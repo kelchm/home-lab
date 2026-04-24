@@ -1,6 +1,11 @@
 # Strategic merge replaces the interfaces list atomically, so we must
 # restate the primary interface here (mirrors talconfig.yaml.j2 output)
 # alongside the secondary interfaces we want to add.
+#
+# `physical: true` on the selector is critical: VLAN sub-interfaces inherit
+# the parent's MAC. Without it, the selector matches the physical NIC AND any
+# VLAN sub-interfaces of it, causing Talos to recursively apply the `vlans:`
+# block to each match and stack more sub-interfaces on every reconcile.
 machine:
   network:
     interfaces:
@@ -8,6 +13,7 @@ machine:
       # Adds a VLAN 40 tagged subinterface for Cilium L2 announcements (no IP).
       - deviceSelector:
           hardwareAddr: "80:e8:2c:22:6a:33"
+          physical: true
         dhcp: false
         addresses:
           - "10.32.30.11/24"
@@ -24,6 +30,7 @@ machine:
       # Same-subnet only; no default route.
       - deviceSelector:
           hardwareAddr: "00:e0:4c:68:04:d3"
+          physical: true
         dhcp: false
         addresses:
           - "10.32.25.11/24"

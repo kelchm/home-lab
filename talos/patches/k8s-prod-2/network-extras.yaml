@@ -3,6 +3,7 @@ machine:
     interfaces:
       - deviceSelector:
           hardwareAddr: "c4:65:16:9d:0a:2b"
+          physical: true
         dhcp: false
         addresses:
           - "10.32.30.12/24"
@@ -17,6 +18,7 @@ machine:
             mtu: 1500
       - deviceSelector:
           hardwareAddr: "00:e0:4c:68:04:69"
+          physical: true
         dhcp: false
         addresses:
           - "10.32.25.12/24"
