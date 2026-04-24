@@ -54,7 +54,7 @@ spec:
       lb-pool: admin
     annotations:
       external-dns.alpha.kubernetes.io/hostname: external.${SECRET_DOMAIN}
-      lbipam.cilium.io/ips: "#{ cloudflare_gateway_addr }#"
+      lbipam.cilium.io/ips: "10.32.30.201"
   listeners:
     - name: http
       protocol: HTTP
@@ -86,7 +86,7 @@ spec:
       lb-pool: services
     annotations:
       external-dns.alpha.kubernetes.io/hostname: internal.${SECRET_DOMAIN}
-      lbipam.cilium.io/ips: "#{ cluster_gateway_addr }#"
+      lbipam.cilium.io/ips: "10.32.40.10"
   listeners:
     - name: http
       protocol: HTTP
@@ -138,7 +138,7 @@ spec:
   clientIPDetection:
     xForwardedFor:
       trustedCIDRs:
-        - "#{ cluster_pod_cidr }#"
+        - "10.42.0.0/16"
   http2:
     onInvalidMessage: TerminateStream
   http3: {}

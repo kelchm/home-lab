@@ -1,0 +1,6 @@
+machine:
+  install:
+    # Wipe the install disk before laying down Talos partitions.
+    # These nodes were previously running Proxmox; need a clean slate to avoid
+    # GPT/LVM ghosts and ensure Longhorn sees fresh storage later.
+    wipe: true

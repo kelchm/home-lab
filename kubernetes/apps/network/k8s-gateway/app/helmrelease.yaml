@@ -18,6 +18,6 @@ spec:
       labels:
         lb-pool: admin
       annotations:
-        lbipam.cilium.io/ips: "#{ cluster_dns_gateway_addr }#"
+        lbipam.cilium.io/ips: "10.32.30.202"
       externalTrafficPolicy: Cluster
     watchedResources: ["HTTPRoute", "Service"]

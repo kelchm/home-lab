@@ -1,0 +1,102 @@
+---
+clusterName: kubernetes
+
+talosVersion: "${talosVersion}"
+kubernetesVersion: "${kubernetesVersion}"
+
+endpoint: https://10.32.30.8:6443
+additionalApiServerCertSans: &sans
+  - "127.0.0.1"
+  - "10.32.30.8"
+  - "k8s-prod.home.kelch.io"
+additionalMachineCertSans: *sans
+
+clusterPodNets: ["10.42.0.0/16"]
+clusterSvcNets: ["10.43.0.0/16"]
+
+# Disable built-in CNI to use Cilium
+cniConfig:
+  name: none
+
+nodes:
+  - hostname: "k8s-prod-1"
+    ipAddress: "10.32.30.11"
+    installDiskSelector:
+      serial: "23030W803073"
+    machineSpec:
+      secureboot: false
+    talosImageURL: factory.talos.dev/installer/7c9e329e408b058e4bdb5e18e4af75eed95d5b53944d6024fa59f8fa235e1741
+    controlPlane: true
+    networkInterfaces:
+      - deviceSelector:
+          hardwareAddr: "80:e8:2c:22:6a:33"
+        dhcp: false
+        addresses:
+          - "10.32.30.11/24"
+        routes:
+          - gateway: "10.32.30.1"
+            network: 0.0.0.0/0
+        mtu: 1500
+        vip:
+          ip: "10.32.30.8"
+    patches:
+      - "@./patches/k8s-prod-1/network-extras.yaml"
+  - hostname: "k8s-prod-2"
+    ipAddress: "10.32.30.12"
+    installDiskSelector:
+      serial: "23033R803188"
+    machineSpec:
+      secureboot: false
+    talosImageURL: factory.talos.dev/installer/7c9e329e408b058e4bdb5e18e4af75eed95d5b53944d6024fa59f8fa235e1741
+    controlPlane: true
+    networkInterfaces:
+      - deviceSelector:
+          hardwareAddr: "c4:65:16:9d:0a:2b"
+        dhcp: false
+        addresses:
+          - "10.32.30.12/24"
+        routes:
+          - gateway: "10.32.30.1"
+            network: 0.0.0.0/0
+        mtu: 1500
+        vip:
+          ip: "10.32.30.8"
+    patches:
+      - "@./patches/k8s-prod-2/network-extras.yaml"
+  - hostname: "k8s-prod-3"
+    ipAddress: "10.32.30.13"
+    installDiskSelector:
+      serial: "23033R803133"
+    machineSpec:
+      secureboot: false
+    talosImageURL: factory.talos.dev/installer/7c9e329e408b058e4bdb5e18e4af75eed95d5b53944d6024fa59f8fa235e1741
+    controlPlane: true
+    networkInterfaces:
+      - deviceSelector:
+          hardwareAddr: "b0:0c:d1:59:da:2b"
+        dhcp: false
+        addresses:
+          - "10.32.30.13/24"
+        routes:
+          - gateway: "10.32.30.1"
+            network: 0.0.0.0/0
+        mtu: 1500
+        vip:
+          ip: "10.32.30.8"
+    patches:
+      - "@./patches/k8s-prod-3/network-extras.yaml"
+
+# Global patches
+patches:
+  - "@./patches/global/machine-files.yaml"
+  - "@./patches/global/machine-install.yaml"
+  - "@./patches/global/machine-kubelet.yaml"
+  - "@./patches/global/machine-network.yaml"
+  - "@./patches/global/machine-sysctls.yaml"
+  - "@./patches/global/machine-time.yaml"
+
+# Controller patches
+controlPlane:
+  patches:
+    - "@./patches/controller/cluster.yaml"
+

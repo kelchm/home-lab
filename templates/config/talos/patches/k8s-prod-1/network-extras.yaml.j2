@@ -1,0 +1,30 @@
+# Strategic merge replaces the interfaces list atomically, so we must
+# restate the primary interface here (mirrors talconfig.yaml.j2 output)
+# alongside the secondary interfaces we want to add.
+machine:
+  network:
+    interfaces:
+      # 1GbE primary on VLAN 30 (native/untagged). VIP for K8s API at .8.
+      # Adds a VLAN 40 tagged subinterface for Cilium L2 announcements (no IP).
+      - deviceSelector:
+          hardwareAddr: "80:e8:2c:22:6a:33"
+        dhcp: false
+        addresses:
+          - "10.32.30.11/24"
+        routes:
+          - gateway: "10.32.30.1"
+            network: 0.0.0.0/0
+        mtu: 1500
+        vip:
+          ip: "10.32.30.8"
+        vlans:
+          - vlanId: 40
+            mtu: 1500
+      # 2.5GbE storage NIC on VLAN 25 (access port, untagged).
+      # Same-subnet only; no default route.
+      - deviceSelector:
+          hardwareAddr: "00:e0:4c:68:04:d3"
+        dhcp: false
+        addresses:
+          - "10.32.25.11/24"
+        mtu: 1500
