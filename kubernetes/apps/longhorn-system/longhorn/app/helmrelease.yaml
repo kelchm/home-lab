@@ -1,0 +1,55 @@
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: longhorn
+spec:
+  chart:
+    spec:
+      chart: longhorn
+      version: 1.11.1
+      sourceRef:
+        kind: HelmRepository
+        name: longhorn
+  interval: 1h
+  values:
+    # Disable the upgrade-checker job — incompatible with GitOps reconciliation
+    # because it expects to run interactively and gates the chart's apply on
+    # its own progress. Same reasoning the chart README gives for Argo CD users.
+    preUpgradeChecker:
+      jobEnabled: false
+      upgradeVersionCheck: false
+
+    csi:
+      # Talos's kubelet root, explicit for clarity.
+      kubeletRootDir: /var/lib/kubelet
+
+    persistence:
+      # Replica count for the default StorageClass Longhorn ships.
+      defaultClassReplicaCount: 2
+      reclaimPolicy: Delete
+
+    service:
+      ui:
+        type: ClusterIP   # access via port-forward initially; ingress added later
+
+    ingress:
+      enabled: false
+
+    defaultSettings:
+      # Point Longhorn at the dedicated user volume (talos UserVolumeConfig
+      # provisioned and mounted at /var/mnt/longhorn). Keeps OS/runtime data on
+      # EPHEMERAL from competing with replica storage.
+      defaultDataPath: /var/mnt/longhorn
+
+      # Replica fan-out for new volumes when a workload doesn't override.
+      defaultReplicaCount: 2
+
+      # Reserve 15% of the longhorn partition as scheduling headroom (default 25%).
+      # On 828 GiB that's ~124 GiB reserved — plenty for snapshot/replica overhead
+      # while freeing capacity above the architecture-doc target.
+      storageMinimalAvailablePercentage: "15"
+
+      # Prefer placing one replica on the requesting node when possible — small
+      # latency win for read-heavy stateful workloads on local NVMe.
+      defaultDataLocality: best-effort
