@@ -4,3 +4,11 @@ machine:
     nameservers:
       - 1.1.1.1
       - 1.0.0.1
+    interfaces:
+      # Cilium's BPF host routing (enabled by bpf.masquerade=true in 1.16.5+)
+      # can't reach 169.254.116.108 when it's only implicitly on lo, breaking
+      # forwardKubeDNSToHost. Explicitly binding it makes it visible to BPF.
+      # Ref: https://github.com/cilium/cilium/issues/36761#issuecomment-3493689525
+      - interface: lo
+        addresses:
+          - 169.254.116.108/32
