@@ -1,0 +1,9 @@
+---
+# Traefik publishes its chart to a traditional Helm repo (not OCI).
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: traefik
+spec:
+  interval: 15m
+  url: https://traefik.github.io/charts

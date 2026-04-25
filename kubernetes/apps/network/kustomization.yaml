@@ -13,3 +13,4 @@ resources:
   - ./envoy-gateway/ks.yaml
   - ./gateway-certificates/ks.yaml
   - ./k8s-gateway/ks.yaml
+  - ./traefik/ks.yaml

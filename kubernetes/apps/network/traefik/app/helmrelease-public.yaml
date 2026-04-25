@@ -1,0 +1,60 @@
+---
+# traefik-public — fronts Cloudflare-tunneled apps. ClusterIP only because
+# the only consumer is the in-cluster cloudflared pod, which targets the
+# Service via cluster DNS.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: traefik-public
+spec:
+  chart:
+    spec:
+      chart: traefik
+      version: 39.0.8
+      sourceRef:
+        kind: HelmRepository
+        name: traefik
+  interval: 1h
+  values:
+    fullnameOverride: traefik-public
+    deployment:
+      replicas: 2
+    providers:
+      kubernetesGateway:
+        enabled: true
+        # Filter to GatewayClasses with this label — partitions which
+        # Traefik instance owns which Gateway when there are multiple.
+        labelSelector: homelab.kelch.io/gateway-role=public
+      kubernetesIngress:
+        enabled: false
+      kubernetesCRD:
+        enabled: false
+    # We author Gateways and GatewayClasses ourselves (gateways.yaml).
+    gateway:
+      enabled: false
+    gatewayClass:
+      enabled: false
+    service:
+      enabled: true
+      type: ClusterIP
+      # No lb-pool label, no lbipam annotation — Cilium does not L2-announce
+      # ClusterIP services, which is what we want.
+    ports:
+      web:
+        http:
+          redirections:
+            entryPoint:
+              to: websecure
+              scheme: https
+              permanent: true
+    metrics:
+      prometheus:
+        enabled: true
+        serviceMonitor:
+          enabled: true
+          namespace: network
+    logs:
+      general:
+        level: INFO
+      access:
+        enabled: true
