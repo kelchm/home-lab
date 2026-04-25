@@ -10,7 +10,11 @@ machine:
   network:
     interfaces:
       # 1GbE primary on VLAN 30 (native/untagged). VIP for K8s API at .8.
-      # Adds a VLAN 40 tagged subinterface for Cilium L2 announcements (no IP).
+      # VLAN 40 subinterface carries a node IP so Cilium's kube-proxy-replacement
+      # TC ingress programs attach to it; without a connected route on the
+      # announcement interface, inbound LB traffic to 10.32.40.0/24 isn't
+      # intercepted before kernel routing and ends up bouncing out the default
+      # route. No default route on this sub-interface — VLAN 30 stays primary.
       - deviceSelector:
           hardwareAddr: "80:e8:2c:22:6a:33"
           physical: true
@@ -26,6 +30,8 @@ machine:
         vlans:
           - vlanId: 40
             mtu: 1500
+            addresses:
+              - "10.32.40.11/24"
       # 2.5GbE storage NIC on VLAN 25 (access port, untagged).
       # Same-subnet only; no default route.
       - deviceSelector:

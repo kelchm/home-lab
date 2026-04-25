@@ -99,10 +99,14 @@ Note: Last-octet alignment across Prod and Storage VLANs (`.11 = k8s-prod-1` on 
 ```
 10.32.40.1        gateway-services         Gateway router interface
 10.32.40.10       ingress                  Ingress controller LB IP (all services via Host header)
-10.32.40.11-.99   (reserved for additional LB IPs if needed)
+10.32.40.11       k8s-prod-1-services      Node 1 VLAN 40 subinterface
+10.32.40.12       k8s-prod-2-services      Node 2 VLAN 40 subinterface
+10.32.40.13       k8s-prod-3-services      Node 3 VLAN 40 subinterface
+10.32.40.14-.29   (reserved for future Talos nodes)
+10.32.40.30-.99   (reserved for additional LB IPs if needed)
 ```
 
-Cilium advertises this pool via L2 announcements. Nodes have VLAN 40 tagged on their interfaces but do not hold IPs on it.
+Cilium advertises the LB pool (`.10`+) via L2 announcements. Nodes hold IPs on VLAN 40 because Cilium's native-routing LB delivery needs a connected route on the announcement interface — without one, inbound traffic to LB IPs isn't intercepted before the kernel routing decision and gets forwarded back out the default route. Node IPs on VLAN 40 are plumbing; no service binds to them.
 
 **Lab Infra VLAN (20, 10.32.20.0/24) — shared across environments:**
 

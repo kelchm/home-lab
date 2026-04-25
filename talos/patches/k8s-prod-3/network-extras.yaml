@@ -16,6 +16,8 @@ machine:
         vlans:
           - vlanId: 40
             mtu: 1500
+            addresses:
+              - "10.32.40.13/24"
       - deviceSelector:
           hardwareAddr: "00:e0:4c:68:05:04"
           physical: true
