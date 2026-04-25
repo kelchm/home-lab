@@ -112,12 +112,13 @@ Examples:
 10.32.30.8        k8s-prod                 Kubernetes API VIP (floats across CP nodes)
 10.32.30.11-.13   k8s-prod-{1,2,3}         Cluster nodes (1GbE NIC)
 10.32.30.14-.29   (reserved for future cluster nodes / misfit static IPs)
-10.32.30.30       (infra LB) public gateway (Cloudflare-tunnel target)
-10.32.30.31       (infra LB) admin gateway (operator UIs — Longhorn, Grafana, etc.)
-10.32.30.32       (infra LB) k8s-gateway (DNS)
-10.32.30.33-.39   (infra LBs reserved)
+10.32.30.30       (infra LB) admin gateway (operator UIs — Longhorn, Grafana, etc.)
+10.32.30.31       (infra LB) k8s-gateway (DNS)
+10.32.30.32-.39   (infra LBs reserved)
 10.32.30.40-.99   (app LBs — for non-HTTP services that need their own IP)
 ```
+
+The **public gateway** (Cloudflare-tunnel target) has no IP on this VLAN — it runs as a `ClusterIP` service since the only consumer is the in-cluster `cloudflared` pod, which targets it via cluster service DNS (`traefik-public.network.svc.cluster.local`). No LB IP is needed and not having one removes LAN-side attack surface.
 
 **Lab Storage VLAN (25, 10.32.25.0/24) — shared-resource class:**
 
