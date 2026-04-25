@@ -13,6 +13,9 @@ spec:
       sourceRef:
         kind: HelmRepository
         name: traefik
+  # traefik-admin owns the Traefik CRDs (chart bundles them as templates).
+  # The other two instances Skip CRD management and depend on this one so
+  # they install after CRDs are present.
   interval: 1h
   values:
     fullnameOverride: traefik-admin

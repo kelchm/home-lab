@@ -13,6 +13,12 @@ spec:
       sourceRef:
         kind: HelmRepository
         name: traefik
+  dependsOn:
+    - name: traefik-admin   # admin instance owns the CRDs
+  install:
+    crds: Skip
+  upgrade:
+    crds: Skip
   interval: 1h
   values:
     fullnameOverride: traefik-services
