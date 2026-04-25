@@ -56,66 +56,105 @@ Goals: Container-native workloads, GitOps-driven IaC, clear prod/sandbox separat
 
 ## IP Addressing Convention
 
-Within each /24:
-- `.1` — Gateway
-- `.2-.9` — Network infrastructure / reserved
-- `.11-.49` — Static assignments (nodes/servers)
-- `.50-.99` — Reserved for future static
-- `.100-.199` — DHCP pool (where applicable)
-- `.200-.250` — LoadBalancer / VIP pool
+A universal skeleton applies to every structured VLAN. The `.30-.99` window is class-specific.
 
-**Special convention:** Kubernetes API VIP lives at `.8` in each environment's VLAN (cheeky reference to k8s). Node numbering is 1-indexed (`k8s-prod-1 = .11`, not `.10`).
+### Universal skeleton (every structured VLAN)
+
+| Range | Purpose |
+|---|---|
+| `.1` | Router gateway |
+| `.2-.10` | Cross-VLAN device interfaces (NAS units, switch/AP mgmt interfaces, etc.) — placed opportunistically within the range. `.8` is the only reserved sub-slot: primary cluster API VIP where applicable (e.g., Kubernetes API VIP — "k8s" mnemonic). Storage VLAN uses the full range for storage providers (up to 9 slots). |
+| `.11-.19` | Primary inhabitants — typically the cluster's nodes |
+| `.20-.29` | Reserved for future primary nodes (or misfit static IPs — frequent use here signals a new VLAN is warranted) |
+| `.100-.199` | DHCP pool (where used) |
+| `.200-.254` | Off-limits / unused |
+
+Node numbering is 1-indexed (`k8s-prod-1 = .11`, not `.10`).
+
+### Class-specific `.30-.99` window
+
+| VLAN class | `.30-.39` | `.40-.99` | Examples |
+|---|---|---|---|
+| **Cluster-LB** | Infrastructure LBs (gateways, DNS) | Application LBs (mostly non-HTTP — DNS, MQTT, VPN, game servers; HTTP services route through the gateway) | Lab Prod (30), Lab Services (40) |
+| **Hypervisor** | Cluster-level features (HA VIPs, migration network) | Static VMs / containers | Future Lab Sandbox (31) |
+| **Static-host** | (range collapses — `.30-.99` is one continuous range for individual device assignments) | (continued) | Lab Infra (20) |
+| **Shared-resource** | Cluster #3 nodes' interfaces | Clusters #4-#9 nodes' interfaces (one decade per cluster) | Lab Storage (25); see below for full layout |
+
+### Shared-resource class specialization (storage VLAN)
+
+The universal skeleton bends slightly for shared-resource VLANs because the primary inhabitants are storage *providers*, not cluster nodes, and many clusters can have a presence here.
+
+| Range | Purpose |
+|---|---|
+| `.2-.10` | Storage providers (NAS units, MinIO, backup appliances, etc. — 9 slots, placed opportunistically within the range) |
+| `.11-.19` | Cluster #1 storage interfaces (prod) |
+| `.20-.29` | Cluster #2 storage interfaces (future sandbox) |
+| `.30-.39` | Cluster #3 storage interfaces |
+| `.40-.49` | Cluster #4 |
+| `.50-.99` | Clusters #5-#9 (one decade each) |
+
+### Cross-VLAN node IP rule
+
+> **Ones digit = node number. Tens digit varies by VLAN class.**
+> - Compute VLAN (cluster-LB or hypervisor class): tens digit is always `1` (the universal "primary nodes" slot).
+> - Storage VLAN (shared-resource class): tens digit = cluster's storage-VLAN index. Cluster #1 at `.1X`, #2 at `.2X`, #3 at `.3X`, etc.
+
+Examples:
+- Prod k8s node 1 (cluster #1): `10.32.30.11` ↔ `10.32.25.11` (1:1, since cluster #1's storage decade is also `.1X`)
+- Future sandbox PVE node 1 (cluster #2): `10.32.31.11` ↔ `10.32.25.21` (+10 offset)
 
 ## Prod Cluster IP Allocation
 
-**Lab Prod VLAN (30, 10.32.30.0/24) — node management and internal services:**
+**Lab Prod VLAN (30, 10.32.30.0/24) — cluster-LB class:**
 
 ```
-10.32.30.1        gateway-prod             Gateway router interface
+10.32.30.1        gateway-prod             Router interface
 10.32.30.8        k8s-prod                 Kubernetes API VIP (floats across CP nodes)
-10.32.30.11       k8s-prod-1               Node 1 (705 G4 #1, 1GbE NIC)
-10.32.30.12       k8s-prod-2               Node 2 (705 G4 #2, 1GbE NIC)
-10.32.30.13       k8s-prod-3               Node 3 (705 G4 #3, 1GbE NIC)
-10.32.30.14-.29   (reserved for future Talos nodes)
-10.32.30.30-.49   (reserved for future non-Talos infra)
-10.32.30.200-.250 Cilium internal LB pool (admin-facing: Grafana, ArgoCD/Flux UI, Longhorn UI, Hubble)
+10.32.30.11-.13   k8s-prod-{1,2,3}         Cluster nodes (1GbE NIC)
+10.32.30.14-.29   (reserved for future cluster nodes / misfit static IPs)
+10.32.30.30       (infra LB) public gateway (Cloudflare-tunnel target)
+10.32.30.31       (infra LB) admin gateway (operator UIs — Longhorn, Grafana, etc.)
+10.32.30.32       (infra LB) k8s-gateway (DNS)
+10.32.30.33-.39   (infra LBs reserved)
+10.32.30.40-.99   (app LBs — for non-HTTP services that need their own IP)
 ```
 
-**Lab Storage VLAN (25, 10.32.25.0/24) — Talos secondary interfaces for NFS/iSCSI:**
+**Lab Storage VLAN (25, 10.32.25.0/24) — shared-resource class:**
 
 ```
-10.32.25.1        gateway-storage          Gateway router interface
+10.32.25.1        gateway-storage          Router interface
 10.32.25.5        nas-storage              Synology (SFP+ interface)
-10.32.25.11       k8s-prod-1-storage       Node 1 (2.5GbE NIC)
-10.32.25.12       k8s-prod-2-storage       Node 2 (2.5GbE NIC)
-10.32.25.13       k8s-prod-3-storage       Node 3 (2.5GbE NIC)
-10.32.25.14-.29   (reserved for future Talos nodes)
+10.32.25.6-.10    (reserved for future storage providers — MinIO, backup appliances, etc.)
+10.32.25.11-.13   k8s-prod-{1,2,3}-storage Cluster #1 storage interfaces (2.5GbE NIC)
+10.32.25.14-.19   (reserved for cluster #1 expansion)
+10.32.25.21-.23   sbx-pve-{1,2,3}-storage  Cluster #2 storage interfaces (future sandbox PVE)
+10.32.25.24-.29   (reserved for cluster #2 expansion)
+10.32.25.30-.99   (clusters #3-#9 storage interfaces, one decade per cluster)
 ```
 
-Note: Last-octet alignment across Prod and Storage VLANs (`.11 = k8s-prod-1` on both) for at-a-glance identification.
+Cluster #1 happens to align 1:1 with its compute VLAN (`.30.11 ↔ .25.11`) because cluster #1's storage decade is `.1X`, the same as the universal "primary nodes" slot. Cluster #2 onward gets a +10 offset per cluster (cluster #2 at `.21-.29`, cluster #3 at `.31-.39`, etc.).
 
-**Lab Services VLAN (40, 10.32.40.0/24) — household-facing services:**
+**Lab Services VLAN (40, 10.32.40.0/24) — cluster-LB class (DMZ for household-facing services):**
 
 ```
-10.32.40.1        gateway-services         Gateway router interface
-10.32.40.10       ingress                  Ingress controller LB IP (all services via Host header)
-10.32.40.11       k8s-prod-1-services      Node 1 VLAN 40 subinterface
-10.32.40.12       k8s-prod-2-services      Node 2 VLAN 40 subinterface
-10.32.40.13       k8s-prod-3-services      Node 3 VLAN 40 subinterface
+10.32.40.1        gateway-services         Router interface
+10.32.40.11-.13   k8s-prod-{1,2,3}-services Node VLAN 40 subinterfaces (no service binds)
 10.32.40.14-.29   (reserved for future Talos nodes)
-10.32.40.30-.99   (reserved for additional LB IPs if needed)
+10.32.40.30       (infra LB) services gateway (LAN ingress for household-facing apps)
+10.32.40.31-.39   (infra LBs reserved)
+10.32.40.40-.99   (app LBs — non-HTTP services exposed to household)
 ```
 
-Cilium advertises the LB pool (`.10`+) via L2 announcements. Nodes hold IPs on VLAN 40 because Cilium's native-routing LB delivery needs a connected route on the announcement interface — without one, inbound traffic to LB IPs isn't intercepted before the kernel routing decision and gets forwarded back out the default route. Node IPs on VLAN 40 are plumbing; no service binds to them.
+Cilium advertises the LB pool via L2 announcements. Nodes hold IPs on VLAN 40 because Cilium's native-routing LB delivery needs a connected route on the announcement interface — without one, inbound traffic to LB IPs isn't intercepted before the kernel routing decision and gets forwarded back out the default route. Node IPs on VLAN 40 are plumbing; no service binds to them.
 
-**Lab Infra VLAN (20, 10.32.20.0/24) — shared across environments:**
+**Lab Infra VLAN (20, 10.32.20.0/24) — static-host class, shared across environments:**
 
 ```
-10.32.20.1        gateway-infra            Gateway router interface
+10.32.20.1        gateway-infra            Router interface
 10.32.20.5        nas                      Synology admin interface
 10.32.20.10-.19   (reserved for future Proxmox cluster mgmt IPs)
-10.32.20.20       pikvm                    (future, when added)
-10.32.20.30-.39   (reserved for switches, APs)
+10.32.20.20       pikvm                    (future)
+10.32.20.30-.99   (static device assignments — switches, APs, future infra appliances)
 ```
 
 Talos nodes do NOT have IPs on Lab Infra. Talos is designed without a classic management plane — no corosync, no side-channel heartbeat, no separate admin UI, no SSH. `talosctl` and `kubectl` (both mTLS) are the entire management surface, and they run over VLAN 30 alongside workload traffic. Network-level isolation is replaced by cryptographic isolation. Lab Infra exists for tenants that *do* need a classic mgmt plane — the future Proxmox sandbox, hardware admin interfaces, etc.
@@ -153,8 +192,8 @@ gateway.home.kelch.io               10.32.1.1
 sbx-pve-01.home.kelch.io            10.32.31.11
 sbx-k8s.home.kelch.io               10.32.31.8
 
-# Wildcard for household services (via ingress controller)
-*.home.kelch.io                     10.32.40.10
+# Wildcard for household services (via services gateway)
+*.home.kelch.io                     10.32.40.30
 ```
 
 **Naming rule:** Hostnames describe what things are, not where they live on the network. VLAN is never encoded in hostnames.
