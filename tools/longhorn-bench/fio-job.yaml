@@ -1,0 +1,76 @@
+---
+# fio benchmark Pod against a Longhorn PVC. Runs 5 profiles sequentially:
+#   1. Sequential write 1M  (creates the 10G file fully)
+#   2. Sequential read 1M
+#   3. Random read 4K
+#   4. Random write 4K
+#   5. Random rw 70/30 4K
+#
+# All profiles use --direct=1 to bypass page cache (we're measuring storage,
+# not OS cache) and --ioengine=libaio for async I/O at iodepth=32.
+#
+# After the suite completes the container sleeps so logs stay accessible.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: longhorn-bench
+  namespace: default
+spec:
+  restartPolicy: Never
+  containers:
+    - name: fio
+      image: xridge/fio:latest
+      command:
+        - sh
+        - -c
+        - |
+          set -e
+          TARGET=/data/fio.test
+
+          run_fio() {
+            local label="$1"; shift
+            echo ""
+            echo "================================================================"
+            echo "=== $label"
+            echo "================================================================"
+            fio --name="$label" --filename="$TARGET" \
+                --iodepth=32 --ioengine=libaio --direct=1 \
+                --group_reporting --norandommap \
+                --output-format=normal "$@"
+          }
+
+          # Profile 1 — seqwrite WITHOUT --time_based so the full 10G file is laid
+          # down (subsequent read profiles need the whole file populated to avoid
+          # reading unwritten regions).
+          run_fio "1) Sequential write 1M (writes full 10G file)" \
+                  --rw=write --bs=1M --size=10G
+
+          # All subsequent profiles run --time_based for 30s against the 10G file.
+          run_fio "2) Sequential read 1M" \
+                  --rw=read --bs=1M --size=10G --time_based --runtime=30
+          run_fio "3) Random read 4K" \
+                  --rw=randread --bs=4K --size=10G --time_based --runtime=30
+          run_fio "4) Random write 4K" \
+                  --rw=randwrite --bs=4K --size=10G --time_based --runtime=30
+          run_fio "5) Random rw 70/30 4K" \
+                  --rw=randrw --rwmixread=70 --bs=4K --size=10G --time_based --runtime=30
+
+          echo ""
+          echo "================================================================"
+          echo "=== Suite complete. Sleeping 1h so 'kubectl logs' stays usable."
+          echo "================================================================"
+          sleep 3600
+      volumeMounts:
+        - name: data
+          mountPath: /data
+      resources:
+        requests:
+          cpu: 200m
+          memory: 256Mi
+        limits:
+          cpu: 4
+          memory: 1Gi
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: longhorn-bench

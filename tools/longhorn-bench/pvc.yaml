@@ -1,0 +1,19 @@
+---
+# Manually applied — NOT Flux-managed.
+#   kubectl apply -f tools/longhorn-bench/pvc.yaml
+#   kubectl apply -f tools/longhorn-bench/fio-job.yaml
+#   kubectl logs -f pod/longhorn-bench
+#   kubectl delete -f tools/longhorn-bench/fio-job.yaml -f tools/longhorn-bench/pvc.yaml
+#
+# 20 GiB is sized for fio --size=10G plus filesystem/metadata headroom.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: longhorn-bench
+  namespace: default
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 20Gi
