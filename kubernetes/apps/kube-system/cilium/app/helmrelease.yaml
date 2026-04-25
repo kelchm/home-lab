@@ -21,8 +21,9 @@ spec:
       automount:
         enabled: false
       hostRoot: /sys/fs/cgroup
-    # NOTE: devices might need to be set if you have more than one active NIC on your hosts
-    # devices: eno+ eth+
+    # eno+ covers the physical NIC; eno+.40 includes the VLAN 40 sub-interface so Cilium
+    # selects it for L2 announcements (address-less interfaces are skipped by auto-discovery).
+    devices: "eno+ eno+.40"
     dashboards:
       enabled: true
     endpointRoutes:
