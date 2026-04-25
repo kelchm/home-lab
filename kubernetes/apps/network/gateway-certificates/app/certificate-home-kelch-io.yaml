@@ -1,0 +1,22 @@
+---
+# *.home.kelch.io wildcard cert for the LAN-internal admin gateway.
+# DNS-01 challenge via Cloudflare (home.kelch.io is a sub-record in the kelch.io
+# Cloudflare zone, so the existing letsencrypt-production ClusterIssuer's
+# Cloudflare API token can write the _acme-challenge.home TXT record).
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: home-kelch-io-production
+spec:
+  dnsNames:
+    - home.kelch.io
+    - "*.home.kelch.io"
+  duration: 160h
+  issuerRef:
+    name: letsencrypt-production
+    kind: ClusterIssuer
+  privateKey:
+    algorithm: ECDSA
+  secretName: home-kelch-io-production-tls
+  usages:
+    - digital signature
