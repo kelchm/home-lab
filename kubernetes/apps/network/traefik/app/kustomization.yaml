@@ -6,3 +6,4 @@ resources:
   - ./helmrelease-admin.yaml
   - ./helmrelease-public.yaml
   - ./helmrelease-services.yaml
+  - ./gateways.yaml

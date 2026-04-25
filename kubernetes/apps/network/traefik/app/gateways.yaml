@@ -1,0 +1,120 @@
+---
+# Three GatewayClasses + three Gateways. The labelSelector on each Traefik
+# instance's providers.kubernetesGateway filters GatewayClasses by the
+# homelab.kelch.io/gateway-role label, partitioning which Traefik instance
+# implements which Gateway.
+#
+# All three GatewayClasses use the same Traefik controller name; the label
+# is what differentiates them.
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: traefik-public
+  labels:
+    homelab.kelch.io/gateway-role: public
+spec:
+  controllerName: traefik.io/gateway-controller
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: traefik-admin
+  labels:
+    homelab.kelch.io/gateway-role: admin
+spec:
+  controllerName: traefik.io/gateway-controller
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: traefik-services
+  labels:
+    homelab.kelch.io/gateway-role: services
+spec:
+  controllerName: traefik.io/gateway-controller
+---
+# Public gateway — fronts Cloudflare-tunneled apps. Served by traefik-public
+# (ClusterIP, accessed by cloudflared via service DNS). Hostnames are
+# *.${SECRET_DOMAIN} (i.e., *.kelch.io), so it uses the *.kelch.io cert.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: gateway-public
+  annotations:
+    external-dns.alpha.kubernetes.io/target: external.${SECRET_DOMAIN}
+spec:
+  gatewayClassName: traefik-public
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+      allowedRoutes:
+        namespaces:
+          from: Same
+    - name: https
+      protocol: HTTPS
+      port: 443
+      allowedRoutes:
+        namespaces:
+          from: All
+      tls:
+        certificateRefs:
+          - kind: Secret
+            name: ${SECRET_DOMAIN/./-}-production-tls
+---
+# Admin gateway — fronts LAN-only operator UIs (Longhorn, Grafana, etc.) at
+# *.home.kelch.io. Uses the *.home.kelch.io cert. No external-dns annotation
+# — admin services should not appear in public DNS; they resolve via
+# k8s-gateway internal DNS only.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: gateway-admin
+spec:
+  gatewayClassName: traefik-admin
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+      allowedRoutes:
+        namespaces:
+          from: Same
+    - name: https
+      protocol: HTTPS
+      port: 443
+      allowedRoutes:
+        namespaces:
+          from: All
+      tls:
+        certificateRefs:
+          - kind: Secret
+            name: home-kelch-io-production-tls
+---
+# Services gateway — fronts LAN household-facing apps at *.home.kelch.io
+# (DMZ pattern). Uses the *.home.kelch.io cert. The internal hostname for
+# external-dns is internal.${SECRET_DOMAIN} so we keep that annotation.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: gateway-services
+  annotations:
+    external-dns.alpha.kubernetes.io/target: internal.${SECRET_DOMAIN}
+spec:
+  gatewayClassName: traefik-services
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+      allowedRoutes:
+        namespaces:
+          from: Same
+    - name: https
+      protocol: HTTPS
+      port: 443
+      allowedRoutes:
+        namespaces:
+          from: All
+      tls:
+        certificateRefs:
+          - kind: Secret
+            name: home-kelch-io-production-tls
