@@ -1,8 +1,6 @@
 ---
 # Admin pool — VLAN 30, cluster-managed LBs (gateways, DNS).
 # Convention: .30-.39 infrastructure LBs, .40-.99 application LBs.
-# .200-.250 block is transitional during the envoy -> Traefik migration; remove
-# once envoy-gateway is fully retired.
 apiVersion: cilium.io/v2alpha1
 kind: CiliumLoadBalancerIPPool
 metadata:
@@ -12,13 +10,9 @@ spec:
   blocks:
     - start: "10.32.30.30"
       stop: "10.32.30.99"
-    - start: "10.32.30.200"
-      stop: "10.32.30.250"
 ---
 # Services pool — VLAN 40, household-facing services (DMZ ingress).
 # Convention: .30-.39 infrastructure LBs, .40-.99 application LBs.
-# Single-IP .10 block is transitional (still claimed by envoy-internal during
-# the migration); remove once envoy-gateway is fully retired.
 apiVersion: cilium.io/v2alpha1
 kind: CiliumLoadBalancerIPPool
 metadata:
@@ -26,8 +20,6 @@ metadata:
 spec:
   allowFirstLastIPs: "No"
   blocks:
-    - start: "10.32.40.10"
-      stop: "10.32.40.10"
     - start: "10.32.40.30"
       stop: "10.32.40.99"
 ---

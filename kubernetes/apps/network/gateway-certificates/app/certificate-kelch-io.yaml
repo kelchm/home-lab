@@ -1,0 +1,26 @@
+---
+# *.kelch.io wildcard cert for the Cloudflare-public domain. Same content as
+# the cert previously held under envoy-gateway/ — moved here as part of the
+# Traefik migration so TLS material is decoupled from any specific gateway
+# controller.
+#
+# Hands off ownership cleanly because the secretName is unchanged: cert-manager
+# observes the new Certificate, sees the matching Secret already exists and is
+# valid, and skips re-issuance.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: "${SECRET_DOMAIN/./-}-production"
+spec:
+  dnsNames:
+    - "${SECRET_DOMAIN}"
+    - "*.${SECRET_DOMAIN}"
+  duration: 160h
+  issuerRef:
+    name: letsencrypt-production
+    kind: ClusterIssuer
+  privateKey:
+    algorithm: ECDSA
+  secretName: "${SECRET_DOMAIN/./-}-production-tls"
+  usages:
+    - digital signature
