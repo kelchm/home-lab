@@ -163,9 +163,23 @@ sbx-k8s.home.kelch.io               10.32.31.8
 
 ## Storage Strategy
 
-- **Longhorn on NVMe**: ~400GB allocated per node; 3-replica for critical PVCs (databases, stateful apps), 2-replica default
+- **Longhorn on NVMe**: dedicated user volume per node mounted at `/var/mnt/longhorn` (~828 GiB on the 1 TB SN770, xfs); 3-replica for critical PVCs (databases, stateful apps), 2-replica default
 - **NFS from Synology**: Bulk storage via `csi-driver-nfs` (media libraries, Jellyfin/*arr content, Nextcloud data, anything large and sequential)
 - **Rule of thumb**: Longhorn for default Helm chart PVCs (Postgres, Redis, Grafana); NFS for bulk sequential data
+
+### Disk layout (per node)
+
+The 1 TB NVMe is partitioned by Talos into the standard system partitions plus a dedicated Longhorn user volume (Talos `UserVolumeConfig`):
+
+```
+nvme0n1p1   2.2 GB    EFI         (Talos default)
+nvme0n1p2   1 MB      META        (Talos default)
+nvme0n1p3   105 MB    STATE       (Talos default, holds machine config)
+nvme0n1p4   100 GiB   EPHEMERAL   (/var, capped via VolumeConfig — ~3× typical real usage)
+nvme0n1p5   ~828 GiB  u-longhorn  (/var/mnt/longhorn, xfs, Longhorn defaultDataPath)
+```
+
+Capping EPHEMERAL prevents container-image churn and pod logs from competing with Longhorn for space; the dedicated u-longhorn partition makes capacity planning explicit. Patches live in `talos/patches/global/volume-ephemeral.yaml` and `user-volume-longhorn.yaml`.
 
 ## GitOps / Tooling Stack
 

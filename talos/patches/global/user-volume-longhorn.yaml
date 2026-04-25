@@ -1,0 +1,19 @@
+# Dedicated Longhorn user volume on the system disk.
+# Talos auto-mounts at /var/mnt/longhorn (partition label u-longhorn).
+# Default volumeType=partition and filesystem=xfs match what we want.
+#
+# minSize=100GiB enforces a floor; omitting maxSize lets the volume absorb
+# whatever's left on the system disk after EPHEMERAL (so on the 1 TB SN770:
+# ~828 GiB after EFI/META/STATE + EPHEMERAL=100GiB).
+#
+# Longhorn defaultDataPath should be set to /var/mnt/longhorn at install time.
+apiVersion: v1alpha1
+kind: UserVolumeConfig
+name: longhorn
+provisioning:
+  diskSelector:
+    match: system_disk
+  minSize: 100GiB
+  grow: true
+filesystem:
+  type: xfs

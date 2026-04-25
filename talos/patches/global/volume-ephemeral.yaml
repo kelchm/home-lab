@@ -1,0 +1,16 @@
+# Cap EPHEMERAL (/var) at 100 GiB to leave room on the system disk for the
+# Longhorn user volume. Real EPHEMERAL usage is ~10–30 GiB on this stack
+# (containerd images, kubelet state, pod logs, etcd), so 100 GiB is ~3× cushion.
+#
+# Note: VolumeConfig for system volumes only accepts STATE, EPHEMERAL, or
+# IMAGE-CACHE. Changing maxSize on an existing install does not shrink the
+# partition in place — the node must reset EPHEMERAL (talosctl reset
+# --system-labels-to-wipe=EPHEMERAL --reboot) for the new size to take effect.
+apiVersion: v1alpha1
+kind: VolumeConfig
+name: EPHEMERAL
+provisioning:
+  diskSelector:
+    match: system_disk
+  minSize: 100GiB
+  maxSize: 100GiB
