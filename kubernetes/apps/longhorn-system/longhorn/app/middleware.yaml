@@ -1,0 +1,17 @@
+---
+# Traefik BasicAuth middleware that gates the Longhorn UI HTTPRoute.
+# The 'users' key in the longhorn-ui-htpasswd Secret is read for credentials.
+#
+# Note: Middleware lives in the same namespace as the HTTPRoute that
+# references it via ExtensionRef. When we eventually swap to forwardAuth
+# against an IdP, this Middleware spec changes; the HTTPRoute filter stays
+# the same shape (ExtensionRef -> Middleware).
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: longhorn-ui-auth
+spec:
+  basicAuth:
+    secret: longhorn-ui-htpasswd
+    realm: Longhorn UI
+    removeHeader: true   # don't pass the Authorization header through to Longhorn
