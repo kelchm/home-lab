@@ -1,0 +1,18 @@
+---
+# Routes o11y.home.kelch.io to the OpenObserve UI. Attaches to gateway-admin
+# (LAN-only, *.home.kelch.io cert). No auth middleware needed — OpenObserve
+# has its own login UI fed by the openobserve-root Secret.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: openobserve
+spec:
+  hostnames: ["o11y.home.kelch.io"]
+  parentRefs:
+    - name: gateway-admin
+      namespace: network
+      sectionName: https
+  rules:
+    - backendRefs:
+        - name: openobserve
+          port: 5080
