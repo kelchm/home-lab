@@ -27,8 +27,13 @@ spec:
         labelSelector: homelab.kelch.io/gateway-role=admin
       kubernetesIngress:
         enabled: false
+      # Enabled (admin instance only) so Gateway API HTTPRoute ExtensionRef
+      # filters can resolve to traefik.io/Middleware (e.g. BasicAuth on
+      # Longhorn UI). The other two Traefik instances keep this off — they
+      # have no Middleware-protected routes.
       kubernetesCRD:
-        enabled: false
+        enabled: true
+        allowCrossNamespace: false
     gateway:
       enabled: false
     gatewayClass:

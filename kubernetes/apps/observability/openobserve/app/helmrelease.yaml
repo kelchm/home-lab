@@ -17,6 +17,7 @@ spec:
         name: openobserve
   interval: 1h
   values:
+    fullnameOverride: openobserve   # Service ends up named 'openobserve' (not openobserve-openobserve-standalone)
     auth:
       existingRootUserSecret:
         name: openobserve-root
