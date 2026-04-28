@@ -35,6 +35,7 @@ Goals: Container-native workloads, GitOps-driven IaC, clear prod/sandbox separat
 
 | VLAN | Name | Subnet | Purpose |
 |------|------|--------|---------|
+| 1 | Default | 10.32.1.0/24 | Unifi management |
 | 5 | Cameras | 10.32.5.0/24 | Existing |
 | 10 | Main | 10.32.10.0/24 | Trusted household devices |
 | 20 | Lab Infra | 10.32.20.0/24 | classic mgmt planes (future Proxmox cluster: PVE UI, corosync, SSH) |
