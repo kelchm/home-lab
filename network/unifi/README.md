@@ -8,6 +8,11 @@ of truth and changes are applied manually.
 
 - `frr.conf` — BGP peering with the Cilium BGP control plane on the prod Talos
   cluster. AS 65000 (UniFi) ↔ AS 65020 (k8s-prod). See file header for details.
+- `bgp-test.yaml` — disposable echo Service for the BGP migration synthetic
+  test. Applied via `kubectl`, not Flux. See "Synthetic test" below.
+
+The "Firewall rules" section below documents intent for rules that are
+configured directly in UniFi UI (no exportable artifact lives in this repo).
 
 ## Applying `frr.conf`
 
@@ -42,6 +47,41 @@ Sessions should reach `Established` once Cilium is reconciled with matching
 peer/auth config. No prefixes are advertised until a `CiliumLoadBalancerIPPool`
 matching `admin-prod` or `services-prod` exists and a Service allocates from it.
 
+## Firewall rules
+
+UniFi default inter-VLAN posture is allow, so the BGP LB pool prefixes need
+explicit denies from untrusted VLANs. These rules are configured in the
+UniFi UI (no committable artifact); this section is the source of truth for
+intent.
+
+**Network object:** `bgp-lb-restricted`
+
+| Member          | Notes                                          |
+|-----------------|------------------------------------------------|
+| `10.32.130.0/24` | `admin-prod` pool                              |
+| `10.32.140.0/24` | `services-prod` pool (created in step 9)       |
+
+`shared-prod` (10.32.150.0/24) is intentionally excluded — its tenants need
+per-IP+port allow rules from IoT/Guest, not a blanket deny. Add per-service
+allows when shared-prod gains a tenant.
+
+**Rules** (Settings → Security → Traffic Rules, or the version-equivalent
+LAN-IN section):
+
+| # | Source            | Destination        | Action | Notes                          |
+|---|-------------------|--------------------|--------|--------------------------------|
+| 1 | IoT (VLAN 90)     | `bgp-lb-restricted` | Drop   | Quieter than reject            |
+| 2 | Guest (VLAN 99)   | `bgp-lb-restricted` | Drop   |                                |
+
+VLAN 10 (Main) is intentionally allowed by the default posture and needs no
+explicit rule. If/when a more restrictive default-deny posture is adopted
+across the network, replace these denies with the corresponding allows from
+Main and revisit the per-pool firewall posture in `docs/bgp-plan.md`.
+
+Validate by running `curl --max-time 2 http://10.32.130.99/` from a device on
+each restricted VLAN — should time out or be refused. The synthetic test
+below exercises this as gate 4.
+
 ## Synthetic test (`bgp-test.yaml`)
 
 Step 6 of the BGP migration. Applied manually, not via Flux, so teardown is
@@ -66,7 +106,7 @@ Validate (each step gates the next):
    `curl -s http://10.32.130.99/` returns the echo JSON.
 4. **Denied-VLAN blocking** — from VLAN 90 (IoT) / VLAN 99 (Guest):
    `curl --max-time 2 http://10.32.130.99/` should fail (timeout / refused).
-   Rules need to be in place — see `docs/bgp-plan.md` "LB pool table".
+   Requires the rules in "Firewall rules" above to be applied first.
 5. **Failover** — `talosctl -n 10.32.30.11 reboot`. From VLAN 10, run a
    continuous `curl` loop; at most one or two requests should fail before
    ECMP reconverges on the remaining 2 next-hops.
