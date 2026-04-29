@@ -180,7 +180,7 @@ sbx-k8s.home.kelch.io               10.32.31.8     (future)
 *.home.kelch.io                     10.32.140.1    (services-prod primary gateway)
 
 # Admin gateway
-admin.home.kelch.io                 10.32.130.1
+traefik-admin.home.kelch.io         10.32.130.1   (debug anchor for gateway IP)
 longhorn.home.kelch.io              10.32.130.1    (HTTPRoute)
 grafana.home.kelch.io               10.32.130.1    (HTTPRoute)
 

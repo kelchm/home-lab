@@ -1,6 +1,6 @@
 ---
 # traefik-admin — fronts LAN-only operator UIs (Longhorn, Grafana, etc.).
-# LoadBalancer at 10.32.30.30, the primary admin pool LB IP.
+# LoadBalancer at 10.32.130.1, the primary admin-prod pool LB IP (BGP).
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
@@ -42,9 +42,9 @@ spec:
       enabled: true
       type: LoadBalancer
       labels:
-        lb-pool: admin
+        lb-pool: admin-prod
       annotations:
-        lbipam.cilium.io/ips: 10.32.30.30
+        lbipam.cilium.io/ips: 10.32.130.1
       spec:
         externalTrafficPolicy: Cluster
     ports:
