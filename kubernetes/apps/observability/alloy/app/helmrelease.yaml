@@ -1,0 +1,102 @@
+---
+# Alloy — log collector DaemonSet for the bake-off. Pipeline A's log
+# ingest path. Tails pod logs from /var/log/pods on each node and ships
+# them to Loki via the Loki ingestion API.
+#
+# Commit 5 will extend this config to dual-write to VictoriaLogs in
+# parallel — VL accepts the Loki ingestion API natively, so a single
+# Alloy with two `loki.write` sinks gives both backends byte-identical
+# input. The comparison stays purely about the storage/query layer.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: alloy
+spec:
+  chart:
+    spec:
+      chart: alloy
+      version: 1.8.0
+      sourceRef:
+        kind: HelmRepository
+        name: grafana
+  interval: 1h
+  values:
+    controller:
+      type: daemonset
+      hostPID: false
+
+    alloy:
+      mounts:
+        varlog: true   # mount /var/log on the host so we can tail pod logs
+
+      configMap:
+        create: true
+        content: |
+          // Discover pods cluster-wide so we can map metadata onto log
+          // files. Each DaemonSet instance gets the full pod list, but
+          // `local.file_match` below only matches files actually present
+          // on the local node — slight discovery overhead vs node-scoped
+          // selectors, but avoids the env-var-vs-field-selector landmine
+          // (HOSTNAME is the pod name, not the node name).
+          discovery.kubernetes "pods" {
+            role = "pod"
+          }
+
+          // Map Kubernetes metadata to Loki labels and compute the log
+          // file path on disk.
+          discovery.relabel "pod_logs" {
+            targets = discovery.kubernetes.pods.targets
+
+            rule {
+              source_labels = ["__meta_kubernetes_namespace"]
+              target_label  = "namespace"
+            }
+            rule {
+              source_labels = ["__meta_kubernetes_pod_name"]
+              target_label  = "pod"
+            }
+            rule {
+              source_labels = ["__meta_kubernetes_pod_container_name"]
+              target_label  = "container"
+            }
+            rule {
+              source_labels = ["__meta_kubernetes_pod_node_name"]
+              target_label  = "node"
+            }
+            rule {
+              source_labels = [
+                "__meta_kubernetes_pod_uid",
+                "__meta_kubernetes_pod_container_name",
+              ]
+              separator    = "/"
+              action       = "replace"
+              replacement  = "/var/log/pods/*$1/*.log"
+              target_label = "__path__"
+            }
+          }
+
+          // Tail logs from /var/log/pods by file pattern.
+          local.file_match "pod_logs" {
+            path_targets = discovery.relabel.pod_logs.output
+            sync_period  = "10s"
+          }
+
+          loki.source.file "pod_logs" {
+            targets    = local.file_match.pod_logs.targets
+            forward_to = [loki.process.pod_logs.receiver]
+          }
+
+          // Decode CRI log format (Talos uses containerd).
+          loki.process "pod_logs" {
+            stage.cri {}
+            forward_to = [loki.write.loki.receiver]
+          }
+
+          loki.write "loki" {
+            endpoint {
+              url = "http://loki.observability.svc.cluster.local:3100/loki/api/v1/push"
+            }
+          }
+
+    serviceMonitor:
+      enabled: true   # let KPS Prometheus scrape Alloy itself
