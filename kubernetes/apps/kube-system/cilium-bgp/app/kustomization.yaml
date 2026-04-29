@@ -4,3 +4,4 @@ kind: Kustomization
 resources:
   - ./bgp.yaml
   - ./bgp-secret.sops.yaml
+  - ./pools.yaml

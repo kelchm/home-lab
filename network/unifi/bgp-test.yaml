@@ -1,0 +1,63 @@
+---
+# One-off synthetic test for step 6 of the BGP migration.
+# NOT Flux-managed. Apply manually, validate, tear down with `kubectl delete`.
+#
+# What this exercises:
+#   - admin-prod IPAM allocation (the .99 pin)
+#   - BGP /32 advertisement from all 3 nodes to UniFi (3 ECMP next-hops)
+#   - VLAN 10 reachability (firewall allow)
+#   - VLAN 90/99 blocking (firewall deny)
+#   - Node-reboot route withdrawal/reconvergence
+#
+# Apply:    kubectl apply -f network/unifi/bgp-test.yaml
+# Teardown: kubectl delete -f network/unifi/bgp-test.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: bgp-test
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: echo
+  namespace: bgp-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: echo }
+  template:
+    metadata:
+      labels: { app: echo }
+    spec:
+      containers:
+        - name: echo
+          image: ghcr.io/mendhak/http-https-echo:40
+          ports:
+            - { containerPort: 8080, name: http }
+          env:
+            - { name: HTTP_PORT, value: "8080" }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65534
+            capabilities: { drop: ["ALL"] }
+          resources:
+            requests: { cpu: 10m }
+            limits: { memory: 64Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: echo
+  namespace: bgp-test
+  labels:
+    lb-pool: admin-prod
+  annotations:
+    lbipam.cilium.io/ips: "10.32.130.99"
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Cluster
+  selector: { app: echo }
+  ports:
+    - { name: http, port: 80, targetPort: 8080 }
