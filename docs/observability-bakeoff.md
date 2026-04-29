@@ -82,9 +82,57 @@ the VM defensive value prop and is in scope for the comparison.
 
 _Populated as we go; dated entries._
 
-### 2026-04-29 — bake-off setup begun
+### 2026-04-29 — bake-off setup complete
 
-Standalone Grafana deployed (commit 1). Pipelines A and B follow.
+All five planned commits landed. State at end-of-day:
+
+- Standalone Grafana on `grafana.home.kelch.io`, four datasources
+  registered via labeled ConfigMaps (Prometheus, Loki, VictoriaMetrics,
+  VictoriaLogs), 41 bundled dashboards from KPS + VM-stack + VL-stack
+  picked up by the sidecar.
+- KPS: Prometheus (49 healthy targets), Alertmanager, KSM, node-exporter
+  ×3, prometheus-operator. ServiceMonitor selectors set cluster-wide so
+  cilium / longhorn / cert-manager / traefik / Loki / Alloy / VM
+  components are all being scraped.
+- VM stack: VMSingle (67 targets — slightly more than Prom because
+  vmagent also scrapes VMServiceScrapes and VL/VM internals), vmagent,
+  vmalert (firing to KPS Alertmanager). VMAlertmanager disabled.
+- Loki single-binary on Longhorn, ingesting via Alloy.
+- VictoriaLogs single-node on Longhorn, ingesting via the same Alloy
+  DaemonSet's second `loki.write` sink — stream labels flow through
+  identically.
+- OpenObserve unchanged, not part of evaluation.
+
+Snags hit during setup, recorded for "operational ergonomics" axis:
+
+- KPS chart version assumed (8.5.2) was wildly stale; current is 84.3.0.
+  My fault, not the chart's. Caught before push.
+- VM-k8s-stack: chart's value path for the bundled VMAlertmanager is
+  `alertmanager:` at the values root, not `vmalertmanager:` as I'd
+  assumed by analogy with `vmsingle` / `vmagent` / `vmalert`. Disable
+  flag was silently accepted and ignored — required a fix-up commit.
+- VM-k8s-stack: with VMAlertmanager disabled, vmalert errors at
+  template-render unless given an explicit notifier or
+  `vmalert.spec.extraArgs.['notifier.blackhole']: 'true'`. Resolved by
+  pointing vmalert at KPS Alertmanager. Single AM UI for both stacks
+  is a win incidentally.
+- VM datasource ConfigMap initially had port 8429 (vmagent's port);
+  vmsingle is on 8428. Trivial off-by-one, fixed.
+
+These are the kind of "operational footgun" findings that should
+inform the comparison. Loki has not yet reciprocated with anything
+similar, but it's been live for ~1h.
+
+## Next
+
+- Use the stack daily for real queries. Open Grafana, hit Explore,
+  query each datasource. Build a small mental model of which UX feels
+  better, which dashboards work without modification, what the day-2
+  ops feel is.
+- Author the three test alerts (node disk >80%, pod crashlooping,
+  Longhorn replica unhealthy) on each stack and note the time + pain.
+- Run for at least 2 weeks. Expect to update Findings as observations
+  accumulate.
 
 ## Decision
 
