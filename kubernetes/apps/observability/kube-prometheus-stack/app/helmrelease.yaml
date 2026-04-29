@@ -1,0 +1,99 @@
+---
+# kube-prometheus-stack — Pipeline A's metrics + alerting layer.
+# Prometheus, Alertmanager, kube-state-metrics, node-exporter, the
+# prometheus-operator, and the standard set of bundled dashboards/rules.
+#
+# The Grafana subchart is disabled — we use the standalone Grafana
+# deployed in commit 1. Dashboards still render as ConfigMaps with the
+# `grafana_dashboard: "1"` label, which the standalone Grafana sidecar
+# discovers automatically. Datasources are registered separately via
+# datasources.yaml (also a labeled ConfigMap).
+#
+# kubeControllerManager / kubeScheduler / kubeEtcd scrape configs are
+# disabled because Talos binds those metric endpoints to localhost by
+# default; surfacing them needs a Talos config change we declined to
+# take during the bake-off (see docs/observability-bakeoff.md).
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: kube-prometheus-stack
+spec:
+  chart:
+    spec:
+      chart: kube-prometheus-stack
+      version: 84.3.0
+      sourceRef:
+        kind: HelmRepository
+        name: prometheus-community
+  interval: 1h
+  values:
+    crds:
+      enabled: true
+
+    grafana:
+      enabled: false
+      forceDeployDashboards: true
+      forceDeployDatasources: false
+      sidecar:
+        dashboards:
+          label: grafana_dashboard
+          labelValue: "1"
+
+    kubeControllerManager:
+      enabled: false
+    kubeScheduler:
+      enabled: false
+    kubeEtcd:
+      enabled: false
+
+    prometheus:
+      prometheusSpec:
+        # Watch ServiceMonitors / PodMonitors / Rules / Probes across all
+        # namespaces. Default scope is too narrow — cilium, longhorn,
+        # traefik etc. emit ServiceMonitors outside observability.
+        serviceMonitorSelectorNilUsesHelmValues: false
+        podMonitorSelectorNilUsesHelmValues: false
+        ruleSelectorNilUsesHelmValues: false
+        probeSelectorNilUsesHelmValues: false
+        retention: 30d
+        retentionSize: "45GB"   # leave headroom under the PVC size below
+        storageSpec:
+          volumeClaimTemplate:
+            spec:
+              storageClassName: longhorn
+              accessModes: ["ReadWriteOnce"]
+              resources:
+                requests:
+                  storage: 50Gi
+        resources:
+          requests:
+            cpu: 200m
+            memory: 1Gi
+          limits:
+            memory: 2Gi
+
+    alertmanager:
+      alertmanagerSpec:
+        storage:
+          volumeClaimTemplate:
+            spec:
+              storageClassName: longhorn
+              accessModes: ["ReadWriteOnce"]
+              resources:
+                requests:
+                  storage: 1Gi
+        resources:
+          requests:
+            cpu: 10m
+            memory: 64Mi
+          limits:
+            memory: 128Mi
+
+    nodeExporter:
+      enabled: true
+
+    kubeStateMetrics:
+      enabled: true
+
+    prometheusOperator:
+      enabled: true

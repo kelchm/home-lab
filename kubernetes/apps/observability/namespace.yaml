@@ -5,3 +5,11 @@ metadata:
   name: observability
   annotations:
     kustomize.toolkit.fluxcd.io/prune: disabled
+  labels:
+    # Required by node-exporter (hostNetwork, hostPID, host filesystem
+    # mounts) deployed as part of kube-prometheus-stack. PSA on Talos
+    # enforces strict defaults outside kube-system, so workloads needing
+    # privileged access need this label on their namespace.
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/warn: privileged
+    pod-security.kubernetes.io/audit: privileged

@@ -1,0 +1,30 @@
+---
+# Grafana datasource registration for KPS's Prometheus + Alertmanager.
+# The standalone Grafana's sidecar (commit 1) discovers any ConfigMap in
+# this namespace labeled `grafana_datasource: "1"` and registers its
+# datasources without a Grafana restart.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasource-kps
+  labels:
+    grafana_datasource: "1"
+data:
+  kps.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        uid: prometheus-kps
+        type: prometheus
+        access: proxy
+        url: http://kube-prometheus-stack-prometheus.observability.svc.cluster.local:9090
+        isDefault: true
+        editable: false
+      - name: Alertmanager
+        uid: alertmanager-kps
+        type: alertmanager
+        access: proxy
+        url: http://kube-prometheus-stack-alertmanager.observability.svc.cluster.local:9093
+        jsonData:
+          implementation: prometheus
+        editable: false
