@@ -99,8 +99,12 @@ spec:
       spec:
         selectAllByDefault: true
         evaluationInterval: 30s
-        # No notifier — we're evaluating rule authoring ergonomics in the
-        # bake-off, not delivery. Mirrors KPS AM having no notifier wired.
+        # Fire to KPS Alertmanager — single AM UI showing alerts from
+        # both stacks. KPS AM still has no external notifier wired
+        # (matching the bake-off doc's "rule eval yes, delivery no"
+        # stance), so this is just where alerts surface for inspection.
+        notifiers:
+          - url: http://kube-prometheus-stack-alertmanager.observability.svc.cluster.local:9093
         resources:
           requests:
             cpu: 50m
