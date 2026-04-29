@@ -13,4 +13,5 @@ resources:
   - ./loki/ks.yaml
   - ./alloy/ks.yaml
   - ./victoria-metrics-k8s-stack/ks.yaml
+  - ./victoria-logs-single/ks.yaml
   - ./openobserve/ks.yaml

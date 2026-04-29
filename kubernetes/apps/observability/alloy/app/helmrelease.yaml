@@ -86,15 +86,31 @@ spec:
             forward_to = [loki.process.pod_logs.receiver]
           }
 
-          // Decode CRI log format (Talos uses containerd).
+          // Decode CRI log format (Talos uses containerd) and fan out
+          // to both log backends. Same parsed events, same labels,
+          // byte-identical input on each — the bake-off comparison is
+          // purely about the storage/query layer downstream.
           loki.process "pod_logs" {
             stage.cri {}
-            forward_to = [loki.write.loki.receiver]
+            forward_to = [
+              loki.write.loki.receiver,
+              loki.write.vl.receiver,
+            ]
           }
 
           loki.write "loki" {
             endpoint {
               url = "http://loki.observability.svc.cluster.local:3100/loki/api/v1/push"
+            }
+          }
+
+          // VictoriaLogs accepts the Loki HTTP ingestion API natively
+          // at /insert/loki/api/v1/push. Stream labels (namespace, pod,
+          // container, node) come through as VL stream fields with no
+          // additional config needed.
+          loki.write "vl" {
+            endpoint {
+              url = "http://victoria-logs-single-server.observability.svc.cluster.local:9428/insert/loki/api/v1/push"
             }
           }
 

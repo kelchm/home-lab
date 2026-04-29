@@ -1,0 +1,46 @@
+---
+# VictoriaLogs single-node — Pipeline B's log backend. Same shape as
+# Loki single-binary in scope, different engine. VL accepts the Loki
+# HTTP ingestion API natively, which lets Alloy dual-write to Loki and
+# VL through a single agent (see alloy commit) — both backends see
+# byte-identical input, so the bake-off comparison is purely on
+# storage, query, and operational ergonomics.
+#
+# Reuses the victoriametrics HelmRepository deployed by commit 4.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: victoria-logs-single
+spec:
+  chart:
+    spec:
+      chart: victoria-logs-single
+      version: 0.12.2
+      sourceRef:
+        kind: HelmRepository
+        name: victoriametrics
+  interval: 1h
+  values:
+    # The chart bundles a Vector subchart. We use Alloy instead — disable.
+    vector:
+      enabled: false
+
+    server:
+      retentionPeriod: 30d   # match Loki's retention for fair comparison
+      persistentVolume:
+        enabled: true
+        size: 30Gi
+        storageClassName: longhorn
+      resources:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          memory: 1Gi
+      serviceMonitor:
+        enabled: true   # let KPS Prom scrape VL itself
+
+    dashboards:
+      enabled: true
+      labels:
+        grafana_dashboard: "1"

@@ -1,0 +1,24 @@
+---
+# VictoriaLogs datasource for the standalone Grafana sidecar.
+#
+# Type is `victoriametrics-logs-datasource` — the dedicated VL plugin
+# installed alongside the Grafana chart in commit 1. The plugin handles
+# LogsQL natively (VL's query language; not LogQL, not PromQL) and
+# exposes VL-specific features. Loki dashboards from grafana.com don't
+# transplant here because the query language is genuinely different.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasource-vl
+  labels:
+    grafana_datasource: "1"
+data:
+  vl.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: VictoriaLogs
+        uid: victorialogs
+        type: victoriametrics-logs-datasource
+        access: proxy
+        url: http://victoria-logs-single-server.observability.svc.cluster.local:9428
+        editable: false

@@ -2,18 +2,17 @@
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
-  name: alloy
+  name: victoria-logs-single
 spec:
   dependsOn:
-    - name: loki                   # primary log backend
-    - name: victoria-logs-single   # second log backend (dual-write)
+    - name: victoria-metrics-k8s-stack   # reuses the victoriametrics HelmRepository
   healthChecks:
     - apiVersion: helm.toolkit.fluxcd.io/v2
       kind: HelmRelease
-      name: alloy
+      name: victoria-logs-single
       namespace: observability
   interval: 1h
-  path: ./kubernetes/apps/observability/alloy/app
+  path: ./kubernetes/apps/observability/victoria-logs-single/app
   postBuild:
     substituteFrom:
       - name: cluster-secrets
