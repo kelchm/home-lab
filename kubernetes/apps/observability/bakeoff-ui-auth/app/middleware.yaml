@@ -1,0 +1,17 @@
+---
+# Traefik BasicAuth middleware shared by every native stack UI exposed
+# during the bake-off (Prometheus, Alertmanager, vmui, vmagent, vmalert,
+# VictoriaLogs). Mirrors Longhorn's pattern — same BasicAuth shape,
+# different Secret name. Reusing Longhorn's actual credentials for now;
+# proper auth/IdP comes as the next big workstream and at that point
+# this Middleware swaps to forwardAuth and the HTTPRoute filters stay
+# identically shaped.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: bakeoff-ui-auth
+spec:
+  basicAuth:
+    secret: bakeoff-ui-htpasswd
+    realm: Bake-off UIs
+    removeHeader: true   # don't leak Authorization to backends

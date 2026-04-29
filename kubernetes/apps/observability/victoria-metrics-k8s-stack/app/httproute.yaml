@@ -1,0 +1,69 @@
+---
+# VictoriaMetrics vmui — VM's built-in query browser. Genuinely nicer
+# than Prometheus's native expr browser; an actual axis of comparison
+# in the bake-off.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: vmsingle
+spec:
+  hostnames: ["vm.home.kelch.io"]
+  parentRefs:
+    - name: gateway-admin
+      namespace: network
+      sectionName: https
+  rules:
+    - filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: traefik.io
+            kind: Middleware
+            name: bakeoff-ui-auth
+      backendRefs:
+        - name: vmsingle-victoria-metrics-k8s-stack
+          port: 8428
+---
+# vmagent UI — exposes /targets, ingestion stats, and (the defensive
+# selling point) persistent queue depth.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: vmagent
+spec:
+  hostnames: ["vmagent.home.kelch.io"]
+  parentRefs:
+    - name: gateway-admin
+      namespace: network
+      sectionName: https
+  rules:
+    - filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: traefik.io
+            kind: Middleware
+            name: bakeoff-ui-auth
+      backendRefs:
+        - name: vmagent-victoria-metrics-k8s-stack
+          port: 8429
+---
+# vmalert UI — rule groups, evaluation results, firing alerts.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: vmalert
+spec:
+  hostnames: ["vmalert.home.kelch.io"]
+  parentRefs:
+    - name: gateway-admin
+      namespace: network
+      sectionName: https
+  rules:
+    - filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: traefik.io
+            kind: Middleware
+            name: bakeoff-ui-auth
+      backendRefs:
+        - name: vmalert-victoria-metrics-k8s-stack
+          port: 8080

@@ -8,6 +8,7 @@ components:
 
 resources:
   - ./namespace.yaml
+  - ./bakeoff-ui-auth/ks.yaml
   - ./grafana/ks.yaml
   - ./kube-prometheus-stack/ks.yaml
   - ./loki/ks.yaml

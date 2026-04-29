@@ -6,6 +6,7 @@ metadata:
 spec:
   dependsOn:
     - name: kube-prometheus-stack   # we reuse KPS's KSM, node-exporter, Alertmanager, prometheus-operator CRDs
+    - name: bakeoff-ui-auth         # HTTPRoutes reference the shared Traefik Middleware
   healthChecks:
     - apiVersion: helm.toolkit.fluxcd.io/v2
       kind: HelmRelease
