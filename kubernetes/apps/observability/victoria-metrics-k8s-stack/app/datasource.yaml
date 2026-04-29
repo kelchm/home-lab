@@ -1,0 +1,25 @@
+---
+# VictoriaMetrics datasource for the standalone Grafana sidecar.
+#
+# Type is `prometheus` — VM speaks PromQL natively, so KPS's bundled
+# dashboards drop in unchanged when repointed at this datasource. The
+# `victoriametrics-metrics-datasource` plugin is also installed (see
+# Grafana commit 1) and exposes VM-specific features like downsampling
+# queries, but for the bake-off the apples-to-apples comparison wants
+# the same datasource type on both sides.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasource-vm
+  labels:
+    grafana_datasource: "1"
+data:
+  vm.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: VictoriaMetrics
+        uid: victoriametrics
+        type: prometheus
+        access: proxy
+        url: http://vmsingle-victoria-metrics-k8s-stack.observability.svc.cluster.local:8429
+        editable: false

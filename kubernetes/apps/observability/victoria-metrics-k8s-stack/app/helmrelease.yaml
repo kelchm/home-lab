@@ -1,0 +1,107 @@
+---
+# victoria-metrics-k8s-stack — Pipeline B's metrics layer. Operator,
+# VMSingle (single-node TSDB), vmagent (scraping), vmalert (rule eval).
+# vmagent is the actual point of the comparison vs KPS Prom — its
+# persistent queue is the defensive ingest property we cited as the
+# reason VM is in the bake-off.
+#
+# Subcharts disabled to avoid duplicating components we already have:
+# - kube-state-metrics and node-exporter live in KPS already; vmagent
+#   scrapes them via the same ServiceMonitors KPS Prom does.
+# - grafana is the standalone instance from commit 1.
+# - vmalertmanager is disabled in favor of KPS's Alertmanager. vmalert
+#   does NOT fire to it during the bake-off — neither stack has an
+#   external notifier target wired (matching the "no delivery during
+#   the bake-off, only rule evaluation" stance in observability-bakeoff.md).
+#
+# Same Talos localhost-bound endpoints disabled here as in KPS
+# (kubeControllerManager / kubeScheduler / kubeEtcd).
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: victoria-metrics-k8s-stack
+spec:
+  chart:
+    spec:
+      chart: victoria-metrics-k8s-stack
+      version: 0.76.0
+      sourceRef:
+        kind: HelmRepository
+        name: victoriametrics
+  interval: 1h
+  values:
+    # Subcharts already provided elsewhere — disable to avoid duplication.
+    grafana:
+      enabled: false
+      forceDeployDashboards: true
+      defaultDashboardsEnabled: true
+      sidecar:
+        dashboards:
+          label: grafana_dashboard
+          labelValue: "1"
+
+    kube-state-metrics:
+      enabled: false
+    prometheus-node-exporter:
+      enabled: false
+
+    # vmalertmanager off — KPS Alertmanager is the single AM during bake-off.
+    vmalertmanager:
+      enabled: false
+
+    # Talos binds these to localhost; matches the KPS exclusion.
+    kubeControllerManager:
+      enabled: false
+    kubeScheduler:
+      enabled: false
+    kubeEtcd:
+      enabled: false
+
+    vmsingle:
+      enabled: true
+      spec:
+        retentionPeriod: "30d"
+        storage:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 50Gi
+          storageClassName: longhorn
+        resources:
+          requests:
+            cpu: 200m
+            memory: 1Gi
+          limits:
+            memory: 2Gi
+
+    vmagent:
+      enabled: true
+      spec:
+        # Scrape ServiceMonitor / PodMonitor / VMServiceScrape / VMPodScrape
+        # cluster-wide. vm-operator auto-converts prometheus-operator CRDs
+        # so KPS's ServiceMonitors flow through transparently.
+        selectAllByDefault: true
+        scrapeInterval: 30s
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            memory: 512Mi
+
+    vmalert:
+      enabled: true
+      spec:
+        selectAllByDefault: true
+        evaluationInterval: 30s
+        # No notifier — we're evaluating rule authoring ergonomics in the
+        # bake-off, not delivery. Mirrors KPS AM having no notifier wired.
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            memory: 256Mi
+
+    defaultRules:
+      create: true
