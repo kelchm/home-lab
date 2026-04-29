@@ -8,4 +8,5 @@ components:
 
 resources:
   - ./namespace.yaml
+  - ./grafana/ks.yaml
   - ./openobserve/ks.yaml
