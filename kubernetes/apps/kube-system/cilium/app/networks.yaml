@@ -1,6 +1,8 @@
 ---
-# Admin pool — VLAN 30, cluster-managed LBs (gateways, DNS).
-# Convention: .30-.39 infrastructure LBs, .40-.99 application LBs.
+# Legacy L2-announced pools — kept as rollback targets after the BGP
+# migration. The corresponding CiliumL2AnnouncementPolicy resources were
+# removed in step 12; re-add them to roll back. Pools and VLAN 40 are
+# removed in step 14 once a stable maintenance window has passed.
 apiVersion: cilium.io/v2alpha1
 kind: CiliumLoadBalancerIPPool
 metadata:
@@ -11,8 +13,6 @@ spec:
     - start: "10.32.30.30"
       stop: "10.32.30.99"
 ---
-# Services pool — VLAN 40, household-facing services (DMZ ingress).
-# Convention: .30-.39 infrastructure LBs, .40-.99 application LBs.
 apiVersion: cilium.io/v2alpha1
 kind: CiliumLoadBalancerIPPool
 metadata:
@@ -22,35 +22,3 @@ spec:
   blocks:
     - start: "10.32.40.30"
       stop: "10.32.40.99"
----
-# Admin L2 announcement — announces on VLAN 30 primary interface only
-apiVersion: cilium.io/v2alpha1
-kind: CiliumL2AnnouncementPolicy
-metadata:
-  name: admin
-spec:
-  loadBalancerIPs: true
-  serviceSelector:
-    matchLabels:
-      lb-pool: admin
-  interfaces:
-    - "^eno[0-9]+$"
-  nodeSelector:
-    matchLabels:
-      kubernetes.io/os: linux
----
-# Services L2 announcement — announces on VLAN 40 tagged subinterface only
-apiVersion: cilium.io/v2alpha1
-kind: CiliumL2AnnouncementPolicy
-metadata:
-  name: services
-spec:
-  loadBalancerIPs: true
-  serviceSelector:
-    matchLabels:
-      lb-pool: services
-  interfaces:
-    - "^eno[0-9]+\\.40$"
-  nodeSelector:
-    matchLabels:
-      kubernetes.io/os: linux
