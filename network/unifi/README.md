@@ -31,7 +31,7 @@ Retrieve it with:
 
 ```sh
 sops --decrypt \
-  kubernetes/apps/kube-system/cilium/app/bgp-secret.sops.yaml \
+  kubernetes/apps/kube-system/cilium-bgp/app/bgp-secret.sops.yaml \
   | yq '.stringData.password'
 ```
 
