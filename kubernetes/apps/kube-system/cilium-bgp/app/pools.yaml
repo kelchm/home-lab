@@ -18,3 +18,19 @@ spec:
   serviceSelector:
     matchLabels:
       lb-pool: admin-prod
+---
+# services-prod — household-facing LBs. Coexists with the legacy L2 `services`
+# pool (10.32.40.30/24) until step 12 of the migration. Pool /24 skeleton:
+# .1 anchor (traefik-services), .2-.10 specials, .30-.99 per-service IPs.
+apiVersion: cilium.io/v2alpha1
+kind: CiliumLoadBalancerIPPool
+metadata:
+  name: services-prod
+spec:
+  allowFirstLastIPs: "No"
+  blocks:
+    - start: "10.32.140.1"
+      stop: "10.32.140.99"
+  serviceSelector:
+    matchLabels:
+      lb-pool: services-prod

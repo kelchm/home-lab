@@ -1,6 +1,5 @@
 ---
 # traefik-services — fronts LAN household-facing apps (DMZ pattern).
-# LoadBalancer at 10.32.40.30 on the services pool / VLAN 40.
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
@@ -40,9 +39,9 @@ spec:
       enabled: true
       type: LoadBalancer
       labels:
-        lb-pool: services
+        lb-pool: services-prod
       annotations:
-        lbipam.cilium.io/ips: 10.32.40.30
+        lbipam.cilium.io/ips: 10.32.140.1
       spec:
         externalTrafficPolicy: Cluster
     ports:
