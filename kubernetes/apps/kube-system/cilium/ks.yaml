@@ -16,4 +16,6 @@ spec:
     name: flux-system
     namespace: flux-system
   targetNamespace: kube-system
-  wait: false
+  # wait: true so cilium-bgp's dependsOn gates on the HelmRelease being
+  # actually rolled out (i.e., BGP CRDs installed by the chart).
+  wait: true
