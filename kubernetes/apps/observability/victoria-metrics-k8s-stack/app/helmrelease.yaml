@@ -32,22 +32,27 @@ spec:
   values:
     # Subcharts already provided elsewhere — disable to avoid duplication.
     grafana:
-      enabled: false
-      forceDeployDashboards: true
-      defaultDashboardsEnabled: true
-      sidecar:
-        dashboards:
-          label: grafana_dashboard
-          labelValue: "1"
+      enabled: false   # using standalone Grafana from commit 1
 
     kube-state-metrics:
       enabled: false
     prometheus-node-exporter:
       enabled: false
 
-    # vmalertmanager off — KPS Alertmanager is the single AM during bake-off.
-    vmalertmanager:
+    # The chart's own VMAlertmanager — disabled in favor of KPS's
+    # Alertmanager during the bake-off. The chart names this `alertmanager`
+    # (not `vmalertmanager`) at the values root, even though the resource
+    # it creates is a VMAlertmanager CRD.
+    alertmanager:
       enabled: false
+
+    # Default dashboards rendered as ConfigMaps (chart default). The
+    # standalone Grafana's sidecar discovers them via `grafana_dashboard`
+    # label. Default datasources are rendered into the disabled grafana
+    # subchart and end up as no-ops, so our `datasource.yaml` is the
+    # only VM datasource Grafana actually sees.
+    defaultDashboards:
+      enabled: true
 
     # Talos binds these to localhost; matches the KPS exclusion.
     kubeControllerManager:
