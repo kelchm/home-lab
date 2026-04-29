@@ -10,6 +10,8 @@ spec:
   interval: 1h
   values:
     autoDirectNodeRoutes: true
+    bgpControlPlane:
+      enabled: true
     bpf:
       masquerade: true
     cni:

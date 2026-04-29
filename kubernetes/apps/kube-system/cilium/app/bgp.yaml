@@ -1,0 +1,67 @@
+---
+# BGP cluster config — runs the speaker on every Linux node, peering with the
+# UniFi gateway from each node's VLAN 30 interface.
+apiVersion: cilium.io/v2alpha1
+kind: CiliumBGPClusterConfig
+metadata:
+  name: prod
+spec:
+  nodeSelector:
+    matchLabels:
+      kubernetes.io/os: linux
+  bgpInstances:
+    - name: prod
+      localASN: 65020
+      peers:
+        - name: unifi-gateway
+          peerASN: 65000
+          peerAddress: 10.32.30.1
+          peerConfigRef:
+            name: unifi-gateway
+---
+# Per-peer config: timers match UniFi (3s keepalive / 9s hold), MD5 auth from
+# the bgp-md5 Secret, graceful restart so a node reboot doesn't immediately
+# withdraw routes from the other peers' learned RIB.
+apiVersion: cilium.io/v2alpha1
+kind: CiliumBGPPeerConfig
+metadata:
+  name: unifi-gateway
+spec:
+  authSecretRef: bgp-md5
+  timers:
+    holdTimeSeconds: 9
+    keepAliveTimeSeconds: 3
+    connectRetryTimeSeconds: 5
+  gracefulRestart:
+    enabled: true
+    restartTimeSeconds: 120
+  families:
+    - afi: ipv4
+      safi: unicast
+      advertisements:
+        matchLabels:
+          advertise: bgp
+---
+# Advertise allocated LoadBalancer VIPs as /32s for Services labeled with the
+# new BGP-era pool names. No Service carries these labels yet — sessions will
+# establish but advertise nothing until step 5 (admin-prod pool) and step 7
+# (admin gateway cutover) of the migration.
+apiVersion: cilium.io/v2alpha1
+kind: CiliumBGPAdvertisement
+metadata:
+  name: lb-services
+  labels:
+    advertise: bgp
+spec:
+  advertisements:
+    - advertisementType: Service
+      service:
+        addresses:
+          - LoadBalancerIP
+      selector:
+        matchExpressions:
+          - key: lb-pool
+            operator: In
+            values:
+              - admin-prod
+              - services-prod

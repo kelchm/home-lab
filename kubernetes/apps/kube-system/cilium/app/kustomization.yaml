@@ -5,3 +5,5 @@ resources:
   - ./helmrelease.yaml
   - ./ocirepository.yaml
   - ./networks.yaml
+  - ./bgp.yaml
+  - ./bgp-secret.sops.yaml

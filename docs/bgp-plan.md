@@ -2,7 +2,9 @@
 
 ## Status
 
-Not yet implemented. This document captures the target architecture for migrating from Cilium L2 announcements to Cilium BGP, including the unified IP convention that becomes possible under BGP. Will be merged into `architecture.md` when executed.
+In progress. This document captures the target architecture for migrating from Cilium L2 announcements to Cilium BGP, including the unified IP convention that becomes possible under BGP. Will be merged into `architecture.md` when executed.
+
+Initial migration scope is `admin-prod` and `services-prod` only. AdGuard is deferred (UniFi gateway is the LAN resolver and forwards the `home.kelch.io` zone to `k8s-gateway`), so `shared-prod` has no immediate tenant and migration step 11 is future work. The pool design is preserved so a later AdGuard or other shared-VLAN service can land cleanly.
 
 ## Trigger conditions
 
@@ -228,8 +230,8 @@ Failure isolation: sandbox BGP issues cannot blackhole prod traffic when prefix-
 
 ## Migration sequencing
 
-1. Prerequisite: alerting on Cilium BGP session state in OpenObserve
-2. Lower TTLs on records that will move (e.g., wildcard, admin gateway, per-service DNS) to 60–120s, at least one prior TTL window before cutover
+1. ~~Prerequisite: alerting on Cilium BGP session state in OpenObserve~~ — **skipped intentionally**; revisit once BGP is steady-state and OpenObserve is the obvious place for it.
+2. ~~Lower TTLs on records that will move (e.g., wildcard, admin gateway, per-service DNS) to 60–120s, at least one prior TTL window before cutover~~ — **already satisfied**: `k8s-gateway` serves the zone with `ttl: 1` and is the only resolver path that points at LAN LB IPs.
 3. Configure UniFi BGP: AS, neighbor entries for prod nodes, prefix-list filters (accept `<pool>/24 le 32`)
 4. Apply `CiliumBGPClusterConfig` and `CiliumBGPAdvertisement` — peering establishes, no Service VIPs allocated yet from BGP pools
 5. Create `CiliumLoadBalancerIPPool` for `admin-prod` (10.32.130.0/24) alongside existing L2 pool
@@ -238,7 +240,7 @@ Failure isolation: sandbox BGP issues cannot blackhole prod traffic when prefix-
 8. Move `k8s-gateway` DNS to `10.32.130.2`
 9. Create `services-prod` pool, move services Traefik to `10.32.140.1`
 10. Migrate one low-risk per-service app (e.g., Jellyfin) to a `services-prod` per-service VIP
-11. Create `shared-prod` pool, move AdGuard DNS to `10.32.150.53` only after the per-IP+port firewall rules are proven against IoT/Guest VLANs
+11. ~~Create `shared-prod` pool, move AdGuard DNS to `10.32.150.53` only after the per-IP+port firewall rules are proven against IoT/Guest VLANs~~ — **deferred**: no current tenant. Pool design preserved for when AdGuard or another shared-VLAN service lands.
 12. Once all Services migrated, remove L2 announcement policy
 13. Leave VLAN 40 dormant but in place for at least one stable maintenance window (no service depends on it, but the L2 pool stays available as a rollback target)
 14. Remove VLAN 40 from switch trunks, delete from UniFi config, remove VLAN 40 subinterfaces from Talos node configs
