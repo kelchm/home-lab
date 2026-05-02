@@ -105,14 +105,21 @@ Examples:
 
 ### Storage VLAN specialization
 
-Storage VLAN bends the skeleton because primary inhabitants are storage *providers*, not cluster nodes, and many clusters can have a presence:
+Storage VLAN bends the skeleton because primary inhabitants are storage *providers*, not cluster nodes, and many clusters can have a presence. The /24 also carries pod-level endpoints for workloads that need a presence on the storage VLAN (Longhorn instance managers via Multus); those use a parallel allocation in the `.1XX` range with the same per-cluster decade structure.
 
 | Range | Purpose |
 |---|---|
 | `.2-.10` | Storage providers (NAS units, MinIO, backup appliances) |
-| `.11-.19` | Cluster #1 storage interfaces (prod) |
-| `.20-.29` | Cluster #2 storage interfaces (future sandbox) |
-| `.30-.99` | Clusters #3-#9 (one decade each) |
+| `.11-.19` | Cluster #1 host NICs (prod) |
+| `.20-.29` | Cluster #2 host NICs (future sandbox) |
+| `.30-.99` | Clusters #3-#9 host NICs (one decade each) |
+| `.100-.109` | Reserved (mirror of provider range) |
+| `.110-.119` | Cluster #1 storage-pod IPs (prod) |
+| `.120-.129` | Cluster #2 storage-pod IPs (future sandbox) |
+| `.130-.199` | Clusters #3-#9 storage-pod IPs (one decade each) |
+| `.200-.254` | Reserved |
+
+**Reading rule:** hundreds digit `1` indicates a pod-level endpoint; tens digit still encodes the cluster. Units digit mirrors the host scheme so a pod IP sits at host-IP+100 — `.111` is the storage-pod on the node whose host NIC is `.11`. This composes cleanly for sandbox: cluster #2 host NICs at `.21-.29`, cluster #2 storage-pods at `.121-.129`.
 
 ## Prod Cluster IP Allocation
 
@@ -130,13 +137,17 @@ API VIP is managed by the Talos `vipController` (GARP-based at the machine-confi
 **Lab Storage VLAN (25):**
 
 ```
-10.32.25.1        gateway-storage          Router interface
-10.32.25.5        nas-storage              Synology (SFP+ interface)
-10.32.25.6-.10    (reserved for future storage providers)
-10.32.25.11-.13   k8s-prod-{1,2,3}-storage Cluster #1 storage interfaces (2.5GbE NIC)
-10.32.25.14-.19   (reserved for cluster #1 expansion)
-10.32.25.21-.29   (reserved for cluster #2 — future sandbox)
-10.32.25.30-.99   (reserved for clusters #3-#9, one decade each)
+10.32.25.1         gateway-storage           Router interface
+10.32.25.5         nas-storage               Synology (SFP+ interface)
+10.32.25.6-.10     (reserved for future storage providers)
+10.32.25.11-.13    k8s-prod-{1,2,3}-storage  Cluster #1 host NICs (2.5GbE)
+10.32.25.14-.19    (reserved for cluster #1 host expansion)
+10.32.25.21-.29    (reserved for cluster #2 host NICs — future sandbox)
+10.32.25.30-.99    (reserved for clusters #3-#9 host NICs)
+10.32.25.111-.113  longhorn-im-prod-{1,2,3}  Cluster #1 Longhorn IM pods (Multus on VLAN 25)
+10.32.25.114-.119  (reserved for cluster #1 storage-pod expansion)
+10.32.25.121-.129  (reserved for cluster #2 storage-pod IPs)
+10.32.25.130-.199  (reserved for clusters #3-#9 storage-pod IPs)
 ```
 
 **Lab Infra VLAN (20):**
@@ -300,7 +311,7 @@ Failure isolation: sandbox BGP issues cannot blackhole prod traffic when prefix-
 
 ## Storage Strategy
 
-- **Longhorn on NVMe**: dedicated user volume per node mounted at `/var/mnt/longhorn` (~890 GiB on the 1 TB SN770, xfs); 3-replica for critical PVCs (databases, stateful apps), 2-replica default
+- **Longhorn on NVMe**: dedicated user volume per node mounted at `/var/mnt/longhorn` (~890 GiB on the 1 TB SN770, xfs); 3-replica for critical PVCs (databases, stateful apps), 2-replica default. Replica engine ↔ replica engine traffic rides VLAN 25 (2.5GbE storage NIC) via Multus + macvlan; Longhorn's `storage-network` setting points at a NetworkAttachmentDefinition that attaches a secondary interface to instance-manager pods with IPs from `10.32.25.110/29` (Whereabouts pool, see [Storage VLAN specialization](#storage-vlan-specialization)).
 - **NFS from Synology**: bulk storage via `csi-driver-nfs` (media libraries, *arr content, Nextcloud data, anything large and sequential)
 - **Rule of thumb**: Longhorn for default Helm chart PVCs (Postgres, Redis, Grafana); NFS for bulk sequential data
 

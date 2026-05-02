@@ -1,0 +1,32 @@
+---
+# Secondary network attached to Longhorn instance-manager pods so replica
+# engine ↔ replica engine traffic rides VLAN 25 (2.5GbE storage NIC).
+# Whereabouts coordinates IP allocation across nodes from .111-.119
+# (cluster #1 storage-pod range — see docs/architecture.md).
+#
+# `mode: bridge` lets macvlan endpoints on the same host communicate
+# (irrelevant for our 1-pod-per-node DaemonSet, but the most permissive
+# default and matches upstream Longhorn examples).
+#
+# No `gateway` — pods on this secondary only need same-VLAN reachability
+# (other IM pods, nas-storage at .5). Setting a gateway risks overriding
+# the pod's primary default route on Cilium.
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata:
+  name: storage-network
+  namespace: longhorn-system
+spec:
+  config: |
+    {
+      "cniVersion": "0.3.1",
+      "type": "macvlan",
+      "master": "enp6s0",
+      "mode": "bridge",
+      "ipam": {
+        "type": "whereabouts",
+        "range": "10.32.25.0/24",
+        "range_start": "10.32.25.111",
+        "range_end": "10.32.25.119"
+      }
+    }

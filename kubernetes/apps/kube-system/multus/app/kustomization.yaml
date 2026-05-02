@@ -1,0 +1,30 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Multus runs as a meta-CNI alongside Cilium. Pods get Cilium primary; pods
+# annotated with k8s.v1.cni.cncf.io/networks gain a secondary interface from
+# the referenced NetworkAttachmentDefinition. See docs/architecture.md for
+# the storage-VLAN allocation feeding Longhorn instance-manager pods.
+#
+# Talos quirks (ref: docs.siderolabs.com/kubernetes-guides/cni/multus):
+#   - Pin the image off the moving `snapshot-thick` tag.
+#   - host-run-netns hostPath must be /var/run/netns; upstream's /run/netns
+#     leaves new pods unable to attach (cluster-crippling).
+#   - 50Mi memory limit OOMs under load; bumped to 150Mi.
+resources:
+  - https://raw.githubusercontent.com/k8snetworkplumbingwg/multus-cni/v4.2.4/deployments/multus-daemonset-thick.yml
+
+images:
+  - name: ghcr.io/k8snetworkplumbingwg/multus-cni
+    newTag: v4.2.4-thick
+
+patches:
+  - path: ./patches/host-run-netns.yaml
+    target:
+      kind: DaemonSet
+      name: kube-multus-ds
+  - path: ./patches/resources.yaml
+    target:
+      kind: DaemonSet
+      name: kube-multus-ds

@@ -1,0 +1,16 @@
+---
+# Talos exposes netns under /var/run/netns; the upstream /run/netns path
+# leaves Multus unable to attach new pods. Strategic merge keys volumes by
+# name, so this replaces just the matching entry.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: kube-multus-ds
+  namespace: kube-system
+spec:
+  template:
+    spec:
+      volumes:
+        - name: host-run-netns
+          hostPath:
+            path: /var/run/netns/

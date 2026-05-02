@@ -1,0 +1,22 @@
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: whereabouts
+spec:
+  dependsOn:
+    - name: multus                 # Whereabouts is the IPAM behind Multus secondary networks
+  healthChecks:
+    - apiVersion: apps/v1
+      kind: DaemonSet
+      name: whereabouts
+      namespace: kube-system
+  interval: 1h
+  path: ./kubernetes/apps/kube-system/whereabouts/app
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+    namespace: flux-system
+  targetNamespace: kube-system
+  wait: true

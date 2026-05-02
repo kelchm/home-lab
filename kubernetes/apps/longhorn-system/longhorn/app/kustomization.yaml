@@ -7,3 +7,4 @@ resources:
   - ./secret.sops.yaml
   - ./middleware.yaml
   - ./httproute.yaml
+  - ./networkattachmentdefinition.yaml

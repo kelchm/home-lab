@@ -4,6 +4,11 @@ kind: Kustomization
 metadata:
   name: longhorn
 spec:
+  dependsOn:
+    - name: multus                 # NetworkAttachmentDefinition CRD provider
+      namespace: kube-system
+    - name: whereabouts            # IPAM behind storage-network NAD
+      namespace: kube-system
   healthChecks:
     - apiVersion: helm.toolkit.fluxcd.io/v2
       kind: HelmRelease

@@ -1,0 +1,21 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Whereabouts is cluster-coordinated IPAM for Multus-attached secondary
+# networks. Reference IPAM plugins (static, host-local) can't allocate
+# unique IPs across nodes from a shared pool — Whereabouts persists
+# allocations as IPPool CRs so a 3-node DaemonSet gets three distinct,
+# stable IPs from one configured range.
+#
+# Used by: longhorn-system/storage-network NAD (see
+# kubernetes/apps/longhorn-system/longhorn/app/networkattachmentdefinition.yaml).
+resources:
+  - https://raw.githubusercontent.com/k8snetworkplumbingwg/whereabouts/v0.9.3/doc/crds/whereabouts.cni.cncf.io_ippools.yaml
+  - https://raw.githubusercontent.com/k8snetworkplumbingwg/whereabouts/v0.9.3/doc/crds/whereabouts.cni.cncf.io_overlappingrangeipreservations.yaml
+  - https://raw.githubusercontent.com/k8snetworkplumbingwg/whereabouts/v0.9.3/doc/crds/whereabouts.cni.cncf.io_nodeslicepools.yaml
+  - https://raw.githubusercontent.com/k8snetworkplumbingwg/whereabouts/v0.9.3/doc/crds/daemonset-install.yaml
+
+images:
+  - name: ghcr.io/k8snetworkplumbingwg/whereabouts
+    newTag: v0.9.3

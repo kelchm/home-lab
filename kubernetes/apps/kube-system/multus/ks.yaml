@@ -1,0 +1,22 @@
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: multus
+spec:
+  dependsOn:
+    - name: cilium                 # Multus auto-wraps the primary CNI's conf from /etc/cni/net.d
+  healthChecks:
+    - apiVersion: apps/v1
+      kind: DaemonSet
+      name: kube-multus-ds
+      namespace: kube-system
+  interval: 1h
+  path: ./kubernetes/apps/kube-system/multus/app
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+    namespace: flux-system
+  targetNamespace: kube-system
+  wait: true
