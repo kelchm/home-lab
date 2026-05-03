@@ -1,0 +1,90 @@
+---
+# Talos v1.12.x ships only a curated subset of CNI reference plugins in
+# /opt/cni/bin (bridge, host-local, loopback, portmap, firewall, plus the
+# CNI of the bundled primary like cilium-cni). The multi-network plugins —
+# macvlan, ipvlan, vlan, ptp — are not bundled.
+#
+# Multus invokes macvlan when our longhorn-system/storage-network NAD is
+# attached to a pod (Longhorn instance-managers via the storage-network
+# setting). This DaemonSet installs the macvlan binary onto every node so
+# Multus has it on the standard CNI bin path.
+#
+# Source: github.com/containernetworking/plugins releases (canonical
+# upstream). The init container downloads the release tarball, verifies
+# SHA256, extracts macvlan, and installs to /opt/cni/bin. A sentinel file
+# (.macvlan-<version>.installed) makes it a no-op once installed.
+#
+# Maintenance: bump CNI_PLUGINS_VERSION + CNI_PLUGINS_SHA256 together; the
+# checksum is published at the release URL with .sha256 suffix.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: cni-plugins-installer
+  namespace: kube-system
+  labels:
+    app: cni-plugins-installer
+spec:
+  selector:
+    matchLabels:
+      app: cni-plugins-installer
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: cni-plugins-installer
+    spec:
+      hostNetwork: true
+      tolerations:
+        - operator: Exists
+          effect: NoSchedule
+        - operator: Exists
+          effect: NoExecute
+      initContainers:
+        - name: install-macvlan
+          image: alpine:3.20.3
+          env:
+            - name: CNI_PLUGINS_VERSION
+              value: v1.9.1
+            - name: CNI_PLUGINS_SHA256
+              value: b98f74a0f8522f0a83867178729c1aa70f2158f90c45a2ca8fa791db1c76b303
+          command:
+            - sh
+            - -ec
+            - |
+              cd /tmp
+              SENTINEL="/host/opt/cni/bin/.macvlan-${CNI_PLUGINS_VERSION}.installed"
+              if [ -f "$SENTINEL" ] && [ -x /host/opt/cni/bin/macvlan ]; then
+                echo "macvlan ${CNI_PLUGINS_VERSION} already installed"
+                exit 0
+              fi
+
+              echo "downloading cni-plugins ${CNI_PLUGINS_VERSION}"
+              wget -q "https://github.com/containernetworking/plugins/releases/download/${CNI_PLUGINS_VERSION}/cni-plugins-linux-amd64-${CNI_PLUGINS_VERSION}.tgz"
+              echo "${CNI_PLUGINS_SHA256}  cni-plugins-linux-amd64-${CNI_PLUGINS_VERSION}.tgz" | sha256sum -c -
+
+              tar -xzf "cni-plugins-linux-amd64-${CNI_PLUGINS_VERSION}.tgz" macvlan
+              install -m 0755 macvlan /host/opt/cni/bin/macvlan
+              # Stale sentinels for prior versions are harmless; remove only the
+              # current-version sentinel pattern to avoid accumulating dotfiles.
+              rm -f /host/opt/cni/bin/.macvlan-*.installed
+              touch "$SENTINEL"
+              echo "installed macvlan to /opt/cni/bin"
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: cnibin
+              mountPath: /host/opt/cni/bin
+      containers:
+        - name: pause
+          image: registry.k8s.io/pause:3.10
+          resources:
+            requests:
+              cpu: 1m
+              memory: 8Mi
+            limits:
+              memory: 16Mi
+      volumes:
+        - name: cnibin
+          hostPath:
+            path: /opt/cni/bin
