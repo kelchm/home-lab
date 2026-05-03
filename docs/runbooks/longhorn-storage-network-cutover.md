@@ -12,8 +12,18 @@ These must be in place before starting the maintenance window. They're independe
 
 - [ ] `kubernetes/apps/kube-system/multus/` deployed; `kubectl -n kube-system get ds kube-multus-ds` reports all 3 desired/ready
 - [ ] `kubernetes/apps/kube-system/whereabouts/` deployed; `kubectl -n kube-system get ds whereabouts` reports all 3 desired/ready
+- [ ] `kubernetes/apps/kube-system/cni-plugins-installer/` deployed; `kubectl -n kube-system get ds cni-plugins-installer` reports all 3 desired/ready
 - [ ] CRD `network-attachment-definitions.k8s.cni.cncf.io` exists (installed by Multus)
 - [ ] CRDs `ippools.whereabouts.cni.cncf.io` etc. exist (installed by Whereabouts)
+- [ ] **macvlan binary present on every node** (Talos doesn't ship it; the cni-plugins-installer DaemonSet handles it):
+  ```sh
+  for n in k8s-prod-1 k8s-prod-2 k8s-prod-3; do
+    pod=$(kubectl -n kube-system get pods -l app=multus -o jsonpath="{.items[?(@.spec.nodeName=='${n}')].metadata.name}")
+    echo "${n}:"
+    kubectl -n kube-system exec "$pod" -c kube-multus -- /opt/cni/bin/macvlan --version 2>&1 | head -1
+  done
+  ```
+  All three should report `CNI macvlan plugin v<version>`.
 - [ ] `kubectl -n longhorn-system get net-attach-def storage-network` returns the macvlan NAD
 - [ ] `kubectl -n longhorn-system get setting storage-network -o jsonpath='{.value}'` returns **empty** (cutover not yet applied)
 - [ ] `helmrelease.yaml` change adding `storageNetwork: longhorn-system/storage-network` is **staged but not committed** (or staged in a separate commit not yet pushed)
@@ -22,16 +32,19 @@ These must be in place before starting the maintenance window. They're independe
 
 All currently in `observability`:
 
-| Workload | Kind | PVC |
-|---|---|---|
-| `alertmanager-kube-prometheus-stack-alertmanager` | StatefulSet | 1 Gi |
-| `prometheus-kube-prometheus-stack-prometheus` | StatefulSet | 50 Gi |
-| `loki` | StatefulSet | 30 Gi |
-| `victoria-logs-single-server` | StatefulSet | 30 Gi |
-| `victoria-metrics-k8s-stack-vmsingle` | Deployment (vmsingle) | 50 Gi |
-| `openobserve` | StatefulSet | 50 Gi |
-| `openobserve-openobserve-standalone` | StatefulSet | 50 Gi |
-| `grafana` | Deployment | 10 Gi |
+| Workload | Kind | PVC | Owned by operator? |
+|---|---|---|---|
+| `alertmanager-kube-prometheus-stack-alertmanager` | StatefulSet | 1 Gi | yes — kube-prometheus-stack-operator |
+| `prometheus-kube-prometheus-stack-prometheus` | StatefulSet | 50 Gi | yes — kube-prometheus-stack-operator |
+| `loki` | StatefulSet | 30 Gi | no |
+| `victoria-logs-single-server` | StatefulSet | 30 Gi | no |
+| `vmsingle-victoria-metrics-k8s-stack` | Deployment | 50 Gi | yes — victoria-metrics-operator |
+| `openobserve` | StatefulSet | 50 Gi | no |
+| `grafana` | Deployment | 10 Gi | no |
+
+The "owned by operator" column matters for step 2: scaling an operator-managed workload to 0 alone doesn't stick — the operator reconciles it back. Scale the operator down first.
+
+There's also an orphan PVC `data-openobserve-openobserve-standalone-0` in observability with no owning workload (left from a chart rename). It's already detached and stays detached; no action needed.
 
 ## Maintenance window
 
@@ -47,18 +60,27 @@ flux suspend hr -n observability \
   victoria-metrics-k8s-stack openobserve grafana
 ```
 
-### 2. Scale workloads to 0
+### 2. Scale operators to 0 first, then their workloads
+
+The Prometheus and VictoriaMetrics operators reconcile their managed workloads (Prometheus, Alertmanager, VMSingle) back to non-zero replicas if you scale just the underlying STS/Deploy. Scale the operators first so the subsequent scale-to-0 sticks.
 
 ```sh
+kubectl -n observability scale deployment \
+  kube-prometheus-stack-operator \
+  victoria-metrics-k8s-stack-victoria-metrics-operator \
+  --replicas=0
+
 kubectl -n observability scale statefulset \
   alertmanager-kube-prometheus-stack-alertmanager \
   prometheus-kube-prometheus-stack-prometheus \
-  loki victoria-logs-single-server \
-  openobserve openobserve-openobserve-standalone \
+  loki \
+  victoria-logs-single-server \
+  openobserve \
   --replicas=0
 
 kubectl -n observability scale deployment \
-  grafana victoria-metrics-k8s-stack-vmsingle \
+  grafana \
+  vmsingle-victoria-metrics-k8s-stack \
   --replicas=0
 ```
 
@@ -108,19 +130,28 @@ Three allocations expected, one per node, all in `.111-.119`.
 
 ### 7. Resume Flux and scale workloads back up
 
+Resuming the HRs is necessary but **not sufficient** — Helm doesn't reset replica counts after a `kubectl scale --replicas=0` (it tracks template-level fields, not live replica counts). Manually scale everything back up after resuming.
+
 ```sh
 flux resume hr -n observability \
   kube-prometheus-stack loki victoria-logs-single \
   victoria-metrics-k8s-stack openobserve grafana
+
+kubectl -n observability scale deployment \
+  kube-prometheus-stack-operator \
+  victoria-metrics-k8s-stack-victoria-metrics-operator \
+  grafana \
+  vmsingle-victoria-metrics-k8s-stack \
+  --replicas=1
+
+kubectl -n observability scale statefulset \
+  loki \
+  victoria-logs-single-server \
+  openobserve \
+  --replicas=1
 ```
 
-Flux will scale workloads back to declared replica counts on the next reconcile. Force it:
-
-```sh
-flux reconcile hr -n observability kube-prometheus-stack
-flux reconcile hr -n observability loki
-# ...etc
-```
+The Prometheus and Alertmanager StatefulSets are recreated by the operator from their CRs once the operator is back up — no manual scaling needed for those.
 
 ### 8. Verify replica traffic on VLAN 25
 
@@ -137,12 +168,16 @@ Expect traffic between IM pod IPs on the storage-pod range. **No** Longhorn repl
 
 If something goes wrong and we need to back out the storage-network change:
 
-1. Suspend / scale down stateful workloads (steps 1–3 again)
-2. Revert the `helmrelease.yaml` commit; push
-3. Force reconcile; Longhorn clears the setting and IM pods drop the secondary interface
-4. Resume / scale back up
+1. Suspend / scale down stateful workloads (steps 1–3 again, including operators per step 2's note)
+2. Revert the `helmrelease.yaml` commit; push; force reconcile
+3. **Manually clear the setting CR** — Longhorn's `defaultSettings` only applies on initial install, so removing the value from helm values does *not* unset it on the existing Settings CR. Force it:
+   ```sh
+   kubectl -n longhorn-system patch setting storage-network --type=merge -p '{"value":""}'
+   ```
+4. IM pods restart on the primary network only
+5. Resume / scale back up per step 7
 
-The Multus, Whereabouts, and NAD manifests can stay deployed — they're inert without Longhorn referencing the NAD.
+The Multus, Whereabouts, NAD, and cni-plugins-installer manifests can stay deployed — they're inert without Longhorn referencing the NAD.
 
 ## Follow-ups
 
