@@ -123,6 +123,79 @@ These are the kind of "operational footgun" findings that should
 inform the comparison. Loki has not yet reciprocated with anything
 similar, but it's been live for ~1h.
 
+### 2026-05-02 — Loki wipes its PVC on scale-to-0
+
+Discovered during the Longhorn storage-network maintenance window. The
+Loki Helm chart sets the StatefulSet's
+`persistentVolumeClaimRetentionPolicy` to `whenScaled: Delete,
+whenDeleted: Delete`. Every other stateful workload in the bake-off
+(Prometheus, Alertmanager, VictoriaLogs, OpenObserve) defaults to
+`Retain`.
+
+Combined with our Longhorn StorageClass `reclaimPolicy: Delete`, this
+means **scaling Loki to 0 destroys its data**: Kubernetes deletes the
+PVC, which deletes the underlying Longhorn volume. On scale-up Loki
+gets a brand-new empty PVC. We saw the loki PVC UID change three
+times across two cutover attempts before manual cleanup landed it on
+a fresh `pvc-5991bea7-…`. The intermediate "faulted" state mid-window
+turned out not to be a network bug — it was a brand-new volume that
+never finished its first replica creation while the cluster was busy
+churning.
+
+Implications for the comparison:
+
+- Loki's default-destructive scale behavior is a real operational
+  footgun for routine cluster maintenance windows. VictoriaLogs sits
+  through the same scale-to-0 → scale-to-1 with its data intact.
+- Override is a one-line value (`singleBinary.persistentVolumeClaim
+  RetentionPolicy.whenScaled: Retain`) but the fact that it ships
+  destructive-by-default is worth weighing. For a homelab where
+  Loki retention is short anyway it may be acceptable; in a setting
+  where logs are correlated against historic traces it isn't.
+- Worth checking what other Loki-chart deployment modes (simple-
+  scalable, microservices) do here — they may behave differently.
+
+### 2026-05-02 — VictoriaMetrics had no gaps; Prometheus did
+
+Same maintenance window. After the cluster came back up, looking at
+the same time range in Grafana across both metrics stacks: VM dashboards
+show a continuous timeline with no missing samples; Prometheus dashboards
+show clear gaps spanning the window.
+
+Root cause is architectural, not configuration:
+
+- `kube-prometheus-stack` deploys a **monolithic** Prometheus — one
+  StatefulSet pod that both scrapes targets and stores TSDB on its
+  PVC. To detach the PVC for the maintenance window we had to scale
+  it to 0, which also stops scraping. No second writer is around to
+  cover for it. Gaps in the data are real and unrecoverable.
+- `victoria-metrics-k8s-stack` splits the role: **vmagent** (separate
+  Deployment, no PVC) does scraping; **vmsingle** (separate, with
+  PVC) does storage. To detach vmsingle's PVC we scaled vmsingle to
+  0, but vmagent kept running. vmagent buffers remote_write traffic
+  when its target is unavailable (in-memory + on-disk persistent
+  queue) and flushes the buffer when vmsingle returns. From the
+  query side the timeline looks unbroken.
+
+Implications for the comparison:
+
+- This isn't a tunable in Prometheus — fixing it requires running
+  Prometheus in agent mode with remote_write to a separate storage
+  backend, which is essentially rebuilding the VM architecture. As
+  shipped by KPS, monolithic Prometheus loses data during any
+  storage-PVC maintenance. VM as shipped does not.
+- The observation generalizes beyond storage cutovers: anything that
+  takes the storage layer offline (volume migrations, version upgrades
+  involving incompatible state, replica rebuild windows) lands in the
+  same bucket — VM hides it, Prometheus exposes it as gaps.
+- Caveat we should verify: vmagent's buffer durability depends on
+  whether its persistent queue is on a PVC or just emptyDir/tmpfs.
+  In the chart's default deployment it's the latter, which means
+  a vmagent restart during the same window would lose buffered
+  samples. We didn't restart vmagent here — only vmsingle — so the
+  buffer survived. Worth noting before claiming "VM never loses
+  metrics during maintenance" categorically.
+
 ## Next
 
 - Use the stack daily for real queries. Open Grafana, hit Explore,
