@@ -53,3 +53,10 @@ spec:
       # Prefer placing one replica on the requesting node when possible — small
       # latency win for read-heavy stateful workloads on local NVMe.
       defaultDataLocality: best-effort
+
+      # Route replica engine ↔ replica engine traffic over VLAN 25 (2.5GbE
+      # storage NIC) via Multus + macvlan. NAD lives in this namespace; the
+      # secondary interface gets an IP from the Whereabouts pool .111-.119.
+      # Changing this setting requires every volume to detach and reattach —
+      # see docs/runbooks/longhorn-storage-network-cutover.md.
+      storageNetwork: longhorn-system/storage-network
