@@ -17,6 +17,8 @@ metadata:
   namespace: default
 spec:
   restartPolicy: Never
+  # Pin to the same node previous benches ran on for cross-run comparability.
+  nodeName: k8s-prod-3
   containers:
     - name: fio
       image: xridge/fio:latest
