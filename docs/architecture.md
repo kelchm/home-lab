@@ -113,13 +113,16 @@ Storage VLAN bends the skeleton because primary inhabitants are storage *provide
 | `.11-.19` | Cluster #1 host NICs (prod) |
 | `.20-.29` | Cluster #2 host NICs (future sandbox) |
 | `.30-.99` | Clusters #3-#9 host NICs (one decade each) |
-| `.100-.109` | Reserved (mirror of provider range) |
-| `.110-.119` | Cluster #1 storage-pod IPs (prod) |
-| `.120-.129` | Cluster #2 storage-pod IPs (future sandbox) |
-| `.130-.199` | Clusters #3-#9 storage-pod IPs (one decade each) |
-| `.200-.254` | Reserved |
+| `.100-.127` | Reserved |
+| `.128/28` | Cluster #1 storage-pod IPs (prod, 16 IPs) |
+| `.144/28` | Cluster #2 storage-pod IPs (future sandbox, 16 IPs) |
+| `.160/28` | Cluster #3 storage-pod IPs (16 IPs) |
+| `.176/28` | Cluster #4 storage-pod IPs (16 IPs) |
+| `.192-.254` | Reserved |
 
-**Reading rule:** hundreds digit `1` indicates a pod-level endpoint; tens digit still encodes the cluster. Units digit mirrors the host scheme so a pod IP sits at host-IP+100 — `.111` is the storage-pod on the node whose host NIC is `.11`. This composes cleanly for sandbox: cluster #2 host NICs at `.21-.29`, cluster #2 storage-pods at `.121-.129`.
+**Reading rule:** Pod-level endpoints occupy `.128/26` (`.128-.191`), sub-allocated as one /28 per cluster — see table above. Unlike host IPs, the "tens digit = cluster" decode does **not** apply to pod IPs; the per-cluster /28 is the source of truth.
+
+**Why CIDR for pods, decimal for hosts?** Host IPs are statically configured per-node and only humans ever read them — decimal alignment pays for itself in readability. Pod IPs are pool-allocated by Whereabouts and read by ACLs (NFS export rules, future firewall rules), both of which think in CIDR. Per-cluster /28 means a single rule scopes to every storage-VLAN pod for that cluster, instead of two /29s or nine /32s. The two address classes have different audiences and earn different schemes.
 
 ## Prod Cluster IP Allocation
 
@@ -144,10 +147,10 @@ API VIP is managed by the Talos `vipController` (GARP-based at the machine-confi
 10.32.25.14-.19    (reserved for cluster #1 host expansion)
 10.32.25.21-.29    (reserved for cluster #2 host NICs — future sandbox)
 10.32.25.30-.99    (reserved for clusters #3-#9 host NICs)
-10.32.25.111-.113  longhorn-im-prod-{1,2,3}  Cluster #1 Longhorn IM pods (Multus on VLAN 25)
-10.32.25.114-.119  (reserved for cluster #1 storage-pod expansion)
-10.32.25.121-.129  (reserved for cluster #2 storage-pod IPs)
-10.32.25.130-.199  (reserved for clusters #3-#9 storage-pod IPs)
+10.32.25.128-.143  cluster #1 storage-pod range (/28; longhorn-im-prod-{1,2,3} float here)
+10.32.25.144-.159  (reserved for cluster #2 storage-pod range — future sandbox)
+10.32.25.160-.175  (reserved for cluster #3 storage-pod range)
+10.32.25.176-.191  (reserved for cluster #4 storage-pod range)
 ```
 
 **Lab Infra VLAN (20):**
@@ -311,7 +314,7 @@ Failure isolation: sandbox BGP issues cannot blackhole prod traffic when prefix-
 
 ## Storage Strategy
 
-- **Longhorn on NVMe**: dedicated user volume per node mounted at `/var/mnt/longhorn` (~890 GiB on the 1 TB SN770, xfs); 3-replica for critical PVCs (databases, stateful apps), 2-replica default. Replica engine ↔ replica engine traffic rides VLAN 25 (2.5GbE storage NIC) via Multus + bridge CNI. Each node carries a Linux bridge `br-storage` (configured per-node in Talos `machine.network`) with `enp6s0` as its only slave; the host's `10.32.25.X/24` IP lives on the bridge. Longhorn's `storage-network` setting points at a NetworkAttachmentDefinition that attaches an `lhnet1` veth from each instance-manager pod into `br-storage`, with the pod IP coming from the Whereabouts pool `.111-.119` (see [Storage VLAN specialization](#storage-vlan-specialization)). Bridge sits host and pods on one L2 broadcast domain, which is required so the host's `iscsiadm` can reach the same-node engine's iSCSI target — macvlan and ipvlan L2 both break this with kernel-level host-to-same-host-pod isolation. Cutover runbook at [`docs/runbooks/longhorn-storage-network-cutover.md`](runbooks/longhorn-storage-network-cutover.md).
+- **Longhorn on NVMe**: dedicated user volume per node mounted at `/var/mnt/longhorn` (~890 GiB on the 1 TB SN770, xfs); 3-replica for critical PVCs (databases, stateful apps), 2-replica default. Replica engine ↔ replica engine traffic rides VLAN 25 (2.5GbE storage NIC) via Multus + bridge CNI. Each node carries a Linux bridge `br-storage` (configured per-node in Talos `machine.network`) with `enp6s0` as its only slave; the host's `10.32.25.X/24` IP lives on the bridge. Longhorn's `storage-network` setting points at a NetworkAttachmentDefinition that attaches an `lhnet1` veth from each instance-manager pod into `br-storage`, with the pod IP coming from the Whereabouts pool `.128/28` (see [Storage VLAN specialization](#storage-vlan-specialization)). Bridge sits host and pods on one L2 broadcast domain, which is required so the host's `iscsiadm` can reach the same-node engine's iSCSI target — macvlan and ipvlan L2 both break this with kernel-level host-to-same-host-pod isolation. Cutover runbook at [`docs/runbooks/longhorn-storage-network-cutover.md`](runbooks/longhorn-storage-network-cutover.md).
 - **NFS from Synology**: bulk storage via `csi-driver-nfs` (media libraries, *arr content, Nextcloud data, anything large and sequential)
 - **Rule of thumb**: Longhorn for default Helm chart PVCs (Postgres, Redis, Grafana); NFS for bulk sequential data
 

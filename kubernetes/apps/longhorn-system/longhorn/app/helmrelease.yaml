@@ -55,8 +55,8 @@ spec:
       defaultDataLocality: best-effort
 
       # Route replica engine ↔ replica engine traffic over VLAN 25 (2.5GbE
-      # storage NIC) via Multus + macvlan. NAD lives in this namespace; the
-      # secondary interface gets an IP from the Whereabouts pool .111-.119.
+      # storage NIC) via Multus + bridge CNI. NAD lives in this namespace;
+      # the secondary interface gets an IP from the Whereabouts pool .128/28.
       # Changing this setting requires every volume to detach and reattach —
       # see docs/runbooks/longhorn-storage-network-cutover.md.
       storageNetwork: longhorn-system/storage-network

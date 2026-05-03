@@ -112,7 +112,7 @@ kubectl -n longhorn-system get pods -l longhorn.io/component=instance-manager \
   -o jsonpath='{range .items[*]}{.metadata.name}{"\n  "}{.metadata.annotations.k8s\.v1\.cni\.cncf\.io/network-status}{"\n\n"}{end}'
 ```
 
-Each IM pod should show two interfaces: Cilium primary (`eth0` on `10.42.x.x`) and the bridge secondary (`lhnet1` on `10.32.25.11{1,2,3}`).
+Each IM pod should show two interfaces: Cilium primary (`eth0` on `10.42.x.x`) and the bridge secondary (`lhnet1` on an address from the `.128/28` Whereabouts pool, typically `.128-.130` for three nodes).
 
 Cross-check Whereabouts:
 
@@ -120,7 +120,7 @@ Cross-check Whereabouts:
 kubectl -n kube-system get ippool 10.32.25.0-24 -o yaml | grep -A 15 'allocations:'
 ```
 
-Three allocations, one per node, all in `.111-.119`.
+Three allocations, one per node, all in `.128/28` (.128-.143).
 
 ### 7. Resume Flux and scale workloads back up
 
@@ -152,7 +152,7 @@ The Prometheus and Alertmanager StatefulSets are recreated by the operator from 
 From a privileged `hostNetwork: true` debug pod (e.g., `nicolaka/netshoot`) on any node:
 
 ```sh
-tcpdump -i enp6s0 -n -c 20 'host 10.32.25.111 or host 10.32.25.112 or host 10.32.25.113'
+tcpdump -i enp6s0 -n -c 20 'net 10.32.25.128/28'
 ```
 
 Expect TCP traffic between the IM-pod IPs. **No** Longhorn replica traffic should appear on `eno1` going forward.

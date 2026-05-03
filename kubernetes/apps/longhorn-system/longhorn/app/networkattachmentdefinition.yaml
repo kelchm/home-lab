@@ -1,8 +1,10 @@
 ---
 # Secondary network attached to Longhorn instance-manager pods so replica
 # engine ↔ replica engine traffic rides VLAN 25 (2.5GbE storage NIC).
-# Whereabouts coordinates IP allocation across nodes from .111-.119
-# (cluster #1 storage-pod range — see docs/architecture.md).
+# Whereabouts coordinates IP allocation across nodes from .128/28
+# (.128-.143 — cluster #1 storage-pod range; see docs/architecture.md).
+# CIDR-aligned per-cluster /28s let one ACL/firewall rule scope to all
+# of a cluster's storage-VLAN pods (see architecture.md "Reading rule").
 #
 # Why bridge, not macvlan/ipvlan: Longhorn's iSCSI flow requires the
 # host's iscsiadm to reach the engine's iSCSI target running inside a
@@ -37,7 +39,7 @@ spec:
       "ipam": {
         "type": "whereabouts",
         "range": "10.32.25.0/24",
-        "range_start": "10.32.25.111",
-        "range_end": "10.32.25.119"
+        "range_start": "10.32.25.128",
+        "range_end": "10.32.25.143"
       }
     }
