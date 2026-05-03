@@ -1,0 +1,19 @@
+---
+# Default BackupTarget CR. The chart auto-creates a `default` BackupTarget
+# at bootstrap with an empty URL; we take ownership here so the URL is
+# Flux-managed and survives chart upgrades.
+#
+# Network path: instance-manager pods carry a storage-network attachment
+# in the same /24 as the NAS (10.32.25.5), so the kernel routes NFS
+# traffic out lhnet1 (2.5GbE) without extra config.
+#
+# Restore drill / opt-out / DR sketch: docs/runbooks/longhorn-backup-restore.md
+apiVersion: longhorn.io/v1beta2
+kind: BackupTarget
+metadata:
+  name: default
+  namespace: longhorn-system
+spec:
+  backupTargetURL: nfs://10.32.25.5:/volume1/backups-k8s-prod/longhorn
+  credentialSecret: ""
+  pollInterval: 5m0s

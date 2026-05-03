@@ -61,8 +61,8 @@ spec:
       # see docs/runbooks/longhorn-storage-network-cutover.md.
       storageNetwork: longhorn-system/storage-network
 
-      # Backup target on Synology NFS share. Instance-manager pods carry a
-      # storage-network attachment in the same /24 as the NAS (10.32.25.5),
-      # so kernel routing sends NFS traffic out lhnet1 (2.5GbE) without any
-      # extra config. Restore drill: docs/runbooks/longhorn-backup-restore.md
-      backupTarget: nfs://10.32.25.5:/volume1/backups-k8s-prod/longhorn
+    # Backup target is managed as a BackupTarget CR (backuptarget.yaml in
+    # this dir), not via defaultSettings — Longhorn 1.7+ moved backup-target
+    # out of the settings space and the chart's defaultSettings.backupTarget
+    # value is silently ignored on existing installs (it only populates the
+    # CR at the chart's first bootstrap, which has long passed for us).
