@@ -1,3 +1,4 @@
+# See k8s-prod-1/network-extras.yaml for context — same shape, different IPs.
 machine:
   network:
     interfaces:
@@ -18,10 +19,20 @@ machine:
             mtu: 1500
             addresses:
               - "10.32.40.12/24"
+      # 2.5GbE storage NIC — bridge slave (no IP).
       - deviceSelector:
           hardwareAddr: "00:e0:4c:68:04:69"
           physical: true
         dhcp: false
+        mtu: 1500
+      # Linux bridge owning the storage VLAN IP.
+      - interface: br-storage
+        bridge:
+          stp:
+            enabled: false
+          interfaces:
+            - enp6s0
         addresses:
           - "10.32.25.12/24"
         mtu: 1500
+        dhcp: false

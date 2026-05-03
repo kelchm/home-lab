@@ -32,12 +32,26 @@ machine:
             mtu: 1500
             addresses:
               - "10.32.40.11/24"
-      # 2.5GbE storage NIC on VLAN 25 (access port, untagged).
-      # Same-subnet only; no default route.
+      # 2.5GbE storage NIC on VLAN 25 — now a bridge slave (no IP of its own).
+      # IP moves to br-storage below so the host shares an L2 broadcast domain
+      # with Multus-attached pods (same-host iscsiadm reachability — macvlan
+      # and ipvlan both have host-to-same-host-pod isolation issues; bridge
+      # does not).
       - deviceSelector:
           hardwareAddr: "00:e0:4c:68:04:d3"
           physical: true
         dhcp: false
+        mtu: 1500
+      # Linux bridge owning the storage VLAN IP, with enp6s0 as its only slave.
+      # Multus storage-network NAD uses bridge CNI with this bridge; pods get
+      # veth into br-storage and share L2 with the host.
+      - interface: br-storage
+        bridge:
+          stp:
+            enabled: false
+          interfaces:
+            - enp6s0
         addresses:
           - "10.32.25.11/24"
         mtu: 1500
+        dhcp: false

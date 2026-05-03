@@ -4,18 +4,23 @@
 # Whereabouts coordinates IP allocation across nodes from .111-.119
 # (cluster #1 storage-pod range — see docs/architecture.md).
 #
-# Why ipvlan, not macvlan: macvlan blocks host-to-pod communication on
-# the same node (kernel-level limitation — host's parent NIC and macvlan
-# slaves are isolated L2 endpoints; switches don't hairpin traffic back).
-# That breaks Longhorn's iSCSI flow: the engine binds the iSCSI target
-# on lhnet1, and the workload pod's host iscsiadm has to reach that IP
-# from the same node. ipvlan L2 mode shares the host's MAC, removes the
-# isolation, and lets host-to-pod-on-same-node work — while still giving
-# pods independent IPs and same-VLAN reachability for replica traffic.
+# Why bridge, not macvlan/ipvlan: Longhorn's iSCSI flow requires the
+# host's iscsiadm to reach the engine's iSCSI target running inside a
+# Multus-attached pod on the same node. macvlan and ipvlan L2 both block
+# host-to-same-host-pod communication at the kernel level — host's
+# parent-NIC stack and the slave's namespace stack are isolated even
+# though they sit on the same physical port. With bridge CNI, pods get
+# veth into the host's br-storage Linux bridge (configured per-node via
+# Talos `machine.network.interfaces[].bridge`), and host + pods share
+# one L2 broadcast domain. Same-host iscsiadm just works.
 #
-# No `gateway` — pods on this secondary only need same-VLAN reachability
-# (other IM pods, nas-storage at .5). Setting a gateway risks overriding
-# the pod's primary default route on Cilium.
+# `master`: br-storage is created by Talos with enp6s0 as its only
+# member and carries the host's 10.32.25.X/24 IP.
+#
+# `isGateway: false`, `ipMasq: false`: the bridge is a pure L2 endpoint;
+# no NAT, no acting as gateway. Pods use Whereabouts-assigned same-VLAN
+# IPs and reach NAS / other nodes directly via the bridge → enp6s0 wire
+# path. Default route stays on the pod's primary Cilium interface.
 apiVersion: k8s.cni.cncf.io/v1
 kind: NetworkAttachmentDefinition
 metadata:
@@ -25,9 +30,10 @@ spec:
   config: |
     {
       "cniVersion": "0.3.1",
-      "type": "ipvlan",
-      "master": "enp6s0",
-      "mode": "l2",
+      "type": "bridge",
+      "bridge": "br-storage",
+      "isGateway": false,
+      "ipMasq": false,
       "ipam": {
         "type": "whereabouts",
         "range": "10.32.25.0/24",
