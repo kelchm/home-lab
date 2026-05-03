@@ -26,14 +26,6 @@ spec:
     devices: "eno+ eno+.40"
     dashboards:
       enabled: true
-    # BPF masquerade picks the source IP matching the kernel route to the
-    # destination instead of always using the node primary NIC. Needed so
-    # pod-originated traffic to VLAN 25 (NAS NFS) sources from the storage
-    # NIC (.11/.12/.13) — matching the Synology NFS export rule — instead
-    # of the VLAN 30 primary IP. Architecturally aligns "storage traffic
-    # rides VLAN 25" for both data plane (Multus IM pods) and control
-    # plane (longhorn-manager BackupTarget reconcile).
-    enableMasqueradeRouteSource: true
     endpointRoutes:
       enabled: true
     envoy:
