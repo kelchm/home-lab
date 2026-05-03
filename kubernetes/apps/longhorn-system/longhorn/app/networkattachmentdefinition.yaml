@@ -4,9 +4,14 @@
 # Whereabouts coordinates IP allocation across nodes from .111-.119
 # (cluster #1 storage-pod range — see docs/architecture.md).
 #
-# `mode: bridge` lets macvlan endpoints on the same host communicate
-# (irrelevant for our 1-pod-per-node DaemonSet, but the most permissive
-# default and matches upstream Longhorn examples).
+# Why ipvlan, not macvlan: macvlan blocks host-to-pod communication on
+# the same node (kernel-level limitation — host's parent NIC and macvlan
+# slaves are isolated L2 endpoints; switches don't hairpin traffic back).
+# That breaks Longhorn's iSCSI flow: the engine binds the iSCSI target
+# on lhnet1, and the workload pod's host iscsiadm has to reach that IP
+# from the same node. ipvlan L2 mode shares the host's MAC, removes the
+# isolation, and lets host-to-pod-on-same-node work — while still giving
+# pods independent IPs and same-VLAN reachability for replica traffic.
 #
 # No `gateway` — pods on this secondary only need same-VLAN reachability
 # (other IM pods, nas-storage at .5). Setting a gateway risks overriding
@@ -20,9 +25,9 @@ spec:
   config: |
     {
       "cniVersion": "0.3.1",
-      "type": "macvlan",
+      "type": "ipvlan",
       "master": "enp6s0",
-      "mode": "bridge",
+      "mode": "l2",
       "ipam": {
         "type": "whereabouts",
         "range": "10.32.25.0/24",

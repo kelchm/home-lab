@@ -4,10 +4,11 @@
 # CNI of the bundled primary like cilium-cni). The multi-network plugins —
 # macvlan, ipvlan, vlan, ptp — are not bundled.
 #
-# Multus invokes macvlan when our longhorn-system/storage-network NAD is
+# Multus invokes ipvlan when our longhorn-system/storage-network NAD is
 # attached to a pod (Longhorn instance-managers via the storage-network
-# setting). This DaemonSet installs the macvlan binary onto every node so
-# Multus has it on the standard CNI bin path.
+# setting). macvlan is also installed for completeness / future use, but
+# the NAD uses ipvlan because macvlan blocks host-to-pod communication
+# on the same node, which breaks Longhorn's iSCSI target exposure.
 #
 # Source: github.com/containernetworking/plugins releases (canonical
 # upstream). The init container downloads the release tarball, verifies
@@ -53,25 +54,37 @@ spec:
             - -ec
             - |
               cd /tmp
-              SENTINEL="/host/opt/cni/bin/.macvlan-${CNI_PLUGINS_VERSION}.installed"
-              if [ -f "$SENTINEL" ] && [ -x /host/opt/cni/bin/macvlan ]; then
-                echo "macvlan ${CNI_PLUGINS_VERSION} already installed"
-                exit 0
+              # Bump PLUGINS list to install additional binaries.
+              PLUGINS="macvlan ipvlan"
+              SENTINEL="/host/opt/cni/bin/.cni-plugins-${CNI_PLUGINS_VERSION}.installed"
+              if [ -f "$SENTINEL" ]; then
+                missing=""
+                for p in $PLUGINS; do
+                  [ -x "/host/opt/cni/bin/$p" ] || missing="$missing $p"
+                done
+                if [ -z "$missing" ]; then
+                  echo "cni-plugins ${CNI_PLUGINS_VERSION} already installed: $PLUGINS"
+                  exit 0
+                fi
+                echo "sentinel present but missing:$missing — reinstalling"
               fi
 
               echo "downloading cni-plugins ${CNI_PLUGINS_VERSION}"
               wget -q "https://github.com/containernetworking/plugins/releases/download/${CNI_PLUGINS_VERSION}/cni-plugins-linux-amd64-${CNI_PLUGINS_VERSION}.tgz"
               echo "${CNI_PLUGINS_SHA256}  cni-plugins-linux-amd64-${CNI_PLUGINS_VERSION}.tgz" | sha256sum -c -
 
-              # Tarball entries are prefixed with ./ — busybox tar is strict, leading
-              # path must match.
-              tar -xzf "cni-plugins-linux-amd64-${CNI_PLUGINS_VERSION}.tgz" ./macvlan
-              install -m 0755 macvlan /host/opt/cni/bin/macvlan
-              # Stale sentinels for prior versions are harmless; remove only the
-              # current-version sentinel pattern to avoid accumulating dotfiles.
-              rm -f /host/opt/cni/bin/.macvlan-*.installed
+              # Tarball entries are prefixed with ./ — busybox tar is strict, the
+              # leading path must match.
+              for p in $PLUGINS; do
+                tar -xzf "cni-plugins-linux-amd64-${CNI_PLUGINS_VERSION}.tgz" "./$p"
+                install -m 0755 "$p" "/host/opt/cni/bin/$p"
+                echo "installed $p"
+              done
+              # Stale sentinels (any version) are harmless; remove the prior naming
+              # scheme too in case we're upgrading from an earlier installer.
+              rm -f /host/opt/cni/bin/.macvlan-*.installed /host/opt/cni/bin/.cni-plugins-*.installed
               touch "$SENTINEL"
-              echo "installed macvlan to /opt/cni/bin"
+              echo "done"
           securityContext:
             privileged: true
           volumeMounts:
