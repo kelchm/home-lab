@@ -63,7 +63,9 @@ spec:
               wget -q "https://github.com/containernetworking/plugins/releases/download/${CNI_PLUGINS_VERSION}/cni-plugins-linux-amd64-${CNI_PLUGINS_VERSION}.tgz"
               echo "${CNI_PLUGINS_SHA256}  cni-plugins-linux-amd64-${CNI_PLUGINS_VERSION}.tgz" | sha256sum -c -
 
-              tar -xzf "cni-plugins-linux-amd64-${CNI_PLUGINS_VERSION}.tgz" macvlan
+              # Tarball entries are prefixed with ./ — busybox tar is strict, leading
+              # path must match.
+              tar -xzf "cni-plugins-linux-amd64-${CNI_PLUGINS_VERSION}.tgz" ./macvlan
               install -m 0755 macvlan /host/opt/cni/bin/macvlan
               # Stale sentinels for prior versions are harmless; remove only the
               # current-version sentinel pattern to avoid accumulating dotfiles.
