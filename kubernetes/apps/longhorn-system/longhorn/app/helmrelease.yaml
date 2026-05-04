@@ -13,6 +13,14 @@ spec:
         name: longhorn
   interval: 1h
   values:
+    # Attach longhorn-manager pods to the storage-network NAD so the
+    # BackupTarget controller's NFS mount sources from a .128/28 IP and
+    # reaches the NAS over VLAN 25. The chart's `storageNetwork` setting
+    # (set below) only annotates instance-manager / backing-image-manager /
+    # backing-image-data-source pods — manager is excluded upstream.
+    annotations:
+      k8s.v1.cni.cncf.io/networks: longhorn-system/storage-network
+
     # Disable the upgrade-checker job — incompatible with GitOps reconciliation
     # because it expects to run interactively and gates the chart's apply on
     # its own progress. Same reasoning the chart README gives for Argo CD users.
