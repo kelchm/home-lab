@@ -87,6 +87,13 @@ spec:
         # so KPS's ServiceMonitors flow through transparently.
         selectAllByDefault: true
         scrapeInterval: 30s
+        # vmagent's externalLabels are scrape-time labels (unlike Prometheus,
+        # which only applies external_labels at federation/remote_write/alert
+        # boundaries). Stamping `cluster` here makes every series in vmsingle
+        # carry it, which is what bundled dashboards' `$cluster` template
+        # variable filters on.
+        externalLabels:
+          cluster: k8s-prod
         resources:
           requests:
             cpu: 100m
@@ -99,6 +106,10 @@ spec:
       spec:
         selectAllByDefault: true
         evaluationInterval: 30s
+        # Stamp alerts with the cluster identity so notifications surface
+        # alongside any future cluster's alerts in the same Alertmanager.
+        externalLabels:
+          cluster: k8s-prod
         # Fire to KPS Alertmanager — single AM UI showing alerts from
         # both stacks. KPS AM still has no external notifier wired
         # (matching the bake-off doc's "rule eval yes, delivery no"
