@@ -8,7 +8,7 @@ metadata:
   name: backup-daily
   namespace: longhorn-system
 spec:
-  cron: "0 3 * * *"        # 03:00 local, off-peak
+  cron: "0 7 * * *"        # 03:00 America/New_York EDT (02:00 EST)
   task: backup
   groups:
     - default
@@ -24,7 +24,7 @@ metadata:
   name: backup-weekly
   namespace: longhorn-system
 spec:
-  cron: "0 4 * * 0"        # 04:00 Sunday
+  cron: "0 8 * * 0"        # 04:00 Sunday America/New_York EDT (03:00 EST)
   task: backup
   groups:
     - default
