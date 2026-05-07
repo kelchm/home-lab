@@ -1,0 +1,102 @@
+---
+# Removes node.multus.io/not-ready (set at kubelet registration via the
+# Talos machine-kubelet patch) once /etc/cni/net.d/00-multus.conf exists on
+# the node — the marker that Multus has finished install. Kubelet otherwise
+# goes Ready as soon as Cilium drops 05-cilium.conflist, opening a race
+# window where pods admitted before Multus's install step come up without
+# their secondary networks. Cilium's own taint (node.cilium.io/agent-not-
+# ready) is removed by cilium-operator; this DS handles the Multus side.
+#
+# hostNetwork so it can reach the API server before any CNI conf exists,
+# tolerates everything since it's the thing unblocking the node.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cni-ready-untaint
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cni-ready-untaint
+rules:
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cni-ready-untaint
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cni-ready-untaint
+subjects:
+  - kind: ServiceAccount
+    name: cni-ready-untaint
+    namespace: kube-system
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: cni-ready-untaint
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/name: cni-ready-untaint
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cni-ready-untaint
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: cni-ready-untaint
+    spec:
+      hostNetwork: true
+      priorityClassName: system-node-critical
+      serviceAccountName: cni-ready-untaint
+      tolerations:
+        - operator: Exists
+      containers:
+        - name: untaint
+          image: docker.io/rancher/kubectl:v1.35.4
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -eu
+              echo "waiting for /host/etc/cni/net.d/00-multus.conf on ${NODE_NAME}"
+              until [ -f /host/etc/cni/net.d/00-multus.conf ]; do
+                sleep 1
+              done
+              echo "multus conf present; removing node.multus.io/not-ready taint from ${NODE_NAME}"
+              # Retry forever — `|| true` would leave the node permanently
+              # tainted on a transient kubectl failure (apiserver unreachable
+              # while Cilium still programming BPF kube-proxy replacement, etc).
+              until kubectl taint nodes "${NODE_NAME}" node.multus.io/not-ready-; do
+                echo "untaint failed; retrying in 2s"
+                sleep 2
+              done
+              echo "done; idling"
+              exec sleep infinity
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 64Mi
+          volumeMounts:
+            - name: cni-conf-dir
+              mountPath: /host/etc/cni/net.d
+              readOnly: true
+      volumes:
+        - name: cni-conf-dir
+          hostPath:
+            path: /etc/cni/net.d
+            type: Directory

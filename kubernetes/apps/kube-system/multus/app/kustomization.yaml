@@ -14,6 +14,7 @@ kind: Kustomization
 #   - 50Mi memory limit OOMs under load; bumped to 150Mi.
 resources:
   - https://raw.githubusercontent.com/k8snetworkplumbingwg/multus-cni/v4.2.4/deployments/multus-daemonset-thick.yml
+  - ./cni-ready-untaint.yaml
 
 images:
   - name: ghcr.io/k8snetworkplumbingwg/multus-cni
