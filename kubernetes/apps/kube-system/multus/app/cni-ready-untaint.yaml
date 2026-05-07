@@ -71,7 +71,13 @@ spec:
                 sleep 1
               done
               echo "multus conf present; removing node.multus.io/not-ready taint from ${NODE_NAME}"
-              kubectl taint nodes "${NODE_NAME}" node.multus.io/not-ready- || true
+              # Retry forever — `|| true` would leave the node permanently
+              # tainted on a transient kubectl failure (apiserver unreachable
+              # while Cilium still programming BPF kube-proxy replacement, etc).
+              until kubectl taint nodes "${NODE_NAME}" node.multus.io/not-ready-; do
+                echo "untaint failed; retrying in 2s"
+                sleep 2
+              done
               echo "done; idling"
               exec sleep infinity
           env:
