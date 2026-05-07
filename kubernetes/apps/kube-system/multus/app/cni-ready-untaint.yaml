@@ -73,11 +73,18 @@ spec:
                 sleep 1
               done
               echo "multus conf present; removing node.multus.io/not-ready taint from ${NODE_NAME}"
-              # Retry forever — `|| true` would leave the node permanently
-              # tainted on a transient kubectl failure (apiserver unreachable
-              # while Cilium still programming BPF kube-proxy replacement, etc).
-              until kubectl taint nodes "${NODE_NAME}" node.multus.io/not-ready-; do
-                echo "untaint failed; retrying in 2s"
+              # Idempotent: treat "taint not found" as success so the pod
+              # idles on nodes that registered without the taint (pre-Talos-
+              # rollout, or any node where kubelet didn't apply it). Retry
+              # on real failures (apiserver/RBAC/transient) — fail-stuck-
+              # tainted is the correct mode if the cluster is unhealthy.
+              while true; do
+                out=$(kubectl taint nodes "${NODE_NAME}" node.multus.io/not-ready- 2>&1) && break
+                if echo "${out}" | grep -q 'not found'; then
+                  echo "no matching taint; nothing to remove"
+                  break
+                fi
+                echo "untaint failed: ${out}; retrying in 2s"
                 sleep 2
               done
               echo "done; idling"
