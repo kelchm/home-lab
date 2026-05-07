@@ -60,7 +60,9 @@ spec:
         - operator: Exists
       containers:
         - name: untaint
-          image: docker.io/rancher/kubectl:v1.35.4
+          # alpine-based image; rancher/kubectl is distroless (no /bin/sh)
+          # which our wait-for-file loop needs.
+          image: docker.io/alpine/k8s:1.35.4
           command:
             - /bin/sh
             - -c
