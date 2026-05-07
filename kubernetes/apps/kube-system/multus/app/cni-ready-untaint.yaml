@@ -83,13 +83,21 @@ spec:
 
               log() { echo "[$(date -Iseconds)] $*"; }
 
-              # --request-timeout caps each kubectl call so a stuck apiserver
-              # doesn't block the reconcile loop indefinitely. Idempotent:
+              # `timeout` caps the kubectl process so a stuck apiserver doesn't
+              # block the reconcile loop. We use the shell wrapper rather than
+              # `kubectl --request-timeout=5s` because the latter triggers
+              # kubernetes/kubernetes#93474 (open since 2020): the flag
+              # disables in-cluster config auto-discovery, so kubectl falls
+              # back to localhost:8080 and fails with connection refused
+              # instead of loading the SA token. The reporter's own
+              # workaround in that issue is the same shell timeout pattern.
+              # Bonus: shell timeout bounds the entire process (DNS, TCP,
+              # parsing), not just the HTTP roundtrip. Idempotent:
               # --overwrite treats re-apply of the same value as success;
-              # apply_taint failing means apiserver/RBAC trouble, not a real
-              # "already tainted" condition.
+              # apply_taint failing means apiserver/RBAC trouble, not
+              # "already tainted."
               apply_taint() {
-                if out=$(kubectl --request-timeout=5s taint nodes "${NODE_NAME}" "${TAINT}=true:NoSchedule" --overwrite 2>&1); then
+                if out=$(timeout 5 kubectl taint nodes "${NODE_NAME}" "${TAINT}=true:NoSchedule" --overwrite 2>&1); then
                   return 0
                 fi
                 log "taint failed: ${out}"
@@ -99,7 +107,7 @@ spec:
               # Treat "not found" as success so re-applies on already-clean
               # nodes don't loop forever.
               remove_taint() {
-                if out=$(kubectl --request-timeout=5s taint nodes "${NODE_NAME}" "${TAINT}-" 2>&1); then
+                if out=$(timeout 5 kubectl taint nodes "${NODE_NAME}" "${TAINT}-" 2>&1); then
                   return 0
                 fi
                 if echo "${out}" | grep -q 'not found'; then
