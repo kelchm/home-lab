@@ -5,3 +5,25 @@ machine:
     nodeIP:
       validSubnets:
         - 10.32.30.0/24
+    # Register every node with NoSchedule taints that hold workload pods off
+    # until both CNIs are actually ready. Without this, there's a boot race:
+    # Cilium drops 05-cilium.conflist and kubelet goes Ready while Multus is
+    # still in its install step (00-multus.conf not yet written). Pods
+    # admitted in that window come up Cilium-only — their Multus annotations
+    # are ignored, no secondary networks attach, and Longhorn engine↔replica
+    # connectivity over VLAN 25 silently breaks. Once seen with a node-1
+    # power-cycle (2026-05-06): VictoriaLogs faulted, four other PVCs went
+    # degraded, manual pod-restart was required to recover.
+    #
+    # Removal:
+    #   - node.cilium.io/agent-not-ready: removed by cilium-operator once the
+    #     local cilium-agent is healthy (built-in Cilium behavior).
+    #   - node.multus.io/not-ready: removed by the cni-ready-untaint DS in
+    #     kube-system once /etc/cni/net.d/00-multus.conf exists on the node.
+    registerWithTaints:
+      - key: node.cilium.io/agent-not-ready
+        value: "true"
+        effect: NoSchedule
+      - key: node.multus.io/not-ready
+        value: "true"
+        effect: NoSchedule
