@@ -55,6 +55,8 @@ spec:
     metrics:
       prometheus:
         enabled: true
+        # See helmrelease-admin.yaml for rationale.
+        disableAPICheck: true
         serviceMonitor:
           enabled: true
           namespace: network
