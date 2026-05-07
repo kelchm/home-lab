@@ -45,6 +45,16 @@ spec:
       enabled: false
 
     defaultSettings:
+      # When a node goes NotReady (kubelet unreachable), force-delete
+      # StatefulSet pods bound to it so the controller can schedule a
+      # replacement on a healthy node. Default `do-nothing` leaves RWO +
+      # StatefulSet pods stuck Terminating — the down kubelet can't
+      # complete graceful shutdown, the StatefulSet "at most one" guarantee
+      # then blocks replacement creation, and CSI keeps the VolumeAttachment
+      # pinned to the dead node. Setting this is what enables HA failover
+      # for our stateful workloads (VictoriaLogs, Loki, etc.).
+      nodeDownPodDeletionPolicy: delete-statefulset-pod
+
       # Point Longhorn at the dedicated user volume (talos UserVolumeConfig
       # provisioned and mounted at /var/mnt/longhorn). Keeps OS/runtime data on
       # EPHEMERAL from competing with replica storage.
