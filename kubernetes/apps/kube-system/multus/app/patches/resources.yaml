@@ -1,5 +1,11 @@
 ---
-# Default 50Mi memory limit OOMs under realistic load.
+# Multus memory headroom: the upstream 50Mi default OOMs under any
+# real load; 150Mi was a first bump that held until the 2026-05-07
+# prod-3 reboot test, when concentrated CNI ADDs (3 STS failovers
+# + Longhorn IM rescheduling + Deployment pod restarts on prod-1)
+# crashed multus 6 times in 20 minutes and stranded loki-0 in
+# FailedCreatePodSandBox. 384Mi gives meaningful headroom for
+# CNI-ADD bursts during node failover events.
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
@@ -13,7 +19,7 @@ spec:
           resources:
             requests:
               cpu: 100m
-              memory: 100Mi
+              memory: 192Mi
             limits:
               cpu: 100m
-              memory: 150Mi
+              memory: 384Mi
