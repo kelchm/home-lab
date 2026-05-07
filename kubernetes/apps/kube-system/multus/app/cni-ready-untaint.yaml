@@ -5,10 +5,11 @@
 # (Multus missing or restarting; block new pod admissions until it returns).
 #
 # Needed because multus-cni v4.2.4 thick mode unconditionally deletes
-# 00-multus.conf on SIGTERM (pkg/server/config/manager.go's monitorPlugin
-# Configuration goroutine), so a routine multus DS rolling restart leaves
-# a window where kubelet sandboxes new pods Cilium-only. Mirrors the
-# pattern cilium-operator uses for node.cilium.io/agent-not-ready.
+# 00-multus.conf on SIGTERM (the monitorPluginConfiguration goroutine
+# in pkg/server/config/manager.go), so a routine multus DS rolling
+# restart leaves a window where kubelet sandboxes new pods Cilium-only.
+# Mirrors the pattern cilium-operator uses for
+# node.cilium.io/agent-not-ready.
 #
 # Talos kubelet.extraConfig.registerWithTaints applies the taint at fresh
 # node registration (a no-op on existing-node reboots — kubelet skips
@@ -82,11 +83,13 @@ spec:
 
               log() { echo "[$(date -Iseconds)] $*"; }
 
-              # Idempotent: --overwrite treats re-apply of the same value as
-              # success. apply_taint failing means apiserver/RBAC trouble, not
-              # a real "already tainted" condition.
+              # --request-timeout caps each kubectl call so a stuck apiserver
+              # doesn't block the reconcile loop indefinitely. Idempotent:
+              # --overwrite treats re-apply of the same value as success;
+              # apply_taint failing means apiserver/RBAC trouble, not a real
+              # "already tainted" condition.
               apply_taint() {
-                if out=$(kubectl taint nodes "${NODE_NAME}" "${TAINT}=true:NoSchedule" --overwrite 2>&1); then
+                if out=$(kubectl --request-timeout=5s taint nodes "${NODE_NAME}" "${TAINT}=true:NoSchedule" --overwrite 2>&1); then
                   return 0
                 fi
                 log "taint failed: ${out}"
@@ -96,7 +99,7 @@ spec:
               # Treat "not found" as success so re-applies on already-clean
               # nodes don't loop forever.
               remove_taint() {
-                if out=$(kubectl taint nodes "${NODE_NAME}" "${TAINT}-" 2>&1); then
+                if out=$(kubectl --request-timeout=5s taint nodes "${NODE_NAME}" "${TAINT}-" 2>&1); then
                   return 0
                 fi
                 if echo "${out}" | grep -q 'not found'; then
@@ -113,13 +116,18 @@ spec:
 
                 if [ "${cur}" != "${prev}" ]; then
                   log "state change: ${prev:-init} -> ${cur}"
-                  if [ "${cur}" = present ] && remove_taint; then
-                    prev=${cur}
-                  elif [ "${cur}" = absent ] && apply_taint; then
-                    prev=${cur}
-                  fi
-                  # On kubectl failure prev stays unchanged; next loop retries.
                 fi
+                # Reconcile every iteration, not just on edge transitions:
+                # if a prior kubectl returned success but the apiserver state
+                # didn't persist (admission webhook drop, race), this self-
+                # heals on the next pass. Idempotent calls make the steady-
+                # state cost trivial.
+                if [ "${cur}" = present ] && remove_taint; then
+                  prev=${cur}
+                elif [ "${cur}" = absent ] && apply_taint; then
+                  prev=${cur}
+                fi
+                # On kubectl failure prev stays unchanged; next loop retries.
                 sleep 1
               done
           env:

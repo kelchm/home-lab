@@ -8,7 +8,7 @@ Recovery procedure for pods stuck running on Cilium-only after a Multus restart,
 
 ## When this runbook applies
 
-The reconciler is the primary defense — sub-second reaction time, no human action needed. A pod can still end up Cilium-only if either:
+The reconciler is the primary defense — reacts within one polling interval (~1s plus apiserver round-trip), no human action needed. A pod can still end up Cilium-only if either:
 
 - It was admitted in the brief window between the conf disappearing and the reconciler tainting (very rare; the original 2026-05-07 incident was caused by *no* reconciler, not by a race within it)
 - The reconciler itself was unhealthy when Multus went down — check `kubectl -n kube-system get ds cni-ready-untaint` shows desired = current = ready on every node
@@ -55,8 +55,10 @@ Before recycling pods, confirm the node is *currently* healthy. Recycling onto a
 
 4. **No active CNI EAGAIN cascade**
    ```sh
-   kubectl -n kube-system logs ds/kube-multus-ds --since=2m \
-     --selector spec.nodeName=<node> | grep -iE 'DelegateAdd|temporarily unavailable'
+   POD=$(kubectl -n kube-system get pod -l app=multus \
+     --field-selector=spec.nodeName=<node> -o name)
+   kubectl -n kube-system logs --since=2m "$POD" \
+     | grep -iE 'DelegateAdd|temporarily unavailable'
    ```
    Empty output is what you want. If you see `cannot set "" interface name to "eth0": resource temporarily unavailable`, **wait** — recycling now creates more stuck pods. Investigate why CNI ADDs are failing on this node before proceeding.
 
