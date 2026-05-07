@@ -1,13 +1,22 @@
 ---
-# Removes node.multus.io/not-ready (set at kubelet registration via the
-# Talos machine-kubelet patch) once /etc/cni/net.d/00-multus.conf exists on
-# the node — the marker that Multus has finished install. Kubelet otherwise
-# goes Ready as soon as Cilium drops 05-cilium.conflist, opening a race
-# window where pods admitted before Multus's install step come up without
-# their secondary networks. Cilium's own taint (node.cilium.io/agent-not-
-# ready) is removed by cilium-operator; this DS handles the Multus side.
+# Continuously reconciles node.multus.io/not-ready against the presence of
+# /etc/cni/net.d/00-multus.conf on the host. Conf present → taint removed
+# (Multus operational, pods may be admitted). Conf absent → taint applied
+# (Multus missing or restarting; block new pod admissions until it returns).
 #
-# hostNetwork so it can reach the API server before any CNI conf exists,
+# Needed because multus-cni v4.2.4 thick mode unconditionally deletes
+# 00-multus.conf on SIGTERM (the monitorPluginConfiguration goroutine
+# in pkg/server/config/manager.go), so a routine multus DS rolling
+# restart leaves a window where kubelet sandboxes new pods Cilium-only.
+# Mirrors the pattern cilium-operator uses for
+# node.cilium.io/agent-not-ready.
+#
+# Talos kubelet.extraConfig.registerWithTaints applies the taint at fresh
+# node registration (a no-op on existing-node reboots — kubelet skips
+# registerWithTaints once the Node object exists). The reactive reconciler
+# in this DS handles every other transition: reboots, DS rolls, crashes.
+#
+# hostNetwork so it can reach the API server before any CNI conf exists;
 # tolerates everything since it's the thing unblocking the node.
 apiVersion: v1
 kind: ServiceAccount
@@ -59,36 +68,68 @@ spec:
       tolerations:
         - operator: Exists
       containers:
-        - name: untaint
+        - name: reconcile
           # alpine-based image; rancher/kubectl is distroless (no /bin/sh)
-          # which our wait-for-file loop needs.
+          # which the reconcile loop needs.
           image: docker.io/alpine/k8s:1.35.4
           command:
             - /bin/sh
             - -c
             - |
-              set -eu
-              echo "waiting for /host/etc/cni/net.d/00-multus.conf on ${NODE_NAME}"
-              until [ -f /host/etc/cni/net.d/00-multus.conf ]; do
+              set -u
+
+              CONF=/host/etc/cni/net.d/00-multus.conf
+              TAINT=node.multus.io/not-ready
+
+              log() { echo "[$(date -Iseconds)] $*"; }
+
+              # --request-timeout caps each kubectl call so a stuck apiserver
+              # doesn't block the reconcile loop indefinitely. Idempotent:
+              # --overwrite treats re-apply of the same value as success;
+              # apply_taint failing means apiserver/RBAC trouble, not a real
+              # "already tainted" condition.
+              apply_taint() {
+                if out=$(kubectl --request-timeout=5s taint nodes "${NODE_NAME}" "${TAINT}=true:NoSchedule" --overwrite 2>&1); then
+                  return 0
+                fi
+                log "taint failed: ${out}"
+                return 1
+              }
+
+              # Treat "not found" as success so re-applies on already-clean
+              # nodes don't loop forever.
+              remove_taint() {
+                if out=$(kubectl --request-timeout=5s taint nodes "${NODE_NAME}" "${TAINT}-" 2>&1); then
+                  return 0
+                fi
+                if echo "${out}" | grep -q 'not found'; then
+                  return 0
+                fi
+                log "untaint failed: ${out}"
+                return 1
+              }
+
+              log "starting continuous reconciler for ${NODE_NAME}"
+              prev=""
+              while true; do
+                if [ -f "${CONF}" ]; then cur=present; else cur=absent; fi
+
+                if [ "${cur}" != "${prev}" ]; then
+                  log "state change: ${prev:-init} -> ${cur}"
+                fi
+                # Reconcile every iteration, not just on edge transitions:
+                # if a prior kubectl returned success but the apiserver state
+                # didn't persist (admission webhook drop, race), this self-
+                # heals on the next pass. Idempotent calls make the steady-
+                # state cost trivial.
+                if [ "${cur}" = present ] && remove_taint; then
+                  prev=${cur}
+                elif [ "${cur}" = absent ] && apply_taint; then
+                  prev=${cur}
+                fi
+                # On kubectl failure prev stays unchanged; next loop retries.
                 sleep 1
               done
-              echo "multus conf present; removing node.multus.io/not-ready taint from ${NODE_NAME}"
-              # Idempotent: treat "taint not found" as success so the pod
-              # idles on nodes that registered without the taint (pre-Talos-
-              # rollout, or any node where kubelet didn't apply it). Retry
-              # on real failures (apiserver/RBAC/transient) — fail-stuck-
-              # tainted is the correct mode if the cluster is unhealthy.
-              while true; do
-                out=$(kubectl taint nodes "${NODE_NAME}" node.multus.io/not-ready- 2>&1) && break
-                if echo "${out}" | grep -q 'not found'; then
-                  echo "no matching taint; nothing to remove"
-                  break
-                fi
-                echo "untaint failed: ${out}; retrying in 2s"
-                sleep 2
-              done
-              echo "done; idling"
-              exec sleep infinity
           env:
             - name: NODE_NAME
               valueFrom:
