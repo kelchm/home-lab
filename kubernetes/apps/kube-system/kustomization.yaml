@@ -11,6 +11,7 @@ resources:
   - ./cilium/ks.yaml
   - ./cilium-bgp/ks.yaml
   - ./coredns/ks.yaml
+  - ./csi-driver-nfs/ks.yaml
   - ./metrics-server/ks.yaml
   - ./multus/ks.yaml
   - ./reloader/ks.yaml
