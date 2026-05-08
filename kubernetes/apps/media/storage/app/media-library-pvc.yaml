@@ -1,0 +1,13 @@
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: media-library
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: nfs-media-static
+  volumeName: media-library
+  resources:
+    requests:
+      storage: 50Ti

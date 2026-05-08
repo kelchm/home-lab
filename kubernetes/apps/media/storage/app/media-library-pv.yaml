@@ -1,0 +1,41 @@
+---
+# Static PV for the Synology /volume1/media share. Static (not dynamic) so the
+# mount lands at the share root with the pre-created subdir layout
+# (tv/ movies/ music/ books/ audiobooks/ subs/ downloads/...). A dynamic
+# StorageClass would create a per-PVC `pvc-<uid>` subdir and break the
+# hardlink-across-subdirs requirement that *arr atomic imports rely on.
+#
+# Server is the NAS storage NIC IP (matching the Longhorn BackupTarget pattern).
+# Swap to a DNS hostname when nas-storage.home.kelch.io is published.
+#
+# storageClassName is a non-empty string that does NOT resolve to a real
+# StorageClass — required to prevent a default-class binding race during
+# initial reconcile, while still letting this PV bind to its matching PVC by
+# name (volumeName/claimRef).
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: media-library
+spec:
+  capacity:
+    storage: 50Ti
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs-media-static
+  mountOptions:
+    - nfsvers=4.1
+    - hard
+    - noatime
+    - nodiratime
+    - rsize=1048576
+    - wsize=1048576
+  csi:
+    driver: nfs.csi.k8s.io
+    volumeHandle: media-library
+    volumeAttributes:
+      server: 10.32.25.5
+      share: /volume1/media
+  claimRef:
+    namespace: media
+    name: media-library
