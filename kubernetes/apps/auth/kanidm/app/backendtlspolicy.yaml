@@ -6,7 +6,7 @@
 # Let's Encrypt's public roots — System trust store validates either.
 # Without this policy, Traefik connects in plaintext and Kanidm rejects the
 # request because its bindaddress is HTTPS-only.
-apiVersion: gateway.networking.k8s.io/v1alpha3
+apiVersion: gateway.networking.k8s.io/v1
 kind: BackendTLSPolicy
 metadata:
   name: kanidm

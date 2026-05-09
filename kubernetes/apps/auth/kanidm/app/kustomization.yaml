@@ -8,3 +8,5 @@ resources:
   - ./statefulset.yaml
   - ./httproute.yaml
   - ./backendtlspolicy.yaml
+  - ./secret.sops.yaml
+  - ./seed-cronjob.yaml

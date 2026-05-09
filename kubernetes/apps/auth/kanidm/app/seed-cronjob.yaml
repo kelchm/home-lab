@@ -1,0 +1,117 @@
+---
+# Idempotent Kanidm seed CronJob. Runs hourly; every command in the script
+# checks for existence first, so a successful run is a no-op and the only
+# log noise is "object exists" lines. Drift correction comes for free —
+# if the operator hand-edits a group or OAuth2 client, the next CronJob
+# fire restores it.
+#
+# Why CronJob and not Job:
+#   - Reloader can't restart a Job (spec.template is immutable).
+#   - `ttlSecondsAfterFinished` on a Job deletes the object, after which
+#     Flux re-creates it on every reconcile (~1h) — same effective
+#     cadence as a CronJob, but expressed less honestly.
+#   - CronJob's history limits give us bounded resource usage without
+#     fighting Flux's apply loop.
+#
+# To force an out-of-band run during bootstrap (e.g., right after editing
+# secret.sops.yaml so you don't wait for the next scheduled fire):
+#   kubectl -n auth create job --from=cronjob/kanidm-seed kanidm-seed-$(date +%s)
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: kanidm-seed
+spec:
+  schedule: "0 * * * *"             # hourly
+  concurrencyPolicy: Forbid          # don't overlap if a previous run is still going
+  startingDeadlineSeconds: 300       # if kubelet missed the schedule by >5min, skip
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      # Bound a stuck run so concurrencyPolicy:Forbid doesn't block all
+      # future scheduled fires. 15min is generous for a script that's
+      # mostly waiting on Kanidm API calls.
+      activeDeadlineSeconds: 900
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: kanidm-seed
+        spec:
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          volumes:
+            # Backs $HOME and KANIDM_TOKEN_CACHE_PATH so the rest of the
+            # filesystem can be read-only. Per-pod ephemeral, fine for
+            # session-token state that only lives for one Job invocation.
+            - name: tmp
+              emptyDir: {}
+          containers:
+            - name: seed
+              image: docker.io/kanidm/tools:1.10.1
+              imagePullPolicy: IfNotPresent
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
+              env:
+                - name: KANIDM_URL
+                  value: https://auth.home.kelch.io
+                - name: KANIDM_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: kanidm-bootstrap
+                      key: idm_admin_password
+                # Writable cache dir for the kanidm CLI's session token.
+                - { name: HOME,                    value: /tmp }
+                - { name: KANIDM_TOKEN_CACHE_PATH, value: /tmp/kanidm_tokens }
+              command: [/bin/sh, -c]
+              args:
+                - |
+                  set -eu
+
+                  # Login as idm_admin via stdin (KANIDM_PASSWORD is also read
+                  # by the CLI when stdin isn't a TTY; both paths work).
+                  echo "$KANIDM_PASSWORD" | kanidm login --name idm_admin
+
+                  # ---- Group: arr-admins -------------------------------------
+                  if ! kanidm group get arr-admins --name idm_admin >/dev/null 2>&1; then
+                    kanidm group create arr-admins --name idm_admin
+                  fi
+
+                  # ---- Person: operator --------------------------------------
+                  if ! kanidm person get operator --name idm_admin >/dev/null 2>&1; then
+                    kanidm person create operator "Operator" --name idm_admin
+                  fi
+                  kanidm group add-members arr-admins operator --name idm_admin
+
+                  # ---- OAuth2: arr-suite -------------------------------------
+                  # Used by traefik-oidc-auth in PR 6. Per-app *.home.kelch.io
+                  # redirect URLs get added by each consumer's PR (Kanidm
+                  # rejects wildcard redirect_uri values per OIDC spec).
+                  if ! kanidm system oauth2 get arr-suite --name idm_admin >/dev/null 2>&1; then
+                    kanidm system oauth2 create arr-suite "Arr Admin Suite" "https://home.kelch.io" --name idm_admin
+                  fi
+                  kanidm system oauth2 update-scope-map arr-suite arr-admins openid profile email groups --name idm_admin
+
+                  # ---- OAuth2: jellyseerr ------------------------------------
+                  # Jellyseerr is OIDC-aware natively (no Traefik plugin in
+                  # front). Redirect URL added by Jellyseerr's PR.
+                  if ! kanidm system oauth2 get jellyseerr --name idm_admin >/dev/null 2>&1; then
+                    kanidm system oauth2 create jellyseerr "Jellyseerr" "https://jellyseerr.home.kelch.io" --name idm_admin
+                  fi
+                  kanidm system oauth2 update-scope-map jellyseerr arr-admins openid profile email groups --name idm_admin
+
+                  echo
+                  echo "Seed complete. Capture client secrets for downstream consumers:"
+                  echo "  kanidm system oauth2 show-basic-secret arr-suite --name idm_admin"
+                  echo "  kanidm system oauth2 show-basic-secret jellyseerr --name idm_admin"
+              resources:
+                requests: { cpu: 10m,  memory: 32Mi }
+                limits:   { memory: 128Mi }
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: { drop: [ALL] }
