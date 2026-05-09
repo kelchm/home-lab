@@ -8,4 +8,3 @@ resources:
   - ./helmrelease-services.yaml
   - ./gateways.yaml
   - ./oauth2-arr-suite.yaml
-  - ./middlewares
