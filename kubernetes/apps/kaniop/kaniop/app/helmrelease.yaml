@@ -1,0 +1,32 @@
+---
+# kaniop is a cluster-scoped Kanidm operator. Manages Kanidm, KanidmGroup,
+# KanidmPersonAccount, KanidmOAuth2Client, and KanidmServiceAccount CRDs across
+# all namespaces. Pod itself runs here; the Kanidm CR + identity resources live
+# in the `auth` namespace; per-app KanidmOAuth2Client CRs land alongside their
+# consumers in `media/<app>/`.
+#
+# Pivot context: docs/plans/20260509-kaniop-migration.md
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: kaniop
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: kaniop
+  interval: 1h
+  values:
+    # Validating webhook prevents two Kanidm CRs in different namespaces from
+    # both pointing at the same Kanidm cluster. We have one Kanidm CR; the
+    # collision class doesn't exist for us. Disabled to skip the cert-issuance
+    # job + admission webhook deployment pipeline.
+    webhook:
+      enabled: false
+
+    # Prometheus integration. kube-prometheus-stack runs with
+    # serviceMonitorSelectorNilUsesHelmValues: false, so a ServiceMonitor in
+    # any namespace is auto-discovered.
+    metrics:
+      enabled: true
+      serviceMonitor:
+        enabled: true
