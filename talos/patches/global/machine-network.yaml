@@ -2,13 +2,10 @@ machine:
   network:
     disableSearchDomain: true
     nameservers:
-      # UniFi gateway — forwards home.kelch.io to k8s-gateway internally,
-      # everything else upstream. Single DNS authority for the LAN so
-      # cluster pods resolve household HTTPRoute hostnames via the same
-      # chain as any other LAN client. Adding a Cloudflare fallback would
-      # mask UniFi misconfigs by returning NXDOMAIN for home.kelch.io
-      # from the second resolver, creating inconsistent answers.
-      - 10.32.30.1
+      # Public DNS for node-level resolution. Cluster pods reach UniFi
+      # directly via CoreDNS (kube-system/coredns home.kelch.io block).
+      - 1.1.1.1
+      - 1.0.0.1
     interfaces:
       # Cilium's BPF host routing (enabled by bpf.masquerade=true in 1.16.5+)
       # can't reach 169.254.116.108 when it's only implicitly on lo, breaking
