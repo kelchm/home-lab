@@ -31,6 +31,12 @@ spec:
     metadata:
       labels:
         app.kubernetes.io/name: kanidm
+      annotations:
+        # Roll the StatefulSet when kanidm-server-config or the cert Secret
+        # change. Required because /data/server.toml is a subPath mount, and
+        # subPath mounts do NOT propagate ConfigMap updates into running pods.
+        # Reloader is already deployed cluster-wide (kube-system/reloader).
+        reloader.stakater.com/auto: "true"
     spec:
       affinity:
         podAntiAffinity:
@@ -47,6 +53,7 @@ spec:
         # confirming the image's UID risks a permissions deadlock on the
         # PVC. Tighten in PR 8 hardening once the actual UID is captured
         # via `kubectl exec -- id`.
+        runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
       containers:
@@ -100,7 +107,9 @@ spec:
         - name: certs
           secret:
             secretName: auth-home-kelch-io-tls
-            defaultMode: 0400
+            # No defaultMode override — K8s default of 0644 lets the
+            # non-root container user read tls.crt/tls.key. Tightening to
+            # 0400 with root ownership would lock the kanidm process out.
         - name: config
           configMap:
             name: kanidm-server-config

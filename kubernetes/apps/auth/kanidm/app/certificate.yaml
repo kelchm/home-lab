@@ -14,8 +14,10 @@ metadata:
 spec:
   dnsNames:
     - auth.home.kelch.io
-  duration: 2160h    # 90 days
-  renewBefore: 720h  # 30 days
+  # Match the existing wildcard cert (network/gateway-certificates) — the
+  # letsencrypt-production ClusterIssuer uses the LE shortlived ACME profile,
+  # which issues ~7-day certs. cert-manager handles renewal automatically.
+  duration: 160h
   issuerRef:
     name: letsencrypt-production
     kind: ClusterIssuer
@@ -23,6 +25,7 @@ spec:
     algorithm: ECDSA
   secretName: auth-home-kelch-io-tls
   usages:
+    # `key encipherment` removed — invalid for ECDSA per RFC 5480 (only RSA
+    # certs use the key-transport keyUsage).
     - digital signature
-    - key encipherment
     - server auth
