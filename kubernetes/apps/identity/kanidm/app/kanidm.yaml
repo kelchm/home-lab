@@ -40,7 +40,7 @@ spec:
 
   replicaGroups:
     - name: default
-      replicas: 1
+      replicas: 3
       role: write_replica
       primaryNode: true
       # Stakater Reloader (kube-system/reloader) restarts the pod when the
