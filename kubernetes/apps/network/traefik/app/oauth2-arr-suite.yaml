@@ -1,0 +1,34 @@
+---
+# Single shared OIDC client for the *arr admin UI suite. Each gated app
+# registers its callback URL here; SSO across subdomains via shared
+# session cookie on .home.kelch.io.
+#
+# kaniop emits the client_secret into `arr-suite-kanidm-oauth2-credentials`
+# Secret in this same namespace (network), which traefik-admin mounts as
+# an env var.
+apiVersion: kaniop.rs/v1beta1
+kind: KanidmOAuth2Client
+metadata:
+  name: arr-suite
+spec:
+  kanidmRef:
+    name: kanidm
+    namespace: identity
+  displayname: Arr Admin Suite
+  origin: https://home.kelch.io
+  redirectUrl:
+    - https://prowlarr.home.kelch.io/oidc/callback
+    - https://sonarr.home.kelch.io/oidc/callback
+    - https://radarr.home.kelch.io/oidc/callback
+    - https://lidarr.home.kelch.io/oidc/callback
+    - https://readarr.home.kelch.io/oidc/callback
+    - https://bazarr.home.kelch.io/oidc/callback
+    - https://qbittorrent.home.kelch.io/oidc/callback
+    - https://sabnzbd.home.kelch.io/oidc/callback
+  scopeMap:
+    - group: arr-admins
+      scopes:
+        - openid
+        - profile
+        - email
+        - groups
