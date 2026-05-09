@@ -48,12 +48,18 @@ spec:
                 matchLabels:
                   app.kubernetes.io/name: kanidm
       securityContext:
-        # Image runs as root by design — kanidm/server needs UID 0 at
-        # startup to chown /data and bind sub-1024 ports under some configs.
-        # The KittyKatt chart deliberately omits runAsNonRoot for the same
-        # reason. Container-level capabilities are still dropped to ALL
-        # below; PR 8 hardening can revisit forcing a non-root UID once the
-        # binary's actual filesystem-init expectations are mapped out.
+        # Pin UID/GID 389 — matches Kanidm's docker-compose convention. The
+        # image's USER directive is unset, so without these the pod runs as
+        # root and Kanidm prints "running as uid == 0" warnings on startup.
+        # fsGroup makes Longhorn chown the PVC to 389 on first attach, so
+        # the kanidm process can write /data without an init container.
+        # Once the PVC is owned by 389, switching this UID later requires
+        # a manual chown recovery — pick once.
+        runAsNonRoot: true
+        runAsUser: 389
+        runAsGroup: 389
+        fsGroup: 389
+        fsGroupChangePolicy: OnRootMismatch
         seccompProfile:
           type: RuntimeDefault
       containers:
