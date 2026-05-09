@@ -73,6 +73,15 @@ User-confirmed choices: qBittorrent + SABnzbd; Jellyfin + Jellyseerr; full *arr 
 
 5. **Kanidm (HA OIDC OP + LDAP + self-service UI) + traefik-oidc-auth (in-Traefik forwardAuth shim) — `kubernetes/apps/auth/`** — primary credential layer for every operator UI. UniFi VLAN-10 firewall scoping remains the perimeter; Kanidm provides the actual login. Native *arr auth gets **Disabled** in Phase 5 (edge auth + admin UIs on VLAN-10-only `gateway-admin` make the second prompt UX-pure-loss and breaks *arr mobile clients).
 
+   > **2026-05-09 pivot:** The hand-rolled-StatefulSet design described below is being
+   > replaced with the [pando85/kaniop](https://github.com/pando85/kaniop) operator.
+   > See `docs/plans/20260509-kaniop-migration.md` for the operator-managed shape,
+   > the cutover sequence, and the resulting changes to PR 5 (replication scaling)
+   > and PR 6 (OIDC client secret discovery). The high-level architecture below
+   > (Kanidm + traefik-oidc-auth, Gateway API HTTPRoute on `gateway-services`, no
+   > net-new SPOF, etc.) is unchanged — only the deployment mechanism shifts from
+   > hand-rolled YAML to operator CRs.
+
    **Why this shape.** The architecture doc names Authelia/Authentik forwardAuth as the eventual control (architecture.md:232), but on close inspection both options force three single-replica components into the auth path (forwardAuth process, user directory, session store) and any one of them becoming wedged blocks login to *every* admin UI simultaneously. Kanidm replaces all three with one HA-native component: it is *both* the user store *and* an OIDC OP, replicates active-active via CRDTs over mutual-TLS (no external Postgres, no Galera, no leader election, no Raft), and emits stateless JWTs that downstream RPs can validate without shared session state. Pairing Kanidm with `traefik-oidc-auth` — a yaegi-loaded Traefik plugin that does the OIDC-RP dance *inside the Traefik request path itself* — means the request-path auth component is also already HA, because the existing `traefik-admin` HelmRelease is already 2-replica (`helmrelease-admin.yaml:22`). Net: zero net-new SPOF. The only state is Kanidm's, and Kanidm is replicated.
 
    **Stack.**
