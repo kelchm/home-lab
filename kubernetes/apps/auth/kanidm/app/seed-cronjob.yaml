@@ -29,6 +29,10 @@ spec:
   jobTemplate:
     spec:
       backoffLimit: 1
+      # Bound a stuck run so concurrencyPolicy:Forbid doesn't block all
+      # future scheduled fires. 15min is generous for a script that's
+      # mostly waiting on Kanidm API calls.
+      activeDeadlineSeconds: 900
       template:
         metadata:
           labels:
@@ -39,10 +43,19 @@ spec:
             runAsNonRoot: true
             seccompProfile:
               type: RuntimeDefault
+          volumes:
+            # Backs $HOME and KANIDM_TOKEN_CACHE_PATH so the rest of the
+            # filesystem can be read-only. Per-pod ephemeral, fine for
+            # session-token state that only lives for one Job invocation.
+            - name: tmp
+              emptyDir: {}
           containers:
             - name: seed
               image: docker.io/kanidm/tools:1.10.1
               imagePullPolicy: IfNotPresent
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
               env:
                 - name: KANIDM_URL
                   value: https://auth.home.kelch.io
@@ -100,5 +113,5 @@ spec:
                 limits:   { memory: 128Mi }
               securityContext:
                 allowPrivilegeEscalation: false
-                readOnlyRootFilesystem: false   # /tmp writable for token cache
+                readOnlyRootFilesystem: true
                 capabilities: { drop: [ALL] }

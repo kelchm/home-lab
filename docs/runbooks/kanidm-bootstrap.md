@@ -90,7 +90,7 @@ Store each secret in the appropriate consumer Secret — see PR 6 (traefik-oidc-
 
 ## Step 5 — Sanity check via web UI
 
-```
+```text
 https://auth.home.kelch.io/ui
 ```
 
