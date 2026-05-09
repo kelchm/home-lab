@@ -48,12 +48,12 @@ spec:
                 matchLabels:
                   app.kubernetes.io/name: kanidm
       securityContext:
-        # Image-default USER applies (kanidm/server bakes its own non-root
-        # user + ownership on /data). Setting runAsUser/Group here without
-        # confirming the image's UID risks a permissions deadlock on the
-        # PVC. Tighten in PR 8 hardening once the actual UID is captured
-        # via `kubectl exec -- id`.
-        runAsNonRoot: true
+        # Image runs as root by design — kanidm/server needs UID 0 at
+        # startup to chown /data and bind sub-1024 ports under some configs.
+        # The KittyKatt chart deliberately omits runAsNonRoot for the same
+        # reason. Container-level capabilities are still dropped to ALL
+        # below; PR 8 hardening can revisit forcing a non-root UID once the
+        # binary's actual filesystem-init expectations are mapped out.
         seccompProfile:
           type: RuntimeDefault
       containers:
