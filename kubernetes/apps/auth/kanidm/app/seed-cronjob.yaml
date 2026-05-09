@@ -40,7 +40,13 @@ spec:
         spec:
           restartPolicy: OnFailure
           securityContext:
+            # Match the kanidm pod's UID — kanidm/tools image's USER is
+            # unset so runAsNonRoot alone gets rejected. The CLI only
+            # writes the session token to /tmp (emptyDir below), so any
+            # UID works; 389 keeps things uniform with the server pod.
             runAsNonRoot: true
+            runAsUser: 389
+            runAsGroup: 389
             seccompProfile:
               type: RuntimeDefault
           volumes:
@@ -81,11 +87,13 @@ spec:
                     kanidm group create arr-admins --name idm_admin
                   fi
 
-                  # ---- Person: operator --------------------------------------
-                  if ! kanidm person get operator --name idm_admin >/dev/null 2>&1; then
-                    kanidm person create operator "Operator" --name idm_admin
+                  # ---- Person: kelchm ----------------------------------------
+                  if ! kanidm person get kelchm --name idm_admin >/dev/null 2>&1; then
+                    kanidm person create kelchm "Matthew Kelch" --name idm_admin
                   fi
-                  kanidm group add-members arr-admins operator --name idm_admin
+                  # Idempotent — Kanidm accepts the same value as a no-op.
+                  kanidm person update kelchm --mail kelchm@gmail.com --name idm_admin
+                  kanidm group add-members arr-admins kelchm --name idm_admin
 
                   # ---- OAuth2: arr-suite -------------------------------------
                   # Used by traefik-oidc-auth in PR 6. Per-app *.home.kelch.io
