@@ -1,0 +1,55 @@
+---
+# Default-deny shape: only the explicitly listed sources reach kanidm.
+# Particularly load-bearing because spec.env enables KANIDM_TRUST_X_FORWARD_FOR
+# (the legacy V1 boolean = trust-all-sources). Without this policy, any
+# in-cluster pod could forge X-Forwarded-For headers and pollute audit logs
+# or bypass per-IP rate limits.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: kanidm
+spec:
+  endpointSelector:
+    matchLabels:
+      kanidm.kaniop.rs/cluster: kanidm
+  ingress:
+    # Traefik (gateway-services) -> Kanidm HTTPS API. The XFF trust boundary.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: network
+            app.kubernetes.io/name: traefik
+            app.kubernetes.io/instance: traefik-services
+      toPorts:
+        - ports:
+            - port: "8443"
+              protocol: TCP
+
+    # kaniop operator -> Kanidm HTTPS API (IDM reconcile: groups, persons,
+    # OAuth2 clients).
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: identity
+            app.kubernetes.io/name: kaniop
+      toPorts:
+        - ports:
+            - port: "8443"
+              protocol: TCP
+
+    # In-cluster LDAPS bind from RPs (e.g. Jellyfin SSO).
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: media
+      toPorts:
+        - ports:
+            - port: "3636"
+              protocol: TCP
+
+    # Peer-to-peer replication (kicks in when scaled to >1 replica).
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: identity
+            kanidm.kaniop.rs/cluster: kanidm
+      toPorts:
+        - ports:
+            - port: "8444"
+              protocol: TCP

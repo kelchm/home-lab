@@ -22,6 +22,22 @@ spec:
   # LDAP bind from RPs that don't speak OIDC.
   ldapPortName: ldaps
 
+  env:
+    # Trust X-Forwarded-For so audit logs and per-IP rate limits see real
+    # client IPs from Traefik. The legacy V1 boolean = trust-all-sources;
+    # the actual trust boundary is networkpolicy.yaml restricting :8443
+    # ingress to Traefik pods.
+    - name: KANIDM_TRUST_X_FORWARD_FOR
+      value: "true"
+    # Daily transactionally-consistent SQLite dump to /data/backups/. Cron
+    # is interpreted in container TZ (UTC). 05:00 UTC = 01:00 EDT, two
+    # hours before Longhorn's 07:00 UTC daily PVC backup picks up both the
+    # live DB and the latest dump.
+    - name: KANIDM_ONLINE_BACKUP_SCHEDULE
+      value: "0 5 * * *"
+    - name: KANIDM_ONLINE_BACKUP_VERSIONS
+      value: "7"
+
   replicaGroups:
     - name: default
       replicas: 1

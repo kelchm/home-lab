@@ -8,3 +8,5 @@ metadata:
 spec:
   kanidmRef:
     name: kanidm
+  members:
+    - kelchm

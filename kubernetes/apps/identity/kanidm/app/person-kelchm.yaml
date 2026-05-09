@@ -1,0 +1,15 @@
+---
+# Sole human admin account. Initial password set out-of-band via the
+# credential-reset URL surfaced in `kubectl describe kanidmpersonaccount kelchm`.
+# kaniop emits the URL for `credentialsTokenTtl` seconds (default 3600).
+apiVersion: kaniop.rs/v1beta1
+kind: KanidmPersonAccount
+metadata:
+  name: kelchm
+spec:
+  kanidmRef:
+    name: kanidm
+  personAttributes:
+    displayname: Matthew Kelch
+    mail:
+      - kelchm@gmail.com
