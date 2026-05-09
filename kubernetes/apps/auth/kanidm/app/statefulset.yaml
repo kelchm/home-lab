@@ -62,6 +62,26 @@ spec:
         fsGroupChangePolicy: OnRootMismatch
         seccompProfile:
           type: RuntimeDefault
+      initContainers:
+        # Longhorn provisions the volume root with mode 0755. Kanidm flags
+        # any "others" bit on /data as a security warning. Distroless image
+        # has no chmod, so we tighten via a one-shot init container.
+        - name: data-perms
+          image: docker.io/library/busybox:1.37.0
+          imagePullPolicy: IfNotPresent
+          command: [sh, -c, 'chmod 0770 /data']
+          volumeMounts:
+            - { name: data, mountPath: /data }
+          securityContext:
+            # Override pod-level runAsNonRoot — chmod on a Longhorn-provisioned
+            # root-owned dir requires UID 0. Container exits after chmod.
+            runAsNonRoot: false
+            runAsUser: 0
+            runAsGroup: 0
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+              add: [FOWNER]
       containers:
         - name: kanidm
           image: docker.io/kanidm/server:1.10.1
@@ -113,11 +133,14 @@ spec:
         - name: certs
           secret:
             secretName: auth-home-kelch-io-tls
-            # No defaultMode override — K8s default of 0644 lets the
-            # non-root container user read tls.crt/tls.key. Tightening to
-            # 0400 with root ownership would lock the kanidm process out.
+            # 0440: owner=root, group=389 (fsGroup) read, others none. The
+            # kanidm process runs as 389 and reads via group membership.
+            # Eliminates Kanidm's "everyone permission bits" warning on
+            # /certs/tls.key without locking the process out.
+            defaultMode: 0o440
         - name: config
           configMap:
             name: kanidm-server-config
+            defaultMode: 0o440
             items:
               - { key: server.toml, path: server.toml }
