@@ -1,0 +1,21 @@
+---
+# Tells Traefik to talk HTTPS to the kanidm Service backend and validate the
+# cert against the public Let's Encrypt chain. The pod presents an
+# auth.home.kelch.io cert; gateway-services terminates the client side with
+# the *.home.kelch.io wildcard cert. Different leaf certs, both chained to
+# Let's Encrypt's public roots — System trust store validates either.
+# Without this policy, Traefik connects in plaintext and Kanidm rejects the
+# request because its bindaddress is HTTPS-only.
+apiVersion: gateway.networking.k8s.io/v1alpha3
+kind: BackendTLSPolicy
+metadata:
+  name: kanidm
+spec:
+  targetRefs:
+    - group: ""
+      kind: Service
+      name: kanidm
+      sectionName: https
+  validation:
+    hostname: auth.home.kelch.io
+    wellKnownCACertificates: System

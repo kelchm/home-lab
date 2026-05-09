@@ -1,0 +1,39 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kanidm-server-config
+data:
+  server.toml: |
+    version = "2"
+
+    domain = "auth.home.kelch.io"
+    origin = "https://auth.home.kelch.io"
+
+    bindaddress = "[::]:8443"
+    ldapbindaddress = "[::]:3636"
+
+    db_path = "/data/kanidm.db"
+    db_fs_type = "other"
+
+    tls_chain = "/certs/tls.crt"
+    tls_key = "/certs/tls.key"
+
+    # Trust X-Forwarded-* from Traefik so client IPs in audit log are real.
+    trust_x_forward_for = true
+
+    # Built-in scheduled DB snapshot. Writes a consistent point-in-time copy
+    # to /data/backups; the underlying Longhorn volume's daily backup picks
+    # those snapshot files up alongside the live DB. Belt + suspenders for
+    # credential-store recovery.
+    [online_backup]
+    path = "/data/backups"
+    schedule = "0 3 * * *"
+    versions = 7
+
+    # Replication is intentionally NOT configured here. PR 5 will (a) scale
+    # this StatefulSet to replicas: 3, (b) capture each pod's self-generated
+    # replication cert via `kanidmd show-replication-certificate`, and (c)
+    # land a follow-up ConfigMap revision with the [replication] +
+    # [replication."repl://..."] peer entries. Until then this is a single
+    # canonical Kanidm instance with no replication topology.
