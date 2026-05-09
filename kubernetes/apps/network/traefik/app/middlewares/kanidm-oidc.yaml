@@ -26,13 +26,14 @@ spec:
           - Name: groups
             AnyOf:
               - arr-admins@auth.home.kelch.io
+      # Authorization is enforced by AssertClaims above; downstream *arr apps
+      # don't read Remote-Groups, so it's omitted to avoid Go-slice formatting
+      # weirdness on the array claim.
       Headers:
         - Name: Remote-User
           Value: "{{ .claims.preferred_username }}"
         - Name: Remote-Email
           Value: "{{ .claims.email }}"
-        - Name: Remote-Groups
-          Value: "{{ .claims.groups }}"
       SessionCookie:
         Domain: .home.kelch.io
         Secure: true
