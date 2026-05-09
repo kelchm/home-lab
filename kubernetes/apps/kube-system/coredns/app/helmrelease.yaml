@@ -43,6 +43,7 @@ spec:
             parameters: 30
             configBlock: |-
               servfail 0
+          - name: loop
           - name: log
             configBlock: |-
               class error
