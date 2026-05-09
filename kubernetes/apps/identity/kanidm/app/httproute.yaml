@@ -1,8 +1,10 @@
 ---
-# Routes auth.home.kelch.io -> kanidm Service (HTTPS backend, validated by
-# BackendTLSPolicy). Lives on gateway-services so housemates on streaming
-# VLANs can complete OIDC redirects from Jellyseerr; gateway-admin (VLAN-10
-# only) can also reach this hostname since the cert + DNS path are shared.
+# Routes auth.home.kelch.io -> kanidm Service. Backend connection is HTTPS
+# (validated by BackendTLSPolicy); a plain-HTTP backend would break Kanidm's
+# HTTPS-only listener.
+#
+# Lives on gateway-services so client VLANs can complete OIDC redirects from
+# OIDC RPs; gateway-admin (VLAN-10 only) shares the same cert + DNS path.
 #
 # No auth Middleware attached — Kanidm is the auth source itself; gating it
 # would create a chicken-and-egg.

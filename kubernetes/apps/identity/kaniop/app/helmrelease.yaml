@@ -1,0 +1,50 @@
+---
+# kaniop: cluster-scoped Kanidm operator. Watches Kanidm, KanidmGroup,
+# KanidmPersonAccount, KanidmOAuth2Client, KanidmServiceAccount CRDs across
+# all namespaces.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: kaniop
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: kaniop
+  interval: 1h
+  values:
+    resources:
+      requests:
+        cpu: 10m
+        memory: 14Mi
+      limits:
+        cpu: 2
+        memory: 256Mi
+
+    # Validating webhook rejects same-name CRs in different namespaces that
+    # target the same Kanidm cluster (kanidmRef name+namespace). With per-app
+    # KanidmOAuth2Client CRs in `media/<app>/`, this protection is real:
+    # without it, a duplicate-named client silently overwrites the original.
+    webhook:
+      enabled: true
+      certManager:
+        enabled: true
+      resources:
+        requests:
+          cpu: 10m
+          memory: 14Mi
+        limits:
+          cpu: 2
+          memory: 128Mi
+
+    # Prometheus integration. kube-prometheus-stack runs with
+    # serviceMonitorSelectorNilUsesHelmValues: false, so a ServiceMonitor in
+    # any namespace is auto-discovered. The grafana sidecar discovers the
+    # bundled dashboards via the default `grafana_dashboard=1` label.
+    metrics:
+      enabled: true
+      serviceMonitor:
+        enabled: true
+      prometheusRules:
+        enabled: true
+      dashboards:
+        enabled: true

@@ -1,0 +1,10 @@
+---
+# Membership group for *arr-suite admin access. Used as the group reference
+# in OAuth2 scope maps on KanidmOAuth2Client CRs.
+apiVersion: kaniop.rs/v1beta1
+kind: KanidmGroup
+metadata:
+  name: arr-admins
+spec:
+  kanidmRef:
+    name: kanidm
