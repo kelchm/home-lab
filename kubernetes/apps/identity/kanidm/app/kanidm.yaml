@@ -14,14 +14,39 @@ spec:
 
   logLevel: info
 
-  # cert-manager-managed Secret produced by certificate.yaml.
+  # cert-manager-managed Secret produced by certificate.yaml. cert-manager owns
+  # cert lifecycle (DNS01 ACME, renewal); kaniop just mounts the Secret.
   tlsSecretName: auth-home-kelch-io-tls
+
+  # Exposes port 3636 (LDAPS) on the kaniop-generated Service for in-cluster
+  # LDAP bind from RPs that don't speak OIDC.
+  ldapPortName: ldaps
 
   replicaGroups:
     - name: default
       replicas: 1
       role: write_replica
       primaryNode: true
+      # Stakater Reloader (kube-system/reloader) restarts the pod when the
+      # referenced TLS Secret rotates. Kanidm reads its cert at startup only;
+      # without this annotation the pod would serve the old cert past
+      # cert-manager's renewal until something else restarted it.
+      statefulSetAnnotations:
+        reloader.stakater.com/auto: "true"
+      resources:
+        requests:
+          cpu: 10m
+          memory: 90Mi
+        limits:
+          memory: 2Gi
+      topologySpreadConstraints:
+        - labelSelector:
+            matchLabels:
+              kanidm.kaniop.rs/cluster: kanidm
+              kanidm.kaniop.rs/replica-group: default
+          maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
 
   storage:
     volumeClaimTemplate:

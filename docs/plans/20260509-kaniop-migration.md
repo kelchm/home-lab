@@ -36,7 +36,7 @@ zero. It replaces the planned PR 5 (manual replication bootstrap) and reshapes P
 | **Identity seeding** | Declarative `KanidmGroup arr-admins` + `KanidmPersonAccount kelchm` in `identity` namespace | Replaces seed CronJob. Initial password set via the credential-reset URL surfaced in `kubectl describe kanidmpersonaccount kelchm` — kaniop emits it for `credentialsTokenTtl` seconds (default 3600). |
 | **Application-consistent backups** | `KANIDM_ONLINE_BACKUP_SCHEDULE='0 5 * * *'` (01:00 ET) + `KANIDM_ONLINE_BACKUP_VERSIONS=7` env vars on Kanidm CR | Daily SQLite-online-backup-API dump to `/data/backups/`. Two-hour gap before Longhorn's 03:00 ET PVC backup picks up both the live DB and the consistent dump. |
 | **Volume-level backups** | Inherited from existing default `RecurringJob` (daily 03:00 ET retain 7, weekly Sunday 04:00 ET retain 4) | No new Longhorn config; new PVCs auto-join the `default` group. BackupTarget at `nfs://10.32.25.5:/volume1/backups-k8s-prod/longhorn` already in place. |
-| **HTTPRoute** | Keep the hand-rolled `httproute.yaml` rather than use kaniop's `spec.gateway` field | Preserves existing parentRef/sectionName + BackendTLSPolicy contract. kaniop's gateway field would re-create equivalent objects with operator-owned naming. No upside, just churn. |
+| **HTTPRoute** | Hand-rolled `httproute.yaml` alongside the Kanidm CR | kaniop's `spec.gateway` could render the route, but the symmetric pair (HTTPRoute + BackendTLSPolicy) belongs together: BackendTLSPolicy must stay hand-rolled (no operator generates it), so making HTTPRoute operator-rendered would split a logical pair across two ownership models. Hand-rolled keeps both visible in the same dir and trivially editable for filters/headers/timeouts kaniop's typed CRD doesn't expose. cert-manager Certificate stays separate per the same separation-of-concerns logic (cert lifecycle is cert-manager's domain). |
 
 ## Affected files
 
@@ -48,7 +48,7 @@ zero. It replaces the planned PR 5 (manual replication bootstrap) and reshapes P
 **Add** under `kubernetes/apps/identity/`:
 - `namespace.yaml`, `kustomization.yaml` — new `identity` namespace at the standard top-level shape.
 - `kaniop/{ks.yaml, app/{kustomization.yaml, ocirepository.yaml, helmrelease.yaml}}` — operator HelmRelease.
-- `kanidm/{ks.yaml, app/{kustomization.yaml, certificate.yaml, kanidm.yaml, group-arr-admins.yaml, httproute.yaml, backendtlspolicy.yaml}}` — Kanidm CR + identity resources + cert + ingress.
+- `kanidm/{ks.yaml, app/{kustomization.yaml, certificate.yaml, kanidm.yaml, group-arr-admins.yaml, httproute.yaml, backendtlspolicy.yaml}}` — Kanidm CR + identity resources + cert + Gateway API routing pair.
 - `kanidm/app/person-kelchm.yaml` — `KanidmPersonAccount` (PR C, not B).
 - `policies/{kustomization.yaml, kanidm.yaml}` — CiliumNetworkPolicy (PR C, not B).
 - `docs/runbooks/kanidm-kaniop-cutover.md` — one-time wipe-and-redo (PR B).

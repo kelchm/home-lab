@@ -156,6 +156,22 @@ kubectl -n identity logs deploy/kaniop --tail=50
 # for the kanidm cluster + arr-admins group are normal.
 ```
 
+### 10. Clean up the empty old namespaces
+
+The `auth/` and `kaniop/` namespace manifests had `kustomize.toolkit.fluxcd.io/prune: disabled` annotations, which tell Flux to leave the Namespace object alone even after it disappears from git. Their child resources are pruned, but the empty namespace shells linger.
+
+```sh
+kubectl get ns auth kaniop
+# Expect: both Active with zero workloads
+kubectl get all -n auth
+kubectl get all -n kaniop
+# Expect: "No resources found"
+
+kubectl delete ns auth kaniop
+# Manual cleanup — Flux respects the prune-disabled annotation, so we delete
+# directly. Both should terminate within ~30s.
+```
+
 ## Validation
 
 Run the test-plan items in PR B's description before declaring the cutover done.
