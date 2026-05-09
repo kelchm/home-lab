@@ -19,7 +19,39 @@ spec:
       name: kube-dns
       clusterIP: "10.43.0.10"
     replicaCount: 2
+
     servers:
+      # Deliberately route the household/internal zone directly to UniFi.
+      #
+      # UniFi owns some home.kelch.io records directly and conditionally forwards
+      # Kubernetes app records to k8s-gateway. This preserves both behaviors while
+      # bypassing Talos hostDNS / 169.254.116.108 for this zone.
+      #
+      # See issue #36 for the SERVFAIL flake that motivated splitting this out.
+      # NetworkPolicy note: if a default-deny egress is added to kube-system,
+      # an explicit allow rule for 10.32.30.1:53 (UDP+TCP) is required.
+      - zones:
+          - zone: home.kelch.io
+            scheme: dns://
+            use_tcp: true
+        port: 53
+        plugins:
+          - name: errors
+          - name: forward
+            parameters: . 10.32.30.1
+          - name: cache
+            parameters: 30
+            configBlock: |-
+              servfail 0
+          - name: loop
+          - name: log
+            configBlock: |-
+              class error
+
+      # Default Kubernetes/CoreDNS behavior. Forward is left at the host
+      # resolver (Talos hostDNS) so generic external resolution follows the
+      # node's configured nameservers. Internal household DNS is handled by
+      # the explicit home.kelch.io server block above.
       - zones:
           - zone: .
             scheme: dns://
@@ -41,9 +73,10 @@ spec:
           - name: forward
             parameters: . /etc/resolv.conf
           - name: cache
+            parameters: 30
             configBlock: |-
               prefetch 20
-              serve_stale
+              servfail 0
           - name: loop
           - name: reload
           - name: loadbalance
@@ -52,6 +85,7 @@ spec:
           - name: log
             configBlock: |-
               class error
+
     affinity:
       nodeAffinity:
         requiredDuringSchedulingIgnoredDuringExecution:
