@@ -19,8 +19,12 @@ data:
     tls_chain = "/certs/tls.crt"
     tls_key = "/certs/tls.key"
 
-    # Trust X-Forwarded-* from Traefik so client IPs in audit log are real.
-    trust_x_forward_for = true
+    # Trust X-Forwarded-For from Traefik (any in-cluster source) so client
+    # IPs in audit logs are real instead of Traefik's pod IP. The 1.10.x
+    # config key is [http_client_address_info]; the older
+    # `trust_x_forward_for` boolean was removed.
+    [http_client_address_info]
+    x-forward-for = ["10.42.0.0/16"]
 
     # Built-in scheduled DB snapshot. Writes a consistent point-in-time copy
     # to /data/backups; the underlying Longhorn volume's daily backup picks
