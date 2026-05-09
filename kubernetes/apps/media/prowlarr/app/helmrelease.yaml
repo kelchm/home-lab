@@ -23,11 +23,8 @@ spec:
               tag: 2.3.7.5365
             env:
               TZ: America/New_York
-              # Trust Remote-User from the kanidm-oidc Traefik plugin; skip
-              # native auth for in-cluster API calls (downstream *arr apps
-              # talk to Prowlarr's API via Service DNS bypassing Traefik).
+              # Disables app-level auth; OIDC at the edge is the only gate.
               PROWLARR__AUTH__METHOD: External
-              PROWLARR__AUTH__REQUIRED: DisabledForLocalAddresses
             probes:
               liveness: &probes
                 enabled: true
