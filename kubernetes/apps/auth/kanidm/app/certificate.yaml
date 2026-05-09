@@ -1,0 +1,28 @@
+---
+# Public TLS for auth.home.kelch.io. Mounted into Kanidm pods at /certs and
+# referenced by server.toml's tls_chain / tls_key — Kanidm refuses to start
+# without HTTPS, and clients hit the pod cert directly because Traefik's
+# HTTPRoute backend connection is HTTPS (BackendTLSPolicy validates against
+# the same public chain).
+#
+# DNS01 Cloudflare via the existing letsencrypt-production ClusterIssuer
+# (same flow as the *.home.kelch.io wildcard cert in the network namespace).
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: auth-home-kelch-io
+spec:
+  dnsNames:
+    - auth.home.kelch.io
+  duration: 2160h    # 90 days
+  renewBefore: 720h  # 30 days
+  issuerRef:
+    name: letsencrypt-production
+    kind: ClusterIssuer
+  privateKey:
+    algorithm: ECDSA
+  secretName: auth-home-kelch-io-tls
+  usages:
+    - digital signature
+    - key encipherment
+    - server auth
