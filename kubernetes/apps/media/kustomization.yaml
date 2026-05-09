@@ -8,5 +8,6 @@ components:
 
 resources:
   - ./namespace.yaml
+  - ./middleware-kanidm-oidc.yaml
   - ./storage/ks.yaml
   - ./prowlarr/ks.yaml

@@ -92,4 +92,3 @@ spec:
                   group: traefik.io
                   kind: Middleware
                   name: kanidm-oidc
-                  namespace: network

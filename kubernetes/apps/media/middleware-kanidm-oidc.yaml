@@ -1,9 +1,12 @@
 ---
-# OIDC RP middleware. Loaded into traefik-admin via the experimental.plugins
-# block. Attached to *arr admin HTTPRoutes via filters.ExtensionRef.
+# OIDC RP middleware referenced by *arr admin HTTPRoutes via ExtensionRef.
+# Lives in `media` namespace because Gateway API ExtensionRef is
+# LocalObjectReference — cross-namespace refs are not part of the spec.
 #
-# CLIENT_SECRET reaches the plugin via env var (chart's spec.values.env on
-# the traefik-admin Deployment, sourced from the kaniop-emitted Secret).
+# The plugin is loaded into traefik-admin (network namespace); ARR_SUITE_CLIENT_SECRET
+# is set on the traefik-admin pod from the kaniop-emitted Secret in network/.
+# The plugin's env-var expansion happens in-process when this Middleware is
+# read at request time, so the Secret can stay namespace-isolated to network/.
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
@@ -26,9 +29,6 @@ spec:
           - Name: groups
             AnyOf:
               - arr-admins@auth.home.kelch.io
-      # Authorization is enforced by AssertClaims above; downstream *arr apps
-      # don't read Remote-Groups, so it's omitted to avoid Go-slice formatting
-      # weirdness on the array claim.
       Headers:
         - Name: Remote-User
           Value: "{{ .claims.preferred_username }}"
