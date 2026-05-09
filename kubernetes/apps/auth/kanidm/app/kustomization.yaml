@@ -9,4 +9,4 @@ resources:
   - ./httproute.yaml
   - ./backendtlspolicy.yaml
   - ./secret.sops.yaml
-  - ./seed-job.yaml
+  - ./seed-cronjob.yaml

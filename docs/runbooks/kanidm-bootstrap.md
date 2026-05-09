@@ -52,21 +52,24 @@ git commit -m "Populate kanidm-bootstrap Secret with recovered passwords"
 git push
 ```
 
-## Step 3 — Wait for the seed Job to run
+## Step 3 — Run the seed
 
-Reloader watches `kanidm-bootstrap` and re-creates the `kanidm-seed` Job whenever the Secret changes. After Flux applies the updated Secret:
+`kanidm-seed` is a CronJob that fires hourly with an idempotent script — once the Secret has real credentials, the next scheduled run will succeed. To skip the wait during bootstrap:
 
 ```sh
-kubectl -n auth get jobs -w
-# wait for kanidm-seed to show 1/1 Complete
-kubectl -n auth logs job/kanidm-seed
+kubectl -n auth create job --from=cronjob/kanidm-seed kanidm-seed-$(date +%s)
+kubectl -n auth get jobs -l app.kubernetes.io/name=kanidm-seed -w
+# wait for the new job to show 1/1 Complete
+kubectl -n auth logs -l app.kubernetes.io/name=kanidm-seed --tail=200
 ```
 
-The Job is idempotent — re-running it is a no-op for objects that already exist. To force a re-run after editing the Job manifest:
+The script checks for object existence before creating, so re-runs are no-ops. Drift correction comes for free — if you hand-edit a group or OAuth2 client via the UI, the next CronJob fire restores the declared state.
+
+To pause the CronJob (e.g., during a Kanidm upgrade):
 
 ```sh
-kubectl -n auth delete job kanidm-seed
-# Flux recreates on next reconcile (1h interval, or `flux reconcile ks kanidm -n auth`)
+kubectl -n auth patch cronjob kanidm-seed --type merge -p '{"spec":{"suspend":true}}'
+# remember to unsuspend once the upgrade is settled
 ```
 
 ## Step 4 — Capture OAuth2 client secrets for downstream consumers
@@ -108,7 +111,7 @@ Or just have the housemate log in with a recovery password and set their own.
 
 ## Troubleshooting
 
-**Seed Job pod stuck `CrashLoopBackOff` with auth errors.** Most likely the password in the SOPS Secret is stale (recovered, then someone changed it via the UI). Re-run step 1 and step 2.
+**Seed CronJob pods keep failing with auth errors.** Most likely the password in the SOPS Secret is stale (recovered, then someone changed it via the UI). Re-run step 1 and step 2; the next scheduled fire will pick up the new value (or trigger one early via `kubectl create job --from=cronjob/...`).
 
 **`auth.home.kelch.io` returns the gateway's default cert, not Kanidm's.** Means the BackendTLSPolicy isn't being honored — check `kubectl get backendtlspolicy -n auth -o yaml` and confirm the gateway-services Traefik replica picked it up. Traefik logs in `network` namespace will show the upstream connection failure.
 
