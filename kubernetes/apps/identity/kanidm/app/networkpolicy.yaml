@@ -13,12 +13,11 @@ spec:
     matchLabels:
       kanidm.kaniop.rs/cluster: kanidm
   ingress:
-    # Traefik (gateway-services) -> Kanidm HTTPS API. The XFF trust boundary.
+    # Traefik -> Kanidm HTTPS API. The XFF trust boundary.
     - fromEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: network
             app.kubernetes.io/name: traefik
-            app.kubernetes.io/instance: traefik-services
       toPorts:
         - ports:
             - port: "8443"
