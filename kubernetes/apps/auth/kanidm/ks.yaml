@@ -17,4 +17,8 @@ spec:
     name: flux-system
     namespace: flux-system
   targetNamespace: auth
-  wait: true
+  # wait:false because the seed Job sits Failed until the operator
+  # populates kanidm-bootstrap with real recovered passwords. See
+  # docs/runbooks/kanidm-bootstrap.md. Other Kanidm resources still
+  # reconcile and become Ready independently.
+  wait: false
