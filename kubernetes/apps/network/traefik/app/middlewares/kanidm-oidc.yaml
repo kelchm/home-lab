@@ -1,0 +1,41 @@
+---
+# OIDC RP middleware. Loaded into traefik-admin via the experimental.plugins
+# block. Attached to *arr admin HTTPRoutes via filters.ExtensionRef.
+#
+# CLIENT_SECRET reaches the plugin via env var (chart's spec.values.env on
+# the traefik-admin Deployment, sourced from the kaniop-emitted Secret).
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: kanidm-oidc
+spec:
+  plugin:
+    traefik-oidc-auth:
+      Provider:
+        Url: https://auth.home.kelch.io/oauth2/openid/arr-suite
+        ClientId: arr-suite
+        ClientSecret: ${ARR_SUITE_CLIENT_SECRET}
+        UsePkce: true
+      Scopes:
+        - openid
+        - profile
+        - email
+        - groups
+      Authorization:
+        AssertClaims:
+          - Name: groups
+            AnyOf:
+              - arr-admins@auth.home.kelch.io
+      Headers:
+        - Name: Remote-User
+          Value: "{{ .claims.preferred_username }}"
+        - Name: Remote-Email
+          Value: "{{ .claims.email }}"
+        - Name: Remote-Groups
+          Value: "{{ .claims.groups }}"
+      SessionCookie:
+        Domain: .home.kelch.io
+        Secure: true
+        HttpOnly: true
+        SameSite: lax
+        MaxAge: 43200

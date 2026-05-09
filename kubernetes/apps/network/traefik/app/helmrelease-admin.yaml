@@ -32,7 +32,9 @@ spec:
       # have no Middleware-protected routes.
       kubernetesCRD:
         enabled: true
-        allowCrossNamespace: false
+        # HTTPRoutes in `media/` reference Middleware kanidm-oidc in `network/`
+        # via ExtensionRef.
+        allowCrossNamespace: true
     gateway:
       enabled: false
     gatewayClass:
@@ -72,3 +74,22 @@ spec:
         level: INFO
       access:
         enabled: true
+
+    # OIDC RP plugin loaded via yaegi. The kanidm-oidc Middleware references
+    # this plugin name. Plugin failure mode: load error fails traefik-admin
+    # startup — pin via Renovate, never auto-merge bumps.
+    experimental:
+      plugins:
+        traefik-oidc-auth:
+          moduleName: github.com/sevensolutions/traefik-oidc-auth
+          # renovate: datasource=github-releases depName=sevensolutions/traefik-oidc-auth
+          version: v0.19.0
+
+    # CLIENT_SECRET key from the kaniop-emitted Secret, renamed so a future
+    # second OIDC client wouldn't collide on the env var name.
+    env:
+      - name: ARR_SUITE_CLIENT_SECRET
+        valueFrom:
+          secretKeyRef:
+            name: arr-suite-kanidm-oauth2-credentials
+            key: CLIENT_SECRET
