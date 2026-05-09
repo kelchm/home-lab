@@ -57,7 +57,10 @@ spec:
         enabled: true
         label: grafana_dashboard
         labelValue: "1"
-        searchNamespace: observability
+        # ALL so charts that ship dashboards in their own namespace
+        # (kaniop in identity, cilium in kube-system) get picked up.
+        # Chart auto-grants the sidecar a ClusterRole when set to ALL.
+        searchNamespace: ALL
         folderAnnotation: grafana_folder
         provider:
           foldersFromFilesStructure: true
