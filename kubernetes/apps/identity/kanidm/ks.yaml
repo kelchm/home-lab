@@ -9,16 +9,14 @@ spec:
       namespace: cert-manager
     - name: longhorn
       namespace: longhorn-system
+    - name: kaniop
+      namespace: identity
   interval: 1h
-  path: ./kubernetes/apps/auth/kanidm/app
+  path: ./kubernetes/apps/identity/kanidm/app
   prune: true
   sourceRef:
     kind: GitRepository
     name: flux-system
     namespace: flux-system
-  targetNamespace: auth
-  # wait:false because the seed Job sits Failed until the operator
-  # populates kanidm-bootstrap with real recovered passwords. See
-  # docs/runbooks/kanidm-bootstrap.md. Other Kanidm resources still
-  # reconcile and become Ready independently.
-  wait: false
+  targetNamespace: identity
+  wait: true

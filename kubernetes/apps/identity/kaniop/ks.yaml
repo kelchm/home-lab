@@ -8,13 +8,13 @@ spec:
     - apiVersion: helm.toolkit.fluxcd.io/v2
       kind: HelmRelease
       name: kaniop
-      namespace: kaniop
+      namespace: identity
   interval: 1h
-  path: ./kubernetes/apps/kaniop/kaniop/app
+  path: ./kubernetes/apps/identity/kaniop/app
   prune: true
   sourceRef:
     kind: GitRepository
     name: flux-system
     namespace: flux-system
-  targetNamespace: kaniop
+  targetNamespace: identity
   wait: true

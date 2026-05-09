@@ -1,0 +1,28 @@
+---
+# kaniop: cluster-scoped Kanidm operator. Watches Kanidm, KanidmGroup,
+# KanidmPersonAccount, KanidmOAuth2Client, KanidmServiceAccount CRDs across
+# all namespaces.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: kaniop
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: kaniop
+  interval: 1h
+  values:
+    # Validating webhook prevents two Kanidm CRs from pointing at the same
+    # Kanidm cluster from different namespaces. With one Kanidm CR the
+    # collision class doesn't exist; disabling skips the cert-issuance Job +
+    # admission webhook deployment.
+    webhook:
+      enabled: false
+
+    # Prometheus integration. kube-prometheus-stack runs with
+    # serviceMonitorSelectorNilUsesHelmValues: false, so a ServiceMonitor in
+    # any namespace is auto-discovered.
+    metrics:
+      enabled: true
+      serviceMonitor:
+        enabled: true

@@ -6,11 +6,10 @@ substack only — the rest of the master plan is unchanged).
 
 ## Context
 
-The `auth` namespace has a working hand-rolled Kanidm StatefulSet (1 replica, Kanidm
-1.10.1) recovered to a clean state but never fully bootstrapped. PR 4's seed CronJob
-never successfully ran due to an upstream CoreDNS flake (issue #36, since resolved);
-the only credential in the DB is the `idm_admin` recovered via the manual
-`kanidmd recover-account` flow.
+The hand-rolled Kanidm StatefulSet (1 replica, Kanidm 1.10.1) was recovered to a clean
+state but never fully bootstrapped. PR 4's seed CronJob never successfully ran due to
+an upstream CoreDNS flake (issue #36, since resolved); the only credential in the DB
+is the `idm_admin` recovered via the manual `kanidmd recover-account` flow.
 
 Reviewing [pando85/kaniop](https://github.com/pando85/kaniop) revealed it's a strictly
 better fit than continuing with the hand-rolled approach. It provides declarative
@@ -31,59 +30,40 @@ zero. It replaces the planned PR 5 (manual replication bootstrap) and reshapes P
 | **Operator** | kaniop v0.6.1, OCI chart `oci://ghcr.io/pando85/helm-charts/kaniop` | Active maintenance (releases every 2-3 weeks, last commit today), AGPLv3 (matches Kanidm), Gateway API native, only 4 open issues. |
 | **Kanidm image** | `kanidm/server:1.9.2` | kaniop builds against `kanidm_client = "1.9.0"`. Matches pando85's own homelab pairing. Avoids the cosmetic "incompatible version" condition in the Kanidm CR status. Downgrade is free for us — DB is empty. |
 | **Replicas at migration** | 1 | Smaller blast radius. Scale to 3 in PR E once stable. Forward-compatible with the original HA target. |
+| **Namespace** | `identity` (single namespace, kaniop and kanidm as sibling apps inside) | Surveyed 8 community repos running Kanidm: `security/` (3) and `identity/` (1) dominate; workload-named `kanidm/` is a minority pattern. `identity/` is the most semantically precise — survives a hypothetical product swap (Kanidm → Authentik would still describe the contents). Operator and workload as siblings (`identity/kaniop/` + `identity/kanidm/`) rather than bundled into a single app dir, to keep their Flux Kustomizations independent. |
 | **Reverse-proxy IP attribution** | `KANIDM_TRUST_X_FORWARD_FOR=true` env var + CiliumNetworkPolicy restricting `:8443` ingress to Traefik pods | NetworkPolicy is the actual trust boundary — kaniop's V2-config CIDR scoping wouldn't buy anything extra, since pod IPs come from a single CIDR for everyone in-cluster. PROXY v2 is the architecturally-correct answer per Kanidm docs but isn't worth blocking on (LDAPS is in-cluster only, so no real attribution gap). Decision-trail: chat 2026-05-09. |
 | **OAuth2 client management** | Per-app `KanidmOAuth2Client` CR in each consumer's namespace | Replaces the centralized seed CronJob. kaniop generates `<client-name>-kanidm-oauth2-credentials` Secret per client in the same namespace; consumer reads it directly via SOPS-free reference. Cross-namespace discovery enabled via `oauth2ClientNamespaceSelector: {}` on the Kanidm CR. |
-| **Identity seeding** | Declarative `KanidmGroup arr-admins` + `KanidmPersonAccount kelchm` in `auth` namespace | Replaces seed CronJob. Initial password set via the credential-reset URL surfaced in `kubectl describe kanidmpersonaccount kelchm` — kaniop emits it for `credentialsTokenTtl` seconds (default 3600). |
+| **Identity seeding** | Declarative `KanidmGroup arr-admins` + `KanidmPersonAccount kelchm` in `identity` namespace | Replaces seed CronJob. Initial password set via the credential-reset URL surfaced in `kubectl describe kanidmpersonaccount kelchm` — kaniop emits it for `credentialsTokenTtl` seconds (default 3600). |
 | **Application-consistent backups** | `KANIDM_ONLINE_BACKUP_SCHEDULE='0 5 * * *'` (01:00 ET) + `KANIDM_ONLINE_BACKUP_VERSIONS=7` env vars on Kanidm CR | Daily SQLite-online-backup-API dump to `/data/backups/`. Two-hour gap before Longhorn's 03:00 ET PVC backup picks up both the live DB and the consistent dump. |
 | **Volume-level backups** | Inherited from existing default `RecurringJob` (daily 03:00 ET retain 7, weekly Sunday 04:00 ET retain 4) | No new Longhorn config; new PVCs auto-join the `default` group. BackupTarget at `nfs://10.32.25.5:/volume1/backups-k8s-prod/longhorn` already in place. |
-| **HTTPRoute** | Keep the existing hand-rolled `httproute.yaml` rather than use kaniop's `spec.gateway` field | Preserves existing parentRef/sectionName + BackendTLSPolicy contract. kaniop's gateway field would re-create equivalent objects with operator-owned naming. No upside, just churn. |
+| **HTTPRoute** | Keep the hand-rolled `httproute.yaml` rather than use kaniop's `spec.gateway` field | Preserves existing parentRef/sectionName + BackendTLSPolicy contract. kaniop's gateway field would re-create equivalent objects with operator-owned naming. No upside, just churn. |
 
 ## Affected files
 
-**Delete** (all under `kubernetes/apps/auth/kanidm/app/`):
-- `configmap.yaml` — kaniop manages `server.toml` via env vars + rash-sh templating.
-- `service.yaml` — kaniop creates `kanidm` Service via the `Kanidm` CR.
-- `statefulset.yaml` — kaniop creates the StatefulSet via the `Kanidm` CR.
-- `seed-cronjob.yaml` — replaced by `KanidmGroup` / `KanidmPersonAccount` /
-  per-app `KanidmOAuth2Client` CRs.
-- `secret.sops.yaml` — kaniop generates `kanidm-admin-passwords` Secret itself by
-  running `kanidmd recover-account` for both `admin` and `idm_admin` on first
-  reconcile.
+**Delete entirely** — wrong-namespace placements from PR A and pre-pivot:
+- `kubernetes/apps/kaniop/` — PR A's standalone-namespace placement, superseded by `identity/kaniop/`.
+- `kubernetes/apps/auth/` — pre-pivot hand-rolled placement, superseded by `identity/kanidm/`.
+- `docs/runbooks/kanidm-bootstrap.md` — runbook for the hand-rolled bootstrap flow, superseded by `kanidm-kaniop-cutover.md`.
 
-**Keep** (no change):
-- `kubernetes/apps/auth/kanidm/app/certificate.yaml` — Kanidm CR references the
-  existing `auth-home-kelch-io-tls` Secret unchanged.
-- `kubernetes/apps/auth/kanidm/app/httproute.yaml` — see decision table.
-- `kubernetes/apps/auth/kanidm/app/backendtlspolicy.yaml` — Kanidm still serves HTTPS
-  on `:8443`, BackendTLSPolicy still required.
-
-**Add**:
-- `kubernetes/apps/kaniop/kaniop/{ks.yaml, app/{kustomization.yaml, helmrelease.yaml, ocirepository.yaml}}` — operator install (PR A).
-- `kubernetes/apps/auth/kanidm/app/kanidm.yaml` — `Kanidm` CR (PR B).
-- `kubernetes/apps/auth/kanidm/app/group-arr-admins.yaml` — `KanidmGroup` (PR B).
-- `kubernetes/apps/auth/kanidm/app/person-kelchm.yaml` — `KanidmPersonAccount` (PR C).
-- `kubernetes/apps/auth/policies/{kustomization.yaml, kanidm.yaml}` — CiliumNetworkPolicy (PR C).
+**Add** under `kubernetes/apps/identity/`:
+- `namespace.yaml`, `kustomization.yaml` — new `identity` namespace at the standard top-level shape.
+- `kaniop/{ks.yaml, app/{kustomization.yaml, ocirepository.yaml, helmrelease.yaml}}` — operator HelmRelease.
+- `kanidm/{ks.yaml, app/{kustomization.yaml, certificate.yaml, kanidm.yaml, group-arr-admins.yaml, httproute.yaml, backendtlspolicy.yaml}}` — Kanidm CR + identity resources + cert + ingress.
+- `kanidm/app/person-kelchm.yaml` — `KanidmPersonAccount` (PR C, not B).
+- `policies/{kustomization.yaml, kanidm.yaml}` — CiliumNetworkPolicy (PR C, not B).
 - `docs/runbooks/kanidm-kaniop-cutover.md` — one-time wipe-and-redo (PR B).
 - `docs/runbooks/kanidm-restore.md` — restore drill procedure (PR C).
 
 **Update**:
-- `kubernetes/apps/kaniop/{namespace.yaml, kustomization.yaml}` — new top-level
-  app group. Mirrors `cert-manager/`, `longhorn-system/`, `flux-system/`. Aggregator
-  at `kubernetes/flux/cluster/ks.yaml` walks `./kubernetes/apps`, no aggregator edit
-  needed.
-- `kubernetes/apps/auth/kustomization.yaml` — include `./policies/` (PR C).
-- `kubernetes/apps/auth/kanidm/app/kustomization.yaml` — replace deleted manifests
-  with new ones across PR B and PR C.
-- `docs/plans/20260508-arr-suite-setup.md` — pointer at Phase 0 step 5 to this pivot
-  doc (in PR A).
+- `docs/plans/20260508-arr-suite-setup.md` — pointer at Phase 0 step 5 to this pivot doc (already in place from PR A).
 
 ## PR sequence
 
 | # | Title | Risk | Scope |
 |---|---|---|---|
-| **A** | Install kaniop operator in dedicated `kaniop` namespace | low | Pure additive — operator pod runs idle until we give it a Kanidm CR. Verifies CRDs register cleanly. Updates the master plan with a pointer to this doc. |
-| **B** | Cutover hand-rolled Kanidm → kaniop-managed | high | Destructive (PVC wipe). Cutover runbook drives the sequence. Single replica through cutover. KanidmGroup arr-admins lands here so the operator has something to reconcile besides the cluster CR itself. |
-| **C** | Harden + backups + kelchm | medium | NetworkPolicy lockdown in `auth` namespace. `KANIDM_TRUST_X_FORWARD_FOR=true`, `KANIDM_ONLINE_BACKUP_*` env vars on the Kanidm CR. KanidmPersonAccount kelchm. Restore runbook. |
+| ~~A~~ | ~~Install kaniop operator in standalone namespace~~ | ~~low~~ | Merged. Placement wrong; superseded by PR B (which dissolves the standalone `kaniop` namespace and relocates the operator into `identity/kaniop/` alongside kanidm). |
+| **B** | Cutover hand-rolled Kanidm → kaniop-managed; relocate kaniop into `identity/` | high | Destructive (PVC wipe). Combined: deletes both `kubernetes/apps/auth/` and `kubernetes/apps/kaniop/`, builds `kubernetes/apps/identity/` from scratch with kaniop and kanidm as siblings. Single replica through cutover. KanidmGroup arr-admins lands here so the operator has something to reconcile besides the cluster CR itself. Cutover runbook drives the sequence. |
+| **C** | Harden + backups + kelchm | medium | NetworkPolicy lockdown in `identity` namespace. `KANIDM_TRUST_X_FORWARD_FOR=true`, `KANIDM_ONLINE_BACKUP_*` env vars on the Kanidm CR. KanidmPersonAccount kelchm. Restore runbook. |
 | (ops) | Restore drill | n/a | Follow `docs/runbooks/kanidm-restore.md` against a copy of production data. Sign-off step before D+. |
 | **D+** | Per-app KanidmOAuth2Client during arr-suite deployment | n/a | Per-app PRs in `media/`. kaniop emits client_secret into a per-namespace Secret. |
 | **E** | Scale Kanidm CR from 1 → 3 replicas | low | One-line bump on `replicaGroups[0].replicas`. Operator handles peer cert exchange. Resolve open question on online_backup replica scoping before this lands. |
@@ -93,40 +73,19 @@ Tasks tracked in the home-lab task list as #17–#22 + #7 + #8.
 
 ## Cutover runbook outline
 
-Lives in `docs/runbooks/kanidm-kaniop-cutover.md`, written as part of PR B. Skeleton:
+Lives in `docs/runbooks/kanidm-kaniop-cutover.md`, written as part of PR B. Walks the
+operator-relocation + hand-rolled-Kanidm-wipe + reconcile cycle. Key steps:
 
-1. **Pre-cutover sanity** — confirm the DB has nothing worth keeping:
-   ```
-   kubectl -n auth exec sts/kanidm -- kanidmd domain show
-   kubectl -n auth get pvc data-kanidm-0   # capture pre-cutover state
-   ```
-2. **Pause Flux** on the `auth-kanidm` Kustomization:
-   ```
-   flux suspend kustomization auth-kanidm -n flux-system
-   ```
-3. **Tear down old StatefulSet + PVC**:
-   ```
-   kubectl -n auth scale sts kanidm --replicas=0
-   kubectl -n auth wait --for=delete pod/kanidm-0 --timeout=120s
-   kubectl -n auth delete pvc data-kanidm-0
-   ```
-4. **Merge PR B**. The PR deletes the old manifests and adds the Kanidm CR.
-5. **Resume Flux**:
-   ```
-   flux resume kustomization auth-kanidm -n flux-system
-   ```
-6. **Wait for readiness**:
-   ```
-   kubectl -n auth get kanidm kanidm -w
-   # until status conditions show Available=True
-   ```
-7. **Retrieve admin credentials** (kaniop-generated):
-   ```
-   kubectl -n auth get secret kanidm-admin-passwords \
-     -o jsonpath='{.data.IDM_ADMIN_PASSWORD}' | base64 -d
-   ```
-8. **Sanity-check the web UI**: log in to <https://auth.home.kelch.io> as `idm_admin`.
-   Verify the `arr-admins` group is reconciled by kaniop and present in the UI.
+1. Suspend Flux on the old `kaniop` and `auth-kanidm` Kustomizations.
+2. Scale the hand-rolled StatefulSet to 0 and delete its PVC (irreversible — the
+   data wipe).
+3. Merge PR B.
+4. Resume Flux. cluster-apps reconciles → deletes the old `kaniop` namespace and the
+   old `auth` namespace via prune → creates the new `identity` namespace, installs
+   kaniop, then provisions the Kanidm CR.
+5. Verify operator pod in `identity` namespace, Kanidm CR ready.
+6. Retrieve idm_admin password from kaniop-managed `kanidm-admin-passwords` Secret.
+7. Sanity-check web UI; verify `arr-admins` group reconciled.
 
 ## Restore runbook outline
 
