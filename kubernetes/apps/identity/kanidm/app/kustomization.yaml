@@ -5,5 +5,7 @@ resources:
   - ./certificate.yaml
   - ./kanidm.yaml
   - ./group-arr-admins.yaml
+  - ./person-kelchm.yaml
   - ./httproute.yaml
   - ./backendtlspolicy.yaml
+  - ./networkpolicy.yaml
