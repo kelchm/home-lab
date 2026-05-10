@@ -34,8 +34,12 @@ spec:
 
     # RWO PVC + default RollingUpdate deadlocks every upgrade: the new
     # pod can't attach the volume while the old pod still holds it.
+    # rollingUpdate: null is required so Helm's three-way patch drops
+    # the existing maxSurge/maxUnavailable block — k8s rejects a
+    # Deployment that has both type=Recreate and a rollingUpdate spec.
     deploymentStrategy:
       type: Recreate
+      rollingUpdate: null
 
     service:
       type: ClusterIP
