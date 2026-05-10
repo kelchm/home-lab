@@ -32,14 +32,18 @@ spec:
       size: 10Gi
       storageClassName: longhorn
 
-    # RWO PVC + default RollingUpdate deadlocks every upgrade: the new
-    # pod can't attach the volume while the old pod still holds it.
-    # rollingUpdate: null is required so Helm's three-way patch drops
-    # the existing maxSurge/maxUnavailable block — k8s rejects a
-    # Deployment that has both type=Recreate and a rollingUpdate spec.
+    # RWO PVC + the chart's default maxSurge=25% deadlocks every upgrade:
+    # the new pod can't attach the volume while the old pod still holds
+    # it. maxSurge=0 forces the old pod to terminate before the new one
+    # starts; maxUnavailable=1 permits the brief gap where the single
+    # replica is down. Functionally equivalent to type=Recreate, but
+    # type=Recreate trips a chart rendering bug (rollingUpdate field
+    # leaks through and the API rejects the Deployment).
     deploymentStrategy:
-      type: Recreate
-      rollingUpdate: null
+      type: RollingUpdate
+      rollingUpdate:
+        maxSurge: 0
+        maxUnavailable: 1
 
     service:
       type: ClusterIP
