@@ -32,6 +32,11 @@ spec:
       size: 10Gi
       storageClassName: longhorn
 
+    # RWO PVC + default RollingUpdate deadlocks every upgrade: the new
+    # pod can't attach the volume while the old pod still holds it.
+    deploymentStrategy:
+      type: Recreate
+
     service:
       type: ClusterIP
 
