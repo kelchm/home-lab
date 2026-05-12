@@ -67,6 +67,13 @@ spec:
                     name: qbittorrent-secret
                     key: WIREGUARD_ADDRESSES
             securityContext:
+              # Gluetun needs root to manipulate iptables — /run/xtables.lock
+              # requires uid=0, NET_ADMIN alone isn't enough. Overrides
+              # defaultPodOptions.securityContext (runAsUser=1036, runAsNonRoot=true)
+              # which apply to the qB app container.
+              runAsUser: 0
+              runAsGroup: 0
+              runAsNonRoot: false
               capabilities:
                 add: ["NET_ADMIN"]
                 drop: ["ALL"]
