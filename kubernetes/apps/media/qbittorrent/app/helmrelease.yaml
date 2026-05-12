@@ -75,7 +75,10 @@ spec:
               runAsGroup: 0
               runAsNonRoot: false
               capabilities:
-                add: ["NET_ADMIN"]
+                # NET_ADMIN: iptables + tunnel setup.
+                # NET_RAW: ICMP for gluetun's internal healthcheck (otherwise
+                # falls back to DNS-over-UDP probes — works but noisier).
+                add: ["NET_ADMIN", "NET_RAW"]
                 drop: ["ALL"]
               allowPrivilegeEscalation: false
             probes:
@@ -169,6 +172,15 @@ spec:
           qbittorrent:
             gluetun:
               - path: /dev/net/tun
+      # Gluetun writes /tmp/gluetun/ip to persist public IP between runs.
+      # Image's /tmp/gluetun is owned by uid 1000; we run as 0 but mounting
+      # a fresh emptyDir sidesteps any baked ownership issue.
+      gluetun-tmp:
+        type: emptyDir
+        advancedMounts:
+          qbittorrent:
+            gluetun:
+              - path: /tmp/gluetun
     route:
       app:
         hostnames: ["qbittorrent.home.kelch.io"]
