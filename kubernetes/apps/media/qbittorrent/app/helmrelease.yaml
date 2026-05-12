@@ -1,0 +1,181 @@
+---
+# qBittorrent + Gluetun. Gluetun runs as a native sidecar (initContainer with
+# restartPolicy: Always, k8s 1.28+) and owns the pod's network namespace; the
+# qBittorrent container's egress is forced through Gluetun's tun device by
+# iptables killswitch — no fallback to host network. /dev/net/tun is hostPath
+# from the node (Talos exposes it world-writable; verified pre-deploy).
+#
+# Auth model: native qB auth bypassed for pod CIDR via Web UI "Bypass
+# authentication for clients in whitelisted IP subnets" — configured once via
+# kubectl port-forward on first deploy. OIDC at the edge (kanidm-oidc
+# Middleware on gateway-admin) is the externally-facing gate.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: qbittorrent
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: qbittorrent
+  interval: 1h
+  values:
+    defaultPodOptions:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1036
+        runAsGroup: 65537
+        supplementalGroups: [65537]
+        fsGroup: 1036
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+        sysctls:
+          # Required for WireGuard in a container (gluetun docs).
+          - name: net.ipv4.conf.all.src_valid_mark
+            value: "1"
+    controllers:
+      qbittorrent:
+        strategy: Recreate
+        initContainers:
+          gluetun:
+            restartPolicy: Always
+            image:
+              # renovate: datasource=docker depName=ghcr.io/qdm12/gluetun
+              repository: ghcr.io/qdm12/gluetun
+              tag: v3.41.1
+            env:
+              VPN_SERVICE_PROVIDER: protonvpn
+              VPN_TYPE: wireguard
+              SERVER_COUNTRIES: Netherlands
+              # Opens inbound on the pod's local interface so Traefik (in
+              # pod CIDR) can reach qB's Web UI on 8080.
+              FIREWALL_INPUT_PORTS: "8080"
+              # Allow non-VPN egress to pod + service CIDRs so cluster
+              # traffic (return path, DNS) doesn't get blackholed.
+              FIREWALL_OUTBOUND_SUBNETS: "10.42.0.0/16,10.43.0.0/16"
+              TZ: America/New_York
+              # Targeted secret injection (least privilege): gluetun only
+              # gets WireGuard credentials, not the qB Web UI password.
+              WIREGUARD_PRIVATE_KEY:
+                valueFrom:
+                  secretKeyRef:
+                    name: qbittorrent-secret
+                    key: WIREGUARD_PRIVATE_KEY
+              WIREGUARD_ADDRESSES:
+                valueFrom:
+                  secretKeyRef:
+                    name: qbittorrent-secret
+                    key: WIREGUARD_ADDRESSES
+            securityContext:
+              capabilities:
+                add: ["NET_ADMIN"]
+                drop: ["ALL"]
+              allowPrivilegeEscalation: false
+            probes:
+              # Gates qB on tunnel readiness; mirrors gluetun's own Docker
+              # HEALTHCHECK (which k8s ignores by default).
+              startup:
+                enabled: true
+                custom: true
+                spec:
+                  exec:
+                    command: ["/gluetun-entrypoint", "healthcheck"]
+                  initialDelaySeconds: 5
+                  periodSeconds: 5
+                  timeoutSeconds: 5
+                  failureThreshold: 30
+            resources:
+              requests:
+                cpu: 50m
+                memory: 64Mi
+              limits:
+                memory: 256Mi
+        containers:
+          app:
+            image:
+              # renovate: datasource=docker depName=ghcr.io/home-operations/qbittorrent
+              repository: ghcr.io/home-operations/qbittorrent
+              tag: 5.2.0
+            env:
+              TZ: America/New_York
+              UMASK: "002"
+              # Targeted secret injection (least privilege): qB only gets
+              # the Web UI password, not the WireGuard private key.
+              WEBUI_PASSWORD_PBKDF2:
+                valueFrom:
+                  secretKeyRef:
+                    name: qbittorrent-secret
+                    key: WEBUI_PASSWORD_PBKDF2
+            probes:
+              liveness: &probes
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: /
+                    port: &port 8080
+                    httpHeaders:
+                      - name: Host
+                        value: localhost
+                  initialDelaySeconds: 30
+                  periodSeconds: 30
+                  timeoutSeconds: 5
+                  failureThreshold: 3
+              readiness: *probes
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities: { drop: ["ALL"] }
+            resources:
+              requests:
+                cpu: 50m
+                memory: 256Mi
+              limits:
+                memory: 2Gi
+    service:
+      app:
+        ports:
+          http:
+            port: *port
+    persistence:
+      config:
+        type: persistentVolumeClaim
+        storageClass: longhorn
+        size: 5Gi
+        accessMode: ReadWriteOnce
+        advancedMounts:
+          qbittorrent:
+            app:
+              - path: /config
+      media:
+        type: persistentVolumeClaim
+        existingClaim: media-library
+        advancedMounts:
+          qbittorrent:
+            app:
+              - path: /data
+                subPath: downloads/torrents
+      dev-net-tun:
+        type: hostPath
+        hostPath: /dev/net/tun
+        hostPathType: CharDevice
+        advancedMounts:
+          qbittorrent:
+            gluetun:
+              - path: /dev/net/tun
+    route:
+      app:
+        hostnames: ["qbittorrent.home.kelch.io"]
+        parentRefs:
+          - name: gateway-admin
+            namespace: network
+            sectionName: https
+        rules:
+          - backendRefs:
+              - identifier: app
+                port: *port
+            filters:
+              - type: ExtensionRef
+                extensionRef:
+                  group: traefik.io
+                  kind: Middleware
+                  name: kanidm-oidc
