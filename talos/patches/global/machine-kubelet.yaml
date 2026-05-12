@@ -28,6 +28,12 @@ machine:
         - key: node.multus.io/not-ready
           value: "true"
           effect: NoSchedule
+      # Unsafe sysctls that pods are allowed to request via
+      # spec.securityContext.sysctls. Per-pod-netns; setting host-wide
+      # via machine.sysctls doesn't help because each pod gets its own
+      # net namespace where the value resets to default.
+      allowedUnsafeSysctls:
+        - "net.ipv4.conf.all.src_valid_mark"   # WireGuard | qBittorrent+Gluetun
     nodeIP:
       validSubnets:
         - 10.32.30.0/24
