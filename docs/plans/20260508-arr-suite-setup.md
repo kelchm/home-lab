@@ -6,6 +6,18 @@ The home-lab cluster (Talos + Flux + Cilium BGP + Traefik + Longhorn) is fully b
 
 User-confirmed choices: qBittorrent + SABnzbd; Jellyfin + Jellyseerr; full *arr scope (TV/movies/music/books + helpers); single `/volume1/media` NFS share with hardlink-capable subdir layout; **per-app NAS identity** (real Synology users + a shared `media` group) instead of an `all_squash` blob, with `root_squash`-equivalent ("Map root to guest") for defense-in-depth; native *arr auth Disabled in favor of edge SSO. **Auth stack: Kanidm + traefik-oidc-auth, zero SPOF in the auth path.** Kanidm (Rust, CRDT-replicated multi-master, 3 replicas) is the user/password directory + OIDC OP + self-service web UI; OIDC-aware apps (Jellyseerr, Jellyfin via plugin) talk to it directly. The *arr/qBit/SAB management UIs that don't speak OIDC are gated by **`traefik-oidc-auth` running in-process inside the existing `traefik-admin` HelmRelease** as a yaegi plugin — no separate forwardAuth Deployment, no Valkey/Redis session store, no lldap, no Authelia. Cookie-only stateless sessions on the request path, replication-shard storage on the Kanidm side. Jellyfin keeps its native auth (client-compatibility); admin UIs ride `gateway-admin` (VLAN-10 only); Kanidm + Jellyseerr ride `gateway-services` so OIDC redirects and self-serve password changes work from streaming VLANs.
 
+## Status (as of 2026-05-11)
+
+What's deployed and where the implementation diverges from the prose below:
+
+- **Phase 0 (Synology bootstrap)** — done. 9 service users + `media` group (gid 65537), `/volume1/media` directory tree with setgid 2775, NFS export to `10.32.25.11/.12/.13` with "Map root to guest", Btrfs snapshots (every 4h, retention 14d/8w/6mo, immutable 7d). Captured UIDs and export config: `docs/runbooks/arr-suite-bootstrap.md`.
+- **Phase 1 (substrate)** — done. `csi-driver-nfs` at `kubernetes/apps/kube-system/csi-driver-nfs/`. Static `media-library` PV/PVC bound at `10.32.25.5:/volume1/media` (`kubernetes/apps/media/storage/`). **Kanidm + kaniop operator deployed in `kubernetes/apps/identity/`, not `kubernetes/apps/auth/` as written below** — references in subsequent prose to `auth/` namespace and `kubernetes/apps/auth/...` paths are plan-time intent; the hostname `auth.home.kelch.io` is unchanged. The `kanidm-oidc` Traefik Middleware lives in `media` namespace (`kubernetes/apps/media/middleware-kanidm-oidc.yaml`) — the cross-namespace ExtensionRef fallback flagged in the Phase 1 verification was needed.
+- **Phase 2 (partial)** — Prowlarr and Flaresolverr deployed. End-to-end OIDC SSO verified via Prowlarr.
+- **Next: SABnzbd** — first NFS-writing app; exercises Phase 0 layout + UIDs in anger. Smoke test of the NFS substrate (identity + hardlink + root-squash) runs immediately before, via `tools/media-nfs-smoke/smoketest.yaml`.
+- Phases 3–8 pending per original prose.
+
+The deployed shape uses the kaniop operator per `docs/plans/20260509-kaniop-migration.md`. Treat the hand-rolled Kanidm-StatefulSet design below as architectural rationale, not file-path truth.
+
 ## Approach
 
 ### Phase 0 — Prerequisites (one-time, blocks everything else)
@@ -15,22 +27,39 @@ User-confirmed choices: qBittorrent + SABnzbd; Jellyfin + Jellyseerr; full *arr 
    **a. Users + group** (SSH to NAS as admin, `sudo -i`):
    ```
    synogroup --add media
-   for u in qbittorrent sabnzbd prowlarr sonarr radarr lidarr readarr bazarr unpackerr jellyfin jellyseerr; do
+   # Only apps that actually mount the NFS share get a Synology user. API-only
+   # apps (Prowlarr, Flaresolverr, Recyclarr, request UI) never touch the NAS.
+   for u in qbittorrent sabnzbd sonarr radarr lidarr readarr bazarr unpackerr jellyfin; do
      synouser --add "$u" "$(openssl rand -hex 16)" "$u service" 0 "" 0
-     synogroup --member media "$u"
    done
+   # CRITICAL: `synogroup --member` is a SET operation, not append — it replaces
+   # the entire member list with the supplied users. Call once with all members,
+   # NOT in a loop per user (that would leave only the last user in the group).
+   synogroup --member media qbittorrent sabnzbd sonarr radarr lidarr readarr bazarr unpackerr jellyfin
    # Capture-then-pin: do NOT assume sequential UIDs. Existing users, deleted
-   # accounts, package users, etc. can shift the allocation.
-   for u in qbittorrent sabnzbd prowlarr sonarr radarr lidarr readarr bazarr unpackerr jellyfin jellyseerr; do
-     getent passwd "$u" | awk -F: '{printf "%-12s uid=%s gid=%s\n", $1, $3, $4}'
+   # accounts, package users, etc. can shift the allocation. DSM ships busybox
+   # ash with no `getent`, so we read /etc/passwd and /etc/group directly.
+   for u in qbittorrent sabnzbd sonarr radarr lidarr readarr bazarr unpackerr jellyfin; do
+     grep "^${u}:" /etc/passwd | awk -F: '{printf "%-12s uid=%s gid=%s\n", $1, $3, $4}'
    done
-   getent group media   # capture media GID
+   grep "^media:" /etc/group   # capture media GID
    ```
    Paste the actual output into `docs/runbooks/arr-suite-bootstrap.md`; that captured table is the source of truth pinned into per-app `runAsUser`. Disable shell + DSM access for each service user via DSM Control Panel → User.
 
-   **b. Filesystem layout** — `/volume1/media` on a single volume; pre-create `tv/ movies/ music/ books/ audiobooks/ subs/ downloads/{torrents,usenet}/{incomplete,tv,movies,music,books}`. The `incomplete/` subdirs keep half-written downloads out of the category folders that *arr scanners watch. Then `chown -R root:media /volume1/media && find /volume1/media -type d -exec chmod 2775 {} +`. The setgid bit causes new files/dirs to inherit `gid=media` regardless of the writer's primary group — required for cross-app hardlinks. Containers rely on `umask 002` (home-operations default).
+   **b. Filesystem layout** — `/volume1/media` on a single volume; pre-create `tv/ movies/ music/ books/ audiobooks/ downloads/manual/ downloads/{torrents,usenet}/{.incomplete,tv,movies,music,books}`. The `.incomplete/` subdirs keep half-written downloads out of the category folders that *arr scanners watch; the leading dot also hides them from default listings. `downloads/manual/` is a flat operator drop processed via each *arr's Manual Import UI.
 
-   **c. NFS export** — share `/volume1/media`, NFSv4.1, allow the **node host storage NICs `10.32.25.11`, `.12`, `.13`** (architecture.md:144–146). **Not** the `10.32.25.128/28` pod /28 — that range is exclusively for Longhorn instance-manager Multus-attached pods (architecture.md:150). csi-driver-nfs mounts are kubelet-initiated, so the Synology sees the connection from the node's storage NIC, not from any pod IP. Options: `sync`, `no_subtree_check`, async I/O on, allow non-privileged source ports, allow access to mounted subfolders. **Squash: "Map root to guest"** — preserves per-app UIDs end-to-end while neutering any UID-0 client (misconfigured pod, node-level mount session) to a no-group, mode-`other`-only identity. Make sure DSM's `guest` account has no ACL rights on the share.
+   Then set ownership + setgid **scoped to our created subtree**, not the share as a whole — a freshly-created DSM share contains a `@eaDir` (file-indexing metadata, DSM-managed) and the share root itself comes out as `d---------+` (POSIX 000 plus a Synology ACL). Both need careful handling: don't chown `@eaDir` (DSM tooling assumes its ownership), and the share root needs a real POSIX mode so NFS clients can traverse:
+   ```bash
+   chown root:media /volume1/media
+   chmod 2775 /volume1/media
+   for top in tv movies music books audiobooks downloads; do
+     chown -R root:media "/volume1/media/$top"
+     find "/volume1/media/$top" -type d -exec chmod 2775 {} +
+   done
+   ```
+   The setgid bit causes new files/dirs to inherit `gid=media` regardless of the writer's primary group — required for cross-app hardlinks. Containers rely on `umask 002` (home-operations default).
+
+   **c. NFS export** — share `/volume1/media`, NFSv4.1, allow the **node host storage NICs `10.32.25.11`, `.12`, `.13`** (architecture.md:144–146). **Not** the `10.32.25.128/28` pod /28 — that range is exclusively for Longhorn instance-manager Multus-attached pods (architecture.md:150). csi-driver-nfs mounts are kubelet-initiated, so the Synology sees the connection from the node's storage NIC, not from any pod IP. **Options**: async I/O on (throughput; durability via Btrfs snapshots + Longhorn-side recovery); "Allow connections from non-privileged ports" **OFF** (Linux NFS client defaults to `resvport`; flip ON only if a mount actually fails with "non-privileged port" in `dmesg`); "Allow users to access mounted subfolders" **OFF** (csi-driver-nfs mounts the share root; per-app scoping uses kernel-side `subPath` bind-mounts, not subdir NFS mounts). **Squash: "Map root to guest"** — preserves per-app UIDs end-to-end while neutering any UID-0 client (misconfigured pod, node-level mount session) to a no-group, mode-`other`-only identity. Make sure DSM's `guest` account has no ACL rights on the share.
 
    **d. Snapshots** — Btrfs snapshot policy on `/volume1/media` (hourly × 24, daily × 14, weekly × 8) outside the NFS-visible namespace. **Load-bearing** recovery mechanism for ransomware/oops-rm — call this out explicitly in the runbook; it is not optional.
 
@@ -201,7 +230,7 @@ All four share the per-app pattern below; deltas are image, container port, libr
 ### Phase 5 — Helpers
 
 15. **Bazarr** — subPaths `tv`, `movies` (RW for sidecar subtitle files); no downloads access.
-16. **Unpackerr** — `kubernetes/apps/media/unpackerr/`. No web UI; mounts `media-library` (RW — writes extracted files into downloads + library); needs *arr API keys + URLs from `secret.sops.yaml`.
+16. **Unpackerr** — `kubernetes/apps/media/unpackerr/`. No web UI; mounts `media-library` with subPath `downloads` (RW — extracts archives in-place inside the downloads tree). Never writes to the library; *arr does the library import. Needs *arr API keys + URLs from `secret.sops.yaml`.
 17. **Recyclarr** — `kubernetes/apps/media/recyclarr/`. bjw-s `controllers.recyclarr.type: cronjob`, daily. **No media mount** — only talks to *arr APIs. TRaSH-guide YAML in a `ConfigMap`; API keys in `secret.sops.yaml`.
 
 ### Phase 6 — Media server
@@ -237,17 +266,15 @@ All four share the per-app pattern below; deltas are image, container port, libr
 |-------------|---------------|------------------------------------------|------------------------------------------|
 | qbittorrent |               | downloads RW                             | Highest blast radius — extra hardening   |
 | sabnzbd     |               | downloads/usenet RW                      |                                          |
-| prowlarr    |               | none (drop media mount)                  | API-only                                 |
 | sonarr      |               | tv RW + downloads RW                     |                                          |
 | radarr      |               | movies RW + downloads RW                 |                                          |
 | lidarr      |               | music RW + downloads RW                  |                                          |
 | readarr     |               | books/audiobooks RW + downloads RW       |                                          |
 | bazarr      |               | tv/movies RW                             | No downloads                             |
-| unpackerr   |               | downloads + library RW                   |                                          |
+| unpackerr   |               | downloads RW                             | Extracts in-place; *arr handles import   |
 | jellyfin    |               | library RO                               | + supplementalGroups for /dev/dri        |
-| jellyseerr  |               | none (drop media mount)                  | API-only                                 |
 
-Capture the `media` GID the same way and reuse as the shared `supplementalGroup` (and as `runAsGroup` — see pattern below) across all writers and Jellyfin. Recyclarr is the only app without a Synology user (no library access at all).
+Capture the `media` GID the same way and reuse as the shared `supplementalGroup` (and as `runAsGroup` — see pattern below) across all writers and Jellyfin. Apps without a Synology user (no NFS access at all): Prowlarr, Flaresolverr, Recyclarr, and the request UI (Jellyseerr/Seerr) — all API-only, reach *arr/Jellyfin over the cluster network.
 
 ### Per-app pattern (every app above)
 
@@ -276,7 +303,7 @@ spec:
         runAsUser:  <app-uid>             # see UID table
         runAsGroup: <media-gid>           # process primary group = shared media group;
                                           # makes new file group ownership independent of setgid
-        supplementalGroups: [<media-gid>] # belt + suspenders (omit for prowlarr/recyclarr/jellyseerr)
+        supplementalGroups: [<media-gid>] # belt + suspenders (omit for prowlarr/flaresolverr/recyclarr/jellyseerr|seerr)
         fsGroupChangePolicy: OnRootMismatch
         # No pod-level fsGroup — csi-driver-nfs does not advertise fsGroup ownership-change
         # support, and we don't want a recursive chown racing NAS-side ownership.
@@ -335,7 +362,7 @@ Document in a new runbook `docs/runbooks/arr-suite-bootstrap.md`. Mostly UI conf
 
 1. Prowlarr: add indexers; set Flaresolverr URL; configure Apps → Sonarr/Radarr/Lidarr/Readarr (auto-syncs indexers).
 2. *arr apps → Settings → Download Clients: add qBittorrent (`http://qbittorrent.media.svc.cluster.local:8080`) + SABnzbd (`http://sabnzbd.media.svc.cluster.local:8080`); set categories `tv movies music books`.
-3. *arr apps → Settings → Media Management: set root folders under `/data/{tv,movies,music,books}`; enable hardlinks; verify "Use Hardlinks instead of Copy" works (test via the Phase 1 hardlink check). Configure qBittorrent + SABnzbd to write incomplete files into `downloads/{torrents,usenet}/incomplete/` and only move into the category dirs on completion.
+3. *arr apps → Settings → Media Management: set root folders under `/data/{tv,movies,music,books}`; enable hardlinks; verify "Use Hardlinks instead of Copy" works (test via the Phase 1 hardlink check). Configure qBittorrent + SABnzbd to write incomplete files into `downloads/{torrents,usenet}/.incomplete/` and only move into the category dirs on completion.
 4. *arr apps → Settings → General → Security: set **Authentication Required = Disabled** (or, where the *arr exposes it, `Authentication Method = External` with `Authentication Required = DisabledForLocalAddresses`). The `kanidm-oidc` Traefik middleware is the operator-UI gate; native auth would mean a second prompt with no shared session. **API-key auth stays enabled** — Sonarr/Radarr/etc. APIs are reached server-to-server via cluster Service (Recyclarr, Unpackerr, Bazarr, Jellyseerr), bypassing Traefik and therefore the OIDC plugin, so the API key is the only credential on those paths. Capture each app's API key into its `secret.sops.yaml` (step 9) so cross-app config stays declarative.
 5. Bazarr: add Sonarr + Radarr endpoints.
 6. Recyclarr: verify CronJob sync writes profiles into each *arr.
