@@ -38,9 +38,6 @@ spec:
         strategy: Recreate
         initContainers:
           gluetun:
-            # Native sidecar pattern: starts before app, stays running for
-            # the pod's lifetime. App container only starts after gluetun
-            # is ready (sidecar startupProbe).
             restartPolicy: Always
             image:
               # renovate: datasource=docker depName=ghcr.io/qdm12/gluetun
@@ -57,14 +54,36 @@ spec:
               # traffic (return path, DNS) doesn't get blackholed.
               FIREWALL_OUTBOUND_SUBNETS: "10.42.0.0/16,10.43.0.0/16"
               TZ: America/New_York
-            envFrom:
-              - secretRef:
-                  name: qbittorrent-secret
+              # Targeted secret injection (least privilege): gluetun only
+              # gets WireGuard credentials, not the qB Web UI password.
+              WIREGUARD_PRIVATE_KEY:
+                valueFrom:
+                  secretKeyRef:
+                    name: qbittorrent-secret
+                    key: WIREGUARD_PRIVATE_KEY
+              WIREGUARD_ADDRESSES:
+                valueFrom:
+                  secretKeyRef:
+                    name: qbittorrent-secret
+                    key: WIREGUARD_ADDRESSES
             securityContext:
               capabilities:
                 add: ["NET_ADMIN"]
                 drop: ["ALL"]
               allowPrivilegeEscalation: false
+            probes:
+              # Gates qB on tunnel readiness; mirrors gluetun's own Docker
+              # HEALTHCHECK (which k8s ignores by default).
+              startup:
+                enabled: true
+                custom: true
+                spec:
+                  exec:
+                    command: ["/gluetun-entrypoint", "healthcheck"]
+                  initialDelaySeconds: 5
+                  periodSeconds: 5
+                  timeoutSeconds: 5
+                  failureThreshold: 30
             resources:
               requests:
                 cpu: 50m
@@ -80,9 +99,13 @@ spec:
             env:
               TZ: America/New_York
               UMASK: "002"
-            envFrom:
-              - secretRef:
-                  name: qbittorrent-secret
+              # Targeted secret injection (least privilege): qB only gets
+              # the Web UI password, not the WireGuard private key.
+              WEBUI_PASSWORD_PBKDF2:
+                valueFrom:
+                  secretKeyRef:
+                    name: qbittorrent-secret
+                    key: WEBUI_PASSWORD_PBKDF2
             probes:
               liveness: &probes
                 enabled: true
