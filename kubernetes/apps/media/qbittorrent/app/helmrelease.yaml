@@ -149,7 +149,7 @@ spec:
         advancedMounts:
           qbittorrent:
             app:
-              - path: /data
+              - path: /data/.downloads/torrents
                 subPath: .downloads/torrents
       dev-net-tun:
         type: hostPath

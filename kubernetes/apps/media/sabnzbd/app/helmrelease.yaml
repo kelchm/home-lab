@@ -89,7 +89,7 @@ spec:
         advancedMounts:
           sabnzbd:
             app:
-              - path: /data
+              - path: /data/.downloads/usenet
                 subPath: .downloads/usenet
     route:
       app:
