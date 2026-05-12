@@ -3,12 +3,19 @@
 # restartPolicy: Always, k8s 1.28+) and owns the pod's network namespace; the
 # qBittorrent container's egress is forced through Gluetun's tun device by
 # iptables killswitch — no fallback to host network. /dev/net/tun is hostPath
-# from the node (Talos exposes it world-writable; verified pre-deploy).
+# from the node (Talos exposes it world-writable).
 #
 # Auth model: native qB auth bypassed for pod CIDR via Web UI "Bypass
 # authentication for clients in whitelisted IP subnets" — configured once via
 # kubectl port-forward on first deploy. OIDC at the edge (kanidm-oidc
 # Middleware on gateway-admin) is the externally-facing gate.
+#
+# securityContext shape follows the bjw-s canonical qBittorrent+Gluetun
+# example: identity (runAsUser/runAsGroup) at the container level only, NOT
+# at the pod level. Pinning identity pod-wide forces gluetun out of its
+# image-default root, which then breaks iptables / state-file ownership.
+# Trust gluetun's image to know it needs root; harden qB-container side
+# instead.
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
@@ -21,18 +28,11 @@ spec:
   values:
     defaultPodOptions:
       securityContext:
-        runAsNonRoot: true
-        runAsUser: 1036
-        runAsGroup: 65537
-        supplementalGroups: [65537]
-        fsGroup: 1036
+        # Chowns /config (Longhorn) to root:65537 + setgid so qB (gid=65537)
+        # can write. csi-driver-nfs ignores fsGroup, so the media mount keeps
+        # its NAS-side ownership.
+        fsGroup: 65537
         fsGroupChangePolicy: OnRootMismatch
-        seccompProfile:
-          type: RuntimeDefault
-        sysctls:
-          # Required for WireGuard in a container (gluetun docs).
-          - name: net.ipv4.conf.all.src_valid_mark
-            value: "1"
     controllers:
       qbittorrent:
         strategy: Recreate
@@ -54,8 +54,6 @@ spec:
               # traffic (return path, DNS) doesn't get blackholed.
               FIREWALL_OUTBOUND_SUBNETS: "10.42.0.0/16,10.43.0.0/16"
               TZ: America/New_York
-              # Targeted secret injection (least privilege): gluetun only
-              # gets WireGuard credentials, not the qB Web UI password.
               WIREGUARD_PRIVATE_KEY:
                 valueFrom:
                   secretKeyRef:
@@ -67,20 +65,8 @@ spec:
                     name: qbittorrent-secret
                     key: WIREGUARD_ADDRESSES
             securityContext:
-              # Gluetun needs root to manipulate iptables — /run/xtables.lock
-              # requires uid=0, NET_ADMIN alone isn't enough. Overrides
-              # defaultPodOptions.securityContext (runAsUser=1036, runAsNonRoot=true)
-              # which apply to the qB app container.
-              runAsUser: 0
-              runAsGroup: 0
-              runAsNonRoot: false
               capabilities:
-                # NET_ADMIN: iptables + tunnel setup.
-                # NET_RAW: ICMP for gluetun's internal healthcheck (otherwise
-                # falls back to DNS-over-UDP probes — works but noisier).
-                add: ["NET_ADMIN", "NET_RAW"]
-                drop: ["ALL"]
-              allowPrivilegeEscalation: false
+                add: ["NET_ADMIN"]
             probes:
               # Gates qB on tunnel readiness; mirrors gluetun's own Docker
               # HEALTHCHECK (which k8s ignores by default).
@@ -109,8 +95,6 @@ spec:
             env:
               TZ: America/New_York
               UMASK: "002"
-              # Targeted secret injection (least privilege): qB only gets
-              # the Web UI password, not the WireGuard private key.
               WEBUI_PASSWORD_PBKDF2:
                 valueFrom:
                   secretKeyRef:
@@ -133,8 +117,11 @@ spec:
                   failureThreshold: 3
               readiness: *probes
             securityContext:
+              runAsUser: 1036
+              runAsGroup: 65537
               allowPrivilegeEscalation: false
-              capabilities: { drop: ["ALL"] }
+              capabilities:
+                drop: ["ALL"]
             resources:
               requests:
                 cpu: 50m
@@ -172,15 +159,6 @@ spec:
           qbittorrent:
             gluetun:
               - path: /dev/net/tun
-      # Gluetun writes /tmp/gluetun/ip to persist public IP between runs.
-      # Image's /tmp/gluetun is owned by uid 1000; we run as 0 but mounting
-      # a fresh emptyDir sidesteps any baked ownership issue.
-      gluetun-tmp:
-        type: emptyDir
-        advancedMounts:
-          qbittorrent:
-            gluetun:
-              - path: /tmp/gluetun
     route:
       app:
         hostnames: ["qbittorrent.home.kelch.io"]
