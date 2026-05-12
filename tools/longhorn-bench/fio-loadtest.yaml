@@ -1,0 +1,202 @@
+---
+# Sustained fio load test against Longhorn — sized to stress VLAN 25 across
+# all three prod nodes simultaneously.
+#
+# One Pod + PVC per node, all writing concurrently. With 2-replica volumes
+# this loads every storage-NIC port bidirectionally:
+#   - outbound: each node's own write fan-out to its remote replica
+#   - inbound: fan-out arriving from the other nodes' fio pods
+#
+# Single profile per pod: sequential 1M write, numjobs=4, time_based.
+# Sequential 1M write is the only network-bound profile (see
+# docs/storage-benchmarks.md); multi-stream pushes toward the 2.5 GbE ceiling.
+#
+# Parallel to fio-job.yaml — separate PVC/Pod names so both can coexist.
+#
+# Override runtime via the FIO_RUNTIME env value below (e.g. "4h", "24h").
+#
+#   kubectl apply -f tools/longhorn-bench/fio-loadtest.yaml
+#   # tail any one of the three pods, or all in parallel:
+#   for n in 1 2 3; do kubectl logs -f pod/longhorn-loadtest-$n & done; wait
+#   kubectl delete -f tools/longhorn-bench/fio-loadtest.yaml
+#
+# Watch during the run:
+#   - UniFi switch port counters on ports 16/17/18 (rates, errors, drops)
+#   - kubectl top pod -n longhorn-system  (instance-manager CPU)
+#   - br-storage / Realtek NIC tx_dropped & rx_dropped on each node
+#   - NVMe and NIC temperatures (thermal throttling is the extended-run signal)
+#   - Longhorn replica rebuilds / engine restarts in the events stream
+#
+# StorageClass: 3-rep so every volume has a replica on every node and write
+# fan-out is symmetric across all three storage NICs (2 TX + 2 RX per node).
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: longhorn-loadtest-3rep
+provisioner: driver.longhorn.io
+reclaimPolicy: Delete
+volumeBindingMode: Immediate
+allowVolumeExpansion: true
+parameters:
+  numberOfReplicas: "3"
+  dataEngine: v1
+  dataLocality: disabled
+  fsType: ext4
+  staleReplicaTimeout: "30"
+  disableRevisionCounter: "true"
+  unmapMarkSnapChainRemoved: ignored
+  fromBackup: ""
+  backupTargetName: default
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: longhorn-loadtest-1
+  namespace: default
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: longhorn-loadtest-3rep
+  resources:
+    requests:
+      storage: 60Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: longhorn-loadtest-2
+  namespace: default
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: longhorn-loadtest-3rep
+  resources:
+    requests:
+      storage: 60Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: longhorn-loadtest-3
+  namespace: default
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: longhorn-loadtest-3rep
+  resources:
+    requests:
+      storage: 60Gi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: longhorn-loadtest-1
+  namespace: default
+  labels:
+    app: longhorn-loadtest
+spec:
+  restartPolicy: Never
+  nodeName: k8s-prod-1
+  containers:
+    - name: fio
+      image: xridge/fio:latest
+      env:
+        - name: FIO_RUNTIME
+          value: "1h"
+      command: [sh, -c]
+      args:
+        - |
+          set -e
+          echo "=== [k8s-prod-1] sustained seqwrite 1M, numjobs=4, runtime=$FIO_RUNTIME"
+          fio --name=loadtest --directory=/data \
+              --rw=write --bs=1M --numjobs=4 --size=10G \
+              --iodepth=32 --ioengine=libaio --direct=1 \
+              --group_reporting --norandommap \
+              --time_based --runtime="$FIO_RUNTIME" \
+              --output-format=normal
+          echo "=== [k8s-prod-1] complete; sleeping 1h for log access"
+          sleep 3600
+      volumeMounts:
+        - {name: data, mountPath: /data}
+      resources:
+        requests: {cpu: 500m, memory: 512Mi}
+        limits: {cpu: 4, memory: 2Gi}
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: longhorn-loadtest-1
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: longhorn-loadtest-2
+  namespace: default
+  labels:
+    app: longhorn-loadtest
+spec:
+  restartPolicy: Never
+  nodeName: k8s-prod-2
+  containers:
+    - name: fio
+      image: xridge/fio:latest
+      env:
+        - name: FIO_RUNTIME
+          value: "1h"
+      command: [sh, -c]
+      args:
+        - |
+          set -e
+          echo "=== [k8s-prod-2] sustained seqwrite 1M, numjobs=4, runtime=$FIO_RUNTIME"
+          fio --name=loadtest --directory=/data \
+              --rw=write --bs=1M --numjobs=4 --size=10G \
+              --iodepth=32 --ioengine=libaio --direct=1 \
+              --group_reporting --norandommap \
+              --time_based --runtime="$FIO_RUNTIME" \
+              --output-format=normal
+          echo "=== [k8s-prod-2] complete; sleeping 1h for log access"
+          sleep 3600
+      volumeMounts:
+        - {name: data, mountPath: /data}
+      resources:
+        requests: {cpu: 500m, memory: 512Mi}
+        limits: {cpu: 4, memory: 2Gi}
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: longhorn-loadtest-2
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: longhorn-loadtest-3
+  namespace: default
+  labels:
+    app: longhorn-loadtest
+spec:
+  restartPolicy: Never
+  nodeName: k8s-prod-3
+  containers:
+    - name: fio
+      image: xridge/fio:latest
+      env:
+        - name: FIO_RUNTIME
+          value: "1h"
+      command: [sh, -c]
+      args:
+        - |
+          set -e
+          echo "=== [k8s-prod-3] sustained seqwrite 1M, numjobs=4, runtime=$FIO_RUNTIME"
+          fio --name=loadtest --directory=/data \
+              --rw=write --bs=1M --numjobs=4 --size=10G \
+              --iodepth=32 --ioengine=libaio --direct=1 \
+              --group_reporting --norandommap \
+              --time_based --runtime="$FIO_RUNTIME" \
+              --output-format=normal
+          echo "=== [k8s-prod-3] complete; sleeping 1h for log access"
+          sleep 3600
+      volumeMounts:
+        - {name: data, mountPath: /data}
+      resources:
+        requests: {cpu: 500m, memory: 512Mi}
+        limits: {cpu: 4, memory: 2Gi}
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: longhorn-loadtest-3
