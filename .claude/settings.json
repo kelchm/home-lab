@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(kubectl -n * get *)",
+      "Bash(kubectl -n * logs *)",
+      "Bash(kubectl -n * describe *)",
+      "Bash(kubectl logs *)",
+      "Bash(kubectl describe *)",
+      "Bash(kubectl kustomize *)",
+      "Bash(kubectl top *)",
+      "Bash(cargo check *)",
+      "Bash(nslookup *)",
+      "Bash(helm template *)"
+    ]
+  }
+}
