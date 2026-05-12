@@ -196,6 +196,116 @@ Implications for the comparison:
   buffer survived. Worth noting before claiming "VM never loses
   metrics during maintenance" categorically.
 
+### 2026-05-09 — Cross-datasource portability of VM-authored dashboards
+
+Two observations from real-world use of the VM-stack's
+`kubernetes-views-pods` dashboard while looking at a Prowlarr pod in
+`media/`. Reference:
+[grafana.home.kelch.io/d/k8s_views_pods](https://grafana.home.kelch.io/d/k8s_views_pods/kubernetes-views-pods?orgId=1&var-namespace=media&var-job=kube-state-metrics).
+
+- **Memory utilization shifts when switching datasource.** Same panel,
+  same pod, same time range → different absolute values when toggling
+  the panel's `$datasource` between `prometheus-kps` and the VM
+  datasource. Root cause is architectural, not a bug: panel queries
+  (`container_memory_working_set_bytes` etc.) are authored against VM's
+  scrape cadence and recording-rule set. Pointing them at Prom feeds the
+  same expression into a different scraper with a different scrape
+  interval, different relabel rules, and no recording rules. Both
+  samplings of the kubelet are valid; numerical drift is expected, not
+  "wrong." It's a real cost of cross-stack dashboard portability — VM
+  dashboards do *render* on Prom, they just don't *agree* with
+  Prom-native dashboards at the value level.
+
+- **Pods all legend as "app".** Series legends collapse to `app` rather
+  than the pod name. The dashboard's legend format is `{{container}}`,
+  and most workloads in this cluster (Prowlarr, Flaresolverr, the *arr
+  suite) ship a single container literally named `app`. Per-panel fix:
+  change legend to `{{pod}}` or `{{workload}}` on a forked copy. KPS's
+  `Compute Resources / Pod` dashboard isn't affected — uses pod names
+  directly.
+
+### 2026-05-11 — Grafana HR unstuck; dashboard discoverability audit
+
+Started as "are we missing pre-baked dashboards?" Ended as a
+chart-rendering + Helm-patch-semantics rabbit hole. Notable findings:
+
+- **Cross-namespace dashboards weren't loading because the Grafana HR
+  was Stalled.** The `sidecar.dashboards.searchNamespace: ALL` change
+  (commit `fba7e18`, 2026-05-09) had been rejected three times by Helm;
+  the HR rolled back to v5 with `Stalled / RetriesExceeded`. Cilium and
+  Kaniop's labeled ConfigMaps were sitting in the cluster waiting for a
+  sidecar that was still scoped to `observability/`.
+
+- **The rollouts deadlocked on RWO + RollingUpdate.** Grafana's PVC is
+  `ReadWriteOnce` (longhorn). The chart's default
+  `deploymentStrategy.type: RollingUpdate` with `maxSurge: 25%` tries
+  to bring up a new pod while the old one still holds the volume. New
+  pod sits in `ContainerCreating` until rollout deadline, Helm rolls
+  back. Any future spec change would have hit the same wall.
+
+- **`type: Recreate` is unreachable in this chart.** First fix attempt
+  set `deploymentStrategy.type: Recreate`. Failed: Helm's three-way
+  patch preserved the live Deployment's existing `rollingUpdate` block;
+  k8s rejected with `rollingUpdate may not be specified when type is
+  'Recreate'`. Adding `rollingUpdate: null` failed identically — the
+  chart template is unconditional:
+
+      {{- with .Values.deploymentStrategy }}
+      strategy:
+        {{- toYaml . | trim | nindent 4 }}
+      {{- end }}
+
+  `toYaml` emits `rollingUpdate: null` literally, and the API server
+  treats explicit null as "specified." No clean fix without forking
+  the chart or post-rendering.
+
+- **Working fix: RollingUpdate with `maxSurge: 0, maxUnavailable: 1`.**
+  For a single-replica Deployment this is runtime-equivalent to
+  Recreate — the old pod must go unavailable (releasing the RWO volume)
+  before a new one starts. Landed as `bf74b1d`. HR went Ready, sidecar
+  picked up the cross-namespace ConfigMaps, three previously-invisible
+  dashboards (Cilium agent, Cilium operator, Kaniop) loaded. End state:
+  51 dashboards across 52 labeled ConfigMaps.
+
+- **The 52→51 gap is a silent title collision.** KPS's `kubelet.json`
+  and VM-stack's `kubernetes-kubelet.json` both register a dashboard
+  titled `Kubernetes / Kubelet`. Grafana surfaces only one; the choice
+  is unstable across sidecar resyncs. Right when we want symmetric
+  side-by-side stack comparison this view goes asymmetric.
+
+- **Several scraped workloads ship no bundled dashboard.** Longhorn,
+  Traefik, cert-manager, Flux, and Alloy emit metrics that KPS / VM
+  scrape, but their charts bundle no Grafana dashboard. There's no
+  opt-in flag to flip — each requires a manual labeled ConfigMap from
+  grafana.com or the upstream source.
+
+- **Three KPS dashboards are intentionally absent.** Controller Manager,
+  Scheduler, etcd — `kubeControllerManager / kubeScheduler / kubeEtcd`
+  remain `enabled: false` per the original setup note above.
+
+Implications for the comparison:
+
+- The HR incident is stack-agnostic (same RWO PVC + chart pattern would
+  have hit either stack). Not a differentiator.
+- The portability quirks logged on 2026-05-09 are stack-specific
+  though: VM-authored dashboards drift numerically when pointed at
+  Prom, and the title-collision case erases the VM kubelet view in a
+  single shared Grafana. Counts against the "just put both datasources
+  behind one Grafana and let people compare" framing.
+- Of the workloads with no bundled dashboard, Longhorn is the most
+  bake-off-load-bearing — storage behavior is exactly what we care about
+  during maintenance windows, and we have no canned view of it.
+
+Tracked separately:
+
+- [#50](https://github.com/kelchm/home-lab/issues/50) — dashboard
+  inventory: kubelet collision, chart-bundles-no-dashboard gaps,
+  Talos-bound control-plane scrapes
+- [#51](https://github.com/kelchm/home-lab/issues/51) — `smartctl_exporter`
+  DaemonSet for NVMe wear / SMART telemetry (surfaced while looking at
+  low-level node metrics; hwmon already covers CPU / NVMe / GPU temps
+  and voltages, but not SMART wear / media errors)
+
 ## Next
 
 - Use the stack daily for real queries. Open Grafana, hit Explore,
@@ -223,3 +333,4 @@ _Filled in at the end of the bake-off with rationale._
   with strong S3 demand wins, MinIO on the Synology becomes the target.
 - Gatus uptime monitoring — orthogonal to this comparison; ideally lives
   outside the cluster anyway.
+
