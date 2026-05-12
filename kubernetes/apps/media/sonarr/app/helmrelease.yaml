@@ -1,0 +1,97 @@
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: sonarr
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: sonarr
+  interval: 1h
+  values:
+    controllers:
+      sonarr:
+        strategy: Recreate
+        containers:
+          app:
+            image:
+              # renovate: datasource=docker depName=ghcr.io/home-operations/sonarr
+              repository: ghcr.io/home-operations/sonarr
+              tag: 4.0.17.2967
+            env:
+              TZ: America/New_York
+              SONARR__AUTH__METHOD: External
+            probes:
+              liveness: &probes
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: /ping
+                    port: &port 8989
+                  initialDelaySeconds: 10
+                  periodSeconds: 30
+                  timeoutSeconds: 5
+                  failureThreshold: 3
+              readiness: *probes
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities: { drop: ["ALL"] }
+            resources:
+              requests:
+                cpu: 50m
+                memory: 256Mi
+              limits:
+                memory: 1Gi
+    defaultPodOptions:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1038
+        runAsGroup: 65537
+        supplementalGroups: [65537]
+        fsGroup: 1038
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+    service:
+      app:
+        ports:
+          http:
+            port: *port
+    persistence:
+      config:
+        type: persistentVolumeClaim
+        storageClass: longhorn
+        size: 5Gi
+        accessMode: ReadWriteOnce
+        advancedMounts:
+          sonarr:
+            app:
+              - path: /config
+      media:
+        type: persistentVolumeClaim
+        existingClaim: media-library
+        advancedMounts:
+          sonarr:
+            app:
+              - path: /data/tv
+                subPath: tv
+              - path: /data/.downloads
+                subPath: .downloads
+    route:
+      app:
+        hostnames: ["sonarr.home.kelch.io"]
+        parentRefs:
+          - name: gateway-admin
+            namespace: network
+            sectionName: https
+        rules:
+          - backendRefs:
+              - identifier: app
+                port: *port
+            filters:
+              - type: ExtensionRef
+                extensionRef:
+                  group: traefik.io
+                  kind: Middleware
+                  name: kanidm-oidc
