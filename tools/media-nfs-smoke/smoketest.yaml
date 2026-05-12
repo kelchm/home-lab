@@ -1,0 +1,112 @@
+---
+# Phase 1 smoke test for the Synology /volume1/media NFS substrate. Run before
+# the first NFS-writing app (SABnzbd) goes in — validates that
+#   - csi-driver-nfs mounts the share root (not a pvc-<uid>/ subdir)
+#   - per-app UID identity is preserved end-to-end through NFS
+#   - setgid on the share gives new files group=media for cross-app hardlinks
+#   - hardlinks across category subdirs work (required for *arr atomic imports)
+#   - root_squash maps UID 0 to guest and POSIX mode-other denies writes
+#
+# Usage:
+#   kubectl apply -f tools/media-nfs-smoke/smoketest.yaml
+#   kubectl -n media wait --for=condition=Ready=false pod/media-nfs-identity --timeout=60s 2>/dev/null
+#   kubectl -n media logs media-nfs-identity
+#   kubectl -n media logs media-nfs-rootsquash
+#   kubectl delete -f tools/media-nfs-smoke/smoketest.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: media-nfs-identity
+  namespace: media
+spec:
+  restartPolicy: Never
+  securityContext:
+    runAsUser: 1037
+    runAsGroup: 65537
+    supplementalGroups: [65537]
+    fsGroupChangePolicy: OnRootMismatch
+  containers:
+    - name: smoketest
+      image: busybox:stable
+      command: ["/bin/sh", "-c"]
+      args:
+        - |
+          set -e
+          echo "=== identity (expect uid=1037 gid=65537 with media in groups) ==="
+          id
+
+          echo ""
+          echo "=== mount layout (expect /data = share root: tv/ movies/ ...) ==="
+          ls -la /data
+
+          echo ""
+          echo "=== write test in downloads/usenet/.incomplete (sabnzbd's path) ==="
+          F=/data/downloads/usenet/.incomplete/smoketest-write
+          touch "$F"
+          stat -c "owner=%u:%g mode=%a name=%n" "$F"
+          echo "expect owner=1037:65537 (sabnzbd:media)"
+
+          echo ""
+          echo "=== hardlink across subdirs (downloads/usenet/tv -> tv) ==="
+          mkdir -p /data/downloads/usenet/tv/SmokeShow
+          echo "fake media" > /data/downloads/usenet/tv/SmokeShow/episode.mkv
+          ln /data/downloads/usenet/tv/SmokeShow/episode.mkv /data/tv/SmokeShow.episode.mkv
+          stat -c "inode=%i links=%h owner=%u:%g name=%n" \
+            /data/downloads/usenet/tv/SmokeShow/episode.mkv \
+            /data/tv/SmokeShow.episode.mkv
+          echo "expect identical inode, links=2"
+
+          echo ""
+          echo "=== cleanup ==="
+          rm -f "$F" /data/tv/SmokeShow.episode.mkv
+          rm -rf /data/downloads/usenet/tv/SmokeShow
+          echo "done"
+      volumeMounts:
+        - name: media
+          mountPath: /data
+  volumes:
+    - name: media
+      persistentVolumeClaim:
+        claimName: media-library
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: media-nfs-rootsquash
+  namespace: media
+spec:
+  restartPolicy: Never
+  securityContext:
+    runAsUser: 0
+    runAsGroup: 0
+  containers:
+    - name: rootsquash
+      image: busybox:stable
+      command: ["/bin/sh", "-c"]
+      args:
+        - |
+          set +e
+          echo "=== identity in container ==="
+          id
+
+          echo ""
+          echo "=== read attempt (share root mode-other r-x; should succeed) ==="
+          ls /data | head
+
+          echo ""
+          echo "=== write attempt as UID 0 (NFS squashes to guest=1025; guest is gid=100 users, not in media; mode-other has no write — must fail) ==="
+          touch /data/rootsquash-attack 2>&1
+          rc=$?
+          if [ "$rc" -eq 0 ]; then
+            echo "FAIL: write as UID 0 succeeded — root-squash is NOT enforced"
+            rm -f /data/rootsquash-attack
+            exit 1
+          fi
+          echo "PASS: write failed (rc=$rc) as expected"
+      volumeMounts:
+        - name: media
+          mountPath: /data
+  volumes:
+    - name: media
+      persistentVolumeClaim:
+        claimName: media-library
