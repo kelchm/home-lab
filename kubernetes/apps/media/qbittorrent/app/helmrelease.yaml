@@ -150,7 +150,7 @@ spec:
           qbittorrent:
             app:
               - path: /data
-                subPath: downloads/torrents
+                subPath: .downloads/torrents
       dev-net-tun:
         type: hostPath
         hostPath: /dev/net/tun

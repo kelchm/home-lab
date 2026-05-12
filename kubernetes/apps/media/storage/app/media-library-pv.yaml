@@ -1,7 +1,7 @@
 ---
 # Static PV for the Synology /volume1/media share. Static (not dynamic) so the
 # mount lands at the share root with the pre-created subdir layout
-# (tv/ movies/ music/ books/ audiobooks/ subs/ downloads/...). A dynamic
+# (tv/ movies/ music/ books/ audiobooks/ .downloads/...). A dynamic
 # StorageClass would create a per-PVC `pvc-<uid>` subdir and break the
 # hardlink-across-subdirs requirement that *arr atomic imports rely on.
 #

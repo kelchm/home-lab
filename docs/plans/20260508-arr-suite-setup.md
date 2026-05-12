@@ -46,13 +46,13 @@ The deployed shape uses the kaniop operator per `docs/plans/20260509-kaniop-migr
    ```
    Paste the actual output into `docs/runbooks/arr-suite-bootstrap.md`; that captured table is the source of truth pinned into per-app `runAsUser`. Disable shell + DSM access for each service user via DSM Control Panel → User.
 
-   **b. Filesystem layout** — `/volume1/media` on a single volume; pre-create `tv/ movies/ music/ books/ audiobooks/ downloads/manual/ downloads/{torrents,usenet}/{.incomplete,tv,movies,music,books}`. The `.incomplete/` subdirs keep half-written downloads out of the category folders that *arr scanners watch; the leading dot also hides them from default listings. `downloads/manual/` is a flat operator drop processed via each *arr's Manual Import UI.
+   **b. Filesystem layout** — `/volume1/media` on a single volume; pre-create `tv/ movies/ music/ books/ audiobooks/ .downloads/manual/ .downloads/{torrents,usenet}/{.incomplete,tv,movies,music,books}`. The `.incomplete/` subdirs keep half-written downloads out of the category folders that *arr scanners watch; the leading dot also hides them from default listings. `.downloads/manual/` is a flat operator drop processed via each *arr's Manual Import UI.
 
    Then set ownership + setgid **scoped to our created subtree**, not the share as a whole — a freshly-created DSM share contains a `@eaDir` (file-indexing metadata, DSM-managed) and the share root itself comes out as `d---------+` (POSIX 000 plus a Synology ACL). Both need careful handling: don't chown `@eaDir` (DSM tooling assumes its ownership), and the share root needs a real POSIX mode so NFS clients can traverse:
    ```bash
    chown root:media /volume1/media
    chmod 2775 /volume1/media
-   for top in tv movies music books audiobooks downloads; do
+   for top in tv movies music books audiobooks .downloads; do
      chown -R root:media "/volume1/media/$top"
      find "/volume1/media/$top" -type d -exec chmod 2775 {} +
    done
@@ -204,7 +204,7 @@ Only once all four substrate checks pass do app deploys begin.
 
 7. **Prowlarr** — `kubernetes/apps/media/prowlarr/`. **No media mount** (Prowlarr never touches the library). Config PVC only. First "real" app — validates the per-app skeleton end-to-end (Flux Kustomization, OCIRepository, HelmRelease, Longhorn config PVC, gateway-admin route + middleware, native auth) on a workload that can't damage anything.
 8. **Flaresolverr** — `kubernetes/apps/media/flaresolverr/`. ClusterIP only, no PVC, no media mount, no HTTPRoute. Prowlarr targets `http://flaresolverr.media.svc.cluster.local:8191`.
-9. **SABnzbd** — `kubernetes/apps/media/sabnzbd/`. No VPN. Mounts `media-library` at `/data` with `subPath: downloads/usenet` (RW). First library writer — validates per-app NAS UID + setgid + hardlinks against real NFS.
+9. **SABnzbd** — `kubernetes/apps/media/sabnzbd/`. No VPN. Mounts `media-library` at `/data` with `subPath: .downloads/usenet` (RW). First library writer — validates per-app NAS UID + setgid + hardlinks against real NFS.
 
 ### Phase 3 — VPN downloader
 
@@ -220,17 +220,17 @@ Only once all four substrate checks pass do app deploys begin.
 
 ### Phase 4 — Core *arr apps
 
-11. **Sonarr** — subPaths `tv` (RW) + `downloads` (RW for cleanup post-import).
-12. **Radarr** — subPaths `movies` (RW) + `downloads` (RW).
-13. **Lidarr** — subPaths `music` (RW) + `downloads` (RW).
-14. **Readarr** — subPaths `books` (RW) + `audiobooks` (RW) + `downloads` (RW). **Defer to last in this phase** — fussier metadata than the other three; bring it up after Sonarr/Radarr/Lidarr are stable.
+11. **Sonarr** — subPaths `tv` (RW) + `.downloads` (RW for cleanup post-import).
+12. **Radarr** — subPaths `movies` (RW) + `.downloads` (RW).
+13. **Lidarr** — subPaths `music` (RW) + `.downloads` (RW).
+14. **Readarr** — subPaths `books` (RW) + `audiobooks` (RW) + `.downloads` (RW). **Defer to last in this phase** — fussier metadata than the other three; bring it up after Sonarr/Radarr/Lidarr are stable.
 
 All four share the per-app pattern below; deltas are image, container port, library subPaths, and `runAsUser`.
 
 ### Phase 5 — Helpers
 
-15. **Bazarr** — subPaths `tv`, `movies` (RW for sidecar subtitle files); no downloads access.
-16. **Unpackerr** — `kubernetes/apps/media/unpackerr/`. No web UI; mounts `media-library` with subPath `downloads` (RW — extracts archives in-place inside the downloads tree). Never writes to the library; *arr does the library import. Needs *arr API keys + URLs from `secret.sops.yaml`.
+15. **Bazarr** — subPaths `tv`, `movies` (RW for sidecar subtitle files); no `.downloads` access.
+16. **Unpackerr** — `kubernetes/apps/media/unpackerr/`. No web UI; mounts `media-library` with subPath `.downloads` (RW — extracts archives in-place inside the `.downloads` tree). Never writes to the library; *arr does the library import. Needs *arr API keys + URLs from `secret.sops.yaml`.
 17. **Recyclarr** — `kubernetes/apps/media/recyclarr/`. bjw-s `controllers.recyclarr.type: cronjob`, daily. **No media mount** — only talks to *arr APIs. TRaSH-guide YAML in a `ConfigMap`; API keys in `secret.sops.yaml`.
 
 ### Phase 6 — Media server
@@ -264,14 +264,14 @@ All four share the per-app pattern below; deltas are image, container port, libr
 
 | App         | UID (fill in) | Library access                          | Notes                                    |
 |-------------|---------------|------------------------------------------|------------------------------------------|
-| qbittorrent |               | downloads RW                             | Highest blast radius — extra hardening   |
-| sabnzbd     |               | downloads/usenet RW                      |                                          |
-| sonarr      |               | tv RW + downloads RW                     |                                          |
-| radarr      |               | movies RW + downloads RW                 |                                          |
-| lidarr      |               | music RW + downloads RW                  |                                          |
-| readarr     |               | books/audiobooks RW + downloads RW       |                                          |
-| bazarr      |               | tv/movies RW                             | No downloads                             |
-| unpackerr   |               | downloads RW                             | Extracts in-place; *arr handles import   |
+| qbittorrent |               | .downloads RW                             | Highest blast radius — extra hardening   |
+| sabnzbd     |               | .downloads/usenet RW                      |                                          |
+| sonarr      |               | tv RW + .downloads RW                     |                                          |
+| radarr      |               | movies RW + .downloads RW                 |                                          |
+| lidarr      |               | music RW + .downloads RW                  |                                          |
+| readarr     |               | books/audiobooks RW + .downloads RW       |                                          |
+| bazarr      |               | tv/movies RW                             | No `.downloads`                          |
+| unpackerr   |               | .downloads RW                             | Extracts in-place; *arr handles import   |
 | jellyfin    |               | library RO                               | + supplementalGroups for /dev/dri        |
 
 Capture the `media` GID the same way and reuse as the shared `supplementalGroup` (and as `runAsGroup` — see pattern below) across all writers and Jellyfin. Apps without a Synology user (no NFS access at all): Prowlarr, Flaresolverr, Recyclarr, and the request UI (Jellyseerr/Seerr) — all API-only, reach *arr/Jellyfin over the cluster network.
@@ -362,7 +362,7 @@ Document in a new runbook `docs/runbooks/arr-suite-bootstrap.md`. Mostly UI conf
 
 1. Prowlarr: add indexers; set Flaresolverr URL; configure Apps → Sonarr/Radarr/Lidarr/Readarr (auto-syncs indexers).
 2. *arr apps → Settings → Download Clients: add qBittorrent (`http://qbittorrent.media.svc.cluster.local:8080`) + SABnzbd (`http://sabnzbd.media.svc.cluster.local:8080`); set categories `tv movies music books`.
-3. *arr apps → Settings → Media Management: set root folders under `/data/{tv,movies,music,books}`; enable hardlinks; verify "Use Hardlinks instead of Copy" works (test via the Phase 1 hardlink check). Configure qBittorrent + SABnzbd to write incomplete files into `downloads/{torrents,usenet}/.incomplete/` and only move into the category dirs on completion.
+3. *arr apps → Settings → Media Management: set root folders under `/data/{tv,movies,music,books}`; enable hardlinks; verify "Use Hardlinks instead of Copy" works (test via the Phase 1 hardlink check). Configure qBittorrent + SABnzbd to write incomplete files into `.downloads/{torrents,usenet}/.incomplete/` and only move into the category dirs on completion.
 4. *arr apps → Settings → General → Security: set **Authentication Required = Disabled** (or, where the *arr exposes it, `Authentication Method = External` with `Authentication Required = DisabledForLocalAddresses`). The `kanidm-oidc` Traefik middleware is the operator-UI gate; native auth would mean a second prompt with no shared session. **API-key auth stays enabled** — Sonarr/Radarr/etc. APIs are reached server-to-server via cluster Service (Recyclarr, Unpackerr, Bazarr, Jellyseerr), bypassing Traefik and therefore the OIDC plugin, so the API key is the only credential on those paths. Capture each app's API key into its `secret.sops.yaml` (step 9) so cross-app config stays declarative.
 5. Bazarr: add Sonarr + Radarr endpoints.
 6. Recyclarr: verify CronJob sync writes profiles into each *arr.
@@ -399,13 +399,13 @@ Document in a new runbook `docs/runbooks/arr-suite-bootstrap.md`. Mostly UI conf
 
 **Phase 1 substrate (run before any real app deploys):**
 - **NFS client source IP**: while a debug pod has `media-library` mounted, on the Synology run `netstat -tn | grep ':2049'` (or DSM → Resource Monitor → Connection). Source IPs must be `10.32.25.11/.12/.13` (node host NICs), **not** any pod IP. Document in the runbook.
-- **PVC mounts share root, not a subdir**: `kubectl -n media exec <debug> -- sh -c 'ls -la /data && find /data -maxdepth 2 -type d | sort | head -50'` shows `/data/tv`, `/data/movies`, `/data/downloads/torrents/incomplete`, etc. — **not** `/data/pvc-...`.
+- **PVC mounts share root, not a subdir**: `kubectl -n media exec <debug> -- sh -c 'ls -la /data && find /data -maxdepth 2 -type d | sort | head -50'` shows `/data/tv`, `/data/movies`, `/data/.downloads/torrents/incomplete`, etc. — **not** `/data/pvc-...`.
 - **Hardlink across real category paths** (matches actual downloader layout):
   ```
   kubectl -n media exec <debug> -- sh -c '
-    touch /data/downloads/torrents/tv/hardlink-test &&
-    ln /data/downloads/torrents/tv/hardlink-test /data/tv/hardlink-test &&
-    stat -c "%h %i %n" /data/downloads/torrents/tv/hardlink-test /data/tv/hardlink-test
+    touch /data/.downloads/torrents/tv/hardlink-test &&
+    ln /data/.downloads/torrents/tv/hardlink-test /data/tv/hardlink-test &&
+    stat -c "%h %i %n" /data/.downloads/torrents/tv/hardlink-test /data/tv/hardlink-test
   '
   ```
   Same inode, link count = 2.

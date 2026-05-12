@@ -40,26 +40,26 @@ spec:
           ls -la /data
 
           echo ""
-          echo "=== write test in downloads/usenet/.incomplete (sabnzbd's path) ==="
-          F=/data/downloads/usenet/.incomplete/smoketest-write
+          echo "=== write test in .downloads/usenet/.incomplete (sabnzbd's path) ==="
+          F=/data/.downloads/usenet/.incomplete/smoketest-write
           touch "$F"
           stat -c "owner=%u:%g mode=%a name=%n" "$F"
           echo "expect owner=1037:65537 (sabnzbd:media)"
 
           echo ""
-          echo "=== hardlink across subdirs (downloads/usenet/tv -> tv) ==="
-          mkdir -p /data/downloads/usenet/tv/SmokeShow
-          echo "fake media" > /data/downloads/usenet/tv/SmokeShow/episode.mkv
-          ln /data/downloads/usenet/tv/SmokeShow/episode.mkv /data/tv/SmokeShow.episode.mkv
+          echo "=== hardlink across subdirs (.downloads/usenet/tv -> tv) ==="
+          mkdir -p /data/.downloads/usenet/tv/SmokeShow
+          echo "fake media" > /data/.downloads/usenet/tv/SmokeShow/episode.mkv
+          ln /data/.downloads/usenet/tv/SmokeShow/episode.mkv /data/tv/SmokeShow.episode.mkv
           stat -c "inode=%i links=%h owner=%u:%g name=%n" \
-            /data/downloads/usenet/tv/SmokeShow/episode.mkv \
+            /data/.downloads/usenet/tv/SmokeShow/episode.mkv \
             /data/tv/SmokeShow.episode.mkv
           echo "expect identical inode, links=2"
 
           echo ""
           echo "=== cleanup ==="
           rm -f "$F" /data/tv/SmokeShow.episode.mkv
-          rm -rf /data/downloads/usenet/tv/SmokeShow
+          rm -rf /data/.downloads/usenet/tv/SmokeShow
           echo "done"
       volumeMounts:
         - name: media

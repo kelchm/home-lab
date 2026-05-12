@@ -13,14 +13,14 @@ Captured state from bootstrapping the media stack described in `docs/plans/20260
 
 | App         | UID  | Library access                    |
 |-------------|------|-----------------------------------|
-| qbittorrent | 1036 | downloads RW                      |
-| sabnzbd     | 1037 | downloads/usenet RW               |
-| sonarr      | 1038 | tv RW + downloads RW              |
-| radarr      | 1039 | movies RW + downloads RW          |
-| lidarr      | 1040 | music RW + downloads RW           |
-| readarr     | 1041 | books/audiobooks RW + downloads RW|
+| qbittorrent | 1036 | .downloads RW                      |
+| sabnzbd     | 1037 | .downloads/usenet RW               |
+| sonarr      | 1038 | tv RW + .downloads RW              |
+| radarr      | 1039 | movies RW + .downloads RW          |
+| lidarr      | 1040 | music RW + .downloads RW           |
+| readarr     | 1041 | books/audiobooks RW + .downloads RW|
 | bazarr      | 1042 | tv/movies RW                      |
-| unpackerr   | 1043 | downloads RW (extract in-place)   |
+| unpackerr   | 1043 | .downloads RW (extract in-place)   |
 | jellyfin    | 1044 | library RO + /dev/dri host group  |
 
 | Group | GID   |
@@ -36,11 +36,11 @@ Apps without a Synology user (never touch NFS, API-only over the cluster network
 ```
 /volume1/media                                           drwxrwsr-x root:media
 /volume1/media/{tv,movies,music,books,audiobooks}        drwxrwsr-x root:media
-/volume1/media/downloads                                 drwxrwsr-x root:media
-/volume1/media/downloads/manual                          drwxrwsr-x root:media
-/volume1/media/downloads/{torrents,usenet}               drwxrwsr-x root:media
-/volume1/media/downloads/{torrents,usenet}/.incomplete   drwxrwsr-x root:media
-/volume1/media/downloads/{torrents,usenet}/{tv,movies,music,books}
+/volume1/media/.downloads                                 drwxrwsr-x root:media
+/volume1/media/.downloads/manual                          drwxrwsr-x root:media
+/volume1/media/.downloads/{torrents,usenet}               drwxrwsr-x root:media
+/volume1/media/.downloads/{torrents,usenet}/.incomplete   drwxrwsr-x root:media
+/volume1/media/.downloads/{torrents,usenet}/{tv,movies,music,books}
                                                          drwxrwsr-x root:media
 /volume1/media/@eaDir                                    drwxrwxrwx+ root:root  (DSM-managed)
 ```

@@ -90,7 +90,7 @@ spec:
           sabnzbd:
             app:
               - path: /data
-                subPath: downloads/usenet
+                subPath: .downloads/usenet
     route:
       app:
         hostnames: ["sabnzbd.home.kelch.io"]
