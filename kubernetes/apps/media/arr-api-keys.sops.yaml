@@ -1,0 +1,38 @@
+# Shared *arr API keys consumed by helper apps in the media namespace
+# (Unpackerr via envFrom + secretKeyRef, Recyclarr via envFrom + !env_var,
+# future Seerr likewise). Bazarr does not consume env vars — its *arr
+# connections are configured in the Bazarr UI; the keys live here only
+# as a single source-of-truth for rotation.
+#
+# Populate the four placeholders, then encrypt in place:
+#   sops --encrypt --in-place kubernetes/apps/media/arr-api-keys.sops.yaml
+#
+# Captured each *arr's API key during the inter-app wiring step:
+#   <app> UI → Settings → General → API Key.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: arr-api-keys
+  namespace: media
+type: Opaque
+stringData:
+  SONARR_API_KEY: ENC[AES256_GCM,data:RvjacxM9VbwjIrCbnddAxm4+/Fh1l6U+TkotIkLDKXU=,iv:8jbjALCnSUGPegqunivwBF84fzpO0S9FmtpmV6f5J1I=,tag:QYz/ig84HWCKkz/5p1BG4Q==,type:str]
+  RADARR_API_KEY: ENC[AES256_GCM,data:j5uRUdfHOGDmWlTDvu5u72SZneQtsHvlwjc4ql5D1SE=,iv:RmN79duLohhGPuY4P48Th3m9nqe7DJzMC7X1AdG0kWg=,tag:j6kBuv4XXVuVKEEqmX1wcQ==,type:str]
+  LIDARR_API_KEY: ENC[AES256_GCM,data:tZ3aaJcNyTZokprlb6WHfxcqgCG5LZcoOlbOneVxa+8=,iv:uVaaFhkElO/2LZKMHkCg2kOja4OxJk+vDpz1cbZu7V0=,tag:AimCu/XoDq1x7/rwa+PDBw==,type:str]
+  READARR_API_KEY: ENC[AES256_GCM,data:vxTYSe2/ZsBpxqG1wdvY5czl2AG3wB6kiai31KpKXKw=,iv:Far+W0Y0fuhU1o67hEODm8sZ6eAqdtSSEhuUaHg7eqE=,tag:RmQAOWZG0yT0BF73SzXW7A==,type:str]
+sops:
+  age:
+    - recipient: age14wcg0t6njf76c4ctrndypvvmxk9p7jkumnumlvxdmsn543tc3yusgk5jwy
+      enc: |
+        -----BEGIN AGE ENCRYPTED FILE-----
+        YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBQTDdFS3VkOGNtaVlCRlRY
+        bWJzUFoyRTdDQ2V4M3J0TUlQamdHRG04T0NrClR0NlRjVm4rdXluQncxK3lCNXQv
+        bHh5TzVmQWlGMVdYTUdJMUZjY3JoTnMKLS0tIEF1dzVYYjFPenYyY0l4K0s1cjVu
+        RGFCZ3l4N09TKzJOMGJsaXN1ZWl3cjQKb16rv5sTzcX80v+zBr1kFYImmSX2LdKz
+        Ys6owQ2PhdGxIj2OLzm1j3bib2PClVxO25njBIGA9PDl+DsfMO6/Nw==
+        -----END AGE ENCRYPTED FILE-----
+  lastmodified: "2026-05-13T02:57:50Z"
+  mac: ENC[AES256_GCM,data:v7lfYL+i16b37sM9Af3PYfPBkrczvLqdFH8IdG91+1lqu2Ohonqqc3xNbEcjuUZh/GTDfsKKi8M9QjUhcM9fkLulpm7f7w1QHoIoF7dITWJYIzm7t0Tllxq/yFYQp5jLSTkUgDme/hNqNe3BrIizRVP6yWvTHvPgVzVvjtwu2D8=,iv:LhLiA7FLU1a14JNVD2eJuH+bJaUfn8uz+59RoC/auKQ=,tag:0z6cVw/dikCVhqAjFh5d7w==,type:str]
+  encrypted_regex: ^(data|stringData)$
+  mac_only_encrypted: true
+  version: 3.12.2
