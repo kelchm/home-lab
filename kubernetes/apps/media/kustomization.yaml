@@ -22,3 +22,4 @@ resources:
   - ./bazarr/ks.yaml
   - ./unpackerr/ks.yaml
   - ./recyclarr/ks.yaml
+  - ./jellyfin/ks.yaml
