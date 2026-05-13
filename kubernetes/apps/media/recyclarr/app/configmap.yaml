@@ -18,8 +18,7 @@ data:
         quality_definition:
           type: series
         include:
-          - template: sonarr-v4-quality-profile-web-1080p
-          - template: sonarr-v4-custom-formats-web-1080p
+          - template: web-1080p-v4
         delete_old_custom_formats: true
         replace_existing_custom_formats: true
     radarr:
@@ -29,7 +28,6 @@ data:
         quality_definition:
           type: movie
         include:
-          - template: radarr-quality-profile-hd-bluray-web
-          - template: radarr-custom-formats-hd-bluray-web
+          - template: hd-bluray-web
         delete_old_custom_formats: true
         replace_existing_custom_formats: true
