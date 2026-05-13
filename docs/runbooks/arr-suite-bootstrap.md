@@ -18,7 +18,6 @@ Captured state from bootstrapping the media stack described in `docs/plans/20260
 | sonarr      | 1038 | tv RW + .downloads RW              |
 | radarr      | 1039 | movies RW + .downloads RW          |
 | lidarr      | 1040 | music RW + .downloads RW           |
-| readarr     | 1041 | books/audiobooks RW + .downloads RW|
 | bazarr      | 1042 | tv/movies RW                      |
 | unpackerr   | 1043 | .downloads RW (extract in-place)   |
 | jellyfin    | 1044 | library RO + /dev/dri host group  |

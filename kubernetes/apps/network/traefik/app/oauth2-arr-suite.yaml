@@ -21,7 +21,6 @@ spec:
     - https://sonarr.home.kelch.io/oidc/callback
     - https://radarr.home.kelch.io/oidc/callback
     - https://lidarr.home.kelch.io/oidc/callback
-    - https://readarr.home.kelch.io/oidc/callback
     - https://bazarr.home.kelch.io/oidc/callback
     - https://qbittorrent.home.kelch.io/oidc/callback
     - https://sabnzbd.home.kelch.io/oidc/callback

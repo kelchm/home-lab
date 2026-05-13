@@ -30,8 +30,6 @@ spec:
               UN_RADARR_0_PATHS_0: /data/.downloads
               UN_LIDARR_0_URL: http://lidarr.media.svc.cluster.local:8686
               UN_LIDARR_0_PATHS_0: /data/.downloads
-              UN_READARR_0_URL: http://readarr.media.svc.cluster.local:8787
-              UN_READARR_0_PATHS_0: /data/.downloads
               UN_SONARR_0_API_KEY:
                 valueFrom:
                   secretKeyRef:
@@ -47,11 +45,6 @@ spec:
                   secretKeyRef:
                     name: arr-api-keys
                     key: LIDARR_API_KEY
-              UN_READARR_0_API_KEY:
-                valueFrom:
-                  secretKeyRef:
-                    name: arr-api-keys
-                    key: READARR_API_KEY
             securityContext:
               allowPrivilegeEscalation: false
               capabilities: { drop: ["ALL"] }

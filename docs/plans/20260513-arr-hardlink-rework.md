@@ -63,7 +63,7 @@ tries to `link()`.
 | **SAB file permissions** | `permissions = 775` (set via SAB UI Config → Folders, captured declaratively where possible — see Open Questions). | Yields files at mode 664 via SAB's `removexbits` translation. Group-write on files satisfies `protected_hardlinks` so *arr can `link()` SAB-created files into the library. |
 | **POSIX baseline (unchanged)** | `/volume1/media` subdirs stay `2775` with the existing `media` group (GID 65537) for: (a) `.downloads` shared-workspace writes, (b) Plex/Jellyfin reads via `other r-x` on dirs and `other r--` on files. | NFSv4 ACLs are additive over POSIX bits. The `media` group continues to serve as the cross-cutting read/handoff identity. Per-app UIDs (1036–1044) stay — used by per-folder ACEs as the principal name. |
 | **Per-category writer groups** | **Not adopted.** Initially designed in chat; rejected once we settled on ACLs. Adding groups in parallel with ACLs is double-bookkeeping for one isolation property. | NFSv4 ACL grants are folder-scoped and named by user; no need for a group abstraction over them. Skip the `synogroup --add media-{tv,movies,...}` step. |
-| **Readarr removal** | Out of scope for this plan. Books/audiobooks categories get **no writer ACE** in this rework; they stay readable via share-default ACL and unwritable until a replacement reader-arr lands. | Per operator note 2026-05-13: Readarr is unmaintained and broken. Handled in a separate follow-up PR. |
+| **Readarr removal** | Books/audiobooks categories get **no writer ACE** in this rework; they stay readable via inherited share-root ACEs and unwritable until a replacement reader-arr lands. | Per operator note 2026-05-13: Readarr is unmaintained and broken. Removed in this changeset (originally planned as a follow-up; folded in pre-merge). |
 
 ## NAS-side ACL layout
 
@@ -225,8 +225,8 @@ category dir so Plex/Jellyfin and cross-cutting reads keep working.
 | `/volume1/media/audiobooks` | (no writer ACEs) | — |
 
 Books/audiobooks stay at the share-default ACL (admin + media + Everyone
-read) — effectively read-only library trees pending the Readarr
-replacement.
+read) — effectively read-only library trees until a replacement
+reader-arr lands.
 
 **Negative side handled implicitly**: a Radarr write to `/tv` matches no
 Allow ACE for `radarr` and falls through to the `media` group ACE
@@ -587,7 +587,6 @@ link new) must succeed. This is the end-to-end functional test.
 - `kubernetes/apps/media/sabnzbd/app/helmrelease.yaml` — keeps `subPath: .downloads/usenet`.
 - `kubernetes/apps/media/qbittorrent/app/helmrelease.yaml` — keeps `subPath: .downloads/torrents`.
 - `kubernetes/apps/media/unpackerr/app/helmrelease.yaml` — keeps `subPath: .downloads`.
-- `kubernetes/apps/media/readarr/` — out of scope; separate removal PR.
 - `kubernetes/apps/media/storage/` — PV/PVC unchanged; share-root mount with `volumeHandle: media-library`.
 
 ## Open questions
@@ -663,9 +662,9 @@ the same wall.
    Synology canonicalizes Deny-first regardless of insertion order.
    Resolution: Jellyfin removed from `media` group membership on the
    NAS; `media` now represents writers only (sonarr, radarr, lidarr,
-   bazarr, sabnzbd, qbittorrent, unpackerr, readarr). Jellyfin gets a
-   per-user `Allow Reader` ACE on the share root with `fd--`
-   inheritance, and a per-user `Deny DENY_ALL` on `/.downloads`.
+   bazarr, sabnzbd, qbittorrent, unpackerr). Jellyfin gets a per-user
+   `Allow Reader` ACE on the share root with `fd--` inheritance, and
+   a per-user `Deny DENY_ALL` on `/.downloads`.
 
 4. **`media` Reader on share root uses `---n`, not `fd--`.** Original
    design propagated `media:Reader` to every category. That was

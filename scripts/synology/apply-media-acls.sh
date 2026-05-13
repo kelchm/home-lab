@@ -71,9 +71,9 @@ PATHS="
 # `action` = allow | deny
 #
 # `media` group membership: qbittorrent, sabnzbd, sonarr, radarr, lidarr,
-# readarr, bazarr, unpackerr. Jellyfin is NOT a member (it's a library
-# consumer, not a producer) — its access goes via the user:jellyfin ACE
-# on the share root, with an explicit Deny on /.downloads.
+# bazarr, unpackerr. Jellyfin is NOT a member (it's a library consumer,
+# not a producer) — its access goes via the user:jellyfin ACE on the
+# share root, with an explicit Deny on /.downloads.
 #
 # Synology's synoacltool canonicalizes Deny-first regardless of insertion
 # order, so the user:jellyfin Deny on /.downloads correctly precedes the
@@ -96,8 +96,9 @@ ACES="
 # === /music: lidarr manages ===
 /volume1/media/music	user	lidarr	allow	$PERMS_MANAGER	$INHERIT_ALL
 
-# === /books, /audiobooks: no explicit writer ACEs (Readarr replacement pending) ===
+# === /books, /audiobooks: no explicit writer ACEs ===
 # Access comes from inherited administrators (Mgr) and user:jellyfin (Rdr).
+# When a books/audiobooks management app is introduced, add per-app ACEs here.
 
 # === /.downloads: media group writes; jellyfin explicitly denied (overrides inherited Reader) ===
 /volume1/media/.downloads	group	media	allow	$PERMS_MANAGER	$INHERIT_ALL
