@@ -1,33 +1,40 @@
 ---
-# Recyclarr starter config — pulls TRaSH-Guides quality profiles + custom
-# formats for Sonarr + Radarr daily. Adjust quality_profile name choices
-# and include templates after first sync if you want different presets
-# (e.g., uhd-bluray-web for 4K, anime, etc.). Full template registry:
-# https://github.com/recyclarr/config-templates
+# Recyclarr v8 config — guide-backed quality profiles by trash_id.
+# The v7-style 'include: - template:' pattern was removed; v8 references
+# TRaSH guides directly.
+#
+# Start minimal (just the quality profile). To layer in TRaSH's recommended
+# "unwanted formats" + per-profile custom format scoring, regenerate from
+# templates and copy the custom_format_groups block:
+#
+#   kubectl -n media run rcfg --rm -i --restart=Never \
+#     --image=ghcr.io/recyclarr/recyclarr:8.6.0 -- \
+#     sh -c "recyclarr config create -t web-1080p -t hd-bluray-web > /dev/null \
+#            && cat /config/configs/*.yml"
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: recyclarr-config
 data:
   recyclarr.yml: |
-    # yaml-language-server: $schema=https://raw.githubusercontent.com/recyclarr/recyclarr/master/schemas/config-schema.json
+    # yaml-language-server: $schema=https://schemas.recyclarr.dev/v8/config-schema.json
     sonarr:
       main:
         base_url: !env_var SONARR_BASE_URL
         api_key: !env_var SONARR_API_KEY
         quality_definition:
           type: series
-        include:
-          - template: web-1080p-v4
-        delete_old_custom_formats: true
-        replace_existing_custom_formats: true
+        quality_profiles:
+          - trash_id: 72dae194fc92bf828f32cde7744e51a1  # WEB-1080p
+            reset_unmatched_scores:
+              enabled: true
     radarr:
       main:
         base_url: !env_var RADARR_BASE_URL
         api_key: !env_var RADARR_API_KEY
         quality_definition:
           type: movie
-        include:
-          - template: hd-bluray-web
-        delete_old_custom_formats: true
-        replace_existing_custom_formats: true
+        quality_profiles:
+          - trash_id: d1d67249d3890e49bc12e275d989a7e9  # HD Bluray + WEB
+            reset_unmatched_scores:
+              enabled: true
