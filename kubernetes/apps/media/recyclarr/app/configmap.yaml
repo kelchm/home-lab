@@ -20,10 +20,6 @@ data:
         include:
           - template: sonarr-v4-quality-profile-web-1080p
           - template: sonarr-v4-custom-formats-web-1080p
-        custom_formats:
-          - trash_ids: []
-            quality_profiles:
-              - name: WEB-1080p
         delete_old_custom_formats: true
         replace_existing_custom_formats: true
     radarr:
@@ -35,9 +31,5 @@ data:
         include:
           - template: radarr-quality-profile-hd-bluray-web
           - template: radarr-custom-formats-hd-bluray-web
-        custom_formats:
-          - trash_ids: []
-            quality_profiles:
-              - name: HD Bluray + WEB
         delete_old_custom_formats: true
         replace_existing_custom_formats: true
