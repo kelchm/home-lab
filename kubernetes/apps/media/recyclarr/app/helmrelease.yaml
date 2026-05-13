@@ -22,7 +22,6 @@ spec:
           concurrencyPolicy: Forbid
           successfulJobsHistory: 3
           failedJobsHistory: 5
-          restartPolicy: OnFailure
         containers:
           app:
             image:
