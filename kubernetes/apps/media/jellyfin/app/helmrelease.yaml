@@ -26,8 +26,9 @@ spec:
         containers:
           app:
             image:
-              # renovate: datasource=docker depName=ghcr.io/home-operations/jellyfin
-              repository: ghcr.io/home-operations/jellyfin
+              # renovate: datasource=docker depName=docker.io/jellyfin/jellyfin
+              # home-operations doesn't ship jellyfin; using upstream official.
+              repository: docker.io/jellyfin/jellyfin
               tag: 10.11.8
             env:
               TZ: America/New_York
@@ -104,22 +105,25 @@ spec:
               - path: /data/audiobooks
                 subPath: audiobooks
                 readOnly: true
-      # AMD iGPU access for VAAPI hardware transcoding. /dev/dri/renderD128
-      # is world-rw on Talos (no group membership needed). card0 is
-      # root-only and not required for software-render fallback or VAAPI.
-      dev-dri:
+      # AMD iGPU access for VAAPI hardware transcoding. Tightened to the
+      # renderD128 device only (world-rw on Talos) — card0 is root-only
+      # and not needed for VAAPI. CharDevice type confirms the mount.
+      dev-dri-render:
         type: hostPath
-        hostPath: /dev/dri
+        hostPath: /dev/dri/renderD128
+        hostPathType: CharDevice
         advancedMounts:
           jellyfin:
             app:
-              - path: /dev/dri
+              - path: /dev/dri/renderD128
       # Transcoding scratch space — Jellyfin writes intermediate files
       # here during live transcodes. Keep on local node fs (not NFS) for
-      # speed; size depends on concurrent streams (~5 GB per 1080p stream
-      # buffer is plenty).
+      # speed. sizeLimit caps worst-case usage to prevent node-disk
+      # pressure if a transcode runs away; ~5 GB per 1080p stream buffer,
+      # 50 GiB allows ~10 concurrent without eviction risk.
       transcodes:
         type: emptyDir
+        sizeLimit: 50Gi
         advancedMounts:
           jellyfin:
             app:
