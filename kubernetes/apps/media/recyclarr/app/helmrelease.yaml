@@ -62,7 +62,19 @@ spec:
         seccompProfile:
           type: RuntimeDefault
     persistence:
+      # Writable /config for Recyclarr's state + cache (TRaSH git clones,
+      # repo metadata, etc.). Ephemeral per-run is fine — Recyclarr re-clones
+      # if needed.
       config:
+        type: emptyDir
+        advancedMounts:
+          recyclarr:
+            app:
+              - path: /config
+      # ConfigMap mount stacked on top: kubelet bind-mounts the single
+      # recyclarr.yml file over the emptyDir at that path. Everything else
+      # under /config remains the writable emptyDir.
+      recyclarr-yml:
         type: configMap
         name: recyclarr-config
         advancedMounts:
@@ -71,9 +83,3 @@ spec:
               - path: /config/recyclarr.yml
                 subPath: recyclarr.yml
                 readOnly: true
-      cache:
-        type: emptyDir
-        advancedMounts:
-          recyclarr:
-            app:
-              - path: /config/cache
