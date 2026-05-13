@@ -1,0 +1,80 @@
+---
+# Unpackerr — polls *arr APIs for completed downloads, extracts RAR/7z
+# archives in-place inside the downloads tree. No Web UI, no HTTPRoute.
+# Watches the downloads dir; *arr does the library import after extract.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: unpackerr
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: unpackerr
+  interval: 1h
+  values:
+    controllers:
+      unpackerr:
+        strategy: Recreate
+        containers:
+          app:
+            image:
+              # renovate: datasource=docker depName=ghcr.io/unpackerr/unpackerr
+              repository: ghcr.io/unpackerr/unpackerr
+              tag: 0.15.2
+            env:
+              TZ: America/New_York
+              UN_LOG_LEVEL: info
+              UN_SONARR_0_URL: http://sonarr.media.svc.cluster.local:8989
+              UN_SONARR_0_PATHS_0: /data/.downloads
+              UN_RADARR_0_URL: http://radarr.media.svc.cluster.local:7878
+              UN_RADARR_0_PATHS_0: /data/.downloads
+              UN_LIDARR_0_URL: http://lidarr.media.svc.cluster.local:8686
+              UN_LIDARR_0_PATHS_0: /data/.downloads
+              UN_READARR_0_URL: http://readarr.media.svc.cluster.local:8787
+              UN_READARR_0_PATHS_0: /data/.downloads
+              UN_SONARR_0_API_KEY:
+                valueFrom:
+                  secretKeyRef:
+                    name: arr-api-keys
+                    key: SONARR_API_KEY
+              UN_RADARR_0_API_KEY:
+                valueFrom:
+                  secretKeyRef:
+                    name: arr-api-keys
+                    key: RADARR_API_KEY
+              UN_LIDARR_0_API_KEY:
+                valueFrom:
+                  secretKeyRef:
+                    name: arr-api-keys
+                    key: LIDARR_API_KEY
+              UN_READARR_0_API_KEY:
+                valueFrom:
+                  secretKeyRef:
+                    name: arr-api-keys
+                    key: READARR_API_KEY
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities: { drop: ["ALL"] }
+            resources:
+              requests:
+                cpu: 25m
+                memory: 64Mi
+              limits:
+                memory: 256Mi
+    defaultPodOptions:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1043
+        runAsGroup: 65537
+        supplementalGroups: [65537]
+        seccompProfile:
+          type: RuntimeDefault
+    persistence:
+      media:
+        type: persistentVolumeClaim
+        existingClaim: media-library
+        advancedMounts:
+          unpackerr:
+            app:
+              - path: /data/.downloads
+                subPath: .downloads

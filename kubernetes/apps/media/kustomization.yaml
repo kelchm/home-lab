@@ -18,3 +18,7 @@ resources:
   - ./radarr/ks.yaml
   - ./lidarr/ks.yaml
   - ./readarr/ks.yaml
+  - ./arr-api-keys.sops.yaml
+  - ./bazarr/ks.yaml
+  - ./unpackerr/ks.yaml
+  - ./recyclarr/ks.yaml

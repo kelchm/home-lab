@@ -1,0 +1,43 @@
+---
+# Recyclarr starter config — pulls TRaSH-Guides quality profiles + custom
+# formats for Sonarr + Radarr daily. Adjust quality_profile name choices
+# and include templates after first sync if you want different presets
+# (e.g., uhd-bluray-web for 4K, anime, etc.). Full template registry:
+# https://github.com/recyclarr/config-templates
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: recyclarr-config
+data:
+  recyclarr.yml: |
+    # yaml-language-server: $schema=https://raw.githubusercontent.com/recyclarr/recyclarr/master/schemas/config-schema.json
+    sonarr:
+      main:
+        base_url: !env_var SONARR_BASE_URL
+        api_key: !env_var SONARR_API_KEY
+        quality_definition:
+          type: series
+        include:
+          - template: sonarr-v4-quality-profile-web-1080p
+          - template: sonarr-v4-custom-formats-web-1080p
+        custom_formats:
+          - trash_ids: []
+            quality_profiles:
+              - name: WEB-1080p
+        delete_old_custom_formats: true
+        replace_existing_custom_formats: true
+    radarr:
+      main:
+        base_url: !env_var RADARR_BASE_URL
+        api_key: !env_var RADARR_API_KEY
+        quality_definition:
+          type: movie
+        include:
+          - template: radarr-quality-profile-hd-bluray-web
+          - template: radarr-custom-formats-hd-bluray-web
+        custom_formats:
+          - trash_ids: []
+            quality_profiles:
+              - name: HD Bluray + WEB
+        delete_old_custom_formats: true
+        replace_existing_custom_formats: true
