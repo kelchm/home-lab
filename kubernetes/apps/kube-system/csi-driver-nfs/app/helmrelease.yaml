@@ -31,3 +31,6 @@ spec:
       # Lightweight controller; one replica is sufficient. Node DaemonSet
       # provides the per-node mount-path agency that actually matters.
       replicas: 1
+      # Override chart default `File` — would chown the entire NFS tree
+      # to each pod's fsGroup on every mount.
+      fsGroupPolicy: None

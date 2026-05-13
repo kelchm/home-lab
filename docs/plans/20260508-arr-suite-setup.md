@@ -220,6 +220,16 @@ Only once all four substrate checks pass do app deploys begin.
 
 ### Phase 4 — Core *arr apps
 
+> **2026-05-13 pivot:** Per-app `subPath` mounts for Sonarr/Radarr/Lidarr/Bazarr
+> are being replaced with a single share-root `globalMounts: [{ path: /data }]`
+> mount, and the "shared `media` group as writer identity" isolation model is
+> being replaced with per-folder NFSv4 ACLs on the NAS. See
+> `docs/plans/20260513-arr-hardlink-rework.md` for the rework's full
+> rationale (separate-NFS-mounts breaks `link(2)` across category dirs),
+> the manifest deltas, and the operator execution sequence. The high-level
+> shape below (Flux Kustomization, OCIRepository, HelmRelease, Longhorn
+> config PVC, gateway-admin route + middleware) is unchanged.
+
 11. **Sonarr** — subPaths `tv` (RW) + `.downloads` (RW for cleanup post-import).
 12. **Radarr** — subPaths `movies` (RW) + `.downloads` (RW).
 13. **Lidarr** — subPaths `music` (RW) + `.downloads` (RW).
@@ -228,6 +238,12 @@ Only once all four substrate checks pass do app deploys begin.
 All four share the per-app pattern below; deltas are image, container port, library subPaths, and `runAsUser`.
 
 ### Phase 5 — Helpers
+
+> **2026-05-13 pivot:** Bazarr is rolled in with the Phase 4 mount-shape
+> rework above (single share-root mount, NFSv4 ACLs). See
+> `docs/plans/20260513-arr-hardlink-rework.md`. Unpackerr and Recyclarr
+> are unchanged: unpackerr keeps `subPath: .downloads` (no cross-category
+> hardlinks needed); Recyclarr has no media mount.
 
 15. **Bazarr** — subPaths `tv`, `movies` (RW for sidecar subtitle files); no `.downloads` access.
 16. **Unpackerr** — `kubernetes/apps/media/unpackerr/`. No web UI; mounts `media-library` with subPath `.downloads` (RW — extracts archives in-place inside the `.downloads` tree). Never writes to the library; *arr does the library import. Needs *arr API keys + URLs from `secret.sops.yaml`.

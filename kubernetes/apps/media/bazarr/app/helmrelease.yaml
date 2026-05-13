@@ -70,13 +70,8 @@ spec:
       media:
         type: persistentVolumeClaim
         existingClaim: media-library
-        advancedMounts:
-          bazarr:
-            app:
-              - path: /data/tv
-                subPath: tv
-              - path: /data/movies
-                subPath: movies
+        globalMounts:
+          - path: /data
     route:
       app:
         hostnames: ["bazarr.home.kelch.io"]

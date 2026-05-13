@@ -71,13 +71,8 @@ spec:
       media:
         type: persistentVolumeClaim
         existingClaim: media-library
-        advancedMounts:
-          lidarr:
-            app:
-              - path: /data/music
-                subPath: music
-              - path: /data/.downloads
-                subPath: .downloads
+        globalMounts:
+          - path: /data
     route:
       app:
         hostnames: ["lidarr.home.kelch.io"]

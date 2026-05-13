@@ -71,13 +71,8 @@ spec:
       media:
         type: persistentVolumeClaim
         existingClaim: media-library
-        advancedMounts:
-          sonarr:
-            app:
-              - path: /data/tv
-                subPath: tv
-              - path: /data/.downloads
-                subPath: .downloads
+        globalMounts:
+          - path: /data
     route:
       app:
         hostnames: ["sonarr.home.kelch.io"]
