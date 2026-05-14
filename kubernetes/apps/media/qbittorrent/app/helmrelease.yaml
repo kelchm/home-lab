@@ -54,8 +54,11 @@ spec:
               # time WebUI setting) — UP_COMMAND has no qB credentials.
               VPN_PORT_FORWARDING: "on"
               VPN_PORT_FORWARDING_PROVIDER: protonvpn
+              # bjw-s renders env values through tpl, so {{PORT}} would be
+              # consumed by Helm. Wrap in {{` `}} so Helm emits it literally
+              # for gluetun's own templater to substitute at runtime.
               VPN_PORT_FORWARDING_UP_COMMAND: >-
-                /bin/sh -c 'wget -O- --post-data="json={\"listen_port\":{{PORT}}}"
+                /bin/sh -c 'wget -O- --post-data="json={\"listen_port\":{{`{{PORT}}`}}}"
                 http://localhost:8080/api/v2/app/setPreferences 2>&1'
               # Opens inbound on the pod's local interface so Traefik (in
               # pod CIDR) can reach qB's Web UI on 8080.
