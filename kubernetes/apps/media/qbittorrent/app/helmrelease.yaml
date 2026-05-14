@@ -49,9 +49,14 @@ spec:
               # Requires the WireGuard key to have been generated with the
               # NAT-PMP / Port Forwarding flag in the ProtonVPN dashboard.
               # Gluetun auto-opens the assigned port on the VPN firewall and
-              # writes it to /tmp/gluetun/forwarded_port.
+              # pushes it into qB via the UP_COMMAND hook below. Requires
+              # qB's "Bypass authentication for clients on localhost" (one-
+              # time WebUI setting) — UP_COMMAND has no qB credentials.
               VPN_PORT_FORWARDING: "on"
               VPN_PORT_FORWARDING_PROVIDER: protonvpn
+              VPN_PORT_FORWARDING_UP_COMMAND: >-
+                /bin/sh -c 'wget -O- --post-data="json={\"listen_port\":{{PORT}}}"
+                http://localhost:8080/api/v2/app/setPreferences 2>&1'
               # Opens inbound on the pod's local interface so Traefik (in
               # pod CIDR) can reach qB's Web UI on 8080.
               FIREWALL_INPUT_PORTS: "8080"
