@@ -436,10 +436,11 @@ middle, with Flux suspended on both ends.
    ```
 
    The script is idempotent (re-running produces the same state) and
-   prints a diff between the existing and target ACL on each folder
-   before applying. Manual UI fallback exists for emergency single-ACE
-   tweaks but should not be the primary path — drift between UI state
-   and script-recorded state is the failure mode we're avoiding.
+   writes a timestamped backup of the prior ACL state to
+   `/var/log/media-acls-backup-*.txt` before mutating anything. Manual
+   UI fallback exists for emergency single-ACE tweaks but should not be
+   the primary path — drift between UI state and script-recorded state
+   is the failure mode we're avoiding.
 
 5. **Verify ACLs were applied** from a NAS shell:
 

@@ -31,6 +31,18 @@ spec:
       # Lightweight controller; one replica is sufficient. Node DaemonSet
       # provides the per-node mount-path agency that actually matters.
       replicas: 1
-      # Override chart default `File` — would chown the entire NFS tree
-      # to each pod's fsGroup on every mount.
-      fsGroupPolicy: None
+
+  # The chart hardcodes `fsGroupPolicy: File` on the CSIDriver with no
+  # values knob, so the only way to flip it is to patch the rendered
+  # object. `File` would have kubelet recursively chown the entire NFS
+  # tree to each pod's fsGroup on every mount; `None` skips that.
+  postRenderers:
+    - kustomize:
+        patches:
+          - target:
+              kind: CSIDriver
+              name: nfs.csi.k8s.io
+            patch: |
+              - op: replace
+                path: /spec/fsGroupPolicy
+                value: None
