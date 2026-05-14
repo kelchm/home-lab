@@ -71,13 +71,8 @@ spec:
       media:
         type: persistentVolumeClaim
         existingClaim: media-library
-        advancedMounts:
-          radarr:
-            app:
-              - path: /data/movies
-                subPath: movies
-              - path: /data/.downloads
-                subPath: .downloads
+        globalMounts:
+          - path: /data
     route:
       app:
         hostnames: ["radarr.home.kelch.io"]

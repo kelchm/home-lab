@@ -62,7 +62,6 @@ spec:
         runAsNonRoot: true
         runAsUser: 1044
         runAsGroup: 65537
-        supplementalGroups: [65537]
         fsGroup: 1044
         fsGroupChangePolicy: OnRootMismatch
         seccompProfile:

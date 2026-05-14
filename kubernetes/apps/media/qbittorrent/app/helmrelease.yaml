@@ -29,8 +29,7 @@ spec:
     defaultPodOptions:
       securityContext:
         # Chowns /config (Longhorn) to root:65537 + setgid so qB (gid=65537)
-        # can write. csi-driver-nfs ignores fsGroup, so the media mount keeps
-        # its NAS-side ownership.
+        # can write. csi-driver-nfs.fsGroupPolicy=None skips the NFS mount.
         fsGroup: 65537
         fsGroupChangePolicy: OnRootMismatch
     controllers:
