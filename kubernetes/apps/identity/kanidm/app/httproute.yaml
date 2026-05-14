@@ -1,7 +1,8 @@
 ---
-# Routes auth.home.kelch.io -> kanidm Service. Backend connection is HTTPS
-# (validated by BackendTLSPolicy); a plain-HTTP backend would break Kanidm's
-# HTTPS-only listener.
+# Routes auth.home.kelch.io -> kanidm via a TraefikService that adds sticky-
+# cookie LB across replicas (kanidm's multi-step auth flow signs per-pod
+# state, so a single login must pin to one backend). Backend TLS + cert
+# validation come from the ServersTransport that the TraefikService refers to.
 #
 # Lives on gateway-services so client VLANs can complete OIDC redirects from
 # OIDC RPs; gateway-admin (VLAN-10 only) shares the same cert + DNS path.
@@ -20,5 +21,6 @@ spec:
       sectionName: https
   rules:
     - backendRefs:
-        - name: kanidm
-          port: 8443
+        - group: traefik.io
+          kind: TraefikService
+          name: kanidm

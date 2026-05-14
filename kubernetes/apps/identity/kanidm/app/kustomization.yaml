@@ -7,5 +7,6 @@ resources:
   - ./group-arr-admins.yaml
   - ./person-kelchm.yaml
   - ./httproute.yaml
-  - ./backendtlspolicy.yaml
+  - ./serverstransport.yaml
+  - ./traefikservice.yaml
   - ./networkpolicy.yaml

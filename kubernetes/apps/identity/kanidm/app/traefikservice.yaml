@@ -1,0 +1,27 @@
+---
+# Sticky-cookie LB in front of the kaniop-managed kanidm Service. Kanidm's
+# interactive auth flow signs per-pod session state, so a /login/begin on
+# pod A followed by a POST on pod B fails JWT verification (InvalidSignature
+# + "session id not present in cred presented to 'begin' step").
+#
+# The label opts this resource into traefik-services' kubernetesCRD provider
+# (label selector in network/traefik/helmrelease-services.yaml).
+apiVersion: traefik.io/v1alpha1
+kind: TraefikService
+metadata:
+  name: kanidm
+  labels:
+    homelab.kelch.io/traefik-role: services
+spec:
+  weighted:
+    services:
+      - name: kanidm
+        port: 8443
+        scheme: https
+        serversTransport: kanidm
+        sticky:
+          cookie:
+            name: kanidm_lb
+            secure: true
+            httpOnly: true
+            sameSite: lax

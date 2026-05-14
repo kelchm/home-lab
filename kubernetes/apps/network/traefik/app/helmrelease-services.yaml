@@ -29,8 +29,13 @@ spec:
         labelSelector: homelab.kelch.io/gateway-role=services
       kubernetesIngress:
         enabled: false
+      # Scoped via labelSelector so this instance only picks up CRDs explicitly
+      # opted in. Used today for TraefikService + ServersTransport that give
+      # kanidm sticky-cookie LB across replicas (multi-step auth signs per-pod
+      # state).
       kubernetesCRD:
-        enabled: false
+        enabled: true
+        labelSelector: homelab.kelch.io/traefik-role=services
     gateway:
       enabled: false
     gatewayClass:

@@ -1,0 +1,17 @@
+---
+# Backend TLS for the kanidm Service: validate the auth.home.kelch.io leaf
+# against the system root CA bundle (Let's Encrypt public chain). Empty
+# rootCAsSecrets => Go's default system trust pool.
+#
+# Referenced by the kanidm TraefikService, which is what the HTTPRoute backends
+# (the TraefikService wraps the underlying Service to add sticky-cookie LB).
+#
+# The label opts this resource into traefik-services' kubernetesCRD provider.
+apiVersion: traefik.io/v1alpha1
+kind: ServersTransport
+metadata:
+  name: kanidm
+  labels:
+    homelab.kelch.io/traefik-role: services
+spec:
+  serverName: auth.home.kelch.io
