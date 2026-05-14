@@ -10,7 +10,7 @@ spec:
   origin: https://auth.home.kelch.io
 
   # renovate: datasource=docker depName=docker.io/kanidm/server
-  image: kanidm/server:1.9.2
+  image: kanidm/server:1.10.2
 
   logLevel: info
 
