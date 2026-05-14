@@ -1,0 +1,25 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# squat/generic-device-plugin — advertises host devices as Kubernetes
+# extended resources so the kubelet wires up the cgroup-v2 device-allow
+# list when a pod requests them. A bare hostPath device mount alone
+# places the inode in the pod namespace but leaves open() returning
+# EPERM, which is why the prior Jellyfin VAAPI config never worked.
+#
+# Upstream ships args for serial/video/fuse/audio/capture; the
+# dri-only patch replaces them with a single device entry for the
+# AMD iGPU render node, exposed as squat.ai/dri.
+resources:
+  - https://raw.githubusercontent.com/squat/generic-device-plugin/generic-device-plugin-0.1.2/manifests/generic-device-plugin.yaml
+
+images:
+  - name: squat/generic-device-plugin
+    newTag: "0.2.0"
+
+patches:
+  - path: ./patches/dri-only.yaml
+    target:
+      kind: DaemonSet
+      name: generic-device-plugin

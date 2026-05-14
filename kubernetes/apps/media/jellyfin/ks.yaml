@@ -6,6 +6,8 @@ metadata:
 spec:
   dependsOn:
     - name: media-storage
+    - name: generic-device-plugin   # advertises squat.ai/dri for VAAPI transcoding
+      namespace: kube-system
   interval: 1h
   path: ./kubernetes/apps/media/jellyfin/app
   postBuild:

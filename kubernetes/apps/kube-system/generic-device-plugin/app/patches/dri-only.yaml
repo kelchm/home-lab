@@ -1,0 +1,21 @@
+---
+# Replace upstream's serial/video/fuse/audio/capture args with a single
+# definition for the AMD iGPU render node. Nodes without
+# /dev/dri/renderD128 simply advertise 0 of the resource.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: generic-device-plugin
+  namespace: kube-system
+spec:
+  template:
+    spec:
+      containers:
+        - name: generic-device-plugin
+          args:
+            - --device
+            - |
+              name: dri
+              groups:
+                - paths:
+                    - path: /dev/dri/renderD128
