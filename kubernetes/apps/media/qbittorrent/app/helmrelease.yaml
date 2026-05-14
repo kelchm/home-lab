@@ -91,9 +91,20 @@ spec:
               # renovate: datasource=docker depName=ghcr.io/home-operations/qbittorrent
               repository: ghcr.io/home-operations/qbittorrent
               tag: 5.2.0
+            # Force umask 002 so qBittorrent writes files at 664
+            # (group-writable). Required for *arr atomic-import hardlinks
+            # across UIDs: protected_hardlinks blocks link() when the
+            # linker isn't the source owner and the source isn't
+            # group-writable. The home-operations image entrypoint does
+            # not honor the UMASK env var, so wrap it directly.
+            command:
+              - /usr/bin/catatonit
+              - "--"
+              - /bin/sh
+              - -c
+              - "umask 002 && exec /entrypoint.sh"
             env:
               TZ: America/New_York
-              UMASK: "002"
               WEBUI_PASSWORD_PBKDF2:
                 valueFrom:
                   secretKeyRef:
