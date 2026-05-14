@@ -11,7 +11,7 @@
 # crw-rw-rw- perms — kubelet only wires the cgroup-v2 device-allow
 # list when a pod requests an extended resource owned by a registered
 # device plugin. We use squat/generic-device-plugin (kube-system) to
-# expose the render node as squat.ai/dri and request it below.
+# expose the render node as devic.es/dri and request it below.
 # Configure HW accel in Jellyfin UI: Dashboard → Playback → Hardware
 # accel = VAAPI, device = /dev/dri/renderD128.
 apiVersion: helm.toolkit.fluxcd.io/v2
@@ -59,10 +59,10 @@ spec:
               requests:
                 cpu: 200m
                 memory: 1Gi
-                squat.ai/dri: 1
+                devic.es/dri: 1
               limits:
                 memory: 4Gi
-                squat.ai/dri: 1
+                devic.es/dri: 1
     defaultPodOptions:
       securityContext:
         runAsNonRoot: true
