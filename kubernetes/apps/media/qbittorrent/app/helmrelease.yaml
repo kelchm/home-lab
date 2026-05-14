@@ -46,6 +46,12 @@ spec:
               VPN_SERVICE_PROVIDER: protonvpn
               VPN_TYPE: wireguard
               SERVER_COUNTRIES: Netherlands
+              # Requires the WireGuard key to have been generated with the
+              # NAT-PMP / Port Forwarding flag in the ProtonVPN dashboard.
+              # Gluetun auto-opens the assigned port on the VPN firewall and
+              # writes it to /tmp/gluetun/forwarded_port.
+              VPN_PORT_FORWARDING: "on"
+              VPN_PORT_FORWARDING_PROVIDER: protonvpn
               # Opens inbound on the pod's local interface so Traefik (in
               # pod CIDR) can reach qB's Web UI on 8080.
               FIREWALL_INPUT_PORTS: "8080"
