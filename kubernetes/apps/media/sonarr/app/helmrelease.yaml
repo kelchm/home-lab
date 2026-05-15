@@ -73,6 +73,12 @@ spec:
         existingClaim: media-library
         globalMounts:
           - path: /data
+      imports:
+        type: persistentVolumeClaim
+        existingClaim: media-imports
+        globalMounts:
+          - path: /imports
+            readOnly: true
     route:
       app:
         hostnames: ["sonarr.home.kelch.io"]

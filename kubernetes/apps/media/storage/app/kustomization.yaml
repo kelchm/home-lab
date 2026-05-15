@@ -4,3 +4,5 @@ kind: Kustomization
 resources:
   - ./media-library-pv.yaml
   - ./media-library-pvc.yaml
+  - ./media-imports-pv.yaml
+  - ./media-imports-pvc.yaml

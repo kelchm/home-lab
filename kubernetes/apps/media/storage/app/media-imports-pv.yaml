@@ -1,0 +1,32 @@
+---
+# Static PV for the Synology /volume1/NetBackup share, mounted read-only into
+# *arr apps so existing media in arbitrary subdirs can be picked up by the
+# Library Import flow without risk of writes back to the backup share.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: media-imports
+spec:
+  capacity:
+    storage: 50Ti
+  accessModes:
+    - ReadOnlyMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs-media-static
+  mountOptions:
+    - nfsvers=4.1
+    - ro
+    - hard
+    - noatime
+    - nodiratime
+    - rsize=1048576
+    - wsize=1048576
+  csi:
+    driver: nfs.csi.k8s.io
+    volumeHandle: media-imports
+    volumeAttributes:
+      server: 10.32.25.5
+      share: /volume1/NetBackup
+  claimRef:
+    namespace: media
+    name: media-imports
