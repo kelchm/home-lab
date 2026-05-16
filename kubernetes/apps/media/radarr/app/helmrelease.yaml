@@ -73,12 +73,6 @@ spec:
         existingClaim: media-library
         globalMounts:
           - path: /data
-      imports:
-        type: persistentVolumeClaim
-        existingClaim: media-imports
-        globalMounts:
-          - path: /imports
-            readOnly: true
     route:
       app:
         hostnames: ["radarr.home.kelch.io"]
