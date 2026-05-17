@@ -71,7 +71,7 @@ spec:
         - name: reconcile
           # alpine-based image; rancher/kubectl is distroless (no /bin/sh)
           # which the reconcile loop needs.
-          image: docker.io/alpine/k8s:1.35.4
+          image: docker.io/alpine/k8s:1.36.1
           command:
             - /bin/sh
             - -c
