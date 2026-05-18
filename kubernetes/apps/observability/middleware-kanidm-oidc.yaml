@@ -4,10 +4,15 @@
 # it via ExtensionRef.
 #
 # Same shape as media/middleware-kanidm-oidc.yaml — Gateway API
-# ExtensionRef is LocalObjectReference so each namespace needs its own
+# ExtensionRef is LocalObjectReference so each namespace owns its own
 # copy. The plugin itself runs once inside traefik-admin (network ns);
 # OPS_SUITE_CLIENT_SECRET is set on that pod from the kaniop-emitted
 # Secret in network/.
+#
+# Lives at the namespace top so it is reconciled by `cluster-apps`, which
+# has no postBuild.substituteFrom — the literal ${OPS_SUITE_CLIENT_SECRET}
+# below must survive to the cluster so traefik-oidc-auth can expand it
+# from the pod env at request time.
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:

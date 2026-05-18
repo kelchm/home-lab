@@ -8,7 +8,7 @@ components:
 
 resources:
   - ./namespace.yaml
-  - ./kanidm-oidc/ks.yaml
+  - ./middleware-kanidm-oidc.yaml
   - ./grafana/ks.yaml
   - ./kube-prometheus-stack/ks.yaml
   - ./loki/ks.yaml
