@@ -18,7 +18,7 @@ spec:
           extensionRef:
             group: traefik.io
             kind: Middleware
-            name: bakeoff-ui-auth
+            name: kanidm-oidc
       backendRefs:
         - name: vmsingle-victoria-metrics-k8s-stack
           port: 8428
@@ -41,7 +41,7 @@ spec:
           extensionRef:
             group: traefik.io
             kind: Middleware
-            name: bakeoff-ui-auth
+            name: kanidm-oidc
       backendRefs:
         - name: vmagent-victoria-metrics-k8s-stack
           port: 8429
@@ -63,7 +63,7 @@ spec:
           extensionRef:
             group: traefik.io
             kind: Middleware
-            name: bakeoff-ui-auth
+            name: kanidm-oidc
       backendRefs:
         - name: vmalert-victoria-metrics-k8s-stack
           port: 8080

@@ -20,10 +20,10 @@ spec:
     fullnameOverride: traefik-admin
     deployment:
       replicas: 2
-      # Restart the Deployment when kaniop rotates the OAuth2 client_secret.
+      # Restart the Deployment when kaniop rotates either OAuth2 client_secret.
       # Env-from-Secret doesn't propagate to running pods otherwise.
       annotations:
-        secret.reloader.stakater.com/reload: arr-suite-kanidm-oauth2-credentials
+        secret.reloader.stakater.com/reload: arr-suite-kanidm-oauth2-credentials,ops-suite-kanidm-oauth2-credentials
     providers:
       kubernetesGateway:
         enabled: true
@@ -89,11 +89,17 @@ spec:
           # renovate: datasource=github-releases depName=sevensolutions/traefik-oidc-auth
           version: v0.19.0
 
-    # CLIENT_SECRET key from the kaniop-emitted Secret, renamed so a future
-    # second OIDC client wouldn't collide on the env var name.
+    # CLIENT_SECRET keys from the kaniop-emitted Secrets, one per OIDC
+    # client. Env-var names are namespaced so additional clients can be
+    # added without collision.
     env:
       - name: ARR_SUITE_CLIENT_SECRET
         valueFrom:
           secretKeyRef:
             name: arr-suite-kanidm-oauth2-credentials
+            key: CLIENT_SECRET
+      - name: OPS_SUITE_CLIENT_SECRET
+        valueFrom:
+          secretKeyRef:
+            name: ops-suite-kanidm-oauth2-credentials
             key: CLIENT_SECRET

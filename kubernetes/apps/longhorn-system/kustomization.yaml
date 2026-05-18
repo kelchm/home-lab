@@ -8,4 +8,5 @@ components:
 
 resources:
   - ./namespace.yaml
+  - ./middleware-kanidm-oidc.yaml
   - ./longhorn/ks.yaml

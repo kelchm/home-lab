@@ -1,6 +1,6 @@
 ---
-# Prometheus UI — gated by BasicAuth via the shared bakeoff-ui-auth
-# Middleware (see kubernetes/apps/observability/bakeoff-ui-auth/).
+# Prometheus UI — gated by OIDC via the shared kanidm-oidc Middleware
+# (see kubernetes/apps/observability/middleware-kanidm-oidc.yaml).
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
@@ -17,7 +17,7 @@ spec:
           extensionRef:
             group: traefik.io
             kind: Middleware
-            name: bakeoff-ui-auth
+            name: kanidm-oidc
       backendRefs:
         - name: kube-prometheus-stack-prometheus
           port: 9090
@@ -40,7 +40,7 @@ spec:
           extensionRef:
             group: traefik.io
             kind: Middleware
-            name: bakeoff-ui-auth
+            name: kanidm-oidc
       backendRefs:
         - name: kube-prometheus-stack-alertmanager
           port: 9093

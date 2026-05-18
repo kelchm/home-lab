@@ -1,0 +1,48 @@
+---
+# OIDC RP middleware for operator UIs in this namespace (Prometheus,
+# Alertmanager, vmui/vmagent/vmalert, VictoriaLogs). HTTPRoutes reference
+# it via ExtensionRef.
+#
+# Same shape as media/middleware-kanidm-oidc.yaml — Gateway API
+# ExtensionRef is LocalObjectReference so each namespace owns its own
+# copy. The plugin itself runs once inside traefik-admin (network ns);
+# OPS_SUITE_CLIENT_SECRET is set on that pod from the kaniop-emitted
+# Secret in network/.
+#
+# Lives at the namespace top so it is reconciled by `cluster-apps`, which
+# has no postBuild.substituteFrom — the literal ${OPS_SUITE_CLIENT_SECRET}
+# below must survive to the cluster so traefik-oidc-auth can expand it
+# from the pod env at request time.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: kanidm-oidc
+spec:
+  plugin:
+    traefik-oidc-auth:
+      Provider:
+        Url: https://auth.home.kelch.io/oauth2/openid/ops-suite
+        ClientId: ops-suite
+        ClientSecret: ${OPS_SUITE_CLIENT_SECRET}
+        UsePkce: true
+      Scopes:
+        - openid
+        - profile
+        - email
+        - groups
+      Authorization:
+        AssertClaims:
+          - Name: groups
+            AnyOf:
+              - ops-admins@auth.home.kelch.io
+      Headers:
+        - Name: Remote-User
+          Value: "{{ .claims.preferred_username }}"
+        - Name: Remote-Email
+          Value: "{{ .claims.email }}"
+      SessionCookie:
+        Domain: .home.kelch.io
+        Secure: true
+        HttpOnly: true
+        SameSite: lax
+        MaxAge: 43200

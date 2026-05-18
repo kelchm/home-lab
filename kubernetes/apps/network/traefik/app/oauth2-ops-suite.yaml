@@ -1,0 +1,33 @@
+---
+# Shared OIDC client for operator UIs gated at the Gateway via the
+# traefik-oidc-auth plugin. Each gated host registers its callback URL
+# here; SSO across subdomains via shared session cookie on .home.kelch.io.
+#
+# kaniop emits the client_secret into `ops-suite-kanidm-oauth2-credentials`
+# Secret in this same namespace (network), which traefik-admin mounts as
+# an env var.
+apiVersion: kaniop.rs/v1beta1
+kind: KanidmOAuth2Client
+metadata:
+  name: ops-suite
+spec:
+  kanidmRef:
+    name: kanidm
+    namespace: identity
+  displayname: Ops Admin Suite
+  origin: https://home.kelch.io
+  redirectUrl:
+    - https://prometheus.home.kelch.io/oidc/callback
+    - https://alertmanager.home.kelch.io/oidc/callback
+    - https://vm.home.kelch.io/oidc/callback
+    - https://vmagent.home.kelch.io/oidc/callback
+    - https://vmalert.home.kelch.io/oidc/callback
+    - https://vlogs.home.kelch.io/oidc/callback
+    - https://longhorn.home.kelch.io/oidc/callback
+  scopeMap:
+    - group: ops-admins
+      scopes:
+        - openid
+        - profile
+        - email
+        - groups
