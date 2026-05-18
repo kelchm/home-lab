@@ -20,6 +20,10 @@ metadata:
 spec:
   plugin:
     traefik-oidc-auth:
+      # Plugin session-state encryption key, shared across traefik-admin
+      # replicas. Without this each pod generates its own random default
+      # and cross-pod auth-flow handoffs fail.
+      Secret: ${OIDC_SESSION_SECRET}
       Provider:
         Url: https://auth.home.kelch.io/oauth2/openid/ops-suite
         ClientId: ops-suite
