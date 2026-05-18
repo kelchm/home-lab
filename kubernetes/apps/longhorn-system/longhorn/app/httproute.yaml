@@ -1,7 +1,7 @@
 ---
 # Routes longhorn.home.kelch.io to the longhorn-frontend Service via the
-# admin gateway. BasicAuth is enforced by attaching the longhorn-ui-auth
-# Middleware as a Gateway API ExtensionRef filter (Traefik resolves
+# admin gateway. OIDC is enforced by attaching the kanidm-oidc Middleware
+# as a Gateway API ExtensionRef filter (Traefik resolves
 # group=traefik.io/kind=Middleware natively).
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -19,7 +19,7 @@ spec:
           extensionRef:
             group: traefik.io
             kind: Middleware
-            name: longhorn-ui-auth
+            name: kanidm-oidc
       backendRefs:
         - name: longhorn-frontend
           port: 80

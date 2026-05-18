@@ -1,0 +1,13 @@
+---
+# Membership group for operator UI access (Prometheus, Alertmanager,
+# vmui/vmagent/vmalert, VictoriaLogs, Longhorn). Used as the group
+# reference in the ops-suite OAuth2 client's scopeMap.
+apiVersion: kaniop.rs/v1beta1
+kind: KanidmGroup
+metadata:
+  name: ops-admins
+spec:
+  kanidmRef:
+    name: kanidm
+  members:
+    - kelchm

@@ -1,9 +1,13 @@
 ---
-# OIDC RP middleware that gates the Longhorn UI HTTPRoute. Same shape as
-# observability/kanidm-oidc/ — Gateway API ExtensionRef is
-# LocalObjectReference so each namespace owns its own copy. The plugin
-# runs once inside traefik-admin (network ns); OPS_SUITE_CLIENT_SECRET is
-# set on that pod from the kaniop-emitted Secret in network/.
+# OIDC RP middleware for operator UIs in this namespace (Prometheus,
+# Alertmanager, vmui/vmagent/vmalert, VictoriaLogs). HTTPRoutes reference
+# it via ExtensionRef.
+#
+# Same shape as media/middleware-kanidm-oidc.yaml — Gateway API
+# ExtensionRef is LocalObjectReference so each namespace needs its own
+# copy. The plugin itself runs once inside traefik-admin (network ns);
+# OPS_SUITE_CLIENT_SECRET is set on that pod from the kaniop-emitted
+# Secret in network/.
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:

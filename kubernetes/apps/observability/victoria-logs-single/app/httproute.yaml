@@ -18,7 +18,7 @@ spec:
           extensionRef:
             group: traefik.io
             kind: Middleware
-            name: bakeoff-ui-auth
+            name: kanidm-oidc
       backendRefs:
         - name: victoria-logs-single-server
           port: 9428
