@@ -20,10 +20,11 @@ spec:
     fullnameOverride: traefik-admin
     deployment:
       replicas: 2
-      # Restart the Deployment when kaniop rotates either OAuth2 client_secret.
-      # Env-from-Secret doesn't propagate to running pods otherwise.
+      # Restart the Deployment when kaniop rotates either OAuth2 client_secret
+      # or we rotate the traefik-oidc-auth session encryption key. Env-from-
+      # Secret doesn't propagate to running pods otherwise.
       annotations:
-        secret.reloader.stakater.com/reload: arr-suite-kanidm-oauth2-credentials,ops-suite-kanidm-oauth2-credentials
+        secret.reloader.stakater.com/reload: arr-suite-kanidm-oauth2-credentials,ops-suite-kanidm-oauth2-credentials,traefik-oidc-session-key
     providers:
       kubernetesGateway:
         enabled: true
@@ -91,7 +92,10 @@ spec:
 
     # CLIENT_SECRET keys from the kaniop-emitted Secrets, one per OIDC
     # client. Env-var names are namespaced so additional clients can be
-    # added without collision.
+    # added without collision. OIDC_SESSION_SECRET is the traefik-oidc-auth
+    # plugin's session-state encryption key — shared across both replicas
+    # so cross-pod auth-flow handoffs work (without it each pod uses a
+    # random default and the OAuth2 code exchange fails ~50% of the time).
     env:
       - name: ARR_SUITE_CLIENT_SECRET
         valueFrom:
@@ -103,3 +107,8 @@ spec:
           secretKeyRef:
             name: ops-suite-kanidm-oauth2-credentials
             key: CLIENT_SECRET
+      - name: OIDC_SESSION_SECRET
+        valueFrom:
+          secretKeyRef:
+            name: traefik-oidc-session-key
+            key: SESSION_SECRET
