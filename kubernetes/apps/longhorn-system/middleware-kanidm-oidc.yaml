@@ -23,6 +23,12 @@ spec:
       # replicas. Without this each pod generates its own random default
       # and cross-pod auth-flow handoffs fail.
       Secret: ${OIDC_SESSION_SECRET}
+      # Per-OAuth2-client cookie name. Partitions session cookies by
+      # OAuth2 client identity so an arr-admins session can't satisfy
+      # this Middleware (which gates on ops-admins). Shared with
+      # observability/ on purpose — same ops-suite client, same group
+      # check, so users get real SSO across both ops UIs.
+      CookieNamePrefix: ops-suite
       Provider:
         Url: https://auth.home.kelch.io/oauth2/openid/ops-suite
         ClientId: ops-suite
@@ -34,6 +40,11 @@ spec:
         - email
         - groups
       Authorization:
+        # Re-evaluate group membership on every request, not just at
+        # session creation. Defense in depth — even if a session cookie
+        # were ever cross-presented across Middlewares sharing
+        # .home.kelch.io, this would reject it.
+        CheckOnEveryRequest: true
         AssertClaims:
           - Name: groups
             AnyOf:
