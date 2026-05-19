@@ -79,6 +79,12 @@ spec:
       # see docs/runbooks/longhorn-storage-network-cutover.md.
       storageNetwork: longhorn-system/storage-network
 
+      # Rebuild replicas onto under-utilized nodes when distribution drifts
+      # (e.g. after a node returns from an outage with zero replicas while
+      # peers carry the full set). Longhorn provisions the new replica first,
+      # then drops the surplus, so numberOfReplicas is never undercut mid-move.
+      replicaAutoBalance: best-effort
+
     # Backup target is managed as a BackupTarget CR (backuptarget.yaml in
     # this dir), not via defaultSettings — Longhorn 1.7+ moved backup-target
     # out of the settings space and the chart's defaultSettings.backupTarget
