@@ -21,10 +21,26 @@ spec:
   values:
     replicas: 1
 
+    # Break-glass local admin. Kanidm lives in this same cluster — if it's
+    # down, we still need a way into Grafana to diagnose. The OIDC button
+    # is the everyday path (auto_login=true below); /login?disableAutoLogin=true
+    # falls back to this credential.
     admin:
       existingSecret: grafana-admin
       userKey: admin-user
       passwordKey: admin-password
+
+    # client_secret is rotated by kaniop into grafana-kanidm-oauth2-credentials
+    # (see oauth2-client.yaml). Stakater reloader restarts the Deployment on
+    # rotation so the env-from-Secret value propagates to the running pod.
+    deploymentAnnotations:
+      secret.reloader.stakater.com/reload: grafana-kanidm-oauth2-credentials
+
+    envValueFrom:
+      GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET:
+        secretKeyRef:
+          name: grafana-kanidm-oauth2-credentials
+          key: CLIENT_SECRET
 
     persistence:
       enabled: true
@@ -86,6 +102,27 @@ spec:
         reporting_enabled: false
       log:
         mode: console
+      auth.generic_oauth:
+        enabled: true
+        name: Kanidm
+        icon: signin
+        # scopeMap on the KanidmOAuth2Client restricts the flow to
+        # ops-admins, so first-login auto-provision only creates accounts
+        # for users kanidm has already vetted.
+        allow_sign_up: true
+        # Land users in the OIDC flow on /login. Break-glass admin uses
+        # /login?disableAutoLogin=true to reach the local form.
+        auto_login: true
+        client_id: grafana
+        # client_secret comes from GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET env.
+        scopes: openid profile email groups
+        auth_url: https://auth.home.kelch.io/ui/oauth2
+        token_url: https://auth.home.kelch.io/oauth2/token
+        api_url: https://auth.home.kelch.io/oauth2/openid/grafana/userinfo
+        use_pkce: true
+        # ops-admins → Admin. contains() form keeps role mapping working
+        # if a future scopeMap adds a read-only group.
+        role_attribute_path: contains(groups[*], 'ops-admins@auth.home.kelch.io') && 'Admin' || 'Viewer'
 
     resources:
       requests:

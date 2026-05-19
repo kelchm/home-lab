@@ -5,4 +5,5 @@ resources:
   - ./helmrepository.yaml
   - ./helmrelease.yaml
   - ./secret.sops.yaml
+  - ./oauth2-client.yaml
   - ./httproute.yaml
