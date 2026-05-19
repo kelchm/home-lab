@@ -18,6 +18,12 @@ spec:
       # replicas. Without this each pod generates its own random default
       # and cross-pod auth-flow handoffs fail.
       Secret: ${OIDC_SESSION_SECRET}
+      # Per-OAuth2-client cookie name. Partitions session cookies by
+      # OAuth2 client identity so an ops-admins session can't satisfy
+      # this Middleware (which gates on arr-admins) — without a unique
+      # prefix the three Middlewares sharing .home.kelch.io would
+      # cross-bleed under the default TraefikOidcAuth prefix.
+      CookieNamePrefix: arr-suite
       Provider:
         Url: https://auth.home.kelch.io/oauth2/openid/arr-suite
         ClientId: arr-suite
@@ -29,6 +35,11 @@ spec:
         - email
         - groups
       Authorization:
+        # Re-evaluate group membership on every request, not just at
+        # session creation. Defense in depth — even if a session cookie
+        # were ever cross-presented across Middlewares sharing
+        # .home.kelch.io, this would reject it.
+        CheckOnEveryRequest: true
         AssertClaims:
           - Name: groups
             AnyOf:
