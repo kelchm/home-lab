@@ -24,10 +24,29 @@ spec:
     controller:
       type: daemonset
       hostPID: false
+      # Chart doesn't checksum the config ConfigMap into the pod template,
+      # so HelmRelease upgrades change the mounted config without rolling
+      # the pods. Stakater reloader watches the ConfigMap and triggers
+      # the rollout.
+      extraAnnotations:
+        configmap.reloader.stakater.com/reload: alloy
+      volumes:
+        # Persist Alloy's storage dir (positions file, WAL) across pod
+        # restarts. Without this, every restart re-reads every pod log from
+        # the start and Loki rejects the >7d portion en masse.
+        extra:
+          - name: alloy-data
+            hostPath:
+              path: /var/lib/alloy
+              type: DirectoryOrCreate
 
     alloy:
+      storagePath: /var/lib/alloy
       mounts:
         varlog: true   # mount /var/log on the host so we can tail pod logs
+        extra:
+          - name: alloy-data
+            mountPath: /var/lib/alloy
 
       configMap:
         create: true
