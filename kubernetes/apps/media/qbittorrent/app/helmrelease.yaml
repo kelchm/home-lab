@@ -80,6 +80,20 @@ spec:
             securityContext:
               capabilities:
                 add: ["NET_ADMIN"]
+            lifecycle:
+              # Pod netns persists across sidecar restarts, so an abrupt
+              # gluetun exit (SIGKILL, OOM, internal restart-VPN bailing)
+              # leaves `ip rule 101 → table 51820` behind. The next instance
+              # then fails `ip rule add` with `file exists` and enters a
+              # retry loop that the startup probe can't outwait. Clearing
+              # the leftover rule on start lets gluetun's 15s backoff
+              # succeed on attempt 2. Canonical fix per gluetun-wiki.
+              postStart:
+                exec:
+                  command:
+                    - /bin/sh
+                    - -c
+                    - (ip rule del table 51820; ip -6 rule del table 51820) || true
             probes:
               # Gates qB on tunnel readiness; mirrors gluetun's own Docker
               # HEALTHCHECK (which k8s ignores by default).
