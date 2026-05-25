@@ -33,7 +33,7 @@ spec:
               # renovate: datasource=docker depName=docker.io/jellyfin/jellyfin
               # home-operations doesn't ship jellyfin; using upstream official.
               repository: docker.io/jellyfin/jellyfin
-              tag: 10.11.8
+              tag: 10.11.10
             env:
               TZ: America/New_York
               # Jellyfin uses this for its own self-URL in API responses,
