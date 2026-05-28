@@ -1,0 +1,66 @@
+---
+# In-cluster HTTP MCP server reached by mcpjungle via Service DNS at
+# http://playwright-mcp.ai.svc.cluster.local:8931/mcp. Not on any Gateway —
+# clients should hit mcpjungle, which proxies through.
+#
+# --isolated keeps the browser profile in-memory so no PVC is needed.
+# --no-sandbox follows Microsoft's documented container invocation; the
+# Chromium sandbox needs user-namespace privs that the pod doesn't grant.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: playwright-mcp
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: playwright-mcp
+  interval: 1h
+  values:
+    controllers:
+      playwright-mcp:
+        strategy: Recreate
+        containers:
+          app:
+            image:
+              repository: mcr.microsoft.com/playwright/mcp
+              tag: v0.0.75
+            command: ["node"]
+            args:
+              - /app/cli.js
+              - --headless
+              - --browser=chromium
+              - --no-sandbox
+              - --isolated
+              - --host=0.0.0.0
+              - --port=8931
+            probes:
+              liveness: &probes
+                enabled: true
+                custom: true
+                spec:
+                  tcpSocket:
+                    port: &port 8931
+                  initialDelaySeconds: 15
+                  periodSeconds: 10
+                  timeoutSeconds: 1
+                  failureThreshold: 3
+              readiness: *probes
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities: { drop: ["ALL"] }
+            resources:
+              requests:
+                cpu: 100m
+                memory: 512Mi
+              limits:
+                memory: 2Gi
+    defaultPodOptions:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: { type: RuntimeDefault }
+    service:
+      app:
+        controller: playwright-mcp
+        ports:
+          http:
+            port: *port

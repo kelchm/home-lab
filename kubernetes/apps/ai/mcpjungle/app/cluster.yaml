@@ -1,0 +1,20 @@
+---
+# Postgres backing store for mcpjungle. Single instance — mcpjungle's state is
+# gateway metadata (registered servers, tool groups, enterprise-mode tokens),
+# low write rate. Longhorn snapshot policy on the data PVC handles DR via the
+# existing NFS BackupTarget; CNPG-native PITR would require S3 we don't have.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: mcpjungle-db
+spec:
+  instances: 1
+  storage:
+    size: 10Gi
+    storageClass: longhorn
+  monitoring:
+    enablePodMonitor: true
+  bootstrap:
+    initdb:
+      database: mcpjungle
+      owner: mcpjungle
