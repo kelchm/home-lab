@@ -33,6 +33,10 @@ spec:
               - --isolated
               - --host=0.0.0.0
               - --port=8931
+              # ClusterIP-only Service; the upstream Host-header guard
+              # (designed for DNS rebinding on local browser installs)
+              # rejects the in-cluster FQDN by default.
+              - --allowed-hosts=*
             probes:
               liveness: &probes
                 enabled: true
