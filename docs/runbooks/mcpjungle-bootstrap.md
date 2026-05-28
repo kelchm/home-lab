@@ -113,10 +113,15 @@ Wraps the Digi-Key Product Information API for part lookups, datasheet
 URLs, pricing, availability.
 
 1. Create a Digi-Key developer account at <https://developer.digikey.com>,
-   create an app under Production APIs → Product Information V4, capture
-   the Client ID + Client Secret.
+   create an app under Production APIs → Product Information V4. The
+   portal requires an OAuth Callback URL even though `digikey_mcp` uses
+   the Client Credentials grant (no redirect ever happens at runtime) —
+   `https://localhost` is fine as a placeholder. Capture the Client ID
+   and Client Secret.
 2. Register the MCP with creds embedded in the registration config (they
-   end up in the mcpjungle DB, not in a k8s Secret):
+   end up in the mcpjungle DB, not in a k8s Secret). Env var names are
+   the bare `CLIENT_ID` / `CLIENT_SECRET` that `digikey_mcp` reads, not
+   prefixed ones:
 
 ```bash
 cat <<EOF > /tmp/digikey.json
@@ -127,12 +132,13 @@ cat <<EOF > /tmp/digikey.json
   "command": "uvx",
   "args": ["--from", "git+https://github.com/bengineer19/digikey_mcp", "digikey-mcp"],
   "env": {
-    "DIGIKEY_CLIENT_ID": "${DIGIKEY_CLIENT_ID}",
-    "DIGIKEY_CLIENT_SECRET": "${DIGIKEY_CLIENT_SECRET}"
+    "CLIENT_ID": "${CLIENT_ID}",
+    "CLIENT_SECRET": "${CLIENT_SECRET}",
+    "USE_SANDBOX": "false"
   }
 }
 EOF
-DIGIKEY_CLIENT_ID=... DIGIKEY_CLIENT_SECRET=... mcpjungle register -c /tmp/digikey.json
+CLIENT_ID=... CLIENT_SECRET=... mcpjungle register -c /tmp/digikey.json
 ```
 
 Treat the registration JSON as a secret while it exists on disk — delete
