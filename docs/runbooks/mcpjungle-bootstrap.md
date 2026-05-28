@@ -28,9 +28,35 @@ access token to `~/.mcpjungle.conf` on the machine that ran it. Treat that
 file as you would any other long-lived credential — it's the equivalent of
 the cluster's admin kubeconfig for mcpjungle.
 
-If the file is lost, you can't recover it from the server. Recovery path:
-delete the admin row from the `mcpjungle` DB (see "DR" below) and re-run
-`init-server`.
+If the file is lost, you can't recover it from the server — `init-server`
+refuses to run twice. To re-bootstrap:
+
+1. Take an ad-hoc Longhorn snapshot of the `mcpjungle-db` PVC first
+   (Longhorn UI → Volume → Take Snapshot). Cheap insurance against
+   typing the wrong `DELETE`.
+2. Open a psql shell as the cnpg superuser. The Cluster generates a
+   `mcpjungle-db-superuser` Secret with `username` (= `postgres`) and
+   `password` keys; the pod hostname follows `<cluster>-<ordinal>`:
+
+   ```bash
+   kubectl -n ai exec -it mcpjungle-db-1 -c postgres -- \
+     psql -U postgres -d mcpjungle
+   ```
+
+3. Inspect the schema to identify the admin/user table — mcpjungle's
+   schema is version-specific, so confirm on the live DB before deleting
+   (this runbook does not pin an exact SQL statement because the table
+   name will drift across mcpjungle releases):
+
+   ```sql
+   \dt
+   -- inspect candidate table, e.g.:
+   SELECT * FROM <admin-table>;
+   ```
+
+4. `DELETE` the single admin row, `\q`, then re-run `init-server`. All
+   previously-minted per-client tokens are invalidated (different admin
+   == different signing context); reissue them per the next section.
 
 ## Per-client tokens
 
@@ -138,15 +164,40 @@ documented in `longhorn-backup-restore.md`.
 
 To restore:
 
-1. `flux suspend ks mcpjungle -n ai` (stop reconcile)
-2. `kubectl scale cluster.postgresql.cnpg.io/mcpjungle-db -n ai --replicas=0`
-   — actually CNPG doesn't speak `scale`; use `cnpg.io/reconciliationLoop:
-   disabled` annotation if you need it offline. For a pure PVC swap,
-   delete the Cluster + restore the underlying PVC, then re-apply.
-3. Restore the PVC from Longhorn snapshot per the longhorn runbook.
-4. `flux resume ks mcpjungle -n ai` and let CNPG re-attach.
-5. Verify connectivity: `kubectl logs -n ai deploy/mcpjungle` should show
-   successful DB ping; the `/health` endpoint should return 200.
+1. Stop Flux reconciling the app so nothing fights us:
+
+   ```bash
+   flux suspend ks mcpjungle -n ai
+   ```
+
+2. Hibernate the Cluster — CNPG scales the PG pod to 0 and detaches
+   the PVC, which is what Longhorn's in-place restore requires. Stock
+   kubectl path (no krew plugin needed):
+
+   ```bash
+   kubectl -n ai annotate cluster.postgresql.cnpg.io/mcpjungle-db \
+     cnpg.io/hibernation=on --overwrite
+   # wait for the instance pod to terminate
+   kubectl -n ai wait --for=delete pod/mcpjungle-db-1 --timeout=120s
+   ```
+
+   (Equivalent with the krew plugin:
+   `kubectl cnpg hibernate on mcpjungle-db -n ai`.)
+
+3. Restore the PVC from Longhorn snapshot per
+   `docs/runbooks/longhorn-backup-restore.md` → "Restore in-place over
+   the existing PVC". The PVC name is `mcpjungle-db-1`.
+4. Bring the Cluster back:
+
+   ```bash
+   kubectl -n ai annotate cluster.postgresql.cnpg.io/mcpjungle-db \
+     cnpg.io/hibernation=off --overwrite
+   flux resume ks mcpjungle -n ai
+   ```
+
+5. Verify: the PG pod re-attaches to the restored PVC, mcpjungle
+   reconnects, `/health` returns 200, and the `mcpjungle list mcp-servers`
+   call from the operator laptop returns the expected registrations.
 
 If the restore predates the most recent admin token issuance, re-run
 `init-server` on a fresh machine and reissue client tokens. There's no
