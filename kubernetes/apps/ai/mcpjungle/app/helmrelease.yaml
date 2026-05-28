@@ -53,7 +53,8 @@ spec:
                 memory: 512Mi
     defaultPodOptions:
       securityContext:
-        runAsNonRoot: true
+        # 0.4.5-stdio runs as root (npx/uvx caches in /root); the plain
+        # 0.4.5 distroless image is non-root but lacks the stdio runtime.
         seccompProfile: { type: RuntimeDefault }
     service:
       app:

@@ -56,7 +56,12 @@ spec:
                 memory: 2Gi
     defaultPodOptions:
       securityContext:
+        # Playwright image's USER directive is "node" (non-numeric), which
+        # kubelet's runAsNonRoot admission check can't verify pre-start.
+        # Pin to the node user's numeric UID so the check passes.
         runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
         seccompProfile: { type: RuntimeDefault }
     service:
       app:
