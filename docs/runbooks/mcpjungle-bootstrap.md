@@ -119,9 +119,13 @@ URLs, pricing, availability.
    `https://localhost` is fine as a placeholder. Capture the Client ID
    and Client Secret.
 2. Register the MCP with creds embedded in the registration config (they
-   end up in the mcpjungle DB, not in a k8s Secret). Env var names are
-   the bare `CLIENT_ID` / `CLIENT_SECRET` that `digikey_mcp` reads, not
-   prefixed ones:
+   end up in the mcpjungle DB, not in a k8s Secret). Notes:
+   - Env var names are bare `CLIENT_ID` / `CLIENT_SECRET`, not prefixed.
+   - Points at `kelchm/digikey_mcp@add-console-script` because upstream
+     lacks the `[project.scripts]` entry uvx needs (PR pending).
+   - Do NOT set `USE_SANDBOX`. Upstream's logic is inverted
+     (`USE_SANDBOX = os.getenv(...) == "false"`), so any value other
+     than the literal string `"true"` lands you in sandbox.
 
 ```bash
 cat <<EOF > /tmp/digikey.json
@@ -130,11 +134,10 @@ cat <<EOF > /tmp/digikey.json
   "transport": "stdio",
   "description": "Digi-Key parts catalog lookups",
   "command": "uvx",
-  "args": ["--from", "git+https://github.com/bengineer19/digikey_mcp", "digikey-mcp"],
+  "args": ["--from", "git+https://github.com/kelchm/digikey_mcp@add-console-script", "digikey-mcp"],
   "env": {
     "CLIENT_ID": "${CLIENT_ID}",
-    "CLIENT_SECRET": "${CLIENT_SECRET}",
-    "USE_SANDBOX": "false"
+    "CLIENT_SECRET": "${CLIENT_SECRET}"
   }
 }
 EOF
