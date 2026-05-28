@@ -50,14 +50,84 @@ To revoke: `mcpjungle delete mcp-client claude-code-laptop`.
 
 ## Registering upstream MCP servers
 
-HTTP-based (preferred — runs as a separate workload):
+Two transports. Pick by what the upstream supports:
+
+- **Streamable HTTP** — server runs as its own workload (or is an external
+  SaaS), mcpjungle proxies over HTTP. Higher isolation, separate resource
+  budget. The default choice for anything browser-heavy or stateful.
+- **stdio** — server runs as a subprocess of the mcpjungle pod (`-stdio`
+  image bundles `npx` + `uvx`). Zero extra workloads. Good for thin REST
+  wrappers and the small official servers. Subprocess crashes are scoped to
+  the request, but a runaway subprocess shares the mcpjungle pod's limits.
+
+Registration is a one-shot CLI call against the live server; the result lands
+in the Postgres DB. Re-runs are idempotent on the `name` field (use
+`mcpjungle update mcp-server ...` to change an existing one).
+
+### server-time (official, stdio)
+
+Trivial — no auth, no state, returns timezone-aware current time.
 
 ```bash
-mcpjungle register --name context7 --url https://mcp.context7.com/mcp
+cat <<'EOF' > /tmp/time.json
+{
+  "name": "time",
+  "transport": "stdio",
+  "description": "Current time and timezone conversion",
+  "command": "uvx",
+  "args": ["mcp-server-time"]
+}
+EOF
+mcpjungle register -c /tmp/time.json
 ```
 
-stdio-based (runs inside the mcpjungle pod since we deployed the `-stdio`
-image variant). Refer to upstream docs for the exact config-file schema.
+### digikey_mcp (third-party, stdio, needs Digi-Key API creds)
+
+Wraps the Digi-Key Product Information API for part lookups, datasheet
+URLs, pricing, availability.
+
+1. Create a Digi-Key developer account at <https://developer.digikey.com>,
+   create an app under Production APIs → Product Information V4, capture
+   the Client ID + Client Secret.
+2. Register the MCP with creds embedded in the registration config (they
+   end up in the mcpjungle DB, not in a k8s Secret):
+
+```bash
+cat <<EOF > /tmp/digikey.json
+{
+  "name": "digikey",
+  "transport": "stdio",
+  "description": "Digi-Key parts catalog lookups",
+  "command": "uvx",
+  "args": ["--from", "git+https://github.com/bengineer19/digikey_mcp", "digikey-mcp"],
+  "env": {
+    "DIGIKEY_CLIENT_ID": "${DIGIKEY_CLIENT_ID}",
+    "DIGIKEY_CLIENT_SECRET": "${DIGIKEY_CLIENT_SECRET}"
+  }
+}
+EOF
+DIGIKEY_CLIENT_ID=... DIGIKEY_CLIENT_SECRET=... mcpjungle register -c /tmp/digikey.json
+```
+
+Treat the registration JSON as a secret while it exists on disk — delete
+after registration. To rotate creds, re-register or use
+`mcpjungle update mcp-server digikey -c <new-config>`.
+
+### playwright-mcp (deployed as its own workload, HTTP)
+
+Already running in-cluster (`kubernetes/apps/ai/playwright-mcp/`). Just
+point mcpjungle at the Service:
+
+```bash
+mcpjungle register \
+  --name playwright \
+  --url http://playwright-mcp.ai.svc.cluster.local:8931/mcp \
+  --description "Headless Chromium browser automation"
+```
+
+No bearer token — playwright-mcp doesn't auth, and the URL is only
+reachable from inside the cluster. mcpjungle's per-client tokens are the
+boundary.
 
 ## DR — Longhorn snapshot restore
 

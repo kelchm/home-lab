@@ -9,3 +9,4 @@ components:
 resources:
   - ./namespace.yaml
   - ./mcpjungle/ks.yaml
+  - ./playwright-mcp/ks.yaml
