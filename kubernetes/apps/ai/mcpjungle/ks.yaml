@@ -1,0 +1,27 @@
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: mcpjungle
+spec:
+  dependsOn:
+    - name: cnpg-operator         # CNPG CRDs must exist before Cluster CR applies
+      namespace: cnpg-system
+  healthChecks:
+    - apiVersion: helm.toolkit.fluxcd.io/v2
+      kind: HelmRelease
+      name: mcpjungle
+      namespace: ai
+  interval: 1h
+  path: ./kubernetes/apps/ai/mcpjungle/app
+  postBuild:
+    substituteFrom:
+      - name: cluster-secrets
+        kind: Secret
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+    namespace: flux-system
+  targetNamespace: ai
+  wait: false
