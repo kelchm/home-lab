@@ -23,6 +23,12 @@ spec:
               # Docker-Compose hack to rewrite localhost references; meaningless
               # in K8s and would mangle our Service DNS rewrites — keep off.
               TRANSFORM_LOCALHOST_TO_DOCKER_INTERNAL: "false"
+              # Entrypoint script blocks on `wait-for-postgres` using these vars
+              # directly, independent of DATABASE_URL — defaults are the
+              # docker-compose service name `postgres:5432` which doesn't exist
+              # here. Point at CNPG's read/write Service.
+              POSTGRES_HOST: metamcp-db-rw
+              POSTGRES_PORT: "5432"
               DATABASE_URL:
                 valueFrom:
                   secretKeyRef:
