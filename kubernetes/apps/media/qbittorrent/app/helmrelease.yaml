@@ -118,7 +118,7 @@ spec:
             image:
               # renovate: datasource=docker depName=ghcr.io/home-operations/qbittorrent
               repository: ghcr.io/home-operations/qbittorrent
-              tag: 5.2.0
+              tag: 5.2.1
             # Force umask 002 so qBittorrent writes files at 664
             # (group-writable). Required for *arr atomic-import hardlinks
             # across UIDs: protected_hardlinks blocks link() when the
