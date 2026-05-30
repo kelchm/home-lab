@@ -1,0 +1,5 @@
+{
+  "description": "Claude Desktop client configuration for MCP Jungle",
+  "allow": ["time", "playwright", "playwright-stealth", "digikey"],
+  "tokenRef": "op://Private/mcpjungle-claude-desktop/credential"
+}
