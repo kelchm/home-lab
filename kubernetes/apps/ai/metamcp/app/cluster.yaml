@@ -1,0 +1,20 @@
+---
+# Postgres backing store for MetaMCP. Single instance — MetaMCP's state is
+# gateway metadata (registered servers, namespaces, API keys, OIDC sessions
+# via Better Auth), low write rate. Longhorn snapshot policy on the data PVC
+# handles DR via the existing NFS BackupTarget.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: metamcp-db
+spec:
+  instances: 1
+  storage:
+    size: 10Gi
+    storageClass: longhorn
+  monitoring:
+    enablePodMonitor: true
+  bootstrap:
+    initdb:
+      database: metamcp
+      owner: metamcp

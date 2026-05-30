@@ -1,0 +1,68 @@
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: metamcp
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: metamcp
+  interval: 1h
+  values:
+    controllers:
+      metamcp:
+        strategy: Recreate
+        containers:
+          app:
+            image:
+              repository: ghcr.io/metatool-ai/metamcp
+              tag: 2.0.6
+            env:
+              APP_URL: https://metamcp.home.kelch.io
+              NEXT_PUBLIC_APP_URL: https://metamcp.home.kelch.io
+              # Docker-Compose hack to rewrite localhost references; meaningless
+              # in K8s and would mangle our Service DNS rewrites — keep off.
+              TRANSFORM_LOCALHOST_TO_DOCKER_INTERNAL: "false"
+              DATABASE_URL:
+                valueFrom:
+                  secretKeyRef:
+                    name: metamcp-db-app
+                    key: uri
+              BETTER_AUTH_SECRET:
+                valueFrom:
+                  secretKeyRef:
+                    name: metamcp-secrets
+                    key: BETTER_AUTH_SECRET
+            probes:
+              liveness: &probes
+                enabled: true
+                custom: true
+                spec:
+                  tcpSocket:
+                    port: &port 12008
+                  initialDelaySeconds: 30
+                  periodSeconds: 10
+                  timeoutSeconds: 1
+                  failureThreshold: 3
+              readiness: *probes
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities: { drop: ["ALL"] }
+            resources:
+              requests:
+                cpu: 100m
+                memory: 256Mi
+              limits:
+                memory: 1Gi
+    defaultPodOptions:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+    service:
+      app:
+        controller: metamcp
+        ports:
+          http:
+            port: *port
