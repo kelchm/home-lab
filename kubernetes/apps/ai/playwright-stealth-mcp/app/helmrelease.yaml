@@ -21,7 +21,7 @@ spec:
           app:
             image:
               repository: ghcr.io/kelchm/playwright-stealth-mcp
-              tag: v0.0.75
+              tag: v0.0.75-1
             command: ["node"]
             args:
               - /app/cli.js
