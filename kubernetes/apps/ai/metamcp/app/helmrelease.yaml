@@ -62,9 +62,9 @@ spec:
                 memory: 1Gi
     defaultPodOptions:
       securityContext:
-        runAsNonRoot: true
-        runAsUser: 1000
-        runAsGroup: 1000
+        # Image runs migrations via pnpm which expects to mkdir under $HOME;
+        # default $HOME is `/` (root-as-default). UID 1000 can't write there
+        # and the migration step crashes. Same shape as mcpjungle 0.4.5-stdio.
         seccompProfile: { type: RuntimeDefault }
     service:
       app:
