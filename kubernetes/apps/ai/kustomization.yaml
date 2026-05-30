@@ -10,3 +10,4 @@ resources:
   - ./namespace.yaml
   - ./mcpjungle/ks.yaml
   - ./playwright-mcp/ks.yaml
+  - ./playwright-stealth-mcp/ks.yaml
