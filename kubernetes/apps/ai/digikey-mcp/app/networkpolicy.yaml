@@ -1,0 +1,24 @@
+---
+# Default-deny shape: only MCP gateways in the ai namespace reach the
+# digikey-mcp HTTP transport. Egress is unrestricted so the server can
+# call api.digikey.com and resolve DNS.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: digikey-mcp
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: digikey-mcp
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: ai
+            app.kubernetes.io/name: mcpjungle
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: ai
+            app.kubernetes.io/name: metamcp
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
