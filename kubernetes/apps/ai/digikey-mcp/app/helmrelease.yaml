@@ -1,6 +1,6 @@
 ---
 # In-cluster HTTP MCP server reached by mcpjungle via Service DNS at
-# http://digikey-mcp.ai.svc.cluster.local:8000/mcp/. Not on any Gateway.
+# http://digikey-mcp.ai.svc.cluster.local:8000/mcp. Not on any Gateway.
 #
 # MyLists tools need 3-legged OAuth — DIGIKEY_REFRESH_TOKEN_SEED is
 # consumed once from the Secret on first call, then the rotating refresh
