@@ -76,7 +76,8 @@ LAN-IN section):
 VLAN 10 (Main) is intentionally allowed by the default posture and needs no
 explicit rule. If/when a more restrictive default-deny posture is adopted
 across the network, replace these denies with the corresponding allows from
-Main and revisit the per-pool firewall posture in `docs/bgp-plan.md`.
+Main and revisit the per-pool firewall posture in
+[`docs/architecture.md`](../../docs/architecture.md#lb-pool-allocation).
 
 Validate by running `curl --max-time 2 http://10.32.130.99/` from a device on
 each restricted VLAN — should time out or be refused. The synthetic test

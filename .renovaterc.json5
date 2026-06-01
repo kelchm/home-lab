@@ -14,19 +14,19 @@
   schedule: ["every weekend"],
   ignorePaths: ["**/*.sops.*"],
   flux: {
-    managerFilePatterns: ["/(^|/)kubernetes/.+\\.ya?ml(?:\\.j2)?$/"],
+    managerFilePatterns: ["/(^|/)kubernetes/.+\\.ya?ml$/"],
   },
   helmfile: {
     managerFilePatterns: [
-      "/(^|/)helmfile\\.ya?ml(?:\\.gotmpl)?(?:\\.j2)?$/",
-      "/(^|/)helmfile\\.d/.+\\.ya?ml(?:\\.gotmpl)?(?:\\.j2)?$/",
+      "/(^|/)helmfile\\.ya?ml(?:\\.gotmpl)?$/",
+      "/(^|/)helmfile\\.d/.+\\.ya?ml(?:\\.gotmpl)?$/",
     ],
   },
   kubernetes: {
-    managerFilePatterns: ["/(^|/)kubernetes/.+\\.ya?ml(?:\\.j2)?$/"],
+    managerFilePatterns: ["/(^|/)kubernetes/.+\\.ya?ml$/"],
   },
   kustomize: {
-    managerFilePatterns: ["/^kustomization\\.ya?ml(?:\\.j2)?$/"],
+    managerFilePatterns: ["/^kustomization\\.ya?ml$/"],
   },
   packageRules: [
     {
@@ -139,9 +139,9 @@
       description: "Process annotated dependencies",
       customType: "regex",
       managerFilePatterns: [
-        "/(^|/).+\\.env(?:\\.j2)?$/",
-        "/(^|/).+\\.sh(?:\\.j2)?$/",
-        "/(^|/).+\\.ya?ml(?:\\.j2)?$/",
+        "/(^|/).+\\.env$/",
+        "/(^|/).+\\.sh$/",
+        "/(^|/).+\\.ya?ml$/",
       ],
       matchStrings: [
         // # renovate: datasource=github-releases depName=k3s-io/k3s
@@ -161,7 +161,7 @@
       customType: "regex",
       description: "Process OCI dependencies",
       managerFilePatterns: [
-        "/\\.yaml(?:\\.j2)?$/",
+        "/\\.yaml$/",
       ],
       matchStrings: [
         "oci://(?<depName>[^:]+):(?<currentValue>\\S+)",
