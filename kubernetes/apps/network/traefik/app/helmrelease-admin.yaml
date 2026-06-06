@@ -88,7 +88,7 @@ spec:
         traefik-oidc-auth:
           moduleName: github.com/sevensolutions/traefik-oidc-auth
           # renovate: datasource=github-releases depName=sevensolutions/traefik-oidc-auth
-          version: v0.20.0
+          version: v0.20.1
 
     # CLIENT_SECRET keys from the kaniop-emitted Secrets, one per OIDC
     # client. Env-var names are namespaced so additional clients can be
