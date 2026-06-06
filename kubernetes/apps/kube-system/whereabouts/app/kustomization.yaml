@@ -18,4 +18,4 @@ resources:
 
 images:
   - name: ghcr.io/k8snetworkplumbingwg/whereabouts
-    newTag: v0.9.3
+    newTag: v0.9.4
