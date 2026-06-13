@@ -23,7 +23,7 @@ spec:
           app:
             image:
               repository: mcr.microsoft.com/playwright/mcp
-              tag: v0.0.75
+              tag: v0.0.76
             command: ["node"]
             args:
               - /app/cli.js
