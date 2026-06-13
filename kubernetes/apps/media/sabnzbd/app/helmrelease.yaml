@@ -22,7 +22,7 @@ spec:
             image:
               # renovate: datasource=docker depName=ghcr.io/home-operations/sabnzbd
               repository: ghcr.io/home-operations/sabnzbd
-              tag: 5.0.3
+              tag: 5.0.4
             env:
               TZ: America/New_York
               # The home-operations entrypoint maps this to host_whitelist in
