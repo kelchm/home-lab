@@ -1,8 +1,7 @@
 ---
 # LAN-only at metamcp.home.kelch.io via the admin gateway. No Cloudflare, no
-# public DNS. Better Auth (the auth framework MetaMCP uses) handles login via
-# API keys for MCP clients and OIDC for the web UI; LAN-only is the boundary
-# for the moment until kanidm OIDC client is wired up.
+# public DNS. Web-UI login is OIDC via kanidm (oauth2-client.yaml); MetaMCP is
+# then the OAuth provider for MCP clients. LAN-only is the network boundary.
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:

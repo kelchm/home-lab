@@ -1,0 +1,24 @@
+---
+# OIDC client for MetaMCP's web-UI login (better-auth genericOAuth), federated
+# to kanidm. kaniop emits the client_secret into metamcp-kanidm-oauth2-credentials
+# in this namespace; the HelmRelease mounts it as OIDC_CLIENT_SECRET. Once a human
+# is signed in via kanidm, MetaMCP is itself the OAuth provider for MCP clients
+# (Claude Code/Desktop), so no static client token lives in any client config.
+apiVersion: kaniop.rs/v1beta1
+kind: KanidmOAuth2Client
+metadata:
+  name: metamcp
+spec:
+  kanidmRef:
+    name: kanidm
+    namespace: identity
+  displayname: MetaMCP
+  origin: https://metamcp.home.kelch.io
+  redirectUrl:
+    - https://metamcp.home.kelch.io/api/auth/oauth2/callback/oidc
+  scopeMap:
+    - group: ops-admins
+      scopes:
+        - openid
+        - profile
+        - email
