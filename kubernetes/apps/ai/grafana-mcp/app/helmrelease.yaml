@@ -1,0 +1,79 @@
+---
+# In-cluster HTTP MCP server reached by metamcp via Service DNS at
+# http://grafana-mcp.ai.svc.cluster.local:8000/mcp. Not on any Gateway.
+#
+# Read-only window into Grafana and every datasource it fronts (Prometheus,
+# VictoriaMetrics, Loki, VictoriaLogs). Two-layer least privilege: a Grafana
+# Viewer service-account token (grafana-mcp-secrets) caps the Grafana-API blast
+# radius, and --disable-write keeps mutating tools out of the model's tool list.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: grafana-mcp
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: grafana-mcp
+  interval: 1h
+  values:
+    controllers:
+      grafana-mcp:
+        strategy: Recreate
+        containers:
+          app:
+            image:
+              # No v-prefix and no ghcr mirror; Docker Hub is the only registry.
+              repository: docker.io/grafana/mcp-grafana
+              tag: 0.16.0
+            # Image ENTRYPOINT defaults to SSE on path /; override to
+            # streamable-http and pin the endpoint path to the Service-DNS
+            # convention (default is / which would 404).
+            args:
+              - -t
+              - streamable-http
+              - --address
+              - 0.0.0.0:8000
+              - --endpoint-path
+              - /mcp
+              - --disable-write
+            env:
+              # Grafana Service in observability is port 80.
+              GRAFANA_URL: http://grafana.observability.svc.cluster.local
+            envFrom:
+              - secretRef:
+                  name: grafana-mcp-secrets
+            probes:
+              liveness: &probes
+                enabled: true
+                custom: true
+                spec:
+                  tcpSocket:
+                    port: &port 8000
+                  initialDelaySeconds: 10
+                  periodSeconds: 10
+                  timeoutSeconds: 1
+                  failureThreshold: 3
+              readiness: *probes
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities: { drop: ["ALL"] }
+            resources:
+              requests:
+                cpu: 25m
+                memory: 64Mi
+              limits:
+                memory: 256Mi
+    defaultPodOptions:
+      securityContext:
+        # Image USER is mcp-grafana UID 1000; pin numerically so kubelet's
+        # runAsNonRoot admission check passes pre-start.
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+    service:
+      app:
+        controller: grafana-mcp
+        ports:
+          http:
+            port: *port

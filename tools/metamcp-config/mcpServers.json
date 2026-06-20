@@ -1,0 +1,25 @@
+{
+  "mcpServers": {
+    "time": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": ["mcp-server-time"],
+      "description": "Time/timezone utility. stdio runs inside the metamcp pod via the bundled uvx toolchain."
+    },
+    "digikey": {
+      "type": "streamable_http",
+      "url": "http://digikey-mcp.ai.svc.cluster.local:8000/mcp",
+      "description": "DigiKey component search + MyLists (3-legged OAuth, rotating token cached on the backend PVC)."
+    },
+    "playwright-stealth": {
+      "type": "streamable_http",
+      "url": "http://playwright-stealth-mcp.ai.svc.cluster.local:8931/mcp",
+      "description": "Stealth headless-browser automation. Highest prompt-injection surface; isolate in the 'browser' namespace."
+    },
+    "grafana": {
+      "type": "streamable_http",
+      "url": "http://grafana-mcp.ai.svc.cluster.local:8000/mcp",
+      "description": "Read-only Grafana. Queries Prometheus/VictoriaMetrics/Loki/VictoriaLogs through Grafana datasources."
+    }
+  }
+}

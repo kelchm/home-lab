@@ -9,6 +9,7 @@ components:
 resources:
   - ./namespace.yaml
   - ./digikey-mcp/ks.yaml
+  - ./grafana-mcp/ks.yaml
   - ./mcpjungle/ks.yaml
   - ./metamcp/ks.yaml
   - ./playwright-mcp/ks.yaml
