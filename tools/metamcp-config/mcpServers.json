@@ -20,6 +20,16 @@
       "type": "streamable_http",
       "url": "http://grafana-mcp.ai.svc.cluster.local:8000/mcp",
       "description": "Read-only Grafana. Queries Prometheus/VictoriaMetrics/Loki/VictoriaLogs through Grafana datasources."
+    },
+    "flux-operator-mcp": {
+      "type": "streamable_http",
+      "url": "http://flux-operator-mcp.ai.svc.cluster.local:9090/mcp",
+      "description": "Read-only Flux GitOps introspection. Traces ResourceSets/HelmReleases/Kustomizations/sources to workloads and pod logs; diffs Git vs cluster."
+    },
+    "kubernetes-mcp": {
+      "type": "streamable_http",
+      "url": "http://kubernetes-mcp.ai.svc.cluster.local:8080/mcp",
+      "description": "Read-only Kubernetes introspection for the CRDs Flux doesn't model (Cilium, Longhorn, kaniop, Gateway API, Traefik, cert-manager, CNPG)."
     }
   }
 }
