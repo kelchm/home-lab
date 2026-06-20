@@ -17,7 +17,7 @@ spec:
             image:
               # renovate: datasource=docker depName=ghcr.io/home-operations/sonarr
               repository: ghcr.io/home-operations/sonarr
-              tag: 4.0.17.2967
+              tag: 4.0.17.2969
             env:
               TZ: America/New_York
               SONARR__AUTH__METHOD: External
