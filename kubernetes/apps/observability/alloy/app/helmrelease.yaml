@@ -51,12 +51,11 @@ spec:
       configMap:
         create: true
         content: |
-          // Discover pods cluster-wide so we can map metadata onto log
-          // files. Each DaemonSet instance gets the full pod list, but
-          // `local.file_match` below only matches files actually present
-          // on the local node — slight discovery overhead vs node-scoped
-          // selectors, but avoids the env-var-vs-field-selector landmine
-          // (HOSTNAME is the pod name, not the node name).
+          // Discover pods, then keep only this node's via the relabel below.
+          // Node-scoping is required for correctness: with the full cluster
+          // pod list, local.file_match mis-correlates the bloated target set
+          // against the few log files present on the node and attaches one
+          // pod's file to another pod's labels.
           discovery.kubernetes "pods" {
             role = "pod"
           }
@@ -66,6 +65,13 @@ spec:
           discovery.relabel "pod_logs" {
             targets = discovery.kubernetes.pods.targets
 
+            // Keep only pods on this node. K8S_NODE_NAME is injected by the
+            // chart from spec.nodeName.
+            rule {
+              source_labels = ["__meta_kubernetes_pod_node_name"]
+              regex         = sys.env("K8S_NODE_NAME")
+              action        = "keep"
+            }
             rule {
               source_labels = ["__meta_kubernetes_namespace"]
               target_label  = "namespace"
