@@ -1,0 +1,21 @@
+---
+# Default-deny shape: only MCP gateways in the ai namespace reach the
+# open-meteo-mcp HTTP transport. Egress is unrestricted so the server can
+# resolve DNS and reach the Open-Meteo API subdomains over HTTPS.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: open-meteo-mcp
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: open-meteo-mcp
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: ai
+            app.kubernetes.io/name: metamcp
+      toPorts:
+        - ports:
+            - port: "3000"
+              protocol: TCP

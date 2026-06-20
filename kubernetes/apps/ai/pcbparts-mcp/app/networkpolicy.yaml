@@ -1,0 +1,21 @@
+---
+# Default-deny shape: only MCP gateways in the ai namespace reach the
+# pcbparts-mcp HTTP transport. Egress is unrestricted so the server can resolve
+# DNS and reach JLCPCB/EasyEDA over HTTPS.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: pcbparts-mcp
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: pcbparts-mcp
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: ai
+            app.kubernetes.io/name: metamcp
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP

@@ -1,0 +1,63 @@
+---
+# In-cluster HTTP MCP server reached by metamcp via Service DNS at
+# http://open-meteo-mcp.ai.svc.cluster.local:3000/mcp. Not on any Gateway.
+#
+# Read-only weather over the free Open-Meteo APIs (forecast/archive/air-quality/
+# marine/geocoding). No API key. The image bakes TRANSPORT=http; pinned here too.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: open-meteo-mcp
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: open-meteo-mcp
+  interval: 1h
+  values:
+    controllers:
+      open-meteo-mcp:
+        containers:
+          app:
+            image:
+              # Container tags are unprefixed (1.6.1, not v1.6.1).
+              repository: ghcr.io/cmer81/open-meteo-mcp
+              tag: "1.6.1"
+            env:
+              TRANSPORT: http
+              PORT: "3000"
+            probes:
+              liveness: &probes
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: /health
+                    port: &port 3000
+                  initialDelaySeconds: 15
+                  periodSeconds: 10
+                  timeoutSeconds: 1
+                  failureThreshold: 3
+              readiness: *probes
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities: { drop: ["ALL"] }
+            resources:
+              requests:
+                cpu: 25m
+                memory: 64Mi
+              limits:
+                memory: 256Mi
+    defaultPodOptions:
+      securityContext:
+        # Image USER is nodejs (UID 1001); pin to the repo-standard numeric UID.
+        # Stateless with no writable volume, so no file-ownership conflict.
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+    service:
+      app:
+        controller: open-meteo-mcp
+        ports:
+          http:
+            port: *port

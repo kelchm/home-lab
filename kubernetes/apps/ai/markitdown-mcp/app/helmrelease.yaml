@@ -1,0 +1,70 @@
+---
+# In-cluster HTTP MCP server reached by metamcp via Service DNS at
+# http://markitdown-mcp.ai.svc.cluster.local:3001/mcp. Not on any Gateway.
+#
+# Read-only file/URL -> Markdown conversion (one tool). The server binds
+# 127.0.0.1 by default, so --host 0.0.0.0 is required. Only a :latest tag is
+# published (Docker MCP Catalog), so the image is pinned by digest.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: markitdown-mcp
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: markitdown-mcp
+  interval: 1h
+  values:
+    controllers:
+      markitdown-mcp:
+        containers:
+          app:
+            image:
+              repository: docker.io/mcp/markitdown
+              # Only :latest is published; pin the digest for reproducibility.
+              tag: latest@sha256:200809df27ad8f73b08706842ae7a35b3f5dc4c165dd6f1e7eef70613a98dd43
+            # Image ENTRYPOINT is ["markitdown-mcp"]; supply args only.
+            args:
+              - --http
+              - --host
+              - "0.0.0.0"
+              - --port
+              - "3001"
+            env:
+              # 3rd-party plugins are baked on in this image; disable them.
+              MARKITDOWN_ENABLE_PLUGINS: "false"
+            probes:
+              liveness: &probes
+                enabled: true
+                custom: true
+                spec:
+                  tcpSocket:
+                    port: &port 3001
+                  initialDelaySeconds: 15
+                  periodSeconds: 10
+                  timeoutSeconds: 1
+                  failureThreshold: 3
+              readiness: *probes
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities: { drop: ["ALL"] }
+            resources:
+              requests:
+                cpu: 50m
+                memory: 128Mi
+              limits:
+                memory: 512Mi
+    defaultPodOptions:
+      securityContext:
+        # Image USER is nobody:nogroup (non-numeric); pin numeric UID so the
+        # runAsNonRoot admission check passes. Stateless; /tmp is writable.
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+    service:
+      app:
+        controller: markitdown-mcp
+        ports:
+          http:
+            port: *port
