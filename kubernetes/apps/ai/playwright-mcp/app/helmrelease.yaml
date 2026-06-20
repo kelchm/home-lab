@@ -1,7 +1,7 @@
 ---
-# In-cluster HTTP MCP server reached by mcpjungle via Service DNS at
+# In-cluster HTTP MCP server reached by metamcp via Service DNS at
 # http://playwright-mcp.ai.svc.cluster.local:8931/mcp. Not on any Gateway —
-# clients should hit mcpjungle, which proxies through.
+# clients should hit metamcp, which proxies through.
 #
 # --isolated keeps the browser profile in-memory so no PVC is needed.
 # --no-sandbox follows Microsoft's documented container invocation; the
