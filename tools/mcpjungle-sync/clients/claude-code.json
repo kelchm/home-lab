@@ -1,5 +1,0 @@
-{
-  "description": "Claude Code on the daily driver laptop",
-  "allow": ["time", "playwright", "playwright-stealth", "digikey"],
-  "tokenRef": "op://Private/mcpjungle-claude-code/credential"
-}
