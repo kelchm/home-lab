@@ -1,9 +1,12 @@
 ---
 # Read-only grant for the app-template-created kubernetes-mcp ServiceAccount.
 # The built-in `view` ClusterRole covers core/apps/batch/networking reads and
-# excludes Secrets; the supplemental role adds the CRD groups present in this
-# cluster that `view` does not aggregate. resources:["*"] stays read-only via
-# get/list/watch verbs and future-proofs new kinds in groups already installed.
+# excludes Secrets; the supplemental role adds the core `nodes` resource (which
+# `view` omits) plus the CRD groups present in this cluster that `view` does not
+# aggregate. resources:["*"] stays read-only via get/list/watch verbs and
+# future-proofs new kinds in groups already installed. nodes/proxy is
+# deliberately NOT granted — node logs/stats are served by Grafana/Loki/
+# Prometheus and the kubelet proxy is an escalation-adjacent grant.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
@@ -22,6 +25,9 @@ kind: ClusterRole
 metadata:
   name: kubernetes-mcp-crd-view
 rules:
+  - apiGroups: [""] # core nodes (view excludes them); enables node listing + nodes_top
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch"]
   - apiGroups: ["cilium.io"] # Cilium policies, endpoints, identities
     resources: ["*"]
     verbs: ["get", "list", "watch"]
