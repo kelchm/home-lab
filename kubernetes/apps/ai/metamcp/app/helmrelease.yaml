@@ -11,6 +11,10 @@ spec:
   values:
     controllers:
       metamcp:
+        # kaniop rotates the OIDC client_secret into metamcp-kanidm-oauth2-credentials;
+        # Reloader restarts the pod so OIDC_CLIENT_SECRET propagates from the Secret.
+        annotations:
+          secret.reloader.stakater.com/reload: metamcp-kanidm-oauth2-credentials
         strategy: Recreate
         containers:
           app:
@@ -39,6 +43,19 @@ spec:
                   secretKeyRef:
                     name: metamcp-secrets
                     key: BETTER_AUTH_SECRET
+              # OIDC SSO for the web UI, federated to kanidm. better-auth derives
+              # the callback as ${APP_URL}/api/auth/oauth2/callback/oidc, which must
+              # match redirectUrl in oauth2-client.yaml. PKCE: kanidm advertises S256.
+              OIDC_CLIENT_ID: metamcp
+              OIDC_DISCOVERY_URL: https://auth.home.kelch.io/oauth2/openid/metamcp/.well-known/openid-configuration
+              OIDC_AUTHORIZATION_URL: https://auth.home.kelch.io/ui/oauth2
+              OIDC_SCOPES: openid email profile
+              OIDC_PKCE: "true"
+              OIDC_CLIENT_SECRET:
+                valueFrom:
+                  secretKeyRef:
+                    name: metamcp-kanidm-oauth2-credentials
+                    key: CLIENT_SECRET
             probes:
               liveness: &probes
                 enabled: true
