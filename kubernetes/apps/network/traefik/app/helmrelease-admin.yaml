@@ -8,7 +8,7 @@ spec:
   chart:
     spec:
       chart: traefik
-      version: 39.0.9
+      version: 41.0.0
       sourceRef:
         kind: HelmRepository
         name: traefik
@@ -46,12 +46,12 @@ spec:
       enabled: false
     service:
       enabled: true
-      type: LoadBalancer
       labels:
         lb-pool: admin-prod
       annotations:
         lbipam.cilium.io/ips: 10.32.130.1
       spec:
+        type: LoadBalancer
         externalTrafficPolicy: Cluster
     ports:
       web:
@@ -74,11 +74,10 @@ spec:
         serviceMonitor:
           enabled: true
           namespace: network
-    logs:
-      general:
-        level: INFO
-      access:
-        enabled: true
+    log:
+      level: INFO
+    accessLog:
+      enabled: true
 
     # OIDC RP plugin loaded via yaegi. The kanidm-oidc Middleware references
     # this plugin name. Plugin failure mode: load error fails traefik-admin
