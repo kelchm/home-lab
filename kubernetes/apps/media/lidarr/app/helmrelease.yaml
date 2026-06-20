@@ -17,7 +17,7 @@ spec:
             image:
               # renovate: datasource=docker depName=ghcr.io/home-operations/lidarr
               repository: ghcr.io/home-operations/lidarr
-              tag: 3.1.2.4938
+              tag: 3.1.3.4968
             env:
               TZ: America/New_York
               LIDARR__AUTH__METHOD: External
