@@ -1,0 +1,57 @@
+---
+# Read-only grant for the chart-created flux-operator-mcp ServiceAccount,
+# replacing the chart's cluster-admin binding (rbac.create:false). The built-in
+# `view` ClusterRole covers core/apps/Flux-toolkit reads and excludes Secrets;
+# the supplemental role adds the CRDs `view` does not aggregate.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: flux-operator-mcp-view
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: view
+subjects:
+  - kind: ServiceAccount
+    name: flux-operator-mcp
+    namespace: ai
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: flux-operator-mcp-extra
+rules:
+  - apiGroups: ["kustomize.toolkit.fluxcd.io"] # Flux Kustomizations
+    resources: ["kustomizations"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["helm.toolkit.fluxcd.io"] # Flux HelmReleases
+    resources: ["helmreleases"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["source.toolkit.fluxcd.io"] # Flux sources
+    resources: ["gitrepositories", "ocirepositories", "helmrepositories", "helmcharts", "buckets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["notification.toolkit.fluxcd.io"] # Flux notifications
+    resources: ["alerts", "providers", "receivers"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["fluxcd.controlplane.io"] # flux-operator CRDs; never aggregated into view
+    resources: ["fluxinstances", "fluxreports", "resourcesets", "resourcesetinputproviders"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apiextensions.k8s.io"] # CRD discovery for get_kubernetes_api_versions
+    resources: ["customresourcedefinitions"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["metrics.k8s.io"] # pod/node metrics for get_kubernetes_metrics
+    resources: ["pods", "nodes"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: flux-operator-mcp-extra
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: flux-operator-mcp-extra
+subjects:
+  - kind: ServiceAccount
+    name: flux-operator-mcp
+    namespace: ai

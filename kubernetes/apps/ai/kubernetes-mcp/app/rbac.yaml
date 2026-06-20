@@ -1,0 +1,71 @@
+---
+# Read-only grant for the app-template-created kubernetes-mcp ServiceAccount.
+# The built-in `view` ClusterRole covers core/apps/batch/networking reads and
+# excludes Secrets; the supplemental role adds the CRD groups present in this
+# cluster that `view` does not aggregate. resources:["*"] stays read-only via
+# get/list/watch verbs and future-proofs new kinds in groups already installed.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kubernetes-mcp-view
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: view
+subjects:
+  - kind: ServiceAccount
+    name: kubernetes-mcp
+    namespace: ai
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kubernetes-mcp-crd-view
+rules:
+  - apiGroups: ["cilium.io"] # Cilium policies, endpoints, identities
+    resources: ["*"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["longhorn.io"] # Longhorn volumes, replicas, engines, backups
+    resources: ["*"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["kaniop.rs"] # kanidm/kaniop CRDs
+    resources: ["*"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["gateway.networking.k8s.io"] # Gateway API
+    resources: ["*"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["traefik.io"] # Traefik IngressRoute/Middleware/TraefikService
+    resources: ["*"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: # Flux GitOps CRs
+      - "source.toolkit.fluxcd.io"
+      - "helm.toolkit.fluxcd.io"
+      - "kustomize.toolkit.fluxcd.io"
+      - "notification.toolkit.fluxcd.io"
+    resources: ["*"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["cert-manager.io"] # Certificates, Issuers
+    resources: ["*"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["postgresql.cnpg.io"] # CNPG clusters
+    resources: ["*"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["k8s.cni.cncf.io"] # Multus NetworkAttachmentDefinition
+    resources: ["*"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["externaldns.k8s.io"] # DNSEndpoint
+    resources: ["*"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kubernetes-mcp-crd-view
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kubernetes-mcp-crd-view
+subjects:
+  - kind: ServiceAccount
+    name: kubernetes-mcp
+    namespace: ai
