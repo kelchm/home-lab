@@ -9,6 +9,9 @@ components:
 resources:
   - ./namespace.yaml
   - ./digikey-mcp/ks.yaml
+  - ./flux-operator-mcp/ks.yaml
+  - ./grafana-mcp/ks.yaml
+  - ./kubernetes-mcp/ks.yaml
   - ./metamcp/ks.yaml
   - ./playwright-mcp/ks.yaml
   - ./playwright-stealth-mcp/ks.yaml

@@ -1,0 +1,70 @@
+---
+# In-cluster HTTP MCP server reached by metamcp via Service DNS at
+# http://kubernetes-mcp.ai.svc.cluster.local:8080/mcp. Not on any Gateway.
+#
+# Read-only Kubernetes introspection for the CRDs Flux doesn't model (Cilium,
+# Longhorn, Kanidm, Traefik, cert-manager, CNPG). --read-only refuses writes and
+# --disable-destructive drops delete/update tools; the durable boundary is the
+# read-only ServiceAccount in rbac.yaml. A single --port enables /mcp + /sse.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: kubernetes-mcp
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: kubernetes-mcp
+  interval: 1h
+  values:
+    controllers:
+      kubernetes-mcp:
+        containers:
+          app:
+            image:
+              # quay tags are v-prefixed.
+              repository: quay.io/containers/kubernetes_mcp_server
+              tag: v0.0.62
+            args:
+              - --port=8080
+              - --read-only
+              - --disable-destructive
+            probes:
+              liveness: &probes
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: /healthz
+                    port: &port 8080
+                  initialDelaySeconds: 10
+                  periodSeconds: 10
+                  timeoutSeconds: 1
+                  failureThreshold: 3
+              readiness: *probes
+            securityContext:
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              capabilities: { drop: ["ALL"] }
+            resources:
+              requests:
+                cpu: 25m
+                memory: 64Mi
+              limits:
+                memory: 256Mi
+        serviceAccount:
+          name: kubernetes-mcp
+    defaultPodOptions:
+      # Required: this app is a Kubernetes-API client and app-template defaults
+      # this to false, which would leave the in-cluster client unauthenticated.
+      automountServiceAccountToken: true
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+    service:
+      app:
+        controller: kubernetes-mcp
+        ports:
+          http:
+            port: *port

@@ -1,0 +1,52 @@
+---
+# In-cluster HTTP MCP server reached by metamcp via Service DNS at
+# http://flux-operator-mcp.ai.svc.cluster.local:9090/mcp. Not on any Gateway.
+#
+# Read-only Flux introspection: traces ResourceSets/HelmReleases/Kustomizations/
+# Git+OCIRepositories down to workloads and pod logs, and diffs Git vs cluster.
+# Uses the official ControlPlane chart, not app-template. readonly:true disables
+# the six mutating tools; the chart's bundled RBAC is cluster-admin only, so it
+# is replaced with the minimal read-only grant in rbac.yaml.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: flux-operator-mcp
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: flux-operator-mcp
+  interval: 1h
+  values:
+    # Chart default is sse; http serves streamable-http at /mcp on port 9090
+    # (port is hardcoded in the chart, not configurable).
+    transport: http
+    readonly: true
+    # Chart's only RBAC is a cluster-admin binding; supply read-only RBAC instead.
+    rbac:
+      create: false
+    serviceAccount:
+      create: true
+      automount: true
+    # Repo uses a CiliumNetworkPolicy keyed on the metamcp pod, not the chart's
+    # namespace-scoped NetworkPolicy.
+    networkPolicy:
+      create: false
+    image:
+      repository: ghcr.io/controlplaneio-fluxcd/flux-operator-mcp
+      tag: v0.52.0
+    securityContext:
+      runAsNonRoot: true
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop: ["ALL"]
+      seccompProfile:
+        type: RuntimeDefault
+    podSecurityContext:
+      fsGroup: 1337
+    resources:
+      requests:
+        cpu: 10m
+        memory: 64Mi
+      limits:
+        memory: 256Mi
