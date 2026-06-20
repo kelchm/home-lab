@@ -14,9 +14,6 @@ spec:
     - fromEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: ai
-            app.kubernetes.io/name: mcpjungle
-        - matchLabels:
-            k8s:io.kubernetes.pod.namespace: ai
             app.kubernetes.io/name: metamcp
       toPorts:
         - ports:
