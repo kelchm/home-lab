@@ -10,7 +10,7 @@ spec:
   chart:
     spec:
       chart: traefik
-      version: 41.0.0
+      version: 39.0.9
       sourceRef:
         kind: HelmRepository
         name: traefik
@@ -42,10 +42,9 @@ spec:
       enabled: false
     service:
       enabled: true
+      type: ClusterIP
       # No lb-pool label, no lbipam annotation — Cilium does not L2-announce
       # ClusterIP services, which is what we want.
-      spec:
-        type: ClusterIP
     ports:
       web:
         http:
@@ -62,7 +61,8 @@ spec:
         serviceMonitor:
           enabled: true
           namespace: network
-    log:
-      level: INFO
-    accessLog:
-      enabled: true
+    logs:
+      general:
+        level: INFO
+      access:
+        enabled: true

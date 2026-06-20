@@ -8,7 +8,7 @@ spec:
   chart:
     spec:
       chart: traefik
-      version: 41.0.0
+      version: 39.0.9
       sourceRef:
         kind: HelmRepository
         name: traefik
@@ -42,12 +42,12 @@ spec:
       enabled: false
     service:
       enabled: true
+      type: LoadBalancer
       labels:
         lb-pool: services-prod
       annotations:
         lbipam.cilium.io/ips: 10.32.140.1
       spec:
-        type: LoadBalancer
         externalTrafficPolicy: Cluster
     ports:
       web:
@@ -65,7 +65,8 @@ spec:
         serviceMonitor:
           enabled: true
           namespace: network
-    log:
-      level: INFO
-    accessLog:
-      enabled: true
+    logs:
+      general:
+        level: INFO
+      access:
+        enabled: true
