@@ -83,9 +83,10 @@ spec:
     seccompProfile:
       type: RuntimeDefault
 
-  # Custom web-UI theme. configmap-theme.yaml carries override.css, which kanidm
-  # serves at /pkg/override.css (loaded last in <head>, so it wins the cascade).
-  # kaniop appends these to the StatefulSet; the volumeMount lands on the kanidm
+  # Custom web-UI theme. The kanidm-theme ConfigMap (generated from override.css
+  # by kustomization.yaml) holds the stylesheet, which kanidm serves at
+  # /pkg/override.css (loaded last in <head>, so it wins the cascade). kaniop
+  # appends these to the StatefulSet; the volumeMount lands on the kanidm
   # container. The StatefulSet's reloader.stakater.com/auto annotation rolls the
   # pods when the ConfigMap changes — required because subPath mounts don't
   # live-update.
