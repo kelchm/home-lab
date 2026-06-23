@@ -3,7 +3,7 @@
 # rare per-service admin IPs). Coexists with the legacy L2 `admin` pool
 # (10.32.30.30/24) until step 12 of the migration.
 #
-# Pool /24 skeleton (per docs/bgp-plan.md): .1 anchor (traefik-admin),
+# Pool /24 skeleton (per docs/architecture.md): .1 anchor (traefik-admin),
 # .2-.10 specials/mnemonics (.2 = k8s-gateway), .30-.99 per-service.
 # .100-.254 are reserved DHCP elsewhere; not allocated here.
 apiVersion: cilium.io/v2alpha1

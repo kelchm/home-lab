@@ -7,6 +7,7 @@ area/docs:
   - changed-files:
       - any-glob-to-any-file:
           - README.md
+          - docs/**/*
 area/github:
   - changed-files:
       - any-glob-to-any-file:
@@ -37,7 +38,3 @@ area/taskfile:
       - any-glob-to-any-file:
           - .taskfiles/**/*
           - Taskfile.yaml
-area/templates:
-  - changed-files:
-      - any-glob-to-any-file:
-          - templates/**/*
