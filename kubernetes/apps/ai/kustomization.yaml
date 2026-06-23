@@ -12,6 +12,9 @@ resources:
   - ./flux-operator-mcp/ks.yaml
   - ./grafana-mcp/ks.yaml
   - ./kubernetes-mcp/ks.yaml
+  - ./markitdown-mcp/ks.yaml
   - ./metamcp/ks.yaml
+  - ./open-meteo-mcp/ks.yaml
+  - ./pcbparts-mcp/ks.yaml
   - ./playwright-mcp/ks.yaml
   - ./playwright-stealth-mcp/ks.yaml

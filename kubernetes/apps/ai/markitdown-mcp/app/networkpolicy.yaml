@@ -1,0 +1,21 @@
+---
+# Default-deny shape: only MCP gateways in the ai namespace reach the
+# markitdown-mcp HTTP transport. Egress is unrestricted so the convert tool can
+# resolve DNS and fetch arbitrary http/https URIs.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: markitdown-mcp
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: markitdown-mcp
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: ai
+            app.kubernetes.io/name: metamcp
+      toPorts:
+        - ports:
+            - port: "3001"
+              protocol: TCP
