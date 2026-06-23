@@ -1,26 +1,18 @@
-/* ============================================================================
-   INDIGO AURORA — kanidm override.css  (kanidm 1.10.3 web UI)
+/* INDIGO AURORA — kanidm 1.10.3 override.css
+ *
+ * Calm indigo theme with automatic light/dark and a custom key logo.
+ * kanidm's style.js toggles data-bs-theme on <html> from prefers-color-scheme,
+ * so Bootstrap 5.3 color modes are live; the palette is driven from --bs-*
+ * tokens per mode and this file loads last, winning the cascade.
+ *
+ * Self-contained for kanidm's CSP: system fonts + an inline data: SVG logo, no
+ * remote assets. Targets AA contrast in both modes, keeps focus visible under
+ * forced-colors, and respects prefers-reduced-motion. Accent #4f46e5.
+ * Design rationale and coverage notes live in the PR, not inline.
+ */
 
-   A calm indigo->violet theme: airy whitespace, one disciplined accent
-   (#4f46e5), hairline borders, gentle elevation, larger radii, and a soft
-   aurora glow behind a custom "key" mark on the login/recover/error cards.
+/* ===== Foundations ======================================================= */
 
-   Mechanism: kanidm's style.js sets data-bs-theme=light|dark on <html> from
-   prefers-color-scheme (and live on OS change / after htmx swaps), so Bootstrap
-   5.3 native color modes are active. We drive the palette from --bs-* tokens
-   under [data-bs-theme=...]; this file loads LAST and wins the cascade.
-
-   Constraints honored: CSP (system fonts + same-origin/data: only, no remote
-   assets); the shipped @media (forced-colors: active) block is honored and
-   focus stays visible there; all decorative motion sits behind
-   prefers-reduced-motion;
-   keyboard focus uses a real outline (visible under forced-colors) layered with
-   a glow. Logo is a per-mode inline data: SVG so it adapts to light/dark.
-
-   Accent: #4f46e5  rgb(79,70,229)   Violet partner: #7c3aed
-   ========================================================================== */
-
-/* ---- Private tokens + system font stack --------------------------------- */
 :root {
   --ia-font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
     Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
@@ -31,7 +23,6 @@
   --ia-radius-lg: 18px;
   --ia-accent: #4f46e5;
   --ia-accent-rgb: 79, 70, 229;
-  --ia-violet: #7c3aed;
 }
 
 body, .btn, .form-control, .form-select, .navbar, .card, .nav-link,
@@ -44,9 +35,7 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-/* ============================================================================
-   LIGHT MODE — cool near-white with a faint indigo wash
-   ========================================================================== */
+/* Palette — light: cool near-white with a faint indigo wash */
 :root,
 [data-bs-theme="light"] {
   --bs-body-bg: #f7f8fc;
@@ -72,22 +61,17 @@ body {
   --bs-form-invalid-border-color: #d92d20;
 
   --ia-surface: #ffffff;
-  --ia-logo: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2096%2096%22%3E%3Cdefs%3E%3CradialGradient%20id%3D%22g%22%20cx%3D%2250%25%22%20cy%3D%2243%25%22%20r%3D%2255%25%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%237c3aed%22%20stop-opacity%3D%22.22%22%2F%3E%3Cstop%20offset%3D%22.55%22%20stop-color%3D%22%234f46e5%22%20stop-opacity%3D%22.10%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%234f46e5%22%20stop-opacity%3D%220%22%2F%3E%3C%2FradialGradient%3E%3C%2Fdefs%3E%3Ccircle%20cx%3D%2248%22%20cy%3D%2242%22%20r%3D%2246%22%20fill%3D%22url%28%23g%29%22%2F%3E%3Cg%20fill%3D%22none%22%20stroke%3D%22%234f46e5%22%20stroke-width%3D%225.2%22%20stroke-linecap%3D%22round%22%3E%3Ccircle%20cx%3D%2248%22%20cy%3D%2235%22%20r%3D%2213%22%2F%3E%3Cpath%20d%3D%22M48%2048V74M48%2060H62M48%2069H59%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E");
-  --ia-navlogo: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2040%2040%22%3E%3Cg%20fill%3D%22none%22%20stroke%3D%22%234f46e5%22%20stroke-width%3D%223%22%20stroke-linecap%3D%22round%22%3E%3Ccircle%20cx%3D%2220%22%20cy%3D%2213%22%20r%3D%227.5%22%2F%3E%3Cpath%20d%3D%22M20%2020.5V33M20%2027H29M20%2031.5H26%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E");
-  --ia-logo-plate: transparent;            /* light: app logos sit on white card */
   --ia-page-tint: radial-gradient(1200px 520px at 50% -8%,
       rgba(var(--ia-accent-rgb), 0.07), transparent 60%);
   --ia-elev: 0 1px 2px rgba(20, 24, 48, 0.05),
              0 12px 32px -12px rgba(var(--ia-accent-rgb), 0.18);
   --ia-elev-hover: 0 2px 4px rgba(20, 24, 48, 0.07),
                    0 18px 40px -14px rgba(var(--ia-accent-rgb), 0.28);
-  --ia-focus-border: #4f46e5;              /* solid ring, >=3:1 on light surfaces */
+  --ia-focus-border: #4f46e5;
   --ia-focus-ring: rgba(99, 102, 241, 0.32);
 }
 
-/* ============================================================================
-   DARK MODE — deep blue-charcoal, never pure black (raised elevation ladder)
-   ========================================================================== */
+/* Palette — dark: deep blue-charcoal, raised elevation ladder, never black */
 [data-bs-theme="dark"] {
   --bs-body-bg: #13172a;
   --bs-body-color: #e7e9f3;
@@ -112,20 +96,29 @@ body {
   --bs-form-invalid-border-color: #f87171;
 
   --ia-surface: #1b2036;
-  --ia-logo: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2096%2096%22%3E%3Cdefs%3E%3CradialGradient%20id%3D%22g%22%20cx%3D%2250%25%22%20cy%3D%2243%25%22%20r%3D%2255%25%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%23818cf8%22%20stop-opacity%3D%22.34%22%2F%3E%3Cstop%20offset%3D%22.55%22%20stop-color%3D%22%237c3aed%22%20stop-opacity%3D%22.16%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%234f46e5%22%20stop-opacity%3D%220%22%2F%3E%3C%2FradialGradient%3E%3C%2Fdefs%3E%3Ccircle%20cx%3D%2248%22%20cy%3D%2242%22%20r%3D%2246%22%20fill%3D%22url%28%23g%29%22%2F%3E%3Cg%20fill%3D%22none%22%20stroke%3D%22%23a5b4fc%22%20stroke-width%3D%225.2%22%20stroke-linecap%3D%22round%22%3E%3Ccircle%20cx%3D%2248%22%20cy%3D%2235%22%20r%3D%2213%22%2F%3E%3Cpath%20d%3D%22M48%2048V74M48%2060H62M48%2069H59%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E");
-  --ia-navlogo: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2040%2040%22%3E%3Cg%20fill%3D%22none%22%20stroke%3D%22%23a5b4fc%22%20stroke-width%3D%223%22%20stroke-linecap%3D%22round%22%3E%3Ccircle%20cx%3D%2220%22%20cy%3D%2213%22%20r%3D%227.5%22%2F%3E%3Cpath%20d%3D%22M20%2020.5V33M20%2027H29M20%2031.5H26%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E");
-  --ia-logo-plate: transparent;            /* no plate: kanidm app icons are colorful + self-legible */
   --ia-page-tint: radial-gradient(1200px 560px at 50% -10%,
       rgba(124, 58, 237, 0.16), transparent 62%);
   --ia-elev: 0 1px 2px rgba(0, 0, 0, 0.4),
              0 16px 40px -14px rgba(0, 0, 0, 0.6);
   --ia-elev-hover: 0 2px 6px rgba(0, 0, 0, 0.5),
                    0 22px 48px -16px rgba(0, 0, 0, 0.7);
-  --ia-focus-border: #818cf8;              /* solid ring, 5.39:1 on dark surface */
+  --ia-focus-border: #818cf8;
   --ia-focus-ring: rgba(129, 140, 248, 0.45);
 }
 
-/* ---- Page background: flat color + faint top aurora wash ---------------- */
+/* Logo — custom key mark as a per-mode inline SVG (kept out of the palette
+   blocks above so those stay readable). Light glow indigo, dark glow brighter. */
+:root,
+[data-bs-theme="light"] {
+  --ia-logo: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2096%2096%22%3E%3Cdefs%3E%3CradialGradient%20id%3D%22g%22%20cx%3D%2250%25%22%20cy%3D%2243%25%22%20r%3D%2255%25%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%237c3aed%22%20stop-opacity%3D%22.22%22%2F%3E%3Cstop%20offset%3D%22.55%22%20stop-color%3D%22%234f46e5%22%20stop-opacity%3D%22.10%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%234f46e5%22%20stop-opacity%3D%220%22%2F%3E%3C%2FradialGradient%3E%3C%2Fdefs%3E%3Ccircle%20cx%3D%2248%22%20cy%3D%2242%22%20r%3D%2246%22%20fill%3D%22url%28%23g%29%22%2F%3E%3Cg%20fill%3D%22none%22%20stroke%3D%22%234f46e5%22%20stroke-width%3D%225.2%22%20stroke-linecap%3D%22round%22%3E%3Ccircle%20cx%3D%2248%22%20cy%3D%2235%22%20r%3D%2213%22%2F%3E%3Cpath%20d%3D%22M48%2048V74M48%2060H62M48%2069H59%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E");
+  --ia-navlogo: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2040%2040%22%3E%3Cg%20fill%3D%22none%22%20stroke%3D%22%234f46e5%22%20stroke-width%3D%223%22%20stroke-linecap%3D%22round%22%3E%3Ccircle%20cx%3D%2220%22%20cy%3D%2213%22%20r%3D%227.5%22%2F%3E%3Cpath%20d%3D%22M20%2020.5V33M20%2027H29M20%2031.5H26%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E");
+}
+[data-bs-theme="dark"] {
+  --ia-logo: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2096%2096%22%3E%3Cdefs%3E%3CradialGradient%20id%3D%22g%22%20cx%3D%2250%25%22%20cy%3D%2243%25%22%20r%3D%2255%25%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%23818cf8%22%20stop-opacity%3D%22.34%22%2F%3E%3Cstop%20offset%3D%22.55%22%20stop-color%3D%22%237c3aed%22%20stop-opacity%3D%22.16%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%234f46e5%22%20stop-opacity%3D%220%22%2F%3E%3C%2FradialGradient%3E%3C%2Fdefs%3E%3Ccircle%20cx%3D%2248%22%20cy%3D%2242%22%20r%3D%2246%22%20fill%3D%22url%28%23g%29%22%2F%3E%3Cg%20fill%3D%22none%22%20stroke%3D%22%23a5b4fc%22%20stroke-width%3D%225.2%22%20stroke-linecap%3D%22round%22%3E%3Ccircle%20cx%3D%2248%22%20cy%3D%2235%22%20r%3D%2213%22%2F%3E%3Cpath%20d%3D%22M48%2048V74M48%2060H62M48%2069H59%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E");
+  --ia-navlogo: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2040%2040%22%3E%3Cg%20fill%3D%22none%22%20stroke%3D%22%23a5b4fc%22%20stroke-width%3D%223%22%20stroke-linecap%3D%22round%22%3E%3Ccircle%20cx%3D%2220%22%20cy%3D%2213%22%20r%3D%227.5%22%2F%3E%3Cpath%20d%3D%22M20%2020.5V33M20%2027H29M20%2031.5H26%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E");
+}
+
+/* Page background: flat color + a faint top aurora wash */
 body {
   background-color: var(--bs-body-bg);
   background-image: var(--ia-page-tint);
@@ -133,10 +126,10 @@ body {
   background-attachment: fixed;
 }
 
-/* ============================================================================
-   ACCENT RECOLOR — primary/success buttons share the "main action" indigo
-   (success is reused by kanidm for Save/Sign out/Return — color == intent)
-   ========================================================================== */
+/* ===== Controls ========================================================== */
+
+/* Primary + success share the "main action" indigo (kanidm reuses success for
+   Save / Sign out / Return — color tracks intent, not Bootstrap semantics) */
 .btn-primary,
 .btn-success {
   --bs-btn-color: #ffffff;
@@ -181,7 +174,7 @@ body {
   border-radius: var(--ia-radius-sm);
 }
 
-/* btn-warning: a calm caution amber (Add Password, Accept SHA1) ------------ */
+/* Caution amber (Add Password, Accept SHA1) */
 .btn-warning {
   --bs-btn-color: #3d2c00;
   --bs-btn-bg: #f6c344;
@@ -195,7 +188,7 @@ body {
   font-weight: 500;
 }
 
-/* Destructive intent normalized by endpoint, regardless of base class ------ */
+/* Destructive intent, keyed by endpoint regardless of base class */
 .btn[hx-post*="delete"],
 .btn[hx-post*="revoke"],
 .btn[hx-post*="regenerate"],
@@ -212,7 +205,7 @@ body {
   --bs-btn-disabled-border-color: rgba(217, 45, 32, 0.55);
 }
 
-/* Quiet danger by default; intensify on hover/focus ----------------------- */
+/* Quiet danger by default, intensifying on hover */
 .btn-outline-danger {
   --bs-btn-color: #d92d20;
   --bs-btn-border-color: rgba(217, 45, 32, 0.45);
@@ -223,7 +216,7 @@ body {
 }
 [data-bs-theme="dark"] .btn-outline-danger { --bs-btn-color: #fca5a5; }
 
-/* Cancel/back actions (body-target btn-danger) read as neutral, not danger - */
+/* Body-target Cancel/back reads neutral, not danger */
 .btn-danger[hx-target="body"] {
   --bs-btn-color: var(--bs-secondary-color);
   --bs-btn-bg: transparent;
@@ -233,7 +226,7 @@ body {
   --bs-btn-hover-border-color: var(--bs-border-color);
 }
 
-/* Provide the missing small-size class kanidm references but never defines -- */
+/* .btn-sml: kanidm references this size class but never defines it */
 .btn-tiny, .btn-sml {
   --bs-btn-padding-y: 0.05rem;
   --bs-btn-padding-x: 0.4rem;
@@ -241,7 +234,7 @@ body {
   border-radius: 7px;
 }
 
-/* Keyboard focus: real outline (forced-colors-safe) + decorative glow ------ */
+/* Keyboard focus: real outline (survives forced-colors) + a decorative glow */
 .btn:focus-visible,
 .btn-close:focus-visible {
   outline: 2px solid var(--ia-focus-border);
@@ -252,9 +245,7 @@ body {
 a { text-underline-offset: 0.18em; text-decoration-thickness: 0.06em; }
 a:hover { text-decoration-color: rgba(var(--ia-accent-rgb), 0.6); }
 
-/* ============================================================================
-   FORM CONTROLS — recolor focus glow + checked states off Bootstrap blue
-   ========================================================================== */
+/* Inputs — recolor focus glow and checked states off Bootstrap blue */
 .form-control,
 .form-select {
   border-radius: var(--ia-radius-sm);
@@ -282,21 +273,19 @@ a:hover { text-decoration-color: rgba(var(--ia-accent-rgb), 0.6); }
 }
 .form-label,
 .col-form-label { font-weight: 500; color: var(--bs-secondary-color); letter-spacing: 0.2px; }
-
-/* Validation feedback stays legible on themed control backgrounds ---------- */
 .invalid-feedback { color: var(--bs-form-invalid-color); font-weight: 500; }
 .valid-feedback { color: var(--bs-form-valid-color); }
 
-/* Readonly profile fields read as inert; editable ones are clearly chromed - */
+/* Readonly profile fields read inert; editable ones keep their chrome */
 .form-control-plaintext {
   color: var(--bs-secondary-color);
   background: transparent;
   border: 1px solid transparent;
 }
 
-/* ============================================================================
-   LOGIN / RECOVER / ERROR card (main.form-signin, .kanidm_logo, h3)
-   ========================================================================== */
+/* ===== Pages ============================================================= */
+
+/* Login / recover / error card */
 main.form-signin {
   max-width: 432px;
   width: 100%;
@@ -312,7 +301,7 @@ main.form-signin .form-control { text-align: left; }
 main.form-signin a { font-weight: 500; }
 main.form-signin .btn + .btn { margin-top: 0.6rem; }
 
-/* Custom key mark (per-mode data: SVG with baked-in aurora glow) ----------- */
+/* Custom key mark (login / recover / error) */
 .kanidm_logo {
   width: 7.5em;
   height: 7.5em;
@@ -321,7 +310,7 @@ main.form-signin .btn + .btn { margin-top: 0.6rem; }
   object-fit: contain;
 }
 
-/* Context banner: a calm neutral wayfinding chip, not an alarm ------------- */
+/* Context banner: a calm neutral wayfinding chip, not an alarm */
 .alert { border-radius: var(--ia-radius-md); border-width: 1px; }
 .alert-info {
   --bs-alert-bg: var(--bs-secondary-bg);
@@ -340,10 +329,8 @@ main.form-signin .btn + .btn { margin-top: 0.6rem; }
   --bs-alert-border-color: rgba(248, 113, 113, 0.32);
 }
 
-/* ============================================================================
-   NAVBAR (nav.navbar.bg-body-tertiary)
-   ========================================================================== */
-nav.navbar.bg-body-tertiary {
+/* Navbar */
+nav.navbar.bg-body-tertiary {           /* !important beats the .bg-body-tertiary utility */
   background-color: var(--ia-surface) !important;
   border-bottom: 1px solid var(--bs-border-color-translucent);
   box-shadow: 0 1px 0 rgba(var(--ia-accent-rgb), 0.04),
@@ -361,14 +348,13 @@ nav .navbar-brand img {
   width: auto;
   height: 34px;
 }
-.navbar-brand > div {       /* cap long display names so they can't crowd the toggler */
+.navbar-brand > div {                   /* cap long display names off the toggler */
   max-width: 46vw;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* The three nav links all carry an identical data-feather="file" icon — drop it */
-.navbar .nav-link svg.feather,
+.navbar .nav-link svg.feather,          /* the three nav icons are all "file" — drop them */
 .navbar .nav-link [data-feather] { display: none; }
 .navbar .nav-link {
   font-weight: 500;
@@ -386,7 +372,7 @@ nav .navbar-brand img {
   color: var(--bs-link-color);
   background-color: rgba(var(--ia-accent-rgb), 0.1);
 }
-.navbar-nav.ms-md-auto .nav-link {     /* Sign out sits apart from primary nav */
+.navbar-nav.ms-md-auto .nav-link {      /* Sign out sits apart from primary nav */
   border: 1px solid var(--bs-border-color);
 }
 .navbar-toggler {
@@ -400,9 +386,7 @@ nav .navbar-brand img {
   box-shadow: 0 0 0 0.26rem var(--ia-focus-ring);
 }
 
-/* ============================================================================
-   APPS LAUNCHER (main.container-lg + .card grid)
-   ========================================================================== */
+/* Apps launcher */
 main.container-lg { padding-top: 0.5rem; }
 main.container-lg h2 { font-weight: 600; letter-spacing: -0.3px; }
 main.container-lg > hr {
@@ -410,8 +394,7 @@ main.container-lg > hr {
   opacity: 1;
   margin-bottom: 1.6rem;
 }
-/* Fix the 4-cramped-columns bug: the redundant .col-md-3 overrides row-cols-md-3 */
-@media (min-width: 768px) {
+@media (min-width: 768px) {              /* fix the 4-column bug: col-md-3 fights row-cols-md-3 */
   main.container-lg .row-cols-md-3 > .col-md-3 { flex: 0 0 auto; width: 33.3333%; }
 }
 main.container-lg .card { height: 100%; }
@@ -432,14 +415,8 @@ main.container-lg .card { height: 100%; }
 .card a.stretched-link { color: var(--bs-body-color); font-weight: 500; text-decoration: none; }
 .card label { color: var(--bs-secondary-color); font-weight: 500; padding-bottom: 0.5rem; }
 .card:hover label { color: var(--bs-link-color); }
-/* App logos: contain + a light neutral plate in dark so any polarity stays legible */
-.oauth2-img {
-  object-fit: contain;
-  background-color: var(--ia-logo-plate);
-  border-radius: var(--ia-radius-sm);
-}
-/* Keyboard focus rings the whole tile; re-assert the overlay box so the
-   outline has a painted area, with a :has() fallback on the card itself ---- */
+.oauth2-img { object-fit: contain; border-radius: var(--ia-radius-sm); }
+/* Keyboard focus rings the whole tile (:has) with a stretched-link fallback */
 .card:has(a.stretched-link:focus-visible) {
   outline: 2px solid var(--ia-focus-border);
   outline-offset: 2px;
@@ -454,17 +431,15 @@ main.container-lg .card { height: 100%; }
   border-radius: var(--ia-radius-md);
 }
 
-/* ============================================================================
-   OAUTH2 CONSENT (main.form-signin > h2 + scope <ul> + Proceed)
-   ========================================================================== */
+/* OAuth2 consent — scope list as a bounded, scannable block */
 main.form-signin h2.h3 { font-weight: 600; letter-spacing: -0.2px; margin-bottom: 1.25rem; }
-main.form-signin ul {       /* scope disclosure: a bounded, scannable block */
+main.form-signin ul {
   text-align: left;
   list-style: none;
   background: var(--bs-secondary-bg);
   border: 1px solid var(--bs-border-color);
   border-radius: var(--ia-radius-md);
-  padding: 0.4rem 0.4rem;
+  padding: 0.4rem;
   margin-bottom: 1.5rem;
 }
 main.form-signin ul li {
@@ -475,9 +450,7 @@ main.form-signin ul li {
 main.form-signin ul li + li { border-top: 1px solid var(--bs-border-color); }
 main.form-signin .btn-lg { border-radius: var(--ia-radius-md); padding-block: 0.7rem; }
 
-/* ============================================================================
-   CREDENTIAL RESET / SETTINGS shell, side menu, wizard rhythm
-   ========================================================================== */
+/* Credential reset / settings shell + side menu */
 .form-cred-reset-body {
   max-width: 520px;
   padding: 1.75rem;
@@ -486,13 +459,11 @@ main.form-signin .btn-lg { border-radius: var(--ia-radius-md); padding-block: 0.
   border-radius: var(--ia-radius-lg);
   box-shadow: var(--ia-elev);
 }
-#settings-window .form-cred-reset-body { max-width: 720px; }   /* cap readable width in settings */
+#settings-window .form-cred-reset-body { max-width: 720px; }
 .form-cred-reset-body hr { border-color: var(--bs-border-color); opacity: 1; }
-.form-cred-reset-body hr + hr { display: none; }               /* collapse orphan dividers from denied sections */
+.form-cred-reset-body hr + hr { display: none; }   /* collapse dividers from empty/denied sections */
 .form-cred-reset-body h4 { font-weight: 600; letter-spacing: -0.2px; }
-/* reserve a gap so expanded hit-areas can't overlap adjacent labels */
 .form-cred-reset-body .d-flex.justify-content-between { column-gap: 0.75rem; }
-
 .side-menu { min-width: 188px; }
 .side-menu-item {
   border-radius: var(--ia-radius-sm);
@@ -507,7 +478,7 @@ main.form-signin .btn-lg { border-radius: var(--ia-radius-md); padding-block: 0.
   box-shadow: inset 3px 0 0 var(--ia-accent);
 }
 
-/* LEAK FIX 1: #cred-update-commit-bar hardcoded background:white ----------- */
+/* Dark-mode leak fix 1: #cred-update-commit-bar is hardcoded background:white */
 #cred-update-commit-bar {
   background: var(--bs-tertiary-bg);
   border: 1px solid var(--bs-border-color);
@@ -515,8 +486,7 @@ main.form-signin .btn-lg { border-radius: var(--ia-radius-md); padding-block: 0.
   border-radius: var(--ia-radius-md);
   box-shadow: var(--ia-elev);
 }
-/* Save == main action (indigo, handled above); Discard == quiet danger ----- */
-#cred-update-commit-bar .btn-danger {
+#cred-update-commit-bar .btn-danger {   /* Discard reads as quiet danger; Save stays primary */
   --bs-btn-color: var(--bs-secondary-color);
   --bs-btn-bg: transparent;
   --bs-btn-border-color: var(--bs-border-color);
@@ -525,7 +495,7 @@ main.form-signin .btn-lg { border-radius: var(--ia-radius-md); padding-block: 0.
   --bs-btn-hover-border-color: #d92d20;
 }
 
-/* LEAK FIX 2: .totp-display-container hardcoded light neumorphism ---------- */
+/* Dark-mode leak fix 2: .totp-display-container has hardcoded light neumorphism */
 .totp-display-container {
   background-color: var(--bs-secondary-bg);
   border: 1px solid var(--bs-border-color);
@@ -541,68 +511,44 @@ main.form-signin .btn-lg { border-radius: var(--ia-radius-md); padding-block: 0.
 }
 .totp-display { font-family: var(--ia-font-mono); font-variant-numeric: tabular-nums; letter-spacing: 0.12em; }
 
-/* LEAK FIX 3: .side-menu icons (filter:invert(40%)) vanish on dark --------- */
+/* Dark-mode leak fix 3: side-menu icons use filter:invert(40%), invisible on dark */
 [data-bs-theme="dark"] .side-menu-item .icon-container img { filter: invert(72%) brightness(1.15); }
 
-/* ============================================================================
-   QR + PLAINTEXT SECRETS (TOTP setup, device enrolment, RADIUS)
-   kanidm renders the QR via the qrcode crate as two hardcoded <path>s
-   (#fff background + #000 modules), so it scans in both modes untouched.
-   Frame it only — NEVER re-fill: filling the background path black would turn
-   the whole code into a solid square.
-   ========================================================================== */
+/* QR codes: kanidm emits hardcoded #000-on-#fff, so frame only — never re-fill */
 #totpInfo svg, #intentInfo svg {
   border-radius: var(--ia-radius-sm);
   box-shadow: 0 0 0 6px #ffffff, var(--ia-elev);
 }
-/* Plaintext secrets as contained monospace with a caution border ---------- */
+/* Plaintext secrets as contained monospace with a caution border */
 #intentInfo code, #totpInfo code {
   font-family: var(--ia-font-mono);
   display: inline-block;
   background: var(--bs-secondary-bg);
-  border: 1px solid #b8860b;          /* opaque amber: >=3:1 on light secondary-bg */
+  border: 1px solid #b8860b;
   border-radius: var(--ia-radius-sm);
   padding: 0.35rem 0.6rem;
   color: var(--bs-emphasis-color);
   user-select: all;
 }
 [data-bs-theme="dark"] #intentInfo code,
-[data-bs-theme="dark"] #totpInfo code {
-  border-color: rgba(246, 195, 68, 0.5);
-}
+[data-bs-theme="dark"] #totpInfo code { border-color: rgba(246, 195, 68, 0.5); }
 
-/* ============================================================================
-   PASSKEY / SSH lists
-   ========================================================================== */
+/* Passkey / SSH lists; theme the hardcoded text-bg-dark key-type badge */
 .list-group-item {
   background-color: var(--ia-surface);
   border-color: var(--bs-border-color);
   color: var(--bs-body-color);
 }
-/* kanidm tags SSH key type with text-bg-dark — make it theme-aware --------- */
 .text-bg-dark {
   background-color: var(--bs-tertiary-bg) !important;
   color: var(--bs-body-color) !important;
 }
 .badge.text-bg-dark { border: 1px solid var(--bs-border-color); }
 
-/* ============================================================================
-   TAP TARGETS (WCAG 2.5.8) — expand small controls to >=44px without changing
-   their visual box or the row height (invisible centered hit-area)
-   ========================================================================== */
+/* Tap targets (WCAG 2.5.8): grow small controls to >=44px via an invisible
+   centered hit-area, leaving the visual box and row height unchanged */
 .btn-tiny, .btn-sml { position: relative; }
-.btn-tiny::before, .btn-sml::before {
-  content: "";
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 44px;
-  height: 44px;
-  transform: translate(-50%, -50%);
-}
-/* add-email plus (a.cursor-pointer with .bi-plus-square ~20px) ------------- */
-a.cursor-pointer .bi-plus-square { width: 22px; height: 22px; color: var(--ia-accent); }
-a.cursor-pointer.float-end { position: relative; display: inline-flex; }
+.btn-tiny::before, .btn-sml::before,
 a.cursor-pointer.float-end::before {
   content: "";
   position: absolute;
@@ -612,16 +558,17 @@ a.cursor-pointer.float-end::before {
   height: 44px;
   transform: translate(-50%, -50%);
 }
-/* email Remove (btn-secondary): restrained danger on hover ----------------- */
-.kanidm-remove-list-entry:hover {
+a.cursor-pointer.float-end { position: relative; display: inline-flex; }
+a.cursor-pointer .bi-plus-square { width: 22px; height: 22px; color: var(--ia-accent); }
+.kanidm-remove-list-entry:hover {       /* email Remove (btn-secondary): restrained danger */
   --bs-btn-hover-color: #ffffff;
   --bs-btn-hover-bg: #d92d20;
   --bs-btn-hover-border-color: #d92d20;
 }
 
-/* ============================================================================
-   HTMX loading feedback — keyed to the element htmx flags, not a form ancestor
-   ========================================================================== */
+/* ===== Feedback ========================================================== */
+
+/* htmx loading — keyed to the element's own flag, not a form ancestor */
 .htmx-request.btn,
 button[aria-busy="true"] { position: relative; color: transparent !important; pointer-events: none; }
 .htmx-request.btn::after,
@@ -640,9 +587,7 @@ button[aria-busy="true"]::after {
 }
 @keyframes ia-spin { to { transform: rotate(360deg); } }
 
-/* ============================================================================
-   TOASTS (#savedToast success / #permissionDeniedToast error) + container
-   ========================================================================== */
+/* Toasts — status via a colored left border, paired with the header word */
 #toast-container { padding: 1rem; display: flex; flex-direction: column; gap: 0.6rem; }
 .toast {
   background-color: var(--ia-surface);
@@ -658,9 +603,7 @@ button[aria-busy="true"]::after {
 [data-bs-theme="dark"] #permissionDeniedToast { border-left-color: #f87171; }
 .btn-close { border-radius: 7px; }
 
-/* ============================================================================
-   MODALS (sign-out, error) — themed surface + Kani art legible on dark
-   ========================================================================== */
+/* Modals (sign-out, error) */
 .modal-content {
   background-color: var(--ia-surface);
   border: 1px solid var(--bs-border-color-translucent);
@@ -671,31 +614,22 @@ button[aria-busy="true"]::after {
 .modal-title { font-weight: 600; }
 [data-bs-theme="dark"] #signoutModal .modal-body img { filter: drop-shadow(0 2px 10px rgba(129, 140, 248, 0.25)); }
 
-/* ============================================================================
-   FAILURE SCREENS (login_denied, oauth2_access_denied, unrecoverable_error)
-   The one place danger red is appropriate — on the heading, not the exit.
-   ========================================================================== */
-/* Failure-screen danger headings are intentionally NOT recolored here:
-   login_denied's <h3> is indistinguishable from the sign-in display-name <h3>,
-   and the apps-page <h2> shares the same #main wrapper — any selector reddens
-   the wrong heading. Documented residual (template-level fix territory). */
+/* Failure screens. Headings are deliberately NOT reddened: login_denied's <h3>
+   is indistinguishable from the sign-in display-name <h3>, and the apps-page
+   <h2> shares the same #main wrapper, so any selector reddens the wrong one. */
 #main { padding-top: 0.25rem; }
-/* Operation ids / SPNs as selectable monospace ---------------------------- */
 #main code, #main .opid { font-family: var(--ia-font-mono); user-select: all; }
 
-/* ============================================================================
-   FOOTER ("Powered by Kanidm")
-   ========================================================================== */
-footer.footer.bg-body-tertiary {
+/* Footer */
+footer.footer.bg-body-tertiary {        /* !important beats the .bg-body-tertiary utility */
   background-color: transparent !important;
   border-top: 1px solid var(--bs-border-color-translucent);
   color: var(--bs-tertiary-color);
 }
 footer.footer a { color: var(--bs-link-color); font-weight: 500; }
 
-/* ============================================================================
-   GLOBAL — focus fallback, selection, reduced-motion
-   ========================================================================== */
+/* ===== Accessibility ===================================================== */
+
 a:focus-visible,
 .side-menu-item:focus-visible,
 .nav-link:focus-visible,
@@ -706,8 +640,7 @@ a.cursor-pointer:focus-visible {
 }
 ::selection { background: rgba(var(--ia-accent-rgb), 0.22); }
 
-/* Under forced-colors (Windows High Contrast): keep focus visible via system
-   colors and drop decorative shadow. No content-color overrides here. */
+/* Forced-colors: keep focus visible via system colors, drop decorative shadow */
 @media (forced-colors: active) {
   .btn:focus-visible,
   .navbar-toggler:focus,
@@ -724,4 +657,3 @@ a.cursor-pointer:focus-visible {
   .btn-primary:active, .btn-success:active { transform: none; }
   .htmx-request.btn::after, button[aria-busy="true"]::after { animation: none; }
 }
-
