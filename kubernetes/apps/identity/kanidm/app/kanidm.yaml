@@ -83,6 +83,23 @@ spec:
     seccompProfile:
       type: RuntimeDefault
 
+  # Custom web-UI theme. The kanidm-theme ConfigMap (generated from override.css
+  # by kustomization.yaml) holds the stylesheet, which kanidm serves at
+  # /pkg/override.css (loaded last in <head>, so it wins the cascade). kaniop
+  # appends these to the StatefulSet; the volumeMount lands on the kanidm
+  # container. The StatefulSet's reloader.stakater.com/auto annotation rolls the
+  # pods when the ConfigMap changes — required because subPath mounts don't
+  # live-update.
+  volumes:
+    - name: theme
+      configMap:
+        name: kanidm-theme
+  volumeMounts:
+    - name: theme
+      mountPath: /hpkg/override.css
+      subPath: override.css
+      readOnly: true
+
   # Empty selector = match all namespaces. Required so OAuth2 client CRs can
   # live alongside the consumer apps that depend on them.
   oauth2ClientNamespaceSelector: {}
