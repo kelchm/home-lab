@@ -188,11 +188,10 @@ body {
   font-weight: 500;
 }
 
-/* Destructive intent, keyed by endpoint regardless of base class */
-.btn[hx-post*="delete"],
-.btn[hx-post*="revoke"],
-.btn[hx-post*="regenerate"],
-.btn-warning[hx-post*="delete_alt_creds"] {
+/* Escalate the one genuinely-destructive amber button (Delete Legacy
+   Credentials) to red, keyed on kanidm's own hx-confirm marker, not endpoint
+   URLs. .btn-danger / .btn-outline-danger Removes are already red by class. */
+.btn-warning[hx-confirm] {
   --bs-btn-color: #ffffff;
   --bs-btn-bg: #d92d20;
   --bs-btn-border-color: #d92d20;
@@ -348,7 +347,7 @@ nav .navbar-brand img {
   width: auto;
   height: 34px;
 }
-.navbar-brand > div {                   /* cap long display names off the toggler */
+.navbar-brand div {                     /* cap long display names off the toggler */
   max-width: 46vw;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -416,12 +415,7 @@ main.container-lg .card { height: 100%; }
 .card label { color: var(--bs-secondary-color); font-weight: 500; padding-bottom: 0.5rem; }
 .card:hover label { color: var(--bs-link-color); }
 .oauth2-img { object-fit: contain; border-radius: var(--ia-radius-sm); }
-/* Keyboard focus rings the whole tile (:has) with a stretched-link fallback */
-.card:has(a.stretched-link:focus-visible) {
-  outline: 2px solid var(--ia-focus-border);
-  outline-offset: 2px;
-  border-radius: var(--ia-radius-md);
-}
+/* Keyboard focus rings the app tile via an overlay on the link (the focus target) */
 .card a.stretched-link:focus-visible::after {
   content: "";
   position: absolute;
@@ -548,8 +542,7 @@ main.form-signin .btn-lg { border-radius: var(--ia-radius-md); padding-block: 0.
 /* Tap targets (WCAG 2.5.8): grow small controls to >=44px via an invisible
    centered hit-area, leaving the visual box and row height unchanged */
 .btn-tiny, .btn-sml { position: relative; }
-.btn-tiny::before, .btn-sml::before,
-a.cursor-pointer.float-end::before {
+.btn-tiny::before, .btn-sml::before {
   content: "";
   position: absolute;
   top: 50%;
@@ -558,8 +551,7 @@ a.cursor-pointer.float-end::before {
   height: 44px;
   transform: translate(-50%, -50%);
 }
-a.cursor-pointer.float-end { position: relative; display: inline-flex; }
-a.cursor-pointer .bi-plus-square { width: 22px; height: 22px; color: var(--ia-accent); }
+.bi-plus-square { width: 22px; height: 22px; color: var(--ia-accent); }
 .kanidm-remove-list-entry:hover {       /* email Remove (btn-secondary): restrained danger */
   --bs-btn-hover-color: #ffffff;
   --bs-btn-hover-bg: #d92d20;
@@ -567,25 +559,6 @@ a.cursor-pointer .bi-plus-square { width: 22px; height: 22px; color: var(--ia-ac
 }
 
 /* ===== Feedback ========================================================== */
-
-/* htmx loading — keyed to the element's own flag, not a form ancestor */
-.htmx-request.btn,
-button[aria-busy="true"] { position: relative; color: transparent !important; pointer-events: none; }
-.htmx-request.btn::after,
-button[aria-busy="true"]::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 1.05em;
-  height: 1.05em;
-  margin: -0.525em 0 0 -0.525em;
-  border: 2px solid var(--bs-btn-color, #ffffff);
-  border-right-color: transparent;
-  border-radius: 50%;
-  animation: ia-spin 0.6s linear infinite;
-}
-@keyframes ia-spin { to { transform: rotate(360deg); } }
 
 /* Toasts — status via a colored left border, paired with the header word */
 #toast-container { padding: 1rem; display: flex; flex-direction: column; gap: 0.6rem; }
@@ -655,5 +628,4 @@ a.cursor-pointer:focus-visible {
   .card, .btn-primary, .btn-success, .form-control, .form-select, .nav-link { transition: none; }
   .card:hover { transform: none; }
   .btn-primary:active, .btn-success:active { transform: none; }
-  .htmx-request.btn::after, button[aria-busy="true"]::after { animation: none; }
 }
