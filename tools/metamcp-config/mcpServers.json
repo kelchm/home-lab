@@ -45,6 +45,11 @@
       "type": "streamable_http",
       "url": "http://markitdown-mcp.ai.svc.cluster.local:3001/mcp",
       "description": "Read-only file/URL -> Markdown conversion (PDF/DOCX/XLSX/PPTX/images/etc.)."
+    },
+    "dbhub": {
+      "type": "streamable_http",
+      "url": "http://dbhub-mcp.ai.svc.cluster.local:8080/mcp",
+      "description": "Read-only SQL over metamcp-db (the gateway's own registry). SELECT-only Postgres role + dbhub.toml readonly."
     }
   }
 }
