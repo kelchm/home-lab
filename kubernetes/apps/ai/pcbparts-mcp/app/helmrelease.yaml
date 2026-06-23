@@ -28,6 +28,23 @@ spec:
               # Every client arrives from the single metamcp pod IP, so the
               # per-IP limiter is one global bucket; raise it from the default.
               RATE_LIMIT_REQUESTS: "500"
+              # Light up the DigiKey cross-reference tools by reusing the
+              # existing digikey-mcp client-credentials (2-legged, no refresh
+              # token).
+              DIGIKEY_CLIENT_ID:
+                valueFrom:
+                  secretKeyRef:
+                    name: digikey-mcp-secrets
+                    key: CLIENT_ID
+              DIGIKEY_CLIENT_SECRET:
+                valueFrom:
+                  secretKeyRef:
+                    name: digikey-mcp-secrets
+                    key: CLIENT_SECRET
+            # MOUSER_API_KEY (Mouser Search API) lights up the Mouser tools.
+            envFrom:
+              - secretRef:
+                  name: pcbparts-mcp-secrets
             probes:
               liveness: &probes
                 enabled: true

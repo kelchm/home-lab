@@ -34,7 +34,7 @@
     "pcbparts-mcp": {
       "type": "streamable_http",
       "url": "http://pcbparts-mcp.ai.svc.cluster.local:8080/mcp",
-      "description": "Read-only component search: keyless JLCPCB in-stock DB + EasyEDA footprints. Complements digikey for JLCPCB/LCSC pricing and assembly stock."
+      "description": "Read-only component search across JLCPCB in-stock DB + EasyEDA footprints + DigiKey + Mouser. JLCPCB/LCSC pricing and assembly stock."
     },
     "open-meteo-mcp": {
       "type": "streamable_http",
