@@ -30,6 +30,11 @@
       "type": "streamable_http",
       "url": "http://kubernetes-mcp.ai.svc.cluster.local:8080/mcp",
       "description": "Read-only Kubernetes introspection for the CRDs Flux doesn't model (Cilium, Longhorn, kaniop, Gateway API, Traefik, cert-manager, CNPG)."
+    },
+    "dbhub": {
+      "type": "streamable_http",
+      "url": "http://dbhub-mcp.ai.svc.cluster.local:8080/mcp",
+      "description": "Read-only SQL over metamcp-db (the gateway's own registry). SELECT-only Postgres role + dbhub.toml readonly."
     }
   }
 }
