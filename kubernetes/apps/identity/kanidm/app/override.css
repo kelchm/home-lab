@@ -295,7 +295,7 @@ main.form-signin {
   border-radius: var(--ia-radius-lg);
   box-shadow: var(--ia-elev);
 }
-main.form-signin h3 { font-weight: 600; letter-spacing: -0.2px; margin-bottom: 1.6rem; }
+main.form-signin h3 { font-size: 1.375rem; font-weight: 600; letter-spacing: -0.2px; margin-bottom: 1.6rem; }
 main.form-signin .form-control { text-align: left; }
 main.form-signin a { font-weight: 500; }
 main.form-signin .btn + .btn { margin-top: 0.6rem; }
@@ -336,6 +336,7 @@ nav.navbar.bg-body-tertiary {           /* !important beats the .bg-body-tertiar
               0 6px 20px -16px rgba(20, 24, 48, 0.5);
 }
 .navbar-brand {
+  font-size: 1.05rem;
   font-weight: 600;
   letter-spacing: -0.2px;
   display: inline-flex;
@@ -387,7 +388,7 @@ nav .navbar-brand img {
 
 /* Apps launcher */
 main.container-lg { padding-top: 0.5rem; }
-main.container-lg h2 { font-weight: 600; letter-spacing: -0.3px; }
+main.container-lg h2 { font-size: 1.5rem; font-weight: 600; letter-spacing: -0.3px; }
 main.container-lg > hr {
   border-color: var(--bs-border-color);
   opacity: 1;
@@ -425,9 +426,10 @@ main.container-lg .card { height: 100%; }
   border-radius: var(--ia-radius-md);
 }
 
-/* OAuth2 consent — scope list as a bounded, scannable block */
-main.form-signin h2.h3 { font-weight: 600; letter-spacing: -0.2px; margin-bottom: 1.25rem; }
-main.form-signin ul {
+/* OAuth2 consent — scope list as a bounded, scannable block. Excludes
+   .list-unstyled so it doesn't box the login_mech_choose button list. */
+main.form-signin h2.h3 { font-size: 1.375rem; font-weight: 600; letter-spacing: -0.2px; margin-bottom: 1.25rem; }
+main.form-signin ul:not(.list-unstyled) {
   text-align: left;
   list-style: none;
   background: var(--bs-secondary-bg);
@@ -436,12 +438,12 @@ main.form-signin ul {
   padding: 0.4rem;
   margin-bottom: 1.5rem;
 }
-main.form-signin ul li {
+main.form-signin ul:not(.list-unstyled) li {
   padding: 0.55rem 0.8rem;
   border-radius: var(--ia-radius-sm);
   color: var(--bs-body-color);
 }
-main.form-signin ul li + li { border-top: 1px solid var(--bs-border-color); }
+main.form-signin ul:not(.list-unstyled) li + li { border-top: 1px solid var(--bs-border-color); }
 main.form-signin .btn-lg { border-radius: var(--ia-radius-md); padding-block: 0.7rem; }
 
 /* Credential reset / settings shell + side menu */
