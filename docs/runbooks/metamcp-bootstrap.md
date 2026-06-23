@@ -78,3 +78,34 @@ tools:
 
 Grafana fronts every datasource (Prometheus, VictoriaMetrics, Loki, VictoriaLogs), so
 this one server is the read path into the whole telemetry stack during the VM migration.
+
+## DBHub (read-only SQL over metamcp-db)
+
+`dbhub-mcp` connects to `metamcp-db` as a dedicated **SELECT-only** Postgres role — the
+hard read-only boundary; `dbhub.toml` `readonly=true` is the tool-layer belt-and-braces.
+Two one-time steps before the pod is functional:
+
+1. Create the role + grants in `metamcp-db`. Connect with a role that has CREATEROLE
+   (the CNPG superuser — `kubectl cnpg psql metamcp-db`, or set
+   `enableSuperuserAccess: true` on the Cluster if disabled), then:
+   ```sql
+   CREATE ROLE dbhub_ro LOGIN PASSWORD '<generate-a-strong-password>';
+   GRANT CONNECT ON DATABASE metamcp TO dbhub_ro;
+   GRANT USAGE ON SCHEMA public TO dbhub_ro;
+   GRANT SELECT ON ALL TABLES IN SCHEMA public TO dbhub_ro;
+   ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO dbhub_ro;
+   ```
+   The `ALTER DEFAULT PRIVILEGES` line covers tables metamcp creates later (schema
+   migrations on image bumps), so the role stays read-complete without re-granting.
+2. Put the matching DSN into the SOPS secret (the committed value is a placeholder):
+   ```sh
+   sops set kubernetes/apps/ai/dbhub-mcp/app/secret.sops.yaml \
+     '["stringData"]["METAMCP_DSN"]' \
+     '"postgresql://dbhub_ro:<password>@metamcp-db-rw.ai.svc.cluster.local:5432/metamcp?sslmode=require"'
+   ```
+3. Commit + reconcile; confirm the pod is healthy. Register `dbhub` in MetaMCP
+   (Import JSON → `default` namespace) and verify a SELECT works and an INSERT is refused.
+
+DBHub reaches only `metamcp-db` (the one in-cluster Postgres). The *arr/Jellyfin databases
+are SQLite; to query those, add an `[[sources]]` block with a `sqlite:///<path>` DSN and
+mount the DB file read-only into the pod.
