@@ -1,0 +1,80 @@
+---
+# In-cluster HTTP MCP server reached by metamcp via Service DNS at
+# http://dbhub-mcp.ai.svc.cluster.local:8080/mcp. Not on any Gateway.
+#
+# Read-only SQL over metamcp-db (the gateway's own registry: servers,
+# namespaces, endpoints). Two read-only layers: a SELECT-only Postgres role
+# (the hard boundary) and dbhub.toml [[tools]] readonly=true (tool layer).
+# Read-only is NOT a flag here — --readonly crashes the process, so the TOML
+# ConfigMap is required. The DSN comes from the SOPS secret and is referenced
+# in the ConfigMap TOML via ${METAMCP_DSN}.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: dbhub-mcp
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: dbhub-mcp
+  interval: 1h
+  values:
+    controllers:
+      dbhub-mcp:
+        containers:
+          app:
+            image:
+              # Docker Hub only; no ghcr mirror.
+              repository: docker.io/bytebase/dbhub
+              tag: 0.22.3
+            args:
+              - --transport=http
+              - --port=8080
+              - --config=/config/dbhub.toml
+            env:
+              DBHUB_HOST: 0.0.0.0
+              HOME: /tmp
+            envFrom:
+              - secretRef:
+                  name: dbhub-mcp-secrets
+            probes:
+              liveness: &probes
+                enabled: true
+                custom: true
+                spec:
+                  tcpSocket:
+                    port: &port 8080
+                  initialDelaySeconds: 10
+                  periodSeconds: 10
+                  timeoutSeconds: 1
+                  failureThreshold: 3
+              readiness: *probes
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities: { drop: ["ALL"] }
+            resources:
+              requests:
+                cpu: 25m
+                memory: 64Mi
+              limits:
+                memory: 256Mi
+    defaultPodOptions:
+      securityContext:
+        # Image has no USER (runs as root); pin numeric UID so kubelet's
+        # runAsNonRoot admission check passes.
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+    persistence:
+      config:
+        type: configMap
+        name: dbhub-mcp-config
+        globalMounts:
+          - path: /config
+            readOnly: true
+    service:
+      app:
+        controller: dbhub-mcp
+        ports:
+          http:
+            port: *port

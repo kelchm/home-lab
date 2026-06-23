@@ -1,0 +1,21 @@
+---
+# Default-deny shape: only MCP gateways in the ai namespace reach the dbhub-mcp
+# HTTP transport. Egress is unrestricted so the server can resolve DNS and
+# reach the metamcp-db Postgres in this namespace.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: dbhub-mcp
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: dbhub-mcp
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: ai
+            app.kubernetes.io/name: metamcp
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
