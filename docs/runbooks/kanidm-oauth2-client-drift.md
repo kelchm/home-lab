@@ -88,6 +88,9 @@ and let kaniop re-read it.
 - After rotation, any users currently authenticated against the
   affected client are unaffected (the rotation only changes the
   `client_secret`, not the session cookie's encryption key).
-- Track the upstream gap at [pando85/kaniop#491](https://github.com/pando85/kaniop/issues/491)
-  and the eventual-consistency caveat at the
+- The `force-secret-rotation` annotation was added in
+  [pando85/kaniop#648](https://github.com/pando85/kaniop/pull/648). The underlying
+  multi-replica `basic_secret` read-after-write race is not tracked upstream: kaniop
+  reads the secret back from a separate, possibly not-yet-converged pod across the
+  headless (`clusterIP: None`) Service. See the eventual-consistency caveat in the
   [kanidm replication docs](https://kanidm.github.io/kanidm/stable/repl/index.html).
