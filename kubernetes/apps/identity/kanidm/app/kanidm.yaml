@@ -15,7 +15,7 @@ spec:
     displayName: auth.home.kelch.io
 
   # renovate: datasource=docker depName=docker.io/kanidm/server
-  image: kanidm/server:1.10.3
+  image: kanidm/server:1.10.4
 
   logLevel: info
 
