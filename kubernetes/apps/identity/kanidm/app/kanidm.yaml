@@ -9,6 +9,11 @@ spec:
   domain: auth.home.kelch.io
   origin: https://auth.home.kelch.io
 
+  # Shown as the login heading and navbar brand. Without this kaniop defaults
+  # to "Kanidm <hostname>".
+  domainAppearance:
+    displayName: auth.home.kelch.io
+
   # renovate: datasource=docker depName=docker.io/kanidm/server
   image: kanidm/server:1.10.3
 
