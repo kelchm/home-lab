@@ -16,6 +16,9 @@ spec:
     name: kanidm
     namespace: identity
   displayname: Grafana
+  # Portal tile icon — kaniop downloads this and sets it in kanidm.
+  image:
+    url: https://raw.githubusercontent.com/kelchm/home-lab/main/kubernetes/apps/identity/kanidm/app/portal-icons/grafana.svg
   origin: https://grafana.home.kelch.io
   redirectUrl:
     - https://grafana.home.kelch.io/login/generic_oauth

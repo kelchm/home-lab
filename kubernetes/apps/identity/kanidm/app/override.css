@@ -316,6 +316,18 @@ main.form-signin .btn + .btn { margin-top: 0.6rem; }
   --bs-alert-border-color: var(--bs-border-color);
   --bs-alert-color: var(--bs-body-color);
   border-left: 3px solid var(--ia-accent);
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.alert-info::before {   /* leading lock icon for the auth-context chip (Tabler 'lock', masked) */
+  content: "";
+  flex: none;
+  width: 1.1rem;
+  height: 1.1rem;
+  background-color: var(--bs-link-color);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M5%2013a2%202%200%200%201%202%20-2h10a2%202%200%200%201%202%202v6a2%202%200%200%201%20-2%202h-10a2%202%200%200%201%20-2%20-2v-6%22%20%2F%3E%3Cpath%20d%3D%22M11%2016a1%201%200%201%200%202%200a1%201%200%200%200%20-2%200%22%20%2F%3E%3Cpath%20d%3D%22M8%2011v-4a4%204%200%201%201%208%200v4%22%20%2F%3E%3C%2Fsvg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M5%2013a2%202%200%200%201%202%20-2h10a2%202%200%200%201%202%202v6a2%202%200%200%201%20-2%202h-10a2%202%200%200%201%20-2%20-2v-6%22%20%2F%3E%3Cpath%20d%3D%22M11%2016a1%201%200%201%200%202%200a1%201%200%200%200%20-2%200%22%20%2F%3E%3Cpath%20d%3D%22M8%2011v-4a4%204%200%201%201%208%200v4%22%20%2F%3E%3C%2Fsvg%3E") center / contain no-repeat;
 }
 .alert-danger {
   --bs-alert-bg: rgba(217, 45, 32, 0.08);
@@ -439,9 +451,20 @@ main.form-signin ul:not(.list-unstyled) {
   margin-bottom: 1.5rem;
 }
 main.form-signin ul:not(.list-unstyled) li {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
   padding: 0.55rem 0.8rem;
   border-radius: var(--ia-radius-sm);
   color: var(--bs-body-color);
+}
+main.form-signin ul:not(.list-unstyled) li::before {   /* accent marker per scope row */
+  content: "";
+  flex: none;
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: var(--ia-accent);
 }
 main.form-signin ul:not(.list-unstyled) li + li { border-top: 1px solid var(--bs-border-color); }
 main.form-signin .btn-lg { border-radius: var(--ia-radius-md); padding-block: 0.7rem; }
