@@ -1,0 +1,10 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Gateway API standard-channel CRDs + the safe-upgrades ValidatingAdmissionPolicy
+# (gatewayclasses, gateways, httproutes, grpcroutes, tlsroutes, referencegrants,
+# backendtlspolicies, listenersets). Traefik's kubernetesGateway provider needs
+# the v1 TLSRoute CRD that ships in the standard channel from v1.5.0 onward.
+resources:
+  # renovate: datasource=github-releases depName=kubernetes-sigs/gateway-api
+  - https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/standard-install.yaml
