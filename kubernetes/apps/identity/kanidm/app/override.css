@@ -425,9 +425,10 @@ main.container-lg .card { height: 100%; }
   border-radius: var(--ia-radius-md);
 }
 
-/* OAuth2 consent — scope list as a bounded, scannable block */
+/* OAuth2 consent — scope list as a bounded, scannable block. Excludes
+   .list-unstyled so it doesn't box the login_mech_choose button list. */
 main.form-signin h2.h3 { font-weight: 600; letter-spacing: -0.2px; margin-bottom: 1.25rem; }
-main.form-signin ul {
+main.form-signin ul:not(.list-unstyled) {
   text-align: left;
   list-style: none;
   background: var(--bs-secondary-bg);
@@ -436,12 +437,12 @@ main.form-signin ul {
   padding: 0.4rem;
   margin-bottom: 1.5rem;
 }
-main.form-signin ul li {
+main.form-signin ul:not(.list-unstyled) li {
   padding: 0.55rem 0.8rem;
   border-radius: var(--ia-radius-sm);
   color: var(--bs-body-color);
 }
-main.form-signin ul li + li { border-top: 1px solid var(--bs-border-color); }
+main.form-signin ul:not(.list-unstyled) li + li { border-top: 1px solid var(--bs-border-color); }
 main.form-signin .btn-lg { border-radius: var(--ia-radius-md); padding-block: 0.7rem; }
 
 /* Credential reset / settings shell + side menu */
