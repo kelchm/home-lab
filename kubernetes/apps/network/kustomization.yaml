@@ -11,5 +11,6 @@ resources:
   - ./cloudflare-dns/ks.yaml
   - ./cloudflare-tunnel/ks.yaml
   - ./gateway-certificates/ks.yaml
+  - ./gateway-api/ks.yaml
   - ./k8s-gateway/ks.yaml
   - ./traefik/ks.yaml
