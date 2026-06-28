@@ -22,7 +22,7 @@ spec:
             image:
               repository: docker.io/mcp/markitdown
               # Only :latest is published; pin the digest for reproducibility.
-              tag: latest@sha256:200809df27ad8f73b08706842ae7a35b3f5dc4c165dd6f1e7eef70613a98dd43
+              tag: latest@sha256:9cb5f26d30b609a1d5560a090371cb9dba84fc32e7df10e5496aa22aa7b52658
             # Image ENTRYPOINT is ["markitdown-mcp"]; supply args only.
             args:
               - --http
