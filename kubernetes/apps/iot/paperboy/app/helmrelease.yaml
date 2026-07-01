@@ -1,0 +1,108 @@
+---
+# paperboy — newspaper front-page mirror for wall-mounted e-ink displays.
+# Household-facing (gateway-services); no auth — displays fetch by URL over the
+# LAN. Mirrors public freedomforum.org front pages, so no credentials / Secret.
+#
+# A background reconciler polls upstream and archives PDFs to /data; HTTP
+# handlers are pure reads over that archive. Liveness is /health (up-with-
+# process); readiness is /healthz, which goes green once at least one edition is
+# archived (a warm PVC is ready at once; a cold start waits for the first poll).
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: paperboy
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: paperboy
+  interval: 1h
+  values:
+    controllers:
+      paperboy:
+        # RWO PVC + single replica: old pod must release the volume before
+        # the new one attaches.
+        strategy: Recreate
+        containers:
+          app:
+            image:
+              repository: ghcr.io/kelchm/paperboy
+              # Mutable tag: Always so the node re-pulls on pod restart.
+              tag: latest
+              pullPolicy: Always
+            env:
+              TZ: America/New_York
+              PAPERBOY_PORT: &port 8080
+              PAPERBOY_DATA_DIR: /data
+              PAPERBOY_LOG_LEVEL: info
+              # Retain a year of archived editions (engine default is 14).
+              PAPERBOY_ARCHIVE_DAYS: "365"
+            probes:
+              # Up-with-process; always 200.
+              liveness:
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: /health
+                    port: *port
+                  initialDelaySeconds: 10
+                  periodSeconds: 15
+                  timeoutSeconds: 2
+                  failureThreshold: 3
+              # 200 once the reconciler has archived ≥1 edition. Cold start
+              # (empty PVC) is briefly not-ready until the first poll lands.
+              readiness:
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: /healthz
+                    port: *port
+                  initialDelaySeconds: 5
+                  periodSeconds: 10
+                  timeoutSeconds: 2
+                  failureThreshold: 3
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities: { drop: ["ALL"] }
+            resources:
+              requests:
+                cpu: 50m
+                memory: 128Mi
+              limits:
+                memory: 512Mi
+    defaultPodOptions:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        # PVC initialized with this gid so the runtime user can write /data.
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+    service:
+      app:
+        controller: paperboy
+        ports:
+          http:
+            port: *port
+    persistence:
+      # Durable archive of front-page PDFs + disposable PNG cache + state.json.
+      # ~365 days × 6 sources of PDFs, plus renders; longhorn expands online.
+      data:
+        type: persistentVolumeClaim
+        storageClass: longhorn
+        size: 20Gi
+        accessMode: ReadWriteOnce
+        globalMounts:
+          - path: /data
+    route:
+      app:
+        hostnames: ["paperboy.home.kelch.io"]
+        parentRefs:
+          - name: gateway-services
+            namespace: network
+            sectionName: https
+        rules:
+          - backendRefs:
+              - identifier: app
+                port: *port
