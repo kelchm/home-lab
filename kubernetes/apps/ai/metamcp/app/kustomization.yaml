@@ -8,3 +8,4 @@ resources:
   - ./oauth2-client.yaml
   - ./helmrelease.yaml
   - ./httproute.yaml
+  - ./networkpolicy.yaml
