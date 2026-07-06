@@ -8,4 +8,4 @@ components:
 
 resources:
   - ./namespace.yaml
-  - ./paperboy/ks.yaml
+  - ./broadsheet/ks.yaml
