@@ -26,9 +26,9 @@ spec:
           app:
             image:
               repository: ghcr.io/kelchm/broadsheet
-              # Mutable tag: Always so the node re-pulls on pod restart.
-              tag: latest
-              pullPolicy: Always
+              # Immutable sha tag; bump to deploy. Spegel caches mutable tags
+              # (latest) stale, so a versioned ref is the reliable pull.
+              tag: sha-73dce4f
             env:
               TZ: America/New_York
               BROADSHEET_PORT: &port 8080
