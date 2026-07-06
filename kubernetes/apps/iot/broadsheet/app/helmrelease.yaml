@@ -68,9 +68,13 @@ spec:
             resources:
               requests:
                 cpu: 50m
-                memory: 128Mi
+                # Baseline (cached reads + polling) sits ~130Mi.
+                memory: 256Mi
               limits:
-                memory: 512Mi
+                # MuPDF holds hundreds of MB per in-flight rasterization, and
+                # /admin/papers renders every source at once. 512Mi OOM-killed
+                # the cold-cache render storm.
+                memory: 2Gi
     defaultPodOptions:
       securityContext:
         runAsNonRoot: true
