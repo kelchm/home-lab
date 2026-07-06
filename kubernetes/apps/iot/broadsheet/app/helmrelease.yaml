@@ -1,5 +1,5 @@
 ---
-# paperboy — newspaper front-page mirror for wall-mounted e-ink displays.
+# broadsheet — newspaper front-page mirror for wall-mounted e-ink displays.
 # Household-facing (gateway-services); no auth — displays fetch by URL over the
 # LAN. Mirrors public freedomforum.org front pages, so no credentials / Secret.
 #
@@ -10,32 +10,32 @@
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
-  name: paperboy
+  name: broadsheet
 spec:
   chartRef:
     kind: OCIRepository
-    name: paperboy
+    name: broadsheet
   interval: 1h
   values:
     controllers:
-      paperboy:
+      broadsheet:
         # RWO PVC + single replica: old pod must release the volume before
         # the new one attaches.
         strategy: Recreate
         containers:
           app:
             image:
-              repository: ghcr.io/kelchm/paperboy
+              repository: ghcr.io/kelchm/broadsheet
               # Mutable tag: Always so the node re-pulls on pod restart.
               tag: latest
               pullPolicy: Always
             env:
               TZ: America/New_York
-              PAPERBOY_PORT: &port 8080
-              PAPERBOY_DATA_DIR: /data
-              PAPERBOY_LOG_LEVEL: info
+              BROADSHEET_PORT: &port 8080
+              BROADSHEET_DATA_DIR: /data
+              BROADSHEET_LOG_LEVEL: info
               # Retain a year of archived editions (engine default is 14).
-              PAPERBOY_ARCHIVE_DAYS: "365"
+              BROADSHEET_ARCHIVE_DAYS: "365"
             probes:
               # Up-with-process; always 200.
               liveness:
@@ -76,28 +76,25 @@ spec:
         runAsNonRoot: true
         runAsUser: 1000
         runAsGroup: 1000
-        # PVC initialized with this gid so the runtime user can write /data.
+        # PVC files are owned by this gid so the runtime user can write /data.
         fsGroup: 1000
         seccompProfile: { type: RuntimeDefault }
     service:
       app:
-        controller: paperboy
+        controller: broadsheet
         ports:
           http:
             port: *port
     persistence:
-      # Durable archive of front-page PDFs + disposable PNG cache + state.json.
-      # ~365 days × 6 sources of PDFs, plus renders; longhorn expands online.
+      # Durable archive of front-page PDFs + disposable PNG cache + broadsheet.db.
+      # Statically bound to the existing Longhorn volume (see pvc.yaml).
       data:
-        type: persistentVolumeClaim
-        storageClass: longhorn
-        size: 20Gi
-        accessMode: ReadWriteOnce
+        existingClaim: broadsheet
         globalMounts:
           - path: /data
     route:
       app:
-        hostnames: ["paperboy.home.kelch.io"]
+        hostnames: ["broadsheet.home.kelch.io"]
         parentRefs:
           - name: gateway-services
             namespace: network

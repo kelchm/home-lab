@@ -1,0 +1,15 @@
+---
+# Statically bound to the Longhorn PV that already holds the archived PDFs.
+# volumeName + a matching claimRef on the PV pin this claim to that exact
+# volume so no empty replacement is provisioned.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: broadsheet
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 20Gi
+  volumeName: pvc-1d47a183-b382-4e2e-a0d7-96ac4fbb2b08
