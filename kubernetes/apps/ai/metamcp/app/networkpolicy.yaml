@@ -1,0 +1,26 @@
+---
+# Default-deny shape: only the admin gateway reaches metamcp. metamcp is the
+# MCP aggregator that proxies to kubernetes-mcp, flux-operator-mcp, et al., so
+# its own reachability is the tightest choke point worth constraining. App-layer
+# auth (API keys) is the primary gate; this bounds who can even open a socket to
+# it. Egress is unrestricted so it can proxy to the downstream MCP servers, reach
+# its Postgres backend, and resolve DNS.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: metamcp
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: metamcp
+  ingress:
+    # gateway-admin (traefik-admin) -> metamcp HTTP. metamcp is LAN-only on the
+    # admin gateway, so no other Traefik instance should reach it.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: network
+            app.kubernetes.io/instance: traefik-admin-network
+      toPorts:
+        - ports:
+            - port: "12008"
+              protocol: TCP
