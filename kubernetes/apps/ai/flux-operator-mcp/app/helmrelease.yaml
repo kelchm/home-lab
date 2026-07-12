@@ -33,7 +33,7 @@ spec:
       create: false
     image:
       repository: ghcr.io/controlplaneio-fluxcd/flux-operator-mcp
-      tag: v0.53.0
+      tag: v0.54.1
     securityContext:
       runAsNonRoot: true
       readOnlyRootFilesystem: true
