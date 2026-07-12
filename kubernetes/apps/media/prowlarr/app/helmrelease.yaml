@@ -20,7 +20,7 @@ spec:
             image:
               # renovate: datasource=docker depName=ghcr.io/home-operations/prowlarr
               repository: ghcr.io/home-operations/prowlarr
-              tag: 2.5.1.5460
+              tag: 2.5.1.5464
             env:
               TZ: America/New_York
               # Disables app-level auth; OIDC at the edge is the only gate.
