@@ -20,6 +20,13 @@
   color: "0e8a16"
 - name: area/taskfile
   color: "0e8a16"
+# Priority
+- name: priority/high
+  color: "b60205"
+- name: priority/medium
+  color: "fbca04"
+- name: priority/low
+  color: "0e8a16"
 # Renovate Types
 - name: renovate/container
   color: "027fa0"
