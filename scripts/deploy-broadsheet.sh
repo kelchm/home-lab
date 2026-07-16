@@ -47,7 +47,7 @@ done
 ROOT_DIR="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)"
 cd "$ROOT_DIR"
 if command -v mise >/dev/null 2>&1; then
-    eval "$(mise env)"
+    eval "$(mise env -s bash)"
 fi
 for bin in flux kubectl git curl python3; do
     command -v "$bin" >/dev/null 2>&1 || { log error "missing required tool: $bin"; exit 1; }
