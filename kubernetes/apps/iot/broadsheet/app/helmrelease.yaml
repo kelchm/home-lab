@@ -28,7 +28,7 @@ spec:
               repository: ghcr.io/kelchm/broadsheet
               # Immutable sha tag; bump to deploy. Spegel caches mutable tags
               # (latest) stale, so a versioned ref is the reliable pull.
-              tag: sha-83262ea
+              tag: sha-7772646
             env:
               TZ: America/New_York
               BROADSHEET_PORT: &port 8080
