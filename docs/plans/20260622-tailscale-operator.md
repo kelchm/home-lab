@@ -142,6 +142,49 @@ cannot authenticate and routes will not auto-approve:
    --accept-routes`, or the GUI toggle). If the tailnet ACL is locked down from the
    default allow-all, add a grant permitting client devices to reach the advertised CIDRs.
 
+## Client model & adjacent options
+
+The subnet router is the bridge for devices that **cannot or shouldn't** run a Tailscale
+client (UniFi gateway, switches/APs, appliances, and the cluster gateways / their
+`*.home.kelch.io` VIPs). It is **not** the preferred path for machines you own and can
+install software on. Tier the tailnet:
+
+- **Native clients** — install Tailscale directly on personal workstations, laptops,
+  phones, and key servers. A native node gets its own `100.x` address, a MagicDNS name, an
+  end-to-end encrypted WireGuard path (direct peer-to-peer when NAT traversal succeeds,
+  DERP relay otherwise), and per-device ACL identity. It is reachable **wherever the device
+  is**, and independent of the cluster being up.
+- **Subnet router (this app)** — the `Connector` relays the advertised CIDRs for the
+  clientless fleet above. A subnet-routed host is only reachable **while it sits on the
+  advertised LAN**, and its traffic is forwarded through the router pod (then SNAT'd by
+  Cilium to a VLAN 30 node IP, per Caveats).
+
+Overlap note: VLAN 10 (`10.32.10.0/24`) is advertised, so a workstation there is already
+reachable by its LAN IP over the tailnet *while home* even without a client — treat that as
+incidental. Path selection is by **destination address**, not an automatic preference: dial
+a dual-homed host by its MagicDNS name / `100.x` IP for the direct peer path; its LAN IP
+(`10.32.10.y`, or the NAS at `10.32.20.5`) still routes via the Connector.
+
+### NAS native client
+
+The Synology NAS should run Tailscale's official DSM package rather than being reached only
+via the subnet router: direct, cluster-independent access to the NAS. It can optionally also
+advertise LAN routes as a **backup subnet router and/or exit node** — an out-of-cluster path
+that survives a cluster outage. This only **partially** offsets the chicken-and-egg caveat:
+it restores native NAS access plus whatever LAN CIDRs the NAS itself can L3-reach, but the
+admin-prod / services-prod VIPs (`10.32.130/140`) and `*.home.kelch.io` are still dead if the
+cluster is down, and it is not the in-scope break-glass. A NAS acting as subnet router needs
+its **own** tag — `tag:k8s` is owned by `tag:k8s-operator` and cannot be applied to a
+user/DSM-authenticated node — so give it a distinct tag (e.g. `tag:nas-router`) with matching
+`tagOwners` + `autoApprovers.routes` (plus `autoApprovers.exitNode` if it is also an exit node).
+
+### Exit node (optional)
+
+Any native node (a home box, or the NAS) can be an exit node so a roaming client can route
+**all** internet egress through home on untrusted networks. Not enabled here; noted for
+completeness. The k8s `Connector` can also set `spec.exitNode: true`, but an out-of-cluster
+exit node is preferable for the same cluster-independence reason.
+
 ## Validation
 
 Pre-merge (no cluster needed):
