@@ -24,7 +24,7 @@ spec:
             image:
               # No v-prefix and no ghcr mirror; Docker Hub is the only registry.
               repository: docker.io/grafana/mcp-grafana
-              tag: 0.17.1
+              tag: 0.17.2
             # Image ENTRYPOINT defaults to SSE on path /; override to
             # streamable-http and pin the endpoint path to the Service-DNS
             # convention (default is / which would 404).
