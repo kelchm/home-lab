@@ -73,11 +73,15 @@ spec:
               storage: 50Gi
           storageClassName: longhorn
         resources:
+          # Sized for full-cluster long-range (30d) queries — vmsingle's
+          # per-query memory pool scales with the limit, and cluster RAM
+          # is not a constraint. The 2Gi bake-off sizing starved heavy
+          # cadvisor range queries; this gives ample headroom.
           requests:
             cpu: 200m
-            memory: 1Gi
+            memory: 4Gi
           limits:
-            memory: 2Gi
+            memory: 8Gi
 
     vmagent:
       enabled: true
