@@ -18,7 +18,7 @@ resources:
 configMapGenerator:
   - name: kanidm-theme
     files:
-      - override.css
-      - style.js
+      - theme/override.css
+      - theme/style.js
 generatorOptions:
   disableNameSuffixHash: true
