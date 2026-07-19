@@ -12,12 +12,26 @@ resources:
   - ./traefikservice.yaml
   - ./networkpolicy.yaml
 
-# Generates the kanidm-theme ConfigMap from the standalone override.css.
-# Hash suffix disabled so kanidm.yaml's fixed configMap reference resolves;
+# Theme assets, split by how they mount:
+#  - kanidm-theme: override.css + style.js, subPath-mounted onto individual
+#    files in kanidm's /hpkg (see kanidm.yaml).
+#  - kanidm-icons: the SVGs, dir-mounted at /hpkg/icons so any file added here
+#    is served at /pkg/icons/<name> with no extra mount. ConfigMap keys are
+#    basenames, so filenames must stay unique across icons/apps + icons/brand.
+# Hash suffix disabled so kanidm.yaml's fixed configMap references resolve;
 # Stakater Reloader (annotation on the StatefulSet) handles roll-on-change.
 configMapGenerator:
   - name: kanidm-theme
     files:
-      - override.css
+      - theme/override.css
+      - theme/style.js
+  - name: kanidm-icons
+    files:
+      - theme/icons/apps/grafana.svg
+      - theme/icons/apps/arr-suite.svg
+      - theme/icons/apps/ops-suite.svg
+      - theme/icons/apps/metamcp.svg
+      - theme/icons/brand/logo.svg
+      - theme/icons/brand/logo-nav.svg
 generatorOptions:
   disableNameSuffixHash: true
