@@ -110,12 +110,12 @@ body {
    blocks above so those stay readable). Light glow indigo, dark glow brighter. */
 :root,
 [data-bs-theme="light"] {
-  --ia-logo: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2096%2096%22%3E%3Cdefs%3E%3CradialGradient%20id%3D%22g%22%20cx%3D%2250%25%22%20cy%3D%2243%25%22%20r%3D%2255%25%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%237c3aed%22%20stop-opacity%3D%22.22%22%2F%3E%3Cstop%20offset%3D%22.55%22%20stop-color%3D%22%234f46e5%22%20stop-opacity%3D%22.10%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%234f46e5%22%20stop-opacity%3D%220%22%2F%3E%3C%2FradialGradient%3E%3C%2Fdefs%3E%3Ccircle%20cx%3D%2248%22%20cy%3D%2242%22%20r%3D%2246%22%20fill%3D%22url%28%23g%29%22%2F%3E%3Cg%20fill%3D%22none%22%20stroke%3D%22%234f46e5%22%20stroke-width%3D%225.2%22%20stroke-linecap%3D%22round%22%3E%3Ccircle%20cx%3D%2248%22%20cy%3D%2235%22%20r%3D%2213%22%2F%3E%3Cpath%20d%3D%22M48%2048V74M48%2060H62M48%2069H59%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E");
-  --ia-navlogo: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2040%2040%22%3E%3Cg%20fill%3D%22none%22%20stroke%3D%22%234f46e5%22%20stroke-width%3D%223%22%20stroke-linecap%3D%22round%22%3E%3Ccircle%20cx%3D%2220%22%20cy%3D%2213%22%20r%3D%227.5%22%2F%3E%3Cpath%20d%3D%22M20%2020.5V33M20%2027H29M20%2031.5H26%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E");
+  --ia-logo: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2096%2096%22%3E%3Cdefs%3E%3CradialGradient%20id%3D%22g%22%20cx%3D%2250%25%22%20cy%3D%2243%25%22%20r%3D%2255%25%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%237c3aed%22%20stop-opacity%3D%22.22%22%2F%3E%3Cstop%20offset%3D%22.55%22%20stop-color%3D%22%234f46e5%22%20stop-opacity%3D%22.10%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%234f46e5%22%20stop-opacity%3D%220%22%2F%3E%3C%2FradialGradient%3E%3C%2Fdefs%3E%3Ccircle%20cx%3D%2248%22%20cy%3D%2242%22%20r%3D%2246%22%20fill%3D%22url%28%23g%29%22%2F%3E%3Cg%20transform%3D%22translate%286.4%2C6.4%29%20scale%282.6%29%22%20fill%3D%22none%22%20stroke%3D%22%234f46e5%22%20stroke-width%3D%222.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Ccircle%20cx%3D%2216%22%20cy%3D%229.5%22%20r%3D%225.4%22%2F%3E%3Cpath%20d%3D%22M16%2014.9V27M16%2021h5M16%2025h4%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E");
+  --ia-navlogo: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2040%2040%22%3E%3Cg%20transform%3D%22translate%282%2C2%29%20scale%281.125%29%22%20fill%3D%22none%22%20stroke%3D%22%234f46e5%22%20stroke-width%3D%222.6%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Ccircle%20cx%3D%2216%22%20cy%3D%229.5%22%20r%3D%225.4%22%2F%3E%3Cpath%20d%3D%22M16%2014.9V27M16%2021h5M16%2025h4%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E");
 }
 [data-bs-theme="dark"] {
-  --ia-logo: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2096%2096%22%3E%3Cdefs%3E%3CradialGradient%20id%3D%22g%22%20cx%3D%2250%25%22%20cy%3D%2243%25%22%20r%3D%2255%25%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%23818cf8%22%20stop-opacity%3D%22.34%22%2F%3E%3Cstop%20offset%3D%22.55%22%20stop-color%3D%22%237c3aed%22%20stop-opacity%3D%22.16%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%234f46e5%22%20stop-opacity%3D%220%22%2F%3E%3C%2FradialGradient%3E%3C%2Fdefs%3E%3Ccircle%20cx%3D%2248%22%20cy%3D%2242%22%20r%3D%2246%22%20fill%3D%22url%28%23g%29%22%2F%3E%3Cg%20fill%3D%22none%22%20stroke%3D%22%23a5b4fc%22%20stroke-width%3D%225.2%22%20stroke-linecap%3D%22round%22%3E%3Ccircle%20cx%3D%2248%22%20cy%3D%2235%22%20r%3D%2213%22%2F%3E%3Cpath%20d%3D%22M48%2048V74M48%2060H62M48%2069H59%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E");
-  --ia-navlogo: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2040%2040%22%3E%3Cg%20fill%3D%22none%22%20stroke%3D%22%23a5b4fc%22%20stroke-width%3D%223%22%20stroke-linecap%3D%22round%22%3E%3Ccircle%20cx%3D%2220%22%20cy%3D%2213%22%20r%3D%227.5%22%2F%3E%3Cpath%20d%3D%22M20%2020.5V33M20%2027H29M20%2031.5H26%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E");
+  --ia-logo: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2096%2096%22%3E%3Cdefs%3E%3CradialGradient%20id%3D%22g%22%20cx%3D%2250%25%22%20cy%3D%2243%25%22%20r%3D%2255%25%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%23818cf8%22%20stop-opacity%3D%22.34%22%2F%3E%3Cstop%20offset%3D%22.55%22%20stop-color%3D%22%237c3aed%22%20stop-opacity%3D%22.16%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%237c3aed%22%20stop-opacity%3D%220%22%2F%3E%3C%2FradialGradient%3E%3C%2Fdefs%3E%3Ccircle%20cx%3D%2248%22%20cy%3D%2242%22%20r%3D%2246%22%20fill%3D%22url%28%23g%29%22%2F%3E%3Cg%20transform%3D%22translate%286.4%2C6.4%29%20scale%282.6%29%22%20fill%3D%22none%22%20stroke%3D%22%23a5b4fc%22%20stroke-width%3D%222.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Ccircle%20cx%3D%2216%22%20cy%3D%229.5%22%20r%3D%225.4%22%2F%3E%3Cpath%20d%3D%22M16%2014.9V27M16%2021h5M16%2025h4%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E");
+  --ia-navlogo: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2040%2040%22%3E%3Cg%20transform%3D%22translate%282%2C2%29%20scale%281.125%29%22%20fill%3D%22none%22%20stroke%3D%22%23a5b4fc%22%20stroke-width%3D%222.6%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Ccircle%20cx%3D%2216%22%20cy%3D%229.5%22%20r%3D%225.4%22%2F%3E%3Cpath%20d%3D%22M16%2014.9V27M16%2021h5M16%2025h4%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E");
 }
 
 /* Page background: flat color + a faint top aurora wash */
@@ -123,8 +123,11 @@ body {
   background-color: var(--bs-body-bg);
   background-image: var(--ia-page-tint);
   background-repeat: no-repeat;
-  background-attachment: fixed;
 }
+/* Theme the browser chrome (scrollbars, native controls, root canvas) per mode
+   and paint the root so the iOS overscroll area isn't a bare gap. */
+:root { color-scheme: light dark; }
+html { background-color: var(--bs-body-bg); }
 
 /* ===== Controls ========================================================== */
 
@@ -619,12 +622,14 @@ main.form-signin .btn-lg { border-radius: var(--ia-radius-md); padding-block: 0.
 #main code, #main .opid { font-family: var(--ia-font-mono); user-select: all; }
 
 /* Footer */
-footer.footer.bg-body-tertiary {        /* !important beats the .bg-body-tertiary utility */
+footer.footer.bg-body-tertiary {        /* !important beats the .bg-body-tertiary / .text-end utilities */
   background-color: transparent !important;
-  border-top: 1px solid var(--bs-border-color-translucent);
+  text-align: center !important;
   color: var(--bs-tertiary-color);
+  font-size: 0.8125rem;
+  opacity: 0.85;
 }
-footer.footer a { color: var(--bs-link-color); font-weight: 500; }
+footer.footer a { color: inherit; font-weight: 500; text-underline-offset: 0.18em; }
 
 /* ===== Accessibility ===================================================== */
 

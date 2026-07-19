@@ -104,6 +104,10 @@ spec:
       mountPath: /hpkg/override.css
       subPath: override.css
       readOnly: true
+    - name: theme
+      mountPath: /hpkg/style.js
+      subPath: style.js
+      readOnly: true
 
   # Empty selector = match all namespaces. Required so OAuth2 client CRs can
   # live alongside the consumer apps that depend on them.
