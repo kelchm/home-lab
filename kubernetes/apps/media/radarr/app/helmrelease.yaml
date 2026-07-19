@@ -17,7 +17,7 @@ spec:
             image:
               # renovate: datasource=docker depName=ghcr.io/home-operations/radarr
               repository: ghcr.io/home-operations/radarr
-              tag: 6.3.0.10514
+              tag: 6.4.0.10523
             env:
               TZ: America/New_York
               RADARR__AUTH__METHOD: External
