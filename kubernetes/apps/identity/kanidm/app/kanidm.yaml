@@ -88,17 +88,22 @@ spec:
     seccompProfile:
       type: RuntimeDefault
 
-  # Custom web-UI theme. The kanidm-theme ConfigMap (generated from override.css
-  # by kustomization.yaml) holds the stylesheet, which kanidm serves at
-  # /pkg/override.css (loaded last in <head>, so it wins the cascade). kaniop
-  # appends these to the StatefulSet; the volumeMount lands on the kanidm
-  # container. The StatefulSet's reloader.stakater.com/auto annotation rolls the
-  # pods when the ConfigMap changes — required because subPath mounts don't
-  # live-update.
+  # Custom web-UI theme. Two ConfigMaps (generated in kustomization.yaml), served
+  # by kanidm out of /pkg. kaniop appends these to the StatefulSet; the mounts
+  # land on the kanidm container. The StatefulSet's reloader.stakater.com/auto
+  # annotation rolls the pods when either ConfigMap changes.
+  #  - kanidm-theme: override.css + style.js, subPath-mounted onto individual
+  #    files (subPath mounts don't live-update, hence Reloader).
+  #  - kanidm-icons: dir-mounted at /hpkg/icons, so every SVG is served at
+  #    /pkg/icons/<name> — the brand logos (referenced by override.css) and the
+  #    portal tiles (fetched by kaniop via image.url on each OAuth2 client).
   volumes:
     - name: theme
       configMap:
         name: kanidm-theme
+    - name: theme-icons
+      configMap:
+        name: kanidm-icons
   volumeMounts:
     - name: theme
       mountPath: /hpkg/override.css
@@ -110,6 +115,9 @@ spec:
     - name: theme
       mountPath: /hpkg/style.js
       subPath: style.js
+      readOnly: true
+    - name: theme-icons
+      mountPath: /hpkg/icons
       readOnly: true
 
   # Empty selector = match all namespaces. Required so OAuth2 client CRs can

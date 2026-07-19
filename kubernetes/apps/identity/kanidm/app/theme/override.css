@@ -106,17 +106,9 @@ body {
   --ia-focus-ring: rgba(129, 140, 248, 0.45);
 }
 
-/* Logo — custom key mark as a per-mode inline SVG (kept out of the palette
-   blocks above so those stay readable). Light glow indigo, dark glow brighter. */
-:root,
-[data-bs-theme="light"] {
-  --ia-logo: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2096%2096%22%3E%3Cdefs%3E%3CradialGradient%20id%3D%22g%22%20cx%3D%2250%25%22%20cy%3D%2246%25%22%20r%3D%2258%25%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%237c3aed%22%20stop-opacity%3D%22.12%22%2F%3E%3Cstop%20offset%3D%22.5%22%20stop-color%3D%22%234f46e5%22%20stop-opacity%3D%22.05%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%234f46e5%22%20stop-opacity%3D%220%22%2F%3E%3C%2FradialGradient%3E%3C%2Fdefs%3E%3Ccircle%20cx%3D%2248%22%20cy%3D%2248%22%20r%3D%2247%22%20fill%3D%22url%28%23g%29%22%2F%3E%3Cg%20transform%3D%22translate%2820.4%2C20.4%29%20scale%282.3%29%22%20fill%3D%22none%22%20stroke%3D%22%234f46e5%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M16.555%203.843l3.602%203.602a2.877%202.877%200%200%201%200%204.069l-2.643%202.643a2.877%202.877%200%200%201%20-4.069%200l-.301%20-.301l-6.558%206.558a2%202%200%200%201%20-1.239%20.578l-.175%20.008h-1.172a1%201%200%200%201%20-.993%20-.883l-.007%20-.117v-1.172a2%202%200%200%201%20.467%20-1.284l.119%20-.13l.414%20-.414h2v-2h2v-2l2.144%20-2.144l-.301%20-.301a2.877%202.877%200%200%201%200%20-4.069l2.643%20-2.643a2.877%202.877%200%200%201%204.069%200%22%20%2F%3E%3Cpath%20d%3D%22M15%209h.01%22%20%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E");
-  --ia-navlogo: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2040%2040%22%3E%3Cg%20transform%3D%22translate%283.2%2C3.2%29%20scale%281.4%29%22%20fill%3D%22none%22%20stroke%3D%22%234f46e5%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M16.555%203.843l3.602%203.602a2.877%202.877%200%200%201%200%204.069l-2.643%202.643a2.877%202.877%200%200%201%20-4.069%200l-.301%20-.301l-6.558%206.558a2%202%200%200%201%20-1.239%20.578l-.175%20.008h-1.172a1%201%200%200%201%20-.993%20-.883l-.007%20-.117v-1.172a2%202%200%200%201%20.467%20-1.284l.119%20-.13l.414%20-.414h2v-2h2v-2l2.144%20-2.144l-.301%20-.301a2.877%202.877%200%200%201%200%20-4.069l2.643%20-2.643a2.877%202.877%200%200%201%204.069%200%22%20%2F%3E%3Cpath%20d%3D%22M15%209h.01%22%20%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E");
-}
-[data-bs-theme="dark"] {
-  --ia-logo: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2096%2096%22%3E%3Cdefs%3E%3CradialGradient%20id%3D%22g%22%20cx%3D%2250%25%22%20cy%3D%2246%25%22%20r%3D%2258%25%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%23818cf8%22%20stop-opacity%3D%22.20%22%2F%3E%3Cstop%20offset%3D%22.5%22%20stop-color%3D%22%237c3aed%22%20stop-opacity%3D%22.09%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%237c3aed%22%20stop-opacity%3D%220%22%2F%3E%3C%2FradialGradient%3E%3C%2Fdefs%3E%3Ccircle%20cx%3D%2248%22%20cy%3D%2248%22%20r%3D%2247%22%20fill%3D%22url%28%23g%29%22%2F%3E%3Cg%20transform%3D%22translate%2820.4%2C20.4%29%20scale%282.3%29%22%20fill%3D%22none%22%20stroke%3D%22%23a5b4fc%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M16.555%203.843l3.602%203.602a2.877%202.877%200%200%201%200%204.069l-2.643%202.643a2.877%202.877%200%200%201%20-4.069%200l-.301%20-.301l-6.558%206.558a2%202%200%200%201%20-1.239%20.578l-.175%20.008h-1.172a1%201%200%200%201%20-.993%20-.883l-.007%20-.117v-1.172a2%202%200%200%201%20.467%20-1.284l.119%20-.13l.414%20-.414h2v-2h2v-2l2.144%20-2.144l-.301%20-.301a2.877%202.877%200%200%201%200%20-4.069l2.643%20-2.643a2.877%202.877%200%200%201%204.069%200%22%20%2F%3E%3Cpath%20d%3D%22M15%209h.01%22%20%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E");
-  --ia-navlogo: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2040%2040%22%3E%3Cg%20transform%3D%22translate%283.2%2C3.2%29%20scale%281.4%29%22%20fill%3D%22none%22%20stroke%3D%22%23a5b4fc%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M16.555%203.843l3.602%203.602a2.877%202.877%200%200%201%200%204.069l-2.643%202.643a2.877%202.877%200%200%201%20-4.069%200l-.301%20-.301l-6.558%206.558a2%202%200%200%201%20-1.239%20.578l-.175%20.008h-1.172a1%201%200%200%201%20-.993%20-.883l-.007%20-.117v-1.172a2%202%200%200%201%20.467%20-1.284l.119%20-.13l.414%20-.414h2v-2h2v-2l2.144%20-2.144l-.301%20-.301a2.877%202.877%200%200%201%200%20-4.069l2.643%20-2.643a2.877%202.877%200%200%201%204.069%200%22%20%2F%3E%3Cpath%20d%3D%22M15%209h.01%22%20%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E");
-}
+/* Logo — the key marks live as served SVGs under /pkg/icons (kanidm-icons
+   ConfigMap). Each SVG adapts light/dark via its own prefers-color-scheme,
+   so no per-mode CSS is needed here. */
 
 /* Page background: flat color + a faint top aurora wash */
 body {
@@ -313,7 +305,7 @@ main.form-signin .btn-success { width: 100%; min-height: 44px; }
   width: 6em;
   height: 6em;
   margin-bottom: 0.6rem;
-  content: var(--ia-logo);
+  content: url("/pkg/icons/logo.svg");
   object-fit: contain;
 }
 
@@ -368,7 +360,7 @@ nav.navbar.bg-body-tertiary {           /* !important beats the .bg-body-tertiar
   gap: 0.55rem;
 }
 nav .navbar-brand img {
-  content: var(--ia-navlogo);
+  content: url("/pkg/icons/logo-nav.svg");
   width: auto;
   height: 34px;
 }

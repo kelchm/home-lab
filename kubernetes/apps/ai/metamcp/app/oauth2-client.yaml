@@ -15,7 +15,7 @@ spec:
   displayname: MetaMCP
   # Portal tile icon — kaniop downloads this and sets it in kanidm.
   image:
-    url: https://raw.githubusercontent.com/kelchm/home-lab/main/kubernetes/apps/identity/kanidm/app/theme/portal-icons/metamcp.svg
+    url: https://auth.home.kelch.io/pkg/icons/metamcp.svg
   origin: https://metamcp.home.kelch.io
   redirectUrl:
     - https://metamcp.home.kelch.io/api/auth/oauth2/callback/oidc
