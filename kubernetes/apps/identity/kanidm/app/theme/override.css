@@ -278,6 +278,27 @@ a:hover { text-decoration-color: rgba(var(--ia-accent-rgb), 0.6); }
   border: 1px solid transparent;
 }
 
+/* Password-manager decoy fields: kanidm ships hidden #password/#totp inputs
+   (class .d-none) so a manager can autofill on the username step. iOS Safari
+   can't render a display:none credential field in place, so it pins an AutoFill
+   affordance to the bottom of the viewport — a black bar under our dark
+   color-scheme. Swap display:none for the visually-hidden pattern: a zero-size
+   clipped box that stays autofillable but is decorated in place, not pinned. */
+main.form-signin input#password,
+main.form-signin input#totp {
+  display: block !important;   /* beat .d-none: keep the field in-flow */
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  margin: -1px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  clip-path: inset(50%) !important;
+  opacity: 0 !important;
+}
+
 /* ===== Pages ============================================================= */
 
 /* Login / recover / error card */
