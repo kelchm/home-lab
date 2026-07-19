@@ -1,0 +1,19 @@
+---
+# Separate Kustomization so the tailscale-operator HelmRelease can install the
+# Connector CRD before Flux dry-runs this CR.
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: tailscale-connector
+spec:
+  dependsOn:
+    - name: tailscale-operator
+  interval: 1h
+  path: ./kubernetes/apps/tailscale/connector/app
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+    namespace: flux-system
+  targetNamespace: tailscale
+  wait: false

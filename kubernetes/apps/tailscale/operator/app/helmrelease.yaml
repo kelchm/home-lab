@@ -1,0 +1,38 @@
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: tailscale-operator
+spec:
+  chart:
+    spec:
+      chart: tailscale-operator
+      version: 1.98.4
+      sourceRef:
+        kind: HelmRepository
+        name: tailscale
+  interval: 1h
+  values:
+    # oauth.clientId left unset → operator mounts the pre-created operator-oauth
+    # Secret (secret.sops.yaml) at /oauth.
+    operatorConfig:
+      # Operator device tag; the OAuth client must own tag:k8s-operator.
+      defaultTags:
+        - "tag:k8s-operator"
+      resources:
+        requests:
+          cpu: 25m
+          memory: 64Mi
+        limits:
+          memory: 128Mi
+      # Userspace tailscaled needs no caps; non-root/RO-root omitted (see plan doc).
+      podSecurityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+    proxyConfig:
+      # Tag applied to operator-created proxies; the OAuth client must own tag:k8s.
+      defaultTags: "tag:k8s"

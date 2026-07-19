@@ -1,0 +1,9 @@
+---
+# Tailscale publishes the operator chart to a classic Helm repo (not OCI).
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: tailscale
+spec:
+  interval: 15m
+  url: https://pkgs.tailscale.com/helmcharts
