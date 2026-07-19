@@ -104,6 +104,13 @@ spec:
       mountPath: /hpkg/override.css
       subPath: override.css
       readOnly: true
+    # style.js overrides kanidm's to keep <meta theme-color> in sync per mode
+    # (mobile browser chrome). Mirrors upstream's data-bs-theme logic — re-check
+    # on kanidm upgrades.
+    - name: theme
+      mountPath: /hpkg/style.js
+      subPath: style.js
+      readOnly: true
 
   # Empty selector = match all namespaces. Required so OAuth2 client CRs can
   # live alongside the consumer apps that depend on them.

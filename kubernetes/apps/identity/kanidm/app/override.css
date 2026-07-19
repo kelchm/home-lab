@@ -127,7 +127,8 @@ body {
 /* Theme the browser chrome (scrollbars, native controls, root canvas) per mode
    and paint the root so the iOS overscroll area isn't a bare gap. */
 :root { color-scheme: light dark; }
-html { background-color: var(--bs-body-bg); }
+html { min-height: 100%; background-color: var(--bs-body-bg); }
+body { min-height: 100dvh; }   /* fill the visible area; kanidm's height:100% is only the short iOS viewport */
 
 /* ===== Controls ========================================================== */
 
@@ -289,7 +290,7 @@ a:hover { text-decoration-color: rgba(var(--ia-accent-rgb), 0.6); }
 
 /* Login / recover / error card */
 main.form-signin {
-  max-width: 432px;
+  max-width: min(432px, calc(100% - 2rem));
   width: 100%;
   margin-block: clamp(2rem, 8vh, 5rem);
   padding: 2.25rem 2.5rem 2.25rem;
