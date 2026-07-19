@@ -17,7 +17,7 @@ spec:
   displayname: Ops Admin Suite
   # Portal tile icon — kaniop downloads this and sets it in kanidm.
   image:
-    url: https://raw.githubusercontent.com/kelchm/home-lab/main/kubernetes/apps/identity/kanidm/app/portal-icons/ops-suite.svg
+    url: https://raw.githubusercontent.com/kelchm/home-lab/main/kubernetes/apps/identity/kanidm/app/theme/portal-icons/ops-suite.svg
   origin: https://home.kelch.io
   redirectUrl:
     - https://prometheus.home.kelch.io/oidc/callback
