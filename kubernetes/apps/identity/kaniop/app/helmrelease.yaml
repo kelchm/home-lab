@@ -11,6 +11,9 @@ spec:
     kind: OCIRepository
     name: kaniop
   interval: 1h
+  # Headroom for chart upgrade hooks: the CRD-migration Jobs can run up to ~15m,
+  # which would exceed Flux's 5m default timeout and abort the upgrade mid-hook.
+  timeout: 30m
   values:
     resources:
       requests:
