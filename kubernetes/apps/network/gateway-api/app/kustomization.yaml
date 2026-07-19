@@ -7,4 +7,4 @@ kind: Kustomization
 # the v1 TLSRoute CRD that ships in the standard channel from v1.5.0 onward.
 resources:
   # renovate: datasource=github-releases depName=kubernetes-sigs/gateway-api
-  - https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/standard-install.yaml
+  - https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.6.1/standard-install.yaml
