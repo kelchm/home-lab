@@ -18,7 +18,26 @@ function updateColourScheme() {
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.setAttribute("content", theme === "dark" ? "#13172a" : "#f7f8fc");
 }
+
+// kanidm ships hidden #password/#totp decoy inputs (class .d-none) on the login
+// page so a password manager can autofill them in the background on the username
+// step. iOS Safari renders those decoys despite display:none — a phantom input
+// pinned to the bottom of the viewport. Converting them to type=hidden makes them
+// unrenderable on every browser while still submitting their (empty) value, so
+// the form is unchanged. Guarded on .d-none so real credential inputs on later
+// steps are never touched. Trade-off: no background password/OTP pre-fill on the
+// username step (username autofill and the actual password/2FA step are fine).
+function neutraliseAutofillDecoys() {
+  document.querySelectorAll("#password.d-none, #totp.d-none").forEach((el) => {
+    if (el.type !== "hidden") el.type = "hidden";
+  });
+}
+
 updateColourScheme();
+neutraliseAutofillDecoys();
 window.matchMedia("(prefers-color-scheme: light)").addEventListener("change", updateColourScheme);
 window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", updateColourScheme);
-document.body.addEventListener("htmx:afterOnLoad", updateColourScheme);
+document.body.addEventListener("htmx:afterOnLoad", function () {
+  updateColourScheme();
+  neutraliseAutofillDecoys();
+});
