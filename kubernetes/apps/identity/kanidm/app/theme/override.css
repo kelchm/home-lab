@@ -330,20 +330,23 @@ main.form-signin .btn-success { width: 100%; min-height: 44px; }
   object-fit: contain;
 }
 
-/* Context banner: a calm neutral wayfinding chip, not an alarm */
-.alert { border-radius: var(--ia-radius-md); border-width: 1px; }
-.alert-info {                  /* a flat status strip, not a form field */
-  --bs-alert-bg: rgba(var(--ia-accent-rgb), 0.06);
-  --bs-alert-border-color: transparent;
+/* Alerts: every variant is a flat left-accent status strip (squared, single
+   left border), never a rounded full-border box — those read as input fields.
+   Each variant below sets only its accent colour + background tint. */
+.alert {
   --bs-alert-color: var(--bs-body-color);
   border: none;
-  border-left: 3px solid var(--ia-accent);
+  border-left: 3px solid var(--bs-secondary-color);
   border-radius: 0 var(--ia-radius-sm) var(--ia-radius-sm) 0;
   padding: 0.5rem 0.8rem;
   font-size: 0.875rem;
   display: flex;
   align-items: center;
   gap: 0.55rem;
+}
+.alert-info {                  /* auth-context banner */
+  --bs-alert-bg: rgba(var(--ia-accent-rgb), 0.06);
+  border-left-color: var(--ia-accent);
 }
 .alert-info::before {   /* leading lock icon for the auth-context chip (Tabler 'lock', masked) */
   content: "";
@@ -354,15 +357,12 @@ main.form-signin .btn-success { width: 100%; min-height: 44px; }
   -webkit-mask: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M5%2013a2%202%200%200%201%202%20-2h10a2%202%200%200%201%202%202v6a2%202%200%200%201%20-2%202h-10a2%202%200%200%201%20-2%20-2v-6%22%20%2F%3E%3Cpath%20d%3D%22M11%2016a1%201%200%201%200%202%200a1%201%200%200%200%20-2%200%22%20%2F%3E%3Cpath%20d%3D%22M8%2011v-4a4%204%200%201%201%208%200v4%22%20%2F%3E%3C%2Fsvg%3E") center / contain no-repeat;
   mask: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M5%2013a2%202%200%200%201%202%20-2h10a2%202%200%200%201%202%202v6a2%202%200%200%201%20-2%202h-10a2%202%200%200%201%20-2%20-2v-6%22%20%2F%3E%3Cpath%20d%3D%22M11%2016a1%201%200%201%200%202%200a1%201%200%200%200%20-2%200%22%20%2F%3E%3Cpath%20d%3D%22M8%2011v-4a4%204%200%201%201%208%200v4%22%20%2F%3E%3C%2Fsvg%3E") center / contain no-repeat;
 }
-.alert-danger {
+.alert-danger {                /* errors, e.g. "Session Expired" */
   --bs-alert-bg: rgba(217, 45, 32, 0.08);
-  --bs-alert-border-color: rgba(217, 45, 32, 0.3);
-  --bs-alert-color: var(--bs-body-color);
-  border-left: 3px solid #d92d20;
+  border-left-color: #d92d20;
 }
 [data-bs-theme="dark"] .alert-danger {
   --bs-alert-bg: rgba(248, 113, 113, 0.12);
-  --bs-alert-border-color: rgba(248, 113, 113, 0.32);
 }
 
 /* Navbar */
