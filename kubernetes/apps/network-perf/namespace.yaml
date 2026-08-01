@@ -9,7 +9,6 @@ metadata:
     # iperf3 runs as a DaemonSet with hostNetwork to measure underlay
     # NIC throughput (not the CNI overlay). Talos PSA enforces strict
     # defaults outside kube-system, so the namespace needs the
-    # privileged label for hostNetwork pods to admit.
+    # privileged enforcement label for hostNetwork pods to admit. Restricted
+    # warn/audit telemetry continues to come from the Talos defaults.
     pod-security.kubernetes.io/enforce: privileged
-    pod-security.kubernetes.io/warn: privileged
-    pod-security.kubernetes.io/audit: privileged

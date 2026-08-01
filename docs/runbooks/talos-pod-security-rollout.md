@@ -13,9 +13,11 @@ workloads require baseline-prohibited host access:
 | `observability` | node-exporter and Alloy use host namespaces and paths |
 | `tailscale` | The operator-generated subnet router runs privileged containers |
 
-All other namespaces inherit `baseline` enforcement and `restricted`
-warn/audit from Talos. Existing non-compliant pods are not evicted; the policy
-is evaluated when pods are created or updated.
+The five namespace exceptions relax only enforcement. They, and every other
+namespace, retain Talos' cluster-wide `restricted` warn/audit settings so the
+exceptions do not suppress security telemetry. All other namespaces also
+inherit `baseline` enforcement. Existing non-compliant pods are not evicted;
+the policy is evaluated when pods are created or updated.
 
 ## Prepare and inspect
 
@@ -41,6 +43,10 @@ for config in talos/clusterconfig/kubernetes-k8s-prod-*.yaml; do
     .cluster.apiServer.admissionControl' "$config"
 done
 ```
+
+The five namespaces must show `privileged` only in the `ENFORCE` column. Their
+`WARN` and `AUDIT` columns must be blank so the Talos `restricted` defaults
+continue to apply.
 
 Each generated file must contain the `PodSecurity` admission configuration
 with these defaults before any node is changed:
@@ -121,13 +127,41 @@ kubectl --server=https://10.32.30.11:6443 \
   --dry-run=server -o name
 ```
 
-Expected result: `pod/psa-privileged-exemption` with no object persisted.
-Use the updated API server to audit regular namespaces against `restricted`.
-These are server-side dry runs; warnings identify existing incompatibilities
-without changing namespace labels:
+Expected result: `pod/psa-privileged-exemption` with no object persisted, plus
+a warning that it violates `restricted:latest`. The warning confirms that the
+namespace exception relaxes enforcement without suppressing telemetry.
+
+Before changing a second node, use the updated API server to validate the
+final, live workload definitions. This checks existing Pods by dry-running a
+`baseline` namespace label and submits every stored Deployment, StatefulSet,
+DaemonSet, Job, CronJob, and ReplicationController Pod template as a
+server-side dry-run. It therefore covers Helm-rendered and operator-generated
+objects currently stored in the API, without creating or changing anything:
 
 ```sh
-for namespace in ai cert-manager cnpg-system default flux-system identity iot network; do
+KUBE_API_SERVER=https://10.32.30.11:6443 \
+KUBE_TLS_SERVER_NAME=k8s-prod.home.kelch.io \
+  scripts/verify-pod-security-baseline.sh
+```
+
+Any rejection is a rollout blocker. Review restricted-policy warnings as
+telemetry, not as baseline failures. This validation must run against the
+first updated API server because the live cluster does not evaluate Pod
+Security Admission before that point.
+
+At the time this runbook was prepared, the existing-Pod audit reported four
+completed, unowned `node-debugger-*` Pods in `default` with host namespace and
+hostPath access. Confirm they are no longer needed, remove those stale Pods,
+and rerun the audit before rollout; do not exempt the `default` namespace.
+
+Next, use the updated API server to audit regular namespaces against
+`restricted`. These are server-side dry runs; warnings identify existing
+incompatibilities without changing namespace labels:
+
+```sh
+for namespace in $(kubectl --server=https://10.32.30.11:6443 \
+  --tls-server-name=k8s-prod.home.kelch.io get namespaces -o json | \
+  jq -r '.items[] | select((.metadata.labels["pod-security.kubernetes.io/enforce"] // "") != "privileged") | .metadata.name'); do
   kubectl --server=https://10.32.30.11:6443 \
     --tls-server-name=k8s-prod.home.kelch.io \
     label namespace "${namespace}" \
@@ -163,12 +197,31 @@ kubectl --namespace=default run psa-baseline-rejection \
 ## Roll back
 
 Stop if a node or workload does not recover. Do not continue to the next node.
-Revert the PR so `cluster.apiServer.admissionControl` is deleted again and the
-namespace-label changes are removed, regenerate the Talos configuration, and
-apply that configuration only to nodes already changed, one at a time in
-reverse order. Run the health checks after every node. Because Flux watches
-`main`, land the Git revert before removing privileged namespace labels from
-the live cluster.
+The rollback has two deliberately ordered phases:
 
-The rollback is complete when the live Talos admission-control resource is
-absent, all nodes are ready, and Flux reports every Kustomization ready.
+1. Prepare a rollback Talos configuration that restores the
+   `cluster.apiServer.admissionControl: {$$patch: delete}` override. Keep all
+   five namespace `enforce: privileged` labels in Git and on the live cluster.
+2. Regenerate and validate the Talos configuration, then apply it only to nodes
+   already changed, one at a time in reverse order. Run the direct API-server,
+   node readiness, workload, and `talosctl health` checks after every node.
+3. Verify the admission-control resource is absent on every rolled-back node;
+   do not rely only on the control-plane VIP:
+
+   ```sh
+   for node in 10.32.30.13 10.32.30.12 10.32.30.11; do
+     talosctl --nodes "${node}" get \
+       admissioncontrolconfigs.kubernetes.talos.dev admission-control
+   done
+   ```
+
+   Each node that was rolled back must return `NotFound`. Skip nodes that were
+   never changed.
+4. Only after no API server enforces the restored policy, remove the five
+   namespace labels in a second Git change (or complete the original PR
+   revert) and let Flux reconcile them.
+
+Because Flux watches `main`, never merge or reconcile namespace-label removal
+while even one API server still enforces `baseline`. The rollback is complete
+when the admission-control resource is absent from every changed node, all
+nodes are ready, and Flux reports every Kustomization ready.

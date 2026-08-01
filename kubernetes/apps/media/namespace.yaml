@@ -7,8 +7,6 @@ metadata:
     kustomize.toolkit.fluxcd.io/prune: disabled
   labels:
     # qBittorrent's Gluetun sidecar requires NET_ADMIN and /dev/net/tun.
-    # Keep that exception explicit; other namespaces inherit Talos' baseline
-    # enforcement and restricted warn/audit defaults.
+    # Relax enforcement only. Talos' restricted warn/audit defaults remain in
+    # effect so this exception does not suppress security telemetry.
     pod-security.kubernetes.io/enforce: privileged
-    pod-security.kubernetes.io/warn: privileged
-    pod-security.kubernetes.io/audit: privileged
