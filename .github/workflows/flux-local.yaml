@@ -337,20 +337,16 @@ jobs:
         if: needs.pre-job.outputs.network_changed == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Install Kubernetes validation tools
-        if: needs.pre-job.outputs.network_changed == 'true'
-        uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14 # v4.2.3
-        with:
-          install_args: "aqua:yannh/kubeconform"
-
       - name: Validate synthetic test manifest
         if: needs.pre-job.outputs.network_changed == 'true'
         run: >-
-          kubeconform
+          docker run --rm
+          --volume "${GITHUB_WORKSPACE}:/workspace:ro"
+          ghcr.io/yannh/kubeconform@sha256:5103f6f5e89061728aad4ad5a250627dd0fc9b2a92eb876f3762677a4222f9e0
           -strict
           -kubernetes-version 1.36.0
           -summary
-          network/unifi/bgp-test.yaml
+          /workspace/network/unifi/bgp-test.yaml
 
       - name: Validate FRR configuration
         if: needs.pre-job.outputs.network_changed == 'true'
