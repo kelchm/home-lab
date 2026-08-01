@@ -1,0 +1,18 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ./helmrepository.yaml
+  - ./helmrelease.yaml
+
+# Grafana dashboard 22381, published by prometheus-community for this exporter:
+# https://grafana.com/grafana/dashboards/22381-smartctl-exporter/
+configMapGenerator:
+  - name: grafana-dashboard-smartctl-exporter
+    files:
+      - smartctl-exporter.json=./dashboard.json
+    options:
+      labels:
+        grafana_dashboard: "1"
+      annotations:
+        grafana_folder: Hardware
