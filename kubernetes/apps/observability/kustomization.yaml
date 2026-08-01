@@ -4,6 +4,7 @@ kind: Kustomization
 namespace: observability
 
 components:
+  - ../../components/pod-quota
   - ../../components/sops
 
 resources:

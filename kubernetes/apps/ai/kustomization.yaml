@@ -4,6 +4,7 @@ kind: Kustomization
 namespace: ai
 
 components:
+  - ../../components/pod-quota
   - ../../components/sops
 
 resources:

@@ -1,8 +1,10 @@
 ---
-name: "Flux Local"
+name: "Repository Validation"
 
 on:
   pull_request:
+    branches: ["main"]
+  push:
     branches: ["main"]
 
 concurrency:
@@ -11,10 +13,15 @@ concurrency:
 
 jobs:
   pre-job:
-    name: Flux Local Pre-Job
+    name: Detect Changed Surfaces
     runs-on: ubuntu-latest
     outputs:
-      any_changed: ${{ steps.changed-files.outputs.any_changed }}
+      bootstrap_changed: ${{ steps.changed-files.outputs.bootstrap_any_changed }}
+      docs_changed: ${{ steps.changed-files.outputs.docs_any_changed }}
+      kubernetes_changed: ${{ steps.changed-files.outputs.kubernetes_any_changed }}
+      scripts_changed: ${{ steps.changed-files.outputs.scripts_any_changed }}
+      sops_changed: ${{ steps.changed-files.outputs.sops_any_changed }}
+      talos_changed: ${{ steps.changed-files.outputs.talos_any_changed }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -23,23 +30,62 @@ jobs:
         id: changed-files
         uses: tj-actions/changed-files@9426d40962ed5378910ee2e21d5f8c6fcbf2dd96 # v47.0.6
         with:
-          files: kubernetes/**
+          files_yaml: |
+            bootstrap:
+              - '.github/workflows/flux-local.yaml'
+              - '.mise.toml'
+              - '.taskfiles/bootstrap/**'
+              - 'Taskfile.yaml'
+              - 'bootstrap/**'
+            docs:
+              - '.github/workflows/flux-local.yaml'
+              - '.mise.toml'
+              - '**/*.md'
+            kubernetes:
+              - '.github/workflows/flux-local.yaml'
+              - '.mise.toml'
+              - 'kubernetes/**'
+              - 'scripts/ci/validate-unsafe-sysctls.sh'
+              - 'talos/patches/global/machine-kubelet.yaml'
+            scripts:
+              - '.github/workflows/flux-local.yaml'
+              - '.mise.toml'
+              - '.shellcheckrc'
+              - 'scripts/**/*.sh'
+            sops:
+              - '.github/workflows/flux-local.yaml'
+              - '.mise.toml'
+              - '.sops.yaml'
+              - '**/*.sops.yaml'
+              - '**/*.sops.yml'
+              - 'scripts/ci/validate-sops.sh'
+            talos:
+              - '.github/workflows/flux-local.yaml'
+              - '.mise.toml'
+              - '.taskfiles/talos/**'
+              - 'Taskfile.yaml'
+              - 'talos/**'
 
-  test:
+  flux-local-test:
     name: Flux Local Test
     needs: pre-job
     runs-on: ubuntu-latest
-    if: ${{ needs.pre-job.outputs.any_changed == 'true' }}
     steps:
       - name: Checkout
+        if: needs.pre-job.outputs.kubernetes_changed == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Run flux-local test
+        if: needs.pre-job.outputs.kubernetes_changed == 'true'
         uses: docker://ghcr.io/allenporter/flux-local:v8.2.0
         with:
           args: test --enable-helm --all-namespaces --path /github/workspace/kubernetes/flux/cluster -v
 
-  diff:
+      - name: No Kubernetes changes
+        if: needs.pre-job.outputs.kubernetes_changed != 'true'
+        run: echo "Flux Local test is not required."
+
+  flux-local-diff:
     name: Flux Local Diff
     needs: pre-job
     runs-on: ubuntu-latest
@@ -51,20 +97,22 @@ jobs:
         resources: ["helmrelease", "kustomization"]
       max-parallel: 4
       fail-fast: false
-    if: ${{ needs.pre-job.outputs.any_changed == 'true' }}
     steps:
       - name: Checkout Pull Request Branch
+        if: github.event_name == 'pull_request' && needs.pre-job.outputs.kubernetes_changed == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: pull
 
       - name: Checkout Default Branch
+        if: github.event_name == 'pull_request' && needs.pre-job.outputs.kubernetes_changed == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: "${{ github.event.repository.default_branch }}"
           path: default
 
       - name: Run flux-local diff
+        if: github.event_name == 'pull_request' && needs.pre-job.outputs.kubernetes_changed == 'true'
         uses: docker://ghcr.io/allenporter/flux-local:v8.2.0
         with:
           args: >-
@@ -80,13 +128,14 @@ jobs:
 
       - name: Generate Diff
         id: diff
+        if: github.event_name == 'pull_request' && needs.pre-job.outputs.kubernetes_changed == 'true'
         run: |
-          cat diff.patch;
+          cat diff.patch
           {
               echo 'diff<<EOF'
               cat diff.patch
               echo EOF
-          } >> "$GITHUB_OUTPUT";
+          } >> "$GITHUB_OUTPUT"
           {
               echo "### Diff"
               echo '```diff'
@@ -95,7 +144,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Add Comment
-        if: ${{ steps.diff.outputs.diff != '' }}
+        if: github.event_name == 'pull_request' && steps.diff.outputs.diff != ''
         continue-on-error: true
         uses: mshick/add-pr-comment@ec328af66588ab8f77cdeb2c264f14aba45bbf59 # v3.12
         with:
@@ -106,16 +155,206 @@ jobs:
             ${{ steps.diff.outputs.diff }}
             ```
 
+      - name: Diff not required
+        if: github.event_name != 'pull_request' || needs.pre-job.outputs.kubernetes_changed != 'true'
+        run: echo "Flux Local diff is only produced for Kubernetes pull requests."
+
+  kubernetes:
+    name: Kubernetes Static Validation
+    needs: pre-job
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        if: needs.pre-job.outputs.kubernetes_changed == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install Kubernetes validation tools
+        if: needs.pre-job.outputs.kubernetes_changed == 'true'
+        uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14 # v4.2.3
+        with:
+          install_args: "aqua:fluxcd/flux2 aqua:yannh/kubeconform aqua:mikefarah/yq"
+
+      - name: Render Flux Kustomizations recursively
+        if: needs.pre-job.outputs.kubernetes_changed == 'true'
+        run: |
+          flux build kustomization cluster-apps \
+            --path kubernetes/apps \
+            --kustomization-file kubernetes/flux/cluster/ks.yaml \
+            --recursive \
+            --local-sources GitRepository/flux-system/flux-system=. \
+            --dry-run > /tmp/flux-render.yaml
+
+      - name: Validate rendered resources
+        if: needs.pre-job.outputs.kubernetes_changed == 'true'
+        run: >-
+          kubeconform
+          -strict
+          -ignore-missing-schemas
+          -kubernetes-version 1.36.0
+          -summary
+          /tmp/flux-render.yaml
+
+      - name: Validate pod sysctls against Talos
+        if: needs.pre-job.outputs.kubernetes_changed == 'true'
+        run: scripts/ci/validate-unsafe-sysctls.sh
+
+      - name: No Kubernetes changes
+        if: needs.pre-job.outputs.kubernetes_changed != 'true'
+        run: echo "Kubernetes static validation is not required."
+
+  talos:
+    name: Talhelper Configuration Validation
+    needs: pre-job
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        if: needs.pre-job.outputs.talos_changed == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install talhelper
+        if: needs.pre-job.outputs.talos_changed == 'true'
+        uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14 # v4.2.3
+        with:
+          install_args: "aqua:budimanjojo/talhelper"
+
+      - name: Validate talhelper configuration
+        if: needs.pre-job.outputs.talos_changed == 'true'
+        working-directory: talos
+        run: talhelper validate talconfig talconfig.yaml
+
+      - name: No Talos changes
+        if: needs.pre-job.outputs.talos_changed != 'true'
+        run: echo "Talhelper validation is not required."
+
+  bootstrap:
+    name: Bootstrap Render Validation
+    needs: pre-job
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        if: needs.pre-job.outputs.bootstrap_changed == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install bootstrap validation tools
+        if: needs.pre-job.outputs.bootstrap_changed == 'true'
+        uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14 # v4.2.3
+        with:
+          install_args: "aqua:helm/helm aqua:helmfile/helmfile aqua:yannh/kubeconform"
+
+      - name: Render Helmfiles
+        if: needs.pre-job.outputs.bootstrap_changed == 'true'
+        run: |
+          mkdir -p /tmp/helmfile-render
+          helmfile --file bootstrap/helmfile.d/00-crds.yaml template --quiet > /tmp/helmfile-render/crds.yaml
+          helmfile --file bootstrap/helmfile.d/01-apps.yaml template --quiet > /tmp/helmfile-render/apps.yaml
+
+      - name: Validate rendered resources
+        if: needs.pre-job.outputs.bootstrap_changed == 'true'
+        run: >-
+          kubeconform
+          -strict
+          -ignore-missing-schemas
+          -kubernetes-version 1.36.0
+          -summary
+          /tmp/helmfile-render/*.yaml
+
+      - name: No bootstrap changes
+        if: needs.pre-job.outputs.bootstrap_changed != 'true'
+        run: echo "Bootstrap render validation is not required."
+
+  sops:
+    name: SOPS Validation
+    needs: pre-job
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        if: needs.pre-job.outputs.sops_changed == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install SOPS
+        if: needs.pre-job.outputs.sops_changed == 'true'
+        uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14 # v4.2.3
+        with:
+          install_args: "aqua:getsops/sops"
+
+      - name: Validate SOPS files
+        if: needs.pre-job.outputs.sops_changed == 'true'
+        env:
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
+        run: scripts/ci/validate-sops.sh
+
+      - name: No SOPS changes
+        if: needs.pre-job.outputs.sops_changed != 'true'
+        run: echo "SOPS validation is not required."
+
+  scripts:
+    name: Shell Validation
+    needs: pre-job
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        if: needs.pre-job.outputs.scripts_changed == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install ShellCheck
+        if: needs.pre-job.outputs.scripts_changed == 'true'
+        uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14 # v4.2.3
+        with:
+          install_args: "aqua:koalaman/shellcheck"
+
+      - name: Check shell syntax
+        if: needs.pre-job.outputs.scripts_changed == 'true'
+        run: git ls-files -z -- '*.sh' | xargs -0 -n1 bash -n
+
+      - name: Run ShellCheck
+        if: needs.pre-job.outputs.scripts_changed == 'true'
+        run: git ls-files -z -- '*.sh' | xargs -0 shellcheck
+
+      - name: No shell changes
+        if: needs.pre-job.outputs.scripts_changed != 'true'
+        run: echo "Shell validation is not required."
+
+  docs:
+    name: Local Markdown Link Validation
+    needs: pre-job
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        if: needs.pre-job.outputs.docs_changed == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install lychee
+        if: needs.pre-job.outputs.docs_changed == 'true'
+        uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14 # v4.2.3
+        with:
+          install_args: "aqua:lycheeverse/lychee"
+
+      - name: Validate local Markdown links
+        if: needs.pre-job.outputs.docs_changed == 'true'
+        run: lychee --offline --include-fragments '**/*.md'
+
+      - name: No documentation changes
+        if: needs.pre-job.outputs.docs_changed != 'true'
+        run: echo "Markdown link validation is not required."
+
   flux-local-status:
     name: Flux Local Success
-    needs: ["test", "diff"]
+    needs:
+      - pre-job
+      - flux-local-test
+      - flux-local-diff
+      - kubernetes
+      - talos
+      - bootstrap
+      - sops
+      - scripts
+      - docs
     runs-on: ubuntu-latest
     if: ${{ always() }}
     steps:
-      - name: Any jobs failed?
-        if: ${{ contains(needs.*.result, 'failure') }}
-        run: exit 1
-
-      - name: All jobs passed or skipped?
-        if: ${{ !(contains(needs.*.result, 'failure')) }}
-        run: echo "All jobs passed or skipped" && echo "${{ toJSON(needs.*.result) }}"
+      - name: Require every validation job to succeed
+        env:
+          RESULTS: ${{ toJSON(needs.*.result) }}
+        run: |
+          echo "${RESULTS}"
+          jq --exit-status 'all(.[]; . == "success")' <<<"${RESULTS}"

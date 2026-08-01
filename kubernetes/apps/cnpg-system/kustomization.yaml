@@ -4,6 +4,7 @@ kind: Kustomization
 namespace: cnpg-system
 
 components:
+  - ../../components/pod-quota
   - ../../components/sops
 
 resources:

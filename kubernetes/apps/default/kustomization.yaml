@@ -4,6 +4,7 @@ kind: Kustomization
 namespace: default
 
 components:
+  - ../../components/pod-quota
   - ../../components/sops
 
 resources:

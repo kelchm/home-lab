@@ -4,6 +4,7 @@ kind: Kustomization
 namespace: cert-manager
 
 components:
+  - ../../components/pod-quota
   - ../../components/sops
 
 resources:

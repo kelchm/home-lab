@@ -4,6 +4,7 @@ kind: Kustomization
 namespace: kube-system
 
 components:
+  - ../../components/pod-quota
   - ../../components/sops
 
 resources:
