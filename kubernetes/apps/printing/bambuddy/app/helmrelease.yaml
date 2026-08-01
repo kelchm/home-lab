@@ -106,7 +106,7 @@ spec:
         storageClass: longhorn
         # Archives, thumbnails, encryption keys, and portable backups. Database
         # rows live in CNPG, but Bambuddy exports portable SQLite backups here.
-        size: 20Gi
+        size: 100Gi
         accessMode: ReadWriteOnce
         advancedMounts:
           bambuddy:

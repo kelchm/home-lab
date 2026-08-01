@@ -1,7 +1,7 @@
 # Bambuddy bootstrap and recovery
 
 Bambuddy runs in `printing` with a single-instance CloudNativePG database on a
-5 GiB Longhorn PVC. Archives and portable backups use a separate 20 GiB
+5 GiB Longhorn PVC. Archives and portable backups use a separate 100 GiB
 Longhorn PVC. It is reachable only through `gateway-admin` at
 `https://bambuddy.home.kelch.io`. Automatic discovery, host networking,
 Virtual Printer, Proxy mode, external archive roots, and cloud integrations are
@@ -17,7 +17,7 @@ out of scope for the initial deployment.
    camera/file transfer `6000`, and A1/P1S ports `2024-2026` as applicable.
 4. Replace `192.0.2.1/32` in `networkpolicy.yaml` with the fixed printer `/32`
    and remove ports the model does not use. Do not substitute its VLAN CIDR.
-5. Confirm the initial 20 GiB archive allocation is reasonable. Longhorn can
+5. Confirm the initial 100 GiB archive allocation is reasonable. Longhorn can
    expand it later; move only bulk archives to NFS in a separately reviewed
    change.
 
