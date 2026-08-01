@@ -17,17 +17,26 @@ spec:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: network
             app.kubernetes.io/instance: traefik-admin-network
+            io.cilium.k8s.policy.serviceaccount: traefik-admin
       toPorts: &webui-port
         - ports:
             - port: "8080"
               protocol: TCP
 
     # These are the download clients configured in the live *arr instances.
+    # Pair the workload label with its dedicated ServiceAccount identity so a
+    # compromised pod cannot gain access merely by forging an app label.
     - fromEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: media
-          matchExpressions:
-            - key: app.kubernetes.io/name
-              operator: In
-              values: [lidarr, radarr, sonarr]
+            app.kubernetes.io/name: lidarr
+            io.cilium.k8s.policy.serviceaccount: lidarr
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: media
+            app.kubernetes.io/name: radarr
+            io.cilium.k8s.policy.serviceaccount: radarr
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: media
+            app.kubernetes.io/name: sonarr
+            io.cilium.k8s.policy.serviceaccount: sonarr
       toPorts: *webui-port
