@@ -4,6 +4,7 @@ kind: Kustomization
 namespace: identity
 
 components:
+  - ../../components/pod-quota
   - ../../components/sops
 
 resources:

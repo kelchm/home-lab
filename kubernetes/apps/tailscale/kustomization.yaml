@@ -4,6 +4,7 @@ kind: Kustomization
 namespace: tailscale
 
 components:
+  - ../../components/pod-quota
   - ../../components/sops
 
 resources:

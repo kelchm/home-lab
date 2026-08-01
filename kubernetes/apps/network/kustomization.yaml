@@ -4,6 +4,7 @@ kind: Kustomization
 namespace: network
 
 components:
+  - ../../components/pod-quota
   - ../../components/sops
 
 resources:
