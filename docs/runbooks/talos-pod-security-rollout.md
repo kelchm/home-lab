@@ -205,23 +205,26 @@ The rollback has two deliberately ordered phases:
 2. Regenerate and validate the Talos configuration, then apply it only to nodes
    already changed, one at a time in reverse order. Run the direct API-server,
    node readiness, workload, and `talosctl health` checks after every node.
-3. Verify the admission-control resource is absent on every rolled-back node;
-   do not rely only on the control-plane VIP:
+3. Verify the admission-control resource has an empty configuration on every
+   rolled-back node; do not rely only on the control-plane VIP:
 
    ```sh
    for node in 10.32.30.13 10.32.30.12 10.32.30.11; do
      talosctl --nodes "${node}" get \
-       admissioncontrolconfigs.kubernetes.talos.dev admission-control
+       admissioncontrolconfigs.kubernetes.talos.dev admission-control \
+       -o json | jq -e '.spec.config == []'
    done
    ```
 
-   Each node that was rolled back must return `NotFound`. Skip nodes that were
-   never changed.
+   Each node that was rolled back must pass the `jq` assertion. The restored
+   `$$patch: delete` state retains the Talos resource with `spec.config: []`;
+   it does not make the resource return `NotFound`. Skip nodes that were never
+   changed.
 4. Only after no API server enforces the restored policy, remove the five
    namespace labels in a second Git change (or complete the original PR
    revert) and let Flux reconcile them.
 
 Because Flux watches `main`, never merge or reconcile namespace-label removal
 while even one API server still enforces `baseline`. The rollback is complete
-when the admission-control resource is absent from every changed node, all
-nodes are ready, and Flux reports every Kustomization ready.
+when the admission-control resource has `spec.config: []` on every changed
+node, all nodes are ready, and Flux reports every Kustomization ready.
