@@ -9,7 +9,6 @@ metadata:
     # Required by node-exporter (hostNetwork, hostPID, host filesystem
     # mounts) deployed as part of kube-prometheus-stack. PSA on Talos
     # enforces strict defaults outside kube-system, so workloads needing
-    # privileged access need this label on their namespace.
+    # privileged access need this enforcement label on their namespace.
+    # Restricted warn/audit telemetry remains enabled cluster-wide.
     pod-security.kubernetes.io/enforce: privileged
-    pod-security.kubernetes.io/warn: privileged
-    pod-security.kubernetes.io/audit: privileged
