@@ -9,28 +9,32 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.number || github.ref }}
-  # A later push only reports its own changed-file delta. Cancelling an older
-  # main run could therefore leave the older push's surfaces unvalidated.
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  # PR runs cover the complete PR diff; main runs validate every surface. In
+  # both cases a newer run therefore subsumes an older run for the same ref.
+  cancel-in-progress: true
 
 jobs:
   pre-job:
-    name: Detect Changed Surfaces
+    name: Determine Validation Scope
     runs-on: ubuntu-latest
     outputs:
-      bootstrap_changed: ${{ steps.changed-files.outputs.bootstrap_any_changed }}
-      docs_changed: ${{ steps.changed-files.outputs.docs_any_changed }}
-      kubernetes_changed: ${{ steps.changed-files.outputs.kubernetes_any_changed }}
-      network_changed: ${{ steps.changed-files.outputs.network_any_changed }}
-      scripts_changed: ${{ steps.changed-files.outputs.scripts_any_changed }}
-      sops_changed: ${{ steps.changed-files.outputs.sops_any_changed }}
-      talos_changed: ${{ steps.changed-files.outputs.talos_any_changed }}
+      # changed-files only runs for PRs. Its absent outputs intentionally
+      # default to true on main so the latest commit is validated as a whole.
+      bootstrap_changed: ${{ steps.changed-files.outputs.bootstrap_any_changed || 'true' }}
+      docs_changed: ${{ steps.changed-files.outputs.docs_any_changed || 'true' }}
+      kubernetes_changed: ${{ steps.changed-files.outputs.kubernetes_any_changed || 'true' }}
+      network_changed: ${{ steps.changed-files.outputs.network_any_changed || 'true' }}
+      scripts_changed: ${{ steps.changed-files.outputs.scripts_any_changed || 'true' }}
+      sops_changed: ${{ steps.changed-files.outputs.sops_any_changed || 'true' }}
+      talos_changed: ${{ steps.changed-files.outputs.talos_any_changed || 'true' }}
     steps:
       - name: Checkout
+        if: github.event_name == 'pull_request'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Get Changed Files
         id: changed-files
+        if: github.event_name == 'pull_request'
         uses: tj-actions/changed-files@9426d40962ed5378910ee2e21d5f8c6fcbf2dd96 # v47.0.6
         with:
           files_yaml: |
@@ -73,6 +77,10 @@ jobs:
               - '.taskfiles/talos/**'
               - 'Taskfile.yaml'
               - 'talos/**'
+
+      - name: Validate complete main state
+        if: github.event_name == 'push'
+        run: echo "Every validation surface runs for pushes to main."
 
   flux-local-test:
     name: Flux Local Test

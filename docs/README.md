@@ -10,6 +10,9 @@ Current-state, authoritative docs.
 - [**architecture.md**](architecture.md) — infrastructure architecture: network
   / VLAN layout, the IP-addressing convention, LB pools, BGP, DNS, and storage
   strategy. The source of truth for how the cluster is wired and why.
+- [**repository-validation.md**](repository-validation.md) — CI event semantics,
+  concurrency, aggregate-check invariants, and the boundary between validation
+  and Flux deployment.
 - [**roadmap.md**](roadmap.md) — forward-looking design: the planned second
   ("sandbox") cluster, two-cluster topology, and deferred work.
 
