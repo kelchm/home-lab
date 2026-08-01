@@ -69,12 +69,23 @@ function is_allowed_unsafe_sysctl() {
 function main() {
     local failed=0
     local file
+    local host_network
     local requested
 
     while IFS= read -r -d '' file; do
-        while IFS= read -r requested; do
+        # $document and $name below are yq variables, not shell variables.
+        # shellcheck disable=SC2016
+        while IFS=$'\t' read -r requested host_network; do
             [[ -n "${requested}" ]] || continue
+            [[ "${host_network}" == true || "${host_network}" == false ]] || continue
             requested="$(normalize_sysctl "${requested}")"
+
+            if [[ "${host_network}" == true && "${requested}" == net.* ]]; then
+                printf 'Network sysctl %q in %s is forbidden when hostNetwork is enabled\n' \
+                    "${requested}" "${file#"${ROOT_DIR}"/}" >&2
+                failed=1
+                continue
+            fi
 
             if is_safe_sysctl "${requested}" || is_allowed_unsafe_sysctl "${requested}"; then
                 continue
@@ -84,15 +95,19 @@ function main() {
                 "${requested}" "${file#"${ROOT_DIR}"/}" "${KUBELET_PATCH#"${ROOT_DIR}"/}" >&2
             failed=1
         done < <(yq eval --unwrapScalar \
-            '.. | select(tag == "!!map" and has("sysctls")) | .sysctls[]? | .name // ""' \
-            "${file}")
+            '. as $document |
+             ($document | .. | select(tag == "!!map" and has("sysctls")) |
+                .sysctls[]? | .name // "") as $name |
+             [$name, ([$document | .. |
+                select(tag == "!!map" and .hostNetwork == true)] | length > 0)] |
+             @tsv' "${file}")
     done < <(find "${MANIFEST_DIR}" -type f \( -name '*.yaml' -o -name '*.yml' \) -print0)
 
     if ((failed != 0)); then
         return 1
     fi
 
-    echo "All requested pod sysctls are safe or present in the Talos kubelet allowlist."
+    echo "All requested pod sysctls are compatible with pod networking and the Talos kubelet allowlist."
 }
 
 main "$@"

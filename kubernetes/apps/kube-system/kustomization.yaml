@@ -19,3 +19,14 @@ resources:
   - ./reloader/ks.yaml
   - ./spegel/ks.yaml
   - ./whereabouts/ks.yaml
+
+# kube-system normally runs about 36 pods. Keep enough room for a complete
+# replacement set during control-plane and CNI recovery.
+patches:
+  - target:
+      kind: ResourceQuota
+      name: pod-count
+    patch: |-
+      - op: replace
+        path: /spec/hard/count~1pods
+        value: "100"

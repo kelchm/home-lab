@@ -9,7 +9,9 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.number || github.ref }}
-  cancel-in-progress: true
+  # A later push only reports its own changed-file delta. Cancelling an older
+  # main run could therefore leave the older push's surfaces unvalidated.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   pre-job:
@@ -19,6 +21,7 @@ jobs:
       bootstrap_changed: ${{ steps.changed-files.outputs.bootstrap_any_changed }}
       docs_changed: ${{ steps.changed-files.outputs.docs_any_changed }}
       kubernetes_changed: ${{ steps.changed-files.outputs.kubernetes_any_changed }}
+      network_changed: ${{ steps.changed-files.outputs.network_any_changed }}
       scripts_changed: ${{ steps.changed-files.outputs.scripts_any_changed }}
       sops_changed: ${{ steps.changed-files.outputs.sops_any_changed }}
       talos_changed: ${{ steps.changed-files.outputs.talos_any_changed }}
@@ -45,8 +48,13 @@ jobs:
               - '.github/workflows/flux-local.yaml'
               - '.mise.toml'
               - 'kubernetes/**'
+              - 'scripts/ci/test-validate-unsafe-sysctls.sh'
               - 'scripts/ci/validate-unsafe-sysctls.sh'
               - 'talos/patches/global/machine-kubelet.yaml'
+            network:
+              - '.github/workflows/flux-local.yaml'
+              - '.mise.toml'
+              - 'network/**'
             scripts:
               - '.github/workflows/flux-local.yaml'
               - '.mise.toml'
@@ -196,7 +204,9 @@ jobs:
 
       - name: Validate pod sysctls against Talos
         if: needs.pre-job.outputs.kubernetes_changed == 'true'
-        run: scripts/ci/validate-unsafe-sysctls.sh
+        run: |
+          scripts/ci/test-validate-unsafe-sysctls.sh
+          scripts/ci/validate-unsafe-sysctls.sh
 
       - name: No Kubernetes changes
         if: needs.pre-job.outputs.kubernetes_changed != 'true'
@@ -277,11 +287,15 @@ jobs:
         with:
           install_args: "aqua:getsops/sops"
 
-      - name: Validate SOPS files
-        if: needs.pre-job.outputs.sops_changed == 'true'
+      - name: Validate SOPS encryption
+        if: github.event_name == 'pull_request' && needs.pre-job.outputs.sops_changed == 'true'
+        run: scripts/ci/validate-sops.sh
+
+      - name: Validate SOPS decryption
+        if: github.event_name == 'push' && needs.pre-job.outputs.sops_changed == 'true'
         env:
           SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
-        run: scripts/ci/validate-sops.sh
+        run: scripts/ci/validate-sops.sh --require-decrypt
 
       - name: No SOPS changes
         if: needs.pre-job.outputs.sops_changed != 'true'
@@ -313,6 +327,43 @@ jobs:
       - name: No shell changes
         if: needs.pre-job.outputs.scripts_changed != 'true'
         run: echo "Shell validation is not required."
+
+  network:
+    name: Network Artifact Validation
+    needs: pre-job
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        if: needs.pre-job.outputs.network_changed == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install Kubernetes validation tools
+        if: needs.pre-job.outputs.network_changed == 'true'
+        uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14 # v4.2.3
+        with:
+          install_args: "aqua:yannh/kubeconform"
+
+      - name: Validate synthetic test manifest
+        if: needs.pre-job.outputs.network_changed == 'true'
+        run: >-
+          kubeconform
+          -strict
+          -kubernetes-version 1.36.0
+          -summary
+          network/unifi/bgp-test.yaml
+
+      - name: Validate FRR configuration
+        if: needs.pre-job.outputs.network_changed == 'true'
+        run: >-
+          docker run --rm
+          --entrypoint vtysh
+          --volume "${GITHUB_WORKSPACE}:/workspace:ro"
+          quay.io/frrouting/frr@sha256:5a3a646db8bc911a996e48d67fc6dfed4c49f8d893c76cc6ef52a620a9ec6312
+          -C -f /workspace/network/unifi/frr.conf
+
+      - name: No network changes
+        if: needs.pre-job.outputs.network_changed != 'true'
+        run: echo "Network artifact validation is not required."
 
   docs:
     name: Local Markdown Link Validation
@@ -348,6 +399,7 @@ jobs:
       - bootstrap
       - sops
       - scripts
+      - network
       - docs
     runs-on: ubuntu-latest
     if: ${{ always() }}

@@ -11,3 +11,14 @@ resources:
   - ./namespace.yaml
   - ./middleware-kanidm-oidc.yaml
   - ./longhorn/ks.yaml
+
+# Longhorn normally runs about 29 pods. A 75-pod cap preserves a full
+# replacement set plus upgrade headroom while still bounding runaway churn.
+patches:
+  - target:
+      kind: ResourceQuota
+      name: pod-count
+    patch: |-
+      - op: replace
+        path: /spec/hard/count~1pods
+        value: "75"
