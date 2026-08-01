@@ -5,3 +5,9 @@ metadata:
   name: tailscale
   annotations:
     kustomize.toolkit.fluxcd.io/prune: disabled
+  labels:
+    # The operator-generated subnet-router pod needs privileged containers to
+    # configure forwarding. Keep the exception scoped to this namespace.
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/warn: privileged
+    pod-security.kubernetes.io/audit: privileged
