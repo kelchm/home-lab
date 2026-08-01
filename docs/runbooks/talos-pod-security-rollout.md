@@ -36,6 +36,18 @@ kubectl get namespace longhorn-system media network-perf observability tailscale
   -L pod-security.kubernetes.io/warn \
   -L pod-security.kubernetes.io/audit
 
+for namespace in longhorn-system media network-perf observability tailscale; do
+  namespace_json="$(kubectl get namespace "${namespace}" -o json)" || exit 1
+  jq -e '
+    .metadata.labels["pod-security.kubernetes.io/enforce"] == "privileged"
+    and (.metadata.labels | has("pod-security.kubernetes.io/warn") | not)
+    and (.metadata.labels | has("pod-security.kubernetes.io/audit") | not)
+  ' <<<"${namespace_json}" >/dev/null || {
+    echo "Pod Security labels are not reconciled for ${namespace}" >&2
+    exit 1
+  }
+done
+
 task talos:generate-config
 for config in talos/clusterconfig/kubernetes-k8s-prod-*.yaml; do
   echo "$config"
@@ -132,11 +144,15 @@ a warning that it violates `restricted:latest`. The warning confirms that the
 namespace exception relaxes enforcement without suppressing telemetry.
 
 Before changing a second node, use the updated API server to validate the
-final, live workload definitions. This checks existing Pods by dry-running a
-`baseline` namespace label and submits every stored Deployment, StatefulSet,
-DaemonSet, Job, CronJob, and ReplicationController Pod template as a
-server-side dry-run. It therefore covers Helm-rendered and operator-generated
-objects currently stored in the API, without creating or changing anything:
+final, live workload definitions. This checks existing Pods—including direct
+and operator-created Pods—by dry-running a `baseline` namespace label. It also
+submits every stored Deployment, ReplicaSet, StatefulSet, DaemonSet, Job,
+CronJob, and ReplicationController Pod template as a server-side dry-run. This
+covers the final Pods and built-in controller templates currently reconciled
+and stored in the API, without creating or changing anything. It does not try
+to predict future or unreconciled Pod output embedded in arbitrary custom
+resources; the retained `restricted` warn/audit policy provides continuous
+telemetry for later Pod creations.
 
 ```sh
 KUBE_API_SERVER=https://10.32.30.11:6443 \
@@ -161,7 +177,7 @@ incompatibilities without changing namespace labels:
 ```sh
 for namespace in $(kubectl --server=https://10.32.30.11:6443 \
   --tls-server-name=k8s-prod.home.kelch.io get namespaces -o json | \
-  jq -r '.items[] | select((.metadata.labels["pod-security.kubernetes.io/enforce"] // "") != "privileged") | .metadata.name'); do
+  jq -r '.items[] | select(.metadata.name != "kube-system") | select((.metadata.labels["pod-security.kubernetes.io/enforce"] // "") != "privileged") | .metadata.name'); do
   kubectl --server=https://10.32.30.11:6443 \
     --tls-server-name=k8s-prod.home.kelch.io \
     label namespace "${namespace}" \
@@ -202,6 +218,10 @@ The rollback has two deliberately ordered phases:
 1. Prepare a rollback Talos configuration that restores the
    `cluster.apiServer.admissionControl: {$$patch: delete}` override. Keep all
    five namespace `enforce: privileged` labels in Git and on the live cluster.
+   The doubled dollar is intentional in the repository source: Talhelper's
+   environment expansion emits the Talos `$patch: delete` directive in the
+   rendered patch. Confirm the generated configuration has an empty admission
+   configuration before applying it.
 2. Regenerate and validate the Talos configuration, then apply it only to nodes
    already changed, one at a time in reverse order. Run the direct API-server,
    node readiness, workload, and `talosctl health` checks after every node.
