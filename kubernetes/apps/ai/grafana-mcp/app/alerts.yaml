@@ -43,5 +43,17 @@ spec:
           labels:
             severity: critical
           annotations:
-            summary: Grafana MCP functional probe is failing
-            description: No successful initialize/list_datasources/delete cycle has completed in the last 10 minutes.
+            summary: AI/MCP functional probe is failing
+            description: No successful MetaMCP session-policy check and Grafana initialize/list_datasources/delete cycle has completed in the last 10 minutes.
+
+        # last_successful_time does not exist until the first success and can
+        # disappear if the CronJob or kube-state-metrics coverage is lost. Give
+        # a fresh rollout two schedules before treating absence as a failure.
+        - alert: GrafanaMCPFunctionalProbeMissing
+          expr: absent(kube_cronjob_status_last_successful_time{namespace="ai", cronjob="grafana-mcp-functional-probe"})
+          for: 12m
+          labels:
+            severity: critical
+          annotations:
+            summary: AI/MCP functional probe has no success metric
+            description: The scheduled MetaMCP session-policy and Grafana functional probe has not produced a success metric for 12 minutes.

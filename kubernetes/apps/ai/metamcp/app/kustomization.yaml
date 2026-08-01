@@ -9,3 +9,4 @@ resources:
   - ./helmrelease.yaml
   - ./httproute.yaml
   - ./networkpolicy.yaml
+  - ./database-networkpolicy.yaml

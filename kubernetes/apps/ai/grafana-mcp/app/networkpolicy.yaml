@@ -72,3 +72,11 @@ spec:
         - ports:
             - port: "8000"
               protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: ai
+            app.kubernetes.io/name: metamcp
+      toPorts:
+        - ports:
+            - port: "12008"
+              protocol: TCP

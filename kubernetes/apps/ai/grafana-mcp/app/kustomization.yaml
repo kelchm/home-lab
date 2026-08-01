@@ -8,3 +8,11 @@ resources:
   - ./alerts.yaml
   - ./networkpolicy.yaml
   - ./helmrelease.yaml
+
+configMapGenerator:
+  - name: grafana-mcp-functional-probe
+    files:
+      - probe.py
+
+generatorOptions:
+  disableNameSuffixHash: true

@@ -56,35 +56,6 @@ spec:
                   secretKeyRef:
                     name: metamcp-kanidm-oauth2-credentials
                     key: CLIENT_SECRET
-            # MetaMCP 2.4.22 has a built-in five-minute cleanup loop, but its
-            # lifetime defaults to infinity and this release cannot read the
-            # setting from an environment variable. The image already carries
-            # psql; postStart waits for the entrypoint's migrations, then makes
-            # the supported DB setting declarative on fresh and restored DBs.
-            lifecycle:
-              postStart:
-                exec:
-                  command:
-                    - /bin/sh
-                    - -c
-                    - |
-                      until [ "$(psql "$DATABASE_URL" -Atqc "select to_regclass('public.config')")" = "config" ]; do
-                        sleep 2
-                      done
-                      psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
-                      INSERT INTO config (id, value, description, created_at, updated_at)
-                      VALUES (
-                        'SESSION_LIFETIME',
-                        '14400000',
-                        'Expire MCP transport sessions after 4 hours',
-                        now(),
-                        now()
-                      )
-                      ON CONFLICT (id) DO UPDATE
-                      SET value = EXCLUDED.value,
-                          description = EXCLUDED.description,
-                          updated_at = now();
-                      SQL
             probes:
               liveness: &probes
                 enabled: true
@@ -106,8 +77,8 @@ spec:
                 cpu: 100m
                 memory: 512Mi
               limits:
-                # Temporary headroom while the four-hour retention cap is
-                # observed over the issue's 14-day soak period.
+                # Session lifetime is a supported DB setting, verified by the
+                # functional probe. Keep temporary headroom for its 14-day soak.
                 memory: 2Gi
     defaultPodOptions:
       securityContext:

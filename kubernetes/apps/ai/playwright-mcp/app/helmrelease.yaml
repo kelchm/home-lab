@@ -1,7 +1,7 @@
 ---
-# In-cluster HTTP MCP server reached by metamcp via Service DNS at
-# http://playwright-mcp.ai.svc.cluster.local:8931/mcp. Not on any Gateway —
-# clients should hit metamcp, which proxies through.
+# Dormant in-cluster HTTP MCP server retained for comparison/rollback. It is not
+# registered with MetaMCP and its network policy denies all ingress; the approved
+# browser backend is playwright-stealth-mcp.
 #
 # --isolated keeps the browser profile in-memory so no PVC is needed.
 # --no-sandbox follows Microsoft's documented container invocation; the

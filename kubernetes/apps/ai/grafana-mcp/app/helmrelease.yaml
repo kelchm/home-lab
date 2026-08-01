@@ -18,6 +18,9 @@ spec:
   values:
     controllers:
       grafana-mcp:
+        pod:
+          labels:
+            homelab.kelch.io/metamcp-backend: "true"
         strategy: Recreate
         containers:
           app:

@@ -1,7 +1,8 @@
 ---
-# Default-deny shape: only MCP gateways in the ai namespace reach the
-# playwright-mcp HTTP transport. Public-only HTTP(S) egress and DNS are supplied
-# by the namespace-level ai-public-web-egress policy.
+# This vanilla backend is retained for comparison/rollback but is not registered
+# with MetaMCP. Deny all ingress so the reciprocal policy cannot imply that it is
+# an approved dependency. Public-only HTTP(S) egress and DNS are supplied by the
+# namespace-level ai-public-web-egress policy.
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
@@ -10,12 +11,4 @@ spec:
   endpointSelector:
     matchLabels:
       app.kubernetes.io/name: playwright-mcp
-  ingress:
-    - fromEndpoints:
-        - matchLabels:
-            k8s:io.kubernetes.pod.namespace: ai
-            app.kubernetes.io/name: metamcp
-      toPorts:
-        - ports:
-            - port: "8931"
-              protocol: TCP
+  ingress: []

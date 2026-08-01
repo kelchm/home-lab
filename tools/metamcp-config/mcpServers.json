@@ -1,11 +1,5 @@
 {
   "mcpServers": {
-    "time": {
-      "type": "stdio",
-      "command": "uvx",
-      "args": ["mcp-server-time"],
-      "description": "Time/timezone utility. stdio runs inside the metamcp pod via the bundled uvx toolchain."
-    },
     "digikey": {
       "type": "streamable_http",
       "url": "http://digikey-mcp.ai.svc.cluster.local:8000/mcp",

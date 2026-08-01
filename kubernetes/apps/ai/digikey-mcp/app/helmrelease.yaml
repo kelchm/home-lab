@@ -18,6 +18,9 @@ spec:
   values:
     controllers:
       digikey-mcp:
+        pod:
+          labels:
+            homelab.kelch.io/metamcp-backend: "true"
         # RWO PVC + single replica: old pod must release the volume
         # before the new one attaches.
         strategy: Recreate
