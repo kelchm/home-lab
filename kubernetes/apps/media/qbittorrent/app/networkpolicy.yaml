@@ -1,0 +1,33 @@
+---
+# qBittorrent bypasses native authentication for the pod CIDR, so this policy
+# is the internal authentication boundary. Ingress is default-denied for the
+# selected endpoint; egress remains unrestricted so Gluetun can establish the
+# VPN and continue enforcing the pod-network-namespace killswitch.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: qbittorrent
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: qbittorrent
+  ingress:
+    # Only the admin Traefik instance may reach the OIDC-protected Web UI.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: network
+            app.kubernetes.io/instance: traefik-admin-network
+      toPorts: &webui-port
+        - ports:
+            - port: "8080"
+              protocol: TCP
+
+    # These are the download clients configured in the live *arr instances.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: media
+          matchExpressions:
+            - key: app.kubernetes.io/name
+              operator: In
+              values: [lidarr, radarr, sonarr]
+      toPorts: *webui-port
