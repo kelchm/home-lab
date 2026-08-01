@@ -1,8 +1,8 @@
 # Bambuddy bootstrap and recovery
 
 Bambuddy runs in `printing` with a single-instance CloudNativePG database on a
-5 GiB Longhorn PVC. Archives and portable backups use a separate 100 GiB
-Longhorn PVC. It is reachable only through `gateway-admin` at
+5 GiB Longhorn PVC. Live archives use a separate 50 GiB Longhorn PVC. It is
+reachable only through `gateway-admin` at
 `https://bambuddy.home.kelch.io`. Automatic discovery, host networking,
 Virtual Printer, Proxy mode, external archive roots, and cloud integrations are
 out of scope for the initial deployment.
@@ -17,9 +17,11 @@ out of scope for the initial deployment.
    camera/file transfer `6000`, and A1/P1S ports `2024-2026` as applicable.
 4. Replace `192.0.2.1/32` in `networkpolicy.yaml` with the fixed printer `/32`
    and remove ports the model does not use. Do not substitute its VLAN CIDR.
-5. Confirm the initial 100 GiB archive allocation is reasonable. Longhorn can
-   expand it later; move only bulk archives to NFS in a separately reviewed
-   change.
+5. Treat 50 GiB as the initial allocation, not a permanent forecast. Upstream
+   estimates 500 prints with some timelapses at 1-5 GB and 1,000+ prints with
+   full timelapses at 10+ GB. Record actual growth after 30 and 60 days and
+   expand before the volume reaches 80% utilization. Move only bulk archives
+   to NFS in a separately reviewed change.
 
 The documentation address intentionally prevents printer connectivity while
 the PR is a draft. Do not merge it unchanged.
@@ -79,10 +81,16 @@ IoT device, a node address, the NAS, and the Kubernetes API must remain denied.
 ## Backup and restore drill
 
 Both the CNPG data PVC and the archive PVC inherit Longhorn's daily and weekly
-backup jobs. Configure Bambuddy's portable scheduled backup to write under
-`/app/data/backups`, then create a manual backup after OIDC and printer setup.
+backup jobs. Leave Bambuddy's scheduled local backup disabled until a separate
+NFS-backed backup path is mounted. A complete portable backup contains the
+database and every data directory; keeping its default five retained copies
+under `/app/data/backups` can consume several times the live archive capacity.
+Create one manual backup after OIDC and printer setup, copy it to the NAS or an
+operator workstation, and remove the on-volume copy after verifying it.
 Portable backups use SQLite format even when Bambuddy runs on PostgreSQL, so
-they can be restored onto either backend.
+they can be restored onto either backend. See upstream's
+[backup and restore documentation](https://wiki.bambuddy.cool/features/backup/)
+for the included directories and retention behavior.
 
 For the acceptance drill:
 

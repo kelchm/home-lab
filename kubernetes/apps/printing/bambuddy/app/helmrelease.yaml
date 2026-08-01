@@ -104,9 +104,10 @@ spec:
       data:
         type: persistentVolumeClaim
         storageClass: longhorn
-        # Archives, thumbnails, encryption keys, and portable backups. Database
-        # rows live in CNPG, but Bambuddy exports portable SQLite backups here.
-        size: 100Gi
+        # Live archives, thumbnails, and encryption keys. Database rows live in
+        # CNPG. Keep recurring portable backups off this volume: each backup
+        # contains the complete archive and would multiply the capacity needed.
+        size: 50Gi
         accessMode: ReadWriteOnce
         advancedMounts:
           bambuddy:
