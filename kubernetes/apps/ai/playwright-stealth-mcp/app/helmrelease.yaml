@@ -31,7 +31,7 @@ spec:
               - --isolated
               - --host=0.0.0.0
               - --port=8931
-              - --allowed-hosts=*
+              - --allowed-hosts=playwright-stealth-mcp.ai.svc.cluster.local:8931
             probes:
               liveness: &probes
                 enabled: true

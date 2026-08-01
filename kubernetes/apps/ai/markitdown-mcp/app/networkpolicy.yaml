@@ -1,7 +1,7 @@
 ---
 # Default-deny shape: only MCP gateways in the ai namespace reach the
-# markitdown-mcp HTTP transport. Egress is unrestricted so the convert tool can
-# resolve DNS and fetch arbitrary http/https URIs.
+# markitdown-mcp HTTP transport. Public-only HTTP(S) egress and DNS are supplied
+# by the namespace-level ai-public-web-egress policy.
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:

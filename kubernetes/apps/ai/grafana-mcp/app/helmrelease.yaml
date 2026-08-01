@@ -35,6 +35,10 @@ spec:
               - 0.0.0.0:8000
               - --endpoint-path
               - /mcp
+              # MetaMCP connects with this exact Host header. Keep the
+              # upstream DNS-rebinding guard enabled; only admit the
+              # in-cluster Service name rather than using a wildcard.
+              - --allowed-hosts=grafana-mcp.ai.svc.cluster.local:8000
               - --disable-write
             env:
               # Grafana Service in observability is port 80.
@@ -47,11 +51,20 @@ spec:
                 enabled: true
                 custom: true
                 spec:
-                  tcpSocket:
+                  httpGet:
+                    # Unlike the streamable /mcp GET, /healthz terminates its
+                    # response. The Host guard still applies, so a regression
+                    # to the original 403 makes the pod unready.
+                    path: /healthz
                     port: &port 8000
+                    httpHeaders:
+                      - name: Host
+                        value: grafana-mcp.ai.svc.cluster.local:8000
+                      - name: Accept
+                        value: application/json, text/event-stream
                   initialDelaySeconds: 10
                   periodSeconds: 10
-                  timeoutSeconds: 1
+                  timeoutSeconds: 3
                   failureThreshold: 3
               readiness: *probes
             securityContext:

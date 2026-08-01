@@ -1,7 +1,7 @@
 ---
 # Default-deny shape: only MCP gateways in the ai namespace reach the
-# kubernetes-mcp HTTP transport. Egress is unrestricted so the server can reach
-# the kube-apiserver and resolve DNS.
+# kubernetes-mcp HTTP transport. Egress is limited to DNS and Cilium's
+# kube-apiserver identity.
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
@@ -19,3 +19,16 @@ spec:
         - ports:
             - port: "8080"
               protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    - toEntities:
+        - kube-apiserver

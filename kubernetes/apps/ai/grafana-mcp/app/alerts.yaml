@@ -1,0 +1,47 @@
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: ai-mcp-reliability
+spec:
+  groups:
+    - name: ai-mcp-reliability
+      rules:
+        - alert: MetaMCPOOMKilled
+          expr: |
+            increase(kube_pod_container_status_restarts_total{namespace="ai", container="app", pod=~"metamcp-.*"}[15m]) > 0
+            and on (namespace, pod, container)
+            kube_pod_container_status_last_terminated_reason{namespace="ai", container="app", pod=~"metamcp-.*", reason="OOMKilled"} == 1
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: MetaMCP was OOM-killed
+            description: MetaMCP restarted after exceeding its memory limit in the last 15 minutes.
+
+        - alert: MetaMCPRepeatedRestarts
+          expr: increase(kube_pod_container_status_restarts_total{namespace="ai", container="app", pod=~"metamcp-.*"}[30m]) >= 2
+          for: 1m
+          labels:
+            severity: warning
+          annotations:
+            summary: MetaMCP is repeatedly restarting
+            description: MetaMCP restarted at least twice in the last 30 minutes.
+
+        - alert: GrafanaMCPFunctionalProbeFailed
+          expr: |
+            (
+              time() - kube_cronjob_status_last_successful_time{namespace="ai", cronjob="grafana-mcp-functional-probe"} > 600
+            )
+            or
+            (
+              kube_job_status_failed{namespace="ai", job_name=~"grafana-mcp-functional-probe-.*"} > 0
+              and on (namespace, job_name)
+              time() - kube_job_status_start_time{namespace="ai", job_name=~"grafana-mcp-functional-probe-.*"} < 600
+            )
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: Grafana MCP functional probe is failing
+            description: No successful initialize/list_datasources/delete cycle has completed in the last 10 minutes.

@@ -9,6 +9,7 @@ components:
 
 resources:
   - ./namespace.yaml
+  - ./networkpolicy.yaml
   - ./digikey-mcp/ks.yaml
   - ./flux-operator-mcp/ks.yaml
   - ./grafana-mcp/ks.yaml

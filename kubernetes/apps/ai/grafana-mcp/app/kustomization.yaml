@@ -4,5 +4,7 @@ kind: Kustomization
 resources:
   - ./ocirepository.yaml
   - ./secret.sops.yaml
+  - ./functional-probe.yaml
+  - ./alerts.yaml
   - ./networkpolicy.yaml
   - ./helmrelease.yaml
