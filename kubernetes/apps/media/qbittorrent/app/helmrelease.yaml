@@ -7,8 +7,12 @@
 #
 # Auth model: native qB auth bypassed for pod CIDR via Web UI "Bypass
 # authentication for clients in whitelisted IP subnets" — configured once via
-# kubectl port-forward on first deploy. OIDC at the edge (kanidm-oidc
-# Middleware on gateway-admin) is the externally-facing gate.
+# kubectl port-forward on first deploy. The CiliumNetworkPolicy is therefore a
+# security boundary: only traefik-admin (with OIDC at the edge) and the three
+# configured download-client workload + ServiceAccount identities (Sonarr,
+# Radarr, Lidarr) can reach 8080.
+# Gluetun's port-forward hook uses localhost inside this pod and does not cross
+# that boundary.
 #
 # securityContext shape follows the bjw-s canonical qBittorrent+Gluetun
 # example: identity (runAsUser/runAsGroup) at the container level only, NOT
