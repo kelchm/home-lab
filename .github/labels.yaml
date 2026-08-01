@@ -20,6 +20,10 @@
   color: "0e8a16"
 - name: area/taskfile
   color: "0e8a16"
+# Work Kinds
+- name: kind/deployment
+  color: "5319e7"
+  description: "Deploy a new application, service, or infrastructure workload"
 # Priority
 - name: priority/high
   color: "b60205"
