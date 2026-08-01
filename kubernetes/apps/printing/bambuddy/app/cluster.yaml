@@ -1,0 +1,25 @@
+---
+# Dedicated PostgreSQL backing store for Bambuddy. One instance is sufficient
+# for the initial single-printer deployment; Longhorn's recurring backups and
+# Bambuddy's portable exports provide DR without adding synchronous replicas.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: bambuddy-db
+spec:
+  instances: 1
+  storage:
+    size: 5Gi
+    storageClass: longhorn
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
+  monitoring:
+    enablePodMonitor: true
+  bootstrap:
+    initdb:
+      database: bambuddy
+      owner: bambuddy
