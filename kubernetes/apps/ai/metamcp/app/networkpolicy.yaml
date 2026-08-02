@@ -1,8 +1,8 @@
 ---
 # MetaMCP may only receive LAN UI/API traffic from the admin gateway and
-# scheduled health traffic from the functional probe. Downstream MCPs opt in
-# with homelab.kelch.io/metamcp-backend=true; the central policy only carries
-# the small union of MCP ports rather than duplicating every server identity.
+# scheduled health traffic from the functional probe. Each downstream rule
+# identifies the exact Kubernetes Services and effective endpoint port MetaMCP
+# may use; grouping is only used when services share the same port.
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
@@ -42,22 +42,58 @@ spec:
         - ports:
             - port: "5432"
               protocol: TCP
-    - toEndpoints:
-        - matchLabels:
-            k8s:io.kubernetes.pod.namespace: ai
-            homelab.kelch.io/metamcp-backend: "true"
+    - toServices:
+        - k8sService:
+            serviceName: digikey-mcp
+            namespace: ai
+        - k8sService:
+            serviceName: grafana-mcp
+            namespace: ai
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
+    - toServices:
+        - k8sService:
+            serviceName: kubernetes-mcp
+            namespace: ai
+        - k8sService:
+            serviceName: pcbparts-mcp
+            namespace: ai
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    - toServices:
+        - k8sService:
+            serviceName: markitdown-mcp
+            namespace: ai
+      toPorts:
+        - ports:
+            - port: "3001"
+              protocol: TCP
+    - toServices:
+        - k8sService:
+            serviceName: open-meteo-mcp
+            namespace: ai
       toPorts:
         - ports:
             - port: "3000"
               protocol: TCP
-            - port: "3001"
-              protocol: TCP
-            - port: "8000"
-              protocol: TCP
-            - port: "8080"
-              protocol: TCP
+    - toServices:
+        - k8sService:
+            serviceName: playwright-stealth-mcp
+            namespace: ai
+      toPorts:
+        - ports:
             - port: "8931"
               protocol: TCP
+    - toServices:
+        - k8sService:
+            serviceName: flux-operator-mcp
+            namespace: ai
+      toPorts:
+        - ports:
             - port: "9090"
               protocol: TCP
     # auth.home.kelch.io resolves to this Kubernetes LoadBalancer Service.

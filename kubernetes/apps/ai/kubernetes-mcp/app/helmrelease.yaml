@@ -18,9 +18,6 @@ spec:
   values:
     controllers:
       kubernetes-mcp:
-        pod:
-          labels:
-            homelab.kelch.io/metamcp-backend: "true"
         containers:
           app:
             image:

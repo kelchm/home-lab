@@ -17,8 +17,6 @@ spec:
     name: flux-operator-mcp
   interval: 1h
   values:
-    commonLabels:
-      homelab.kelch.io/metamcp-backend: "true"
     # Chart default is sse; http serves streamable-http at /mcp on port 9090
     # (port is hardcoded in the chart, not configurable).
     transport: http

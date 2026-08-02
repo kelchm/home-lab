@@ -53,7 +53,7 @@ raises the limit to 2 GiB for the 14-day soak.
 | --- | --- | --- | --- |
 | All AI workloads | CoreDNS pods | UDP/TCP 53 | Cluster DNS |
 | MetaMCP | `metamcp-db` pods | TCP 5432 | PostgreSQL |
-| MetaMCP | Pods labeled `homelab.kelch.io/metamcp-backend=true` | TCP 3000, 3001, 8000, 8080, 8931, 9090 | Explicit opt-in tool aggregation |
+| MetaMCP | Eight exact Kubernetes MCP Services | Each Service's single MCP port | Tool aggregation |
 | MetaMCP | Kubernetes Service `network/traefik-services` | Effective pod TCP 8443 | `auth.home.kelch.io` Kanidm OIDC |
 | Grafana MCP | Grafana pods in `observability` | TCP 3000 | Read-only Grafana API |
 | Kubernetes/Flux MCP | Cilium `kube-apiserver` entity | API server ports | Read-only cluster APIs |
@@ -70,12 +70,12 @@ space, loopback, link-local, CGNAT, benchmarking, documentation, multicast, and
 reserved IPv4 ranges. IPv6 is disabled in Cilium; equivalent exclusions must be
 added before enabling it.
 
-There is no hard-coded LAN CIDR. Cilium selects `traefik-services` by Kubernetes
-Service identity and follows its endpoints if the LoadBalancer address changes.
-Each downstream MCP opts in at its own controller. When adding a backend, add
-the backend label and reciprocal ingress rule alongside that app; update the
-small central port union only when introducing a previously unused port.
-`playwright-mcp` is intentionally not labeled and denies all ingress because the
+There is no hard-coded LAN CIDR. Cilium selects every dependency by Kubernetes
+Service identity and follows its endpoints if addresses change. Each MetaMCP
+egress rule pairs an exact Service with its effective endpoint port; services
+are grouped only when they share that port. When adding a backend, add that
+Service/port pair centrally and its reciprocal ingress rule alongside the app.
+`playwright-mcp` is intentionally absent and denies all ingress because the
 checked-in and live MetaMCP inventories use `playwright-stealth-mcp` instead. It
 remains deployed only as a dormant comparison/rollback workload.
 

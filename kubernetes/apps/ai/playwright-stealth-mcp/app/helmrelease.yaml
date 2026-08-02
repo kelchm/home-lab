@@ -16,9 +16,6 @@ spec:
   values:
     controllers:
       playwright-stealth-mcp:
-        pod:
-          labels:
-            homelab.kelch.io/metamcp-backend: "true"
         strategy: Recreate
         containers:
           app:
