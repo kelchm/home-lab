@@ -21,8 +21,8 @@ only from that PVC — JSON export covers servers alone.
 - Do not register package-runner stdio servers such as `uvx` or `npx`. MetaMCP
   initializes every registered server during startup, so they create undeclared
   Internet/package-registry dependencies and make cold starts non-reproducible.
-  Package the tool as a pinned in-cluster HTTP backend and add its exact
-  Service/port pair to the MetaMCP network allowlist instead.
+  Package the tool as a pinned in-cluster HTTP backend, add its identity to the
+  MetaMCP egress allowlist, and admit MetaMCP on its port in the backend policy.
 
 ## Registry hygiene before the containment rollout
 

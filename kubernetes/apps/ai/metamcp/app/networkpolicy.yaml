@@ -1,8 +1,8 @@
 ---
 # MetaMCP may only receive LAN UI/API traffic from the admin gateway and
-# scheduled health traffic from the functional probe. Each downstream rule
-# identifies the exact Kubernetes Services and effective endpoint port MetaMCP
-# may use; grouping is only used when services share the same port.
+# scheduled health traffic from the functional probe. Egress owns the exact
+# backend identities; each backend's reciprocal ingress policy owns its MCP
+# port. Cilium requires both directions to allow a connection.
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
@@ -42,60 +42,21 @@ spec:
         - ports:
             - port: "5432"
               protocol: TCP
-    - toServices:
-        - k8sService:
-            serviceName: digikey-mcp
-            namespace: ai
-        - k8sService:
-            serviceName: grafana-mcp
-            namespace: ai
-      toPorts:
-        - ports:
-            - port: "8000"
-              protocol: TCP
-    - toServices:
-        - k8sService:
-            serviceName: kubernetes-mcp
-            namespace: ai
-        - k8sService:
-            serviceName: pcbparts-mcp
-            namespace: ai
-      toPorts:
-        - ports:
-            - port: "8080"
-              protocol: TCP
-    - toServices:
-        - k8sService:
-            serviceName: markitdown-mcp
-            namespace: ai
-      toPorts:
-        - ports:
-            - port: "3001"
-              protocol: TCP
-    - toServices:
-        - k8sService:
-            serviceName: open-meteo-mcp
-            namespace: ai
-      toPorts:
-        - ports:
-            - port: "3000"
-              protocol: TCP
-    - toServices:
-        - k8sService:
-            serviceName: playwright-stealth-mcp
-            namespace: ai
-      toPorts:
-        - ports:
-            - port: "8931"
-              protocol: TCP
-    - toServices:
-        - k8sService:
-            serviceName: flux-operator-mcp
-            namespace: ai
-      toPorts:
-        - ports:
-            - port: "9090"
-              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: ai
+          matchExpressions:
+            - key: app.kubernetes.io/name
+              operator: In
+              values:
+                - digikey-mcp
+                - flux-operator-mcp
+                - grafana-mcp
+                - kubernetes-mcp
+                - markitdown-mcp
+                - open-meteo-mcp
+                - pcbparts-mcp
+                - playwright-stealth-mcp
     # auth.home.kelch.io resolves to this Kubernetes LoadBalancer Service.
     # Cilium evaluates L4 policy after Service translation, so select the
     # Service and allow Traefik's effective websecure container port.

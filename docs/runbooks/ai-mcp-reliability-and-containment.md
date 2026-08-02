@@ -53,7 +53,7 @@ raises the limit to 2 GiB for the 14-day soak.
 | --- | --- | --- | --- |
 | All AI workloads | CoreDNS pods | UDP/TCP 53 | Cluster DNS |
 | MetaMCP | `metamcp-db` pods | TCP 5432 | PostgreSQL |
-| MetaMCP | Eight exact Kubernetes MCP Services | Each Service's single MCP port | Tool aggregation |
+| MetaMCP | Eight exact MCP pod identities | Port owned by each backend's ingress policy | Tool aggregation |
 | MetaMCP | Kubernetes Service `network/traefik-services` | Effective pod TCP 8443 | `auth.home.kelch.io` Kanidm OIDC |
 | Grafana MCP | Grafana pods in `observability` | TCP 3000 | Read-only Grafana API |
 | Kubernetes/Flux MCP | Cilium `kube-apiserver` entity | API server ports | Read-only cluster APIs |
@@ -70,14 +70,15 @@ space, loopback, link-local, CGNAT, benchmarking, documentation, multicast, and
 reserved IPv4 ranges. IPv6 is disabled in Cilium; equivalent exclusions must be
 added before enabling it.
 
-There is no hard-coded LAN CIDR. Cilium selects every dependency by Kubernetes
-Service identity and follows its endpoints if addresses change. Each MetaMCP
-egress rule pairs an exact Service with its effective endpoint port; services
-are grouped only when they share that port. When adding a backend, add that
-Service/port pair centrally and its reciprocal ingress rule alongside the app.
-`playwright-mcp` is intentionally absent and denies all ingress because the
-checked-in and live MetaMCP inventories use `playwright-stealth-mcp` instead. It
-remains deployed only as a dormant comparison/rollback workload.
+There is no hard-coded LAN CIDR. MetaMCP egress names the exact backend pod
+identities once; each backend's reciprocal policy admits MetaMCP only on that
+server's MCP port. Cilium requires both policies to allow a connection, keeping
+identity and port ownership local without a central identity/port cross-product.
+When adding a backend, add its identity to the central list and its exact port to
+the backend ingress policy. `playwright-mcp` is intentionally absent and denies
+all ingress because the checked-in and live MetaMCP inventories use
+`playwright-stealth-mcp` instead. It remains deployed only as a dormant
+comparison/rollback workload.
 
 ## Functional checks
 
