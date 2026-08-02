@@ -52,6 +52,19 @@ spec:
               target:
                 group: helm.toolkit.fluxcd.io
                 kind: HelmRelease
+            - # HelmReleases labeled helm-crds=skip delegate the CRD lifecycle to their chart's hooks
+              patch: |-
+                apiVersion: helm.toolkit.fluxcd.io/v2
+                kind: HelmRelease
+                metadata:
+                  name: _
+                spec:
+                  upgrade:
+                    crds: Skip
+              target:
+                group: helm.toolkit.fluxcd.io
+                kind: HelmRelease
+                labelSelector: homelab.kelch.io/helm-crds=skip
       target:
         group: kustomize.toolkit.fluxcd.io
         kind: Kustomization
