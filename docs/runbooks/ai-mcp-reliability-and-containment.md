@@ -75,10 +75,9 @@ identities once; each backend's reciprocal policy admits MetaMCP only on that
 server's MCP port. Cilium requires both policies to allow a connection, keeping
 identity and port ownership local without a central identity/port cross-product.
 When adding a backend, add its identity to the central list and its exact port to
-the backend ingress policy. `playwright-mcp` is intentionally absent and denies
-all ingress because the checked-in and live MetaMCP inventories use
-`playwright-stealth-mcp` instead. It remains deployed only as a dormant
-comparison/rollback workload.
+the backend ingress policy. The unused vanilla `playwright-mcp` workload was
+removed; the checked-in and live MetaMCP inventories use only
+`playwright-stealth-mcp`.
 
 ## Functional checks
 

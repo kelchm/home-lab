@@ -17,7 +17,6 @@ spec:
           - markitdown-mcp
           - open-meteo-mcp
           - pcbparts-mcp
-          - playwright-mcp
           - playwright-stealth-mcp
   egress:
     - toEndpoints:
