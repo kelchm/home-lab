@@ -20,7 +20,16 @@ If any of those gaps grow load-bearing, layer Velero on top — the BackupTarget
 - BackupTarget URL: `nfs://10.32.25.5:/volume1/backups-k8s-prod/longhorn`
 - Path on NAS: `/volume1/backups-k8s-prod/longhorn/` (Longhorn writes `backupstore/{volumes,backups}/...` underneath)
 - Network path: instance-manager pods reach `10.32.25.5` via the `lhnet1` storage-network attachment (same /24, kernel routes out the secondary interface). Backup transfer rides 2.5GbE, not the 1GbE node NIC.
-- Synology NFS export: scoped to `10.32.25.0/24`, all-users squashed to admin (Longhorn writes as root in-pod; squash maps to NAS admin UID, share-level ACL restricts access to one dedicated `k8s-backup` user).
+- Synology NFS export rules (verified against DSM 2026-08-02):
+
+  | Client | Privilege | Squash | Async | Non-priv ports | Cross-mount |
+  |---|---|---|---|---|---|
+  | `10.32.25.128/28` | Read/Write | Map root to admin | Yes | Allowed | Denied |
+  | `10.32.25.11`, `.12`, `.13`, `.14` | Read/Write | Map root to admin | Yes | Allowed | Denied |
+
+  - The `/28` admits the Longhorn instance-manager pods, which mount the target from their Multus storage-VLAN IPs. `.11`–`.13` are the node storage NICs (longhorn-manager traffic SNATs to these); `.14` is from the host-expansion reservation (`architecture.md`).
+  - Root squashes to admin because Longhorn writes as root in-pod; admin holds rights on the share ACL. Non-root UIDs pass through unmapped.
+  - Contrast with the read-only `lemon-manuals-k8s-prod` share (all users → admin, reserved ports only): that share serves kubelet-initiated read-only mounts, this one takes root writes from in-pod clients.
 
 ## Schedule and retention
 

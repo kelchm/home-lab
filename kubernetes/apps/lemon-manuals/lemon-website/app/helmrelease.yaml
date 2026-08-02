@@ -1,0 +1,103 @@
+---
+# LEMON Manuals (lemon-manuals.la) — self-hosted car repair manual archive,
+# served from the lemon-manuals-k8s-prod share (see storage/). Runs the
+# torrent-shipped static musl binary directly off the read-only NFS mount:
+# no image to build, and the binary is integrity-pinned by the torrent it
+# arrived in. musl (not glibc) is deliberate — upstream documents the glibc
+# build fragmenting to ~20GB RSS.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: lemon-website
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: lemon-website
+  interval: 1h
+  values:
+    controllers:
+      lemon-website:
+        containers:
+          app:
+            image:
+              # renovate: datasource=docker depName=docker.io/library/alpine
+              repository: docker.io/library/alpine
+              tag: 3.22.1
+            command:
+              - /data/bin/lemon-website-linux-x86_64-musl
+              - --listen-address
+              - 0.0.0.0:8080
+              - /data/lemon/index.json
+              - /data/charm/index.json
+            env:
+              TZ: America/New_York
+            probes:
+              # Startup parses the index.json files (~150MB combined) before
+              # listening; allow up to 5 minutes on first boot.
+              startup:
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: /
+                    port: &port 8080
+                  periodSeconds: 5
+                  timeoutSeconds: 5
+                  failureThreshold: 60
+              liveness: &probes
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: /
+                    port: *port
+                  periodSeconds: 30
+                  timeoutSeconds: 5
+                  failureThreshold: 3
+              readiness: *probes
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities: { drop: ["ALL"] }
+              readOnlyRootFilesystem: true
+            resources:
+              requests:
+                cpu: 100m
+                memory: 512Mi
+              limits:
+                memory: 3Gi
+    defaultPodOptions:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+    service:
+      app:
+        ports:
+          http:
+            port: *port
+    persistence:
+      data:
+        type: persistentVolumeClaim
+        existingClaim: lemon-manuals
+        globalMounts:
+          - path: /data
+            readOnly: true
+    route:
+      app:
+        hostnames: ["lemon.home.kelch.io"]
+        parentRefs:
+          - name: gateway-admin
+            namespace: network
+            sectionName: https
+        rules:
+          - backendRefs:
+              - identifier: app
+                port: *port
+            filters:
+              - type: ExtensionRef
+                extensionRef:
+                  group: traefik.io
+                  kind: Middleware
+                  name: kanidm-oidc

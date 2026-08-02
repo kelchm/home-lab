@@ -27,6 +27,7 @@ spec:
     - https://bazarr.home.kelch.io/oidc/callback
     - https://qbittorrent.home.kelch.io/oidc/callback
     - https://sabnzbd.home.kelch.io/oidc/callback
+    - https://lemon.home.kelch.io/oidc/callback
   scopeMap:
     - group: arr-admins
       scopes:

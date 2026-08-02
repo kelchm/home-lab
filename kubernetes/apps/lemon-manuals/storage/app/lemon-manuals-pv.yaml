@@ -1,0 +1,41 @@
+---
+# Static PV for the Synology lemon-manuals-k8s-prod share — the LEMON/CHARM
+# manual databases, populated out-of-band by reflink clone from the torrent
+# in /volume1/media. The share is workload plumbing (NFS-only, no DSM user
+# access, no snapshots — contents are re-downloadable).
+#
+# Read-only end to end: the NFS export rule is RO on the Synology side, the
+# `ro` mount option enforces it at the kernel mount, and pods additionally
+# mount readOnly. lemon-website never writes (mtbl mmap / LMDB RDONLY).
+#
+# storageClassName is a non-empty string that does NOT resolve to a real
+# StorageClass — required to prevent a default-class binding race during
+# initial reconcile, while still letting this PV bind to its matching PVC by
+# name (volumeName/claimRef).
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: lemon-manuals
+spec:
+  capacity:
+    storage: 2Ti
+  accessModes:
+    - ReadOnlyMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs-lemon-manuals-static
+  mountOptions:
+    - nfsvers=4.1
+    - ro
+    - hard
+    - noatime
+    - nodiratime
+    - rsize=1048576
+  csi:
+    driver: nfs.csi.k8s.io
+    volumeHandle: lemon-manuals
+    volumeAttributes:
+      server: 10.32.25.5
+      share: /volume1/lemon-manuals-k8s-prod
+  claimRef:
+    namespace: lemon-manuals
+    name: lemon-manuals
