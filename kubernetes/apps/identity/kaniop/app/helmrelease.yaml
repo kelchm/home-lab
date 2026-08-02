@@ -6,9 +6,6 @@ apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
   name: kaniop
-  labels:
-    # The chart's person-CRD-rename migration hooks own the CRD lifecycle
-    homelab.kelch.io/helm-crds: skip
 spec:
   chartRef:
     kind: OCIRepository
