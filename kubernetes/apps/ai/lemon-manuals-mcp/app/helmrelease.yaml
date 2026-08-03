@@ -22,12 +22,13 @@ spec:
           app:
             image:
               repository: ghcr.io/kelchm/lemon-manuals-mcp
-              tag: sha-7cf2b4c
+              tag: sha-8857281
             env:
               PORT: "8787"
               LEMON_BASE_URL: http://lemon-website.lemon-manuals.svc.cluster.local:8080
               LEMON_INDEX_JSON: /data/lemon/index.json
               CHARM_INDEX_JSON: /data/charm/index.json
+              LEMON_SEARCH_DB: /search/manual-search.sqlite
             probes:
               liveness: &probes
                 enabled: true
@@ -57,6 +58,8 @@ spec:
         runAsNonRoot: true
         runAsUser: 1000
         runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
         seccompProfile: { type: RuntimeDefault }
     service:
       app:
@@ -71,3 +74,11 @@ spec:
         globalMounts:
           - path: /data
             readOnly: true
+      search:
+        type: persistentVolumeClaim
+        storageClass: longhorn
+        accessMode: ReadWriteOnce
+        size: 5Gi
+        retain: true
+        globalMounts:
+          - path: /search
