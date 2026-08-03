@@ -35,9 +35,13 @@ spec:
             )
             or
             (
-              kube_job_status_failed{namespace="ai", job_name=~"grafana-mcp-functional-probe-.*"} > 0
-              and on (namespace, job_name)
-              time() - kube_job_status_start_time{namespace="ai", job_name=~"grafana-mcp-functional-probe-.*"} < 600
+              (
+                kube_job_status_failed{namespace="ai", job_name=~"grafana-mcp-functional-probe-.*"} > 0
+                and on (namespace, job_name)
+                time() - kube_job_status_start_time{namespace="ai", job_name=~"grafana-mcp-functional-probe-.*"} < 600
+              )
+              unless on (namespace, job_name)
+              kube_job_status_succeeded{namespace="ai", job_name=~"grafana-mcp-functional-probe-.*"} > 0
             )
           for: 2m
           labels:
