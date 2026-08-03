@@ -23,12 +23,15 @@ spec:
               # renovate: datasource=docker depName=docker.io/library/alpine
               repository: docker.io/library/alpine
               tag: 3.22.1
+            # sha256 gate: the executed binary must match the hash pinned
+            # here in git (verified identical to the qB-checked torrent
+            # copy), so a swapped file on the NAS fails closed instead of
+            # running.
             command:
-              - /data/bin/lemon-website-linux-x86_64-musl
-              - --listen-address
-              - 0.0.0.0:8080
-              - /data/lemon/index.json
-              - /data/charm/index.json
+              - /bin/sh
+              - -c
+              - echo "f4f86ecbbec66e2923997ea96487e9483601b9186ab317bd9a64ad793ccd2902  /data/bin/lemon-website-linux-x86_64-musl" | sha256sum -c
+                && exec /data/bin/lemon-website-linux-x86_64-musl --listen-address 0.0.0.0:8080 /data/lemon/index.json /data/charm/index.json
             env:
               TZ: America/New_York
             probes:
@@ -44,7 +47,20 @@ spec:
                   periodSeconds: 5
                   timeoutSeconds: 5
                   failureThreshold: 60
-              liveness: &probes
+              # Liveness is looser than readiness: an NFS stall (e.g. NAS
+              # reboot) should drop the pod from endpoints, not restart-loop
+              # a process a restart can't fix.
+              liveness:
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: /
+                    port: *port
+                  periodSeconds: 30
+                  timeoutSeconds: 10
+                  failureThreshold: 6
+              readiness:
                 enabled: true
                 custom: true
                 spec:
@@ -54,7 +70,6 @@ spec:
                   periodSeconds: 30
                   timeoutSeconds: 5
                   failureThreshold: 3
-              readiness: *probes
             securityContext:
               allowPrivilegeEscalation: false
               capabilities: { drop: ["ALL"] }

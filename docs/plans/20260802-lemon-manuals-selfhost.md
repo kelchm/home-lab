@@ -52,18 +52,29 @@ Done:
   NFS, so no `chmod +x` on the binary is needed — POSIX modes on this share are
   cosmetic; the export-level RO is what governs.
 
+Deployed via PR #314 (merge `662c17e`, 2026-08-02): pod serves both databases
+(~7s index load, ~500Mi RSS), route 302s to kanidm, deep pages and an
+`images.mtbl` JPEG verified. Post-merge review findings (grok + CodeRabbit)
+triaged: sha256-gated exec and split liveness/readiness probes added; PV
+recovery note below; `nodeAffinity` finding dismissed (all three nodes are in
+the export allowlist); `backups-k8s-prod` async-write durability logged as a
+separate non-lemon decision.
+
+## Operational notes
+
+- **Binary provenance**: the executed musl binary's sha256 is pinned in the
+  HelmRelease command (`f4f86ecb…`) and was verified identical between the
+  share copy and the qB-checked torrent copy. The vendored source tarball's
+  sha256 lives in the private `kelchm/lemon-website` repo README.
+- **Retained-PV recovery**: with `persistentVolumeReclaimPolicy: Retain` and a
+  fixed `claimRef`, deleting/pruning the PVC leaves the PV `Released` and it
+  will not re-bind. Recover with
+  `kubectl patch pv lemon-manuals --type json -p '[{"op":"remove","path":"/spec/claimRef/uid"},{"op":"remove","path":"/spec/claimRef/resourceVersion"}]'`
+  (also applies to `media-library`).
+
 ## Remaining
 
-1. Commit on `feat/lemon-manuals-selfhost` (not the worktree branch name), PR,
-   merge, let Flux reconcile.
-2. Verify: `lemon-website` pod Ready in `lemon-manuals`; `https://lemon.home.kelch.io`
-   renders behind OIDC; spot-check one manual page from each database (LEMON and
-   CHARM) including an image (exercises `images.mtbl`).
-3. Cleanup on Athena: `sudo rm /volume1/lemon-manuals-k8s-prod/.reflink-test`.
-4. Documentation debt discovered en route: capture the `backups-k8s-prod` NFS
-   rule table + rationale (pod-/28 client, map-root-to-admin for root-writing
-   Longhorn, non-privileged ports allowed) in
-   `docs/runbooks/longhorn-backup-restore.md`.
+1. Cleanup on Athena: `sudo rm /volume1/lemon-manuals-k8s-prod/.reflink-test`.
 
 ## Phase 2 — MCP (design sketch, not started)
 
