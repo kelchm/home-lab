@@ -22,7 +22,7 @@ spec:
             image:
               # renovate: datasource=docker depName=docker.io/library/alpine
               repository: docker.io/library/alpine
-              tag: 3.22.1
+              tag: 3.24.1
             # sha256 gate: the executed binary must match the hash pinned
             # here in git (verified identical to the qB-checked torrent
             # copy), so a swapped file on the NAS fails closed instead of
