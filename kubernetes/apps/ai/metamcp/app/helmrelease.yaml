@@ -61,11 +61,12 @@ spec:
                 enabled: true
                 custom: true
                 spec:
-                  tcpSocket:
+                  httpGet:
+                    path: /health
                     port: &port 12008
                   initialDelaySeconds: 30
                   periodSeconds: 10
-                  timeoutSeconds: 1
+                  timeoutSeconds: 3
                   failureThreshold: 3
               readiness: *probes
             securityContext:
@@ -74,9 +75,11 @@ spec:
             resources:
               requests:
                 cpu: 100m
-                memory: 256Mi
+                memory: 512Mi
               limits:
-                memory: 1Gi
+                # Session lifetime is a supported DB setting, verified by the
+                # functional probe. Keep temporary headroom for its 14-day soak.
+                memory: 2Gi
     defaultPodOptions:
       securityContext:
         # Image runs migrations via pnpm which expects to mkdir under $HOME;

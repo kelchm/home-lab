@@ -4,6 +4,11 @@ kind: Kustomization
 metadata:
   name: grafana-mcp
 spec:
+  # Provides the PrometheusRule CRD and depends transitively on Grafana, which
+  # is this MCP server's only application dependency.
+  dependsOn:
+    - name: kube-prometheus-stack
+      namespace: observability
   healthChecks:
     - apiVersion: helm.toolkit.fluxcd.io/v2
       kind: HelmRelease

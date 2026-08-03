@@ -9,6 +9,7 @@ components:
 
 resources:
   - ./namespace.yaml
+  - ./networkpolicy.yaml
   - ./digikey-mcp/ks.yaml
   - ./flux-operator-mcp/ks.yaml
   - ./grafana-mcp/ks.yaml
@@ -18,5 +19,4 @@ resources:
   - ./metamcp/ks.yaml
   - ./open-meteo-mcp/ks.yaml
   - ./pcbparts-mcp/ks.yaml
-  - ./playwright-mcp/ks.yaml
   - ./playwright-stealth-mcp/ks.yaml

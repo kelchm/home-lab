@@ -18,6 +18,25 @@ only from that PVC — JSON export covers servers alone.
 - `tools/metamcp-config/mcpServers.json` is the reviewable, re-importable definition of
   the in-cluster server backends. It is a partial seed (servers only); reconcile it
   against the UI's **Export JSON** after registry changes.
+- Do not register package-runner stdio servers such as `uvx` or `npx`. MetaMCP
+  initializes every registered server during startup, so they create undeclared
+  Internet/package-registry dependencies and make cold starts non-reproducible.
+  Package the tool as a pinned in-cluster HTTP backend, add its identity to the
+  MetaMCP egress allowlist, and admit MetaMCP on its port in the backend policy.
+
+## Registry hygiene before the containment rollout
+
+MetaMCP initializes registered servers even when no namespace currently maps
+them. Before applying the restricted MetaMCP egress policy:
+
+1. Remove `time` from the `default` namespace, then delete its `uvx
+   mcp-server-time` server registration.
+2. Delete the unused `default-endpoint` server registration that points back to
+   `https://metamcp.home.kelch.io/metamcp/default/mcp`. Do not delete the actual
+   `default` endpoint under **Endpoints**.
+3. Export the server registry and confirm it matches
+   `tools/metamcp-config/mcpServers.json`; no stdio/package-runner or MetaMCP
+   self-reference should remain.
 
 ## Access hardening (verify once)
 

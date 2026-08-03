@@ -1,0 +1,63 @@
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: ai-mcp-reliability
+spec:
+  groups:
+    - name: ai-mcp-reliability
+      rules:
+        - alert: MetaMCPOOMKilled
+          expr: |
+            increase(kube_pod_container_status_restarts_total{namespace="ai", container="app", pod=~"metamcp-.*"}[15m]) > 0
+            and on (namespace, pod, container)
+            kube_pod_container_status_last_terminated_reason{namespace="ai", container="app", pod=~"metamcp-.*", reason="OOMKilled"} == 1
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: MetaMCP was OOM-killed
+            description: MetaMCP restarted after exceeding its memory limit in the last 15 minutes.
+
+        - alert: MetaMCPRepeatedRestarts
+          expr: increase(kube_pod_container_status_restarts_total{namespace="ai", container="app", pod=~"metamcp-.*"}[30m]) >= 2
+          for: 1m
+          labels:
+            severity: warning
+          annotations:
+            summary: MetaMCP is repeatedly restarting
+            description: MetaMCP restarted at least twice in the last 30 minutes.
+
+        - alert: GrafanaMCPFunctionalProbeFailed
+          expr: |
+            (
+              time() - kube_cronjob_status_last_successful_time{namespace="ai", cronjob="grafana-mcp-functional-probe"} > 600
+            )
+            or
+            (
+              (
+                kube_job_status_failed{namespace="ai", job_name=~"grafana-mcp-functional-probe-.*"} > 0
+                and on (namespace, job_name)
+                time() - kube_job_status_start_time{namespace="ai", job_name=~"grafana-mcp-functional-probe-.*"} < 600
+              )
+              unless on (namespace, job_name)
+              kube_job_status_succeeded{namespace="ai", job_name=~"grafana-mcp-functional-probe-.*"} > 0
+            )
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: AI/MCP functional probe is failing
+            description: No successful MetaMCP session-policy check and Grafana initialize/list_datasources/delete cycle has completed in the last 10 minutes.
+
+        # last_successful_time does not exist until the first success and can
+        # disappear if the CronJob or kube-state-metrics coverage is lost. Give
+        # a fresh rollout two schedules before treating absence as a failure.
+        - alert: GrafanaMCPFunctionalProbeMissing
+          expr: absent(kube_cronjob_status_last_successful_time{namespace="ai", cronjob="grafana-mcp-functional-probe"})
+          for: 12m
+          labels:
+            severity: critical
+          annotations:
+            summary: AI/MCP functional probe has no success metric
+            description: The scheduled MetaMCP session-policy and Grafana functional probe has not produced a success metric for 12 minutes.

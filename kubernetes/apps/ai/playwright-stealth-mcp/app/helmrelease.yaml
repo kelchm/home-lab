@@ -1,9 +1,9 @@
 ---
-# Patchright-backed sibling of playwright-mcp. Reached internally at
+# Patchright-backed browser MCP. Reached internally at
 # http://playwright-stealth-mcp.ai.svc.cluster.local:8931/mcp. Image is
 # built from kelchm/playwright-stealth-mcp — Microsoft's playwright-mcp
 # source with playwright/playwright-core swapped to patchright via npm
-# aliases. Same args/securityContext as vanilla playwright-mcp.
+# aliases.
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
@@ -31,7 +31,7 @@ spec:
               - --isolated
               - --host=0.0.0.0
               - --port=8931
-              - --allowed-hosts=*
+              - --allowed-hosts=playwright-stealth-mcp.ai.svc.cluster.local:8931
             probes:
               liveness: &probes
                 enabled: true

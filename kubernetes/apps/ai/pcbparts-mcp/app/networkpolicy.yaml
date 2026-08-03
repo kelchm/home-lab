@@ -1,7 +1,7 @@
 ---
 # Default-deny shape: only MCP gateways in the ai namespace reach the
-# pcbparts-mcp HTTP transport. Egress is unrestricted so the server can resolve
-# DNS and reach JLCPCB/EasyEDA over HTTPS.
+# pcbparts-mcp HTTP transport. Public-only HTTP(S) egress and DNS are supplied
+# by the namespace-level ai-public-web-egress policy.
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
