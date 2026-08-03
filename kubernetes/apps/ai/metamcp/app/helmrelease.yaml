@@ -27,6 +27,9 @@ spec:
               # Docker-Compose hack to rewrite localhost references; meaningless
               # in K8s and would mangle our Service DNS rewrites — keep off.
               TRANSFORM_LOCALHOST_TO_DOCKER_INTERNAL: "false"
+              # The image already includes pnpm, but its packageManager field
+              # otherwise makes pnpm download another version at every startup.
+              NPM_CONFIG_MANAGE_PACKAGE_MANAGER_VERSIONS: "false"
               # Entrypoint script blocks on `wait-for-postgres` using these vars
               # directly, independent of DATABASE_URL — defaults are the
               # docker-compose service name `postgres:5432` which doesn't exist
