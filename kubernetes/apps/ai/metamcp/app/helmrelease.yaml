@@ -57,18 +57,30 @@ spec:
                     name: metamcp-kanidm-oauth2-credentials
                     key: CLIENT_SECRET
             probes:
-              liveness: &probes
+              # MetaMCP runs schema migrations before starting its HTTP server.
+              # Gate the steady-state probes for up to five minutes so a slow
+              # migration cannot be mistaken for a wedged application.
+              startup:
                 enabled: true
                 custom: true
                 spec:
                   httpGet:
-                    path: /health
+                    path: &healthPath /health
                     port: &port 12008
-                  initialDelaySeconds: 30
+                  periodSeconds: 5
+                  timeoutSeconds: 3
+                  failureThreshold: 60
+              liveness: &steadyStateProbes
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: *healthPath
+                    port: *port
                   periodSeconds: 10
                   timeoutSeconds: 3
                   failureThreshold: 3
-              readiness: *probes
+              readiness: *steadyStateProbes
             securityContext:
               allowPrivilegeEscalation: false
               capabilities: { drop: ["ALL"] }
