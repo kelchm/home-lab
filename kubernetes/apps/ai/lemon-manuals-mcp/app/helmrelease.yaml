@@ -34,6 +34,12 @@ spec:
               # persistent index on the writable search volume.
               SQLITE_TMPDIR: /search
               TMPDIR: /search
+            # The first search of an unindexed manual ingests its whole page tree,
+            # which pins the single-threaded event loop for minutes. The previous
+            # 3s/6 budget killed the pod mid-ingest, losing the rebuild and any
+            # in-flight request. Readiness shares the budget deliberately: at one
+            # replica, dropping out of the Service has no failover to offer and
+            # only turns a slow request into a failed one.
             probes:
               liveness: &probes
                 enabled: true
@@ -44,8 +50,8 @@ spec:
                     port: &port 8787
                   initialDelaySeconds: 15
                   periodSeconds: 10
-                  timeoutSeconds: 3
-                  failureThreshold: 6
+                  timeoutSeconds: 5
+                  failureThreshold: 30
               readiness: *probes
             securityContext:
               allowPrivilegeEscalation: false
@@ -53,8 +59,14 @@ spec:
               readOnlyRootFilesystem: true
             resources:
               requests:
-                cpu: 50m
-                memory: 512Mi
+                # Indexing is single-threaded, so it cannot use more than one core;
+                # request a full one so a contended node cannot starve an ingest down
+                # to the old 50m share. Idle draw stays ~10m and there is no CPU limit,
+                # so this reserves scheduling room rather than capping bursts.
+                cpu: "1"
+                # Steady state measured ~660Mi, above the previous 512Mi request,
+                # which made the pod an eviction candidate under node memory pressure.
+                memory: 1Gi
               limits:
                 memory: 2Gi
     defaultPodOptions:
