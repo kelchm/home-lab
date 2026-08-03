@@ -53,6 +53,7 @@ spec:
                 - flux-operator-mcp
                 - grafana-mcp
                 - kubernetes-mcp
+                - lemon-manuals-mcp
                 - markitdown-mcp
                 - open-meteo-mcp
                 - pcbparts-mcp

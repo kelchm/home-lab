@@ -53,9 +53,10 @@ raises the limit to 2 GiB for the 14-day soak.
 | --- | --- | --- | --- |
 | All AI workloads | CoreDNS pods | UDP/TCP 53 | Cluster DNS |
 | MetaMCP | `metamcp-db` pods | TCP 5432 | PostgreSQL |
-| MetaMCP | Eight exact MCP pod identities | Port owned by each backend's ingress policy | Tool aggregation |
+| MetaMCP | Nine exact MCP pod identities | Port owned by each backend's ingress policy | Tool aggregation |
 | MetaMCP | Kubernetes Service `network/traefik-services` | Effective pod TCP 8443 | `auth.home.kelch.io` Kanidm OIDC |
 | Grafana MCP | Grafana pods in `observability` | TCP 3000 | Read-only Grafana API |
+| LEMON manuals MCP | `lemon-website` pods in `lemon-manuals` | TCP 8080 | Self-hosted manual page retrieval |
 | Kubernetes/Flux MCP | Cilium `kube-apiserver` entity | API server ports | Read-only cluster APIs |
 | Grafana functional probe | Grafana MCP and MetaMCP pods | TCP 8000 and 12008 | Tool call plus session-policy drift check |
 | Browser, document, weather, and parts MCPs | Public IPv4 only | TCP 80/443 | Untrusted web/API fetches |

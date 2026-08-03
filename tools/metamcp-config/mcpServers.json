@@ -25,6 +25,11 @@
       "url": "http://kubernetes-mcp.ai.svc.cluster.local:8080/mcp",
       "description": "Read-only Kubernetes introspection for the CRDs Flux doesn't model (Cilium, Longhorn, kaniop, Gateway API, Traefik, cert-manager, CNPG)."
     },
+    "lemon-manuals": {
+      "type": "streamable_http",
+      "url": "http://lemon-manuals-mcp.ai.svc.cluster.local:8787/mcp",
+      "description": "Read-only search and page retrieval over the self-hosted LEMON/CHARM manuals archive."
+    },
     "pcbparts-mcp": {
       "type": "streamable_http",
       "url": "http://pcbparts-mcp.ai.svc.cluster.local:8080/mcp",
