@@ -1,0 +1,32 @@
+---
+# Second static PV onto the lemon-manuals-k8s-prod share (one PV binds one
+# PVC; the first pair lives in the lemon-manuals namespace). The MCP reads
+# only the two index.json files; the mtbl databases stay untouched.
+# Read-only end to end, same as the primary pair.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: lemon-manuals-ai
+spec:
+  capacity:
+    storage: 2Ti
+  accessModes:
+    - ReadOnlyMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs-lemon-manuals-static
+  mountOptions:
+    - nfsvers=4.1
+    - ro
+    - hard
+    - noatime
+    - nodiratime
+    - rsize=1048576
+  csi:
+    driver: nfs.csi.k8s.io
+    volumeHandle: lemon-manuals-ai
+    volumeAttributes:
+      server: 10.32.25.5
+      share: /volume1/lemon-manuals-k8s-prod
+  claimRef:
+    namespace: ai
+    name: lemon-manuals
