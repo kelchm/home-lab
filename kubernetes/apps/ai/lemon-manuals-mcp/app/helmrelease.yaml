@@ -29,6 +29,11 @@ spec:
               LEMON_INDEX_JSON: /data/lemon/index.json
               CHARM_INDEX_JSON: /data/charm/index.json
               LEMON_SEARCH_DB: /search/manual-search.sqlite
+              # Large FTS imports spill temporary work to disk. The root
+              # filesystem is read-only, so keep SQLite temp files beside the
+              # persistent index on the writable search volume.
+              SQLITE_TMPDIR: /search
+              TMPDIR: /search
             probes:
               liveness: &probes
                 enabled: true
@@ -78,7 +83,9 @@ spec:
         type: persistentVolumeClaim
         storageClass: longhorn
         accessMode: ReadWriteOnce
-        size: 5Gi
+        # The packed source pages are about 61 GiB. Start at 100 GiB and
+        # expand the Longhorn volume if prewarming approaches its headroom.
+        size: 100Gi
         retain: true
         globalMounts:
           - path: /search
