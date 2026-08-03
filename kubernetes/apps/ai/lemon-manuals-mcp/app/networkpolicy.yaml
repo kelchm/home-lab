@@ -1,0 +1,21 @@
+---
+# Default-deny shape: only MCP gateways in the ai namespace reach the
+# lemon-manuals-mcp HTTP transport. Egress is unrestricted so the server can
+# resolve DNS and fetch pages from lemon-website (lemon-manuals namespace).
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: lemon-manuals-mcp
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: lemon-manuals-mcp
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: ai
+            app.kubernetes.io/name: metamcp
+      toPorts:
+        - ports:
+            - port: "8787"
+              protocol: TCP

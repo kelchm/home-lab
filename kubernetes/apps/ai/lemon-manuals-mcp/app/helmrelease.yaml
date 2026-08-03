@@ -1,0 +1,73 @@
+---
+# In-cluster HTTP MCP server reached by metamcp via Service DNS at
+# http://lemon-manuals-mcp.ai.svc.cluster.local:8787/mcp. Not on any Gateway.
+#
+# Browse/search over the self-hosted LEMON/CHARM manual archive: vehicle
+# search answered in-process from the share's index.json files, page content
+# fetched from lemon-website (lemon-manuals namespace) and converted to
+# markdown. /healthz returns 200 only after both indexes parse.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: lemon-manuals-mcp
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: lemon-manuals-mcp
+  interval: 1h
+  values:
+    controllers:
+      lemon-manuals-mcp:
+        containers:
+          app:
+            image:
+              repository: ghcr.io/kelchm/lemon-manuals-mcp
+              tag: sha-791f153
+            env:
+              PORT: "8787"
+              LEMON_BASE_URL: http://lemon-website.lemon-manuals.svc.cluster.local:8080
+              LEMON_INDEX_JSON: /data/lemon/index.json
+              CHARM_INDEX_JSON: /data/charm/index.json
+            probes:
+              liveness: &probes
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: /healthz
+                    port: &port 8787
+                  initialDelaySeconds: 15
+                  periodSeconds: 10
+                  timeoutSeconds: 3
+                  failureThreshold: 6
+              readiness: *probes
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities: { drop: ["ALL"] }
+              readOnlyRootFilesystem: true
+            resources:
+              requests:
+                cpu: 50m
+                memory: 512Mi
+              limits:
+                memory: 2Gi
+    defaultPodOptions:
+      securityContext:
+        # Image USER is bun (UID 1000); share files are world-readable.
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+    service:
+      app:
+        controller: lemon-manuals-mcp
+        ports:
+          http:
+            port: *port
+    persistence:
+      data:
+        type: persistentVolumeClaim
+        existingClaim: lemon-manuals
+        globalMounts:
+          - path: /data
+            readOnly: true

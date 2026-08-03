@@ -13,6 +13,7 @@ resources:
   - ./flux-operator-mcp/ks.yaml
   - ./grafana-mcp/ks.yaml
   - ./kubernetes-mcp/ks.yaml
+  - ./lemon-manuals-mcp/ks.yaml
   - ./markitdown-mcp/ks.yaml
   - ./metamcp/ks.yaml
   - ./open-meteo-mcp/ks.yaml
