@@ -22,7 +22,9 @@ Both files sit on PVC `seerr-config`, which joins Longhorn's implicit `default` 
 
 The setup wizard is reachable at `https://seerr.home.kelch.io` on a fresh PVC; everything redirects to `/setup` until it completes.
 
-1. **Sign in with a Jellyfin *administrator* account.** Seerr hard-requires `User.Policy.IsAdministrator` on this first login and returns 403 `NotAdmin` otherwise. This account becomes owner (user id 1) permanently — it cannot be deleted, and its stored Jellyfin token is what Seerr uses for all server-side library reads. Choose deliberately.
+1. **Sign in with a Jellyfin *administrator* account.** Seerr hard-requires `User.Policy.IsAdministrator` on this first login and returns 403 `NotAdmin` otherwise. This account becomes owner (user id 1) permanently and cannot be deleted. Choose deliberately.
+
+   Setup mints a *separate* Jellyfin API key (`POST /Auth/Keys?App=Seerr`) and stores it as `jellyfin.apiKey` in `settings.json`. That key — paired with the owner's Jellyfin user id — is what every server-side library scan uses from then on, **not** the owner's login token. Signing in again as the owner refreshes only that user's access token; it does not remint the API key. Revoking the `Seerr` key in Jellyfin therefore breaks library sync until the key is replaced in `settings.json` or the setup path is re-run.
 
    Connection fields: hostname `jellyfin.media.svc.cluster.local`, port `8096`, no SSL, empty URL base. Seerr mints its own Jellyfin API key (`POST /Auth/Keys?App=Seerr`) during this step.
 
@@ -159,4 +161,5 @@ Seerr's *own* API key can be pinned declaratively via the `API_KEY` env var — 
 - **Do not put the config volume on NFS.** SQLite runs with WAL enabled and needs real file locking. It is on Longhorn RWO, which is correct — keep it single-replica.
 - **`readOnlyRootFilesystem` is not enabled.** The chart defaults it off. Upstream blesses it, but `npm start` wants a writable `HOME` and it is unverified against this image; enabling it needs a canary plus an emptyDir at `/tmp`.
 - **The `app.kubernetes.io/version` pod label reads `v3.4.0`** — it comes from the chart's `appVersion`, while the image is pinned to `v3.4.1`. Cosmetic; the running image is what `image:` says.
+- **The container is named `seerr-chart`, not `seerr`.** The chart hardcodes it to `.Chart.Name`, which `nameOverride` does not affect — so `kubectl logs -n media seerr-0 -c seerr` fails. The pod is single-container, so just drop `-c`.
 - **Seerr is in the no-Synology-user class.** It never touches the library — all availability data comes over the Jellyfin API. See [arr-suite-bootstrap](arr-suite-bootstrap.md).
