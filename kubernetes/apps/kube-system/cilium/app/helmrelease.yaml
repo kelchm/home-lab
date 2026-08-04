@@ -87,3 +87,8 @@ spec:
     socketLB:
       enabled: true
       hostNamespaceOnly: true
+    # Chart default is 2, which would take two of three nodes' datapath down at once.
+    updateStrategy:
+      rollingUpdate:
+        maxUnavailable: 1
+    upgradeCompatibility: "1.19"
