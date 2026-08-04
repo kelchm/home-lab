@@ -1,8 +1,8 @@
 # Shared *arr API keys consumed by helper apps in the media namespace
-# (Unpackerr via envFrom + secretKeyRef, Recyclarr via envFrom + !env_var,
-# future Seerr likewise). Bazarr does not consume env vars — its *arr
-# connections are configured in the Bazarr UI; the keys live here only
-# as a single source-of-truth for rotation.
+# (Unpackerr via envFrom + secretKeyRef, Recyclarr via envFrom + !env_var).
+# Bazarr and Seerr do not consume env vars — their *arr connections are
+# configured in their own UIs; the keys live here only as a single
+# source-of-truth for rotation.
 #
 # Populate the four placeholders, then encrypt in place:
 #   sops --encrypt --in-place kubernetes/apps/media/arr-api-keys.sops.yaml

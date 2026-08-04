@@ -1,0 +1,63 @@
+---
+# Seerr — household media request and discovery frontend for Jellyfin,
+# Radarr and Sonarr. Runs on gateway-services with no kanidm-oidc middleware:
+# that middleware asserts group arr-admins, which would lock out every
+# household member. Seerr authenticates them against their existing Jellyfin
+# accounts instead.
+#
+# API-only over the cluster network — Seerr never reads the media library, so
+# it takes no NFS mount and no Synology user (see arr-suite-bootstrap.md).
+#
+# The Jellyfin, Radarr and Sonarr service credentials are held in
+# /app/config/settings.json on the config PVC. Seerr accepts no environment
+# variable for them, so they cannot come from SOPS; the config volume is the
+# system of record and docs/runbooks/seerr-bootstrap.md covers rotation.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: seerr
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: seerr
+  interval: 1h
+  values:
+    # Chart.Name is `seerr-chart`, so without this the fullname helper emits
+    # `seerr-seerr-chart` for the Service, ServiceAccount and PVC, and the
+    # name label likewise — silently missing the selectors in networkpolicy.yaml.
+    nameOverride: seerr
+    image:
+      # renovate: datasource=docker depName=ghcr.io/seerr-team/seerr
+      tag: v3.4.1
+    extraEnv:
+      - name: TZ
+        value: America/New_York
+      # Seerr's own default is `debug`.
+      - name: LOG_LEVEL
+        value: info
+    serviceAccount:
+      # Seerr never reads the Kubernetes API. The ServiceAccount exists only
+      # to give the pod a distinct Cilium identity for networkpolicy.yaml.
+      automount: false
+    resources:
+      requests:
+        cpu: 50m
+        memory: 256Mi
+      limits:
+        memory: 1Gi
+    config:
+      persistence:
+        storageClass: longhorn
+        size: 5Gi
+    service:
+      # Chart default is 80. Match the container port instead so the Service,
+      # the rendered HTTPRoute backendRef and networkpolicy.yaml all name 5055.
+      port: 5055
+    route:
+      main:
+        enabled: true
+        hostnames: ["seerr.home.kelch.io"]
+        parentRefs:
+          - name: gateway-services
+            namespace: network
+            sectionName: https

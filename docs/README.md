@@ -29,6 +29,7 @@ or fixing.
 | [kanidm-kaniop-cutover](runbooks/kanidm-kaniop-cutover.md) | Migrating Kanidm from the hand-rolled StatefulSet to the kaniop operator. |
 | [kanidm-oauth2-client-drift](runbooks/kanidm-oauth2-client-drift.md) | Recovering a KanidmOAuth2Client when its K8s secret drifts. |
 | [arr-suite-bootstrap](runbooks/arr-suite-bootstrap.md) | The *arr suite's NAS identity, ACL layout, and NFS export — current state. |
+| [seerr-bootstrap](runbooks/seerr-bootstrap.md) | Wiring Seerr to Jellyfin/Radarr/Sonarr, household request policy, and break-glass admin (the non-GitOps UI steps). |
 | [multus-conf-absent-recovery](runbooks/multus-conf-absent-recovery.md) | Recovering pods stuck on an absent Multus network config. |
 | [metamcp-bootstrap](runbooks/metamcp-bootstrap.md) | Initialising the MetaMCP gateway and onboarding backend MCP servers (the non-GitOps registry steps). |
 
