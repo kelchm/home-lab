@@ -1,0 +1,43 @@
+---
+name: "Kanidm Ceiling Sync"
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * 1"
+  push:
+    branches: ["main"]
+    paths:
+      - "kubernetes/apps/identity/kaniop/app/ocirepository.yaml"
+      - "scripts/ci/sync-kanidm-version-ceiling.sh"
+
+jobs:
+  sync:
+    name: Sync Kanidm Version Ceiling
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Sync ceiling from kaniop Cargo.lock
+        run: ./scripts/ci/sync-kanidm-version-ceiling.sh
+
+      - name: Open PR if ceiling changed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git diff --quiet .renovaterc.json5 && { echo "no change"; exit 0; }
+          if gh pr list --head chore/kanidm-ceiling-sync --state open --json number -q length | grep -qv '^0$'; then
+            echo "sync PR already open"; exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -B chore/kanidm-ceiling-sync
+          git commit -am "chore(renovate): sync kanidm/server ceiling with kaniop SDK"
+          git push -f origin chore/kanidm-ceiling-sync
+          gh pr create \
+            --title "chore(renovate): sync kanidm/server ceiling with kaniop SDK" \
+            --body "Automated: the pinned kaniop release bundles a kanidm_client SDK whose minor no longer matches the Renovate allowedVersions ceiling for kanidm/server. See scripts/ci/sync-kanidm-version-ceiling.sh and #311."

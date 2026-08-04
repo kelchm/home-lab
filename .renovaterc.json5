@@ -30,6 +30,14 @@
   },
   packageRules: [
     {
+      // Kaniop rejects kanidm server minors newer than its bundled client SDK.
+      // Ceiling value is machine-managed by the "Kanidm Ceiling Sync" workflow.
+      description: "kanidm/server: cap at the minor supported by kaniop's SDK",
+      matchDatasources: ["docker"],
+      matchPackageNames: ["/kanidm/server$/"],
+      allowedVersions: "<1.11.0",
+    },
+    {
       description: "Override Helmfile Dependency Name",
       matchDatasources: ["docker"],
       matchManagers: ["helmfile"],
