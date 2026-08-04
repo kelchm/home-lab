@@ -5,10 +5,14 @@
 # anything not listed here fails, including any notification agent enabled
 # later from the UI that needs a port other than 80/443.
 #
-# Public HTTP(S) is allowed because discovery needs api.themoviedb.org, but
-# it cannot be turned into lateral movement into pod, Service, node, LAN,
-# storage, loopback, link-local, CGNAT or reserved space. IPv6 is disabled
-# cluster-wide; add equivalent IPv6 policy before enabling it.
+# Public HTTP(S) is allowed because discovery needs api.themoviedb.org, and
+# it is scoped against lateral movement into pod, Service, node, LAN, storage,
+# loopback, link-local, CGNAT and reserved space — not against exfiltration:
+# any public IP is reachable on 80/443. An FQDN allowlist would not close that
+# either, since Seerr's required set already includes api.github.com and
+# raw.githubusercontent.com, and notification agents are enabled from the UI at
+# runtime, so the host set is not known at authoring time.
+# IPv6 is disabled cluster-wide; add equivalent IPv6 policy before enabling it.
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:

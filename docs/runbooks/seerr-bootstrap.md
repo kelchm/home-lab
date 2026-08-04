@@ -10,8 +10,11 @@ Seerr accepts no environment variable for the Jellyfin, Radarr or Sonarr connect
 |---|---|---|
 | Chart version, image tag, resources, PVC, route, network policy | `kubernetes/apps/media/seerr/` | Flux + Renovate |
 | Jellyfin / Radarr / Sonarr URLs + API keys | `/app/config/settings.json` | this runbook |
+| Default permissions, global quotas, sign-in policy | `/app/config/settings.json` | this runbook |
 | Users, requests, issues, sessions | `/app/config/db/db.sqlite3` | Seerr |
-| Permissions, quotas, sign-in policy | `/app/config/settings.json` | this runbook |
+| Per-user permission and quota **overrides** | `/app/config/db/db.sqlite3` | Seerr |
+
+Default permissions are copied onto a user at creation, so the settings row and the user rows drift apart by design — restoring `settings.json` alone does not restore who was allowed to request what.
 
 Both files sit on PVC `seerr-config`, which joins Longhorn's implicit `default` recurring-job group automatically — `backup-daily` (retain 7) and `backup-weekly` (retain 4) cover it with no per-app manifest work. See [longhorn-backup-restore](longhorn-backup-restore.md).
 
@@ -22,6 +25,8 @@ The setup wizard is reachable at `https://seerr.home.kelch.io` on a fresh PVC; e
 1. **Sign in with a Jellyfin *administrator* account.** Seerr hard-requires `User.Policy.IsAdministrator` on this first login and returns 403 `NotAdmin` otherwise. This account becomes owner (user id 1) permanently — it cannot be deleted, and its stored Jellyfin token is what Seerr uses for all server-side library reads. Choose deliberately.
 
    Connection fields: hostname `jellyfin.media.svc.cluster.local`, port `8096`, no SSL, empty URL base. Seerr mints its own Jellyfin API key (`POST /Auth/Keys?App=Seerr`) during this step.
+
+   Afterwards set **External URL** to `https://jellyfin.home.kelch.io` under *Settings → Media Server*. That field is what Seerr hands to the browser for "Play on Jellyfin" links; left empty it falls back to the internal address, which no household client can resolve.
 
 2. **Sync libraries and enable at least one.** The wizard's Continue button is gated on one enabled library.
 
@@ -90,12 +95,48 @@ Then *Users → Import Jellyfin Users* and select the specific accounts to admit
 
 Create one local admin under *Users → Create Local User* with a generated password, and give no household account a local password.
 
-Local sign-in stays enabled deliberately. The owner account is bound to whichever Jellyfin admin signed in at setup, so disabling local sign-in makes Seerr admin access depend on Jellyfin being up and on its user DB matching what Seerr recorded. There is no CLI recovery path — with local sign-in off, recovery means editing `settings.json` on the PVC from a debug pod:
+Local sign-in stays enabled deliberately. The owner account is bound to whichever Jellyfin admin signed in at setup, so disabling local sign-in makes Seerr admin access depend on Jellyfin being up and on its user DB matching what Seerr recorded.
+
+There is no CLI recovery path. If local sign-in is ever turned off and Jellyfin then becomes unavailable, `settings.json` has to be edited directly on the PVC. `kubectl debug --target` is *not* the tool for this — an ephemeral container does not inherit the target's volume mounts, so `/app/config` would not be there. The config PVC is RWO, so the StatefulSet has to release it first:
 
 ```bash
-kubectl -n media debug seerr-0 -it --image=busybox --target=seerr -- \
-  sh -c 'sed -i "s/\"localLogin\":false/\"localLogin\":true/" /app/config/settings.json'
-kubectl -n media rollout restart statefulset/seerr
+kubectl -n media scale statefulset/seerr --replicas=0
+kubectl -n media wait --for=delete pod/seerr-0 --timeout=120s
+
+kubectl -n media apply -f - <<'YAML'
+apiVersion: v1
+kind: Pod
+metadata:
+  name: seerr-recovery
+spec:
+  restartPolicy: Never
+  securityContext:
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+  containers:
+    - name: shell
+      image: ghcr.io/seerr-team/seerr:v3.4.1
+      command: ["sleep", "600"]
+      volumeMounts:
+        - name: config
+          mountPath: /app/config
+  volumes:
+    - name: config
+      persistentVolumeClaim:
+        claimName: seerr-config
+YAML
+
+# Edit structurally — the file is pretty-printed, so a substring sed is unreliable.
+kubectl -n media exec seerr-recovery -- node -e '
+  const fs = require("fs"), f = "/app/config/settings.json";
+  const s = JSON.parse(fs.readFileSync(f, "utf8"));
+  s.main.localLogin = true;
+  fs.writeFileSync(f, JSON.stringify(s, null, 2));
+'
+
+kubectl -n media delete pod seerr-recovery
+kubectl -n media scale statefulset/seerr --replicas=1
 ```
 
 Store the break-glass password wherever the other operator credentials live; it is not needed by any workload, so it does not belong in a SOPS Secret that Flux mounts.
