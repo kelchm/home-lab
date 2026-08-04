@@ -35,39 +35,66 @@ If any of those gaps grow load-bearing, layer Velero on top — the BackupTarget
 
 Defined in `kubernetes/apps/longhorn-system/longhorn/app/recurringjobs.yaml`:
 
-| Job | Cron | Retain | Group |
-|---|---|---|---|
-| `backup-daily` | `0 3 * * *` (03:00) | 7 | default |
-| `backup-weekly` | `0 4 * * 0` (Sunday 04:00) | 4 | default |
+Cron is evaluated in UTC, so the America/New_York wall time shifts an hour across daylight saving:
+
+| Job | Cron (UTC) | Local | Retain | Group |
+|---|---|---|---|---|
+| `backup-daily` | `0 7 * * *` | 03:00 EDT / 02:00 EST | 7 | default |
+| `backup-weekly` | `0 8 * * 0` | Sunday 04:00 EDT / 03:00 EST | 4 | default |
 
 `retain` is a **count**, not a time window. If a job is unable to run for several days the count doesn't reset; you just have a sparser series until the schedule catches up.
 
 ## Group membership and opt-out
 
-Longhorn's `default` group is implicit: a volume with **no** recurring-job labels automatically receives `default`'s jobs. Adding *any* recurring-job label removes it from `default` — there is no explicit "disable" label.
+**Policy: backed up unless the manifest says otherwise.** Longhorn's `default` group is implicit — a Longhorn `Volume` carrying no recurring-job labels has `recurring-job-group.longhorn.io/default: enabled` added for it, so a PVC that says nothing is backed up. Keep it that way. Omission failing towards a backup costs NAS capacity; omission failing towards no backup costs data. Only volumes whose contents are regenerable should opt out, and they do it in their own manifest so the exclusion is reviewable in the diff.
 
-To opt a volume out of default backups:
+Currently excluded:
 
-1. **Cleanest:** create a no-op group and label the PVC into it.
+| Volume | Why regenerable |
+|---|---|
+| `ai/lemon-manuals-mcp` `search` (100 GiB) | SQLite FTS index built lazily from the read-only `lemon-manuals-k8s-prod` NFS share |
 
-   ```yaml
-   # add to the PVC manifest (or label the live PVC)
-   metadata:
-     labels:
-       recurring-job-group.longhorn.io/no-backup: enabled
-   ```
+### How to opt a volume out
 
-   No `RecurringJob` CR references `no-backup`, so the volume gets nothing. Document in the chart values why it's excluded (e.g. ephemeral metric store).
+Label the PVC with **both** of these:
 
-2. **Quick-and-dirty:** label the PVC with any individual job that doesn't apply (e.g. a hypothetical `recurring-job.longhorn.io/snapshot-only: enabled`). The label removes it from `default`; the referenced job not existing is fine.
+```yaml
+metadata:
+  labels:
+    recurring-job.longhorn.io/source: enabled
+    recurring-job-group.longhorn.io/no-backup: enabled
+```
 
-To put it back: `kubectl label pvc <name> recurring-job-group.longhorn.io/no-backup-` (trailing hyphen removes the label).
+- `recurring-job.longhorn.io/source: enabled` is what makes Longhorn read the PVC's recurring-job labels at all. Without it the volume controller logs `Ignoring recurring job labels ... due to missing source label` and the other label is inert.
+- `recurring-job-group.longhorn.io/no-backup: enabled` is copied onto the `Volume`. No `RecurringJob` CR names `no-backup`, so it schedules nothing — but its presence is enough to stop Longhorn from adding the `default` group.
+
+The source label itself is deliberately *not* copied to the `Volume`, so it cannot stand in for the group label. Source-only leaves the volume with zero recurring-job labels, and Longhorn re-adds `default`.
+
+Verify after Flux reconciles:
+
+```sh
+kubectl -n longhorn-system get volumes.longhorn.io \
+  -o custom-columns='PVC:.status.kubernetesStatus.pvcName,LABELS:.metadata.labels' \
+  | grep <pvc-name>
+```
+
+`recurring-job-group.longhorn.io/default` must be gone and `no-backup` present.
+
+To put it back, drop **only** `no-backup` and leave `source` in place. Sync then removes `no-backup` from the `Volume`, which leaves zero recurring-job labels, and Longhorn re-adds `default`. Removing `source` in the same edit strands the volume: sync stops running, `no-backup` is never cleared off the `Volume`, and `default` never returns. `source` alone is a stable steady state meaning "backed up", so there is no need to take it off afterwards.
+
+### Existing backups survive the opt-out
+
+Retention (`retain: N`) is enforced by the job as it runs, per volume. Once a volume leaves the group the job never visits it again, so whatever is already on the NAS stays there indefinitely. Reclaim it explicitly — Longhorn UI → **Backup** → select the backup volume → Delete, or:
+
+```sh
+kubectl -n longhorn-system delete backupvolumes.longhorn.io <backup-volume-name>
+```
 
 ## Routine monitoring
 
 Until OpenObserve / VictoriaMetrics alerting is wired up:
 
-- **Longhorn UI → Backup → Backup Volume** — every active PV should show backups within the last ~24h.
+- **Longhorn UI → Backup → Backup Volume** — every active PV except those listed under "Currently excluded" should show backups within the last ~24h.
 - `kubectl -n longhorn-system get backups.longhorn.io --sort-by=.metadata.creationTimestamp` — last few entries should be recent.
 - Free space on the NAS share — DSM → Storage Manager → Volume 1 utilization.
 
