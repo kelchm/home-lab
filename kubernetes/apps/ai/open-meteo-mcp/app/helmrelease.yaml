@@ -21,7 +21,7 @@ spec:
             image:
               # Container tags are unprefixed (1.6.1, not v1.6.1).
               repository: ghcr.io/cmer81/open-meteo-mcp
-              tag: "1.6.1"
+              tag: "1.7.0"
             env:
               TRANSPORT: http
               PORT: "3000"
