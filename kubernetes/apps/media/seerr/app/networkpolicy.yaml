@@ -1,0 +1,110 @@
+---
+# Seerr is reachable by every household member and holds the Radarr, Sonarr
+# and Jellyfin API keys in its config volume, so both directions are pinned.
+# The egress section is what puts the endpoint into default-deny egress —
+# anything not listed here fails, including any notification agent enabled
+# later from the UI that needs a port other than 80/443.
+#
+# Public HTTP(S) is allowed because discovery needs api.themoviedb.org, and
+# it is scoped against lateral movement into pod, Service, node, LAN, storage,
+# loopback, link-local, CGNAT and reserved space — not against exfiltration:
+# any public IP is reachable on 80/443. An FQDN allowlist would not close that
+# either, since Seerr's required set already includes api.github.com and
+# raw.githubusercontent.com, and notification agents are enabled from the UI at
+# runtime, so the host set is not known at authoring time.
+# IPv6 is disabled cluster-wide; add equivalent IPv6 policy before enabling it.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: seerr
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: seerr
+  ingress:
+    # Only the services Traefik instance may reach the UI. All three Traefik
+    # instances share app.kubernetes.io/name: traefik, so the instance label
+    # plus its dedicated ServiceAccount identity are what single this one out.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: network
+            app.kubernetes.io/instance: traefik-services-network
+            io.cilium.k8s.policy.serviceaccount: traefik-services
+      toPorts:
+        - ports:
+            - port: "5055"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+
+    # Library state and end-user authentication — Seerr proxies each member's
+    # Jellyfin credentials rather than holding its own. Cilium evaluates L4
+    # policy against the backend endpoint, so these are container ports.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: media
+            app.kubernetes.io/name: jellyfin
+            io.cilium.k8s.policy.serviceaccount: jellyfin
+      toPorts:
+        - ports:
+            - port: "8096"
+              protocol: TCP
+
+    # Movie requests.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: media
+            app.kubernetes.io/name: radarr
+            io.cilium.k8s.policy.serviceaccount: radarr
+      toPorts:
+        - ports:
+            - port: "7878"
+              protocol: TCP
+
+    # Series requests.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: media
+            app.kubernetes.io/name: sonarr
+            io.cilium.k8s.policy.serviceaccount: sonarr
+      toPorts:
+        - ports:
+            - port: "8989"
+              protocol: TCP
+
+    # api.themoviedb.org carries all discovery, search and availability
+    # metadata and is the one host Seerr cannot run without. Avatars, ratings
+    # and the version check are also out here; each degrades to an empty
+    # panel rather than an error page when unreachable.
+    - toCIDRSet:
+        - cidr: 0.0.0.0/0
+          except:
+            - 0.0.0.0/8
+            - 10.0.0.0/8
+            - 100.64.0.0/10
+            - 127.0.0.0/8
+            - 169.254.0.0/16
+            - 172.16.0.0/12
+            - 192.0.0.0/24
+            - 192.0.2.0/24
+            - 192.168.0.0/16
+            - 198.18.0.0/15
+            - 198.51.100.0/24
+            - 203.0.113.0/24
+            - 224.0.0.0/4
+            - 240.0.0.0/4
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP
+            - port: "443"
+              protocol: TCP
