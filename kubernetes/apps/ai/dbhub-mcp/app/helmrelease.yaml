@@ -25,7 +25,9 @@ spec:
             image:
               # Docker Hub only; no ghcr mirror.
               repository: docker.io/bytebase/dbhub
-              tag: 0.22.3
+              # Last release before 1.0.0 adopted the new MCP spec; carries the
+              # TOML-config/DSN-interpolation fix this deployment relies on.
+              tag: 0.24.0
             args:
               - --transport=http
               - --port=8080
