@@ -79,13 +79,18 @@ if [ -n "$coupling" ]; then echo "$coupling"; else echo "  (none — every PR to
 # Heuristic: pull the dependency name out of the Renovate title and reduce it to
 # its last path segment, so "…/charts/kube-prometheus-stack" and the bare
 # "kube-prometheus-stack" collapse to the same key.
+# The topic list must cover every commitMessageTopic in .renovaterc.json5 — the five
+# per-datasource topics, plus the "<name> group" shape grouped rules emit. The match is
+# case-insensitive because breaking (!) bumps capitalise the topic verb.
 echo
 echo "== 3. Candidate semantic pairs: same component across multiple PRs (land together) =="
 pairs=$(jq -r '
   [ .[]
     | { pr:.number,
         dep:( .title
-              | (capture("update (?:image|chart|tool) (?<d>[^ ]+)") // {d:null}).d
+              | ( capture("update (?:image|chart|tool|action|release) (?<d>[^ ]+)";"i")
+                  // capture("update (?<d>[^ ]+) group";"i")
+                  // {d:null} ).d
               | if .==null then null else (sub(".*/";"")|sub(".*:";"")) end ) }
     | select(.dep!=null) ]
   | group_by(.dep)
@@ -116,11 +121,11 @@ fi
 gh repo view --json squashMergeAllowed,mergeCommitAllowed,rebaseMergeAllowed,deleteBranchOnMerge -q \
   '"  Merge methods: squash=\(.squashMergeAllowed) merge=\(.mergeCommitAllowed) rebase=\(.rebaseMergeAllowed)  autoDeleteBranch=\(.deleteBranchOnMerge)"'
 
-rc=$(git rev-parse --show-toplevel 2>/dev/null)/renovate.json5
+rc=$(git rev-parse --show-toplevel 2>/dev/null)/.renovaterc.json5
 if [ -f "$rc" ]; then
   am=$(grep -A3 -i 'automerge' "$rc" | grep -iE 'matchManagers|automerge:' | head -3 | tr -d '",' | sed 's/^/      /')
   sched=$(grep -iE 'schedule:' "$rc" | head -1 | tr -d '",')
-  echo "  Renovate: automerge is scoped (see renovate.json5); ${sched:-no explicit schedule}"
+  echo "  Renovate: automerge is scoped (see .renovaterc.json5); ${sched:-no explicit schedule}"
   [ -n "$am" ] && echo "$am"
 fi
 

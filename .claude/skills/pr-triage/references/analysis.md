@@ -95,17 +95,18 @@ Set updateType="feature". Return the structured verdict.
 {
   "type": "object",
   "additionalProperties": false,
-  "required": ["pr","component","updateType","recommendation","risk","clusterImpact","breakingChanges","reasoning"],
+  "required": ["pr","component","updateType","recommendation","risk","clusterImpact","breakingChanges","reasoning","coordinationNotes","evidenceQuality"],
   "properties": {
     "pr":              {"type": "number"},
     "component":       {"type": "string"},
-    "updateType":      {"type": "string", "enum": ["patch","minor","major","feature","mixed"]},
-    "recommendation":  {"type": "string", "enum": ["merge-now","merge-coordinated","hold"]},
+    "updateType":      {"type": "string", "enum": ["patch","minor","major","feature","chore","mixed"]},
+    "recommendation":  {"type": "string", "enum": ["merge-now","merge-coordinated","hold","close"]},
     "risk":            {"type": "string", "enum": ["low","medium","high"]},
     "clusterImpact":   {"type": "string", "description": "what changes on the LIVE cluster on merge, or 'config-only, inert'"},
     "breakingChanges": {"type": "string", "description": "breaking changes for THIS exact version range, and whether each applies here; or 'none found in range'"},
     "reasoning":       {"type": "string", "description": "2-4 sentences: why this recommendation"},
-    "coordinationNotes":{"type": "string", "description": "pairing/ordering/prereqs, e.g. 'merge with #189', 'raise spec.timeout first', or ''"}
+    "coordinationNotes":{"type": "string", "description": "pairing/ordering/prereqs, e.g. 'merge with #189', 'raise spec.timeout first', or ''"},
+    "evidenceQuality": {"type": "string", "description": "did you READ the upstream notes for the exact range? name the source URLs, or say plainly you could not find them"}
   }
 }
 ```
