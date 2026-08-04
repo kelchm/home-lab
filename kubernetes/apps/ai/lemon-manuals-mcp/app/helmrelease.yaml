@@ -22,7 +22,7 @@ spec:
           app:
             image:
               repository: ghcr.io/kelchm/lemon-manuals-mcp
-              tag: sha-8857281
+              tag: sha-853c03a
             env:
               PORT: "8787"
               LEMON_BASE_URL: http://lemon-website.lemon-manuals.svc.cluster.local:8080
