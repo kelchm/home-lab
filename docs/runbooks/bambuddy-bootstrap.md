@@ -75,8 +75,9 @@ override enabled during normal operation.
 Add the printer manually by its fixed IP. Do not enable discovery, Virtual
 Printer, or Proxy mode. Run Bambuddy's connection diagnostic and one approved
 test operation. Use Hubble while testing to confirm that accepted egress goes
-only to the printer `/32`, DNS, and `10.32.140.1:443`; denied tests to another
-IoT device, a node address, the NAS, and the Kubernetes API must remain denied.
+only to the printer `/32`, DNS, the `bambuddy-db` Postgres on 5432, and a
+`traefik-services` pod on 8443; denied tests to another IoT device, a node
+address, the NAS, and the Kubernetes API must remain denied.
 
 ## Backup and restore drill
 

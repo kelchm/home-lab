@@ -4,6 +4,7 @@ kind: Kustomization
 namespace: printing
 
 components:
+  - ../../components/pod-quota
   - ../../components/sops
 
 resources:
