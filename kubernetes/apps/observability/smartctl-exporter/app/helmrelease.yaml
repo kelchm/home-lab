@@ -1,0 +1,115 @@
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: smartctl-exporter
+spec:
+  chart:
+    spec:
+      chart: prometheus-smartctl-exporter
+      version: 0.16.0
+      sourceRef:
+        kind: HelmRepository
+        name: prometheus-community-smartctl-exporter
+  interval: 1h
+  values:
+    # smartctl needs raw block-device access. The chart runs as root in a
+    # privileged container and mounts the host's /dev at /hostdev.
+    tolerations:
+      - effect: NoSchedule
+        operator: Exists
+
+    # The workload does not call the Kubernetes API. Avoid the chart's legacy
+    # PSP RoleBinding, which is unnecessary on modern Kubernetes.
+    rbac:
+      create: false
+
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        memory: 128Mi
+
+    serviceMonitor:
+      enabled: true
+      interval: 60s
+      scrapeTimeout: 30s
+      relabelings:
+        - action: replace
+          sourceLabels:
+            - __meta_kubernetes_pod_node_name
+          targetLabel: node
+
+    prometheusRules:
+      enabled: true
+      rules:
+        # The chart's default status rule uses smartctl_device_status, but
+        # exporter v0.14.0 emits smartctl_device_smart_status.
+        smartCTLDeviceStatus:
+          enabled: true
+          alert: SmartCTLDeviceStatusFailing
+          expr: smartctl_device_smart_status != 1
+          for: 5m
+          annotations:
+            summary: SMART reports a failing device
+            description: >-
+              Device {{ $labels.device }} on node {{ $labels.node }} is failing
+              its SMART health check.
+          labels:
+            severity: critical
+        smartCTLDeviceMediaErrors:
+          enabled: true
+          alert: SmartCTLDeviceMediaErrors
+          expr: smartctl_device_media_errors > 0
+          for: 5m
+          annotations:
+            summary: Device has uncorrectable media errors
+            description: >-
+              Device {{ $labels.device }} on node {{ $labels.node }} reports
+              {{ $value }} uncorrectable media errors.
+          labels:
+            severity: critical
+        smartCTLDeviceCriticalWarning:
+          enabled: true
+          alert: SmartCTLDeviceCriticalWarning
+          expr: smartctl_device_critical_warning != 0
+          for: 5m
+          annotations:
+            summary: NVMe controller reports a critical warning
+            description: >-
+              Device {{ $labels.device }} on node {{ $labels.node }} reports
+              critical-warning bitmask {{ $value }}.
+          labels:
+            severity: critical
+        smartCTLDeviceAvailableSpareUnderThreshold:
+          enabled: true
+          alert: SmartCTLDeviceAvailableSpareUnderThreshold
+          expr: smartctl_device_available_spare < smartctl_device_available_spare_threshold
+          for: 15m
+          annotations:
+            summary: NVMe available spare is below its threshold
+            description: >-
+              Device {{ $labels.device }} on node {{ $labels.node }} has only
+              {{ $value }}% spare capacity available.
+          labels:
+            severity: warning
+        smartCTLDeviceWearHigh:
+          enabled: true
+          alert: SmartCTLDeviceWearHigh
+          expr: smartctl_device_percentage_used >= 80
+          for: 15m
+          annotations:
+            summary: NVMe wear estimate is high
+            description: >-
+              Device {{ $labels.device }} on node {{ $labels.node }} has used
+              {{ $value }}% of its estimated endurance.
+          labels:
+            severity: warning
+        # These chart defaults are intentionally disabled: node-exporter
+        # already covers temperature, and link-speed changes are not a drive
+        # health signal for this deployment.
+        smartCTLDDeviceTemperature:
+          enabled: false
+        smartCTLDInterfaceSlow:
+          enabled: false
