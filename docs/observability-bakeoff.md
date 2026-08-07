@@ -306,6 +306,32 @@ Tracked separately:
   low-level node metrics; hwmon already covers CPU / NVMe / GPU temps
   and voltages, but not SMART wear / media errors)
 
+### 2026-07-03 — ergonomics axes closed (rule authoring + query languages)
+
+The authoring/query axes never got the daily-use evaluation originally planned.
+Closed here instead with a concrete side-by-side, authored independently by two
+models (grok-4.5 and gpt-5.6-sol) and reconciled. Both grounded in the live cluster
+(Alloy stream labels `namespace`/`pod`/`container`/`node`, no `app` label; Loki
+single-binary has no first-class rule CRD; the bake-off vmalert is metrics-only).
+
+| Axis | Result | Why |
+|---|---|---|
+| Metric rule authoring | **Tie** | `PrometheusRule` and `VMRule` share the same group/rule schema; PromQL is copy-paste. VMRule's extra fields don't help ordinary alerts. |
+| Metric query language | **Near-tie (slight VM)** | The real queries (p99 histogram, topk memory, error ratio) are byte-identical PromQL/MetricsQL. MetricsQL only wins on opt-in extras (`WITH`, implicit lookbehind, rollups, `holt_winters` without a Prom-v3 flag) — which are also a portability/hidden-behaviour footgun. |
+| Logs query language | **VictoriaLogs (LogsQL)** | LogsQL's `filter → stats by → filter` pipeline is consistently flatter than LogQL's `count_over_time(...) > N` / `unwrap` + parser-error handling + per-stream aggregation. One mental model vs PromQL-shape-on-logs. |
+| Log **alerting wiring** | **Friction both sides** | Loki's single-binary Helm release has no working rule CRD — rules are ConfigMap/file-mounted into the ruler. VictoriaLogs alerts are a first-class `VMRule` (`type: vlogs`) but need a **second** vmalert instance (vmalert takes one datasource; the current one is metrics-only). Neither is drop-in. |
+
+Cross-model divergence worth flagging: the Longhorn alert expression differed — grok
+used the numeric robustness gauge (`longhorn_volume_robustness == 2`, 2=degraded),
+gpt-5.6-sol assumed a `state` label. The numeric-gauge form is the standard Longhorn
+encoding; verify against the Longhorn 1.12 metrics reference when the rule is authored.
+Ergonomics conclusion is a tie either way.
+
+Net: the untested ergonomics axes **do not reverse the ops-driven VictoriaMetrics /
+VictoriaLogs lean** — metrics authoring and querying are a wash, logs mildly favour
+VictoriaLogs. On no axis does VM *lose*, which makes the convergence an earned call
+rather than a forced one.
+
 ## Next
 
 - Use the stack daily for real queries. Open Grafana, hit Explore,
@@ -319,7 +345,16 @@ Tracked separately:
 
 ## Decision
 
-_Filled in at the end of the bake-off with rationale._
+**VictoriaMetrics wins** — metrics on the VM k8s-stack, logs on VictoriaLogs. Decided
+on the axes recorded in Findings above: ingest robustness during storage-maintenance
+windows (vmagent's persistent queue survives; monolithic Prometheus gaps are
+architectural, not tunable — 2026-05-02) and Loki's destructive scale-to-0 PVC-delete
+vs VictoriaLogs sitting through the same window intact (2026-05-02). Grafana stays the
+single front-door pane; OpenObserve is retired.
+
+Execution — convergence (retire KPS Prometheus/Alertmanager, Loki, OpenObserve), wiring
+alert delivery, closing the dashboard/estate gaps, and the anomaly/ML decision — is
+sequenced in [plans/20260703-observability-rework.md](plans/20260703-observability-rework.md).
 
 ## Out of scope
 
