@@ -1,0 +1,25 @@
+---
+# Native Bambuddy OIDC client. kaniop writes the generated client secret to
+# bambuddy-kanidm-oauth2-credentials in this namespace; Bambuddy stores the
+# provider configuration encrypted in PostgreSQL after bootstrap.
+apiVersion: kaniop.rs/v1beta1
+kind: KanidmOAuth2Client
+metadata:
+  name: bambuddy
+spec:
+  kanidmRef:
+    name: kanidm
+    namespace: identity
+  displayname: Bambuddy
+  origin: https://bambuddy.home.kelch.io
+  redirectUrl:
+    - https://bambuddy.home.kelch.io/api/v1/auth/oidc/callback
+  # Restrict authorization at Kanidm as well as mapping the resulting user to
+  # Bambuddy's local Administrators group during the one-time bootstrap.
+  scopeMap:
+    - group: ops-admins
+      scopes:
+        - openid
+        - profile
+        - email
+        - groups

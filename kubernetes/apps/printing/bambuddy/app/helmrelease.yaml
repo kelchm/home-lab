@@ -1,0 +1,132 @@
+---
+# Bambuddy — private Bambu Lab printer management and print archive.
+#
+# Phase 1 deliberately uses ordinary pod networking and manual printer setup.
+# Discovery, hostNetwork, Virtual Printer, Proxy, slicer sidecars, external
+# archive roots, and Bambu cloud access are not enabled.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: bambuddy
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: bambuddy
+  interval: 1h
+  values:
+    controllers:
+      bambuddy:
+        # The archive uses an RWO PVC. Recreate releases it before the new pod
+        # starts; PostgreSQL state lives separately in bambuddy-db.
+        strategy: Recreate
+        pod:
+          terminationGracePeriodSeconds: 30
+        containers:
+          app:
+            image:
+              # renovate: datasource=docker depName=ghcr.io/maziggy/bambuddy
+              repository: ghcr.io/maziggy/bambuddy
+              # Stable amd64 manifest. All k8s-prod nodes are amd64.
+              tag: 1.2.5.1@sha256:beb5a8352982db21a6a9e2c553bf60ccf85f7b2fb80e0fd9a7672ae844a299bd
+            env:
+              TZ: America/New_York
+              PORT: &port 8000
+              PUID: "1000"
+              PGID: "1000"
+              DEBUG: "false"
+              LOG_LEVEL: INFO
+              # Kubernetes captures stdout; the small emptyDir below remains
+              # for code paths that still expect /app/logs to be writable.
+              LOG_TO_FILE: "false"
+              # CNPG's generated URI uses the postgresql:// scheme. The args
+              # below convert it to SQLAlchemy's asyncpg scheme before Python
+              # starts, without copying the generated password into Git.
+              CNPG_DATABASE_URL:
+                valueFrom:
+                  secretKeyRef:
+                    name: bambuddy-db-app
+                    key: uri
+              # A single-printer install does not need Bambuddy's 100-client
+              # PostgreSQL default. Leave ample headroom under max_connections.
+              DB_POOL_SIZE: "5"
+              DB_MAX_OVERFLOW: "10"
+              # Do not set BAMBUDDY_LOCAL_LOGIN normally. It is the documented
+              # emergency override after local login is disabled in the UI.
+            args:
+              - sh
+              - -c
+              - |
+                export DATABASE_URL="postgresql+asyncpg${CNPG_DATABASE_URL#postgresql}"
+                exec uvicorn backend.app.main:app \
+                  --host 0.0.0.0 \
+                  --port "${PORT}" \
+                  --loop asyncio \
+                  --timeout-graceful-shutdown "${UVICORN_TIMEOUT_GRACEFUL_SHUTDOWN:-5}"
+            probes:
+              liveness: &probe
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: /health
+                    port: *port
+                  initialDelaySeconds: 15
+                  periodSeconds: 30
+                  timeoutSeconds: 5
+                  failureThreshold: 3
+              readiness: *probe
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities: { drop: ["ALL"] }
+            resources:
+              requests:
+                cpu: 100m
+                memory: 512Mi
+              limits:
+                memory: 2Gi
+    defaultPodOptions:
+      securityContext:
+        # Running as the image's PUID/PGID skips its root chown path. fsGroup
+        # makes the Longhorn PVC and emptyDir writable without root.
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile: { type: RuntimeDefault }
+    service:
+      app:
+        controller: bambuddy
+        ports:
+          http:
+            port: *port
+    persistence:
+      data:
+        type: persistentVolumeClaim
+        storageClass: longhorn
+        # Live archives, thumbnails, and encryption keys. Database rows live in
+        # CNPG. Keep recurring portable backups off this volume: each backup
+        # contains the complete archive and would multiply the capacity needed.
+        size: 50Gi
+        accessMode: ReadWriteOnce
+        advancedMounts:
+          bambuddy:
+            app:
+              - path: /app/data
+      logs:
+        type: emptyDir
+        advancedMounts:
+          bambuddy:
+            app:
+              - path: /app/logs
+    route:
+      app:
+        hostnames: ["bambuddy.home.kelch.io"]
+        parentRefs:
+          - name: gateway-admin
+            namespace: network
+            sectionName: https
+        rules:
+          - backendRefs:
+              - identifier: app
+                port: *port
