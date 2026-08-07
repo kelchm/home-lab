@@ -1,0 +1,22 @@
+---
+# DBHub read-only config. --readonly/READONLY are removed upstream and crash
+# the process; read-only is enforced per-tool here. The DSN is injected from
+# the dbhub-mcp-secrets Secret via ${METAMCP_DSN} interpolation at load, so no
+# credential is stored in this ConfigMap.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dbhub-mcp-config
+data:
+  dbhub.toml: |
+    [[sources]]
+    id = "metamcp"
+    dsn = "${METAMCP_DSN}"
+    connection_timeout = 60
+    query_timeout = 30
+
+    [[tools]]
+    name = "execute_sql"
+    source = "metamcp"
+    readonly = true
+    max_rows = 1000
