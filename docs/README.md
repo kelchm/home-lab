@@ -16,6 +16,10 @@ Current-state, authoritative docs.
 - [**roadmap.md**](roadmap.md) — forward-looking design: the planned second
   ("sandbox") cluster, two-cluster topology, and deferred work.
 
+## Further reading
+
+- [**other-labs.md**](other-labs.md) — curated external home labs grouped by the architectural question each one helps answer.
+
 ## Runbooks
 
 Step-by-step operational procedures — reach for these when something needs doing
