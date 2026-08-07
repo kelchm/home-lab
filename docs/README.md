@@ -46,6 +46,7 @@ executed, the current state lives in the corresponding runbook.
 - [20260509-kaniop-migration](plans/20260509-kaniop-migration.md) — Kanidm → kaniop operator pivot.
 - [20260513-arr-hardlink-rework](plans/20260513-arr-hardlink-rework.md) — single share-root mount + NFSv4 ACL isolation.
 - [20260620-metamcp-mcp-rollout](plans/20260620-metamcp-mcp-rollout.md) — MetaMCP gateway + curated backend MCP server rollout.
+- [20260620-nas-out-of-cluster-workloads](plans/20260620-nas-out-of-cluster-workloads.md) — Synology-hosted S3 backup target and Git-driven deployment model for workloads outside Kubernetes.
 - [20260622-sequenced-dependency-upgrades](plans/20260622-sequenced-dependency-upgrades.md) — ordered major-version upgrade pass for k8s-prod (Longhorn → Talos → k8s → Gateway API/Traefik → kaniop).
 
 ## Decision records & benchmarks
