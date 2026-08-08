@@ -197,7 +197,7 @@ jobs:
 
       - name: Install Kubernetes validation tools
         if: needs.pre-job.outputs.kubernetes_changed == 'true'
-        uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14 # v4.2.3
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install_args: "aqua:fluxcd/flux2 aqua:yannh/kubeconform aqua:mikefarah/yq"
 
@@ -244,7 +244,7 @@ jobs:
 
       - name: Install talhelper
         if: needs.pre-job.outputs.talos_changed == 'true'
-        uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14 # v4.2.3
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install_args: "aqua:budimanjojo/talhelper"
 
@@ -270,7 +270,7 @@ jobs:
 
       - name: Install bootstrap validation tools
         if: needs.pre-job.outputs.bootstrap_changed == 'true'
-        uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14 # v4.2.3
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install_args: "aqua:helm/helm aqua:helmfile/helmfile aqua:yannh/kubeconform"
 
@@ -308,7 +308,7 @@ jobs:
 
       - name: Install SOPS
         if: needs.pre-job.outputs.sops_changed == 'true'
-        uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14 # v4.2.3
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install_args: "aqua:getsops/sops"
 
@@ -339,7 +339,7 @@ jobs:
 
       - name: Install ShellCheck
         if: needs.pre-job.outputs.scripts_changed == 'true'
-        uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14 # v4.2.3
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install_args: "aqua:koalaman/shellcheck"
 
@@ -403,7 +403,7 @@ jobs:
 
       - name: Install lychee
         if: needs.pre-job.outputs.docs_changed == 'true'
-        uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14 # v4.2.3
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install_args: "aqua:lycheeverse/lychee"
 
