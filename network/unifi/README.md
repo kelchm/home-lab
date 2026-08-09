@@ -70,8 +70,9 @@ LAN-IN section):
 
 | # | Source            | Destination        | Action | Notes                          |
 |---|-------------------|--------------------|--------|--------------------------------|
-| 1 | IoT (VLAN 90)     | `bgp-lb-restricted` | Drop   | Quieter than reject            |
-| 2 | Guest (VLAN 99)   | `bgp-lb-restricted` | Drop   |                                |
+| 1 | Guest (VLAN 99)   | `10.32.140.1` 80,443/tcp | Allow  | Must precede rule 3            |
+| 2 | IoT (VLAN 90)     | `bgp-lb-restricted` | Drop   | Quieter than reject            |
+| 3 | Guest (VLAN 99)   | `bgp-lb-restricted` | Drop   |                                |
 
 VLAN 10 (Main) is intentionally allowed by the default posture and needs no
 explicit rule. If/when a more restrictive default-deny posture is adopted
@@ -81,7 +82,32 @@ Main and revisit the per-pool firewall posture in
 
 Validate by running `curl --max-time 2 http://10.32.130.99/` from a device on
 each restricted VLAN — should time out or be refused. The synthetic test
-below exercises this as gate 4.
+below exercises this as gate 4. For rule 1, from a Guest device:
+`dig seerr.home.kelch.io` should return `10.32.140.1` and
+`curl -sI https://seerr.home.kelch.io/` should return a response, while
+`curl --max-time 2 https://longhorn.home.kelch.io/` should still fail.
+
+### Guest → services gateway carve-out (rule 1)
+
+Guest carries household devices that are deliberately kept off Main. Rule 1
+gives them the `traefik-services` VIP and nothing else: `admin-prod` and every
+per-service IP in `services-prod` stay covered by the rule 3 drop. Both ports
+are needed because the `web` entrypoint permanently redirects to `websecure`,
+so without 80 a bare `http://` hostname times out instead of redirecting.
+
+A LAN-IN rule matches on IP and port, not SNI, so this cannot be scoped to
+individual hostnames — it grants Guest every tenant of `gateway-services`.
+Today that is kanidm, Jellyfin and Seerr, all of which gate on their own
+login, plus broadsheet, which has no auth but serves a mirror of public
+newspaper front pages with no credentials and no user data. Anything added to
+that gateway later inherits Guest reachability, so treat `gateway-services`
+as household-facing with untrusted clients; put anything narrower on the admin
+gateway or its own `services-prod` IP.
+
+If VLAN 99 is configured as a UniFi *Guest Network* type, its built-in policy
+blocks RFC1918 destinations independently of this rule — the allow-list in the
+guest policy has to permit `10.32.140.1` as well, or rule 1 appears to do
+nothing.
 
 ## Synthetic test (`bgp-test.yaml`)
 

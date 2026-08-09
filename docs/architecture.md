@@ -178,7 +178,7 @@ Three policy classes:
 | Class | Pool (prod) | Reachable from | Use cases |
 |---|---|---|---|
 | **admin** | `admin-prod` (10.32.130.0/24) | VLAN 10 admin devices only | Operator UIs via Traefik admin gateway, k8s-gateway DNS |
-| **services** | `services-prod` (10.32.140.0/24) | VLAN 10 (Main) | Household-facing apps (Traefik services gateway, per-service IPs) |
+| **services** | `services-prod` (10.32.140.0/24) | VLAN 10 (Main); VLAN 99 (Guest) to 10.32.140.1 only | Household-facing apps (Traefik services gateway, per-service IPs) |
 | **shared** | `shared-prod` (10.32.150.0/24) | All client VLANs (per-IP+port) | Cluster-wide shared services like DNS or NTP — not currently allocated |
 
 Sandbox-side pools (`admin-sandbox` 10.32.131.0/24, `services-sandbox` 10.32.141.0/24) follow the same naming under a future second cluster.
@@ -198,6 +198,7 @@ Sandbox-side pools (`admin-sandbox` 10.32.131.0/24, `services-sandbox` 10.32.141
 
 ```
 .1     traefik-services         Household apps without mature native auth via HTTPRoute.
+                                The only pool IP reachable from Guest (VLAN 99).
 .30-.99 per-service IPs:
   .50  jellyfin                 Native auth, dedicated IP   (example, future)
   .51  nextcloud                Native auth, dedicated IP   (example, future)
@@ -219,9 +220,12 @@ VLAN 10 Main  → services-prod       : allow
 VLAN 90 IoT   → admin-prod          : deny
 VLAN 90 IoT   → services-prod       : deny
 VLAN 99 Guest → admin-prod          : deny
-VLAN 99 Guest → services-prod       : deny
+VLAN 99 Guest → services-prod/.1 80,443/tcp : allow (household devices kept off Main)
+VLAN 99 Guest → services-prod       : deny (all other IPs in the pool)
 VLAN 90/99    → shared-prod/X 53/udp+tcp : per-tenant allow (when shared-prod gains a tenant)
 ```
+
+The Guest allow is ordered above the pool-wide deny and targets the services gateway VIP alone. Because a LAN-IN rule matches IP and port rather than SNI, it grants Guest every tenant of `gateway-services` — see [`network/unifi/README.md`](../network/unifi/README.md#guest--services-gateway-carve-out-rule-1) for what that covers and what it means for apps added to that gateway later.
 
 ## Service categorization & exposure
 
