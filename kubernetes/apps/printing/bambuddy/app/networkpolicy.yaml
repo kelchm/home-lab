@@ -1,7 +1,7 @@
 ---
 # Default-deny policy for Bambuddy. The only inbound path is gateway-admin;
-# outbound is DNS, PostgreSQL, Kanidm OIDC, and Bambu LAN protocols within the
-# IoT trust zone. Bambuddy's UI, not Kubernetes, owns printer inventory.
+# outbound is DNS, PostgreSQL, and Bambu LAN protocols within the IoT trust
+# zone. OIDC egress stays closed until the public-issuer blocker is resolved.
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
@@ -38,20 +38,10 @@ spec:
         - ports:
             - port: "5432"
               protocol: TCP
-    # auth.home.kelch.io resolves to this Kubernetes LoadBalancer Service.
-    # Cilium evaluates L4 policy after Service translation, so select the
-    # Service and allow Traefik's effective websecure container port.
-    - toServices:
-        - k8sService:
-            serviceName: traefik-services
-            namespace: network
-      toPorts:
-        - ports:
-            - port: "8443"
-              protocol: TCP
-    # UniFi owns the routed cluster-to-IoT boundary. Cilium limits this workload
-    # to the IoT trust zone and Bambu LAN protocols without duplicating the
-    # printer inventory managed through Bambuddy's UI.
+    # Cilium restricts this Bambuddy pod to the IoT zone and Bambu LAN ports.
+    # The UI inventory is not an enforcement boundary: any host in this CIDR
+    # listening on one of these ports is reachable. UniFi is intended to own
+    # the routed zone boundary after the default-deny work tracked in #348.
     - toCIDR:
         - 10.32.90.0/24
       toPorts:
@@ -126,7 +116,6 @@ spec:
               protocol: TCP
     - fromEntities:
         - host
-        - remote-node
       toPorts:
         - ports:
             - port: "8000"
