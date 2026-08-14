@@ -1,6 +1,7 @@
 ---
 # Default-deny policy for Bambuddy. The only inbound path is gateway-admin;
-# outbound is DNS, PostgreSQL, Kanidm OIDC, and the single reviewed printer.
+# outbound is DNS, PostgreSQL, Kanidm OIDC, and Bambu LAN protocols within the
+# IoT trust zone. Bambuddy's UI, not Kubernetes, owns printer inventory.
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
@@ -48,11 +49,11 @@ spec:
         - ports:
             - port: "8443"
               protocol: TCP
-    # REVIEW BLOCKER (#299): replace TEST-NET-1 with the printer's fixed IP
-    # after recording its model/VLAN and testing the required ports. Keeping a
-    # valid but non-routable address makes the draft renderable and fail closed.
+    # UniFi owns the routed cluster-to-IoT boundary. Cilium limits this workload
+    # to the IoT trust zone and Bambu LAN protocols without duplicating the
+    # printer inventory managed through Bambuddy's UI.
     - toCIDR:
-        - 192.0.2.1/32
+        - 10.32.90.0/24
       toPorts:
         - ports:
             - port: "8883" # MQTT/TLS

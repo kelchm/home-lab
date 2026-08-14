@@ -9,22 +9,21 @@ out of scope for the initial deployment.
 
 ## Before making the PR ready
 
-1. Record the printer model, fixed IP, VLAN, and UniFi rule that permits the
-   cluster pod CIDR to reach it.
+1. Record the printer model and confirm it is on the IoT VLAN (`10.32.90.0/24`).
+   Confirm UniFi permits the Talos compute-node addresses to reach that trust
+   zone; pod traffic is currently masqueraded to those node addresses.
 2. Decide whether LAN Only/Developer Mode is acceptable for that model.
 3. From a temporary pod subject to the intended policy, test the model's
    required outbound flows: MQTT/TLS `8883`, FTPS `990`, RTSPS `322`, A2L
    camera/file transfer `6000`, and A1/P1S ports `2024-2026` as applicable.
-4. Replace `192.0.2.1/32` in `networkpolicy.yaml` with the fixed printer `/32`
-   and remove ports the model does not use. Do not substitute its VLAN CIDR.
+4. Confirm the policy's union of Bambu LAN ports covers the printer models that
+   will be managed. Printer addresses are configured only in Bambuddy's UI;
+   adding or replacing a printer does not require a Kubernetes policy change.
 5. Treat 50 GiB as the initial allocation, not a permanent forecast. Upstream
    estimates 500 prints with some timelapses at 1-5 GB and 1,000+ prints with
    full timelapses at 10+ GB. Record actual growth after 30 and 60 days and
    expand before the volume reaches 80% utilization. Move only bulk archives
    to NFS in a separately reviewed change.
-
-The documentation address intentionally prevents printer connectivity while
-the PR is a draft. Do not merge it unchanged.
 
 ## First login and OIDC
 
@@ -74,10 +73,11 @@ override enabled during normal operation.
 
 Add the printer manually by its fixed IP. Do not enable discovery, Virtual
 Printer, or Proxy mode. Run Bambuddy's connection diagnostic and one approved
-test operation. Use Hubble while testing to confirm that accepted egress goes
-only to the printer `/32`, DNS, the `bambuddy-db` Postgres on 5432, and a
-`traefik-services` pod on 8443; denied tests to another IoT device, a node
-address, the NAS, and the Kubernetes API must remain denied.
+test operation. Use Hubble while testing to confirm that external egress is
+limited to Bambu LAN ports within `10.32.90.0/24`; DNS, `bambuddy-db` Postgres
+on 5432, and a `traefik-services` pod on 8443 are the other expected flows.
+Denied tests to a node address, the NAS, and the Kubernetes API must remain
+denied. UniFi remains responsible for policy between the cluster and IoT VLAN.
 
 ## Backup and restore drill
 
