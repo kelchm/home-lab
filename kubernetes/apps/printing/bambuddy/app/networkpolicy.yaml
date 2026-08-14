@@ -1,0 +1,158 @@
+---
+# Default-deny policy for Bambuddy. The only inbound path is gateway-admin;
+# outbound is DNS, PostgreSQL, Kanidm OIDC, and Bambu LAN protocols within the
+# IoT trust zone. Bambuddy's UI, not Kubernetes, owns printer inventory.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: bambuddy
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: bambuddy
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: network
+            app.kubernetes.io/instance: traefik-admin-network
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: printing
+            cnpg.io/cluster: bambuddy-db
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+    # auth.home.kelch.io is a valid HTTPS issuer whose private DNS answer is
+    # the traefik-services LoadBalancer. Bambuddy accepts symbolic issuer
+    # hostnames without resolving them during validation. Cilium evaluates L4
+    # policy after Service translation, so allow Traefik's effective websecure
+    # container port through the selected Service only.
+    - toServices:
+        - k8sService:
+            serviceName: traefik-services
+            namespace: network
+      toPorts:
+        - ports:
+            - port: "8443"
+              protocol: TCP
+    # Cilium restricts this Bambuddy pod to the IoT zone and Bambu LAN ports.
+    # The UI inventory is not an enforcement boundary: any host in this CIDR
+    # listening on one of these ports is reachable. UniFi is intended to own
+    # the routed zone boundary after the default-deny work tracked in #348.
+    - toCIDR:
+        - 10.32.90.0/24
+      toPorts:
+        - ports:
+            - port: "8883" # MQTT/TLS
+              protocol: TCP
+            - port: "990" # FTPS
+              protocol: TCP
+            - port: "322" # RTSPS camera (X1/H2/P2)
+              protocol: TCP
+            - port: "6000" # A2L camera/file-transfer protocol
+              protocol: TCP
+            - port: "2024" # A1/P1S proprietary slicer ports
+              protocol: TCP
+            - port: "2025"
+              protocol: TCP
+            - port: "2026"
+              protocol: TCP
+---
+# CNPG is reachable only from Bambuddy, the CNPG operator, and the established
+# metrics scrapers. CNPG operator traffic is ordinary pod traffic, not a host
+# entity. Same-cluster peers are admitted so increasing instances does not
+# silently break replication or instance-manager coordination.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: bambuddy-db
+spec:
+  endpointSelector:
+    matchLabels:
+      cnpg.io/cluster: bambuddy-db
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: printing
+            app.kubernetes.io/name: bambuddy
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: cnpg-system
+            app.kubernetes.io/instance: cnpg-operator
+            app.kubernetes.io/name: cloudnative-pg
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+            - port: "8000"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: printing
+            cnpg.io/cluster: bambuddy-db
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+            - port: "8000"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: prometheus
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: vmagent
+      toPorts:
+        - ports:
+            - port: "9187"
+              protocol: TCP
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: printing
+            cnpg.io/cluster: bambuddy-db
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+            - port: "8000"
+              protocol: TCP
+    - toEntities:
+        - kube-apiserver
