@@ -7,7 +7,7 @@ reachable only through `gateway-admin` at
 Virtual Printer, Proxy mode, external archive roots, and cloud integrations are
 out of scope for the initial deployment.
 
-## Before making the PR ready
+## Post-merge acceptance
 
 1. Record the printer model and confirm it is on the IoT VLAN (`10.32.90.0/24`).
    Record the actual UniFi rule state for Talos compute-node traffic to that
@@ -33,19 +33,12 @@ out of scope for the initial deployment.
    expand before the volume reaches 80% utilization. Move only bulk archives
    to NFS in a separately reviewed change.
 
-## OIDC prerequisite and first login
+## First login and OIDC
 
-Do not enable OIDC yet. `auth.home.kelch.io` currently resolves inside the
-cluster to the private `10.32.140.1` LoadBalancer address, and Bambuddy rejects
-private, loopback, and link-local OIDC issuer addresses as SSRF protection.
-Before making this PR ready, provide a separately reviewed HTTPS Kanidm issuer
-whose DNS resolves to a non-private address from the Bambuddy pod and whose
-discovery document and token `iss` claim use that exact issuer. An alias in
-front of the current issuer is not sufficient if those values still name
-`auth.home.kelch.io`.
-
-Until that prerequisite exists, keep the local administrator and local login
-enabled. Once it does, use the following bootstrap sequence:
+Use the following bootstrap sequence. Bambuddy rejects literal private IP
+issuer URLs, but accepts symbolic HTTPS issuer hostnames without resolving them
+during validation. The existing `auth.home.kelch.io` issuer is therefore valid
+even though private DNS routes it to the `traefik-services` LoadBalancer.
 
 1. Wait for the `bambuddy` HelmRelease and the
    `bambuddy-kanidm-oauth2-credentials` Secret to become ready.
@@ -55,7 +48,7 @@ enabled. Once it does, use the following bootstrap sequence:
 3. In **Settings -> Authentication -> SSO / OIDC**, add:
 
    - Name: `Kanidm`
-   - Issuer: `<public-kanidm-issuer>/oauth2/openid/bambuddy`
+   - Issuer: `https://auth.home.kelch.io/oauth2/openid/bambuddy`
    - Client ID: `bambuddy`
    - Client secret: the `CLIENT_SECRET` value from
      `bambuddy-kanidm-oauth2-credentials`
@@ -102,9 +95,8 @@ Run explicit negative tests from the selected pod: an unapproved port on the
 printer and an allowed printer port on an address outside the IoT VLAN must be
 denied. An unrelated IoT host on an allowed port is expected to be reachable
 under this interim `/24` policy and demonstrates the documented residual risk.
-DNS and `bambuddy-db` Postgres on 5432 are the other expected flows. Add the
-public issuer's narrowly scoped egress only when the OIDC prerequisite above is
-implemented; the current policy deliberately contains no usable Kanidm path.
+DNS, `bambuddy-db` Postgres on 5432, and `traefik-services` on its effective
+websecure container port 8443 for Kanidm OIDC are the other expected flows.
 
 Cilium restricts Bambuddy's allow-set. It does not stop unpoliced workloads or
 host-network processes from using the node-to-IoT path. UniFi is the intended
@@ -147,8 +139,8 @@ Exercise the two recovery paths separately:
    database query and the expected files under `/app/data` before testing the
    full application state.
 3. Record the exact CNPG stop/reattach procedure and restore result before
-   making the PR ready. Delete disposable resources only after that record is
-   complete.
+   declaring the bootstrap complete. Delete disposable resources only after
+   that record is complete.
 
 The generic Longhorn single-PVC drill is not by itself proof of Bambuddy
 recovery: the database and archive have separate storage contracts.
