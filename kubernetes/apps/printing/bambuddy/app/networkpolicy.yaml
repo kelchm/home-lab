@@ -1,7 +1,8 @@
 ---
 # Default-deny policy for Bambuddy. The only inbound path is gateway-admin;
-# outbound is DNS, PostgreSQL, Kanidm OIDC, and Bambu LAN protocols within the
-# IoT trust zone. Bambuddy's UI, not Kubernetes, owns printer inventory.
+# outbound is DNS, PostgreSQL, Kanidm OIDC, public internet, and Bambu LAN
+# protocols within the IoT trust zone. Bambuddy's UI, not Kubernetes, owns
+# printer inventory.
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
@@ -30,6 +31,28 @@ spec:
               protocol: UDP
             - port: "53"
               protocol: TCP
+    # Bambuddy is new to the lab and exposes integrations configured at
+    # runtime. Permit public internet access while those workflows are explored
+    # and observed, without also admitting private, cluster-adjacent, loopback,
+    # link-local, CGNAT, or reserved destinations. IPv6 is disabled
+    # cluster-wide; add equivalent IPv6 policy before enabling it.
+    - toCIDRSet:
+        - cidr: 0.0.0.0/0
+          except:
+            - 0.0.0.0/8
+            - 10.0.0.0/8
+            - 100.64.0.0/10
+            - 127.0.0.0/8
+            - 169.254.0.0/16
+            - 172.16.0.0/12
+            - 192.0.0.0/24
+            - 192.0.2.0/24
+            - 192.168.0.0/16
+            - 198.18.0.0/15
+            - 198.51.100.0/24
+            - 203.0.113.0/24
+            - 224.0.0.0/4
+            - 240.0.0.0/4
     - toEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: printing
