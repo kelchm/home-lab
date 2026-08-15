@@ -27,7 +27,7 @@ spec:
               # renovate: datasource=docker depName=ghcr.io/maziggy/bambuddy
               repository: ghcr.io/maziggy/bambuddy
               # Stable amd64 manifest. All k8s-prod nodes are amd64.
-              tag: 1.2.5.1@sha256:beb5a8352982db21a6a9e2c553bf60ccf85f7b2fb80e0fd9a7672ae844a299bd
+              tag: 1.2.5.2@sha256:93749b4a06ad8b51c790f27cea22c8c84cde3fdc8096253d1bcf0f601cd0c57a
             env:
               TZ: America/New_York
               PORT: &port 8000
