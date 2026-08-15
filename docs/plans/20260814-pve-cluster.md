@@ -310,8 +310,8 @@ it is being diagnosed.
 
 ### Why no ZFS on the expected drives
 
-The expected drives are 1 TB WD_BLACK SN770s, not SN850s. A read-only query of
-all three live Kubernetes nodes on 2026-08-15 reported that model, firmware
+The expected drives are 1 TB WD_BLACK SN770s. A read-only query of all three
+live Kubernetes nodes on 2026-08-15 reported that model, firmware
 `731100WD`, and 512-byte logical sectors. The PVE drives still require direct
 inventory because "same drives" has not yet been verified on those machines.
 
