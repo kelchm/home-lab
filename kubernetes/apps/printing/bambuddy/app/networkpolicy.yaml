@@ -86,6 +86,9 @@ spec:
               protocol: TCP
             - port: "990" # FTPS
               protocol: TCP
+            - port: "50000" # FTPS passive data
+              endPort: 50100
+              protocol: TCP
             - port: "322" # RTSPS camera (X1/H2/P2)
               protocol: TCP
             - port: "6000" # A2L camera/file-transfer protocol
