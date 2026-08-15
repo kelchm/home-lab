@@ -1,4 +1,4 @@
-"""Exercise Grafana MCP and optionally verify MetaMCP's session policy.
+"""Exercise Grafana MCP with a real tool call.
 
 The scheduled probe uses the direct Grafana MCP Service. The same script can
 exercise the authenticated MetaMCP endpoint during rollout by overriding
@@ -57,40 +57,6 @@ def rpc(connection, payload, session_id=None, expected=(200,)):
     return response, parse_json_or_sse(body)
 
 
-def check_session_lifetime():
-    host = os.getenv("SESSION_LIFETIME_HOST")
-    if not host:
-        return None
-
-    scheme = os.getenv("SESSION_LIFETIME_SCHEME", "http")
-    port = int(os.getenv("SESSION_LIFETIME_PORT", "12008"))
-    path = os.getenv(
-        "SESSION_LIFETIME_PATH",
-        "/trpc/frontend.config.getSessionLifetime?input=%7B%22json%22%3Anull%7D",
-    )
-    expected = int(os.environ["EXPECTED_SESSION_LIFETIME_MS"])
-    connection = new_connection(scheme, host, port)
-    try:
-        connection.request("GET", path, headers={"Accept": "application/json"})
-        response = connection.getresponse()
-        body = response.read().decode("utf-8")
-        if response.status != 200:
-            raise RuntimeError(
-                f"MetaMCP session-policy check returned HTTP {response.status}: {body[:500]}"
-            )
-        value = json.loads(body).get("result", {}).get("data")
-        if isinstance(value, dict) and "json" in value:
-            value = value["json"]
-        if value != expected:
-            raise RuntimeError(
-                f"MetaMCP SESSION_LIFETIME is {value!r}; expected {expected} ms"
-            )
-        return value
-    finally:
-        connection.close()
-
-
-session_lifetime = check_session_lifetime()
 connection = new_connection(MCP_SCHEME, MCP_HOST, MCP_PORT)
 session_id = None
 try:
@@ -138,14 +104,9 @@ try:
     datasources = payload.get("datasources")
     if not isinstance(datasources, list):
         raise RuntimeError(f"Grafana returned no datasource list: {result}")
-    suffix = (
-        f", session lifetime {session_lifetime} ms"
-        if session_lifetime is not None
-        else ""
-    )
     print(
         f"Grafana MCP functional probe passed via {MCP_HOST} "
-        f"({len(datasources)} datasources{suffix})"
+        f"({len(datasources)} datasources)"
     )
 finally:
     active_error = sys.exc_info()[0] is not None

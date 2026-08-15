@@ -48,7 +48,7 @@ spec:
             severity: critical
           annotations:
             summary: AI/MCP functional probe is failing
-            description: No successful MetaMCP session-policy check and Grafana initialize/list_datasources/delete cycle has completed in the last 10 minutes.
+            description: No successful Grafana initialize/list_datasources/delete cycle has completed in the last 10 minutes.
 
         # last_successful_time does not exist until the first success and can
         # disappear if the CronJob or kube-state-metrics coverage is lost. Give
@@ -60,4 +60,4 @@ spec:
             severity: critical
           annotations:
             summary: AI/MCP functional probe has no success metric
-            description: The scheduled MetaMCP session-policy and Grafana functional probe has not produced a success metric for 12 minutes.
+            description: The scheduled Grafana functional probe has not produced a success metric for 12 minutes.

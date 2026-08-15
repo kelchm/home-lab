@@ -24,28 +24,26 @@ Live state before the change:
   fix.
 
 The stable image has no log-level control: its per-session `console.log` calls
-are unconditional. Retention bounds both the session population and associated
-log volume. Revisit `LOG_LEVEL` when upstream publishes a stable release that
-contains it instead of carrying a local image patch.
+are unconditional. Revisit `LOG_LEVEL` when upstream publishes a stable release
+that contains it instead of carrying a local image patch.
 
-Before rollout, complete both registry gates in the MetaMCP UI:
+The initial rollout set **Settings → Session lifetime** to 240 minutes. It was
+deliberately rolled back on 2026-08-03 because clients, particularly Claude,
+continued using sessions after the server expired them instead of
+re-initializing. Any nonzero lifetime eventually turned normal client traffic
+into a user-visible failure, so `SESSION_LIFETIME` remains unset until client
+behavior changes. The functional probe must not assert a session lifetime.
 
-1. Set **Settings → Session lifetime** to **240 minutes**. This is a supported
-   DB-backed setting and is included in CNPG backups.
-2. Follow the registry-hygiene procedure in `metamcp-bootstrap.md` to remove the
-   package-downloading `time` server and unused `default-endpoint`
-   self-reference. MetaMCP initializes every registered server, so inactive
-   entries are still dependencies.
+Follow the registry-hygiene procedure in `metamcp-bootstrap.md` to remove the
+package-downloading `time` server and unused `default-endpoint` self-reference.
+MetaMCP initializes every registered server, so inactive entries are still
+dependencies.
 
-The deployment deliberately does not write MetaMCP's private database schema
-from a lifecycle hook; the scheduled functional probe continuously checks that
-the effective value remains `14400000` ms and alerts on drift.
-
-The lifetime is maximum age, not idle age; an MCP client receives a
-missing-session response after expiry and must reconnect. Four hours matches
-the default suggested by MetaMCP's settings UI when automatic cleanup is
-enabled. The change also raises the memory request to 512 MiB and temporarily
-raises the limit to 2 GiB for the 14-day soak.
+With expiry disabled, session growth remains unbounded. The 2 GiB memory limit
+is headroom, not proof of containment, and must not be reduced merely because a
+14-day window passes without an OOM. Track memory growth against session
+activity and replace random OOM disruption with a deliberate containment
+mechanism, such as a restart in a known quiet window, before lowering it.
 
 ## Allowed dependency matrix
 
@@ -58,7 +56,7 @@ raises the limit to 2 GiB for the 14-day soak.
 | Grafana MCP | Grafana pods in `observability` | TCP 3000 | Read-only Grafana API |
 | LEMON manuals MCP | `lemon-website` pods in `lemon-manuals` | TCP 8080 | Self-hosted manual page retrieval |
 | Kubernetes/Flux MCP | Cilium `kube-apiserver` entity | API server ports | Read-only cluster APIs |
-| Grafana functional probe | Grafana MCP and MetaMCP pods | TCP 8000 and 12008 | Tool call plus session-policy drift check |
+| Grafana functional probe | Grafana MCP pods | TCP 8000 | Initialize, tool call, and session cleanup |
 | Browser, document, weather, and parts MCPs | Public IPv4 only | TCP 80/443 | Untrusted web/API fetches |
 | Prometheus and vmagent | `metamcp-db` pods | TCP 9187 | CNPG metrics |
 | CNPG operator | `metamcp-db` pods | TCP 5432 and 8000 | Reconciliation, failover, and recovery |
@@ -82,11 +80,11 @@ removed; the checked-in and live MetaMCP inventories use only
 
 ## Functional checks
 
-The `grafana-mcp-functional-probe` CronJob runs every five minutes. It first
-reads MetaMCP's supported public session-lifetime API and requires four hours.
-It then uses the exact Grafana MCP URL MetaMCP stores, initializes MCP, calls
-`list_datasources` (which must reach Grafana), verifies the response, and
-deletes the MCP session. A TCP-only success cannot satisfy the check.
+The `grafana-mcp-functional-probe` CronJob runs every five minutes. It uses the
+exact Grafana MCP URL MetaMCP stores, initializes MCP, calls `list_datasources`
+(which must reach Grafana), verifies the response, and deletes the MCP session.
+A TCP-only success cannot satisfy the check. Session-lifetime policy is
+intentionally outside this probe.
 
 After rollout:
 
@@ -167,7 +165,7 @@ Remove a manual probe Job after reviewing it:
 kubectl -n ai delete job grafana-mcp-manual-probe
 ```
 
-## Alerts and 14-day soak
+## Alerts and memory monitoring
 
 `ai-mcp-reliability` alerts on a new MetaMCP OOM kill, two restarts within 30
 minutes, a failed/stale functional probe, or twelve minutes with no probe
@@ -179,7 +177,7 @@ observability notifier decision so these alerts can page proactively; until
 then, delivery only means visibility in the Alertmanager UI.
 
 For issue #294, keep the issue open until the authenticated MetaMCP probe above
-passes and start the 14-day clock from the rollout. At the end, record pod age,
-restart count, last termination reason, session count, current memory, and the
-14-day maximum. Only then remove the temporary 2 GiB limit or close the no-OOM
-acceptance item.
+passes. Record pod age, restart count, last termination reason, session count,
+current memory, and memory growth per unit of session activity. A 14-day
+no-OOM window alone is not evidence of containment and must not be used to
+remove the 2 GiB limit or close the reliability item.
