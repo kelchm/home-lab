@@ -112,7 +112,7 @@ spec:
         # Live archives, thumbnails, and encryption keys. Database rows live in
         # CNPG. Keep recurring portable backups off this volume: each backup
         # contains the complete archive and would multiply the capacity needed.
-        size: 50Gi
+        size: 100Gi
         accessMode: ReadWriteOnce
         advancedMounts:
           bambuddy:
