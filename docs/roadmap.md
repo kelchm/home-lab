@@ -1,38 +1,33 @@
 # Roadmap
 
 Forward-looking design and deferred work. Current-state reference lives in
-[architecture.md](architecture.md); much of the addressing, BGP, and storage
+[architecture.md](architecture.md); much of the addressing and storage
 design there is deliberately shaped to make the items below land cleanly.
 
-## Sandbox cluster
+## Proxmox virtualization cluster
 
-A second Talos cluster for experimentation, on 3× HP EliteDesk 800 G3 mini PCs
-(Intel i5-6500T, 32 GB RAM, 1 TB NVMe). It shares the storage and infra VLANs
-with prod but takes a distinct compute VLAN (31) and BGP ASN (65021).
+The three HP EliteDesk 800 G3 machines are planned as an independent three-node
+Proxmox VE cluster. This replaces the earlier proposal to use them for a second
+Talos cluster. PVE uses VLAN 20 for management and primary Corosync, the
+already-reserved `.21-.23` addresses on VLAN 25 for 2.5 GbE storage/migration
+and secondary Corosync, and VLAN 31 as the isolated guest network.
 
-Why a second cluster rather than a VM playground: it keeps an identical
-operational model to prod, the addressing scheme already generalises via the
-cluster-index digit, and prefix-list scoping isolates failure domains. The
-trade-off — losing a general-purpose VM sandbox in favour of uniformity — was
-made consciously.
+The detailed draft—including every host IP, DNS name, bridge, storage tier,
+backup/retention policy, HA class, update cadence, Git/IaC boundary, and rollout
+gate—is in [the PVE cluster plan](plans/20260814-pve-cluster.md).
 
-### Two-cluster topology
+Important boundaries:
 
-When sandbox lands as a second Talos cluster:
-
-- Each cluster is its own AS (prod 65020, sandbox 65021), peering with UniFi (65000)
-- Each cluster allocates from only its own pool prefixes; advertises VIPs as `/32`s within those prefixes
-- UniFi prefix-list filter per neighbor isolates failure domains: sandbox cannot advertise into prod's CIDR space
-- Storage VLAN 25 shared; both clusters present per the cluster-identity rule
-- API VIPs continue to be Talos-managed (vipController), independent of BGP
-- Total BGP sessions on UniFi: 6 (3 per cluster)
-
-Failure isolation: sandbox BGP issues cannot blackhole prod traffic when prefix-list scoping is in place.
-
-The IP-addressing convention ([architecture.md](architecture.md#ip-addressing-convention))
-already reserves sandbox's slots throughout — compute VLAN 31, the `.144/28`
-storage-pod range, `admin-sandbox` / `services-sandbox` LB pools, and the `-sbx`
-DNS suffix — so standing it up is largely a matter of filling in reserved space.
+- PVE remains operable with Kubernetes completely unavailable.
+- Declarations will live in a self-contained top-level `proxmox/` tree, but
+  Flux and Kubernetes-hosted runners will never apply them.
+- Initial host bootstrap and rolling updates are documented manual operations;
+  OpenTofu manages guests. Ansible is deferred until repeated host drift or
+  rebuild work justifies it.
+- Local LVM-thin is the default runtime tier. Synology NFS holds templates and
+  backups; a separate shared-guest export is optional for the few guests that
+  justify PVE HA and the resulting NAS runtime dependency.
+- Ceph is not planned for these single-NVMe, 32 GB, 2.5 GbE nodes.
 
 ## Out of scope (future considerations)
 

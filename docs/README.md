@@ -13,8 +13,8 @@ Current-state, authoritative docs.
 - [**repository-validation.md**](repository-validation.md) — CI event semantics,
   concurrency, aggregate-check invariants, and the boundary between validation
   and Flux deployment.
-- [**roadmap.md**](roadmap.md) — forward-looking design: the planned second
-  ("sandbox") cluster, two-cluster topology, and deferred work.
+- [**roadmap.md**](roadmap.md) — forward-looking design: the planned PVE
+  virtualization cluster and deferred work.
 
 ## Further reading
 
@@ -50,6 +50,7 @@ executed, the current state lives in the corresponding runbook.
 - [20260620-nas-out-of-cluster-workloads](plans/20260620-nas-out-of-cluster-workloads.md) — Synology-hosted S3 backup target and Git-driven deployment model for workloads outside Kubernetes.
 - [20260622-sequenced-dependency-upgrades](plans/20260622-sequenced-dependency-upgrades.md) — ordered major-version upgrade pass for k8s-prod (Longhorn → Talos → k8s → Gateway API/Traefik → kaniop).
 - [20260703-observability-rework](plans/20260703-observability-rework.md) — conclude the observability bakeoff, converge on VictoriaMetrics/VictoriaLogs, and restore useful alerting and estate coverage.
+- [20260814-pve-cluster](plans/20260814-pve-cluster.md) — draft design for the independent three-node PVE cluster: hardware, IPs, networks, storage, backup, HA, updates, IaC boundaries, and rollout gates.
 
 ## Decision records & benchmarks
 

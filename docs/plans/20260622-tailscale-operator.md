@@ -33,7 +33,7 @@ path is the only ingress this plan delivers.
   | `10.32.140.0/24` | services-prod LB pool — household apps + wildcard `*.home.kelch.io` → `10.32.140.1` |
 
   Excluded on purpose: VLAN 99 Guest, VLAN 5 Cameras, VLAN 25 Storage, VLAN 90 IoT,
-  and all future/unallocated ranges (VLAN 31, sandbox pools `10.32.131/141`, shared-prod
+  and all future/unallocated ranges (PVE guest VLAN 31, reserved Kubernetes pools `10.32.131/141`, shared-prod
   `10.32.150`). Every CIDR is drawn from `docs/architecture.md`; none invented.
 - **Scope** — subnet router only. No direct per-Service Tailscale exposure and no
   kube-apiserver proxy this round (both are easy follow-ups: a `tailscale`-class

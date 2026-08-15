@@ -15,6 +15,10 @@ The "Firewall rules" and "IDS/IPS signature suppression" sections below document
 intent for configuration that lives only in the UniFi UI (no exportable artifact
 lives in this repo).
 
+The future PVE VLAN/IP/firewall design is specified separately in the
+[draft PVE cluster plan](../../docs/plans/20260814-pve-cluster.md). It does
+not participate in BGP.
+
 ## Applying `frr.conf`
 
 The config targets FRR, which UniFi gateways (UDM Pro / UDM SE / UXG-series)
@@ -83,6 +87,25 @@ Main and revisit the per-pool firewall posture in
 Validate by running `curl --max-time 2 http://10.32.130.99/` from a device on
 each restricted VLAN — should time out or be refused. The synthetic test
 below exercises this as gate 4.
+
+### Planned PVE rules
+
+These rules are inert intent until the PVE rollout begins. Add them in phase 0
+of the PVE plan, before any guest is created:
+
+| Source | Destination | Action | Notes |
+|---|---|---|---|
+| Admin device group | `10.32.20.11-.13:8006/tcp` | Allow | PVE UI/API |
+| Admin device group | `10.32.20.11-.13:22/tcp` | Allow | Operator SSH only |
+| Other Main, IoT, Guest | VLAN 20 and VLAN 25 | Drop | Protect management/storage |
+| VLAN 31 | VLAN 20, VLAN 25, VLAN 30, and BGP LB pools | Drop | Guest isolation; place explicit exceptions above this rule |
+| `10.32.25.21-.23` | `10.32.25.5:2049/tcp` | Allow | PVE backup/library NFS |
+| Admin device group | VLAN 31 | Allow | Initial guest administration path |
+| VLAN 31 | Internet | Allow | Guest updates and image pulls |
+
+PVE host-to-host traffic on VLANs 20 and 25 remains switched at L2 and does not
+cross the UniFi router. Keep both port profiles confined to the three intended
+hosts and the NAS-facing storage fabric.
 
 ## IDS/IPS signature suppression
 
