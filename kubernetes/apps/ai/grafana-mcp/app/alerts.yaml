@@ -48,7 +48,7 @@ spec:
             severity: critical
           annotations:
             summary: AI/MCP functional probe is failing
-            description: No successful Grafana initialize/list_datasources/delete cycle has completed in the last 10 minutes.
+            description: The latest Grafana functional probe failed or no successful initialize/list_datasources/delete cycle has completed in the last 10 minutes.
 
         # last_successful_time does not exist until the first success and can
         # disappear if the CronJob or kube-state-metrics coverage is lost. Give

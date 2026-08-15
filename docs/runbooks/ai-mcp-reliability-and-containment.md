@@ -178,6 +178,9 @@ then, delivery only means visibility in the Alertmanager UI.
 
 For issue #294, keep the issue open until the authenticated MetaMCP probe above
 passes. Record pod age, restart count, last termination reason, session count,
-current memory, and memory growth per unit of session activity. A 14-day
-no-OOM window alone is not evidence of containment and must not be used to
-remove the 2 GiB limit or close the reliability item.
+current memory, and memory growth per unit of session activity as diagnostic
+data only. No reproducible closure threshold currently defines the session
+unit, observation window, and acceptable growth rate, so these observations and
+a 14-day no-OOM window must not be used to remove the 2 GiB limit or close the
+reliability item. A replacement containment design must define and validate its
+own acceptance criteria first.
