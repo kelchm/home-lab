@@ -32,14 +32,6 @@ spec:
               env:
                 - name: PYTHONDONTWRITEBYTECODE
                   value: "1"
-                # Verify the supported DB-backed setting through MetaMCP's
-                # public read API without coupling pod startup to its schema.
-                - name: SESSION_LIFETIME_HOST
-                  value: metamcp.ai.svc.cluster.local
-                - name: SESSION_LIFETIME_PORT
-                  value: "12008"
-                - name: EXPECTED_SESSION_LIFETIME_MS
-                  value: "14400000"
               securityContext:
                 allowPrivilegeEscalation: false
                 readOnlyRootFilesystem: true

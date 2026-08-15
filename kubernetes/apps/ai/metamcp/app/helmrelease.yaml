@@ -92,8 +92,9 @@ spec:
                 cpu: 100m
                 memory: 512Mi
               limits:
-                # Session lifetime is a supported DB setting, verified by the
-                # functional probe. Keep temporary headroom for its 14-day soak.
+                # Session expiry breaks clients which do not re-initialize after
+                # server-side termination. Keep headroom for unbounded sessions
+                # until a replacement containment mechanism is deployed.
                 memory: 2Gi
     defaultPodOptions:
       securityContext:
