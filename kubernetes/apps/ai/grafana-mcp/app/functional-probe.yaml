@@ -27,7 +27,7 @@ spec:
             seccompProfile: { type: RuntimeDefault }
           containers:
             - name: probe
-              image: docker.io/library/python:3.13.5-alpine3.22
+              image: docker.io/library/python:3.14.5-alpine3.22
               command: ["python", "/config/probe.py"]
               env:
                 - name: PYTHONDONTWRITEBYTECODE
