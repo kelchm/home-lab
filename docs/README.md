@@ -58,5 +58,5 @@ executed, the current state lives in the corresponding runbook.
 
 ## Related docs elsewhere in the repo
 
-- [network/unifi/README.md](../network/unifi/README.md) — UniFi-side BGP/FRR and firewall intent (UniFi isn't GitOps-managed).
+- [network/unifi/README.md](../network/unifi/README.md) — UniFi-side BGP/FRR, firewall, and IDS/IPS suppression intent (UniFi isn't GitOps-managed).
 - [AGENTS.md](../AGENTS.md) — conventions for working in this repo (branch vs. direct-to-main).

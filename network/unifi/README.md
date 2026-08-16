@@ -11,8 +11,9 @@ of truth and changes are applied manually.
 - `bgp-test.yaml` — disposable echo Service for the BGP migration synthetic
   test. Applied via `kubectl`, not Flux. See "Synthetic test" below.
 
-The "Firewall rules" section below documents intent for rules that are
-configured directly in UniFi UI (no exportable artifact lives in this repo).
+The "Firewall rules" and "IDS/IPS signature suppression" sections below document
+intent for configuration that lives only in the UniFi UI (no exportable artifact
+lives in this repo).
 
 ## Applying `frr.conf`
 
@@ -82,6 +83,50 @@ Main and revisit the per-pool firewall posture in
 Validate by running `curl --max-time 2 http://10.32.130.99/` from a device on
 each restricted VLAN — should time out or be refused. The synthetic test
 below exercises this as gate 4.
+
+## IDS/IPS signature suppression
+
+Threat Management (Settings → CyberSecure → Threat Management) runs in **Notify** mode — detections are logged and pushed as notifications, nothing is blocked. Suppressions mute a signature; because nothing is blocked, a suppression costs alerting only.
+
+Suppressions are configured from an **alert's own action menu** (System Log → Security → open an event → `Suppress Signature`), not from the `Detection Exclusions` list on the CyberSecure settings page. The two are unrelated: Detection Exclusions take an IP/network/subnet and remove it from analysis entirely, with no way to reference a signature.
+
+**Active suppressions**
+
+| Signature | SID | Scope | Rationale |
+|---|---|---|---|
+| `ET SCAN Potential SSH Scan OUTBOUND` | 2003068 | Outgoing / Subnet `140.82.112.0/20` | git-over-SSH to GitHub. False positive. |
+
+The ET rule fires on 5 outbound TCP SYNs to port 22 from one source within 120 seconds (`threshold: type threshold, track by_src, count 5, seconds 120`). Routine `git fetch` / `git push` from workstations clears that threshold constantly; unsuppressed it generates ~74 detections/day, ~99% of all Security-category log volume. `140.82.112.0/20` is GitHub's published `git` range from `api.github.com/meta`. Their `git` list also carries `192.30.252.0/22`, `185.199.108.0/22`, and `143.55.64.0/20`; add those as further Subnet rows if detections reappear from outside the /20.
+
+The suppression is scoped rather than global so the signature stays live for every other host and destination — a workstation scanning SSH across the internet still alerts.
+
+### Dialog semantics
+
+`Target: Specific` rows are `Traffic Direction` × `Type` × value, where `Type` is `IP`, `Network`, or `Subnet`. **`Subnet` accepts CIDR**, so a netblock is one row rather than one row per address.
+
+`Traffic Direction` values serialise as `src` / `dest` / `both`, mapping to Suricata's `track by_src` / `by_dst` / `by_either`. The UI label `Outgoing` writes `direction: "dest"` — the listed address is matched as the *destination*. This is worth stating explicitly because the Network app bundle carries an unrelated `incoming`/`outgoing` direction enum used by region blocking, and the two are easy to conflate.
+
+Read back the stored object to confirm what was actually written:
+
+```sh
+curl -s -b "TOKEN=$UNIFI_TOKEN" \
+  https://unifi.home.kelch.io/proxy/network/api/s/default/rest/setting \
+  | jq '.data[] | select(.key=="ips_suppression")'
+```
+
+Writes go to `POST .../set/setting/ips_suppression` as a whole-object set — a hand-built POST that omits `whitelist` or carries a stale `_id` clobbers rather than merges. Prefer the UI.
+
+### Verification
+
+Suppression scoped by source/destination has a history of silently failing to apply, so confirm rather than assume. From a host behind the gateway, deliberately cross the rule's threshold:
+
+```sh
+for i in (seq 6); ssh -T -o BatchMode=yes git@github.com; end
+```
+
+Then check System Log → Security. No new `Threat Detected` entry means the suppression is live. If entries still arrive, widen `Target` to `Any` to distinguish a broken scope from a broken suppression.
+
+Confirm Intrusion Prevention still reads **On** afterwards. Suppressing a signature could disable it outright on Network releases before 10.1.83.
 
 ## Synthetic test (`bgp-test.yaml`)
 
