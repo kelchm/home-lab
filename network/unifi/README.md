@@ -86,47 +86,25 @@ below exercises this as gate 4.
 
 ## IDS/IPS signature suppression
 
-Threat Management (Settings → CyberSecure → Threat Management) runs in **Notify** mode — detections are logged and pushed as notifications, nothing is blocked. Suppressions mute a signature; because nothing is blocked, a suppression costs alerting only.
-
-Suppressions are configured from an **alert's own action menu** (System Log → Security → open an event → `Suppress Signature`), not from the `Detection Exclusions` list on the CyberSecure settings page. The two are unrelated: Detection Exclusions take an IP/network/subnet and remove it from analysis entirely, with no way to reference a signature.
-
-**Active suppressions**
+Threat Management runs in **Notify** mode, so a suppression costs alerting only. Suppressions are added from an alert's action menu (System Log → Security → open an event → `Suppress Signature`), not from `Detection Exclusions`, which takes an IP/network/subnet and can't reference a signature.
 
 | Signature | SID | Scope | Rationale |
 |---|---|---|---|
-| `ET SCAN Potential SSH Scan OUTBOUND` | 2003068 | Outgoing / Subnet `140.82.112.0/20` | git-over-SSH to GitHub. False positive. |
+| `ET SCAN Potential SSH Scan OUTBOUND` | 2003068 | Outgoing / Subnet `140.82.112.0/20` | Routine git-over-SSH trips the rule's 5-SYN-to-port-22-per-120s threshold — ~74 false positives/day, ~99% of Security log volume. |
 
-The ET rule fires on 5 outbound TCP SYNs to port 22 from one source within 120 seconds (`threshold: type threshold, track by_src, count 5, seconds 120`). Routine `git fetch` / `git push` from workstations clears that threshold constantly; unsuppressed it generates ~74 detections/day, ~99% of all Security-category log volume. `140.82.112.0/20` is GitHub's published `git` range from `api.github.com/meta`. Their `git` list also carries `192.30.252.0/22`, `185.199.108.0/22`, and `143.55.64.0/20`; add those as further Subnet rows if detections reappear from outside the /20.
+`140.82.112.0/20` is GitHub's published `git` range (`api.github.com/meta`), which also lists `192.30.252.0/22`, `185.199.108.0/22`, and `143.55.64.0/20` — add those as further Subnet rows if detections reappear. Scoping beats `Target: Any`, which would suppress the signature for every host and destination.
 
-The suppression is scoped rather than global so the signature stays live for every other host and destination — a workstation scanning SSH across the internet still alerts.
+Non-obvious behavior, confirmed by reading `ips_suppression` back from `GET .../rest/setting` after applying:
 
-### Dialog semantics
+- `Type: Subnet` accepts CIDR, so a netblock is one row rather than one per address.
+- `Traffic Direction` serializes to `src` / `dest` / `both` (Suricata `by_src` / `by_dst` / `by_either`). `Outgoing` writes `direction: "dest"` — not the `incoming`/`outgoing` enum region blocking uses.
+- `POST .../set/setting/ips_suppression` is a whole-object set; a hand-built POST that drops `whitelist` clobbers rather than merges. Prefer the UI.
 
-`Target: Specific` rows are `Traffic Direction` × `Type` × value, where `Type` is `IP`, `Network`, or `Subnet`. **`Subnet` accepts CIDR**, so a netblock is one row rather than one row per address.
-
-`Traffic Direction` values serialize as `src` / `dest` / `both`, mapping to Suricata's `track by_src` / `by_dst` / `by_either`. The UI label `Outgoing` writes `direction: "dest"` — the listed address is matched as the *destination*. This is worth stating explicitly because the Network app bundle carries an unrelated `incoming`/`outgoing` direction enum used by region blocking, and the two are easy to conflate.
-
-Read back the stored object to confirm what was actually written:
-
-```sh
-curl -s -b "TOKEN=$UNIFI_TOKEN" \
-  https://unifi.home.kelch.io/proxy/network/api/s/default/rest/setting \
-  | jq '.data[] | select(.key=="ips_suppression")'
-```
-
-Writes go to `POST .../set/setting/ips_suppression` as a whole-object set — a hand-built POST that omits `whitelist` or carries a stale `_id` clobbers rather than merges. Prefer the UI.
-
-### Verification
-
-Scoped suppression works on this gateway. Applied 2026-08-16 against UniFi OS 5.1.26 / Network 10.5.67, it silenced the signature immediately, and Intrusion Prevention stayed enabled across the change (`ips_mode: "ids"`, 34 categories active).
-
-Two failure modes are widely reported and neither reproduced here: scoped suppressions silently failing to apply, and suppression disabling Intrusion Prevention outright on Network releases before 10.1.83. Both are cheap to re-check after any change to this section. From a host behind the gateway, deliberately cross the rule's threshold:
+Verified 2026-08-16 on UniFi OS 5.1.26 / Network 10.5.67 — signature silenced, Intrusion Prevention still enabled. To re-check, cross the threshold from a host behind the gateway and confirm no new `Threat Detected` entry appears:
 
 ```sh
 seq 6 | xargs -I{} ssh -T -o BatchMode=yes git@github.com
 ```
-
-No new `Threat Detected` entry in System Log → Security means the suppression is live. If entries do arrive, widen `Target` to `Any` for a single test to separate a broken scope from a broken suppression, then restore `Outgoing` / Subnet `140.82.112.0/20` — leaving `Any` in place would suppress the signature for every host and destination.
 
 ## Synthetic test (`bgp-test.yaml`)
 
