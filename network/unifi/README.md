@@ -104,7 +104,7 @@ The suppression is scoped rather than global so the signature stays live for eve
 
 `Target: Specific` rows are `Traffic Direction` × `Type` × value, where `Type` is `IP`, `Network`, or `Subnet`. **`Subnet` accepts CIDR**, so a netblock is one row rather than one row per address.
 
-`Traffic Direction` values serialise as `src` / `dest` / `both`, mapping to Suricata's `track by_src` / `by_dst` / `by_either`. The UI label `Outgoing` writes `direction: "dest"` — the listed address is matched as the *destination*. This is worth stating explicitly because the Network app bundle carries an unrelated `incoming`/`outgoing` direction enum used by region blocking, and the two are easy to conflate.
+`Traffic Direction` values serialize as `src` / `dest` / `both`, mapping to Suricata's `track by_src` / `by_dst` / `by_either`. The UI label `Outgoing` writes `direction: "dest"` — the listed address is matched as the *destination*. This is worth stating explicitly because the Network app bundle carries an unrelated `incoming`/`outgoing` direction enum used by region blocking, and the two are easy to conflate.
 
 Read back the stored object to confirm what was actually written:
 
@@ -118,15 +118,15 @@ Writes go to `POST .../set/setting/ips_suppression` as a whole-object set — a 
 
 ### Verification
 
-Suppression scoped by source/destination has a history of silently failing to apply, so confirm rather than assume. From a host behind the gateway, deliberately cross the rule's threshold:
+Scoped suppression works on this gateway. Applied 2026-08-16 against UniFi OS 5.1.26 / Network 10.5.67, it silenced the signature immediately, and Intrusion Prevention stayed enabled across the change (`ips_mode: "ids"`, 34 categories active).
+
+Two failure modes are widely reported and neither reproduced here: scoped suppressions silently failing to apply, and suppression disabling Intrusion Prevention outright on Network releases before 10.1.83. Both are cheap to re-check after any change to this section. From a host behind the gateway, deliberately cross the rule's threshold:
 
 ```sh
-for i in (seq 6); ssh -T -o BatchMode=yes git@github.com; end
+seq 6 | xargs -I{} ssh -T -o BatchMode=yes git@github.com
 ```
 
-Then check System Log → Security. No new `Threat Detected` entry means the suppression is live. If entries still arrive, widen `Target` to `Any` to distinguish a broken scope from a broken suppression.
-
-Confirm Intrusion Prevention still reads **On** afterwards. Suppressing a signature could disable it outright on Network releases before 10.1.83.
+No new `Threat Detected` entry in System Log → Security means the suppression is live. If entries do arrive, widen `Target` to `Any` for a single test to separate a broken scope from a broken suppression, then restore `Outgoing` / Subnet `140.82.112.0/20` — leaving `Any` in place would suppress the signature for every host and destination.
 
 ## Synthetic test (`bgp-test.yaml`)
 
