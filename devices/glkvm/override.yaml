@@ -1,0 +1,78 @@
+# PiKVM UI controls for the downstream eight-port KVM. The switch recognizes
+# Left Ctrl, Left Ctrl, DigitN, but needs more time between events than the
+# GL.iNet shortcut UI provides.
+kvmd:
+    gpio:
+        drivers:
+            kvm_channel_1:
+                type: cmd
+                cmd: [/etc/kvmd/user/bin/kvm-switch, "1"]
+            kvm_channel_2:
+                type: cmd
+                cmd: [/etc/kvmd/user/bin/kvm-switch, "2"]
+            kvm_channel_3:
+                type: cmd
+                cmd: [/etc/kvmd/user/bin/kvm-switch, "3"]
+            kvm_channel_4:
+                type: cmd
+                cmd: [/etc/kvmd/user/bin/kvm-switch, "4"]
+            kvm_channel_5:
+                type: cmd
+                cmd: [/etc/kvmd/user/bin/kvm-switch, "5"]
+            kvm_channel_6:
+                type: cmd
+                cmd: [/etc/kvmd/user/bin/kvm-switch, "6"]
+            kvm_channel_7:
+                type: cmd
+                cmd: [/etc/kvmd/user/bin/kvm-switch, "7"]
+            kvm_channel_8:
+                type: cmd
+                cmd: [/etc/kvmd/user/bin/kvm-switch, "8"]
+        scheme:
+            kvm_channel_1:
+                driver: kvm_channel_1
+                pin: 0
+                mode: output
+                switch: false
+            kvm_channel_2:
+                driver: kvm_channel_2
+                pin: 0
+                mode: output
+                switch: false
+            kvm_channel_3:
+                driver: kvm_channel_3
+                pin: 0
+                mode: output
+                switch: false
+            kvm_channel_4:
+                driver: kvm_channel_4
+                pin: 0
+                mode: output
+                switch: false
+            kvm_channel_5:
+                driver: kvm_channel_5
+                pin: 0
+                mode: output
+                switch: false
+            kvm_channel_6:
+                driver: kvm_channel_6
+                pin: 0
+                mode: output
+                switch: false
+            kvm_channel_7:
+                driver: kvm_channel_7
+                pin: 0
+                mode: output
+                switch: false
+            kvm_channel_8:
+                driver: kvm_channel_8
+                pin: 0
+                mode: output
+                switch: false
+        view:
+            header:
+                title: Hosts
+            table:
+                - ["kvm_channel_4|k8s-prod-1"]
+                - ["kvm_channel_5|k8s-prod-2"]
+                - ["kvm_channel_6|k8s-prod-3"]
