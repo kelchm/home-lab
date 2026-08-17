@@ -11,8 +11,9 @@ of truth and changes are applied manually.
 - `bgp-test.yaml` — disposable echo Service for the BGP migration synthetic
   test. Applied via `kubectl`, not Flux. See "Synthetic test" below.
 
-The "Firewall rules" section below documents intent for rules that are
-configured directly in UniFi UI (no exportable artifact lives in this repo).
+The "Firewall rules" and "IDS/IPS signature suppression" sections below document
+intent for configuration that lives only in the UniFi UI (no exportable artifact
+lives in this repo).
 
 ## Applying `frr.conf`
 
@@ -82,6 +83,28 @@ Main and revisit the per-pool firewall posture in
 Validate by running `curl --max-time 2 http://10.32.130.99/` from a device on
 each restricted VLAN — should time out or be refused. The synthetic test
 below exercises this as gate 4.
+
+## IDS/IPS signature suppression
+
+Threat Management runs in **Notify** mode, so a suppression costs alerting only. Suppressions are added from an alert's action menu (System Log → Security → open an event → `Suppress Signature`), not from `Detection Exclusions`, which takes an IP/network/subnet and can't reference a signature.
+
+| Signature | SID | Scope | Rationale |
+|---|---|---|---|
+| `ET SCAN Potential SSH Scan OUTBOUND` | 2003068 | Outgoing / Subnet `140.82.112.0/20` | Routine git-over-SSH trips the rule's 5-SYN-to-port-22-per-120s threshold — ~74 false positives/day, ~99% of Security log volume. |
+
+`140.82.112.0/20` is GitHub's published `git` range (`api.github.com/meta`), which also lists `192.30.252.0/22`, `185.199.108.0/22`, and `143.55.64.0/20` — add those as further Subnet rows if detections reappear. Scoping beats `Target: Any`, which would suppress the signature for every host and destination.
+
+Non-obvious behavior, confirmed by reading `ips_suppression` back from `GET .../rest/setting` after applying:
+
+- `Type: Subnet` accepts CIDR, so a netblock is one row rather than one per address.
+- `Traffic Direction` serializes to `src` / `dest` / `both` (Suricata `by_src` / `by_dst` / `by_either`). `Outgoing` writes `direction: "dest"` — not the `incoming`/`outgoing` enum region blocking uses.
+- `POST .../set/setting/ips_suppression` is a whole-object set; a hand-built POST that drops `whitelist` clobbers rather than merges. Prefer the UI.
+
+Verified 2026-08-16 on UniFi OS 5.1.26 / Network 10.5.67 — signature silenced, Intrusion Prevention still enabled. To re-check, cross the threshold from a host behind the gateway and confirm no new `Threat Detected` entry appears:
+
+```sh
+seq 6 | xargs -I{} ssh -T -o BatchMode=yes git@github.com
+```
 
 ## Synthetic test (`bgp-test.yaml`)
 
