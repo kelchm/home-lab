@@ -4,14 +4,26 @@ Recovery procedure for pods stuck running on Cilium-only after a Multus restart,
 
 ## Background
 
-`multus-cni` v4.2.4 thick mode deletes `/etc/cni/net.d/00-multus.conf` on SIGTERM (the [`monitorPluginConfiguration`](https://github.com/k8snetworkplumbingwg/multus-cni/blob/v4.2.4/pkg/server/config/manager.go) goroutine's deferred `os.Remove`). Upstream PR [#1338](https://github.com/k8snetworkplumbingwg/multus-cni/issues/1338) attempted graceful shutdown but was closed stale Dec 2024; only OpenShift carries a downstream fix. We work around it with the continuous reconciler in `cni-ready-untaint` (kube-system), which applies `node.multus.io/not-ready:NoSchedule` whenever the conf file is absent.
+`multus-cni` thick mode deletes `/etc/cni/net.d/00-multus.conf` on SIGTERM (the [`monitorPluginConfiguration`](https://github.com/k8snetworkplumbingwg/multus-cni/blob/v4.3.0/pkg/server/config/manager.go) goroutine's deferred `os.Remove`). Upstream PR [#1338](https://github.com/k8snetworkplumbingwg/multus-cni/issues/1338) attempted graceful shutdown but was closed stale Dec 2024; only OpenShift carries a downstream fix.
+
+Two mechanisms guard the resulting window:
+
+1. **Fail-closed config publication (primary).** Cilium writes its conflist to `/etc/cni/multus/net.d` (`cni.confPath`) rather than `/etc/cni/net.d`, and Multus reads it from there as its master CNI. Containerd's live CNI directory therefore contains *only* `00-multus.conf`. When Multus is down that directory is empty, containerd reports CNI uninitialized, and no sandbox is created at all — instead of one created on Cilium alone.
+2. **`cni-ready-untaint` (supplementary).** Applies `node.multus.io/not-ready:NoSchedule` whenever the conf is absent. This keeps the scheduler from piling pending pods onto a node whose CNI is down. It is a scheduling nicety, **not** a correctness mechanism — see below.
 
 ## When this runbook applies
 
-The reconciler is the primary defense — reacts within one polling interval (~1s plus apiserver round-trip), no human action needed. A pod can still end up Cilium-only if either:
+Under the fail-closed arrangement a pod should never reach Running while missing a Multus attachment; it should fail with `FailedCreatePodSandBox` instead. This runbook still applies if you find a Cilium-only pod, which now indicates one of:
 
-- It was admitted in the brief window between the conf disappearing and the reconciler tainting (very rare; the original 2026-05-07 incident was caused by *no* reconciler, not by a race within it)
-- The reconciler itself was unhealthy when Multus went down — check `kubectl -n kube-system get ds cni-ready-untaint` shows desired = current = ready on every node
+- The node predates the fail-closed cutover, or a stale `/etc/cni/net.d/05-cilium.conflist` was left behind by it (see the cutover runbook's cleanup step)
+- Something other than Cilium wrote a containerd-recognized config into `/etc/cni/net.d`
+- A stale `00-multus.conf` survived a crash — containerd sees a syntactically valid config, but `multus-shim` fails against the absent socket. Still fail-closed, though the node may report `Ready` inaccurately.
+
+### Why the taint alone was never sufficient
+
+`node.multus.io/not-ready` is a `NoSchedule` taint, which is a *scheduler* constraint. Pods already bound to a node via `.spec.nodeName` are not rescheduled after a reboot — kubelet simply calls `RunPodSandbox` for them again, with the scheduler uninvolved. A `NoSchedule` taint neither evicts them nor prevents kubelet from starting them.
+
+This is exactly what happened on 2026-08-16: all three nodes rebooted, Cilium's conflist was already on disk, Multus wrote `00-multus.conf` roughly a minute later, and every `longhorn-manager` pod was recreated in that window with `eth0` only. Their `network-status` annotations still described the pre-reboot `net1`, so nothing surfaced the failure, and the Longhorn NFS backup target sat unavailable for two days. The taint could not have prevented it regardless of health, which is why the fail-closed mechanism above exists.
 
 ## Symptom
 
@@ -32,6 +44,30 @@ kubectl -n longhorn-system get pod -o json | jq -r '
 ```
 
 Any pod where `status` is `"MISSING"` or doesn't contain the requested NAD name is broken.
+
+### The above query is not sufficient on its own
+
+When a sandbox is recreated without Multus, the `network-status` annotation is not cleared — it retains the values from the *previous* sandbox and keeps advertising an attachment that no longer exists. The query above then reports the pod as fine. This is how the 2026-08-16 breakage stayed invisible for two days.
+
+Multus writes that annotation only during a successful Multus ADD, so a sandbox created behind its back leaves it stale in every field, including the primary interface IP. Comparing that IP against the pod's live `status.podIP` is a reliable staleness check that needs no exec:
+
+```sh
+kubectl get pod -A -o json | jq -r '
+  .items[]
+  | select(.metadata.annotations["k8s.v1.cni.cncf.io/networks"])
+  | select(.metadata.annotations["k8s.v1.cni.cncf.io/network-status"])
+  | . as $p
+  | ($p.metadata.annotations["k8s.v1.cni.cncf.io/network-status"] | fromjson) as $ns
+  | ($ns[] | select(.default == true) | .ips[0]) as $annIP
+  | select($annIP != $p.status.podIP)
+  | "STALE \($p.metadata.namespace)/\($p.metadata.name) annotation=\($annIP) actual=\($p.status.podIP)"'
+```
+
+Any output means that pod's sandbox was created without Multus and its annotation is fiction. Confirm before acting — the interface is the ground truth:
+
+```sh
+kubectl -n <namespace> exec <pod> -- ip -br addr
+```
 
 ## Pre-recovery checks — do not skip
 
