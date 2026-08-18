@@ -92,8 +92,10 @@ All five planned commits landed. State at end-of-day:
   picked up by the sidecar.
 - KPS: Prometheus (49 healthy targets), Alertmanager, KSM, node-exporter
   ×3, prometheus-operator. ServiceMonitor selectors set cluster-wide so
-  cilium / longhorn / cert-manager / traefik / Loki / Alloy / VM
-  components are all being scraped.
+  cilium / cert-manager / traefik / Loki / Alloy / VM components are all
+  being scraped. (This entry originally listed Longhorn as well. It was
+  never scraped — the chart ships its ServiceMonitor disabled and it was
+  not enabled here until 2026-08-18. See #323.)
 - VM stack: VMSingle (67 targets — slightly more than Prom because
   vmagent also scrapes VMServiceScrapes and VL/VM internals), vmagent,
   vmalert (firing to KPS Alertmanager). VMAlertmanager disabled.
