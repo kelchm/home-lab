@@ -1,0 +1,39 @@
+---
+# Point Multus at its private source directory for the master CNI config, so
+# containerd's /etc/cni/net.d only ever holds 00-multus.conf. Combined with
+# Cilium's cni.confPath, this makes pod sandbox creation fail closed: when
+# Multus is down its config is absent, containerd reports CNI uninitialized,
+# and no sandbox is created at all. Previously a standalone Cilium conflist sat
+# alongside it, so a Multus outage produced pods missing their Multus
+# interfaces instead of no pods.
+#
+# multusAutoconfigDir and readinessindicatorfile are in-container paths. The
+# upstream thick DaemonSet mounts multus-conf-dir at the same path it uses on
+# the host, so no volume patch is required.
+#
+# multusMasterCNI is a bare filename joined onto multusAutoconfigDir, not a
+# path. Setting it explicitly avoids auto-discovery picking up any other file
+# that lands in that directory.
+#
+# readinessindicatorfile makes multus-daemon wait for the Cilium conflist
+# before generating its own, and exit if that file later disappears -- removing
+# 00-multus.conf on the way out so the fail-closed property holds.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: multus-daemon-config
+  namespace: kube-system
+data:
+  daemon-config.json: |
+    {
+        "chrootDir": "/hostroot",
+        "cniVersion": "0.3.1",
+        "logLevel": "verbose",
+        "logToStderr": true,
+        "cniConfigDir": "/host/etc/cni/net.d",
+        "multusAutoconfigDir": "/etc/cni/multus/net.d",
+        "multusMasterCNI": "05-cilium.conflist",
+        "readinessindicatorfile": "/etc/cni/multus/net.d/05-cilium.conflist",
+        "multusConfigFile": "auto",
+        "socketDir": "/host/run/multus/"
+    }

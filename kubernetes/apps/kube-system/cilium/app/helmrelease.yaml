@@ -17,6 +17,20 @@ spec:
     cni:
       # Required for pairing with Multus CNI
       exclusive: false
+      # Write the Cilium conflist into Multus's private source directory instead
+      # of containerd's live CNI directory, so 00-multus.conf is the only config
+      # containerd can ever load. Multus reads this path as its master CNI
+      # (multusAutoconfigDir) and republishes it into /etc/cni/net.d.
+      #
+      # Without this, /etc/cni/net.d holds a standalone-valid Cilium conflist,
+      # and any window where Multus has not yet written 00-multus.conf lets
+      # containerd create sandboxes with Cilium alone — pods that requested a
+      # Multus attachment come up silently missing it.
+      #
+      # This is the hostPath of the agent's etc-cni-netd volume (type
+      # DirectoryOrCreate), and matches the multus-conf-dir hostPath the
+      # upstream thick DaemonSet already mounts.
+      confPath: /etc/cni/multus/net.d
     cgroup:
       automount:
         enabled: false

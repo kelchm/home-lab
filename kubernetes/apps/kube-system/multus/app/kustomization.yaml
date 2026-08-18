@@ -29,3 +29,7 @@ patches:
     target:
       kind: DaemonSet
       name: kube-multus-ds
+  - path: ./patches/daemon-config.yaml
+    target:
+      kind: ConfigMap
+      name: multus-daemon-config
