@@ -1,0 +1,28 @@
+---
+# The chart's own longhorn-manager NetworkPolicy admits ingress only from other
+# Longhorn pods in this namespace, which also blocks the metrics port. Prometheus
+# and VMAgent run in observability, so without this every scrape of the
+# ServiceMonitor times out and no longhorn_* series are collected.
+#
+# NetworkPolicies are additive, so this grants the metrics port alongside the
+# chart's rules rather than replacing them. Scoped to port 9500 from the one
+# namespace that scrapes, so nothing else in the manager's surface is opened.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: longhorn-manager-metrics
+  namespace: longhorn-system
+spec:
+  podSelector:
+    matchLabels:
+      app: longhorn-manager
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+      ports:
+        - protocol: TCP
+          port: 9500

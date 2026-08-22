@@ -9,3 +9,4 @@ resources:
   - ./recurringjobs.yaml
   - ./backuptarget.yaml
   - ./alerts.yaml
+  - ./networkpolicy.yaml
