@@ -21,6 +21,19 @@ spec:
     annotations:
       k8s.v1.cni.cncf.io/networks: longhorn-system/storage-network
 
+    # Scrape longhorn-manager. The chart ships this disabled, so nothing was
+    # collecting longhorn_* series at all. Prometheus and VMAgent both select
+    # ServiceMonitors cluster-wide with empty selectors, and the VM operator
+    # converts ServiceMonitor -> VMServiceScrape automatically, so this one
+    # resource feeds both stacks without a separate VMServiceScrape.
+    #
+    # longhorn-manager binds its metrics listener to the pod IP rather than
+    # 0.0.0.0, so a ServiceMonitor (which targets endpoint pod IPs) reaches it
+    # while `kubectl port-forward` and localhost curls do not.
+    metrics:
+      serviceMonitor:
+        enabled: true
+
     # Disable the upgrade-checker job — incompatible with GitOps reconciliation
     # because it expects to run interactively and gates the chart's apply on
     # its own progress. Same reasoning the chart README gives for Argo CD users.

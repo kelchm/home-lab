@@ -1,0 +1,177 @@
+---
+# Longhorn is the failure domain behind every stateful workload here, so these
+# cover the three things that actually lose data or wake someone up: backups
+# silently stopping, replicas losing redundancy, and disks filling.
+#
+# Every expression below is written against metrics verified present on
+# longhorn-manager 1.12.1. Two label shapes are easy to get wrong:
+#   - longhorn_volume_robustness is NOT an enum value. It is one series per
+#     state (healthy/degraded/faulted/unknown) carrying 0 or 1, so these match
+#     on {state="..."} == 1 rather than comparing the value to an ordinal.
+#   - longhorn_volume_last_backup_at is a unix timestamp, and is 0 (not absent)
+#     for a volume that has never been backed up. The `> 0` guards keep a
+#     newly-created volume from reading as infinitely stale, and
+#     LonghornVolumeNeverBackedUp covers the zero case those guards skip.
+#
+# Volumes opted out of backups are subtracted via the longhorn:volume_backup_exempt
+# recording rule rather than matched by name, so opting a volume out is a PVC
+# label change and nothing here needs editing.
+#
+# The VM operator converts PrometheusRule -> VMRule automatically, so vmalert
+# evaluates these too without a duplicate resource.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: longhorn-storage
+spec:
+  groups:
+    - name: longhorn-backups
+      rules:
+        # Volumes opted out of backups carry
+        # recurring-job-group.longhorn.io/no-backup on their PVC, naming a group
+        # no RecurringJob claims. That label is not a Longhorn metric label, so
+        # it is read from kube-state-metrics and renamed to match Longhorn's
+        # pvc_namespace/pvc. Defined once here; the backup alerts below subtract
+        # it with `unless`. Requires kube-state-metrics metricLabelsAllowlist to
+        # include this label -- see the kube-prometheus-stack HelmRelease.
+        #
+        # Failure direction is deliberate: if kube-state-metrics is down this
+        # series empties, exempt volumes start alerting, and the result is a
+        # false positive rather than a silently suppressed one.
+        - record: longhorn:volume_backup_exempt
+          expr: |
+            label_replace(label_replace(
+              kube_persistentvolumeclaim_labels{label_recurring_job_group_longhorn_io_no_backup="enabled"},
+              "pvc_namespace", "$1", "namespace", "(.*)"),
+              "pvc", "$1", "persistentvolumeclaim", "(.*)")
+
+        # The 2026-08-16 failure: the NFS backup target went unreachable and
+        # every backup silently stopped for two days. One aggregate alert
+        # rather than one per volume, so a dead target is a single page
+        # instead of two dozen. backup-daily runs at 07:00, so 26h means a
+        # whole scheduled run was missed.
+        - alert: LonghornBackupsStalled
+          expr: time() - max(longhorn_volume_last_backup_at > 0) > 26 * 3600
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: No Longhorn volume has been backed up in over 26 hours
+            description: The most recent backup across all volumes is more than 26 hours old, so at least one scheduled daily run did not complete. Check BackupTarget/default is available and that longhorn-manager can reach the NFS target.
+
+        # Catches a single volume failing while the rest succeed, which the
+        # aggregate above cannot see. Deliberately looser than 26h so a
+        # cluster-wide outage fires LonghornBackupsStalled first.
+        - alert: LonghornVolumeBackupStale
+          expr: |
+            time() - (longhorn_volume_last_backup_at > 0) > 30 * 3600
+            unless on (pvc_namespace, pvc) longhorn:volume_backup_exempt
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: Longhorn volume {{ $labels.pvc_namespace }}/{{ $labels.pvc }} has a stale backup
+            description: Volume {{ $labels.volume }} ({{ $labels.pvc_namespace }}/{{ $labels.pvc }}) has not completed a backup in over 30 hours while other volumes have.
+
+        # longhorn_volume_last_backup_at is 0 for a volume that has never
+        # completed a backup, so the `> 0` guards above deliberately skip those
+        # -- otherwise a freshly-created volume reads as infinitely stale. That
+        # leaves the case this rule covers: backups that never succeeded even
+        # once, which is the same failure the rules above exist to catch.
+        #
+        # `for` supplies the grace period rather than a volume-age join: a new
+        # volume sits pending until it has read 0 for 30h continuously, and a
+        # first successful backup makes the series non-zero and resets it.
+        - alert: LonghornVolumeNeverBackedUp
+          expr: |
+            longhorn_volume_last_backup_at == 0
+            unless on (pvc_namespace, pvc) longhorn:volume_backup_exempt
+          for: 30h
+          labels:
+            severity: warning
+          annotations:
+            summary: Longhorn volume {{ $labels.pvc_namespace }}/{{ $labels.pvc }} has never completed a backup
+            description: Volume {{ $labels.volume }} ({{ $labels.pvc_namespace }}/{{ $labels.pvc }}) has reported no successful backup for over 30 hours, so backups were never configured for it or every attempt has failed.
+
+    - name: longhorn-volume-health
+      rules:
+        # Faulted means no usable replica -- the volume is down, not just
+        # thin. Short `for` because there is no benign transient version.
+        - alert: LonghornVolumeFaulted
+          expr: longhorn_volume_robustness{state="faulted"} == 1
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: Longhorn volume {{ $labels.pvc_namespace }}/{{ $labels.pvc }} is faulted
+            description: Volume {{ $labels.volume }} ({{ $labels.pvc_namespace }}/{{ $labels.pvc }}) has no healthy replica and is unusable.
+
+        # Degraded is normal during a rebuild or a node reboot, so this waits
+        # long enough that routine rebuilds finish without alerting. A volume
+        # still degraded after 20m is not rebuilding, it is stuck.
+        - alert: LonghornVolumeDegraded
+          expr: longhorn_volume_robustness{state="degraded"} == 1
+          for: 20m
+          labels:
+            severity: warning
+          annotations:
+            summary: Longhorn volume {{ $labels.pvc_namespace }}/{{ $labels.pvc }} has been degraded for 20m
+            description: Volume {{ $labels.volume }} ({{ $labels.pvc_namespace }}/{{ $labels.pvc }}) is running with reduced replica redundancy and has not finished rebuilding.
+
+        - alert: LonghornNodeNotReady
+          expr: longhorn_node_status{condition="ready"} == 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: Longhorn node {{ $labels.node }} is not ready
+            description: Longhorn reports node {{ $labels.node }} as not ready, so its replicas are unavailable and rebuilds may be blocked.
+
+    - name: longhorn-capacity
+      rules:
+        # Longhorn stops scheduling new replicas well before a disk is full
+        # (storageMinimalAvailablePercentage is 15), so these thresholds are
+        # about losing rebuild headroom rather than ENOSPC.
+        - alert: LonghornDiskSpaceLow
+          expr: |
+            longhorn_disk_usage_bytes / (longhorn_disk_capacity_bytes > 0) > 0.80
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: Longhorn disk {{ $labels.disk }} on {{ $labels.node }} is over 80% used
+            description: Disk {{ $labels.disk }} on node {{ $labels.node }} is above 80% usage. Rebuild headroom is shrinking; Longhorn stops scheduling replicas at 85% used.
+
+        - alert: LonghornDiskSpaceCritical
+          expr: |
+            longhorn_disk_usage_bytes / (longhorn_disk_capacity_bytes > 0) > 0.90
+          for: 10m
+          labels:
+            severity: critical
+          annotations:
+            summary: Longhorn disk {{ $labels.disk }} on {{ $labels.node }} is over 90% used
+            description: Disk {{ $labels.disk }} on node {{ $labels.node }} is above 90% usage. Longhorn can no longer schedule replicas here and rebuilds onto this node will fail.
+
+        - alert: LonghornDiskNotSchedulable
+          expr: longhorn_disk_status{condition="schedulable"} == 0
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: Longhorn disk {{ $labels.disk }} on {{ $labels.node }} is not schedulable
+            description: Disk {{ $labels.disk }} on node {{ $labels.node }} cannot accept new replicas. Usually capacity pressure or a failed disk condition.
+
+    - name: longhorn-monitoring-coverage
+      rules:
+        # The meta-alert. Longhorn shipped its ServiceMonitor disabled, so
+        # this cluster ran with zero longhorn_* series and every rule above
+        # would have been silently vacuous. If the scrape breaks again the
+        # absence of data must itself be the signal.
+        - alert: LonghornMetricsMissing
+          expr: absent(longhorn_volume_robustness)
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: No Longhorn metrics are being scraped
+            description: longhorn_volume_robustness has been absent for 15 minutes, so every Longhorn alert is evaluating against no data. Check the longhorn-manager ServiceMonitor and its scrape targets.

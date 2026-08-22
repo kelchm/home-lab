@@ -95,5 +95,13 @@ spec:
     kubeStateMetrics:
       enabled: true
 
+    # Sub-chart values; `kubeStateMetrics` above only toggles the dependency.
+    kube-state-metrics:
+      # KSM exports no resource labels by default. Surface Longhorn's backup
+      # opt-out label so the storage alert rules can read the exemption off the
+      # PVC rather than matching volumes by name.
+      metricLabelsAllowlist:
+        - persistentvolumeclaims=[recurring-job-group.longhorn.io/no-backup]
+
     prometheusOperator:
       enabled: true
