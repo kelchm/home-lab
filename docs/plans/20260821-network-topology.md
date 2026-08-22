@@ -21,6 +21,11 @@ initial `192.168.100/101.0/31` rails overlapped the gateway's existing
 Starlink-management meaning for `192.168.100.1`. On 2026-08-22 the Sparks were
 readdressed onto the isolated `/24` rails documented below, then revalidated.
 
+The Spark LAN addresses likewise moved on 2026-08-22 from `10.32.21.11/.12` to
+`10.32.21.31/.32`, adopting the system-identity octets that mirror their storage
+legs. Storage addresses were unchanged; routes, the fabric guard, and NCCL were
+revalidated after the move.
+
 ## Decision summary
 
 - Add exactly one VLAN: **21 — Workloads** (`10.32.21.0/24`) for LAN-serving servers that aren't part of a more specific plane: the two DGX Sparks and general-purpose PVE guests.
@@ -67,18 +72,18 @@ VLAN names drop the "Lab" prefix; it no longer distinguishes anything: 20 **Infr
 |---|---|
 | `.1` | UniFi gateway (`gateway-workloads.home.kelch.io`) |
 | `.2-.10` | Network/service anchors (reserved) |
-| `.11` | `spark-1.home.kelch.io` (10 GbE, native) |
-| `.12` | `spark-2.home.kelch.io` |
-| `.13-.19` | Future physical workload hosts |
-| `.20-.49` | Fixed platform guests (e.g. `.21` Home Assistant VM, `ha.home.kelch.io`) |
-| `.50-.99` | Fixed application guests (OpenTofu/cloud-init static) |
-| `.100-.199` | Long-lived DHCP reservations |
+| `.31` | `spark-1.home.kelch.io` (10 GbE, native) |
+| `.32` | `spark-2.home.kelch.io` |
+| `.33-.39` | Future workload hosts and storage-attached guests (system 3) |
+| `.11-.29`, `.41-.99` | Unallocated identity octets — other systems' decades; PVE hosts trunk this VLAN but hold no address |
+| `.100-.149` | Fixed platform/application guests (OpenTofu/cloud-init static; e.g. `.101` Home Assistant VM, `ha.home.kelch.io`) |
+| `.150-.199` | Long-lived DHCP reservations |
 | `.200-.239` | Dynamic DHCP |
 | `.240-.254` | Reserved |
 
 ### VLAN 25 — Storage additions
 
-Convention change: storage decades allocate **per system in commissioning order**, not by Kubernetes cluster index — `.1X` k8s-prod, `.2X` pve-lab, `.3X` workload hosts, `.4X` next system.
+Storage decades allocate **per registered system in commissioning order** — `.1X` k8s-prod, `.2X` pve-lab, `.3X` workload hosts, `.4X` second Kubernetes cluster — and each member keeps one final octet across every VLAN it touches. The registry and mirror rule are canonical in [architecture.md](../architecture.md#storage-vlan-registry).
 
 | Address | DNS | Use |
 |---|---|---|
@@ -129,8 +134,8 @@ One UniFi zone per VLAN — never merge two VLANs into a zone, since intra-zone 
 | Main (rest) | deny | deny | deny | service ports only | deny | allow | mDNS repeater only | deny | allow |
 | Mgmt 20 | — | allow (NAS backup paths) | deny | deny | deny | deny | deny | deny | DNS/NTP/HTTPS |
 | Storage 25 | deny | L2 enclave; deny all routed | deny | deny | deny | deny | deny | deny | deny |
-| K8s 30 (node IPs) | deny | (L2, not routed) | — | explicit inference ports on `.21.11-.12`; else deny | — | — | deny | deny | allow |
-| Workloads 21 | deny | deny routed (Sparks use the L2 leg; guest NFS by per-IP exception) | deny | intra-zone open (accepted) | deny | allow | HA VM `.21.21` → allow; else deny | deny | allow |
+| K8s 30 (node IPs) | deny | (L2, not routed) | — | explicit inference ports on `.21.31-.32`; else deny | — | — | deny | deny | allow |
+| Workloads 21 | deny | deny routed (Sparks use the L2 leg; guest NFS by per-IP exception) | deny | intra-zone open (accepted) | deny | allow | HA VM `.21.101` → allow; else deny | deny | allow |
 | IoT / Guest / Cameras | deny | deny | deny | deny | deny | deny | — | — | Guest/IoT allow; Cameras deny |
 | WAN | deny | deny | deny | deny | deny | deny | deny | deny | — |
 
@@ -162,7 +167,7 @@ Create the network, DHCP scope (`.200-.239`), zones, and the full matrix above �
 Execution state, exact host configuration, benchmarks, and remaining gates are
 tracked in the [DGX Spark bring-up runbook](../runbooks/dgx-spark-bringup.md).
 
-1. Connect each Spark's 10 GbE to the aggregation switch on `spark-trunk`; static `10.32.21.11/.12` plus storage legs `10.32.25.31/.32`.
+1. Connect each Spark's 10 GbE to the aggregation switch on `spark-trunk`; static `10.32.21.31/.32` plus storage legs `10.32.25.31/.32`.
 2. Disable EEE on the RTL8127 ports preemptively ([known instability report](https://forums.developer.nvidia.com/t/defective-onboard-rtl8127-nic-on-dgx-spark/378356)).
 3. Scope the Synology NFS exports the Sparks need to `.25.31-.32`.
 4. Cable the QSFP DAC using the same port number on both ends ([NVIDIA clustering guide](https://docs.nvidia.com/dgx/dgx-spark/spark-clustering.html), [connect-two-sparks playbook](https://github.com/NVIDIA/dgx-spark-playbooks/blob/main/nvidia/connect-two-sparks/README.md)); address both `/24` rails; MTU 9000; `NCCL_SOCKET_IFNAME=<10GbE>`.
@@ -177,7 +182,7 @@ Follow the [PVE cluster plan (PR #373)](https://github.com/kelchm/home-lab/pull/
 
 ### Phase 5 — deferred: second Kubernetes cluster
 
-Fills VLAN 31, pools `131/141`, ASN 65021, storage `.41-.43` (+`.144/28` if Longhorn) exactly as reserved. As PVE VMs: one Talos VM per host, vNIC 0 tagged 31, vNIC 1 tagged 25, VIP `10.32.31.8` via vipController, new pod/service CIDRs (e.g. `10.44.0.0/16`/`10.45.0.0/16`), no PVE HA on node VMs, per-vNIC PVE MAC/IP filtering off (GARP VIP), deterministic MACs in OpenTofu. The same cluster can later migrate VM-by-VM to bare metal without touching any address, BGP session, or firewall rule.
+Fills VLAN 31, pools `131/141`, ASN 65021, storage `.41-.43` (+`.144/28` if Longhorn) exactly as reserved. As PVE VMs: one Talos VM per host, vNIC 0 tagged 31 (nodes `10.32.31.41-.43`), vNIC 1 tagged 25 (`10.32.25.41-.43`), VIP `10.32.31.8` via vipController, new pod/service CIDRs (e.g. `10.44.0.0/16`/`10.45.0.0/16`), no PVE HA on node VMs, per-vNIC PVE MAC/IP filtering off (GARP VIP), deterministic MACs in OpenTofu. The same cluster can later migrate VM-by-VM to bare metal without touching any address, BGP session, or firewall rule.
 
 ## Repo-alignment checklist
 

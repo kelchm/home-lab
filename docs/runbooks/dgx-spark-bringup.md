@@ -32,7 +32,7 @@ explicitly under [Remaining work](#remaining-work).
 | KVM input | 7 | 8 |
 | Core Aggregation port | 7 | 8 |
 | RTL8127 interface | `enP7s7` | `enP7s7` |
-| Workloads address | `10.32.21.11/24` | `10.32.21.12/24` |
+| Workloads address | `10.32.21.31/24` | `10.32.21.32/24` |
 | Default gateway | `10.32.21.1` | `10.32.21.1` |
 | Storage interface | `enP7s7.25` | `enP7s7.25` |
 | Storage address | `10.32.25.31/24` | `10.32.25.32/24` |
@@ -122,7 +122,7 @@ must yield these properties:
 
 | Profile | Interface | IPv4 | Gateway | MTU | Other requirements |
 |---|---|---|---|---|---|
-| `spark-lan` | `enP7s7` | host-specific `10.32.21.11/.12/24` | `10.32.21.1` | 1500 | DNS `10.32.21.1`; IPv6 disabled; EEE disabled |
+| `spark-lan` | `enP7s7` | host-specific `10.32.21.31/.32/24` | `10.32.21.1` | 1500 | DNS `10.32.21.1`; IPv6 disabled; EEE disabled |
 | `spark-storage` | `enP7s7.25` (VLAN 25 on `enP7s7`) | host-specific `10.32.25.31/.32/24` | none | 1500 | `ipv4.never-default yes`; IPv6 disabled |
 | `cx7-fabric-a` | `enp1s0f0np0` | host-specific `198.19.240.11/.12/24` | none | 9000 | `ipv4.never-default yes`; IPv6, mDNS, and LLMNR disabled |
 | `cx7-fabric-b` | `enP2p1s0f0np0` | host-specific `198.19.241.11/.12/24` | none | 9000 | `ipv4.never-default yes`; IPv6, mDNS, and LLMNR disabled |
@@ -308,7 +308,7 @@ export NCCL_IB_MERGE_NICS=1
 export NCCL_CROSS_NIC=1
 export NCCL_IB_GID_INDEX=3
 
-mpirun -np 2 -H 10.32.21.11:1,10.32.21.12:1 \
+mpirun -np 2 -H 10.32.21.31:1,10.32.21.32:1 \
   -x LD_LIBRARY_PATH -x UCX_NET_DEVICES -x NCCL_SOCKET_IFNAME \
   -x OMPI_MCA_btl_tcp_if_include -x NCCL_IB_HCA \
   -x NCCL_IB_MERGE_NICS -x NCCL_CROSS_NIC -x NCCL_IB_GID_INDEX \
@@ -377,7 +377,9 @@ Do not mark this runbook complete until these are resolved:
 - [ ] Remove `/etc/sudoers.d/99-dgx-bringup` from both Sparks and verify
       `sudo -n true` fails before declaring the commissioning session closed.
 - [ ] Remove obsolete DHCP-address entries for these hosts from the operator's
-      local `known_hosts` after confirming the static identities.
+      local `known_hosts` after confirming the static identities. The superseded
+      static entries for `10.32.21.11/.12` are already removed on the Sparks and
+      the operator machine.
 
 ## Rollback
 
