@@ -18,6 +18,19 @@ spec:
   interval: 1h
   values:
     fullnameOverride: traefik-admin
+
+    # OIDC RP plugin loaded via yaegi. Traefik downloads plugins once during
+    # process startup and does not retry a failed install; it keeps serving
+    # without the plugin, which drops every Middleware-protected router. Pin
+    # via Renovate, never auto-merge bumps. The anchor keeps the init-container
+    # availability check on exactly the same release as Traefik loads.
+    experimental:
+      plugins:
+        traefik-oidc-auth:
+          moduleName: github.com/sevensolutions/traefik-oidc-auth
+          # renovate: datasource=github-releases depName=sevensolutions/traefik-oidc-auth
+          version: &oidcPluginVersion v0.21.0
+
     deployment:
       replicas: 2
       # Restart the Deployment when kaniop rotates either OAuth2 client_secret
@@ -25,6 +38,44 @@ spec:
       # Secret doesn't propagate to running pods otherwise.
       annotations:
         secret.reloader.stakater.com/reload: arr-suite-kanidm-oauth2-credentials,ops-suite-kanidm-oauth2-credentials,traefik-oidc-session-key
+      # Existing pods restart concurrently with CoreDNS after a cold boot, so
+      # Flux dependsOn cannot order this runtime dependency. Block each Traefik
+      # process until the exact plugin artifact is downloadable; this gates on
+      # pod DNS, Service routing, external connectivity, and the plugin host.
+      # The loop deliberately fails closed instead of starting an admin gateway
+      # that silently omits every OIDC-protected route.
+      initContainers:
+        - name: wait-for-oidc-plugin
+          image: mirror.gcr.io/curlimages/curl:8.16.0
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              plugin_url="https://plugins.traefik.io/public/download/github.com/sevensolutions/traefik-oidc-auth/$(OIDC_PLUGIN_VERSION)"
+              echo "Waiting for $plugin_url"
+              until curl --fail --silent --show-error --location \
+                --connect-timeout 5 --max-time 20 \
+                --output /dev/null "$plugin_url"; do
+                echo "OIDC plugin artifact is not reachable; retrying in 5 seconds"
+                sleep 5
+              done
+              echo "OIDC plugin artifact is reachable"
+          env:
+            - name: OIDC_PLUGIN_VERSION
+              value: *oidcPluginVersion
+          resources:
+            requests:
+              cpu: 1m
+              memory: 8Mi
+            limits:
+              memory: 32Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
     providers:
       kubernetesGateway:
         enabled: true
@@ -78,16 +129,6 @@ spec:
       level: INFO
     accessLog:
       enabled: true
-
-    # OIDC RP plugin loaded via yaegi. The kanidm-oidc Middleware references
-    # this plugin name. Plugin failure mode: load error fails traefik-admin
-    # startup — pin via Renovate, never auto-merge bumps.
-    experimental:
-      plugins:
-        traefik-oidc-auth:
-          moduleName: github.com/sevensolutions/traefik-oidc-auth
-          # renovate: datasource=github-releases depName=sevensolutions/traefik-oidc-auth
-          version: v0.21.0
 
     # CLIENT_SECRET keys from the kaniop-emitted Secrets, one per OIDC
     # client. Env-var names are namespaced so additional clients can be
