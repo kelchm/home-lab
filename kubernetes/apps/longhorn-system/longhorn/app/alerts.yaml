@@ -13,6 +13,10 @@
 #     newly-created volume from reading as infinitely stale, and
 #     LonghornVolumeNeverBackedUp covers the zero case those guards skip.
 #
+# Volumes opted out of backups are subtracted via the longhorn:volume_backup_exempt
+# recording rule rather than matched by name, so opting a volume out is a PVC
+# label change and nothing here needs editing.
+#
 # The VM operator converts PrometheusRule -> VMRule automatically, so vmalert
 # evaluates these too without a duplicate resource.
 apiVersion: monitoring.coreos.com/v1
@@ -23,6 +27,24 @@ spec:
   groups:
     - name: longhorn-backups
       rules:
+        # Volumes opted out of backups carry
+        # recurring-job-group.longhorn.io/no-backup on their PVC, naming a group
+        # no RecurringJob claims. That label is not a Longhorn metric label, so
+        # it is read from kube-state-metrics and renamed to match Longhorn's
+        # pvc_namespace/pvc. Defined once here; the backup alerts below subtract
+        # it with `unless`. Requires kube-state-metrics metricLabelsAllowlist to
+        # include this label -- see the kube-prometheus-stack HelmRelease.
+        #
+        # Failure direction is deliberate: if kube-state-metrics is down this
+        # series empties, exempt volumes start alerting, and the result is a
+        # false positive rather than a silently suppressed one.
+        - record: longhorn:volume_backup_exempt
+          expr: |
+            label_replace(label_replace(
+              kube_persistentvolumeclaim_labels{label_recurring_job_group_longhorn_io_no_backup="enabled"},
+              "pvc_namespace", "$1", "namespace", "(.*)"),
+              "pvc", "$1", "persistentvolumeclaim", "(.*)")
+
         # The 2026-08-16 failure: the NFS backup target went unreachable and
         # every backup silently stopped for two days. One aggregate alert
         # rather than one per volume, so a dead target is a single page
@@ -40,15 +62,10 @@ spec:
         # Catches a single volume failing while the rest succeed, which the
         # aggregate above cannot see. Deliberately looser than 26h so a
         # cluster-wide outage fires LonghornBackupsStalled first.
-        #
-        # lemon-manuals-mcp is opted out of backups via the
-        # recurring-job-group.longhorn.io/no-backup label on its Volume, and
-        # its last_backup_at therefore ages forever. That label is the source
-        # of truth but is not exposed as a metric label, so the exemption has
-        # to be repeated here -- revisit if more volumes get opted out.
         - alert: LonghornVolumeBackupStale
           expr: |
-            time() - (longhorn_volume_last_backup_at{pvc!="lemon-manuals-mcp"} > 0) > 30 * 3600
+            time() - (longhorn_volume_last_backup_at > 0) > 30 * 3600
+            unless on (pvc_namespace, pvc) longhorn:volume_backup_exempt
           for: 15m
           labels:
             severity: warning
@@ -62,20 +79,19 @@ spec:
         # leaves the case this rule covers: backups that never succeeded even
         # once, which is the same failure the rules above exist to catch.
         #
-        # `for` supplies the grace period. A new volume sits pending until it
-        # has been at 0 for 30h continuously; a first successful backup makes
-        # the series non-zero and resets it. Longhorn exposes no volume-creation
-        # metric, so the alternative was joining kube_persistentvolumeclaim_created
-        # from kube-state-metrics -- same coverage, but it couples this rule to
-        # another exporter, and a KSM outage would silently mute it.
+        # `for` supplies the grace period rather than a volume-age join: a new
+        # volume sits pending until it has read 0 for 30h continuously, and a
+        # first successful backup makes the series non-zero and resets it.
         - alert: LonghornVolumeNeverBackedUp
-          expr: longhorn_volume_last_backup_at{pvc!="lemon-manuals-mcp"} == 0
+          expr: |
+            longhorn_volume_last_backup_at == 0
+            unless on (pvc_namespace, pvc) longhorn:volume_backup_exempt
           for: 30h
           labels:
             severity: warning
           annotations:
             summary: Longhorn volume {{ $labels.pvc_namespace }}/{{ $labels.pvc }} has never completed a backup
-            description: Volume {{ $labels.volume }} ({{ $labels.pvc_namespace }}/{{ $labels.pvc }}) has had no successful backup since it was created over 30 hours ago, so backups were never configured for it or every attempt has failed.
+            description: Volume {{ $labels.volume }} ({{ $labels.pvc_namespace }}/{{ $labels.pvc }}) has reported no successful backup for over 30 hours, so backups were never configured for it or every attempt has failed.
 
     - name: longhorn-volume-health
       rules:
