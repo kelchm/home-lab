@@ -151,13 +151,15 @@ Both `/etc/hosts` files contain only these fabric-local names:
 
 Do not publish these names in DNS.
 
-### Anti-transit guard
+### Forwarding guard
 
 Docker enables global IPv4 forwarding and resets per-interface forwarding
 sysctls during boot. A per-interface sysctl therefore did not survive a reboot
 and was removed. A dedicated nftables hook now drops any forwarded packet that
 enters or leaves a fabric interface before Docker's forwarding rules can accept
-it.
+it. This blocks ordinary bridge-networked containers from using the fabric as
+an application path. It does not block traffic originating on the host,
+host-network containers, or a workload deliberately given fabric/RDMA access.
 
 `/etc/dgx-fabric-isolation.nft` on both hosts:
 
@@ -175,9 +177,8 @@ table inet dgx_fabric_guard {
 
 ```ini
 [Unit]
-Description=Keep the DGX point-to-point fabric non-routed
-Requires=docker.service
-After=network-online.target docker.service
+Description=Block forwarded traffic to and from the DGX fabric
+Before=docker.service
 
 [Service]
 Type=oneshot
@@ -190,11 +191,32 @@ ExecStop=-/usr/sbin/nft delete table inet dgx_fabric_guard
 WantedBy=multi-user.target
 ```
 
+`/etc/systemd/system/docker.service.d/dgx-fabric-guard.conf`:
+
+```ini
+[Unit]
+Requires=dgx-fabric-isolation.service
+After=dgx-fabric-isolation.service
+```
+
+The dependency deliberately points from Docker to the guard. Docker cannot
+start unless the guard loads, while an explicit Docker restart leaves the
+guard running and its nftables table continuously installed. Stopping or
+restarting the guard stops Docker first, so bridge workloads cannot use the
+rule-replacement window. Do not reverse this dependency: making the guard
+require Docker propagates Docker restarts into the guard and deletes the table
+through `ExecStop`.
+
+The stock `nftables.service` remains disabled. Its default configuration starts
+with `flush ruleset`, which would erase Docker-managed firewall state if the
+service were restarted after Docker.
+
 Validate both persistence and behavior:
 
 ```sh
 systemctl is-enabled dgx-fabric-isolation.service
 systemctl is-active dgx-fabric-isolation.service
+systemctl show docker.service -p Requires -p After
 sudo nft list table inet dgx_fabric_guard
 ```
 
@@ -202,6 +224,16 @@ The live negative test temporarily routed `10.32.21.1/32` from Spark 1 through
 Spark 2 on fabric A. All three probes were dropped; the Spark 2 guard counter
 increased by exactly three packets, and the temporary route was removed. This
 test passed again after the 2026-08-22 readdress and sequential reboot.
+
+A Docker bridge-container A/B test then proved why the guard is needed. From
+Spark 1 to Spark 2 fabric A, the guarded attempt received 0/3 replies, the same
+container received 3/3 replies while the guard was briefly stopped, and a
+post-restore attempt received 0/2 replies. After inverting the systemd
+dependency, sequential Docker restarts on Spark 1 and Spark 2 left the guard
+invocation IDs unchanged. Polling observed the table present for all 67 and 64
+samples respectively, `nft monitor` recorded no guard-table event, and a final
+bridge-container attempt on each host received 0/3 replies. Temporary test
+containers and images were removed.
 
 ## Firmware and software
 
@@ -242,7 +274,7 @@ NCCL_HOME="$NCCL_HOME" MPI_HOME="$MPI_HOME" \
 ## Validation record
 
 Initial bring-up results are from 2026-08-21. Fabric readdress, RDMA/NCCL,
-anti-transit, and reboot-persistence results are from 2026-08-22.
+forwarding-guard, and reboot-persistence results are from 2026-08-22.
 
 | Gate | Result | Status |
 |---|---|---|
@@ -252,7 +284,8 @@ anti-transit, and reboot-persistence results are from 2026-08-22.
 | Raw RDMA, concurrent rails | 98.04 Gb/s per rail; 196.08 Gb/s aggregate before and after readdress | Pass |
 | NCCL all-gather, 16 GiB, warmed | Initial 23.82 GB/s average; post-readdress 24.05 GB/s average; zero wrong values | Pass |
 | Routed Spark to Main client | 1.09 Gb/s to Wi-Fi MBP `10.32.10.244` | Healthy end-to-end baseline |
-| Fabric transit | Three attempted forwarded packets, three nftables drops, zero replies | Pass |
+| Fabric transit | Routed negative test dropped 3/3 packets; bridge-container A/B passed only with the guard absent | Pass; guard closes a proven Docker forwarding path |
+| Guard across Docker restart | Unchanged guard invocation IDs; table present in 67/67 and 64/64 samples; no guard-table nft events | Pass |
 | Reboot persistence | All four profiles, EEE-off, jumbo reachability, and nftables guard returned | Pass |
 | Spark to NAS iperf3 + one-hop trace | Not run; DSM work deferred | Open |
 | RTL8127 10-minute full-duplex burn | Standard `rx_errors`, `rx_missed`, and `rx_mac_error` remained zero on both hosts | Pass; vendor counter monitored |
@@ -388,8 +421,10 @@ Rollback is host-by-host so KVM remains available throughout:
 1. Disable the affected aggregation switch port.
 2. Use KVM to restore NetworkManager profiles and `/etc/hosts` from
    `/root/dgx-bringup-backup`.
-3. Disable `dgx-fabric-isolation.service`; remove its nftables table only after
-   the fabric profiles are down.
+3. Stop Docker, remove
+   `/etc/systemd/system/docker.service.d/dgx-fabric-guard.conf`, and reload
+   systemd before disabling `dgx-fabric-isolation.service`; remove its nftables
+   table only after the fabric profiles are down.
 4. Remove the cluster public keys from `authorized_keys` if the pair is being
    separated. Never copy a private key between hosts.
 5. Reboot, verify console access, then re-enable only the required LAN port.
