@@ -63,7 +63,7 @@ PVE itself has a pull-based GitOps reconciler.
 | Memory | 32 GB per node |
 | Local disk | Expected 1 TB WD_BLACK SN770 NVMe per node; verify each host before install |
 | Management NIC | Onboard 1 GbE; controller and PCI address to inventory per host |
-| Storage/migration NIC | PCIe Realtek RTL8125 2.5 GbE; exact PCI address and interface name to inventory per host |
+| Storage/guest-trunk NIC | PCIe Realtek RTL8125 2.5 GbE; exact PCI address and interface name to inventory per host |
 | PVE release | Current stable 9.x; 9.2 is the planning baseline |
 | Root storage | Installer-default ext4 root and LVM-thin guest storage ID `local-lvm` |
 | Shared system | Synology DS1821+ on `10.32.25.5` |
@@ -89,13 +89,17 @@ and avoid session or console routing ambiguity.
 |---|---|---|
 | `10.32.20.1` | `gateway-infra.home.kelch.io` | UniFi gateway |
 | `10.32.20.5` | `nas.home.kelch.io` | Synology management |
+| `10.32.20.7` | `pbs.home.kelch.io` | Reserved for an independent future PBS appliance; octet matches `pbs-storage` |
 | `10.32.20.10` | `pdm.home.kelch.io` | Reserved; PDM is not initially deployed |
-| `10.32.20.11` | `pve-lab-1.home.kelch.io` | PVE UI/API, SSH, Corosync link 0 |
-| `10.32.20.12` | `pve-lab-2.home.kelch.io` | PVE UI/API, SSH, Corosync link 0 |
-| `10.32.20.13` | `pve-lab-3.home.kelch.io` | PVE UI/API, SSH, Corosync link 0 |
-| `10.32.20.14-.19` | — | Future PVE nodes; leave unallocated |
 | `10.32.20.20` | `pikvm.home.kelch.io` | Reserved for the planned PiKVM |
-| `10.32.20.25` | `pbs.home.kelch.io` | Reserved for an independent future PBS appliance |
+| `10.32.20.21` | `pve-lab-1.home.kelch.io` | PVE UI/API, SSH, Corosync link 0 |
+| `10.32.20.22` | `pve-lab-2.home.kelch.io` | PVE UI/API, SSH, Corosync link 0 |
+| `10.32.20.23` | `pve-lab-3.home.kelch.io` | PVE UI/API, SSH, Corosync link 0 |
+| `10.32.20.24-.29` | — | Future PVE nodes; leave unallocated |
+
+Host octets `.21-.23` match the storage addresses below per the system identity
+rule in [architecture.md](../architecture.md#system-identity-rule): one final
+octet per member on every VLAN it touches.
 
 The PVE addresses are configured statically on the hosts. Matching UniFi fixed
 assignments may document the MAC-to-IP relation, but DHCP is not authoritative
@@ -126,26 +130,18 @@ normal operation. VLAN 25 is not the primary because concurrent migration,
 shared-storage, and backup traffic can introduce latency and jitter that affects
 quorum traffic.
 
-### Guest network — VLAN 31, `10.32.31.0/24`
+### Guest network — VLAN 21, `10.32.21.0/24`
 
-Use the existing VLAN 31 reservation for `Lab Virtualization`, replacing the
-previously proposed `Lab Sandbox` role. It is a routed guest network, not a PVE
-management network or Kubernetes compute network.
-
-| Range | Allocation |
-|---|---|
-| `10.32.31.1` | UniFi gateway |
-| `10.32.31.2-.9` | Reserved network/service anchors |
-| `10.32.31.10-.29` | Fixed platform and infrastructure guests |
-| `10.32.31.30-.99` | Fixed application/service guests |
-| `10.32.31.100-.199` | Long-lived DHCP reservations |
-| `10.32.31.200-.239` | Dynamic DHCP for disposable guests |
-| `10.32.31.240-.254` | Reserved for tests and future conventions |
-
-OpenTofu-managed, long-lived guests normally get a fixed address from
-`.10-.99` through cloud-init. Interactive test VMs use DHCP. There is no `.8`
-VIP on this VLAN; the `.8 = Kubernetes API` mnemonic applies only to a
-Kubernetes compute VLAN.
+Guests attach to the shared Workloads VLAN. VLAN 31 stays reserved for a
+second Kubernetes cluster; hosting guests is not a Kubernetes compute role.
+Allocations follow the Workloads table in the
+[network-topology plan](20260821-network-topology.md): OpenTofu-managed,
+long-lived guests get a fixed address from `.100-.149` through cloud-init;
+interactive test VMs use dynamic DHCP (`.200-.239`). A guest that needs a
+direct storage leg registers as a workload-system member and takes matching
+`10.32.21.3X`/`10.32.25.3X` octets. Guests never inherit a PVE host identity,
+and PVE hosts hold no address on VLAN 21. There is no `.8` VIP on this VLAN;
+the `.8 = Kubernetes API` mnemonic applies only to a Kubernetes compute VLAN.
 
 DNS remains flat under `home.kelch.io`. A service that exists only on PVE gets
 its natural name. A PVE copy of a service that also exists in production
@@ -156,45 +152,61 @@ which instance it is; the VLAN is never encoded in the name.
 
 ### Onboard 1 GbE
 
-The switch port carries tagged VLANs 20 and 31, with no usable native network.
-Create one VLAN-aware bridge, `vmbr0`, over the onboard NIC:
-
-- `vmbr0` itself has no address;
-- `vmbr0.20` carries the node's static management address and only default route;
-- guest NICs attach to `vmbr0` with VLAN tag `31`; and
-- no guest may be created with an untagged NIC.
-
-This makes an accidentally untagged guest fail closed instead of landing on the
-PVE management LAN. If the installer cannot express the final trunk, install
-temporarily on an access VLAN 20 port, convert the host to the final config from
-its local console, and only then create or join the cluster.
+The switch port is an access/untagged member of VLAN 20. Put the node's static
+management address and only default route directly on the physical interface —
+no bridge. It carries PVE UI/API, SSH, and Corosync link 0, nothing else.
+UI/SSH traffic is negligible, so this is effectively the dedicated Corosync
+NIC the Proxmox docs recommend: a guest saturating a shared link is exactly
+the congestion that destabilizes quorum.
 
 Illustrative node-1 shape; substitute the inventoried NIC name:
 
 ```text
 auto <onboard-nic>
-iface <onboard-nic> inet manual
-
-auto vmbr0
-iface vmbr0 inet manual
-    bridge-ports <onboard-nic>
-    bridge-stp off
-    bridge-fd 0
-    bridge-vlan-aware yes
-    bridge-vids 20 31
-
-auto vmbr0.20
-iface vmbr0.20 inet static
-    address 10.32.20.11/24
+iface <onboard-nic> inet static
+    address 10.32.20.21/24
     gateway 10.32.20.1
 ```
 
 ### RTL8125 2.5 GbE
 
-The switch port is an access/untagged member of VLAN 25. Put
-`10.32.25.21/24` (then `.22`, `.23`) directly on the physical interface with no
-gateway and no bridge. Guests do not attach to the storage NIC. A direct host
-interface reduces both accidental exposure and unnecessary bridge machinery.
+The switch port is a trunk (`pve-guest-trunk`: tagged 10, 21, 25, 90 — no
+native VLAN). Create one VLAN-aware bridge, `vmbr0`, over the NIC:
+
+- `vmbr0` itself has no address;
+- `vmbr0.25` carries `10.32.25.21/24` (then `.22`, `.23`) with no gateway —
+  storage, migration, and Corosync link 1;
+- guest NICs attach to `vmbr0` tagged `21` by default, `90` or `10` only by
+  deliberate zone placement; and
+- no guest may be created with an untagged NIC.
+
+With no native VLAN on the trunk, an accidentally untagged guest fails closed
+instead of landing on any host network. Manage the tag set as a Proxmox SDN
+VLAN zone so all three hosts stay identical. If the installer cannot express
+the final config, install temporarily on an access VLAN 20 port, convert the
+host from its local console, and only then create or join the cluster.
+
+```text
+auto <2.5g-nic>
+iface <2.5g-nic> inet manual
+
+auto vmbr0
+iface vmbr0 inet manual
+    bridge-ports <2.5g-nic>
+    bridge-stp off
+    bridge-fd 0
+    bridge-vlan-aware yes
+    bridge-vids 10 21 25 90
+
+auto vmbr0.25
+iface vmbr0.25 inet static
+    address 10.32.25.21/24
+```
+
+Under this wiring a 2.5 GbE/RTL8125 failure costs a node its storage and
+guests but not quorum or management; guests trade contention with
+storage/migration/backup traffic for a 2.5× bandwidth ceiling and a
+congestion-free Corosync link 0.
 
 ### Name resolution and time
 
@@ -222,11 +234,11 @@ not routed and must be trusted at the switch layer.
 | PVE nodes on VLAN 20 | Internet | Allow DNS, NTP, HTTPS/HTTP for package and image retrieval |
 | PVE node storage IPs | `10.32.25.5` | Allow NFSv4 TCP 2049 |
 | PVE node storage IPs | Other PVE storage IPs | Allow host-to-host migration and cluster-link traffic |
-| PVE guest VLAN 31 | VLAN 20 and VLAN 25 | Deny by default |
-| PVE guest VLAN 31 | Kubernetes VLAN 30 and its LB prefixes | Deny by default; add per-service exceptions only |
-| Kubernetes VLAN 30 | PVE guest VLAN 31 | Deny by default; add per-service exceptions only |
-| PVE guest VLAN 31 | Internet | Allow, subject to normal DNS and egress controls |
-| Admin device group on Main | PVE guest VLAN 31 | Allow for administration; narrow later if guest classes justify it |
+| PVE guests on VLAN 21 | VLAN 20 and VLAN 25 | Deny by default |
+| PVE guests on VLAN 21 | Kubernetes VLAN 30 and its LB prefixes | Deny by default; add per-service exceptions only |
+| Kubernetes VLAN 30 | PVE guests on VLAN 21 | Deny by default; add per-service exceptions only |
+| PVE guests on VLAN 21 | Internet | Allow, subject to normal DNS and egress controls |
+| Admin device group on Main | PVE guests on VLAN 21 | Allow for administration; narrow later if guest classes justify it |
 
 Start with UniFi policy and guest OS firewalls. Do not enable a cluster-wide PVE
 firewall policy until local console recovery is proven on all three nodes; a
@@ -646,7 +658,7 @@ usable when Kubernetes is completely unavailable.
 
 | Phase | Work | Exit gate |
 |---|---|---|
-| 0 — network | Configure the VLAN 31 reservation as `Lab Virtualization`; add switch profiles, IP reservations, DNS, and firewall intent | Admin reaches reserved node IPs; VLAN 31 cannot reach VLANs 20/25/30 |
+| 0 — network | Apply the `pve-guest-trunk` and VLAN 20 access switch profiles; add IP reservations, DNS, and firewall intent | Admin reaches reserved node IPs; VLAN 21 guests cannot reach VLANs 20/25/30 |
 | 1 — one-node proof | BIOS/firmware, install node 1, RTL8125/NVMe burn-in, final bridges | Stable 1/2.5 GbE links across reboot and sustained load |
 | 2 — cluster | Install nodes 2/3, form `pve-lab`, configure redundant Corosync and migration network | Three votes; either NIC can fail without losing quorum; migration uses VLAN 25 |
 | 3 — storage/recovery | Add NFS exports, backup job, config capture and restore drill | A disconnected restored VM boots; RTO and throughput recorded |
@@ -666,7 +678,7 @@ a workload HA unless the optional phase 5 passes with that workload class.
 | Proxmox Datacenter Manager | A second PVE/PBS system exists or centralized status is independently valuable |
 | Shared runtime NFS storage | A guest needs HA restart more than it needs independence from NAS or VLAN 25 failure |
 | Local ZFS and PVE replication | The SN770s are replaced by drives that pass sustained ZFS scrub/send burn-in on these exact hosts |
-| Additional guest VLANs | Trust classes cannot be safely expressed with guest firewalls and VLAN 31 policy |
+| Additional guest VLANs | Trust classes cannot be safely expressed with guest firewalls and VLAN 21 policy |
 | 10 GbE | Measured migration/backup windows or a future storage design justify it |
 | Ceph | Different hardware provides dedicated OSDs, substantially more RAM, and dedicated 10+ GbE networking |
 
