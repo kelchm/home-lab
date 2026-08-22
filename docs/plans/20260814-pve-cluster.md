@@ -330,7 +330,7 @@ The vendor's later HMB firmware advisory lists the 2 TB SN770, not this 1 TB
 model. The current 512-byte logical sector format also avoids one later-reported
 4K-sector trigger, but does not prove that the controller is safe under ZFS.
 
-A destructive [qualification run](../sn770-zfs-qualification.md) on one 1 TB
+A destructive [qualification run](20260818-sn770-zfs-qualification-results.md) on one 1 TB
 specimen subsequently completed 18 full 700 GiB sends and 8 full 700 GiB scrubs
 without a controller failure. It covered 0/32/128/200 MiB HMB screens, the
 historical 32 MiB/eight-descriptor allocator, and both 512-byte and 4096-byte

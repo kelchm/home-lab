@@ -51,12 +51,12 @@ executed, the current state lives in the corresponding runbook.
 - [20260622-sequenced-dependency-upgrades](plans/20260622-sequenced-dependency-upgrades.md) — ordered major-version upgrade pass for k8s-prod (Longhorn → Talos → k8s → Gateway API/Traefik → kaniop).
 - [20260703-observability-rework](plans/20260703-observability-rework.md) — conclude the observability bakeoff, converge on VictoriaMetrics/VictoriaLogs, and restore useful alerting and estate coverage.
 - [20260814-pve-cluster](plans/20260814-pve-cluster.md) — draft design for the independent three-node PVE cluster: hardware, IPs, networks, storage, backup, HA, updates, IaC boundaries, and rollout gates.
+- [20260818-sn770-zfs-qualification-results](plans/20260818-sn770-zfs-qualification-results.md) — destructive SN770 reproduction matrix, evidence index, findings, and remaining qualification work supporting the PVE storage decision.
 
 ## Decision records & benchmarks
 
 - [storage-benchmarks](storage-benchmarks.md) — Longhorn fio results, pre/post storage-network cutover.
 - [observability-bakeoff](observability-bakeoff.md) — VictoriaMetrics/Logs vs. Prometheus/Loki evaluation.
-- [sn770-zfs-qualification](sn770-zfs-qualification.md) — destructive SN770 reproduction matrix, evidence index, findings, and remaining qualification work.
 
 ## Related docs elsewhere in the repo
 
