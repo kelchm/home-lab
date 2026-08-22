@@ -38,6 +38,7 @@ or fixing.
 | [multus-fail-closed-cutover](runbooks/multus-fail-closed-cutover.md) | Moving Cilium's conflist out of containerd's live CNI directory so Multus is the only publisher. |
 | [metamcp-bootstrap](runbooks/metamcp-bootstrap.md) | Initialising the MetaMCP gateway and onboarding backend MCP servers (the non-GitOps registry steps). |
 | [bambuddy-bootstrap](runbooks/bambuddy-bootstrap.md) | Bringing up Bambuddy, validating printer containment and OIDC, and exercising backup recovery. |
+| [dgx-spark-bringup](runbooks/dgx-spark-bringup.md) | Configuring, validating, troubleshooting, and recovering the two-node DGX Spark LAN/storage/RDMA setup. |
 
 ## Plans
 
@@ -51,6 +52,7 @@ executed, the current state lives in the corresponding runbook.
 - [20260620-nas-out-of-cluster-workloads](plans/20260620-nas-out-of-cluster-workloads.md) — Synology-hosted S3 backup target and Git-driven deployment model for workloads outside Kubernetes.
 - [20260622-sequenced-dependency-upgrades](plans/20260622-sequenced-dependency-upgrades.md) — ordered major-version upgrade pass for k8s-prod (Longhorn → Talos → k8s → Gateway API/Traefik → kaniop).
 - [20260703-observability-rework](plans/20260703-observability-rework.md) — conclude the observability bakeoff, converge on VictoriaMetrics/VictoriaLogs, and restore useful alerting and estate coverage.
+- [20260821-network-topology](plans/20260821-network-topology.md) — active, partially implemented VLAN/zone topology, DGX placement, PVE wiring, and second-cluster reservations.
 
 ## Decision records & benchmarks
 
