@@ -32,21 +32,39 @@ already-created pods restart concurrently after a node or cluster reboot.
 
 ## Prevention
 
-The `traefik-admin` HelmRelease has a `wait-for-oidc-plugin` init container. It
-retries a validated HTTPS download of the exact pinned plugin artifact before
-Traefik may start. The plugin version is a shared YAML anchor, so Renovate
-updates the init check and Traefik static configuration together.
+The `traefik-admin` HelmRelease enables Traefik's native
+`experimental.abortOnPluginFailure` option. If the real plugin download,
+integrity check, or Yaegi load fails, Traefik exits nonzero instead of starting
+without the plugin. Kubernetes restarts the container and retries the complete
+load after its normal container-restart backoff.
 
-The guard intentionally fails closed. During a full outage the admin gateway
-remains unready instead of silently serving only its unprotected routes.
+This intentionally fails closed. During a full outage `traefik-admin` remains
+in `CrashLoopBackOff` instead of silently serving only its unprotected routes.
+Once DNS, outbound connectivity, and the plugin catalog recover, the next
+container restart loads the plugin and the pod becomes Ready automatically.
+
+The catalog is therefore a startup dependency for `traefik-admin`. An extended
+catalog outage, corrupt artifact, or incompatible plugin release keeps the
+admin gateway unavailable. Plugin updates remain pinned, manually reviewed,
+and never auto-merged.
 
 ## Recovery
 
-Confirm that CoreDNS is ready and the plugin download is reachable from a pod,
-then restart only the admin Traefik Deployment:
+Recovery is normally automatic. If the pods remain in `CrashLoopBackOff`,
+confirm that CoreDNS is ready and inspect the previous Traefik attempt:
 
 ```sh
 kubectl -n kube-system get pods -l k8s-app=kube-dns
+kubectl -n network get pods -l app.kubernetes.io/instance=traefik-admin-network
+kubectl -n network logs -l app.kubernetes.io/instance=traefik-admin-network \
+  --previous --prefix --tail=100
+```
+
+After correcting DNS, egress, catalog reachability, or the pinned plugin
+version, allow the kubelet retry to run. If its exponential backoff would delay
+recovery, restart only the admin Traefik Deployment to create fresh pods:
+
+```sh
 kubectl -n network rollout restart deployment/traefik-admin
 kubectl -n network rollout status deployment/traefik-admin --timeout=5m
 ```
