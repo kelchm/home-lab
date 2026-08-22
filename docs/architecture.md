@@ -19,6 +19,7 @@ Goals: container-native workloads, GitOps-driven IaC, clear prod/sandbox separat
 |---|---|---|
 | Prod cluster nodes (3x) | HP EliteDesk 705 G4 | Ryzen 5 2400GE, 64GB RAM, 1TB NVMe (WD_BLACK SN770), 1GbE + 2.5GbE |
 | Sandbox cluster nodes (3x, future) | HP EliteDesk 800 G3 | Intel i5-6500T, 32GB RAM, 1TB NVMe (SN850), 1GbE + 2.5GbE |
+| AI compute (2x) | NVIDIA DGX Spark | GB10, 128GB unified memory, 4TB NVMe, 10GbE + ConnectX-7 direct fabric |
 | NAS | Synology DS1821+ | Ryzen V1500B, 6x 14TB Exos X16, 32GB RAM, 2x SFP+ + 4x 1GbE |
 
 ## Cluster Architecture
@@ -42,6 +43,7 @@ Goals: container-native workloads, GitOps-driven IaC, clear prod/sandbox separat
 | 5 | Cameras | 10.32.5.0/24 | Existing |
 | 10 | Main | 10.32.10.0/24 | Trusted household devices |
 | 20 | Lab Infra | 10.32.20.0/24 | Classic mgmt planes for non-Talos tenants |
+| 21 | Workloads | 10.32.21.0/24 | DGX Sparks and general-purpose workload servers |
 | 25 | Lab Storage | 10.32.25.0/24 | NFS/iSCSI to Synology |
 | 30 | Lab Prod | 10.32.30.0/24 | Prod cluster compute (nodes + API VIP only) |
 | 31 | Lab Sandbox | 10.32.31.0/24 | Sandbox cluster compute (future) |
@@ -74,6 +76,15 @@ Within 100-254:
 ```
 
 So `10.32.130.0/24` = admin-prod, `10.32.141.0/24` = services-sandbox, `10.32.150.0/24` = shared-prod, etc. Reading any LB pool prefix tells you policy class and which cluster owns it.
+
+### Non-routed machine fabrics
+
+`198.19.240.0/20` is reserved from the RFC 2544 benchmarking block for closed
+machine interconnects. Current rail A is `198.19.240.0/24`; rail B is
+`198.19.241.0/24`. Fabric prefixes exist only as connected routes on
+participating endpoints and are never routed, advertised, published in DNS, or
+included in gateway firewall/address objects. The DGX allocation is recorded
+in the [bring-up runbook](runbooks/dgx-spark-bringup.md#fabric-address-allocation).
 
 ### /24 skeleton
 

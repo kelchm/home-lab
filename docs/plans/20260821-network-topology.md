@@ -1,8 +1,25 @@
 # Network topology: workloads VLAN, DGX Spark placement, VLAN 40 retirement
 
-**Status:** Proposed 2026-08-21. Design + migration plan; nothing implemented.
+**Status:** Active 2026-08-22. Partially implemented; current host state and
+remaining phase-3 work are tracked in the
+[DGX Spark bring-up runbook](../runbooks/dgx-spark-bringup.md).
 
-**Scope:** VLAN/zone model for the whole lab — DGX Spark placement and interconnect, PVE guest wiring (amending the [PVE cluster plan (PR #373)](https://github.com/kelchm/home-lab/pull/373)), VLAN 40 teardown, and the reserved identity for a second Kubernetes cluster. It changes no runtime state; each migration phase lists its own repo edits.
+**Scope:** VLAN/zone model for the whole lab — DGX Spark placement and interconnect, PVE guest wiring (amending the [PVE cluster plan (PR #373)](https://github.com/kelchm/home-lab/pull/373)), VLAN 40 teardown, and the reserved identity for a second Kubernetes cluster. Each migration phase lists its runtime and repository changes.
+
+## Implementation status
+
+- Phase 2 is partial: VLAN 21 `Workloads` and the `spark-trunk` switch profile
+  are applied, but the firewall matrix remains deferred.
+- Phase 3 is active: both Sparks have their LAN, storage, and direct-fabric
+  interfaces configured; jumbo Ethernet, raw RDMA, NCCL, reboot persistence,
+  RTL8127 burn-in, and host anti-transit have passed. DSM/NFS throughput, DNS,
+  gateway route read-back, firewall tests, and temporary-access cleanup remain.
+- All unlisted phases remain planned rather than applied.
+
+The implemented fabric allocation differs from the original proposal. The
+initial `192.168.100/101.0/31` rails overlapped the gateway's existing
+Starlink-management meaning for `192.168.100.1`. On 2026-08-22 the Sparks were
+readdressed onto the isolated `/24` rails documented below, then revalidated.
 
 ## Decision summary
 
@@ -72,14 +89,14 @@ Convention change: storage decades allocate **per system in commissioning order*
 
 ### Spark interconnect fabric
 
-Each QSFP port exposes two logical ~100 G interfaces (the ConnectX-7 aggregates two PCIe Gen5 x4 links behind one cage), so a single DAC yields two netdev pairs; NVIDIA's playbook addresses them as two subnets. This plan tightens the playbook's `/24`s to `/31`s ([RFC 3021](https://datatracker.ietf.org/doc/html/rfc3021)):
+Each QSFP port exposes two logical ~100 G interfaces (the ConnectX-7 aggregates two PCIe Gen5 x4 links behind one cage), so a single DAC yields two netdev pairs; NVIDIA's playbook addresses them as two subnets. The lab reserves `198.19.240.0/20` from the RFC 2544 benchmarking block for isolated machine fabrics and assigns one `/24` per rail:
 
 | Link | spark-1 | spark-2 | MTU |
 |---|---|---|---|
-| Subnet A | `192.168.100.0/31` | `192.168.100.1/31` | 9000 |
-| Subnet B | `192.168.101.0/31` | `192.168.101.1/31` | 9000 |
+| Subnet A | `198.19.240.11/24` | `198.19.240.12/24` | 9000 |
+| Subnet B | `198.19.241.11/24` | `198.19.241.12/24` | 9000 |
 
-No gateway, no DNS, `/etc/hosts` entries only. `NCCL_SOCKET_IFNAME` pins control traffic to the 10 GbE. The fabric sits outside `10.32.0.0/16` and avoids Docker's `172.17.0.0/16`. Anti-transit is structural: no other host has a route via a Spark, the Sparks advertise nothing, and the gateway never learns these prefixes. Standing rule: **never add a static route to `192.168.100/101.x` on the gateway.**
+The third octet is the rail identifier beginning at 240; `.11/.12` preserve the workload-host identity and `/24` permits a future switched rail without renumbering. No gateway, no DNS, `/etc/hosts` entries only. `NCCL_SOCKET_IFNAME` pins control traffic to the 10 GbE. Fabric prefixes exist only as directly connected routes on participating endpoints. They never enter the gateway routing table, router firewall/address objects, BGP/OSPF, or Tailscale advertisements. Workload and service software uses `10.32.21.x`; fabric addresses are limited to RDMA/NCCL and explicit operator diagnostics. If that boundary changes, renumber to fallback rails `10.254.240.0/24` and `10.254.241.0/24` rather than adding exceptions.
 
 ## PVE wiring amendment
 
@@ -142,11 +159,14 @@ Create the network, DHCP scope (`.200-.239`), zones, and the full matrix above �
 
 ### Phase 3 — DGX Sparks
 
+Execution state, exact host configuration, benchmarks, and remaining gates are
+tracked in the [DGX Spark bring-up runbook](../runbooks/dgx-spark-bringup.md).
+
 1. Connect each Spark's 10 GbE to the aggregation switch on `spark-trunk`; static `10.32.21.11/.12` plus storage legs `10.32.25.31/.32`.
 2. Disable EEE on the RTL8127 ports preemptively ([known instability report](https://forums.developer.nvidia.com/t/defective-onboard-rtl8127-nic-on-dgx-spark/378356)).
 3. Scope the Synology NFS exports the Sparks need to `.25.31-.32`.
-4. Cable the QSFP DAC using the same port number on both ends ([NVIDIA clustering guide](https://docs.nvidia.com/dgx/dgx-spark/spark-clustering.html), [connect-two-sparks playbook](https://github.com/NVIDIA/dgx-spark-playbooks/blob/main/nvidia/connect-two-sparks/README.md)); address the `/31`s; MTU 9000; `NCCL_SOCKET_IFNAME=<10GbE>`.
-5. Tests: iperf3 Spark→NAS over the VLAN 25 leg ≥9 Gbit/s with `traceroute` proving one hop; iperf3 Spark→Main documenting the routed ceiling for contrast; `ib_write_bw`/NCCL all_gather expecting ~22-24 GB/s on current firmware (pre-2026-02 firmware caps near 100 Gb/s); `ip route` on each Spark shows the fabric as connected-only; the gateway has no path to `192.168.100/101.x`.
+4. Cable the QSFP DAC using the same port number on both ends ([NVIDIA clustering guide](https://docs.nvidia.com/dgx/dgx-spark/spark-clustering.html), [connect-two-sparks playbook](https://github.com/NVIDIA/dgx-spark-playbooks/blob/main/nvidia/connect-two-sparks/README.md)); address both `/24` rails; MTU 9000; `NCCL_SOCKET_IFNAME=<10GbE>`.
+5. Tests: iperf3 Spark→NAS over the VLAN 25 leg ≥9 Gbit/s with `traceroute` proving one hop; iperf3 Spark→Main documenting the routed ceiling for contrast; `ib_write_bw`/NCCL all_gather expecting ~22-24 GB/s on current firmware (pre-2026-02 firmware caps near 100 Gb/s); `ip route` on each Spark shows the fabric as connected-only; the gateway has no path to `198.19.240.0/20`.
 
 ### Phase 4 — PVE
 
@@ -178,7 +198,7 @@ Contradictions this plan resolves: PR #373 reserves k8s cluster 2's LB pools whi
 - The gateway model is not recorded anywhere; BGP support, IDS/IPS ceiling, and routed throughput depend on it. Phase 0 resolves it; nothing here assumes a specific model.
 - Core switch model, NAS SFP+ physical landing, and current DHCP scopes exist only in the controller; inventoried in phase 0.
 - Sparks are assumed to connect via 10GBase-T SFP+ transceivers in the aggregation switch; verify thermals/compatibility or use the lab switch's SFP+ ports.
-- One DAC or two between the Sparks is open; the plan addresses both logical-interface pairs either way.
+- One DAC is installed between physical port 0 on both Sparks; it exposes both logical-interface pairs.
 - Direct client access to Spark inference (as designed) vs. fronting through the services Traefik gateway is a reversible taste decision.
 - Whether PVE HA is ever enabled changes the Corosync risk calculus (disarmed watchdog vs. fleet-wide self-fencing on a lab-switch outage); the wiring is safe under both.
 - Jumbo frames on VLAN 25 were considered and rejected: mixed 1G/2.5G/10G endpoints plus the whereabouts pod range make silent-blackhole risk that isn't worth single-digit gains at 2.5 G line rate. MTU 9000 applies to the Spark fabric only.
@@ -190,7 +210,7 @@ Contradictions this plan resolves: PR #373 reserves k8s cluster 2's LB pools whi
 - [Proxmox SDN](https://pve.proxmox.com/wiki/Software-Defined_Network) — cluster-wide VLAN zones over VLAN-aware bridges.
 - [NVIDIA DGX Spark clustering](https://docs.nvidia.com/dgx/dgx-spark/spark-clustering.html) and [dgx-spark-playbooks](https://github.com/NVIDIA/dgx-spark-playbooks) — dual-system cabling, two-subnet addressing, keep CX-7 off management traffic.
 - [ServeTheHome on GB10 ConnectX-7](https://www.servethehome.com/the-nvidia-gb10-connectx-7-200gbe-networking-is-really-different/) — two ~100 G MACs per QSFP cage.
-- [RFC 3021](https://datatracker.ietf.org/doc/html/rfc3021) — /31 point-to-point subnets.
+- [RFC 2544](https://datatracker.ietf.org/doc/html/rfc2544) — benchmarking address block used for the isolated machine-fabric allocation.
 - [Cilium L2 announcements](https://docs.cilium.io/en/stable/network/l2-announcements/) — single-announcer model retired here in favor of BGP ECMP.
 - [UniFi BGP](https://help.ui.com/hc/en-us/articles/16271338193559-UniFi-Border-Gateway-Protocol-BGP) — FRR config upload, supported gateways.
 - ShiftCTRL on [IDS/IPS throughput](https://shiftctrl.net/articles/unifi-ids-ips-throughput-ceiling) and [inter-VLAN hairpin/zone behavior](https://shiftctrl.net/articles/unifi-vlan-mistakes).
