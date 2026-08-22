@@ -1,0 +1,164 @@
+---
+name: "Safe Dependency Updates"
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Sweep in case a completed check or label event was missed.
+    - cron: "23 * * * *"
+  pull_request_target:
+    branches: ["main"]
+    types: [opened, reopened, synchronize, labeled, unlabeled, ready_for_review]
+  workflow_run:
+    workflows: ["Repository Validation"]
+    types: [completed]
+
+permissions:
+  actions: write
+  checks: read
+  contents: write
+  issues: write
+  pull-requests: write
+  statuses: read
+
+concurrency:
+  group: safe-dependency-updates
+  cancel-in-progress: false
+
+jobs:
+  triage-and-merge:
+    name: Triage and Merge
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Classify Renovate updates and merge one validated PR
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v9.0.0
+        with:
+          script: |
+            const safeLabel = "automerge/safe";
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            const listFiles = async (pullNumber) => github.paginate(
+              github.rest.pulls.listFiles,
+              { owner, repo, pull_number: pullNumber, per_page: 100 },
+            );
+
+            const classify = async (pull) => {
+              const labels = new Set(pull.labels.map(({ name }) => name));
+              const files = await listFiles(pull.number);
+              const isPatch = labels.has("type/patch") && /^fix\(/i.test(pull.title);
+              const isDigest = labels.has("type/digest");
+              const isAction = labels.has("renovate/github-action") &&
+                ["type/minor", "type/patch", "type/digest"].some((label) => labels.has(label));
+              const touchesTalos = files.some(({ filename }) => filename.startsWith("talos/"));
+
+              const safe = pull.user.login === "renovate[bot]" &&
+                pull.base.ref === "main" &&
+                !pull.draft &&
+                !labels.has("hold") &&
+                !touchesTalos &&
+                (isPatch || isDigest || isAction);
+
+              return { safe, labels, files };
+            };
+
+            const setTriageLabel = async (pull, safe, labels) => {
+              if (safe && !labels.has(safeLabel)) {
+                await github.rest.issues.addLabels({
+                  owner,
+                  repo,
+                  issue_number: pull.number,
+                  labels: [safeLabel],
+                });
+                core.info(`#${pull.number}: marked ${safeLabel}`);
+              } else if (!safe && labels.has(safeLabel)) {
+                await github.rest.issues.removeLabel({
+                  owner,
+                  repo,
+                  issue_number: pull.number,
+                  name: safeLabel,
+                });
+                core.info(`#${pull.number}: removed stale ${safeLabel} label`);
+              }
+            };
+
+            const validationPassed = async (sha) => {
+              const runs = await github.paginate(
+                github.rest.checks.listForRef,
+                { owner, repo, ref: sha, filter: "latest", per_page: 100 },
+              );
+              const { data: statuses } = await github.rest.repos.getCombinedStatusForRef({
+                owner,
+                repo,
+                ref: sha,
+              });
+              const allowed = new Set(["success", "neutral", "skipped"]);
+              const aggregate = runs.find(({ name }) => name === "Flux Local Success");
+              return aggregate?.conclusion === "success" && runs.every((run) =>
+                run.status === "completed" && allowed.has(run.conclusion)
+              ) && (statuses.total_count === 0 || statuses.state === "success");
+            };
+
+            let pullNumbers;
+            let mayMerge = false;
+
+            if (context.eventName === "pull_request_target") {
+              pullNumbers = [context.payload.pull_request.number];
+            } else if (context.eventName === "workflow_run") {
+              pullNumbers = context.payload.workflow_run.pull_requests.map(({ number }) => number);
+              mayMerge = context.payload.workflow_run.conclusion === "success";
+            } else {
+              const pulls = await github.paginate(
+                github.rest.pulls.list,
+                { owner, repo, state: "open", base: "main", per_page: 100 },
+              );
+              pullNumbers = pulls.map(({ number }) => number);
+              mayMerge = true;
+            }
+
+            // Oldest first keeps the sweep deterministic. Only one merge is
+            // allowed per run so every subsequent PR must rebase and validate.
+            pullNumbers = [...new Set(pullNumbers)].sort((a, b) => a - b);
+            for (const pullNumber of pullNumbers) {
+              const { data: pull } = await github.rest.pulls.get({
+                owner,
+                repo,
+                pull_number: pullNumber,
+              });
+              if (pull.state !== "open") continue;
+
+              const { safe, labels } = await classify(pull);
+              await setTriageLabel(pull, safe, labels);
+              if (!safe || !mayMerge) continue;
+              if (!(await validationPassed(pull.head.sha))) {
+                core.info(`#${pull.number}: waiting for successful checks`);
+                continue;
+              }
+              if (pull.mergeable !== true || pull.mergeable_state !== "clean") {
+                core.info(`#${pull.number}: waiting for a clean, up-to-date branch`);
+                continue;
+              }
+
+              const result = await github.rest.pulls.merge({
+                owner,
+                repo,
+                pull_number: pull.number,
+                merge_method: "squash",
+                sha: pull.head.sha,
+              });
+              if (!result.data.merged) {
+                core.setFailed(`#${pull.number}: ${result.data.message}`);
+                return;
+              }
+              // Merges made with GITHUB_TOKEN do not emit another Actions push
+              // run, so explicitly validate the resulting main state.
+              await github.rest.actions.createWorkflowDispatch({
+                owner,
+                repo,
+                workflow_id: "flux-local.yaml",
+                ref: "main",
+              });
+              core.notice(`#${pull.number}: merged ${pull.title}`);
+              return;
+            }

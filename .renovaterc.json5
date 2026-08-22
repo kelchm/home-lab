@@ -54,13 +54,15 @@
       minimumGroupSize: 3,
     },
     {
-      description: "Auto-merge GitHub Actions",
-      matchManagers: ["github-actions"],
-      automerge: true,
-      automergeType: "branch",
-      matchUpdateTypes: ["minor", "patch", "digest"],
+      description: "Stabilize patch and digest updates before safe-update triage",
+      matchUpdateTypes: ["patch", "digest"],
       minimumReleaseAge: "3 days",
-      ignoreTests: true,
+    },
+    {
+      description: "Stabilize minor GitHub Actions before safe-update triage",
+      matchManagers: ["github-actions"],
+      matchUpdateTypes: ["minor"],
+      minimumReleaseAge: "3 days",
     },
     {
       matchUpdateTypes: ["major"],

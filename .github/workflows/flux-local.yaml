@@ -2,6 +2,7 @@
 name: "Repository Validation"
 
 on:
+  workflow_dispatch:
   pull_request:
     branches: ["main"]
   push:
@@ -84,8 +85,8 @@ jobs:
               - 'talos/**'
 
       - name: Validate complete main state
-        if: github.event_name == 'push'
-        run: echo "Every validation surface runs for pushes to main."
+        if: github.event_name != 'pull_request'
+        run: echo "Every validation surface runs against the complete main state."
 
   flux-local-test:
     name: Flux Local Test
@@ -317,7 +318,7 @@ jobs:
         run: scripts/ci/validate-sops.sh
 
       - name: Validate SOPS decryption
-        if: github.event_name == 'push' && needs.pre-job.outputs.sops_changed == 'true'
+        if: github.event_name != 'pull_request' && needs.pre-job.outputs.sops_changed == 'true'
         env:
           SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
         run: scripts/ci/validate-sops.sh --require-decrypt
