@@ -187,6 +187,7 @@ API VIP is managed by the Talos `vipController` (GARP-based at the machine-confi
 10.32.20.5        nas                      Synology admin interface
 10.32.20.7        pbs                      (planned) PBS appliance, aligned with pbs-storage
 10.32.20.10       pdm                      (reserved) Proxmox Datacenter Manager
+10.32.20.12       ups-compute-rack         NixOS Pi, compute-rack UPS monitor (VLAN-local; grandfathered in identity space)
 10.32.20.20       pikvm                    (future)
 10.32.20.21-.23   pve-lab-{1,2,3}          (planned) PVE UI/API, SSH, Corosync link 0
 10.32.20.24-.29   (reserved, pve-lab expansion)
