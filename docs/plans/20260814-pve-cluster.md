@@ -330,6 +330,14 @@ The vendor's later HMB firmware advisory lists the 2 TB SN770, not this 1 TB
 model. The current 512-byte logical sector format also avoids one later-reported
 4K-sector trigger, but does not prove that the controller is safe under ZFS.
 
+A destructive [qualification run](../sn770-zfs-qualification.md) on one 1 TB
+specimen subsequently completed 18 full 700 GiB sends and 8 full 700 GiB scrubs
+without a controller failure. It covered 0/32/128/200 MiB HMB screens, the
+historical 32 MiB/eight-descriptor allocator, and both 512-byte and 4096-byte
+logical sectors. This is a strong negative result for that specimen and host,
+not a model-wide qualification or a firmware A/B; the multi-specimen launch
+decision therefore remains unchanged.
+
 Do not build ZFS and suppress or weaken scrubs to keep it alive: routine
 integrity work cannot be treated as an optional dangerous workload. Use ext4
 and LVM-thin for these drives, retain tested backups, and watch the kernel log

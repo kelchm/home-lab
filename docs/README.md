@@ -56,6 +56,7 @@ executed, the current state lives in the corresponding runbook.
 
 - [storage-benchmarks](storage-benchmarks.md) — Longhorn fio results, pre/post storage-network cutover.
 - [observability-bakeoff](observability-bakeoff.md) — VictoriaMetrics/Logs vs. Prometheus/Loki evaluation.
+- [sn770-zfs-qualification](sn770-zfs-qualification.md) — destructive SN770 reproduction matrix, evidence index, findings, and remaining qualification work.
 
 ## Related docs elsewhere in the repo
 
