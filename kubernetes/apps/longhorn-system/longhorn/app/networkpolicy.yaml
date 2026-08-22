@@ -1,46 +1,36 @@
 ---
 # The chart's own longhorn-manager NetworkPolicy admits ingress only from other
-# Longhorn pods in this namespace, which also blocks the metrics port. Prometheus
-# and VMAgent run in observability, so without this every scrape of the
-# ServiceMonitor times out and no longhorn_* series are collected.
+# Longhorn pods in this namespace, which also blocks the metrics port, so every
+# scrape of the chart's ServiceMonitor times out without this.
 #
-# Port 9500 is the longhorn-manager REST API, not a metrics-only listener --
-# /metrics is one path on it, and /v1/volumes on the same port exposes mutating
-# actions like attach and detach. NetworkPolicy matches on L3/L4 and cannot
-# scope by HTTP path, so the source is narrowed to the two scraper pods instead
-# of the whole namespace.
-#
-# namespaceSelector and podSelector inside a single `from` entry are ANDed;
-# separate entries are ORed. Both must stay paired, since a bare podSelector
-# would resolve against longhorn-system and match nothing.
-#
-# NetworkPolicies are additive, so this grants the port alongside the chart's
-# rules rather than replacing them.
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
+# Port 9500 is the longhorn-manager REST API, not a metrics listener. /metrics
+# is one path on it and /v1/volumes on the same port serves mutating actions
+# such as attach and detach, with no authentication -- Longhorn treats network
+# reachability as its authorization boundary. An L4 rule would therefore hand
+# the scrapers full control of storage, so the HTTP rule narrows them to the
+# one path they need.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
 metadata:
   name: longhorn-manager-metrics
   namespace: longhorn-system
 spec:
-  podSelector:
+  endpointSelector:
     matchLabels:
       app: longhorn-manager
-  policyTypes:
-    - Ingress
   ingress:
-    - from:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: observability
-          podSelector:
-            matchLabels:
-              app.kubernetes.io/name: prometheus
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: observability
-          podSelector:
-            matchLabels:
-              app.kubernetes.io/name: vmagent
-      ports:
-        - protocol: TCP
-          port: 9500
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: prometheus
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: vmagent
+      toPorts:
+        - ports:
+            - port: "9500"
+              protocol: TCP
+          rules:
+            http:
+              - method: GET
+                path: /metrics
