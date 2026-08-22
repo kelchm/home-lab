@@ -409,10 +409,10 @@ Do not mark this runbook complete until these are resolved:
       SSH negative test and Main inference-port positive test.
 - [ ] Remove `/etc/sudoers.d/99-dgx-bringup` from both Sparks and verify
       `sudo -n true` fails before declaring the commissioning session closed.
-- [ ] Remove obsolete DHCP-address entries for these hosts from the operator's
-      local `known_hosts` after confirming the static identities. The superseded
-      static entries for `10.32.21.11/.12` are already removed on the Sparks and
-      the operator machine.
+- [x] Remove obsolete `known_hosts` entries: the bring-up DHCP addresses
+      (`10.32.21.228/.231`, matched by host key) and the superseded statics
+      `10.32.21.11/.12` are removed on the operator machine and both Sparks.
+      The corresponding stale controller leases age out on their own.
 
 ## Rollback
 
