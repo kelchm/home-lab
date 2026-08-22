@@ -10,7 +10,8 @@
 #     on {state="..."} == 1 rather than comparing the value to an ordinal.
 #   - longhorn_volume_last_backup_at is a unix timestamp, and is 0 (not absent)
 #     for a volume that has never been backed up. The `> 0` guards keep a
-#     newly-created volume from reading as infinitely stale.
+#     newly-created volume from reading as infinitely stale, and
+#     LonghornVolumeNeverBackedUp covers the zero case those guards skip.
 #
 # The VM operator converts PrometheusRule -> VMRule automatically, so vmalert
 # evaluates these too without a duplicate resource.
@@ -54,6 +55,27 @@ spec:
           annotations:
             summary: Longhorn volume {{ $labels.pvc_namespace }}/{{ $labels.pvc }} has a stale backup
             description: Volume {{ $labels.volume }} ({{ $labels.pvc_namespace }}/{{ $labels.pvc }}) has not completed a backup in over 30 hours while other volumes have.
+
+        # longhorn_volume_last_backup_at is 0 for a volume that has never
+        # completed a backup, so the `> 0` guards above deliberately skip those
+        # -- otherwise a freshly-created volume reads as infinitely stale. That
+        # leaves the case this rule covers: backups that never succeeded even
+        # once, which is the same failure the rules above exist to catch.
+        #
+        # `for` supplies the grace period. A new volume sits pending until it
+        # has been at 0 for 30h continuously; a first successful backup makes
+        # the series non-zero and resets it. Longhorn exposes no volume-creation
+        # metric, so the alternative was joining kube_persistentvolumeclaim_created
+        # from kube-state-metrics -- same coverage, but it couples this rule to
+        # another exporter, and a KSM outage would silently mute it.
+        - alert: LonghornVolumeNeverBackedUp
+          expr: longhorn_volume_last_backup_at{pvc!="lemon-manuals-mcp"} == 0
+          for: 30h
+          labels:
+            severity: warning
+          annotations:
+            summary: Longhorn volume {{ $labels.pvc_namespace }}/{{ $labels.pvc }} has never completed a backup
+            description: Volume {{ $labels.volume }} ({{ $labels.pvc_namespace }}/{{ $labels.pvc }}) has had no successful backup since it was created over 30 hours ago, so backups were never configured for it or every attempt has failed.
 
     - name: longhorn-volume-health
       rules:
