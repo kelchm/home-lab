@@ -90,8 +90,8 @@ and avoid session or console routing ambiguity.
 | `10.32.20.1` | `gateway-infra.home.kelch.io` | UniFi gateway |
 | `10.32.20.5` | `nas.home.kelch.io` | Synology management |
 | `10.32.20.7` | `pbs.home.kelch.io` | Reserved for an independent future PBS appliance; octet matches `pbs-storage` |
-| `10.32.20.10` | `pdm.home.kelch.io` | Reserved; PDM is not initially deployed |
-| `10.32.20.20` | `pikvm.home.kelch.io` | Reserved for the planned PiKVM |
+| `10.32.20.10` | `glkvm.home.kelch.io` | GL-RM1PE KVM (existing) |
+| `10.32.20.20` | `pdm.home.kelch.io` | Reserved; PDM is not initially deployed |
 | `10.32.20.21` | `pve-lab-1.home.kelch.io` | PVE UI/API, SSH, Corosync link 0 |
 | `10.32.20.22` | `pve-lab-2.home.kelch.io` | PVE UI/API, SSH, Corosync link 0 |
 | `10.32.20.23` | `pve-lab-3.home.kelch.io` | PVE UI/API, SSH, Corosync link 0 |
@@ -634,7 +634,7 @@ balancer remains disabled; maintenance evacuation is explicit and observable.
 
 PDM 1.1 can centralize visibility and launch package updates through connected
 PVE nodes, but it does not provide a Talos-style immutable, health-gated rolling
-upgrade controller. Reserve `10.32.20.10`, but deploy PDM only after a second
+upgrade controller. Reserve `10.32.20.20`, but deploy PDM only after a second
 PVE/PBS estate exists or its cross-system status view saves real time. It is not
 a prerequisite for this one cluster.
 
