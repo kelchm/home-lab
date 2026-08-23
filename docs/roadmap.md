@@ -4,35 +4,51 @@ Forward-looking design and deferred work. Current-state reference lives in
 [architecture.md](architecture.md); much of the addressing, BGP, and storage
 design there is deliberately shaped to make the items below land cleanly.
 
-## Sandbox cluster
+## Proxmox virtualization cluster
 
-A second Talos cluster for experimentation, on 3× HP EliteDesk 800 G3 mini PCs
-(Intel i5-6500T, 32 GB RAM, 1 TB NVMe). It shares the storage and infra VLANs
-with prod but takes a distinct compute VLAN (31) and BGP ASN (65021).
+The three HP EliteDesk 800 G3 machines are planned as an independent three-node
+Proxmox VE cluster. PVE uses VLAN 20 for management and primary Corosync,
+matching `.21-.23` identities on VLAN 25 for storage, migration, and secondary
+Corosync, and the shared VLAN 21 Workloads network for general-purpose guests.
+VLAN 31 remains reserved for a second Kubernetes cluster.
 
-Why a second cluster rather than a VM playground: it keeps an identical
-operational model to prod, the addressing scheme already generalises via the
-system-identity decade, and prefix-list scoping isolates failure domains. The
-trade-off — losing a general-purpose VM sandbox in favour of uniformity — was
-made consciously.
+The detailed draft—including host identities, bridge design, storage, backups,
+HA classes, update cadence, IaC boundaries, and rollout gates—is in the
+[PVE cluster plan](plans/20260814-pve-cluster.md).
+
+Important boundaries:
+
+- PVE remains operable with Kubernetes completely unavailable.
+- Initial host bootstrap and rolling updates are documented manual operations;
+  OpenTofu manages guests. Ansible is deferred until repeated host drift or
+  rebuild work justifies it.
+- Deployable PVE inventory and guest IaC will earn their own owner directory
+  when they exist; the current repository tree does not advertise an empty
+  planned directory.
+- Local LVM-thin is the default runtime tier. Synology NFS holds templates and
+  backups; shared guest storage is optional for workloads that justify PVE HA
+  and the resulting NAS runtime dependency.
+- Ceph is not planned for these single-NVMe, 32 GB, 2.5 GbE nodes.
+
+## Second Kubernetes cluster
+
+The network model reserves a second Kubernetes identity without choosing its
+deployment substrate.
 
 ### Two-cluster topology
 
-When sandbox lands as a second Talos cluster:
+It may run as one Talos VM per PVE host or later move to bare metal while
+retaining the same addresses and BGP policy:
 
-- Each cluster is its own AS (prod 65020, sandbox 65021), peering with UniFi (65000)
-- Each cluster allocates from only its own pool prefixes; advertises VIPs as `/32`s within those prefixes
-- UniFi prefix-list filter per neighbor isolates failure domains: sandbox cannot advertise into prod's CIDR space
-- Storage VLAN 25 shared; both clusters present per the system identity rule
-- API VIPs continue to be Talos-managed (vipController), independent of BGP
-- Total BGP sessions on UniFi: 6 (3 per cluster)
+- compute VLAN 31 and API VIP `.8`;
+- system-4 host identities `.41-.43` on VLANs 31 and 25;
+- storage-pod range `.144/28`;
+- BGP ASN 65021 and `admin-sandbox` / `services-sandbox` LB pools; and
+- per-neighbor prefix filters that prevent either cluster from advertising the
+  other's pool prefixes.
 
-Failure isolation: sandbox BGP issues cannot blackhole prod traffic when prefix-list scoping is in place.
-
-The IP-addressing convention ([architecture.md](architecture.md#ip-addressing-convention))
-already reserves sandbox's slots throughout — compute VLAN 31, the `.144/28`
-storage-pod range, `admin-sandbox` / `services-sandbox` LB pools, and the `-sbx`
-DNS suffix — so standing it up is largely a matter of filling in reserved space.
+No implementation date or hardware assignment is committed. PVE does not
+consume these reservations merely by hosting unrelated guests.
 
 ## Out of scope (future considerations)
 

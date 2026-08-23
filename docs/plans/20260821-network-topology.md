@@ -4,7 +4,11 @@
 remaining phase-3 work are tracked in the
 [DGX Spark bring-up runbook](../runbooks/dgx-spark-bringup.md).
 
-**Scope:** VLAN/zone model for the whole lab — DGX Spark placement and interconnect, PVE guest wiring (amending the [PVE cluster plan (PR #373)](https://github.com/kelchm/home-lab/pull/373)), VLAN 40 teardown, and the reserved identity for a second Kubernetes cluster. Each migration phase lists its runtime and repository changes.
+**Scope:** VLAN/zone model for the whole lab — DGX Spark placement and
+interconnect, PVE guest wiring (integrated into the
+[PVE cluster plan](20260814-pve-cluster.md)), VLAN 40 teardown, and the
+reserved identity for a second Kubernetes cluster. Each migration phase lists
+its runtime and repository changes.
 
 ## Implementation status
 
@@ -31,7 +35,7 @@ revalidated after the move.
 - Add exactly one VLAN: **21 — Workloads** (`10.32.21.0/24`) for LAN-serving servers that aren't part of a more specific plane: the two DGX Sparks and general-purpose PVE guests.
 - Retire VLAN 40 end-to-end. Live-verified 2026-08-21: zero `CiliumL2AnnouncementPolicy` objects exist (CRD installed, never instantiated), legacy `admin`/`services` pools show 0 IPs used, and all three LoadBalancer services hold BGP-pool addresses. The L2 path is dead code.
 - The Spark-to-Spark QSFP interconnect is one physical, unrouted point-to-point link with two logical PCIe/RDMA paths — not a VLAN, not in `10.32.0.0/16`, never advertised.
-- Amend the PVE plan's wiring: guests move to the 2.5 GbE trunk; the onboard 1 GbE carries only management + Corosync link 0. Guest network is VLAN 21, not VLAN 31.
+- The PVE plan puts guests on the 2.5 GbE trunk; the onboard 1 GbE carries only management + Corosync link 0. Guest network is VLAN 21, not VLAN 31.
 - VLAN 31, LB pools `10.32.131/141.0/24`, ASN 65021, and storage slots `10.32.25.41-.43` + `.144/28` stay coherently reserved for a second Kubernetes cluster — whether it lands as PVE VMs or bare metal.
 - Service reachability policy continues to live on routed BGP prefixes; VLANs are reserved for genuinely different link-layer needs (quorum latency, bulk L2 adjacency, RDMA, management blast radius, client trust grades).
 
@@ -103,12 +107,14 @@ Each QSFP port exposes two logical ~100 G interfaces (the ConnectX-7 connects to
 
 The third octet is the logical-path identifier beginning at 240; `.11/.12` are member indexes within this non-routed fabric rather than instances of the VLAN system-identity rule. A `/24` per path permits a future switched fabric without renumbering. No gateway, no DNS, `/etc/hosts` entries only. `NCCL_SOCKET_IFNAME` pins control traffic to the 10 GbE. Fabric prefixes exist only as directly connected routes on participating endpoints. They never enter the gateway routing table, router firewall/address objects, BGP/OSPF, or Tailscale advertisements. Workload and service software uses `10.32.21.x`; fabric addresses are limited to RDMA/NCCL and explicit operator diagnostics. If that boundary changes, renumber to fallback subnets `10.254.240.0/24` and `10.254.241.0/24` rather than adding exceptions.
 
-## PVE wiring amendment
+## PVE wiring decision
 
-Amendments to the [PVE cluster plan (PR #373)](https://github.com/kelchm/home-lab/pull/373); its addressing, storage, backup, IaC, and rollout content stands.
+This wiring is integrated into the
+[PVE cluster plan](20260814-pve-cluster.md); its addressing, storage, backup,
+IaC, and rollout content stands.
 
 - **Onboard 1 GbE**: access port on VLAN 20, plain static interface, no bridge. Carries PVE UI/API, SSH, and Corosync link 0 — nothing else. UI/SSH traffic is negligible, so this is effectively the dedicated Corosync NIC the [Proxmox docs](https://pve.proxmox.com/pve-docs/chapter-pvecm.html) recommend.
-- **RTL8125 2.5 GbE**: trunk carrying one VLAN-aware bridge (`bridge-vids 10 21 25 90`, no native VLAN — an untagged guest NIC still fails closed). Host addresses only on the `.25` subinterface (storage, migration, Corosync link 1). Guests attach tagged: 21 by default, 90 or 10 only by deliberate zone placement. Manage the tag set as a Proxmox SDN VLAN zone so all three hosts stay identical.
+- **RTL8125 2.5 GbE**: trunk carrying one VLAN-aware bridge (`bridge-vids 10 21 25 90`, no native VLAN — an untagged guest NIC still fails closed). Host addresses only on the `.25` subinterface (storage, migration, Corosync link 1). Guests attach tagged: 21 by default; 90 or 10 require deliberate zone placement, and 25 is only for a registered storage-attached guest with an explicit per-IP NAS/export ACL. Keep the explicit bridge tag set identical on all three hosts; defer an SDN zone/VNet layer until it solves a repeated management problem.
 - Rationale for moving guests off the 1 GbE: the original wiring put guest traffic on the same physical link as Corosync link 0, contradicting its own jitter rationale for keeping link 0 off VLAN 25 — a guest saturating 1 GbE creates exactly the congestion [Proxmox staff warn about](https://forum.proxmox.com/threads/proxmox-corosync-cluster-dedicated-network-why.139557/). Under this wiring a 2.5 GbE/RTL8125 failure costs a node its storage and guests but not quorum or management; the reverse held before.
 - Trade accepted: guests now contend with storage/migration/backup on the 2.5 GbE. Quorum stability is the higher-value invariant, and guests also gain 2.5× the bandwidth ceiling.
 - A VM needing L2/mDNS adjacency to IoT (Home Assistant) starts in VLAN 21 with an allow rule plus the UniFi mDNS repeater; a second vNIC tagged 90 is the escalation if discovery breaks empirically.
@@ -132,7 +138,7 @@ One UniFi zone per VLAN — never merge two VLANs into a zone, since intra-zone 
 |---|---|---|---|---|---|---|---|---|---|
 | Admin devices (Main group) | allow 8006/22/443/DSM | allow (diagnostics) | allow 6443/50000 | allow all | allow | allow | allow | allow | allow |
 | Main (rest) | deny | deny | deny | service ports only | deny | allow | mDNS repeater only | deny | allow |
-| Mgmt 20 | — | allow (NAS backup paths) | deny | deny | deny | deny | deny | deny | DNS/NTP/HTTPS |
+| Mgmt 20 | — | allow (NAS backup paths) | deny | deny | deny | deny | deny | deny | DNS/NTP/HTTPS; PVE repository HTTP |
 | Storage 25 | deny | L2 enclave; deny all routed | deny | deny | deny | deny | deny | deny | deny |
 | K8s 30 (node IPs) | deny | (L2, not routed) | — | explicit inference ports on `.21.31-.32`; else deny | — | — | deny | deny | allow |
 | Workloads 21 | deny | deny routed (Sparks use the L2 leg; guest NFS by per-IP exception) | deny | intra-zone open (accepted) | deny | allow | HA VM `.21.101` → allow; else deny | deny | allow |
@@ -175,28 +181,34 @@ tracked in the [DGX Spark bring-up runbook](../runbooks/dgx-spark-bringup.md).
 
 ### Phase 4 — PVE
 
-Follow the [PVE cluster plan (PR #373)](https://github.com/kelchm/home-lab/pull/373) phases 0-6 with the wiring amendment above. Added gates:
+Follow the [PVE cluster plan](20260814-pve-cluster.md) phases 0-6. Its wiring
+already incorporates this topology. Added gates:
 
 - Corosync under load: saturate the 2.5 GbE with iperf3 plus a vzdump run while watching `corosync-cfgtool -s` link stats and sub-ms ping on link 0; no retransmit/jitter events.
 - Pull the 1 GbE on one node: quorum retained via link 1, no reboot (watchdog disarmed without HA resources). Restore and verify fallback.
 
 ### Phase 5 — deferred: second Kubernetes cluster
 
-Fills VLAN 31, pools `131/141`, ASN 65021, storage `.41-.43` (+`.144/28` if Longhorn) exactly as reserved. As PVE VMs: one Talos VM per host, vNIC 0 tagged 31 (nodes `10.32.31.41-.43`), vNIC 1 tagged 25 (`10.32.25.41-.43`), VIP `10.32.31.8` via vipController, new pod/service CIDRs (e.g. `10.44.0.0/16`/`10.45.0.0/16`), no PVE HA on node VMs, per-vNIC PVE MAC/IP filtering off (GARP VIP), deterministic MACs in OpenTofu. The same cluster can later migrate VM-by-VM to bare metal without touching any address, BGP session, or firewall rule.
+Fills VLAN 31, pools `131/141`, ASN 65021, storage `.41-.43` (+`.144/28` if Longhorn) exactly as reserved. Before creating VMs, extend every PVE host bridge's allowed-tag set to 31 and apply the matching switch-profile change. Then run one Talos VM per host: vNIC 0 tagged 31 (nodes `10.32.31.41-.43`), vNIC 1 tagged 25 (`10.32.25.41-.43`), VIP `10.32.31.8` via vipController, new pod/service CIDRs (e.g. `10.44.0.0/16`/`10.45.0.0/16`), no PVE HA on node VMs, per-vNIC PVE MAC/IP filtering off (GARP VIP), deterministic MACs in OpenTofu. The same cluster can later migrate VM-by-VM to bare metal without touching any address, BGP session, or firewall rule.
 
 ## Repo-alignment checklist
 
 Edits land with their phases, not before:
 
-- `docs/architecture.md` — VLAN table (add 21, rename 20/25/30/31, delete 40), storage-VLAN decade convention, hardware table (add Sparks), DNS table (spark/ha entries), key-decisions (workloads zone; fabric-not-VLAN).
-- `docs/plans/20260814-pve-cluster.md` (once PR #373 merges) — guest bridge to the 2.5 GbE, guest network VLAN 21, VLAN 31 stays reserved; its network-policy table and phase 0 gate reference 31 throughout.
-- `network/unifi/README.md` — PVE rules amendments, Spark/VLAN 21 rules, VLAN 40 teardown record, new switch/port-map section.
+- `docs/architecture.md`, `docs/plans/20260814-pve-cluster.md`, and
+  `docs/roadmap.md` — aligned with the PVE guest bridge on 2.5 GbE, guest
+  VLAN 21, and the reserved VLAN 31 second-cluster identity.
+- `network/unifi/README.md` — add PVE rules and switch state only when applied;
+  Spark/VLAN 21 state is already recorded.
 - `talos/talconfig.yaml` + `talos/patches/k8s-prod-{1,2,3}/network-extras.yaml` — remove VLAN 40.
 - `kubernetes/apps/kube-system/cilium/app/helmrelease.yaml` + `networks.yaml` — devices, l2announcements, legacy pools.
-- `docs/roadmap.md` — Sparks; second-cluster stance.
-- Untracked `cluster.yaml` — stale `10.32.40.30`; fix or delete locally.
 
-Contradictions this plan resolves: PR #373 reserves k8s cluster 2's LB pools while consuming its VLAN and storage decade; PR #373's guest/Corosync NIC sharing contradicts its own link-priority rationale; the repo's firewall documentation reads as posture but is unapplied; main's hardware table lists SN850s for the G3s while the PVE plan expects SN770s (unverified either way).
+Contradictions this plan resolves: an earlier PVE draft consumed the second
+Kubernetes cluster's VLAN and storage identity; its guest/Corosync NIC sharing
+also contradicted its link-priority rationale. The integrated plan reserves
+VLAN 31, puts guests on VLAN 21, and keeps primary Corosync on the 1 GbE
+management link. Firewall documentation remains intent until explicitly applied,
+and the expected G3 drive model still requires inventory before installation.
 
 ## Assumptions and unresolved decisions
 

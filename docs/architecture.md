@@ -1,24 +1,29 @@
 # Infrastructure Architecture
 
 > Current-state reference for how the cluster is wired and why. Forward-looking
-> design (the planned sandbox cluster, deferred work) lives in
+> design (the planned PVE cluster, a reserved second Kubernetes cluster, and
+> deferred work) lives in
 > [roadmap.md](roadmap.md).
 
 ## Overview
 
-Container-native homelab with two separate environments:
+Container-native homelab with separate operational domains:
 
 - **Prod**: Bare-metal Talos Kubernetes cluster on 3x HP EliteDesk 705 G4 mini PCs
-- **Sandbox** (future): Second Talos cluster on 3x HP EliteDesk 800 G3 mini PCs for experimentation
+- **AI compute**: Two DGX Spark hosts with a direct ConnectX-7 fabric
+- **PVE** (planned): Independent virtualization cluster on 3x HP EliteDesk 800 G3 mini PCs
+- **K8s 2** (reserved): A future second Kubernetes cluster, on PVE or bare metal
 
-Goals: container-native workloads, GitOps-driven IaC, clear prod/sandbox separation, shared storage and management infrastructure.
+Goals: container-native workloads, GitOps-driven Kubernetes IaC, explicit
+ownership boundaries, and shared storage and network infrastructure without
+coupling every control plane.
 
 ## Hardware
 
 | Role | Hardware | Specs |
 |---|---|---|
 | Prod cluster nodes (3x) | HP EliteDesk 705 G4 | Ryzen 5 2400GE, 64GB RAM, 1TB NVMe (WD_BLACK SN770), 1GbE + 2.5GbE |
-| Sandbox cluster nodes (3x, future) | HP EliteDesk 800 G3 | Intel i5-6500T, 32GB RAM, 1TB NVMe (SN850), 1GbE + 2.5GbE |
+| PVE cluster nodes (3x, planned) | HP EliteDesk 800 G3 | Intel i5-6500T, 32GB RAM, expected 1TB WD_BLACK SN770 (verify before install), 1GbE + PCIe 2.5GbE |
 | AI compute (2x) | NVIDIA DGX Spark | GB10, 128GB unified memory, 4TB NVMe, 10GbE + ConnectX-7 direct fabric |
 | NAS | Synology DS1821+ | Ryzen V1500B, 6x 14TB Exos X16, 32GB RAM, 2x SFP+ + 4x 1GbE |
 
@@ -33,7 +38,17 @@ Goals: container-native workloads, GitOps-driven IaC, clear prod/sandbox separat
 - NFS from Synology for bulk storage
 - Flux for GitOps
 
-**Sandbox environment (future):** second Talos cluster sharing the storage and infra VLANs but a distinct compute VLAN and BGP ASN. See [Two-cluster topology](roadmap.md#two-cluster-topology).
+**DGX Spark hosts:** two standalone systems on the Workloads and Storage VLANs,
+with one closed, non-routed ConnectX-7 link. Applied state and recovery are in
+the [bring-up runbook](runbooks/dgx-spark-bringup.md).
+
+**PVE environment (planned):** an independent three-node virtualization cluster
+using Infra Mgmt for host control, Storage for migration/NFS, and Workloads for
+general-purpose guests. See the [PVE cluster plan](plans/20260814-pve-cluster.md).
+
+**K8s 2 (reserved):** VLAN 31, storage identities, LB pools, and BGP ASN remain
+reserved for a future second Kubernetes cluster. It may run as one Talos VM per
+PVE host or on later bare metal; no implementation is selected.
 
 ## VLAN Layout
 
@@ -57,8 +72,9 @@ VLAN 40 (Lab Services) is being retired — it existed only to host node subinte
 - K8s 2 ↔ K8s Prod: deny (environments isolated)
 - Main → Infra Mgmt: allow from admin devices only
 - Main (admin devices) → K8s Prod: allow on 50000/tcp (talosctl) + 6443/tcp (Kube API) — Talos consolidates its mgmt plane onto VLAN 30; mTLS enforces isolation
-- K8s 2 → Storage: scoped/limited (prevent sandbox from nuking prod data)
-- K8s Prod and K8s 2 → Internet: allow (image pulls, updates)
+- PVE guests on Workloads → Infra Mgmt, Storage, and K8s Prod: deny by default; add explicit service exceptions only
+- PVE and K8s storage identities → Storage: scope to named peers and services
+- K8s Prod, K8s 2, and Workloads → Internet: allow subject to normal DNS and egress controls
 - Per-pool LB rules: see [LB Pool Allocation](#lb-pool-allocation)
 
 ## IP Addressing Convention
@@ -209,7 +225,7 @@ Three policy classes:
 | Class | Pool (prod) | Reachable from | Use cases |
 |---|---|---|---|
 | **admin** | `admin-prod` (10.32.130.0/24) | VLAN 10 admin devices only | Operator UIs via Traefik admin gateway, k8s-gateway DNS |
-| **services** | `services-prod` (10.32.140.0/24) | VLAN 10 (Main) | Household-facing apps (Traefik services gateway, per-service IPs) |
+| **services** | `services-prod` (10.32.140.0/24) | VLAN 10 (Main), VLAN 21 (Workloads) | Household-facing apps (Traefik services gateway, per-service IPs) |
 | **shared** | `shared-prod` (10.32.150.0/24) | All client VLANs (per-IP+port) | Cross-zone services with per-IP+port firewall rules (Visionect device gateway, future DNS/NTP) |
 
 Sandbox-side pools (`admin-sandbox` 10.32.131.0/24, `services-sandbox` 10.32.141.0/24) follow the same naming under a future second cluster.
@@ -219,8 +235,8 @@ Sandbox-side pools (`admin-sandbox` 10.32.131.0/24, `services-sandbox` 10.32.141
 ```
 .1     traefik-admin            Operator UIs (Longhorn, Grafana, OpenObserve, …) via HTTPRoute;
                                 Traefik middleware adds auth where the app lacks native.
-.2     k8s-gateway              In-cluster authoritative DNS for home.kelch.io
-                                (UniFi gateway forwards the zone to this IP).
+.2     k8s-gateway              In-cluster authority for app/service records
+                                conditionally forwarded by the UniFi resolver.
 .3-.10 (reserved infra)
 .30-.99 (per-service admin IPs — rare; admin gateway is the default)
 ```
@@ -253,6 +269,7 @@ Configured in UniFi (no committable artifact lives in this repo; intent in [`net
 ```
 VLAN 10 Main  → admin-prod          : allow (admin device group only)
 VLAN 10 Main  → services-prod       : allow
+VLAN 21 Workloads → services-prod    : allow
 VLAN 90 IoT   → admin-prod          : deny
 VLAN 90 IoT   → services-prod       : deny
 VLAN 99 Guest → admin-prod          : deny
@@ -284,7 +301,12 @@ Operator surfaces stay behind admin Traefik even when they have native auth — 
 
 ## DNS Plan
 
-**Domain:** `home.kelch.io` (owned). UniFi gateway forwards the zone to `k8s-gateway` (10.32.130.2) which serves records derived from in-cluster `HTTPRoute` and `Service` resources at TTL=1.
+**Domain:** `home.kelch.io` (owned). The UniFi gateway is the client-facing
+resolver: it answers static infrastructure and host records locally, then
+conditionally forwards unresolved app/service records to `k8s-gateway`
+(10.32.130.2). The in-cluster authority serves records derived from
+`HTTPRoute` and `Service` resources at TTL=1. Core infrastructure names
+therefore continue resolving while Kubernetes is unavailable.
 
 **Structure:** Fully flat — all hostnames directly under `home.kelch.io`. Environment/role info lives in the hostname prefix, not in DNS hierarchy. Keeps wildcard certs simple (Let's Encrypt wildcards only cover one level).
 
@@ -294,6 +316,10 @@ k8s-prod.home.kelch.io              10.32.30.8
 k8s-prod-{1,2,3}.home.kelch.io      10.32.30.{11,12,13}
 k8s-prod-{1,2,3}-storage.home.kelch.io  10.32.25.{11,12,13}
 sbx-k8s.home.kelch.io               10.32.31.8     (future)
+
+# PVE hosts (planned; static UniFi-local records)
+pve-lab-{1,2,3}.home.kelch.io       10.32.20.{21,22,23}
+pve-lab-{1,2,3}-storage.home.kelch.io  10.32.25.{21,22,23}
 
 # Workload hosts (pending)
 spark-{1,2}.home.kelch.io           10.32.21.{31,32}
@@ -402,7 +428,7 @@ home-lab/
 │   └── unifi/                  # versioned UniFi-side artifacts (FRR config, firewall intent)
 └── docs/
     ├── architecture.md         # this file
-    ├── roadmap.md              # forward-looking design (sandbox, deferred work)
+    ├── roadmap.md              # forward-looking design (PVE, K8s 2, deferred work)
     ├── runbooks/              # operational procedures
     └── plans/                 # design docs written ahead of changes
 ```
@@ -427,14 +453,22 @@ gitignored.
 
 ## Key Design Decisions (and why)
 
-- **Bare metal Talos over virtualized**: User prefers Talos' modern declarative model; 6 mini PCs is ample hardware for split prod/sandbox; Proxmox UI didn't align with aesthetic preferences.
+- **Bare-metal Talos for production; separate PVE for general virtualization**:
+  Kubernetes keeps its immutable declarative host model while PVE remains an
+  independently recoverable VM/LXC environment. Neither control plane hosts or
+  applies the other.
 - **3-node combined CP+worker**: Best hardware utilization at homelab scale; etcd HA with 3 nodes; `allowSchedulingOnControlPlanes: true` is idiomatic.
-- **Sandbox as a second Talos cluster (future)**: Identical operational model to prod; the encoding scheme generalizes via the system-identity decade; prefix-list scoping isolates failure domains. Trades VM playground capability for uniformity — accepted consciously.
+- **PVE on the EliteDesk 800 G3 nodes (planned)**: Host updates stay deliberate
+  and node-by-node; OpenTofu manages guests without making Kubernetes an
+  execution dependency. See the [draft plan](plans/20260814-pve-cluster.md).
+- **Second Kubernetes cluster remains a reservation, not a hardware assignment**:
+  VLAN 31 and its BGP/storage identities can support Talos VMs on PVE or future
+  bare metal without renumbering the cluster.
 - **BGP for LB delivery, Traefik for HTTP+auth aggregation**: Different layers. BGP handles packet delivery and ECMP; Traefik aggregates TLS + auth for apps that lack native versions. Cilium Gateway API will displace Traefik when Cilium implements GEP-1494 (external auth filter) — until then Traefik's middleware story is irreducible for auth-less app UIs.
 - **Three pool classes (admin / services / shared)**: pool == firewall policy class. Shared exists specifically to let cluster-wide services like DNS take per-IP+port carve-outs from untrusted VLANs without diluting the admin/services posture.
 - **Per-service IPs for native-auth household apps**: BGP makes IPs cheap; offloading from Traefik reduces middleware sprawl and lets each app own its own TLS path via cert-manager.
 - **Admin gateway is the default for operator surfaces regardless of native auth**: native auth solves the login screen but not consistent IP allowlisting, future SSO, or uniform security headers. Centralize that policy in Traefik admin.
-- **VLAN 30 retained as compute-only**: pod egress identity, sandbox isolation pathway, and mgmt-surface blast radius still justify a dedicated compute VLAN even when it holds only nodes + API VIP.
+- **VLAN 30 retained as compute-only**: pod egress identity and management-surface blast radius still justify a dedicated Kubernetes compute VLAN even when it holds only nodes + API VIP.
 - **API VIPs managed by Talos `vipController`, not Cilium service-LB**: Talos handles VIP failover via GARP at the machine-config layer. Cluster API reachability is therefore independent of Cilium's service-LB and BGP convergence — important during BGP outages.
 - **Flat DNS namespace**: Hostname prefixes encode role/environment; DNS hierarchy would duplicate that info and complicate wildcard certs.
 - **`.8` for Kubernetes API VIP**: Mnemonic for k8s; consistent across environments (k8s-prod at 10.32.30.8, future sbx-k8s at 10.32.31.8).
