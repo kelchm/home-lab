@@ -27,9 +27,20 @@ spec:
               tag: 7.6.5@sha256:1c8de943f4063d207483563896b1713b986a463e13d6a56730671813d6668415
             command: ["/bin/sh", "-ec"]
             args:
-              - >-
-                mkdir -p /data/ac_apps /data/certs /data/config /data/devices
-                /data/customfonts
+              - |-
+                mkdir -p /data/ac_apps /data/certs /data/config /data/devices \
+                  /data/customfonts
+
+                # VSS 7.6.5 mis-parses an IPv6 localhost socket as "[" when
+                # advertising its internal render engine. Docker selected the
+                # IPv4 localhost address; Kubernetes exposes both families.
+                if [ -f /data/config/config.json ]; then
+                  umask 077
+                  jq '.Global.MasterHost = "127.0.0.1"' \
+                    /data/config/config.json \
+                    > /data/config/config.json.tmp
+                  mv /data/config/config.json.tmp /data/config/config.json
+                fi
             securityContext:
               allowPrivilegeEscalation: false
               capabilities: { drop: ["ALL"] }
@@ -46,6 +57,7 @@ spec:
               tag: 7.6.5@sha256:1c8de943f4063d207483563896b1713b986a463e13d6a56730671813d6668415
             env:
               TZ: America/New_York
+              VISIONECT_SERVER_MASTER_HOST: 127.0.0.1
               DB2_1_PORT_5432_TCP_ADDR:
                 valueFrom:
                   secretKeyRef:
