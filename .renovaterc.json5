@@ -39,6 +39,15 @@
       enabled: false,
     },
     {
+      // VSS 7.6.5 is a frozen vendor binary; its Redis client is not
+      // inspectable. Valkey 7.2 reports redis_version 7.2.4, which that client
+      // already supports. Patches still flow; 8.x and 9.x do not.
+      description: "Valkey: cap the VSS cache sidecar at the 7.x series",
+      matchDatasources: ["docker"],
+      matchPackageNames: ["docker.io/valkey/valkey"],
+      allowedVersions: "<8.0.0",
+    },
+    {
       // Kaniop rejects kanidm server minors newer than its bundled client SDK.
       // Ceiling value is machine-managed by the "Kanidm Ceiling Sync" workflow.
       description: "kanidm/server: cap at the minor supported by kaniop's SDK",
