@@ -28,6 +28,7 @@ jobs:
       kubernetes_changed: ${{ steps.changed-files.outputs.kubernetes_any_changed || 'true' }}
       network_changed: ${{ steps.changed-files.outputs.network_any_changed || 'true' }}
       scripts_changed: ${{ steps.changed-files.outputs.scripts_any_changed || 'true' }}
+      skills_changed: ${{ steps.changed-files.outputs.skills_any_changed || 'true' }}
       sops_changed: ${{ steps.changed-files.outputs.sops_any_changed || 'true' }}
       talos_changed: ${{ steps.changed-files.outputs.talos_any_changed || 'true' }}
     steps:
@@ -69,6 +70,9 @@ jobs:
               - '.mise.toml'
               - '.shellcheckrc'
               - 'scripts/**/*.sh'
+            skills:
+              - '.github/workflows/flux-local.yaml'
+              - '.agents/skills/**'
             sops:
               - '.github/workflows/flux-local.yaml'
               - '.mise.toml'
@@ -354,6 +358,45 @@ jobs:
       - name: No shell changes
         if: needs.pre-job.outputs.scripts_changed != 'true'
         run: echo "Shell validation is not required."
+
+  skills:
+    name: Agent Skills Validation
+    needs: pre-job
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        if: needs.pre-job.outputs.skills_changed == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        if: needs.pre-job.outputs.skills_changed == 'true'
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.12.1"
+          enable-cache: false
+
+      - name: Validate Agent Skills
+        if: needs.pre-job.outputs.skills_changed == 'true'
+        env:
+          SKILLS_REF_SOURCE: git+https://github.com/agentskills/agentskills.git@69ef37e9424c0a7ea9dd2293b559e43ec8176379#subdirectory=skills-ref
+        run: |
+          mapfile -d '' skill_files < <(
+            find .agents/skills -mindepth 2 -maxdepth 2 -name SKILL.md -print0 | sort -z
+          )
+          if (( ${#skill_files[@]} == 0 )); then
+            echo "No Agent Skills found under .agents/skills." >&2
+            exit 1
+          fi
+
+          for skill_file in "${skill_files[@]}"; do
+            uvx --from "$SKILLS_REF_SOURCE" skills-ref validate "${skill_file%/SKILL.md}"
+          done
+
+      - name: No skill changes
+        if: needs.pre-job.outputs.skills_changed != 'true'
+        run: echo "Agent Skills validation is not required."
 
   network:
     name: Network Artifact Validation
