@@ -209,6 +209,8 @@ spec:
         labels:
           lb-pool: shared-prod
         annotations:
+          # Service records otherwise default to name.namespace.<zone>.
+          coredns.io/hostname: vss.home.kelch.io
           lbipam.cilium.io/ips: "10.32.150.30"
         ports:
           https:
