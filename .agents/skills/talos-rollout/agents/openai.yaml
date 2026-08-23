@@ -1,4 +1,0 @@
-interface:
-  display_name: "Talos Rollout"
-  short_description: "Safely roll Talos nodes one at a time"
-  default_prompt: "Use $talos-rollout to safely upgrade the production Talos cluster."
