@@ -225,7 +225,7 @@ Three policy classes:
 | Class | Pool (prod) | Reachable from | Use cases |
 |---|---|---|---|
 | **admin** | `admin-prod` (10.32.130.0/24) | VLAN 10 admin devices only | Operator UIs via Traefik admin gateway, k8s-gateway DNS |
-| **services** | `services-prod` (10.32.140.0/24) | VLAN 10 (Main) | Household-facing apps (Traefik services gateway, per-service IPs) |
+| **services** | `services-prod` (10.32.140.0/24) | VLAN 10 (Main), VLAN 21 (Workloads) | Household-facing apps (Traefik services gateway, per-service IPs) |
 | **shared** | `shared-prod` (10.32.150.0/24) | All client VLANs (per-IP+port) | Cluster-wide shared services like DNS or NTP — not currently allocated |
 
 Sandbox-side pools (`admin-sandbox` 10.32.131.0/24, `services-sandbox` 10.32.141.0/24) follow the same naming under a future second cluster.
@@ -263,6 +263,7 @@ Configured in UniFi (no committable artifact lives in this repo; intent in [`net
 ```
 VLAN 10 Main  → admin-prod          : allow (admin device group only)
 VLAN 10 Main  → services-prod       : allow
+VLAN 21 Workloads → services-prod    : allow
 VLAN 90 IoT   → admin-prod          : deny
 VLAN 90 IoT   → services-prod       : deny
 VLAN 99 Guest → admin-prod          : deny

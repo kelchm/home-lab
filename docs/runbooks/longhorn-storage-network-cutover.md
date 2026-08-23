@@ -1,6 +1,6 @@
 # Longhorn Storage Network Cutover
 
-Runbook for moving Longhorn replica engine ↔ replica engine traffic onto VLAN 25 (2.5GbE storage NIC) via Multus + bridge CNI. **Already executed for the prod cluster on 2026-05-02.** Kept around as the reference procedure for future similar work (plugin/version migrations, replacement Talos nodes, or a future Kubernetes cluster).
+Runbook for moving Longhorn replica engine ↔ replica engine traffic onto VLAN 25 (2.5GbE storage NIC) via Multus + bridge CNI. **Already executed for the prod cluster on 2026-05-02.** Kept as a reference for similar work; re-inventory cluster-specific node paths, namespaces, workloads, and safety gates before reuse.
 
 ## Why bridge, not macvlan or ipvlan
 

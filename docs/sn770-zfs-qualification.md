@@ -104,7 +104,7 @@ harness-error run are excluded from the counts but retained in the matrix.
 
 ### Established by this experiment
 
-- HMB size alone was not a trigger on the current single-descriptor allocator: 0, 32, 128, and 200 MiB send screens all passed.
+- HMB configuration alone was not a trigger on the current kernel: the 0 MiB (disabled), 32 MiB, 128 MiB, and 200 MiB send screens all passed; the enabled cases each used one descriptor.
 - The historical 32 MiB/eight-descriptor HMB geometry was genuinely reproduced and is not sufficient by itself on this specimen.
 - Changing this specimen from 512-byte to 4096-byte logical sectors did not reproduce the fast ZFS-send failure, even though controlled public A/B reports show that the format matters on other specimens and platforms.
 - `zfs send`, scrub, and concurrent send-plus-scrub are not universal detonators for every 1 TB SN770 on `731100WD`.
