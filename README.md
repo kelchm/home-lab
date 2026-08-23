@@ -73,6 +73,8 @@ home-lab/
 │   └── components/ # shared Kustomize components (e.g. SOPS secrets)
 ├── bootstrap/      # Helmfile used to bring up Cilium/Flux before GitOps takes over
 ├── network/unifi/  # versioned UniFi-side artifacts (FRR/BGP, firewall intent)
+├── devices/        # manually applied config for appliances outside Kubernetes
+├── synology/       # manually applied Compose workloads on the Synology NAS
 ├── scripts/        # helper scripts (bootstrap, Synology ACLs)
 ├── tools/          # one-off benchmarks and sync utilities
 └── docs/           # architecture, runbooks, plans, decision records
