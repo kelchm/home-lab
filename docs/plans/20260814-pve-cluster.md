@@ -177,8 +177,9 @@ native VLAN). Create one VLAN-aware bridge, `vmbr0`, over the NIC:
 - `vmbr0` itself has no address;
 - `vmbr0.25` carries `10.32.25.21/24` (then `.22`, `.23`) with no gateway —
   storage, migration, and Corosync link 1;
-- guest NICs attach to `vmbr0` tagged `21` by default, `90` or `10` only by
-  deliberate zone placement; and
+- guest NICs attach to `vmbr0` tagged `21` by default; `90` or `10` require
+  deliberate zone placement, and `25` is only for a registered
+  storage-attached guest with an explicit per-IP NAS/export ACL; and
 - no guest may be created with an untagged NIC.
 
 With no native VLAN on the trunk, an accidentally untagged guest fails closed
@@ -256,26 +257,34 @@ mistyped PVE rule can lock out every node even when the router rules are sound.
 
 Before forming a cluster:
 
-1. Update BIOS, then use the vendor-supported tool to check for an NVMe firmware
-   update. Record the before/after revision. Load BIOS defaults, then enable
-   VT-x, VT-d, UEFI boot, and power-on-after-AC-loss.
-2. Before partitioning, boot a trusted live environment and record `nvme
-   id-ctrl`, `nvme id-ns`, `nvme smart-log`, and `smartctl` output. Verify the
-   model, firmware, capacity, and a 512-byte logical sector size.
-3. While no valuable data exists, run memory and CPU burn-in plus a destructive
+1. Before any firmware change or partitioning, boot a trusted live environment
+   and record the BIOS state plus `nvme id-ctrl`, `nvme id-ns`, `nvme
+   smart-log`, and `smartctl` output. Verify each drive's model, firmware,
+   capacity, and logical sector size. Keep serials, MACs, and raw captures in
+   ignored/private inventory; track only sanitized facts.
+2. Compare every candidate drive with the remaining
+   [SN770 qualification](../sn770-zfs-qualification.md) matrix. Preserve any
+   old-firmware specimen, control drive, and same-host baseline needed by that
+   work; do not change its firmware, sector format, or host firmware until the
+   qualification hold is explicitly released.
+3. After the hold is cleared, update BIOS and load defaults, then enable VT-x,
+   VT-d, UEFI boot, and power-on-after-AC-loss. For each released drive, use the
+   vendor-supported tool to check and, when applicable, apply an NVMe firmware
+   update one drive at a time; record the sanitized before/after revision.
+4. While no valuable data exists, run memory and CPU burn-in plus a destructive
    full-device write/read verification and sustained mixed/sync NVMe I/O. A
    quick SMART pass is insufficient. Reject a drive or host that logs any NVMe
    reset, timeout, PCIe/AER error, media error, or capacity change.
-4. Install only `pve-lab-1` using the current stable PVE 9.x ISO. Keep the
+5. Install only `pve-lab-1` using the current stable PVE 9.x ISO. Keep the
    default supported kernel; do not opt into a test kernel to make the RTL8125
    work unless the stable kernel demonstrably fails.
-5. Record `lspci -nnk`, interface names/MACs, and `ethtool` link and
-   driver/firmware data. The RTL8125 must hold a negotiated 2.5 Gb/s link and
-   sustain `iperf3` without resets or PCIe/AER errors.
-6. Exercise the installed storage with a disposable VM: sustained I/O, backup
+6. Record `lspci -nnk`, interface names, private MAC inventory, and `ethtool`
+   link and driver/firmware data. The RTL8125 must hold a negotiated 2.5 Gb/s
+   link and sustain `iperf3` without resets or PCIe/AER errors.
+7. Exercise the installed storage with a disposable VM: sustained I/O, backup
    to `nas-vzdump`, restore, and—after node 2 exists—local-disk migration over
    VLAN 25. Recheck the kernel and NVMe error logs after every test.
-7. Test a reboot and complete power removal. Confirm both NIC identities and
+8. Test a reboot and complete power removal. Confirm both NIC identities and
    all LVM volumes return unchanged.
 
 Only after node 1 passes should the same baseline move to nodes 2 and 3. This
@@ -312,8 +321,10 @@ it is being diagnosed.
 4. Confirm expected votes `3`, quorum `2`, and that removal of either physical
    link does not destroy quorum.
 5. Do not add a QDevice or change expected votes. A symmetric three-node
-   cluster already has the correct quorum model, and the HA watchdog provides
-   self-fencing when a node loses cluster communication.
+   cluster already has the correct quorum model. Before HA resources are
+   configured, losing one link should retain quorum without rebooting; once HA
+   services and resources are enabled, the watchdog provides self-fencing when
+   a node loses cluster communication.
 6. Configure `10.32.25.0/24` as the secure migration network.
 7. Create a non-root `kelchm@pve` administrator and API-token service identity;
    retain `root@pam` as local-console break glass.
@@ -432,11 +443,15 @@ symmetric nodes.
 ### Capacity guardrails
 
 Each 32 GB host keeps at least 6 GiB free for PVE, migration, and transient
-load. For a planned one-node evacuation—and for failover of the subset on
-`nas-guests`—normal guest allocation should stay near 18-20 GiB per node and
-HA-critical running memory across the cluster should stay at or below about 52
-GiB, the usable guest memory of two nodes. CPU is intentionally overcommittable,
-but sustained host CPU above 60% would leave limited headroom for evacuation.
+load, leaving about 26 GiB for guests. If every running guest must remain online
+through a planned one-node evacuation, aggregate running memory across the
+cluster stays at or below about 52 GiB (roughly 17 GiB per host before
+evacuation), with placement that leaves destination headroom. A denser 18-20
+GiB-per-host baseline explicitly accepts stopping lower-priority guests during
+maintenance. For abrupt failover, count surviving non-HA guests plus every
+`shared-ha` guest eligible to restart—not only the HA subset—against the same
+two-host ceiling. CPU is intentionally overcommittable, but sustained host CPU
+above 60% would leave limited headroom for evacuation.
 
 Thin-provisioned storage is not capacity. Alert when either `local-lvm` data or
 metadata reaches 70%, stop routine growth at 80%, and treat 90% as an incident.
