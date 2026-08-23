@@ -35,7 +35,7 @@
       description: "kanidm/server: cap at the minor supported by kaniop's SDK",
       matchDatasources: ["docker"],
       matchPackageNames: ["/kanidm/server$/"],
-      allowedVersions: "<1.11.0",
+      allowedVersions: "<1.12.0",
     },
     {
       description: "Override Helmfile Dependency Name",
