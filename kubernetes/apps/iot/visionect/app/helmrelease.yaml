@@ -1,6 +1,6 @@
 ---
-# Visionect Software Suite. The migration deliberately preserves VSS 7.6.5;
-# upgrade the application only after the Synology rollback copy is retired.
+# Visionect Software Suite. VSS 7.7.0 introduced mandatory server licensing,
+# so the application is deliberately locked to this exact 7.6.5 image.
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:

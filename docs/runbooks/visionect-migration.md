@@ -48,6 +48,21 @@ by the VSS Cilium policy.
   this change.
 - Never run both VSS instances against client traffic at once.
 
+### Version lock and licensing boundary
+
+Visionect's [7.7.0 release notes](https://docs.visionect.com/TechnicalDocumentation/ReleaseNotes/VisionectSoftwareSuite.html#release-7-7-0)
+state that the release introduced mandatory VSS licenses. The production
+deployment therefore remains byte-for-byte locked to the proven 7.6.5 image:
+
+```text
+docker.io/visionect/visionect-server-v3:7.6.5@sha256:1c8de943f4063d207483563896b1713b986a463e13d6a56730671813d6668415
+```
+
+The HelmRelease and manual import helper use that immutable digest, and
+Renovate is disabled specifically for the Visionect image so it cannot open
+version or digest-update PRs. Any intentional upgrade must be a reviewed change
+that updates the pinned images and removes or changes the Renovate rule.
+
 ### Why VSS does not get privileged/FUSE access
 
 Visionect 2.8 introduced a FUSE-backed cookie filesystem and the official
