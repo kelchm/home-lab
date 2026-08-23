@@ -80,11 +80,13 @@ So `10.32.130.0/24` = admin-prod, `10.32.141.0/24` = services-sandbox, `10.32.15
 ### Non-routed machine fabrics
 
 `198.19.240.0/20` is reserved from the RFC 2544 benchmarking block for closed
-machine interconnects. Current rail A is `198.19.240.0/24`; rail B is
-`198.19.241.0/24`. Fabric prefixes exist only as connected routes on
-participating endpoints and are never routed, advertised, published in DNS, or
-included in gateway firewall/address objects. The DGX allocation is recorded
-in the [bring-up runbook](runbooks/dgx-spark-bringup.md#fabric-address-allocation).
+machine interconnects. The current DGX fabric uses logical subnets A
+(`198.19.240.0/24`) and B (`198.19.241.0/24`). At each endpoint, both paths
+share the same ConnectX-7 and QSFP cage; end to end, they share the single DAC.
+They are not independent physical rails or failure domains. Fabric prefixes
+exist only as connected routes on participating endpoints and are never routed,
+advertised, published in DNS, or included in gateway firewall/address objects.
+The DGX allocation is recorded in the [bring-up runbook](runbooks/dgx-spark-bringup.md#fabric-address-allocation).
 
 ### /24 skeletons
 
@@ -112,7 +114,7 @@ Member numbering is 1-indexed (`k8s-prod-1` = `.11`, not `.10`); `.X0` is never 
 - Decades allocate to registered systems in commissioning order; the ledger is the [Storage VLAN registry](#storage-vlan-registry) below.
 - A system is an addressing group — a Kubernetes cluster, a PVE host cluster, or the standalone-workload class — never a substrate. Kubernetes nodes running as PVE VMs address as Kubernetes members, so a cluster can move between PVE and bare metal without renumbering.
 - A member's octet is reserved on the storage VLAN even while it has no storage leg, so adding one later never renumbers.
-- Outside the rule: API VIPs (`.8`), LB pools (routed service slots; third-octet units digit = cluster, host portion = service slot), storage-pod /28s, and single-homed VLAN-local endpoints (guests, DHCP clients, infra appliances).
+- Outside the rule: API VIPs (`.8`), LB pools (routed service slots; third-octet units digit = cluster, host portion = service slot), storage-pod /28s, non-routed machine-fabric addresses, and single-homed VLAN-local endpoints (guests, DHCP clients, infra appliances).
 
 Examples:
 
@@ -267,7 +269,7 @@ Operator surfaces stay behind admin Traefik even when they have native auth — 
 ## Network Interface Assignments (per 705 G4 node)
 
 - **1GbE NIC**: K8s Prod (VLAN 30) — node mgmt, Kube API, pod network, BGP source
-- **2.5GbE NIC**: Storage (VLAN 25, tagged) — NFS/iSCSI to Synology
+- **2.5GbE NIC**: Storage (VLAN 25 access/native) — enslaved to `br-storage`, which owns the host address for NFS/iSCSI to Synology
 - Default route via K8s Prod interface only; Storage interface is same-subnet only
 
 (VLAN 40 subinterface remains plumbed pending teardown but binds nothing.)
@@ -282,12 +284,12 @@ Operator surfaces stay behind admin Traefik even when they have native auth — 
 # Cluster identity
 k8s-prod.home.kelch.io              10.32.30.8
 k8s-prod-{1,2,3}.home.kelch.io      10.32.30.{11,12,13}
-k8s-prod-{1,2,3}-storage.h.k.io     10.32.25.{11,12,13}
+k8s-prod-{1,2,3}-storage.home.kelch.io  10.32.25.{11,12,13}
 sbx-k8s.home.kelch.io               10.32.31.8     (future)
 
-# Workload hosts
+# Workload hosts (pending)
 spark-{1,2}.home.kelch.io           10.32.21.{31,32}
-spark-{1,2}-storage.h.k.io          10.32.25.{31,32}
+spark-{1,2}-storage.home.kelch.io   10.32.25.{31,32}  (pending)
 
 # Shared infrastructure
 nas.home.kelch.io                   10.32.20.5
@@ -401,7 +403,7 @@ gitignored.
 
 ## Bootstrap Sequence
 
-1. **Network prep**: Configure DHCP reservations for all 6 NICs across the 3 nodes; configure switch ports as trunks carrying VLANs 25 and 30; verify Synology has an interface on VLAN 25; configure UniFi BGP per [`network/unifi/`](../network/unifi/).
+1. **Network prep**: Configure DHCP reservations for all 6 NICs across the 3 nodes; apply the `k8s-node` access-30 profile to each 1GbE port and the `storage` access-25 profile to each 2.5GbE port; verify Synology has an interface on VLAN 25; configure UniFi BGP per [`network/unifi/`](../network/unifi/).
 2. **Repo + tooling**: Install `talosctl`, `talhelper`, `kubectl`, `flux`, `sops`, `age`, `helm`, `kustomize` locally. Create git repo, generate age key, set up `.sops.yaml`.
 3. **Talos config**: Write `talconfig.yaml`, generate secrets with `talhelper gensecret`, encrypt with sops, commit.
 4. **Boot nodes**: Flash Talos ISO (from [factory.talos.dev](https://factory.talos.dev) with `iscsi-tools` and `util-linux-tools` extensions for Longhorn). Boot all three nodes from USB.

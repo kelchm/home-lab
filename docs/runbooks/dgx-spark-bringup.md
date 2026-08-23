@@ -44,23 +44,26 @@ explicitly under [Remaining work](#remaining-work).
 | Fabric B RDMA device | `roceP2p1s0f0` | `roceP2p1s0f0` |
 
 The QSFP DAC is connected to physical port 0 on both systems. Each cage exposes
-two logical network/RDMA devices, so both `/24` rails must be configured even
-though there is one cable.
+two logical network/RDMA devices, so both `/24` paths must be configured even
+though there is one cable. At each endpoint, both paths share the same
+ConnectX-7 and QSFP cage; end to end, they share the single DAC. They are not
+independent physical rails or failure domains.
 
 ### Fabric address allocation
 
 `198.19.240.0/20` is reserved for isolated machine fabrics. It is part of the
 [RFC 2544](https://datatracker.ietf.org/doc/html/rfc2544) benchmarking block,
 not part of the lab's routed `10.32.0.0/16` vocabulary. The third octet is the
-rail identifier beginning at 240; the final octet preserves the workload-host
-identity (`.11` for Spark 1 and `.12` for Spark 2). A `/24` per rail permits a
-future switched fabric to add nodes without renumbering.
+logical-path identifier beginning at 240; `.11` and `.12` are member indexes
+within this fabric rather than instances of the VLAN system-identity rule. A
+`/24` per path permits a future switched fabric to add nodes without
+renumbering.
 
 This allocation is valid only while the fabric remains closed: no DNS or
 service discovery, no gateway/router firewall object, no static or dynamic
 route, and no Tailscale advertisement. Host nftables rules refer to interface
 names rather than fabric prefixes. If general applications or clients ever
-need fabric access, renumber rail A to `10.254.240.0/24` and rail B to
+need fabric access, renumber path A to `10.254.240.0/24` and path B to
 `10.254.241.0/24` instead of weakening those boundaries.
 
 ## UniFi state
@@ -265,7 +268,8 @@ git clone --branch v2.30.7-1 --depth 1 \
 make -C "$HOME/nccl" -j"$(nproc)" src.build \
   NVCC_GENCODE='-gencode=arch=compute_121,code=sm_121'
 
-git clone --depth 1 https://github.com/NVIDIA/nccl-tests.git \
+git clone --branch v2.19.7 --depth 1 \
+  https://github.com/NVIDIA/nccl-tests.git \
   "$HOME/nccl-tests"
 NCCL_HOME="$NCCL_HOME" MPI_HOME="$MPI_HOME" \
   make -C "$HOME/nccl-tests" -j"$(nproc)" MPI=1
@@ -280,9 +284,9 @@ forwarding-guard, and reboot-persistence results are from 2026-08-22.
 |---|---|---|
 | Static routes after reboot | Default only via `10.32.21.1`; VLAN 25 and both fabric `/24`s connected-only | Pass |
 | Storage L2 reachability | Both storage source IPs reached NAS `10.32.25.5` in about 0.3-1.0 ms | Partial; throughput deferred |
-| Fabric jumbo frames | 8972-byte ICMP payload on both rails, 0% loss | Pass |
-| Raw RDMA, concurrent rails | 98.04 Gb/s per rail; 196.08 Gb/s aggregate before and after readdress | Pass |
-| NCCL all-gather, 16 GiB, warmed | Initial 23.82 GB/s average; post-readdress 24.05 GB/s average; zero wrong values | Pass |
+| Fabric jumbo frames | 8972-byte ICMP payload on both logical paths, 0% loss | Pass |
+| Raw RDMA, concurrent paths | 98.04 Gb/s per path; 196.08 Gb/s aggregate before and after readdress | Pass |
+| NCCL all-gather, 16 GiB, warmed | Initial 23.82 GB/s; post-fabric-readdress 24.05 GB/s; post-LAN-readdress 22.47 GB/s; zero wrong values | Pass |
 | Routed Spark to Main client | 1.09 Gb/s to Wi-Fi MBP `10.32.10.244` | Healthy end-to-end baseline |
 | Fabric transit | Routed negative test dropped 3/3 packets; bridge-container A/B passed only with the guard absent | Pass; guard closes a proven Docker forwarding path |
 | Guard across Docker restart | Unchanged guard invocation IDs; table present in 67/67 and 64/64 samples; no guard-table nft events | Pass |
@@ -307,7 +311,7 @@ trend to compare after driver updates or any reported link instability.
 
 ### Raw RDMA command shape
 
-Run one server per rail on Spark 2, then both clients concurrently on Spark 1:
+Run one server per logical path on Spark 2, then both clients concurrently on Spark 1:
 
 ```sh
 # Spark 2
@@ -326,7 +330,9 @@ ib_write_bw -d roceP2p1s0f0 -x 3 -F -D 10 -s 1048576 -q 4 \
 ### NCCL environment and command
 
 Management/bootstrap traffic is pinned to 10GbE. NCCL data is restricted to
-the two exact RoCE devices and IPv4 RoCEv2 GID index 3:
+the two exact RoCE devices and IPv4 RoCEv2 GID index 3. Leave NIC merging and
+cross-NIC policy at NCCL defaults; NCCL schedules channels across the two
+separate logical devices without fusing them.
 
 ```sh
 export CUDA_HOME=/usr/local/cuda
@@ -334,17 +340,15 @@ export MPI_HOME=/usr/lib/aarch64-linux-gnu/openmpi
 export NCCL_HOME="$HOME/nccl/build"
 export LD_LIBRARY_PATH="$NCCL_HOME/lib:$CUDA_HOME/lib64:$MPI_HOME/lib:${LD_LIBRARY_PATH:-}"
 export UCX_NET_DEVICES=enP7s7
-export NCCL_SOCKET_IFNAME=enP7s7
+export NCCL_SOCKET_IFNAME='=enP7s7'
 export OMPI_MCA_btl_tcp_if_include=enP7s7
 export NCCL_IB_HCA='=rocep1s0f0,roceP2p1s0f0'
-export NCCL_IB_MERGE_NICS=1
-export NCCL_CROSS_NIC=1
 export NCCL_IB_GID_INDEX=3
 
 mpirun -np 2 -H 10.32.21.31:1,10.32.21.32:1 \
   -x LD_LIBRARY_PATH -x UCX_NET_DEVICES -x NCCL_SOCKET_IFNAME \
   -x OMPI_MCA_btl_tcp_if_include -x NCCL_IB_HCA \
-  -x NCCL_IB_MERGE_NICS -x NCCL_CROSS_NIC -x NCCL_IB_GID_INDEX \
+  -x NCCL_IB_GID_INDEX \
   "$HOME/nccl-tests/build/all_gather_perf" \
   -b 16G -e 16G -f 2 -w 5 -n 30
 ```
@@ -356,10 +360,10 @@ before reusing the command after a driver or firmware change.
 
 ### Link is up but RDMA is near 13 Gb/s
 
-The first run produced 13.40 Gb/s on a single rail even though both logical
+The first run produced 13.40 Gb/s on a single path even though both logical
 interfaces reported up. The QSFP DAC was not fully seated. After reseating both
-ends and rebooting with the final cable topology already connected, a single
-rail reached 111.87 Gb/s and two simultaneous rails reached 196.08 Gb/s.
+ends and rebooting with the final cable topology already connected, one path
+reached 111.87 Gb/s and both simultaneous paths reached 196.08 Gb/s.
 
 Treat a low-but-nonzero result as a physical/link-initialization problem before
 changing firmware or NCCL settings:
@@ -404,7 +408,7 @@ Do not mark this runbook complete until these are resolved:
 - [ ] Add `spark-1.home.kelch.io`, `spark-2.home.kelch.io`, and the two storage
       DNS records. Never add fabric DNS records.
 - [ ] Read back the gateway routing table and prove that no route for
-      `198.19.240.0/20` or either rail prefix is present.
+      `198.19.240.0/20` or either fabric prefix is present.
 - [ ] Apply the network-plan firewall matrix in its own phase, then run the IoT
       SSH negative test and Main inference-port positive test.
 - [ ] Remove `/etc/sudoers.d/99-dgx-bringup` from both Sparks and verify
