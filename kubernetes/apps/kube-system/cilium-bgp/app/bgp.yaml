@@ -43,9 +43,8 @@ spec:
           advertise: bgp
 ---
 # Advertise allocated LoadBalancer VIPs as /32s for Services labeled with the
-# new BGP-era pool names. No Service carries these labels yet — sessions will
-# establish but advertise nothing until step 5 (admin-prod pool) and step 7
-# (admin gateway cutover) of the migration.
+# BGP-era pool names. The UniFi peer applies a matching per-pool /32-only
+# prefix-list so an accidental covering route is rejected at the boundary.
 apiVersion: cilium.io/v2alpha1
 kind: CiliumBGPAdvertisement
 metadata:
@@ -65,3 +64,4 @@ spec:
             values:
               - admin-prod
               - services-prod
+              - shared-prod

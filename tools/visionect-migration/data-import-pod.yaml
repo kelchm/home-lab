@@ -1,0 +1,43 @@
+---
+# Manual cutover helper; this tree is not reconciled by Flux. It mounts the
+# staged VSS data PVC while the Git-managed Deployment remains at replicas: 0.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: visionect-data-import
+  namespace: iot
+  labels:
+    app.kubernetes.io/name: visionect-data-import
+spec:
+  restartPolicy: Never
+  securityContext:
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: import
+      image: docker.io/visionect/visionect-server-v3:7.6.5@sha256:1c8de943f4063d207483563896b1713b986a463e13d6a56730671813d6668415
+      command: ["/bin/sh", "-c", "trap : TERM INT; sleep infinity & wait"]
+      securityContext:
+        runAsUser: 0
+        runAsGroup: 0
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+      resources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          memory: 256Mi
+      volumeMounts:
+        - name: data
+          mountPath: /data
+        - name: logs
+          mountPath: /logs
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: visionect
+    - name: logs
+      persistentVolumeClaim:
+        claimName: visionect-logs

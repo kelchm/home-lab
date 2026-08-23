@@ -1,0 +1,169 @@
+---
+# VSS has two intentionally different clients on one shared-pool VIP:
+# Visionect devices on IoT use raw TCP/11113, while operators on Main use the
+# TLS proxy. externalTrafficPolicy=Local preserves the client addresses seen by
+# Cilium so these CIDR rules remain meaningful after Service translation.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: visionect
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: visionect
+  ingress:
+    - fromCIDR:
+        - 10.32.90.0/24
+      toPorts:
+        - ports:
+            - port: "11113"
+              protocol: TCP
+    - fromCIDR:
+        - 10.32.10.0/24
+      toPorts:
+        - ports:
+            - port: "8443"
+              protocol: TCP
+    # kubelet probes and kubectl port-forward are node-originated. Port 8081 is
+    # not present on the LoadBalancer Service and is never client-routable.
+    - fromEntities:
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "8081"
+              protocol: TCP
+            - port: "8443"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: iot
+            cnpg.io/cluster: visionect-db
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+    # Four current display sessions render Broadsheet through the private
+    # services gateway. Cilium evaluates this after Service translation, so
+    # allow Traefik's effective websecure container port.
+    - toServices:
+        - k8sService:
+            serviceName: traefik-services
+            namespace: network
+      toPorts:
+        - ports:
+            - port: "8443"
+              protocol: TCP
+    # Display sessions render operator-configured HTTP(S) URLs. Preserve that
+    # product behavior while excluding private destinations; add an explicit
+    # private service path here before configuring one in VSS.
+    - toCIDRSet:
+        - cidr: 0.0.0.0/0
+          except:
+            - 0.0.0.0/8
+            - 10.0.0.0/8
+            - 100.64.0.0/10
+            - 127.0.0.0/8
+            - 169.254.0.0/16
+            - 172.16.0.0/12
+            - 192.0.0.0/24
+            - 192.0.2.0/24
+            - 192.168.0.0/16
+            - 198.18.0.0/15
+            - 198.51.100.0/24
+            - 203.0.113.0/24
+            - 224.0.0.0/4
+            - 240.0.0.0/4
+---
+# CNPG is reachable only from VSS, its operator/peers, and established metrics
+# collectors. Restore commands run inside the database pod and need no hole.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: visionect-db
+spec:
+  endpointSelector:
+    matchLabels:
+      cnpg.io/cluster: visionect-db
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: iot
+            app.kubernetes.io/name: visionect
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: cnpg-system
+            app.kubernetes.io/instance: cnpg-operator
+            app.kubernetes.io/name: cloudnative-pg
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+            - port: "8000"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: iot
+            cnpg.io/cluster: visionect-db
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+            - port: "8000"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: prometheus
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: vmagent
+      toPorts:
+        - ports:
+            - port: "9187"
+              protocol: TCP
+    - fromEntities:
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: iot
+            cnpg.io/cluster: visionect-db
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+            - port: "8000"
+              protocol: TCP
+    - toEntities:
+        - kube-apiserver

@@ -1,0 +1,20 @@
+---
+# vss.home.kelch.io must resolve directly to the shared-pool Service because
+# Visionect devices use raw TCP/11113. Terminate the management UI's TLS in the
+# pod so HTTPS and the device protocol can share that one DNS name and VIP.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: vss-home-kelch-io
+spec:
+  dnsNames:
+    - vss.home.kelch.io
+  duration: 160h
+  issuerRef:
+    name: letsencrypt-production
+    kind: ClusterIssuer
+  privateKey:
+    algorithm: ECDSA
+  secretName: vss-tls
+  usages:
+    - digital signature

@@ -1,0 +1,15 @@
+---
+# CNPG 1.30 deprecates spec.monitoring.enablePodMonitor in favor of an
+# explicitly managed monitor. The instance always exposes its `metrics` port.
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: visionect-db
+spec:
+  namespaceSelector: {}
+  podMetricsEndpoints:
+    - port: metrics
+  selector:
+    matchLabels:
+      cnpg.io/cluster: visionect-db
+      cnpg.io/podRole: instance
