@@ -1,0 +1,51 @@
+#!ipxe
+
+goto ${menu} ||
+
+:live_menu
+set os System Rescue
+set os_arch ${arch}
+isset ${rootpass_enabled} || set rootpass_enabled false
+set rootpass ${mac:hexraw}
+iseq ${os_arch} x86_64 && set os_arch amd64 ||
+iseq ${os_arch} i386 && set os_arch i686 ||
+menu ${os}
+set ipparam BOOTIF=${netX/mac} ip=dhcp net.ifnames=0
+item --gap ${os} Versions
+iseq ${os_arch} amd64 && item 13.0_${os_arch} ${space} ${os} 13.0 ||
+iseq ${os_arch} amd64 && item 12.03_${os_arch} ${space} ${os} 12.03 - Linux 6.12 HMB test ||
+iseq ${os_arch} i686 && item 9.03_${os_arch} ${space} ${os} 9.03 ||
+item rootpass_mac Enable rootpass=${rootpass} [IP:${ip}] [ enabled: ${rootpass_enabled} ]
+choose live_version || goto live_exit
+goto ${live_version}
+
+:13.0_amd64
+set url ${live_endpoint}/asset-mirror/releases/download/13.00-d20a63ac/
+clear extra_params
+goto boot
+
+:12.03_amd64
+set url ${live_endpoint}/asset-mirror/releases/download/12.03-d20a63ac/
+set extra_params copytoram=y
+goto boot
+
+:9.03_i686
+set url ${live_endpoint}/asset-mirror/releases/download/9.03-0f19cc5c/
+clear extra_params
+goto boot
+
+:rootpass_mac
+clear params
+iseq ${rootpass_enabled} true && set rootpass_enabled false || set rootpass_enabled true && set params rootpass=${rootpass} nofirewall
+goto live_menu
+
+:boot
+imgfree
+kernel ${url}vmlinuz archisobasedir=sysresccd ${ipparam} archiso_http_srv=${url} ${params} ${extra_params} initrd=initrd.magic ${cmdline}
+initrd ${url}initrd
+initrd ${url}archiso_pxe_http /hooks/archiso_pxe_http mode=755
+boot
+
+:live_exit
+clear menu
+exit 0
