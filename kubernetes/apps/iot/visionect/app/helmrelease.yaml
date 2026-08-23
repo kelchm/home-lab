@@ -1,0 +1,343 @@
+---
+# Visionect Software Suite. The migration deliberately preserves VSS 7.6.5;
+# upgrade the application only after the Synology rollback copy is retired.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: visionect
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: visionect
+  interval: 1h
+  values:
+    controllers:
+      visionect:
+        # Staging state: CNPG, the PVC, certificate, and VIP can reconcile
+        # without starting a fresh VSS against the empty database. The cutover
+        # commit changes this to 1 after the final dump/config import.
+        replicas: 0
+        strategy: Recreate
+        pod:
+          terminationGracePeriodSeconds: 60
+        initContainers:
+          prepare-data:
+            image:
+              repository: docker.io/visionect/visionect-server-v3
+              tag: 7.6.5@sha256:1c8de943f4063d207483563896b1713b986a463e13d6a56730671813d6668415
+            command: ["/bin/sh", "-ec"]
+            args:
+              - >-
+                mkdir -p /data/ac_apps /data/certs /data/config /data/devices
+                /data/customfonts
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities: { drop: ["ALL"] }
+            resources:
+              requests:
+                cpu: 10m
+                memory: 32Mi
+              limits:
+                memory: 128Mi
+        containers:
+          app:
+            image:
+              repository: docker.io/visionect/visionect-server-v3
+              tag: 7.6.5@sha256:1c8de943f4063d207483563896b1713b986a463e13d6a56730671813d6668415
+            env:
+              TZ: America/New_York
+              DB2_1_PORT_5432_TCP_ADDR:
+                valueFrom:
+                  secretKeyRef:
+                    name: visionect-db-app
+                    key: host
+              DB2_1_PORT_5432_TCP_USER:
+                valueFrom:
+                  secretKeyRef:
+                    name: visionect-db-app
+                    key: username
+              DB2_1_PORT_5432_TCP_PASS:
+                valueFrom:
+                  secretKeyRef:
+                    name: visionect-db-app
+                    key: password
+              DB2_1_PORT_5432_TCP_DB:
+                valueFrom:
+                  secretKeyRef:
+                    name: visionect-db-app
+                    key: dbname
+              REDIS_ADDRESS: 127.0.0.1:6379
+            probes:
+              startup:
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: /
+                    port: &ui-port 8081
+                  periodSeconds: 5
+                  timeoutSeconds: 3
+                  failureThreshold: 60
+              readiness:
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: /
+                    port: *ui-port
+                  periodSeconds: 10
+                  timeoutSeconds: 3
+                  failureThreshold: 3
+              liveness:
+                enabled: true
+                custom: true
+                spec:
+                  exec:
+                    command:
+                      - /bin/sh
+                      - -ec
+                      - test "$(supervisorctl status | grep -c RUNNING)" -eq 4
+                  periodSeconds: 30
+                  timeoutSeconds: 5
+                  failureThreshold: 3
+            # The vendor still documents privileged+FUSE from its historical
+            # cookie-filesystem design. A full 7.6.5 DB clone ran all four
+            # services with this restricted context and no /dev/fuse.
+            securityContext:
+              runAsUser: 0
+              runAsGroup: 0
+              allowPrivilegeEscalation: false
+              capabilities: { drop: ["ALL"] }
+            resources:
+              requests:
+                cpu: 500m
+                memory: 3Gi
+              limits:
+                memory: 8Gi
+          proxy:
+            image:
+              repository: docker.io/nginxinc/nginx-unprivileged
+              tag: 1.29.1-alpine@sha256:6742337773a7ca839e7a76f489cc684cc410e3de46c0c83be8bb2bb9944360ef
+            probes:
+              readiness:
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: /healthz
+                    port: &tls-port 8443
+                    scheme: HTTPS
+                  periodSeconds: 10
+                  timeoutSeconds: 3
+                  failureThreshold: 3
+              liveness:
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: /healthz
+                    port: 8443
+                    scheme: HTTPS
+                  periodSeconds: 10
+                  timeoutSeconds: 3
+                  failureThreshold: 3
+            securityContext:
+              runAsNonRoot: true
+              runAsUser: 101
+              runAsGroup: 101
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              capabilities: { drop: ["ALL"] }
+            resources:
+              requests:
+                cpu: 10m
+                memory: 32Mi
+              limits:
+                memory: 128Mi
+          redis:
+            image:
+              repository: docker.io/library/redis
+              tag: 7.4.2@sha256:cd13b924409d740ea8abe6677a7d1accf696898408d330a3d7c8234fa7545775
+            command: ["redis-server"]
+            args:
+              - --save
+              - ""
+              - --appendonly
+              - "no"
+              - --maxmemory
+              - 128mb
+              - --maxmemory-policy
+              - allkeys-lru
+            probes:
+              readiness: &redis-probe
+                enabled: true
+                custom: true
+                spec:
+                  exec:
+                    command: ["redis-cli", "ping"]
+                  periodSeconds: 10
+                  timeoutSeconds: 3
+                  failureThreshold: 3
+              liveness: *redis-probe
+            securityContext:
+              runAsNonRoot: true
+              runAsUser: 999
+              runAsGroup: 999
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              capabilities: { drop: ["ALL"] }
+            resources:
+              requests:
+                cpu: 10m
+                memory: 32Mi
+              limits:
+                memory: 192Mi
+    defaultPodOptions:
+      securityContext:
+        seccompProfile: { type: RuntimeDefault }
+    service:
+      app:
+        controller: visionect
+        ports:
+          http:
+            port: *ui-port
+      external:
+        forceRename: vss
+        controller: visionect
+        type: LoadBalancer
+        externalTrafficPolicy: Local
+        labels:
+          lb-pool: shared-prod
+        annotations:
+          lbipam.cilium.io/ips: "10.32.150.30"
+        ports:
+          https:
+            port: 443
+            targetPort: *tls-port
+            protocol: HTTPS
+          devices:
+            port: 11113
+            targetPort: 11113
+            protocol: TCP
+    configMaps:
+      proxy:
+        data:
+          nginx.conf: |-
+            pid /tmp/nginx.pid;
+            error_log /dev/stderr notice;
+
+            events {}
+
+            http {
+              access_log /dev/stdout;
+              client_body_temp_path /tmp/client_temp;
+              proxy_temp_path /tmp/proxy_temp;
+
+              map $http_upgrade $connection_upgrade {
+                default upgrade;
+                '' close;
+              }
+
+              server {
+                listen 8443 ssl;
+                server_name vss.home.kelch.io;
+
+                ssl_certificate /tls/tls.crt;
+                ssl_certificate_key /tls/tls.key;
+                ssl_protocols TLSv1.2 TLSv1.3;
+                client_max_body_size 512m;
+
+                location = /healthz {
+                  access_log off;
+                  return 200;
+                }
+
+                location / {
+                  proxy_pass http://127.0.0.1:8081;
+                  proxy_http_version 1.1;
+                  proxy_set_header Host $host;
+                  proxy_set_header X-Real-IP $remote_addr;
+                  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                  proxy_set_header X-Forwarded-Host $host;
+                  proxy_set_header X-Forwarded-Proto https;
+                  proxy_set_header X-Forwarded-Port 443;
+                  proxy_set_header Upgrade $http_upgrade;
+                  proxy_set_header Connection $connection_upgrade;
+                  proxy_request_buffering off;
+                  proxy_read_timeout 3600s;
+                }
+              }
+            }
+    persistence:
+      data:
+        type: persistentVolumeClaim
+        forceRename: visionect
+        storageClass: longhorn
+        size: 5Gi
+        accessMode: ReadWriteOnce
+        advancedMounts:
+          visionect:
+            prepare-data:
+              - path: /data
+            app:
+              - path: /opt/visionect/vss/ac_apps
+                subPath: ac_apps
+              - path: /opt/visionect/vss/certs
+                subPath: certs
+              - path: /opt/visionect/vss/config
+                subPath: config
+              - path: /opt/visionect/vss/devices
+                subPath: devices
+              - path: /usr/share/fonts/truetype/customfonts
+                subPath: customfonts
+      logs:
+        type: persistentVolumeClaim
+        forceRename: visionect-logs
+        storageClass: longhorn
+        size: 4Gi
+        accessMode: ReadWriteOnce
+        advancedMounts:
+          visionect:
+            app:
+              - path: /var/log/vss
+      shm:
+        type: emptyDir
+        medium: Memory
+        sizeLimit: 2Gi
+        advancedMounts:
+          visionect:
+            app:
+              - path: /dev/shm
+      proxy-config:
+        type: configMap
+        identifier: proxy
+        advancedMounts:
+          visionect:
+            proxy:
+              - path: /etc/nginx/nginx.conf
+                subPath: nginx.conf
+                readOnly: true
+      proxy-tmp:
+        type: emptyDir
+        medium: Memory
+        sizeLimit: 64Mi
+        advancedMounts:
+          visionect:
+            proxy:
+              - path: /tmp
+      redis-data:
+        type: emptyDir
+        medium: Memory
+        sizeLimit: 16Mi
+        advancedMounts:
+          visionect:
+            redis:
+              - path: /data
+      tls:
+        type: secret
+        name: vss-tls
+        advancedMounts:
+          visionect:
+            proxy:
+              - path: /tls
+                readOnly: true

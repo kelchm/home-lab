@@ -68,7 +68,8 @@ show ip route bgp
 
 Sessions should reach `Established` once Cilium is reconciled with matching
 peer/auth config. No prefixes are advertised until a `CiliumLoadBalancerIPPool`
-matching `admin-prod` or `services-prod` exists and a Service allocates from it.
+matching `admin-prod`, `services-prod`, or `shared-prod` exists and a Service
+allocates from it.
 
 ## Firewall rules
 
@@ -84,9 +85,9 @@ intent.
 | `10.32.130.0/24` | `admin-prod` pool                              |
 | `10.32.140.0/24` | `services-prod` pool (created in step 9)       |
 
-`shared-prod` (10.32.150.0/24) is intentionally excluded — its tenants need
-per-IP+port allow rules from IoT/Guest, not a blanket deny. Add per-service
-allows when shared-prod gains a tenant.
+`shared-prod` (10.32.150.0/24) is intentionally excluded — its tenants use
+per-IP+port policy, not a pool-wide deny. Its first allocation is Visionect at
+`10.32.150.30`.
 
 **Rules** (Settings → Security → Traffic Rules, or the version-equivalent
 LAN-IN section):
@@ -101,6 +102,21 @@ explicit rule. If/when a more restrictive default-deny posture is adopted
 across the network, replace these denies with the corresponding allows from
 Main and revisit the per-pool firewall posture in
 [`docs/architecture.md`](../../docs/architecture.md#lb-pool-allocation).
+
+### shared-prod tenant rules
+
+Shared-pool policy is explicit per tenant. Keep these Visionect rules ordered
+above the final deny for `10.32.150.30`:
+
+| # | Source | Destination | Port | Action | Purpose |
+|---|---|---|---|---|---|
+| 1 | IoT (VLAN 90) | `10.32.150.30` | TCP 11113 | Allow | Visionect device protocol |
+| 2 | Main (VLAN 10) | `10.32.150.30` | TCP 443 | Allow | HTTPS management UI |
+| 3 | Internal client networks | `10.32.150.30` | Any | Drop | Fail closed on every other path |
+
+The Cilium policy on the destination pod repeats the same source/port boundary.
+The UniFi rules remain required because they prevent disallowed traffic from
+reaching the cluster at all.
 
 Validate by running `curl --max-time 2 http://10.32.130.99/` from a device on
 each restricted VLAN — should time out or be refused. The synthetic test

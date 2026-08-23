@@ -38,6 +38,7 @@ or fixing.
 | [multus-fail-closed-cutover](runbooks/multus-fail-closed-cutover.md) | Moving Cilium's conflist out of containerd's live CNI directory so Multus is the only publisher. |
 | [metamcp-bootstrap](runbooks/metamcp-bootstrap.md) | Initialising the MetaMCP gateway and onboarding backend MCP servers (the non-GitOps registry steps). |
 | [bambuddy-bootstrap](runbooks/bambuddy-bootstrap.md) | Bringing up Bambuddy, validating printer containment and OIDC, and exercising backup recovery. |
+| [visionect-migration](runbooks/visionect-migration.md) | Staging, cutting over, validating, and rolling back the Synology-to-k8s Visionect migration. |
 | [dgx-spark-bringup](runbooks/dgx-spark-bringup.md) | Configuring, validating, troubleshooting, and recovering the two-node DGX Spark LAN/storage/RDMA setup. |
 
 ## Plans

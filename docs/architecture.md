@@ -210,7 +210,7 @@ Three policy classes:
 |---|---|---|---|
 | **admin** | `admin-prod` (10.32.130.0/24) | VLAN 10 admin devices only | Operator UIs via Traefik admin gateway, k8s-gateway DNS |
 | **services** | `services-prod` (10.32.140.0/24) | VLAN 10 (Main) | Household-facing apps (Traefik services gateway, per-service IPs) |
-| **shared** | `shared-prod` (10.32.150.0/24) | All client VLANs (per-IP+port) | Cluster-wide shared services like DNS or NTP — not currently allocated |
+| **shared** | `shared-prod` (10.32.150.0/24) | All client VLANs (per-IP+port) | Cross-zone services with per-IP+port firewall rules (Visionect device gateway, future DNS/NTP) |
 
 Sandbox-side pools (`admin-sandbox` 10.32.131.0/24, `services-sandbox` 10.32.141.0/24) follow the same naming under a future second cluster.
 
@@ -236,9 +236,15 @@ Sandbox-side pools (`admin-sandbox` 10.32.131.0/24, `services-sandbox` 10.32.141
   ...  Non-HTTP household services (MQTT brokers, game servers) also live here.
 ```
 
-### shared-prod — 10.32.150.0/24 (future)
+### shared-prod — 10.32.150.0/24
 
-Reserved for cluster-wide services that need port-scoped reachability from untrusted VLANs (DNS, NTP). Add carve-out firewall rules per allocated IP+port — not pool-wide port allows.
+```
+.30    vss                     Visionect: IoT devices TCP/11113; Main UI HTTPS/443
+.31-.99 per-service shared IPs
+```
+
+Reserved for services that need port-scoped reachability across trust zones.
+Add carve-out firewall rules per allocated IP+port — never pool-wide allows.
 
 ### Firewall posture per pool
 
@@ -251,7 +257,9 @@ VLAN 90 IoT   → admin-prod          : deny
 VLAN 90 IoT   → services-prod       : deny
 VLAN 99 Guest → admin-prod          : deny
 VLAN 99 Guest → services-prod       : deny
-VLAN 90/99    → shared-prod/X 53/udp+tcp : per-tenant allow (when shared-prod gains a tenant)
+VLAN 90       → 10.32.150.30 TCP/11113 : allow (Visionect devices)
+VLAN 10       → 10.32.150.30 TCP/443   : allow (Visionect management UI)
+other clients → 10.32.150.30 any       : deny
 ```
 
 ## Service categorization & exposure
@@ -308,6 +316,9 @@ o11y.home.kelch.io                  10.32.130.1
 # Per-service household IPs (when allocated)
 jellyfin.home.kelch.io              10.32.140.50
 nextcloud.home.kelch.io             10.32.140.51
+
+# Cross-zone per-service IPs
+vss.home.kelch.io                   10.32.150.30  (TCP/11113 devices; HTTPS UI)
 
 # Cross-cluster duplicates use -sbx suffix
 jellyfin-sbx.home.kelch.io          10.32.141.50

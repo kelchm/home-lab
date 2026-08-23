@@ -34,3 +34,20 @@ spec:
   serviceSelector:
     matchLabels:
       lb-pool: services-prod
+---
+# shared-prod — port-scoped services reachable across client trust zones.
+# Unlike admin/services, this pool is not covered by a pool-wide IoT/Guest
+# deny. Every tenant needs its own UniFi source+port rules before allocation.
+# .30 is Visionect: IoT devices use TCP/11113 and Main operators use HTTPS.
+apiVersion: cilium.io/v2
+kind: CiliumLoadBalancerIPPool
+metadata:
+  name: shared-prod
+spec:
+  allowFirstLastIPs: "No"
+  blocks:
+    - start: "10.32.150.30"
+      stop: "10.32.150.99"
+  serviceSelector:
+    matchLabels:
+      lb-pool: shared-prod
