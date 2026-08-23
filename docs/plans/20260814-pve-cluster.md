@@ -71,10 +71,11 @@ PVE itself has a pull-based GitOps reconciler.
 The three live Kubernetes nodes currently report `WD_BLACK SN770 1TB`, firmware
 `731100WD`, and 512-byte logical sectors. The proposed PVE hosts are believed to
 use the same drives, but that is an inference rather than an inventory. Record
-each PVE host's actual model, serial number, firmware, logical sector size, MAC
-addresses, Linux interface names, and SMART baseline in
-`proxmox/inventory.yaml` before installing the second node. Serial numbers stay
-in the private inventory and do not belong in this public plan.
+each PVE host's actual model, firmware, logical sector size, Linux interface
+names, and sanitized SMART baseline in `proxmox/inventory.yaml` before
+installing the second node. Serial numbers, MAC addresses, and raw SMART output
+belong in an ignored local inventory; unique hardware identifiers never enter
+the tracked repository.
 
 ## Address plan
 
@@ -181,10 +182,12 @@ native VLAN). Create one VLAN-aware bridge, `vmbr0`, over the NIC:
 - no guest may be created with an untagged NIC.
 
 With no native VLAN on the trunk, an accidentally untagged guest fails closed
-instead of landing on any host network. Manage the tag set as a Proxmox SDN
-VLAN zone so all three hosts stay identical. If the installer cannot express
-the final config, install temporarily on an access VLAN 20 port, convert the
-host from its local console, and only then create or join the cluster.
+instead of landing on any host network. Keep the explicit `bridge-vids` tag
+set identical on all three hosts. Defer a Proxmox SDN zone/VNet layer until it
+solves a repeated management problem; do not configure direct bridge tags and
+SDN as competing sources of truth. If the installer cannot express the final
+config, install temporarily on an access VLAN 20 port, convert the host from
+its local console, and only then create or join the cluster.
 
 ```text
 auto <2.5g-nic>
@@ -210,7 +213,9 @@ congestion-free Corosync link 0.
 
 ### Name resolution and time
 
-- Create all six node A records before `pvecm create` or `pvecm add`.
+- Create all six node A records as static UniFi-local records before
+  `pvecm create` or `pvecm add`; never make PVE host resolution depend
+  exclusively on `k8s-gateway`.
 - Put all three management names and addresses in every node's `/etc/hosts`.
 - Use `home.kelch.io` as the search domain.
 - Use the UniFi gateway as the local DNS resolver so internal names resolve;
@@ -235,7 +240,8 @@ not routed and must be trusted at the switch layer.
 | PVE node storage IPs | `10.32.25.5` | Allow NFSv4 TCP 2049 |
 | PVE node storage IPs | Other PVE storage IPs | Allow host-to-host migration and cluster-link traffic |
 | PVE guests on VLAN 21 | VLAN 20 and VLAN 25 | Deny by default |
-| PVE guests on VLAN 21 | Kubernetes VLAN 30 and its LB prefixes | Deny by default; add per-service exceptions only |
+| PVE guests on VLAN 21 | Kubernetes VLAN 30 and `admin-prod` LB prefix | Deny by default; add per-service exceptions only |
+| PVE guests on VLAN 21 | `services-prod` LB prefix | Allow |
 | Kubernetes VLAN 30 | PVE guests on VLAN 21 | Deny by default; add per-service exceptions only |
 | PVE guests on VLAN 21 | Internet | Allow, subject to normal DNS and egress controls |
 | Admin device group on Main | PVE guests on VLAN 21 | Allow for administration; narrow later if guest classes justify it |
@@ -342,7 +348,7 @@ The vendor's later HMB firmware advisory lists the 2 TB SN770, not this 1 TB
 model. The current 512-byte logical sector format also avoids one later-reported
 4K-sector trigger, but does not prove that the controller is safe under ZFS.
 
-A destructive [qualification run](20260818-sn770-zfs-qualification-results.md) on one 1 TB
+A destructive [qualification run](../sn770-zfs-qualification.md) on one 1 TB
 specimen subsequently completed 18 full 700 GiB sends and 8 full 700 GiB scrubs
 without a controller failure. It covered 0/32/128/200 MiB HMB screens, the
 historical 32 MiB/eight-descriptor allocator, and both 512-byte and 4096-byte
@@ -523,7 +529,7 @@ execution boundary:
 home-lab/
 └── proxmox/
     ├── README.md                 # scope, prerequisites, apply/recovery entrypoints
-    ├── inventory.yaml            # non-secret host hardware and address inventory
+    ├── inventory.yaml            # non-secret roles, hardware facts, interfaces, addresses
     ├── cloud-init/               # guest bootstrap snippets and image metadata
     └── tofu/
         ├── modules/

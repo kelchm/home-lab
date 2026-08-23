@@ -1,33 +1,54 @@
 # Roadmap
 
 Forward-looking design and deferred work. Current-state reference lives in
-[architecture.md](architecture.md); much of the addressing and storage
+[architecture.md](architecture.md); much of the addressing, BGP, and storage
 design there is deliberately shaped to make the items below land cleanly.
 
 ## Proxmox virtualization cluster
 
 The three HP EliteDesk 800 G3 machines are planned as an independent three-node
-Proxmox VE cluster. This replaces the earlier proposal to use them for a second
-Talos cluster. PVE uses VLAN 20 for management and primary Corosync, the
-already-reserved `.21-.23` addresses on VLAN 25 for 2.5 GbE storage/migration
-and secondary Corosync, and VLAN 31 as the isolated guest network.
+Proxmox VE cluster. PVE uses VLAN 20 for management and primary Corosync,
+matching `.21-.23` identities on VLAN 25 for storage, migration, and secondary
+Corosync, and the shared VLAN 21 Workloads network for general-purpose guests.
+VLAN 31 remains reserved for a second Kubernetes cluster.
 
-The detailed draft—including every host IP, DNS name, bridge, storage tier,
-backup/retention policy, HA class, update cadence, Git/IaC boundary, and rollout
-gate—is in [the PVE cluster plan](plans/20260814-pve-cluster.md).
+The detailed draft—including host identities, bridge design, storage, backups,
+HA classes, update cadence, IaC boundaries, and rollout gates—is in the
+[PVE cluster plan](plans/20260814-pve-cluster.md).
 
 Important boundaries:
 
 - PVE remains operable with Kubernetes completely unavailable.
-- Declarations will live in a self-contained top-level `proxmox/` tree, but
-  Flux and Kubernetes-hosted runners will never apply them.
 - Initial host bootstrap and rolling updates are documented manual operations;
   OpenTofu manages guests. Ansible is deferred until repeated host drift or
   rebuild work justifies it.
+- Deployable PVE inventory and guest IaC will earn their own owner directory
+  when they exist; the current repository tree does not advertise an empty
+  planned directory.
 - Local LVM-thin is the default runtime tier. Synology NFS holds templates and
-  backups; a separate shared-guest export is optional for the few guests that
-  justify PVE HA and the resulting NAS runtime dependency.
+  backups; shared guest storage is optional for workloads that justify PVE HA
+  and the resulting NAS runtime dependency.
 - Ceph is not planned for these single-NVMe, 32 GB, 2.5 GbE nodes.
+
+## Second Kubernetes cluster
+
+The network model reserves a second Kubernetes identity without choosing its
+deployment substrate.
+
+### Two-cluster topology
+
+It may run as one Talos VM per PVE host or later move to bare metal while
+retaining the same addresses and BGP policy:
+
+- compute VLAN 31 and API VIP `.8`;
+- system-4 host identities `.41-.43` on VLANs 31 and 25;
+- storage-pod range `.144/28`;
+- BGP ASN 65021 and `admin-sandbox` / `services-sandbox` LB pools; and
+- per-neighbor prefix filters that prevent either cluster from advertising the
+  other's pool prefixes.
+
+No implementation date or hardware assignment is committed. PVE does not
+consume these reservations merely by hosting unrelated guests.
 
 ## Out of scope (future considerations)
 

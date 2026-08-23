@@ -18,6 +18,20 @@ spec:
   interval: 1h
   values:
     fullnameOverride: traefik-admin
+
+    # OIDC RP plugin loaded via yaegi. Traefik downloads plugins once during
+    # process startup and does not retry a failed install. Fail the process if
+    # that download, verification, or load fails so Kubernetes retries it
+    # instead of Traefik serving without every plugin-protected router. Pin via
+    # Renovate and never auto-merge bumps.
+    experimental:
+      abortOnPluginFailure: true
+      plugins:
+        traefik-oidc-auth:
+          moduleName: github.com/sevensolutions/traefik-oidc-auth
+          # renovate: datasource=github-releases depName=sevensolutions/traefik-oidc-auth
+          version: v0.21.0
+
     deployment:
       replicas: 2
       # Restart the Deployment when kaniop rotates either OAuth2 client_secret
@@ -78,16 +92,6 @@ spec:
       level: INFO
     accessLog:
       enabled: true
-
-    # OIDC RP plugin loaded via yaegi. The kanidm-oidc Middleware references
-    # this plugin name. Plugin failure mode: load error fails traefik-admin
-    # startup — pin via Renovate, never auto-merge bumps.
-    experimental:
-      plugins:
-        traefik-oidc-auth:
-          moduleName: github.com/sevensolutions/traefik-oidc-auth
-          # renovate: datasource=github-releases depName=sevensolutions/traefik-oidc-auth
-          version: v0.21.0
 
     # CLIENT_SECRET keys from the kaniop-emitted Secrets, one per OIDC
     # client. Env-var names are namespaced so additional clients can be

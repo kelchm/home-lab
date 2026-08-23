@@ -90,7 +90,8 @@ This phase demonstrates that 4096-byte logical sectors plus the historical HMB g
 
 ## Aggregate accounting
 
-Only completed full operations are included here. Thermal stops and the harness-error run are excluded from the counts but retained in the matrix and evidence index.
+Only completed full operations are included here. Thermal stops and the
+harness-error run are excluded from the counts but retained in the matrix.
 
 | Phase | Full sends | Full scrubs | Target failures |
 |---|---:|---:|---:|
@@ -131,53 +132,9 @@ Next tests, in information-gain order:
 4. Do not update the old-firmware specimen until a failing baseline exists. If one is established, use the official Windows SanDisk Dashboard and rerun the identical failing condition before and after firmware while holding another drive on old firmware.
 5. Return every candidate drive to 512-byte logical sectors before the final seven-day, three-drive operational qualification.
 
-## Evidence index
+## Evidence retention
 
-Evidence is retained outside Git. Each directory contains captured logs plus a `SHA256SUMS` manifest; the hash below is the SHA-256 of that manifest. Private hardware identifiers remain inside the evidence archive rather than this public repository.
-
-### Current-kernel 512-byte arms
-
-| Evidence directory | Classification | `SHA256SUMS` hash |
-|---|---|---|
-| `hmb-128/send-only-20260819T0245Z` | Complete send, clean | `8f596ec1b71867adb0a349e4e7ce4f0839c11d4ba90fc5468a53ec6af52ce1ea` |
-| `hmb-128/send-only-20260819T0256Z` | Complete send, clean | `edfbc8624296bae3fdd43bcafa32335cd338aee4f7588686f9ef05c25148847a` |
-| `hmb-128/scrub-only-20260819T0306Z` | Harness error, canceled cleanly | `3dbca05b41c6bff3a447eea534481858d9f23c5a0c1815d62ac9668b09c09a80` |
-| `hmb-128/scrub-only-20260819T0312Z` | Thermal-guard stop | `38ab45c54eae3bae01246804c507bfa514f92fdbe58d4eae76eb1aa6366f3b4d` |
-| `hmb-32/boot-20260819T0316Z` | Boot/HMB capture | `b98efbf907f25c469d3f0319b63b7427e16a374d88cbfc9c51b046cfb6e47128` |
-| `hmb-32/send-only-20260819T0318Z` | Complete send, clean | `30b77229fe4b2a17c81694124e58b277f2c089a01f1d58d198bab9ce844682cb` |
-| `hmb-200/boot-20260819T0324Z` | Boot/HMB capture | `8459f737fcf0e01a00e1f4225ee022204b94fa1483732c3c2423e6a8f6c9ab64` |
-| `hmb-200/send-only-20260819T0327Z` | Complete send, clean | `c13a178d29f54c44308ef5e91cbcaad0242e42567af1f46fb0e7deaa2342aebc` |
-| `hmb-0/boot-20260819T0333Z` | Boot/HMB capture | `a16c6cee2996b99c28ebc502a5aea4f510ddc332f677486e68b9cb64d2cfd18d` |
-| `hmb-0/send-only-20260819T0335Z` | Complete send, clean | `29f78e4655aaa7ccf3becb532e555a0f28e7e71359d328d6f47b4450c3eb84c9` |
-| `hmb-128/restored-default-20260819T0341Z` | Default restoration, clean | `2eadcc2412597e3c535f386907d948d48db72d2f11effdf12d974c821072e58e` |
-
-The earlier unbounded scrub that reached SMART thermal warning `0x2` predates the sealed bounded-run directories. It remains part of the chronology but is not represented by a hash row.
-
-### Historical eight-descriptor 512-byte arms
-
-| Evidence directory | Classification | `SHA256SUMS` hash |
-|---|---|---|
-| `historical-hmb-6.12/read-only-20260819T040752Z` | Read-only HMB-geometry discovery | `faa86c98b8f98fd5039ad25872289e8eda9cbb24875cf30034681d9eb4be2034` |
-| `historical-hmb-8seg/scrub-only-20260819T0429Z` | Thermal-guard stop | `285eea9b38a07b925549ced2cfb89fd866a0972a52f15d1e6a2795685285d070` |
-| `historical-hmb-8seg/send-only-20260819T0430Z` | Complete send, clean | `e529fab3af5b01c1f5c312137f5e202a240ce0aaabdbc297868c773f4407bdc8` |
-| `historical-hmb-8seg/mixed-20260819T0432Z` | Thermal-guard stop | `c0caf0bd6b014649e2bb891bdd471c389413c665e89a02bf3de3efa0ac70b153` |
-| `historical-hmb-8seg/restored-modern-20260819T043510Z` | Modern-kernel restoration, clean | `a220bbc3e9a6c895fc90090f423a18d7b76534a9714db005a96248ada5d6b250` |
-| `historical-hmb-8seg/heatsink-scrub-20260821T012406Z` | Complete scrub, clean | `b4d10bffdff6ef1c334d16055de8900b071ca8d13c0a91d5e9a03165a347a4ae` |
-| `historical-hmb-8seg/heatsink-mixed-20260821T013109Z` | One complete mixed cycle, clean | `e1faa4442bacb8eec62cfefcbbaf26109e6c36fc9862762421313dccd71195c3` |
-| `historical-hmb-8seg/heatsink-mixed4-20260821T014056Z` | Four complete mixed cycles, clean | `a3a7066fd8d12c21813a3b669cee0fcf45024fe532ed89ab8c12cb4d6ea0e52c` |
-| `historical-hmb-8seg/heatsink-send5-20260821T024147Z` | Five complete sends, clean | `db5a51105d903a882287a708fd3340650bf3adf9d8a5bb7c79a2b33346cab5d5` |
-| `historical-hmb-8seg/heatsink-restored-modern-20260821T031309Z` | Modern-kernel restoration, clean | `b7600d093c30ac6709db76f9eca3ac685fd5cf01e9752e2e760970fd1c879c3a` |
-
-### Historical eight-descriptor 4096-byte arms
-
-| Evidence directory | Classification | `SHA256SUMS` hash |
-|---|---|---|
-| `fourk-lba/preformat-512-20260821T235207Z` | Pre-format 512-byte baseline, clean | `6c92239a7d6c82baeb7d433635a8cbca7bd4ecdc29a7a94604e6bc118c5db684` |
-| `fourk-lba/send-only-20260822T001512Z` | Complete 4096-byte send, clean | `c959c96e7aba9aecbd9138118e249da29cf75e2dab986dbda1958fc52befcd0e` |
-| `fourk-lba/scrub-only-20260822T002208Z` | Complete 4096-byte scrub, clean | `db26585cbbd5fbe63b397abcd41c8d0f43599bf8ecdf304e734ed197f0612bc4` |
-| `fourk-lba/mixed-20260822T002652Z` | Complete 4096-byte mixed cycle, clean | `2a1ab261c22cbd4910ef29f0b734b19162def4fdf9864b1fd12dca846aeb80cf` |
-| `fourk-lba/restored-modern-20260822T003556Z` | Historical final and modern-kernel restoration, clean | `e1d21d2eba21854ccab4b63ffb148620cdaa53c2ae184971f8c876e1e25e3044` |
-
-## End state
-
-At the end of the reproduction work, the node was restored to its normal current PVE kernel with the default 128 MiB/one-descriptor HMB allocation, an empty one-shot boot override, no active workload, a healthy pool, and zero SMART media/error-log entries. The disposable pool remained at 4096-byte logical sectors to preserve that reproduction condition for a possible second-specimen comparison. Final operational qualification requires returning candidate drives to 512-byte logical sectors.
+Raw logs, SMART/NVMe captures, run manifests, and checksums are retained
+privately outside Git. This public record contains only the sanitized method and
+result summary; unique hardware identifiers and internal evidence locations are
+intentionally omitted.

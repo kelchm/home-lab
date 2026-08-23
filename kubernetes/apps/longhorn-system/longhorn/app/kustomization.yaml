@@ -8,3 +8,5 @@ resources:
   - ./networkattachmentdefinition.yaml
   - ./recurringjobs.yaml
   - ./backuptarget.yaml
+  - ./alerts.yaml
+  - ./networkpolicy.yaml

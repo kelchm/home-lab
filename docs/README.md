@@ -13,8 +13,6 @@ Current-state, authoritative docs.
 - [**repository-validation.md**](repository-validation.md) — CI event semantics,
   concurrency, aggregate-check invariants, and the boundary between validation
   and Flux deployment.
-- [**roadmap.md**](roadmap.md) — forward-looking design: the planned PVE
-  virtualization cluster and deferred work.
 
 ## Further reading
 
@@ -35,14 +33,18 @@ or fixing.
 | [arr-suite-bootstrap](runbooks/arr-suite-bootstrap.md) | The *arr suite's NAS identity, ACL layout, and NFS export — current state. |
 | [seerr-bootstrap](runbooks/seerr-bootstrap.md) | Wiring Seerr to Jellyfin/Radarr/Sonarr, household request policy, and break-glass admin (the non-GitOps UI steps). |
 | [multus-conf-absent-recovery](runbooks/multus-conf-absent-recovery.md) | Recovering pods stuck on an absent Multus network config. |
+| [multus-fail-closed-cutover](runbooks/multus-fail-closed-cutover.md) | Moving Cilium's conflist out of containerd's live CNI directory so Multus is the only publisher. |
 | [metamcp-bootstrap](runbooks/metamcp-bootstrap.md) | Initialising the MetaMCP gateway and onboarding backend MCP servers (the non-GitOps registry steps). |
 | [bambuddy-bootstrap](runbooks/bambuddy-bootstrap.md) | Bringing up Bambuddy, validating printer containment and OIDC, and exercising backup recovery. |
+| [dgx-spark-bringup](runbooks/dgx-spark-bringup.md) | Configuring, validating, troubleshooting, and recovering the two-node DGX Spark LAN/storage/RDMA setup. |
 
 ## Plans
 
-Design docs written ahead of a change. Each carries a status header; once
-executed, the current state lives in the corresponding runbook.
+Forward-looking design docs. Dated implementation plans carry a status header;
+once executed, the current state lives in the corresponding runbook or
+reference document.
 
+- [roadmap](roadmap.md) — rolling overview of the planned PVE environment, reserved second Kubernetes cluster, and deferred work.
 - [20260508-arr-suite-setup](plans/20260508-arr-suite-setup.md) — the original media-stack deployment plan.
 - [20260509-kaniop-migration](plans/20260509-kaniop-migration.md) — Kanidm → kaniop operator pivot.
 - [20260513-arr-hardlink-rework](plans/20260513-arr-hardlink-rework.md) — single share-root mount + NFSv4 ACL isolation.
@@ -51,12 +53,13 @@ executed, the current state lives in the corresponding runbook.
 - [20260622-sequenced-dependency-upgrades](plans/20260622-sequenced-dependency-upgrades.md) — ordered major-version upgrade pass for k8s-prod (Longhorn → Talos → k8s → Gateway API/Traefik → kaniop).
 - [20260703-observability-rework](plans/20260703-observability-rework.md) — conclude the observability bakeoff, converge on VictoriaMetrics/VictoriaLogs, and restore useful alerting and estate coverage.
 - [20260814-pve-cluster](plans/20260814-pve-cluster.md) — draft design for the independent three-node PVE cluster: hardware, IPs, networks, storage, backup, HA, updates, IaC boundaries, and rollout gates.
-- [20260818-sn770-zfs-qualification-results](plans/20260818-sn770-zfs-qualification-results.md) — destructive SN770 reproduction matrix, evidence index, findings, and remaining qualification work supporting the PVE storage decision.
+- [20260821-network-topology](plans/20260821-network-topology.md) — active, partially implemented VLAN/zone topology, DGX placement, PVE wiring, and second-cluster reservations.
 
 ## Decision records & benchmarks
 
 - [storage-benchmarks](storage-benchmarks.md) — Longhorn fio results, pre/post storage-network cutover.
 - [observability-bakeoff](observability-bakeoff.md) — VictoriaMetrics/Logs vs. Prometheus/Loki evaluation.
+- [sn770-zfs-qualification](sn770-zfs-qualification.md) — bounded SN770/ZFS reproduction matrix, findings, and remaining qualification work supporting the PVE storage decision.
 
 ## Related docs elsewhere in the repo
 
