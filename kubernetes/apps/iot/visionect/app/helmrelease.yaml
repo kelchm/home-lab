@@ -164,11 +164,13 @@ spec:
                 memory: 32Mi
               limits:
                 memory: 128Mi
+          # Cache only: persistence is off and /data is an emptyDir. Valkey 7.2
+          # reports redis_version 7.2.4 to clients, matching what VSS expects.
           redis:
             image:
-              repository: docker.io/library/redis
-              tag: 7.4.11@sha256:91d0f7e8c748ec7a4c2b4fb2c4f84edab794dd91d01e095e38dc906db9d684ab
-            command: ["redis-server"]
+              repository: docker.io/valkey/valkey
+              tag: 7.2.14@sha256:421ea3061a040b8aaa4545d83be0bd03f15ea6102d0d81bb7d13ea83e853481d
+            command: ["valkey-server"]
             args:
               - --save
               - ""
@@ -184,7 +186,7 @@ spec:
                 custom: true
                 spec:
                   exec:
-                    command: ["redis-cli", "ping"]
+                    command: ["valkey-cli", "ping"]
                   periodSeconds: 10
                   timeoutSeconds: 3
                   failureThreshold: 3
