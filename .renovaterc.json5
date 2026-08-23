@@ -30,6 +30,15 @@
   },
   packageRules: [
     {
+      // VSS 7.7.0 introduced mandatory server licensing. Keep the proven
+      // pre-license deployment byte-for-byte pinned unless this rule and the
+      // image pins are deliberately changed together.
+      description: "Visionect VSS: freeze the deployed pre-license image",
+      matchDatasources: ["docker"],
+      matchPackageNames: ["docker.io/visionect/visionect-server-v3"],
+      enabled: false,
+    },
+    {
       // Kaniop rejects kanidm server minors newer than its bundled client SDK.
       // Ceiling value is machine-managed by the "Kanidm Ceiling Sync" workflow.
       description: "kanidm/server: cap at the minor supported by kaniop's SDK",
