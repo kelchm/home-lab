@@ -16,7 +16,7 @@ spec:
         # Staging state: CNPG, the PVC, certificate, and VIP can reconcile
         # without starting a fresh VSS against the empty database. The cutover
         # commit changes this to 1 after the final dump/config import.
-        replicas: 0
+        replicas: 1
         strategy: Recreate
         pod:
           terminationGracePeriodSeconds: 60
