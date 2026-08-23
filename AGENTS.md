@@ -26,5 +26,5 @@ these nodes have hung during the default kexec reboot path.
 
 Operate on one node at a time. Do not continue until etcd has quorum, every
 Kubernetes node is Ready, every Longhorn volume is healthy, and every Longhorn
-instance-manager has its `longhorn-system/storage-network` attachment on
-`lhnet1`.
+instance-manager is Running and Ready with its
+`longhorn-system/storage-network` attachment on `lhnet1`.

@@ -32,7 +32,7 @@ talosctl -n "${IPS[0]}" etcd members
 
 section "Kubernetes nodes"
 kubectl get nodes -o wide
-not_ready="$(kubectl get nodes -o json | jq -r '[.items[] | select(.status.conditions[]? | select(.type == "Ready" and .status != "True")) | .metadata.name] | unique | .[]')"
+not_ready="$(kubectl get nodes -o json | jq -r '.items[] | select(any(.status.conditions[]?; .type == "Ready" and .status == "True") | not) | .metadata.name')"
 if [[ -n "$not_ready" ]]; then
     printf 'nodes not Ready:\n%s\n' "$not_ready" >&2
     exit 1
@@ -66,21 +66,25 @@ section "Longhorn instance-manager storage attachments"
 instance_json="$(kubectl -n longhorn-system get pods -l longhorn.io/component=instance-manager -o json)"
 bad_instances="$(jq -r '
   .items[]
+  | (.status.containerStatuses // []) as $containers
   | (.metadata.annotations["k8s.v1.cni.cncf.io/network-status"] // "[]") as $raw
   | ($raw | fromjson? // []) as $networks
-  | select(([$networks[]
-      | select(.name == "longhorn-system/storage-network"
-          and .interface == "lhnet1"
-          and any(.ips[]?; startswith("10.32.25.")))] | length) == 0)
-  | [.metadata.name, .spec.nodeName] | @tsv
+  | select(.status.phase != "Running"
+      or ($containers | length) == 0
+      or (all($containers[]; .ready == true) | not)
+      or ([$networks[]
+        | select(.name == "longhorn-system/storage-network"
+            and .interface == "lhnet1"
+            and any(.ips[]?; startswith("10.32.25.")))] | length) == 0)
+  | [.metadata.name, .spec.nodeName, (.status.phase // "unknown")] | @tsv
 ' <<<"$instance_json")"
-jq -r '.items[] | [.metadata.name, .spec.nodeName] | @tsv' <<<"$instance_json"
+jq -r '.items[] | [.metadata.name, .spec.nodeName, (.status.phase // "unknown"), ((.status.containerStatuses // []) | all(.ready == true))] | @tsv' <<<"$instance_json"
 if (( $(jq '.items | length' <<<"$instance_json") == 0 )); then
     echo 'no Longhorn instance-manager pods found' >&2
     exit 1
 fi
 if [[ -n "$bad_instances" ]]; then
-    printf 'instance-managers missing storage-network/lhnet1:\n%s\n' "$bad_instances" >&2
+    printf 'instance-managers not Ready or missing storage-network/lhnet1:\n%s\n' "$bad_instances" >&2
     exit 1
 fi
 
@@ -90,4 +94,4 @@ kubectl -n tailscale get pods -o wide
 section "PodDisruptionBudgets"
 kubectl get pdb -A
 
-printf '\nPASS: etcd responded, all nodes are Ready, networking safeguards are Ready, and %s Longhorn volumes are healthy.\n' "$volume_count"
+printf '\nPREFLIGHT CHECKS PASSED: etcd membership responded, all nodes and instance-managers are Ready, networking safeguards are Ready, and %s Longhorn volumes are healthy. Run talosctl health with one healthy control-plane node before the go/no-go decision.\n' "$volume_count"

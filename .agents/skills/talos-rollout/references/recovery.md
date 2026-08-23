@@ -30,8 +30,9 @@ Ready while the pod had only Cilium networking. This occurred after two node
 reboots and left Longhorn without its storage-VLAN path.
 
 Detection requires all of the following in the instance-manager's
-`k8s.v1.cni.cncf.io/network-status` annotation:
+state and `k8s.v1.cni.cncf.io/network-status` annotation:
 
+- pod phase `Running` with every container Ready
 - network `longhorn-system/storage-network`
 - interface `lhnet1`
 - an address in `10.32.25.0/24`
@@ -57,10 +58,18 @@ authoritative pod-recovery procedure.
 
 ## Drain is blocked
 
-Do not turn a PDB failure into a forced drain. Identify whether the blocker is
-an operator-managed singleton, a database replica, or an access-path pod.
-Move or safely quiesce it, repeat the server-side drain dry-run, and preserve a
-healthy etcd majority throughout.
+Talos cordons the node before draining it. If the drain fails, the node can
+remain cordoned even though no reboot occurred.
+
+1. Inspect the node's `.spec.unschedulable` value and the workloads that remain
+   on it. Identify whether the blocker is an operator-managed singleton, a
+   database primary, or an access-path pod.
+2. Do not turn a PDB failure into a forced drain. If continuing, deliberately
+   resolve the blocker and retry the guarded single-node task while preserving
+   etcd quorum.
+3. If abandoning the attempt, confirm the node and its workloads are safe to
+   resume scheduling, then run `kubectl uncordon <node-name>` deliberately.
+4. Re-run preflight and cluster health checks before another attempt.
 
 ## Tailscale route moves
 

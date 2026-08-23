@@ -469,6 +469,7 @@ jobs:
       - bootstrap
       - sops
       - scripts
+      - skills
       - network
       - docs
     runs-on: ubuntu-latest

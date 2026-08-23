@@ -58,12 +58,16 @@ while true; do
         --field-selector "spec.nodeName=$node_name" -o json)"
     bad_count="$(jq '[
       .items[]
+      | (.status.containerStatuses // []) as $containers
       | (.metadata.annotations["k8s.v1.cni.cncf.io/network-status"] // "[]") as $raw
       | ($raw | fromjson? // []) as $networks
-      | select(([$networks[]
-          | select(.name == "longhorn-system/storage-network"
-              and .interface == "lhnet1"
-              and any(.ips[]?; startswith("10.32.25.")))] | length) == 0)
+      | select(.status.phase != "Running"
+          or ($containers | length) == 0
+          or (all($containers[]; .ready == true) | not)
+          or ([$networks[]
+            | select(.name == "longhorn-system/storage-network"
+                and .interface == "lhnet1"
+                and any(.ips[]?; startswith("10.32.25.")))] | length) == 0)
     ] | length' <<<"$instance_json")"
     if (( $(jq '.items | length' <<<"$instance_json") > 0 && bad_count == 0 )); then
         break
@@ -72,7 +76,7 @@ while true; do
     sleep 10
 done
 
-jq -r '.items[] | [.metadata.name, .spec.nodeName, .status.phase] | @tsv' <<<"$instance_json"
+jq -r '.items[] | [.metadata.name, .spec.nodeName, .status.phase, ((.status.containerStatuses // []) | all(.ready == true))] | @tsv' <<<"$instance_json"
 
 echo 'waiting for every Longhorn volume to become healthy...'
 while true; do
@@ -86,6 +90,38 @@ while true; do
     sleep 15
 done
 
+echo 'checking every Kubernetes node and Longhorn instance-manager...'
+node_json="$(kubectl get nodes -o json)"
+not_ready="$(jq -r '.items[] | select(any(.status.conditions[]?; .type == "Ready" and .status == "True") | not) | .metadata.name' <<<"$node_json")"
+if [[ -n "$not_ready" ]]; then
+    printf 'nodes not Ready:\n%s\n' "$not_ready" >&2
+    exit 1
+fi
+
+instance_json="$(kubectl -n longhorn-system get pods -l longhorn.io/component=instance-manager -o json)"
+bad_instances="$(jq -r '
+  .items[]
+  | (.status.containerStatuses // []) as $containers
+  | (.metadata.annotations["k8s.v1.cni.cncf.io/network-status"] // "[]") as $raw
+  | ($raw | fromjson? // []) as $networks
+  | select(.status.phase != "Running"
+      or ($containers | length) == 0
+      or (all($containers[]; .ready == true) | not)
+      or ([$networks[]
+        | select(.name == "longhorn-system/storage-network"
+            and .interface == "lhnet1"
+            and any(.ips[]?; startswith("10.32.25.")))] | length) == 0)
+  | [.metadata.name, .spec.nodeName, (.status.phase // "unknown")] | @tsv
+' <<<"$instance_json")"
+if (( $(jq '.items | length' <<<"$instance_json") == 0 )); then
+    echo 'no Longhorn instance-manager pods found' >&2
+    exit 1
+fi
+if [[ -n "$bad_instances" ]]; then
+    printf 'instance-managers not Ready or missing storage-network/lhnet1:\n%s\n' "$bad_instances" >&2
+    exit 1
+fi
+
 kubectl get nodes -o wide
 kubectl -n tailscale get pods -o wide
-printf 'PASS: %s is Ready on %s, Multus config is present, lhnet1 is attached, and all Longhorn volumes are healthy.\n' "$node_name" "$server_version"
+printf 'NODE CHECKS PASSED: %s is Ready on %s, every Kubernetes node and instance-manager is Ready, every instance-manager has lhnet1, and all Longhorn volumes are healthy. Run talosctl health with one healthy control-plane node before the go/no-go decision.\n' "$node_name" "$server_version"
