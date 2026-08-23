@@ -15,6 +15,28 @@ The "Firewall rules" and "IDS/IPS signature suppression" sections below document
 intent for configuration that lives only in the UniFi UI (no exportable artifact
 lives in this repo).
 
+## DGX Spark applied state
+
+The Spark commissioning session created VLAN 21 `Workloads` and the
+`spark-trunk` port profile, then applied that profile to enabled Core
+Aggregation ports 7 and 8:
+
+| Item | Applied value |
+|---|---|
+| Workloads gateway | `10.32.21.1/24` |
+| Workloads DHCP | `10.32.21.200-.239` |
+| `spark-trunk` native network | VLAN 21 |
+| `spark-trunk` tagged networks | VLAN 25 only |
+| Port features | Autonegotiation and flow control enabled; EEE disabled |
+| Port 7 | `spark-1`, 10GbE |
+| Port 8 | `spark-2`, 10GbE |
+
+No Workloads firewall rules were created during this phase. The intended rules
+remain part of the network-topology firewall phase and must not be described as
+applied. See the
+[DGX Spark bring-up runbook](../../docs/runbooks/dgx-spark-bringup.md) for the
+full host configuration, physical port map, test record, and remaining gates.
+
 ## Applying `frr.conf`
 
 The config targets FRR, which UniFi gateways (UDM Pro / UDM SE / UXG-series)

@@ -12,7 +12,7 @@ with prod but takes a distinct compute VLAN (31) and BGP ASN (65021).
 
 Why a second cluster rather than a VM playground: it keeps an identical
 operational model to prod, the addressing scheme already generalises via the
-cluster-index digit, and prefix-list scoping isolates failure domains. The
+system-identity decade, and prefix-list scoping isolates failure domains. The
 trade-off — losing a general-purpose VM sandbox in favour of uniformity — was
 made consciously.
 
@@ -23,7 +23,7 @@ When sandbox lands as a second Talos cluster:
 - Each cluster is its own AS (prod 65020, sandbox 65021), peering with UniFi (65000)
 - Each cluster allocates from only its own pool prefixes; advertises VIPs as `/32`s within those prefixes
 - UniFi prefix-list filter per neighbor isolates failure domains: sandbox cannot advertise into prod's CIDR space
-- Storage VLAN 25 shared; both clusters present per the cluster-identity rule
+- Storage VLAN 25 shared; both clusters present per the system identity rule
 - API VIPs continue to be Talos-managed (vipController), independent of BGP
 - Total BGP sessions on UniFi: 6 (3 per cluster)
 
