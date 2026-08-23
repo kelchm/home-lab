@@ -8,7 +8,7 @@ metadata:
   name: visionect-db
 spec:
   instances: 1
-  imageName: ghcr.io/cloudnative-pg/postgresql:17.8-system-trixie
+  imageName: ghcr.io/cloudnative-pg/postgresql:17.11-system-trixie
   storage:
     # The source is 2 GiB with ~6.4M history rows. Leave useful growth
     # headroom; Longhorn volumes can be expanded later if retention is kept
