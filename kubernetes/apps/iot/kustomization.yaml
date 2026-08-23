@@ -10,3 +10,4 @@ components:
 resources:
   - ./namespace.yaml
   - ./broadsheet/ks.yaml
+  - ./visionect/ks.yaml
