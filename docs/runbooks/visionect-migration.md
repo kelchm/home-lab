@@ -309,6 +309,34 @@ printf '%s\n' "$visionect_cutover_dir"
     `demo.visionect.com` and `broadsheet.home.kelch.io`. The obsolete Newsprint
     session is allowed to fail and can be removed or repointed afterward.
 
+## Cutover record (2026-08-23)
+
+- Athena's VSS stopped cleanly at `02:40:59Z` and remains stopped. Its
+  PostgreSQL and Redis containers remain running and unchanged for rollback.
+- The final source and restored target fingerprints matched exactly: 9
+  `device`, 2,886,874 `device_events`, 10 `session`, 4 `settings`, and
+  3,554,674 `status` rows; `schema_migrations` was version 5 and not dirty.
+  The live target `status` count began advancing after startup.
+- A storm-related whole-network outage and two startup-readiness corrections
+  extended the maintenance window. The final pod became Ready at `03:23:00Z`;
+  all nine VLAN 90 clients were established on TCP/11113 at the first
+  post-readiness connection check, about 43 minutes after source shutdown.
+- Flux/Helm converged at commit `7b2fd7808955268d74d0b1defdfe495032e653bc`.
+  The pod was 3/3 Ready with zero restarts and all four supervisor services
+  running. HTTPS `/healthz` returned 200 with a valid certificate and `/`
+  redirected to `/login`.
+- Normal DNS and a direct k8s-gateway query both resolved
+  `vss.home.kelch.io` to `10.32.150.30`; no UniFi local-DNS record remains.
+  Cilium advertised `10.32.150.30/32` from `k8s-prod-2` with next hop
+  `10.32.30.12`. The live UniFi policy read-back showed the Main/443 and
+  IoT/11113 allows ordered before the all-other drop.
+- Immediate Longhorn backups completed for `visionect`
+  (`backup-04041ce26aba429f`, 180 MiB) and `visionect-db-1`
+  (`backup-04369edffa8448c9`, about 3.8 GiB). Both volumes carry the `default`
+  recurring-job group for the daily and weekly schedules.
+- Keep the source containers and final migration artifacts through at least
+  2026-08-30 and one successful restore drill before retiring rollback.
+
 ## Rollback
 
 The source database is unchanged after the source VSS stops. If any target gate
