@@ -24,7 +24,7 @@ spec:
           prepare-data:
             image:
               repository: docker.io/visionect/visionect-server-v3
-              tag: 7.6.5@sha256:1c8de943f4063d207483563896b1713b986a463e13d6a56730671813d6668415
+              tag: 7.9.6@sha256:5c9bcaacbd6e6d92da746fc7ea2d0db6307f0596e4a4af56ba40b3518e436b0f
             command: ["/bin/sh", "-ec"]
             args:
               - >-
@@ -43,7 +43,7 @@ spec:
           app:
             image:
               repository: docker.io/visionect/visionect-server-v3
-              tag: 7.6.5@sha256:1c8de943f4063d207483563896b1713b986a463e13d6a56730671813d6668415
+              tag: 7.9.6@sha256:5c9bcaacbd6e6d92da746fc7ea2d0db6307f0596e4a4af56ba40b3518e436b0f
             env:
               TZ: America/New_York
               DB2_1_PORT_5432_TCP_ADDR:
