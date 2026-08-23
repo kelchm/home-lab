@@ -72,8 +72,7 @@ spec:
                 enabled: true
                 custom: true
                 spec:
-                  httpGet:
-                    path: /
+                  tcpSocket:
                     port: &ui-port 8081
                   periodSeconds: 5
                   timeoutSeconds: 3
@@ -82,8 +81,7 @@ spec:
                 enabled: true
                 custom: true
                 spec:
-                  httpGet:
-                    path: /
+                  tcpSocket:
                     port: *ui-port
                   periodSeconds: 10
                   timeoutSeconds: 3
@@ -233,7 +231,10 @@ spec:
             http {
               access_log /dev/stdout;
               client_body_temp_path /tmp/client_temp;
+              fastcgi_temp_path /tmp/fastcgi_temp;
               proxy_temp_path /tmp/proxy_temp;
+              scgi_temp_path /tmp/scgi_temp;
+              uwsgi_temp_path /tmp/uwsgi_temp;
 
               map $http_upgrade $connection_upgrade {
                 default upgrade;
