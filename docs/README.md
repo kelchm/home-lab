@@ -10,6 +10,7 @@ Current-state, authoritative docs.
 - [**architecture.md**](architecture.md) — infrastructure architecture: network
   / VLAN layout, the IP-addressing convention, LB pools, BGP, DNS, and storage
   strategy. The source of truth for how the cluster is wired and why.
+- [**dgx-spark-thermal.md**](dgx-spark-thermal.md) — measured thermal headroom for the two DGX Sparks: what the cabinet does and does not constrain, and the ambient ceiling.
 - [**repository-validation.md**](repository-validation.md) — CI event semantics,
   concurrency, aggregate-check invariants, and the boundary between validation
   and Flux deployment.

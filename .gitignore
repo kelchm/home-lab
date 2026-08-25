@@ -19,3 +19,11 @@ talosconfig
 .venv/
 .DS_Store
 Thumbs.db
+
+# Host-local Spark stack config; .env.example is the committed template.
+sparks/inference/.env
+sparks/inference/deepseek/.env
+
+# Python bytecode
+__pycache__/
+*.pyc
