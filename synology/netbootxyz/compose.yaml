@@ -1,0 +1,30 @@
+name: netbootxyz-nas
+
+services:
+  netbootxyz:
+    image: ghcr.io/netbootxyz/netbootxyz:0.7.6-nbxyz24@sha256:7bd0964fd3648cd3323772ad6ad8b0a507afe797385e4c0f587a8c23972ee4e3
+    environment:
+      MENU_VERSION: 3.0.2
+      NGINX_PORT: 80
+      TFTPD_OPTS: --tftp-single-port
+      TZ: America/New_York
+      WEB_APP_PORT: 3000
+    ports:
+      - "10.32.20.5:69:69/udp"
+      - "10.32.20.5:3000:3000/tcp"
+      - "10.32.20.5:8080:80/tcp"
+    volumes:
+      - ./config:/config
+      - ./assets:/assets
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          wget -q -O /dev/null http://127.0.0.1:3000/
+          && test -s /config/menus/netboot.xyz-snponly.efi
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
+    restart: unless-stopped
+    stop_grace_period: 30s

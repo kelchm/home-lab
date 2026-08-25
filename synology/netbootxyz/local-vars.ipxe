@@ -1,0 +1,5 @@
+#!ipxe
+
+# Prefer assets cached on Athena. Generated menus append their repository path,
+# for example /asset-mirror/releases/download/<version>/<file>.
+set live_endpoint http://10.32.20.5:8080
