@@ -1,6 +1,6 @@
 # WD_BLACK SN770 1 TB ZFS qualification record
 
-**Status:** Reproduction work complete on one specimen as of 2026-08-22; multi-specimen operational qualification remains open.
+**Status:** Active — 2026-08-22; reproduction complete on one specimen, multi-specimen operational qualification remains open.
 
 ## Executive result
 

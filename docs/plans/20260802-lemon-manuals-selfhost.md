@@ -1,5 +1,7 @@
 # LEMON Manuals self-host
 
+**Status:** Implemented — 2026-08-24; both phases are live, including the MCP server (`kubernetes/apps/ai/lemon-manuals-mcp/`).
+
 Self-host the LEMON/CHARM car-repair-manual archive (lemon-manuals.la, 1.1TB
 torrent) on the cluster, then put an MCP server in front of it for LLM access.
 
@@ -76,7 +78,7 @@ separate non-lemon decision.
 
 1. Cleanup on Athena: `sudo rm /volume1/lemon-manuals-k8s-prod/.reflink-test`.
 
-## Phase 2 — MCP (design sketch, not started)
+## Phase 2 — MCP (implemented)
 
 - No public LEMON MCP exists (checked 2026-08-02). Closest prior art:
   `Gonzih/mcp-charm` (TypeScript, MIT, scrapes charm.li live, base URL not

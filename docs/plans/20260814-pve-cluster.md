@@ -1,6 +1,6 @@
 # Three-node PVE cluster
 
-**Status:** Draft design; not implemented
+**Status:** Proposed — 2026-08-14; not implemented.
 
 **Plan date:** 2026-08-14
 

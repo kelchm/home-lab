@@ -1,5 +1,7 @@
 # SN770 ZFS qualification procedure
 
+**Status:** Implemented — 2026-08-22; executed against one specimen. Results: [qualification record](20260818-sn770-zfs-qualification-results.md).
+
 ## 1. Safety and test topology
 
 Use only the uncommissioned PVE machines. Do not run this on the live Talos nodes.

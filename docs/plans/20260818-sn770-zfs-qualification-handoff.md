@@ -1,5 +1,7 @@
 # SN770 ZFS qualification — session handoff (2026-08-18)
 
+**Status:** Active — 2026-08-22; single-specimen reproduction complete; second-specimen and multi-drive qualification remain. Detailed status is mid-document.
+
 ## Late-session authoritative update
 
 ### 2026-08-21 4 KiB logical-sector reproduction update

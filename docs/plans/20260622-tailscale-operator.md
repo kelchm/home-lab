@@ -1,5 +1,7 @@
 # Tailscale operator — remote LAN access plan
 
+**Status:** Implemented — 2026-08-24; current state: [kubernetes/apps/tailscale/](../../kubernetes/apps/tailscale/README.md).
+
 ## Context
 
 Off-LAN, the only thing reachable today is the public `*.${SECRET_DOMAIN}` web

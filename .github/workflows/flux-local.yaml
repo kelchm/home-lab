@@ -54,6 +54,7 @@ jobs:
               - '.github/workflows/flux-local.yaml'
               - '.mise.toml'
               - '**/*.md'
+              - 'scripts/ci/validate-docs-index.sh'
             kubernetes:
               - '.github/workflows/flux-local.yaml'
               - '.mise.toml'
@@ -453,6 +454,10 @@ jobs:
       - name: Validate local Markdown links
         if: needs.pre-job.outputs.docs_changed == 'true'
         run: lychee --offline --include-fragments '**/*.md'
+
+      - name: Validate docs index and plan statuses
+        if: needs.pre-job.outputs.docs_changed == 'true'
+        run: scripts/ci/validate-docs-index.sh
 
       - name: No documentation changes
         if: needs.pre-job.outputs.docs_changed != 'true'

@@ -1,6 +1,6 @@
 # Kanidm pivot: hand-rolled StatefulSet → kaniop operator
 
-**Status:** in flight (2026-05-09).
+**Status:** Implemented — 2026-08-24; current state: [kanidm-kaniop-cutover runbook](../runbooks/kanidm-kaniop-cutover.md).
 **Supersedes:** Phase 0 step 5 of `docs/plans/20260508-arr-suite-setup.md` (the Kanidm
 substack only — the rest of the master plan is unchanged).
 

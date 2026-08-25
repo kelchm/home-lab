@@ -1,5 +1,7 @@
 # MetaMCP server rollout plan
 
+**Status:** Implemented — 2026-08-24; the gateway and backend set are live under `kubernetes/apps/ai/`; bootstrap procedure: [metamcp-bootstrap runbook](../runbooks/metamcp-bootstrap.md).
+
 ## Context
 
 MetaMCP (`ghcr.io/metatool-ai/metamcp`, ns `ai`) is the cluster's MCP gateway, fronting

@@ -1,5 +1,7 @@
 # Observability rework — conclude the bake-off, wire delivery, kill the toil
 
+**Status:** Active — 2026-08-24; both metric stacks run while convergence completes. Background: [observability bake-off](../observability-bakeoff.md).
+
 ## Context
 
 This is the execution plan that concludes the [observability bake-off](../observability-bakeoff.md)
