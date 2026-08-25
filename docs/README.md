@@ -63,13 +63,12 @@ The status header form is `**Status:** <Proposed|Active|Implemented|Superseded> 
 - [20260802-lemon-manuals-selfhost](plans/20260802-lemon-manuals-selfhost.md) — self-host the LEMON manuals archive on NFS with an MCP server in front.
 - [20260814-pve-cluster](plans/20260814-pve-cluster.md) — draft design for the independent three-node PVE cluster: hardware, IPs, networks, storage, backup, HA, updates, IaC boundaries, and rollout gates.
 - [20260818-sn770-zfs-qualification-procedure](plans/20260818-sn770-zfs-qualification-procedure.md) — the bounded, destructive test procedure and safety guards used for the SN770 reproduction run.
-- [20260818-sn770-zfs-qualification-results](plans/20260818-sn770-zfs-qualification-results.md) — SN770 reproduction matrix, evidence index, findings, and remaining qualification work supporting the PVE storage decision.
-- [20260818-sn770-zfs-qualification-handoff](plans/20260818-sn770-zfs-qualification-handoff.md) — operator handoff notes: harness invocation, recurring traps, and open threads from the run.
 - [20260821-network-topology](plans/20260821-network-topology.md) — active, partially implemented VLAN/zone topology, DGX placement, PVE wiring, and second-cluster reservations.
 
 ## Decision records & benchmarks
 
 - [storage-benchmarks](storage-benchmarks.md) — Longhorn fio results, pre/post storage-network cutover.
+- [**sn770-zfs-qualification.md**](sn770-zfs-qualification.md) — WD_BLACK SN770 reproduction matrix, evidence index, and the remaining qualification gates for the PVE storage decision.
 - [observability-bakeoff](observability-bakeoff.md) — VictoriaMetrics/Logs vs. Prometheus/Loki evaluation.
 
 ## Related docs elsewhere in the repo

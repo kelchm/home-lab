@@ -70,7 +70,7 @@ jobs:
               - '.github/workflows/flux-local.yaml'
               - '.mise.toml'
               - '.shellcheckrc'
-              - 'scripts/**/*.sh'
+              - '**/*.sh'
             skills:
               - '.github/workflows/flux-local.yaml'
               - '.agents/skills/**'
