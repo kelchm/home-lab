@@ -39,7 +39,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "$${datasource}"
       },
       "description": "AMD CPU control temperature. Warning alert: 85 °C for 15 minutes. Critical alert: 92 °C for 5 minutes.",
       "fieldConfig": {
@@ -112,7 +112,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "$${datasource}"
       },
       "description": "Integrated AMD GPU edge temperature.",
       "fieldConfig": {
@@ -185,7 +185,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "$${datasource}"
       },
       "description": "NVMe controller composite temperature. Warning alert: 75 °C for 15 minutes. Critical alert: 80 °C for 5 minutes.",
       "fieldConfig": {
@@ -258,7 +258,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "$${datasource}"
       },
       "description": "Hottest reported NVMe channel on each node. Warning alert: 85 °C for 15 minutes. Critical alert: 90 °C for 5 minutes.",
       "fieldConfig": {
@@ -331,7 +331,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "$${datasource}"
       },
       "description": "AMD CPU control temperature by node.",
       "fieldConfig": {
@@ -427,7 +427,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "$${datasource}"
       },
       "description": "Integrated AMD GPU edge temperature by node.",
       "fieldConfig": {
@@ -523,7 +523,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "$${datasource}"
       },
       "description": "NVMe composite temperature by node.",
       "fieldConfig": {
@@ -619,7 +619,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "$${datasource}"
       },
       "description": "Maximum of every NVMe temperature channel on each node.",
       "fieldConfig": {
@@ -715,7 +715,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "$${datasource}"
       },
       "description": "CPU utilization provides workload context for temperature changes.",
       "fieldConfig": {
@@ -834,7 +834,7 @@
         "current": {},
         "datasource": {
           "type": "prometheus",
-          "uid": "${datasource}"
+          "uid": "$${datasource}"
         },
         "definition": "label_values(node_uname_info,nodename)",
         "includeAll": true,
