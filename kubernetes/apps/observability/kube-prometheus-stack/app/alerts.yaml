@@ -41,3 +41,201 @@ spec:
               at {{ printf "%.0f" $value }} Mb/s; expected
               {{ $labels.expected_mbps }} Mb/s. Check the cable, keystone, patch
               lead, switch port, and port profile.
+---
+# Curated hardware-temperature alerts for the three HP EliteDesk nodes. The
+# dashboard uses the same semantic hwmon labels (Tctl, edge, and Composite), so
+# PCI addresses and exporter pod names never appear in operator-facing output.
+#
+# The Ryzen 5 2400GE Tjmax is 95 C. CPU/GPU warning and critical thresholds
+# leave 10 C and 3 C of headroom respectively. NVMe limits match the bounded
+# qualification harness: 80 C composite and 90 C on any individual sensor.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: node-hardware-temperature
+spec:
+  groups:
+    - name: node-hardware-temperature
+      rules:
+        - alert: NodeCpuTemperatureHigh
+          expr: |
+            (
+              node_hwmon_temp_celsius
+              * on (instance, chip, sensor) group_left (label)
+                node_hwmon_sensor_label{label="Tctl"}
+              * on (instance) group_left (nodename) node_uname_info
+            ) > 85
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: CPU temperature is high on {{ $labels.nodename }}
+            description: >-
+              CPU Tctl on {{ $labels.nodename }} has remained at
+              {{ printf "%.1f" $value }} C for 15 minutes; warning threshold is
+              85 C and processor Tjmax is 95 C.
+
+        - alert: NodeCpuTemperatureCritical
+          expr: |
+            (
+              node_hwmon_temp_celsius
+              * on (instance, chip, sensor) group_left (label)
+                node_hwmon_sensor_label{label="Tctl"}
+              * on (instance) group_left (nodename) node_uname_info
+            ) > 92
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: CPU temperature is critical on {{ $labels.nodename }}
+            description: >-
+              CPU Tctl on {{ $labels.nodename }} has remained at
+              {{ printf "%.1f" $value }} C for 5 minutes; critical threshold is
+              92 C and processor Tjmax is 95 C.
+
+        - alert: NodeGpuTemperatureHigh
+          expr: |
+            (
+              node_hwmon_temp_celsius
+              * on (instance, chip, sensor) group_left (label)
+                node_hwmon_sensor_label{label="edge"}
+              * on (instance) group_left (nodename) node_uname_info
+            ) > 85
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: Integrated GPU temperature is high on {{ $labels.nodename }}
+            description: >-
+              AMD GPU edge temperature on {{ $labels.nodename }} has remained at
+              {{ printf "%.1f" $value }} C for 15 minutes; warning threshold is
+              85 C.
+
+        - alert: NodeGpuTemperatureCritical
+          expr: |
+            (
+              node_hwmon_temp_celsius
+              * on (instance, chip, sensor) group_left (label)
+                node_hwmon_sensor_label{label="edge"}
+              * on (instance) group_left (nodename) node_uname_info
+            ) > 92
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: Integrated GPU temperature is critical on {{ $labels.nodename }}
+            description: >-
+              AMD GPU edge temperature on {{ $labels.nodename }} has remained at
+              {{ printf "%.1f" $value }} C for 5 minutes; critical threshold is
+              92 C.
+
+        - alert: NodeNvmeCompositeTemperatureHigh
+          expr: |
+            (
+              node_hwmon_temp_celsius
+              * on (instance, chip, sensor) group_left (label)
+                node_hwmon_sensor_label{label="Composite"}
+              * on (instance) group_left (nodename) node_uname_info
+            ) > 75
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: NVMe composite temperature is high on {{ $labels.nodename }}
+            description: >-
+              NVMe composite temperature on {{ $labels.nodename }} has remained
+              at {{ printf "%.1f" $value }} C for 15 minutes; warning threshold
+              is 75 C.
+
+        - alert: NodeNvmeCompositeTemperatureCritical
+          expr: |
+            (
+              node_hwmon_temp_celsius
+              * on (instance, chip, sensor) group_left (label)
+                node_hwmon_sensor_label{label="Composite"}
+              * on (instance) group_left (nodename) node_uname_info
+            ) > 80
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: NVMe composite temperature is critical on {{ $labels.nodename }}
+            description: >-
+              NVMe composite temperature on {{ $labels.nodename }} has remained
+              at {{ printf "%.1f" $value }} C for 5 minutes; critical threshold
+              is 80 C.
+
+        - alert: NodeNvmeSensorTemperatureHigh
+          expr: |
+            max by (instance) (node_hwmon_temp_celsius{chip=~"nvme.*"})
+            * on (instance) group_left (nodename) node_uname_info
+            > 85
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: An NVMe temperature sensor is high on {{ $labels.nodename }}
+            description: >-
+              The hottest NVMe sensor on {{ $labels.nodename }} has remained at
+              {{ printf "%.1f" $value }} C for 15 minutes; warning threshold is
+              85 C.
+
+        - alert: NodeNvmeSensorTemperatureCritical
+          expr: |
+            max by (instance) (node_hwmon_temp_celsius{chip=~"nvme.*"})
+            * on (instance) group_left (nodename) node_uname_info
+            > 90
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: An NVMe temperature sensor is critical on {{ $labels.nodename }}
+            description: >-
+              The hottest NVMe sensor on {{ $labels.nodename }} has remained at
+              {{ printf "%.1f" $value }} C for 5 minutes; critical threshold is
+              90 C.
+
+        - alert: NodeHardwareTemperatureAlarm
+          expr: |
+            (node_hwmon_temp_alarm != 0)
+            * on (instance) group_left (nodename) node_uname_info
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: Hardware temperature alarm is active on {{ $labels.nodename }}
+            description: >-
+              Sensor {{ $labels.sensor }} on chip {{ $labels.chip }} reports an
+              active hardware temperature alarm on {{ $labels.nodename }}.
+
+        - alert: NodeCpuTemperatureSensorMissing
+          expr: |
+            node_uname_info
+            unless on (instance)
+            (
+              node_hwmon_temp_celsius
+              * on (instance, chip, sensor) group_left (label)
+                node_hwmon_sensor_label{label="Tctl"}
+            )
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: CPU temperature sensor is missing on {{ $labels.nodename }}
+            description: >-
+              Node-exporter is still reporting {{ $labels.nodename }}, but its
+              CPU Tctl hwmon sensor has been absent for 15 minutes.
+
+        - alert: NodeNvmeTemperatureSensorMissing
+          expr: |
+            node_uname_info
+            unless on (instance)
+            node_hwmon_temp_celsius{chip=~"nvme.*"}
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: NVMe temperature sensors are missing on {{ $labels.nodename }}
+            description: >-
+              Node-exporter is still reporting {{ $labels.nodename }}, but all
+              NVMe hwmon temperature sensors have been absent for 15 minutes.
