@@ -29,12 +29,16 @@ bundled PiKVM UI:
 
 | KVM port | Host |
 |----------|------|
+| 1 | `pve-sbx-1` |
+| 2 | `pve-sbx-2` |
+| 3 | `pve-sbx-3` |
 | 4 | `k8s-prod-1` |
 | 5 | `k8s-prod-2` |
 | 6 | `k8s-prod-3` |
+| 7 | `spark-1` |
+| 8 | `spark-2` |
 
-The script supports ports 1-8. Add another row under `view.table` to expose a
-configured channel in the UI.
+All eight downstream ports are assigned and exposed in the UI. Update the table and the corresponding row under `view.table` together if the physical mapping changes.
 
 ## Remote console helpers
 
@@ -49,7 +53,7 @@ boot-menu, and console work:
 - [`capture-screen.sh`](capture-screen.sh) copies a JPEG directly from kvmd's
   `/run/kvmd/ustreamer.sock` to the operator workstation.
 
-For the end-to-end HP Startup Menu, PXE, and PVE installation sequence, use the [PVE node bootstrap runbook](../../docs/runbooks/pve-node-bootstrap.md). This README remains the appliance configuration and recovery source.
+For the end-to-end HP Startup Menu, PXE, and PVE installation sequence, use the [PVE node bootstrap runbook](../../docs/runbooks/pve-node-bootstrap.md). For DGX host networking and recovery, use the [DGX Spark bring-up runbook](../../docs/runbooks/dgx-spark-bringup.md). This README remains the appliance configuration and recovery source.
 
 The GLKVM starts `ustreamer` only while an authenticated KVM viewer is active
 and stops it about ten seconds after the final viewer disconnects. The Unix

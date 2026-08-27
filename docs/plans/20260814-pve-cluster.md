@@ -4,14 +4,11 @@
 
 **Plan date:** 2026-08-14
 
-**Target platform:** Proxmox VE 9.2 or the current stable 9.x installer at execution time
+**Target platform:** Proxmox VE 9.2-1 x86-64 through the pinned and verified local netboot entry
 
 ## Outcome
 
-Build one three-node Proxmox VE cluster named `pve-lab` on the HP EliteDesk 800
-G3 hosts. PVE remains a separate failure and control domain
-from `k8s-prod`, while its declarations live in this repository under a future
-top-level `proxmox/` tree.
+Build one three-node Proxmox VE cluster named `pve-sbx` on the HP EliteDesk 800 G3 hosts. PVE remains a separate failure and control domain from `k8s-prod`, while its declarations live in this repository under a future top-level `proxmox/` tree.
 
 Initial operating model:
 
@@ -56,15 +53,15 @@ PVE itself has a pull-based GitOps reconciler.
 
 | Item | Value |
 |---|---|
-| Cluster | `pve-lab` |
-| Nodes | `pve-lab-1`, `pve-lab-2`, `pve-lab-3` |
+| Cluster | `pve-sbx` |
+| Nodes | `pve-sbx-1`, `pve-sbx-2`, `pve-sbx-3` |
 | Hardware | 3x HP EliteDesk 800 G3 Mini |
 | CPU | Intel Core i5-6500T, 4 cores / 4 threads |
 | Memory | 32 GB per node |
 | Local disk | Expected 1 TB WD_BLACK SN770 NVMe per node; verify each host before install |
 | Management NIC | Onboard 1 GbE; controller and PCI address to inventory per host |
 | Storage/guest-trunk NIC | PCIe Realtek RTL8125 2.5 GbE; exact PCI address and interface name to inventory per host |
-| PVE release | Current stable 9.x; 9.2 is the planning baseline |
+| PVE release | 9.2-1 x86-64 for initial commissioning; later upgrades require a separately reviewed version bump |
 | Root storage | Installer-default ext4 root and LVM-thin guest storage ID `local-lvm` |
 | Shared system | Synology DS1821+ on `10.32.25.5` |
 
@@ -93,9 +90,9 @@ and avoid session or console routing ambiguity.
 | `10.32.20.7` | `pbs.home.kelch.io` | Reserved for an independent future PBS appliance; octet matches `pbs-storage` |
 | `10.32.20.10` | `glkvm.home.kelch.io` | GL-RM1PE KVM (existing) |
 | `10.32.20.20` | `pdm.home.kelch.io` | Reserved; PDM is not initially deployed |
-| `10.32.20.21` | `pve-lab-1.home.kelch.io` | PVE UI/API, SSH, Corosync link 0 |
-| `10.32.20.22` | `pve-lab-2.home.kelch.io` | PVE UI/API, SSH, Corosync link 0 |
-| `10.32.20.23` | `pve-lab-3.home.kelch.io` | PVE UI/API, SSH, Corosync link 0 |
+| `10.32.20.21` | `pve-sbx-1.home.kelch.io` | PVE UI/API, SSH, Corosync link 0 |
+| `10.32.20.22` | `pve-sbx-2.home.kelch.io` | PVE UI/API, SSH, Corosync link 0 |
+| `10.32.20.23` | `pve-sbx-3.home.kelch.io` | PVE UI/API, SSH, Corosync link 0 |
 | `10.32.20.24-.29` | — | Future PVE nodes; leave unallocated |
 
 Host octets `.21-.23` match the storage addresses below per the system identity
@@ -114,9 +111,9 @@ for cluster identity.
 | `10.32.25.5` | `nas-storage.home.kelch.io` | Synology NFS endpoint |
 | `10.32.25.6` | `s3-storage.home.kelch.io` | Reserved by the NAS out-of-cluster workload plan |
 | `10.32.25.7` | `pbs-storage.home.kelch.io` | Reserved for a future PBS data interface |
-| `10.32.25.21` | `pve-lab-1-storage.home.kelch.io` | Migration, NFS, Corosync link 1 |
-| `10.32.25.22` | `pve-lab-2-storage.home.kelch.io` | Migration, NFS, Corosync link 1 |
-| `10.32.25.23` | `pve-lab-3-storage.home.kelch.io` | Migration, NFS, Corosync link 1 |
+| `10.32.25.21` | `pve-sbx-1-storage.home.kelch.io` | Migration, NFS, Corosync link 1 |
+| `10.32.25.22` | `pve-sbx-2-storage.home.kelch.io` | Migration, NFS, Corosync link 1 |
+| `10.32.25.23` | `pve-sbx-3-storage.home.kelch.io` | Migration, NFS, Corosync link 1 |
 | `10.32.25.24-.29` | — | PVE expansion; leave unallocated |
 
 Set the datacenter migration network to `10.32.25.0/24` with secure migration.
@@ -150,6 +147,8 @@ Kubernetes gets `-pve`, for example `foo-pve.home.kelch.io`. The hostname says
 which instance it is; the VLAN is never encoded in the name.
 
 ## Physical and Linux network design
+
+The owner-confirmed Lab Switch layout is intentionally parallel with `k8s-prod`: `pve-sbx-{1,2,3}` use ports 1–3 for onboard 1 GbE management and ports 13–15 for RTL8125 2.5 GbE trunks, while `k8s-prod-{1,2,3}` use the immediately following blocks at ports 4–6 and 16–18. Treat the PVE and production Kubernetes port blocks as separate change scopes.
 
 ### Onboard 1 GbE
 
@@ -267,19 +266,12 @@ Before forming a cluster:
    old-firmware specimen, control drive, and same-host baseline needed by that
    work; do not change its firmware, sector format, or host firmware until the
    qualification hold is explicitly released.
-3. After the hold is cleared, update BIOS and load defaults, then enable VT-x,
-   VT-d, UEFI boot, and power-on-after-AC-loss. For each released drive, use the
-   vendor-supported tool to check and, when applicable, apply an NVMe firmware
-   update one drive at a time; record the sanitized before/after revision.
+3. After the hold is cleared, normalize each host's BIOS configuration against the [PVE node bootstrap runbook](../runbooks/pve-node-bootstrap.md). Record the installed BIOS revision before changing settings. A BIOS firmware flash is a separate, product-ID-specific operation and is not implied by loading defaults. For each released drive, use the vendor-supported tool to check and, when applicable, apply an NVMe firmware update one drive at a time; record the sanitized before/after revision.
 4. While no valuable data exists, run memory and CPU burn-in plus a destructive
    full-device write/read verification and sustained mixed/sync NVMe I/O. A
    quick SMART pass is insufficient. Reject a drive or host that logs any NVMe
    reset, timeout, PCIe/AER error, media error, or capacity change.
-5. Install only `pve-lab-1` using the current stable PVE 9.x ISO. Keep the
-   default supported kernel; do not opt into a test kernel to make the RTL8125
-   work unless the stable kernel demonstrably fails. Use the
-   [PVE node bootstrap runbook](../runbooks/pve-node-bootstrap.md) for the
-   GLKVM and netboot.xyz control path.
+5. Install only `pve-sbx-1` using the committed local Proxmox VE 9.2-1 submenu and verified assets. Keep the default supported kernel; do not opt into a test kernel to make the RTL8125 work unless the stable kernel demonstrably fails. Use the [PVE node bootstrap runbook](../runbooks/pve-node-bootstrap.md) for the GLKVM and netboot.xyz control path.
 6. Record `lspci -nnk`, interface names, private MAC inventory, and `ethtool`
    link and driver/firmware data. The RTL8125 must hold a negotiated 2.5 Gb/s
    link and sustain `iperf3` without resets or PCIe/AER errors.
@@ -295,7 +287,7 @@ it is being diagnosed.
 
 ### PVE install choices
 
-- Install the current stable PVE 9.x release (9.2 at design time).
+- Install Proxmox VE 9.2-1 x86-64 through the committed local submenu and verified `9.2-1-4bbcc809` asset set. A later installer release first requires a reviewed menu, checksum, plan, and runbook update.
 - Install in UEFI mode onto the single verified local NVMe using ext4 and the
   installer's default LVM layout. Keep the default `local-lvm` thin pool rather
   than inventing fixed sizes until the installer shows the actual available
@@ -317,8 +309,7 @@ it is being diagnosed.
 ### Cluster formation
 
 1. Finish and validate both networks on all three standalone nodes.
-2. Create `pve-lab` on node 1 with VLAN 20 as Corosync link 0 and VLAN 25 as
-   link 1.
+2. Create `pve-sbx` on node 1 with VLAN 20 as Corosync link 0 and VLAN 25 as link 1.
 3. Join node 2, verify quorum and both links, then join node 3.
 4. Confirm expected votes `3`, quorum `2`, and that removal of either physical
    link does not destroy quorum.
@@ -401,15 +392,12 @@ available hardware with fewer resource and recovery-path constraints.
 Create distinct Synology exports:
 
 ```text
-/volume1/pve-lab/library
-/volume1/pve-lab/guests
-/volume1/backups-pve-lab/vzdump
+/volume1/pve-sbx/library
+/volume1/pve-sbx/guests
+/volume1/backups-pve-sbx/vzdump
 ```
 
-Use NFSv4.1, scope export access to `10.32.25.21-.23`, and map root to an
-account that can write the backup directory. Do not use `soft` mounts. Synology
-snapshots and its offsite backup policy must include `backups-pve-lab`; a backup
-on the same NAS is independent of PVE host loss, not of NAS loss.
+Use NFSv4.1, scope export access to `10.32.25.21-.23`, and map root to an account that can write the backup directory. Do not use `soft` mounts. Synology snapshots and its offsite backup policy must include `backups-pve-sbx`; a backup on the same NAS is independent of PVE host loss, not of NAS loss.
 
 Create `nas-guests` only if a real HA guest justifies it. Use `qcow2` there so
 the directory/NFS backend can provide snapshots and clones. First benchmark
@@ -683,7 +671,7 @@ usable when Kubernetes is completely unavailable.
 |---|---|---|
 | 0 — network | Apply the `pve-guest-trunk` and VLAN 20 access switch profiles; add IP reservations, DNS, and firewall intent | Admin reaches reserved node IPs; VLAN 21 guests cannot reach VLANs 20/25/30 |
 | 1 — one-node proof | BIOS/firmware, install node 1, RTL8125/NVMe burn-in, final bridges | Stable 1/2.5 GbE links across reboot and sustained load |
-| 2 — cluster | Install nodes 2/3, form `pve-lab`, configure redundant Corosync and migration network | Three votes; either NIC can fail without losing quorum; migration uses VLAN 25 |
+| 2 — cluster | Install nodes 2/3, form `pve-sbx`, configure redundant Corosync and migration network | Three votes; either NIC can fail without losing quorum; migration uses VLAN 25 |
 | 3 — storage/recovery | Add NFS exports, backup job, config capture and restore drill | A disconnected restored VM boots; RTO and throughput recorded |
 | 4 — guest IaC | Independent S3 state, OpenTofu encryption/provider, templates and smoke VM | A plan/apply/re-apply is clean; destroy/recreate works without Kubernetes |
 | 5 — optional HA proof | Benchmark `nas-guests`; place one test guest there, enable HA, and pull power on its node | Guest restarts safely; NFS interruption behavior and NAS dependency are documented |

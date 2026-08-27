@@ -135,7 +135,7 @@ Member numbering is 1-indexed (`k8s-prod-1` = `.11`, not `.10`); `.X0` is never 
 Examples:
 
 - `k8s-prod-1` (system 1): `10.32.30.11` ↔ `10.32.25.11`
-- `pve-lab-1` (system 2, planned): `10.32.20.21` ↔ `10.32.25.21` — trunks VLAN 21 for guests but holds no address there
+- `pve-sbx-1` (system 2, planned): `10.32.20.21` ↔ `10.32.25.21` — trunks VLAN 21 for guests but holds no address there
 - `spark-1` (system 3): `10.32.21.31` ↔ `10.32.25.31`
 - Second-cluster node 1 (system 4, reserved): `10.32.31.41` ↔ `10.32.25.41`
 - A service slot 50 in services-prod: `10.32.140.50`; same slot in services-sandbox: `10.32.141.50`
@@ -150,7 +150,7 @@ The storage VLAN bends the skeleton because its primary inhabitants are storage 
 |---|---|
 | `.2-.10` | Storage providers (NAS `.5`, S3 endpoint `.6`, PBS `.7`) |
 | `.11-.19` | System 1 — k8s-prod node NICs |
-| `.21-.29` | System 2 — pve-lab host NICs (planned) |
+| `.21-.29` | System 2 — pve-sbx host NICs (planned) |
 | `.31-.39` | System 3 — workload hosts (DGX Sparks; future standalone servers and storage-attached guests) |
 | `.41-.49` | System 4 — second Kubernetes cluster node NICs (reserved) |
 | `.51-.99` | Future systems, one decade each |
@@ -189,11 +189,11 @@ API VIP is managed by the Talos `vipController` (GARP-based at the machine-confi
 10.32.25.8-.10     (reserved for future storage providers)
 10.32.25.11-.13    k8s-prod-{1,2,3}-storage  System 1 node NICs (2.5GbE)
 10.32.25.14-.19    (reserved, k8s-prod expansion)
-10.32.25.21-.23    pve-lab-{1,2,3}-storage   System 2 host NICs (planned)
-10.32.25.24-.29    (reserved, pve-lab expansion)
+10.32.25.21-.23    pve-sbx-{1,2,3}-storage   System 2 host NICs (planned)
+10.32.25.24-.29    (reserved, pve-sbx expansion)
 10.32.25.31-.32    spark-{1,2}-storage       System 3 workload hosts (10GbE tagged leg)
 10.32.25.33-.39    (reserved, workload-host expansion)
-10.32.25.41-.43    (reserved, second Kubernetes cluster node NICs)
+10.32.25.41-.43    k8s-sbx-{1,2,3}-storage  System 4 node NICs (reserved)
 10.32.25.128-.143  k8s-prod storage-pod range (/28; longhorn-im-prod-{1,2,3} float here)
 10.32.25.144-.159  (reserved, second-cluster storage-pod range)
 ```
@@ -206,8 +206,8 @@ API VIP is managed by the Talos `vipController` (GARP-based at the machine-confi
 10.32.20.7        pbs                      (planned) PBS appliance, aligned with pbs-storage
 10.32.20.10       glkvm                    GL-RM1PE KVM (currently a DHCP fixed assignment; prefer on-device static — the recovery console should not depend on DHCP)
 10.32.20.20       pdm                      (reserved) Proxmox Datacenter Manager
-10.32.20.21-.23   pve-lab-{1,2,3}          (planned) PVE UI/API, SSH, Corosync link 0
-10.32.20.24-.29   (reserved, pve-lab expansion)
+10.32.20.21-.23   pve-sbx-{1,2,3}          (planned) PVE UI/API, SSH, Corosync link 0
+10.32.20.24-.29   (reserved, pve-sbx expansion)
 10.32.20.30-.99   (existing static devices — switches, APs; new static infra devices allocate from .100-.199)
 10.32.20.110-.119 (UPS/NUT monitor family, 1-indexed; upsmon clients reference these IPs directly)
 10.32.20.111      ups-compute-rack         NixOS Pi, compute-rack UPS monitor
@@ -315,11 +315,13 @@ therefore continue resolving while Kubernetes is unavailable.
 k8s-prod.home.kelch.io              10.32.30.8
 k8s-prod-{1,2,3}.home.kelch.io      10.32.30.{11,12,13}
 k8s-prod-{1,2,3}-storage.home.kelch.io  10.32.25.{11,12,13}
-sbx-k8s.home.kelch.io               10.32.31.8     (future)
+k8s-sbx.home.kelch.io               10.32.31.8     (future)
+k8s-sbx-{1,2,3}.home.kelch.io       10.32.31.{41,42,43}  (future)
+k8s-sbx-{1,2,3}-storage.home.kelch.io  10.32.25.{41,42,43}  (future)
 
 # PVE hosts (planned; static UniFi-local records)
-pve-lab-{1,2,3}.home.kelch.io       10.32.20.{21,22,23}
-pve-lab-{1,2,3}-storage.home.kelch.io  10.32.25.{21,22,23}
+pve-sbx-{1,2,3}.home.kelch.io       10.32.20.{21,22,23}
+pve-sbx-{1,2,3}-storage.home.kelch.io  10.32.25.{21,22,23}
 
 # Workload hosts (pending)
 spark-{1,2}.home.kelch.io           10.32.21.{31,32}
@@ -471,7 +473,7 @@ gitignored.
 - **VLAN 30 retained as compute-only**: pod egress identity and management-surface blast radius still justify a dedicated Kubernetes compute VLAN even when it holds only nodes + API VIP.
 - **API VIPs managed by Talos `vipController`, not Cilium service-LB**: Talos handles VIP failover via GARP at the machine-config layer. Cluster API reachability is therefore independent of Cilium's service-LB and BGP convergence — important during BGP outages.
 - **Flat DNS namespace**: Hostname prefixes encode role/environment; DNS hierarchy would duplicate that info and complicate wildcard certs.
-- **`.8` for Kubernetes API VIP**: Mnemonic for k8s; consistent across environments (k8s-prod at 10.32.30.8, future sbx-k8s at 10.32.31.8).
+- **`.8` for Kubernetes API VIP**: Mnemonic for k8s; consistent across environments (k8s-prod at 10.32.30.8, future k8s-sbx at 10.32.31.8).
 - **One final octet per system member, mirrored across VLANs**: firewall rules, DSM export ACLs, and packet captures correlate to a host without an offset table; decade allocation keeps each system's members contiguous for range-based rules.
 - **Pool slot convention starts at `.1`**: vestigial `.30` boundary from the L2-announcements era has no meaning under BGP.
 

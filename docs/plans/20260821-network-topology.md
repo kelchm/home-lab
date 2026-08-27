@@ -85,7 +85,7 @@ VLAN names drop the "Lab" prefix; it no longer distinguishes anything: 20 **Infr
 
 ### VLAN 25 — Storage additions
 
-Storage decades allocate **per registered system in commissioning order** — `.1X` k8s-prod, `.2X` pve-lab, `.3X` workload hosts, `.4X` second Kubernetes cluster — and each member keeps one final octet across every VLAN it touches. The registry and mirror rule are canonical in [architecture.md](../architecture.md#storage-vlan-registry).
+Storage decades allocate **per registered system in commissioning order** — `.1X` k8s-prod, `.2X` pve-sbx, `.3X` workload hosts, `.4X` second Kubernetes cluster — and each member keeps one final octet across every VLAN it touches. The registry and mirror rule are canonical in [architecture.md](../architecture.md#storage-vlan-registry).
 
 | Address | DNS | Use |
 |---|---|---|

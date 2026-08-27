@@ -1,0 +1,119 @@
+#!ipxe
+
+# Local override based on the generated netboot.xyz 3.0.2 submenu. Preserve
+# the other generated Proxmox products while pinning PVE independently of
+# MENU_VERSION to the extraction of the official Proxmox VE 9.2-1 ISO.
+
+goto ${menu} ||
+
+:proxmox
+clear proxmox_choice
+clear proxmox_version
+set os Proxmox
+menu ${os}
+item --gap ${os} Backup Server
+item pbs-normal ${space} ${os} Backup Server 4.2-1
+item pbs-text ${space} ${os} Backup Server 4.2-1 (Text)
+item pbs-debug ${space} ${os} Backup Server 4.2-1 (Debug)
+item --gap ${os} Datacenter Manager
+item pdm-normal ${space} ${os} Datacenter Manager 1.0-2
+item pdm-text ${space} ${os} Datacenter Manager 1.0-2 (Text)
+item pdm-debug ${space} ${os} Datacenter Manager 1.0-2 (Debug)
+item --gap ${os} Mail Gateway
+item pmg-normal ${space} ${os} Mail Gateway 9.0-1
+item pmg-text ${space} ${os} Mail Gateway 9.0-1 (Text)
+item pmg-debug ${space} ${os} Mail Gateway 9.0-1 (Debug)
+item --gap ${os} VE
+item pve-normal ${space} ${os} VE 9.2-1
+item pve-text ${space} ${os} VE 9.2-1 (Text)
+item pve-debug ${space} ${os} VE 9.2-1 (Debug)
+choose proxmox_choice || goto proxmox_exit
+goto ${proxmox_choice}
+
+:pdm-normal
+set params splash=silent
+goto boot-pdm
+
+:pdm-text
+set params splash=silent proxtui
+goto boot-pdm
+
+:pdm-debug
+set params splash=verbose proxdebug
+goto boot-pdm
+
+:pve-normal
+set params splash=silent
+goto boot-pve
+
+:pve-text
+set params splash=silent proxtui
+goto boot-pve
+
+:pve-debug
+set params splash=verbose proxdebug
+goto boot-pve
+
+:pmg-normal
+set params splash=silent
+goto boot-pmg
+
+:pmg-text
+set params splash=silent proxtui
+goto boot-pmg
+
+:pmg-debug
+set params splash=verbose proxdebug
+goto boot-pmg
+
+:pbs-normal
+set params splash=silent
+goto boot-pbs
+
+:pbs-text
+set params splash=silent proxtui
+goto boot-pbs
+
+:pbs-debug
+set params splash=verbose proxdebug
+goto boot-pbs
+
+:boot-pbs
+set kernel_url ${live_endpoint}/asset-mirror/releases/download/4.2-1-6f50261b/
+set proxmox_version 4.2-1
+imgfree
+kernel ${kernel_url}vmlinuz vga=791 video=vesafb:ywrap,mtrr ramdisk_size=16777216 rw quiet ${params} initrd=initrd.magic ${cmdline}
+initrd ${kernel_url}initrd
+initrd ${kernel_url}proxmox.iso /proxmox.iso
+boot
+
+:boot-pmg
+set kernel_url ${live_endpoint}/asset-mirror/releases/download/9.0-1-ded4eba1/
+set proxmox_version 9.0-1
+imgfree
+kernel ${kernel_url}vmlinuz vga=791 video=vesafb:ywrap,mtrr ramdisk_size=16777216 rw quiet ${params} initrd=initrd.magic ${cmdline}
+initrd ${kernel_url}initrd
+initrd ${kernel_url}proxmox.iso /proxmox.iso
+boot
+
+:boot-pdm
+set kernel_url ${live_endpoint}/asset-mirror/releases/download/1.0-2-6fa12487/
+set proxmox_version 1.0-2
+imgfree
+kernel ${kernel_url}vmlinuz vga=791 video=vesafb:ywrap,mtrr ramdisk_size=16777216 rw quiet ${params} initrd=initrd.magic ${cmdline}
+initrd ${kernel_url}initrd
+initrd ${kernel_url}proxmox.iso /proxmox.iso
+boot
+
+:boot-pve
+set kernel_url ${live_endpoint}/asset-mirror/releases/download/9.2-1-4bbcc809/
+set proxmox_version 9.2-1
+imgfree
+kernel ${kernel_url}vmlinuz vga=791 video=vesafb:ywrap,mtrr ramdisk_size=16777216 rw quiet ${params} initrd=initrd.magic ${cmdline}
+initrd ${kernel_url}initrd
+initrd ${kernel_url}proxmox.iso /proxmox.iso
+boot
+
+:proxmox_exit
+clear menu
+exit 0

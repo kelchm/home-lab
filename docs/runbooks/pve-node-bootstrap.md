@@ -16,15 +16,35 @@ GLKVM provides console and keyboard but no ATX control. A responsive OS can rebo
 
 Do not use GLKVM virtual media on these hosts. The appliance's composite HID and mass-storage device reset-loops through the downstream KVM's full-speed Hotkey port, which can make the BIOS keyboard unavailable. PXE leaves mass storage disabled, preserves KVM switching, and is the proven installation path.
 
-## Record the PVE KVM mapping first
+## PVE KVM mapping
 
-The committed GLKVM mapping currently records only `k8s-prod-1` through `k8s-prod-3` on downstream ports 4 through 6. The PVE ports are not yet verified. Before sending any HID input:
+The owner-confirmed downstream mapping is committed in `devices/glkvm/override.yaml`:
+
+| KVM port | Host |
+|---|---|
+| 1 | `pve-sbx-1` |
+| 2 | `pve-sbx-2` |
+| 3 | `pve-sbx-3` |
+
+Before sending HID input:
 
 1. Select one candidate downstream port from the PiKVM **Hosts** menu or with `/etc/kvmd/user/bin/kvm-switch PORT` on GLKVM.
 2. Compare the displayed hostname, chassis label, and expected power state. Do not identify a node from an old IP shown by a stale installation.
-3. Record the verified `pve-lab-1` through `pve-lab-3` mapping in `devices/glkvm/override.yaml` and its table in `devices/glkvm/README.md`, apply the override, and verify every button once.
+3. Stop if the observed host disagrees with the committed mapping. Correct the physical or recorded mapping before continuing, apply the override, and verify every button once.
 
 Treat an unverified channel as the wrong host. Never launch a destructive installer or firmware tool until the on-screen identity and the private hardware inventory agree.
+
+## PVE switch mapping
+
+The owner-confirmed physical pattern places each PVE block immediately before the equivalent `k8s-prod` block on the Lab Switch:
+
+| Host | Onboard 1 GbE | RTL8125 2.5 GbE |
+|---|---|---|
+| `pve-sbx-1` | Lab Switch port 1 | Lab Switch port 13 |
+| `pve-sbx-2` | Lab Switch port 2 | Lab Switch port 14 |
+| `pve-sbx-3` | Lab Switch port 3 | Lab Switch port 15 |
+
+Ports 1–3 use the VLAN 20 access profile. Ports 13–15 use `pve-guest-trunk`, tagged for VLANs 10, 21, 25, and 90 with no native VLAN. The neighboring `k8s-prod-{1,2,3}` blocks are ports 4–6 and 16–18 respectively; do not modify those production ports while commissioning PVE.
 
 ## Preflight
 
@@ -38,11 +58,34 @@ Treat an unverified channel as the wrong host. Never launch a destructive instal
    ```
 
 4. Confirm UniFi VLAN 20 Network Boot still points to TFTP server `10.32.20.5` with filename `netboot.xyz-snponly.efi`.
-5. Verify the intended PVE installer. The pinned netboot.xyz menu release `3.0.2` advertises PVE `9.1-1`, not the planned `9.2-1`. Before commissioning, stage a local `9.2-1` entry containing `vmlinuz`, `initrd`, and `proxmox.iso`, verify the ISO against Proxmox's published checksum, and complete one cold-boot acceptance test. Do not silently substitute the older menu entry.
+5. Verify the intended PVE installer. The pinned netboot.xyz menu release `3.0.2` advertises PVE `9.1-1`, so require the committed local `9.2-1` submenu plus its verified `vmlinuz`, `initrd`, and `proxmox.iso`. Complete the non-destructive cold-start PXE proof below before installation; do not silently substitute the older generated entry.
 6. Confirm GLKVM mass storage is disabled and the target host's onboard 1 GbE switch port is an untagged VLAN 20 member.
 7. Keep physical power access available. The KVM cannot recover a node that is off or hard-hung.
 
-The repository does not yet contain a tested PVE `9.2-1` custom menu entry. Staging and validating that entry is a commissioning gate, not an instruction to point a production install at an unreviewed development menu.
+The committed `synology/netbootxyz/proxmox.ipxe` pins the PVE `9.2-1` asset-mirror release rather than pointing the deployment at netboot.xyz's development menu. Deploy the override and verify all three assets as described in `synology/netbootxyz/README.md` before the cold-boot test.
+
+## Normalize BIOS configuration
+
+Normalize every host from the same recorded baseline before its permanent PVE install. Do this interactively and one node at a time; do not automate firmware menus with an unobserved HID sequence.
+
+1. Enter **F10 Computer Setup** from the HP Startup Menu and record the installed BIOS revision before changing anything.
+2. Load setup defaults, then apply and verify the following deltas:
+
+   | Setting | Required state |
+   |---|---|
+   | Virtualization Technology (VT-x) | Enabled |
+   | Virtualization Technology for Directed I/O (VT-d) | Enabled |
+   | Boot mode / Legacy Support | UEFI native / Legacy disabled |
+   | Secure Boot | Disabled |
+   | Fast Boot | Disabled |
+   | Network (PXE) Boot | Enabled |
+   | After Power Loss | Power On |
+
+3. Save, reboot, re-enter setup, and verify the settings persisted.
+4. Keep the installed NVMe first in the normal boot order after PVE installation. Reach PXE explicitly through **Esc → F12 → IPv4**, not by making network boot the everyday first choice.
+5. Record the BIOS revision and normalized settings in the private inventory for that chassis. If the three revisions differ, stop and review the exact HP product ID and firmware package before flashing anything; configuration normalization does not authorize a BIOS firmware update.
+
+Apply this checklist independently to `pve-sbx-1`, `pve-sbx-2`, and `pve-sbx-3`. A node does not inherit acceptance from another nominally identical chassis.
 
 ## Reach the HP PXE menu
 
@@ -70,6 +113,17 @@ One-shot F9, F10, and F12 presses during POST are unreliable on these EliteDesk 
 5. Confirm the UEFI client receives a VLAN 20 DHCP lease, downloads `netboot.xyz-snponly.efi` from Athena, and reaches the netboot.xyz menu.
 
 If the host misses the menu, reboot and repeat the held-Esc sequence. Do not type recovery URLs at the iPXE shell unless unavoidable; this HID path has dropped characters there.
+
+## Prove the PVE netboot path without installing
+
+Before the first permanent installation, prove the complete local path from a powered-off `pve-sbx-1` without writing to any disk:
+
+1. Shut the temporary OS down cleanly, disconnect AC for approximately 30 seconds, then restore AC. The normalized **After Power Loss = Power On** setting should start the host; use its physical power button if it does not because GLKVM has no ATX control.
+2. Follow **Esc → F12 → IPv4** and select the locally staged **Proxmox VE 9.2-1** entry.
+3. Require all three payloads to load from Athena and wait for the Proxmox VE 9.2-1 installer UI to appear.
+4. Stop before accepting an installation target or starting partitioning. Exit or power the host off cleanly and record the cold-start PXE proof as passed.
+
+This is intentionally a pre-install acceptance gate for PXE, KVM, and the pinned installer assets. It is separate from the post-install cold-power gate that proves the installed NVMe system returns correctly.
 
 ## Start the PVE installer
 

@@ -24,6 +24,7 @@ Runtime state is adjacent to the deployed Compose file:
 ├── config/            # generated menus and web-app state
 │   └── menus/
 │       ├── local-vars.ipxe    # copied from this directory
+│       ├── proxmox.ipxe       # copied from this directory
 │       └── systemrescue.ipxe  # copied from this directory
 └── assets/            # downloaded installers and live-image assets
 ```
@@ -43,21 +44,27 @@ Copy the authoritative file to the NAS and apply it. Athena's SSH file-transfer
 subsystem rejects `scp`, so use `rsync`; create the bind-mount targets before the
 first start:
 
+On the first PVE `9.2-1` deployment, complete the asset-staging procedure below before copying `proxmox.ipxe`. Do not publish a boot selection whose kernel, initrd, or ISO path is still absent.
+
 ```sh
 ssh kelchm@10.32.20.5 \
-  'mkdir -p /volume1/docker/netbootxyz/config /volume1/docker/netbootxyz/assets'
+  'mkdir -p /volume1/docker/netbootxyz/config/menus /volume1/docker/netbootxyz/assets'
 rsync -av synology/netbootxyz/compose.yaml \
   kelchm@10.32.20.5:/volume1/docker/netbootxyz/compose.yaml
 rsync -av synology/netbootxyz/local-vars.ipxe \
   kelchm@10.32.20.5:/volume1/docker/netbootxyz/config/menus/local-vars.ipxe
+rsync -av synology/netbootxyz/proxmox.ipxe \
+  kelchm@10.32.20.5:/volume1/docker/netbootxyz/config/menus/proxmox.ipxe
 rsync -av synology/netbootxyz/systemrescue.ipxe \
   kelchm@10.32.20.5:/volume1/docker/netbootxyz/config/menus/systemrescue.ipxe
 ssh kelchm@10.32.20.5 '
   sudo chown 1000:1000 \
     /volume1/docker/netbootxyz/config/menus/local-vars.ipxe \
+    /volume1/docker/netbootxyz/config/menus/proxmox.ipxe \
     /volume1/docker/netbootxyz/config/menus/systemrescue.ipxe
   sudo chmod 0755 \
     /volume1/docker/netbootxyz/config/menus/local-vars.ipxe \
+    /volume1/docker/netbootxyz/config/menus/proxmox.ipxe \
     /volume1/docker/netbootxyz/config/menus/systemrescue.ipxe
   cd /volume1/docker/netbootxyz
   sudo /usr/local/bin/docker-compose pull
@@ -77,7 +84,43 @@ applied without reviewing upstream changes and the persistent-config format.
 
 ## Local boot assets
 
-For PVE commissioning, follow the [PVE node bootstrap runbook](../../docs/runbooks/pve-node-bootstrap.md). The pinned menu release `3.0.2` currently advertises PVE `9.1-1`, while the cluster plan targets `9.2-1`; do not select the older entry. Stage and cold-boot-test an explicit `9.2-1` local entry before installing a node.
+For PVE commissioning, follow the [PVE node bootstrap runbook](../../docs/runbooks/pve-node-bootstrap.md). The pinned menu release `3.0.2` advertises PVE `9.1-1`, so the committed `proxmox.ipxe` preserves the generated PBS, PDM, and PMG choices while replacing only PVE with an explicit local `9.2-1` entry. Do not point the deployment at netboot.xyz's development menu and do not select the older entry after a menu refresh.
+
+The custom entry uses netboot.xyz asset-mirror release [`9.2-1-4bbcc809`](https://github.com/netbootxyz/asset-mirror/releases/tag/9.2-1-4bbcc809). Stage its three x86-64 assets directly on Athena, verify them before publication, and leave an existing published set untouched:
+
+```sh
+ssh kelchm@10.32.20.5 '
+  set -eu
+  asset_parent=/volume1/docker/netbootxyz/assets/asset-mirror/releases/download
+  asset_dir="$asset_parent/9.2-1-4bbcc809"
+  staging_dir="$asset_dir.staging"
+  sudo mkdir -p "$asset_parent"
+  sudo test ! -e "$asset_dir"
+  sudo mkdir -p "$staging_dir"
+  cd "$staging_dir"
+  sudo curl -fL --retry 3 \
+    -o initrd \
+    https://github.com/netbootxyz/asset-mirror/releases/download/9.2-1-4bbcc809/initrd
+  sudo curl -fL --retry 3 \
+    -o proxmox.iso \
+    https://github.com/netbootxyz/asset-mirror/releases/download/9.2-1-4bbcc809/proxmox.iso
+  sudo curl -fL --retry 3 \
+    -o vmlinuz \
+    https://github.com/netbootxyz/asset-mirror/releases/download/9.2-1-4bbcc809/vmlinuz
+  printf "%s  %s\n" \
+    8fdf76b44287af130358c142f1743c30e1b10df21bae1693283736603bef3cba initrd \
+    4e88fe416df9b527624a175f24c9aa07c714d3332afb1ee3dbf3879573ef2c6c proxmox.iso \
+    9eaf9a7fa2cc55815863db9af76d3de20cb491ca77839febd198d392d4c2e171 vmlinuz \
+    | sudo sha256sum -c -
+  sudo chmod 0644 initrd proxmox.iso vmlinuz
+  cd "$asset_parent"
+  sudo mv "$staging_dir" "$asset_dir"
+'
+```
+
+The `proxmox.iso` digest above is the [official Proxmox VE 9.2-1 x86-64 SHA-256](https://www.proxmox.com/en/downloads/proxmox-virtual-environment). The `initrd` and `vmlinuz` digests are the immutable asset digests published with the pinned netboot.xyz asset-mirror release.
+
+Runtime status as of 2026-08-26: Athena holds the complete `9.2-1-4bbcc809` directory, all three on-disk hashes pass, and nginx returns HTTP 200 with the expected content lengths. The generated PVE 9.1-1 submenu remains active until this repository change is merged and explicitly applied; the PVE 9.2-1 cold-boot acceptance test is still pending.
 
 Use the administration UI's **Local Assets** page to download the files needed
 by a menu entry. For SystemRescue 13.00, select the four
@@ -105,9 +148,7 @@ not mistake this boot for the later ZFS workload environment.
 The committed `local-vars.ipxe` sets `live_endpoint` to Athena's HTTP endpoint.
 The netboot.xyz bootloader requests this override before the generated menus,
 whose asset paths are then resolved beneath `http://10.32.20.5:8080`. Copy the
-override and the committed `systemrescue.ipxe` after initial menu generation,
-after recreating `config/`, and after upstream menu refreshes. The downloaded
-files in `assets/` remain runtime cache rather than Git-managed content.
+override and the committed `proxmox.ipxe` and `systemrescue.ipxe` files after initial menu generation, after recreating `config/`, and after upstream menu refreshes. The downloaded files in `assets/` remain runtime cache rather than Git-managed content.
 
 ## Verification
 
@@ -116,6 +157,9 @@ From another VLAN 20 host:
 ```sh
 tftp 10.32.20.5 -g -r netboot.xyz-snponly.efi
 curl -fsSI http://10.32.20.5:8080/
+curl -fsSI http://10.32.20.5:8080/asset-mirror/releases/download/9.2-1-4bbcc809/vmlinuz
+curl -fsSI http://10.32.20.5:8080/asset-mirror/releases/download/9.2-1-4bbcc809/initrd
+curl -fsSI http://10.32.20.5:8080/asset-mirror/releases/download/9.2-1-4bbcc809/proxmox.iso
 ```
 
 Also verify a container restart does not lose menus or assets:
