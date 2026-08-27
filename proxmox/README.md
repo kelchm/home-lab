@@ -23,7 +23,7 @@ ssh kelchm@NODE
 sudo -i
 ```
 
-Direct root SSH remains enabled for break-glass recovery and the encrypted configuration-capture workflow. Do not remove it until those paths have been migrated and tested through a narrower recovery identity.
+PVE retains its cluster-managed `root@pve-sbx-*` SSH keys for node-to-node operations. The human `personal:home-lab` key is not authorized directly for root; ordinary administration and the encrypted configuration-capture workflow connect as `kelchm` and elevate with sudo.
 
 ## Shared storage
 
@@ -133,7 +133,9 @@ Package changes abort the hook if the expected upstream JavaScript structure cha
 PVE_AGE_IDENTITY=age.key ./proxmox/capture-host-config.sh
 ```
 
-The script decrypts and validates required members in each archive before accepting it, then prints its SHA-256 digest. A verified three-node capture, including SQLite-consistent pmxcfs database snapshots and the host operator identity, was completed on 2026-08-27 at `20260827T185913Z`. This is off-node recovery state on the admin workstation, not an off-site backup; copy the encrypted artifacts to a second protected location if workstation loss is in scope.
+The script connects as `kelchm` by default and requires the verified noninteractive sudo policy. Set `PVE_SSH_USER` only for an explicitly tested recovery identity; direct human root SSH is not the normal path.
+
+The script decrypts and validates required members in each archive before accepting it, then prints its SHA-256 digest. A verified three-node capture, including SQLite-consistent pmxcfs database snapshots and the host operator identity, was completed on 2026-08-27 at `20260827T194251Z`. This is off-node recovery state on the admin workstation, not an off-site backup; copy the encrypted artifacts to a second protected location if workstation loss is in scope.
 
 ## Outstanding commissioning gates
 

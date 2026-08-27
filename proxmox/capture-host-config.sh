@@ -3,6 +3,7 @@ set -eu
 
 pve_age_identity=${PVE_AGE_IDENTITY:-age.key}
 pve_recovery_dir=${PVE_RECOVERY_DIR:-.private/pve-sbx/recovery}
+pve_ssh_user=${PVE_SSH_USER:-kelchm}
 pve_archive_stamp=$(date -u +%Y%m%dT%H%M%SZ)
 
 test -r "$pve_age_identity"
@@ -27,9 +28,10 @@ for pve_endpoint in \
     pve_listing="${pve_archive}.members.partial"
     trap 'rm -f "$pve_partial" "$pve_listing"' EXIT INT TERM
 
-    ssh "root@$pve_address" 'set -eu
+    ssh "$pve_ssh_user@$pve_address" 'sudo -n /bin/sh -s' <<'PVE_CAPTURE' | age -r "$pve_age_recipient" -o "$pve_partial"
+        set -eu
         pve_capture_dir=$(mktemp -d)
-        trap '\''rm -rf "$pve_capture_dir"'\'' EXIT INT TERM
+        trap 'rm -rf "$pve_capture_dir"' EXIT INT TERM
 
         command -v sqlite3 >/dev/null
         mkdir -p "$pve_capture_dir/var/lib/pve-cluster"
@@ -81,13 +83,14 @@ for pve_endpoint in \
         done
 
         tar -C / -czf - "$@" -C "$pve_capture_dir" .
-    ' | age -r "$pve_age_recipient" -o "$pve_partial"
+PVE_CAPTURE
 
     age -d -i "$pve_age_identity" "$pve_partial" | tar -tzf - >"$pve_listing"
     for pve_required in \
         etc/pve/storage.cfg \
         etc/pve/jobs.cfg \
         etc/pve/corosync.conf \
+        etc/pve/priv/authorized_keys \
         etc/network/interfaces \
         etc/hostname \
         etc/passwd \
