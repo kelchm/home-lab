@@ -40,8 +40,8 @@ deployment substrate.
 It may run as one Talos VM per PVE host or later move to bare metal while
 retaining the same addresses and BGP policy:
 
-- compute VLAN 31 and API VIP `.8`;
-- system-4 host identities `.41-.43` on VLANs 31 and 25;
+- compute VLAN 31 and `k8s-sbx.home.kelch.io` API VIP `.8`;
+- `k8s-sbx-{1,2,3}` system-4 host identities `.41-.43` on VLANs 31 and 25;
 - storage-pod range `.144/28`;
 - BGP ASN 65021 and `admin-sandbox` / `services-sandbox` LB pools; and
 - per-neighbor prefix filters that prevent either cluster from advertising the

@@ -2,6 +2,8 @@
 
 **Status:** Implemented — 2026-08-22; executed against one specimen. Results: [qualification record](../sn770-zfs-qualification.md).
 
+This historical procedure and its evidence paths retain the provisional `pve-lab-*` labels used during the 2026-08 qualification campaign. The permanent commissioning identities selected afterward are `pve-sbx-{1,2,3}`; do not recreate the provisional DNS names.
+
 ## 1. Safety and test topology
 
 Use only the uncommissioned PVE machines. Do not run this on the live Talos nodes.

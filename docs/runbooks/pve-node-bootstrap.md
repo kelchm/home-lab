@@ -16,13 +16,21 @@ GLKVM provides console and keyboard but no ATX control. A responsive OS can rebo
 
 Do not use GLKVM virtual media on these hosts. The appliance's composite HID and mass-storage device reset-loops through the downstream KVM's full-speed Hotkey port, which can make the BIOS keyboard unavailable. PXE leaves mass storage disabled, preserves KVM switching, and is the proven installation path.
 
-## Record the PVE KVM mapping first
+## PVE KVM mapping
 
-The committed GLKVM mapping currently records only `k8s-prod-1` through `k8s-prod-3` on downstream ports 4 through 6. The PVE ports are not yet verified. Before sending any HID input:
+The owner-confirmed downstream mapping is committed in `devices/glkvm/override.yaml`:
+
+| KVM port | Host |
+|---|---|
+| 1 | `pve-sbx-1` |
+| 2 | `pve-sbx-2` |
+| 3 | `pve-sbx-3` |
+
+Before sending HID input:
 
 1. Select one candidate downstream port from the PiKVM **Hosts** menu or with `/etc/kvmd/user/bin/kvm-switch PORT` on GLKVM.
 2. Compare the displayed hostname, chassis label, and expected power state. Do not identify a node from an old IP shown by a stale installation.
-3. Record the verified `pve-lab-1` through `pve-lab-3` mapping in `devices/glkvm/override.yaml` and its table in `devices/glkvm/README.md`, apply the override, and verify every button once.
+3. Stop if the observed host disagrees with the committed mapping. Correct the physical or recorded mapping before continuing, apply the override, and verify every button once.
 
 Treat an unverified channel as the wrong host. Never launch a destructive installer or firmware tool until the on-screen identity and the private hardware inventory agree.
 
@@ -38,11 +46,34 @@ Treat an unverified channel as the wrong host. Never launch a destructive instal
    ```
 
 4. Confirm UniFi VLAN 20 Network Boot still points to TFTP server `10.32.20.5` with filename `netboot.xyz-snponly.efi`.
-5. Verify the intended PVE installer. The pinned netboot.xyz menu release `3.0.2` advertises PVE `9.1-1`, not the planned `9.2-1`. Before commissioning, stage a local `9.2-1` entry containing `vmlinuz`, `initrd`, and `proxmox.iso`, verify the ISO against Proxmox's published checksum, and complete one cold-boot acceptance test. Do not silently substitute the older menu entry.
+5. Verify the intended PVE installer. The pinned netboot.xyz menu release `3.0.2` advertises PVE `9.1-1`, so require the committed local `9.2-1` submenu plus its verified `vmlinuz`, `initrd`, and `proxmox.iso`, then complete one cold-boot acceptance test. Do not silently substitute the older generated entry.
 6. Confirm GLKVM mass storage is disabled and the target host's onboard 1 GbE switch port is an untagged VLAN 20 member.
 7. Keep physical power access available. The KVM cannot recover a node that is off or hard-hung.
 
-The repository does not yet contain a tested PVE `9.2-1` custom menu entry. Staging and validating that entry is a commissioning gate, not an instruction to point a production install at an unreviewed development menu.
+The committed `synology/netbootxyz/proxmox.ipxe` pins the PVE `9.2-1` asset-mirror release rather than pointing the deployment at netboot.xyz's development menu. Deploy the override and verify all three assets as described in `synology/netbootxyz/README.md` before the cold-boot test.
+
+## Normalize BIOS configuration
+
+Normalize every host from the same recorded baseline before its permanent PVE install. Do this interactively and one node at a time; do not automate firmware menus with an unobserved HID sequence.
+
+1. Enter **F10 Computer Setup** from the HP Startup Menu and record the installed BIOS revision before changing anything.
+2. Load setup defaults, then apply and verify the following deltas:
+
+   | Setting | Required state |
+   |---|---|
+   | Virtualization Technology (VT-x) | Enabled |
+   | Virtualization Technology for Directed I/O (VT-d) | Enabled |
+   | Boot mode / Legacy Support | UEFI native / Legacy disabled |
+   | Secure Boot | Disabled |
+   | Fast Boot | Disabled |
+   | Network (PXE) Boot | Enabled |
+   | After Power Loss | Power On |
+
+3. Save, reboot, re-enter setup, and verify the settings persisted.
+4. Keep the installed NVMe first in the normal boot order after PVE installation. Reach PXE explicitly through **Esc → F12 → IPv4**, not by making network boot the everyday first choice.
+5. Record the BIOS revision and normalized settings in the private inventory for that chassis. If the three revisions differ, stop and review the exact HP product ID and firmware package before flashing anything; configuration normalization does not authorize a BIOS firmware update.
+
+Apply this checklist independently to `pve-sbx-1`, `pve-sbx-2`, and `pve-sbx-3`. A node does not inherit acceptance from another nominally identical chassis.
 
 ## Reach the HP PXE menu
 

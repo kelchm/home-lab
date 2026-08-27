@@ -29,6 +29,9 @@ bundled PiKVM UI:
 
 | KVM port | Host |
 |----------|------|
+| 1 | `pve-sbx-1` |
+| 2 | `pve-sbx-2` |
+| 3 | `pve-sbx-3` |
 | 4 | `k8s-prod-1` |
 | 5 | `k8s-prod-2` |
 | 6 | `k8s-prod-3` |

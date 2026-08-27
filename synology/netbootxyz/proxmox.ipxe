@@ -1,0 +1,41 @@
+#!ipxe
+
+# Local PVE commissioning entry pinned independently of MENU_VERSION. The
+# assets are the netboot.xyz extraction of the official Proxmox VE 9.2-1 ISO.
+
+goto ${menu} ||
+
+:proxmox
+clear proxmox_choice
+set os Proxmox
+menu ${os}
+item --gap ${os} VE
+item pve-normal ${space} ${os} VE 9.2-1
+item pve-text ${space} ${os} VE 9.2-1 (Text)
+item pve-debug ${space} ${os} VE 9.2-1 (Debug)
+choose proxmox_choice || goto proxmox_exit
+goto ${proxmox_choice}
+
+:pve-normal
+set params splash=silent
+goto boot-pve
+
+:pve-text
+set params splash=silent proxtui
+goto boot-pve
+
+:pve-debug
+set params splash=verbose proxdebug
+goto boot-pve
+
+:boot-pve
+set kernel_url ${live_endpoint}/asset-mirror/releases/download/9.2-1-4bbcc809/
+imgfree
+kernel ${kernel_url}vmlinuz vga=791 video=vesafb:ywrap,mtrr ramdisk_size=16777216 rw quiet ${params}
+initrd ${kernel_url}initrd
+initrd ${kernel_url}proxmox.iso /proxmox.iso
+boot
+
+:proxmox_exit
+clear menu
+exit 0
