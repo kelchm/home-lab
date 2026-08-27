@@ -401,9 +401,7 @@ Use each DSM shared-folder leaf as the corresponding PVE storage ID so the same 
 
 Create `guests-pve-sbx` only if a real HA guest justifies it. Use `qcow2` there so the directory/NFS backend can provide snapshots and clones. First benchmark latency, sustained mixed I/O, backup contention, and VM behavior during an NFS interruption. Shared NFS lets a surviving PVE node see the guest disk without a copy, but makes the Synology and storage network part of the guest's runtime failure domain. Do not put ordinary guests there for convenience.
 
-Synology iSCSI plus shared LVM is not the initial design: it adds SAN-style
-failure handling while normal shared LVM lacks the snapshot and clone behavior
-available with `qcow2` on NFS. Btrfs remains a PVE technology-preview backend.
+Synology iSCSI plus shared LVM is not the initial design: it adds SAN-style failure handling while normal shared LVM lacks the snapshot and clone behavior available with `qcow2` on NFS. Btrfs remains a PVE technology-preview backend.
 
 ### Availability classes
 
@@ -469,7 +467,7 @@ Before hosting anything important:
 3. If `guests-pve-sbx` is enabled, interrupt one compute node and prove that a test `shared-ha` guest restarts safely on another node. Separately interrupt NFS in a controlled test and document the guest and PVE behavior.
 4. Write the elapsed restore time and observed throughput into the runbook.
 
-The initial VM restore gate passed on 2026-08-27. VM 300 backed up from node 2 to `backups-pve-sbx` in 14 seconds as a 334 MB Zstandard archive, restored on node 3 as VM 301, and booted with its NIC removed. The root filesystem and QEMU guest agent passed inspection; the isolated restore and source acceptance VM were then destroyed, while the backup archive was retained.
+The initial VM functional restore check passed on 2026-08-27. VM 300 backed up from node 2 to `backups-pve-sbx` in 14 seconds as a 334 MB Zstandard archive, restored on node 3 as VM 301, and booted with its NIC removed. The root filesystem and QEMU guest agent passed inspection; the isolated restore and source acceptance VM were then destroyed, while the backup archive was retained. The full restore gate remains open because restore elapsed time and throughput were not captured.
 
 Whole-cluster recovery favors rebuilding from documented state: reinstall one node with its recorded identity, recreate the intended cluster and storage configuration, attach `backups-pve-sbx`, and restore the critical guests. Restoring the pmxcfs database is an additional recovery option, not the default procedure.
 
@@ -664,7 +662,7 @@ usable when Kubernetes is completely unavailable.
 
 Do not place an irreplaceable workload on PVE until phases 0-4 pass. Do not call a workload HA unless the optional phase 5 passes with that workload class.
 
-As of 2026-08-27, phases 0 and 2 have passed. Phase 3 proved backup and isolated restore functionality but remains open because restore RTO and throughput were not recorded. Phase 1 remains blocked on the zero-AER storage criterion despite clean higher-level I/O, and phase 4 has not started. No irreplaceable workload is cleared for placement.
+As of 2026-08-27, phase 0 has passed and phase 2's cluster, quorum, redundant-link, and migration exit gate has passed provisionally. Cluster formation proceeded as a deliberate sequencing exception before phase 1 closed because higher-level I/O remained clean; this does not clear phase 1's failed zero-AER criterion or authorize workload placement. Phase 3 proved backup and isolated restore functionality but remains open because restore RTO and throughput were not recorded, and phase 4 has not started. No irreplaceable workload is cleared for placement.
 
 ## Deferred decisions with explicit triggers
 
