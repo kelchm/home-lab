@@ -1,0 +1,18 @@
+---
+services:
+  hermes:
+    image: nousresearch/hermes-agent:v2026.8.27@sha256:e0df6adebddf29b91112aefc999d4aaf6846c9eb544faca5672a16a13590ff79
+    container_name: hermes
+    restart: unless-stopped
+    network_mode: host
+    shm_size: 1gb
+    stop_grace_period: 60s
+    volumes:
+      - /srv/hermes:/opt/data
+    environment:
+      HERMES_UID: "1000"
+      HERMES_GID: "1000"
+      HERMES_DASHBOARD: "1"
+      HERMES_DASHBOARD_HOST: 0.0.0.0
+      HERMES_DASHBOARD_PORT: "9119"
+    command: ["gateway", "run"]
