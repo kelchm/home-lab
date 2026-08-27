@@ -1,6 +1,6 @@
 # paperboy → broadsheet: rename + PVC-preserving migration
 
-/ status: ready — manifests authored on `feat/broadsheet-rename`, live steps pending
+**Status:** Implemented — 2026-08-24; current state: `kubernetes/apps/iot/broadsheet/`.
 
 ## Goal
 

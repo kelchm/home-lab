@@ -68,15 +68,16 @@ guard() {
   else
     [ "$actual_alloc" = "$hmb_alloc" ] || { echo hmb_allocation_mismatch >&2; return 1; }
   fi
-  zpool status -x "$pool" 2>/dev/null | grep -Fqx "pool '$pool' is healthy" ||
-    { echo pool_not_healthy >&2; return 1; }
-  zfs list -H -t snapshot -o name | grep -Fxq "$snapshot" ||
-    { echo snapshot_missing >&2; return 1; }
+  pool_health=$(zpool status -x "$pool" 2>/dev/null) || { echo pool_not_healthy >&2; return 1; }
+  [ "$pool_health" = "pool '$pool' is healthy" ] || { echo pool_not_healthy >&2; return 1; }
+  snapshots=$(zfs list -H -t snapshot -o name) || { echo snapshot_missing >&2; return 1; }
+  grep -Fxq "$snapshot" <<<"$snapshots" || { echo snapshot_missing >&2; return 1; }
   mountpoint=$(zfs list -H -o mountpoint sn770test/churn)
   [ "$mountpoint" != / ] && [[ "$mountpoint" == /* ]] || { echo unsafe_mount >&2; return 1; }
   disk_path=/dev/disk/by-id/nvme-WD_BLACK_SN770_1TB_$nvme_serial
   [ -n "$disk_path" ] && [ "$(readlink -f "$disk_path")" = /dev/nvme0n1 ] || { echo exact_by_id_disk_missing >&2; return 1; }
-  zpool status -P "$pool" | grep -Fq "$disk_path" || { echo pool_disk_identity_mismatch >&2; return 1; }
+  pool_paths=$(zpool status -P "$pool") || { echo pool_disk_identity_mismatch >&2; return 1; }
+  grep -Fq "$disk_path" <<<"$pool_paths" || { echo pool_disk_identity_mismatch >&2; return 1; }
 }
 diagnostics() {
   mkdir -p "$run_dir"
@@ -113,9 +114,11 @@ start_run() {
   printf '%s\n' "$smart_baseline" >>"$run_dir/smart-baseline.log"
   unit=sn770-qualification-$(date +%s)
   atomic_write "$unit_file" "$unit"
+  script_path=$(readlink -f "${BASH_SOURCE[0]}")
+  [ -x "$script_path" ] || { echo harness_path_not_executable >&2; return 1; }
   systemd-run --unit="$unit" --collect --service-type=exec \
     --property=KillMode=control-group --property=TimeoutStopSec=30 \
-    "${BASH_SOURCE[0]}" worker --run-dir "$run_dir" --node-serial "$node_serial" --nvme-serial "$nvme_serial" \
+    "$script_path" worker --run-dir "$run_dir" --node-serial "$node_serial" --nvme-serial "$nvme_serial" \
     --firmware "$firmware" --hmb-cap "$hmb_cap" --hmb-alloc "$hmb_alloc" --duration "$duration" \
     --send-count "$send_target" --scrub-count "$scrub_target" --churn-runtime "$churn_runtime"
 }
@@ -179,17 +182,21 @@ worker() {
     done
   }
   watch_worker() {
-    initial_warning=$(nvme smart-log /dev/nvme0 2>/dev/null | awk '/critical_warning/ {print $3; exit}')
-    initial_media=$(nvme smart-log /dev/nvme0 2>/dev/null | awk '/media_errors/ {print $3; exit}')
+    if ! initial_smart=$(nvme smart-log /dev/nvme0 2>/dev/null); then
+      request_failure smart_unreadable; return
+    fi
+    initial_warning=$(printf '%s\n' "$initial_smart" | awk '/critical_warning/ {print $3; exit}')
+    initial_media=$(printf '%s\n' "$initial_smart" | awk '/media_errors/ {print $3; exit}')
     warning_temp=$(nvme id-ctrl /dev/nvme0 2>/dev/null | awk '/wctemp/ {print $3; exit}')
     [ "$warning_temp" -gt 200 ] 2>/dev/null && warning_temp=$((warning_temp - 273)) || true
     journal_since=$start_epoch
     while ! is_stopping; do
-      if journalctl -k --since="@$journal_since" --no-pager 2>/dev/null |
-          grep -Eqi 'nvme.*(timeout|reset|reset failed|controller (down|not ready)|not ready|CSTS[ =:]*(0xffffffff|all ones)|ENODEV|namespace|abort|I/O error)|((AER|PCIe|pcie).*(error|link|down|reset))'; then
+      window_start=$journal_since
+      journal_since=$(date +%s)
+      kernel_window=$(journalctl -k --since="@$window_start" --no-pager 2>/dev/null || true)
+      if grep -Eqi 'nvme.*(timeout|reset|reset failed|controller (down|not ready)|not ready|CSTS[ =:]*(0xffffffff|all ones)|ENODEV|namespace|abort|I/O error)|((AER|PCIe|pcie).*(error|link|down|reset))' <<<"$kernel_window"; then
         request_failure kernel_nvme_pcie_error; return
       fi
-      journal_since=$(( $(date +%s) - 1 ))
       [ -e /dev/nvme0n1 ] || { request_failure namespace_disappeared; return; }
       current_bytes=$(blockdev --getsize64 /dev/nvme0n1 2>/dev/null || echo 0)
       expected_bytes=$(cat "$run_dir/namespace_bytes" 2>/dev/null || echo 0)
@@ -198,9 +205,12 @@ worker() {
       printf '%s\n' "$pool_status" | grep -Eq 'state: +ONLINE' || { request_failure zpool_not_online_or_error; return; }
       printf '%s\n' "$pool_status" | grep -Eqi 'permanent error|suspended' && { request_failure zpool_permanent_or_suspended; return; }
       printf '%s\n' "$pool_status" | grep -Eq 'errors: No known data errors' || { request_failure zpool_data_error; return; }
-      current_warning=$(nvme smart-log /dev/nvme0 2>/dev/null | awk '/critical_warning/ {print $3; exit}')
-      current_media=$(nvme smart-log /dev/nvme0 2>/dev/null | awk '/media_errors/ {print $3; exit}')
-      current_temp=$(nvme smart-log /dev/nvme0 2>/dev/null | awk '/temperature/ {print $3; exit}')
+      if ! current_smart=$(nvme smart-log /dev/nvme0 2>/dev/null); then
+        request_failure smart_unreadable; return
+      fi
+      current_warning=$(printf '%s\n' "$current_smart" | awk '/critical_warning/ {print $3; exit}')
+      current_media=$(printf '%s\n' "$current_smart" | awk '/media_errors/ {print $3; exit}')
+      current_temp=$(printf '%s\n' "$current_smart" | awk '/temperature/ {print $3; exit}')
       [ "$current_warning" = 0 ] && [ "$initial_warning" = 0 ] || { request_failure smart_critical_warning; return; }
       [ -n "$current_media" ] && [ "$current_media" = "$initial_media" ] || { request_failure smart_media_errors_increased; return; }
       [ -z "$current_temp" ] || [ -z "$warning_temp" ] || [ "$current_temp" -lt "$warning_temp" ] ||

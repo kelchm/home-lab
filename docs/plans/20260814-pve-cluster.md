@@ -1,6 +1,6 @@
 # Three-node PVE cluster
 
-**Status:** Draft design; not implemented
+**Status:** Proposed — 2026-08-14; not implemented.
 
 **Plan date:** 2026-08-14
 
@@ -263,7 +263,7 @@ Before forming a cluster:
    capacity, and logical sector size. Keep serials, MACs, and raw captures in
    ignored/private inventory; track only sanitized facts.
 2. Compare every candidate drive with the remaining
-   [SN770 qualification](20260818-sn770-zfs-qualification-results.md) matrix. Preserve any
+   [SN770 qualification](../sn770-zfs-qualification.md) matrix. Preserve any
    old-firmware specimen, control drive, and same-host baseline needed by that
    work; do not change its firmware, sector format, or host firmware until the
    qualification hold is explicitly released.
@@ -277,7 +277,9 @@ Before forming a cluster:
    reset, timeout, PCIe/AER error, media error, or capacity change.
 5. Install only `pve-lab-1` using the current stable PVE 9.x ISO. Keep the
    default supported kernel; do not opt into a test kernel to make the RTL8125
-   work unless the stable kernel demonstrably fails.
+   work unless the stable kernel demonstrably fails. Use the
+   [PVE node bootstrap runbook](../runbooks/pve-node-bootstrap.md) for the
+   GLKVM and netboot.xyz control path.
 6. Record `lspci -nnk`, interface names, private MAC inventory, and `ethtool`
    link and driver/firmware data. The RTL8125 must hold a negotiated 2.5 Gb/s
    link and sustain `iperf3` without resets or PCIe/AER errors.
@@ -359,7 +361,7 @@ The vendor's later HMB firmware advisory lists the 2 TB SN770, not this 1 TB
 model. The current 512-byte logical sector format also avoids one later-reported
 4K-sector trigger, but does not prove that the controller is safe under ZFS.
 
-A destructive [qualification run](20260818-sn770-zfs-qualification-results.md) on one 1 TB
+A destructive [qualification run](../sn770-zfs-qualification.md) on one 1 TB
 specimen subsequently completed 18 full 700 GiB sends and 8 full 700 GiB scrubs
 without a controller failure. It covered 0/32/128/200 MiB HMB screens, the
 historical 32 MiB/eight-descriptor allocator, and both 512-byte and 4096-byte

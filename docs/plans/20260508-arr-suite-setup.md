@@ -1,5 +1,7 @@
 # *arr suite deployment plan
 
+**Status:** Implemented — 2026-08-24; current state: [arr-suite-bootstrap runbook](../runbooks/arr-suite-bootstrap.md).
+
 ## Context
 
 The home-lab cluster (Talos + Flux + Cilium BGP + Traefik + Longhorn) is fully bootstrapped with infra (cert-manager, three Traefik gateways, k8s-gateway DNS, Cloudflare tunnel, observability) but has zero media workloads. `docs/architecture.md` already anticipates this stack: it reserves Jellyfin's LB IP at `10.32.140.50` (architecture.md:198), names *arr content as the canonical NFS-bulk-storage tenant (architecture.md:318), and documents the storage-VLAN egress path that downloader/library traffic should ride. This plan delivers a GitOps-managed media stack — Prowlarr, Sonarr, Radarr, Lidarr, Readarr, Bazarr, qBittorrent (behind Gluetun), SABnzbd, Flaresolverr, Unpackerr, Recyclarr, Jellyfin, Jellyseerr — all using the established echo/grafana app pattern.

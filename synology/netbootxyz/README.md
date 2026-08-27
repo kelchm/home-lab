@@ -77,6 +77,8 @@ applied without reviewing upstream changes and the persistent-config format.
 
 ## Local boot assets
 
+For PVE commissioning, follow the [PVE node bootstrap runbook](../../docs/runbooks/pve-node-bootstrap.md). The pinned menu release `3.0.2` currently advertises PVE `9.1-1`, while the cluster plan targets `9.2-1`; do not select the older entry. Stage and cold-boot-test an explicit `9.2-1` local entry before installing a node.
+
 Use the administration UI's **Local Assets** page to download the files needed
 by a menu entry. For SystemRescue 13.00, select the four
 `systemrescue-amd64` files under `13.00-d20a63ac`: `airootfs.sfs`, `initrd`,

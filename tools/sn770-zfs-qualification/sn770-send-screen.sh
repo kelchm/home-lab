@@ -120,6 +120,7 @@ require_parameters() {
 
 guard() {
   local actual_node actual_nvme actual_fw actual_cap actual_alloc actual_segments actual_logical_block_size disk_path
+  local pool_paths pool_health snapshots
   actual_node=$(cat /sys/class/dmi/id/product_serial)
   actual_nvme=$(controller_value sn)
   actual_fw=$(controller_value fr)
@@ -156,9 +157,12 @@ guard() {
 
   disk_path=/dev/disk/by-id/nvme-WD_BLACK_SN770_1TB_$nvme_serial
   [ "$(readlink -f "$disk_path")" = /dev/nvme0n1 ] || { echo "persistent disk identity mismatch" >&2; return 1; }
-  zpool status -P "$pool" | grep -Fq "$disk_path" || { echo "pool does not use expected drive" >&2; return 1; }
-  zpool status -x "$pool" | grep -Fqx "pool '$pool' is healthy" || { echo "pool is not healthy" >&2; return 1; }
-  zfs list -H -t snapshot -o name | grep -Fxq "$snapshot" || { echo "snapshot is missing" >&2; return 1; }
+  pool_paths=$(zpool status -P "$pool") || { echo "pool does not use expected drive" >&2; return 1; }
+  grep -Fq "$disk_path" <<<"$pool_paths" || { echo "pool does not use expected drive" >&2; return 1; }
+  pool_health=$(zpool status -x "$pool") || { echo "pool is not healthy" >&2; return 1; }
+  [ "$pool_health" = "pool '$pool' is healthy" ] || { echo "pool is not healthy" >&2; return 1; }
+  snapshots=$(zfs list -H -t snapshot -o name) || { echo "snapshot is missing" >&2; return 1; }
+  grep -Fxq "$snapshot" <<<"$snapshots" || { echo "snapshot is missing" >&2; return 1; }
 }
 
 json_field() {
@@ -213,7 +217,7 @@ capture_final() {
 }
 
 start_run() {
-  local unit
+  local unit script_path
   local -a extra_args=()
   require_parameters
   guard
@@ -227,9 +231,11 @@ start_run() {
   [ -z "$hmb_segments" ] || extra_args+=(--hmb-segments "$hmb_segments")
   [ -z "$logical_block_size" ] || extra_args+=(--logical-block-size "$logical_block_size")
   [ -z "$zfs_root" ] || extra_args+=(--zfs-root "$zfs_root")
+  script_path=$(readlink -f "${BASH_SOURCE[0]}")
+  [ -x "$script_path" ] || { echo "harness path is not executable: $script_path" >&2; return 1; }
   systemd-run --unit="$unit" --collect --service-type=exec \
     --property=KillMode=control-group --property=TimeoutStopSec=20 \
-    "${BASH_SOURCE[0]}" worker \
+    "$script_path" worker \
     --run-dir "$run_dir" --node-serial "$node_serial" --nvme-serial "$nvme_serial" \
     --firmware "$firmware" --hmb-cap "$hmb_cap" --hmb-alloc "$hmb_alloc" \
     --workload "$workload" --count "$target_count" --composite-stop "$composite_stop" \
@@ -324,8 +330,8 @@ EOF
         reason=thermal_sensor_${max_sensor}C
         break
       fi
-      if journalctl -k -b --since=-5seconds --no-pager 2>/dev/null |
-          grep -Eqi 'nvme.*(timeout|reset|reset failed|controller (down|not ready)|CSTS[ =:]*(0xffffffff|all ones)|ENODEV|I/O error)|((AER|PCIe|pcie).*(error|link down))'; then
+      kernel_window=$(journalctl -k -b --since=-5seconds --no-pager 2>/dev/null || true)
+      if grep -Eqi 'nvme.*(timeout|reset|reset failed|controller (down|not ready)|CSTS[ =:]*(0xffffffff|all ones)|ENODEV|I/O error)|((AER|PCIe|pcie).*(error|link down))' <<<"$kernel_window"; then
         reason=kernel_nvme_or_pcie_error
         break
       fi
@@ -347,7 +353,10 @@ EOF
       kill "$workload_pid" "$secondary_pid" 2>/dev/null || true
       kill "$journal_pid" 2>/dev/null || true
       trap - EXIT INT TERM
-      return 0
+      case "$reason" in
+        thermal_*|operator_stop) return 0 ;;
+        *) return 1 ;;
+      esac
     fi
 
     set +e
@@ -370,7 +379,8 @@ EOF
     printf '%s %s_complete count=%s\n' "$(timestamp)" "$workload" "$completed_count" >>"$workload_log"
   done
 
-  zpool status -x "$pool" | grep -Fqx "pool '$pool' is healthy" || {
+  pool_health=$(zpool status -x "$pool" 2>/dev/null || true)
+  [ "$pool_health" = "pool '$pool' is healthy" ] || {
     atomic_write "$outcome_file" pool_not_healthy
     atomic_write "$state_file" "failed reason=pool_not_healthy $count_name=$completed_count"
     capture_final

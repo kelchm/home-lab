@@ -1,5 +1,7 @@
 # SN770 ZFS qualification procedure
 
+**Status:** Implemented — 2026-08-22; executed against one specimen. Results: [qualification record](../sn770-zfs-qualification.md).
+
 ## 1. Safety and test topology
 
 Use only the uncommissioned PVE machines. Do not run this on the live Talos nodes.
@@ -284,7 +286,7 @@ the first tens of gigabytes. A short pass is only a negative reproduction result
 it is not a qualification pass.
 
 If the platform reaches the drive's thermal warning threshold, use
-`scripts/sn770-send-screen.sh` for bounded `send`, `scrub`, or `mixed` attempts.
+`tools/sn770-zfs-qualification/sn770-send-screen.sh` for bounded `send`, `scrub`, or `mixed` attempts.
 Its defaults stop at 80 C composite, 90 C on any individual sensor, or any SMART
 critical warning. Pass `--hmb-segments 8` for a historical-geometry arm and
 `--zfs-root /opt/zfs-2.2.8-pve1` when using its isolated matching userspace. A
@@ -514,3 +516,11 @@ The 200 MiB override remains diagnostic. Even if it performs best, I would not m
 
 This procedure is substantially different from the generic PVE burn-in section
 and is the authoritative qualification procedure for this experiment.
+
+## Lab-host state after the 2026-08 campaign
+
+- `pve-lab-1` boots an expendable PVE install from a USB stick; the host has no SATA disk, and the NVMe under test stays raw with no OS, mount, or swap on it.
+- BIOS deltas applied from factory defaults: VT-x and VT-d on, After Power Loss = Power On, Fast Boot off, Network (PXE) Boot on, Secure Boot off. Boot order is USB, then NVMe, then network; PXE is reached from the Startup Menu (hold Esc through POST, then F12 → IPv4).
+- Kernel ↔ HMB geometry on this host: the stock PVE kernel allocates a 128 MiB HMB in one descriptor; the installed non-default `6.8.12-17-pve` kernel allocates 32 MiB across eight descriptors — the historical allocator geometry the reproduction arms require.
+- The bounded runner is installed on-host as `/usr/local/sbin/sn770-send-screen.sh` from its Git source in [`tools/sn770-zfs-qualification/`](../../tools/sn770-zfs-qualification/).
+- A hard hang needs a physical power-cycle; the KVM has no ATX wiring to this node.

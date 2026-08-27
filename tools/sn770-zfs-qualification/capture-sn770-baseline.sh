@@ -1,21 +1,23 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ $# -ne 5 ]]; then
-  echo "usage: $0 HOST SSH_KEY OUTPUT_FILE EXPECTED_NODE_SERIAL EXPECTED_NVME_SERIAL" >&2
+if [[ $# -ne 6 ]]; then
+  echo "usage: $0 HOST KNOWN_HOSTS SSH_KEY OUTPUT_FILE EXPECTED_NODE_SERIAL EXPECTED_NVME_SERIAL" >&2
   exit 2
 fi
 
 host=$1
-ssh_key=$2
-output_file=$3
-expected_node_serial=$4
-expected_nvme_serial=$5
+known_hosts=$2
+ssh_key=$3
+output_file=$4
+expected_node_serial=$5
+expected_nvme_serial=$6
+[[ -r "$known_hosts" ]] || { echo "known_hosts required: $known_hosts" >&2; exit 1; }
 ssh_options=(
   -i "$ssh_key"
   -o BatchMode=yes
-  -o UserKnownHostsFile=/dev/null
-  -o StrictHostKeyChecking=no
+  -o UserKnownHostsFile="$known_hosts"
+  -o StrictHostKeyChecking=yes
 )
 
 identity=$(ssh "${ssh_options[@]}" "root@$host" '
@@ -24,20 +26,29 @@ identity=$(ssh "${ssh_options[@]}" "root@$host" '
   nvme id-ctrl /dev/nvme0n1 | sed -n -e "s/^sn  *: */nvme_serial=/p" -e "s/^fr  *: */nvme_firmware=/p"
 ')
 
-if ! grep -Fq "node_serial=$expected_node_serial" <<<"$identity"; then
+if ! grep -Fxq "node_serial=$expected_node_serial" <<<"$identity"; then
   echo "refusing capture: expected node serial $expected_node_serial" >&2
   printf '%s\n' "$identity" >&2
   exit 1
 fi
-if ! grep -Fq "nvme_serial=$expected_nvme_serial" <<<"$identity"; then
+if ! grep -Fxq "nvme_serial=$expected_nvme_serial" <<<"$identity"; then
   echo "refusing capture: expected NVMe serial $expected_nvme_serial" >&2
   printf '%s\n' "$identity" >&2
   exit 1
 fi
 
-mkdir -p "$(dirname "$output_file")"
+output_dir=$(dirname -- "$output_file")
+output_name=$(basename -- "$output_file")
+mkdir -p "$output_dir"
+if [[ -e "$output_file" || -L "$output_file" ]]; then
+  echo "refusing capture: output already exists: $output_file" >&2
+  exit 1
+fi
+output_tmp=$(mktemp "$output_dir/.$output_name.tmp.XXXXXX")
+chmod 0600 "$output_tmp"
+trap 'rm -f -- "$output_tmp"' EXIT INT TERM
 
-ssh "${ssh_options[@]}" "root@$host" 'bash -s' >"$output_file" 2>&1 <<'REMOTE'
+if ! ssh "${ssh_options[@]}" "root@$host" 'bash -s' >"$output_tmp" 2>&1 <<'REMOTE'
 set -u
 
 section() {
@@ -137,5 +148,15 @@ run pvesm status
 run journalctl --no-pager -b
 run journalctl --no-pager -k -b
 REMOTE
+then
+  echo "baseline capture failed; no output published" >&2
+  exit 1
+fi
 
+if ! ln "$output_tmp" "$output_file"; then
+  echo "refusing capture: output appeared during collection: $output_file" >&2
+  exit 1
+fi
+rm -f -- "$output_tmp"
+trap - EXIT INT TERM
 sha256sum "$output_file"

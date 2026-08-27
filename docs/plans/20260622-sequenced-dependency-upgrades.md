@@ -1,5 +1,7 @@
 # Sequenced dependency upgrades — k8s-prod (Longhorn → Talos → k8s → Gateway API/Traefik → kaniop)
 
+**Status:** Implemented — 2026-08-24; every upgrade window has landed and live versions have since moved past the plan's targets.
+
 ## Context
 
 A batch of major-version Renovate PRs for `k8s-prod` cannot be merged independently:

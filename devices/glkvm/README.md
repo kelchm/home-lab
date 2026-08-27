@@ -49,6 +49,8 @@ boot-menu, and console work:
 - [`capture-screen.sh`](capture-screen.sh) copies a JPEG directly from kvmd's
   `/run/kvmd/ustreamer.sock` to the operator workstation.
 
+For the end-to-end HP Startup Menu, PXE, and PVE installation sequence, use the [PVE node bootstrap runbook](../../docs/runbooks/pve-node-bootstrap.md). This README remains the appliance configuration and recovery source.
+
 The GLKVM starts `ustreamer` only while an authenticated KVM viewer is active
 and stops it about ten seconds after the final viewer disconnects. The Unix
 socket pathname can therefore exist while refusing connections. Open the KVM
