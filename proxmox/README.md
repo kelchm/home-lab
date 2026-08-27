@@ -25,6 +25,19 @@ sudo -i
 
 PVE retains its cluster-managed `root@pve-sbx-*` SSH keys for node-to-node operations. The human `personal:home-lab` key is not authorized directly for root; ordinary administration and the encrypted configuration-capture workflow connect as `kelchm` and elevate with sudo.
 
+## Certificates
+
+Each node serves an independently issued Let's Encrypt certificate for its exact `pve-sbx-N.home.kelch.io` FQDN. The cluster ACME account is `letsencrypt-production`, and the DNS-01 plugin is `pve-sbx-acme-dns01`, limited to the three PVE nodes and backed by a dedicated Cloudflare token with DNS Edit and Zone Read only for `kelch.io`. The authoritative token remains in 1Password; PVE's encrypted recovery capture contains the cluster runtime copy. Do not reuse the Kubernetes cert-manager credential.
+
+PVE's active `pve-daily-update.timer` handles renewal. Check node configuration, timer state, and the certificate actually served on port 8006:
+
+```sh
+ssh kelchm@NODE "sudo pvenode config get | grep -E '^acme|^acmedomain'; systemctl is-active pve-daily-update.timer"
+openssl s_client -connect NODE_IP:8006 -servername NODE_FQDN -verify_hostname NODE_FQDN </dev/null
+```
+
+The initial certificates were issued and hostname-validated on 2026-08-27. A manual `pvenode acme cert renew` correctly refuses while a certificate is outside PVE's 30-day renewal window; do not use `--force` merely to test routine renewal.
+
 ## Shared storage
 
 | PVE storage ID | Current NFS export | Content |
@@ -135,7 +148,7 @@ After installation, clear the browser cache or perform an empty-cache hard reloa
 
 ## Configuration recovery archive
 
-[`capture-host-config.sh`](capture-host-config.sh) streams cluster and node configuration directly over SSH into age-encrypted archives under the ignored `.private/pve-sbx/recovery/` directory. The plaintext tar stream is never written to the workstation. The capture includes `/etc/pve`, a SQLite-consistent snapshot of `/var/lib/pve-cluster/config.db`, Corosync authentication, system account and sudo state, root and operator SSH authorization, network and repository state, SSH host identity, LVM metadata, installed package versions, the kernel boot log, and NVMe identity and health data, so treat the resulting archive as a secret even though it is encrypted.
+[`capture-host-config.sh`](capture-host-config.sh) streams cluster and node configuration directly over SSH into age-encrypted archives under the ignored `.private/pve-sbx/recovery/` directory. The plaintext tar stream is never written to the workstation. The capture includes `/etc/pve`, a SQLite-consistent snapshot of `/var/lib/pve-cluster/config.db`, the ACME account, DNS plugin credential and proxy certificate keys, Corosync authentication, system account and sudo state, root and operator SSH authorization, network and repository state, SSH host identity, LVM metadata, installed package versions, the kernel boot log, and NVMe identity and health data, so treat the resulting archive as a secret even though it is encrypted.
 
 ```sh
 PVE_AGE_IDENTITY=age.key ./proxmox/capture-host-config.sh
@@ -143,7 +156,7 @@ PVE_AGE_IDENTITY=age.key ./proxmox/capture-host-config.sh
 
 The script connects as `kelchm` by default and requires the verified noninteractive sudo policy. Set `PVE_SSH_USER` only for an explicitly tested recovery identity; direct human root SSH is not the normal path.
 
-The script decrypts and validates required members in each archive before accepting it, then prints its SHA-256 digest. A verified three-node capture, including SQLite-consistent pmxcfs database snapshots, the host operator identity, and the installed subscription-nag helper and package hook, was completed on 2026-08-27 at `20260827T195229Z`. This is off-node recovery state on the admin workstation, not an off-site backup; copy the encrypted artifacts to a second protected location if workstation loss is in scope.
+The script decrypts and validates required members in each archive before accepting it, then prints its SHA-256 digest. A verified three-node capture, including SQLite-consistent pmxcfs database snapshots, the host operator identity, the installed subscription-nag helper and package hook, and the ACME account, plugin, certificate and key material, was completed on 2026-08-27 at `20260827T200605Z`. This is off-node recovery state on the admin workstation, not an off-site backup; copy the encrypted artifacts to a second protected location if workstation loss is in scope.
 
 ## Outstanding commissioning gates
 
@@ -152,7 +165,6 @@ The script decrypts and validates required members in each archive before accept
 - Complete physical cold-power removal and recovery on all three nodes; GLKVM cannot assert ATX power.
 - Remove the obsolete SanDisk qualification USB from node 1 after its NVMe cold-power boot is proven.
 - Enroll TOTP for `kelchm@pve`.
-- Create a dedicated Cloudflare DNS token, configure ACME DNS-01 certificates for each node FQDN, and avoid reusing the Kubernetes cert-manager token.
 - Configure and test an authenticated SMTP notification target; direct-to-MX Postfix delivery from the home public IP is rejected by Gmail.
 
 Installation, BIOS, KVM, PXE, and recovery-console procedures live in [the PVE node bootstrap runbook](../docs/runbooks/pve-node-bootstrap.md). The architecture and acceptance rationale remain in [the cluster plan](../docs/plans/20260814-pve-cluster.md).

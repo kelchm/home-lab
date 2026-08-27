@@ -91,6 +91,10 @@ PVE_CAPTURE
         etc/pve/jobs.cfg \
         etc/pve/corosync.conf \
         etc/pve/priv/authorized_keys \
+        etc/pve/priv/acme/letsencrypt-production \
+        etc/pve/priv/acme/plugins.cfg \
+        "etc/pve/nodes/$pve_node/pveproxy-ssl.key" \
+        "etc/pve/nodes/$pve_node/pveproxy-ssl.pem" \
         etc/network/interfaces \
         etc/hostname \
         etc/passwd \
