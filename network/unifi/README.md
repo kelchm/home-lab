@@ -31,6 +31,8 @@ Aggregation ports 7 and 8:
 
 The original Spark commissioning phase did not create Workloads firewall rules. The PVE commissioning session added the three applied containment rules documented below on 2026-08-27; the rest of the topology matrix remains deferred. See the [DGX Spark bring-up runbook](../../docs/runbooks/dgx-spark-bringup.md) for the full host configuration, physical port map, test record, and remaining gates.
 
+UniFi local DNS also contains a Host (A) record for `hermes.home.kelch.io` at `10.32.21.100`. It was added on 2026-08-27 and verified through the gateway resolvers on the Default, Main, Workloads, and K8s Prod networks.
+
 ## Workloads containment applied state
 
 The following policies are live in UniFi Network 10.5.67 and ordered above the default `Allow Return Traffic` and `Allow All Traffic` policies:

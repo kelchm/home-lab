@@ -10,8 +10,8 @@ This directory is the source for the application deployment and its operating re
 | Node | `pve-sbx-1` initially; migratable |
 | Address | `10.32.21.100/24` on VLAN 21 |
 | Guest | Debian 13 genericcloud, 2 vCPU, 4 GiB RAM, 32 GiB `local-lvm` |
-| Dashboard | `http://10.32.21.100:9119` |
-| API | `http://10.32.21.100:8642` |
+| Dashboard | `http://hermes.home.kelch.io:9119` |
+| API | `http://hermes.home.kelch.io:8642` |
 | State | `/srv/hermes` in the guest, mounted at `/opt/data` in the container |
 | Backup | Included in cluster job `daily-backups` |
 
@@ -23,7 +23,7 @@ The optional MetaMCP entry is checked in but disabled. Enabling it needs a dedic
 
 The runtime `.env` is intentionally not in Git. It contains the dashboard authentication values and API-server token. A root-readable recovery copy of the client credentials is stored at `/root/hermes-access.txt` inside the backed-up VM. These credentials have not been copied into 1Password or another external secret manager.
 
-No messaging adapter is configured. Hermes Desktop for macOS connects to the dashboard URL on port `9119`; Safari on iOS can use the same authenticated web UI. A future native iOS client can use the authenticated API on port `8642`. The IP address is the canonical client endpoint until a DNS record is added through the normal network administration path.
+No messaging adapter is configured. Hermes Desktop for macOS connects to the dashboard URL on port `9119`; Safari on iOS can use the same authenticated web UI. A future native iOS client can use the authenticated API on port `8642`. UniFi local DNS resolves `hermes.home.kelch.io` directly to the VM at `10.32.21.100`.
 
 ## Deployment verification
 
@@ -36,18 +36,18 @@ An on-demand QGA-assisted snapshot backup completed successfully and produced `b
 Deploy the checked-in configuration after copying this directory to `/opt/hermes` on the guest:
 
 ```sh
-ssh kelchm@10.32.21.100 'cd /opt/hermes && sudo docker compose pull && sudo docker compose up -d'
+ssh kelchm@hermes.home.kelch.io 'cd /opt/hermes && sudo docker compose pull && sudo docker compose up -d'
 ```
 
 Inspect the service without printing credentials:
 
 ```sh
-ssh kelchm@10.32.21.100 'cd /opt/hermes && sudo docker compose ps && sudo docker logs --tail 100 hermes'
-curl -sS http://10.32.21.100:9119/api/status | jq '{auth_required, auth_providers}'
+ssh kelchm@hermes.home.kelch.io 'cd /opt/hermes && sudo docker compose ps && sudo docker logs --tail 100 hermes'
+curl -sS http://hermes.home.kelch.io:9119/api/status | jq '{auth_required, auth_providers}'
 ```
 
 Retrieve the dashboard username/password or API-server token only when configuring a client:
 
 ```sh
-ssh -t kelchm@10.32.21.100 'sudo less /root/hermes-access.txt'
+ssh -t kelchm@hermes.home.kelch.io 'sudo less /root/hermes-access.txt'
 ```
