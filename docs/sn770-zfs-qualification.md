@@ -1,6 +1,6 @@
 # WD_BLACK SN770 1 TB ZFS qualification record
 
-**Status:** Active — 2026-08-27; reproduction complete on one specimen, deployment commissioning found correctable PCIe/AER errors, and multi-specimen operational qualification remains open.
+**Status:** Active — 2026-08-27; reproduction complete on one specimen, deployment commissioning found correctable PCIe/AER errors, firmware ASPM mitigation is applied, and multi-specimen operational qualification remains open.
 
 ## Executive result
 
@@ -14,7 +14,9 @@ This is a strong negative reproduction result for this specimen and host. It doe
 
 The three deployment drives were installed on ext4 plus LVM-thin at 512-byte logical sectors and default Linux NVMe/PCIe power-management settings on 2026-08-27. As of 14:48 EDT, node 1 had logged three correctable errors at the SN770 endpoint: two paired the root port's Data Link Layer `[12] Timeout` with the endpoint's Physical Layer `RxErr`, while the later event contained the endpoint `RxErr` without the root-port timeout. Node 2 had logged two events with the paired timeout/`RxErr` signature. Node 3 completed a bounded 100-cycle idle-to-direct-read screen without reproducing an event, then later logged two endpoint `RxErr` events without the root-port timeout. All three deployment hosts therefore fail the zero-AER acceptance criterion.
 
-All three drives continued to report zero SMART critical warnings, media errors, and NVMe error-log entries. There was no NVMe reset, timeout, controller loss, namespace loss, capacity change, guest I/O error, failed `fio` operation, migration error, backup error, or restore error. The observation therefore does not reproduce the catastrophic controller drop from the public ZFS reports, but it does fail the PVE plan's deliberately stricter zero-AER operational gate. APST and PCIe L1 remain at their defaults while the physical link, host firmware, power-state transition, and controller behavior are diagnosed; no unsupported mitigation has been made persistent.
+All three drives continued to report zero SMART critical warnings, media errors, and NVMe error-log entries. There was no NVMe reset, timeout, controller loss, namespace loss, capacity change, guest I/O error, failed `fio` operation, migration error, backup error, or restore error. The observation therefore does not reproduce the catastrophic controller drop from the public ZFS reports, but it does fail the PVE plan's deliberately stricter zero-AER operational gate.
+
+At 17:26 EDT, the HP firmware's PCI Express Power Management setting was disabled consistently on the three deployed hosts while Linux NVMe APST remained at its default `100000` µs latency threshold. After sequential reboots, every `00:1d.0` root port reported ASPM unsupported/disabled and every `02:00.0` SN770 endpoint reported ASPM disabled; the cluster was quorate, storage was active, SMART and NVMe error logs remained clean, and the new boot journals contained no PCIe or NVMe error. The mitigation is now the deployment baseline, but operational qualification remains open until the idle-to-I/O and storage acceptance window is repeated on all three specimens.
 
 ## Why this was tested
 

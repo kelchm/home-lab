@@ -99,7 +99,9 @@ lvs -a -o lv_name,lv_size,data_percent,metadata_percent
 
 Any NVMe reset, timeout, namespace loss, media error, or PCIe/AER event fails the storage acceptance gate and must be investigated rather than cleared from the log.
 
-As of 2026-08-27 14:48 EDT, commissioning had observed three correctable AER events on node 1, two on node 2, and two on node 3 at the SN770 endpoint. The first two node-1 events and both node-2 events paired a root-port Data Link Layer timeout with an endpoint Physical Layer `RxErr`; the later node-1 event and both node-3 events contained the endpoint `RxErr` without a root-port timeout. Node 3's two events appeared after it had completed a bounded 100-cycle idle-to-read screen without reproducing one, so that screen is not sufficient evidence of stability. All three drives still reported zero SMART critical warnings, media errors, and NVMe error-log entries, with no reset, controller loss, namespace loss, or guest I/O error. APST and PCIe L1 remain at their defaults; no unsupported power-management workaround has been applied.
+As of 2026-08-27 14:48 EDT, commissioning had observed three correctable AER events on node 1, two on node 2, and two on node 3 at the SN770 endpoint. The first two node-1 events and both node-2 events paired a root-port Data Link Layer timeout with an endpoint Physical Layer `RxErr`; the later node-1 event and both node-3 events contained the endpoint `RxErr` without a root-port timeout. Node 3's two events appeared after it had completed a bounded 100-cycle idle-to-read screen without reproducing one, so that screen is not sufficient evidence of stability. All three drives still reported zero SMART critical warnings, media errors, and NVMe error-log entries, with no reset, controller loss, namespace loss, or guest I/O error.
+
+At 17:26 EDT, firmware-level **PCI Express Power Management** was disabled on all three nodes, one node and reboot at a time. Post-boot `lspci` showed the `00:1d.0` root port as `ASPM not supported` and `ASPM Disabled`, and the `02:00.0` SN770 endpoint as `ASPM Disabled`; Linux NVMe APST remained at its default `100000` µs latency threshold. Every node rejoined both cluster quorum and active NFS storage with zero failed units, zero SMART critical warnings, zero media or NVMe error-log entries, and no PCIe, NVMe, reset, timeout, or I/O error in the new boot. This is the applied mitigation baseline, not clearance of the zero-AER gate; the three-node idle and I/O acceptance window must still be repeated.
 
 ## Backup and isolated restore drill
 
@@ -160,7 +162,7 @@ The script decrypts and validates required members in each archive before accept
 
 ## Outstanding commissioning gates
 
-- Investigate and resolve the correctable SN770 PCIe/AER events observed on all three nodes under default APST and PCIe L1 power management, then repeat the idle and I/O acceptance window on all three hosts. Node 3's clean 100-cycle screen preceded two later errors and is not sufficient evidence for the gate.
+- Validate the firmware-level PCIe ASPM disable applied to all three nodes by repeating the idle and I/O acceptance window on every host while leaving NVMe APST unchanged. Node 3's earlier clean 100-cycle screen preceded two later errors and is not sufficient evidence for the gate.
 - Repeat a timed isolated restore after the storage investigation and record restore RTO and throughput; the initial restore proved functionality but did not capture elapsed time.
 - Complete physical cold-power removal and recovery on all three nodes; GLKVM cannot assert ATX power.
 - Remove the obsolete SanDisk qualification USB from node 1 after its NVMe cold-power boot is proven.

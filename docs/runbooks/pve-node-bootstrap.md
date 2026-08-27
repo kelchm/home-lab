@@ -80,6 +80,9 @@ Normalize every host from the same recorded baseline before its permanent PVE in
    | Fast Boot | Disabled |
    | Network (PXE) Boot | Enabled |
    | After Power Loss | Power On |
+   | PCI Express Power Management | Disabled |
+
+   The HP setting is under **Advanced → Power Management Options** and controls PCIe Active State Power Management (ASPM) for the platform. Leave Runtime Power Management, Extended Idle Power States, SATA Power Management, and the Linux NVMe APST policy at their defaults unless a separate diagnosis requires changing them.
 
 3. Save, reboot, re-enter setup, and verify the settings persisted.
 4. Keep the installed NVMe first in the normal boot order after PVE installation. Reach PXE explicitly through **Esc → F12 → IPv4**, not by making network boot the everyday first choice.
