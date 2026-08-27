@@ -46,7 +46,7 @@ Treat an unverified channel as the wrong host. Never launch a destructive instal
    ```
 
 4. Confirm UniFi VLAN 20 Network Boot still points to TFTP server `10.32.20.5` with filename `netboot.xyz-snponly.efi`.
-5. Verify the intended PVE installer. The pinned netboot.xyz menu release `3.0.2` advertises PVE `9.1-1`, so require the committed local `9.2-1` submenu plus its verified `vmlinuz`, `initrd`, and `proxmox.iso`, then complete one cold-boot acceptance test. Do not silently substitute the older generated entry.
+5. Verify the intended PVE installer. The pinned netboot.xyz menu release `3.0.2` advertises PVE `9.1-1`, so require the committed local `9.2-1` submenu plus its verified `vmlinuz`, `initrd`, and `proxmox.iso`. Complete the non-destructive cold-start PXE proof below before installation; do not silently substitute the older generated entry.
 6. Confirm GLKVM mass storage is disabled and the target host's onboard 1 GbE switch port is an untagged VLAN 20 member.
 7. Keep physical power access available. The KVM cannot recover a node that is off or hard-hung.
 
@@ -101,6 +101,17 @@ One-shot F9, F10, and F12 presses during POST are unreliable on these EliteDesk 
 5. Confirm the UEFI client receives a VLAN 20 DHCP lease, downloads `netboot.xyz-snponly.efi` from Athena, and reaches the netboot.xyz menu.
 
 If the host misses the menu, reboot and repeat the held-Esc sequence. Do not type recovery URLs at the iPXE shell unless unavoidable; this HID path has dropped characters there.
+
+## Prove the PVE netboot path without installing
+
+Before the first permanent installation, prove the complete local path from a powered-off `pve-sbx-1` without writing to any disk:
+
+1. Shut the temporary OS down cleanly, disconnect AC for approximately 30 seconds, then restore AC. The normalized **After Power Loss = Power On** setting should start the host; use its physical power button if it does not because GLKVM has no ATX control.
+2. Follow **Esc → F12 → IPv4** and select the locally staged **Proxmox VE 9.2-1** entry.
+3. Require all three payloads to load from Athena and wait for the Proxmox VE 9.2-1 installer UI to appear.
+4. Stop before accepting an installation target or starting partitioning. Exit or power the host off cleanly and record the cold-start PXE proof as passed.
+
+This is intentionally a pre-install acceptance gate for PXE, KVM, and the pinned installer assets. It is separate from the post-install cold-power gate that proves the installed NVMe system returns correctly.
 
 ## Start the PVE installer
 

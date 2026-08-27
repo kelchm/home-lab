@@ -4,14 +4,11 @@
 
 **Plan date:** 2026-08-14
 
-**Target platform:** Proxmox VE 9.2 or the current stable 9.x installer at execution time
+**Target platform:** Proxmox VE 9.2-1 x86-64 through the pinned and verified local netboot entry
 
 ## Outcome
 
-Build one three-node Proxmox VE cluster named `pve-sbx` on the HP EliteDesk 800
-G3 hosts. PVE remains a separate failure and control domain
-from `k8s-prod`, while its declarations live in this repository under a future
-top-level `proxmox/` tree.
+Build one three-node Proxmox VE cluster named `pve-sbx` on the HP EliteDesk 800 G3 hosts. PVE remains a separate failure and control domain from `k8s-prod`, while its declarations live in this repository under a future top-level `proxmox/` tree.
 
 Initial operating model:
 
@@ -64,7 +61,7 @@ PVE itself has a pull-based GitOps reconciler.
 | Local disk | Expected 1 TB WD_BLACK SN770 NVMe per node; verify each host before install |
 | Management NIC | Onboard 1 GbE; controller and PCI address to inventory per host |
 | Storage/guest-trunk NIC | PCIe Realtek RTL8125 2.5 GbE; exact PCI address and interface name to inventory per host |
-| PVE release | Current stable 9.x; 9.2 is the planning baseline |
+| PVE release | 9.2-1 x86-64 for initial commissioning; later upgrades require a separately reviewed version bump |
 | Root storage | Installer-default ext4 root and LVM-thin guest storage ID `local-lvm` |
 | Shared system | Synology DS1821+ on `10.32.25.5` |
 
@@ -267,22 +264,12 @@ Before forming a cluster:
    old-firmware specimen, control drive, and same-host baseline needed by that
    work; do not change its firmware, sector format, or host firmware until the
    qualification hold is explicitly released.
-3. After the hold is cleared, normalize each host's BIOS configuration against
-   the [PVE node bootstrap runbook](../runbooks/pve-node-bootstrap.md). Record
-   the installed BIOS revision before changing settings. A BIOS firmware flash
-   is a separate, product-ID-specific operation and is not implied by loading
-   defaults. For each released drive, use the vendor-supported tool to check
-   and, when applicable, apply an NVMe firmware update one drive at a time;
-   record the sanitized before/after revision.
+3. After the hold is cleared, normalize each host's BIOS configuration against the [PVE node bootstrap runbook](../runbooks/pve-node-bootstrap.md). Record the installed BIOS revision before changing settings. A BIOS firmware flash is a separate, product-ID-specific operation and is not implied by loading defaults. For each released drive, use the vendor-supported tool to check and, when applicable, apply an NVMe firmware update one drive at a time; record the sanitized before/after revision.
 4. While no valuable data exists, run memory and CPU burn-in plus a destructive
    full-device write/read verification and sustained mixed/sync NVMe I/O. A
    quick SMART pass is insufficient. Reject a drive or host that logs any NVMe
    reset, timeout, PCIe/AER error, media error, or capacity change.
-5. Install only `pve-sbx-1` using the current stable PVE 9.x ISO. Keep the
-   default supported kernel; do not opt into a test kernel to make the RTL8125
-   work unless the stable kernel demonstrably fails. Use the
-   [PVE node bootstrap runbook](../runbooks/pve-node-bootstrap.md) for the
-   GLKVM and netboot.xyz control path.
+5. Install only `pve-sbx-1` using the committed local Proxmox VE 9.2-1 submenu and verified assets. Keep the default supported kernel; do not opt into a test kernel to make the RTL8125 work unless the stable kernel demonstrably fails. Use the [PVE node bootstrap runbook](../runbooks/pve-node-bootstrap.md) for the GLKVM and netboot.xyz control path.
 6. Record `lspci -nnk`, interface names, private MAC inventory, and `ethtool`
    link and driver/firmware data. The RTL8125 must hold a negotiated 2.5 Gb/s
    link and sustain `iperf3` without resets or PCIe/AER errors.
@@ -298,7 +285,7 @@ it is being diagnosed.
 
 ### PVE install choices
 
-- Install the current stable PVE 9.x release (9.2 at design time).
+- Install Proxmox VE 9.2-1 x86-64 through the committed local submenu and verified `9.2-1-4bbcc809` asset set. A later installer release first requires a reviewed menu, checksum, plan, and runbook update.
 - Install in UEFI mode onto the single verified local NVMe using ext4 and the
   installer's default LVM layout. Keep the default `local-lvm` thin pool rather
   than inventing fixed sizes until the installer shows the actual available
@@ -320,8 +307,7 @@ it is being diagnosed.
 ### Cluster formation
 
 1. Finish and validate both networks on all three standalone nodes.
-2. Create `pve-sbx` on node 1 with VLAN 20 as Corosync link 0 and VLAN 25 as
-   link 1.
+2. Create `pve-sbx` on node 1 with VLAN 20 as Corosync link 0 and VLAN 25 as link 1.
 3. Join node 2, verify quorum and both links, then join node 3.
 4. Confirm expected votes `3`, quorum `2`, and that removal of either physical
    link does not destroy quorum.
@@ -409,10 +395,7 @@ Create distinct Synology exports:
 /volume1/backups-pve-sbx/vzdump
 ```
 
-Use NFSv4.1, scope export access to `10.32.25.21-.23`, and map root to an
-account that can write the backup directory. Do not use `soft` mounts. Synology
-snapshots and its offsite backup policy must include `backups-pve-sbx`; a backup
-on the same NAS is independent of PVE host loss, not of NAS loss.
+Use NFSv4.1, scope export access to `10.32.25.21-.23`, and map root to an account that can write the backup directory. Do not use `soft` mounts. Synology snapshots and its offsite backup policy must include `backups-pve-sbx`; a backup on the same NAS is independent of PVE host loss, not of NAS loss.
 
 Create `nas-guests` only if a real HA guest justifies it. Use `qcow2` there so
 the directory/NFS backend can provide snapshots and clones. First benchmark

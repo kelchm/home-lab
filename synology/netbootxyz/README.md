@@ -48,7 +48,7 @@ On the first PVE `9.2-1` deployment, complete the asset-staging procedure below 
 
 ```sh
 ssh kelchm@10.32.20.5 \
-  'mkdir -p /volume1/docker/netbootxyz/config /volume1/docker/netbootxyz/assets'
+  'mkdir -p /volume1/docker/netbootxyz/config/menus /volume1/docker/netbootxyz/assets'
 rsync -av synology/netbootxyz/compose.yaml \
   kelchm@10.32.20.5:/volume1/docker/netbootxyz/compose.yaml
 rsync -av synology/netbootxyz/local-vars.ipxe \
