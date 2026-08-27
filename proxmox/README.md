@@ -34,7 +34,7 @@ PVE retains its cluster-managed `root@pve-sbx-*` SSH keys for node-to-node opera
 
 Both stores use hard NFSv4.1 mounts and are allowed only from the three PVE storage addresses. `library-pve` is platform-specific but reusable across PVE clusters; `backups-pve-sbx` is intentionally cluster-specific. Shared external storage uses the DSM shared-folder leaf as its PVE storage ID so the same resource has one canonical name across both systems.
 
-The cluster job `daily-backups` backs up all guests to `backups-pve-sbx` at 05:00 in snapshot mode with Zstandard compression. Its retention policy is last 3, daily 7, weekly 4, and monthly 6. Disposable guests must be excluded deliberately rather than relying on tags. The built-in matcher currently targets `mail-to-root`, but direct delivery to Gmail failed with `550 5.7.1`; do not depend on email alerts until an authenticated SMTP relay is configured and tested.
+The cluster job `daily-backups` backs up all non-disposable guests to `backups-pve-sbx` at 05:00 America/New_York in snapshot mode with Zstandard compression. The live job uses `all=1`; add every disposable VMID to its explicit `exclude` field. The field is currently unset because no disposable guest remains. Its retention policy is last 3, daily 7, weekly 4, and monthly 6. The built-in matcher currently targets `mail-to-root`, but direct delivery to Gmail failed with `550 5.7.1`; do not depend on email alerts until an authenticated SMTP relay is configured and tested.
 
 ## Applied guest network policy
 
@@ -66,8 +66,12 @@ Confirm both Corosync links from every node before maintenance:
 
 ```sh
 pvecm status
+corosync-cfgtool -s
+corosync-cfgtool -n
 journalctl -u corosync --since today --no-pager
 ```
+
+Inspect the output on each node and confirm that Link 0 and Link 1 report every peer as connected. `pvecm status` proves membership and quorum, and the journal provides history, but neither substitutes for the live per-link output. Do not use the `corosync-cfgtool` exit status alone as proof of link health.
 
 Check the local host before and after storage-heavy work:
 
@@ -100,8 +104,13 @@ qmrestore /mnt/pve/backups-pve-sbx/dump/ARCHIVE.vma.zst RESTORE_VMID --storage l
 for nic in $(qm config RESTORE_VMID | sed -n 's/^\(net[0-9]\+\):.*/\1/p'); do
     qm set RESTORE_VMID --delete "$nic"
 done
-test -z "$(qm config RESTORE_VMID | sed -n 's/^\(net[0-9]\+\):.*/\1/p')"
-qm config RESTORE_VMID
+restored_config=$(qm config RESTORE_VMID) || { echo "Unable to read restored VM configuration" >&2; exit 1; }
+remaining_nics=$(printf '%s\n' "$restored_config" | sed -n 's/^\(net[0-9]\+\):.*/\1/p')
+if [ -n "$remaining_nics" ]; then
+    echo "Refusing to start RESTORE_VMID: network interfaces remain: $remaining_nics" >&2
+    exit 1
+fi
+printf '%s\n' "$restored_config"
 qm start RESTORE_VMID
 qm guest cmd RESTORE_VMID ping
 ```
@@ -112,18 +121,17 @@ The initial acceptance drill used disposable VM 300. A 60-second 70/30 random re
 
 ## Host baseline artifacts
 
-[`host/pve-no-subscription-popup`](host/pve-no-subscription-popup) removes only the subscription modal from the PVE web client. It does not falsify subscription status or enable enterprise repositories. The script hashes and preserves each upstream file before making an exact, fail-closed replacement; [`host/99-pve-no-subscription-popup`](host/99-pve-no-subscription-popup) reapplies it after package transactions.
+[`host/pve-remove-nag.sh`](host/pve-remove-nag.sh) and [`host/no-nag-script`](host/no-nag-script) are copied verbatim from the Proxmox VE Helper-Scripts post-install implementation at commit [`519f5630cecdcf030a22934cba815c6c1dde2b6d`](https://github.com/community-scripts/ProxmoxVE/blob/519f5630cecdcf030a22934cba815c6c1dde2b6d/tools/pve/post-pve-install.sh#L559-L610). They suppress the desktop and mobile subscription reminders and reapply the maintained patch after package transactions. They do not enable enterprise repositories. The upstream MIT license is retained in [`host/LICENSE.community-scripts`](host/LICENSE.community-scripts).
 
-Apply the reviewed artifacts to one node, verify the marker, and then repeat one node at a time:
+Restore the packaged widget toolkit before applying the artifacts so a previous or changed patch is not layered underneath. Apply and verify one node at a time:
 
 ```sh
-scp proxmox/host/pve-no-subscription-popup root@NODE:/tmp/pve-no-subscription-popup
-scp proxmox/host/99-pve-no-subscription-popup root@NODE:/tmp/99-pve-no-subscription-popup
-ssh root@NODE 'install -o root -g root -m 0755 /tmp/pve-no-subscription-popup /usr/local/sbin/pve-no-subscription-popup && install -o root -g root -m 0644 /tmp/99-pve-no-subscription-popup /etc/apt/apt.conf.d/99-pve-no-subscription-popup && /usr/local/sbin/pve-no-subscription-popup'
-ssh root@NODE "grep -F 'Local no-subscription policy' /usr/share/javascript/proxmox-widget-toolkit/proxmoxlib.js"
+scp proxmox/host/pve-remove-nag.sh proxmox/host/no-nag-script kelchm@NODE:/tmp/
+ssh kelchm@NODE 'sudo rm -f /etc/apt/apt.conf.d/99-pve-no-subscription-popup /usr/local/sbin/pve-no-subscription-popup && sudo apt-get install --reinstall -y proxmox-widget-toolkit && sudo install -o root -g root -m 0755 /tmp/pve-remove-nag.sh /usr/local/bin/pve-remove-nag.sh && sudo install -o root -g root -m 0644 /tmp/no-nag-script /etc/apt/apt.conf.d/no-nag-script && sudo /usr/local/bin/pve-remove-nag.sh'
+ssh kelchm@NODE "sudo grep -F NoMoreNagging /usr/share/javascript/proxmox-widget-toolkit/proxmoxlib.js && sudo grep -F 'MANAGED BLOCK FOR MOBILE NAG' /usr/share/pve-yew-mobile-gui/index.html.tpl"
 ```
 
-Package changes abort the hook if the expected upstream JavaScript structure changes. If that blocks package recovery, move `/etc/apt/apt.conf.d/99-pve-no-subscription-popup` to `/root/99-pve-no-subscription-popup.disabled`, finish repairing the package state, review and update the exact replacement, rerun the script, and reinstall the hook. Do not weaken the guard or leave the hook disabled silently.
+After installation, clear the browser cache or perform an empty-cache hard reload before testing a new login. If a future PVE update defeats the suppression, check the maintained upstream implementation and review its current diff before refreshing these pinned artifacts.
 
 ## Configuration recovery archive
 
@@ -135,7 +143,7 @@ PVE_AGE_IDENTITY=age.key ./proxmox/capture-host-config.sh
 
 The script connects as `kelchm` by default and requires the verified noninteractive sudo policy. Set `PVE_SSH_USER` only for an explicitly tested recovery identity; direct human root SSH is not the normal path.
 
-The script decrypts and validates required members in each archive before accepting it, then prints its SHA-256 digest. A verified three-node capture, including SQLite-consistent pmxcfs database snapshots and the host operator identity, was completed on 2026-08-27 at `20260827T194251Z`. This is off-node recovery state on the admin workstation, not an off-site backup; copy the encrypted artifacts to a second protected location if workstation loss is in scope.
+The script decrypts and validates required members in each archive before accepting it, then prints its SHA-256 digest. A verified three-node capture, including SQLite-consistent pmxcfs database snapshots, the host operator identity, and the installed subscription-nag helper and package hook, was completed on 2026-08-27 at `20260827T195229Z`. This is off-node recovery state on the admin workstation, not an off-site backup; copy the encrypted artifacts to a second protected location if workstation loss is in scope.
 
 ## Outstanding commissioning gates
 

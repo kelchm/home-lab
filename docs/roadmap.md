@@ -13,9 +13,7 @@ The design, acceptance record, and remaining rollout gates are in the [PVE clust
 Important boundaries:
 
 - PVE remains operable with Kubernetes completely unavailable.
-- Initial host bootstrap and rolling updates are documented manual operations;
-  OpenTofu manages guests. Ansible is deferred until repeated host drift or
-  rebuild work justifies it.
+- Initial host bootstrap and rolling updates are documented manual operations; OpenTofu manages guests. Ansible is deferred until repeated host drift or rebuild work justifies it.
 - PVE operator documentation and manually applied host artifacts live under `proxmox/`; guest OpenTofu will join that owner directory when the first durable guest is declared.
 - Local LVM-thin is the default runtime tier. Synology NFS holds templates and
   backups; shared guest storage is optional for workloads that justify PVE HA

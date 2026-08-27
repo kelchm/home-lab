@@ -278,9 +278,7 @@ Before forming a cluster:
 6. Record `lspci -nnk`, interface names, private MAC inventory, and `ethtool`
    link and driver/firmware data. The RTL8125 must hold a negotiated 2.5 Gb/s
    link and sustain `iperf3` without resets or PCIe/AER errors.
-7. Exercise the installed storage with a disposable VM: sustained I/O, backup
-   to `backups-pve-sbx`, restore, and—after node 2 exists—local-disk migration over
-   VLAN 25. Recheck the kernel and NVMe error logs after every test.
+7. Exercise the installed storage with a disposable VM: sustained I/O, backup to `backups-pve-sbx`, restore, and—after node 2 exists—local-disk migration over VLAN 25. Recheck the kernel and NVMe error logs after every test.
 8. Test a reboot and complete power removal. Confirm both NIC identities and
    all LVM volumes return unchanged.
 
@@ -335,10 +333,7 @@ it is being diagnosed.
 
 ### Why no ZFS on the expected drives
 
-The expected drives are 1 TB WD_BLACK SN770s. A read-only query of all three
-live Kubernetes nodes on 2026-08-15 reported that model, firmware
-`731100WD`, and 512-byte logical sectors. The PVE drives still require direct
-inventory because "same drives" has not yet been verified on those machines.
+The expected drives were 1 TB WD_BLACK SN770s. The direct PVE inventory recorded above confirmed that model, firmware `731100WD`, and 512-byte logical sectors on all three hosts; the sanitized facts and private-file location are part of that inventory record.
 
 The available failure reports are sufficient to reject ZFS as the launch
 default on SN770s. The long-running OpenZFS discussion documents SN770
@@ -404,12 +399,7 @@ Use NFSv4.1, scope export access to `10.32.25.21-.23`, and map root to an accoun
 
 Use each DSM shared-folder leaf as the corresponding PVE storage ID so the same external resource has one canonical name across both systems. Backup job names describe their schedule and purpose separately; the live cluster job is `daily-backups`.
 
-Create `guests-pve-sbx` only if a real HA guest justifies it. Use `qcow2` there so
-the directory/NFS backend can provide snapshots and clones. First benchmark
-latency, sustained mixed I/O, backup contention, and VM behavior during an NFS
-interruption. Shared NFS lets a surviving PVE node see the guest disk without a
-copy, but makes the Synology and storage network part of the guest's runtime
-failure domain. Do not put ordinary guests there for convenience.
+Create `guests-pve-sbx` only if a real HA guest justifies it. Use `qcow2` there so the directory/NFS backend can provide snapshots and clones. First benchmark latency, sustained mixed I/O, backup contention, and VM behavior during an NFS interruption. Shared NFS lets a surviving PVE node see the guest disk without a copy, but makes the Synology and storage network part of the guest's runtime failure domain. Do not put ordinary guests there for convenience.
 
 Synology iSCSI plus shared LVM is not the initial design: it adds SAN-style
 failure handling while normal shared LVM lacks the snapshot and clone behavior
@@ -417,10 +407,7 @@ available with `qcow2` on NFS. Btrfs remains a PVE technology-preview backend.
 
 ### Availability classes
 
-PVE quorum and HA management do not make `local-lvm` shared. A controlled
-maintenance move can copy a local guest disk over VLAN 25, but after an abrupt
-node loss that disk is unavailable until the node returns. Recovery is restore
-from `backups-pve-sbx`, not an automatic HA restart.
+PVE quorum and HA management do not make `local-lvm` shared. A controlled maintenance move can copy a local guest disk over VLAN 25, but after an abrupt node loss that disk is unavailable until the node returns. Recovery is restore from `backups-pve-sbx`, not an automatic HA restart.
 
 | Class | Storage and placement | Failure behavior |
 |---|---|---|
@@ -457,8 +444,7 @@ dangerous. Never count a snapshot as a backup.
 
 ### Initial backup policy
 
-- Cluster job `daily-backups`: all non-disposable guests to `backups-pve-sbx` at **05:00
-  America/New_York daily**.
+- Cluster job `daily-backups`: all non-disposable guests to `backups-pve-sbx` at **05:00 America/New_York daily**. The live job uses `all=1`; add every disposable VMID to its explicit `exclude` field. The field is currently unset because no disposable guest remains.
 - Mode: snapshot where the guest/storage supports it; zstd compression.
 - Retention: `keep-last=3`, `keep-daily=7`, `keep-weekly=4`, `keep-monthly=6`.
 - Install and enable the QEMU guest agent in every VM image; freeze-capable
@@ -478,20 +464,14 @@ make it recovery material, not a Git artifact.
 
 Before hosting anything important:
 
-1. Restore a VM under a new VMID from `backups-pve-sbx` and boot it without its
-   production NIC connected.
+1. Restore a VM under a new VMID from `backups-pve-sbx` and boot it without its production NIC connected.
 2. Restore an LXC container if LXC will be used.
-3. If `guests-pve-sbx` is enabled, interrupt one compute node and prove that a test
-   `shared-ha` guest restarts safely on another node. Separately interrupt NFS
-   in a controlled test and document the guest and PVE behavior.
+3. If `guests-pve-sbx` is enabled, interrupt one compute node and prove that a test `shared-ha` guest restarts safely on another node. Separately interrupt NFS in a controlled test and document the guest and PVE behavior.
 4. Write the elapsed restore time and observed throughput into the runbook.
 
 The initial VM restore gate passed on 2026-08-27. VM 300 backed up from node 2 to `backups-pve-sbx` in 14 seconds as a 334 MB Zstandard archive, restored on node 3 as VM 301, and booted with its NIC removed. The root filesystem and QEMU guest agent passed inspection; the isolated restore and source acceptance VM were then destroyed, while the backup archive was retained.
 
-Whole-cluster recovery favors rebuilding from documented state: reinstall one
-node with its recorded identity, recreate the intended cluster and storage
-configuration, attach `backups-pve-sbx`, and restore the critical guests. Restoring
-the pmxcfs database is an additional recovery option, not the default procedure.
+Whole-cluster recovery favors rebuilding from documented state: reinstall one node with its recorded identity, recreate the intended cluster and storage configuration, attach `backups-pve-sbx`, and restore the critical guests. Restoring the pmxcfs database is an additional recovery option, not the default procedure.
 
 ### Future PBS trigger
 
@@ -542,8 +522,9 @@ home-lab/
 │   ├── README.md                         # live scope, checks, backup, restore, and recovery entrypoints
 │   ├── capture-host-config.sh            # encrypted off-node host and cluster capture
 │   └── host/
-│       ├── pve-no-subscription-popup     # exact-match UI patch
-│       └── 99-pve-no-subscription-popup  # package hook
+│       ├── pve-remove-nag.sh              # pinned Proxmox VE Helper-Scripts implementation
+│       ├── no-nag-script                  # package hook
+│       └── LICENSE.community-scripts      # retained upstream MIT license
 └── .private/pve-sbx/
     ├── inventory.yaml                    # ignored hardware, identity, BIOS, and commissioning evidence
     └── recovery/                         # ignored age-encrypted configuration archives
@@ -681,8 +662,7 @@ usable when Kubernetes is completely unavailable.
 | 5 — optional HA proof | Benchmark `guests-pve-sbx`; place one test guest there, enable HA, and pull power on its node | Guest restarts safely; NFS interruption behavior and NAS dependency are documented |
 | 6 — operations | Execute a complete node-by-node update window | All three nodes updated with quorum, backups, storage and guests healthy |
 
-Do not place an irreplaceable workload on PVE until phases 0-4 pass. Do not call
-a workload HA unless the optional phase 5 passes with that workload class.
+Do not place an irreplaceable workload on PVE until phases 0-4 pass. Do not call a workload HA unless the optional phase 5 passes with that workload class.
 
 As of 2026-08-27, phases 0 and 2 have passed. Phase 3 proved backup and isolated restore functionality but remains open because restore RTO and throughput were not recorded. Phase 1 remains blocked on the zero-AER storage criterion despite clean higher-level I/O, and phase 4 has not started. No irreplaceable workload is cleared for placement.
 

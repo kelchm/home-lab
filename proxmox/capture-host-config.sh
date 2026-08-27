@@ -68,8 +68,8 @@ for pve_endpoint in \
             etc/sudoers.d/90-kelchm \
             etc/apt/sources.list \
             etc/apt/sources.list.d \
-            etc/apt/apt.conf.d/99-pve-no-subscription-popup \
-            usr/local/sbin/pve-no-subscription-popup \
+            etc/apt/apt.conf.d/no-nag-script \
+            usr/local/bin/pve-remove-nag.sh \
             etc/corosync/authkey \
             etc/ssh/ssh_host_ed25519_key \
             etc/ssh/ssh_host_ed25519_key.pub \
@@ -97,6 +97,8 @@ PVE_CAPTURE
         etc/group \
         etc/shadow \
         etc/sudoers.d/90-kelchm \
+        etc/apt/apt.conf.d/no-nag-script \
+        usr/local/bin/pve-remove-nag.sh \
         etc/corosync/authkey \
         etc/ssh/ssh_host_ed25519_key \
         home/kelchm/.ssh/authorized_keys \
