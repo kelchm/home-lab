@@ -148,6 +148,8 @@ which instance it is; the VLAN is never encoded in the name.
 
 ## Physical and Linux network design
 
+The owner-confirmed Lab Switch layout is intentionally parallel with `k8s-prod`: `pve-sbx-{1,2,3}` use ports 1–3 for onboard 1 GbE management and ports 13–15 for RTL8125 2.5 GbE trunks, while `k8s-prod-{1,2,3}` use the immediately following blocks at ports 4–6 and 16–18. Treat the PVE and production Kubernetes port blocks as separate change scopes.
+
 ### Onboard 1 GbE
 
 The switch port is an access/untagged member of VLAN 20. Put the node's static

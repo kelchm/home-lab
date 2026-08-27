@@ -34,6 +34,18 @@ Before sending HID input:
 
 Treat an unverified channel as the wrong host. Never launch a destructive installer or firmware tool until the on-screen identity and the private hardware inventory agree.
 
+## PVE switch mapping
+
+The owner-confirmed physical pattern places each PVE block immediately before the equivalent `k8s-prod` block on the Lab Switch:
+
+| Host | Onboard 1 GbE | RTL8125 2.5 GbE |
+|---|---|---|
+| `pve-sbx-1` | Lab Switch port 1 | Lab Switch port 13 |
+| `pve-sbx-2` | Lab Switch port 2 | Lab Switch port 14 |
+| `pve-sbx-3` | Lab Switch port 3 | Lab Switch port 15 |
+
+Ports 1–3 use the VLAN 20 access profile. Ports 13–15 use `pve-guest-trunk`, tagged for VLANs 10, 21, 25, and 90 with no native VLAN. The neighboring `k8s-prod-{1,2,3}` blocks are ports 4–6 and 16–18 respectively; do not modify those production ports while commissioning PVE.
+
 ## Preflight
 
 1. Unlock the operator SSH key provider and verify non-interactive access to GLKVM and Athena before starting a reboot.
