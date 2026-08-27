@@ -24,14 +24,26 @@ harness_ssh() {
   printf '%s harness %s\n' "$(date -u +%FT%TZ)" "$(remote_command "$remote_script" "$@")" >>"$out/observer.log"
   ssh -i "$key" -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$known_hosts" "root@$host" "$(remote_command "$remote_script" "$@")"
 }
+collect_command() {
+  local name=$1 artifact_tmp
+  shift
+  artifact_tmp=$(mktemp "$out/.$name.XXXXXX")
+  if raw_ssh "$@" >"$artifact_tmp"; then
+    mv -f "$artifact_tmp" "$out/$name"
+  else
+    rm -f "$artifact_tmp"
+  fi
+}
 collect() {
-  run_dir=$1
+  local run_dir=$1 name
   for name in manifest smart-baseline.log state workload.log thermal.tsv outcome final-evidence.log failure.log count.sends count.scrubs count.fio; do
-    if raw_ssh test -r "$run_dir/$name"; then raw_ssh cat "$run_dir/$name" >"$out/$name"; fi
+    if raw_ssh test -r "$run_dir/$name"; then
+      collect_command "$name" cat "$run_dir/$name"
+    fi
   done
-  raw_ssh journalctl -k --no-pager -n 500 >"$out/kernel-snapshot.log" || true
-  raw_ssh zpool iostat -v sn770test 1 1 >>"$out/zpool-iostat.log" || true
-  raw_ssh iostat -x 1 1 >>"$out/iostat.log" || true
+  collect_command kernel-snapshot.log journalctl -k --no-pager -n 500
+  raw_ssh zpool iostat -v sn770test 1 1 >>"$out/zpool-iostat-poll.log" || true
+  raw_ssh iostat -x 1 1 >>"$out/iostat-poll.log" || true
 }
 stream_pids=()
 start_stream() { stream_name=$1; shift; raw_ssh "$@" >"$out/$stream_name" 2>&1 & stream_pids+=("$!"); }

@@ -40,6 +40,7 @@ or fixing.
 | [bambuddy-bootstrap](runbooks/bambuddy-bootstrap.md) | Bringing up Bambuddy, validating printer containment and OIDC, and exercising backup recovery. |
 | [visionect-migration](runbooks/visionect-migration.md) | Staging, cutting over, validating, and rolling back the Synology-to-k8s Visionect migration. |
 | [dgx-spark-bringup](runbooks/dgx-spark-bringup.md) | Configuring, validating, troubleshooting, and recovering the two-node DGX Spark LAN/storage/RDMA setup. |
+| [pve-node-bootstrap](runbooks/pve-node-bootstrap.md) | Using GLKVM and Athena netboot.xyz to inventory, PXE-boot, install, and recover a PVE node. |
 | [talos-pod-security-rollout](runbooks/talos-pod-security-rollout.md) | Applying and validating Talos Pod Security Admission namespace exceptions after Flux reconciles the labels. |
 | [traefik-oidc-plugin-startup](runbooks/traefik-oidc-plugin-startup.md) | Recovering OIDC-protected routes when traefik-admin started without the OIDC plugin. |
 

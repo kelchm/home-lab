@@ -277,7 +277,9 @@ Before forming a cluster:
    reset, timeout, PCIe/AER error, media error, or capacity change.
 5. Install only `pve-lab-1` using the current stable PVE 9.x ISO. Keep the
    default supported kernel; do not opt into a test kernel to make the RTL8125
-   work unless the stable kernel demonstrably fails.
+   work unless the stable kernel demonstrably fails. Use the
+   [PVE node bootstrap runbook](../runbooks/pve-node-bootstrap.md) for the
+   GLKVM and netboot.xyz control path.
 6. Record `lspci -nnk`, interface names, private MAC inventory, and `ethtool`
    link and driver/firmware data. The RTL8125 must hold a negotiated 2.5 Gb/s
    link and sustain `iperf3` without resets or PCIe/AER errors.

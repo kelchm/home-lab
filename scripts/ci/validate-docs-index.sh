@@ -9,17 +9,17 @@ cd "${ROOT}"
 INDEX="docs/README.md"
 violations=0
 
-# Rule 1: every plan and runbook file must be referenced by filename in the docs index.
+# Rule 1: every plan and runbook file must be referenced by its exact link target in the docs index.
 while IFS= read -r -d '' file; do
-  base="$(basename "${file}")"
-  if ! grep -Fq "${base}" "${INDEX}"; then
+  relative="${file#docs/}"
+  if ! grep -Fq "](${relative})" "${INDEX}"; then
     echo "docs index missing reference to ${file}"
     violations=$((violations + 1))
   fi
 done < <(find docs/plans docs/runbooks -maxdepth 1 -type f -name '*.md' -print0 | sort -z)
 
-# Rule 2: every dated plan must contain a recognized status line.
-status_re='^\*\*Status:\*\* (Proposed|Active|Implemented|Superseded)\b'
+# Rule 2: every dated plan must contain a complete, recognized status line.
+status_re='^\*\*Status:\*\* (Proposed|Active|Implemented|Superseded) — [0-9]{4}-[0-9]{2}-[0-9]{2}; .+$'
 while IFS= read -r -d '' file; do
   if ! grep -Eq "${status_re}" "${file}"; then
     echo "plan status missing or unrecognized in ${file}"

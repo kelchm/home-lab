@@ -1,8 +1,6 @@
 # Network topology: workloads VLAN, DGX Spark placement, VLAN 40 retirement
 
-**Status:** Active 2026-08-22. Partially implemented; current host state and
-remaining phase-3 work are tracked in the
-[DGX Spark bring-up runbook](../runbooks/dgx-spark-bringup.md).
+**Status:** Active — 2026-08-22; partially implemented; current host state and remaining phase-3 work: [DGX Spark bring-up runbook](../runbooks/dgx-spark-bringup.md).
 
 **Scope:** VLAN/zone model for the whole lab — DGX Spark placement and
 interconnect, PVE guest wiring (integrated into the

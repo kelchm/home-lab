@@ -1,6 +1,8 @@
 # Out-of-cluster workloads on the Synology — S3 DB-backup target
 
-**Status:** Proposed 2026-06-20. Research + recommendation; nothing implemented. This doc decides *where*, *what*, and *how* for workloads that must live outside the Talos cluster, using the first concrete one — a clean S3 DB-backup target — as the worked example. The management pattern is meant to generalize to future out-of-cluster services.
+**Status:** Proposed — 2026-06-20; research and recommendation only; nothing implemented.
+
+This doc decides *where*, *what*, and *how* for workloads that must live outside the Talos cluster, using the first concrete one — a clean S3 DB-backup target — as the worked example. The management pattern is meant to generalize to future out-of-cluster services.
 
 ## Problem
 

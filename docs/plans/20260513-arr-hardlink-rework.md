@@ -1,11 +1,8 @@
 # *arr hardlink rework: single share-root mount + NFSv4 ACL isolation
 
-**Status:** Implemented 2026-05-13. **Current state is in
-`docs/runbooks/arr-suite-bootstrap.md` (Isolation model section).** The
-prose below captures the original design intent; the implementation
-diverged in several non-trivial ways once contact with `synoacltool` and
-DSM's actual ACL behavior forced corrections. See "Outcomes" at the
-bottom for the deltas.
+**Status:** Implemented — 2026-05-13; current state: [arr-suite-bootstrap runbook](../runbooks/arr-suite-bootstrap.md#isolation-model).
+
+The prose below captures the original design intent; the implementation diverged in several non-trivial ways once contact with `synoacltool` and DSM's actual ACL behavior forced corrections. See "Outcomes" at the bottom for the deltas.
 
 **Supersedes:** the per-app `subPath` mount isolation choice in
 `docs/plans/20260508-arr-suite-setup.md` (Phases 4–5) and the corresponding

@@ -90,8 +90,6 @@ separate non-lemon decision.
 - v2 option: read `pages.mtbl` directly (zstd-block SSTables; the vendored
   `oxidized-mtbl` crate in the source tarball is the format reference, with
   `get-key`/`dump` examples).
-- Deploy in `ai`, register with metamcp (URL-based registry in Postgres, not
-  GitOps). If the MCP reads files directly it needs its own static PV/PVC pair
-  in `ai` (one PV binds one PVC).
-- Server patches worth considering once source is vendored: a JSON search/browse
-  API endpoint (upstream hints at title search as a future feature).
+- Deployed by PR #317 under `kubernetes/apps/ai/lemon-manuals-mcp/`. The server mounts the existing read-only `lemon-manuals` NFS claim at `/data`, stores its derived SQLite FTS index on the retained Longhorn claim at `/search`, and serves only the in-cluster endpoint `http://lemon-manuals-mcp.ai.svc.cluster.local:8787/mcp`.
+- Registered in MetaMCP as `lemon-manuals`; the reviewable registration lives in `tools/metamcp-config/mcpServers.json`, while the applied URL-based registry remains in MetaMCP's Postgres database.
+- The implemented server loads both `index.json` files for vehicle browse/search, fetches page content from `lemon-website.lemon-manuals.svc.cluster.local`, and converts it to Markdown. Direct `pages.mtbl` reads and a separate JSON search/browse endpoint remain optional follow-on optimizations, not unfinished deployment work.
