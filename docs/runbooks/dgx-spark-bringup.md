@@ -4,11 +4,7 @@ Current-state record and recovery procedure for the two-node NVIDIA DGX Spark
 cluster. This runbook implements phase 3 of the
 [network-topology plan](../plans/20260821-network-topology.md#phase-3--dgx-sparks).
 
-**Status (2026-08-22):** LAN, storage VLAN, direct fabric, host anti-transit,
-raw RDMA, NCCL, and the RTL8127 burn-in are configured and tested. Synology
-export changes, Spark-to-NAS throughput, UniFi firewall policy, DNS, and final
-temporary-access cleanup remain open. The incomplete items are listed
-explicitly under [Remaining work](#remaining-work).
+**Status (2026-08-27):** LAN, storage VLAN, direct fabric, host anti-transit, raw RDMA, NCCL, and the RTL8127 burn-in are configured and tested. The live No Workloads containment slice is applied and validated; the broader UniFi firewall matrix, Synology export changes, Spark-to-NAS throughput, DNS, and final temporary-access cleanup remain open. The incomplete items are listed explicitly under [Remaining work](#remaining-work).
 
 ## Invariants
 
@@ -93,10 +89,7 @@ This is applied controller state, not merely desired configuration.
 | Zone | Internal |
 | Internet access | Enabled |
 
-No Workloads firewall rules were created during bring-up at the owner's
-direction. Treat cross-VLAN reachability as unvalidated until the network-plan
-firewall phase is applied. In particular, do not claim the IoT negative test as
-passing.
+No Workloads firewall rules were created during the original Spark bring-up. The later PVE commissioning session added the containment slice recorded in [`network/unifi/README.md`](../../network/unifi/README.md): Workloads cannot initiate to Infra Mgmt, Storage, K8s Prod, or `admin-prod`, and K8s Prod cannot initiate to Workloads. Main administration and `services-prod` remain reachable. The broader firewall matrix, including explicit Spark inference allows and IoT/Guest negative tests, is still unapplied and unvalidated.
 
 ### `spark-trunk` port profile
 

@@ -1,6 +1,6 @@
 # Network topology: workloads VLAN, DGX Spark placement, VLAN 40 retirement
 
-**Status:** Active — 2026-08-22; partially implemented; current host state and remaining phase-3 work: [DGX Spark bring-up runbook](../runbooks/dgx-spark-bringup.md).
+**Status:** Active — 2026-08-27; partially implemented; current host state and remaining phase-3 work: [DGX Spark bring-up runbook](../runbooks/dgx-spark-bringup.md).
 
 **Scope:** VLAN/zone model for the whole lab — DGX Spark placement and
 interconnect, PVE guest wiring (integrated into the
@@ -10,8 +10,7 @@ its runtime and repository changes.
 
 ## Implementation status
 
-- Phase 2 is partial: VLAN 21 `Workloads` and the `spark-trunk` switch profile
-  are applied, but the firewall matrix remains deferred.
+- Phase 2 is partial: VLAN 21 `Workloads`, the `spark-trunk` switch profile, and the three PVE containment rules are applied. The rest of the firewall matrix remains deferred.
 - Phase 3 is active: both Sparks have their LAN, storage, and direct-fabric
   interfaces configured; jumbo Ethernet, raw RDMA, NCCL, reboot persistence,
   RTL8127 burn-in, and host anti-transit have passed. DSM/NFS throughput, DNS,
@@ -143,7 +142,7 @@ One UniFi zone per VLAN — never merge two VLANs into a zone, since intra-zone 
 | IoT / Guest / Cameras | deny | deny | deny | deny | deny | deny | — | — | Guest/IoT allow; Cameras deny |
 | WAN | deny | deny | deny | deny | deny | deny | deny | deny | — |
 
-Most of this table does not exist on the controller today — the documented `bgp-lb-restricted` posture is unapplied intent. Phase 2 is where documented intent becomes applied state.
+Most of this table does not exist on the controller today, and the general `bgp-lb-restricted` IoT/Guest posture remains unapplied intent. Three PVE-specific rules were applied and negative-tested on 2026-08-27: Workloads is blocked from Infra Mgmt, Storage, K8s Prod, and `admin-prod`; K8s Prod is blocked from initiating into Workloads. `services-prod`, DNS, Internet access, and Main administration remained available. UniFi classifies the Cilium BGP-routed `admin-prod` prefix in the `External` destination zone, so the live rule matches `10.32.130.0/24` there rather than treating it as an `Internal` network. Exact policy names and probe results are in [`network/unifi/README.md`](../../network/unifi/README.md).
 
 ## Migration phases
 
@@ -164,7 +163,7 @@ Most of this table does not exist on the controller today — the documented `bg
 
 ### Phase 2 — create VLAN 21 + apply the firewall for real
 
-Create the network, DHCP scope (`.200-.239`), zones, and the full matrix above — including the long-documented `bgp-lb-restricted` rules. Inert until consumers arrive. Negative-test from IoT and Guest: `curl` to `10.32.130.1` and `10.32.140.1` must fail.
+The network, DHCP scope (`.200-.239`), zone, and PVE containment slice are live. Complete the remaining matrix above, including the long-documented `bgp-lb-restricted` IoT/Guest rules and service-specific Workloads/Spark exceptions. Negative-test from IoT and Guest: `curl` to `10.32.130.1` and `10.32.140.1` must fail.
 
 ### Phase 3 — DGX Sparks
 
@@ -179,8 +178,7 @@ tracked in the [DGX Spark bring-up runbook](../runbooks/dgx-spark-bringup.md).
 
 ### Phase 4 — PVE
 
-Follow the [PVE cluster plan](20260814-pve-cluster.md) phases 0-6. Its wiring
-already incorporates this topology. Added gates:
+The core `pve-sbx` cluster, wiring, dual Corosync links, shared storage, migration, backup, restore drill, and PVE containment rules are live. The zero-AER storage gate remains failed pending diagnosis, and physical cold-power recovery plus identity/certificate/notification work remains open. Follow the [PVE cluster plan](20260814-pve-cluster.md) for the acceptance record and remaining phases. Added gates:
 
 - Corosync under load: saturate the 2.5 GbE with iperf3 plus a vzdump run while watching `corosync-cfgtool -s` link stats and sub-ms ping on link 0; no retransmit/jitter events.
 - Pull the 1 GbE on one node: quorum retained via link 1, no reboot (watchdog disarmed without HA resources). Restore and verify fallback.
@@ -201,12 +199,7 @@ Edits land with their phases, not before:
 - `talos/talconfig.yaml` + `talos/patches/k8s-prod-{1,2,3}/network-extras.yaml` — remove VLAN 40.
 - `kubernetes/apps/kube-system/cilium/app/helmrelease.yaml` + `networks.yaml` — devices, l2announcements, legacy pools.
 
-Contradictions this plan resolves: an earlier PVE draft consumed the second
-Kubernetes cluster's VLAN and storage identity; its guest/Corosync NIC sharing
-also contradicted its link-priority rationale. The integrated plan reserves
-VLAN 31, puts guests on VLAN 21, and keeps primary Corosync on the 1 GbE
-management link. Firewall documentation remains intent until explicitly applied,
-and the expected G3 drive model still requires inventory before installation.
+Contradictions this plan resolves: an earlier PVE draft consumed the second Kubernetes cluster's VLAN and storage identity; its guest/Corosync NIC sharing also contradicted its link-priority rationale. The integrated plan reserves VLAN 31, puts guests on VLAN 21, and keeps primary Corosync on the 1 GbE management link. Firewall documentation distinguishes the three applied PVE rules from the remaining intent. The G3 drive inventory is complete, and its observed correctable AER events now block storage acceptance.
 
 ## Assumptions and unresolved decisions
 

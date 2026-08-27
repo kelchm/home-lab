@@ -16,13 +16,12 @@ a drop-in template.
 | Role | Hardware | Specs |
 |---|---|---|
 | Cluster nodes (3×) | HP EliteDesk 705 G4 mini | Ryzen 5 2400GE · 64 GB RAM · 1 TB NVMe (WD_BLACK SN770) · 1 GbE + 2.5 GbE |
-| PVE nodes (3×, planned) | HP EliteDesk 800 G3 mini | Intel i5-6500T · 32 GB RAM · 1 TB NVMe (expected WD_BLACK SN770; verify before install) · 1 GbE + PCIe Realtek RTL8125 2.5 GbE |
+| PVE nodes (3×) | HP EliteDesk 800 G3 mini | Intel i5-6500T · 32 GB RAM · 1 TB WD_BLACK SN770 NVMe · 1 GbE + PCIe Realtek RTL8125 2.5 GbE |
 | AI compute (2×) | NVIDIA DGX Spark | GB10 · 128 GB unified memory · 4 TB NVMe · 10 GbE + ConnectX-7 direct fabric |
 | NAS / bulk storage | Synology DS1821+ | Ryzen V1500B · 6× 14 TB Exos X16 · 32 GB RAM · 2× SFP+ |
 
 Three combined control-plane + worker nodes (HA etcd, `allowSchedulingOnControlPlanes`).
-An independent three-node Proxmox virtualization cluster is planned on the HP
-EliteDesk 800 G3 hosts — see the [detailed PVE plan](docs/plans/20260814-pve-cluster.md).
+An independent three-node Proxmox virtualization cluster named `pve-sbx` runs on the HP EliteDesk 800 G3 hosts. See the [PVE operator documentation](proxmox/README.md) and [detailed design and acceptance plan](docs/plans/20260814-pve-cluster.md).
 
 ## 🧱 The stack
 
@@ -74,6 +73,7 @@ home-lab/
 ├── bootstrap/      # Helmfile used to bring up Cilium/Flux before GitOps takes over
 ├── network/unifi/  # versioned UniFi-side artifacts (FRR/BGP, firewall intent)
 ├── devices/        # manually applied config for appliances outside Kubernetes
+├── proxmox/        # PVE operator docs and deliberately applied host baseline
 ├── synology/       # manually applied Compose workloads on the Synology NAS
 ├── scripts/        # helper scripts (CI checks, bootstrap, operator helpers)
 ├── tools/          # benchmarks, smoke tests, migrations, manual re-import assets
@@ -87,8 +87,8 @@ Start with the [**docs index**](docs/README.md). Highlights:
 - [Infrastructure architecture](docs/architecture.md) — network/VLAN design, the
   IP-addressing scheme, BGP, and storage. The reference for *why* things are
   laid out the way they are.
-- [PVE cluster plan](docs/plans/20260814-pve-cluster.md) — the planned independent
-  virtualization cluster, down to IPs, storage, backups, updates, and rollout gates.
+- [PVE operations](proxmox/README.md) — the live independent virtualization cluster, routine checks, shared storage, backups, restore drills, and remaining commissioning gates.
+- [PVE cluster plan](docs/plans/20260814-pve-cluster.md) — the design rationale, IPs, storage, backups, updates, and rollout gates.
 - [Roadmap](docs/roadmap.md) — forward-looking work and deferred decisions.
 - [Runbooks](docs/runbooks/) — operational procedures (Longhorn restore, Kanidm
   recovery, storage-network cutover, …).
