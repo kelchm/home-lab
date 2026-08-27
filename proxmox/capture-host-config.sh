@@ -58,6 +58,12 @@ for pve_endpoint in \
             etc/hosts \
             etc/hostname \
             etc/resolv.conf \
+            etc/passwd \
+            etc/group \
+            etc/shadow \
+            etc/gshadow \
+            etc/sudoers \
+            etc/sudoers.d/90-kelchm \
             etc/apt/sources.list \
             etc/apt/sources.list.d \
             etc/apt/apt.conf.d/99-pve-no-subscription-popup \
@@ -69,6 +75,7 @@ for pve_endpoint in \
             etc/lvm/archive \
             etc/kernel/cmdline \
             etc/default/grub \
+            home/kelchm/.ssh/authorized_keys \
             root/.ssh/authorized_keys; do
             test -e "/$pve_path" && set -- "$@" "$pve_path"
         done
@@ -83,8 +90,13 @@ for pve_endpoint in \
         etc/pve/corosync.conf \
         etc/network/interfaces \
         etc/hostname \
+        etc/passwd \
+        etc/group \
+        etc/shadow \
+        etc/sudoers.d/90-kelchm \
         etc/corosync/authkey \
         etc/ssh/ssh_host_ed25519_key \
+        home/kelchm/.ssh/authorized_keys \
         ./var/lib/pve-cluster/config.db; do
         grep -Fqx "$pve_required" "$pve_listing"
     done

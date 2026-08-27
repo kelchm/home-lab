@@ -14,6 +14,17 @@ The cluster name is `pve-sbx`. Corosync link 0 uses the management addresses wit
 
 Use an individual node URL such as `https://pve-sbx-1.home.kelch.io:8006/`; there is no cluster VIP. The local `kelchm@pve` administrator exists, but TOTP enrollment is still pending. Root and bootstrap credentials stay outside Git.
 
+## Operator access
+
+The PVE realm account `kelchm@pve` controls UI and API authorization; it is separate from the Linux account on each host. All three nodes also have a consistent `kelchm` Unix account at UID/GID 1000, with a locked password, the `personal:home-lab` ED25519 public key, membership in `sudo`, and an exact `/etc/sudoers.d/90-kelchm` rule granting noninteractive administrative access. Use it for normal host sessions:
+
+```sh
+ssh kelchm@NODE
+sudo -i
+```
+
+Direct root SSH remains enabled for break-glass recovery and the encrypted configuration-capture workflow. Do not remove it until those paths have been migrated and tested through a narrower recovery identity.
+
 ## Shared storage
 
 | PVE storage ID | Current NFS export | Content |
@@ -116,13 +127,13 @@ Package changes abort the hook if the expected upstream JavaScript structure cha
 
 ## Configuration recovery archive
 
-[`capture-host-config.sh`](capture-host-config.sh) streams cluster and node configuration directly over SSH into age-encrypted archives under the ignored `.private/pve-sbx/recovery/` directory. The plaintext tar stream is never written to the workstation. The capture includes `/etc/pve`, a SQLite-consistent snapshot of `/var/lib/pve-cluster/config.db`, Corosync authentication, network and repository state, SSH host identity, LVM metadata, installed package versions, the kernel boot log, and NVMe identity and health data, so treat the resulting archive as a secret even though it is encrypted.
+[`capture-host-config.sh`](capture-host-config.sh) streams cluster and node configuration directly over SSH into age-encrypted archives under the ignored `.private/pve-sbx/recovery/` directory. The plaintext tar stream is never written to the workstation. The capture includes `/etc/pve`, a SQLite-consistent snapshot of `/var/lib/pve-cluster/config.db`, Corosync authentication, system account and sudo state, root and operator SSH authorization, network and repository state, SSH host identity, LVM metadata, installed package versions, the kernel boot log, and NVMe identity and health data, so treat the resulting archive as a secret even though it is encrypted.
 
 ```sh
 PVE_AGE_IDENTITY=age.key ./proxmox/capture-host-config.sh
 ```
 
-The script decrypts and validates required members in each archive before accepting it, then prints its SHA-256 digest. A verified three-node capture, including SQLite-consistent pmxcfs database snapshots, was completed on 2026-08-27 at `20260827T184822Z`. This is off-node recovery state on the admin workstation, not an off-site backup; copy the encrypted artifacts to a second protected location if workstation loss is in scope.
+The script decrypts and validates required members in each archive before accepting it, then prints its SHA-256 digest. A verified three-node capture, including SQLite-consistent pmxcfs database snapshots and the host operator identity, was completed on 2026-08-27 at `20260827T185913Z`. This is off-node recovery state on the admin workstation, not an off-site backup; copy the encrypted artifacts to a second protected location if workstation loss is in scope.
 
 ## Outstanding commissioning gates
 

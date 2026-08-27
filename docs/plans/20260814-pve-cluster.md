@@ -8,7 +8,7 @@
 
 ## Implementation checkpoint
 
-The three nodes were installed through the pinned local PVE 9.2-1 netboot path, upgraded to PVE Manager 9.2.11 with kernel 7.0.14-14-pve, and formed into the quorate `pve-sbx` cluster on 2026-08-27. Management, the VLAN-aware 2.5 GbE guest/storage bridge, dual Corosync links, secure storage-network migration, operator SSH access, the no-subscription repository baseline, shared NFS library and backup storage, a daily backup job, the local `kelchm@pve` administrator, and the PVE-specific Workloads containment rules are live.
+The three nodes were installed through the pinned local PVE 9.2-1 netboot path, upgraded to PVE Manager 9.2.11 with kernel 7.0.14-14-pve, and formed into the quorate `pve-sbx` cluster on 2026-08-27. Management, the VLAN-aware 2.5 GbE guest/storage bridge, dual Corosync links, secure storage-network migration, the key-only `kelchm` Unix operator with sudo, the no-subscription repository baseline, shared NFS library and backup storage, a daily backup job, the local `kelchm@pve` administrator, and the PVE-specific Workloads containment rules are live.
 
 Acceptance has proven failover between the two Corosync links, local-LVM guest I/O, online local-disk migration over VLAN 25, guest-agent-consistent backup to Athena, and an isolated restore onto another node. The restored copy booted with its NIC removed and was destroyed after verification; the backup archive remains.
 
