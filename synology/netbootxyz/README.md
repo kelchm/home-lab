@@ -120,7 +120,7 @@ ssh kelchm@10.32.20.5 '
 
 The `proxmox.iso` digest above is the [official Proxmox VE 9.2-1 x86-64 SHA-256](https://www.proxmox.com/en/downloads/proxmox-virtual-environment). The `initrd` and `vmlinuz` digests are the immutable asset digests published with the pinned netboot.xyz asset-mirror release.
 
-Runtime status as of 2026-08-26: Athena holds the complete `9.2-1-4bbcc809` directory, all three on-disk hashes pass, and nginx returns HTTP 200 with the expected content lengths. The generated PVE 9.1-1 submenu remains active until this repository change is merged and explicitly applied; the PVE 9.2-1 cold-boot acceptance test is still pending.
+Runtime status as of 2026-08-27: Athena holds the complete `9.2-1-4bbcc809` directory, all three on-disk hashes pass, nginx returns HTTP 200 with the expected content lengths, and the committed local PVE 9.2-1 submenu is active. The non-destructive PVE 9.2-1 cold-start PXE proof is still pending.
 
 Use the administration UI's **Local Assets** page to download the files needed
 by a menu entry. For SystemRescue 13.00, select the four
