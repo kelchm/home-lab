@@ -93,10 +93,7 @@ This is applied controller state, not merely desired configuration.
 | Zone | Internal |
 | Internet access | Enabled |
 
-No Workloads firewall rules were created during bring-up at the owner's
-direction. Treat cross-VLAN reachability as unvalidated until the network-plan
-firewall phase is applied. In particular, do not claim the IoT negative test as
-passing.
+No Workloads firewall rules were created during the original Spark bring-up. The later PVE commissioning session added the containment slice recorded in [`network/unifi/README.md`](../../network/unifi/README.md): Workloads cannot initiate to Infra Mgmt, Storage, K8s Prod, or `admin-prod`, and K8s Prod cannot initiate to Workloads. Main administration and `services-prod` remain reachable. The broader firewall matrix, including explicit Spark inference allows and IoT/Guest negative tests, is still unapplied and unvalidated.
 
 ### `spark-trunk` port profile
 

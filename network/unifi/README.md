@@ -11,9 +11,7 @@ of truth and changes are applied manually.
 - `bgp-test.yaml` — disposable echo Service for the BGP migration synthetic
   test. Applied via `kubectl`, not Flux. See "Synthetic test" below.
 
-The "Firewall rules" and "IDS/IPS signature suppression" sections below document
-intent for configuration that lives only in the UniFi UI (no exportable artifact
-lives in this repo).
+The "Firewall rules" and "IDS/IPS signature suppression" sections below distinguish applied state from intent for configuration that lives only in the UniFi UI; no exportable artifact lives in this repo.
 
 ## DGX Spark applied state
 
@@ -31,11 +29,36 @@ Aggregation ports 7 and 8:
 | Port 7 | `spark-1`, 10GbE |
 | Port 8 | `spark-2`, 10GbE |
 
-No Workloads firewall rules were created during this phase. The intended rules
-remain part of the network-topology firewall phase and must not be described as
-applied. See the
-[DGX Spark bring-up runbook](../../docs/runbooks/dgx-spark-bringup.md) for the
-full host configuration, physical port map, test record, and remaining gates.
+The original Spark commissioning phase did not create Workloads firewall rules. The PVE commissioning session added the three applied containment rules documented below on 2026-08-27; the rest of the topology matrix remains deferred. See the [DGX Spark bring-up runbook](../../docs/runbooks/dgx-spark-bringup.md) for the full host configuration, physical port map, test record, and remaining gates.
+
+## Workloads containment applied state
+
+The following policies are live in UniFi Network 10.5.67 and ordered above the default `Allow Return Traffic` and `Allow All Traffic` policies:
+
+| Policy | Source zone and match | Destination zone and match | Action |
+|---|---|---|---|
+| `Block Workloads to Protected Networks` | `Internal`; network `Workloads` | `Internal`; networks `Infra Mgmt`, `K8s Prod`, `Storage` | Block; all protocols |
+| `Block Workloads to Admin Prod Routed` | `Internal`; network `Workloads` | `External`; IP `10.32.130.0/24` | Block; all protocols |
+| `Block K8s Prod to Workloads` | `Internal`; network `K8s Prod` | `Internal`; network `Workloads` | Block; all protocols |
+
+`admin-prod` is a Cilium BGP-routed prefix, not a UniFi network. A live negative test proved that UniFi classifies this routed destination through the `External` zone: an `Internal` destination rule did not block Traefik at `10.32.130.1`, while the otherwise identical `External` rule did. This classification is controller behavior, not a statement that the service is Internet-hosted. Retest it after controller upgrades or routing changes.
+
+Validation from disposable PVE guest `10.32.21.201` produced the following matrix before the guest was destroyed:
+
+| Probe | Result |
+|---|---|
+| PVE management `10.32.20.21` TCP 22/8006 | Blocked |
+| PVE storage `10.32.25.21` TCP 22 | Blocked |
+| Athena `10.32.25.5` TCP 2049 | Blocked |
+| Talos API `10.32.30.11` TCP 50000 | Blocked |
+| `admin-prod` Traefik `10.32.130.1` TCP 443 | Blocked |
+| `services-prod` Traefik `10.32.140.1` TCP 443 | Open |
+| Local DNS for `jellyfin.home.kelch.io` | Resolved to `10.32.140.1` |
+| Internet HTTP | HTTP 200 |
+| `k8s-prod` pod to guest TCP 22 | Blocked |
+| Main admin workstation to guest TCP 22 | Open |
+
+These rules implement the PVE-specific slice of the network-topology matrix. They do not make the complete phase-2 firewall posture applied: the broader Main, IoT, Guest, Cameras, Spark inference, and BGP-pool restrictions still require their own implementation and negative tests.
 
 ## Applying `frr.conf`
 
@@ -73,10 +96,7 @@ allocates from it.
 
 ## Firewall rules
 
-UniFi default inter-VLAN posture is allow, so the BGP LB pool prefixes need
-explicit denies from untrusted VLANs. These rules are configured in the
-UniFi UI (no committable artifact); this section is the source of truth for
-intent.
+UniFi default inter-VLAN posture is allow, so the BGP LB pool prefixes need explicit denies from untrusted VLANs. The IoT and Guest rules in this section remain unapplied intent; the separately documented Workloads-to-`admin-prod` rule is live. These rules are configured in the UniFi UI, and this section is the source of truth because there is no committable controller artifact.
 
 **Network object:** `bgp-lb-restricted`
 

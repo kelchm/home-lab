@@ -6,15 +6,9 @@ design there is deliberately shaped to make the items below land cleanly.
 
 ## Proxmox virtualization cluster
 
-The three HP EliteDesk 800 G3 machines are planned as an independent three-node
-Proxmox VE cluster. PVE uses VLAN 20 for management and primary Corosync,
-matching `.21-.23` identities on VLAN 25 for storage, migration, and secondary
-Corosync, and the shared VLAN 21 Workloads network for general-purpose guests.
-VLAN 31 remains reserved for a second Kubernetes cluster.
+The three HP EliteDesk 800 G3 machines now run the independent `pve-sbx` Proxmox VE cluster. PVE uses VLAN 20 for management and primary Corosync, matching `.21-.23` identities on VLAN 25 for storage, migration, and secondary Corosync, and the shared VLAN 21 Workloads network for general-purpose guests. VLAN 31 remains reserved for a second Kubernetes cluster.
 
-The detailed draft—including host identities, bridge design, storage, backups,
-HA classes, update cadence, IaC boundaries, and rollout gates—is in the
-[PVE cluster plan](plans/20260814-pve-cluster.md).
+The design, acceptance record, and remaining rollout gates are in the [PVE cluster plan](plans/20260814-pve-cluster.md). Current endpoints, checks, backup and restore operations, and manually applied host artifacts live in [`proxmox/README.md`](../proxmox/README.md).
 
 Important boundaries:
 
@@ -22,9 +16,7 @@ Important boundaries:
 - Initial host bootstrap and rolling updates are documented manual operations;
   OpenTofu manages guests. Ansible is deferred until repeated host drift or
   rebuild work justifies it.
-- Deployable PVE inventory and guest IaC will earn their own owner directory
-  when they exist; the current repository tree does not advertise an empty
-  planned directory.
+- PVE operator documentation and manually applied host artifacts live under `proxmox/`; guest OpenTofu will join that owner directory when the first durable guest is declared.
 - Local LVM-thin is the default runtime tier. Synology NFS holds templates and
   backups; shared guest storage is optional for workloads that justify PVE HA
   and the resulting NAS runtime dependency.

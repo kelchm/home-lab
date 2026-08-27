@@ -14,6 +14,7 @@ Current-state, authoritative docs.
 - [**repository-validation.md**](repository-validation.md) — CI event semantics,
   concurrency, aggregate-check invariants, and the boundary between validation
   and Flux deployment.
+- [**proxmox/README.md**](../proxmox/README.md) — live `pve-sbx` endpoints, routine checks, shared storage, backups, restore drills, and manually applied host baseline.
 
 ## Further reading
 
@@ -62,7 +63,7 @@ The status header form is `**Status:** <Proposed|Active|Implemented|Superseded> 
 - [20260703-observability-rework](plans/20260703-observability-rework.md) — conclude the observability bakeoff, converge on VictoriaMetrics/VictoriaLogs, and restore useful alerting and estate coverage.
 - [20260705-broadsheet-rename-migration](plans/20260705-broadsheet-rename-migration.md) — paperboy → broadsheet rename with PVC-preserving migration.
 - [20260802-lemon-manuals-selfhost](plans/20260802-lemon-manuals-selfhost.md) — self-host the LEMON manuals archive on NFS with an MCP server in front.
-- [20260814-pve-cluster](plans/20260814-pve-cluster.md) — draft design for the independent three-node PVE cluster: hardware, IPs, networks, storage, backup, HA, updates, IaC boundaries, and rollout gates.
+- [20260814-pve-cluster](plans/20260814-pve-cluster.md) — implemented core design for the independent three-node PVE cluster, with remaining hardware acceptance and identity/certificate gates tracked in the live operator documentation.
 - [20260818-sn770-zfs-qualification-procedure](plans/20260818-sn770-zfs-qualification-procedure.md) — the bounded, destructive test procedure and safety guards used for the SN770 reproduction run.
 - [20260821-network-topology](plans/20260821-network-topology.md) — active, partially implemented VLAN/zone topology, DGX placement, PVE wiring, and second-cluster reservations.
 

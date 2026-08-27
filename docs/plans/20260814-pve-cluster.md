@@ -1,14 +1,22 @@
 # Three-node PVE cluster
 
-**Status:** Proposed — 2026-08-14; not implemented.
+**Status:** Active — 2026-08-27; core cluster implemented, remaining commissioning gates tracked in [`proxmox/README.md`](../../proxmox/README.md).
 
 **Plan date:** 2026-08-14
 
 **Target platform:** Proxmox VE 9.2-1 x86-64 through the pinned and verified local netboot entry
 
+## Implementation checkpoint
+
+The three nodes were installed through the pinned local PVE 9.2-1 netboot path, upgraded to PVE Manager 9.2.11 with kernel 7.0.14-14-pve, and formed into the quorate `pve-sbx` cluster on 2026-08-27. Management, the VLAN-aware 2.5 GbE guest/storage bridge, dual Corosync links, secure storage-network migration, operator SSH access, the no-subscription repository baseline, shared NFS library and backup storage, a daily backup job, the local `kelchm@pve` administrator, and the PVE-specific Workloads containment rules are live.
+
+Acceptance has proven failover between the two Corosync links, local-LVM guest I/O, online local-disk migration over VLAN 25, guest-agent-consistent backup to Athena, and an isolated restore onto another node. The restored copy booted with its NIC removed and was destroyed after verification; the backup archive remains.
+
+Commissioning is not complete. As of 14:48 EDT, three correctable PCIe/AER events had appeared on the SN770 path of node 1, two on node 2, and two on node 3 under default APST and PCIe L1 behavior, which fails this plan's zero-AER storage gate even though SMART, NVMe error logs, guest I/O, migration, backup, and restore remained clean. Node 3's two events appeared after it completed a bounded 100-cycle idle-to-read screen without AER, so the three-node idle/I/O qualification must be repeated after diagnosis. Physical cold-power recovery, a timed restore measurement, TOTP enrollment, per-node ACME DNS-01 certificates, and an authenticated SMTP notification target also remain open. A verified encrypted off-node configuration capture was completed to the admin workstation. Current operator state and commands live in [`proxmox/README.md`](../../proxmox/README.md).
+
 ## Outcome
 
-Build one three-node Proxmox VE cluster named `pve-sbx` on the HP EliteDesk 800 G3 hosts. PVE remains a separate failure and control domain from `k8s-prod`, while its declarations live in this repository under a future top-level `proxmox/` tree.
+Build one three-node Proxmox VE cluster named `pve-sbx` on the HP EliteDesk 800 G3 hosts. PVE remains a separate failure and control domain from `k8s-prod`, while its operator documentation and deliberately applied host baseline live under the top-level `proxmox/` tree.
 
 Initial operating model:
 
@@ -58,21 +66,14 @@ PVE itself has a pull-based GitOps reconciler.
 | Hardware | 3x HP EliteDesk 800 G3 Mini |
 | CPU | Intel Core i5-6500T, 4 cores / 4 threads |
 | Memory | 32 GB per node |
-| Local disk | Expected 1 TB WD_BLACK SN770 NVMe per node; verify each host before install |
-| Management NIC | Onboard 1 GbE; controller and PCI address to inventory per host |
-| Storage/guest-trunk NIC | PCIe Realtek RTL8125 2.5 GbE; exact PCI address and interface name to inventory per host |
+| Local disk | 1 TB WD_BLACK SN770 NVMe per node, firmware `731100WD`, LBA format 0 with 512-byte logical sectors |
+| Management NIC | Onboard Intel 1 GbE, exposed consistently as `nic1` |
+| Storage/guest-trunk NIC | PCIe Realtek RTL8125 2.5 GbE, exposed consistently as `nic0` |
 | PVE release | 9.2-1 x86-64 for initial commissioning; later upgrades require a separately reviewed version bump |
 | Root storage | Installer-default ext4 root and LVM-thin guest storage ID `local-lvm` |
 | Shared system | Synology DS1821+ on `10.32.25.5` |
 
-The three live Kubernetes nodes currently report `WD_BLACK SN770 1TB`, firmware
-`731100WD`, and 512-byte logical sectors. The proposed PVE hosts are believed to
-use the same drives, but that is an inference rather than an inventory. Record
-each PVE host's actual model, firmware, logical sector size, Linux interface
-names, and sanitized SMART baseline in `proxmox/inventory.yaml` before
-installing the second node. Serial numbers, MAC addresses, and raw SMART output
-belong in an ignored local inventory; unique hardware identifiers never enter
-the tracked repository.
+All three PVE hosts were directly inventoried with `WD_BLACK SN770 1TB` drives on firmware `731100WD`, using LBA format 0 with 512-byte logical sectors. Their model, firmware, capacity, logical sector format, Linux interface names, sanitized SMART facts, BIOS settings, and host keys are recorded in the ignored `.private/pve-sbx/inventory.yaml`. Serial numbers, MAC addresses, and raw SMART output remain outside the tracked repository.
 
 ## Address plan
 
@@ -250,6 +251,8 @@ Start with UniFi policy and guest OS firewalls. Do not enable a cluster-wide PVE
 firewall policy until local console recovery is proven on all three nodes; a
 mistyped PVE rule can lock out every node even when the router rules are sound.
 
+Applied on UniFi Network 10.5.67 on 2026-08-27: `Block Workloads to Protected Networks` denies VLAN 21 to the `Infra Mgmt`, `Storage`, and `K8s Prod` network objects; `Block Workloads to Admin Prod Routed` denies VLAN 21 to `10.32.130.0/24`; and `Block K8s Prod to Workloads` denies the reverse Kubernetes-to-guest path. The BGP-routed `admin-prod` prefix is classified in UniFi's `External` destination zone even though its next hops are internal Kubernetes nodes, so that rule must not be converted to an `Internal`-zone IP rule without a new negative test. The disposable acceptance guest proved the protected paths blocked while `services-prod`, local DNS, Internet HTTP, and Main-to-guest administration remained available.
+
 ## Installation baseline
 
 ### Firmware and burn-in gate
@@ -276,7 +279,7 @@ Before forming a cluster:
    link and driver/firmware data. The RTL8125 must hold a negotiated 2.5 Gb/s
    link and sustain `iperf3` without resets or PCIe/AER errors.
 7. Exercise the installed storage with a disposable VM: sustained I/O, backup
-   to `nas-vzdump`, restore, and—after node 2 exists—local-disk migration over
+   to `backups-pve-sbx`, restore, and—after node 2 exists—local-disk migration over
    VLAN 25. Recheck the kernel and NVMe error logs after every test.
 8. Test a reboot and complete power removal. Confirm both NIC identities and
    all LVM volumes return unchanged.
@@ -385,21 +388,23 @@ available hardware with fewer resource and recovery-path constraints.
 |---|---|---|---|
 | `local-lvm` | Each node's LVM thin pool | VM disks, LXC root disks | Default fast runtime tier; node-local, not HA |
 | `local` | Each node's root filesystem | Temporary ISO/template staging, snippets | Do not store backups here |
-| `nas-library` | Synology NFS at `10.32.25.5` | ISO images, CT templates, snippets, import staging | Shared convenience tier; no default guest disks |
-| `nas-vzdump` | Synology NFS at `10.32.25.5` | `vzdump` backups only | Recovery tier, mounted on all nodes |
-| `nas-guests` | Optional Synology NFS at `10.32.25.5` | Selected VM disks | Shared HA tier; enable only after benchmark and failure test |
+| `library-pve` | Synology NFS at `10.32.25.5` | ISO images, CT templates, snippets, import staging | Shared convenience tier; no default guest disks |
+| `backups-pve-sbx` | Synology NFS at `10.32.25.5` | `vzdump` backups only | Recovery tier, mounted on all nodes |
+| `guests-pve-sbx` | Optional Synology NFS at `10.32.25.5` | Selected VM disks | Shared HA tier; enable only after benchmark and failure test |
 
 Create distinct Synology exports:
 
 ```text
-/volume1/pve-sbx/library
-/volume1/pve-sbx/guests
-/volume1/backups-pve-sbx/vzdump
+/volume1/library-pve          # live; platform-specific, reusable across PVE clusters
+/volume1/backups-pve-sbx      # live; cluster-specific recovery data
+/volume1/guests-pve-sbx       # optional; not created
 ```
 
 Use NFSv4.1, scope export access to `10.32.25.21-.23`, and map root to an account that can write the backup directory. Do not use `soft` mounts. Synology snapshots and its offsite backup policy must include `backups-pve-sbx`; a backup on the same NAS is independent of PVE host loss, not of NAS loss.
 
-Create `nas-guests` only if a real HA guest justifies it. Use `qcow2` there so
+Use each DSM shared-folder leaf as the corresponding PVE storage ID so the same external resource has one canonical name across both systems. Backup job names describe their schedule and purpose separately; the live cluster job is `daily-backups`.
+
+Create `guests-pve-sbx` only if a real HA guest justifies it. Use `qcow2` there so
 the directory/NFS backend can provide snapshots and clones. First benchmark
 latency, sustained mixed I/O, backup contention, and VM behavior during an NFS
 interruption. Shared NFS lets a surviving PVE node see the guest disk without a
@@ -415,11 +420,11 @@ available with `qcow2` on NFS. Btrfs remains a PVE technology-preview backend.
 PVE quorum and HA management do not make `local-lvm` shared. A controlled
 maintenance move can copy a local guest disk over VLAN 25, but after an abrupt
 node loss that disk is unavailable until the node returns. Recovery is restore
-from `nas-vzdump`, not an automatic HA restart.
+from `backups-pve-sbx`, not an automatic HA restart.
 
 | Class | Storage and placement | Failure behavior |
 |---|---|---|
-| `shared-ha` | `nas-guests`; no passthrough or node-local resources | PVE HA may restart it on a surviving node; NAS and VLAN 25 must be healthy |
+| `shared-ha` | `guests-pve-sbx`; no passthrough or node-local resources | PVE HA may restart it on a surviving node; NAS and VLAN 25 must be healthy |
 | `local` | `local-lvm`; migratable virtual hardware | Migrate with disk copy for planned work; node failure requires node recovery or restore |
 | `pinned` | Local devices, PCI/USB passthrough, or node-specific data | Bound to one node; backup is the recovery path |
 | `disposable` | `local-lvm` | Recreate from OpenTofu/cloud-init |
@@ -452,7 +457,7 @@ dangerous. Never count a snapshot as a backup.
 
 ### Initial backup policy
 
-- Cluster job: all non-disposable guests to `nas-vzdump` at **05:00
+- Cluster job `daily-backups`: all non-disposable guests to `backups-pve-sbx` at **05:00
   America/New_York daily**.
 - Mode: snapshot where the guest/storage supports it; zstd compression.
 - Retention: `keep-last=3`, `keep-daily=7`, `keep-weekly=4`, `keep-monthly=6`.
@@ -473,17 +478,19 @@ make it recovery material, not a Git artifact.
 
 Before hosting anything important:
 
-1. Restore a VM under a new VMID from `nas-vzdump` and boot it without its
+1. Restore a VM under a new VMID from `backups-pve-sbx` and boot it without its
    production NIC connected.
 2. Restore an LXC container if LXC will be used.
-3. If `nas-guests` is enabled, interrupt one compute node and prove that a test
+3. If `guests-pve-sbx` is enabled, interrupt one compute node and prove that a test
    `shared-ha` guest restarts safely on another node. Separately interrupt NFS
    in a controlled test and document the guest and PVE behavior.
 4. Write the elapsed restore time and observed throughput into the runbook.
 
+The initial VM restore gate passed on 2026-08-27. VM 300 backed up from node 2 to `backups-pve-sbx` in 14 seconds as a 334 MB Zstandard archive, restored on node 3 as VM 301, and booted with its NIC removed. The root filesystem and QEMU guest agent passed inspection; the isolated restore and source acceptance VM were then destroyed, while the backup archive was retained.
+
 Whole-cluster recovery favors rebuilding from documented state: reinstall one
 node with its recorded identity, recreate the intended cluster and storage
-configuration, attach `nas-vzdump`, and restore the critical guests. Restoring
+configuration, attach `backups-pve-sbx`, and restore the critical guests. Restoring
 the pmxcfs database is an additional recovery option, not the default procedure.
 
 ### Future PBS trigger
@@ -510,8 +517,7 @@ Initial artifacts:
 
 - `9000`: current Debian stable generic cloud image;
 - `9001`: current Ubuntu LTS cloud image; and
-- `300`: `pve-smoke-1`, a disposable VM used to validate provisioning,
-  local-disk migration, backup, restore, and VLAN isolation.
+- `300`: `pve-smoke-1`, the disposable acceptance VM used to validate provisioning, local-disk migration, backup, restore, and VLAN isolation; destroyed after the checks passed, with its VZDump archive retained.
 
 Every managed guest has a description, owner/purpose, class tag from the HA
 table, backup policy, source module path, and DNS/IP allocation. Use VirtIO SCSI
@@ -532,26 +538,24 @@ execution boundary:
 
 ```text
 home-lab/
-└── proxmox/
-    ├── README.md                 # scope, prerequisites, apply/recovery entrypoints
-    ├── inventory.yaml            # non-secret roles, hardware facts, interfaces, addresses
-    ├── cloud-init/               # guest bootstrap snippets and image metadata
-    └── tofu/
-        ├── modules/
-        │   ├── vm/
-        │   └── lxc/
-        └── environments/
-            └── lab/              # providers, backend, guest declarations, outputs
+├── proxmox/
+│   ├── README.md                         # live scope, checks, backup, restore, and recovery entrypoints
+│   ├── capture-host-config.sh            # encrypted off-node host and cluster capture
+│   └── host/
+│       ├── pve-no-subscription-popup     # exact-match UI patch
+│       └── 99-pve-no-subscription-popup  # package hook
+└── .private/pve-sbx/
+    ├── inventory.yaml                    # ignored hardware, identity, BIOS, and commissioning evidence
+    └── recovery/                         # ignored age-encrypted configuration archives
 ```
 
-The implementation tree is created only when provisioning starts. Until then,
-this document is the source of truth.
+The host-operations tree and ignored inventory are live. Add `proxmox/cloud-init/` and `proxmox/tofu/` only when phase 4 guest provisioning starts.
 
 ### Ownership boundary
 
 | Layer | Owner at launch |
 |---|---|
-| BIOS, installer, final host networking, cluster create/join | Manual runbook + `inventory.yaml` evidence |
+| BIOS, installer, final host networking, cluster create/join | Manual runbook + `.private/pve-sbx/inventory.yaml` evidence |
 | PVE package repository and node maintenance | Manual node-by-node runbook |
 | Cluster-wide storage, backup job, users/roles, notification target | Manual bootstrap, then import into OpenTofu only where provider behavior is reliable |
 | VM/LXC definitions, tags, pools, cloud-init, and placement | OpenTofu using `bpg/proxmox` |
@@ -674,11 +678,13 @@ usable when Kubernetes is completely unavailable.
 | 2 — cluster | Install nodes 2/3, form `pve-sbx`, configure redundant Corosync and migration network | Three votes; either NIC can fail without losing quorum; migration uses VLAN 25 |
 | 3 — storage/recovery | Add NFS exports, backup job, config capture and restore drill | A disconnected restored VM boots; RTO and throughput recorded |
 | 4 — guest IaC | Independent S3 state, OpenTofu encryption/provider, templates and smoke VM | A plan/apply/re-apply is clean; destroy/recreate works without Kubernetes |
-| 5 — optional HA proof | Benchmark `nas-guests`; place one test guest there, enable HA, and pull power on its node | Guest restarts safely; NFS interruption behavior and NAS dependency are documented |
+| 5 — optional HA proof | Benchmark `guests-pve-sbx`; place one test guest there, enable HA, and pull power on its node | Guest restarts safely; NFS interruption behavior and NAS dependency are documented |
 | 6 — operations | Execute a complete node-by-node update window | All three nodes updated with quorum, backups, storage and guests healthy |
 
 Do not place an irreplaceable workload on PVE until phases 0-4 pass. Do not call
 a workload HA unless the optional phase 5 passes with that workload class.
+
+As of 2026-08-27, phases 0 and 2 have passed. Phase 3 proved backup and isolated restore functionality but remains open because restore RTO and throughput were not recorded. Phase 1 remains blocked on the zero-AER storage criterion despite clean higher-level I/O, and phase 4 has not started. No irreplaceable workload is cleared for placement.
 
 ## Deferred decisions with explicit triggers
 

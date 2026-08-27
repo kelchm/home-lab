@@ -1,0 +1,1 @@
+DPkg::Post-Invoke { "if [ -x /usr/local/sbin/pve-no-subscription-popup ]; then /usr/local/sbin/pve-no-subscription-popup; fi"; };
