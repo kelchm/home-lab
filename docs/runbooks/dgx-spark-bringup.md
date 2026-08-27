@@ -416,8 +416,7 @@ Do not mark this runbook complete until these are resolved:
       `10.32.25.31` and `10.32.25.32`. Do not broaden unrelated exports.
 - [ ] Run Spark-to-NAS `iperf3` over VLAN 25 and record at least 9 Gb/s plus a
       direct/one-hop trace. No DSM or export changes were made on 2026-08-21.
-- [ ] Add `spark-1.home.kelch.io`, `spark-2.home.kelch.io`, and the two storage
-      DNS records. Never add fabric DNS records.
+- [x] Add `spark-1.home.kelch.io`, `spark-2.home.kelch.io`, and the two storage DNS records. The four UniFi-local records were added and resolved through the VLAN 20 gateway on 2026-08-26. Fabric names remain `/etc/hosts` only.
 - [ ] Read back the gateway routing table and prove that no route for
       `198.19.240.0/20` or either fabric prefix is present.
 - [ ] Apply the network-plan firewall matrix in its own phase, then run the IoT

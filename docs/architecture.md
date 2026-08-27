@@ -323,9 +323,9 @@ k8s-sbx-{1,2,3}-storage.home.kelch.io  10.32.25.{41,42,43}  (future)
 pve-sbx-{1,2,3}.home.kelch.io       10.32.20.{21,22,23}
 pve-sbx-{1,2,3}-storage.home.kelch.io  10.32.25.{21,22,23}
 
-# Workload hosts (pending)
+# Workload hosts
 spark-{1,2}.home.kelch.io           10.32.21.{31,32}
-spark-{1,2}-storage.home.kelch.io   10.32.25.{31,32}  (pending)
+spark-{1,2}-storage.home.kelch.io   10.32.25.{31,32}
 
 # Shared infrastructure
 nas.home.kelch.io                   10.32.20.5
