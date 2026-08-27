@@ -29,7 +29,7 @@ explicitly under [Remaining work](#remaining-work).
 | Item | Spark 1 | Spark 2 |
 |---|---|---|
 | Hostname | `spark-1` | `spark-2` |
-| KVM input | 7 | 8 |
+| GLKVM port | 7 | 8 |
 | Core Aggregation port | 7 | 8 |
 | RTL8127 interface | `enP7s7` | `enP7s7` |
 | Workloads address | `10.32.21.31/24` | `10.32.21.32/24` |
@@ -48,6 +48,17 @@ two logical network/RDMA devices, so both `/24` paths must be configured even
 though there is one cable. At each endpoint, both paths share the same
 ConnectX-7 and QSFP cage; end to end, they share the single DAC. They are not
 independent physical rails or failure domains.
+
+### GLKVM console
+
+Both Sparks are connected to the GLKVM at `https://10.32.20.10/`: `spark-1` is downstream port 7 and `spark-2` is port 8. Select the named host from the PiKVM **Hosts** menu, or switch explicitly over SSH:
+
+```sh
+ssh root@10.32.20.10 '/etc/kvmd/user/bin/kvm-switch 7' # spark-1
+ssh root@10.32.20.10 '/etc/kvmd/user/bin/kvm-switch 8' # spark-2
+```
+
+Visually confirm the expected Spark before sending keyboard input. GLKVM provides video and USB HID but no ATX control, so a powered-off or hard-hung Spark still requires a physical power action. Appliance deployment and recovery live in [`devices/glkvm/README.md`](../../devices/glkvm/README.md).
 
 ### Fabric address allocation
 

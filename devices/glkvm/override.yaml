@@ -79,3 +79,5 @@ kvmd:
                 - ["kvm_channel_4|k8s-prod-1"]
                 - ["kvm_channel_5|k8s-prod-2"]
                 - ["kvm_channel_6|k8s-prod-3"]
+                - ["kvm_channel_7|spark-1"]
+                - ["kvm_channel_8|spark-2"]
