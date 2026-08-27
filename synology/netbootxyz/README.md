@@ -84,7 +84,7 @@ applied without reviewing upstream changes and the persistent-config format.
 
 ## Local boot assets
 
-For PVE commissioning, follow the [PVE node bootstrap runbook](../../docs/runbooks/pve-node-bootstrap.md). The pinned menu release `3.0.2` advertises PVE `9.1-1`, so the committed `proxmox.ipxe` replaces that generated submenu with an explicit local PVE `9.2-1` entry. Do not point the deployment at netboot.xyz's development menu and do not select the older entry after a menu refresh.
+For PVE commissioning, follow the [PVE node bootstrap runbook](../../docs/runbooks/pve-node-bootstrap.md). The pinned menu release `3.0.2` advertises PVE `9.1-1`, so the committed `proxmox.ipxe` preserves the generated PBS, PDM, and PMG choices while replacing only PVE with an explicit local `9.2-1` entry. Do not point the deployment at netboot.xyz's development menu and do not select the older entry after a menu refresh.
 
 The custom entry uses netboot.xyz asset-mirror release [`9.2-1-4bbcc809`](https://github.com/netbootxyz/asset-mirror/releases/tag/9.2-1-4bbcc809). Stage its three x86-64 assets directly on Athena, verify them before publication, and leave an existing published set untouched:
 
