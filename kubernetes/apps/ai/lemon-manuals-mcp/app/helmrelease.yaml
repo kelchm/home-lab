@@ -59,15 +59,17 @@ spec:
               readOnlyRootFilesystem: true
             resources:
               requests:
-                # Indexing is single-threaded, so it cannot use more than one core;
-                # request a full one so a contended node cannot starve an ingest down
-                # to the old 50m share. Idle draw stays ~10m and there is no CPU limit,
-                # so this reserves scheduling room rather than capping bursts.
+                # Request a full core so a contended node cannot starve an ingest down
+                # to the old 50m share. Idle draw stays ~10m.
                 cpu: "1"
                 # Steady state measured ~660Mi, above the previous 512Mi request,
                 # which made the pod an eviction candidate under node memory pressure.
                 memory: 1Gi
               limits:
+                # SQLite/Bun indexing has been observed consuming several cores and
+                # saturating its 8-core control-plane node. Preserve some burst room
+                # without allowing one manual ingest to monopolize the host.
+                cpu: "2"
                 memory: 2Gi
     defaultPodOptions:
       securityContext:
