@@ -24,17 +24,19 @@ only from that PVC — JSON export covers servers alone.
   Package the tool as a pinned in-cluster HTTP backend, add its identity to the
   MetaMCP egress allowlist, and admit MetaMCP on its port in the backend policy.
 
-## Registry hygiene before the containment rollout
+## Registry hygiene
 
-MetaMCP initializes registered servers even when no namespace currently maps
-them. Before applying the restricted MetaMCP egress policy:
+MetaMCP initializes every registered server at startup, even when no namespace
+maps them. The in-UI endpoint inspector (`/mcp-proxy`) also connects to
+`APP_URL` (`https://metamcp.home.kelch.io/metamcp/<endpoint>/mcp`) from inside
+the pod; that hairpin is allowed through `network/traefik-admin`. Do not
+register MetaMCP's own endpoints as MCP servers — idle-init would open extra
+aggregator sessions through the public URL.
 
-1. Remove `time` from the `default` namespace, then delete its `uvx
-   mcp-server-time` server registration.
-2. Delete the unused `default-endpoint` server registration that points back to
-   `https://metamcp.home.kelch.io/metamcp/default/mcp`. Do not delete the actual
-   `default` endpoint under **Endpoints**.
-3. Export the server registry and confirm it matches
+1. Delete any server registration whose URL is under
+   `https://metamcp.home.kelch.io/` (live leftovers have been `default-endpoint`
+   and `hermes-endpoint`). Do not delete the actual **Endpoints** rows.
+2. Export the server registry and confirm it matches
    `tools/metamcp-config/mcpServers.json`; no stdio/package-runner or MetaMCP
    self-reference should remain.
 
