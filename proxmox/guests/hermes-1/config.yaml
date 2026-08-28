@@ -13,6 +13,15 @@ tool_loop_guardrails:
     exact_failure: 5
     idempotent_no_progress: 5
 
+dashboard:
+  public_url: https://hermes.home.kelch.io
+  oauth:
+    provider: self-hosted
+    self_hosted:
+      issuer: https://auth.home.kelch.io/oauth2/openid/hermes
+      client_id: hermes
+      scopes: openid profile email
+
 mcp_servers:
   homelab:
     url: https://metamcp.home.kelch.io/metamcp/default/mcp

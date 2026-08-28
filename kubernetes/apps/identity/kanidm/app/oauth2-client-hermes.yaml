@@ -1,0 +1,22 @@
+---
+# Public PKCE client for the out-of-cluster Hermes dashboard. No client secret
+# is generated or copied to the PVE workload VM.
+apiVersion: kaniop.rs/v1beta1
+kind: KanidmOAuth2Client
+metadata:
+  name: hermes
+spec:
+  kanidmRef:
+    name: kanidm
+    namespace: identity
+  displayname: Hermes Agent
+  origin: https://hermes.home.kelch.io
+  public: true
+  redirectUrl:
+    - https://hermes.home.kelch.io/auth/callback
+  scopeMap:
+    - group: ops-admins
+      scopes:
+        - openid
+        - profile
+        - email
