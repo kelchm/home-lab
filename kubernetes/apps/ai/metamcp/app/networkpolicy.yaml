@@ -65,12 +65,11 @@ spec:
         - ports:
             - port: "8443"
               protocol: TCP
-    # metamcp.home.kelch.io resolves to the admin gateway. The in-process
-    # MCP inspector (/mcp-proxy) connects to APP_URL from inside the pod,
-    # so this hairpin has to be allowed the same way Kanidm is. Inbound
-    # still arrives from traefik-admin onto :12008. Do not register
-    # MetaMCP's own endpoints as MCP servers; idle-init would open extra
-    # aggregator sessions through this path.
+    # metamcp.home.kelch.io resolves to the admin gateway. Creating an
+    # Endpoint auto-inserts an MCP server named <endpoint>-endpoint whose
+    # URL is APP_URL; the in-process inspector dials that from inside the
+    # pod. This hairpin has to be allowed the same way Kanidm is. Inbound
+    # still arrives from traefik-admin onto :12008.
     - toServices:
         - k8sService:
             serviceName: traefik-admin

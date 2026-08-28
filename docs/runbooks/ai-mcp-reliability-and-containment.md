@@ -35,11 +35,10 @@ into a user-visible failure, so `SESSION_LIFETIME` remains unset until client
 behavior changes. The functional probe must not assert a session lifetime.
 
 Follow the registry-hygiene procedure in `metamcp-bootstrap.md` to remove the
-package-downloading `time` server and any MetaMCP APP_URL self-reference
-(`default-endpoint`, `hermes-endpoint`). MetaMCP initializes every registered
-server, so inactive entries are still dependencies. Delete those self-refs
-**before** the `traefik-admin` hairpin allow is live, or idle-init will open
-extra aggregator sessions through `APP_URL`.
+package-downloading `time` server. Keep the auto-generated
+`<endpoint>-endpoint` MCP server rows; creating an Endpoint in the UI inserts
+those so the in-process inspector can dial `APP_URL`. That path needs the
+`traefik-admin` hairpin allow.
 
 With expiry disabled, session growth remains unbounded. The 2 GiB memory limit
 is headroom, not proof of containment, and must not be reduced merely because a

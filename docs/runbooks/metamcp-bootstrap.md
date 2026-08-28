@@ -26,19 +26,16 @@ only from that PVC — JSON export covers servers alone.
 
 ## Registry hygiene
 
-MetaMCP initializes every registered server at startup, even when no namespace
-maps them. The in-UI endpoint inspector (`/mcp-proxy`) also connects to
-`APP_URL` (`https://metamcp.home.kelch.io/metamcp/<endpoint>/mcp`) from inside
-the pod; that hairpin is allowed through `network/traefik-admin`. Do not
-register MetaMCP's own endpoints as MCP servers — idle-init would open extra
-aggregator sessions through the public URL.
+Creating an Endpoint in the UI defaults `createMcpServer` on. That inserts an
+MCP server named `<endpoint>-endpoint` whose URL is
+`https://metamcp.home.kelch.io/metamcp/<endpoint>/mcp` so the in-UI inspector
+can dial it. Those rows (`default-endpoint`, `hermes-endpoint`) are product
+behavior, not leftover click-ops. The inspector runs inside the pod, so MetaMCP
+egress must be able to reach `network/traefik-admin` (the `APP_URL` hairpin).
 
-1. Delete any server registration whose URL is under
-   `https://metamcp.home.kelch.io/` (live leftovers have been `default-endpoint`
-   and `hermes-endpoint`). Do not delete the actual **Endpoints** rows.
-2. Export the server registry and confirm it matches
-   `tools/metamcp-config/mcpServers.json`; no stdio/package-runner or MetaMCP
-   self-reference should remain.
+Export the in-cluster backends and confirm they match
+`tools/metamcp-config/mcpServers.json`. Ignore the auto-generated
+`<endpoint>-endpoint` rows; they will not be in that file.
 
 ## Access hardening (verify once)
 
