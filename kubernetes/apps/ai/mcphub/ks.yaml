@@ -1,0 +1,30 @@
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: mcphub
+spec:
+  dependsOn:
+    - name: digikey-mcp
+    - name: flux-operator-mcp
+    - name: grafana-mcp
+    - name: kubernetes-mcp
+    - name: lemon-manuals-mcp
+    - name: markitdown-mcp
+    - name: open-meteo-mcp
+    - name: pcbparts-mcp
+    - name: playwright-stealth-mcp
+  healthChecks:
+    - apiVersion: helm.toolkit.fluxcd.io/v2
+      kind: HelmRelease
+      name: mcphub
+      namespace: ai
+  interval: 1h
+  path: ./kubernetes/apps/ai/mcphub/app
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+    namespace: flux-system
+  targetNamespace: ai
+  wait: false
