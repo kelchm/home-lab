@@ -1,11 +1,23 @@
 ---
 _config_version: 39
+timezone: America/New_York
 
 model:
   provider: custom
   default: deepseek-v4-flash-dspark
   base_url: http://10.32.21.31:8888/v1
   api_key: none
+
+agent:
+  reasoning_effort: xhigh
+
+custom_providers:
+  - name: 10.32.21.31:8888
+    base_url: http://10.32.21.31:8888/v1
+    model: deepseek-v4-flash-dspark
+    models:
+      deepseek-v4-flash-dspark: {}
+    models_discovered: true
 
 tool_loop_guardrails:
   hard_stop_enabled: true
@@ -14,6 +26,8 @@ tool_loop_guardrails:
     idempotent_no_progress: 5
 
 dashboard:
+  theme: mono
+  font: jetbrains-mono
   public_url: https://hermes.home.kelch.io
   oauth:
     provider: self-hosted
@@ -23,11 +37,11 @@ dashboard:
       scopes: openid profile email
 
 mcp_servers:
-  homelab:
-    url: https://metamcp.home.kelch.io/metamcp/default/mcp
+  metamcp:
+    url: https://metamcp.home.kelch.io/metamcp/hermes/mcp
     headers:
-      X-API-Key: "${METAMCP_API_KEY}"
-    enabled: false
+      X-API-Key: "${METAMCP_HERMES_API_KEY}"
+    enabled: true
     connect_timeout: 30
     timeout: 120
     trust: full

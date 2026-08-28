@@ -27,6 +27,15 @@ services:
     container_name: hermes-caddy
     restart: unless-stopped
     network_mode: host
+    read_only: true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=16m
     depends_on:
       - hermes
     env_file:
