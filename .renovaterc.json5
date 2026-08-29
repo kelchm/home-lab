@@ -56,6 +56,16 @@
       allowedVersions: "<1.11.0",
     },
     {
+      // Talos supports only a bounded range of Kubernetes minors. Let patch
+      // releases flow, but pair minor and major Kubernetes bumps with the
+      // compatible Talos upgrade and its guarded manual rollout.
+      description: "Talos Kubernetes: require coordinated minor upgrades",
+      matchDatasources: ["docker"],
+      matchPackageNames: ["ghcr.io/siderolabs/kubelet"],
+      matchUpdateTypes: ["major", "minor"],
+      enabled: false,
+    },
+    {
       description: "Override Helmfile Dependency Name",
       matchDatasources: ["docker"],
       matchManagers: ["helmfile"],
