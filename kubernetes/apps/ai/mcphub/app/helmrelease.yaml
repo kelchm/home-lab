@@ -100,6 +100,11 @@ spec:
       settings:
         type: secret
         name: mcphub-settings
+        # Keep JWT_SECRET available only through the environment reference.
+        # MCPHub needs only the JSON settings file on disk.
+        items:
+          - key: mcp_settings.json
+            path: mcp_settings.json
         globalMounts:
           - path: /config
             readOnly: true
