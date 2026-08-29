@@ -11,6 +11,11 @@ model:
 agent:
   reasoning_effort: xhigh
 
+gateway:
+  streaming:
+    enabled: true
+    transport: auto
+
 custom_providers:
   - name: 10.32.21.31:8888
     base_url: http://10.32.21.31:8888/v1
@@ -45,3 +50,15 @@ mcp_servers:
     connect_timeout: 30
     timeout: 120
     trust: full
+  mcphub_hacker_news:
+    url: https://mcphub.home.kelch.io/mcp/hacker-news
+    headers:
+      Authorization: "Bearer ${MCPHUB_HERMES_PERSONAL_TOKEN}"
+    enabled: true
+    connect_timeout: 30
+    timeout: 120
+    trust: untrusted
+
+onboarding:
+  seen:
+    busy_input_prompt: true
