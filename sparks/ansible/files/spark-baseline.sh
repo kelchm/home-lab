@@ -6,4 +6,5 @@ if [ -n "$(docker ps -q --filter name=dspark-guide)" ] || [ -n "$(docker ps -q -
   exit 0
 fi
 cd /opt/spark-stack/inference
-exec docker compose up -d
+# Never pull unattended: the pinned image was present before the reboot.
+exec docker compose up -d --pull never

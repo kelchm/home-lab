@@ -10,7 +10,7 @@ These hosts are outside Flux and outside Talos automation, deliberately: profile
 |---|---|
 | Host | `spark-1` (`10.32.21.31`) |
 | Stack | vLLM serving `nvidia/Qwen3.6-35B-A3B-NVFP4` |
-| Endpoint | `http://10.32.21.31:8000/v1` (OpenAI-compatible) |
+| Endpoint | `http://spark.home.kelch.io/v1` (Caddy; direct: `http://10.32.21.31:8000/v1`) |
 | Model cache | `/opt/spark-models` on the host (22 GB) |
 | Measured | ~80 tok/s decode, 131k context |
 
@@ -28,11 +28,11 @@ task sparks:logs HOST=10.32.21.31
 task sparks:down                      # break-glass teardown, zero dependencies
 ```
 
-`switch` refuses to proceed if MemAvailable stays low after teardown — that means the previous profile's UVM allocations did not release and the affected host needs a reboot first. It also refuses concurrent switches (lock on spark-1; remove `/tmp/spark-switch.lock` if stale) and never pulls images or weights implicitly — preflight fails with instructions instead.
+`switch` refuses to proceed if MemAvailable stays low after teardown — that means the previous profile's UVM allocations did not release and the affected host needs a reboot first. It also refuses concurrent switches (lock on spark-1; remove `/tmp/spark-switch.lock` if stale). TP=2 switches never pull or build mid-switch — preflight verifies the pinned guide rev, every override line, weights, and cross-rank image identity, and fails with instructions instead. The qwen profile pulls only its digest-pinned image, explicitly, before start.
 
 After a reboot the pair converges to the baseline: Caddy and the `qwen` profile come back (docker restart policy + `spark-baseline.service`); TP=2 profiles never auto-start — rerun `switch` for those.
 
-`task sparks:down` stops both routes on **both** hosts and needs nothing but SSH. To reclaim disk as well, on each host:
+`task sparks:down` stops both routes on **both** hosts and needs nothing but SSH — by design it does not touch the resident marker, so `status` shows stale residency until the next switch (`ansible-playbook down.yaml` records `none`). To reclaim disk as well, on each host:
 
 ```sh
 sudo rm -rf /opt/spark-models /opt/spark-stack /opt/spark-cache

@@ -1,6 +1,8 @@
 ---
 - name: Remove dspark-guide containers on {{ teardown_host }}
-  ansible.builtin.shell: ids=$(docker ps -aq --filter "name=dspark-guide"); [ -n "$ids" ] && docker rm -f $ids || echo "no dspark containers"
+  ansible.builtin.shell: |
+    ids=$(docker ps -aq --filter "name=dspark-guide")
+    if [ -n "$ids" ]; then docker rm -f $ids; else echo "no dspark containers"; fi
   delegate_to: "{{ teardown_host }}"
 
 - name: Stop compose stack on {{ teardown_host }}

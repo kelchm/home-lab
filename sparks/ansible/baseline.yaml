@@ -10,6 +10,20 @@
         owner: kelchm
       become: true
 
+    # The boot unit runs compose in this directory; stage it here so
+    # convergence works on a host that has never run a qwen switch.
+    - name: Ensure inference directory exists
+      ansible.builtin.file:
+        path: "{{ remote_dir }}/inference"
+        state: directory
+        owner: kelchm
+      become: true
+
+    - name: Stage qwen compose for boot convergence
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../inference/compose.yaml"
+        dest: "{{ remote_dir }}/inference/compose.yaml"
+
     - name: Ensure caddy directory exists
       ansible.builtin.file:
         path: "{{ remote_dir }}/caddy"

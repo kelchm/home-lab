@@ -27,6 +27,9 @@
       when: lock_acquire.rc != 0
 
     - name: Switch profile
+      # rescue/always never run for unreachable hosts, which would leak the
+      # lock; ignoring lets the gates below convert unreachable into a failure.
+      ignore_unreachable: true
       block:
         - name: Ensure state directory exists
           ansible.builtin.file:
@@ -40,6 +43,11 @@
           loop: "{{ groups['sparks'] }}"
           loop_control:
             loop_var: teardown_host
+
+        - name: Record residency as none
+          ansible.builtin.copy:
+            content: "none\n"
+            dest: "{{ resident_file }}"
 
         - name: Memory-reclaim gate on both hosts
           ansible.builtin.shell: awk '/MemAvailable/ {print int($2/1024/1024)}' /proc/meminfo
@@ -71,9 +79,10 @@
         - name: Start profile
           ansible.builtin.include_tasks: "tasks/start-{{ profile_name }}.yaml"
 
-        # Cold TP=2 boots take 15–30 min; this is the 30-minute gate.
+        # Cold TP=2 boots take 15–30 min; this is the 30-minute gate. Per-probe
+        # timeouts keep a half-dead endpoint from hanging the gate forever.
         - name: Ready gate on spark-1
-          ansible.builtin.shell: curl -fsS {{ health_url }}
+          ansible.builtin.shell: curl -fsS --connect-timeout 5 --max-time 10 {{ health_url }}
           register: ready_check
           until: ready_check.rc == 0
           retries: "{{ ready_retries }}"
@@ -102,6 +111,19 @@
           ansible.builtin.shell: echo "$(date -Is) switch {{ profile_name }}" >> {{ switch_log }}
 
       rescue:
+        # The async start script can keep launching containers after a failed
+        # gate; kill it before advising teardown.
+        - name: Stop lingering start script
+          ansible.builtin.shell: pkill -f start-deepseek-v4-flash-dspark.sh || true
+          when: profile_name == 'deepseek'
+          ignore_errors: true
+
+        - name: Record residency as unknown
+          ansible.builtin.copy:
+            content: "unknown\n"
+            dest: "{{ resident_file }}"
+          ignore_errors: true
+
         - name: Collect docker diagnostics on both hosts
           ansible.builtin.shell: "docker ps -a --format '{% raw %}{{.Names}} {{.Status}}{% endraw %}'"
           register: docker_diag

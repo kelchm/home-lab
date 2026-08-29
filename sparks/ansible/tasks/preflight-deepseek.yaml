@@ -17,24 +17,27 @@
   loop_control:
     label: "{{ item.preflight_host }}"
 
-- name: Verify .env.dspark overrides landed
-  ansible.builtin.shell: grep -q '^MASTER_ADDR=198.19.240.11$' {{ guide_dir }}/.env.dspark && grep -q '^NCCL_IB_HCA=' {{ guide_dir }}/.env.dspark
-  register: env_overrides
-  changed_when: false
-  failed_when: false
+- name: Copy committed overrides for comparison
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../inference/deepseek/env.dspark.overrides"
+    dest: /tmp/env.dspark.overrides
   delegate_to: "{{ preflight_host }}"
   loop: "{{ groups['sparks'] }}"
   loop_control:
     loop_var: preflight_host
 
-- name: Assert .env.dspark overrides are present
-  ansible.builtin.assert:
-    that:
-      - item.rc == 0
-    fail_msg: ".env.dspark overrides missing on {{ item.preflight_host }}; see sparks/inference/deepseek/README.md"
-  loop: "{{ env_overrides.results }}"
+# Every override line must be live verbatim; a host keeping any guide default
+# (e.g. DSPARK_MODEL) would pass a spot check and serve the wrong thing.
+- name: Verify every override landed in .env.dspark
+  ansible.builtin.shell: |
+    grep -v '^#' /tmp/env.dspark.overrides | grep -v '^$' | while IFS= read -r line; do
+      grep -qxF "$line" {{ guide_dir }}/.env.dspark || { echo "override not applied: $line (see sparks/inference/deepseek/README.md)"; exit 1; }
+    done
+  changed_when: false
+  delegate_to: "{{ preflight_host }}"
+  loop: "{{ groups['sparks'] }}"
   loop_control:
-    label: "{{ item.preflight_host }}"
+    loop_var: preflight_host
 
 - name: Verify runtime image is present
   ansible.builtin.command: docker image inspect {{ runtime_image }}

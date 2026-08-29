@@ -5,3 +5,4 @@ serve_port: 8000
 health_url: http://localhost:8000/health
 ready_retries: 60
 ready_delay: 15
+weights_glob: '*Qwen3.6-35B*'

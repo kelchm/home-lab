@@ -4,6 +4,10 @@
   hosts: spark-1
   gather_facts: false
   tasks:
+    # A lingering guide start script can recreate containers after teardown.
+    - name: Stop lingering start script
+      ansible.builtin.shell: pkill -f start-deepseek-v4-flash-dspark.sh || true
+
     - name: Teardown on both hosts
       ansible.builtin.include_tasks: tasks/teardown-host.yaml
       loop: "{{ groups['sparks'] }}"

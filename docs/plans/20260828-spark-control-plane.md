@@ -58,7 +58,8 @@ Not in this slice: GLM-5.3-Flash and Qwen3.8-Flash-Next profiles (each lands lat
 
 ## Open risks
 
-- The deepseek start script is launched async and its exit status is only surfaced if the ready gate fails; a script that "succeeds" while serving the wrong thing is caught by the cold-prefill smoke, not the gate.
+- The deepseek start script is launched async (with `SKIP_OVERLAY_CHECK=1` — preflight owns image validity, and the script's checksum-triggered rebuild would outlive the ready gate); on gate failure the rescue path kills the lingering script. A script that "succeeds" while serving the wrong thing is caught by the cold-prefill smoke, not the gate.
+- If spark-1 reboots while spark-2 still holds a TP=2 worker remnant, boot convergence starts qwen alongside it. Neither host is over-committed (qwen on spark-1, remnant on spark-2), it is visible in `status`, and `down` clears it — accepted rather than giving the boot path SSH access to the peer.
 - The reclaim gate detects unreleased UVM but cannot fix it; the runbook answer stays "power cycle", and the playbook must keep refusing rather than retrying.
 - systemd `Restart=` on single-node containers is delegated to docker's `unless-stopped`; a crash-looping vLLM under memory pressure is visible in `status` but nothing backs off automatically.
 - Ansible runs from the invoking checkout; a switch from a dirty tree diverges live state from git silently. Assert-clean-tree is a candidate follow-up if it bites.
