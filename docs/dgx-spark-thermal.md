@@ -69,6 +69,6 @@ workload: **host memory is**. Three sessions leave roughly 6 GB available of
 
 There is no continuous collection today; these are one-off artifacts. Wiring the Sparks into the cluster's metrics stack would make them the **first out-of-cluster scrape target in this repo** — no `additionalScrapeConfigs`, `ScrapeConfig`, or `Probe` precedent exists. Two things make it straightforward when it is wanted: vmagent runs `selectAllByDefault: true`, so a `VMStaticScrape` is picked up with no chart edit, and the `observability` namespace has no NetworkPolicy restricting egress.
 
-Note that alerts would not reach anyone — the Alertmanager receiver is still `null`, which is tracked separately as Phase 1 of the observability rework.
+Alertmanager now delivers `warning` and `critical` alerts externally. Follow [alerting](runbooks/alerting.md) when adding Spark metrics and rules so the new signal is included in the end-to-end delivery test.
 
 The Sparks expose no fan tachometer and no BMC, so anything built has to run on the hosts: `node_exporter` for hwmon and thermal zones, plus something for `nvidia-smi`.

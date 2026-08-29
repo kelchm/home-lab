@@ -27,6 +27,40 @@ spec:
   groups:
     - name: longhorn-backups
       rules:
+        # kube-state-metrics exports status.available from BackupTarget/default
+        # because Longhorn's native collector exposes only a backup-volume
+        # count. This catches the disconnected NFS target directly instead of
+        # waiting for last-successful timestamps to become stale.
+        - alert: LonghornBackupTargetUnavailable
+          expr: longhorn_backup_target_available{backup_target="default"} == 0
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: Longhorn BackupTarget/default is unavailable
+            description: Longhorn has reported BackupTarget/default unavailable for 15 minutes. Check the Synology NFS export, storage VLAN reachability, and the BackupTarget status before the next recurring backup.
+
+        - alert: LonghornBackupTargetMetricsMissing
+          expr: absent(longhorn_backup_target_available{backup_target="default"})
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: Longhorn BackupTarget availability is not being monitored
+            description: kube-state-metrics has not exported status.available for BackupTarget/default for 15 minutes. Check its custom-resource-state configuration and RBAC.
+
+        # Longhorn encodes backup states numerically: Completed=3, Error=4,
+        # Unknown=5. A failed Backup CR remains actionable until an operator
+        # inspects and removes or replaces it, so alert directly on Error.
+        - alert: LonghornBackupFailed
+          expr: longhorn_backup_state == 4
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: Longhorn backup {{ $labels.backup }} failed
+            description: Backup {{ $labels.backup }} for volume {{ $labels.volume }} has remained in Error state for five minutes (recurring job={{ $labels.recurring_job }}). Inspect the Backup CR and Longhorn manager logs, then confirm the next recurring backup completes.
+
         # Volumes opted out of backups carry
         # recurring-job-group.longhorn.io/no-backup on their PVC, naming a group
         # no RecurringJob claims. That label is not a Longhorn metric label, so

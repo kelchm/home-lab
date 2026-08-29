@@ -9,13 +9,11 @@
 # - kube-state-metrics and node-exporter live in KPS already; vmagent
 #   scrapes them via the same ServiceMonitors KPS Prom does.
 # - grafana is the standalone instance from commit 1.
-# - vmalertmanager is disabled in favor of KPS's Alertmanager. vmalert
-#   does NOT fire to it during the bake-off — neither stack has an
-#   external notifier target wired (matching the "no delivery during
-#   the bake-off, only rule evaluation" stance in observability-bakeoff.md).
+# - vmalertmanager is disabled in favor of KPS's Alertmanager. vmalert sends
+#   into that shared Alertmanager, which owns external delivery.
 #
-# Same Talos localhost-bound endpoints disabled here as in KPS
-# (kubeControllerManager / kubeScheduler / kubeEtcd).
+# Control-plane component scrapes are disabled in this chart because KPS owns
+# the shared ServiceMonitors and vm-operator converts them for vmagent.
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
@@ -54,7 +52,9 @@ spec:
     defaultDashboards:
       enabled: true
 
-    # Talos binds these to localhost; matches the KPS exclusion.
+    # KPS owns the shared ServiceMonitors for these endpoints. vm-operator
+    # converts those monitors for vmagent, so keep the VM chart's duplicate
+    # Services and VMServiceScrapes disabled.
     kubeControllerManager:
       enabled: false
     kubeScheduler:
@@ -114,10 +114,9 @@ spec:
         # alongside any future cluster's alerts in the same Alertmanager.
         externalLabels:
           cluster: k8s-prod
-        # Fire to KPS Alertmanager — single AM UI showing alerts from
-        # both stacks. KPS AM still has no external notifier wired
-        # (matching the bake-off doc's "rule eval yes, delivery no"
-        # stance), so this is just where alerts surface for inspection.
+        # Fire to the shared KPS Alertmanager for comparison in one UI. Its
+        # external route selects only the Prometheus evaluator copy, avoiding
+        # duplicate Pushover notifications from the two distinct fingerprints.
         notifiers:
           - url: http://kube-prometheus-stack-alertmanager.observability.svc.cluster.local:9093
         resources:
@@ -129,3 +128,8 @@ spec:
 
     defaultRules:
       create: true
+      rules:
+        # Talos uses Cilium kube-proxy replacement, so this component is
+        # intentionally absent. KPS disables the matching scrape and rule too.
+        KubeProxyDown:
+          enabled: false

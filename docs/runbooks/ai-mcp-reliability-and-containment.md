@@ -178,14 +178,7 @@ kubectl -n ai delete job grafana-mcp-manual-probe
 
 ## Alerts and memory monitoring
 
-`ai-mcp-reliability` alerts on a new MetaMCP OOM kill, two restarts within 30
-minutes, a failed/stale functional probe, or twelve minutes with no probe
-success metric. `MetaMCPOOMKilled`, `MetaMCPRepeatedRestarts`,
-`GrafanaMCPFunctionalProbeFailed`, and `GrafanaMCPFunctionalProbeMissing` are
-currently UI-only alerts: both metrics stacks select the rules, but the existing
-kube-prometheus-stack Alertmanager has no external notifier. Prioritize the
-observability notifier decision so these alerts can page proactively; until
-then, delivery only means visibility in the Alertmanager UI.
+`ai-mcp-reliability` alerts on a new MetaMCP OOM kill, two restarts within 30 minutes, a failed/stale functional probe, or twelve minutes with no probe success metric. `MetaMCPOOMKilled`, `MetaMCPRepeatedRestarts`, `GrafanaMCPFunctionalProbeFailed`, and `GrafanaMCPFunctionalProbeMissing` route through the shared Alertmanager. Prometheus owns external delivery while the vmalert copy remains available for comparison in the UI; use the [alerting runbook](alerting.md) to test or troubleshoot the notification path.
 
 For issue #294, keep the issue open until the authenticated MetaMCP probe above
 passes. Record pod age, restart count, last termination reason, session count,
