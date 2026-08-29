@@ -60,7 +60,7 @@ spec:
                 custom: true
                 spec:
                   # MCPHub's /health returns 200 even when upstream startup
-                  # aborts before the transport routes are registered. An
+                  # aborts before the transport routes are registered. A
                   # successful OPTIONS response proves Express registered the
                   # POST route; a pre-registration 404 keeps the pod unready.
                   # This avoids creating sessions or logging failed auth probes.
@@ -71,9 +71,10 @@ spec:
                       - >-
                         fetch('http://127.0.0.1:3000/sse/mcp/homelab-read',
                         {method:'OPTIONS'})
-                        .then((response)=>{if(response.status!==200||
-                        !response.headers.get('allow')?.includes('POST'))process.exit(1)})
-                        .catch(()=>process.exit(1))
+                        .then(async(response)=>{const ok=response.status===200&&
+                        response.headers.get('allow')?.includes('POST');
+                        await response.text();if(!ok)process.exitCode=1})
+                        .catch(()=>{process.exitCode=1})
                   periodSeconds: 5
                   timeoutSeconds: 3
                   failureThreshold: 60
