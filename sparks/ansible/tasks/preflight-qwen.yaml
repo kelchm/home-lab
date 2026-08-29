@@ -1,0 +1,12 @@
+---
+- name: Stat local compose file
+  ansible.builtin.stat:
+    path: "{{ playbook_dir }}/../inference/compose.yaml"
+  register: compose_stat
+  delegate_to: localhost
+
+- name: Assert local compose file exists
+  ansible.builtin.assert:
+    that:
+      - compose_stat.stat.exists
+    fail_msg: "missing {{ playbook_dir }}/../inference/compose.yaml"

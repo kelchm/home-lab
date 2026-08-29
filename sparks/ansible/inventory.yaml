@@ -1,0 +1,7 @@
+---
+sparks:
+  hosts:
+    spark-1:
+      ansible_host: 10.32.21.31
+    spark-2:
+      ansible_host: 10.32.21.32

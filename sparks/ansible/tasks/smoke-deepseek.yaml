@@ -1,0 +1,4 @@
+---
+# Forces cold prefill each iteration; warm smoke tests pass on broken deployments.
+- name: Run deepseek cold smoke benchmark
+  ansible.builtin.shell: cd {{ guide_dir }} && URL=http://localhost:8888/v1 N=3 COLD=1 timeout 1200 python3 benchmarks/replay_hermes.py

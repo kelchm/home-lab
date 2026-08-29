@@ -1,0 +1,140 @@
+---
+- name: Switch Spark inference profile
+  hosts: spark-1
+  gather_facts: false
+  pre_tasks:
+    - name: Assert profile is defined and valid
+      ansible.builtin.assert:
+        that:
+          - profile is defined
+          - profile in ['qwen', 'deepseek']
+        fail_msg: "profile must be set to 'qwen' or 'deepseek' via -e profile=..."
+
+    - name: Load profile variables
+      ansible.builtin.include_vars: "profiles/{{ profile }}.yaml"
+
+  tasks:
+    # Outside the block: a lock conflict must fail without entering rescue, and
+    # the always-release below must only run when this invocation holds the lock.
+    - name: Acquire switch lock
+      ansible.builtin.command: mkdir {{ lock_dir }}
+      register: lock_acquire
+      failed_when: false
+
+    - name: Fail if switch already in progress
+      ansible.builtin.fail:
+        msg: "another switch appears to be in progress; remove {{ lock_dir }} on spark-1 if stale"
+      when: lock_acquire.rc != 0
+
+    - name: Switch profile
+      block:
+        - name: Ensure state directory exists
+          ansible.builtin.file:
+            path: "{{ remote_dir }}"
+            state: directory
+            owner: kelchm
+          become: true
+
+        - name: Teardown on both hosts
+          ansible.builtin.include_tasks: tasks/teardown-host.yaml
+          loop: "{{ groups['sparks'] }}"
+          loop_control:
+            loop_var: teardown_host
+
+        - name: Memory-reclaim gate on both hosts
+          ansible.builtin.shell: awk '/MemAvailable/ {print int($2/1024/1024)}' /proc/meminfo
+          register: mem_available
+          until: mem_available.stdout | int >= min_available_gib
+          retries: 4
+          delay: 15
+          ignore_errors: true
+          delegate_to: "{{ item }}"
+          loop: "{{ groups['sparks'] }}"
+
+        - name: Fail when UVM did not release
+          ansible.builtin.fail:
+            msg: "UVM from the previous profile did not release on {{ item.item }}; reboot the affected Spark and re-run (there is no watchdog)"
+          when: item is failed or (item.stdout | default('0') | int < min_available_gib)
+          loop: "{{ mem_available.results }}"
+          loop_control:
+            label: "{{ item.item }}"
+
+        - name: Drop caches on both hosts
+          ansible.builtin.shell: sync && echo 3 > /proc/sys/vm/drop_caches
+          become: true
+          delegate_to: "{{ item }}"
+          loop: "{{ groups['sparks'] }}"
+
+        - name: Preflight checks
+          ansible.builtin.include_tasks: "tasks/preflight-{{ profile_name }}.yaml"
+
+        - name: Start profile
+          ansible.builtin.include_tasks: "tasks/start-{{ profile_name }}.yaml"
+
+        # Cold TP=2 boots take 15–30 min; this is the 30-minute gate.
+        - name: Ready gate on spark-1
+          ansible.builtin.shell: curl -fsS {{ health_url }}
+          register: ready_check
+          until: ready_check.rc == 0
+          retries: "{{ ready_retries }}"
+          delay: "{{ ready_delay }}"
+
+        - name: Endpoint check through Caddy
+          ansible.builtin.shell: curl -fsS --max-time 5 http://localhost:80/v1/models
+          register: caddy_check
+          ignore_errors: true
+
+        - name: Note when Caddy endpoint is not up
+          ansible.builtin.debug:
+            msg: "Caddy endpoint is not up (run baseline.yaml) but the profile itself is healthy"
+          when: caddy_check.rc != 0
+
+        - name: Smoke test deepseek
+          ansible.builtin.include_tasks: tasks/smoke-deepseek.yaml
+          when: profile_name == 'deepseek' and not (skip_smoke | default(false))
+
+        - name: Record residency
+          ansible.builtin.copy:
+            content: "{{ profile_name }}\n"
+            dest: "{{ resident_file }}"
+
+        - name: Append switch log
+          ansible.builtin.shell: echo "$(date -Is) switch {{ profile_name }}" >> {{ switch_log }}
+
+      rescue:
+        - name: Collect docker diagnostics on both hosts
+          ansible.builtin.shell: "docker ps -a --format '{% raw %}{{.Names}} {{.Status}}{% endraw %}'"
+          register: docker_diag
+          ignore_errors: true
+          delegate_to: "{{ item }}"
+          loop: "{{ groups['sparks'] }}"
+
+        - name: Print docker diagnostics
+          ansible.builtin.debug:
+            msg: "{{ item.item }}: {{ item.stdout_lines | default([]) }}"
+          ignore_errors: true
+          loop: "{{ docker_diag.results }}"
+          loop_control:
+            label: "{{ item.item }}"
+
+        - name: Tail start log on spark-1
+          ansible.builtin.shell: "tail -n 40 {{ start_log }}"
+          register: start_log_tail
+          ignore_errors: true
+          when: start_log is defined
+
+        - name: Print start log tail
+          ansible.builtin.debug:
+            var: start_log_tail.stdout_lines
+          ignore_errors: true
+          when: start_log is defined and start_log_tail is defined
+
+        - name: Fail switch
+          ansible.builtin.fail:
+            msg: "switch to {{ profile }} failed; the pair may be partially started — run 'task sparks:down' before retrying"
+
+      always:
+        - name: Remove switch lock
+          ansible.builtin.file:
+            path: "{{ lock_dir }}"
+            state: absent

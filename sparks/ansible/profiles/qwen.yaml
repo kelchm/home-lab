@@ -1,0 +1,7 @@
+---
+profile_name: qwen
+head_host: spark-1
+serve_port: 8000
+health_url: http://localhost:8000/health
+ready_retries: 60
+ready_delay: 15

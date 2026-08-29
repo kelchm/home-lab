@@ -1,0 +1,11 @@
+# Stable client endpoint. Profiles are mutually exclusive, so at most one
+# upstream is ever healthy; lb_policy first routes to it. A cold-booting
+# profile returns a clean 502 here instead of hanging the client.
+:80 {
+	reverse_proxy localhost:8000 localhost:8888 {
+		lb_policy first
+		health_uri /health
+		health_interval 5s
+		health_timeout 3s
+	}
+}

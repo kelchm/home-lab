@@ -1,0 +1,51 @@
+---
+- name: Deploy Spark stable endpoint and boot convergence
+  hosts: spark-1
+  gather_facts: false
+  tasks:
+    - name: Ensure state directory exists
+      ansible.builtin.file:
+        path: "{{ remote_dir }}"
+        state: directory
+        owner: kelchm
+      become: true
+
+    - name: Ensure caddy directory exists
+      ansible.builtin.file:
+        path: "{{ remote_dir }}/caddy"
+        state: directory
+        owner: kelchm
+      become: true
+
+    - name: Copy Caddyfile
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../caddy/Caddyfile"
+        dest: "{{ remote_dir }}/caddy/Caddyfile"
+
+    - name: Copy caddy compose.yaml
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../caddy/compose.yaml"
+        dest: "{{ remote_dir }}/caddy/compose.yaml"
+
+    - name: Pull and start caddy
+      ansible.builtin.shell: cd {{ remote_dir }}/caddy && docker compose pull -q && docker compose up -d
+
+    - name: Install baseline script
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/files/spark-baseline.sh"
+        dest: /opt/spark-stack/baseline.sh
+        mode: "0755"
+
+    - name: Install baseline systemd unit
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/files/spark-baseline.service"
+        dest: /etc/systemd/system/spark-baseline.service
+      become: true
+
+    # Enable but do not start: starting now could start qwen while deepseek is resident.
+    - name: Enable spark-baseline.service
+      ansible.builtin.systemd_service:
+        daemon_reload: true
+        name: spark-baseline.service
+        enabled: true
+      become: true

@@ -1,8 +1,8 @@
 # DGX Spark workloads
 
-Temporary, operator-driven deployment of the two DGX Spark hosts. Hardware bring-up (network, RDMA, fabric isolation) lives in [`docs/runbooks/dgx-spark-bringup.md`](../docs/runbooks/dgx-spark-bringup.md); this directory covers what runs *on* them.
+The two DGX Spark hosts run mutually exclusive inference profiles, switched by an in-repo Ansible control plane. Hardware bring-up (network, RDMA, fabric isolation) lives in [`docs/runbooks/dgx-spark-bringup.md`](../docs/runbooks/dgx-spark-bringup.md); the design decision and rejected alternatives live in [`docs/plans/20260828-spark-control-plane.md`](../docs/plans/20260828-spark-control-plane.md).
 
-**Not GitOps.** These hosts are outside Flux and outside Talos automation. The stack is committed here and pushed over SSH with `task sparks:*`. That is a deliberate placeholder for the deploy model in [`docs/plans/20260620-nas-out-of-cluster-workloads.md`](../docs/plans/20260620-nas-out-of-cluster-workloads.md) — when doco-cd lands, it can consume `sparks/inference/compose.yaml` unchanged.
+These hosts are outside Flux and outside Talos automation, deliberately: profile transitions are hazardous (UMA collapse, no watchdog), so nothing reconciles autonomously. Git owns what *can* run and what runs *by default* after a boot; `task sparks:switch` owns what runs *right now*; residency is operational state recorded on spark-1 (`/opt/spark-stack/resident`, `switch.log`), not in git.
 
 ## What runs today
 
@@ -19,13 +19,20 @@ A second route runs `deepseek-ai/DeepSeek-V4-Flash-0731` across **both** nodes a
 ## Operating it
 
 ```sh
-task sparks:deploy HOST=10.32.21.31   # push compose + start
+task sparks:switch PROFILE=qwen       # guarded switch: teardown both hosts, reclaim
+task sparks:switch PROFILE=deepseek   #   gate, drop_caches, preflight, 30-min ready
+                                      #   gate, cold-prefill smoke (deepseek)
+task sparks:baseline                  # deploy Caddy endpoint + boot unit to spark-1
 task sparks:status                    # both nodes: GPU, containers, endpoint
 task sparks:logs HOST=10.32.21.31
-task sparks:down HOST=10.32.21.31     # full teardown
+task sparks:down                      # break-glass teardown, zero dependencies
 ```
 
-`task sparks:down` stops both routes on **both** hosts. To reclaim disk as well, on each host:
+`switch` refuses to proceed if MemAvailable stays low after teardown — that means the previous profile's UVM allocations did not release and the affected host needs a reboot first. It also refuses concurrent switches (lock on spark-1; remove `/tmp/spark-switch.lock` if stale) and never pulls images or weights implicitly — preflight fails with instructions instead.
+
+After a reboot the pair converges to the baseline: Caddy and the `qwen` profile come back (docker restart policy + `spark-baseline.service`); TP=2 profiles never auto-start — rerun `switch` for those.
+
+`task sparks:down` stops both routes on **both** hosts and needs nothing but SSH. To reclaim disk as well, on each host:
 
 ```sh
 sudo rm -rf /opt/spark-models /opt/spark-stack /opt/spark-cache
@@ -40,16 +47,20 @@ docker rmi "$(grep -oE 'vllm/vllm-openai@sha256:[0-9a-f]+' /path/to/compose.yaml
 
 The pulled images are the large residue — roughly 45 GB per host across the vLLM and DeepSeek tags.
 
+## The stable endpoint
+
+Clients talk to **`http://spark.home.kelch.io/v1`** — Caddy on spark-1 (`sparks/caddy/`, deployed by `task sparks:baseline`) with active health checks over `:8000` and `:8888`. Profiles are mutually exclusive, so at most one upstream is ever healthy and the Caddy config is static; a cold-booting profile returns a clean 502 instead of hanging the client. `curl http://spark.home.kelch.io/v1/models` answers "what is live". Direct ports keep working if Caddy is down.
+
 ## Using it from opencode
 
-The provider block lives in `~/.config/opencode/opencode.jsonc` (not in this repo — it is per-machine):
+The provider block lives in `~/.config/opencode/opencode.jsonc` (not in this repo — it is per-machine). The provider ID stays `spark` and the `models` map carries a **superset** across profiles — only the resident one responds:
 
 ```jsonc
 "provider": {
   "spark": {
     "npm": "@ai-sdk/openai-compatible",
     "options": {
-      "baseURL": "http://10.32.21.31:8000/v1",
+      "baseURL": "http://spark.home.kelch.io/v1",
       // No default; without it a dropped SSE stream hangs the client forever.
       "chunkTimeout": 120000
     },
@@ -57,13 +68,17 @@ The provider block lives in `~/.config/opencode/opencode.jsonc` (not in this rep
       "qwen3.6-35b": {
         "reasoning": true,
         "limit": { "context": 131072, "output": 32000 }
+      },
+      "deepseek-v4-flash-dspark": {
+        "reasoning": true,
+        "limit": { "context": 1000000, "output": 32000 }
       }
     }
   }
 }
 ```
 
-Then `opencode run --model spark/qwen3.6-35b "..."`, or pick it from `/models` interactively.
+Then `opencode run --model spark/qwen3.6-35b "..."`, or pick it from `/models` interactively. Never let any tool rewrite this block: opencode keys sampling overrides on the provider ID and on model-ID substrings.
 
 ## Landmines
 

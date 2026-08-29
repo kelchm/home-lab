@@ -1,0 +1,9 @@
+---
+default_profile: qwen
+remote_dir: /opt/spark-stack
+resident_file: /opt/spark-stack/resident
+switch_log: /opt/spark-stack/switch.log
+lock_dir: /tmp/spark-switch.lock
+# Post-teardown floor: with nothing resident the pair shows >110 GiB free;
+# below this, UVM allocations from the previous profile did not release.
+min_available_gib: 100

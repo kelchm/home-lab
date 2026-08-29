@@ -1,0 +1,64 @@
+---
+- name: Report Spark inference status
+  hosts: spark-1
+  gather_facts: false
+  tasks:
+    - name: Collect host status
+      ansible.builtin.shell: |
+        echo "=== gpu ==="
+        nvidia-smi --query-gpu=temperature.gpu,power.draw,utilization.gpu --format=csv,noheader
+        echo "=== containers ==="
+        docker ps --format '{% raw %}{{.Names}} {{.Status}}{% endraw %}'
+        echo "=== mem ==="
+        awk '/MemAvailable/ {print int($2/1024/1024)}' /proc/meminfo
+      register: host_status
+      changed_when: false
+      ignore_errors: true
+      delegate_to: "{{ item }}"
+      loop: "{{ groups['sparks'] }}"
+
+    - name: Print host status
+      ansible.builtin.debug:
+        msg: "{{ item.item }}: {{ item.stdout_lines | default([]) }}"
+      loop: "{{ host_status.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Read resident profile
+      ansible.builtin.shell: cat {{ resident_file }} 2>/dev/null || echo unknown
+      register: resident
+      changed_when: false
+
+    - name: Print resident profile
+      ansible.builtin.debug:
+        msg: "resident: {{ resident.stdout }} (baseline: {{ default_profile }})"
+
+    - name: Probe qwen endpoint
+      ansible.builtin.shell: curl -fsS --max-time 5 http://localhost:8000/v1/models 2>&1 | head -c 160
+      register: qwen_probe
+      ignore_errors: true
+      changed_when: false
+
+    - name: Print qwen probe
+      ansible.builtin.debug:
+        msg: "qwen :8000 {{ qwen_probe.stdout }}"
+
+    - name: Probe deepseek endpoint
+      ansible.builtin.shell: curl -fsS --max-time 5 http://localhost:8888/v1/models 2>&1 | head -c 160
+      register: deepseek_probe
+      ignore_errors: true
+      changed_when: false
+
+    - name: Print deepseek probe
+      ansible.builtin.debug:
+        msg: "deepseek :8888 {{ deepseek_probe.stdout }}"
+
+    - name: Probe Caddy stable endpoint
+      ansible.builtin.shell: curl -fsS --max-time 5 http://localhost:80/v1/models 2>&1 | head -c 160
+      register: caddy_probe
+      ignore_errors: true
+      changed_when: false
+
+    - name: Print Caddy probe
+      ansible.builtin.debug:
+        msg: "caddy :80 {{ caddy_probe.stdout }}"

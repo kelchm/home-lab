@@ -1,0 +1,7 @@
+---
+# The guide script performs the worker-first launch across both hosts itself; the ready gate in switch.yaml does the waiting.
+- name: Start deepseek via guide script
+  ansible.builtin.shell: cd {{ guide_dir }} && ./start-deepseek-v4-flash-dspark.sh > {{ start_log }} 2>&1
+  async: 5400
+  poll: 0
+  register: dspark_start
