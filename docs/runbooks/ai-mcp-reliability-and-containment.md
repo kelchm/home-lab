@@ -35,9 +35,10 @@ into a user-visible failure, so `SESSION_LIFETIME` remains unset until client
 behavior changes. The functional probe must not assert a session lifetime.
 
 Follow the registry-hygiene procedure in `metamcp-bootstrap.md` to remove the
-package-downloading `time` server and unused `default-endpoint` self-reference.
-MetaMCP initializes every registered server, so inactive entries are still
-dependencies.
+package-downloading `time` server. Keep the auto-generated
+`<endpoint>-endpoint` MCP server rows; creating an Endpoint in the UI inserts
+those so the in-process inspector can dial `APP_URL`. That path needs the
+`traefik-admin` hairpin allow.
 
 With expiry disabled, session growth remains unbounded. The 2 GiB memory limit
 is headroom, not proof of containment, and must not be reduced merely because a
@@ -53,6 +54,7 @@ mechanism, such as a restart in a known quiet window, before lowering it.
 | MetaMCP | `metamcp-db` pods | TCP 5432 | PostgreSQL |
 | MetaMCP | Nine exact MCP pod identities | Port owned by each backend's ingress policy | Tool aggregation |
 | MetaMCP | Kubernetes Service `network/traefik-services` | Effective pod TCP 8443 | `auth.home.kelch.io` Kanidm OIDC |
+| MetaMCP | Kubernetes Service `network/traefik-admin` | Effective pod TCP 8443 | `metamcp.home.kelch.io` APP_URL hairpin for the in-UI endpoint inspector |
 | Grafana MCP | Grafana pods in `observability` | TCP 3000 | Read-only Grafana API |
 | LEMON manuals MCP | `lemon-website` pods in `lemon-manuals` | TCP 8080 | Self-hosted manual page retrieval |
 | Kubernetes/Flux MCP | Cilium `kube-apiserver` entity | API server ports | Read-only cluster APIs |
@@ -121,6 +123,14 @@ Expected final log:
 Grafana MCP functional probe passed via metamcp.home.kelch.io (5 datasources)
 ```
 
+Confirm the APP_URL hairpin used by the in-UI inspector (must return JSON
+`{"status":"ok"}` within five seconds; a hang is a policy miss):
+
+```sh
+kubectl -n ai exec deploy/metamcp -- node -e \
+  "fetch('https://metamcp.home.kelch.io/health',{signal:AbortSignal.timeout(5000)}).then(r=>r.text()).then(console.log)"
+```
+
 Check session cleanup and memory without exposing session IDs:
 
 ```sh
@@ -156,6 +166,7 @@ kubectl -n ai run ai-egress-test --rm -i --restart=Never \
 | Scheduled Grafana MCP tool call | Allowed |
 | MetaMCP to each declared MCP and PostgreSQL | Allowed |
 | MetaMCP OIDC discovery and interactive login | Allowed through `traefik-services` |
+| MetaMCP APP_URL hairpin (`https://metamcp.home.kelch.io/health` from the pod) | Allowed through `traefik-admin` |
 | CNPG operator status/reconcile after instance restart | Healthy |
 | Kubernetes/Flux MCP read calls | Allowed |
 
