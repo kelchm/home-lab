@@ -14,6 +14,7 @@ This directory is the source for the application deployment and its operating re
 | Dashboard backend | `http://127.0.0.1:9119` in the guest |
 | API | `http://127.0.0.1:8642` in the guest; not exposed to the LAN |
 | MetaMCP | `https://metamcp.home.kelch.io/metamcp/hermes/mcp` through a host-specific TCP 443 allow |
+| MCPHub Hacker News | `https://mcphub.home.kelch.io/mcp/hacker-news` through the existing TCP 443 allow |
 | State | `/srv/hermes` in the guest, mounted at `/opt/data` in the container |
 | TLS state | `/srv/caddy`, with the DNS credential in root-only `/srv/caddy/.env` |
 | Backup | Included in cluster job `daily-backups` |
@@ -24,9 +25,13 @@ The default model is the active OpenAI-compatible `deepseek-v4-flash-dspark` end
 
 MetaMCP is enabled through the dedicated `hermes` endpoint. Its API key is supplied at runtime as `METAMCP_HERMES_API_KEY`; the checked-in configuration contains only the environment reference. UniFi permits this guest alone to reach the MetaMCP listener at `10.32.130.1` on TCP 443, ordered immediately above the broader Workloads-to-`admin-prod` deny.
 
-The Hermes runtime `.env` is intentionally not in Git. It contains the dashboard break-glass authentication values, API-server token, and MetaMCP API key. A root-readable recovery copy of the dashboard and API client credentials is stored at `/root/hermes-access.txt` inside the backed-up VM; the authoritative MetaMCP key remains in the `Metamcp - hermes-1` 1Password item. The separate Cloudflare token used by Caddy is stored in `/srv/caddy/.env` at runtime and is therefore also captured by VM backups; do not add this infrastructure credential to the client-access file. Its authoritative copy belongs in 1Password under `hermes - kelch.io`.
+The read-only Hacker News pilot is a separate untrusted MCP connection through MCPHub's `hacker-news` capability group. Its `hermes-personal` bearer token comes from the SOPS-encrypted `kubernetes/apps/ai/mcphub/app/secret.sops.yaml` source of truth and is copied only into `/srv/hermes/.env` as `MCPHUB_HERMES_PERSONAL_TOKEN`; the checked-in Hermes configuration contains only the environment reference. Hacker News content is hostile user-generated text, so this connection must remain isolated from the `browser` group and every write-capable MCP connection. The `hermes-personal` principal is not authorized for `browser`, and no additional firewall rule is needed for this endpoint.
 
-No messaging adapter is configured. Hermes Desktop for macOS and compatible native clients connect to the canonical HTTPS dashboard through Hermes's server-mediated native PKCE flow, while Safari on iOS uses the same authenticated web UI. Kanidm therefore needs the dashboard's `/auth/callback` redirect rather than a native-client redirect URI. The dashboard offers Kanidm through a public PKCE client and retains the local password provider for break-glass access. UniFi local DNS resolves `hermes.home.kelch.io` directly to the VM at `10.32.21.100`.
+The Hermes runtime `.env` is intentionally not in Git. It contains the dashboard break-glass authentication values, API-server token, MetaMCP API key, MCPHub workload token, and messaging-adapter credentials and allowlists. A root-readable recovery copy of the dashboard and API client credentials is stored at `/root/hermes-access.txt` inside the backed-up VM; the authoritative MetaMCP key remains in the `Metamcp - hermes-1` 1Password item and the authoritative MCPHub key remains in the SOPS source above. The separate Cloudflare token used by Caddy is stored in `/srv/caddy/.env` at runtime and is therefore also captured by VM backups; do not add this infrastructure credential to the client-access file. Its authoritative copy belongs in 1Password under `hermes - kelch.io`.
+
+Telegram is enabled for the private `@MaiaRelayBot` adapter. Its BotFather token is stored authoritatively in the `Telegram - hermes-1` 1Password item and copied at runtime to `TELEGRAM_BOT_TOKEN` in `/srv/hermes/.env`. `TELEGRAM_ALLOWED_USERS` contains the single operator's numeric Telegram user ID; neither `TELEGRAM_ALLOW_ALL_USERS` nor `GATEWAY_ALLOW_ALL_USERS` is set. Gateway streaming is enabled with the `auto` transport, which selects Telegram's native draft transport for direct messages and retains the adapter's edit-based fallback. Do not commit the token or numeric allowlist value.
+
+Hermes Desktop for macOS and compatible native clients connect to the canonical HTTPS dashboard through Hermes's server-mediated native PKCE flow, while Safari on iOS uses the same authenticated web UI. Kanidm therefore needs the dashboard's `/auth/callback` redirect rather than a native-client redirect URI. The dashboard offers Kanidm through a public PKCE client and retains the local password provider for break-glass access. UniFi local DNS resolves `hermes.home.kelch.io` directly to the VM at `10.32.21.100`.
 
 Kanidm and local-password sessions are distinct authentication principals: daily Kanidm sessions use the Kanidm subject UUID, while the break-glass principal is `basic:kelchm`. They are not separate Hermes tenants; conversations, projects, memory, credentials, and dashboard preferences belong to this single instance. Browser-controller authorization remains scoped to the principal that registered a controller session.
 
@@ -40,6 +45,10 @@ The HTTPS and Kanidm deployment on 2026-08-27 passed both basic and Kanidm login
 
 The MetaMCP connection test on 2026-08-27 successfully discovered the endpoint's cluster, observability, and reference tools. An unauthenticated request from the guest reached the MetaMCP listener and returned HTTP 401, proving the narrow UniFi path without exposing the API key.
 
+The MCPHub Hacker News connection test on 2026-08-28 was held until fix PR #454 had merged and the deployed transport's readiness probe changed from HTTP 404 to 200. Authenticated initialization negotiated MCP protocol `2025-03-26`, Hermes discovered exactly `hackernews__hn_get_stories`, `hackernews__hn_get_thread`, `hackernews__hn_get_user`, and `hackernews__hn_search_content`, and a one-item `hn_get_stories` call completed without error. From the Hermes VM, initialization without a token returned HTTP 401 and the `hermes-personal` key also returned HTTP 401 for the isolated `browser` group. Test output excluded the bearer token and hostile story text.
+
+The private Telegram adapter test on 2026-08-28 passed a normal `telegram-ok` reply, `/status`, and a harmless terminal-tool call whose persisted session record contained the `terminal` invocation, tool result, and final reply. A controlled response after enabling the `auto` streaming transport completed through the restarted gateway, which resolved Telegram streaming as enabled. The bot profile uses the cropped Maia avatar, the adapter reports `telegram` and `api_server` as its connected platforms, and the allowlist remains limited to the single operator ID.
+
 An on-demand QGA-assisted snapshot backup completed successfully and produced `backups-pve-sbx:backup/vzdump-qemu-200-2026_08_27-19_03_54.vma.zst`. The cluster's enabled `daily-backups` job also includes VMID `200` through its `all=1` selection.
 
 ## Operations
@@ -47,7 +56,7 @@ An on-demand QGA-assisted snapshot backup completed successfully and produced `b
 Stage this directory at `/opt/hermes` on the guest. Hermes reads its persistent configuration from `/srv/hermes/config.yaml`, not the staged copy, so explicitly install a reviewed config change before recreating the containers. Dashboard-managed preferences such as the active theme can also mutate the persistent file; reconcile any preferences that should survive into Git before replacing it. `/srv/caddy/.env` must already contain `CLOUDFLARE_API_TOKEN` with mode `0600` and root ownership. Caddy's two state directories must remain owned by its numeric runtime identity:
 
 ```sh
-ssh kelchm@hermes.home.kelch.io 'sudo install -d -o 1000 -g 1000 -m 0750 /srv/caddy/data /srv/caddy/config && sudo chown -R 1000:1000 /srv/caddy/data /srv/caddy/config && sudo install -o kelchm -g kelchm -m 0644 /opt/hermes/config.yaml /srv/hermes/config.yaml && cd /opt/hermes && sudo docker compose pull hermes && sudo docker compose build --pull caddy && sudo docker compose up -d'
+ssh kelchm@hermes.home.kelch.io 'sudo install -d -o 1000 -g 1000 -m 0750 /srv/caddy/data /srv/caddy/config && sudo chown -R 1000:1000 /srv/caddy/data /srv/caddy/config && sudo install -o kelchm -g kelchm -m 0640 /opt/hermes/config.yaml /srv/hermes/config.yaml && cd /opt/hermes && sudo docker compose pull hermes && sudo docker compose build --pull caddy && sudo docker compose up -d'
 ```
 
 Inspect the service without printing credentials:
@@ -56,6 +65,24 @@ Inspect the service without printing credentials:
 ssh kelchm@hermes.home.kelch.io 'cd /opt/hermes && sudo docker compose ps && sudo docker logs --tail 100 hermes'
 curl -sS https://hermes.home.kelch.io/api/status | jq '{auth_required, auth_providers, auth_flows}'
 openssl s_client -connect hermes.home.kelch.io:443 -servername hermes.home.kelch.io -verify_hostname hermes.home.kelch.io </dev/null
+```
+
+After changing only Hermes runtime values in `/srv/hermes/.env`, restart only the Hermes service. This reloads the mounted persistent environment without pulling an image, rebuilding Caddy, or restarting unrelated services:
+
+```sh
+ssh kelchm@hermes.home.kelch.io 'cd /opt/hermes && sudo docker compose restart hermes'
+```
+
+Validate Telegram configuration without printing the token or allowlist value:
+
+```sh
+ssh kelchm@hermes.home.kelch.io 'set -e; test "$(grep -c "^TELEGRAM_BOT_TOKEN=" /srv/hermes/.env)" -eq 1; test "$(grep -c "^TELEGRAM_ALLOWED_USERS=" /srv/hermes/.env)" -eq 1; ! grep -Eq "^(TELEGRAM_ALLOW_ALL_USERS|GATEWAY_ALLOW_ALL_USERS)=" /srv/hermes/.env; stat -c "%a %U:%G" /srv/hermes/.env; cd /opt/hermes && sudo docker compose ps hermes'
+```
+
+Validate the MCPHub runtime reference and HN discovery without printing any bearer-key fragment:
+
+```sh
+ssh kelchm@hermes.home.kelch.io 'set -e; test "$(grep -c "^MCPHUB_HERMES_PERSONAL_TOKEN=" /srv/hermes/.env)" -eq 1; test "$(stat -c "%a" /srv/hermes/.env)" = 600; sudo docker exec --user hermes hermes /opt/hermes/.venv/bin/hermes mcp test mcphub_hacker_news 2>&1 | grep -E "Connected|Tools discovered"'
 ```
 
 Retrieve the dashboard username/password or API-server token only when configuring a client:
