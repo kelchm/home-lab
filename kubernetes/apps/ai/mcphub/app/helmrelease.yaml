@@ -1,0 +1,115 @@
+---
+# Parallel MCP gateway evaluation. MetaMCP remains deployed and unchanged.
+# MCPHub reads its complete, immutable file-mode configuration from the
+# SOPS-managed Secret. Capability groups and workload-scoped bearer keys are
+# documented in ../README.md. There is no PostgreSQL, Redis, dashboard, or
+# client OAuth.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: mcphub
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: mcphub
+  interval: 1h
+  values:
+    controllers:
+      mcphub:
+        replicas: 1
+        # MCP transports keep in-memory sessions. Recreate prevents two pods
+        # from splitting those sessions during an update.
+        strategy: Recreate
+        annotations:
+          secret.reloader.stakater.com/reload: mcphub-settings
+        containers:
+          app:
+            image:
+              repository: docker.io/samanhappy/mcphub
+              # v1.0.32 release, pinned to its multi-architecture OCI index.
+              tag: 1.0.32@sha256:df34df85e639743d0bf4b64182fc2f47586bf544beb08c85a5e5d693891daad3
+            env:
+              NODE_ENV: production
+              PORT: "3000"
+              # Keep the SSE transport's required messages endpoint below the
+              # only externally exposed /sse prefix; httproute.yaml rewrites
+              # the public MCP and SSE paths to this internal base path.
+              BASE_PATH: /sse
+              MCPHUB_SETTING_PATH: /config/mcp_settings.json
+              USE_DB: "false"
+              DISABLE_WEB: "true"
+              # There is no dashboard route, but also reject mutations if one
+              # is reached accidentally from inside the cluster.
+              READONLY: "true"
+              TRUST_PROXY: "1"
+              HOME: /tmp
+              NPM_CONFIG_USERCONFIG: /tmp/.npmrc
+              JWT_SECRET:
+                valueFrom:
+                  secretKeyRef:
+                    name: mcphub-settings
+                    key: JWT_SECRET
+            probes:
+              startup:
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: &healthPath /health
+                    port: &port 3000
+                  periodSeconds: 5
+                  timeoutSeconds: 3
+                  failureThreshold: 60
+              liveness: &steadyStateProbes
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: *healthPath
+                    port: *port
+                  periodSeconds: 10
+                  timeoutSeconds: 3
+                  failureThreshold: 3
+              readiness: *steadyStateProbes
+            securityContext:
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              capabilities: { drop: ["ALL"] }
+            resources:
+              requests:
+                cpu: 100m
+                memory: 256Mi
+              limits:
+                memory: 1Gi
+    defaultPodOptions:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        # Makes the emptyDir-backed /tmp writable to the non-root process.
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile: { type: RuntimeDefault }
+    service:
+      app:
+        controller: mcphub
+        ports:
+          http:
+            port: *port
+    persistence:
+      settings:
+        type: secret
+        name: mcphub-settings
+        # Keep JWT_SECRET available only through the environment reference.
+        # MCPHub needs only the JSON settings file on disk.
+        items:
+          - key: mcp_settings.json
+            path: mcp_settings.json
+        globalMounts:
+          - path: /config
+            readOnly: true
+      tmp:
+        type: emptyDir
+        sizeLimit: 128Mi
+        globalMounts:
+          - path: /tmp
