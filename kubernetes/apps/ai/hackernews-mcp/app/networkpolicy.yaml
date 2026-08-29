@@ -1,0 +1,21 @@
+---
+# Default-deny shape: only MetaMCP reaches the Hacker News MCP transport here;
+# MCPHub's additive reciprocal grant lives with MCPHub. Public-only HTTP(S)
+# egress and DNS are supplied by the namespace-level ai-public-web-egress policy.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: hackernews-mcp
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: hackernews-mcp
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: ai
+            app.kubernetes.io/name: metamcp
+      toPorts:
+        - ports:
+            - port: "3010"
+              protocol: TCP

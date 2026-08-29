@@ -8,6 +8,7 @@ spec:
     - name: digikey-mcp
     - name: flux-operator-mcp
     - name: grafana-mcp
+    - name: hackernews-mcp
     - name: kubernetes-mcp
     - name: lemon-manuals-mcp
     - name: markitdown-mcp

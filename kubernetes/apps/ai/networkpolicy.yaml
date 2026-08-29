@@ -14,6 +14,7 @@ spec:
         operator: In
         values:
           - digikey-mcp
+          - hackernews-mcp
           - markitdown-mcp
           - open-meteo-mcp
           - pcbparts-mcp
