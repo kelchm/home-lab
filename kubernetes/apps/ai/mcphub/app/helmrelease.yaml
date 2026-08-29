@@ -28,6 +28,11 @@ spec:
               repository: docker.io/samanhappy/mcphub
               # v1.0.32 release, pinned to its multi-architecture OCI index.
               tag: 1.0.32@sha256:df34df85e639743d0bf4b64182fc2f47586bf544beb08c85a5e5d693891daad3
+            # The image's pnpm command asks Corepack to download pnpm again
+            # when running as a non-root user. Start the packaged application
+            # directly so startup does not require public registry egress.
+            command: ["node"]
+            args: ["/app/dist/index.js"]
             env:
               NODE_ENV: production
               PORT: "3000"
