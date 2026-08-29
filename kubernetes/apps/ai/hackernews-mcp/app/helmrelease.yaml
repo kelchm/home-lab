@@ -1,0 +1,90 @@
+---
+# In-cluster HTTP MCP server reached by the MCP gateways via Service DNS at
+# http://hackernews-mcp.ai.svc.cluster.local:3010/mcp. Not on any Gateway.
+#
+# Four read-only tools expose Hacker News feeds, threads, users, and full-text
+# search through the public Firebase and Algolia APIs. No API key is required.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: hackernews-mcp
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: hackernews-mcp
+  interval: 1h
+  values:
+    controllers:
+      hackernews-mcp:
+        containers:
+          app:
+            image:
+              repository: ghcr.io/cyanheads/hn-mcp-server
+              # v0.5.14 release; tag is unprefixed in GHCR. Pin the
+              # multi-architecture OCI index for reproducibility.
+              tag: 0.5.14@sha256:4e6718dcb8b5e988389b11bbf0b8e16081667a470b96e8c4fcd90189a34ab2e2
+            env:
+              NODE_ENV: production
+              MCP_TRANSPORT_TYPE: http
+              MCP_HTTP_HOST: "0.0.0.0"
+              MCP_HTTP_PORT: "3010"
+              MCP_SESSION_MODE: stateless
+              MCP_LOG_LEVEL: info
+              # The upstream image defaults to /var/log. Redirect its Pino
+              # file sinks to the bounded emptyDir so the rootfs stays read-only.
+              LOGS_DIR: /tmp/logs
+              HN_CONCURRENCY_LIMIT: "10"
+            probes:
+              startup:
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: &healthPath /healthz
+                    port: &port 3010
+                  periodSeconds: 5
+                  timeoutSeconds: 1
+                  failureThreshold: 12
+              liveness: &steadyStateProbes
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: *healthPath
+                    port: *port
+                  periodSeconds: 10
+                  timeoutSeconds: 1
+                  failureThreshold: 3
+              readiness: *steadyStateProbes
+            securityContext:
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              capabilities: { drop: ["ALL"] }
+            resources:
+              requests:
+                cpu: 25m
+                memory: 64Mi
+              limits:
+                memory: 256Mi
+    defaultPodOptions:
+      securityContext:
+        # The image's bun user is UID/GID 1000. Pin it numerically for the
+        # runAsNonRoot admission check and ownership of the /tmp emptyDir.
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile: { type: RuntimeDefault }
+    service:
+      app:
+        controller: hackernews-mcp
+        ports:
+          http:
+            port: *port
+    persistence:
+      tmp:
+        type: emptyDir
+        sizeLimit: 64Mi
+        globalMounts:
+          - path: /tmp

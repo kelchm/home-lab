@@ -190,7 +190,7 @@ GitOps state → workloads → pod logs; speaks the daily stack) + `containers/k
 (e.g. the Jellyfin VAAPI issue #63). Native `http` mode, mounted at `/readonly`, PAT
 injected by MetaMCP via `bearerToken`.
 
-**Phase 4 — No-auth utilities.** Hacker News (stdio-in-gateway), Open-Meteo weather
+**Phase 4 — No-auth utilities.** Hacker News (isolated HTTP-native backend), Open-Meteo weather
 (HTTP-native), `markitdown` (file→Markdown, HTTP-native), `mcp-netutils` (DNS/TLS/ping
 diagnostics, HTTP-native). All read-only, no secrets.
 
@@ -280,15 +280,10 @@ Each entry lists only the deltas from the `digikey-mcp` template. Verified corre
 
 ### Hacker News — `hackernews-mcp` (Phase 4)
 
-- Upstream `erithwik/mcp-hn` (Python, `uvx mcp-hn`), **stdio-only**, 4 read-only tools, no
-  auth. No published streamable-http image.
-- **Recommended pattern (a):** register as a `stdio` server in MetaMCP
-  (`command: uvx`, `args: ["mcp-hn"]`) — runs in the gateway pod via the bundled toolchain,
-  exactly like `time`. It's a tiny trusted read-only utility; egress to `hn.algolia.com`
-  (80+443) is benign.
-- Alternative pattern (b) if pod-level isolation/GitOps-visibility is wanted: own Deployment
-  with a `supergateway --stdio "uvx mcp-hn" --outputTransport streamableHttp --port 8000
-  --streamableHttpPath /mcp` wrapper image, registered as `streamable_http`.
+- Upstream `cyanheads/hn-mcp-server` v0.5.14, native stateless streamable HTTP at `/mcp`, 4 read-only tools, no auth. Uses only the public Hacker News Firebase and Algolia APIs.
+- Image: `ghcr.io/cyanheads/hn-mcp-server:0.5.14` (unprefixed container tag), multi-arch and pinned by OCI-index digest. The image runs as UID/GID 1000.
+- Own isolated Deployment on port 3010. The upstream image defaults file logging to `/var/log/hn-mcp-server`; set `LOGS_DIR=/tmp/logs` and mount a bounded `emptyDir` at `/tmp` so `readOnlyRootFilesystem: true` remains enforceable.
+- Four tools: ranked feeds, thread/comment traversal, user profiles, and full-text story/comment search with filters. Keep all four enabled; each advertises `readOnlyHint=true` and the combined surface is small.
 
 ### Open-Meteo — `open-meteo-mcp` (Phase 4)
 

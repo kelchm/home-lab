@@ -48,6 +48,7 @@ spec:
                 - digikey-mcp
                 - flux-operator-mcp
                 - grafana-mcp
+                - hackernews-mcp
                 - kubernetes-mcp
                 - lemon-manuals-mcp
                 - markitdown-mcp
