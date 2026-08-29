@@ -49,6 +49,14 @@ Both stores use hard NFSv4.1 mounts and are allowed only from the three PVE stor
 
 The cluster job `daily-backups` backs up all non-disposable guests to `backups-pve-sbx` at 05:00 America/New_York in snapshot mode with Zstandard compression. The live job uses `all=1`; add every disposable VMID to its explicit `exclude` field. The field is currently unset because no disposable guest remains. Its retention policy is last 3, daily 7, weekly 4, and monthly 6. The built-in matcher currently targets `mail-to-root`, but direct delivery to Gmail failed with `550 5.7.1`; do not depend on email alerts until an authenticated SMTP relay is configured and tested.
 
+## Persistent guests
+
+| VMID | Guest | Address | Purpose | Source |
+|---|---|---|---|---|
+| `200` | `hermes-1` | `10.32.21.100` | Hermes Agent, dashboard, and client API | [`guests/hermes-1`](guests/hermes-1/) |
+
+`hermes-1` is enabled at host boot and is covered by `daily-backups`. Its application state lives on its local VM disk under `/srv/hermes`; it is not a PVE HA resource.
+
 ## Applied guest network policy
 
 Three UniFi policies contain the general-purpose Workloads VLAN without changing Main administration, `services-prod`, or Internet access:

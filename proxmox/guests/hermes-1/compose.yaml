@@ -1,0 +1,53 @@
+---
+services:
+  hermes:
+    image: nousresearch/hermes-agent:v2026.8.27@sha256:e0df6adebddf29b91112aefc999d4aaf6846c9eb544faca5672a16a13590ff79
+    container_name: hermes
+    restart: unless-stopped
+    network_mode: host
+    shm_size: 1gb
+    stop_grace_period: 60s
+    volumes:
+      - /srv/hermes:/opt/data
+    environment:
+      HERMES_UID: "1000"
+      HERMES_GID: "1000"
+      HERMES_DASHBOARD: "1"
+      HERMES_DASHBOARD_HOST: 127.0.0.1
+      HERMES_DASHBOARD_PORT: "9119"
+      HERMES_DASHBOARD_PUBLIC_URL: https://hermes.home.kelch.io
+      API_SERVER_HOST: 127.0.0.1
+    command: ["gateway", "run"]
+
+  caddy:
+    build:
+      context: .
+      dockerfile: Dockerfile.caddy
+    image: localhost/hermes-caddy:2.11.4-cloudflare-0.2.4
+    container_name: hermes-caddy
+    restart: unless-stopped
+    network_mode: host
+    read_only: true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=16m
+    depends_on:
+      - hermes
+    env_file:
+      - path: /srv/caddy/.env
+        required: true
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - /srv/caddy/data:/data
+      - /srv/caddy/config:/config
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "https://hermes.home.kelch.io/api/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 2m

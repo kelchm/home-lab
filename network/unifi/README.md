@@ -29,7 +29,9 @@ Aggregation ports 7 and 8:
 | Port 7 | `spark-1`, 10GbE |
 | Port 8 | `spark-2`, 10GbE |
 
-The original Spark commissioning phase did not create Workloads firewall rules. The PVE commissioning session added the three applied containment rules documented below on 2026-08-27; the rest of the topology matrix remains deferred. See the [DGX Spark bring-up runbook](../../docs/runbooks/dgx-spark-bringup.md) for the full host configuration, physical port map, test record, and remaining gates.
+The original Spark commissioning phase did not create Workloads firewall rules. The PVE commissioning session added the three applied containment rules documented below on 2026-08-27, and the Hermes commissioning session added the narrow MetaMCP exception on 2026-08-28; the rest of the topology matrix remains deferred. See the [DGX Spark bring-up runbook](../../docs/runbooks/dgx-spark-bringup.md) for the full host configuration, physical port map, test record, and remaining gates.
+
+UniFi local DNS also contains a Host (A) record for `hermes.home.kelch.io` at `10.32.21.100`. It was added on 2026-08-27 and verified through the gateway resolvers on the Default, Main, Workloads, and K8s Prod networks.
 
 ## Workloads containment applied state
 
@@ -37,9 +39,12 @@ The following policies are live in UniFi Network 10.5.67 and ordered above the d
 
 | Policy | Source zone and match | Destination zone and match | Action |
 |---|---|---|---|
+| `Allow Hermes to MetaMCP` | `Internal`; IP `10.32.21.100` | `External`; IP `10.32.130.1` | Allow; TCP 443 |
 | `Block Workloads to Protected Networks` | `Internal`; network `Workloads` | `Internal`; networks `Infra Mgmt`, `K8s Prod`, `Storage` | Block; all protocols |
 | `Block Workloads to Admin Prod Routed` | `Internal`; network `Workloads` | `External`; IP `10.32.130.0/24` | Block; all protocols |
 | `Block K8s Prod to Workloads` | `Internal`; network `K8s Prod` | `Internal`; network `Workloads` | Block; all protocols |
+
+`Allow Hermes to MetaMCP` is ordered immediately above `Block Workloads to Admin Prod Routed`; all other Workloads clients remain denied from `admin-prod`. An unauthenticated HTTPS probe from Hermes reached MetaMCP and returned HTTP 401, while the earlier disposable-guest test remained blocked.
 
 `admin-prod` is a Cilium BGP-routed prefix, not a UniFi network. A live negative test proved that UniFi classifies this routed destination through the `External` zone: an `Internal` destination rule did not block Traefik at `10.32.130.1`, while the otherwise identical `External` rule did. This classification is controller behavior, not a statement that the service is Internet-hosted. Retest it after controller upgrades or routing changes.
 

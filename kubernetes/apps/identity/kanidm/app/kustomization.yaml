@@ -7,6 +7,7 @@ resources:
   - ./group-arr-admins.yaml
   - ./group-ops-admins.yaml
   - ./person-kelchm.yaml
+  - ./oauth2-client-hermes.yaml
   - ./httproute.yaml
   - ./serverstransport.yaml
   - ./traefikservice.yaml
