@@ -36,17 +36,14 @@ remains running but is not part of the evaluation.
 
 - `prometheus-community/kube-prometheus-stack` with `grafana.enabled=false`
 - Prometheus scrapes `ServiceMonitor`s → local TSDB on Longhorn (30 d retention)
-- Alertmanager (no notification target wired during the bake-off; rules
-  evaluate, alerts visible in AM UI but do not deliver)
+- Alertmanager (no notification target was wired during the bake-off; the post-bake-off production configuration now delivers actionable alerts)
 - kube-state-metrics, node-exporter
 - ~30 default dashboards published as ConfigMaps for the standalone Grafana
 - ~100 default `PrometheusRule`s
 - Loki in single-binary mode, filesystem store on Longhorn
 - Alloy DaemonSet → Loki via Loki ingestion API
 
-`kubeControllerManager` / `kubeScheduler` / `kubeEtcd` scrape disabled in
-KPS — Talos binds these to localhost by default and surfacing them
-requires a Talos config change we declined to take during the bake-off.
+`kubeControllerManager` / `kubeScheduler` / `kubeEtcd` scrapes were disabled during the bake-off. The post-bake-off production configuration now scrapes the existing Talos node-address listeners with the appropriate transport and authentication settings.
 
 ### Pipeline B — VictoriaMetrics + VictoriaLogs
 
@@ -370,4 +367,3 @@ sequenced in [plans/20260703-observability-rework.md](plans/20260703-observabili
   with strong S3 demand wins, MinIO on the Synology becomes the target.
 - Gatus uptime monitoring — orthogonal to this comparison; ideally lives
   outside the cluster anyway.
-

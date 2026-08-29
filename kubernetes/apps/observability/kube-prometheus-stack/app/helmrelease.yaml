@@ -9,10 +9,12 @@
 # discovers automatically. Datasources are registered separately via
 # datasources.yaml (also a labeled ConfigMap).
 #
-# kubeControllerManager / kubeScheduler / kubeEtcd scrape configs are
-# disabled because Talos binds those metric endpoints to localhost by
-# default; surfacing them needs a Talos config change we declined to
-# take during the bake-off (see docs/observability-bakeoff.md).
+# Talos already exposes controller-manager, scheduler, and etcd metrics on the
+# node addresses. The secure controller-manager and scheduler endpoints use
+# delegated bearer-token authorization; their serving certificates are
+# localhost-only, so the monitors retain TLS encryption while explicitly
+# skipping hostname verification. Etcd's separate metrics-only endpoint is
+# HTTP and receives no bearer token.
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
@@ -40,14 +42,38 @@ spec:
           labelValue: "1"
 
     kubeControllerManager:
-      enabled: false
+      enabled: true
+      serviceMonitor:
+        insecureSkipVerify: true
     kubeScheduler:
-      enabled: false
+      enabled: true
+      serviceMonitor:
+        insecureSkipVerify: true
     kubeEtcd:
+      enabled: true
+      # Talos runs etcd outside Kubernetes, so there are no pods for the
+      # chart's default Service selector to discover.
+      endpoints:
+        - 10.32.30.11
+        - 10.32.30.12
+        - 10.32.30.13
+      serviceMonitor:
+        # Never send the Prometheus service-account token to the plaintext,
+        # metrics-only listener.
+        bearerTokenFile: ""
+
+    # Talos runs Cilium in kube-proxy-replacement mode. Leaving this enabled
+    # creates an empty target and a permanently firing KubeProxyDown alert.
+    kubeProxy:
       enabled: false
 
     prometheus:
       prometheusSpec:
+        # Attach the cluster identity to notifications. Alertmanager routes
+        # only the Prometheus evaluator externally; vmalert remains available
+        # as an independent comparison in the shared Alertmanager UI.
+        externalLabels:
+          cluster: k8s-prod
         # Watch ServiceMonitors / PodMonitors / Rules / Probes across all
         # namespaces. Default scope is too narrow — cilium, longhorn,
         # traefik etc. emit ServiceMonitors outside observability.
@@ -74,6 +100,10 @@ spec:
 
     alertmanager:
       alertmanagerSpec:
+        # The separately managed SOPS Secret contains the complete config so
+        # the Pushover application token and user key never pass through Helm values.
+        useExistingSecret: true
+        configSecret: alertmanager-config
         storage:
           volumeClaimTemplate:
             spec:
@@ -102,6 +132,36 @@ spec:
       # PVC rather than matching volumes by name.
       metricLabelsAllowlist:
         - persistentvolumeclaims=[recurring-job-group.longhorn.io/no-backup]
+      # Longhorn's native metrics expose the number of backup volumes but not
+      # BackupTarget availability. Export the CR's status.available field so a
+      # disconnected NFS target pages before the next scheduled backup ages
+      # into the stale-backup rules.
+      customResourceState:
+        enabled: true
+        config:
+          kind: CustomResourceStateMetrics
+          spec:
+            resources:
+              - groupVersionKind:
+                  group: longhorn.io
+                  version: v1beta2
+                  kind: BackupTarget
+                metricNamePrefix: longhorn
+                labelsFromPath:
+                  backup_target: [metadata, name]
+                  namespace: [metadata, namespace]
+                metrics:
+                  - name: backup_target_available
+                    help: Whether the Longhorn BackupTarget is available.
+                    each:
+                      type: Gauge
+                      gauge:
+                        path: [status, available]
+      rbac:
+        extraRules:
+          - apiGroups: [longhorn.io]
+            resources: [backuptargets]
+            verbs: [list, watch]
 
     prometheusOperator:
       enabled: true

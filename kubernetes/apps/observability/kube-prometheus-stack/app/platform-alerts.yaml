@@ -1,0 +1,98 @@
+---
+# Signals that are specific to this cluster's delivery, GitOps, certificate,
+# and pod-object failure modes. Generic node/filesystem/PVC capacity and
+# CrashLoopBackOff alerts remain owned by kube-prometheus-stack's bundled
+# kubernetes-mixin rules; Longhorn capacity and backup rules live with the
+# Longhorn deployment.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: platform-operations
+spec:
+  groups:
+    - name: flux-reconciliation
+      rules:
+        - alert: FluxReconciliationFailed
+          expr: flux_resource_info{kind=~"Kustomization|HelmRelease",ready="False",suspended="False"} == 1
+          for: 10m
+          labels:
+            severity: critical
+          annotations:
+            summary: Flux {{ $labels.kind }} {{ $labels.exported_namespace }}/{{ $labels.name }} is failing
+            description: Flux has reported this unsuspended resource Ready=False for 10 minutes (reason={{ $labels.reason }}). Inspect the resource conditions and controller logs before retrying reconciliation.
+
+        - alert: FluxReconciliationStalled
+          expr: flux_resource_info{kind=~"Kustomization|HelmRelease",ready="Unknown",suspended="False"} == 1
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: Flux {{ $labels.kind }} {{ $labels.exported_namespace }}/{{ $labels.name }} is stalled
+            description: Flux has reported this unsuspended resource Ready=Unknown for 30 minutes (reason={{ $labels.reason }}). Check dependencies, source readiness, and reconciliation progress.
+
+        - alert: FluxResourceMetricsMissing
+          expr: absent(flux_resource_info{kind=~"Kustomization|HelmRelease"})
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: Flux resource health metrics are missing
+            description: flux_resource_info has been absent for 15 minutes, so reconciliation failures cannot be detected. Check the Flux Operator ServiceMonitor and scrape target.
+
+    - name: certificate-lifecycle
+      rules:
+        # Public certificates now have a roughly 160-hour lifetime. A fixed
+        # 14-day threshold would therefore be permanently firing; 24 hours is
+        # safely after the normal renewal point while retaining recovery time.
+        - alert: CertManagerCertificateExpiringSoon
+          expr: |
+            (certmanager_certificate_expiration_timestamp_seconds - time() < 24 * 3600)
+            and
+            (certmanager_certificate_expiration_timestamp_seconds - time() > 0)
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: Certificate {{ $labels.exported_namespace }}/{{ $labels.name }} expires within 24 hours
+            description: cert-manager has not replaced this certificate by its final 24 hours. Inspect the Certificate, CertificateRequest, Order, and Challenge resources for issuer or DNS failures.
+
+        - alert: CertManagerCertificateExpired
+          expr: certmanager_certificate_expiration_timestamp_seconds - time() <= 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: Certificate {{ $labels.exported_namespace }}/{{ $labels.name }} has expired
+            description: cert-manager still reports an expired certificate. Treat the affected endpoint as unavailable and repair issuance immediately.
+
+        - alert: CertManagerCertificateNotReady
+          expr: certmanager_certificate_ready_status{condition="True"} == 0
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: Certificate {{ $labels.exported_namespace }}/{{ $labels.name }} is not ready
+            description: cert-manager has reported the Certificate Ready condition false for 15 minutes. Inspect its CertificateRequest, Order, and Challenge resources.
+
+        - alert: CertManagerCertificateMetricsMissing
+          expr: absent(certmanager_certificate_expiration_timestamp_seconds)
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: cert-manager certificate metrics are missing
+            description: Certificate expiration timestamps have been absent for 15 minutes, so expiry cannot be detected. Check the cert-manager ServiceMonitor and scrape target.
+
+    - name: pod-object-churn
+      rules:
+        # Namespace count/pods quotas cap the blast radius at 50 objects for
+        # most namespaces. Alert at five failed objects so the operator sees a
+        # runaway ReplicaSet/controller well before KubeQuotaAlmostFull fires.
+        - alert: KubeFailedPodChurn
+          expr: sum by (namespace) (kube_pod_status_phase{phase="Failed"} == 1) >= 5
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: Namespace {{ $labels.namespace }} is accumulating failed pods
+            description: At least {{ printf "%.0f" $value }} failed pod objects have remained in {{ $labels.namespace }} for five minutes. Identify the owning controller before the namespace's count/pods quota blocks healthy replacements.

@@ -92,17 +92,17 @@ kubectl -n longhorn-system delete backupvolumes.longhorn.io <backup-volume-name>
 
 ## Routine monitoring
 
-Until OpenObserve / VictoriaMetrics alerting is wired up:
+Prometheus and vmalert evaluate the Longhorn rules in `kubernetes/apps/longhorn-system/longhorn/app/alerts.yaml`; Alertmanager delivers warnings and critical alerts through the `k8s-prod Alerts` Pushover application. The rules cover BackupTarget availability, cluster-wide backup staleness, per-volume stale or never-completed backups, volume robustness, Longhorn node readiness, disk capacity/schedulability, and missing metric coverage. See [alerting](alerting.md) for ownership, silence policy, and end-to-end tests.
+
+Use these checks to investigate a notification or audit the automation:
 
 - **Longhorn UI → Backup → Backup Volume** — every active PV except those listed under "Currently excluded" should show backups within the last ~24h.
+- `kubectl -n longhorn-system get backuptargets.longhorn.io default -o yaml` — `status.available` must be `true` and `status.lastSyncedAt` recent.
 - `kubectl -n longhorn-system get backups.longhorn.io --sort-by=.metadata.creationTimestamp` — last few entries should be recent.
+- `longhorn_backup_target_available{backup_target="default"}` — must be `1`.
+- `longhorn_volume_last_backup_at` — drives the 26-hour cluster-wide and 30-hour per-volume thresholds.
+- Longhorn manager logs containing `backup failed` or `BackupTarget unavailable` — use when the CR status and timestamp alerts fire.
 - Free space on the NAS share — DSM → Storage Manager → Volume 1 utilization.
-
-When metrics land, alert on:
-
-- `longhorn_volume_actual_size_bytes` for the BackupTarget (treat the BackupTarget volume as a regular monitored object — it shows up in Longhorn metrics)
-- Longhorn manager logs containing `backup failed` / `BackupTarget unavailable`
-- `RecurringJob` last-success timestamp staleness > 30 hours
 
 ## Drill: restore a single PV
 
