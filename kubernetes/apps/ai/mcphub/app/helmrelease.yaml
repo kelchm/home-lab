@@ -59,23 +59,41 @@ spec:
                 enabled: true
                 custom: true
                 spec:
-                  httpGet:
-                    path: &healthPath /health
-                    port: &port 3000
+                  # MCPHub's /health returns 200 even when upstream startup
+                  # aborts before the transport routes are registered. An
+                  # invalid bearer must reach the registered route and receive
+                  # 401; a pre-registration 404 keeps the pod unready.
+                  exec:
+                    command: &transportProbeCommand
+                      - node
+                      - -e
+                      - >-
+                        fetch('http://127.0.0.1:3000/sse/mcp/homelab-read',
+                        {method:'POST',headers:{Authorization:'Bearer readiness-probe-invalid'}})
+                        .then((response)=>{if(response.status!==401)process.exit(1)})
+                        .catch(()=>process.exit(1))
                   periodSeconds: 5
                   timeoutSeconds: 3
                   failureThreshold: 60
-              liveness: &steadyStateProbes
+              liveness:
                 enabled: true
                 custom: true
                 spec:
                   httpGet:
-                    path: *healthPath
-                    port: *port
+                    path: /health
+                    port: &port 3000
                   periodSeconds: 10
                   timeoutSeconds: 3
                   failureThreshold: 3
-              readiness: *steadyStateProbes
+              readiness:
+                enabled: true
+                custom: true
+                spec:
+                  exec:
+                    command: *transportProbeCommand
+                  periodSeconds: 10
+                  timeoutSeconds: 3
+                  failureThreshold: 3
             securityContext:
               allowPrivilegeEscalation: false
               readOnlyRootFilesystem: true
