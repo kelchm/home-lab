@@ -15,6 +15,7 @@ This directory is the source for the application deployment and its operating re
 | API | `http://127.0.0.1:8642` in the guest; not exposed to the LAN |
 | MetaMCP | `https://metamcp.home.kelch.io/metamcp/hermes/mcp` through a host-specific TCP 443 allow |
 | MCPHub Hacker News | `https://mcphub.home.kelch.io/mcp/hacker-news` through the existing TCP 443 allow |
+| Flatrate automotive reference | `https://mcphub.home.kelch.io/mcp/automotive-reference` through the existing TCP 443 allow |
 | State | `/srv/hermes` in the guest, mounted at `/opt/data` in the container |
 | TLS state | `/srv/caddy`, with the DNS credential in root-only `/srv/caddy/.env` |
 | Backup | Included in cluster job `daily-backups` |
@@ -30,6 +31,20 @@ The read-only Hacker News pilot is a separate untrusted MCP connection through M
 The Hermes runtime `.env` is intentionally not in Git. It contains the dashboard break-glass authentication values, API-server token, MetaMCP API key, MCPHub workload token, and messaging-adapter credentials and allowlists. A root-readable recovery copy of the dashboard and API client credentials is stored at `/root/hermes-access.txt` inside the backed-up VM; the authoritative MetaMCP key remains in the `Metamcp - hermes-1` 1Password item and the authoritative MCPHub key remains in the SOPS source above. The separate Cloudflare token used by Caddy is stored in `/srv/caddy/.env` at runtime and is therefore also captured by VM backups; do not add this infrastructure credential to the client-access file. Its authoritative copy belongs in 1Password under `hermes - kelch.io`.
 
 Telegram is enabled for the private `@MaiaRelayBot` adapter. Its BotFather token is stored authoritatively in the `Telegram - hermes-1` 1Password item and copied at runtime to `TELEGRAM_BOT_TOKEN` in `/srv/hermes/.env`. `TELEGRAM_ALLOWED_USERS` contains the single operator's numeric Telegram user ID; neither `TELEGRAM_ALLOW_ALL_USERS` nor `GATEWAY_ALLOW_ALL_USERS` is set. Gateway streaming is enabled with the `auto` transport, which selects Telegram's native draft transport for direct messages and retains the adapter's edit-based fallback. Do not commit the token or numeric allowlist value.
+
+## Flatrate Discord profile
+
+Flatrate is a separate Hermes profile and gateway runtime for the private Discord application `Flatrate Bot`. It is not multiplexed through the personal profile. Its persistent state lives at `/srv/hermes/profiles/flatrate`, the in-container wrapper is `/opt/data/.local/bin/flatrate`, and its s6 service is `gateway-flatrate`. This keeps its conversations, prompt, platform credentials, MCP authorization, tools, and gateway lifecycle separate from the personal agent while sharing the same container and Spark inference endpoint.
+
+Hermes's live profile state is authoritative for profile settings. The dashboard, Hermes CLI, and Hermes upgrades may evolve that state over time, so Git deliberately does not mirror the entire generated profile configuration. Git records the deployment substrate, the reviewed behavioral contract in `flatrate/SOUL.md`, capability and security boundaries, recovery commands, and promotion checklist. When a live change materially alters those boundaries or recovery behavior, update this operating record; do not overwrite the profile wholesale from a stale checked-in snapshot.
+
+The primary model is the local OpenAI-compatible `deepseek-v4-flash-dspark` endpoint at `http://10.32.21.31:8888/v1`. The profile has `gpt-5.6-luna` configured as both the provider fallback and auxiliary vision model, but those paths remain unavailable until an operator deliberately installs an OpenAI API key into the Flatrate profile. A stalled local stream is considered failed after 120 seconds so a configured fallback can take over. The five-person pilot has no hard session cap: Discord's default per-user sessions may run concurrently, and two simultaneous questions should both proceed rather than serializing the room. Revisit that choice only if observed load affects the personal profile or Spark service.
+
+Flatrate reaches MCPHub only through the `automotive-reference` group using the `flatrate-discord` workload principal. The principal is scoped to that group alone. Its bearer token is authoritative in the SOPS-encrypted `kubernetes/apps/ai/mcphub/app/secret.sops.yaml` and copied at runtime to `/srv/hermes/profiles/flatrate/.env` as `MCPHUB_FLATRATE_DISCORD_TOKEN`; the live profile configuration contains only the environment reference. Do not attach Flatrate to MetaMCP, the personal `hermes` endpoint, `homelab-read`, `browser`, or any other MCPHub group. General public research is provided by its isolated headless browser, which denies private URLs and does not use a real browser profile.
+
+The Discord platform exposes only web, isolated browser, vision, and the five automotive-reference tools. Terminal, files, code execution, memory, delegation, home automation, personal-agent tools, Discord administration, and the stock Discord participation toolset remain disabled. Stock progress reactions are disabled. A future personality-driven reaction action must be narrowly limited to reacting to the current Discord message; do not enable broad Discord administration to obtain that behavior.
+
+The rollout is DM-first. User Install remains enabled with only `applications.commands`, allowing the operator to install the application to their account and open a direct conversation. Guild Install retains `applications.commands` plus `bot` with only View Channels, Send Messages, Send Messages in Threads, Embed Links, Attach Files, Read Message History, and Add Reactions. Keep the bot out of `The guys` and leave free-response channels unset until the DM checks pass. Promotion to `#tire-talk` requires verified factual behavior, silence without status chatter, image/fallback tests once the OpenAI credential exists, an operator-only Discord allowlist, and a tested narrow reaction action. Shared-channel silence uses Hermes's exact `NO_REPLY` suppression marker from the reviewed soul.
 
 Hermes Desktop for macOS and compatible native clients connect to the canonical HTTPS dashboard through Hermes's server-mediated native PKCE flow, while Safari on iOS uses the same authenticated web UI. Kanidm therefore needs the dashboard's `/auth/callback` redirect rather than a native-client redirect URI. The dashboard offers Kanidm through a public PKCE client and retains the local password provider for break-glass access. UniFi local DNS resolves `hermes.home.kelch.io` directly to the VM at `10.32.21.100`.
 
@@ -83,6 +98,25 @@ Validate the MCPHub runtime reference and HN discovery without printing any bear
 
 ```sh
 ssh kelchm@hermes.home.kelch.io 'set -e; test "$(grep -c "^MCPHUB_HERMES_PERSONAL_TOKEN=" /srv/hermes/.env)" -eq 1; test "$(stat -c "%a" /srv/hermes/.env)" = 600; sudo docker exec --user hermes hermes /opt/hermes/.venv/bin/hermes mcp test mcphub_hacker_news 2>&1 | grep -E "Connected|Tools discovered"'
+```
+
+Install the reviewed Flatrate soul without replacing its generated profile configuration:
+
+```sh
+scp proxmox/guests/hermes-1/flatrate/SOUL.md kelchm@hermes.home.kelch.io:/tmp/flatrate-SOUL.md
+ssh kelchm@hermes.home.kelch.io 'sudo install -o 1000 -g 1000 -m 0644 /tmp/flatrate-SOUL.md /srv/hermes/profiles/flatrate/SOUL.md && rm /tmp/flatrate-SOUL.md'
+```
+
+Validate Flatrate's isolation and automotive-reference connection without resolving or printing its token:
+
+```sh
+ssh kelchm@hermes.home.kelch.io 'set -e; test "$(grep -c "^MCPHUB_FLATRATE_DISCORD_TOKEN=" /srv/hermes/profiles/flatrate/.env)" -eq 1; test "$(stat -c "%a" /srv/hermes/profiles/flatrate/.env)" = 600; ! grep -Eq "^(DISCORD_ALLOW_ALL_USERS|GATEWAY_ALLOW_ALL_USERS)=" /srv/hermes/profiles/flatrate/.env; sudo docker exec --user hermes hermes /opt/data/.local/bin/flatrate mcp test mcphub_automotive_reference 2>&1 | grep -E "Connected|Tools discovered"'
+```
+
+After installing `DISCORD_BOT_TOKEN` and the operator's numeric `DISCORD_ALLOWED_USERS` value in the profile environment, start only Flatrate's gateway and inspect its status without disturbing the personal gateway:
+
+```sh
+ssh kelchm@hermes.home.kelch.io 'sudo docker exec --user hermes hermes /opt/data/.local/bin/flatrate gateway start && sudo docker exec --user hermes hermes /opt/data/.local/bin/flatrate gateway status'
 ```
 
 Retrieve the dashboard username/password or API-server token only when configuring a client:
