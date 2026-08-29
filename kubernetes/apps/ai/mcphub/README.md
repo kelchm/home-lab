@@ -33,7 +33,7 @@ The global `/mcp` and `/sse` routes are disabled in MCPHub even though their pre
 
 ## Management
 
-The SOPS-encrypted settings Secret is the only source of truth. It includes an admin record with an unshared random password hash solely to prevent MCPHub's file-mode bootstrap from trying to write a default user into the read-only mount. The dashboard, management API, OAuth server, Better Auth, and discovery are unavailable externally, and read-only mode rejects accidental mutations from inside the cluster.
+The SOPS-encrypted settings Secret is the only source of truth. It includes an admin record with an unshared random password hash solely to prevent MCPHub's file-mode bootstrap from trying to write a default user into the read-only mount. Each in-cluster server is owned by that inert admin so MCPHub's SSRF guard admits the explicitly configured Kubernetes Service endpoint; do not remove the owners or disable the guard globally. The dashboard, management API, OAuth server, Better Auth, and discovery are unavailable externally, and read-only mode rejects accidental mutations from inside the cluster.
 
 - Onboard a workload by adding a uniquely named system key with `accessType: groups` and the minimum `allowedGroups` set.
 - Rotate without a flag day by adding a replacement key, updating the client, and removing the old key in a later change.
