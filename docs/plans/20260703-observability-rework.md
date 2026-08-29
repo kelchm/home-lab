@@ -106,11 +106,11 @@ The offline Flex must be classified in inventory as `expected_offline`, `spare`,
 - VictoriaMetrics is the metric system of record.
 - VictoriaLogs is the operational log and security-event system of record.
 - Grafana remains the single pane, using the existing ConfigMap sidecar for dashboards-as-code.
-- Alloy remains the Kubernetes log collector. External systems use their built-in syslog facilities and send to a centrally exposed VictoriaLogs syslog ingress; another agent fleet is not introduced.
+- Alloy remains the Kubernetes log collector. External systems use built-in or explicitly installed syslog forwarding and send to a centrally exposed VictoriaLogs syslog ingress; another general agent fleet is not introduced.
 - Alertmanager handles notification routing. It needs persistent storage, a stable Grafana datasource and route, real receivers, and a continuously checked Watchdog before dependent backends are retired.
 - Metric and LogsQL rules use separate VMAlert instances. LogsQL rule sources carry `observability.kelch.io/rule-datasource=vlogs`; the vlogs evaluator positively selects that label, while the metric evaluator selects every rule except `vlogs`, preserving a safe default for future unlabeled metric rules. The label may live on a native VMRule, chart default-rule metadata, or PrometheusRule metadata preserved through vm-operator conversion; no mandatory resource rewrite is implied. Vlogs groups use `type: vlogs`, query VictoriaLogs, persist alert state through VictoriaMetrics remote-read/write, and notify the shared Alertmanager. A standing CI/rendered-config coverage check detects rules selected by zero or multiple evaluators.
 - Native platform alerts remain enabled for failures that could take the central stack with them, including DSM disk/storage alerts, UniFi console notifications, and Proxmox cluster notifications.
-- An edge Pi supplies the independent dead-man vantage. It expects the central Watchdog heartbeat and probes a minimal set of observability, gateway, WAN, and critical-service outcomes without becoming another storage backend.
+- A healthchecks-style dead-man endpoint outside the estate receives the central Alertmanager Watchdog. One edge Pi runs a second small Gatus instance, sends its own heartbeat and direct alerts to a notification route that does not depend on `k8s-prod`, and probes a minimal set of observability, gateway, WAN, and critical-service outcomes without becoming another storage backend.
 
 ### Collection posture
 
@@ -123,10 +123,10 @@ The offline Flex must be classified in inventory as `expected_offline`, `spare`,
 
 ### Security posture
 
-- Exporter listeners are reachable only from the three `k8s-prod` node addresses used by centrally scraped traffic. Target ports and positive and negative reachability tests are part of each collector’s acceptance gate; the current UniFi firewall matrix is intent, not a prerequisite assumed to exist.
+- General exporter listeners are reachable only from the three `k8s-prod` node addresses used by centrally scraped traffic. The Spark exception rejects direct routed access to `nv-monitor` and permits only the dedicated monitoring SSH principal from those node addresses for the pod-local tunnel instead. Target ports and positive and negative reachability tests are part of each collector’s acceptance gate; the current UniFi firewall matrix is intent, not a prerequisite assumed to exist.
 - Proxmox and UniFi use local read-only service accounts or API tokens stored through the repository's existing SOPS path.
 - Synology uses SNMPv3 rather than SNMPv2c.
-- `nv-monitor` uses a bearer token held outside the systemd command line, and the Workloads firewall admits its port only from the scraper.
+- `nv-monitor` never receives a bearer token across a plaintext network hop. An extra container in the vmagent pod binds two forwards only to pod loopback, authenticates to each Spark's existing `sshd`, and reaches `nv-monitor` over Spark-local loopback; the host firewall rejects direct routed access to the exporter port. The token remains in a root-readable Spark environment file and a SOPS-managed vmagent scrape secret. The request crosses only pod loopback, the encrypted SSH connection, and Spark loopback. This preserves exactly one new monitoring binary on each Spark.
 - Client names, MAC addresses, IP addresses, usernames, and flow tuples are not metric labels unless a bounded use case requires them. Full identity belongs in short-retention logs or flows, not permanent dashboard labels.
 - Before external authentication logs, CEF, or flows are admitted, internal VictoriaMetrics and VictoriaLogs access moves behind VMAuth or equivalently authenticated read/write paths, and default-deny Cilium policies admit only Grafana, vmagent, vmalert, Alloy, the approved syslog/flow senders, and operator access.
 
@@ -144,10 +144,10 @@ The offline Flex must be classified in inventory as `expected_offline`, `spare`,
 | Infrastructure metrics | Kubernetes, PVE, Sparks, Synology, UniFi, Pis | vmagent, central exporters | VictoriaMetrics | Health, performance, capacity, alerts |
 | Application metrics | vLLM and monitored services | vmagent | VictoriaMetrics | Request rate, latency, queueing, tokens, cache behavior |
 | Kubernetes logs | CRI files | Alloy DaemonSet | VictoriaLogs | Workload and platform diagnosis |
-| External operational logs | PVE, Sparks, Synology, later Talos if needed | Native syslog to a restricted VictoriaLogs listener | VictoriaLogs | Host, storage, authentication, and audit diagnosis |
+| External operational logs | PVE, Sparks, Synology | Native or explicitly installed syslog forwarding to a restricted VictoriaLogs listener | VictoriaLogs | Host, storage, authentication, and audit diagnosis |
 | UniFi activity/security events | UDM Pro | Native CEF-over-syslog export | VictoriaLogs | Configuration changes, WAN, PoE, firewall, IPS, honeypot, device events |
 | Routed traffic samples | UDM Pro | Sampled IPFIX to GoFlow2; dedicated flow-routing sidecar | Separate short-retention VictoriaLogs flow instance | Cross-zone communication and security investigations |
-| Synthetic outcomes | In-cluster Gatus/blackbox plus an edge-Pi dead-man probe | Prometheus-compatible metrics and external heartbeat checking | VictoriaMetrics plus the external receiver | User-visible reachability and detection of central-stack failure |
+| Synthetic outcomes | In-cluster Gatus/blackbox, edge-Pi Gatus, and Alertmanager Watchdog | Prometheus-compatible metrics, direct external notifications, and two independent heartbeats | VictoriaMetrics plus a healthchecks-style receiver outside the estate | User-visible reachability and detection of central-stack, Pi, or WAN failure |
 
 Metrics are the index; logs and flows are the evidence. Dashboards should link to filtered Explore queries rather than reproduce a log viewer in every platform folder.
 
@@ -155,11 +155,11 @@ Metrics are the index; logs and flows are the evidence. Dashboards should link t
 
 External push collectors use dedicated BGP LoadBalancer addresses from the restricted admin pool and `externalTrafficPolicy: Local` so the sender address survives Kubernetes ingress. A single-active receiver endpoint is scheduled with an availability policy appropriate to its storage and protocol; Cilium advertises the VIP only from nodes with a local ready endpoint. The design accepts a brief reconnection/template-learning interval during failover rather than hiding source identity behind cluster-mode SNAT.
 
-UniFi rules allow only the documented sender addresses and ports: the UDM Pro for CEF and IPFIX, the three PVE hosts and both Sparks for their syslog listener, and the Synology for its listener. Kubernetes NetworkPolicies repeat those allowlists at the receiver. General external scraping is the reverse path: the three `k8s-prod` node addresses are allowed to each declared exporter/SNMP port, with every other source denied.
+UniFi rules allow only the documented sender addresses and ports: the UDM Pro for CEF and IPFIX, the three PVE hosts and both Sparks for their syslog listener, and the Synology for its listener. Kubernetes NetworkPolicies repeat those allowlists at the receiver. General external scraping is the reverse path: the three `k8s-prod` node addresses are allowed to each declared exporter/SNMP port, with every other source denied. `nv-monitor` is the exception: the nodes may reach Spark SSH for the pod-local forward but may not reach the exporter port directly.
 
-VictoriaLogs uses separate source-class listeners where enrichment differs. Each listener explicitly configures TCP/TLS or UDP, `useRemoteIP`, `streamFields`, fixed extra fields such as `site` and `platform`, ignored fields, timestamp behavior, and timezone. UDP is accepted only when the source cannot use TCP/TLS and is treated as best-effort. Parser fixtures cover UniFi CEF, PVE, Spark, and Synology messages; known-event canaries and sender heartbeats make quiet-source loss distinguishable from “nothing happened.”
+VictoriaLogs uses separate source-class listeners where enrichment differs. Each listener explicitly configures TCP/TLS or UDP, `useRemoteIP`, `streamFields`, fixed extra fields such as `site` and `platform`, ignored fields, timestamp behavior, and timezone. Controllable host forwarders use TLS and sender authentication through a capable ingress or local relay where supported; server-authenticated TLS alone encrypts transport but does not authenticate the sender. Appliance exports that offer only unauthenticated syslog or UDP receive a dedicated listener and an ingress-derived `source_identity` plus `transport_auth=none`; payload hostname or source fields cannot override that identity. Their path must remain inside the trusted wired estate, and their events are advisory rather than the sole authority for destructive automation. Parser fixtures cover UniFi CEF, PVE, Spark, and Synology messages; known-event canaries and sender heartbeats make quiet-source loss distinguishable from “nothing happened.”
 
-Acceptance includes source-IP preservation, positive tests from each sender, negative tests from an unapproved VLAN, failover to a new receiver node, malformed payloads, clock skew, backpressure, packet loss where measurable, and alerting on listener/decode failure.
+Acceptance includes source-IP preservation, positive tests from each sender, negative tests from an unapproved VLAN, proof that a forged payload identity cannot replace ingress-derived identity, failover to a new receiver node, malformed payloads, clock skew, backpressure, packet loss where measurable, and alerting on listener/decode failure. For an unauthenticated protocol, the acceptance record explicitly says that a packet forged with the permitted network source cannot be rejected cryptographically; ACLs are containment, not proof of origin.
 
 ## Data contract
 
@@ -176,9 +176,11 @@ The canonical dimensions are:
 | `cluster` | A real clustered system only | `k8s-prod`, `pve-sbx` |
 | `host` | Stable host or managed-device name | `spark-1`, `pve-sbx-1`, `core-switch` |
 | `service` | Stable logical service | `vllm`, `nfs`, `traefik` |
-| `instance` | Scrape endpoint | `10.32.21.31:9101` |
+| `instance` | Canonical scrape endpoint after relabeling | `spark-1:9101`, `10.32.20.21:9100` |
 
 `instance` is not a durable identity. Dashboards and alerts use `host`, `service`, and the relevant platform dimensions.
+
+Tunnelled Spark jobs relabel pod-loopback targets such as `127.0.0.1:19101` and `:19102` to canonical `spark-1:9101` and `spark-2:9101` instances while setting the durable `host` label explicitly. Loopback port numbers never escape into dashboards, alerts, or stored identity.
 
 The current global `externalLabels.cluster=k8s-prod` is unsafe once vmagent scrapes the rest of the estate, and vmalert independently applies the same global label to every alert. Migrate both components: add `site=home`, explicitly label Kubernetes jobs and rules with `cluster=k8s-prod`, label clustered external targets with their real cluster, omit `cluster` for standalone systems, and then remove both global cluster defaults. Gate the migration on dashboard and recording-rule compatibility and zero unexpected `exported_cluster`, missing-identity, or wrongly stamped alert series.
 
@@ -237,6 +239,10 @@ The private `198.19.240.0/24` and `198.19.241.0/24` Spark fabric never reaches U
 
 The systemd unit sets `nv-monitor`’s internal refresh explicitly rather than assuming the 5-second Prometheus scrape controls its own sampling loop. Acceptance records exporter CPU/memory, scrape duration and timeout rate, and verifies no material TTFT or queue regression under the repository’s known three-session inference load.
 
+Because `nv-monitor` intentionally omits TLS, a declared extra container in the vmagent pod maintains one SSH local forward to each Spark using a dedicated key and an account restricted to forwarding to Spark loopback `:9101`. Both forward listeners bind only to the shared pod loopback namespace, so vmagent's bearer-authenticated HTTP request reaches the tunnel without crossing the cluster network in plaintext. The dedicated principal accepts SSH from the three node-SNAT addresses while the Sparks reject direct routed access to the exporter port. Test `authorized_keys`/`sshd` forwarding restrictions, reconnect, host-key pinning, credential rotation, tunnel failure alerting, and five-second scrape behavior during a tunnel restart. If a reliable restricted SSH-forward account cannot be established, use a host TLS proxy and count it as an explicit exception to the one-binary posture rather than exposing a bearer token over HTTP.
+
+The source restriction applies only to the dedicated monitoring principal; existing operator and host-automation SSH accounts and their approved source paths remain intact. SSH is nevertheless now part of the telemetry path. The documented unified-memory-collapse failure can make a Spark disappear from SSH before diagnosis is complete, so central scraping cannot always distinguish tunnel loss from host collapse. Acceptance must set a measured memory-headroom alert with useful lead time before the known collapse region, prove tunnel-down alerting, and use independent ICMP/inference probes to separate an SSH-path failure from broader host loss where the host still responds.
+
 The inference-target inventory records which mutually exclusive serving mode is active, its port and image/version, expected metric families, and a PromQL fixture for request success, queueing, TTFT, preemption, cache, speculative decode, token throughput, and memory pressure. Five-second scraping begins only after the active mode’s cardinality and metric names are captured.
 
 #### Spark dashboards
@@ -273,19 +279,20 @@ The inference-target inventory records which mutually exclusive serving mode is 
 #### Logs and security events
 
 - Use UniFi's native System Logging/SIEM export for activity logs. It emits structured CEF covering monitoring, WAN, power, security, and system events.
-- Send CEF directly to a dedicated, source-restricted VictoriaLogs syslog listener so VictoriaLogs performs its native CEF parsing.
+- Preflight the live UniFi export controls and use TLS for transport encryption if the installed version actually offers it. Mark the connection `transport_auth=client-cert` only if the sender and selected ingress prove client-certificate authentication; server-authenticated TLS remains `transport_auth=none`. Otherwise send native CEF to a dedicated source-restricted VictoriaLogs listener, mark it `transport_auth=none`, derive `source_identity=unifi-gateway` at ingress, and let VictoriaLogs perform native CEF parsing. Do not mistake a source-address allowlist or payload hostname for cryptographic sender authentication.
 - Do not simultaneously ingest the same UniFi events through Unpoller's Loki/event path.
 - Retain admin changes, device adoption/offline, WAN outage/failover, PoE problems, firewall/IPS/honeypot activity, and selected client events. Drop or sample routine association churn if it dominates volume without diagnostic value.
+- Treat unauthenticated CEF as corroborating evidence. High-impact conclusions and any future automated response require a second signal such as native UniFi notification state, controller/API state, firewall configuration, or endpoint evidence.
 
 #### Routed flows
 
 - Send the UDM Pro's sampled NetFlow/IPFIX export to a small GoFlow2 Deployment in Kubernetes.
 - Require a UniFi flow preflight before deployment: confirm Network and UniFi OS version compatibility, installed console storage and Traffic Flows availability, the current toggle state, and healthy local flow capture. The UDM Pro meets the documented software floor; its storage prerequisite remains unverified.
-- Restrict the UDP collector to the gateway source address and expose GoFlow2's own Prometheus health, socket-drop, sequence-gap, template, and decode-failure signals where available.
+- Restrict the UDP collector to the gateway source address and expose GoFlow2's own Prometheus health, socket-drop, sequence-gap, template, and decode-failure signals where available. Native IPFIX-over-UDP is neither encrypted nor sender-authenticated; the allowlist constrains reachability but does not prove record origin. Keep the first hop inside the trusted wired estate, derive `source_identity=udm-pro-flows` at ingress, mark records `transport_auth=none`, and disable export or add network-level encrypted transport before any future path crosses an untrusted network.
 - Capture a real UDM Pro sample before designing fields or detections. Inventory exported templates and fields, verify sampling-rate interpretation, and commit a GoFlow2 mapping when vendor fields require one. Do not assume that the export includes the richer allowed/blocked/risk/policy metadata visible in UniFi's local flow UI.
-- Preserve each decoded flow as JSON. Proven source/destination addresses, ports, protocols, byte counts, and sampling metadata remain searchable fields, not stream labels. Absence from a sampled feed is never evidence that communication did not occur.
+- Preserve each decoded flow as JSON. Decoded source/destination addresses, ports, protocols, byte counts, and sampling metadata remain searchable fields, not stream labels. Treat them as advisory until corroborated; absence from a sampled feed is never evidence that communication did not occur.
 - Start with the controller's conservative sampling and measure events/day, bytes/day, ingest CPU, query latency, and useful detections before changing sampling.
-- Use a separate small VictoriaLogs flow instance with 7–14-day retention so unknown flow volume cannot evict operational logs. GoFlow2 writes JSON to a shared file rather than stdout; a dedicated central sidecar forwards that file to the flow instance, and the general Alloy DaemonSet drops payload logs from pods labelled `observability.kelch.io/log-route=flow` to prevent duplicate 30-day ingestion.
+- Use a separate small VictoriaLogs flow instance with 7–14-day retention so unknown flow volume cannot evict operational logs. GoFlow2 writes decoded JSON to a shared file rather than stdout, and a dedicated central sidecar forwards only that file to the flow instance. Preserve GoFlow2 and sidecar operational stdout/stderr in the 30-day store. Acceptance proves decoded payload never appears in CRI logs; add a narrowly container-scoped Alloy exclusion only as defense in depth if the selected image can emit payload to stdout.
 - Cross-store correlation is initially a Grafana/manual investigation, not a single LogsQL alert. Automated detections operate within one store or publish a bounded derived metric/event; they do not pretend one vmalert datasource can join the operational-log, flow, and metric stores.
 - Do not add ClickHouse or a separate flow UI until measured volume or query ergonomics prove VictoriaLogs inadequate.
 - Gateway flows see sessions traversing the UDM Pro. They do not see same-VLAN L2 traffic, switched Storage traffic, or the private Spark RDMA fabric.
@@ -302,6 +309,7 @@ The inference-target inventory records which mutually exclusive serving mode is 
 - Continue the planned NixOS `node_exporter` service for edge Pis, with SD-card-sensitive collectors disabled where writes or expensive scans are a concern.
 - Use dashboard 1860 as node-exporter source material, then vendor the subset that remains useful for the Pi fleet.
 - Deploy Gatus for declarative DNS, TCP, TLS, HTTP, and application checks. Its configuration and alert intent remain YAML in Git.
+- Run the main Gatus deployment in-cluster and a second bounded instance on one edge Pi through the `rpi-nixos` repository. The Pi instance sends a heartbeat to the external dead-man endpoint and sends probe failures directly to the chosen external notification channel rather than through the central Alertmanager. Missing central Watchdog and missing Pi heartbeat are separate checks so cluster failure, Pi failure, and WAN loss do not collapse into one silent condition.
 - Gatus remains preferred over Uptime Kuma because the desired checks and alerts stay reviewable in Git rather than living primarily in UI-edited SQLite.
 - Use blackbox exporter where Prometheus-native probing or existing dashboards are more useful; avoid duplicating the same probe in both systems without a clear owner.
 - Keep a probe inventory containing source vantage, target, protocol, expected success or expected denial, cadence, criticality, owner, and alert route. In-cluster probes cover service behavior; an edge Pi covers observability dead-man, gateway/WAN, and selected user-path checks during cluster degradation.
@@ -393,6 +401,7 @@ Initial investigations and same-store rules should remain narrow. Cross-store it
 6. Define the scraper source addresses, exporter/SNMP ports, collector VIPs, `externalTrafficPolicy`, UniFi rules, Cilium policies, and positive/negative network tests.
 7. Extend SOPS path rules if encrypted host-side material will live outside the existing Kubernetes/bootstrap/Talos paths; central exporter credentials remain Kubernetes SOPS Secrets, while Spark tokens use root-readable host environment files provisioned through the chosen host-management path.
 8. Choose and fixture the external journal-forwarding mechanism for PVE 9 and confirm which syslog facility, if any, is already present on the Sparks.
+9. Record a transport-capability and trust matrix for every pushed source: protocol, encryption, sender authentication, network path, ingress-derived identity, spoofing limitation, credential owner, and whether the signal may stand alone for alerting or automation.
 
 **Gate:** no external scrape target is added until it receives unambiguous `site`, `platform`, and `host` labels, plus `cluster` only when it belongs to a real cluster. Numeric budgets, credentials, firewall paths, expected metrics, and independent reachability are recorded first.
 
@@ -400,7 +409,7 @@ Initial investigations and same-store rules should remain narrow. Cross-store it
 
 Convergence is not “delete KPS.” The original 2026-07-03 repository and live-provenance review found five direct couplings, and the 2026-08-27 review found additional Flux and configuration ownership that must move:
 
-1. **kube-state-metrics:** current `kube_*` series come from the KPS-owned service. The VM chart currently disables its copy. Its replacement must preserve job labels and the KPS custom-resource allowlist used by Longhorn backup-exemption alerts.
+1. **kube-state-metrics:** current `kube_*` series come from the KPS-owned service. The VM chart currently disables its copy. Its replacement must preserve job labels and KPS's `metricLabelsAllowlist` entry for the PVC label `recurring-job-group.longhorn.io/no-backup`, which the Longhorn backup-exemption alerts consume. This is not the separate CustomResourceState mechanism used for Flux metrics.
 2. **node-exporter:** current `node_*` series come from the KPS-owned DaemonSet. Enabling both copies can produce port/scheduling conflicts and duplicate targets, so perform a no-overlap handoff rather than flipping both chart flags in one final state.
 3. **Prometheus Operator CRDs:** KPS owns the live `monitoring.coreos.com` CRDs and bootstrap also sources them from KPS. Third-party charts emit ServiceMonitor objects consumed by vm-operator conversion. Install a standalone `prometheus-operator-crds` release and SSA-adopt ownership before KPS can prune the CRDs or their instances.
 4. **Alertmanager:** vmalert points to `kube-prometheus-stack-alertmanager:9093`, which has no working external receiver. Provision the replacement, persistence, UI/datasource route, receivers, and external Watchdog before repointing evaluators.
@@ -420,10 +429,11 @@ Flux does not execute this list as a transaction. Each destructive transition th
 #### Phase 1B — alert delivery and dead-man
 
 - Provision a persistent VM-owned or standalone Alertmanager, stable datasource and route, actual page/notify/review receivers, send-resolved and retry policy, grouping/inhibition, and a Watchdog checked from outside `k8s-prod`.
+- Provision the external dead-man endpoint, route Alertmanager's Watchdog heartbeat to it, and add the edge-Pi Gatus configuration in the `rpi-nixos` repository with its own heartbeat and direct external notification path. Neither missed-heartbeat check may depend on Grafana, VictoriaMetrics, VictoriaLogs, or the central Alertmanager for delivery.
 - Repoint the existing metric evaluator and test a controlled firing and resolution before adding new rules.
 - Add the minimal Alert Delivery and Observability Pipeline dashboard now rather than waiting for the general dashboard phase.
 
-**Gate:** a synthetic alert reaches the intended receiver, resolves, appears in Grafana, and missing Watchdog is detected externally.
+**Gate:** a synthetic alert reaches the intended receiver, resolves, and appears in Grafana; blocking the central Watchdog causes the external dead-man alert; blocking the Pi heartbeat also alerts externally; and a Pi-side probe failure delivers without the central Alertmanager.
 
 #### Phase 1C — rule and KSM configuration ownership
 
@@ -448,36 +458,44 @@ Flux does not execute this list as a transaction. Each destructive transition th
 
 **Gate:** every dashboard and alert link uses the intended datasource and no stale KPS default remains.
 
-#### Phase 1F — remove OpenObserve
+#### Phase 1F — estate label migration
+
+- Stamp `site=home` and `cluster=k8s-prod` explicitly on Kubernetes scrape and rule sources, add each real external cluster only at its own future target, and leave standalone target contracts without `cluster`.
+- Remove `externalLabels.cluster=k8s-prod` from both vmagent and vmalert only after rendered configurations, dashboards, recording rules, alerts, and representative historical queries are compatible. Preserve `site=home` globally only if the rendered test proves it cannot overwrite source identity.
+- Check newly ingested samples and alerts for unexpected `exported_cluster`, missing `site`/`cluster` on Kubernetes data, or `cluster=k8s-prod` on standalone identities before Phase 2 adds an external target.
+
+**Gate:** Kubernetes series and alerts retain correct identity without either global cluster default; standalone target fixtures remain clusterless; PVE fixtures carry only `cluster=pve-sbx`; and representative dashboards, rules, alerts, and historical queries pass the compatibility matrix defined in Phase 0.
+
+#### Phase 1G — remove OpenObserve
 
 - Confirm again that nothing writes to, queries, or links to OpenObserve; retain any explicitly wanted evidence; remove it in its own reversible Git change.
 - The original estimate was that retiring OpenObserve, Loki, and the duplicate KPS metric backend would reclaim about 1.9 GiB plus three upgrade surfaces; remeasure runtime use before quoting the final savings.
 
-#### Phase 1G — remove Loki
+#### Phase 1H — remove Loki
 
 - Prove VictoriaLogs completeness and query behavior, bound Alloy buffering, remove Alloy’s Loki sink and its Flux dependency first, then remove Loki in a later merge.
 - Name the rollback/data-retention window before pruning its PVC, accounting for the chart behavior that caused the bake-off data-loss finding.
 
-#### Phase 1H — remove KPS last
+#### Phase 1I — remove KPS last
 
 - Remove KPS only after CRDs, dependencies, custom rules, KSM/node-exporter, Alertmanager, and Grafana datasource ownership have all moved and remained green for a named observation window.
 - Snapshot or explicitly abandon the old Prometheus and Alertmanager data with a documented rollback window; remove stale routes, datasources, and PVCs deliberately.
 
 Expected repository areas include `victoria-metrics-k8s-stack/app/helmrelease.yaml`, `victoria-metrics-k8s-stack/ks.yaml`, the new standalone CRD release, `bootstrap/helmfile.d/00-crds.yaml`, KPS-owned rule and KSM configuration, smartctl/grafana-mcp/Alloy dependencies, Grafana datasource provisioning, and finally the KPS, Loki, and OpenObserve application trees.
 
-**Phase 1 exit gate:** alert delivery and external dead-man work; CRD, rule, dashboard, and datasource ownership is independent of KPS; Kubernetes metric continuity is accepted; VictoriaLogs ingestion and buffering meet the numeric budget; and every backend removal was a separate merge with a tested rollback boundary.
+**Phase 1 exit gate:** alert delivery and external dead-man work; CRD, rule, dashboard, datasource, and estate-label ownership is independent of KPS; Kubernetes metric continuity is accepted; VictoriaLogs ingestion and buffering meet the numeric budget; and every backend removal was a separate merge with a tested rollback boundary.
 
 ### Phase 2 — low-cost estate metrics
 
 1. Deploy central `prometheus-pve-exporter`, `snmp_exporter`, Unpoller, blackbox exporter/Gatus, and their least-privilege secrets.
 2. Install `node_exporter` on the three PVE hosts.
-3. Install the single `nv-monitor` binary and systemd unit on both Sparks; enable the required inference `/metrics` endpoints.
+3. Install the single `nv-monitor` binary and systemd unit on both Sparks, add the pod-loopback SSH-tunnel extra container to vmagent with pinned host keys, add a dedicated forwarding-only monitoring account restricted to the three node-SNAT addresses and Spark loopback `:9101`, leave existing operator/automation SSH access unchanged, block direct routed access to the exporter port, and enable the required inference `/metrics` endpoints.
 4. Enable SNMPv3 on Synology and validate actual MIB coverage.
 5. Apply the narrowly scoped UniFi collector/exporter firewall rules and validate them from the actual scraper pods and an unapproved source.
-6. Add external vmagent targets using the Phase 0 label contract and the platform-specific scrape classes.
+6. Add external vmagent targets using the Phase 0 label contract and the platform-specific scrape classes only after the Phase 1F label-migration gate passes.
 7. Measure scrape duration, API-poll success and freshness, active-series growth, host/controller overhead, and data freshness before enabling alerts. `up=1` alone proves only that the exporter endpoint answered.
 
-**Gate:** every target has an exporter-health signal, source-poll success/freshness where applicable, independent reachability, stable identity, bounded series count, documented credential ownership, and a coverage matrix stating what remains unmonitored.
+**Gate:** every target has an exporter-health signal, source-poll success/freshness where applicable, independent reachability, stable identity, bounded series count, documented credential ownership, and a coverage matrix stating what remains unmonitored. Spark acceptance also proves direct exporter access is denied, the authenticated tunnel reconnects, and no bearer token crosses plaintext transport.
 
 ### Phase 3 — dashboards and metric alerts
 
@@ -491,26 +509,36 @@ Expected repository areas include `victoria-metrics-k8s-stack/app/helmrelease.ya
 
 **Gate:** an operator can start at a delivered alert, identify the affected platform or service, and reach supporting metrics in two dashboard hops or fewer.
 
-### Phase 4 — external logs and UniFi CEF
+### Phase 4 — authenticated internal paths, external logs, and UniFi CEF
 
-1. Put VictoriaMetrics/VictoriaLogs behind the chosen authenticated internal access paths and default-deny policies before admitting sensitive external data.
-2. Expose the source-restricted `externalTrafficPolicy: Local` syslog VIP and configure source-class listeners, `useRemoteIP`, stream fields, fixed enrichment, ignored fields, timestamp/timezone behavior, and TCP/TLS or best-effort UDP according to sender support.
-3. Forward selected PVE, Spark, and Synology logs using their built-in facilities.
-4. Enable UniFi CEF activity export once and verify parsing, timestamps, remote identity, fields, and duplicate suppression.
-5. Deploy the selector-isolated LogsQL vmalert with VictoriaLogs datasource, VictoriaMetrics state storage, shared Alertmanager notifier, and a minimal first rule set.
-6. Exercise parser fixtures, malformed messages, canaries, heartbeats, clock skew, backpressure, sender loss, and listener failover.
-7. Measure bytes/day and field/stream cardinality; retain operational logs for 30 days initially.
+#### Phase 4A — internal authentication and policy cutover
 
-**Gate:** source loss, parser failure, clock skew, and delivery failure are themselves observable.
+1. Inventory every VictoriaMetrics and VictoriaLogs reader and writer: vmagent remote-write, metric and LogsQL vmalert query/state paths, Alloy, Grafana datasources, operators, probes, and human access.
+2. Provision VMAuth or equivalent authenticated routes and per-client credentials alongside the existing paths. Move one client at a time, test its canary and failure behavior, and keep the old route available for the named rollback window.
+3. Audit default-deny Cilium policies before enforcing them, then prove each intended flow and a representative denied flow. Do not combine first policy enforcement with external log admission.
+
+**Gate:** vmagent ingestion, the metric evaluator, Alloy delivery, Grafana queries, operator reconciliation, every other currently deployed client, and authorized human access continue through authenticated paths; the future LogsQL evaluator has a provisioned least-privilege route and credential fixture; denied clients fail closed; pipeline dashboards and alerts remain green for the observation window; and reverting routes and policies restores the prior path.
+
+#### Phase 4B — external logs and UniFi CEF
+
+1. Preflight both sender and receiver capabilities, provision a capable authenticating ingress or local relay where client authentication is supported, then expose the source-restricted `externalTrafficPolicy: Local` syslog VIP. Configure source-class listeners, `useRemoteIP`, stream fields, fixed enrichment, ignored fields, timestamp/timezone behavior, and TLS where supported. Give server-authenticated-TLS-only and unavoidable unauthenticated appliance/UDP sources dedicated listeners with ingress-derived identity and an explicit `transport_auth=none` field.
+2. Forward selected PVE, Spark, and Synology logs using their built-in facilities.
+3. Enable UniFi CEF activity export once and verify parsing, timestamps, remote identity, fields, and duplicate suppression.
+4. Deploy the selector-isolated LogsQL vmalert with VictoriaLogs datasource, VictoriaMetrics state storage, shared Alertmanager notifier, and a minimal first rule set.
+5. Exercise parser fixtures, malformed messages, canaries, heartbeats, clock skew, backpressure, sender loss, listener failover, unapproved-source rejection, and attempts to override ingress-derived identity from the payload. Record rather than conceal the residual same-source spoofing limitation of unauthenticated protocols.
+6. Measure bytes/day and field/stream cardinality; retain operational logs for 30 days initially.
+
+**Gate:** source loss, parser failure, clock skew, and delivery failure are themselves observable; the deployed LogsQL evaluator uses its authenticated query and state paths; and no external source bypasses the authenticated internal read/write boundary.
 
 ### Phase 5 — sampled flows and SIEM-lite
 
 1. Confirm the UDM Pro storage prerequisite and local Traffic Flows health, then capture and inventory a real IPFIX sample before finalizing the schema.
-2. Deploy the separate short-retention VictoriaLogs flow instance, GoFlow2, its dedicated file-forwarding sidecar, the general-Alloy exclusion label, and a source-preserving VIP restricted to the UDM Pro.
-3. Enable sampled IPFIX and confirm template learning/expiry, restart recovery, sequence/socket-drop behavior, sampler identity, field mapping, and sampling-rate interpretation.
+2. Deploy the separate short-retention VictoriaLogs flow instance, GoFlow2, its dedicated file-forwarding sidecar, and a source-preserving VIP restricted to the UDM Pro. Keep operational container logs in the normal store and prove decoded payload does not leak there.
+3. Enable sampled IPFIX and confirm template learning/expiry, restart recovery, sequence/socket-drop behavior, sampler identity, field mapping, sampling-rate interpretation, `transport_auth=none`, and confinement to the trusted wired path. Do not treat the permitted source address as cryptographic authenticity.
 4. Measure volume, resource use, retention headroom, and query ergonomics before building the Routed Flows dashboard.
 5. Add only same-store or derived-signal detections with a named response; label cross-store items as investigations rather than automatic joins.
 6. Reassess whether VictoriaLogs remains sufficient. Promote to a specialized flow backend only on measured evidence.
+7. Test rollback by disabling IPFIX at UniFi, verifying packets and template refresh stop, and removing the collector VIP, UniFi allow rule, and receiver NetworkPolicy so the flow store has no remaining writers. Stop and remove GoFlow2 and its file-forwarding sidecar in a separate reversible change, remove any defensive container-scoped payload exclusion only after their pods are gone, retain the isolated store until its short retention expires, and remove the store last.
 
 **Gate:** the flow pipeline has a volume budget, privacy decision, retention boundary, and tested loss alert.
 
@@ -520,6 +548,7 @@ Expected repository areas include `victoria-metrics-k8s-stack/app/helmrelease.ya
 - Consider Beyla/OpenTelemetry OBI for service RED metrics or traces only when a named service has a concrete latency or trace-correlation gap. eBPF observes the wire rather than business semantics, TLS visibility is runtime-dependent, and neither Hubble nor Beyla is an anomaly engine.
 - Revisit anomaly detection after normal alerts, dashboards, delivery, labels, and data quality are trustworthy. Trial Coroot Community only if its ClickHouse and second-UI footprint is justified by service-map and SLO value.
 - Consider HolmesGPT with a SOPS-managed model credential for alert-triggered, evidence-backed RCA across Kubernetes, VictoriaMetrics, and VictoriaLogs. Optionally consider `grafana-llm-app` for panel explanation. AI-RCA remains downstream of reliable telemetry and may not silently mutate the estate.
+- Treat Talos service and kernel log export as a separate guarded decision. `machine.logging.destinations` emits newline-delimited JSON over TCP/UDP rather than native syslog, so it needs a dedicated JSON-capable ingress and a manual Talos rollout with the repository's normal one-node-at-a-time validation; it is not part of Phase 4B.
 
 ## The Netdata and anomaly question
 
@@ -538,11 +567,12 @@ The decision is intentionally deferred: try deterministic alerts and Coroot only
 This is cross-cutting and should use a branch and PR. Keep deployment changes independently reversible:
 
 1. **Planning and contracts:** this document, external inventory schema, label migration design, retention/cardinality budgets.
-2. **Convergence and delivery:** KPS decoupling, Alertmanager, datasource migration, retirement of redundant backends.
+2. **Convergence and delivery:** KPS decoupling, Alertmanager, datasource migration, execution of the estate-label migration, external heartbeat receiver, edge-Pi Gatus change in `rpi-nixos`, and retirement of redundant backends.
 3. **External metrics:** central exporters, secrets, vmagent targets, PVE/Spark host bootstrap instructions, initial dashboards.
-4. **External logs:** syslog ingress, PVE/Spark/Synology forwarding, UniFi CEF, LogsQL alerting.
-5. **Flows and security:** GoFlow2, UniFi IPFIX, short-retention flow storage, security dashboards and detections.
-6. **Optional enrichment:** Hubble, tracing, anomaly, and AI-RCA experiments.
+4. **Internal authentication and policy:** VMAuth or equivalent routes, per-client credentials, default-deny policy audit and enforcement, canaries, and rollback as a separately reversible change before external ingestion.
+5. **External logs:** syslog ingress, PVE/Spark/Synology forwarding, UniFi CEF, LogsQL alerting.
+6. **Flows and security:** GoFlow2, UniFi IPFIX, short-retention flow storage, security dashboards and detections.
+7. **Optional enrichment:** Hubble, tracing, anomaly, and AI-RCA experiments.
 
 Host and controller mutations are explicit manual steps after the relevant Git-managed receiver and rollback path exist. No plan phase should combine a destructive backend teardown with first-time collection from an external platform.
 
@@ -600,6 +630,7 @@ Day-two work should shrink after convergence but will not be zero: exporter/API 
 - [VictoriaLogs](https://docs.victoriametrics.com/victorialogs/)
 - [VictoriaLogs syslog ingestion](https://docs.victoriametrics.com/victorialogs/data-ingestion/syslog/)
 - [VictoriaLogs alerting through vmalert](https://docs.victoriametrics.com/victorialogs/vmalert/)
+- [Talos logging](https://docs.siderolabs.com/talos/v1.13/configure-your-talos-cluster/logging-and-telemetry/logging)
 - [Cilium Hubble](https://docs.cilium.io/en/stable/observability/hubble/)
 - [Grafana Beyla](https://grafana.com/docs/beyla/latest/)
 - [Coroot Community](https://github.com/coroot/coroot)
