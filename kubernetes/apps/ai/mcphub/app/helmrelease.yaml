@@ -61,16 +61,18 @@ spec:
                 spec:
                   # MCPHub's /health returns 200 even when upstream startup
                   # aborts before the transport routes are registered. An
-                  # invalid bearer must reach the registered route and receive
-                  # 401; a pre-registration 404 keeps the pod unready.
+                  # successful OPTIONS response proves Express registered the
+                  # POST route; a pre-registration 404 keeps the pod unready.
+                  # This avoids creating sessions or logging failed auth probes.
                   exec:
                     command: &transportProbeCommand
                       - node
                       - -e
                       - >-
                         fetch('http://127.0.0.1:3000/sse/mcp/homelab-read',
-                        {method:'POST',headers:{Authorization:'Bearer readiness-probe-invalid'}})
-                        .then((response)=>{if(response.status!==401)process.exit(1)})
+                        {method:'OPTIONS'})
+                        .then((response)=>{if(response.status!==200||
+                        !response.headers.get('allow')?.includes('POST'))process.exit(1)})
                         .catch(()=>process.exit(1))
                   periodSeconds: 5
                   timeoutSeconds: 3
