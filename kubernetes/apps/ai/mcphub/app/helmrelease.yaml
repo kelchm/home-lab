@@ -1,7 +1,9 @@
 ---
 # Parallel MCP gateway evaluation. MetaMCP remains deployed and unchanged.
 # MCPHub reads its complete, immutable file-mode configuration from the
-# SOPS-managed Secret; there is no PostgreSQL, Redis, dashboard, or client OAuth.
+# SOPS-managed Secret. Capability groups and workload-scoped bearer keys are
+# documented in ../README.md. There is no PostgreSQL, Redis, dashboard, or
+# client OAuth.
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
