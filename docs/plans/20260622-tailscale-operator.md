@@ -1,6 +1,6 @@
 # Tailscale operator — remote LAN access plan
 
-**Status:** Implemented — 2026-08-24; current state: [kubernetes/apps/tailscale/](../../kubernetes/apps/tailscale/README.md).
+**Status:** Implemented — 2026-08-24; current state: [kubernetes/apps/tailscale/](../../kubernetes/apps/tailscale/README.md). The blanket "enroll, then accept subnet routes" client step and the `10.32.10.0/24` advertisement below were superseded by the README's per-node-class client policy and a `/23` advertisement (connected-prefix overlap broke same-LAN Magicsock paths).
 
 ## Context
 
