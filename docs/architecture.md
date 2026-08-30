@@ -73,6 +73,8 @@ The `monitoring.coreos.com` CRDs are owned independently by `prometheus-operator
 | 90 | IoT | 10.32.90.0/24 | Existing |
 | 99 | Guest | 10.32.99.0/24 | Existing |
 
+VLAN 11 stays unassigned: Tailscale advertises `10.32.10.0/23` (see [kubernetes/apps/tailscale/](../kubernetes/apps/tailscale/README.md)) so a VLAN 10 client's connected `/24` outranks the tailnet route; standing up `10.32.11.0/24` would put a live network inside that advertisement.
+
 VLAN 40 (Lab Services) is being retired — it existed only to host node subinterfaces required by Cilium L2 announcements. Under BGP, LB IPs are routed (not bridged) so no node interface on the pool subnet is needed. The legacy L2 pools and node subinterfaces remain in place pending a final maintenance window.
 
 **Firewall principles:**
