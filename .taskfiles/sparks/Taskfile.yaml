@@ -7,22 +7,22 @@ version: '3'
 vars:
   SPARK_HOSTS: '10.32.21.31 10.32.21.32'
   REMOTE_DIR: '/opt/spark-stack'
-  # Two mutually exclusive routes. Qwen is this repo's compose stack on :8000;
-  # DeepSeek is the external DSpark guide's compose project on :8888, cloned to
-  # the hosts (see sparks/inference/deepseek/README.md).
+  # Three mutually exclusive profiles. Qwen is this repo's compose stack on
+  # :8000; DeepSeek and GLM are pinned external guides on :8888.
   QWEN_CONTAINER: 'vllm-qwen'
   DSPARK_PROJECT: 'dspark-guide'
+  GLM_CONTAINER: 'glm53-exl3'
 
 tasks:
 
   switch:
-    desc: Switch the resident inference profile, guarded and ready-gated [PROFILE=qwen|deepseek]
+    desc: Switch the resident inference profile, guarded and ready-gated [PROFILE=qwen|deepseek|glm]
     dir: '{{.ROOT_DIR}}/sparks/ansible'
     cmd: ansible-playbook switch.yaml -e profile={{.PROFILE}}
     requires:
       vars:
         - name: PROFILE
-          enum: ['qwen', 'deepseek']
+          enum: ['qwen', 'deepseek', 'glm']
 
   baseline:
     desc: Deploy the Caddy stable endpoint and boot-convergence unit to spark-1
@@ -35,6 +35,8 @@ tasks:
       - for: {var: SPARK_HOSTS}
         cmd: |
           echo "=== {{.ITEM}} ==="
+          ssh {{.ITEM}} 'for pid in $(pgrep -f "[s]tart.sh" || true); do [ "$(readlink -f /proc/$pid/cwd 2>/dev/null)" = /home/kelchm/glm53-guide ] && kill "$pid" || true; done'
+          ssh {{.ITEM}} 'ids=$(docker ps -aq --filter "name={{.GLM_CONTAINER}}"); [ -n "$ids" ] && docker rm -f $ids || echo "  no GLM containers"'
           # The DeepSeek route is the guide's own compose project, not ours;
           # matching a container name this repo owns would miss it entirely.
           ssh {{.ITEM}} 'ids=$(docker ps -aq --filter "name={{.DSPARK_PROJECT}}"); [ -n "$ids" ] && docker rm -f $ids || echo "  no dspark containers"'
@@ -44,7 +46,7 @@ tasks:
   logs:
     desc: Tail logs of whichever inference stack is running [HOST=required]
     cmd: |
-      ssh {{.HOST}} 'c=$(docker ps -q --filter "name={{.DSPARK_PROJECT}}" --filter "name={{.QWEN_CONTAINER}}" | head -1);
+      ssh {{.HOST}} 'c=$(docker ps -q --filter "name={{.DSPARK_PROJECT}}" --filter "name={{.QWEN_CONTAINER}}" --filter "name={{.GLM_CONTAINER}}" | head -1);
         [ -n "$c" ] || { echo "no inference container running on this host" >&2; exit 1; }
         docker logs -f --tail 100 "$c"'
     requires:

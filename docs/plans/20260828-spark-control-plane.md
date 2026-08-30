@@ -1,6 +1,6 @@
 # Spark inference control plane
 
-**Status:** First slice implemented — 2026-08-28. Supersedes the Sparks-related deploy assumption in [20260620-nas-out-of-cluster-workloads.md](20260620-nas-out-of-cluster-workloads.md) (`sparks/README.md` previously pointed at doco-cd as the eventual deploy model).
+**Status:** Active — 2026-08-30; the first control-plane slice is under review in #440, with the GLM profile following as a stacked change. Supersedes the Sparks-related deploy assumption in [20260620-nas-out-of-cluster-workloads.md](20260620-nas-out-of-cluster-workloads.md) (`sparks/README.md` previously pointed at doco-cd as the eventual deploy model).
 
 ## Problem
 

@@ -6,7 +6,13 @@
   tasks:
     # A lingering guide start script can recreate containers after teardown.
     - name: Stop lingering start script
-      ansible.builtin.shell: pkill -f start-deepseek-v4-flash-dspark.sh || true
+      ansible.builtin.shell: |
+        pkill -f '[s]tart-deepseek-v4-flash-dspark.sh' || true
+        for pid in $(pgrep -f '[s]tart.sh' || true); do
+          if [ "$(readlink -f /proc/$pid/cwd 2>/dev/null)" = /home/kelchm/glm53-guide ]; then
+            kill "$pid" || true
+          fi
+        done
 
     - name: Teardown on both hosts
       ansible.builtin.include_tasks: tasks/teardown-host.yaml

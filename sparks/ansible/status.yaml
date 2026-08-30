@@ -43,15 +43,15 @@
       ansible.builtin.debug:
         msg: "qwen :8000 {{ qwen_probe.stdout }}"
 
-    - name: Probe deepseek endpoint
+    - name: Probe TP2 endpoint
       ansible.builtin.shell: curl -fsS --max-time 5 http://localhost:8888/v1/models 2>&1 | head -c 160
-      register: deepseek_probe
+      register: tp2_probe
       ignore_errors: true
       changed_when: false
 
-    - name: Print deepseek probe
+    - name: Print TP2 probe
       ansible.builtin.debug:
-        msg: "deepseek :8888 {{ deepseek_probe.stdout }}"
+        msg: "TP2 :8888 {{ tp2_probe.stdout }}"
 
     - name: Probe Caddy stable endpoint
       ansible.builtin.shell: curl -fsS --max-time 5 http://localhost:80/v1/models 2>&1 | head -c 160

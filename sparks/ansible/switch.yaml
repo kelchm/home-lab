@@ -7,8 +7,8 @@
       ansible.builtin.assert:
         that:
           - profile is defined
-          - profile in ['qwen', 'deepseek']
-        fail_msg: "profile must be set to 'qwen' or 'deepseek' via -e profile=..."
+          - profile in ['qwen', 'deepseek', 'glm']
+        fail_msg: "profile must be set to 'qwen', 'deepseek', or 'glm' via -e profile=..."
 
     - name: Load profile variables
       ansible.builtin.include_vars: "profiles/{{ profile }}.yaml"
@@ -102,6 +102,10 @@
           ansible.builtin.include_tasks: tasks/smoke-deepseek.yaml
           when: profile_name == 'deepseek' and not (skip_smoke | default(false))
 
+        - name: Smoke test GLM
+          ansible.builtin.include_tasks: tasks/smoke-glm.yaml
+          when: profile_name == 'glm' and not (skip_smoke | default(false))
+
         - name: Record residency
           ansible.builtin.copy:
             content: "{{ profile_name }}\n"
@@ -114,8 +118,17 @@
         # The async start script can keep launching containers after a failed
         # gate; kill it before advising teardown.
         - name: Stop lingering start script
-          ansible.builtin.shell: pkill -f start-deepseek-v4-flash-dspark.sh || true
-          when: profile_name == 'deepseek'
+          ansible.builtin.shell: |
+            if [ "{{ profile_name }}" = deepseek ]; then
+              pkill -f '[s]tart-deepseek-v4-flash-dspark.sh' || true
+            elif [ "{{ profile_name }}" = glm ]; then
+              for pid in $(pgrep -f '[s]tart.sh' || true); do
+                if [ "$(readlink -f /proc/$pid/cwd 2>/dev/null)" = "{{ guide_dir }}" ]; then
+                  kill "$pid" || true
+                fi
+              done
+            fi
+          when: profile_name in ['deepseek', 'glm']
           ignore_errors: true
 
         - name: Record residency as unknown

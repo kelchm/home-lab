@@ -14,7 +14,7 @@ These hosts are outside Flux and outside Talos automation, deliberately: profile
 | Model cache | `/opt/spark-models` on the host (22 GB) |
 | Measured | ~80 tok/s decode, 131k context |
 
-A second route runs `deepseek-ai/DeepSeek-V4-Flash-0731` across **both** nodes at tensor-parallel 2 on **:8888** — see [`inference/deepseek/`](inference/deepseek/). It is not deployed from this repo: it runs [tonyd2wild's DSpark guide](https://github.com/tonyd2wild/DeepSeek-v4-Flash-0731-DSpark-1M-NVFP4-KV-2x-DGX-Spark) cloned onto each host, which builds its own runtime image locally. This directory carries only the site overrides. The two routes are mutually exclusive: TP=2 claims both hosts. Spark's unified memory disables GPUDirect RDMA, so NCCL all-reduce over the ConnectX-7 fabric runs far below raw RDMA line rate — two independent single-node servers beat tensor-parallel for any model that fits in one node. Reach for TP=2 only for models that genuinely exceed ~104 GB.
+Two TP=2 profiles claim **both** nodes and serve on **:8888**: `deepseek-ai/DeepSeek-V4-Flash-0731` via [tonyd2wild's DSpark guide](inference/deepseek/), and `GLM-5.3-Flash-EXL3` via [MiaAI-Lab's EXL3 + DFlash2 guide](inference/glm/). The upstream guides are cloned and pinned on the hosts; this repo carries only site overrides, artifact pins, and the control-plane glue. All three profiles are mutually exclusive. Spark's unified memory disables GPUDirect RDMA, so NCCL all-reduce over the ConnectX-7 fabric runs far below raw RDMA line rate — two independent single-node servers beat tensor-parallel for any model that fits in one node. Reach for TP=2 only for models that genuinely exceed ~104 GB.
 
 ## Operating it
 
@@ -22,30 +22,34 @@ A second route runs `deepseek-ai/DeepSeek-V4-Flash-0731` across **both** nodes a
 task sparks:switch PROFILE=qwen       # guarded switch: teardown both hosts, reclaim
 task sparks:switch PROFILE=deepseek   #   gate, drop_caches, preflight, 30-min ready
                                       #   gate, cold-prefill smoke (deepseek)
+task sparks:switch PROFILE=glm        # pinned EXL3 + DFlash2, thinking-off smoke
 task sparks:baseline                  # deploy Caddy endpoint + boot unit to spark-1
 task sparks:status                    # both nodes: GPU, containers, endpoint
 task sparks:logs HOST=10.32.21.31
 task sparks:down                      # break-glass teardown, zero dependencies
 ```
 
-`switch` refuses to proceed if MemAvailable stays low after teardown — that means the previous profile's UVM allocations did not release and the affected host needs a reboot first. It also refuses concurrent switches (lock on spark-1; remove `/tmp/spark-switch.lock` if stale). TP=2 switches never pull or build mid-switch — preflight verifies the pinned guide rev, every override line, weights, and cross-rank image identity, and fails with instructions instead. The qwen profile pulls only its digest-pinned image, explicitly, before start.
+`switch` refuses to proceed if MemAvailable stays low after teardown — that means the previous profile's UVM allocations did not release and the affected host needs a reboot first. It also refuses concurrent switches (lock on spark-1; remove `/tmp/spark-switch.lock` if stale). TP=2 switches never pull, download, sync, or build mid-switch — preflight verifies the pinned guide rev, every override line, exact weight refs, and cross-rank image identity, and fails with instructions instead. The qwen profile pulls only its digest-pinned image, explicitly, before start.
 
 After a reboot the pair converges to the baseline: Caddy and the `qwen` profile come back (docker restart policy + `spark-baseline.service`); TP=2 profiles never auto-start — rerun `switch` for those.
 
-`task sparks:down` stops both routes on **both** hosts and needs nothing but SSH — by design it does not touch the resident marker, so `status` shows stale residency until the next switch (`ansible-playbook down.yaml` records `none`). To reclaim disk as well, on each host:
+`task sparks:down` stops every profile on **both** hosts and needs nothing but SSH — by design it does not touch the resident marker, so `status` shows stale residency until the next switch (`ansible-playbook down.yaml` records `none`). To reclaim disk as well, on each host:
 
 ```sh
 sudo rm -rf /opt/spark-models /opt/spark-stack /opt/spark-cache
-rm -rf ~/dspark-guide
+rm -rf ~/dspark-guide ~/glm53-guide
+rm -rf ~/.cache/huggingface/hub/models--Mia-AiLab--GLM-5.3-Flash-EXL3-TR3-4bpw
+rm -rf ~/.cache/huggingface/hub/models--incoai--GLM-5.3-Flash-DFlash2
 # Only the images this work pulled or built - `prune -a` would take unrelated ones.
 docker rmi vllm-dspark-runtime:dspark-nvfp4-stage-c \
            vllm-dspark-runtime:mia-raf-pr1 \
            vllm-dspark-runtime:mia-raf-pr1-nvfp4-a \
            vllm-dspark-runtime:mia-raf-pr1-nvfp4-b || true
 docker rmi "$(grep -oE 'vllm/vllm-openai@sha256:[0-9a-f]+' /path/to/compose.yaml)" || true
+docker rmi ghcr.io/miaai-lab/glm-5.3-flash-2x-dgx-sparks@sha256:9bb1557a4234fce63d59599e44d10747eabd742beb337eebf9e7070be8a0fd58 || true
 ```
 
-The pulled images are the large residue — roughly 45 GB per host across the vLLM and DeepSeek tags.
+The pulled images and pinned model caches are the large residue; remove only the explicitly listed paths and tags, never an indiscriminate Docker or Hugging Face cache prune.
 
 ## The stable endpoint
 
@@ -72,13 +76,17 @@ The provider block lives in `~/.config/opencode/opencode.jsonc` (not in this rep
       "deepseek-v4-flash-dspark": {
         "reasoning": true,
         "limit": { "context": 1000000, "output": 32000 }
+      },
+      "GLM-5.3-Flash-EXL3": {
+        "reasoning": true,
+        "limit": { "context": 1000000, "output": 32000 }
       }
     }
   }
 }
 ```
 
-Then `opencode run --model spark/qwen3.6-35b "..."`, or pick it from `/models` interactively. Never let any tool rewrite this block: opencode keys sampling overrides on the provider ID and on model-ID substrings.
+Then `opencode run --model spark/GLM-5.3-Flash-EXL3 "..."`, or pick a resident model from `/models` interactively. Never let any tool rewrite this block: opencode keys sampling overrides on the provider ID and on model-ID substrings.
 
 ## Landmines
 
