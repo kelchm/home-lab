@@ -24,7 +24,7 @@ Design, route rationale, and caveats: `docs/plans/20260622-tailscale-operator.md
 | CIDR | What it reaches |
 |------|-----------------|
 | `10.32.1.0/24`   | VLAN 1 — UniFi controller / gateway admin |
-| `10.32.10.0/24`  | VLAN 10 — Main: trusted clients / admin devices |
+| `10.32.10.0/23`  | VLAN 10 — Main: trusted clients / admin devices (widened past the /24 so a client's connected route wins; see [Client policy](#client-policy-accept-routes)) |
 | `10.32.20.0/24`  | VLAN 20 — Lab Infra: NAS, switches, APs |
 | `10.32.30.0/24`  | VLAN 30 — Lab Prod: `talosctl`, kube-API VIP, nodes |
 | `10.32.130.0/24` | admin-prod LB — Longhorn/Grafana/operator UIs + k8s-gateway DNS |
@@ -71,7 +71,7 @@ In the tailnet policy file (Access controls):
   "autoApprovers": {
     "routes": {
       "10.32.1.0/24":   ["tag:k8s"],
-      "10.32.10.0/24":  ["tag:k8s"],
+      "10.32.10.0/23":  ["tag:k8s"],
       "10.32.20.0/24":  ["tag:k8s"],
       "10.32.30.0/24":  ["tag:k8s"],
       "10.32.130.0/24": ["tag:k8s"],
@@ -104,14 +104,40 @@ the tailnet.
 
 ### 4. Enroll client devices
 
-Install Tailscale on the device, sign in to the tailnet, then accept the routes:
+Install Tailscale on the device and sign in to the tailnet. Whether to accept the
+advertised routes depends on the node class — see [Client policy](#client-policy-accept-routes).
+MagicDNS picks up the split-DNS entry automatically on every enrolled device.
 
-```sh
-tailscale up --accept-routes
-```
+## Client policy (accept-routes)
 
-(or the equivalent GUI toggle: "Use subnet routes"). MagicDNS picks up the split-DNS
-entry automatically.
+Subnet routes exist for devices that are **not** on the advertised prefixes. A device
+sitting on VLAN 10 already reaches every VLAN through `10.32.10.1` (the gateway
+inter-VLAN routes), so accepting routes there buys nothing — and accepting a route
+identical to the connected prefix installs a duplicate `10.32.10/24` on the Tailscale
+interface that breaks Magicsock direct paths between same-LAN peers (direct ↔ DERP
+flapping, dead long-lived TCP). This is a [documented Tailscale failure mode]; the
+documented fix is advertising the prefix wider than the LAN (`/23` above) so the OS's
+connected `/24` always wins by longest-prefix match.
+
+| Node class | Accept routes ("Use Tailscale subnets") | How the LAN is reached |
+|------------|------------------------------------------|------------------------|
+| Always-home (hyperion, talaria) | **Off** (`tailscale set --accept-routes=false`) | Connected LAN + inter-VLAN via `10.32.10.1`; tailnet peers via `100.x` / MagicDNS |
+| Travels (iphone, laptops) | **On**, left on at home too | Away: everything via the subnet router. Home: VLAN 10 direct over Wi-Fi (connected `/24` beats the advertised `/23`); other VLANs hairpin through the subnet router |
+| Subnet router (`lan-subnet-router`) | Never accepts its own routes | n/a |
+
+Limitations, stated plainly:
+
+- Accept-routes is **all prefixes or none** per node; Tailscale has no per-prefix accept
+  and no SSID-conditional subnet toggle. The `/23` widening is what makes leaving it on
+  safe for devices that come home.
+- iOS **VPN On Demand** ("Except On" the home SSID) would disconnect the tunnel entirely
+  at home — that also kills `100.x` reachability (T3 pairing, MagicDNS), so it is not
+  used here. Travel devices keep the tunnel up everywhere.
+- A travel device at home still reaches non-connected VLANs (`10.32.30.x`, the
+  `130`/`140` LB pools) via the subnet-router hairpin rather than the physical gateway.
+  Only a full at-home disconnect would change that; accepted as the lesser cost.
+
+[documented Tailscale failure mode]: https://tailscale.com/docs/reference/troubleshooting/network-configuration/lan-traffic-overlapping-subnets
 
 ## Validation
 
