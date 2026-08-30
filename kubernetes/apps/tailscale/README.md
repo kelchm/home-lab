@@ -108,7 +108,7 @@ Install Tailscale on the device and sign in to the tailnet. Whether to accept th
 
 ## Client policy (accept-routes)
 
-Subnet routes exist for devices that are **not** on the advertised prefixes. A device sitting on VLAN 10 already reaches every VLAN through `10.32.10.1` (the gateway inter-VLAN routes), so accepting routes there buys nothing — and accepting a route identical to the connected prefix installs a duplicate `10.32.10.0/24` on the Tailscale interface that breaks Magicsock direct paths between same-LAN peers (direct ↔ DERP flapping, dead long-lived TCP). This is a [documented Tailscale failure mode]; the documented fix is advertising the prefix wider than the LAN (`/23` above) so the OS's connected `/24` wins by longest-prefix match. Tailscale documents that behavior for macOS and Windows; iOS is asserted nowhere and is verified empirically here (see Validation). A Linux client would **not** be covered — Linux installs Tailscale routes via policy routing that outranks the main table, so an accept-routes Linux device on VLAN 10 needs `ip rule add to 10.32.10.0/24 priority 2500 lookup main` (reapplied at boot) or accept-routes off. No such client exists today.
+Subnet routes exist for devices that are **not** on the advertised prefixes. A device sitting on VLAN 10 already reaches every VLAN through `10.32.10.1` (the gateway inter-VLAN routes), so accepting routes there buys nothing — and accepting a route identical to the connected prefix installs a duplicate `10.32.10.0/24` on the Tailscale interface that breaks Magicsock direct paths between same-LAN peers (direct ↔ DERP flapping, dead long-lived TCP). This is a [documented Tailscale failure mode]; the documented fix is advertising the prefix wider than the LAN (`/23` above) so the OS's connected `/24` wins by longest-prefix match. Tailscale documents that behavior for macOS and Windows; on iOS it is undocumented but currently even stronger — the connected Wi-Fi range wins overlaps regardless of tunnel-route specificity ([tailscale/tailscale#14142], an open behavior bug, so verify after iOS client updates; see Validation). A Linux client would **not** be covered — Linux installs Tailscale routes via policy routing that outranks the main table, so an accept-routes Linux device on VLAN 10 needs `ip rule add to 10.32.10.0/24 priority 2500 lookup main` (reapplied at boot) or accept-routes off. No such client exists today.
 
 | Node class | Accept routes ("Use Tailscale subnets") | How the LAN is reached |
 |------------|------------------------------------------|------------------------|
@@ -124,6 +124,7 @@ Limitations, stated plainly:
 - On a foreign network that itself uses `10.32.10.0/24` (or `10.32.11.0/24`), the connected prefix outranks the advertised `/23` — the same LPM that protects the home case — so home VLAN 10 is unreachable until leaving that network. Inherent to any RFC 1918 collision, and marginally wider now that the `/23` spans two `/24`s.
 
 [documented Tailscale failure mode]: https://tailscale.com/docs/reference/troubleshooting/network-configuration/lan-traffic-overlapping-subnets
+[tailscale/tailscale#14142]: https://github.com/tailscale/tailscale/issues/14142
 
 ## Validation
 
@@ -134,7 +135,7 @@ kubectl -n tailscale get pods                       # operator-* + subnet-router
 kubectl get connector lan-subnet-router -o wide     # SubnetRoutes lists the 6 CIDRs; ConnectorReady
 ```
 
-Admin console → Machines: `tailscale-operator` and `lan-subnet-router` present, routes **approved** (auto) — in particular `10.32.10.0/23` must show approved, not pending (the `autoApprovers` entry must read `/23`; an entry only approves advertisements at or below its own width). On an accept-routes device sitting on VLAN 10: the route table shows the connected `10.32.10.0/24` on the physical interface and only the `/23` on the Tailscale interface, and `tailscale status` holds a `direct <LAN-IP>:41641` path to a same-LAN peer. From a remote enrolled device with `--accept-routes`:
+Admin console → Machines: `tailscale-operator` and `lan-subnet-router` present, routes **approved** (auto) — in particular `10.32.10.0/23` must show approved, not pending (the `autoApprovers` entry must read `/23`; an entry only approves advertisements at or below its own width, and approval is **not retroactive** — a route advertised before the policy change stays pending even after the policy is fixed, and needs a manual approval or a fresh advertisement). On an accept-routes device sitting on VLAN 10: the route table shows the connected `10.32.10.0/24` on the physical interface and only the `/23` on the Tailscale interface, and `tailscale status` holds a `direct <LAN-IP>:41641` path to a same-LAN peer. From a remote enrolled device with `--accept-routes`:
 
 ```sh
 ping 10.32.20.5                                      # a LAN host (NAS)
