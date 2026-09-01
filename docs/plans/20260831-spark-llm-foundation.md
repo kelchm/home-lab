@@ -34,7 +34,7 @@ What "programmatic" buys concretely: a swap is one authenticated API call (or on
 - `sparks/ansible/` restructured: **roles** converge state (`host_baseline`, `caddy`, `controller`); **playbooks** execute transactions. The validated switch core is carried over unchanged; new around it: maintenance-before-teardown, served-model identity verification on the direct port, exact-port publication only after the smoke, stable-endpoint verification, and a `publish.yaml` recovery path that never tears down. A failed switch leaves the endpoint in maintenance, never routing at whatever answered.
 - `sparks/controller/`: FastAPI service, arm64 image built in-repo (`ghcr.io/kelchm/spark-controller`, `latest` + immutable `sha-<commit>` tags), deployed by the baseline. It executes the playbooks from its own checkout of `main` (synced only while no job runs), journals jobs to disk, refuses concurrent jobs, and holds no state a switch cannot rebuild. Bearer token in `sparks/ansible/secrets.sops.yaml`; the controller itself never needs SOPS.
 - Boot convergence made route-complete: after a reboot, `spark-baseline.service` starts qwen *and* resets the stable route to it, so a route published for a TP=2 profile never outlives its containers. TP=2 still never auto-starts.
-- All three profiles (qwen, deepseek, glm) with the pins validated live on 2026-08-30.
+- All three profiles — `qwen36-nvfp4`, `ds4f-dspark`, `glm53-exl3` — with the pins validated live on 2026-08-30. Each profile is a single self-contained YAML (`<family+version>-<quant/runtime lane>`); generic preflight/start/smoke tasks are driven by its vars and the playbooks discover profiles from the directory, so a variant or new version is one added file.
 
 ## Rollout
 
@@ -43,7 +43,7 @@ Each step is verifiable and abortable; nothing before step 4 touches the residen
 1. Merge; wait for the `Spark Controller Image` workflow to publish `ghcr.io/kelchm/spark-controller:latest`. On the operator machine: `mise install` (ansible-core).
 2. Create the `spark.home.kelch.io → 10.32.21.31` UniFi static record.
 3. `task sparks:baseline` from the primary checkout (needs `age.key` for the token). With a TP=2 profile resident this deliberately fails closed: Caddy comes up routing `/v1` at the default profile's dead port. Verify `GET http://spark.home.kelch.io/admin/v1/state` (auth) shows the resident profile and healthy direct port, then `task sparks:publish PROFILE=<resident>` and verify `curl http://spark.home.kelch.io/v1/models` names it.
-4. First API-driven switch in a maintenance window: `POST /admin/v1/switches {"profile":"qwen"}`, follow the job log; then a TP=2 profile end-to-end including its smoke. Re-verify `task sparks:down` from a bare checkout afterwards.
+4. First API-driven switch in a maintenance window: `POST /admin/v1/switches {"profile":"qwen36-nvfp4"}`, follow the job log; then a TP=2 profile end-to-end including its smoke. Re-verify `task sparks:down` from a bare checkout afterwards.
 5. Update the opencode provider `baseURL` to `http://spark.home.kelch.io/v1` (per-machine, one time).
 
 ## Remaining phases

@@ -54,7 +54,7 @@ rsync -a --partial --info=progress2 ~/.cache/huggingface/hub/models--incoai--GLM
 ## Operate
 
 ```sh
-task sparks:switch PROFILE=glm
+task sparks:switch PROFILE=glm53-exl3
 task sparks:status
 task sparks:logs HOST=10.32.21.31
 task sparks:down

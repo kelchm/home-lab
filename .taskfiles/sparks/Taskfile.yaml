@@ -16,22 +16,18 @@ vars:
 tasks:
 
   switch:
-    desc: Switch the resident inference profile, guarded and ready-gated [PROFILE=qwen|deepseek|glm]
+    desc: Switch the resident inference profile, guarded and ready-gated [PROFILE=<profiles/*.yaml name>]
     dir: '{{.ROOT_DIR}}/sparks/ansible'
     cmd: ansible-playbook switch.yaml -e profile={{.PROFILE}}
     requires:
-      vars:
-        - name: PROFILE
-          enum: ['qwen', 'deepseek', 'glm']
+      vars: [PROFILE]
 
   publish:
-    desc: Re-point the stable endpoint at an already-healthy profile without a switch [PROFILE=qwen|deepseek|glm]
+    desc: Re-point the stable endpoint at an already-healthy profile without a switch [PROFILE=<profiles/*.yaml name>]
     dir: '{{.ROOT_DIR}}/sparks/ansible'
     cmd: ansible-playbook publish.yaml -e profile={{.PROFILE}}
     requires:
-      vars:
-        - name: PROFILE
-          enum: ['qwen', 'deepseek', 'glm']
+      vars: [PROFILE]
 
   baseline:
     desc: Converge host baseline and deploy Caddy + controller to spark-1

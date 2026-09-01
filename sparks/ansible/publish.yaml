@@ -7,15 +7,26 @@
   hosts: spark-1
   gather_facts: false
   pre_tasks:
-    - name: Assert profile is defined and valid
+    # Profiles are discovered, never enumerated: adding one is adding a file.
+    - name: Assert profile is defined and known
       ansible.builtin.assert:
         that:
           - profile is defined
-          - profile in ['qwen', 'deepseek', 'glm']
-        fail_msg: "profile must be set to 'qwen', 'deepseek', or 'glm' via -e profile=..."
+          - (playbook_dir + '/profiles/' + profile + '.yaml') is exists
+        fail_msg: "set -e profile=<name>; available: {{ query('ansible.builtin.fileglob', playbook_dir + '/profiles/*.yaml') | map('basename') | map('regex_replace', '[.]yaml$', '') | sort | join(', ') }}"
 
     - name: Load profile variables
       ansible.builtin.include_vars: "profiles/{{ profile }}.yaml"
+
+    - name: Assert profile contract
+      ansible.builtin.assert:
+        that:
+          - profile_name == profile
+          - served_model_id is defined
+          - serve_port is defined
+          - health_url is defined
+          - start_driver in ['compose', 'guide']
+        fail_msg: "profiles/{{ profile }}.yaml is missing required keys (profile_name matching the filename, served_model_id, serve_port, health_url, start_driver)"
 
   tasks:
     - name: Acquire switch lock
@@ -50,8 +61,8 @@
             fail_msg: "profile port serves {{ (models_direct.stdout | from_json).data | map(attribute='id') | list }}, expected exactly ['{{ served_model_id }}']"
 
         - name: Smoke test profile
-          ansible.builtin.include_tasks: "tasks/smoke-{{ profile_name }}.yaml"
-          when: not (skip_smoke | default(false))
+          ansible.builtin.include_tasks: tasks/smoke.yaml
+          when: smoke_command is defined and not (skip_smoke | default(false))
 
         # Residency reflects what is verified running, not what is routed;
         # written before the route flip so state never claims less than the

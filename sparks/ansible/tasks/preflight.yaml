@@ -1,0 +1,85 @@
+---
+# Generic offline preflight, driven entirely by profile vars. Every check is
+# optional: a profile opts in by defining the corresponding variable. Nothing
+# here pulls, downloads, syncs, or builds — a missing artifact fails with
+# instructions instead (no implicit pulls mid-rendezvous).
+- name: Resolve preflight hosts
+  ansible.builtin.set_fact:
+    preflight_hosts: "{{ groups['sparks'] if worker_host is defined else [inventory_hostname] }}"
+
+- name: Assert local compose file exists
+  ansible.builtin.assert:
+    that:
+      - lookup('ansible.builtin.fileglob', compose_file) | length > 0
+    fail_msg: "missing {{ compose_file }}"
+  when: start_driver == 'compose'
+
+- name: Verify guide is pinned to expected revision
+  ansible.builtin.shell: git -C {{ guide_dir }} rev-parse HEAD
+  register: guide_head
+  changed_when: false
+  delegate_to: "{{ item }}"
+  loop: "{{ preflight_hosts if guide_dir is defined else [] }}"
+
+- name: Assert guide revision matches pin
+  ansible.builtin.assert:
+    that:
+      - item.stdout == guide_rev
+    fail_msg: "guide at {{ guide_dir }} on {{ item.item }} is {{ item.stdout }}, expected {{ guide_rev }}; see the recipe README under sparks/inference/ for clone/pin instructions"
+  loop: "{{ guide_head.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Stage committed overrides for comparison
+  ansible.builtin.copy:
+    src: "{{ overrides_file }}"
+    dest: /tmp/spark-profile.overrides
+  delegate_to: "{{ item }}"
+  loop: "{{ preflight_hosts if overrides_file is defined else [] }}"
+
+# Every override line must be live verbatim; a host keeping any guide default
+# (e.g. the model id) would pass a spot check and serve the wrong thing.
+- name: Verify every override landed in the guide environment
+  ansible.builtin.shell: |
+    grep -v '^#' /tmp/spark-profile.overrides | grep -v '^$' | while IFS= read -r line; do
+      grep -qxF "$line" {{ guide_dir }}/{{ guide_env_file }} || { echo "override not applied: $line (re-apply from {{ overrides_file | basename }})"; exit 1; }
+    done
+  changed_when: false
+  delegate_to: "{{ item }}"
+  loop: "{{ preflight_hosts if overrides_file is defined else [] }}"
+
+- name: Reject forbidden guide environment settings
+  ansible.builtin.shell: "! grep -v '^#' {{ guide_dir }}/{{ guide_env_file }} | grep -Eq -- '{{ forbidden_env_regex }}'"
+  changed_when: false
+  delegate_to: "{{ item }}"
+  loop: "{{ preflight_hosts if forbidden_env_regex is defined else [] }}"
+
+- name: Collect runtime image IDs
+  ansible.builtin.shell: "docker image inspect --format '{% raw %}{{.Id}}{% endraw %}' {{ runtime_image }}"
+  register: image_ids
+  changed_when: false
+  failed_when: false
+  delegate_to: "{{ item }}"
+  loop: "{{ preflight_hosts if runtime_image is defined else [] }}"
+
+- name: Assert runtime image is present
+  ansible.builtin.assert:
+    that:
+      - item.rc == 0
+    fail_msg: "image {{ runtime_image }} missing on {{ item.item }}; pre-pull or build it before switching (no implicit pulls mid-rendezvous)"
+  loop: "{{ image_ids.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Assert image IDs match across hosts
+  ansible.builtin.assert:
+    that:
+      - image_ids.results | map(attribute='stdout') | unique | length == 1
+    fail_msg: "runtime image differs between hosts; make both ranks byte-identical before switching"
+  when: runtime_image is defined and (preflight_hosts | length) > 1
+
+- name: Verify model artifacts are present
+  ansible.builtin.shell: "{{ weights_check_command }}"
+  changed_when: false
+  delegate_to: "{{ item }}"
+  loop: "{{ preflight_hosts if weights_check_command is defined else [] }}"

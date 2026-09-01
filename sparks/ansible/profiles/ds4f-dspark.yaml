@@ -1,0 +1,29 @@
+---
+profile_name: ds4f-dspark
+served_model_id: deepseek-v4-flash-dspark
+serve_port: 8888
+health_url: http://localhost:8888/health
+ready_retries: 120
+ready_delay: 15
+head_host: spark-1
+worker_host: spark-2
+
+guide_dir: /home/kelchm/dspark-guide
+guide_rev: 0fec8084979040298fe2a3d4ee89abc640e6bc12
+guide_env_file: .env.dspark
+overrides_file: "{{ playbook_dir }}/../inference/deepseek/env.dspark.overrides"
+runtime_image: vllm-dspark-runtime:dspark-nvfp4-stage-c
+
+weights_check_command: >-
+  find /opt/spark-models -maxdepth 3 -iname '*DeepSeek-V4-Flash-0731*' | grep -q .
+  || { echo "DeepSeek weights missing; pre-download before switching" >&2; exit 1; }
+
+start_driver: guide
+# SKIP_OVERLAY_CHECK: preflight owns image presence and cross-rank identity;
+# the script's overlay-checksum rebuild would otherwise outlive the ready gate.
+start_command: SKIP_OVERLAY_CHECK=1 ./start-deepseek-v4-flash-dspark.sh
+start_wait: false
+start_log: /opt/spark-stack/dspark-start.log
+
+# Forces cold prefill each iteration; warm smoke tests pass on broken deployments.
+smoke_command: cd {{ guide_dir }} && URL=http://localhost:8888/v1 N=3 COLD=1 timeout 1200 python3 benchmarks/replay_hermes.py

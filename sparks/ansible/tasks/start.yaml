@@ -1,0 +1,41 @@
+---
+# Generic start, selected by the profile's start_driver: `compose` (this
+# repo's stack, single-node) or `guide` (a pinned upstream recipe whose own
+# script performs the worker-first launch across both hosts).
+- name: Ensure inference directory exists
+  ansible.builtin.file:
+    path: "{{ remote_dir }}/inference"
+    state: directory
+    owner: kelchm
+  become: true
+  when: start_driver == 'compose'
+
+- name: Copy compose file
+  ansible.builtin.copy:
+    src: "{{ compose_file }}"
+    dest: "{{ remote_dir }}/inference/compose.yaml"
+  when: start_driver == 'compose'
+
+# Explicit pull is fine here — single-node, no rendezvous to desynchronize.
+- name: Pull and start compose stack
+  ansible.builtin.shell: cd {{ remote_dir }}/inference && docker compose pull -q && docker compose up -d
+  when: start_driver == 'compose'
+
+# Preflight owns every artifact; start_command must disable the recipe's own
+# staging/pull/rebuild paths so nothing networked outlives the ready gate.
+# When start_wait is false, the ready gate in switch.yaml does the waiting.
+- name: Start profile via pinned guide
+  ansible.builtin.shell: cd {{ guide_dir }} && {{ start_command }} > {{ start_log }} 2>&1
+  async: 5400
+  poll: 0
+  register: guide_start
+  when: start_driver == 'guide'
+
+- name: Wait for guide launch and warmup to finish
+  ansible.builtin.async_status:
+    jid: "{{ guide_start.ansible_job_id }}"
+  register: guide_start_result
+  until: guide_start_result is finished
+  retries: 360
+  delay: 15
+  when: start_driver == 'guide' and (start_wait | default(false))

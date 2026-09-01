@@ -3,15 +3,26 @@
   hosts: spark-1
   gather_facts: false
   pre_tasks:
-    - name: Assert profile is defined and valid
+    # Profiles are discovered, never enumerated: adding one is adding a file.
+    - name: Assert profile is defined and known
       ansible.builtin.assert:
         that:
           - profile is defined
-          - profile in ['qwen', 'deepseek', 'glm']
-        fail_msg: "profile must be set to 'qwen', 'deepseek', or 'glm' via -e profile=..."
+          - (playbook_dir + '/profiles/' + profile + '.yaml') is exists
+        fail_msg: "set -e profile=<name>; available: {{ query('ansible.builtin.fileglob', playbook_dir + '/profiles/*.yaml') | map('basename') | map('regex_replace', '[.]yaml$', '') | sort | join(', ') }}"
 
     - name: Load profile variables
       ansible.builtin.include_vars: "profiles/{{ profile }}.yaml"
+
+    - name: Assert profile contract
+      ansible.builtin.assert:
+        that:
+          - profile_name == profile
+          - served_model_id is defined
+          - serve_port is defined
+          - health_url is defined
+          - start_driver in ['compose', 'guide']
+        fail_msg: "profiles/{{ profile }}.yaml is missing required keys (profile_name matching the filename, served_model_id, serve_port, health_url, start_driver)"
 
   tasks:
     # Outside the blocks: a lock conflict must fail without entering rescue,
@@ -93,10 +104,10 @@
           loop: "{{ groups['sparks'] }}"
 
         - name: Preflight checks
-          ansible.builtin.include_tasks: "tasks/preflight-{{ profile_name }}.yaml"
+          ansible.builtin.include_tasks: tasks/preflight.yaml
 
         - name: Start profile
-          ansible.builtin.include_tasks: "tasks/start-{{ profile_name }}.yaml"
+          ansible.builtin.include_tasks: tasks/start.yaml
 
         # Cold TP=2 boots take 15–30 min; this is the 30-minute gate. Per-probe
         # timeouts keep a half-dead endpoint from hanging the gate forever.
@@ -120,8 +131,8 @@
             fail_msg: "profile port serves {{ (models_direct.stdout | from_json).data | map(attribute='id') | list }}, expected exactly ['{{ served_model_id }}']"
 
         - name: Smoke test profile
-          ansible.builtin.include_tasks: "tasks/smoke-{{ profile_name }}.yaml"
-          when: not (skip_smoke | default(false))
+          ansible.builtin.include_tasks: tasks/smoke.yaml
+          when: smoke_command is defined and not (skip_smoke | default(false))
 
         # Residency reflects what is verified running, not what is routed;
         # written before the route flip so a failure between publish and the
@@ -153,19 +164,16 @@
 
       rescue:
         # The async start script can keep launching containers after a failed
-        # gate; kill it before advising teardown.
+        # gate; kill anything still running from the guide directory before
+        # advising teardown.
         - name: Stop lingering start script
           ansible.builtin.shell: |
-            if [ "{{ profile_name }}" = deepseek ]; then
-              pkill -f '[s]tart-deepseek-v4-flash-dspark.sh' || true
-            elif [ "{{ profile_name }}" = glm ]; then
-              for pid in $(pgrep -f '[s]tart.sh' || true); do
-                if [ "$(readlink -f /proc/$pid/cwd 2>/dev/null)" = "{{ guide_dir }}" ]; then
-                  kill "$pid" || true
-                fi
-              done
-            fi
-          when: profile_name in ['deepseek', 'glm']
+            for pid in $(pgrep -f '[s]tart' || true); do
+              if [ "$(readlink -f /proc/$pid/cwd 2>/dev/null)" = "{{ guide_dir }}" ]; then
+                kill "$pid" || true
+              fi
+            done
+          when: guide_dir is defined
           ignore_errors: true
 
         # Best-effort: the route must not point at whatever the failure left

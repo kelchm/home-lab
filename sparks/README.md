@@ -19,16 +19,17 @@ Two TP=2 profiles claim **both** nodes and serve on **:8888**: `deepseek-ai/Deep
 ## Operating it
 
 ```sh
-task sparks:switch PROFILE=qwen       # guarded switch: teardown both hosts, reclaim
-task sparks:switch PROFILE=deepseek   #   gate, drop_caches, preflight, 30-min ready
-                                      #   gate, cold-prefill smoke (deepseek)
-task sparks:switch PROFILE=glm        # pinned EXL3 + DFlash2, thinking-off smoke
-task sparks:publish PROFILE=glm       # re-point the stable endpoint, no teardown
-task sparks:baseline                  # converge hosts, deploy Caddy + controller
-task sparks:status                    # both nodes: GPU, containers, endpoint
+task sparks:switch PROFILE=glm53-exl3   # guarded switch: unpublish, teardown both
+                                        #   hosts, reclaim gate, drop_caches,
+                                        #   preflight, ready gate, smoke, publish
+task sparks:publish PROFILE=glm53-exl3  # re-point the stable endpoint, no teardown
+task sparks:baseline                    # converge hosts, deploy Caddy + controller
+task sparks:status                      # both nodes: GPU, containers, endpoint
 task sparks:logs HOST=10.32.21.31
-task sparks:down                      # break-glass teardown, zero dependencies
+task sparks:down                        # break-glass teardown, zero dependencies
 ```
+
+A profile is one YAML file in [`ansible/profiles/`](ansible/profiles/): `qwen36-nvfp4` (single-node vLLM, `:8000`), `ds4f-dspark` and `glm53-exl3` (TP=2 pinned guides, `:8888`). Names follow `<family+version>-<quant/runtime lane>` so variants and new versions coexist. The file declares everything recipe-specific — pins, ports, start driver (`compose` or `guide`), preflight policy, and the smoke contract — and the generic `preflight`/`start`/`smoke` tasks are driven entirely by it; the playbooks discover profiles from the directory, so adding a recipe means adding one file, not editing the transaction.
 
 `switch` refuses to proceed if MemAvailable stays low after teardown — that means the previous profile's UVM allocations did not release and the affected host needs a reboot first. It also refuses concurrent switches (lock on spark-1; remove `/tmp/spark-switch.lock` if stale). TP=2 switches never pull, download, sync, or build mid-switch — preflight verifies the pinned guide rev, every override line, exact weight refs, and cross-rank image identity, and fails with instructions instead. The qwen profile pulls only its digest-pinned image, explicitly, before start.
 

@@ -21,7 +21,7 @@ A switch from anywhere on the LAN:
 ```sh
 curl -sS -X POST http://spark.home.kelch.io/admin/v1/switches \
   -H "Authorization: Bearer $SPARK_TOKEN" -H 'Content-Type: application/json' \
-  -d '{"profile":"glm"}'
+  -d '{"profile":"glm53-exl3"}'
 ```
 
 Then poll `GET /admin/v1/jobs/<id>` for progress; a TP=2 cold boot legitimately takes 15–30 minutes.

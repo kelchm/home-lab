@@ -33,15 +33,15 @@
       ansible.builtin.debug:
         msg: "resident: {{ resident.stdout }} (baseline: {{ default_profile }})"
 
-    - name: Probe qwen endpoint
+    - name: Probe single-node endpoint
       ansible.builtin.shell: curl -fsS --max-time 5 http://localhost:8000/v1/models 2>&1 | head -c 160
-      register: qwen_probe
+      register: single_probe
       ignore_errors: true
       changed_when: false
 
-    - name: Print qwen probe
+    - name: Print single-node probe
       ansible.builtin.debug:
-        msg: "qwen :8000 {{ qwen_probe.stdout }}"
+        msg: ":8000 (single-node) {{ single_probe.stdout }}"
 
     - name: Probe TP2 endpoint
       ansible.builtin.shell: curl -fsS --max-time 5 http://localhost:8888/v1/models 2>&1 | head -c 160
@@ -51,7 +51,7 @@
 
     - name: Print TP2 probe
       ansible.builtin.debug:
-        msg: "TP2 :8888 {{ tp2_probe.stdout }}"
+        msg: ":8888 (TP=2) {{ tp2_probe.stdout }}"
 
     - name: Probe Caddy stable endpoint
       ansible.builtin.shell: curl -fsS --max-time 5 http://localhost:80/v1/models 2>&1 | head -c 160

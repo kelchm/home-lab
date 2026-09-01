@@ -1,0 +1,12 @@
+---
+# Runs the profile's own smoke contract. The command must exit non-zero on an
+# incoherent or misidentified deployment; passing health checks alone never
+# publishes a profile.
+- name: Run profile smoke
+  ansible.builtin.shell: "{{ smoke_command }}"
+  register: smoke_result
+  changed_when: false
+
+- name: Print smoke result
+  ansible.builtin.debug:
+    var: smoke_result.stdout_lines

@@ -1,5 +1,5 @@
 ---
-default_profile: qwen
+default_profile: qwen36-nvfp4
 remote_dir: /opt/spark-stack
 resident_file: /opt/spark-stack/resident
 switch_log: /opt/spark-stack/switch.log
