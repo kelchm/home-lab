@@ -80,7 +80,7 @@ problems are not missing dashboards — they are:
 
 | Phase | Change | Leverage | Risk |
 |---|---|---|---|
-| 1 | Preserve alert **delivery** while converging on VM (retire KPS-Prometheus/Alertmanager, Loki, OpenObserve) | Highest | Medium — staged ownership and live checks required |
+| 1 | Preserve alert **delivery** while converging on VM (cut over the survivor path, retain KPS and Loki for the rollback soak, then remove them in a separate cleanup PR; OpenObserve is already retired) | Highest | Medium — staged ownership and live checks required |
 | 2 | **Dashboards-as-code** for the 5 gap components via `grafana-operator` | High | Low |
 | 3 | **Estate coverage** — UniFi, Synology, edge Pis, uptime | High | Low |
 | 4 | **eBPF signals** — turn on Hubble (already own it); optionally Beyla | Medium | Low–Medium |
@@ -96,7 +96,7 @@ Convergence is **not** "delete KPS." A dependency check (2026-07-03, refreshed 2
 
 **The six couplings and how each is decoupled — do these first, then delete KPS:**
 
-1. **kube-state-metrics.** Resolved in the survivor cutover: VM-native KSM owns the only VM scrape target and carries the PVC label allowlist plus Longhorn `BackupTarget` custom-resource metric; KPS KSM is disabled.
+1. **kube-state-metrics.** Resolved in the survivor cutover: VM-native KSM owns the only VM KSM scrape target and carries the PVC label allowlist plus Longhorn `BackupTarget` custom-resource metric; KPS KSM is disabled.
 2. **node-exporter.** Resolved in the survivor cutover: VM-native node-exporter owns the three VM targets and KPS node-exporter is disabled. The chart preserves `job=kube-state-metrics` / `job=node-exporter`, so dashboards and queries keep matching; a brief scrape gap while source pods rename is acceptable.
 3. **prometheus-operator CRDs (`monitoring.coreos.com`).** Resolved by PR #478: standalone `prometheus-operator-crds` 31.0.1 owns the v0.93.1 CRDs with retention protection, KPS CRD installation is disabled, and consumers depend on the standalone release.
 4. **Converted-object garbage collection.** Resolved by PR #478: converter owner references are enabled and verified so deleted Prometheus sources cannot leave unowned VM copies evaluating forever.

@@ -136,7 +136,9 @@ kubectl -n observability delete prometheusrule longhorn-backup-delivery-test
 VM-native ownership must produce one healthy kube-state-metrics target and three healthy targets for node-exporter and each control-plane job:
 
 ```promql
-count(up{job="kube-state-metrics"} == 1) == 1
+count by (job) (up{job="kube-state-metrics"} == 1) == 1
+and on (job)
+count by (job) (up{job="kube-state-metrics"}) == 1
 
 count by (job) (up{job=~"node-exporter|kube-(controller-manager|scheduler|etcd)"} == 1) == 3
 and on (job)
@@ -148,13 +150,13 @@ Expected results: `1` for kube-state-metrics and `3` for each remaining job. The
 Check the rest of the signal path with:
 
 ```promql
-ALERTS{alertstate="firing",severity=~"warning|critical"}
-alertmanager_config_last_reload_successful
-alertmanager_notifications_failed_total{integration="pushover"}
+ALERTS{alertstate="firing",severity=~"warning|critical",evaluator="vmalert"}
+alertmanager_config_last_reload_successful{job="vmalertmanager-victoria-metrics-k8s-stack"}
+alertmanager_notifications_failed_total{job="vmalertmanager-victoria-metrics-k8s-stack",integration="pushover"}
 longhorn_backup_target_available{backup_target="default"}
 ```
 
-The steady state has the vmalert `Watchdog` in VMAlertmanager without an outbound notification, `alertmanager_config_last_reload_successful == 1`, no firing warning/critical alerts, no Pushover delivery failures, and `longhorn_backup_target_available == 1`.
+The operator-generated VMServiceScrape gives VMAlertmanager the `job="vmalertmanager-victoria-metrics-k8s-stack"` label. The steady state has the vmalert `Watchdog` in VMAlertmanager without an outbound notification, `alertmanager_config_last_reload_successful == 1`, no firing warning/critical alerts, no Pushover delivery failures, and `longhorn_backup_target_available == 1`.
 
 If the vmalert `Watchdog` disappears from VMAlertmanager, treat the absence as an observability incident and check vmalert rule health plus VMAlertmanager ingestion. A future external dead-man monitor should consume the Watchdog heartbeat and notify through a failure domain independent of this cluster; until then, do not rely on a daily self-notification as proof that the outbound path works.
 
