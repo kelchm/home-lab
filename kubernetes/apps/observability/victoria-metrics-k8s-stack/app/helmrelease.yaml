@@ -28,6 +28,13 @@ spec:
         name: victoriametrics
   interval: 1h
   values:
+    victoria-metrics-operator:
+      operator:
+        # Make converted VMRule/VMServiceScrape/VMPodScrape resources follow
+        # their Prometheus source objects during the KPS teardown. Without
+        # owner references, removed sources leave stale alerts and scrapes.
+        enable_converter_ownership: true
+
     # Subcharts already provided elsewhere — disable to avoid duplication.
     grafana:
       enabled: false   # using standalone Grafana from commit 1

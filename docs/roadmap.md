@@ -44,4 +44,3 @@ consume these reservations merely by hosting unrelated guests.
 
 - **Cilium Gateway API replacing Traefik**: defer until Cilium implements GEP-1494 (external auth filter). Until then Traefik's middleware story is irreducible for auth-less app UIs.
 - **Pod CIDR BGP advertisement**: Cilium can advertise pod IPs via BGP for direct LAN reachability. Not needed for current use cases.
-- **OpenObserve alerting on BGP session state**: deferred during the BGP migration; revisit once OpenObserve is the obvious place for it.

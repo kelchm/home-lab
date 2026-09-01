@@ -6,7 +6,7 @@ metadata:
 spec:
   dependsOn:
     # Provides the ServiceMonitor and PrometheusRule CRDs consumed by the chart.
-    - name: kube-prometheus-stack
+    - name: prometheus-operator-crds
   healthChecks:
     - apiVersion: helm.toolkit.fluxcd.io/v2
       kind: HelmRelease
