@@ -16,6 +16,12 @@ metadata:
 data:
   vm.yaml: |
     apiVersion: 1
+    # Remove the database-backed KPS datasource before provisioning the VM
+    # datasource with the same display name. Deleting its ConfigMap entry does
+    # not remove an already provisioned datasource from Grafana's database.
+    deleteDatasources:
+      - name: Alertmanager
+        orgId: 1
     datasources:
       - name: VictoriaMetrics
         uid: victoriametrics

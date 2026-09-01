@@ -10,7 +10,7 @@
 # discovers automatically. Datasources are registered separately via
 # datasources.yaml (also a labeled ConfigMap).
 #
-# The VM chart now owns the Talos node-address scrapes. Keeping all three KPS
+# The VM chart now owns every Kubernetes infrastructure scrape. Keeping the KPS
 # component toggles off prevents their converted ServiceMonitors from becoming
 # permanent duplicate vmagent scrape pools.
 apiVersion: helm.toolkit.fluxcd.io/v2
@@ -46,6 +46,12 @@ spec:
     kubeScheduler:
       enabled: false
     kubeEtcd:
+      enabled: false
+    kubeApiServer:
+      enabled: false
+    kubelet:
+      enabled: false
+    coreDns:
       enabled: false
 
     # Talos runs Cilium in kube-proxy-replacement mode. Leaving this enabled

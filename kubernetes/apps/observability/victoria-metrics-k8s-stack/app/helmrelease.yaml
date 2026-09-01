@@ -66,6 +66,22 @@ spec:
     prometheus-node-exporter:
       enabled: true
 
+    # VM-native resources are the sole vmagent owners for Kubernetes API,
+    # kubelet/cAdvisor/resource, and CoreDNS metrics. The matching KPS
+    # ServiceMonitors stay disabled during the rollback soak.
+    kubeApiServer:
+      enabled: true
+    kubelet:
+      enabled: true
+    coreDns:
+      enabled: true
+      vmScrape:
+        spec:
+          endpoints:
+            # CoreDNS exposes unauthenticated metrics over cluster-internal
+            # HTTP, so do not send vmagent's service-account token.
+            - port: http-metrics
+
     # The chart calls this `alertmanager`, but it creates a VMAlertmanager CR.
     # The complete routing configuration and Pushover credentials live in the
     # separately managed SOPS Secret rather than Helm values.
@@ -212,6 +228,15 @@ spec:
 
     defaultRules:
       create: true
+      groups:
+        kube-apiserver-availability.rules:
+          rules:
+            # The evaluator label changes the output identity of every
+            # recording rule. Start this long-range estimate from the VM
+            # identity instead of merging the retained pre-cutover output.
+            "code_verb:apiserver_request_total:increase30d":
+              spec:
+                expr: avg_over_time(code_verb:apiserver_request_total:increase1h{evaluator="vmalert"}[30d]) * 24 * 30
       rules:
         # Talos uses Cilium kube-proxy replacement, so this component is
         # intentionally absent. KPS disables the matching scrape and rule too.
