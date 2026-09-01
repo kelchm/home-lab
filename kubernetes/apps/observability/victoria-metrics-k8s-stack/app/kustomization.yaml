@@ -6,3 +6,6 @@ resources:
   - ./helmrelease.yaml
   - ./datasource.yaml
   - ./httproute.yaml
+  - ./vmalertmanager-config.sops.yaml
+  - ./alerts.yaml
+  - ./platform-alerts.yaml

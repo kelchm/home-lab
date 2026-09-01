@@ -67,3 +67,27 @@ spec:
       backendRefs:
         - name: vmalert-victoria-metrics-k8s-stack
           port: 8080
+---
+# VMAlertmanager is the notification authority and the durable UI target.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  # Use a new object identity for the Flux Kustomization handoff so pruning
+  # the old KPS-owned HTTPRoute cannot delete this route after it is applied.
+  name: vmalertmanager
+spec:
+  hostnames: ["alertmanager.home.kelch.io"]
+  parentRefs:
+    - name: gateway-admin
+      namespace: network
+      sectionName: https
+  rules:
+    - filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: traefik.io
+            kind: Middleware
+            name: kanidm-oidc
+      backendRefs:
+        - name: vmalertmanager-victoria-metrics-k8s-stack
+          port: 9093

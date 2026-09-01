@@ -1,4 +1,5 @@
 ---
+# Shared cluster rules are owned with the surviving VictoriaMetrics stack.
 # The node-exporter speed gauge is bytes/second. Convert it to Mb/s so alert
 # values and annotations match the speeds shown by Talos and UniFi.
 #
@@ -12,7 +13,8 @@
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
-  name: node-physical-link-speed
+  # New identity avoids a cross-Kustomization prune race with the KPS copy.
+  name: vm-node-physical-link-speed
 spec:
   groups:
     - name: node-physical-network
@@ -52,7 +54,8 @@ spec:
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
-  name: node-hardware-temperature
+  # New identity avoids a cross-Kustomization prune race with the KPS copy.
+  name: vm-node-hardware-temperature
 spec:
   groups:
     - name: node-hardware-temperature
