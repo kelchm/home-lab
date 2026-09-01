@@ -75,6 +75,12 @@ spec:
       enabled: true
     coreDns:
       enabled: true
+      vmScrape:
+        spec:
+          endpoints:
+            # CoreDNS exposes unauthenticated metrics over cluster-internal
+            # HTTP, so do not send vmagent's service-account token.
+            - port: http-metrics
 
     # The chart calls this `alertmanager`, but it creates a VMAlertmanager CR.
     # The complete routing configuration and Pushover credentials live in the
