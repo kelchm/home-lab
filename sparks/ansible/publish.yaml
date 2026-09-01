@@ -29,6 +29,9 @@
       when: lock_acquire.rc != 0
 
     - name: Publish profile
+      # rescue/always never run for unreachable hosts, which would leak the
+      # lock; ignoring lets the gates below convert unreachable into a failure.
+      ignore_unreachable: true
       block:
         - name: Check profile health
           ansible.builtin.shell: curl -fsS --connect-timeout 5 --max-time 10 {{ health_url }}
@@ -50,6 +53,18 @@
           ansible.builtin.include_tasks: "tasks/smoke-{{ profile_name }}.yaml"
           when: not (skip_smoke | default(false))
 
+        # Residency reflects what is verified running, not what is routed;
+        # written before the route flip so state never claims less than the
+        # route delivers.
+        - name: Record residency
+          ansible.builtin.copy:
+            content: "{{ profile_name }}\n"
+            dest: "{{ resident_file }}"
+
+        - name: Mark route change begun
+          ansible.builtin.set_fact:
+            route_publish_attempted: true
+
         - name: Publish profile route
           ansible.builtin.include_tasks: tasks/caddy-publish.yaml
           vars:
@@ -67,18 +82,22 @@
               - served_model_id in ((models_stable.stdout | from_json).data | map(attribute='id') | list)
             fail_msg: "stable endpoint does not serve {{ served_model_id }} after publish"
 
-        - name: Record residency
-          ansible.builtin.copy:
-            content: "{{ profile_name }}\n"
-            dest: "{{ resident_file }}"
-
         - name: Append switch log
           ansible.builtin.shell: echo "$(date -Is) publish {{ profile_name }}" >> {{ switch_log }}
 
       rescue:
+        # Only revert if the route change had begun: a failure before that
+        # point must not tear down a still-working route for another profile.
+        - name: Leave the stable endpoint in maintenance
+          ansible.builtin.include_tasks: tasks/caddy-publish.yaml
+          vars:
+            caddy_mode: maintenance
+            caddy_publish_ignore_errors: true
+          when: route_publish_attempted | default(false)
+
         - name: Fail publish
           ansible.builtin.fail:
-            msg: "publish of {{ profile }} failed; the route was not committed — verify the profile directly on :{{ serve_port }} or run a full 'task sparks:switch PROFILE={{ profile }}'"
+            msg: "publish of {{ profile }} failed{{ ' after the route change began; the stable endpoint is in maintenance' if route_publish_attempted | default(false) else '; the existing route was not touched' }} — verify the profile directly on :{{ serve_port }} or run a full 'task sparks:switch PROFILE={{ profile }}'"
 
       always:
         - name: Remove switch lock

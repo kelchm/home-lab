@@ -1,5 +1,7 @@
 import time
 
+import pytest
+from app.jobs import JobManager
 from app.main import create_app
 from fastapi.testclient import TestClient
 
@@ -43,3 +45,23 @@ def test_failed_command_is_reported(settings, auth, monkeypatch):
         assert job["status"] == "failed"
         assert job["rc"] == 3
         assert "boom" in job["log"]
+
+
+def test_setup_failure_releases_lock(settings, auth, monkeypatch):
+    original_write_meta = JobManager._write_meta
+    failures = iter([OSError("disk full")])
+
+    def flaky_write_meta(self, job):
+        exc = next(failures, None)
+        if exc is not None:
+            raise exc
+        return original_write_meta(self, job)
+
+    monkeypatch.setattr(JobManager, "_write_meta", flaky_write_meta)
+    monkeypatch.setattr("app.jobs.default_command", lambda kind, profile: ["true"])
+    with TestClient(create_app(settings)) as client:
+        with pytest.raises(OSError):
+            client.post("/admin/v1/down", headers=auth)
+        accepted = client.post("/admin/v1/down", headers=auth)
+        assert accepted.status_code == 202
+        assert _wait_for(client, auth, accepted.json()["id"])["status"] == "succeeded"

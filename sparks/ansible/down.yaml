@@ -1,57 +1,85 @@
 ---
-# task sparks:down remains the zero-dependency break-glass equivalent.
+# task sparks:down remains the zero-dependency, lock-free break-glass path.
 - name: Tear down all Spark inference stacks
   hosts: spark-1
   gather_facts: false
   tasks:
-    # Best-effort: teardown must never be blocked by a missing or broken caddy.
-    - name: Leave the stable endpoint in maintenance
-      ansible.builtin.include_tasks: tasks/caddy-publish.yaml
-      vars:
-        caddy_mode: maintenance
-        caddy_publish_ignore_errors: true
+    # This playbook is API-invocable, so it must not interleave with a switch
+    # or publish holding the lock. ignore_lock is the break-glass override for
+    # a lock leaked by a killed run.
+    - name: Acquire switch lock
+      ansible.builtin.command: mkdir {{ lock_dir }}
+      register: lock_acquire
+      failed_when: false
+      when: not (ignore_lock | default(false))
 
-    # A lingering guide start script can recreate containers after teardown.
-    - name: Stop lingering start script
-      ansible.builtin.shell: |
-        pkill -f '[s]tart-deepseek-v4-flash-dspark.sh' || true
-        for pid in $(pgrep -f '[s]tart.sh' || true); do
-          if [ "$(readlink -f /proc/$pid/cwd 2>/dev/null)" = /home/kelchm/glm53-guide ]; then
-            kill "$pid" || true
-          fi
-        done
+    - name: Fail if switch already in progress
+      ansible.builtin.fail:
+        msg: "a switch or publish appears to be in progress; wait for it, remove {{ lock_dir }} on spark-1 if stale, or re-run with -e ignore_lock=true ('task sparks:down' stays lock-free)"
+      when: not (ignore_lock | default(false)) and lock_acquire.rc != 0
 
-    - name: Teardown on both hosts
-      ansible.builtin.include_tasks: tasks/teardown-host.yaml
-      loop: "{{ groups['sparks'] }}"
-      loop_control:
-        loop_var: teardown_host
+    - name: Tear down
+      # rescue/always never run for unreachable hosts, which would leak the
+      # lock; ignoring lets the tasks below convert unreachable into a failure.
+      ignore_unreachable: true
+      block:
+        # Best-effort: teardown must never be blocked by a missing or broken
+        # caddy.
+        - name: Leave the stable endpoint in maintenance
+          ansible.builtin.include_tasks: tasks/caddy-publish.yaml
+          vars:
+            caddy_mode: maintenance
+            caddy_publish_ignore_errors: true
 
-    - name: Report MemAvailable on both hosts
-      ansible.builtin.shell: awk '/MemAvailable/ {print int($2/1024/1024)}' /proc/meminfo
-      register: mem_available
-      changed_when: false
-      delegate_to: "{{ item }}"
-      loop: "{{ groups['sparks'] }}"
+        # A lingering guide start script can recreate containers after
+        # teardown.
+        - name: Stop lingering start script
+          ansible.builtin.shell: |
+            pkill -f '[s]tart-deepseek-v4-flash-dspark.sh' || true
+            for pid in $(pgrep -f '[s]tart.sh' || true); do
+              if [ "$(readlink -f /proc/$pid/cwd 2>/dev/null)" = /home/kelchm/glm53-guide ]; then
+                kill "$pid" || true
+              fi
+            done
 
-    - name: Print MemAvailable
-      ansible.builtin.debug:
-        msg: "{{ item.item }} MemAvailable={{ item.stdout }} GiB"
-      loop: "{{ mem_available.results }}"
-      loop_control:
-        label: "{{ item.item }}"
+        - name: Teardown on both hosts
+          ansible.builtin.include_tasks: tasks/teardown-host.yaml
+          loop: "{{ groups['sparks'] }}"
+          loop_control:
+            loop_var: teardown_host
 
-    - name: Ensure state directory exists
-      ansible.builtin.file:
-        path: "{{ remote_dir }}"
-        state: directory
-        owner: kelchm
-      become: true
+        - name: Report MemAvailable on both hosts
+          ansible.builtin.shell: awk '/MemAvailable/ {print int($2/1024/1024)}' /proc/meminfo
+          register: mem_available
+          changed_when: false
+          delegate_to: "{{ item }}"
+          loop: "{{ groups['sparks'] }}"
 
-    - name: Record residency as none
-      ansible.builtin.copy:
-        content: "none\n"
-        dest: "{{ resident_file }}"
+        - name: Print MemAvailable
+          ansible.builtin.debug:
+            msg: "{{ item.item }} MemAvailable={{ item.stdout }} GiB"
+          loop: "{{ mem_available.results }}"
+          loop_control:
+            label: "{{ item.item }}"
 
-    - name: Append down to switch log
-      ansible.builtin.shell: echo "$(date -Is) down" >> {{ switch_log }}
+        - name: Ensure state directory exists
+          ansible.builtin.file:
+            path: "{{ remote_dir }}"
+            state: directory
+            owner: kelchm
+          become: true
+
+        - name: Record residency as none
+          ansible.builtin.copy:
+            content: "none\n"
+            dest: "{{ resident_file }}"
+
+        - name: Append down to switch log
+          ansible.builtin.shell: echo "$(date -Is) down" >> {{ switch_log }}
+
+      always:
+        - name: Remove switch lock
+          ansible.builtin.file:
+            path: "{{ lock_dir }}"
+            state: absent
+          when: not (ignore_lock | default(false))

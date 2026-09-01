@@ -89,7 +89,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/admin/v1/healthz")
     async def healthz() -> dict:
-        return {"status": "ok"}
+        # busy is deliberately unauthenticated: baseline.yaml checks it before
+        # recreating this container, which would kill a running transaction.
+        return {"status": "ok", "busy": jobs.busy}
 
     @app.get("/admin/v1/state", dependencies=authed)
     async def get_state() -> dict:
@@ -123,9 +125,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         try:
             job = await jobs.start(kind, profile)
         except Busy as exc:
+            # The lock is also held briefly by the git sync; only a job that is
+            # actually still running belongs in the conflict detail.
+            running = jobs.current if jobs.current and jobs.current.rc is None else None
             raise HTTPException(
                 status_code=409,
-                detail={"message": "a job is already running", "job": jobs.current.meta() if jobs.current else None},
+                detail={"message": "the control plane is busy", "job": running.meta() if running else None},
             ) from exc
         return job.meta()
 

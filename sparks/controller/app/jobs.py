@@ -87,17 +87,23 @@ class JobManager:
         if self._lock.locked():
             raise Busy
         await self._lock.acquire()
-        job = Job(
-            id=f"{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())}-{kind}",
-            kind=kind,
-            profile=profile,
-            started_at=_utcnow(),
-        )
-        self.current = job
-        job_dir = self.jobs_dir / job.id
-        job_dir.mkdir(parents=True, exist_ok=True)
-        self._write_meta(job)
-        asyncio.get_running_loop().create_task(self._run(job, job_dir))
+        # Once _run is scheduled, its finally owns the release; until then a
+        # setup failure (journal dir, meta write) must not wedge single-flight.
+        try:
+            job = Job(
+                id=f"{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())}-{kind}",
+                kind=kind,
+                profile=profile,
+                started_at=_utcnow(),
+            )
+            self.current = job
+            job_dir = self.jobs_dir / job.id
+            job_dir.mkdir(parents=True, exist_ok=True)
+            self._write_meta(job)
+            asyncio.get_running_loop().create_task(self._run(job, job_dir))
+        except BaseException:
+            self._lock.release()
+            raise
         return job
 
     async def _run(self, job: Job, job_dir: Path) -> None:

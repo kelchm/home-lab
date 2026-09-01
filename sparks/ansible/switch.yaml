@@ -123,6 +123,14 @@
           ansible.builtin.include_tasks: "tasks/smoke-{{ profile_name }}.yaml"
           when: not (skip_smoke | default(false))
 
+        # Residency reflects what is verified running, not what is routed;
+        # written before the route flip so a failure between publish and the
+        # end of the play never leaves an active route with stale residency.
+        - name: Record residency
+          ansible.builtin.copy:
+            content: "{{ profile_name }}\n"
+            dest: "{{ resident_file }}"
+
         - name: Publish profile route
           ansible.builtin.include_tasks: tasks/caddy-publish.yaml
           vars:
@@ -139,11 +147,6 @@
             that:
               - served_model_id in ((models_stable.stdout | from_json).data | map(attribute='id') | list)
             fail_msg: "stable endpoint does not serve {{ served_model_id }} after publish"
-
-        - name: Record residency
-          ansible.builtin.copy:
-            content: "{{ profile_name }}\n"
-            dest: "{{ resident_file }}"
 
         - name: Append switch log
           ansible.builtin.shell: echo "$(date -Is) switch {{ profile_name }} published" >> {{ switch_log }}

@@ -47,6 +47,20 @@
   vars:
     sops_extract_cmd: sops -d --extract '["controller_token"]' {{ playbook_dir }}/secrets.sops.yaml
 
+# Recreating the container would kill a transaction subprocess mid-switch and
+# leak the on-host lock; a running controller must be idle first.
+- name: Check controller for a running job
+  ansible.builtin.shell: curl -fsS --max-time 5 http://localhost:{{ controller_port }}/admin/v1/healthz || echo '{}'
+  register: controller_healthz
+  changed_when: false
+
+- name: Refuse to redeploy over a running job
+  ansible.builtin.assert:
+    that:
+      - not ((controller_healthz.stdout | from_json).busy | default(false))
+    fail_msg: "the controller reports a running job; wait for it to finish (or pass -e force_controller_redeploy=true after confirming the job is dead)"
+  when: not (force_controller_redeploy | default(false))
+
 - name: Copy controller compose.yaml
   ansible.builtin.copy:
     src: compose.yaml
