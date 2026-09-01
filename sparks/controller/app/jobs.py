@@ -9,6 +9,7 @@ operator's direct ansible path.
 import asyncio
 import json
 import time
+import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -72,6 +73,9 @@ class JobManager:
     def __post_init__(self) -> None:
         self._lock = asyncio.Lock()
         self.current: Job | None = None
+        # The event loop keeps only weak references to tasks; without this a
+        # running job could be garbage-collected mid-execution.
+        self._tasks: set[asyncio.Task] = set()
 
     @property
     def busy(self) -> bool:
@@ -91,16 +95,20 @@ class JobManager:
         # setup failure (journal dir, meta write) must not wedge single-flight.
         try:
             job = Job(
-                id=f"{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())}-{kind}",
+                # The random suffix keeps two same-kind jobs submitted within
+                # one second from sharing a journal directory.
+                id=f"{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())}-{kind}-{uuid.uuid4().hex[:6]}",
                 kind=kind,
                 profile=profile,
                 started_at=_utcnow(),
             )
             self.current = job
             job_dir = self.jobs_dir / job.id
-            job_dir.mkdir(parents=True, exist_ok=True)
+            job_dir.mkdir(parents=True, exist_ok=False)
             self._write_meta(job)
-            asyncio.get_running_loop().create_task(self._run(job, job_dir))
+            task = asyncio.get_running_loop().create_task(self._run(job, job_dir))
+            self._tasks.add(task)
+            task.add_done_callback(self._tasks.discard)
         except BaseException:
             self._lock.release()
             raise
@@ -122,6 +130,10 @@ class JobManager:
             with (job_dir / "job.log").open("ab") as log:
                 log.write(f"controller error: {exc}\n".encode())
         finally:
+            # Cancellation (e.g. controller shutdown mid-job) lands here too;
+            # never journal a job as running forever.
+            if job.rc is None:
+                job.rc = -1
             job.finished_at = _utcnow()
             # A journal-write failure must never wedge single-flight.
             try:
@@ -130,7 +142,18 @@ class JobManager:
                 self._lock.release()
 
     def _write_meta(self, job: Job) -> None:
-        (self.jobs_dir / job.id / "meta.json").write_text(json.dumps(job.meta()))
+        # Atomic replace: termination mid-write must not leave truncated JSON.
+        meta_file = self.jobs_dir / job.id / "meta.json"
+        tmp_file = meta_file.with_suffix(".json.tmp")
+        tmp_file.write_text(json.dumps(job.meta()))
+        tmp_file.replace(meta_file)
+
+    @staticmethod
+    def _read_meta(meta_file: Path) -> dict:
+        try:
+            return json.loads(meta_file.read_text())
+        except (OSError, json.JSONDecodeError):
+            return {"id": meta_file.parent.name, "status": "corrupt-journal"}
 
     def get(self, job_id: str) -> dict | None:
         if self.current and self.current.id == job_id:
@@ -138,7 +161,7 @@ class JobManager:
         meta_file = self.jobs_dir / job_id / "meta.json"
         if not meta_file.is_file():
             return None
-        return json.loads(meta_file.read_text())
+        return self._read_meta(meta_file)
 
     def log_text(self, job_id: str, offset: int = 0) -> str | None:
         log_file = self.jobs_dir / job_id / "job.log"
@@ -148,7 +171,5 @@ class JobManager:
         return data.decode(errors="replace")
 
     def list(self, limit: int = 20) -> list[dict]:
-        metas = []
-        for meta_file in sorted(self.jobs_dir.glob("*/meta.json"), reverse=True)[:limit]:
-            metas.append(json.loads(meta_file.read_text()))
-        return metas
+        meta_files = sorted(self.jobs_dir.glob("*/meta.json"), reverse=True)[:limit]
+        return [self._read_meta(meta_file) for meta_file in meta_files]

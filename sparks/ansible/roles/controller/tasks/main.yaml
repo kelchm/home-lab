@@ -56,8 +56,24 @@
   vars:
     controller_sops_extract_cmd: sops -d --extract '["controller_token"]' {{ playbook_dir }}/secrets.sops.yaml
 
-# Recreating the container would kill a transaction subprocess mid-switch and
-# leak the on-host lock; a running controller must be idle first.
+- name: Render controller compose.yaml
+  ansible.builtin.template:
+    src: compose.yaml
+    dest: "{{ remote_dir }}/controller/compose.yaml"
+    mode: "0644"
+
+# Pull happens before the busy check: it does not touch the running container,
+# and checking idleness after the slow step shrinks the window in which a job
+# accepted mid-deploy would be killed by the recreate below.
+- name: Pull controller image
+  ansible.builtin.command: docker compose pull -q
+  args:
+    chdir: "{{ remote_dir }}/controller"
+  changed_when: false
+
+# Recreating the container kills a transaction subprocess mid-switch and leaks
+# the on-host lock. Fail closed on anything but a clean idle answer or a
+# clearly absent controller (status -1: nothing listening, e.g. first deploy).
 - name: Check controller for a running job
   ansible.builtin.uri:
     url: "http://localhost:{{ controller_port }}/admin/v1/healthz"
@@ -66,26 +82,18 @@
   register: controller_healthz
   failed_when: false
 
-- name: Refuse to redeploy over a running job
+- name: Refuse to redeploy unless the controller is idle or absent
   ansible.builtin.assert:
     that:
-      - not (controller_healthz.json.busy | default(false))
+      - >-
+        controller_healthz.status == -1
+        or (controller_healthz.status == 200
+            and not (controller_healthz.json.busy | default(true)))
     fail_msg: >-
-      the controller reports a running job; wait for it to finish (or pass
-      -e force_controller_redeploy=true after confirming the job is dead)
+      the controller is not verifiably idle (status {{ controller_healthz.status }});
+      wait for the running job or pass -e force_controller_redeploy=true after
+      confirming it is dead
   when: not (force_controller_redeploy | default(false))
-
-- name: Render controller compose.yaml
-  ansible.builtin.template:
-    src: compose.yaml
-    dest: "{{ remote_dir }}/controller/compose.yaml"
-    mode: "0644"
-
-- name: Pull controller image
-  ansible.builtin.command: docker compose pull -q
-  args:
-    chdir: "{{ remote_dir }}/controller"
-  changed_when: false
 
 - name: Start controller
   ansible.builtin.command: docker compose up -d

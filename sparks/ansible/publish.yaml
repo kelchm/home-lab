@@ -97,13 +97,32 @@
             caddy_publish_ignore_errors: true
           when: route_publish_attempted | default(false)
 
+        # The maintenance attempt above is best-effort; report what the route
+        # is actually doing rather than assuming it worked.
+        - name: Probe stable endpoint state
+          ansible.builtin.uri:
+            url: http://localhost:80/v1/models
+            timeout: 5
+          register: rescue_route_probe
+          failed_when: false
+          when: route_publish_attempted | default(false)
+
+        - name: Describe route state
+          ansible.builtin.set_fact:
+            rescue_route_state: >-
+              {{ 'the stable endpoint is in maintenance'
+                 if rescue_route_probe.status | default(0) == 503
+                 else 'the stable endpoint is NOT confirmed in maintenance (status '
+                      ~ rescue_route_probe.status | default('unknown') ~ ')' }}
+          when: route_publish_attempted | default(false)
+
         - name: Fail publish
           ansible.builtin.fail:
             msg: >-
-              publish of {{ profile }} failed{{ ' after the route change began; the stable
-              endpoint is in maintenance' if route_publish_attempted | default(false)
-              else '; the existing route was not touched' }} — verify the profile directly
-              on :{{ serve_port }} or run a full 'task sparks:switch PROFILE={{ profile }}'
+              publish of {{ profile }} failed;
+              {{ rescue_route_state | default('the existing route was not touched') }} —
+              verify the profile directly on :{{ serve_port }} or run a full
+              'task sparks:switch PROFILE={{ profile }}'
 
       always:
         - name: Remove switch lock

@@ -7,6 +7,7 @@ on its own: every mutation is an explicit authenticated request.
 
 import asyncio
 import contextlib
+import re
 import time
 
 from fastapi import Depends, FastAPI, HTTPException
@@ -50,6 +51,10 @@ class ProfileRequest(BaseModel):
     profile: str
 
 
+# Job ids feed a path join; anything outside this shape is not a job.
+JOB_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9-]*$")
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
     jobs = JobManager(ansible_dir=settings.ansible_dir, jobs_dir=settings.jobs_dir)
@@ -57,7 +62,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @contextlib.asynccontextmanager
     async def lifespan(app: FastAPI):
-        app.state.token = settings.token_file.read_text().strip()
+        # Fail fast if the token is missing; auth re-reads it per request so
+        # rotation takes effect without a restart.
+        settings.token_file.read_text()
+        app.state.token_file = settings.token_file
         settings.jobs_dir.mkdir(parents=True, exist_ok=True)
         sync_task = None
         if settings.sync_interval > 0:
@@ -116,6 +124,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/admin/v1/jobs/{job_id}", dependencies=authed)
     async def get_job(job_id: str, log_offset: int = 0) -> dict:
+        if not JOB_ID_PATTERN.fullmatch(job_id):
+            raise HTTPException(status_code=404, detail="no such job")
         meta = jobs.get(job_id)
         if meta is None:
             raise HTTPException(status_code=404, detail="no such job")

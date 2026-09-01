@@ -30,24 +30,32 @@ fi
 
 # Converge the stable route in every case: a route published for a TP=2
 # profile before the reboot would otherwise keep targeting a dead port.
+route_ok=1
 if [ -f '{{ caddy_dir }}/Caddyfile.boot' ]; then
   cp '{{ caddy_dir }}/Caddyfile.boot' '{{ caddy_dir }}/Caddyfile'
-  reloaded=0
+  route_ok=0
   for _ in $(seq 1 12); do
     if docker exec spark-caddy caddy reload --config /etc/caddy/Caddyfile 2>/dev/null; then
-      reloaded=1
+      route_ok=1
       break
     fi
     sleep 5
   done
-  if [ "$reloaded" -eq 0 ]; then
+  if [ "$route_ok" -eq 0 ]; then
     # Caddy already loaded the stale file at container start; a restart is the
     # reliable way to pick up the boot route this early in boot.
-    docker restart spark-caddy >/dev/null 2>&1 || true
+    if docker restart spark-caddy >/dev/null 2>&1; then
+      route_ok=1
+    fi
   fi
 fi
 
-# Residency converges with the workload; status and the controller would
-# otherwise keep reporting the pre-reboot profile.
+# Residency converges with the workload (qwen is up regardless of the route);
+# status and the controller would otherwise keep reporting the pre-reboot
+# profile.
 printf '%s\n' '{{ default_profile }}' > '{{ remote_dir }}/resident'
-printf '%s boot-converge %s\n' "$(date -Is)" '{{ default_profile }}' >> '{{ remote_dir }}/switch.log'
+printf '%s boot-converge %s route_ok=%s\n' "$(date -Is)" '{{ default_profile }}' "$route_ok" >> '{{ remote_dir }}/switch.log'
+
+# A dead stable route is a failed convergence even with the model up; make
+# the oneshot report it.
+[ "$route_ok" -eq 1 ]

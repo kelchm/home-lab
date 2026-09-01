@@ -24,11 +24,22 @@
     # uncommitted interval instead of queueing into a cold boot. A failure here
     # aborts with the previous profile untouched and still routed.
     - name: Publish maintenance before teardown
+      # Unreachable results would skip this rescue and leak the lock; ignoring
+      # them means the assert below is what proves maintenance actually landed.
+      ignore_unreachable: true
       block:
         - name: Publish maintenance
           ansible.builtin.include_tasks: tasks/caddy-publish.yaml
           vars:
             caddy_mode: maintenance
+
+        - name: Assert maintenance is applied
+          ansible.builtin.assert:
+            that:
+              - caddy_reload is not skipped
+              - caddy_reload is not failed
+              - not (caddy_reload.unreachable | default(false))
+            fail_msg: "the maintenance reload did not complete"
       rescue:
         - name: Remove switch lock after failed unpublish
           ansible.builtin.file:
@@ -220,12 +231,23 @@
             var: start_log_tail.stdout_lines
           when: start_log is defined and start_log_tail is defined
 
+        # The maintenance attempt above is best-effort; report what the route
+        # is actually doing rather than assuming it worked.
+        - name: Probe stable endpoint state
+          ansible.builtin.uri:
+            url: http://localhost:80/v1/models
+            timeout: 5
+          register: rescue_route_probe
+          failed_when: false
+
         - name: Fail switch
           ansible.builtin.fail:
             msg: >-
-              switch to {{ profile }} failed; the stable endpoint is in maintenance and the
-              pair may be partially started — run 'task sparks:down' before retrying, or
-              'task sparks:publish PROFILE={{ profile }}' if the model itself came up healthy
+              switch to {{ profile }} failed; the stable endpoint is
+              {{ 'in maintenance' if rescue_route_probe.status == 503
+                 else 'NOT confirmed in maintenance (status ' ~ rescue_route_probe.status ~ ')' }}
+              and the pair may be partially started — run 'task sparks:down' before retrying,
+              or 'task sparks:publish PROFILE={{ profile }}' if the model itself came up healthy
 
       always:
         - name: Remove switch lock
