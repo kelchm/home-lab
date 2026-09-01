@@ -52,7 +52,7 @@ PVE host or on later bare metal; no implementation is selected.
 
 ## Observability
 
-Grafana is the single operator-facing UI and uses VictoriaMetrics as its default metrics datasource. The VictoriaMetrics k8s stack owns VMSingle storage, vmagent ingestion, vmalert evaluation, VMAlertmanager delivery, kube-state-metrics, node-exporter, and the controller-manager, scheduler, and etcd scrapes for all three Talos nodes. vmalert stamps `cluster=k8s-prod` and `evaluator=vmalert`; VMAlertmanager alone matches that evaluator for warning and critical Pushover delivery.
+Grafana is the single operator-facing UI and uses VictoriaMetrics as its default metrics datasource. The VictoriaMetrics k8s stack owns VMSingle storage, vmagent ingestion, vmalert evaluation, VMAlertmanager delivery, kube-state-metrics, node-exporter, API-server, kubelet, CoreDNS, and the controller-manager, scheduler, and etcd scrapes for all three Talos nodes. vmalert stamps `cluster=k8s-prod` and `evaluator=vmalert`; VMAlertmanager alone matches that evaluator for warning and critical Pushover delivery.
 
 The `monitoring.coreos.com` CRDs are owned independently by `prometheus-operator-crds`, and the VictoriaMetrics operator converts third-party ServiceMonitors and shared PrometheusRules with owner references. KPS Prometheus and its null-only Alertmanager remain temporarily as Git-revert rollback components, while Loki remains beside VictoriaLogs for the same approximately one-day soak. Neither KPS nor Loki is part of the survivor path, and neither is deleted by the survivor cutover.
 

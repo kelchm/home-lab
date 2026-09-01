@@ -133,7 +133,7 @@ kubectl -n observability delete prometheusrule longhorn-backup-delivery-test
 
 ## Coverage checks
 
-VM-native ownership must produce one healthy kube-state-metrics target and three healthy targets for node-exporter and each control-plane job:
+VM-native ownership must produce one healthy kube-state-metrics target; three healthy targets for node-exporter and each Talos control-plane job; three healthy API-server endpoints; three healthy kubelet endpoints for each enabled path; and the live CoreDNS replica count:
 
 ```promql
 count by (job) (up{job="kube-state-metrics"} == 1) == 1
@@ -143,9 +143,19 @@ count by (job) (up{job="kube-state-metrics"}) == 1
 count by (job) (up{job=~"node-exporter|kube-(controller-manager|scheduler|etcd)"} == 1) == 3
 and on (job)
 count by (job) (up{job=~"node-exporter|kube-(controller-manager|scheduler|etcd)"}) == 3
+
+count(up{job="apiserver"} == 1) == 3
+and
+count(up{job="apiserver"}) == 3
+
+count by (metrics_path) (up{job="kubelet"} == 1) == 3
+and on (metrics_path)
+count by (metrics_path) (up{job="kubelet"}) == 3
+
+count(up{job="core-dns"} == 1) == count(kube_pod_status_ready{namespace="kube-system",pod=~"coredns-.*",condition="true"} == 1)
 ```
 
-Expected results: `1` for kube-state-metrics and `3` for each remaining job. The equalities reject missing, unhealthy, or duplicate targets. Confirm the corresponding VMServiceScrapes are the only kube-state-metrics, node-exporter, controller-manager, scheduler, and etcd pools in the vmagent targets UI; there must be no converted KPS copies. Controller-manager and scheduler scrape over HTTPS with the vmagent service-account bearer token. Talos issues localhost-only serving certificates for those components, so the scrapes skip certificate verification while retaining transport encryption and authorization. Etcd's separate HTTP listener exposes metrics only and receives no bearer token.
+Expected results: `1` for kube-state-metrics, `3` for node-exporter and each Talos control-plane job, `3` for every enabled kubelet metrics path, and the current ready CoreDNS replica count. The equalities reject missing, unhealthy, or duplicate targets. Confirm VM-native resources are the only pools for kube-state-metrics, node-exporter, API-server, kubelet, CoreDNS, controller-manager, scheduler, and etcd in the vmagent targets UI; there must be no converted KPS copies. Controller-manager and scheduler scrape over HTTPS with the vmagent service-account bearer token. Talos issues localhost-only serving certificates for those components, so the scrapes skip certificate verification while retaining transport encryption and authorization. Etcd's separate HTTP listener exposes metrics only and receives no bearer token.
 
 Check the rest of the signal path with:
 
