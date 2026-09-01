@@ -351,9 +351,7 @@ architectural, not tunable — 2026-05-02) and Loki's destructive scale-to-0 PVC
 vs VictoriaLogs sitting through the same window intact (2026-05-02). Grafana stays the
 single front-door pane; OpenObserve is retired.
 
-Execution — convergence (retire KPS Prometheus/Alertmanager, Loki, and OpenObserve),
-migration of the now-live alert delivery path, closing the dashboard/estate gaps, and the anomaly/ML decision — is
-sequenced in [plans/20260703-observability-rework.md](plans/20260703-observability-rework.md).
+Execution — convergence (retire KPS Prometheus/Alertmanager, Loki, and OpenObserve), migration of the now-live alert delivery path, closing the dashboard/estate gaps, and the anomaly/ML decision — is sequenced in [plans/20260703-observability-rework.md](plans/20260703-observability-rework.md).
 
 ## Out of scope
 

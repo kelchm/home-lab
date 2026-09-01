@@ -27,9 +27,7 @@ Baseline verified live on 2026-07-01/02 (read-only via the Grafana + Kubernetes 
   Confirmed absent: **Longhorn, Traefik, cert-manager, Flux, Alloy**.
 - **296 alerting rules across 66 VMRule groups — 0 hand-authored** (the KPS mixin rules + VM-stack
   defaults, rendered as VMRules, evaluated by vmalert). **0 Grafana-managed rules. 0 anomaly/ML rules.**
-- **At the time, alerting delivered to nothing.** Grafana-managed side was empty; the notification policy pointed at
-  an empty `grafana-default-email` receiver; vmalert fired into the KPS Alertmanager, which had no
-  wired target (matches the bake-off's own note). This was corrected on 2026-08-29 as described below.
+- **At the time, alerting delivered to nothing.** Grafana-managed side was empty; the notification policy pointed at an empty `grafana-default-email` receiver; vmalert fired into the KPS Alertmanager, which had no wired target (matches the bake-off's own note). This was corrected on 2026-08-29 as described below.
 - Cilium is the eBPF datapath (kube-proxy replacement, native routing) with agent/operator Prometheus
   scraped, but **`hubble.enabled: false`** — the eBPF *observability* half is switched off.
 
@@ -94,12 +92,7 @@ Sequencing rule: **preserve delivery, finish convergence, then enrich signals.**
 
 Pushover delivery became operational on 2026-08-29 through the KPS Alertmanager. Live checks on 2026-08-31 found all three controller-manager, scheduler, and etcd targets healthy, the Alertmanager configuration loaded, and no failed Pushover notifications. Convergence must preserve that production path until vmalert and VMAlertmanager pass the same end-to-end test.
 
-Convergence is **not** "delete KPS." A dependency check (2026-07-03, refreshed 2026-08-31 — verified across repo config +
-live metric provenance + live k8s inventory, high confidence) found the **VM stack has six teardown dependencies
-on the KPS release.** The VM chart explicitly disables its own KSM + node-exporter
-(`kube-state-metrics.enabled: false`, `prometheus-node-exporter.enabled: false`) and its `ks.yaml`
-carries `dependsOn: [kube-prometheus-stack]` with the comment "we reuse KPS's KSM, node-exporter,
-Alertmanager, prometheus-operator CRDs." A naive delete cascades well past metrics.
+Convergence is **not** "delete KPS." A dependency check (2026-07-03, refreshed 2026-08-31 — verified across repo config + live metric provenance + live k8s inventory, high confidence) found the **VM stack has six teardown dependencies on the KPS release.** The VM chart explicitly disables its own KSM + node-exporter (`kube-state-metrics.enabled: false`, `prometheus-node-exporter.enabled: false`) and its `ks.yaml` carries `dependsOn: [kube-prometheus-stack]` with the comment "we reuse KPS's KSM, node-exporter, Alertmanager, prometheus-operator CRDs." A naive delete cascades well past metrics.
 
 **The six couplings and how each is decoupled — do these first, then delete KPS:**
 
@@ -117,11 +110,9 @@ Alertmanager, prometheus-operator CRDs." A naive delete cascades well past metri
    converts to VMServiceScrape. KPS packages these in Helm's special `crds/` directory, so Helm retains them on uninstall; the original cascade-delete concern was overstated. The real gaps are independent lifecycle and upgrades. → install the matching `prometheus-operator-crds` 31.0.1 chart as a standalone Flux HelmRelease, adopt the live v0.93.1 CRDs, protect them with `helm.sh/resource-policy: keep`, disable KPS's CRD install, repoint bootstrap, and make CRD consumers depend on the standalone release.
 4. **Converted-object garbage collection.** victoria-metrics-operator had converter owner references disabled. Removing a Prometheus source could therefore leave an unowned VM copy evaluating forever; this happened with `KubeProxyDown`. → enable converter ownership before teardown and verify representative VMRule, VMServiceScrape, and VMPodScrape objects point at their Prometheus sources. Remove any pre-existing orphans explicitly.
 5. **Alertmanager (the delivery target).** vmalert currently sends into `kube-prometheus-stack-alertmanager:9093`; only the Prometheus-evaluated copy is routed to Pushover, which intentionally prevents duplicates. → enable VMAlertmanager with the existing SOPS-managed receiver credentials, stamp vmalert with an explicit evaluator label, switch the receiver matchers and UI route, and pass both synthetic delivery tests before retiring KPS Alertmanager.
-6. **Flux `dependsOn`.** Remove the temporary `dependsOn: [kube-prometheus-stack]` from
-   `victoria-metrics-k8s-stack/ks.yaml`, or the VM Kustomization stops reconciling once KPS is gone.
+6. **Flux `dependsOn`.** Remove the temporary `dependsOn: [kube-prometheus-stack]` from `victoria-metrics-k8s-stack/ks.yaml`, or the VM Kustomization stops reconciling once KPS is gone.
 
-Also repoint Grafana's **default datasource** `prometheus-kps` → `victoriametrics` and verify a sample
-of the 51 dashboards render (VM's datasource type is `prometheus`, so PromQL resolves).
+Also repoint Grafana's **default datasource** `prometheus-kps` → `victoriametrics` and verify a sample of the 51 dashboards render (VM's datasource type is `prometheus`, so PromQL resolves).
 
 Roll out Phase 1 in reviewable slices:
 
