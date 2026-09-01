@@ -1,0 +1,57 @@
+---
+# task sparks:down remains the zero-dependency break-glass equivalent.
+- name: Tear down all Spark inference stacks
+  hosts: spark-1
+  gather_facts: false
+  tasks:
+    # Best-effort: teardown must never be blocked by a missing or broken caddy.
+    - name: Leave the stable endpoint in maintenance
+      ansible.builtin.include_tasks: tasks/caddy-publish.yaml
+      vars:
+        caddy_mode: maintenance
+        caddy_publish_ignore_errors: true
+
+    # A lingering guide start script can recreate containers after teardown.
+    - name: Stop lingering start script
+      ansible.builtin.shell: |
+        pkill -f '[s]tart-deepseek-v4-flash-dspark.sh' || true
+        for pid in $(pgrep -f '[s]tart.sh' || true); do
+          if [ "$(readlink -f /proc/$pid/cwd 2>/dev/null)" = /home/kelchm/glm53-guide ]; then
+            kill "$pid" || true
+          fi
+        done
+
+    - name: Teardown on both hosts
+      ansible.builtin.include_tasks: tasks/teardown-host.yaml
+      loop: "{{ groups['sparks'] }}"
+      loop_control:
+        loop_var: teardown_host
+
+    - name: Report MemAvailable on both hosts
+      ansible.builtin.shell: awk '/MemAvailable/ {print int($2/1024/1024)}' /proc/meminfo
+      register: mem_available
+      changed_when: false
+      delegate_to: "{{ item }}"
+      loop: "{{ groups['sparks'] }}"
+
+    - name: Print MemAvailable
+      ansible.builtin.debug:
+        msg: "{{ item.item }} MemAvailable={{ item.stdout }} GiB"
+      loop: "{{ mem_available.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Ensure state directory exists
+      ansible.builtin.file:
+        path: "{{ remote_dir }}"
+        state: directory
+        owner: kelchm
+      become: true
+
+    - name: Record residency as none
+      ansible.builtin.copy:
+        content: "none\n"
+        dest: "{{ resident_file }}"
+
+    - name: Append down to switch log
+      ansible.builtin.shell: echo "$(date -Is) down" >> {{ switch_log }}

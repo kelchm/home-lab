@@ -1,0 +1,13 @@
+---
+default_profile: qwen
+remote_dir: /opt/spark-stack
+resident_file: /opt/spark-stack/resident
+switch_log: /opt/spark-stack/switch.log
+lock_dir: /tmp/spark-switch.lock
+# Post-teardown floor: with nothing resident the pair shows >110 GiB free;
+# below this, UVM allocations from the previous profile did not release.
+min_available_gib: 100
+caddy_dir: /opt/spark-stack/caddy
+controller_port: 9800
+# Boot route target; must match default_profile's serve_port.
+default_profile_port: 8000

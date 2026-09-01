@@ -1,0 +1,18 @@
+---
+profile_name: glm
+head_host: spark-1
+worker_host: spark-2
+guide_dir: /home/kelchm/glm53-guide
+guide_rev: 79f10b91f84779b2b1ff2c9327b1a5847cd97f70
+runtime_image: ghcr.io/miaai-lab/glm-5.3-flash-2x-dgx-sparks@sha256:9bb1557a4234fce63d59599e44d10747eabd742beb337eebf9e7070be8a0fd58
+serve_port: 8888
+health_url: http://localhost:8888/health
+ready_retries: 120
+ready_delay: 15
+model_cache_dir: /home/kelchm/.cache/huggingface/hub/models--Mia-AiLab--GLM-5.3-Flash-EXL3-TR3-4bpw
+model_revision: 25a44fdbf16862a46b7cc9921142c6c81350af2f
+model_shards: 120
+dflash_cache_dir: /home/kelchm/.cache/huggingface/hub/models--incoai--GLM-5.3-Flash-DFlash2
+dflash_revision: dc77ff1c99eeb2df044ee3d4f0094eb033fee410
+start_log: /opt/spark-stack/glm-start.log
+served_model_id: GLM-5.3-Flash-EXL3

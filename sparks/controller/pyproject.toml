@@ -1,0 +1,19 @@
+[project]
+name = "spark-controller"
+version = "0.1.0"
+description = "Control-plane API for the DGX Spark inference pair"
+requires-python = ">=3.13"
+dependencies = [
+    # Must match the repo's pipx:ansible-core pin so both invocation paths run
+    # the same playbook engine.
+    "ansible-core==2.21.3",
+    "fastapi>=0.115",
+    "httpx>=0.28",
+    "pyyaml>=6.0",
+    "uvicorn>=0.34",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+]

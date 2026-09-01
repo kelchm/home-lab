@@ -67,6 +67,8 @@ The status header form is `**Status:** <Proposed|Active|Implemented|Superseded> 
 - [20260814-pve-cluster](plans/20260814-pve-cluster.md) — implemented core design for the independent three-node PVE cluster, with remaining hardware acceptance and identity/certificate gates tracked in the live operator documentation.
 - [20260818-sn770-zfs-qualification-procedure](plans/20260818-sn770-zfs-qualification-procedure.md) — the bounded, destructive test procedure and safety guards used for the SN770 reproduction run.
 - [20260821-network-topology](plans/20260821-network-topology.md) — active, partially implemented VLAN/zone topology, DGX placement, PVE wiring, and second-cluster reservations.
+- [20260828-spark-control-plane](plans/20260828-spark-control-plane.md) — decision record for the Spark switch transaction, hybrid state model, and rejected alternatives (doco-cd, Komodo, k8s, lmswitch).
+- [20260831-spark-llm-foundation](plans/20260831-spark-llm-foundation.md) — the Spark control plane as landed: guarded transaction plus controller API and admission-controlled Caddy, with rollout, client-contract, host-IaC, and observability phases.
 
 ## Decision records & benchmarks
 

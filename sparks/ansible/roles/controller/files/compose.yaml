@@ -1,0 +1,27 @@
+---
+services:
+  controller:
+    image: ghcr.io/kelchm/spark-controller:latest
+    container_name: spark-controller
+    restart: unless-stopped
+    # Host networking: the API binds loopback only (Caddy fronts it on :80),
+    # and ansible inside the container reaches both hosts over LAN SSH.
+    network_mode: host
+    environment:
+      SPARK_CONTROLLER_PORT: "9800"
+      SPARK_CONTROLLER_TOKEN_FILE: /etc/spark-controller/token
+      SPARK_CONTROLLER_REPO_URL: https://github.com/kelchm/home-lab.git
+      SPARK_CONTROLLER_REPO_DIR: /var/lib/spark-controller/repo
+      SPARK_CONTROLLER_JOBS_DIR: /var/lib/spark-controller/jobs
+      SPARK_CONTROLLER_STATE_DIR: /opt/spark-stack
+      HOME: /var/lib/spark-controller
+      ANSIBLE_REMOTE_USER: kelchm
+      ANSIBLE_SSH_ARGS: >-
+        -o UserKnownHostsFile=/etc/spark-controller/ssh/known_hosts
+        -o IdentityFile=/etc/spark-controller/ssh/id_ed25519
+    volumes:
+      - /etc/spark-controller:/etc/spark-controller:ro
+      - /var/lib/spark-controller:/var/lib/spark-controller
+      # Residency and switch log are read through this mount; every write to
+      # it happens over SSH from the playbooks, exactly as from the laptop.
+      - /opt/spark-stack:/opt/spark-stack:ro

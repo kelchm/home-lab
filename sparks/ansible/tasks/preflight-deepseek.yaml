@@ -1,0 +1,93 @@
+---
+- name: Verify guide is pinned to expected revision
+  ansible.builtin.shell: git -C {{ guide_dir }} rev-parse HEAD
+  register: guide_head
+  changed_when: false
+  delegate_to: "{{ preflight_host }}"
+  loop: "{{ groups['sparks'] }}"
+  loop_control:
+    loop_var: preflight_host
+
+- name: Assert guide revision matches pin
+  ansible.builtin.assert:
+    that:
+      - item.stdout == guide_rev
+    fail_msg: "guide at {{ guide_dir }} on {{ item.preflight_host }} is {{ item.stdout }}, expected {{ guide_rev }}; see sparks/inference/deepseek/README.md for clone/pin instructions"
+  loop: "{{ guide_head.results }}"
+  loop_control:
+    label: "{{ item.preflight_host }}"
+
+- name: Copy committed overrides for comparison
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../inference/deepseek/env.dspark.overrides"
+    dest: /tmp/env.dspark.overrides
+  delegate_to: "{{ preflight_host }}"
+  loop: "{{ groups['sparks'] }}"
+  loop_control:
+    loop_var: preflight_host
+
+# Every override line must be live verbatim; a host keeping any guide default
+# (e.g. DSPARK_MODEL) would pass a spot check and serve the wrong thing.
+- name: Verify every override landed in .env.dspark
+  ansible.builtin.shell: |
+    grep -v '^#' /tmp/env.dspark.overrides | grep -v '^$' | while IFS= read -r line; do
+      grep -qxF "$line" {{ guide_dir }}/.env.dspark || { echo "override not applied: $line (see sparks/inference/deepseek/README.md)"; exit 1; }
+    done
+  changed_when: false
+  delegate_to: "{{ preflight_host }}"
+  loop: "{{ groups['sparks'] }}"
+  loop_control:
+    loop_var: preflight_host
+
+- name: Verify runtime image is present
+  ansible.builtin.command: docker image inspect {{ runtime_image }}
+  register: image_inspect
+  changed_when: false
+  failed_when: false
+  delegate_to: "{{ preflight_host }}"
+  loop: "{{ groups['sparks'] }}"
+  loop_control:
+    loop_var: preflight_host
+
+- name: Assert runtime image is present
+  ansible.builtin.assert:
+    that:
+      - item.rc == 0
+    fail_msg: "image missing on {{ item.preflight_host }}; build it via the guide before switching (no implicit pulls mid-rendezvous)"
+  loop: "{{ image_inspect.results }}"
+  loop_control:
+    label: "{{ item.preflight_host }}"
+
+- name: Verify weights are present
+  ansible.builtin.shell: find /opt/spark-models -maxdepth 3 -iname '{{ weights_glob }}' | head -1
+  register: weights_find
+  changed_when: false
+  failed_when: false
+  delegate_to: "{{ preflight_host }}"
+  loop: "{{ groups['sparks'] }}"
+  loop_control:
+    loop_var: preflight_host
+
+- name: Assert weights are present
+  ansible.builtin.assert:
+    that:
+      - item.stdout | length > 0
+    fail_msg: "weights matching {{ weights_glob }} missing on {{ item.preflight_host }}; pre-download weights before switching"
+  loop: "{{ weights_find.results }}"
+  loop_control:
+    label: "{{ item.preflight_host }}"
+
+- name: Collect runtime image IDs on both hosts
+  ansible.builtin.shell: "docker image inspect --format '{% raw %}{{.Id}}{% endraw %}' {{ runtime_image }}"
+  register: image_ids
+  changed_when: false
+  delegate_to: "{{ preflight_host }}"
+  loop: "{{ groups['sparks'] }}"
+  loop_control:
+    loop_var: preflight_host
+
+- name: Assert runtime image IDs match across hosts
+  ansible.builtin.assert:
+    that:
+      - image_ids.results[0].stdout == image_ids.results[1].stdout
+    fail_msg: "runtime image differs between spark-1 and spark-2; rebuild so both ranks run the same image"

@@ -1,0 +1,16 @@
+---
+- name: Remove dspark-guide containers on {{ teardown_host }}
+  ansible.builtin.shell: |
+    ids=$(docker ps -aq --filter "name=dspark-guide")
+    if [ -n "$ids" ]; then docker rm -f $ids; else echo "no dspark containers"; fi
+  delegate_to: "{{ teardown_host }}"
+
+- name: Remove GLM containers on {{ teardown_host }}
+  ansible.builtin.shell: |
+    ids=$(docker ps -aq --filter "name=glm53-exl3-")
+    if [ -n "$ids" ]; then docker rm -f $ids; else echo "no GLM containers"; fi
+  delegate_to: "{{ teardown_host }}"
+
+- name: Stop compose stack on {{ teardown_host }}
+  ansible.builtin.shell: if [ -d {{ remote_dir }}/inference ]; then cd {{ remote_dir }}/inference && docker compose down; else echo "no compose stack"; fi
+  delegate_to: "{{ teardown_host }}"

@@ -1,0 +1,88 @@
+---
+- name: Verify GLM guide is pinned to expected revision
+  ansible.builtin.shell: git -C {{ guide_dir }} rev-parse HEAD
+  register: glm_guide_head
+  changed_when: false
+  delegate_to: "{{ preflight_host }}"
+  loop: "{{ groups['sparks'] }}"
+  loop_control:
+    loop_var: preflight_host
+
+- name: Assert GLM guide revision matches pin
+  ansible.builtin.assert:
+    that:
+      - item.stdout == guide_rev
+    fail_msg: "guide at {{ guide_dir }} on {{ item.preflight_host }} is {{ item.stdout }}, expected {{ guide_rev }}; see sparks/inference/glm/README.md for clone/pin instructions"
+  loop: "{{ glm_guide_head.results }}"
+  loop_control:
+    label: "{{ item.preflight_host }}"
+
+- name: Copy committed GLM overrides for comparison
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../inference/glm/env.overrides"
+    dest: /tmp/glm.env.overrides
+  changed_when: false
+
+- name: Verify every GLM override landed in the head environment
+  ansible.builtin.shell: |
+    grep -v '^#' /tmp/glm.env.overrides | grep -v '^$' | while IFS= read -r line; do
+      grep -qxF "$line" {{ guide_dir }}/.env || { echo "override not applied: $line (see sparks/inference/glm/README.md)"; exit 1; }
+    done
+    if grep -v '^#' {{ guide_dir }}/.env | grep -Eq -- '--moe-backend[= ]+marlin|^(QUANTIZATION|KV_CACHE_DTYPE)=nvfp4'; then
+      echo "forbidden NVFP4/Marlin GLM setting in {{ guide_dir }}/.env" >&2
+      exit 1
+    fi
+  changed_when: false
+
+- name: Collect digest-pinned GLM image IDs on both hosts
+  ansible.builtin.shell: "docker image inspect --format '{% raw %}{{.Id}}{% endraw %}' {{ runtime_image }}"
+  register: glm_image_ids
+  changed_when: false
+  failed_when: false
+  delegate_to: "{{ preflight_host }}"
+  loop: "{{ groups['sparks'] }}"
+  loop_control:
+    loop_var: preflight_host
+
+- name: Assert digest-pinned GLM image is present
+  ansible.builtin.assert:
+    that:
+      - item.rc == 0
+    fail_msg: "image {{ runtime_image }} missing on {{ item.preflight_host }}; pre-pull it before switching (no implicit pulls mid-rendezvous)"
+  loop: "{{ glm_image_ids.results }}"
+  loop_control:
+    label: "{{ item.preflight_host }}"
+
+- name: Verify pinned GLM weights and DFlash2 draft are present
+  ansible.builtin.shell: |
+    model_ref=$(cat {{ model_cache_dir }}/refs/main 2>/dev/null || true)
+    model_count=$(find {{ model_cache_dir }}/snapshots/{{ model_revision }} -maxdepth 1 -name 'model-*.safetensors' 2>/dev/null | wc -l)
+    dflash_ref=$(cat {{ dflash_cache_dir }}/refs/main 2>/dev/null || true)
+    printf 'model_ref=%s model_shards=%s dflash_ref=%s\n' "$model_ref" "$model_count" "$dflash_ref"
+    test "$model_ref" = "{{ model_revision }}"
+    test "$model_count" -eq "{{ model_shards }}"
+    test -f {{ model_cache_dir }}/snapshots/{{ model_revision }}/config.json
+    test "$dflash_ref" = "{{ dflash_revision }}"
+    test -f {{ dflash_cache_dir }}/snapshots/{{ dflash_revision }}/model.safetensors
+  register: glm_weights_check
+  changed_when: false
+  failed_when: false
+  delegate_to: "{{ preflight_host }}"
+  loop: "{{ groups['sparks'] }}"
+  loop_control:
+    loop_var: preflight_host
+
+- name: Assert pinned GLM weights and DFlash2 draft are present
+  ansible.builtin.assert:
+    that:
+      - item.rc == 0
+    fail_msg: "pinned GLM artifacts are incomplete on {{ item.preflight_host }} ({{ item.stdout }}); stage the exact refs before switching"
+  loop: "{{ glm_weights_check.results }}"
+  loop_control:
+    label: "{{ item.preflight_host }}"
+
+- name: Assert GLM image IDs match across hosts
+  ansible.builtin.assert:
+    that:
+      - glm_image_ids.results[0].stdout == glm_image_ids.results[1].stdout
+    fail_msg: "GLM image differs between spark-1 and spark-2; pull the pinned digest on both ranks"

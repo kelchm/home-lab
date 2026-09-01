@@ -1,0 +1,10 @@
+---
+# The guide script performs the worker-first launch across both hosts itself;
+# the ready gate in switch.yaml does the waiting. SKIP_OVERLAY_CHECK: preflight
+# owns image presence and cross-rank identity; the script's overlay-checksum
+# rebuild would otherwise outlive the ready gate mid-switch.
+- name: Start deepseek via guide script
+  ansible.builtin.shell: cd {{ guide_dir }} && SKIP_OVERLAY_CHECK=1 ./start-deepseek-v4-flash-dspark.sh > {{ start_log }} 2>&1
+  async: 5400
+  poll: 0
+  register: dspark_start

@@ -1,0 +1,25 @@
+---
+# Publishes the client route: `caddy_mode` is `active` (route /v1 to
+# `caddy_upstream_port`) or `maintenance` (OpenAI-shaped 503). The /admin
+# controller route survives every mode. Validate-then-move-then-reload keeps a
+# bad render from ever replacing the live config; a failed reload leaves the
+# previous config serving. `caddy_publish_ignore_errors` lets rescue paths
+# publish best-effort without masking failures on the primary path.
+- name: Render Caddy config ({{ caddy_mode }})
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/roles/caddy/templates/Caddyfile.j2"
+    dest: "{{ caddy_dir }}/Caddyfile.next"
+  ignore_errors: "{{ caddy_publish_ignore_errors | default(false) }}"
+
+- name: Validate rendered Caddy config
+  ansible.builtin.command: docker exec spark-caddy caddy validate --config /etc/caddy/Caddyfile.next --adapter caddyfile
+  changed_when: false
+  ignore_errors: "{{ caddy_publish_ignore_errors | default(false) }}"
+
+- name: Install rendered Caddy config
+  ansible.builtin.command: mv {{ caddy_dir }}/Caddyfile.next {{ caddy_dir }}/Caddyfile
+  ignore_errors: "{{ caddy_publish_ignore_errors | default(false) }}"
+
+- name: Reload Caddy
+  ansible.builtin.command: docker exec spark-caddy caddy reload --config /etc/caddy/Caddyfile
+  ignore_errors: "{{ caddy_publish_ignore_errors | default(false) }}"

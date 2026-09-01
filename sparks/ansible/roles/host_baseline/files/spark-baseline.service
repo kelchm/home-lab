@@ -1,0 +1,12 @@
+[Unit]
+Description=Converge Spark to the default inference profile after boot
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/spark-stack/baseline.sh
+
+[Install]
+WantedBy=multi-user.target

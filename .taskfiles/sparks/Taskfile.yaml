@@ -1,45 +1,42 @@
 ---
 version: '3'
 
-# The Sparks are not under Flux or Talos automation. These tasks push the
-# committed stack over SSH and are the deliberate stand-in until the
-# out-of-cluster deploy model (docs/plans/20260620-nas-out-of-cluster-workloads.md)
-# is implemented.
+# Imperative verbs for the Sparks. switch/baseline drive the Ansible control
+# plane in sparks/ansible/; down and status are dependency-free break-glass.
 
 vars:
   SPARK_HOSTS: '10.32.21.31 10.32.21.32'
   REMOTE_DIR: '/opt/spark-stack'
-  # Two mutually exclusive routes. Qwen is this repo's compose stack on :8000;
-  # DeepSeek is the external DSpark guide's compose project on :8888, cloned to
-  # the hosts (see sparks/inference/deepseek/README.md).
+  # Three mutually exclusive profiles. Qwen is this repo's compose stack on
+  # :8000; DeepSeek and GLM are pinned external guides on :8888.
   QWEN_CONTAINER: 'vllm-qwen'
   DSPARK_PROJECT: 'dspark-guide'
+  GLM_CONTAINER: 'glm53-exl3'
 
 tasks:
 
-  deploy:
-    desc: Push the inference stack to a Spark and start it [HOST=required]
-    cmds:
-      # The two routes are mutually exclusive: TP=2 already claims both hosts and
-      # there is not enough unified memory for both. Starting Qwen on top of a
-      # DeepSeek shard risks the documented UMA collapse, which has no watchdog.
-      - |
-        for h in {{.SPARK_HOSTS}}; do
-          if ssh "$h" 'docker ps -q --filter name={{.DSPARK_PROJECT}}' | grep -q .; then
-            echo "REFUSING: DeepSeek is running on $h. Run 'task sparks:down' first." >&2
-            exit 1
-          fi
-        done
-      - ssh {{.HOST}} 'sudo mkdir -p {{.REMOTE_DIR}}/inference && sudo chown -R $USER {{.REMOTE_DIR}}'
-      - scp -q {{.ROOT_DIR}}/sparks/inference/compose.yaml {{.HOST}}:{{.REMOTE_DIR}}/inference/
-      - ssh {{.HOST}} 'cd {{.REMOTE_DIR}}/inference && sudo docker compose up -d'
+  switch:
+    desc: Switch the resident inference profile, guarded and ready-gated [PROFILE=qwen|deepseek|glm]
+    dir: '{{.ROOT_DIR}}/sparks/ansible'
+    cmd: ansible-playbook switch.yaml -e profile={{.PROFILE}}
     requires:
       vars:
-        - name: HOST
-          enum: ['10.32.21.31', '10.32.21.32']
-    preconditions:
-      - test -f {{.ROOT_DIR}}/sparks/inference/compose.yaml
+        - name: PROFILE
+          enum: ['qwen', 'deepseek', 'glm']
 
+  publish:
+    desc: Re-point the stable endpoint at an already-healthy profile without a switch [PROFILE=qwen|deepseek|glm]
+    dir: '{{.ROOT_DIR}}/sparks/ansible'
+    cmd: ansible-playbook publish.yaml -e profile={{.PROFILE}}
+    requires:
+      vars:
+        - name: PROFILE
+          enum: ['qwen', 'deepseek', 'glm']
+
+  baseline:
+    desc: Converge host baseline and deploy Caddy + controller to spark-1
+    dir: '{{.ROOT_DIR}}/sparks/ansible'
+    cmd: ansible-playbook baseline.yaml
 
   down:
     desc: Stop and remove every inference stack on BOTH Sparks
@@ -47,6 +44,8 @@ tasks:
       - for: {var: SPARK_HOSTS}
         cmd: |
           echo "=== {{.ITEM}} ==="
+          ssh {{.ITEM}} 'for pid in $(pgrep -f "[s]tart.sh" || true); do [ "$(readlink -f /proc/$pid/cwd 2>/dev/null)" = /home/kelchm/glm53-guide ] && kill "$pid" || true; done'
+          ssh {{.ITEM}} 'ids=$(docker ps -aq --filter "name={{.GLM_CONTAINER}}"); [ -n "$ids" ] && docker rm -f $ids || echo "  no GLM containers"'
           # The DeepSeek route is the guide's own compose project, not ours;
           # matching a container name this repo owns would miss it entirely.
           ssh {{.ITEM}} 'ids=$(docker ps -aq --filter "name={{.DSPARK_PROJECT}}"); [ -n "$ids" ] && docker rm -f $ids || echo "  no dspark containers"'
@@ -56,7 +55,7 @@ tasks:
   logs:
     desc: Tail logs of whichever inference stack is running [HOST=required]
     cmd: |
-      ssh {{.HOST}} 'c=$(docker ps -q --filter "name={{.DSPARK_PROJECT}}" --filter "name={{.QWEN_CONTAINER}}" | head -1);
+      ssh {{.HOST}} 'c=$(docker ps -q --filter "name={{.DSPARK_PROJECT}}" --filter "name={{.QWEN_CONTAINER}}" --filter "name={{.GLM_CONTAINER}}" | head -1);
         [ -n "$c" ] || { echo "no inference container running on this host" >&2; exit 1; }
         docker logs -f --tail 100 "$c"'
     requires:
@@ -74,4 +73,3 @@ tasks:
           curl -s --max-time 5 http://{{.ITEM}}:8000/v1/models | head -c 160 || true
           curl -s --max-time 5 http://{{.ITEM}}:8888/v1/models | head -c 160 || true
           echo
-
