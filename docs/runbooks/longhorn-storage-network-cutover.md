@@ -31,7 +31,6 @@ All currently in `observability`:
 | `loki` | StatefulSet | 30 Gi | no — **but** chart sets `pvcRetentionPolicy: Delete` so scaling to 0 wipes data; see "Loki caveat" below |
 | `victoria-logs-single-server` | StatefulSet | 30 Gi | no |
 | `vmsingle-victoria-metrics-k8s-stack` | Deployment | 50 Gi | yes — victoria-metrics-operator |
-| `openobserve` | StatefulSet | 50 Gi | no |
 | `grafana` | Deployment | 10 Gi | no |
 
 The "owned by operator" column matters for step 2: operator-managed workloads need their operator scaled down too, otherwise the operator reconciles the workload back to its declared replica count.
@@ -45,7 +44,7 @@ Estimated 30–60 min including verification. Outage of the observability stack 
 ```sh
 flux suspend hr -n observability \
   kube-prometheus-stack loki victoria-logs-single \
-  victoria-metrics-k8s-stack openobserve grafana
+  victoria-metrics-k8s-stack grafana
 ```
 
 ### 2. Scale operators to 0 first, then their workloads
@@ -61,7 +60,6 @@ kubectl -n observability scale statefulset \
   prometheus-kube-prometheus-stack-prometheus \
   loki \
   victoria-logs-single-server \
-  openobserve \
   --replicas=0
 
 kubectl -n observability scale deployment \
@@ -129,7 +127,7 @@ Helm doesn't reset replica counts after a `kubectl scale --replicas=0`, so scali
 ```sh
 flux resume hr -n observability \
   kube-prometheus-stack loki victoria-logs-single \
-  victoria-metrics-k8s-stack openobserve grafana
+  victoria-metrics-k8s-stack grafana
 
 kubectl -n observability scale deployment \
   kube-prometheus-stack-operator \
@@ -141,7 +139,6 @@ kubectl -n observability scale deployment \
 kubectl -n observability scale statefulset \
   loki \
   victoria-logs-single-server \
-  openobserve \
   --replicas=1
 ```
 

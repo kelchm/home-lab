@@ -27,7 +27,7 @@ Design, route rationale, and caveats: `docs/plans/20260622-tailscale-operator.md
 | `10.32.10.0/24`  | VLAN 10 — Main: trusted clients / admin devices |
 | `10.32.20.0/24`  | VLAN 20 — Lab Infra: NAS, switches, APs |
 | `10.32.30.0/24`  | VLAN 30 — Lab Prod: `talosctl`, kube-API VIP, nodes |
-| `10.32.130.0/24` | admin-prod LB — Longhorn/Grafana/o11y + k8s-gateway DNS |
+| `10.32.130.0/24` | admin-prod LB — Longhorn/Grafana/operator UIs + k8s-gateway DNS |
 | `10.32.140.0/24` | services-prod LB — household apps + `*.home.kelch.io` |
 
 Change the set by editing `connector/app/connector.yaml` **and** the

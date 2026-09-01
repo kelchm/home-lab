@@ -233,7 +233,7 @@ Sandbox-side pools (`admin-sandbox` 10.32.131.0/24, `services-sandbox` 10.32.141
 ### admin-prod — 10.32.130.0/24
 
 ```
-.1     traefik-admin            Operator UIs (Longhorn, Grafana, OpenObserve, …) via HTTPRoute;
+.1     traefik-admin            Operator UIs (Longhorn, Grafana, Alertmanager, …) via HTTPRoute;
                                 Traefik middleware adds auth where the app lacks native.
 .2     k8s-gateway              In-cluster authority for app/service records
                                 conditionally forwarded by the UniFi resolver.
@@ -285,7 +285,7 @@ Every Service falls into one of three buckets; the bucket determines exposure:
 
 | Bucket | Exposure | Examples |
 |---|---|---|
-| Admin / control-plane HTTP | HTTPRoute on admin Traefik gateway, regardless of native-auth maturity | Longhorn UI, Grafana, Prometheus, Alertmanager, kubernetes-dashboard, OpenObserve UI |
+| Admin / control-plane HTTP | HTTPRoute on admin Traefik gateway, regardless of native-auth maturity | Longhorn UI, Grafana, Prometheus, Alertmanager, kubernetes-dashboard |
 | Household HTTP with mature native auth | Per-service LB IP from `services-prod`, own DNS A record, TLS terminated by app or per-service ingress | Jellyfin, Nextcloud, Home Assistant |
 | Non-HTTP | Per-service LB IP, port-scoped firewall rules | MQTT, NTP, game servers |
 
@@ -339,7 +339,6 @@ gateway.home.kelch.io               10.32.1.1
 # Admin gateway tenants (HTTPRoute)
 longhorn.home.kelch.io              10.32.130.1
 grafana.home.kelch.io               10.32.130.1
-o11y.home.kelch.io                  10.32.130.1
 …etc                                10.32.130.1
 
 # Per-service household IPs (when allocated)

@@ -11,10 +11,10 @@ resources:
   - ./namespace.yaml
   - ./middleware-kanidm-oidc.yaml
   - ./grafana/ks.yaml
+  - ./prometheus-operator-crds/ks.yaml
   - ./kube-prometheus-stack/ks.yaml
   - ./smartctl-exporter/ks.yaml
   - ./loki/ks.yaml
   - ./alloy/ks.yaml
   - ./victoria-metrics-k8s-stack/ks.yaml
   - ./victoria-logs-single/ks.yaml
-  - ./openobserve/ks.yaml

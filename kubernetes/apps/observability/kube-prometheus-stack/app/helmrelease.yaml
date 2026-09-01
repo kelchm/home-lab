@@ -30,7 +30,9 @@ spec:
   interval: 1h
   values:
     crds:
-      enabled: true
+      # Owned and upgraded independently so monitoring.coreos.com survives
+      # the eventual removal of this losing bake-off stack.
+      enabled: false
 
     grafana:
       enabled: false
