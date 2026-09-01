@@ -27,6 +27,7 @@ All currently in `observability`:
 | Workload | Kind | PVC | Owned by operator? |
 |---|---|---|---|
 | `alertmanager-kube-prometheus-stack-alertmanager` | StatefulSet | 1 Gi | yes — kube-prometheus-stack-operator |
+| `vmalertmanager-victoria-metrics-k8s-stack` | StatefulSet | 1 Gi | yes — victoria-metrics-operator |
 | `prometheus-kube-prometheus-stack-prometheus` | StatefulSet | 50 Gi | yes — kube-prometheus-stack-operator |
 | `loki` | StatefulSet | 30 Gi | no — **but** chart sets `pvcRetentionPolicy: Delete` so scaling to 0 wipes data; see "Loki caveat" below |
 | `victoria-logs-single-server` | StatefulSet | 30 Gi | no |
@@ -57,6 +58,7 @@ kubectl -n observability scale deployment \
 
 kubectl -n observability scale statefulset \
   alertmanager-kube-prometheus-stack-alertmanager \
+  vmalertmanager-victoria-metrics-k8s-stack \
   prometheus-kube-prometheus-stack-prometheus \
   loki \
   victoria-logs-single-server \
@@ -142,7 +144,7 @@ kubectl -n observability scale statefulset \
   --replicas=1
 ```
 
-The Prometheus and Alertmanager StatefulSets are recreated by the operator from their CRs once the operator is back; no manual scaling needed for those.
+The Prometheus, KPS Alertmanager, and VMAlertmanager StatefulSets are recreated by their operators from the CRs once the operators are back; no manual scaling is needed for those.
 
 ### 8. Verify replica traffic on VLAN 25
 

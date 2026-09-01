@@ -1,6 +1,6 @@
 # Observability rework — conclude the bake-off, consolidate, kill the toil
 
-**Status:** Active — 2026-08-31; alert delivery is live, OpenObserve is retired, and the first convergence slice transfers shared CRD ownership before either bake-off pipeline is removed. Background: [observability bake-off](../observability-bakeoff.md).
+**Status:** Active — 2026-09-01; OpenObserve is retired, standalone CRD ownership is live, and the survivor cutover makes VictoriaMetrics responsible for native cluster scraping and Pushover delivery. KPS and Loki remain for an approximately one-day rollback soak before a separate cleanup PR. Background: [observability bake-off](../observability-bakeoff.md).
 
 ## Context
 
@@ -37,7 +37,7 @@ The stated pain was "I don't have time to hand-build Grafana." The inventory say
 already true: **nothing has been hand-built, and there are 51 dashboards + 296 rules.** The real
 problems are not missing dashboards — they are:
 
-1. **Alert delivery is tied to the losing stack** — Pushover works, but kube-prometheus-stack still owns the production Alertmanager and evaluator route.
+1. **Alert delivery was tied to the losing stack** — the survivor cutover moves Pushover authority from KPS Alertmanager/Prometheus to VMAlertmanager/vmalert.
 2. **Two overlapping bake-off pipelines remain** — pure maintenance tax with no benefit now that the bake-off has a winner. OpenObserve, the unused fifth backend, was retired in the first convergence slice.
 3. **A ~5-component dashboard gap** — real, but each is one declarative reference, not a build project.
 4. **No anomaly/ML** — all 296 rules are static thresholds; nothing surfaces unknown-unknowns.
@@ -80,7 +80,7 @@ problems are not missing dashboards — they are:
 
 | Phase | Change | Leverage | Risk |
 |---|---|---|---|
-| 1 | Preserve alert **delivery** while converging on VM (retire KPS-Prometheus/Alertmanager, Loki, OpenObserve) | Highest | Medium — staged ownership and live checks required |
+| 1 | Preserve alert **delivery** while converging on VM (cut over the survivor path, retain KPS and Loki for the rollback soak, then remove them in a separate cleanup PR; OpenObserve is already retired) | Highest | Medium — staged ownership and live checks required |
 | 2 | **Dashboards-as-code** for the 5 gap components via `grafana-operator` | High | Low |
 | 3 | **Estate coverage** — UniFi, Synology, edge Pis, uptime | High | Low |
 | 4 | **eBPF signals** — turn on Hubble (already own it); optionally Beyla | Medium | Low–Medium |
@@ -90,39 +90,30 @@ Sequencing rule: **preserve delivery, finish convergence, then enrich signals.**
 
 ### Phase 1 — convergence without losing delivery
 
-Pushover delivery became operational on 2026-08-29 through the KPS Alertmanager. Live checks on 2026-08-31 found all three controller-manager, scheduler, and etcd targets healthy, the Alertmanager configuration loaded, and no failed Pushover notifications. Convergence must preserve that production path until vmalert and VMAlertmanager pass the same end-to-end test.
+Pushover delivery became operational on 2026-08-29 through the KPS Alertmanager. Live checks on 2026-08-31 found all three controller-manager, scheduler, and etcd targets healthy, the Alertmanager configuration loaded, and no failed Pushover notifications. The 2026-09-01 survivor cutover replaces that authority directly: vmalert carries `evaluator=vmalert`, sends to VMAlertmanager, and is the only evaluator whose warning and critical alerts match the SOPS-managed Pushover routes. KPS Prometheus and its null-only Alertmanager remain installed solely for easy Git-revert rollback.
 
-Convergence is **not** "delete KPS." A dependency check (2026-07-03, refreshed 2026-08-31 — verified across repo config + live metric provenance + live k8s inventory, high confidence) found the **VM stack has six teardown dependencies on the KPS release.** The VM chart explicitly disables its own KSM + node-exporter (`kube-state-metrics.enabled: false`, `prometheus-node-exporter.enabled: false`) and its `ks.yaml` carries `dependsOn: [kube-prometheus-stack]` with the comment "we reuse KPS's KSM, node-exporter, Alertmanager, prometheus-operator CRDs." A naive delete cascades well past metrics.
+Convergence is **not** "delete KPS." A dependency check (2026-07-03, refreshed 2026-08-31 — verified across repo config + live metric provenance + live k8s inventory, high confidence) found six teardown dependencies on the KPS release. PR #478 resolved shared CRD ownership and converted-object garbage collection; the survivor cutover resolves native scrape ownership, alert delivery, the remaining Flux dependency, and ownership of the shared custom rules and encrypted notification configuration before deletion is attempted.
 
 **The six couplings and how each is decoupled — do these first, then delete KPS:**
 
-1. **kube-state-metrics.** Every `kube_*` series comes from `kube-prometheus-stack-kube-state-metrics`
-   (confirmed: `up{job="kube-state-metrics"}` pod/service carry the KPS name; no VM-owned KSM exists).
-   → flip `kube-state-metrics.enabled: true` in the VM chart.
-2. **node-exporter.** Every `node_*` series comes from `kube-prometheus-stack-prometheus-node-exporter`
-   (KPS-owned DaemonSet, 3 nodes). → flip `prometheus-node-exporter.enabled: true` in the VM chart.
-   The chart preserves `job=kube-state-metrics` / `job=node-exporter`, so dashboards/queries keep
-   matching; expect a brief scrape gap as source pods rename to `victoria-metrics-k8s-stack-*`.
-3. **prometheus-operator CRDs (`monitoring.coreos.com`) — the big blast radius.** The live
-   `servicemonitors.monitoring.coreos.com` CRD is labelled `helm.toolkit.fluxcd.io/name: kube-prometheus-stack`
-   (KPS `crds.enabled: true` owns it; bootstrap `00-crds.yaml` also sources CRDs from KPS). Third-party
-   charts (Cilium, Longhorn, cert-manager, Traefik) emit **ServiceMonitor** objects that vm-operator
-   converts to VMServiceScrape. KPS packages these in Helm's special `crds/` directory, so Helm retains them on uninstall; the original cascade-delete concern was overstated. The real gaps are independent lifecycle and upgrades. → install the matching `prometheus-operator-crds` 31.0.1 chart as a standalone Flux HelmRelease, adopt the live v0.93.1 CRDs, protect them with `helm.sh/resource-policy: keep`, disable KPS's CRD install, repoint bootstrap, and make CRD consumers depend on the standalone release.
-4. **Converted-object garbage collection.** victoria-metrics-operator had converter owner references disabled. Removing a Prometheus source could therefore leave an unowned VM copy evaluating forever; this happened with `KubeProxyDown`. → enable converter ownership before teardown and verify representative VMRule, VMServiceScrape, and VMPodScrape objects point at their Prometheus sources. Remove any pre-existing orphans explicitly.
-5. **Alertmanager (the delivery target).** vmalert currently sends into `kube-prometheus-stack-alertmanager:9093`; only the Prometheus-evaluated copy is routed to Pushover, which intentionally prevents duplicates. → enable VMAlertmanager with the existing SOPS-managed receiver credentials, stamp vmalert with an explicit evaluator label, switch the receiver matchers and UI route, and pass both synthetic delivery tests before retiring KPS Alertmanager.
-6. **Flux `dependsOn`.** Remove the temporary `dependsOn: [kube-prometheus-stack]` from `victoria-metrics-k8s-stack/ks.yaml`, or the VM Kustomization stops reconciling once KPS is gone.
+1. **kube-state-metrics.** Resolved in the survivor cutover: VM-native KSM owns the only VM KSM scrape target and carries the PVC label allowlist plus Longhorn `BackupTarget` custom-resource metric; KPS KSM is disabled.
+2. **node-exporter.** Resolved in the survivor cutover: VM-native node-exporter owns the three VM targets and KPS node-exporter is disabled. The chart preserves `job=kube-state-metrics` / `job=node-exporter`, so dashboards and queries keep matching; a brief scrape gap while source pods rename is acceptable.
+3. **prometheus-operator CRDs (`monitoring.coreos.com`).** Resolved by PR #478: standalone `prometheus-operator-crds` 31.0.1 owns the v0.93.1 CRDs with retention protection, KPS CRD installation is disabled, and consumers depend on the standalone release.
+4. **Converted-object garbage collection.** Resolved by PR #478: converter owner references are enabled and verified so deleted Prometheus sources cannot leave unowned VM copies evaluating forever.
+5. **Alertmanager (the delivery target).** Resolved in the survivor cutover: VMAlertmanager uses the relocated `vmalertmanager-config` SOPS Secret, vmalert carries `evaluator=vmalert`, the Pushover matchers select that label, and the Alertmanager UI and Grafana datasource point to VMAlertmanager. KPS Alertmanager uses an explicit null-only configuration.
+6. **Flux `dependsOn`.** Resolved in the survivor cutover: the temporary `dependsOn: [kube-prometheus-stack]` is removed, and the shared custom rules move under the VictoriaMetrics Kustomization.
 
-Also repoint Grafana's **default datasource** `prometheus-kps` → `victoriametrics` and verify a sample of the 51 dashboards render (VM's datasource type is `prometheus`, so PromQL resolves).
+The survivor cutover also repoints Grafana's **default datasource** from `prometheus-kps` to `victoriametrics`; VM retains the Prometheus datasource type so existing PromQL dashboards continue to resolve.
 
 Roll out Phase 1 in reviewable slices:
 
-1. Retire unreferenced OpenObserve; install and adopt the standalone CRDs; enable converter owner references. The retained `data-openobserve-0` PVC is the rollback path until convergence closes.
-2. Verify CRD ownership and converted owner references live, then enable VM-native KSM, node-exporter, control-plane scrapes, and VMAlertmanager without removing KPS.
-3. Move Grafana's default datasource and Pushover authority to VM. Run the alerting runbook's synthetic tests and sample the existing dashboards.
-4. Hold the survivor path green for a few days.
-5. Delete KPS and its stale converted children, then stop Alloy's Loki write and delete Loki. Re-run the target, rule, dashboard, log-query, and delivery checks before declaring Phase 1 complete.
+1. Completed by PR #478: retire unreferenced OpenObserve; install and adopt the standalone CRDs; enable converter owner references. The retained `data-openobserve-0` PVC remains the rollback path until convergence closes.
+2. Survivor cutover: switch KSM, node-exporter, and Talos control-plane scraping directly from KPS-owned ServiceMonitors/exporters to VM-native resources; enable VMAlertmanager; move the custom rules and encrypted configuration; make vmalert the Pushover authority; and make VictoriaMetrics Grafana's default datasource. KPS and Loki remain installed.
+3. Pass the post-merge gates in the alerting runbook, including exact target counts, duplicate-pool checks, the Longhorn BackupTarget metric, VMAlertmanager reload health, one firing and one resolved Pushover notification, clean alert state, and representative dashboard rendering.
+4. Hold KPS and Loki for roughly one day after the survivor path is green.
+5. In a separate cleanup PR, delete KPS and its stale converted children, remove Alloy's Loki sink, and delete Loki. Re-run the target, rule, dashboard, log-query, and delivery checks before declaring Phase 1 complete.
 
-The first slice removes `openobserve/`, adds the standalone `prometheus-operator-crds` release, repoints bootstrap and dependent Flux Kustomizations, and enables converter ownership. Later slices change `victoria-metrics-k8s-stack`, transfer the custom rules and Alertmanager secret out of the KPS directory, remove Loki's Alloy sink, and finally delete `kube-prometheus-stack/` and `loki/`.
+PR #478 delivered the first slice. The survivor cutover changes `victoria-metrics-k8s-stack`, transfers the custom rules and Alertmanager secret out of the KPS directory, and leaves both losing stacks intact. The next cleanup PR removes Loki's Alloy sink and deletes `kube-prometheus-stack/` and `loki/` only after the one-day soak.
 
 ### Phase 2 — dashboards-as-code (the gap components)
 
@@ -184,7 +175,7 @@ cluster-only (keep the Pi Zero on node_exporter).
 
 ## Effort accounting
 
-- Phase 1: several staged rollouts across a few days (ownership transfer, replacement components, delivery migration, soak, then deletion).
+- Phase 1: CRD ownership transfer, a direct survivor cutover, an approximately one-day rollback soak, then deletion in a separate PR.
 - Phase 2: ~½ day (datasource remapping is the fiddly part).
 - Phase 3: ~½ day total (unpoller's UniFiOS local-admin is the one annoying step).
 - Phase 4: Hubble ~a HelmRelease change + validation; Beyla ~an hour if wanted.

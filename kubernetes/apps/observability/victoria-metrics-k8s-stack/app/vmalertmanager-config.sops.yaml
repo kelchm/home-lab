@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: vmalertmanager-config
+  namespace: observability
+stringData:
+  alertmanager.yaml: ENC[AES256_GCM,data:azq9mVKBKz2V73UsXBpFnM5o5vehQBxEKDbWycpPVjdX/HEI5UfvIZpz7w77h0B3c5olhC78JliZq77UQIzv2bjNx86Lu8zXok++dhg423463GM6rLg04HmYfxRFRN9z5iJdmxB2GqTrmcwno9ZuwRBvj/YXM0BxgAHX+d5N9+VqY7H1BUlsuxa7OAD7LBCtEbGKAkP1CakOrEhgQlB3DRHy5nQgq9xXe7/MZjAt84fCLITWpz635sV5zDp+Zc0hN07aHSBkx67LI1Va1R89vum6PKepuI4Z31zzYnWeeKYYknFrFkSCPYL6JeC+AWMTB0PqgKh4npgh3MOJ4JcAcSujNb1Dzmm5q7zgMXgTeipY+sZBV05D70K2z4lg0oAWbTcYcY9jr0hXTVcBMtS5Mq2W2wHMxeIsgZY7ilaX0hJBesnm1Ud9bFYWlvEVK+FYy3zaA/BWAfEFreO5WI5hSLuSSdd54EpY5zu+Pdxf8naSs+pB2U2uWDTRot7GZpIdnymsfyNAgoJCmtegjqV3/WDJkXogjlFprcHV2WsiIh+Ok2z7R0eZQar4/ySUIrnlW1v5NiEoPIda8PAfBJTC8i74JbLIwbn++11fzy7b128liSvH73HjOY3YnZz0snihw6WN7iZVf3RaFqxytt8RQ0OgLC9/lzZhwcniXPEMjzf8TNCk6WnLO2Kj3rnRNIJeA4loAUB1aMDJDv3hc37ArCmO3OVb0vTDWztto56YDKNgARfhA4UP810zZd6dJ8rE7oXGEyVuem9h8stcxk0X2VQNAFiZG8KnV0b24tqGLiDPUsA6vJNSoQjaM17j46V6ai9EaCI5bnSZt3m1PMCfMz3AqleR76IE3EHY4uijJeIRLZW0gMvNy7CoZxUGD5ES8gj0XoBcU+dmMEk8D5mNpYhOe5a14SnZi5GuZsHK5bHt/2uOoXGqFEm1PcEsflZ2h3NKrVIW8B6kC/PSnJ7es/Hnm7bQAfb0UwLe7z7pNx0AoXKPbp41MJpgEaKEKFHrvIK+b0Z6RzxPG5JmFrRJaZSi4J3p3nvoQWxNKero/5jSZoIgT5VS0X53zEQNFaeXKiAlI9y/FzAtiny+HhDaxr9Cxt7XFyy4HRsSyfxmSyKUJcyalOA23Z3LzEo/T39ORcdbhYC2sus77iDfj5HXz/urS7xPxcqIcyk8kQiTJHqGISCzdilZgHhOWAVHy96vHx1XjATAvIK+20/P8HEm+PKIyxIXR6ZKE4wqYxKbYm7QM05rl4ZrkpozFbmUE+2BCtfbhpLsu3paSCXOuvS7A9+M5P5o309SUNccAMif/qlG0OV31RKgEjb5csIwKV7joCeju7H/CObTuT+ark1A7CxrrlQf/LqGuJTLl+NUrTAOzU5ljGMSRb4n7HxKq3Bm31r8RnbJTKGGKGh1JKNNoKS5AqJVAFPgYmuCbPUbACh+XgJ/BASbsPSUG3bJLY9mFrmF/vtX+YQScBkaECTYPTQHrV+uTkgeQHxWtDh89RdCEa1IuCgothTwpNUfgjYY/FonVXHzeL97Z8hvMW0bYJmR1RGKtB6jlVyJCus6hJXWndaIwSeJ17Zem8RnUiEEaO55wFKaWBxNfY3HZFlIa0wBF6NZuCLFuYYewSvt/21NTZafx9Fj+I8ngAo=,iv:+/Ffmo8Kcx9nXFkYC3Dg7Sw3FiBauphTJB/zJC40PIE=,tag:gd+phWcNwcyz+QR4qKjsMg==,type:str]
+sops:
+  age:
+    - enc: |
+        -----BEGIN AGE ENCRYPTED FILE-----
+        YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBtK3U5ZGlYMHUwdnAyZ0dS
+        NTVnc3hmdkdQM09iOE1EOTBIY1pQNFp0bFhBCnhjYmVTai9Sbk1zRkhBNEFUZzRi
+        VDl3aERjRVNwMXg4SVJjUXR2dVdlc28KLS0tIEpQSURFWnpLaEorUmtYRi9ydGhm
+        c3kxN0JnTEoyNjYvaDB1dmxTRHlSLzgK2BpARd8/ZSpsQDywqhKLP12EomJHof3q
+        tCJ1Ns6clKqvWPlq3TxGDspOTNS1QqFugXc/oRC/CT0Qz+GZuZ4vqA==
+        -----END AGE ENCRYPTED FILE-----
+      recipient: age14wcg0t6njf76c4ctrndypvvmxk9p7jkumnumlvxdmsn543tc3yusgk5jwy
+  encrypted_regex: ^(data|stringData)$
+  lastmodified: "2026-09-01T21:48:02Z"
+  mac: ENC[AES256_GCM,data:jTT9U1X1Nu04b5ywAaIVV66Gnqr96Y4V1Uq2M8LvnX+BXA5MAU23xBbUNL31wQs1UKSSlVvuHBpF7indTmdL1Guy5YZeU18To/CwDgrzR6HG5WFIakS7Nt4jyvwInNfZCktura+mgdHjYyllkBVCCpWd+L5tA5zjVD4oHBAtD94=,iv:eILGnifQEwp4qN6dww9ZIDnWA/WfqYUZkyTFxH4xc2E=,tag:ejmSNFf9sNc4jwdUTQJ/SQ==,type:str]
+  mac_only_encrypted: true
+  version: 3.13.3

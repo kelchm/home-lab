@@ -1,13 +1,15 @@
 ---
+# Shared cluster rules are owned with the surviving VictoriaMetrics stack.
 # Signals that are specific to this cluster's delivery, GitOps, certificate,
 # and pod-object failure modes. Generic node/filesystem/PVC capacity and
-# CrashLoopBackOff alerts remain owned by kube-prometheus-stack's bundled
+# CrashLoopBackOff alerts remain owned by the VM chart's bundled
 # kubernetes-mixin rules; Longhorn capacity and backup rules live with the
 # Longhorn deployment.
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
-  name: platform-operations
+  # New identity avoids a cross-Kustomization prune race with the KPS copy.
+  name: vm-platform-operations
 spec:
   groups:
     - name: flux-reconciliation

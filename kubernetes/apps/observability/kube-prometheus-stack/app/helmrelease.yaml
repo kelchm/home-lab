@@ -1,7 +1,8 @@
 ---
-# kube-prometheus-stack — Pipeline A's metrics + alerting layer.
-# Prometheus, Alertmanager, kube-state-metrics, node-exporter, the
-# prometheus-operator, and the standard set of bundled dashboards/rules.
+# kube-prometheus-stack — temporary rollback metrics + alerting components.
+# Prometheus, Alertmanager, and the prometheus-operator remain installed for
+# an easy Git revert, but VictoriaMetrics now owns exporters, control-plane
+# scraping, and outbound Pushover delivery.
 #
 # The Grafana subchart is disabled — we use the standalone Grafana
 # deployed in commit 1. Dashboards still render as ConfigMaps with the
@@ -9,12 +10,9 @@
 # discovers automatically. Datasources are registered separately via
 # datasources.yaml (also a labeled ConfigMap).
 #
-# Talos already exposes controller-manager, scheduler, and etcd metrics on the
-# node addresses. The secure controller-manager and scheduler endpoints use
-# delegated bearer-token authorization; their serving certificates are
-# localhost-only, so the monitors retain TLS encryption while explicitly
-# skipping hostname verification. Etcd's separate metrics-only endpoint is
-# HTTP and receives no bearer token.
+# The VM chart now owns the Talos node-address scrapes. Keeping all three KPS
+# component toggles off prevents their converted ServiceMonitors from becoming
+# permanent duplicate vmagent scrape pools.
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
@@ -44,36 +42,26 @@ spec:
           labelValue: "1"
 
     kubeControllerManager:
-      enabled: true
-      serviceMonitor:
-        insecureSkipVerify: true
+      enabled: false
     kubeScheduler:
-      enabled: true
-      serviceMonitor:
-        insecureSkipVerify: true
+      enabled: false
     kubeEtcd:
-      enabled: true
-      # Talos runs etcd outside Kubernetes, so there are no pods for the
-      # chart's default Service selector to discover.
-      endpoints:
-        - 10.32.30.11
-        - 10.32.30.12
-        - 10.32.30.13
-      serviceMonitor:
-        # Never send the Prometheus service-account token to the plaintext,
-        # metrics-only listener.
-        bearerTokenFile: ""
+      enabled: false
 
     # Talos runs Cilium in kube-proxy-replacement mode. Leaving this enabled
     # creates an empty target and a permanently firing KubeProxyDown alert.
     kubeProxy:
       enabled: false
 
+    # The VM chart owns the surviving mixin rules. Leaving the KPS defaults on
+    # would make vmalert evaluate both native and converted copies.
+    defaultRules:
+      create: false
+
     prometheus:
       prometheusSpec:
-        # Attach the cluster identity to notifications. Alertmanager routes
-        # only the Prometheus evaluator externally; vmalert remains available
-        # as an independent comparison in the shared Alertmanager UI.
+        # Keep the cluster identity for rollback inspection. This evaluator's
+        # Alertmanager has a null-only route and sends nothing externally.
         externalLabels:
           cluster: k8s-prod
         # Watch ServiceMonitors / PodMonitors / Rules / Probes across all
@@ -101,11 +89,20 @@ spec:
             memory: 2Gi
 
     alertmanager:
+      # Keep the rollback Alertmanager installed, but make its routing
+      # explicitly local-only. Pushover credentials belong only to VMAlertmanager.
+      config:
+        global:
+          resolve_timeout: 5m
+        route:
+          receiver: "null"
+          group_by: [alertname, cluster, namespace]
+          group_wait: 30s
+          group_interval: 5m
+          repeat_interval: 12h
+        receivers:
+          - name: "null"
       alertmanagerSpec:
-        # The separately managed SOPS Secret contains the complete config so
-        # the Pushover application token and user key never pass through Helm values.
-        useExistingSecret: true
-        configSecret: alertmanager-config
         storage:
           volumeClaimTemplate:
             spec:
@@ -122,48 +119,10 @@ spec:
             memory: 128Mi
 
     nodeExporter:
-      enabled: true
+      enabled: false
 
     kubeStateMetrics:
-      enabled: true
-
-    # Sub-chart values; `kubeStateMetrics` above only toggles the dependency.
-    kube-state-metrics:
-      # KSM exports no resource labels by default. Surface Longhorn's backup
-      # opt-out label so the storage alert rules can read the exemption off the
-      # PVC rather than matching volumes by name.
-      metricLabelsAllowlist:
-        - persistentvolumeclaims=[recurring-job-group.longhorn.io/no-backup]
-      # Longhorn's native metrics expose the number of backup volumes but not
-      # BackupTarget availability. Export the CR's status.available field so a
-      # disconnected NFS target pages before the next scheduled backup ages
-      # into the stale-backup rules.
-      customResourceState:
-        enabled: true
-        config:
-          kind: CustomResourceStateMetrics
-          spec:
-            resources:
-              - groupVersionKind:
-                  group: longhorn.io
-                  version: v1beta2
-                  kind: BackupTarget
-                metricNamePrefix: longhorn
-                labelsFromPath:
-                  backup_target: [metadata, name]
-                  namespace: [metadata, namespace]
-                metrics:
-                  - name: backup_target_available
-                    help: Whether the Longhorn BackupTarget is available.
-                    each:
-                      type: Gauge
-                      gauge:
-                        path: [status, available]
-      rbac:
-        extraRules:
-          - apiGroups: [longhorn.io]
-            resources: [backuptargets]
-            verbs: [list, watch]
+      enabled: false
 
     prometheusOperator:
       enabled: true

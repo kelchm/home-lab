@@ -1,19 +1,8 @@
 ---
-# victoria-metrics-k8s-stack — Pipeline B's metrics layer. Operator,
-# VMSingle (single-node TSDB), vmagent (scraping), vmalert (rule eval).
-# vmagent is the actual point of the comparison vs KPS Prom — its
-# persistent queue is the defensive ingest property we cited as the
-# reason VM is in the bake-off.
-#
-# Subcharts disabled to avoid duplicating components we already have:
-# - kube-state-metrics and node-exporter live in KPS already; vmagent
-#   scrapes them via the same ServiceMonitors KPS Prom does.
-# - grafana is the standalone instance from commit 1.
-# - vmalertmanager is disabled in favor of KPS's Alertmanager. vmalert sends
-#   into that shared Alertmanager, which owns external delivery.
-#
-# Control-plane component scrapes are disabled in this chart because KPS owns
-# the shared ServiceMonitors and vm-operator converts them for vmagent.
+# victoria-metrics-k8s-stack — the surviving metrics and alerting path.
+# The operator manages VMSingle, vmagent, vmalert, VMAlertmanager, the native
+# cluster exporters, and their VMServiceScrapes. KPS remains temporarily as a
+# Git-revert rollback path, but no longer owns VM ingestion or outbound paging.
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
@@ -35,21 +24,71 @@ spec:
         # owner references, removed sources leave stale alerts and scrapes.
         enable_converter_ownership: true
 
-    # Subcharts already provided elsewhere — disable to avoid duplication.
+    # The standalone Grafana remains the front door.
     grafana:
-      enabled: false   # using standalone Grafana from commit 1
+      enabled: false
 
     kube-state-metrics:
-      enabled: false
-    prometheus-node-exporter:
-      enabled: false
+      enabled: true
+      # Preserve the Longhorn backup opt-out label used by the storage rules.
+      metricLabelsAllowlist:
+        - persistentvolumeclaims=[recurring-job-group.longhorn.io/no-backup]
+      # Longhorn does not expose BackupTarget availability through its native
+      # metrics endpoint. Export status.available from the CR so a disconnected
+      # backup target alerts before scheduled backups become stale.
+      customResourceState:
+        enabled: true
+        config:
+          kind: CustomResourceStateMetrics
+          spec:
+            resources:
+              - groupVersionKind:
+                  group: longhorn.io
+                  version: v1beta2
+                  kind: BackupTarget
+                metricNamePrefix: longhorn
+                labelsFromPath:
+                  backup_target: [metadata, name]
+                  namespace: [metadata, namespace]
+                metrics:
+                  - name: backup_target_available
+                    help: Whether the Longhorn BackupTarget is available.
+                    each:
+                      type: Gauge
+                      gauge:
+                        path: [status, available]
+      rbac:
+        extraRules:
+          - apiGroups: [longhorn.io]
+            resources: [backuptargets]
+            verbs: [list, watch]
 
-    # The chart's own VMAlertmanager — disabled in favor of KPS's
-    # Alertmanager during the bake-off. The chart names this `alertmanager`
-    # (not `vmalertmanager`) at the values root, even though the resource
-    # it creates is a VMAlertmanager CRD.
+    prometheus-node-exporter:
+      enabled: true
+
+    # The chart calls this `alertmanager`, but it creates a VMAlertmanager CR.
+    # The complete routing configuration and Pushover credentials live in the
+    # separately managed SOPS Secret rather than Helm values.
     alertmanager:
-      enabled: false
+      enabled: true
+      monzoTemplate:
+        enabled: false
+      spec:
+        configSecret: vmalertmanager-config
+        storage:
+          volumeClaimTemplate:
+            spec:
+              storageClassName: longhorn
+              accessModes: ["ReadWriteOnce"]
+              resources:
+                requests:
+                  storage: 1Gi
+        resources:
+          requests:
+            cpu: 10m
+            memory: 64Mi
+          limits:
+            memory: 128Mi
 
     # Default dashboards rendered as ConfigMaps (chart default). The
     # standalone Grafana's sidecar discovers them via `grafana_dashboard`
@@ -59,15 +98,57 @@ spec:
     defaultDashboards:
       enabled: true
 
-    # KPS owns the shared ServiceMonitors for these endpoints. vm-operator
-    # converts those monitors for vmagent, so keep the VM chart's duplicate
-    # Services and VMServiceScrapes disabled.
+    # Talos exposes these components on the node addresses rather than pods.
+    # Controller-manager and scheduler require bearer-token authorization and
+    # use localhost-only certificates, so retain TLS but skip hostname checks.
+    # Etcd exposes a separate plaintext, metrics-only listener and receives no
+    # Kubernetes service-account token.
     kubeControllerManager:
-      enabled: false
+      enabled: true
+      endpoints:
+        - 10.32.30.11
+        - 10.32.30.12
+        - 10.32.30.13
+      vmScrape:
+        spec:
+          endpoints:
+            - bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+              port: http-metrics
+              scheme: https
+              tlsConfig:
+                insecureSkipVerify: true
+
     kubeScheduler:
-      enabled: false
+      enabled: true
+      endpoints:
+        - 10.32.30.11
+        - 10.32.30.12
+        - 10.32.30.13
+      vmScrape:
+        spec:
+          endpoints:
+            - bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+              port: http-metrics
+              scheme: https
+              tlsConfig:
+                insecureSkipVerify: true
+
     kubeEtcd:
-      enabled: false
+      enabled: true
+      endpoints:
+        - 10.32.30.11
+        - 10.32.30.12
+        - 10.32.30.13
+      service:
+        # Talos exposes the metrics-only listener on 2381; the VM chart's
+        # upstream default is etcd's client port 2379.
+        port: 2381
+        targetPort: 2381
+      vmScrape:
+        spec:
+          endpoints:
+            - port: http-metrics
+              scheme: http
 
     vmsingle:
       enabled: true
@@ -117,15 +198,11 @@ spec:
       spec:
         selectAllByDefault: true
         evaluationInterval: 30s
-        # Stamp alerts with the cluster identity so notifications surface
-        # alongside any future cluster's alerts in the same Alertmanager.
+        # The evaluator label is the VMAlertmanager routing authority. It keeps
+        # the temporary KPS evaluator copy from becoming a second notification.
         externalLabels:
           cluster: k8s-prod
-        # Fire to the shared KPS Alertmanager for comparison in one UI. Its
-        # external route selects only the Prometheus evaluator copy, avoiding
-        # duplicate Pushover notifications from the two distinct fingerprints.
-        notifiers:
-          - url: http://kube-prometheus-stack-alertmanager.observability.svc.cluster.local:9093
+          evaluator: vmalert
         resources:
           requests:
             cpu: 50m
