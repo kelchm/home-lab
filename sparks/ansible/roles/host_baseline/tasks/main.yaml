@@ -1,7 +1,7 @@
 ---
-- name: Assert NVIDIA driver is on the 580.x series
-  ansible.builtin.shell: nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -1
-  register: driver_version
+- name: Read NVIDIA driver version
+  ansible.builtin.command: nvidia-smi --query-gpu=driver_version --format=csv,noheader
+  register: host_baseline_driver
   changed_when: false
 
 # Assert-only: driver updates arrive through NVIDIA's own channel; the control
@@ -10,14 +10,17 @@
 - name: Refuse to converge on a non-580 driver
   ansible.builtin.assert:
     that:
-      - driver_version.stdout is match('580\.')
-    fail_msg: "driver on {{ inventory_hostname }} is {{ driver_version.stdout }}, expected 580.x; do not operate the stack on 590.x"
+      - host_baseline_driver.stdout_lines[0] is match('580\.')
+    fail_msg: >-
+      driver on {{ inventory_hostname }} is {{ host_baseline_driver.stdout_lines[0] }},
+      expected 580.x; do not operate the stack on 590.x
 
 - name: Ensure state directory exists
   ansible.builtin.file:
     path: "{{ remote_dir }}"
     state: directory
     owner: kelchm
+    mode: "0755"
   become: true
 
 # The controller invokes these same playbooks non-interactively; become has to
@@ -36,19 +39,21 @@
     path: "{{ remote_dir }}/inference"
     state: directory
     owner: kelchm
+    mode: "0755"
   become: true
   when: inventory_hostname == 'spark-1'
 
 # The boot unit runs compose in this directory; stage it here so convergence
 # works on a host that has never run a qwen switch.
-- name: Stage qwen compose for boot convergence
+- name: Stage default-profile compose for boot convergence
   ansible.builtin.copy:
     src: "{{ playbook_dir }}/../inference/compose.yaml"
     dest: "{{ remote_dir }}/inference/compose.yaml"
+    mode: "0644"
   when: inventory_hostname == 'spark-1'
 
 - name: Install baseline script
-  ansible.builtin.copy:
+  ansible.builtin.template:
     src: spark-baseline.sh
     dest: "{{ remote_dir }}/baseline.sh"
     mode: "0755"
@@ -58,6 +63,7 @@
   ansible.builtin.copy:
     src: spark-baseline.service
     dest: /etc/systemd/system/spark-baseline.service
+    mode: "0644"
   become: true
   when: inventory_hostname == 'spark-1'
 

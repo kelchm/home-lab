@@ -40,6 +40,7 @@ tasks:
       - for: {var: SPARK_HOSTS}
         cmd: |
           echo "=== {{.ITEM}} ==="
+          ssh {{.ITEM}} 'pkill -f "[s]tart-deepseek-v4-flash-dspark.sh" || true'
           ssh {{.ITEM}} 'for pid in $(pgrep -f "[s]tart.sh" || true); do [ "$(readlink -f /proc/$pid/cwd 2>/dev/null)" = /home/kelchm/glm53-guide ] && kill "$pid" || true; done'
           ssh {{.ITEM}} 'ids=$(docker ps -aq --filter "name={{.GLM_CONTAINER}}"); [ -n "$ids" ] && docker rm -f $ids || echo "  no GLM containers"'
           # The DeepSeek route is the guide's own compose project, not ours;

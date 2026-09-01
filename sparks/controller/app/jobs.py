@@ -123,8 +123,11 @@ class JobManager:
                 log.write(f"controller error: {exc}\n".encode())
         finally:
             job.finished_at = _utcnow()
-            self._write_meta(job)
-            self._lock.release()
+            # A journal-write failure must never wedge single-flight.
+            try:
+                self._write_meta(job)
+            finally:
+                self._lock.release()
 
     def _write_meta(self, job: Job) -> None:
         (self.jobs_dir / job.id / "meta.json").write_text(json.dumps(job.meta()))

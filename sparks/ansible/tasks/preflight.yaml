@@ -14,8 +14,8 @@
     fail_msg: "missing {{ compose_file }}"
   when: start_driver == 'compose'
 
-- name: Verify guide is pinned to expected revision
-  ansible.builtin.shell: git -C {{ guide_dir }} rev-parse HEAD
+- name: Verify guide is pinned to expected revision  # noqa: command-instead-of-module — read-only rev check, not a checkout the git module should manage
+  ansible.builtin.command: git -C {{ guide_dir }} rev-parse HEAD
   register: guide_head
   changed_when: false
   delegate_to: "{{ item }}"
@@ -25,7 +25,10 @@
   ansible.builtin.assert:
     that:
       - item.stdout == guide_rev
-    fail_msg: "guide at {{ guide_dir }} on {{ item.item }} is {{ item.stdout }}, expected {{ guide_rev }}; see the recipe README under sparks/inference/ for clone/pin instructions"
+    fail_msg: >-
+      guide at {{ guide_dir }} on {{ item.item }} is {{ item.stdout }}, expected
+      {{ guide_rev }}; see the recipe README under sparks/inference/ for clone/pin
+      instructions
   loop: "{{ guide_head.results | default([]) }}"
   loop_control:
     label: "{{ item.item }}"
@@ -34,6 +37,7 @@
   ansible.builtin.copy:
     src: "{{ overrides_file }}"
     dest: /tmp/spark-profile.overrides
+    mode: "0644"
   delegate_to: "{{ item }}"
   loop: "{{ preflight_hosts if overrides_file is defined else [] }}"
 
@@ -41,21 +45,31 @@
 # (e.g. the model id) would pass a spot check and serve the wrong thing.
 - name: Verify every override landed in the guide environment
   ansible.builtin.shell: |
+    set -o pipefail
     grep -v '^#' /tmp/spark-profile.overrides | grep -v '^$' | while IFS= read -r line; do
       grep -qxF "$line" {{ guide_dir }}/{{ guide_env_file }} || { echo "override not applied: $line (re-apply from {{ overrides_file | basename }})"; exit 1; }
     done
+  args:
+    executable: /bin/bash
   changed_when: false
   delegate_to: "{{ item }}"
   loop: "{{ preflight_hosts if overrides_file is defined else [] }}"
 
 - name: Reject forbidden guide environment settings
-  ansible.builtin.shell: "! grep -v '^#' {{ guide_dir }}/{{ guide_env_file }} | grep -Eq -- '{{ forbidden_env_regex }}'"
+  ansible.builtin.shell: |
+    set -o pipefail
+    if grep -v '^#' {{ guide_dir }}/{{ guide_env_file }} | grep -Eq -- '{{ forbidden_env_regex }}'; then
+      echo "forbidden setting matching '{{ forbidden_env_regex }}' in {{ guide_dir }}/{{ guide_env_file }}"
+      exit 1
+    fi
+  args:
+    executable: /bin/bash
   changed_when: false
   delegate_to: "{{ item }}"
   loop: "{{ preflight_hosts if forbidden_env_regex is defined else [] }}"
 
 - name: Collect runtime image IDs
-  ansible.builtin.shell: "docker image inspect --format '{% raw %}{{.Id}}{% endraw %}' {{ runtime_image }}"
+  ansible.builtin.command: "docker image inspect --format '{% raw %}{{.Id}}{% endraw %}' {{ runtime_image }}"
   register: image_ids
   changed_when: false
   failed_when: false
@@ -66,7 +80,9 @@
   ansible.builtin.assert:
     that:
       - item.rc == 0
-    fail_msg: "image {{ runtime_image }} missing on {{ item.item }}; pre-pull or build it before switching (no implicit pulls mid-rendezvous)"
+    fail_msg: >-
+      image {{ runtime_image }} missing on {{ item.item }}; pre-pull or build it before
+      switching (no implicit pulls mid-rendezvous)
   loop: "{{ image_ids.results | default([]) }}"
   loop_control:
     label: "{{ item.item }}"
@@ -78,7 +94,7 @@
     fail_msg: "runtime image differs between hosts; make both ranks byte-identical before switching"
   when: runtime_image is defined and (preflight_hosts | length) > 1
 
-- name: Verify model artifacts are present
+- name: Verify model artifacts are present  # noqa: command-instead-of-shell — the check body is profile data
   ansible.builtin.shell: "{{ weights_check_command }}"
   changed_when: false
   delegate_to: "{{ item }}"

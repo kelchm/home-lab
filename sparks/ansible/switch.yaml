@@ -3,26 +3,8 @@
   hosts: spark-1
   gather_facts: false
   pre_tasks:
-    # Profiles are discovered, never enumerated: adding one is adding a file.
-    - name: Assert profile is defined and known
-      ansible.builtin.assert:
-        that:
-          - profile is defined
-          - (playbook_dir + '/profiles/' + profile + '.yaml') is exists
-        fail_msg: "set -e profile=<name>; available: {{ query('ansible.builtin.fileglob', playbook_dir + '/profiles/*.yaml') | map('basename') | map('regex_replace', '[.]yaml$', '') | sort | join(', ') }}"
-
-    - name: Load profile variables
-      ansible.builtin.include_vars: "profiles/{{ profile }}.yaml"
-
-    - name: Assert profile contract
-      ansible.builtin.assert:
-        that:
-          - profile_name == profile
-          - served_model_id is defined
-          - serve_port is defined
-          - health_url is defined
-          - start_driver in ['compose', 'guide']
-        fail_msg: "profiles/{{ profile }}.yaml is missing required keys (profile_name matching the filename, served_model_id, serve_port, health_url, start_driver)"
+    - name: Load and validate profile
+      ansible.builtin.include_tasks: tasks/load-profile.yaml
 
   tasks:
     # Outside the blocks: a lock conflict must fail without entering rescue,
@@ -31,6 +13,7 @@
       ansible.builtin.command: mkdir {{ lock_dir }}
       register: lock_acquire
       failed_when: false
+      changed_when: lock_acquire.rc == 0
 
     - name: Fail if switch already in progress
       ansible.builtin.fail:
@@ -54,7 +37,9 @@
 
         - name: Fail without teardown
           ansible.builtin.fail:
-            msg: "could not publish maintenance; nothing was torn down and the previous profile is still routed — verify caddy on spark-1 (baseline.yaml) before retrying"
+            msg: >-
+              could not publish maintenance; nothing was torn down and the previous profile
+              is still routed — verify caddy on spark-1 (baseline.yaml) before retrying
 
     - name: Switch profile
       # rescue/always never run for unreachable hosts, which would leak the
@@ -66,6 +51,7 @@
             path: "{{ remote_dir }}"
             state: directory
             owner: kelchm
+            mode: "0755"
           become: true
 
         - name: Teardown on both hosts
@@ -78,6 +64,7 @@
           ansible.builtin.copy:
             content: "none\n"
             dest: "{{ resident_file }}"
+            mode: "0644"
 
         - name: Memory-reclaim gate on both hosts
           ansible.builtin.shell: awk '/MemAvailable/ {print int($2/1024/1024)}' /proc/meminfo
@@ -85,13 +72,16 @@
           until: mem_available.stdout | int >= min_available_gib
           retries: 4
           delay: 15
-          ignore_errors: true
+          changed_when: false
+          ignore_errors: true  # noqa: ignore-errors — the gate below turns low memory into a targeted failure
           delegate_to: "{{ item }}"
           loop: "{{ groups['sparks'] }}"
 
         - name: Fail when UVM did not release
           ansible.builtin.fail:
-            msg: "UVM from the previous profile did not release on {{ item.item }}; reboot the affected Spark and re-run (there is no watchdog)"
+            msg: >-
+              UVM from the previous profile did not release on {{ item.item }};
+              reboot the affected Spark and re-run (there is no watchdog)
           when: item is failed or (item.stdout | default('0') | int < min_available_gib)
           loop: "{{ mem_available.results }}"
           loop_control:
@@ -99,6 +89,7 @@
 
         - name: Drop caches on both hosts
           ansible.builtin.shell: sync && echo 3 > /proc/sys/vm/drop_caches
+          changed_when: true
           become: true
           delegate_to: "{{ item }}"
           loop: "{{ groups['sparks'] }}"
@@ -112,23 +103,29 @@
         # Cold TP=2 boots take 15–30 min; this is the 30-minute gate. Per-probe
         # timeouts keep a half-dead endpoint from hanging the gate forever.
         - name: Ready gate on spark-1
-          ansible.builtin.shell: curl -fsS --connect-timeout 5 --max-time 10 {{ health_url }}
+          ansible.builtin.uri:
+            url: "{{ health_url }}"
+            timeout: 10
           register: ready_check
-          until: ready_check.rc == 0
+          until: ready_check.status == 200
           retries: "{{ ready_retries }}"
           delay: "{{ ready_delay }}"
 
         - name: Read served models from the profile port
-          ansible.builtin.shell: curl -fsS --max-time 10 http://localhost:{{ serve_port }}/v1/models
+          ansible.builtin.uri:
+            url: "http://localhost:{{ serve_port }}/v1/models"
+            return_content: true
+            timeout: 10
           register: models_direct
-          changed_when: false
 
         # A healthy port serving the wrong thing must never be published.
         - name: Assert the profile's model is the only served model
           ansible.builtin.assert:
             that:
-              - (models_direct.stdout | from_json).data | map(attribute='id') | list == [served_model_id]
-            fail_msg: "profile port serves {{ (models_direct.stdout | from_json).data | map(attribute='id') | list }}, expected exactly ['{{ served_model_id }}']"
+              - models_direct.json.data | map(attribute='id') | list == [served_model_id]
+            fail_msg: >-
+              profile port serves {{ models_direct.json.data | map(attribute='id') | list }},
+              expected exactly ['{{ served_model_id }}']
 
         - name: Smoke test profile
           ansible.builtin.include_tasks: tasks/smoke.yaml
@@ -141,6 +138,7 @@
           ansible.builtin.copy:
             content: "{{ profile_name }}\n"
             dest: "{{ resident_file }}"
+            mode: "0644"
 
         - name: Publish profile route
           ansible.builtin.include_tasks: tasks/caddy-publish.yaml
@@ -149,18 +147,21 @@
             caddy_upstream_port: "{{ serve_port }}"
 
         - name: Read served models through the stable endpoint
-          ansible.builtin.shell: curl -fsS --max-time 10 http://localhost:80/v1/models
+          ansible.builtin.uri:
+            url: http://localhost:80/v1/models
+            return_content: true
+            timeout: 10
           register: models_stable
-          changed_when: false
 
         - name: Assert the stable endpoint serves the profile
           ansible.builtin.assert:
             that:
-              - served_model_id in ((models_stable.stdout | from_json).data | map(attribute='id') | list)
+              - served_model_id in (models_stable.json.data | map(attribute='id') | list)
             fail_msg: "stable endpoint does not serve {{ served_model_id }} after publish"
 
         - name: Append switch log
           ansible.builtin.shell: echo "$(date -Is) switch {{ profile_name }} published" >> {{ switch_log }}
+          changed_when: true
 
       rescue:
         # The async start script can keep launching containers after a failed
@@ -173,8 +174,9 @@
                 kill "$pid" || true
               fi
             done
+          changed_when: true
           when: guide_dir is defined
-          ignore_errors: true
+          ignore_errors: true  # noqa: ignore-errors — rescue diagnostics must not mask the original failure
 
         # Best-effort: the route must not point at whatever the failure left
         # behind, but a caddy problem must not mask the original failure.
@@ -188,38 +190,42 @@
           ansible.builtin.copy:
             content: "unknown\n"
             dest: "{{ resident_file }}"
-          ignore_errors: true
+            mode: "0644"
+          ignore_errors: true  # noqa: ignore-errors — rescue bookkeeping must not mask the original failure
 
         - name: Collect docker diagnostics on both hosts
-          ansible.builtin.shell: "docker ps -a --format '{% raw %}{{.Names}} {{.Status}}{% endraw %}'"
+          ansible.builtin.command: "docker ps -a --format '{% raw %}{{.Names}} {{.Status}}{% endraw %}'"
           register: docker_diag
-          ignore_errors: true
+          changed_when: false
+          ignore_errors: true  # noqa: ignore-errors — rescue diagnostics must not mask the original failure
           delegate_to: "{{ item }}"
           loop: "{{ groups['sparks'] }}"
 
         - name: Print docker diagnostics
           ansible.builtin.debug:
             msg: "{{ item.item }}: {{ item.stdout_lines | default([]) }}"
-          ignore_errors: true
           loop: "{{ docker_diag.results }}"
           loop_control:
             label: "{{ item.item }}"
 
         - name: Tail start log on spark-1
-          ansible.builtin.shell: "tail -n 40 {{ start_log }}"
+          ansible.builtin.command: "tail -n 40 {{ start_log }}"
           register: start_log_tail
-          ignore_errors: true
+          changed_when: false
+          ignore_errors: true  # noqa: ignore-errors — rescue diagnostics must not mask the original failure
           when: start_log is defined
 
         - name: Print start log tail
           ansible.builtin.debug:
             var: start_log_tail.stdout_lines
-          ignore_errors: true
           when: start_log is defined and start_log_tail is defined
 
         - name: Fail switch
           ansible.builtin.fail:
-            msg: "switch to {{ profile }} failed; the stable endpoint is in maintenance and the pair may be partially started — run 'task sparks:down' before retrying, or 'task sparks:publish PROFILE={{ profile }}' if the model itself came up healthy"
+            msg: >-
+              switch to {{ profile }} failed; the stable endpoint is in maintenance and the
+              pair may be partially started — run 'task sparks:down' before retrying, or
+              'task sparks:publish PROFILE={{ profile }}' if the model itself came up healthy
 
       always:
         - name: Remove switch lock

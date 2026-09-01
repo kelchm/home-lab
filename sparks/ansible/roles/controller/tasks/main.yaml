@@ -1,5 +1,5 @@
 ---
-- name: Ensure controller directories exist
+- name: Ensure controller system directories exist
   ansible.builtin.file:
     path: "{{ item }}"
     state: directory
@@ -9,7 +9,16 @@
     - /etc/spark-controller
     - /etc/spark-controller/ssh
     - /var/lib/spark-controller
-    - "{{ remote_dir }}/controller"
+
+# Compose copy and docker compose run unprivileged; root ownership here would
+# block them on a clean first deployment.
+- name: Ensure controller deploy directory exists
+  ansible.builtin.file:
+    path: "{{ remote_dir }}/controller"
+    state: directory
+    owner: kelchm
+    mode: "0755"
+  become: true
 
 - name: Generate controller SSH keypair
   ansible.builtin.command: ssh-keygen -t ed25519 -N '' -C spark-controller -f /etc/spark-controller/ssh/id_ed25519
@@ -39,32 +48,48 @@
 # Decrypted on the operator machine; the controller itself never needs SOPS.
 - name: Install API bearer token
   ansible.builtin.copy:
-    content: "{{ lookup('pipe', sops_extract_cmd) }}\n"
+    content: "{{ lookup('pipe', controller_sops_extract_cmd) }}\n"
     dest: /etc/spark-controller/token
     mode: "0600"
   become: true
   no_log: true
   vars:
-    sops_extract_cmd: sops -d --extract '["controller_token"]' {{ playbook_dir }}/secrets.sops.yaml
+    controller_sops_extract_cmd: sops -d --extract '["controller_token"]' {{ playbook_dir }}/secrets.sops.yaml
 
 # Recreating the container would kill a transaction subprocess mid-switch and
 # leak the on-host lock; a running controller must be idle first.
 - name: Check controller for a running job
-  ansible.builtin.shell: curl -fsS --max-time 5 http://localhost:{{ controller_port }}/admin/v1/healthz || echo '{}'
+  ansible.builtin.uri:
+    url: "http://localhost:{{ controller_port }}/admin/v1/healthz"
+    return_content: true
+    timeout: 5
   register: controller_healthz
-  changed_when: false
+  failed_when: false
 
 - name: Refuse to redeploy over a running job
   ansible.builtin.assert:
     that:
-      - not ((controller_healthz.stdout | from_json).busy | default(false))
-    fail_msg: "the controller reports a running job; wait for it to finish (or pass -e force_controller_redeploy=true after confirming the job is dead)"
+      - not (controller_healthz.json.busy | default(false))
+    fail_msg: >-
+      the controller reports a running job; wait for it to finish (or pass
+      -e force_controller_redeploy=true after confirming the job is dead)
   when: not (force_controller_redeploy | default(false))
 
-- name: Copy controller compose.yaml
-  ansible.builtin.copy:
+- name: Render controller compose.yaml
+  ansible.builtin.template:
     src: compose.yaml
     dest: "{{ remote_dir }}/controller/compose.yaml"
+    mode: "0644"
 
-- name: Pull and start controller
-  ansible.builtin.shell: cd {{ remote_dir }}/controller && docker compose pull -q && docker compose up -d
+- name: Pull controller image
+  ansible.builtin.command: docker compose pull -q
+  args:
+    chdir: "{{ remote_dir }}/controller"
+  changed_when: false
+
+- name: Start controller
+  ansible.builtin.command: docker compose up -d
+  args:
+    chdir: "{{ remote_dir }}/controller"
+  register: controller_up
+  changed_when: "'Started' in controller_up.stderr or 'Created' in controller_up.stderr or 'Recreated' in controller_up.stderr"

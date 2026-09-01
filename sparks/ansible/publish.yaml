@@ -7,32 +7,15 @@
   hosts: spark-1
   gather_facts: false
   pre_tasks:
-    # Profiles are discovered, never enumerated: adding one is adding a file.
-    - name: Assert profile is defined and known
-      ansible.builtin.assert:
-        that:
-          - profile is defined
-          - (playbook_dir + '/profiles/' + profile + '.yaml') is exists
-        fail_msg: "set -e profile=<name>; available: {{ query('ansible.builtin.fileglob', playbook_dir + '/profiles/*.yaml') | map('basename') | map('regex_replace', '[.]yaml$', '') | sort | join(', ') }}"
-
-    - name: Load profile variables
-      ansible.builtin.include_vars: "profiles/{{ profile }}.yaml"
-
-    - name: Assert profile contract
-      ansible.builtin.assert:
-        that:
-          - profile_name == profile
-          - served_model_id is defined
-          - serve_port is defined
-          - health_url is defined
-          - start_driver in ['compose', 'guide']
-        fail_msg: "profiles/{{ profile }}.yaml is missing required keys (profile_name matching the filename, served_model_id, serve_port, health_url, start_driver)"
+    - name: Load and validate profile
+      ansible.builtin.include_tasks: tasks/load-profile.yaml
 
   tasks:
     - name: Acquire switch lock
       ansible.builtin.command: mkdir {{ lock_dir }}
       register: lock_acquire
       failed_when: false
+      changed_when: lock_acquire.rc == 0
 
     - name: Fail if switch already in progress
       ansible.builtin.fail:
@@ -45,20 +28,24 @@
       ignore_unreachable: true
       block:
         - name: Check profile health
-          ansible.builtin.shell: curl -fsS --connect-timeout 5 --max-time 10 {{ health_url }}
-          register: health_check
-          changed_when: false
+          ansible.builtin.uri:
+            url: "{{ health_url }}"
+            timeout: 10
 
         - name: Read served models from the profile port
-          ansible.builtin.shell: curl -fsS --max-time 10 http://localhost:{{ serve_port }}/v1/models
+          ansible.builtin.uri:
+            url: "http://localhost:{{ serve_port }}/v1/models"
+            return_content: true
+            timeout: 10
           register: models_direct
-          changed_when: false
 
         - name: Assert the profile's model is the only served model
           ansible.builtin.assert:
             that:
-              - (models_direct.stdout | from_json).data | map(attribute='id') | list == [served_model_id]
-            fail_msg: "profile port serves {{ (models_direct.stdout | from_json).data | map(attribute='id') | list }}, expected exactly ['{{ served_model_id }}']"
+              - models_direct.json.data | map(attribute='id') | list == [served_model_id]
+            fail_msg: >-
+              profile port serves {{ models_direct.json.data | map(attribute='id') | list }},
+              expected exactly ['{{ served_model_id }}']
 
         - name: Smoke test profile
           ansible.builtin.include_tasks: tasks/smoke.yaml
@@ -71,6 +58,7 @@
           ansible.builtin.copy:
             content: "{{ profile_name }}\n"
             dest: "{{ resident_file }}"
+            mode: "0644"
 
         - name: Mark route change begun
           ansible.builtin.set_fact:
@@ -83,18 +71,21 @@
             caddy_upstream_port: "{{ serve_port }}"
 
         - name: Read served models through the stable endpoint
-          ansible.builtin.shell: curl -fsS --max-time 10 http://localhost:80/v1/models
+          ansible.builtin.uri:
+            url: http://localhost:80/v1/models
+            return_content: true
+            timeout: 10
           register: models_stable
-          changed_when: false
 
         - name: Assert the stable endpoint serves the profile
           ansible.builtin.assert:
             that:
-              - served_model_id in ((models_stable.stdout | from_json).data | map(attribute='id') | list)
+              - served_model_id in (models_stable.json.data | map(attribute='id') | list)
             fail_msg: "stable endpoint does not serve {{ served_model_id }} after publish"
 
         - name: Append switch log
           ansible.builtin.shell: echo "$(date -Is) publish {{ profile_name }}" >> {{ switch_log }}
+          changed_when: true
 
       rescue:
         # Only revert if the route change had begun: a failure before that
@@ -108,7 +99,11 @@
 
         - name: Fail publish
           ansible.builtin.fail:
-            msg: "publish of {{ profile }} failed{{ ' after the route change began; the stable endpoint is in maintenance' if route_publish_attempted | default(false) else '; the existing route was not touched' }} — verify the profile directly on :{{ serve_port }} or run a full 'task sparks:switch PROFILE={{ profile }}'"
+            msg: >-
+              publish of {{ profile }} failed{{ ' after the route change began; the stable
+              endpoint is in maintenance' if route_publish_attempted | default(false)
+              else '; the existing route was not touched' }} — verify the profile directly
+              on :{{ serve_port }} or run a full 'task sparks:switch PROFILE={{ profile }}'
 
       always:
         - name: Remove switch lock

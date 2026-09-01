@@ -17,7 +17,16 @@ weights_check_command: >-
 # Qwen emits long reasoning traces; assert identity and clean completion, not
 # content (a tight token budget truncates mid-thought and returns empty text).
 smoke_command: |
-  response=$(curl -fsS --connect-timeout 5 --max-time 180 http://localhost:8000/v1/chat/completions \
-    -H 'Content-Type: application/json' \
-    -d '{"model":"qwen3.6-35b","messages":[{"role":"user","content":"Reply with the single word ready."}],"temperature":0,"max_tokens":2048}')
-  printf '%s' "$response" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["model"]=="qwen3.6-35b", d["model"]; assert d["choices"][0]["finish_reason"] in ("stop","length"), d["choices"][0]["finish_reason"]; print("smoke ok; completion_tokens=%s" % d["usage"]["completion_tokens"])'
+  set -eu
+  body='{"model":"qwen3.6-35b","messages":[{"role":"user","content":"Reply with the single word ready."}],"temperature":0,"max_tokens":2048}'
+  RESPONSE=$(curl -fsS --connect-timeout 5 --max-time 180 http://localhost:8000/v1/chat/completions \
+    -H 'Content-Type: application/json' -d "$body")
+  export RESPONSE
+  python3 - <<'PY'
+  import json
+  import os
+  d = json.loads(os.environ["RESPONSE"])
+  assert d["model"] == "qwen3.6-35b", d["model"]
+  assert d["choices"][0]["finish_reason"] in ("stop", "length"), d["choices"][0]["finish_reason"]
+  print("smoke ok; completion_tokens=%s" % d["usage"]["completion_tokens"])
+  PY

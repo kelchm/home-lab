@@ -7,6 +7,7 @@
     path: "{{ remote_dir }}/inference"
     state: directory
     owner: kelchm
+    mode: "0755"
   become: true
   when: start_driver == 'compose'
 
@@ -14,11 +15,23 @@
   ansible.builtin.copy:
     src: "{{ compose_file }}"
     dest: "{{ remote_dir }}/inference/compose.yaml"
+    mode: "0644"
   when: start_driver == 'compose'
 
 # Explicit pull is fine here — single-node, no rendezvous to desynchronize.
-- name: Pull and start compose stack
-  ansible.builtin.shell: cd {{ remote_dir }}/inference && docker compose pull -q && docker compose up -d
+- name: Pull compose images
+  ansible.builtin.command: docker compose pull -q
+  args:
+    chdir: "{{ remote_dir }}/inference"
+  changed_when: false
+  when: start_driver == 'compose'
+
+- name: Start compose stack
+  ansible.builtin.command: docker compose up -d
+  args:
+    chdir: "{{ remote_dir }}/inference"
+  register: compose_up
+  changed_when: "'Started' in compose_up.stderr or 'Created' in compose_up.stderr or 'Recreated' in compose_up.stderr"
   when: start_driver == 'compose'
 
 # Preflight owns every artifact; start_command must disable the recipe's own
@@ -29,6 +42,7 @@
   async: 5400
   poll: 0
   register: guide_start
+  changed_when: true
   when: start_driver == 'guide'
 
 - name: Wait for guide launch and warmup to finish

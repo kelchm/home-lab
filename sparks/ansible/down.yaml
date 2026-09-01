@@ -11,11 +11,15 @@
       ansible.builtin.command: mkdir {{ lock_dir }}
       register: lock_acquire
       failed_when: false
+      changed_when: lock_acquire.rc | default(1) == 0
       when: not (ignore_lock | default(false))
 
     - name: Fail if switch already in progress
       ansible.builtin.fail:
-        msg: "a switch or publish appears to be in progress; wait for it, remove {{ lock_dir }} on spark-1 if stale, or re-run with -e ignore_lock=true ('task sparks:down' stays lock-free)"
+        msg: >-
+          a switch or publish appears to be in progress; wait for it, remove
+          {{ lock_dir }} on spark-1 if stale, or re-run with -e ignore_lock=true
+          ('task sparks:down' stays lock-free)
       when: not (ignore_lock | default(false)) and lock_acquire.rc != 0
 
     - name: Tear down
@@ -41,6 +45,7 @@
                 kill "$pid" || true
               fi
             done
+          changed_when: true
 
         - name: Teardown on both hosts
           ansible.builtin.include_tasks: tasks/teardown-host.yaml
@@ -67,15 +72,18 @@
             path: "{{ remote_dir }}"
             state: directory
             owner: kelchm
+            mode: "0755"
           become: true
 
         - name: Record residency as none
           ansible.builtin.copy:
             content: "none\n"
             dest: "{{ resident_file }}"
+            mode: "0644"
 
         - name: Append down to switch log
           ansible.builtin.shell: echo "$(date -Is) down" >> {{ switch_log }}
+          changed_when: true
 
       always:
         - name: Remove switch lock

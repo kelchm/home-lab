@@ -5,7 +5,6 @@ serve_port: 8888
 health_url: http://localhost:8888/health
 ready_retries: 120
 ready_delay: 15
-head_host: spark-1
 worker_host: spark-2
 
 guide_dir: /home/kelchm/dspark-guide

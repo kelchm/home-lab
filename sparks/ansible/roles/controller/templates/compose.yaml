@@ -8,12 +8,12 @@ services:
     # and ansible inside the container reaches both hosts over LAN SSH.
     network_mode: host
     environment:
-      SPARK_CONTROLLER_PORT: "9800"
+      SPARK_CONTROLLER_PORT: "{{ controller_port }}"
       SPARK_CONTROLLER_TOKEN_FILE: /etc/spark-controller/token
       SPARK_CONTROLLER_REPO_URL: https://github.com/kelchm/home-lab.git
       SPARK_CONTROLLER_REPO_DIR: /var/lib/spark-controller/repo
       SPARK_CONTROLLER_JOBS_DIR: /var/lib/spark-controller/jobs
-      SPARK_CONTROLLER_STATE_DIR: /opt/spark-stack
+      SPARK_CONTROLLER_STATE_DIR: "{{ remote_dir }}"
       HOME: /var/lib/spark-controller
       ANSIBLE_REMOTE_USER: kelchm
       ANSIBLE_SSH_ARGS: >-
@@ -24,4 +24,4 @@ services:
       - /var/lib/spark-controller:/var/lib/spark-controller
       # Residency and switch log are read through this mount; every write to
       # it happens over SSH from the playbooks, exactly as from the laptop.
-      - /opt/spark-stack:/opt/spark-stack:ro
+      - "{{ remote_dir }}:{{ remote_dir }}:ro"

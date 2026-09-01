@@ -5,7 +5,6 @@ serve_port: 8888
 health_url: http://localhost:8888/health
 ready_retries: 120
 ready_delay: 15
-head_host: spark-1
 worker_host: spark-2
 
 guide_dir: /home/kelchm/glm53-guide
@@ -23,16 +22,18 @@ model_shards: 120
 dflash_cache_dir: /home/kelchm/.cache/huggingface/hub/models--incoai--GLM-5.3-Flash-DFlash2
 dflash_revision: dc77ff1c99eeb2df044ee3d4f0094eb033fee410
 
+# set -e: every pinned check must gate the result, not just the last line.
 weights_check_command: |
-  model_ref=$(cat {{ model_cache_dir }}/refs/main 2>/dev/null || true)
-  model_count=$(find {{ model_cache_dir }}/snapshots/{{ model_revision }} -maxdepth 1 -name 'model-*.safetensors' 2>/dev/null | wc -l)
-  dflash_ref=$(cat {{ dflash_cache_dir }}/refs/main 2>/dev/null || true)
+  set -eu
+  model_ref=$(cat "{{ model_cache_dir }}/refs/main" 2>/dev/null || true)
+  model_count=$(find "{{ model_cache_dir }}/snapshots/{{ model_revision }}" -maxdepth 1 -name 'model-*.safetensors' 2>/dev/null | wc -l)
+  dflash_ref=$(cat "{{ dflash_cache_dir }}/refs/main" 2>/dev/null || true)
   printf 'model_ref=%s model_shards=%s dflash_ref=%s\n' "$model_ref" "$model_count" "$dflash_ref"
   test "$model_ref" = "{{ model_revision }}"
   test "$model_count" -eq "{{ model_shards }}"
-  test -f {{ model_cache_dir }}/snapshots/{{ model_revision }}/config.json
+  test -f "{{ model_cache_dir }}/snapshots/{{ model_revision }}/config.json"
   test "$dflash_ref" = "{{ dflash_revision }}"
-  test -f {{ dflash_cache_dir }}/snapshots/{{ dflash_revision }}/model.safetensors
+  test -f "{{ dflash_cache_dir }}/snapshots/{{ dflash_revision }}/model.safetensors"
 
 start_driver: guide
 # The pinned guide owns worker-first launch, its health wait, and the
@@ -43,7 +44,21 @@ start_log: /opt/spark-stack/glm-start.log
 
 # Thinking-off coherence contract validated live 2026-08-30.
 smoke_command: |
-  response=$(curl -fsS --connect-timeout 5 --max-time 180 http://localhost:8888/v1/chat/completions \
-    -H 'Content-Type: application/json' \
-    -d '{"model":"GLM-5.3-Flash-EXL3","messages":[{"role":"user","content":"Reply with exactly one short sentence stating the capital of France and the value of 7 times 8."}],"temperature":0,"max_tokens":64,"chat_template_kwargs":{"enable_thinking":false}}')
-  printf '%s' "$response" | python3 -c 'import json,sys; d=json.load(sys.stdin); m=d["choices"][0]["message"]; expected="The capital of France is Paris, and 7 times 8 is 56."; assert d["model"]=="GLM-5.3-Flash-EXL3"; assert m.get("reasoning") in (None, ""); assert m["content"].strip()==expected, m["content"]; print("coherent thinking-off reply; completion_tokens=%s" % d["usage"]["completion_tokens"])'
+  set -eu
+  q='Reply with exactly one short sentence stating the capital of France and the value of 7 times 8.'
+  body='{"model":"GLM-5.3-Flash-EXL3","messages":[{"role":"user","content":"'$q'"}],"temperature":0,'
+  body=$body'"max_tokens":64,"chat_template_kwargs":{"enable_thinking":false}}'
+  RESPONSE=$(curl -fsS --connect-timeout 5 --max-time 180 http://localhost:8888/v1/chat/completions \
+    -H 'Content-Type: application/json' -d "$body")
+  export RESPONSE
+  python3 - <<'PY'
+  import json
+  import os
+  d = json.loads(os.environ["RESPONSE"])
+  m = d["choices"][0]["message"]
+  expected = "The capital of France is Paris, and 7 times 8 is 56."
+  assert d["model"] == "GLM-5.3-Flash-EXL3"
+  assert m.get("reasoning") in (None, "")
+  assert m["content"].strip() == expected, m["content"]
+  print("coherent thinking-off reply; completion_tokens=%s" % d["usage"]["completion_tokens"])
+  PY

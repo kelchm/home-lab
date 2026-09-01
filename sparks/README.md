@@ -33,7 +33,7 @@ A profile is one YAML file in [`ansible/profiles/`](ansible/profiles/): `qwen36-
 
 `switch` refuses to proceed if MemAvailable stays low after teardown — that means the previous profile's UVM allocations did not release and the affected host needs a reboot first. It also refuses concurrent switches (lock on spark-1; remove `/tmp/spark-switch.lock` if stale). TP=2 switches never pull, download, sync, or build mid-switch — preflight verifies the pinned guide rev, every override line, exact weight refs, and cross-rank image identity, and fails with instructions instead. The qwen profile pulls only its digest-pinned image, explicitly, before start.
 
-After a reboot the pair converges to the baseline: Caddy, the `qwen` profile, and the stable route to it come back (docker restart policy + `spark-baseline.service`, which also resets a route left pointing at a TP=2 port); TP=2 profiles never auto-start — rerun `switch` for those.
+After a reboot the pair converges to the baseline: Caddy, the default profile, its stable route, and the residency record all come back (docker restart policy + `spark-baseline.service`, which takes the same transaction lock, resets a route left pointing at a TP=2 port, and records `boot-converge` in the switch log); TP=2 profiles never auto-start — rerun `switch` for those.
 
 `task sparks:down` stops every profile on **both** hosts and needs nothing but SSH — by design it does not touch the resident marker, so `status` shows stale residency until the next switch (`ansible-playbook down.yaml` records `none`). To reclaim disk as well, on each host:
 

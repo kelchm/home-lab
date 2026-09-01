@@ -13,7 +13,7 @@
         awk '/MemAvailable/ {print int($2/1024/1024)}' /proc/meminfo
       register: host_status
       changed_when: false
-      ignore_errors: true
+      ignore_errors: true  # noqa: ignore-errors — status must report every host it can reach
       delegate_to: "{{ item }}"
       loop: "{{ groups['sparks'] }}"
 
@@ -25,50 +25,33 @@
         label: "{{ item.item }}"
 
     - name: Read resident profile
-      ansible.builtin.shell: cat {{ resident_file }} 2>/dev/null || echo unknown
+      ansible.builtin.command: cat {{ resident_file }}
       register: resident
       changed_when: false
+      failed_when: false
 
     - name: Print resident profile
       ansible.builtin.debug:
-        msg: "resident: {{ resident.stdout }} (baseline: {{ default_profile }})"
+        msg: "resident: {{ resident.stdout | default('unknown') }} (baseline: {{ default_profile }})"
 
-    - name: Probe single-node endpoint
-      ansible.builtin.shell: curl -fsS --max-time 5 http://localhost:8000/v1/models 2>&1 | head -c 160
-      register: single_probe
-      ignore_errors: true
-      changed_when: false
+    - name: Probe endpoints
+      ansible.builtin.uri:
+        url: "{{ item.url }}"
+        return_content: true
+        timeout: 5
+      register: endpoint_probes
+      failed_when: false
+      loop:
+        - {name: ":8000 (single-node)", url: "http://localhost:8000/v1/models"}
+        - {name: ":8888 (TP=2)", url: "http://localhost:8888/v1/models"}
+        - {name: "caddy :80", url: "http://localhost:80/v1/models"}
+        - {name: "controller /admin", url: "http://localhost:80/admin/v1/healthz"}
+      loop_control:
+        label: "{{ item.name }}"
 
-    - name: Print single-node probe
+    - name: Print endpoint probes
       ansible.builtin.debug:
-        msg: ":8000 (single-node) {{ single_probe.stdout }}"
-
-    - name: Probe TP2 endpoint
-      ansible.builtin.shell: curl -fsS --max-time 5 http://localhost:8888/v1/models 2>&1 | head -c 160
-      register: tp2_probe
-      ignore_errors: true
-      changed_when: false
-
-    - name: Print TP2 probe
-      ansible.builtin.debug:
-        msg: ":8888 (TP=2) {{ tp2_probe.stdout }}"
-
-    - name: Probe Caddy stable endpoint
-      ansible.builtin.shell: curl -fsS --max-time 5 http://localhost:80/v1/models 2>&1 | head -c 160
-      register: caddy_probe
-      ignore_errors: true
-      changed_when: false
-
-    - name: Print Caddy probe
-      ansible.builtin.debug:
-        msg: "caddy :80 {{ caddy_probe.stdout }}"
-
-    - name: Probe controller
-      ansible.builtin.shell: curl -fsS --max-time 5 http://localhost:80/admin/v1/healthz 2>&1 | head -c 160
-      register: controller_probe
-      ignore_errors: true
-      changed_when: false
-
-    - name: Print controller probe
-      ansible.builtin.debug:
-        msg: "controller /admin {{ controller_probe.stdout }}"
+        msg: "{{ item.item.name }} status={{ item.status }} {{ (item.content | default(''))[:120] }}"
+      loop: "{{ endpoint_probes.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"

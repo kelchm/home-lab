@@ -9,23 +9,26 @@
   ansible.builtin.template:
     src: "{{ playbook_dir }}/roles/caddy/templates/Caddyfile.j2"
     dest: "{{ caddy_dir }}/Caddyfile.next"
+    mode: "0644"
   register: caddy_render
-  ignore_errors: "{{ caddy_publish_ignore_errors | default(false) }}"
+  ignore_errors: "{{ caddy_publish_ignore_errors | default(false) }}"  # noqa: ignore-errors — best-effort on rescue/teardown paths only
 
 - name: Validate rendered Caddy config
   ansible.builtin.command: docker exec spark-caddy caddy validate --config /etc/caddy/Caddyfile.next --adapter caddyfile
   register: caddy_validate
   changed_when: false
   when: caddy_render is not failed
-  ignore_errors: "{{ caddy_publish_ignore_errors | default(false) }}"
+  ignore_errors: "{{ caddy_publish_ignore_errors | default(false) }}"  # noqa: ignore-errors — best-effort on rescue/teardown paths only
 
 - name: Install rendered Caddy config
   ansible.builtin.command: mv {{ caddy_dir }}/Caddyfile.next {{ caddy_dir }}/Caddyfile
   register: caddy_install
+  changed_when: true
   when: caddy_validate is not skipped and caddy_validate is not failed
-  ignore_errors: "{{ caddy_publish_ignore_errors | default(false) }}"
+  ignore_errors: "{{ caddy_publish_ignore_errors | default(false) }}"  # noqa: ignore-errors — best-effort on rescue/teardown paths only
 
 - name: Reload Caddy
   ansible.builtin.command: docker exec spark-caddy caddy reload --config /etc/caddy/Caddyfile
+  changed_when: true
   when: caddy_install is not skipped and caddy_install is not failed
-  ignore_errors: "{{ caddy_publish_ignore_errors | default(false) }}"
+  ignore_errors: "{{ caddy_publish_ignore_errors | default(false) }}"  # noqa: ignore-errors — best-effort on rescue/teardown paths only
