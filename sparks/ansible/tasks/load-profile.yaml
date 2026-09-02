@@ -1,0 +1,48 @@
+---
+# Shared by switch.yaml and publish.yaml: resolve, load, and validate the
+# requested profile before anything destructive can run. Profiles are
+# discovered, never enumerated: adding one is adding a file.
+- name: Assert profile is defined and known
+  ansible.builtin.assert:
+    that:
+      - profile is defined
+      - (playbook_dir + '/profiles/' + profile + '.yaml') is exists
+    fail_msg: >-
+      set -e profile=<name>; available:
+      {{ query('ansible.builtin.fileglob', playbook_dir + '/profiles/*.yaml')
+         | map('basename') | map('regex_replace', '[.]yaml$', '') | sort | join(', ') }}
+
+- name: Load profile variables
+  ansible.builtin.include_vars: "{{ playbook_dir }}/profiles/{{ profile }}.yaml"
+
+- name: Assert profile contract
+  ansible.builtin.assert:
+    that:
+      - profile_name == profile
+      - served_model_id is defined
+      - serve_port is defined
+      - health_url is defined
+      - ready_retries is defined
+      - ready_delay is defined
+      - start_driver in ['compose', 'guide']
+    fail_msg: >-
+      profiles/{{ profile }}.yaml is missing required keys (profile_name matching the
+      filename, served_model_id, serve_port, health_url, ready_retries, ready_delay,
+      start_driver)
+
+- name: Assert compose driver contract
+  ansible.builtin.assert:
+    that:
+      - compose_file is defined
+    fail_msg: "profiles/{{ profile }}.yaml uses the compose driver but does not define compose_file"
+  when: start_driver == 'compose'
+
+- name: Assert guide driver contract
+  ansible.builtin.assert:
+    that:
+      - guide_dir is defined
+      - guide_rev is defined
+      - start_command is defined
+      - start_log is defined
+    fail_msg: "profiles/{{ profile }}.yaml uses the guide driver but does not define guide_dir, guide_rev, start_command, and start_log"
+  when: start_driver == 'guide'

@@ -1,0 +1,78 @@
+---
+- name: Read NVIDIA driver version
+  ansible.builtin.command: nvidia-smi --query-gpu=driver_version --format=csv,noheader
+  register: host_baseline_driver
+  changed_when: false
+
+# Assert-only: driver updates arrive through NVIDIA's own channel; the control
+# plane refuses to operate on 590.x (CUDA-graph capture deadlock) rather than
+# pinning packages underneath it.
+- name: Refuse to converge on a non-580 driver
+  ansible.builtin.assert:
+    that:
+      - host_baseline_driver.stdout_lines[0] is match('580\.')
+    fail_msg: >-
+      driver on {{ inventory_hostname }} is {{ host_baseline_driver.stdout_lines[0] }},
+      expected 580.x; do not operate the stack on 590.x
+
+- name: Ensure state directory exists
+  ansible.builtin.file:
+    path: "{{ remote_dir }}"
+    state: directory
+    owner: kelchm
+    mode: "0755"
+  become: true
+
+# The controller invokes these same playbooks non-interactively; become has to
+# work without a TTY. Replaces the temporary 99-dgx-bringup grant from the
+# bring-up session.
+- name: Install control-plane sudoers grant
+  ansible.builtin.copy:
+    content: "kelchm ALL=(ALL) NOPASSWD: ALL\n"
+    dest: /etc/sudoers.d/99-spark-controlplane
+    mode: "0440"
+    validate: visudo -cf %s
+  become: true
+
+- name: Ensure inference directory exists
+  ansible.builtin.file:
+    path: "{{ remote_dir }}/inference"
+    state: directory
+    owner: kelchm
+    mode: "0755"
+  become: true
+  when: inventory_hostname == 'spark-1'
+
+# The boot unit runs compose in this directory; stage it here so convergence
+# works on a host that has never run a qwen switch.
+- name: Stage default-profile compose for boot convergence
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../inference/compose.yaml"
+    dest: "{{ remote_dir }}/inference/compose.yaml"
+    mode: "0644"
+  when: inventory_hostname == 'spark-1'
+
+- name: Install baseline script
+  ansible.builtin.template:
+    src: spark-baseline.sh
+    dest: "{{ remote_dir }}/baseline.sh"
+    mode: "0755"
+  when: inventory_hostname == 'spark-1'
+
+- name: Install baseline systemd unit
+  ansible.builtin.copy:
+    src: spark-baseline.service
+    dest: /etc/systemd/system/spark-baseline.service
+    mode: "0644"
+  become: true
+  when: inventory_hostname == 'spark-1'
+
+# Enable but do not start: starting now could start qwen while a TP=2 profile
+# is resident.
+- name: Enable spark-baseline.service
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+    name: spark-baseline.service
+    enabled: true
+  become: true
+  when: inventory_hostname == 'spark-1'

@@ -1,0 +1,18 @@
+# Rendered by the control plane ({{ caddy_mode }}); do not edit on the host.
+:80 {
+	handle /admin/* {
+		reverse_proxy localhost:{{ controller_port }}
+	}
+	handle {
+{% if caddy_mode == 'active' %}
+		reverse_proxy localhost:{{ caddy_upstream_port }} {
+			health_uri /health
+			health_interval 5s
+			health_timeout 3s
+		}
+{% else %}
+		header Content-Type application/json
+		respond `{"error":{"message":"no inference profile is published; a switch is in progress or awaiting publish","type":"service_unavailable"}}` 503
+{% endif %}
+	}
+}

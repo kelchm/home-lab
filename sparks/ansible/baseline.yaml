@@ -1,0 +1,15 @@
+---
+# Converge host state and the management plane. Safe to re-run at any time:
+# it never starts, stops, or re-routes an inference profile.
+- name: Converge Spark host baseline
+  hosts: sparks
+  gather_facts: false
+  roles:
+    - host_baseline
+
+- name: Deploy management plane on spark-1
+  hosts: spark-1
+  gather_facts: false
+  roles:
+    - caddy
+    - controller

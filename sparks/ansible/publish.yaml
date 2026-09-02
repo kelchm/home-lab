@@ -1,0 +1,131 @@
+---
+# Recovery-only: re-point the stable endpoint at an already-healthy profile
+# without unloading it — after a caddy restart with a TP=2 profile resident,
+# or after a switch that failed between smoke and publish. Verifies identity
+# and coherence before touching the route; never starts or stops a model.
+- name: Publish the stable endpoint for a resident profile
+  hosts: spark-1
+  gather_facts: false
+  pre_tasks:
+    - name: Load and validate profile
+      ansible.builtin.include_tasks: tasks/load-profile.yaml
+
+  tasks:
+    - name: Acquire switch lock
+      ansible.builtin.command: mkdir {{ lock_dir }}
+      register: lock_acquire
+      failed_when: false
+      changed_when: lock_acquire.rc == 0
+
+    - name: Fail if switch already in progress
+      ansible.builtin.fail:
+        msg: "another switch appears to be in progress; remove {{ lock_dir }} on spark-1 if stale"
+      when: lock_acquire.rc != 0
+
+    - name: Publish profile
+      # rescue/always never run for unreachable hosts, which would leak the
+      # lock; ignoring lets the gates below convert unreachable into a failure.
+      ignore_unreachable: true
+      block:
+        - name: Check profile health
+          ansible.builtin.uri:
+            url: "{{ health_url }}"
+            timeout: 10
+
+        - name: Read served models from the profile port
+          ansible.builtin.uri:
+            url: "http://localhost:{{ serve_port }}/v1/models"
+            return_content: true
+            timeout: 10
+          register: models_direct
+
+        - name: Assert the profile's model is the only served model
+          ansible.builtin.assert:
+            that:
+              - models_direct.json.data | map(attribute='id') | list == [served_model_id]
+            fail_msg: >-
+              profile port serves {{ models_direct.json.data | map(attribute='id') | list }},
+              expected exactly ['{{ served_model_id }}']
+
+        - name: Smoke test profile
+          ansible.builtin.include_tasks: tasks/smoke.yaml
+          when: smoke_command is defined and not (skip_smoke | default(false))
+
+        # Residency reflects what is verified running, not what is routed;
+        # written before the route flip so state never claims less than the
+        # route delivers.
+        - name: Record residency
+          ansible.builtin.copy:
+            content: "{{ profile_name }}\n"
+            dest: "{{ resident_file }}"
+            mode: "0644"
+
+        - name: Mark route change begun
+          ansible.builtin.set_fact:
+            route_publish_attempted: true
+
+        - name: Publish profile route
+          ansible.builtin.include_tasks: tasks/caddy-publish.yaml
+          vars:
+            caddy_mode: active
+            caddy_upstream_port: "{{ serve_port }}"
+
+        - name: Read served models through the stable endpoint
+          ansible.builtin.uri:
+            url: http://localhost:80/v1/models
+            return_content: true
+            timeout: 10
+          register: models_stable
+
+        - name: Assert the stable endpoint serves the profile
+          ansible.builtin.assert:
+            that:
+              - served_model_id in (models_stable.json.data | map(attribute='id') | list)
+            fail_msg: "stable endpoint does not serve {{ served_model_id }} after publish"
+
+        - name: Append switch log
+          ansible.builtin.shell: echo "$(date -Is) publish {{ profile_name }}" >> {{ switch_log }}
+          changed_when: true
+
+      rescue:
+        # Only revert if the route change had begun: a failure before that
+        # point must not tear down a still-working route for another profile.
+        - name: Leave the stable endpoint in maintenance
+          ansible.builtin.include_tasks: tasks/caddy-publish.yaml
+          vars:
+            caddy_mode: maintenance
+            caddy_publish_ignore_errors: true
+          when: route_publish_attempted | default(false)
+
+        # The maintenance attempt above is best-effort; report what the route
+        # is actually doing rather than assuming it worked.
+        - name: Probe stable endpoint state
+          ansible.builtin.uri:
+            url: http://localhost:80/v1/models
+            timeout: 5
+          register: rescue_route_probe
+          failed_when: false
+          when: route_publish_attempted | default(false)
+
+        - name: Describe route state
+          ansible.builtin.set_fact:
+            rescue_route_state: >-
+              {{ 'the stable endpoint is in maintenance'
+                 if rescue_route_probe.status | default(0) == 503
+                 else 'the stable endpoint is NOT confirmed in maintenance (status '
+                      ~ rescue_route_probe.status | default('unknown') ~ ')' }}
+          when: route_publish_attempted | default(false)
+
+        - name: Fail publish
+          ansible.builtin.fail:
+            msg: >-
+              publish of {{ profile }} failed;
+              {{ rescue_route_state | default('the existing route was not touched') }} —
+              verify the profile directly on :{{ serve_port }} or run a full
+              'task sparks:switch PROFILE={{ profile }}'
+
+      always:
+        - name: Remove switch lock
+          ansible.builtin.file:
+            path: "{{ lock_dir }}"
+            state: absent

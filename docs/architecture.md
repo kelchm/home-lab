@@ -334,6 +334,7 @@ pve-sbx-{1,2,3}-storage.home.kelch.io  10.32.25.{21,22,23}
 # Workload hosts
 spark-{1,2}.home.kelch.io           10.32.21.{31,32}
 spark-{1,2}-storage.home.kelch.io   10.32.25.{31,32}
+spark.home.kelch.io                 10.32.21.31    (stable inference endpoint; Caddy on spark-1)
 hermes.home.kelch.io                10.32.21.100
 
 # Shared infrastructure

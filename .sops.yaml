@@ -7,6 +7,9 @@ creation_rules:
     encrypted_regex: "^(data|stringData)$"
     mac_only_encrypted: true
     age: "age14wcg0t6njf76c4ctrndypvvmxk9p7jkumnumlvxdmsn543tc3yusgk5jwy"
+  - path_regex: sparks/.*\.sops\.ya?ml
+    mac_only_encrypted: true
+    age: "age14wcg0t6njf76c4ctrndypvvmxk9p7jkumnumlvxdmsn543tc3yusgk5jwy"
 stores:
   yaml:
     indent: 2

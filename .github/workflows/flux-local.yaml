@@ -23,6 +23,7 @@ jobs:
     outputs:
       # changed-files only runs for PRs. Its absent outputs intentionally
       # default to true on main so the latest commit is validated as a whole.
+      ansible_changed: ${{ steps.changed-files.outputs.ansible_any_changed || 'true' }}
       bootstrap_changed: ${{ steps.changed-files.outputs.bootstrap_any_changed || 'true' }}
       docs_changed: ${{ steps.changed-files.outputs.docs_any_changed || 'true' }}
       kubernetes_changed: ${{ steps.changed-files.outputs.kubernetes_any_changed || 'true' }}
@@ -44,6 +45,10 @@ jobs:
         uses: tj-actions/changed-files@9426d40962ed5378910ee2e21d5f8c6fcbf2dd96 # v47.0.6
         with:
           files_yaml: |
+            ansible:
+              - '.github/workflows/flux-local.yaml'
+              - '.mise.toml'
+              - 'sparks/ansible/**'
             bootstrap:
               - '.github/workflows/flux-local.yaml'
               - '.mise.toml'
@@ -404,6 +409,50 @@ jobs:
         if: needs.pre-job.outputs.skills_changed != 'true'
         run: echo "Agent Skills validation is not required."
 
+  ansible:
+    name: Ansible Validation
+    needs: pre-job
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        if: needs.pre-job.outputs.ansible_changed == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        if: needs.pre-job.outputs.ansible_changed == 'true'
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.12.7"
+          enable-cache: false
+
+      - name: Run ansible-lint
+        if: needs.pre-job.outputs.ansible_changed == 'true'
+        working-directory: sparks/ansible
+        run: >-
+          uvx --from ansible-lint==25.9.2 --with ansible-core==2.21.3
+          ansible-lint --nocolor
+          switch.yaml publish.yaml down.yaml status.yaml baseline.yaml
+          tasks/ roles/ profiles/
+
+      - name: Syntax-check playbooks against every profile
+        if: needs.pre-job.outputs.ansible_changed == 'true'
+        working-directory: sparks/ansible
+        run: |
+          for profile_file in profiles/*.yaml; do
+            profile="$(basename "$profile_file" .yaml)"
+            uvx --from ansible-core==2.21.3 ansible-playbook switch.yaml -e "profile=$profile" --syntax-check
+            uvx --from ansible-core==2.21.3 ansible-playbook publish.yaml -e "profile=$profile" --syntax-check
+          done
+          for playbook in down.yaml status.yaml baseline.yaml; do
+            uvx --from ansible-core==2.21.3 ansible-playbook "$playbook" --syntax-check
+          done
+
+      - name: No Ansible changes
+        if: needs.pre-job.outputs.ansible_changed != 'true'
+        run: echo "Ansible validation is not required."
+
   network:
     name: Network Artifact Validation
     needs: pre-job
@@ -480,6 +529,7 @@ jobs:
       - sops
       - scripts
       - skills
+      - ansible
       - network
       - docs
     runs-on: ubuntu-latest

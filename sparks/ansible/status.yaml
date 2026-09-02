@@ -1,0 +1,57 @@
+---
+- name: Report Spark inference status
+  hosts: spark-1
+  gather_facts: false
+  tasks:
+    - name: Collect host status
+      ansible.builtin.shell: |
+        echo "=== gpu ==="
+        nvidia-smi --query-gpu=temperature.gpu,power.draw,utilization.gpu --format=csv,noheader
+        echo "=== containers ==="
+        docker ps --format '{% raw %}{{.Names}} {{.Status}}{% endraw %}'
+        echo "=== mem ==="
+        awk '/MemAvailable/ {print int($2/1024/1024)}' /proc/meminfo
+      register: host_status
+      changed_when: false
+      ignore_errors: true  # noqa: ignore-errors — status must report every host it can reach
+      delegate_to: "{{ item }}"
+      loop: "{{ groups['sparks'] }}"
+
+    - name: Print host status
+      ansible.builtin.debug:
+        msg: "{{ item.item }}: {{ item.stdout_lines | default([]) }}"
+      loop: "{{ host_status.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Read resident profile
+      ansible.builtin.command: cat {{ resident_file }}
+      register: resident
+      changed_when: false
+      failed_when: false
+
+    - name: Print resident profile
+      ansible.builtin.debug:
+        msg: "resident: {{ resident.stdout | default('unknown') }} (baseline: {{ default_profile }})"
+
+    - name: Probe endpoints
+      ansible.builtin.uri:
+        url: "{{ item.url }}"
+        return_content: true
+        timeout: 5
+      register: endpoint_probes
+      failed_when: false
+      loop:
+        - {name: ":8000 (single-node)", url: "http://localhost:8000/v1/models"}
+        - {name: ":8888 (TP=2)", url: "http://localhost:8888/v1/models"}
+        - {name: "caddy :80", url: "http://localhost:80/v1/models"}
+        - {name: "controller /admin", url: "http://localhost:80/admin/v1/healthz"}
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Print endpoint probes
+      ansible.builtin.debug:
+        msg: "{{ item.item.name }} status={{ item.status }} {{ (item.content | default(''))[:120] }}"
+      loop: "{{ endpoint_probes.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"

@@ -1,0 +1,103 @@
+---
+- name: Ensure controller system directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  become: true
+  loop:
+    - /etc/spark-controller
+    - /etc/spark-controller/ssh
+    - /var/lib/spark-controller
+
+# Compose copy and docker compose run unprivileged; root ownership here would
+# block them on a clean first deployment.
+- name: Ensure controller deploy directory exists
+  ansible.builtin.file:
+    path: "{{ remote_dir }}/controller"
+    state: directory
+    owner: kelchm
+    mode: "0755"
+  become: true
+
+- name: Generate controller SSH keypair
+  ansible.builtin.command: ssh-keygen -t ed25519 -N '' -C spark-controller -f /etc/spark-controller/ssh/id_ed25519
+  args:
+    creates: /etc/spark-controller/ssh/id_ed25519
+  become: true
+
+- name: Read controller public key
+  ansible.builtin.command: cat /etc/spark-controller/ssh/id_ed25519.pub
+  register: controller_pubkey
+  changed_when: false
+  become: true
+
+- name: Authorize controller key on both hosts
+  ansible.builtin.lineinfile:
+    path: /home/kelchm/.ssh/authorized_keys
+    line: "{{ controller_pubkey.stdout }}"
+  delegate_to: "{{ item }}"
+  loop: "{{ groups['sparks'] }}"
+
+- name: Pin host keys for the controller
+  ansible.builtin.shell: ssh-keyscan -H {{ groups['sparks'] | map('extract', hostvars, 'ansible_host') | join(' ') }} > /etc/spark-controller/ssh/known_hosts
+  args:
+    creates: /etc/spark-controller/ssh/known_hosts
+  become: true
+
+# Decrypted on the operator machine; the controller itself never needs SOPS.
+- name: Install API bearer token
+  ansible.builtin.copy:
+    content: "{{ lookup('pipe', controller_sops_extract_cmd) }}\n"
+    dest: /etc/spark-controller/token
+    mode: "0600"
+  become: true
+  no_log: true
+  vars:
+    controller_sops_extract_cmd: sops -d --extract '["controller_token"]' {{ playbook_dir }}/secrets.sops.yaml
+
+- name: Render controller compose.yaml
+  ansible.builtin.template:
+    src: compose.yaml
+    dest: "{{ remote_dir }}/controller/compose.yaml"
+    mode: "0644"
+
+# Pull happens before the busy check: it does not touch the running container,
+# and checking idleness after the slow step shrinks the window in which a job
+# accepted mid-deploy would be killed by the recreate below.
+- name: Pull controller image
+  ansible.builtin.command: docker compose pull -q
+  args:
+    chdir: "{{ remote_dir }}/controller"
+  changed_when: false
+
+# Recreating the container kills a transaction subprocess mid-switch and leaks
+# the on-host lock. Fail closed on anything but a clean idle answer or a
+# clearly absent controller (status -1: nothing listening, e.g. first deploy).
+- name: Check controller for a running job
+  ansible.builtin.uri:
+    url: "http://localhost:{{ controller_port }}/admin/v1/healthz"
+    return_content: true
+    timeout: 5
+  register: controller_healthz
+  failed_when: false
+
+- name: Refuse to redeploy unless the controller is idle or absent
+  ansible.builtin.assert:
+    that:
+      - >-
+        controller_healthz.status == -1
+        or (controller_healthz.status == 200
+            and not (controller_healthz.json.busy | default(true)))
+    fail_msg: >-
+      the controller is not verifiably idle (status {{ controller_healthz.status }});
+      wait for the running job or pass -e force_controller_redeploy=true after
+      confirming it is dead
+  when: not (force_controller_redeploy | default(false))
+
+- name: Start controller
+  ansible.builtin.command: docker compose up -d
+  args:
+    chdir: "{{ remote_dir }}/controller"
+  register: controller_up
+  changed_when: "'Started' in controller_up.stderr or 'Created' in controller_up.stderr or 'Recreated' in controller_up.stderr"

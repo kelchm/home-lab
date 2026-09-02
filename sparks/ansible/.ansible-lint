@@ -1,0 +1,4 @@
+---
+# Deliberate deviations are annotated per-task with `# noqa` and a rationale;
+# nothing is skipped globally.
+profile: production

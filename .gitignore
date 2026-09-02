@@ -27,3 +27,4 @@ sparks/inference/deepseek/.env
 # Python bytecode
 __pycache__/
 *.pyc
+.pytest_cache/

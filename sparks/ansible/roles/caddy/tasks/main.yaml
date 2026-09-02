@@ -1,0 +1,54 @@
+---
+- name: Ensure caddy directory exists
+  ansible.builtin.file:
+    path: "{{ caddy_dir }}"
+    state: directory
+    owner: kelchm
+    mode: "0755"
+  become: true
+
+- name: Copy caddy compose.yaml
+  ansible.builtin.copy:
+    src: compose.yaml
+    dest: "{{ caddy_dir }}/compose.yaml"
+    mode: "0644"
+
+# Staged for boot convergence: spark-baseline.sh restores this route after a
+# reboot so a route published for a TP=2 profile never outlives its containers.
+- name: Render boot config
+  ansible.builtin.template:
+    src: Caddyfile.j2
+    dest: "{{ caddy_dir }}/Caddyfile.boot"
+    mode: "0644"
+  vars:
+    caddy_mode: active
+    caddy_upstream_port: "{{ default_profile_port }}"
+
+- name: Check for a previously published config
+  ansible.builtin.stat:
+    path: "{{ caddy_dir }}/Caddyfile"
+  register: caddy_live_config
+
+# Re-running baseline must not clobber a published route: the live config is
+# seeded from the boot config only on first deploy; after that the switch
+# transaction and boot convergence own it.
+- name: Seed live config on first deploy
+  ansible.builtin.copy:
+    src: "{{ caddy_dir }}/Caddyfile.boot"
+    dest: "{{ caddy_dir }}/Caddyfile"
+    remote_src: true
+    mode: "0644"
+  when: not caddy_live_config.stat.exists
+
+- name: Pull caddy image
+  ansible.builtin.command: docker compose pull -q
+  args:
+    chdir: "{{ caddy_dir }}"
+  changed_when: false
+
+- name: Start caddy
+  ansible.builtin.command: docker compose up -d
+  args:
+    chdir: "{{ caddy_dir }}"
+  register: caddy_up
+  changed_when: "'Started' in caddy_up.stderr or 'Created' in caddy_up.stderr or 'Recreated' in caddy_up.stderr"

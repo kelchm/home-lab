@@ -1,55 +1,76 @@
 # DGX Spark workloads
 
-Temporary, operator-driven deployment of the two DGX Spark hosts. Hardware bring-up (network, RDMA, fabric isolation) lives in [`docs/runbooks/dgx-spark-bringup.md`](../docs/runbooks/dgx-spark-bringup.md); this directory covers what runs *on* them.
+The two DGX Spark hosts run mutually exclusive inference profiles, switched by an in-repo Ansible control plane that is invocable two equivalent ways: `task sparks:*` from an operator checkout, or the [controller API](controller/README.md) on spark-1 for programmatic callers. Hardware bring-up (network, RDMA, fabric isolation) lives in [`docs/runbooks/dgx-spark-bringup.md`](../docs/runbooks/dgx-spark-bringup.md); the transaction design and rejected alternatives live in [`docs/plans/20260828-spark-control-plane.md`](../docs/plans/20260828-spark-control-plane.md) and [`docs/plans/20260831-spark-llm-foundation.md`](../docs/plans/20260831-spark-llm-foundation.md).
 
-**Not GitOps.** These hosts are outside Flux and outside Talos automation. The stack is committed here and pushed over SSH with `task sparks:*`. That is a deliberate placeholder for the deploy model in [`docs/plans/20260620-nas-out-of-cluster-workloads.md`](../docs/plans/20260620-nas-out-of-cluster-workloads.md) — when doco-cd lands, it can consume `sparks/inference/compose.yaml` unchanged.
+These hosts are outside Flux and outside Talos automation, deliberately: profile transitions are hazardous (UMA collapse, no watchdog), so nothing reconciles autonomously. Git owns what *can* run and what runs *by default* after a boot; the switch transaction owns what runs *right now*; residency is operational state recorded on spark-1 (`/opt/spark-stack/resident`, `switch.log`), not in git.
 
-## What runs today
+## Default profile
 
 | | |
 |---|---|
 | Host | `spark-1` (`10.32.21.31`) |
 | Stack | vLLM serving `nvidia/Qwen3.6-35B-A3B-NVFP4` |
-| Endpoint | `http://10.32.21.31:8000/v1` (OpenAI-compatible) |
+| Endpoint | `http://spark.home.kelch.io/v1` (Caddy; direct: `http://10.32.21.31:8000/v1`) |
 | Model cache | `/opt/spark-models` on the host (22 GB) |
 | Measured | ~80 tok/s decode, 131k context |
 
-A second route runs `deepseek-ai/DeepSeek-V4-Flash-0731` across **both** nodes at tensor-parallel 2 on **:8888** — see [`inference/deepseek/`](inference/deepseek/). It is not deployed from this repo: it runs [tonyd2wild's DSpark guide](https://github.com/tonyd2wild/DeepSeek-v4-Flash-0731-DSpark-1M-NVFP4-KV-2x-DGX-Spark) cloned onto each host, which builds its own runtime image locally. This directory carries only the site overrides. The two routes are mutually exclusive: TP=2 claims both hosts. Spark's unified memory disables GPUDirect RDMA, so NCCL all-reduce over the ConnectX-7 fabric runs far below raw RDMA line rate — two independent single-node servers beat tensor-parallel for any model that fits in one node. Reach for TP=2 only for models that genuinely exceed ~104 GB.
+Two TP=2 profiles claim **both** nodes and serve on **:8888**: `deepseek-ai/DeepSeek-V4-Flash-0731` via [tonyd2wild's DSpark guide](inference/deepseek/), and `GLM-5.3-Flash-EXL3` via [MiaAI-Lab's EXL3 + DFlash2 guide](inference/glm/). The upstream guides are cloned and pinned on the hosts; this repo carries only site overrides, artifact pins, and the control-plane glue. All three profiles are mutually exclusive. Spark's unified memory disables GPUDirect RDMA, so NCCL all-reduce over the ConnectX-7 fabric runs far below raw RDMA line rate — two independent single-node servers beat tensor-parallel for any model that fits in one node. Reach for TP=2 only for models that genuinely exceed ~104 GB.
 
 ## Operating it
 
 ```sh
-task sparks:deploy HOST=10.32.21.31   # push compose + start
-task sparks:status                    # both nodes: GPU, containers, endpoint
+task sparks:switch PROFILE=glm53-exl3   # guarded switch: unpublish, teardown both
+                                        #   hosts, reclaim gate, drop_caches,
+                                        #   preflight, ready gate, smoke, publish
+task sparks:publish PROFILE=glm53-exl3  # re-point the stable endpoint, no teardown
+task sparks:baseline                    # converge hosts, deploy Caddy + controller
+task sparks:status                      # both nodes: GPU, containers, endpoint
 task sparks:logs HOST=10.32.21.31
-task sparks:down HOST=10.32.21.31     # full teardown
+task sparks:down                        # break-glass teardown, zero dependencies
 ```
 
-`task sparks:down` stops both routes on **both** hosts. To reclaim disk as well, on each host:
+A profile is one YAML file in [`ansible/profiles/`](ansible/profiles/): `qwen36-nvfp4` (single-node vLLM, `:8000`), `ds4f-dspark` and `glm53-exl3` (TP=2 pinned guides, `:8888`). Names follow `<family+version>-<quant/runtime lane>` so variants and new versions coexist. The file declares everything recipe-specific — pins, ports, start driver (`compose` or `guide`), preflight policy, and the smoke contract — and the generic `preflight`/`start`/`smoke` tasks are driven entirely by it; the playbooks discover profiles from the directory, so adding a recipe means adding one file, not editing the transaction.
+
+`switch` refuses to proceed if MemAvailable stays low after teardown — that means the previous profile's UVM allocations did not release and the affected host needs a reboot first. It also refuses concurrent switches (lock on spark-1; remove `/tmp/spark-switch.lock` if stale). TP=2 switches never pull, download, sync, or build mid-switch — preflight verifies the pinned guide rev, every override line, exact weight refs, and cross-rank image identity, and fails with instructions instead. The qwen profile pulls only its digest-pinned image, explicitly, before start.
+
+After a reboot the pair converges to the baseline: Caddy, the default profile, its stable route, and the residency record all come back (docker restart policy + `spark-baseline.service`, which takes the same transaction lock, resets a route left pointing at a TP=2 port, and records `boot-converge` in the switch log); TP=2 profiles never auto-start — rerun `switch` for those.
+
+`task sparks:down` stops every profile on **both** hosts and needs nothing but SSH — by design it does not touch the resident marker, so `status` shows stale residency until the next switch (`ansible-playbook down.yaml` records `none`). To reclaim disk as well, on each host:
 
 ```sh
 sudo rm -rf /opt/spark-models /opt/spark-stack /opt/spark-cache
-rm -rf ~/dspark-guide
+rm -rf ~/dspark-guide ~/glm53-guide
+rm -rf ~/.cache/huggingface/hub/models--Mia-AiLab--GLM-5.3-Flash-EXL3-TR3-4bpw
+rm -rf ~/.cache/huggingface/hub/models--incoai--GLM-5.3-Flash-DFlash2
 # Only the images this work pulled or built - `prune -a` would take unrelated ones.
 docker rmi vllm-dspark-runtime:dspark-nvfp4-stage-c \
            vllm-dspark-runtime:mia-raf-pr1 \
            vllm-dspark-runtime:mia-raf-pr1-nvfp4-a \
            vllm-dspark-runtime:mia-raf-pr1-nvfp4-b || true
 docker rmi "$(grep -oE 'vllm/vllm-openai@sha256:[0-9a-f]+' /path/to/compose.yaml)" || true
+docker rmi ghcr.io/miaai-lab/glm-5.3-flash-2x-dgx-sparks@sha256:9bb1557a4234fce63d59599e44d10747eabd742beb337eebf9e7070be8a0fd58 || true
 ```
 
-The pulled images are the large residue — roughly 45 GB per host across the vLLM and DeepSeek tags.
+The pulled images and pinned model caches are the large residue; remove only the explicitly listed paths and tags, never an indiscriminate Docker or Hugging Face cache prune.
+
+## Programmatic control
+
+The controller ([`controller/`](controller/README.md), deployed by `task sparks:baseline`) exposes the same transactions over an authenticated API at `http://spark.home.kelch.io/admin/v1/` — agents and tools switch, publish, tear down, and read state without a repo checkout, ansible, or SSH keys. It executes the playbooks from its own checkout of `main`, so a merged profile becomes switchable within a minute of landing; it never initiates anything itself. Both invocation paths contend on the same lock on spark-1, so they cannot interleave.
+
+## The stable endpoint
+
+Clients talk to **`http://spark.home.kelch.io/v1`** — Caddy on spark-1, deployed by `task sparks:baseline` from `sparks/ansible/roles/caddy/`. The route is an admission decision, not health-based discovery: the switch transaction publishes maintenance (an OpenAI-shaped 503) before any teardown, and publishes the profile's exact port only after the model has passed its identity check and coherence smoke. A wedged switch leaves the endpoint in maintenance rather than routing to whatever happens to answer; `task sparks:publish` re-points it at a verified healthy profile without a teardown cycle (after a Caddy or spark-1 restart while a TP=2 profile was resident, this is the recovery path). `curl http://spark.home.kelch.io/v1/models` answers "what is live"; the `/admin/*` route to the controller survives every mode. Direct ports keep working if Caddy is down, as explicit break-glass.
 
 ## Using it from opencode
 
-The provider block lives in `~/.config/opencode/opencode.jsonc` (not in this repo — it is per-machine):
+The provider block lives in `~/.config/opencode/opencode.jsonc` (not in this repo — it is per-machine). The provider ID stays `spark` and the `models` map carries a **superset** across profiles — only the resident one responds:
 
 ```jsonc
 "provider": {
   "spark": {
     "npm": "@ai-sdk/openai-compatible",
     "options": {
-      "baseURL": "http://10.32.21.31:8000/v1",
+      "baseURL": "http://spark.home.kelch.io/v1",
       // No default; without it a dropped SSE stream hangs the client forever.
       "chunkTimeout": 120000
     },
@@ -57,13 +78,21 @@ The provider block lives in `~/.config/opencode/opencode.jsonc` (not in this rep
       "qwen3.6-35b": {
         "reasoning": true,
         "limit": { "context": 131072, "output": 32000 }
+      },
+      "deepseek-v4-flash-dspark": {
+        "reasoning": true,
+        "limit": { "context": 1000000, "output": 32000 }
+      },
+      "GLM-5.3-Flash-EXL3": {
+        "reasoning": true,
+        "limit": { "context": 1000000, "output": 32000 }
       }
     }
   }
 }
 ```
 
-Then `opencode run --model spark/qwen3.6-35b "..."`, or pick it from `/models` interactively.
+Then `opencode run --model spark/GLM-5.3-Flash-EXL3 "..."`, or pick a resident model from `/models` interactively. Never let any tool rewrite this block: opencode keys sampling overrides on the provider ID and on model-ID substrings.
 
 ## Landmines
 
