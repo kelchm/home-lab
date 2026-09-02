@@ -88,20 +88,40 @@ spec:
               source_labels = ["__meta_kubernetes_pod_node_name"]
               target_label  = "node"
             }
-            // Path the on-disk log files by namespace/pod/container. Static
-            // pods (kube-apiserver, etc.) use the kubelet's config-hash on
-            // disk instead of the API's pod UID, so the trailing _* wildcard
-            // matches both shapes.
+            // Path ordinary pod logs by their exact API UID. The doubled
+            // dollar signs survive Flux post-build substitution so Alloy
+            // receives braced relabel capture references; bare $1_ would be
+            // parsed as the nonexistent capture group "1_".
             rule {
               source_labels = [
                 "__meta_kubernetes_namespace",
                 "__meta_kubernetes_pod_name",
+                "__meta_kubernetes_pod_uid",
                 "__meta_kubernetes_pod_container_name",
               ]
               separator    = "/"
               action       = "replace"
-              regex        = "(.+)/(.+)/(.+)"
-              replacement  = "/var/log/pods/$1_$2_*/$3/*.log"
+              regex        = "(.+)/(.+)/(.+)/(.+)"
+              replacement  = "/var/log/pods/$${1}_$${2}_$${3}/$${4}/*.log"
+              target_label = "__path__"
+            }
+            // Static mirror pods use the kubelet config hash in the on-disk
+            // directory instead of the API object's UID. This rule matches
+            // only when that annotation is present and replaces the default
+            // UID path with the exact static-pod path. Restricting the hash
+            // to its kubelet-generated lowercase hexadecimal shape prevents
+            // an annotation value from injecting path separators.
+            rule {
+              source_labels = [
+                "__meta_kubernetes_namespace",
+                "__meta_kubernetes_pod_name",
+                "__meta_kubernetes_pod_annotation_kubernetes_io_config_hash",
+                "__meta_kubernetes_pod_container_name",
+              ]
+              separator    = "/"
+              action       = "replace"
+              regex        = "(.+)/(.+)/([0-9a-f]{32})/(.+)"
+              replacement  = "/var/log/pods/$${1}_$${2}_$${3}/$${4}/*.log"
               target_label = "__path__"
             }
           }
