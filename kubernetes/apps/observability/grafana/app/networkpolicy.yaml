@@ -44,7 +44,9 @@ spec:
             - port: "3000"
               protocol: TCP
   egress:
-    # Grafana itself and both sidecars resolve service and OIDC names.
+    # Grafana itself and both sidecars resolve service and OIDC names. The
+    # rules.dns block activates Cilium's DNS proxy so the toFQDNs rules
+    # below learn the addresses they allow.
     - toEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: kube-system
@@ -55,6 +57,9 @@ spec:
               protocol: UDP
             - port: "53"
               protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
     # The dashboard sidecar has a ClusterRole and watches every namespace.
     - toEntities:
         - kube-apiserver
@@ -123,27 +128,13 @@ spec:
             - port: "8443"
               protocol: TCP
     # GF_INSTALL_PLUGINS downloads the pinned datasource plugins from
-    # grafana.com at pod start. Everything else is denied, including
-    # lateral movement into pod, Service, node, LAN, storage, loopback,
-    # link-local, CGNAT, or reserved space. IPv6 is disabled cluster-wide;
-    # add equivalent IPv6 policy before enabling it.
-    - toCIDRSet:
-        - cidr: 0.0.0.0/0
-          except:
-            - 0.0.0.0/8
-            - 10.0.0.0/8
-            - 100.64.0.0/10
-            - 127.0.0.0/8
-            - 169.254.0.0/16
-            - 172.16.0.0/12
-            - 192.0.0.0/24
-            - 192.0.2.0/24
-            - 192.168.0.0/16
-            - 198.18.0.0/15
-            - 198.51.100.0/24
-            - 203.0.113.0/24
-            - 224.0.0.0/4
-            - 240.0.0.0/4
+    # grafana.com at pod start. Verified: the download URL is served
+    # directly by grafana.com with no redirect to other hosts. If grafana
+    # ever redirects plugin downloads to a CDN, the init fails visibly at
+    # pod start and the hostname lands here. Failures of this rule are
+    # therefore loud, not silent.
+    - toFQDNs:
+        - matchName: grafana.com
       toPorts:
         - ports:
             - port: "443"

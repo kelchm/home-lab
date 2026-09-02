@@ -9,7 +9,7 @@ components:
 
 resources:
   - ./namespace.yaml
-  - ./networkpolicy.yaml
+  - ./default-deny/ks.yaml
   - ./middleware-kanidm-oidc.yaml
   - ./grafana/ks.yaml
   - ./prometheus-operator-crds/ks.yaml

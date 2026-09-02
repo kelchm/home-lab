@@ -12,6 +12,22 @@ spec:
       app.kubernetes.io/instance: loki
       app.kubernetes.io/component: single-binary
   ingress:
+    # Single-binary memberlist join. Memberlist gossips over both TCP and
+    # UDP on 7946; even with replicas=1 the pod joins itself through
+    # loki-memberlist, so peer ingress is required for the ring to form at
+    # all.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: loki
+            app.kubernetes.io/instance: loki
+            app.kubernetes.io/component: single-binary
+      toPorts:
+        - ports:
+            - port: "7946"
+              protocol: TCP
+            - port: "7946"
+              protocol: UDP
     # Alloy dual-write push, Grafana's Loki datasource, self-scrape via the
     # chart's ServiceMonitor, vmagent's converted scrape, and node-level
     # kubectl port-forward handoffs.
@@ -53,7 +69,8 @@ spec:
             - port: "53"
               protocol: TCP
     # Single-binary memberlist join (the chart points ring.kvstore at
-    # loki-memberlist.observability.svc:7946).
+    # loki-memberlist.observability.svc:7946); TCP for state sync, UDP for
+    # gossip and failure detection.
     - toEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: observability
@@ -64,3 +81,5 @@ spec:
         - ports:
             - port: "7946"
               protocol: TCP
+            - port: "7946"
+              protocol: UDP

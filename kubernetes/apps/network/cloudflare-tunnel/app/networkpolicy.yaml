@@ -64,10 +64,13 @@ spec:
             - port: "8443"
               protocol: TCP
     # Cloudflare edge over QUIC (UDP 7844) with the http2 fallback (TCP
-    # 7844), plus generic TLS 443 for control-plane fetches. Everything
-    # else is denied, including lateral movement into pod, Service, node,
-    # LAN, storage, loopback, link-local, CGNAT, or reserved space. IPv6 is
-    # disabled cluster-wide; add equivalent IPv6 policy before enabling it.
+    # 7844), plus generic TLS 443 for control-plane fetches. Deliberately
+    # CIDR-scoped with private-space exceptions rather than toFQDNs: the
+    # argotunnel edge hostnames churn their addresses on ~2 minute TTLs,
+    # and a missed DNS interception would flap the tunnel that carries all
+    # public ingress. The same trade is documented on media/seerr. Revisit
+    # with a soak if that risk posture changes. IPv6 is disabled
+    # cluster-wide; add equivalent IPv6 policy before enabling it.
     - toCIDRSet:
         - cidr: 0.0.0.0/0
           except:

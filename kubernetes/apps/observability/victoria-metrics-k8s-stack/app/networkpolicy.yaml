@@ -176,8 +176,12 @@ spec:
     # Host-network targets: prometheus-node-exporter listens on the node
     # addresses, and Talos exposes controller-manager (10257), scheduler
     # (10259), and the etcd metrics listener (2381) as host processes.
+    # Cilium's host entity is the endpoint's own node only — the other two
+    # nodes carry the remote-node identity, so both are required or the
+    # scrapes against every non-local node silently fail.
     - toEntities:
         - host
+        - remote-node
       toPorts:
         - ports:
             - port: "9100"
@@ -306,6 +310,8 @@ spec:
             - port: "9093"
               protocol: TCP
   egress:
+    # The DNS proxy must intercept DNS so the toFQDNs paging rule below
+    # learns the receiver's addresses.
     - toEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: kube-system
@@ -316,6 +322,9 @@ spec:
               protocol: UDP
             - port: "53"
               protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
     # HA gossip between replicas (TCP + UDP).
     - toEndpoints:
         - matchLabels:
@@ -328,28 +337,12 @@ spec:
               protocol: TCP
             - port: "9094"
               protocol: UDP
-    # Outbound paging. The routed receivers live outside the cluster
-    # (Pushover); everything else is denied, including lateral movement into
-    # pod, Service, node, LAN, storage, loopback, link-local, CGNAT, or
-    # reserved space. IPv6 is disabled cluster-wide; add equivalent IPv6
-    # policy before enabling it.
-    - toCIDRSet:
-        - cidr: 0.0.0.0/0
-          except:
-            - 0.0.0.0/8
-            - 10.0.0.0/8
-            - 100.64.0.0/10
-            - 127.0.0.0/8
-            - 169.254.0.0/16
-            - 172.16.0.0/12
-            - 192.0.0.0/24
-            - 192.0.2.0/24
-            - 192.168.0.0/16
-            - 198.18.0.0/15
-            - 198.51.100.0/24
-            - 203.0.113.0/24
-            - 224.0.0.0/4
-            - 240.0.0.0/4
+    # Outbound paging: Pushover is the sole configured receiver host.
+    # Everything else is denied. When the independent dead-man watchdog
+    # lands (#218), its receiver hostname must be added here — a missing
+    # allowlist entry fails silently at deliver-time, not at apply-time.
+    - toFQDNs:
+        - matchName: api.pushover.net
       toPorts:
         - ports:
             - port: "443"

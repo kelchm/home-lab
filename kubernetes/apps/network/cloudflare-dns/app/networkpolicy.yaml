@@ -38,6 +38,8 @@ spec:
             - port: "7979"
               protocol: TCP
   egress:
+    # The DNS proxy must intercept DNS so the toFQDNs Cloudflare rule
+    # below learns the API's addresses.
     - toEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: kube-system
@@ -48,30 +50,18 @@ spec:
               protocol: UDP
             - port: "53"
               protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
     # Watches Gateway HTTPRoutes and DNSEndpoint CRs.
     - toEntities:
         - kube-apiserver
-    # Cloudflare API. Everything else is denied, including lateral movement
-    # into pod, Service, node, LAN, storage, loopback, link-local, CGNAT, or
-    # reserved space. IPv6 is disabled cluster-wide; add equivalent IPv6
-    # policy before enabling it.
-    - toCIDRSet:
-        - cidr: 0.0.0.0/0
-          except:
-            - 0.0.0.0/8
-            - 10.0.0.0/8
-            - 100.64.0.0/10
-            - 127.0.0.0/8
-            - 169.254.0.0/16
-            - 172.16.0.0/12
-            - 192.0.0.0/24
-            - 192.0.2.0/24
-            - 192.168.0.0/16
-            - 198.18.0.0/15
-            - 198.51.100.0/24
-            - 203.0.113.0/24
-            - 224.0.0.0/4
-            - 240.0.0.0/4
+    # Cloudflare API — the sole public destination. Everything else is
+    # denied, including lateral movement into pod, Service, node, LAN,
+    # storage, loopback, link-local, CGNAT, or reserved space. IPv6 is
+    # disabled cluster-wide; add equivalent IPv6 policy before enabling it.
+    - toFQDNs:
+        - matchName: api.cloudflare.com
       toPorts:
         - ports:
             - port: "443"
