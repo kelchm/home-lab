@@ -1,7 +1,7 @@
 ---
-# Default-deny VictoriaLogs ingress. Alloy may ingest, Grafana and the admin
-# gateway may query, both retained/current scrapers may read metrics, and the
-# node may perform health checks and kubectl port-forward handoffs.
+# Default-deny VictoriaLogs ingress. Each in-cluster client is limited to its
+# required HTTP surface; the node retains L4 access for health checks and
+# kubectl port-forward handoffs.
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
@@ -17,15 +17,18 @@ spec:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: observability
             app.kubernetes.io/name: alloy
+      toPorts:
+        - ports:
+            - port: "9428"
+              protocol: TCP
+          rules:
+            http:
+              - method: POST
+                path: "/insert/loki/api/v1/push.*"
+    - fromEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: observability
             app.kubernetes.io/name: grafana
-        - matchLabels:
-            k8s:io.kubernetes.pod.namespace: observability
-            app.kubernetes.io/name: prometheus
-        - matchLabels:
-            k8s:io.kubernetes.pod.namespace: observability
-            app.kubernetes.io/name: vmagent
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: network
             app.kubernetes.io/instance: traefik-admin-network
@@ -34,6 +37,27 @@ spec:
         - ports:
             - port: "9428"
               protocol: TCP
+          rules:
+            http:
+              - method: GET
+                path: "/select/.*"
+              - method: POST
+                path: "/select/.*"
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: prometheus
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: vmagent
+      toPorts:
+        - ports:
+            - port: "9428"
+              protocol: TCP
+          rules:
+            http:
+              - method: GET
+                path: "/metrics$"
     - fromEntities:
         - host
       toPorts:

@@ -7,7 +7,7 @@ All Kubernetes container stdout/stderr is collected node-locally by Alloy from `
 - **Grafana Explore:** `https://grafana.home.kelch.io/explore` — select the `VictoriaLogs` datasource. This is the normal single-pane entry point.
 - **VictoriaLogs VMUI:** `https://vlogs.home.kelch.io/select/vmui/` — use the native LogsQL explorer and live-stream view. The bare hostname redirects here.
 
-Both routes use the cluster's Kanidm OIDC protection. Useful LogsQL starting points are `namespace:observability`, `namespace:observability _msg:error`, `stream:stderr`, and `namespace:observability | stats by (pod) count()`. The time picker supplies the query window.
+Grafana authenticates through its native `auth.generic_oauth` integration and dedicated Kanidm client; VictoriaLogs VMUI uses the OIDC middleware on its HTTPRoute. Useful LogsQL starting points are `namespace:observability`, `namespace:observability _msg:error`, `stream:stderr`, and `namespace:observability | stats by (pod) count()`. The time picker supplies the query window.
 
 ## Field model
 
