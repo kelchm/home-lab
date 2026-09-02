@@ -1,6 +1,6 @@
 # Observability rework — conclude the bake-off, consolidate, kill the toil
 
-**Status:** Active — 2026-09-02; OpenObserve is retired, standalone CRD ownership is live, and the survivor cutover passed its post-merge gates through PRs #480 and #481. VictoriaMetrics now owns native cluster scraping and Pushover delivery. KPS and Loki remain for an approximately one-day rollback soak before a separate cleanup PR. Background: [observability bake-off](../observability-bakeoff.md).
+**Status:** Active — 2026-09-01; OpenObserve is retired, standalone CRD ownership is live, and the survivor cutover passed its post-merge gates through PRs #480 and #481 at 20:02 EDT (00:02 UTC on 2026-09-02). VictoriaMetrics now owns native cluster scraping and Pushover delivery. KPS and Loki remain for an approximately one-day rollback soak before a separate cleanup PR. Background: [observability bake-off](../observability-bakeoff.md).
 
 ## Context
 
@@ -109,7 +109,7 @@ Roll out Phase 1 in reviewable slices:
 
 1. Completed by PR #478: retire unreferenced OpenObserve; install and adopt the standalone CRDs; enable converter owner references. The retained `data-openobserve-0` PVC remains the rollback path until convergence closes.
 2. Completed by PRs #480 and #481: switch KSM and all Kubernetes infrastructure scraping directly from KPS-owned ServiceMonitors/exporters to VM-native resources; enable VMAlertmanager; move the custom rules and encrypted configuration; make vmalert the Pushover authority; and make VictoriaMetrics Grafana's default datasource. KPS and Loki remain installed.
-3. Completed live on 2026-09-02: pass the post-merge gates in the alerting runbook, including exact target counts, duplicate-pool checks, the Longhorn BackupTarget metric, VMAlertmanager reload health, one firing and one resolved Pushover notification, clean alert state, and representative dashboard rendering.
+3. Completed live at 20:02 EDT on 2026-09-01 (00:02 UTC on 2026-09-02): pass the post-merge gates in the alerting runbook, including exact target counts, duplicate-pool checks, the Longhorn BackupTarget metric, VMAlertmanager reload health, one firing and one resolved Pushover notification, clean alert state, and representative dashboard rendering.
 4. Hold KPS and Loki for roughly one day after the survivor path is green.
 5. In a separate cleanup PR, delete KPS and its stale converted children, remove Alloy's Loki sink, and delete Loki. Re-run the target, rule, dashboard, log-query, and delivery checks before declaring Phase 1 complete.
 

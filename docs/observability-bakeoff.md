@@ -13,7 +13,7 @@ substantially more out-of-the-box integration.
 
 After working through criteria around ergonomics, retention, and ingest
 robustness when the Synology is unavailable, OpenObserve fell out of
-contention on every axis. The remaining real comparison is between two
+contention on every axis. The remaining real comparison was between two
 Grafana-front-door stacks:
 
 - **kube-prometheus-stack + Loki** — most ecosystem-pre-baked artifacts
@@ -24,9 +24,7 @@ Grafana-front-door stacks:
   story, but materially fewer pre-built dashboards/queries on the
   VictoriaLogs side.
 
-This doc is the canonical record of the bake-off going forward. Each
-commit on the bake-off branch references it; findings are appended below
-as they accumulate; the final decision lands in this same doc.
+This doc is the canonical historical record of the bake-off. The findings and final decision are retained below; current execution state lives in the [observability rework plan](plans/20260703-observability-rework.md).
 
 ## Stacks under test
 
