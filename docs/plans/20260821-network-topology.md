@@ -129,16 +129,16 @@ IaC, and rollout content stands.
 
 ## Firewall-policy matrix
 
-One UniFi zone per VLAN — never merge two VLANs into a zone, since intra-zone traffic is unconditionally allowed. Zone rules are stateful. Kubernetes pod egress arrives SNAT'd as node IPs, so K8s-sourced rules key on `10.32.30.11-.13`.
+One UniFi zone per VLAN — never merge two VLANs into a zone, since intra-zone traffic is unconditionally allowed. Zone rules are stateful. Ordinary Kubernetes pod egress arrives SNAT'd as node IPs, so general K8s-sourced rules key on `10.32.30.11-.13`; the observability plan requires a separate fixed egress identity before granting its narrow external-scrape exceptions.
 
 | From ↓ To → | Mgmt 20 | Storage 25 | K8s 30 | Workloads 21 | LB-admin 130 | LB-services 140 | IoT 90 | Guest/Cam | WAN |
 |---|---|---|---|---|---|---|---|---|---|
 | Admin devices (Main group) | allow 8006/22/443/DSM | allow (diagnostics) | allow 6443/50000 | allow all | allow | allow | allow | allow | allow |
 | Main (rest) | deny | deny | deny | service ports only | deny | allow | mDNS repeater only | deny | allow |
-| Mgmt 20 | — | allow (NAS backup paths) | deny | deny | deny | deny | deny | deny | DNS/NTP/HTTPS; PVE repository HTTP |
+| Mgmt 20 | — | allow (NAS backup paths) | deny | deny | exact PVE `10.32.20.21-.23` and Synology `10.32.20.5` sources to their dedicated observability listener VIPs/ports; else deny | deny | deny | deny | DNS/NTP/HTTPS; PVE repository HTTP |
 | Storage 25 | deny | L2 enclave; deny all routed | deny | deny | deny | deny | deny | deny | deny |
-| K8s 30 (node IPs) | deny | (L2, not routed) | — | explicit inference ports on `.21.31-.32`; else deny | — | — | deny | deny | allow |
-| Workloads 21 | deny | deny routed (Sparks use the L2 leg; guest NFS by per-IP exception) | deny | intra-zone open (accepted) | deny | allow | HA VM `.21.101` → allow; else deny | deny | allow |
+| K8s 30 | deny except the dedicated observability egress identity to declared PVE/Synology monitoring ports | (L2, not routed; Multus/storage paths require endpoint binding and host firewall) | — | dedicated observability egress identity to Spark TCP 22 for restricted monitoring tunnels plus declared inference metric ports on `.21.31-.32`; else deny | — | — | deny | deny | allow |
+| Workloads 21 | deny | deny routed (Sparks use the L2 leg; guest NFS by per-IP exception) | deny | intra-zone open (accepted) | exact Spark `10.32.21.31-.32` sources to their dedicated observability listener VIPs/ports; else deny | allow | HA VM `.21.101` → allow; else deny | deny | allow |
 | IoT / Guest / Cameras | deny | deny | deny | deny | deny | deny | — | — | Guest/IoT allow; Cameras deny |
 | WAN | deny | deny | deny | deny | deny | deny | deny | deny | — |
 
@@ -163,7 +163,7 @@ Most of this table does not exist on the controller today, and the general `bgp-
 
 ### Phase 2 — create VLAN 21 + apply the firewall for real
 
-The network, DHCP scope (`.200-.239`), zone, and PVE containment slice are live. Complete the remaining matrix above, including the long-documented `bgp-lb-restricted` IoT/Guest rules and service-specific Workloads/Spark exceptions. Negative-test from IoT and Guest: `curl` to `10.32.130.1` and `10.32.140.1` must fail.
+The network, DHCP scope (`.200-.239`), zone, and PVE containment slice are live. Complete the remaining matrix above, including the long-documented `bgp-lb-restricted` IoT/Guest rules and service-specific Workloads/Spark exceptions. The observability pull exceptions require a dedicated collector egress identity rather than the three node-SNAT addresses; TCP 22 reaches only the Sparks' forwarding-only monitoring principal and does not broaden operator SSH. The push exceptions permit only the exact PVE, Synology, and Spark source addresses to their source-class `admin-prod` listener VIPs and ports, ordered above the broad Mgmt/Workloads denies. Negative-test from IoT and Guest: `curl` to `10.32.130.1` and `10.32.140.1` must fail.
 
 ### Phase 3 — DGX Sparks
 
