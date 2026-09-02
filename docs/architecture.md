@@ -42,9 +42,7 @@ coupling every control plane.
 with one closed, non-routed ConnectX-7 link. Applied state and recovery are in
 the [bring-up runbook](runbooks/dgx-spark-bringup.md).
 
-**PVE environment:** an independent three-node virtualization cluster
-using Infra Mgmt for host control, Storage for migration/NFS, and Workloads for
-general-purpose guests. Its 2.5 GbE guest trunk also carries the isolated Remote Admin VLAN for the two Tailscale subnet-router VMs. See the [PVE cluster plan](plans/20260814-pve-cluster.md) and [operator reference](../proxmox/README.md).
+**PVE environment:** an independent three-node virtualization cluster using Infra Mgmt for host control, Storage for migration/NFS, and Workloads for general-purpose guests. Its 2.5 GbE guest trunk also carries the isolated Remote Admin VLAN for the two Tailscale subnet-router VMs. See the [PVE cluster plan](plans/20260814-pve-cluster.md) and [operator reference](../proxmox/README.md).
 
 **K8s 2 (reserved):** VLAN 31, storage identities, LB pools, and BGP ASN remain
 reserved for a future second Kubernetes cluster. It may run as one Talos VM per
@@ -81,7 +79,7 @@ VLAN 40 (Lab Services) is being retired — it existed only to host node subinte
 - K8s 2 ↔ K8s Prod: deny (environments isolated)
 - Main → Infra Mgmt: allow from admin devices only
 - Main → Remote Admin: allow only to the two router VM addresses; every other Internal → Remote Admin path is denied by the zone boundary
-- Remote Admin → routed LAN destinations: the router pair advertises `10.32.0.0/16`, but UniFi allows only `10.32.19.101/.102` to the six enforcement prefixes (`10.32.1/10/20/30/130/140.0/24`); every other Internal destination remains denied
+- Remote Admin → routed LAN destinations: the router pair advertises `10.32.0.0/16`, but UniFi allows only `10.32.19.101/.102` to the six enforcement prefixes (`10.32.1.0/24`, `10.32.10.0/24`, `10.32.20.0/24`, `10.32.30.0/24`, `10.32.130.0/24`, and `10.32.140.0/24`); every other Internal destination remains denied
 - Main (admin devices) → K8s Prod: allow on 50000/tcp (talosctl) + 6443/tcp (Kube API) — Talos consolidates its mgmt plane onto VLAN 30; mTLS enforces isolation
 - PVE guests on Workloads → Infra Mgmt, Storage, and K8s Prod: deny by default; add explicit service exceptions only
 - PVE and K8s storage identities → Storage: scope to named peers and services
@@ -229,7 +227,7 @@ Talos nodes do NOT have IPs on Infra Mgmt. Talos has no classic management plane
 
 **Remote Admin VLAN (19):**
 
-```
+```text
 10.32.19.1        gateway-remote-admin       Router interface; DNS and Internet egress
 10.32.19.101      tailscale-router-1         PVE VM on pve-sbx-2
 10.32.19.102      tailscale-router-2         PVE VM on pve-sbx-3
