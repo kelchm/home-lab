@@ -59,6 +59,7 @@ jobs:
               - '.github/workflows/flux-local.yaml'
               - '.mise.toml'
               - 'kubernetes/**'
+              - 'scripts/ci/validate-alloy-log-paths.sh'
               - 'scripts/ci/test-validate-unsafe-sysctls.sh'
               - 'scripts/ci/validate-unsafe-sysctls.sh'
               - 'talos/patches/global/machine-kubelet.yaml'
@@ -231,6 +232,10 @@ jobs:
         run: |
           scripts/ci/test-validate-unsafe-sysctls.sh
           scripts/ci/validate-unsafe-sysctls.sh
+
+      - name: Validate Alloy pod-log paths
+        if: needs.pre-job.outputs.kubernetes_changed == 'true'
+        run: scripts/ci/validate-alloy-log-paths.sh
 
       - name: No Kubernetes changes
         if: needs.pre-job.outputs.kubernetes_changed != 'true'
