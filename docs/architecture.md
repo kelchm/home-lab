@@ -11,7 +11,7 @@ Container-native homelab with separate operational domains:
 
 - **Prod**: Bare-metal Talos Kubernetes cluster on 3x HP EliteDesk 705 G4 mini PCs
 - **AI compute**: Two DGX Spark hosts with a direct ConnectX-7 fabric
-- **PVE** (planned): Independent virtualization cluster on 3x HP EliteDesk 800 G3 mini PCs
+- **PVE**: Independent virtualization cluster on 3x HP EliteDesk 800 G3 mini PCs
 - **K8s 2** (reserved): A future second Kubernetes cluster, on PVE or bare metal
 
 Goals: container-native workloads, GitOps-driven Kubernetes IaC, explicit
@@ -23,7 +23,7 @@ coupling every control plane.
 | Role | Hardware | Specs |
 |---|---|---|
 | Prod cluster nodes (3x) | HP EliteDesk 705 G4 | Ryzen 5 2400GE, 64GB RAM, 1TB NVMe (WD_BLACK SN770), 1GbE + 2.5GbE |
-| PVE cluster nodes (3x, planned) | HP EliteDesk 800 G3 | Intel i5-6500T, 32GB RAM, expected 1TB WD_BLACK SN770 (verify before install), 1GbE + PCIe 2.5GbE |
+| PVE cluster nodes (3x) | HP EliteDesk 800 G3 | Intel i5-6500T, 32GB RAM, 1TB WD_BLACK SN770, 1GbE + PCIe 2.5GbE |
 | AI compute (2x) | NVIDIA DGX Spark | GB10, 128GB unified memory, 4TB NVMe, 10GbE + ConnectX-7 direct fabric |
 | NAS | Synology DS1821+ | Ryzen V1500B, 6x 14TB Exos X16, 32GB RAM, 2x SFP+ + 4x 1GbE |
 
@@ -42,9 +42,7 @@ coupling every control plane.
 with one closed, non-routed ConnectX-7 link. Applied state and recovery are in
 the [bring-up runbook](runbooks/dgx-spark-bringup.md).
 
-**PVE environment (planned):** an independent three-node virtualization cluster
-using Infra Mgmt for host control, Storage for migration/NFS, and Workloads for
-general-purpose guests. See the [PVE cluster plan](plans/20260814-pve-cluster.md).
+**PVE environment:** an independent three-node virtualization cluster using Infra Mgmt for host control, Storage for migration/NFS, and Workloads for general-purpose guests. Its 2.5 GbE guest trunk also carries the isolated Remote Admin VLAN for the two Tailscale subnet-router VMs. See the [PVE cluster plan](plans/20260814-pve-cluster.md) and [operator reference](../proxmox/README.md).
 
 **K8s 2 (reserved):** VLAN 31, storage identities, LB pools, and BGP ASN remain
 reserved for a future second Kubernetes cluster. It may run as one Talos VM per
@@ -65,6 +63,7 @@ The `monitoring.coreos.com` CRDs are owned independently by `prometheus-operator
 | 1 | Default | 10.32.1.0/24 | UniFi management |
 | 5 | Cameras | 10.32.5.0/24 | Existing |
 | 10 | Main | 10.32.10.0/24 | Trusted household devices |
+| 19 | Remote Admin | 10.32.19.0/24 | Isolated Tailscale subnet-router transit and management |
 | 20 | Infra Mgmt | 10.32.20.0/24 | Classic mgmt planes for non-Talos tenants |
 | 21 | Workloads | 10.32.21.0/24 | DGX Sparks and general-purpose workload servers |
 | 25 | Storage | 10.32.25.0/24 | NFS/iSCSI to Synology |
@@ -79,6 +78,8 @@ VLAN 40 (Lab Services) is being retired — it existed only to host node subinte
 
 - K8s 2 ↔ K8s Prod: deny (environments isolated)
 - Main → Infra Mgmt: allow from admin devices only
+- Main → Remote Admin: allow only to the two router VM addresses; every other Internal → Remote Admin path is denied by the zone boundary
+- Remote Admin → routed LAN destinations: the router pair advertises `10.32.0.0/16`, but UniFi allows only `10.32.19.101/.102` to the six enforcement prefixes (`10.32.1.0/24`, `10.32.10.0/24`, `10.32.20.0/24`, `10.32.30.0/24`, `10.32.130.0/24`, and `10.32.140.0/24`); every other Internal destination remains denied
 - Main (admin devices) → K8s Prod: allow on 50000/tcp (talosctl) + 6443/tcp (Kube API) — Talos consolidates its mgmt plane onto VLAN 30; mTLS enforces isolation
 - PVE guests on Workloads → Infra Mgmt, Storage, and K8s Prod: deny by default; add explicit service exceptions only
 - PVE and K8s storage identities → Storage: scope to named peers and services
@@ -143,7 +144,7 @@ Member numbering is 1-indexed (`k8s-prod-1` = `.11`, not `.10`); `.X0` is never 
 Examples:
 
 - `k8s-prod-1` (system 1): `10.32.30.11` ↔ `10.32.25.11`
-- `pve-sbx-1` (system 2, planned): `10.32.20.21` ↔ `10.32.25.21` — trunks VLAN 21 for guests but holds no address there
+- `pve-sbx-1` (system 2): `10.32.20.21` ↔ `10.32.25.21` — trunks guest VLANs but holds no address on them
 - `spark-1` (system 3): `10.32.21.31` ↔ `10.32.25.31`
 - Second-cluster node 1 (system 4, reserved): `10.32.31.41` ↔ `10.32.25.41`
 - A service slot 50 in services-prod: `10.32.140.50`; same slot in services-sandbox: `10.32.141.50`
@@ -158,7 +159,7 @@ The storage VLAN bends the skeleton because its primary inhabitants are storage 
 |---|---|
 | `.2-.10` | Storage providers (NAS `.5`, S3 endpoint `.6`, PBS `.7`) |
 | `.11-.19` | System 1 — k8s-prod node NICs |
-| `.21-.29` | System 2 — pve-sbx host NICs (planned) |
+| `.21-.29` | System 2 — pve-sbx host NICs |
 | `.31-.39` | System 3 — workload hosts (DGX Sparks; future standalone servers and storage-attached guests) |
 | `.41-.49` | System 4 — second Kubernetes cluster node NICs (reserved) |
 | `.51-.99` | Future systems, one decade each |
@@ -197,7 +198,7 @@ API VIP is managed by the Talos `vipController` (GARP-based at the machine-confi
 10.32.25.8-.10     (reserved for future storage providers)
 10.32.25.11-.13    k8s-prod-{1,2,3}-storage  System 1 node NICs (2.5GbE)
 10.32.25.14-.19    (reserved, k8s-prod expansion)
-10.32.25.21-.23    pve-sbx-{1,2,3}-storage   System 2 host NICs (planned)
+10.32.25.21-.23    pve-sbx-{1,2,3}-storage   System 2 host NICs
 10.32.25.24-.29    (reserved, pve-sbx expansion)
 10.32.25.31-.32    spark-{1,2}-storage       System 3 workload hosts (10GbE tagged leg)
 10.32.25.33-.39    (reserved, workload-host expansion)
@@ -214,7 +215,7 @@ API VIP is managed by the Talos `vipController` (GARP-based at the machine-confi
 10.32.20.7        pbs                      (planned) PBS appliance, aligned with pbs-storage
 10.32.20.10       glkvm                    GL-RM1PE KVM (currently a DHCP fixed assignment; prefer on-device static — the recovery console should not depend on DHCP)
 10.32.20.20       pdm                      (reserved) Proxmox Datacenter Manager
-10.32.20.21-.23   pve-sbx-{1,2,3}          (planned) PVE UI/API, SSH, Corosync link 0
+10.32.20.21-.23   pve-sbx-{1,2,3}          PVE UI/API, SSH, Corosync link 0
 10.32.20.24-.29   (reserved, pve-sbx expansion)
 10.32.20.30-.99   (existing static devices — switches, APs; new static infra devices allocate from .100-.199)
 10.32.20.110-.119 (UPS/NUT monitor family, 1-indexed; upsmon clients reference these IPs directly)
@@ -224,6 +225,16 @@ API VIP is managed by the Talos `vipController` (GARP-based at the machine-confi
 
 Talos nodes do NOT have IPs on Infra Mgmt. Talos has no classic management plane — `talosctl` and `kubectl` (both mTLS) are the entire management surface, and run over VLAN 30 alongside workload traffic. Network-level isolation is replaced by cryptographic isolation. Infra Mgmt exists for tenants that *do* need a classic mgmt plane.
 
+**Remote Admin VLAN (19):**
+
+```text
+10.32.19.1        gateway-remote-admin       Router interface; DNS and Internet egress
+10.32.19.101      tailscale-router-1         PVE VM on pve-sbx-2
+10.32.19.102      tailscale-router-2         PVE VM on pve-sbx-3
+```
+
+DHCP and IPv6 are disabled on this network. The two VMs are single-homed VLAN-local endpoints and therefore sit outside the cross-VLAN system identity rule. Both advertise the aggregate `10.32.0.0/16`, allowing each local VLAN `/24` to remain more specific on at-home clients. VLAN 19 has its own UniFi zone: it can reach the gateway and Internet for Tailscale coordination, while `Allow Tailscale Routers to Routed LAN` permits only `.101/.102` to the six authorized destination prefixes. UniFi evaluates the BGP-routed `10.32.130.0/24` and `10.32.140.0/24` paths through the Internal transition for this custom source zone, so those exact prefixes are included in the rule alongside the four VLAN subnets. The generated reverse rule accepts only established and related traffic.
+
 ## LB Pool Allocation
 
 LB pools are **not** VLAN inhabitants — they're routed prefixes. Cilium IPAM hands out IPs from a pool; Cilium BGP advertises each allocated VIP as a /32 to UniFi with the speakers' node IPs as next-hops. A pool's main job is firewall scoping: each pool maps to a policy class.
@@ -232,8 +243,8 @@ Three policy classes:
 
 | Class | Pool (prod) | Reachable from | Use cases |
 |---|---|---|---|
-| **admin** | `admin-prod` (10.32.130.0/24) | VLAN 10 admin devices only | Operator UIs via Traefik admin gateway, k8s-gateway DNS |
-| **services** | `services-prod` (10.32.140.0/24) | VLAN 10 (Main), VLAN 21 (Workloads) | Household-facing apps (Traefik services gateway, per-service IPs) |
+| **admin** | `admin-prod` (10.32.130.0/24) | VLAN 10 admin devices; approved Tailnet clients through the VLAN 19 routers | Operator UIs via Traefik admin gateway, k8s-gateway DNS |
+| **services** | `services-prod` (10.32.140.0/24) | VLAN 10 (Main), VLAN 21 (Workloads), approved Tailnet clients through the VLAN 19 routers | Household-facing apps (Traefik services gateway, per-service IPs) |
 | **shared** | `shared-prod` (10.32.150.0/24) | All client VLANs (per-IP+port) | Cross-zone services with per-IP+port firewall rules (Visionect device gateway, future DNS/NTP) |
 
 Sandbox-side pools (`admin-sandbox` 10.32.131.0/24, `services-sandbox` 10.32.141.0/24) follow the same naming under a future second cluster.
@@ -327,7 +338,7 @@ k8s-sbx.home.kelch.io               10.32.31.8     (future)
 k8s-sbx-{1,2,3}.home.kelch.io       10.32.31.{41,42,43}  (future)
 k8s-sbx-{1,2,3}-storage.home.kelch.io  10.32.25.{41,42,43}  (future)
 
-# PVE hosts (planned; static UniFi-local records)
+# PVE hosts (static UniFi-local records)
 pve-sbx-{1,2,3}.home.kelch.io       10.32.20.{21,22,23}
 pve-sbx-{1,2,3}-storage.home.kelch.io  10.32.25.{21,22,23}
 

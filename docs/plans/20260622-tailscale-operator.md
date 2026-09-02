@@ -1,6 +1,6 @@
 # Tailscale operator — remote LAN access plan
 
-**Status:** Implemented — 2026-08-24; current state: [kubernetes/apps/tailscale/](../../kubernetes/apps/tailscale/README.md).
+**Status:** Superseded — 2026-09-02; replaced by the independent PVE router pair in the [Tailscale remote-admin plan](20260902-tailscale-remote-admin.md). The Connector's route approvals are withdrawn; this change removes its Flux manifests so the workload and operator are pruned after merge.
 
 ## Context
 
