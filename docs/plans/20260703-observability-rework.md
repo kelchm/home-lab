@@ -1,6 +1,6 @@
 # Estate observability — converge the stack, cover the hardware, and make incidents navigable
 
-**Status:** Active — 2026-08-27; revised from Kubernetes plus a few external targets into an estate-wide metrics, logs, flow, and security-observability design. Background: [observability bake-off](../observability-bakeoff.md).
+**Status:** Active — 2026-09-02; the VictoriaMetrics/VictoriaLogs survivor path is live and verified, OpenObserve is retired, and KPS plus Loki remain only for the post-cutover correctness soak and cleanup tracked in #470. This revision carries that deployed baseline into an estate-wide metrics, logs, flow, and security-observability design. Background: [observability bake-off](../observability-bakeoff.md).
 
 ## Context and origin
 
@@ -19,14 +19,14 @@ The following baseline was verified live on 2026-07-01/02 through Grafana, Kuber
 - Alert delivery was effectively absent. Grafana’s notification policy pointed at an empty `grafana-default-email` receiver, while vmalert sent to the KPS Alertmanager with no external receiver. Rules evaluated, but nobody was notified.
 - Cilium supplied the eBPF datapath with agent and operator metrics, but `hubble.enabled: false`; the observability half of the installed datapath remained disabled.
 
-The manifests still show the core shape of this baseline on 2026-08-27: both metric stacks and three log backends remain declared, Alloy still dual-writes, and vmalert still points at the KPS Alertmanager. Runtime sizes and counts must be re-baselined before implementation because the July measurements are evidence, not permanent facts.
+This baseline is historical evidence rather than the implementation starting point. PRs #478, #480, and #481 retired OpenObserve, established independent CRD ownership, moved native Kubernetes scraping and rule ownership to VictoriaMetrics, made VMAlertmanager the Pushover delivery authority, and made VictoriaMetrics Grafana's default datasource. The current rollout state and remaining cleanup are recorded below.
 
 ### The reframe
 
-The stated pain was “I do not have time to hand-build Grafana.” The live inventory showed the opposite problem: the estate already had 51 generated dashboards and 296 generated rules. The priorities are therefore:
+The stated pain was “I do not have time to hand-build Grafana.” The live inventory showed the opposite problem: the estate already had 51 generated dashboards and 296 generated rules. After the survivor cutover, the priorities are:
 
-1. Alert delivery is dead. Hundreds of evaluated rules that nobody receives provide little operational value.
-2. Five backends and duplicate pipelines create maintenance cost without continuing bake-off value.
+1. Production alert delivery now works through VMAlertmanager and Pushover, but the stale-backup delivery exercise and an independent Watchdog/dead-man path are still open under #218.
+2. The duplicate KPS and Loki paths remain only as rollback components. Their cleanup follows the post-cutover and corrected-log-path soak under #470.
 3. The dashboard gap is bounded, but imported artifacts need curation, stable datasource ownership, and useful navigation.
 4. No anomaly layer exists, but deterministic alerting, data quality, and delivery must work before adding one.
 5. Most of the physical estate was uncovered; adding PVE and the Sparks makes that gap larger and more important.
@@ -73,17 +73,18 @@ Video, packet capture, full endpoint detection and response, and indefinite flow
 - The original plan proposed Grafana Operator for dashboard imports. That is superseded: the deployed Grafana sidecar already supports labelled ConfigMaps, `grafana_folder`, and folders derived from file structure. Repository-owned, pinned dashboard JSON is the lower-toil path.
 - The original convergence phase was described as one body of work. It is now split into independently merged checkpoints because Flux reconciliation does not execute numbered prose sequentially and multiple Kustomizations depend on the backends being retired.
 - Original sub-day effort estimates are superseded. The work now spans independent convergence, external-metrics, external-logs, and flow/security changes with manual host and controller gates.
+- The survivor cutover is no longer proposed work: PRs #478, #480, and #481 completed the CRD, native scrape, rule, alert-delivery, and Grafana ownership transfers and passed their live gates. The remaining convergence work is the soak, KPS/Loki cleanup, estate-label migration before external targets, and independent dead-man coverage.
 
 ## Current state
 
 ### Central stack
 
-- VictoriaMetrics k8s-stack is already deployed with a 30-second vmagent scrape interval, 30-day metric retention, and `externalLabels.cluster=k8s-prod`.
+- VictoriaMetrics k8s-stack owns native API-server, kubelet, CoreDNS, kube-state-metrics, node-exporter, controller-manager, scheduler, and etcd scraping. vmagent uses a 30-second default scrape interval, VMSingle retains metrics for 30 days, and both vmagent and metric vmalert still apply `externalLabels.cluster=k8s-prod` pending the estate-label migration.
 - VictoriaLogs is already deployed with 30-day retention and a 30 Gi volume.
-- Alloy runs as a DaemonSet, tails Kubernetes CRI logs, labels them with namespace, pod, container, and node, and currently dual-writes to Loki and VictoriaLogs.
-- Grafana already provisions dashboards from labelled ConfigMaps. Its sidecar supports the `grafana_folder` annotation and `foldersFromFilesStructure`; a Grafana operator is not required for repository-owned dashboards.
-- Prometheus/KPS, Loki, and OpenObserve still exist as bake-off overlap. The convergence and dependency gates documented below remain necessary before removing them.
-- Alert evaluation exists but delivery still needs to be made trustworthy and tested end to end.
+- Alloy runs as a DaemonSet, tails Kubernetes CRI logs, labels them with namespace, pod, container, and node, and temporarily dual-writes to Loki and VictoriaLogs. PR #483 corrected path correlation to exact pod UIDs and Talos mirror-pod config hashes after the soak found 461 incorrect label/file pairs among 742 active pairs; pre-fix log-volume and label-quality measurements are invalid, and contaminated retained history must age out naturally.
+- Grafana provisions dashboards from labelled ConfigMaps, uses VictoriaMetrics as the default metrics datasource, and points its Alertmanager datasource at VMAlertmanager. Its sidecar supports the `grafana_folder` annotation and `foldersFromFilesStructure`; a Grafana operator is not required for repository-owned dashboards.
+- Standalone `prometheus-operator-crds` owns the shared CRDs. OpenObserve is retired. KPS owns no production exporter/control-plane scrape objects, rules, notification route, default datasource, CRDs, or downstream Flux dependencies; its Prometheus and explicitly named non-default datasource remain only for Git-revert rollback. Loki remains only as the temporary comparison sink during the corrected-log-path soak.
+- Metric vmalert evaluates the production rules and sends to persistent VMAlertmanager. A live synthetic warning produced exactly one Pushover notification and one resolution with zero delivery failures. The stale-backup delivery exercise and external Watchdog/dead-man path remain unverified.
 
 ### Live UniFi inventory
 
@@ -107,10 +108,10 @@ The offline Flex must be classified in inventory as `expected_offline`, `spare`,
 - VictoriaLogs is the operational log and security-event system of record.
 - Grafana remains the single pane, using the existing ConfigMap sidecar for dashboards-as-code.
 - Alloy remains the Kubernetes log collector. External systems use built-in or explicitly installed syslog forwarding and send to a centrally exposed VictoriaLogs syslog ingress; another general agent fleet is not introduced.
-- Alertmanager handles notification routing. It needs persistent storage, a stable Grafana datasource and route, real receivers, and a continuously checked Watchdog before dependent backends are retired.
-- Metric and LogsQL rules use separate VMAlert instances. LogsQL rule sources carry `observability.kelch.io/rule-datasource=vlogs`; the vlogs evaluator positively selects that label, while the metric evaluator selects every rule except `vlogs`, preserving a safe default for future unlabeled metric rules. The label may live on a native VMRule, chart default-rule metadata, or PrometheusRule metadata preserved through vm-operator conversion; no mandatory resource rewrite is implied. Vlogs groups use `type: vlogs`, query VictoriaLogs, persist alert state through VictoriaMetrics remote-read/write, and notify the shared Alertmanager. A standing CI/rendered-config coverage check detects rules selected by zero or multiple evaluators.
+- VMAlertmanager handles notification routing with a Longhorn-backed 1 GiB volume, a stable Grafana datasource and OIDC-protected route, and SOPS-managed Pushover delivery. The independent Watchdog receiver remains a gate before the observability design can claim protection from central-cluster failure.
+- The current metric vmalert owns production metric rules and notifies VMAlertmanager. When LogsQL rules are introduced, use a separate VMAlert instance: LogsQL sources carry `observability.kelch.io/rule-datasource=vlogs`; the vlogs evaluator positively selects that label, while the metric evaluator selects every rule except `vlogs`, preserving a safe default for future unlabeled metric rules. The label may live on a native VMRule, chart default-rule metadata, or PrometheusRule metadata preserved through vm-operator conversion; no mandatory resource rewrite is implied. Vlogs groups use `type: vlogs`, query VictoriaLogs, persist alert state through VictoriaMetrics remote-read/write, and notify VMAlertmanager. A standing CI/rendered-config coverage check detects rules selected by zero or multiple evaluators.
 - Native platform alerts remain enabled for failures that could take the central stack with them, including DSM disk/storage alerts, UniFi console notifications, and Proxmox cluster notifications.
-- A healthchecks-style dead-man endpoint outside the estate receives the central Alertmanager Watchdog. One edge Pi runs a second small Gatus instance, sends its own heartbeat and direct alerts to a notification route that does not depend on `k8s-prod`, and probes a minimal set of observability, gateway, WAN, and critical-service outcomes without becoming another storage backend.
+- The planned independent failure path uses a healthchecks-style endpoint outside the estate for the central VMAlertmanager Watchdog plus a second small Gatus instance on one edge Pi. The Pi sends its own heartbeat and direct alerts through a route that does not depend on `k8s-prod` and probes a minimal set of observability, gateway, WAN, and critical-service outcomes without becoming another storage backend.
 
 ### Collection posture
 
@@ -133,8 +134,9 @@ The offline Flex must be classified in inventory as `expected_offline`, `spare`,
 ### Reliability and capacity posture
 
 - Time retention is not a capacity limit. Phase 0 sets numeric budgets for active series, series churn, samples per second, log and flow bytes per day, query latency, queue bytes/hours, and at least 20% free-space headroom on the 50 GiB metrics and 30 GiB operational-log volumes.
-- vmagent’s current on-disk queue is an `emptyDir`, so a collector restart during a backend outage loses buffered data. Define its acceptable RPO, persistent-storage need, and `maxDiskUsagePerURL` before convergence.
+- vmagent’s current on-disk queue is an `emptyDir`, so a collector restart during a backend outage loses buffered data. Define its acceptable RPO, persistent-storage need, and `maxDiskUsagePerURL` before external targets increase reliance on that queue.
 - Alloy’s hostPath queue must be bounded and alerted so a VictoriaLogs outage cannot consume node disks after Loki is removed.
+- Establish log-ingest, cardinality, and retention baselines only from post-#483 data. Queries spanning the contaminated retention window must be treated as potentially duplicated or mislabeled until that history expires.
 - Test backend outage, backpressure, collector restart, queue recovery, dropped samples/events, and store read-only behavior before calling the pipeline durable. “Durable” here means a documented and tested RPO, not that the current single-instance PVCs are highly available.
 
 ## Architecture
@@ -198,12 +200,12 @@ The repository must hold a non-secret external-target inventory with address, pl
 
 ### Kubernetes
 
-- Retain the VictoriaMetrics k8s-stack, kube-state-metrics, node-exporter, platform ServiceMonitors, and Alloy CRI collection.
-- Complete the existing KPS dependency decoupling before removing KPS-owned components or CRDs.
+- Retain the VictoriaMetrics k8s-stack, its native kube-state-metrics and node-exporter, platform ServiceMonitors converted under explicit owner references, the standalone Prometheus Operator CRDs, and Alloy CRI collection.
+- Complete the corrected Alloy log-path soak, then remove the rollback-only KPS and Loki paths through the cleanup tracked in #470. Their scrape, rule, notification, datasource, CRD, and Flux ownership has already moved.
 - Add the missing curated dashboards for Longhorn, Traefik, cert-manager, Flux, Alloy, and the observability pipeline itself; preserve and extend the curated Longhorn alerts already present in the repository.
 - Keep the current 30-second platform scrape cadence unless a specific alert or dashboard requires otherwise.
 - Turn on Hubble metrics only after the core estate is covered. L7 visibility remains a separate decision because it changes the datapath and cardinality profile.
-- Treat direct etcd, scheduler, and controller-manager coverage as partial. Both metric stacks disable those targets because Talos binds them locally. A later Talos metrics-exposure change requires its own guarded configuration rollout; until then, dashboards must not claim direct quorum or component metrics that do not exist.
+- Preserve the live VM-native controller-manager, scheduler, and etcd scrapes at three healthy targets each. Controller-manager and scheduler use the vmagent service-account token over HTTPS to the Talos node-address listeners with certificate verification disabled for their node-local self-signed chains; etcd uses its separate plaintext metrics-only listener on port 2381 without a bearer token.
 
 The original component research remains useful source material:
 
@@ -395,8 +397,8 @@ Initial investigations and same-store rules should remain narrow. Cross-store it
 
 1. Commit the label and log-field contracts in this plan and create the external-target inventory shape.
 2. Inventory expected state for PVE hosts, Sparks, Synology, UniFi devices, and edge Pis, including the currently offline UniFi switch.
-3. Re-baseline active series, churn, samples/sec, VictoriaMetrics disk growth, VictoriaLogs bytes/day, current alert volume, query latency, queue use, and free-space headroom; set numeric stop/go budgets for each new source.
-4. Define page, notify, and review destinations and conduct a delivery test before adding more rules.
+3. Re-baseline active series, churn, samples/sec, VictoriaMetrics disk growth, post-#483 VictoriaLogs bytes/day and stream cardinality, current alert volume, query latency, queue use, and free-space headroom; set numeric stop/go budgets for each new source. Exclude the duplicated/mislabeled retention window from log sizing.
+4. Preserve the tested Pushover page path, define notify and review destinations, and conduct another delivery test before adding more rules.
 5. Design the vmagent and vmalert `cluster=k8s-prod` external-label migration and its dashboard, recording-rule, alert, and historical-query compatibility matrix.
 6. Define the scraper source addresses, exporter/SNMP ports, collector VIPs, `externalTrafficPolicy`, UniFi rules, Cilium policies, and positive/negative network tests.
 7. Extend SOPS path rules if encrypted host-side material will live outside the existing Kubernetes/bootstrap/Talos paths; central exporter credentials remain Kubernetes SOPS Secrets, while Spark tokens use root-readable host environment files provisioned through the chosen host-management path.
@@ -405,60 +407,38 @@ Initial investigations and same-store rules should remain narrow. Cross-store it
 
 **Gate:** no external scrape target is added until it receives unambiguous `site`, `platform`, and `host` labels, plus `cluster` only when it belongs to a real cluster. Numeric budgets, credentials, firewall paths, expected metrics, and independent reachability are recorded first.
 
-### Phase 1 — finish convergence and alert delivery
+### Phase 1 — close convergence and alert-resilience gaps
 
-Convergence is not “delete KPS.” The original 2026-07-03 repository and live-provenance review found five direct couplings, and the 2026-08-27 review found additional Flux and configuration ownership that must move:
+The risky ownership transfer is complete rather than future work. PR #478 retired OpenObserve, installed and adopted standalone Prometheus Operator CRDs, enabled converted-object owner references, and began dependency decoupling. PRs #480 and #481 moved Kubernetes infrastructure scraping, kube-state-metrics, node-exporter, custom and default rules, Pushover delivery, VMAlertmanager, and Grafana's default datasource to VictoriaMetrics-native ownership. Live validation found 67/67 Flux Kustomizations, 57/57 HelmReleases, every node and workload Ready, exact expected VM-native target counts without KPS overlap, a healthy Longhorn BackupTarget metric, one synthetic warning and resolution, zero Pushover failures, a clean final alert state, and representative Grafana queries through VictoriaMetrics.
 
-1. **kube-state-metrics:** current `kube_*` series come from the KPS-owned service. The VM chart currently disables its copy. Its replacement must preserve job labels and KPS's `metricLabelsAllowlist` entry for the PVC label `recurring-job-group.longhorn.io/no-backup`, which the Longhorn backup-exemption alerts consume. This is not the separate CustomResourceState mechanism used for Flux metrics.
-2. **node-exporter:** current `node_*` series come from the KPS-owned DaemonSet. Enabling both copies can produce port/scheduling conflicts and duplicate targets, so perform a no-overlap handoff rather than flipping both chart flags in one final state.
-3. **Prometheus Operator CRDs:** KPS owns the live `monitoring.coreos.com` CRDs and bootstrap also sources them from KPS. Third-party charts emit ServiceMonitor objects consumed by vm-operator conversion. Install a standalone `prometheus-operator-crds` release and SSA-adopt ownership before KPS can prune the CRDs or their instances.
-4. **Alertmanager:** vmalert points to `kube-prometheus-stack-alertmanager:9093`, which has no working external receiver. Provision the replacement, persistence, UI/datasource route, receivers, and external Watchdog before repointing evaluators.
-5. **Flux dependencies:** VictoriaMetrics, smartctl-exporter, and grafana-mcp currently depend on KPS. Alloy depends on both Loki and VictoriaLogs. Rewire every dependency before deleting a producer; changing only the VictoriaMetrics Kustomization is insufficient.
-6. **Rule sources:** KPS’s app Kustomization owns custom node rules, but Longhorn and grafana-mcp/AI also own PrometheusRules and the VictoriaMetrics chart renders default VMRules. Inventory and preserve every source, then prove every resulting evaluator rule is selected exactly once.
-7. **Grafana ownership:** KPS owns the current default Prometheus and Alertmanager datasource UIDs. Transfer stable ownership, validate every provisioned dashboard, and explicitly prune stale datasources rather than assuming removed files delete them.
+PR #483 then found and corrected an independent Alloy log-path correlation defect: 461 of 742 active label/file pairs were wrong even though each physical file also had a correct mapping. That made the preceding log-volume and label-quality history unsuitable as a cleanup gate and restarted the VictoriaLogs/Loki correctness soak. Retained contaminated data is not deleted; it ages out under normal retention.
 
-Flux does not execute this list as a transaction. Each destructive transition therefore lands as its own merged checkpoint:
+#### Phase 1A — completed survivor ownership
 
-#### Phase 1A — CRDs and dependency graph
+- Keep standalone CRD ownership, converted-object owner references, VM-native Kubernetes scrape ownership, the PVC label allowlist and Longhorn `BackupTarget` custom-resource metric, VM-owned rules, VMAlertmanager, and the VictoriaMetrics/VMAlertmanager Grafana datasources as the production path.
+- Treat KPS Prometheus and its null-only Alertmanager as rollback-only. They must not regain scrape, rule, notification, datasource, CRD, or Flux authority during cleanup.
 
-- Install and adopt standalone Prometheus Operator CRDs, update bootstrap, inventory every ServiceMonitor/PodMonitor and Flux `dependsOn`, and verify no object was recreated or pruned.
-- Rewire dependencies that do not require a backend cutover.
+**Gate:** passed by PRs #478, #480, #481, and their recorded live checks. Any later change to these ownership boundaries requires the same target-count, duplicate-pool, rule, datasource, delivery, and dashboard checks.
 
-**Gate:** CRD ownership is independent of KPS and all monitoring custom resources remain present and reconciled.
+#### Phase 1B — corrected-log soak and rollback-stack cleanup
 
-#### Phase 1B — alert delivery and dead-man
+- Observe post-#483 Alloy targets long enough to prove exact filename-to-label agreement, stable VictoriaLogs ingestion, zero unexpected send retries or drops, and representative query correctness. Use only post-fix data for volume and stream-cardinality baselines.
+- In the cleanup tracked by #470, remove Alloy's Loki sink and Loki dependency, delete the rollback-only KPS and Loki manifests, and remove any stale converted children. Keep cleanup independently revertible from later external collection work.
+- Name the data-retention decision for the KPS Prometheus, KPS Alertmanager, Loki, and retained OpenObserve claims before pruning them. The Loki chart's destructive scale-to-zero behavior means a rollback claim must not be inferred from a stopped workload.
+- Re-run VM target counts, duplicate-pool checks, rule evaluation, Pushover delivery, Grafana metrics and Alertmanager datasources, VictoriaLogs queries, Alloy delivery health, Flux health, and workload readiness after cleanup.
 
-- Provision a persistent VM-owned or standalone Alertmanager, stable datasource and route, actual page/notify/review receivers, send-resolved and retry policy, grouping/inhibition, and a Watchdog checked from outside `k8s-prod`.
-- Provision the external dead-man endpoint, route Alertmanager's Watchdog heartbeat to it, and add the edge-Pi Gatus configuration in the `rpi-nixos` repository with its own heartbeat and direct external notification path. Neither missed-heartbeat check may depend on Grafana, VictoriaMetrics, VictoriaLogs, or the central Alertmanager for delivery.
-- Repoint the existing metric evaluator and test a controlled firing and resolution before adding new rules.
-- Add the minimal Alert Delivery and Observability Pipeline dashboard now rather than waiting for the general dashboard phase.
+**Gate:** one metrics path, one log path, and one notification authority remain; the post-#483 log pipeline is correct; no surviving resource depends on KPS or Loki; and the data-retention decision is explicit.
 
-**Gate:** a synthetic alert reaches the intended receiver, resolves, and appears in Grafana; blocking the central Watchdog causes the external dead-man alert; blocking the Pi heartbeat also alerts externally; and a Pi-side probe failure delivers without the central Alertmanager.
+#### Phase 1C — independent alert resilience
 
-#### Phase 1C — rule and KSM configuration ownership
+- Preserve the tested VMAlertmanager-to-Pushover path and explicitly exercise the production Longhorn stale-backup condition tracked in #218.
+- Provision the external healthchecks-style dead-man endpoint and route the central Watchdog heartbeat to it.
+- Add the edge-Pi Gatus configuration in the `rpi-nixos` repository with its own heartbeat, direct external notification path, and minimal observability, gateway, WAN, and critical-service probes. Neither missed-heartbeat check may depend on Grafana, VictoriaMetrics, VictoriaLogs, or VMAlertmanager for delivery.
+- Add the minimal Alert Delivery and Observability Pipeline dashboard without waiting for the general dashboard phase.
 
-- Move KPS-owned custom node rules and the kube-state-metrics Longhorn allowlist into replacement ownership.
-- Inventory chart `defaultRules` labels, KPS node PrometheusRules, Longhorn PrometheusRules, grafana-mcp/AI PrometheusRules, and any other converted or native rules.
-- Label only LogsQL sources as `vlogs`; configure the metric evaluator to exclude `vlogs` and the vlogs evaluator to select it positively before the second evaluator starts.
-- Add a standing CI/rendered-config zero-or-multiple-evaluator coverage check, then compare rule counts, generated evaluator configs, and representative query results.
+**Gate:** the stale-backup condition notifies and resolves; blocking the central Watchdog causes the external dead-man alert; blocking the Pi heartbeat also alerts externally; and a Pi-side probe failure delivers without the central stack.
 
-**Gate:** every rule is selected once, Longhorn backup exemptions still work, and no rule disappears with KPS disabled in a rendered test.
-
-#### Phase 1D — no-overlap KSM and node-exporter handoff
-
-- Replace kube-state-metrics and node-exporter one component at a time, preserving expected job and identity labels without running conflicting DaemonSets or duplicate scrape targets.
-- Record the brief expected scrape gap and validate Kubernetes/node dashboards, alerts, and recording rules across it.
-
-**Gate:** metric and label continuity is understood, duplicate targets are zero, and the replacement components are healthy.
-
-#### Phase 1E — Grafana datasource handoff
-
-- Transfer the default Prometheus and Alertmanager datasource UIDs, update dashboard mappings, and validate all provisioned dashboard UID/title/folder/datasource combinations. Estate Overview becomes Grafana home only after Phase 3 provisions and validates it.
-- Exercise explicit `prune`/`deleteDatasources` behavior for the KPS datasources in a rendered or staged test.
-
-**Gate:** every dashboard and alert link uses the intended datasource and no stale KPS default remains.
-
-#### Phase 1F — estate label migration
+#### Phase 1D — estate label migration
 
 - Stamp `site=home` and `cluster=k8s-prod` explicitly on Kubernetes scrape and rule sources, add each real external cluster only at its own future target, and leave standalone target contracts without `cluster`.
 - Remove `externalLabels.cluster=k8s-prod` from both vmagent and vmalert only after rendered configurations, dashboards, recording rules, alerts, and representative historical queries are compatible. Preserve `site=home` globally only if the rendered test proves it cannot overwrite source identity.
@@ -466,24 +446,7 @@ Flux does not execute this list as a transaction. Each destructive transition th
 
 **Gate:** Kubernetes series and alerts retain correct identity without either global cluster default; standalone target fixtures remain clusterless; PVE fixtures carry only `cluster=pve-sbx`; and representative dashboards, rules, alerts, and historical queries pass the compatibility matrix defined in Phase 0.
 
-#### Phase 1G — remove OpenObserve
-
-- Confirm again that nothing writes to, queries, or links to OpenObserve; retain any explicitly wanted evidence; remove it in its own reversible Git change.
-- The original estimate was that retiring OpenObserve, Loki, and the duplicate KPS metric backend would reclaim about 1.9 GiB plus three upgrade surfaces; remeasure runtime use before quoting the final savings.
-
-#### Phase 1H — remove Loki
-
-- Prove VictoriaLogs completeness and query behavior, bound Alloy buffering, remove Alloy’s Loki sink and its Flux dependency first, then remove Loki in a later merge.
-- Name the rollback/data-retention window before pruning its PVC, accounting for the chart behavior that caused the bake-off data-loss finding.
-
-#### Phase 1I — remove KPS last
-
-- Remove KPS only after CRDs, dependencies, custom rules, KSM/node-exporter, Alertmanager, and Grafana datasource ownership have all moved and remained green for a named observation window.
-- Snapshot or explicitly abandon the old Prometheus and Alertmanager data with a documented rollback window; remove stale routes, datasources, and PVCs deliberately.
-
-Expected repository areas include `victoria-metrics-k8s-stack/app/helmrelease.yaml`, `victoria-metrics-k8s-stack/ks.yaml`, the new standalone CRD release, `bootstrap/helmfile.d/00-crds.yaml`, KPS-owned rule and KSM configuration, smartctl/grafana-mcp/Alloy dependencies, Grafana datasource provisioning, and finally the KPS, Loki, and OpenObserve application trees.
-
-**Phase 1 exit gate:** alert delivery and external dead-man work; CRD, rule, dashboard, datasource, and estate-label ownership is independent of KPS; Kubernetes metric continuity is accepted; VictoriaLogs ingestion and buffering meet the numeric budget; and every backend removal was a separate merge with a tested rollback boundary.
+**Phase 1 exit gate:** #470 cleanup is complete; #218's stale-backup and external dead-man work is complete; CRD, scrape, rule, notification, dashboard, datasource, and estate-label ownership is independent of KPS; Kubernetes metric continuity and post-#483 log correctness are accepted; and later external collection can proceed without reopening the bake-off architecture.
 
 ### Phase 2 — low-cost estate metrics
 
@@ -492,7 +455,7 @@ Expected repository areas include `victoria-metrics-k8s-stack/app/helmrelease.ya
 3. Install the single `nv-monitor` binary and systemd unit on both Sparks, add the pod-loopback SSH-tunnel extra container to vmagent with pinned host keys, add a dedicated forwarding-only monitoring account restricted to the three node-SNAT addresses and Spark loopback `:9101`, leave existing operator/automation SSH access unchanged, block direct routed access to the exporter port, and enable the required inference `/metrics` endpoints.
 4. Enable SNMPv3 on Synology and validate actual MIB coverage.
 5. Apply the narrowly scoped UniFi collector/exporter firewall rules and validate them from the actual scraper pods and an unapproved source.
-6. Add external vmagent targets using the Phase 0 label contract and the platform-specific scrape classes only after the Phase 1F label-migration gate passes.
+6. Add external vmagent targets using the Phase 0 label contract and the platform-specific scrape classes only after the Phase 1D label-migration gate passes.
 7. Measure scrape duration, API-poll success and freshness, active-series growth, host/controller overhead, and data freshness before enabling alerts. `up=1` alone proves only that the exporter endpoint answered.
 
 **Gate:** every target has an exporter-health signal, source-poll success/freshness where applicable, independent reachability, stable identity, bounded series count, documented credential ownership, and a coverage matrix stating what remains unmonitored. Spark acceptance also proves direct exporter access is denied, the authenticated tunnel reconnects, and no bearer token crosses plaintext transport.
@@ -513,18 +476,19 @@ Expected repository areas include `victoria-metrics-k8s-stack/app/helmrelease.ya
 
 #### Phase 4A — internal authentication and policy cutover
 
-1. Inventory every VictoriaMetrics and VictoriaLogs reader and writer: vmagent remote-write, metric and LogsQL vmalert query/state paths, Alloy, Grafana datasources, operators, probes, and human access.
-2. Provision VMAuth or equivalent authenticated routes and per-client credentials alongside the existing paths. Move one client at a time, test its canary and failure behavior, and keep the old route available for the named rollback window.
-3. Audit default-deny Cilium policies before enforcing them, then prove each intended flow and a representative denied flow. Do not combine first policy enforcement with external log admission.
+1. Inventory every VictoriaMetrics and VictoriaLogs data-path reader and writer. The current clients are vmagent writing metrics, metric vmalert reading metrics and persisting state through its generated paths, Grafana reading VictoriaMetrics and VictoriaLogs, Alloy writing VictoriaLogs, authenticated human access through the existing OIDC routes, and any explicit health probes. The future LogsQL evaluator adds a VictoriaLogs read path and VictoriaMetrics state paths. The VictoriaMetrics operator reconciles Kubernetes resources through the Kubernetes API and is not assumed to be a backend data client without rendered or live evidence.
+2. Provision VMAuth or equivalent authenticated routes and one credential identity per client. Move one client at a time and test its canary, authorization scope, and failure behavior.
+3. Do not leave the legacy direct Services as a generally reachable rollback bypass. A temporary legacy route or port must sit behind default-deny policy and allow only the specific service account that has not yet cut over or is being rolled back. Remove that allowance after the client's observation window and remove the legacy route entirely when the named rollback window closes.
+4. Audit default-deny Cilium policies before enforcing them, then prove every intended flow, an unapproved service account, and a representative denied network source. Do not combine first policy enforcement with external log admission.
 
-**Gate:** vmagent ingestion, the metric evaluator, Alloy delivery, Grafana queries, operator reconciliation, every other currently deployed client, and authorized human access continue through authenticated paths; the future LogsQL evaluator has a provisioned least-privilege route and credential fixture; denied clients fail closed; pipeline dashboards and alerts remain green for the observation window; and reverting routes and policies restores the prior path.
+**Gate:** vmagent ingestion, metric evaluation/state, Alloy delivery, Grafana queries, explicit probes, and authorized human access continue through authenticated paths; the future LogsQL evaluator has a provisioned least-privilege route and credential fixture; an unapproved pod and service account cannot use either the authenticated or temporary legacy route; pipeline dashboards and alerts remain green for the observation window; rollback grants access only to the named client; and the legacy route is absent after the rollback window.
 
 #### Phase 4B — external logs and UniFi CEF
 
 1. Preflight both sender and receiver capabilities, provision a capable authenticating ingress or local relay where client authentication is supported, then expose the source-restricted `externalTrafficPolicy: Local` syslog VIP. Configure source-class listeners, `useRemoteIP`, stream fields, fixed enrichment, ignored fields, timestamp/timezone behavior, and TLS where supported. Give server-authenticated-TLS-only and unavoidable unauthenticated appliance/UDP sources dedicated listeners with ingress-derived identity and an explicit `transport_auth=none` field.
-2. Forward selected PVE, Spark, and Synology logs using their built-in facilities.
+2. Forward selected PVE, Spark, and Synology logs using the fixture-tested mechanism chosen for each platform. PVE 9 requires either an explicit rsyslog installation or the selected journal-native path; Spark forwarding depends on the Phase 0 facility inventory; Synology uses its supported DSM log-forwarding facility.
 3. Enable UniFi CEF activity export once and verify parsing, timestamps, remote identity, fields, and duplicate suppression.
-4. Deploy the selector-isolated LogsQL vmalert with VictoriaLogs datasource, VictoriaMetrics state storage, shared Alertmanager notifier, and a minimal first rule set.
+4. Deploy the selector-isolated LogsQL vmalert with VictoriaLogs datasource, VictoriaMetrics state storage, VMAlertmanager notifier, and a minimal first rule set.
 5. Exercise parser fixtures, malformed messages, canaries, heartbeats, clock skew, backpressure, sender loss, listener failover, unapproved-source rejection, and attempts to override ingress-derived identity from the payload. Record rather than conceal the residual same-source spoofing limitation of unauthenticated protocols.
 6. Measure bytes/day and field/stream cardinality; retain operational logs for 30 days initially.
 
@@ -567,7 +531,7 @@ The decision is intentionally deferred: try deterministic alerts and Coroot only
 This is cross-cutting and should use a branch and PR. Keep deployment changes independently reversible:
 
 1. **Planning and contracts:** this document, external inventory schema, label migration design, retention/cardinality budgets.
-2. **Convergence and delivery:** KPS decoupling, Alertmanager, datasource migration, execution of the estate-label migration, external heartbeat receiver, edge-Pi Gatus change in `rpi-nixos`, and retirement of redundant backends.
+2. **Convergence and delivery:** corrected-log soak and #470 cleanup, execution of the estate-label migration, #218 stale-backup delivery exercise, external heartbeat receiver, and the edge-Pi Gatus change in `rpi-nixos`. The CRD, native scrape, rule, VMAlertmanager, Pushover, and datasource ownership transfers are completed baseline.
 3. **External metrics:** central exporters, secrets, vmagent targets, PVE/Spark host bootstrap instructions, initial dashboards.
 4. **Internal authentication and policy:** VMAuth or equivalent routes, per-client credentials, default-deny policy audit and enforcement, canaries, and rollback as a separately reversible change before external ingestion.
 5. **External logs:** syslog ingress, PVE/Spark/Synology forwarding, UniFi CEF, LogsQL alerting.
@@ -581,7 +545,7 @@ Host and controller mutations are explicit manual steps after the relevant Git-m
 The original plan estimated roughly one day for convergence, half a day for dashboards, half a day for estate coverage, and an afternoon for anomaly tooling. The dependency and security reviews invalidate that compression. Estimate by independently reviewable change and maintenance window instead:
 
 - Planning, inventory, label/alert contracts, numeric budgets, and network design: one focused documentation/configuration pass before deployment.
-- Convergence: multiple PRs and observation windows across CRDs, delivery, rule/KSM ownership, exporter handoff, datasources, and three separate backend removals. Calendar time is dominated by safe observation, not typing YAML.
+- Remaining convergence: one corrected-log observation window and rollback-stack cleanup, followed independently by the estate-label migration and alert-resilience work. The CRD, delivery, rule/KSM, exporter, control-plane scrape, and datasource transfers are already complete.
 - External metrics: one central-collector change plus bounded host/controller steps for PVE, Sparks, Synology, UniFi, Pis, and probes; commission one platform at a time.
 - Dashboards and alerts: vendor upstream artifacts once their metrics exist, then budget deliberate curation and failure testing rather than assuming imports are complete.
 - External logs and CEF: one receiver/security change plus per-platform sender configuration and parser fixtures.
@@ -592,7 +556,7 @@ Day-two work should shrink after convergence but will not be zero: exporter/API 
 
 ## Open decisions and measurements
 
-- Alert receivers and escalation semantics: which channel pages immediately, which channel receives non-urgent security/capacity notifications, and how delivery is tested periodically.
+- Pushover is the tested page receiver. Decide which channel receives non-urgent security/capacity notifications, which channel receives review-only events, and how all delivery paths are exercised periodically.
 - Exact Synology model/DSM MIB coverage and whether backup-task outcomes require API or log-derived monitoring beyond SNMP.
 - Whether the offline UniFi Flex 2.5G 5 is active, spare, retired, or faulty.
 - Actual UniFi CEF and IPFIX toggle state; the 2026-08-27 inspection was read-only and did not change or conclusively confirm those settings.
@@ -614,6 +578,9 @@ Day-two work should shrink after convergence but will not be zero: exporter/API 
 ## References
 
 - [Observability bake-off](../observability-bakeoff.md)
+- [Alerting runbook](../runbooks/alerting.md)
+- [Convergence tracker](https://github.com/kelchm/home-lab/issues/470)
+- [Alert delivery and dead-man tracker](https://github.com/kelchm/home-lab/issues/218)
 - [PVE cluster plan](20260814-pve-cluster.md)
 - [Network topology plan](20260821-network-topology.md)
 - [DGX Spark bring-up runbook](../runbooks/dgx-spark-bringup.md)
