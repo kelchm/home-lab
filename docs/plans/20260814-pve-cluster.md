@@ -171,13 +171,13 @@ iface <onboard-nic> inet static
 
 ### RTL8125 2.5 GbE
 
-The switch port is a trunk (`pve-guest-trunk`: tagged 10, 21, 25, 90 — no
+The switch port is a trunk (`pve-guest-trunk`: tagged 10, 19, 21, 25, 90 — no
 native VLAN). Create one VLAN-aware bridge, `vmbr0`, over the NIC:
 
 - `vmbr0` itself has no address;
 - `vmbr0.25` carries `10.32.25.21/24` (then `.22`, `.23`) with no gateway —
   storage, migration, and Corosync link 1;
-- guest NICs attach to `vmbr0` tagged `21` by default; `90` or `10` require
+- guest NICs attach to `vmbr0` tagged `21` by default; `19` is reserved for the two Tailscale subnet routers; `90` or `10` require
   deliberate zone placement, and `25` is only for a registered
   storage-attached guest with an explicit per-IP NAS/export ACL; and
 - no guest may be created with an untagged NIC.
@@ -200,7 +200,7 @@ iface vmbr0 inet manual
     bridge-stp off
     bridge-fd 0
     bridge-vlan-aware yes
-    bridge-vids 10 21 25 90
+    bridge-vids 10 19 21 25 90
 
 auto vmbr0.25
 iface vmbr0.25 inet static
