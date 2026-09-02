@@ -21,4 +21,43 @@ data:
         type: victoriametrics-logs-datasource
         access: proxy
         url: http://victoria-logs-single-server.observability.svc.cluster.local:9428
+        jsonData:
+          # Keep the reviewed default explicit and direct Grafana's query/time
+          # handoff to the browser-reachable, OIDC-protected native VMUI.
+          maxLines: 1000
+          vmuiUrl: https://vlogs.home.kelch.io/select/vmui/
+          # New entries receive a normalized top-level level field in Alloy.
+          # These bounded rules keep severity filters and colors working for
+          # retained rows whose structured severity exists only as msg.level.
+          logLevelRules:
+            - field: msg.level
+              value: ^(critical|CRITICAL|crit|CRIT|alert|ALERT|emergency|EMERGENCY|emerg|EMERG|fatal|FATAL|panic|PANIC)$
+              level: critical
+              operator: regex
+              enabled: true
+            - field: msg.level
+              value: ^(error|ERROR|err|ERR|severe|SEVERE)$
+              level: error
+              operator: regex
+              enabled: true
+            - field: msg.level
+              value: ^(warn|WARN|wrn|WRN|warning|WARNING)$
+              level: warning
+              operator: regex
+              enabled: true
+            - field: msg.level
+              value: ^(info|INFO|inf|INF|information|INFORMATION|informational|INFORMATIONAL|notice|NOTICE)$
+              level: info
+              operator: regex
+              enabled: true
+            - field: msg.level
+              value: ^(debug|DEBUG|dbg|DBG|verbose|VERBOSE)$
+              level: debug
+              operator: regex
+              enabled: true
+            - field: msg.level
+              value: ^(trace|TRACE|trc|TRC)$
+              level: trace
+              operator: regex
+              enabled: true
         editable: false

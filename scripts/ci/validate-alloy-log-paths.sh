@@ -15,8 +15,23 @@ readonly EXPECTED_REPLACEMENT='replacement="/var/log/pods/${1}_${2}_${3}/${4}/*.
 readonly UID_RULE='rule{source_labels=["__meta_kubernetes_namespace","__meta_kubernetes_pod_name","__meta_kubernetes_pod_uid","__meta_kubernetes_pod_container_name",]separator="/"action="replace"regex="(.+)/(.+)/(.+)/(.+)"replacement="/var/log/pods/${1}_${2}_${3}/${4}/*.log"target_label="__path__"}'
 # shellcheck disable=SC2016
 readonly STATIC_RULE='rule{source_labels=["__meta_kubernetes_namespace","__meta_kubernetes_pod_name","__meta_kubernetes_pod_annotation_kubernetes_io_config_hash","__meta_kubernetes_pod_container_name",]separator="/"action="replace"regex="(.+)/(.+)/([0-9a-f]{32})/(.+)"replacement="/var/log/pods/${1}_${2}_${3}/${4}/*.log"target_label="__path__"}'
-readonly EXPECTED_VL_URL='url="http://victoria-logs-single-server.observability.svc.cluster.local:9428/insert/loki/api/v1/push?message_fields_prefix=msg.&_msg_field=msg.message,msg.msg,msg.log,msg.event,msg.record.message&_stream_fields=cluster,namespace,pod,container,node"'
+readonly SERVICE_CONTAINER_RULE='rule{source_labels=["__meta_kubernetes_pod_container_name"]regex="(.+)"target_label="service_name"}'
+readonly SERVICE_LEGACY_APP_RULE='rule{source_labels=["__meta_kubernetes_pod_label_app"]regex="(.+)"target_label="service_name"}'
+readonly SERVICE_RECOMMENDED_APP_RULE='rule{source_labels=["__meta_kubernetes_pod_label_app_kubernetes_io_name"]regex="(.+)"target_label="service_name"}'
+readonly EXPECTED_VL_URL='url="http://victoria-logs-single-server.observability.svc.cluster.local:9428/insert/loki/api/v1/push?message_fields_prefix=msg.&_msg_field=msg.message,msg.msg,msg.log,msg.event,msg.record.message&_stream_fields=cluster,namespace,service_name,pod,container,node"'
 readonly EXPECTED_EXTERNAL_LABELS='external_labels={cluster="k8s-prod",}'
+# This is an Alloy selector, not a shell expression.
+# shellcheck disable=SC2016
+readonly EXPECTED_LEVEL_SELECTOR='selector=`{level_candidate=~"trace|debug|info|warning|error|critical"}`'
+# These preserve an inner Alloy template through the chart's Helm tpl pass and
+# distinguish a logfmt envelope from prose containing an incidental key=value.
+# shellcheck disable=SC2016
+readonly EXPECTED_TEMPLATE_ESCAPE='template={{printf"%q"`'
+# shellcheck disable=SC2016
+readonly EXPECTED_LOGFMT_GATE='{{-$is_logfmt:=and(regexMatch"^[[:space:]]*[A-Za-z_][A-Za-z0-9_.-]*=".Entry)$has_logfmt_envelope-}}'
+readonly EXPECTED_DUAL_WRITE='forward_to=[loki.write.loki.receiver,loki.write.vl.receiver,]'
+# shellcheck disable=SC2016
+readonly EXPECTED_LEVEL_ALLOWLIST_CHAIN='stage.labels{values={level_candidate="level",}}stage.match{selector=`{level_candidate=~"trace|debug|info|warning|error|critical"}`stage.labels{values={level="level",}}}stage.label_drop{values=["level_candidate"]}'
 
 function count_occurrences() {
     local haystack="$1"
@@ -79,6 +94,48 @@ function main() {
         return 1
     fi
 
+    if [[ "$(count_occurrences "${compact}" 'target_label="service_name"')" != 3 || \
+          "$(count_occurrences "${compact}" 'target_label="app_instance"')" != 1 || \
+          "$(count_occurrences "${compact}" "${SERVICE_CONTAINER_RULE}")" != 1 || \
+          "$(count_occurrences "${compact}" "${SERVICE_LEGACY_APP_RULE}")" != 1 || \
+          "$(count_occurrences "${compact}" "${SERVICE_RECOMMENDED_APP_RULE}")" != 1 ]]; then
+        echo "Alloy must derive service_name through the reviewed label precedence and preserve app_instance separately." >&2
+        return 1
+    fi
+
+    case "${compact}" in
+        *"${SERVICE_CONTAINER_RULE}"*"${SERVICE_LEGACY_APP_RULE}"*"${SERVICE_RECOMMENDED_APP_RULE}"*) ;;
+        *)
+            echo "Alloy service_name precedence must be container, then legacy app, then app.kubernetes.io/name." >&2
+            return 1
+            ;;
+    esac
+
+    if [[ "$(count_occurrences "${compact}" 'stage.decolorize{}')" != 1 || \
+          "$(count_occurrences "${compact}" 'stage.json{')" != 1 || \
+          "$(count_occurrences "${compact}" 'stage.logfmt{')" != 1 || \
+          "$(count_occurrences "${compact}" "${EXPECTED_LEVEL_SELECTOR}")" != 1 || \
+          "$(count_occurrences "${compact}" 'values=["level_candidate"]')" != 1 || \
+          "$(count_occurrences "${compact}" "${EXPECTED_TEMPLATE_ESCAPE}")" != 1 || \
+          "$(count_occurrences "${compact}" "${EXPECTED_LOGFMT_GATE}")" != 1 || \
+          "$(count_occurrences "${compact}" "${EXPECTED_LEVEL_ALLOWLIST_CHAIN}")" != 1 ]]; then
+        echo "Alloy must retain ANSI cleanup and bounded explicit JSON/logfmt severity normalization." >&2
+        return 1
+    fi
+
+    case "${compact}" in
+        *'stage.cri{}'*'stage.decolorize{}'*'stage.json{'*'stage.logfmt{'*'stage.template{'*) ;;
+        *)
+            echo "Alloy parsing stages must preserve CRI, ANSI cleanup, structured extraction, and normalization order." >&2
+            return 1
+            ;;
+    esac
+
+    if [[ "$(count_occurrences "${compact}" "${EXPECTED_DUAL_WRITE}")" != 1 ]]; then
+        echo "Alloy must keep exactly one Loki and VictoriaLogs dual-write fan-out until convergence is accepted." >&2
+        return 1
+    fi
+
     if [[ "$(count_occurrences "${compact}" 'on_positions_file_error="restart_from_end"')" != 1 || \
           "${compact}" == *'tail_from_end='* ]]; then
         echo "Alloy must resume valid positions, skip replay after position corruption, and retain the default behavior for newly discovered files." >&2
@@ -127,7 +184,7 @@ function main() {
         return 1
     fi
 
-    echo "Alloy logging retains exact paths, stable VictoriaLogs fields, bounded replay, a narrow host mount, and container hardening."
+    echo "Alloy logging retains exact paths, normalized service/severity fields, bounded replay, a narrow host mount, and container hardening."
 }
 
 main "$@"

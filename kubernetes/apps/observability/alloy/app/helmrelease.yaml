@@ -108,6 +108,32 @@ spec:
               source_labels = ["__meta_kubernetes_pod_container_name"]
               target_label  = "container"
             }
+            // Give both log backends a stable logical service identity. Start
+            // with the container name, then prefer legacy and recommended
+            // Kubernetes application labels when they are non-empty.
+            rule {
+              source_labels = ["__meta_kubernetes_pod_container_name"]
+              regex         = "(.+)"
+              target_label  = "service_name"
+            }
+            rule {
+              source_labels = ["__meta_kubernetes_pod_label_app"]
+              regex         = "(.+)"
+              target_label  = "service_name"
+            }
+            rule {
+              source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+              regex         = "(.+)"
+              target_label  = "service_name"
+            }
+            // app.kubernetes.io/instance normally identifies a Helm release,
+            // not a unique OpenTelemetry service instance. Preserve it under
+            // an unambiguous name without adding it to VictoriaLogs streams.
+            rule {
+              source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_instance"]
+              regex         = "(.+)"
+              target_label  = "app_instance"
+            }
             rule {
               source_labels = ["__meta_kubernetes_pod_node_name"]
               target_label  = "node"
@@ -162,11 +188,90 @@ spec:
             on_positions_file_error = "restart_from_end"
           }
 
-          // Decode CRI log format (Talos uses containerd) and fan out to the
-          // surviving VictoriaLogs path and the temporarily retained Loki
-          // rollback sink. VictoriaLogs applies its field mapping at ingest.
+          // Decode CRI log format (Talos uses containerd), remove terminal
+          // color escapes, and extract only explicit structured severity.
+          // The application payload remains unchanged apart from decolorizing;
+          // VictoriaLogs still parses it below the collision-safe msg.* prefix.
           loki.process "pod_logs" {
             stage.cri {}
+            stage.decolorize {}
+
+            stage.json {
+              expressions = {
+                json_level              = "level",
+                json_log_level          = "log.level",
+                json_severity           = "severity",
+                json_severity_text      = "severity_text",
+                json_severity_text_otel = "SeverityText",
+                json_lvl                = "lvl",
+              }
+            }
+
+            // Parse logfmt candidates without trusting them yet. The template
+            // below requires a key=value envelope plus a message or timestamp
+            // companion before a severity candidate is eligible.
+            stage.logfmt {
+              mapping = {
+                logfmt_level         = "level",
+                logfmt_message       = "message",
+                logfmt_msg           = "msg",
+                logfmt_severity      = "severity",
+                logfmt_severity_text = "severity_text",
+                logfmt_time          = "time",
+                logfmt_timestamp     = "timestamp",
+                logfmt_ts            = "ts",
+                logfmt_lvl           = "lvl",
+              }
+            }
+
+            // Coalesce recognized JSON/logfmt fields, then canonicalize a
+            // bounded set of aliases. An absent or foreign value becomes an
+            // empty candidate and cannot escape as a dynamic label.
+            stage.template {
+              source = "level"
+              // The chart evaluates configMap.content with Helm tpl. printf
+              // emits this as one quoted River string so Helm preserves the
+              // inner Alloy template instead of interpreting it itself.
+              template = {{ printf "%q" `
+                {{- $json_raw := coalesce .json_level .json_log_level .json_severity_text .json_severity_text_otel .json_severity .json_lvl -}}
+                {{- $has_logfmt_envelope := not (empty (coalesce .logfmt_message .logfmt_msg .logfmt_ts .logfmt_time .logfmt_timestamp)) -}}
+                {{- $is_logfmt := and (regexMatch "^[[:space:]]*[A-Za-z_][A-Za-z0-9_.-]*=" .Entry) $has_logfmt_envelope -}}
+                {{- $logfmt_raw := "" -}}
+                {{- if $is_logfmt -}}
+                  {{- $logfmt_raw = coalesce .logfmt_level .logfmt_severity_text .logfmt_severity .logfmt_lvl -}}
+                {{- end -}}
+                {{- $raw := coalesce $json_raw $logfmt_raw -}}
+                {{- $value := ToLower (TrimSpace (printf "%v" $raw)) -}}
+                {{- if or (eq $value "trace") (eq $value "trc") -}}trace
+                {{- else if or (eq $value "debug") (eq $value "dbg") (eq $value "verbose") -}}debug
+                {{- else if or (eq $value "info") (eq $value "inf") (eq $value "information") (eq $value "informational") (eq $value "notice") -}}info
+                {{- else if or (eq $value "warn") (eq $value "wrn") (eq $value "warning") -}}warning
+                {{- else if or (eq $value "error") (eq $value "err") (eq $value "severe") -}}error
+                {{- else if or (eq $value "critical") (eq $value "crit") (eq $value "alert") (eq $value "emergency") (eq $value "emerg") (eq $value "fatal") (eq $value "panic") -}}critical
+                {{- end -}}
+              ` }}
+            }
+
+            // stage.labels has no allowlist. Route through a temporary label
+            // so only normalized values become the canonical level field, then
+            // remove the temporary label before either writer receives it.
+            stage.labels {
+              values = {
+                level_candidate = "level",
+              }
+            }
+            stage.match {
+              selector = `{level_candidate=~"trace|debug|info|warning|error|critical"}`
+              stage.labels {
+                values = {
+                  level = "level",
+                }
+              }
+            }
+            stage.label_drop {
+              values = ["level_candidate"]
+            }
+
             forward_to = [
               loki.write.loki.receiver,
               loki.write.vl.receiver,
@@ -181,15 +286,16 @@ spec:
 
           // Prefix structured payload fields so an application cannot replace
           // Kubernetes metadata such as namespace. Keep stream identity to the
-          // stable cluster/workload dimensions; filename and stdout/stderr stay
-          // queryable as ordinary fields without multiplying streams.
+          // stable cluster/workload dimensions; app_instance, level, filename,
+          // and stdout/stderr stay queryable as ordinary fields without
+          // multiplying VictoriaLogs streams.
           loki.write "vl" {
             external_labels = {
               cluster = "k8s-prod",
             }
 
             endpoint {
-              url                 = "http://victoria-logs-single-server.observability.svc.cluster.local:9428/insert/loki/api/v1/push?message_fields_prefix=msg.&_msg_field=msg.message,msg.msg,msg.log,msg.event,msg.record.message&_stream_fields=cluster,namespace,pod,container,node"
+              url                 = "http://victoria-logs-single-server.observability.svc.cluster.local:9428/insert/loki/api/v1/push?message_fields_prefix=msg.&_msg_field=msg.message,msg.msg,msg.log,msg.event,msg.record.message&_stream_fields=cluster,namespace,service_name,pod,container,node"
               max_backoff_retries = 15
             }
           }

@@ -64,5 +64,7 @@ spec:
           namespace: network
     log:
       level: INFO
+      format: json
     accessLog:
       enabled: true
+      format: json
