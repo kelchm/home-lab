@@ -15,6 +15,8 @@ readonly EXPECTED_REPLACEMENT='replacement="/var/log/pods/${1}_${2}_${3}/${4}/*.
 readonly UID_RULE='rule{source_labels=["__meta_kubernetes_namespace","__meta_kubernetes_pod_name","__meta_kubernetes_pod_uid","__meta_kubernetes_pod_container_name",]separator="/"action="replace"regex="(.+)/(.+)/(.+)/(.+)"replacement="/var/log/pods/${1}_${2}_${3}/${4}/*.log"target_label="__path__"}'
 # shellcheck disable=SC2016
 readonly STATIC_RULE='rule{source_labels=["__meta_kubernetes_namespace","__meta_kubernetes_pod_name","__meta_kubernetes_pod_annotation_kubernetes_io_config_hash","__meta_kubernetes_pod_container_name",]separator="/"action="replace"regex="(.+)/(.+)/([0-9a-f]{32})/(.+)"replacement="/var/log/pods/${1}_${2}_${3}/${4}/*.log"target_label="__path__"}'
+readonly EXPECTED_VL_URL='url="http://victoria-logs-single-server.observability.svc.cluster.local:9428/insert/loki/api/v1/push?message_fields_prefix=msg.&_msg_field=msg.message,msg.msg,msg.log,msg.event,msg.record.message&_stream_fields=cluster,namespace,pod,container,node"'
+readonly EXPECTED_EXTERNAL_LABELS='external_labels={cluster="k8s-prod",}'
 
 function count_occurrences() {
     local haystack="$1"
@@ -37,6 +39,7 @@ function main() {
     local static_rule_count
     local target_count
     local uid_rule_count
+    local value
 
     # Simulate the owning Flux Kustomization's post-build envsubst pass. The
     # source must escape relabel references as $${n}, but Alloy must receive
@@ -69,7 +72,62 @@ function main() {
             ;;
     esac
 
-    echo "Alloy pod-log paths retain exact relabel captures through Flux substitution."
+    if [[ "$(count_occurrences "${compact}" "${EXPECTED_VL_URL}")" != 1 || \
+          "$(count_occurrences "${compact}" "${EXPECTED_EXTERNAL_LABELS}")" != 1 || \
+          "$(count_occurrences "${compact}" 'max_backoff_retries=15')" != 1 ]]; then
+        echo "Alloy must use the reviewed VictoriaLogs field mapping, cluster label, and bounded retry count." >&2
+        return 1
+    fi
+
+    if [[ "$(count_occurrences "${compact}" 'on_positions_file_error="restart_from_end"')" != 1 || \
+          "${compact}" == *'tail_from_end='* ]]; then
+        echo "Alloy must resume valid positions, skip replay after position corruption, and retain the default behavior for newly discovered files." >&2
+        return 1
+    fi
+
+    value="$(yq eval --unwrapScalar '.spec.values.alloy.mounts.varlog // false' "${ALLOY_MANIFEST}")"
+    if [[ "${value}" != false ]]; then
+        echo "Alloy must not mount the host's entire /var/log tree." >&2
+        return 1
+    fi
+
+    value="$(yq eval --unwrapScalar '.spec.values.controller.volumes.extra[] | select(.name == "pod-logs") | .hostPath.path' "${ALLOY_MANIFEST}")"
+    if [[ "${value}" != /var/log/pods ]]; then
+        echo "Alloy's pod-logs hostPath must be exactly /var/log/pods." >&2
+        return 1
+    fi
+
+    value="$(yq eval --unwrapScalar '.spec.values.alloy.mounts.extra[] | select(.name == "pod-logs") | [.mountPath, .readOnly] | @tsv' "${ALLOY_MANIFEST}")"
+    if [[ "${value}" != $'/var/log/pods\ttrue' ]]; then
+        echo "Alloy must mount only /var/log/pods and must mount it read-only." >&2
+        return 1
+    fi
+
+    value="$(yq eval --unwrapScalar '.spec.values.alloy.securityContext | [.runAsUser, .runAsGroup, .readOnlyRootFilesystem, .allowPrivilegeEscalation, .seccompProfile.type] | @tsv' "${ALLOY_MANIFEST}")"
+    if [[ "${value}" != $'0\t0\ttrue\tfalse\tRuntimeDefault' ]]; then
+        echo "Alloy's root owner-read exception must retain the reviewed container hardening." >&2
+        return 1
+    fi
+
+    value="$(yq eval --unwrapScalar '.spec.values.alloy.securityContext.capabilities.drop | join(",")' "${ALLOY_MANIFEST}")"
+    if [[ "${value}" != ALL ]]; then
+        echo "Alloy must drop every Linux capability." >&2
+        return 1
+    fi
+
+    value="$(yq eval --unwrapScalar '.spec.values.controller.volumes.extra[] | select(.name == "tmp") | .emptyDir.sizeLimit' "${ALLOY_MANIFEST}")"
+    if [[ "${value}" != 64Mi ]]; then
+        echo "Alloy's read-only root filesystem must retain its bounded writable temporary volume." >&2
+        return 1
+    fi
+
+    value="$(yq eval --unwrapScalar '.spec.values.alloy.mounts.extra[] | select(.name == "tmp") | .mountPath' "${ALLOY_MANIFEST}")"
+    if [[ "${value}" != /tmp ]]; then
+        echo "Alloy's bounded temporary volume must be mounted at /tmp." >&2
+        return 1
+    fi
+
+    echo "Alloy logging retains exact paths, stable VictoriaLogs fields, bounded replay, a narrow host mount, and container hardening."
 }
 
 main "$@"

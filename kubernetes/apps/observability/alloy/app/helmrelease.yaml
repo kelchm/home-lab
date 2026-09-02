@@ -1,12 +1,7 @@
 ---
-# Alloy — log collector DaemonSet for the bake-off. Pipeline A's log
-# ingest path. Tails pod logs from /var/log/pods on each node and ships
-# them to Loki via the Loki ingestion API.
-#
-# Commit 5 will extend this config to dual-write to VictoriaLogs in
-# parallel — VL accepts the Loki ingestion API natively, so a single
-# Alloy with two `loki.write` sinks gives both backends byte-identical
-# input. The comparison stays purely about the storage/query layer.
+# Alloy — node-local Kubernetes pod-log collector. Tails exact pod paths under
+# /var/log/pods and sends the same CRI-decoded entries to VictoriaLogs and the
+# temporarily retained Loki rollback sink.
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
@@ -31,22 +26,51 @@ spec:
       extraAnnotations:
         configmap.reloader.stakater.com/reload: alloy
       volumes:
-        # Persist Alloy's storage dir (positions file, WAL) across pod
-        # restarts. Without this, every restart re-reads every pod log from
-        # the start and Loki rejects the >7d portion en masse.
+        # Persist Alloy's positions across pod restarts. loki.write uses a
+        # bounded in-memory queue and retries; it has no durable sender WAL.
         extra:
           - name: alloy-data
             hostPath:
               path: /var/lib/alloy
               type: DirectoryOrCreate
+          - name: pod-logs
+            hostPath:
+              path: /var/log/pods
+              type: Directory
+          - name: tmp
+            emptyDir:
+              sizeLimit: 64Mi
 
     alloy:
       storagePath: /var/lib/alloy
       mounts:
-        varlog: true   # mount /var/log on the host so we can tail pod logs
+        varlog: false
         extra:
           - name: alloy-data
             mountPath: /var/lib/alloy
+          - name: pod-logs
+            mountPath: /var/log/pods
+            readOnly: true
+          - name: tmp
+            mountPath: /tmp
+      resources:
+        requests:
+          cpu: 50m
+          memory: 128Mi
+        limits:
+          memory: 768Mi
+      # Pod logs are root-owned 0640 on Talos. Keep uid 0 for owner-read while
+      # removing every capability and making the image filesystem immutable.
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        runAsUser: 0
+        runAsGroup: 0
+        capabilities:
+          drop:
+            - ALL
+        seccompProfile:
+          type: RuntimeDefault
 
       configMap:
         create: true
@@ -133,14 +157,14 @@ spec:
           }
 
           loki.source.file "pod_logs" {
-            targets    = local.file_match.pod_logs.targets
-            forward_to = [loki.process.pod_logs.receiver]
+            targets                 = local.file_match.pod_logs.targets
+            forward_to              = [loki.process.pod_logs.receiver]
+            on_positions_file_error = "restart_from_end"
           }
 
-          // Decode CRI log format (Talos uses containerd) and fan out
-          // to both log backends. Same parsed events, same labels,
-          // byte-identical input on each — the bake-off comparison is
-          // purely about the storage/query layer downstream.
+          // Decode CRI log format (Talos uses containerd) and fan out to the
+          // surviving VictoriaLogs path and the temporarily retained Loki
+          // rollback sink. VictoriaLogs applies its field mapping at ingest.
           loki.process "pod_logs" {
             stage.cri {}
             forward_to = [
@@ -155,15 +179,20 @@ spec:
             }
           }
 
-          // VictoriaLogs accepts the Loki HTTP ingestion API natively
-          // at /insert/loki/api/v1/push. Stream labels (namespace, pod,
-          // container, node) come through as VL stream fields with no
-          // additional config needed.
+          // Prefix structured payload fields so an application cannot replace
+          // Kubernetes metadata such as namespace. Keep stream identity to the
+          // stable cluster/workload dimensions; filename and stdout/stderr stay
+          // queryable as ordinary fields without multiplying streams.
           loki.write "vl" {
+            external_labels = {
+              cluster = "k8s-prod",
+            }
+
             endpoint {
-              url = "http://victoria-logs-single-server.observability.svc.cluster.local:9428/insert/loki/api/v1/push"
+              url                 = "http://victoria-logs-single-server.observability.svc.cluster.local:9428/insert/loki/api/v1/push?message_fields_prefix=msg.&_msg_field=msg.message,msg.msg,msg.log,msg.event,msg.record.message&_stream_fields=cluster,namespace,pod,container,node"
+              max_backoff_retries = 15
             }
           }
 
     serviceMonitor:
-      enabled: true   # let KPS Prometheus scrape Alloy itself
+      enabled: true   # converted for vmagent; retained KPS also scrapes during the rollback soak

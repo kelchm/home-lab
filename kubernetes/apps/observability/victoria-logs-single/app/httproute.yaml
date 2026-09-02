@@ -1,7 +1,6 @@
 ---
-# VictoriaLogs UI — native LogsQL browser with log streaming view.
-# Loki has no equivalent native UI (Grafana Explore is the only path),
-# which is itself a comparison data point.
+# VictoriaLogs UI — expose only query/UI and OIDC callback paths. Ingestion,
+# metrics, and administrative endpoints remain cluster-internal.
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
@@ -13,7 +12,27 @@ spec:
       namespace: network
       sectionName: https
   rules:
-    - filters:
+    - matches:
+        - path:
+            type: Exact
+            value: /
+      filters:
+        - type: RequestRedirect
+          requestRedirect:
+            path:
+              type: ReplaceFullPath
+              replaceFullPath: /select/vmui/
+            statusCode: 302
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /select
+        # traefik-oidc-auth owns this callback and intercepts it before the
+        # request reaches VictoriaLogs.
+        - path:
+            type: PathPrefix
+            value: /oidc
+      filters:
         - type: ExtensionRef
           extensionRef:
             group: traefik.io
