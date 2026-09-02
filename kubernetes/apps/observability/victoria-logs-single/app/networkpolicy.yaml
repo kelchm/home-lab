@@ -29,6 +29,7 @@ spec:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: network
             app.kubernetes.io/instance: traefik-admin-network
+            io.cilium.k8s.policy.serviceaccount: traefik-admin
       toPorts:
         - ports:
             - port: "9428"

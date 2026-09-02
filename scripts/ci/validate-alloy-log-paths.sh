@@ -103,9 +103,27 @@ function main() {
         return 1
     fi
 
-    value="$(yq eval --unwrapScalar '.spec.values.alloy.securityContext | [.runAsUser, .readOnlyRootFilesystem, .allowPrivilegeEscalation, .seccompProfile.type] | @tsv' "${ALLOY_MANIFEST}")"
-    if [[ "${value}" != $'0\ttrue\tfalse\tRuntimeDefault' ]]; then
+    value="$(yq eval --unwrapScalar '.spec.values.alloy.securityContext | [.runAsUser, .runAsGroup, .readOnlyRootFilesystem, .allowPrivilegeEscalation, .seccompProfile.type] | @tsv' "${ALLOY_MANIFEST}")"
+    if [[ "${value}" != $'0\t0\ttrue\tfalse\tRuntimeDefault' ]]; then
         echo "Alloy's root owner-read exception must retain the reviewed container hardening." >&2
+        return 1
+    fi
+
+    value="$(yq eval --unwrapScalar '.spec.values.alloy.securityContext.capabilities.drop | join(",")' "${ALLOY_MANIFEST}")"
+    if [[ "${value}" != ALL ]]; then
+        echo "Alloy must drop every Linux capability." >&2
+        return 1
+    fi
+
+    value="$(yq eval --unwrapScalar '.spec.values.controller.volumes.extra[] | select(.name == "tmp") | .emptyDir.sizeLimit' "${ALLOY_MANIFEST}")"
+    if [[ "${value}" != 64Mi ]]; then
+        echo "Alloy's read-only root filesystem must retain its bounded writable temporary volume." >&2
+        return 1
+    fi
+
+    value="$(yq eval --unwrapScalar '.spec.values.alloy.mounts.extra[] | select(.name == "tmp") | .mountPath' "${ALLOY_MANIFEST}")"
+    if [[ "${value}" != /tmp ]]; then
+        echo "Alloy's bounded temporary volume must be mounted at /tmp." >&2
         return 1
     fi
 

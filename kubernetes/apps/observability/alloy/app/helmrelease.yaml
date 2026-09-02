@@ -37,6 +37,9 @@ spec:
             hostPath:
               path: /var/log/pods
               type: Directory
+          - name: tmp
+            emptyDir:
+              sizeLimit: 64Mi
 
     alloy:
       storagePath: /var/lib/alloy
@@ -48,6 +51,8 @@ spec:
           - name: pod-logs
             mountPath: /var/log/pods
             readOnly: true
+          - name: tmp
+            mountPath: /tmp
       resources:
         requests:
           cpu: 50m
