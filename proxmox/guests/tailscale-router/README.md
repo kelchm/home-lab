@@ -30,13 +30,13 @@ The live Tailnet configuration is:
 
 ```sh
 sudo tailscale up --accept-dns=false --accept-routes=false --advertise-tags=tag:remote-admin-router --hostname=<node-name> --operator=kelchm --snat-subnet-routes=true
-sudo tailscale set --advertise-routes=10.32.1.0/24,10.32.10.0/24,10.32.20.0/24,10.32.30.0/24,10.32.130.0/24,10.32.140.0/24
+sudo tailscale set --advertise-routes=10.32.0.0/16
 ```
 
-Both machines have non-expiring keys, are tagged `tag:remote-admin-router`, keep subnet-route SNAT enabled, do not accept peer routes or Tailnet DNS, and advertise the exact same six `/24`s. Router 1 owns the primary routes during normal operation and router 2 is the passive failover candidate. Authentication remains an interactive/manual operation; do not put auth keys into Git or cloud-init.
+Both machines have non-expiring keys, are tagged `tag:remote-admin-router`, keep subnet-route SNAT enabled, do not accept peer routes or Tailnet DNS, and advertise the exact same `10.32.0.0/16`. Tailscale selects one router for the route and moves it to the other after failure; selection can remain on the survivor after recovery, so neither VM has a permanent primary role. Authentication remains an interactive/manual operation; do not put auth keys into Git or cloud-init.
 
 ## Validation and failover
 
-The route set is approved only for `tag:remote-admin-router` in the Tailnet policy. UniFi permits only `.101/.102` to those six prefixes and generates an established/related return rule; all other Remote Admin → Internal initiation remains denied.
+The aggregate route is approved only for `tag:remote-admin-router` in the Tailnet policy. UniFi independently permits only `.101/.102` to the six documented destination prefixes and generates an established/related return rule; all other Remote Admin → Internal initiation remains denied.
 
-The 2026-09-02 acceptance drill enabled routes on an enrolled client and verified PVE, the Kubernetes API, both Traefik VIPs, and split DNS over router 1. Stopping router 1 moved all six primary routes to router 2 in about 10 seconds with every probe still passing. After router 1 recovered, stopping router 2 moved the route set back in about 8 seconds and the probes again passed. Both daemons were restored and the client returned to `--accept-routes=false` for normal at-home use. Full policy and rollback details are in the [remote-admin plan](../../../docs/plans/20260902-tailscale-remote-admin.md).
+The 2026-09-02 acceptance drill enabled routes on an enrolled Main client and confirmed that its connected `10.32.10.0/24` remained physical while other destinations in the aggregate used Tailscale. PVE, the Kubernetes API, both Traefik VIPs, and split DNS passed; Workloads and Storage hosts remained blocked by UniFi. Stopping each selected router in turn moved the `/16` to its peer in about 16 seconds with every positive probe still passing. Both daemons were restored and the client returned to `--accept-routes=false` for normal at-home use. Full policy and rollback details are in the [remote-admin plan](../../../docs/plans/20260902-tailscale-remote-admin.md).

@@ -81,7 +81,7 @@ VLAN 40 (Lab Services) is being retired — it existed only to host node subinte
 - K8s 2 ↔ K8s Prod: deny (environments isolated)
 - Main → Infra Mgmt: allow from admin devices only
 - Main → Remote Admin: allow only to the two router VM addresses; every other Internal → Remote Admin path is denied by the zone boundary
-- Remote Admin → routed LAN destinations: allow only from `10.32.19.101/.102` to the six approved prefixes (`10.32.1/10/20/30/130/140.0/24`); every other destination remains denied
+- Remote Admin → routed LAN destinations: the router pair advertises `10.32.0.0/16`, but UniFi allows only `10.32.19.101/.102` to the six enforcement prefixes (`10.32.1/10/20/30/130/140.0/24`); every other Internal destination remains denied
 - Main (admin devices) → K8s Prod: allow on 50000/tcp (talosctl) + 6443/tcp (Kube API) — Talos consolidates its mgmt plane onto VLAN 30; mTLS enforces isolation
 - PVE guests on Workloads → Infra Mgmt, Storage, and K8s Prod: deny by default; add explicit service exceptions only
 - PVE and K8s storage identities → Storage: scope to named peers and services
@@ -235,7 +235,7 @@ Talos nodes do NOT have IPs on Infra Mgmt. Talos has no classic management plane
 10.32.19.102      tailscale-router-2         PVE VM on pve-sbx-3
 ```
 
-DHCP and IPv6 are disabled on this network. The two VMs are single-homed VLAN-local endpoints and therefore sit outside the cross-VLAN system identity rule. VLAN 19 has its own UniFi zone: it can reach the gateway and Internet for Tailscale coordination, while `Allow Tailscale Routers to Routed LAN` permits only `.101/.102` to the six approved remote-access prefixes. UniFi evaluates the BGP-routed `10.32.130.0/24` and `10.32.140.0/24` paths through the Internal transition for this custom source zone, so those exact prefixes are included in the rule alongside the four VLAN subnets. The generated reverse rule accepts only established and related traffic.
+DHCP and IPv6 are disabled on this network. The two VMs are single-homed VLAN-local endpoints and therefore sit outside the cross-VLAN system identity rule. Both advertise the aggregate `10.32.0.0/16`, allowing each local VLAN `/24` to remain more specific on at-home clients. VLAN 19 has its own UniFi zone: it can reach the gateway and Internet for Tailscale coordination, while `Allow Tailscale Routers to Routed LAN` permits only `.101/.102` to the six authorized destination prefixes. UniFi evaluates the BGP-routed `10.32.130.0/24` and `10.32.140.0/24` paths through the Internal transition for this custom source zone, so those exact prefixes are included in the rule alongside the four VLAN subnets. The generated reverse rule accepts only established and related traffic.
 
 ## LB Pool Allocation
 

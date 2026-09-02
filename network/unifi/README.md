@@ -39,6 +39,8 @@ Two custom policies cross the new boundary:
 
 UniFi generated an established/related return policy for each rule. No other Remote Admin → Internal initiation policy is live. Although the policy table describes the Cilium BGP pools as External for ordinary Internal sources, live probes from the custom Remote Admin zone timed out until `10.32.130.0/24` and `10.32.140.0/24` were included in the Internal destination rule; both returned HTTP 404 immediately afterward. Keep those routed prefixes in this exact rule and revalidate the behavior after UniFi upgrades.
 
+The Tailscale routers advertise `10.32.0.0/16`; that routing aggregate is deliberately broader than this authorization rule. A client can therefore install one stable lab route while UniFi continues to decide which destination networks traffic from `.101/.102` may actually enter. Positive tests through the aggregate reached every allowlisted class, while actual hosts in Workloads (`10.32.21.31`) and Storage (`10.32.25.5`) remained blocked. UniFi classifies traffic addressed to any of its own VLAN interface IPs in the Gateway zone, so those interface addresses remain reachable under the zone's gateway allow even when their attached networks are absent from the Internal allowlist.
+
 Positive validation from both router VMs reached the Default and Main gateways, PVE at `10.32.20.21:8006` (HTTP 200), the Kubernetes API at `10.32.30.8:6443` (HTTP 401 without credentials), and the two Traefik VIPs at `10.32.130.1:443` and `10.32.140.1:443` (HTTP 404 without a host match). Before this allow existed, both routers were unable to ping PVE management or connect to its UI.
 
 ## DGX Spark applied state
