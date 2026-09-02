@@ -1,0 +1,34 @@
+---
+# k8s-gateway is the authoritative LAN DNS responder for kelch.io. It
+# watches HTTPRoutes and Services through the API server and forwards
+# nothing upstream. The LAN reaches it through the admin-prod LoadBalancer
+# IP; in-cluster resolvers reach it hairpinning through the node resolvers,
+# which Cilium classifies as world.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: k8s-gateway
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: k8s-gateway
+      app.kubernetes.io/instance: k8s-gateway
+  ingress:
+    # DNS over the LoadBalancer IP (service port 53 targets container port
+    # 1053). remote-node covers LoadBalancer SNAT forwarding, world covers
+    # DSR-preserved client addresses, and host covers kubelet probes and
+    # node-local debugging.
+    - fromEntities:
+        - world
+        - remote-node
+        - host
+      toPorts:
+        - ports:
+            - port: "1053"
+              protocol: UDP
+            - port: "1053"
+              protocol: TCP
+  egress:
+    # Watches HTTPRoute and Service objects.
+    - toEntities:
+        - kube-apiserver

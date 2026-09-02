@@ -1,0 +1,21 @@
+---
+# Namespace-wide default-deny for both ingress and egress. Every workload in
+# network must be covered by an explicit per-workload CiliumNetworkPolicy in
+# its own app directory (cloudflare-dns, cloudflare-tunnel, k8s-gateway,
+# traefik). The kube-system/flux-system namespaces are a deliberate separate
+# follow-up phase per the issue scope.
+#
+# This namespace terminates everything arriving from the LAN and tunnels in
+# from Cloudflare, so east-west hygiene here is what keeps a compromised
+# edge pod from becoming cluster-wide access.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: default-deny
+spec:
+  endpointSelector: {}
+  enableDefaultDeny:
+    ingress: true
+    egress: true
+  ingress: []
+  egress: []

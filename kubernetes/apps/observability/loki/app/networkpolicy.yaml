@@ -1,0 +1,66 @@
+---
+# Loki: ingestion from Alloy, Grafana queries, scraper access, and node-level
+# debugging in; DNS and single-binary memberlist gossip out.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: loki
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: loki
+      app.kubernetes.io/instance: loki
+      app.kubernetes.io/component: single-binary
+  ingress:
+    # Alloy dual-write push, Grafana's Loki datasource, self-scrape via the
+    # chart's ServiceMonitor, vmagent's converted scrape, and node-level
+    # kubectl port-forward handoffs.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: alloy
+            app.kubernetes.io/instance: alloy
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: grafana
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: vmagent
+            app.kubernetes.io/instance: victoria-metrics-k8s-stack
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: prometheus
+            prometheus: kube-prometheus-stack-prometheus
+      toPorts:
+        - ports:
+            - port: "3100"
+              protocol: TCP
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "3100"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    # Single-binary memberlist join (the chart points ring.kvstore at
+    # loki-memberlist.observability.svc:7946).
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: loki
+            app.kubernetes.io/instance: loki
+            app.kubernetes.io/component: single-binary
+      toPorts:
+        - ports:
+            - port: "7946"
+              protocol: TCP

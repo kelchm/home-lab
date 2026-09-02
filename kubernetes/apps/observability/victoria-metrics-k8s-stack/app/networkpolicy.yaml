@@ -1,0 +1,515 @@
+---
+# The victoria-metrics-k8s-stack workloads: VMOperator (vm-operator),
+# VMAgent, VMAlert, VMAlertmanager, VMSingle, kube-state-metrics, and
+# prometheus-node-exporter. All ingress is default-deny at the namespace
+# level; these policies grant exactly the flows the stack needs.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: vmagent
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: vmagent
+      app.kubernetes.io/instance: victoria-metrics-k8s-stack
+  ingress:
+    # Self-scrape via the chart's VMServiceScrape, admin-gateway UI access,
+    # and node-level kubectl port-forward handoffs.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: vmagent
+            app.kubernetes.io/instance: victoria-metrics-k8s-stack
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: network
+            app.kubernetes.io/instance: traefik-admin-network
+            app.kubernetes.io/name: traefik
+            io.cilium.k8s.policy.serviceaccount: traefik-admin
+      toPorts:
+        - ports:
+            - port: "8429"
+              protocol: TCP
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "8429"
+              protocol: TCP
+  egress:
+    # Discovery and remote-write resolution.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    # Kubernetes service discovery (kubernetes_sd) reads the API server.
+    - toEntities:
+        - kube-apiserver
+    # selectAllByDefault scrapes every ServiceMonitor/PodMonitor/VM scrape
+    # CRD cluster-wide. Within observability, grant the whole namespace:
+    # vmagent is the cluster's metrics vacuum, and chart versions change
+    # component ports between upgrades.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+    # Cross-namespace scrape targets, one rule per namespace, port-scoped:
+    # kube-prometheus-stack-{core-dns,kube-api-server,kube-controller-manager,
+    # kube-etcd,kube-scheduler,...} and the app ServiceMonitors below.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+      toPorts:
+        - ports:
+            # coredns prometheus listener (Corefile: prometheus :9153)
+            - port: "9153"
+              protocol: TCP
+            # cilium-agent metrics + hubble-metrics
+            - port: "9962"
+              protocol: TCP
+            - port: "9964"
+              protocol: TCP
+            # cilium-operator metrics
+            - port: "9963"
+              protocol: TCP
+            # metrics-server
+            - port: "10250"
+              protocol: TCP
+            # reloader (PodMonitor)
+            - port: "9090"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: cert-manager
+      toPorts:
+        - ports:
+            # cert-manager + cainjector metrics; webhook pod also lists 10250
+            - port: "9402"
+              protocol: TCP
+            - port: "10250"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: cnpg-system
+      toPorts:
+        - ports:
+            # cloudnative-pg operator manager metrics
+            - port: "8080"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: flux-system
+      toPorts:
+        - ports:
+            # flux-operator metrics + health
+            - port: "8080"
+              protocol: TCP
+            - port: "9080"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: identity
+      toPorts:
+        - ports:
+            # kaniop metrics
+            - port: "8080"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: ai
+      toPorts:
+        - ports:
+            # metamcp-db (CloudNativePG instance metrics)
+            - port: "9187"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: iot
+      toPorts:
+        - ports:
+            # visionect-db postgres metrics
+            - port: "9187"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: printing
+      toPorts:
+        - ports:
+            # bambuddy-db postgres metrics
+            - port: "9187"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: longhorn-system
+      toPorts:
+        - ports:
+            # longhorn-manager metrics via longhorn-backend
+            - port: "9500"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: default
+      toPorts:
+        - ports:
+            # echo metrics
+            - port: "80"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: network
+      toPorts:
+        - ports:
+            # external-dns + cloudflared metrics
+            - port: "7979"
+              protocol: TCP
+            - port: "8080"
+              protocol: TCP
+            # traefik metrics entrypoint; the Services currently expose only
+            # web/websecure so the SMs resolve zero targets today — this
+            # keeps the scrape working if the metrics port is added.
+            - port: "9100"
+              protocol: TCP
+    # Host-network targets: prometheus-node-exporter listens on the node
+    # addresses, and Talos exposes controller-manager (10257), scheduler
+    # (10259), and the etcd metrics listener (2381) as host processes.
+    - toEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "9100"
+              protocol: TCP
+            - port: "10257"
+              protocol: TCP
+            - port: "10259"
+              protocol: TCP
+            - port: "2381"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: vmalert
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: vmalert
+      app.kubernetes.io/instance: victoria-metrics-k8s-stack
+  ingress:
+    # Self-scrape via the chart's VMServiceScrape, admin-gateway UI access,
+    # and node-level kubectl port-forward handoffs.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: vmagent
+            app.kubernetes.io/instance: victoria-metrics-k8s-stack
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: network
+            app.kubernetes.io/instance: traefik-admin-network
+            app.kubernetes.io/name: traefik
+            io.cilium.k8s.policy.serviceaccount: traefik-admin
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    # Rule evaluation datasource and remote-write sink.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: vmsingle
+            app.kubernetes.io/instance: victoria-metrics-k8s-stack
+      toPorts:
+        - ports:
+            - port: "8428"
+              protocol: TCP
+    # Alert delivery to the VM Alertmanager.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: vmalertmanager
+            app.kubernetes.io/instance: victoria-metrics-k8s-stack
+      toPorts:
+        - ports:
+            - port: "9093"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: vmalertmanager
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: vmalertmanager
+      app.kubernetes.io/instance: victoria-metrics-k8s-stack
+  ingress:
+    # vmalert alert delivery, Grafana's Alertmanager datasource,
+    # self-scrape via the chart's VMServiceScrape, admin-gateway UI access,
+    # and node-level kubectl port-forward handoffs.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: vmalert
+            app.kubernetes.io/instance: victoria-metrics-k8s-stack
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: vmagent
+            app.kubernetes.io/instance: victoria-metrics-k8s-stack
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: grafana
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: network
+            app.kubernetes.io/instance: traefik-admin-network
+            app.kubernetes.io/name: traefik
+            io.cilium.k8s.policy.serviceaccount: traefik-admin
+      toPorts:
+        - ports:
+            - port: "9093"
+              protocol: TCP
+    # HA gossip between replicas (TCP + UDP).
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: vmalertmanager
+            app.kubernetes.io/instance: victoria-metrics-k8s-stack
+      toPorts:
+        - ports:
+            - port: "9094"
+              protocol: TCP
+            - port: "9094"
+              protocol: UDP
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "9093"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    # HA gossip between replicas (TCP + UDP).
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: vmalertmanager
+            app.kubernetes.io/instance: victoria-metrics-k8s-stack
+      toPorts:
+        - ports:
+            - port: "9094"
+              protocol: TCP
+            - port: "9094"
+              protocol: UDP
+    # Outbound paging. The routed receivers live outside the cluster
+    # (Pushover); everything else is denied, including lateral movement into
+    # pod, Service, node, LAN, storage, loopback, link-local, CGNAT, or
+    # reserved space. IPv6 is disabled cluster-wide; add equivalent IPv6
+    # policy before enabling it.
+    - toCIDRSet:
+        - cidr: 0.0.0.0/0
+          except:
+            - 0.0.0.0/8
+            - 10.0.0.0/8
+            - 100.64.0.0/10
+            - 127.0.0.0/8
+            - 169.254.0.0/16
+            - 172.16.0.0/12
+            - 192.0.0.0/24
+            - 192.0.2.0/24
+            - 192.168.0.0/16
+            - 198.18.0.0/15
+            - 198.51.100.0/24
+            - 203.0.113.0/24
+            - 224.0.0.0/4
+            - 240.0.0.0/4
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: vmsingle
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: vmsingle
+      app.kubernetes.io/instance: victoria-metrics-k8s-stack
+  ingress:
+    # vmagent remote-write, vmalert evaluation/remote-write, Grafana's
+    # VictoriaMetrics datasource, self-scrape via the chart's
+    # VMServiceScrape, admin-gateway UI access, and node-level kubectl
+    # port-forward handoffs.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: vmagent
+            app.kubernetes.io/instance: victoria-metrics-k8s-stack
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: vmalert
+            app.kubernetes.io/instance: victoria-metrics-k8s-stack
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: grafana
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: network
+            app.kubernetes.io/instance: traefik-admin-network
+            app.kubernetes.io/name: traefik
+            io.cilium.k8s.policy.serviceaccount: traefik-admin
+      toPorts:
+        - ports:
+            - port: "8428"
+              protocol: TCP
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "8428"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: victoria-metrics-operator
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: victoria-metrics-operator
+      app.kubernetes.io/instance: victoria-metrics-k8s-stack
+  ingress:
+    # Self-scrape via the chart's VMServiceScrape.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: vmagent
+            app.kubernetes.io/instance: victoria-metrics-k8s-stack
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    # Admission webhook calls from the API server, which runs as a host
+    # process on the control-plane nodes.
+    - fromEntities:
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "9443"
+              protocol: TCP
+  egress:
+    # CRD reconciliation against the API server.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    - toEntities:
+        - kube-apiserver
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: kube-state-metrics
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: kube-state-metrics
+      app.kubernetes.io/instance: victoria-metrics-k8s-stack
+  ingress:
+    # Scrape via the chart's VMServiceScrape and node-level kubectl
+    # port-forward handoffs.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: vmagent
+            app.kubernetes.io/instance: victoria-metrics-k8s-stack
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+  egress:
+    # Cluster object watches.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    - toEntities:
+        - kube-apiserver
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: prometheus-node-exporter
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus-node-exporter
+      app.kubernetes.io/instance: victoria-metrics-k8s-stack
+  ingress:
+    # Scrape via the chart's VMServiceScrape. The pods are hostNetwork, so
+    # the endpoint address is the node IP; the vmagent policy grants the
+    # matching host-entity egress. The host rule covers kubelet probes and
+    # node-local debugging.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: vmagent
+            app.kubernetes.io/instance: victoria-metrics-k8s-stack
+      toPorts:
+        - ports:
+            - port: "9100"
+              protocol: TCP
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "9100"
+              protocol: TCP
+  # node-exporter only serves metrics; it makes no outbound connections.
