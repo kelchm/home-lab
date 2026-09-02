@@ -54,6 +54,8 @@ PVE host or on later bare metal; no implementation is selected.
 
 Grafana is the single operator-facing UI and uses VictoriaMetrics as its default metrics datasource. The VictoriaMetrics k8s stack owns VMSingle storage, vmagent ingestion, vmalert evaluation, VMAlertmanager delivery, kube-state-metrics, node-exporter, API-server, kubelet, CoreDNS, and the controller-manager, scheduler, and etcd scrapes for all three Talos nodes. vmalert stamps `cluster=k8s-prod` and `evaluator=vmalert`; VMAlertmanager alone matches that evaluator for warning and critical Pushover delivery.
 
+Alloy runs once per node, reads only exact Kubernetes pod-log paths under `/var/log/pods`, and sends CRI-decoded entries to VictoriaLogs. New rows use `cluster`, `namespace`, `pod`, `container`, and `node` as their stable stream identity; `filename` and `stream` remain ordinary query fields, and structured application payload fields are namespaced below `msg.*` so they cannot overwrite Kubernetes metadata. Operators query logs through the VictoriaLogs datasource in Grafana Explore or the OIDC-protected VictoriaLogs VMUI; operational examples and compatibility notes are in the [logging runbook](runbooks/logging.md).
+
 The `monitoring.coreos.com` CRDs are owned independently by `prometheus-operator-crds`, and the VictoriaMetrics operator converts third-party ServiceMonitors and shared PrometheusRules with owner references. KPS Prometheus and its null-only Alertmanager remain temporarily as Git-revert rollback components, while Loki remains beside VictoriaLogs for the same approximately one-day soak. Neither KPS nor Loki is part of the survivor path, and neither is deleted by the survivor cutover.
 
 ## VLAN Layout

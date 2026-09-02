@@ -1,0 +1,41 @@
+---
+# Default-deny VictoriaLogs ingress. Alloy may ingest, Grafana and the admin
+# gateway may query, both retained/current scrapers may read metrics, and the
+# node may perform health checks and kubectl port-forward handoffs.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: victoria-logs-single
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/instance: victoria-logs-single
+      app.kubernetes.io/name: victoria-logs-single
+      app.kubernetes.io/component: server
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: alloy
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: grafana
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: prometheus
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: vmagent
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: network
+            app.kubernetes.io/instance: traefik-admin-network
+      toPorts:
+        - ports:
+            - port: "9428"
+              protocol: TCP
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "9428"
+              protocol: TCP

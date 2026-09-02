@@ -98,3 +98,99 @@ spec:
           annotations:
             summary: Namespace {{ $labels.namespace }} is accumulating failed pods
             description: At least {{ printf "%.0f" $value }} failed pod objects have remained in {{ $labels.namespace }} for five minutes. Identify the owning controller before the namespace's count/pods quota blocks healthy replacements.
+
+    - name: logging-pipeline
+      rules:
+        - alert: AlloyVictoriaLogsEntriesDropped
+          expr: sum by (pod, reason) (increase(loki_write_dropped_entries_total{component_id="loki.write.vl"}[10m])) > 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: Alloy {{ $labels.pod }} is dropping VictoriaLogs entries
+            description: Alloy has dropped entries bound for VictoriaLogs for five minutes (reason={{ $labels.reason }}). Check the writer queue, response codes, and VictoriaLogs health before restarting the collector.
+
+        - alert: AlloyVictoriaLogsRetriesSustained
+          expr: sum by (pod) (increase(loki_write_batch_retries_total{component_id="loki.write.vl"}[5m])) > 0
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: Alloy {{ $labels.pod }} is persistently retrying VictoriaLogs writes
+            description: VictoriaLogs write retries have remained present for 15 minutes. The in-memory retry budget is finite; restore the sink before queued entries are dropped.
+
+        - alert: AlloyLogCollectorTargetMissing
+          expr: (count(up{job="alloy"} == 1) < 3) or absent(up{job="alloy"})
+          for: 10m
+          labels:
+            severity: critical
+          annotations:
+            summary: Fewer than three Alloy collectors are being scraped
+            description: vmagent cannot see one healthy Alloy target per Kubernetes node. Check the DaemonSet, ServiceMonitor conversion, and Cilium ingress policy.
+
+        - alert: AlloyNodeLogIngestionSilent
+          expr: sum by (pod) (increase(loki_write_sent_entries_total{component_id="loki.write.vl"}[10m])) == 0
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: Alloy {{ $labels.pod }} is not sending logs to VictoriaLogs
+            description: This node-local collector has sent no entries for 15 minutes while its metrics remain available. Check file discovery, positions, and the VictoriaLogs writer graph.
+
+        - alert: VictoriaLogsRowsDropped
+          expr: sum by (reason) (increase(vl_rows_dropped_total{reason!="debug"}[10m])) > 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: VictoriaLogs is dropping ingested rows
+            description: VictoriaLogs has dropped rows for five minutes (reason={{ $labels.reason }}). Debug-mode dry runs are intentionally excluded.
+
+        - alert: VictoriaLogsOversizedLinesDropped
+          expr: increase(vl_too_long_lines_skipped_total[10m]) > 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: VictoriaLogs is rejecting oversized log lines
+            description: At least one line exceeded VictoriaLogs' accepted size during the last ten minutes. Identify the emitting workload before useful context is lost.
+
+        - alert: VictoriaLogsStorageReadOnly
+          expr: max(vl_storage_is_read_only) == 1
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: VictoriaLogs storage is read-only
+            description: VictoriaLogs has marked its storage path read-only. Inspect the PVC, Longhorn volume, and filesystem before ingestion exhausts Alloy's retry budget.
+
+        - alert: VictoriaLogsDiskSpaceLow
+          expr: min(vl_free_disk_space_bytes / vl_total_disk_space_bytes) < 0.10
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: VictoriaLogs has less than 10% disk space free
+            description: Free space is below the emergency threshold despite the 80% retention ceiling. Inspect partition cleanup, daily ingest volume, and Longhorn capacity.
+
+        - alert: VictoriaLogsIngestionSilent
+          expr: (sum(increase(vl_rows_ingested_total{type=~"loki.*"}[10m])) == 0) or absent(vl_rows_ingested_total{type=~"loki.*"})
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: VictoriaLogs has no observable Loki ingestion
+            description: No Loki-protocol rows have reached VictoriaLogs for 15 minutes, or the ingestion metric is absent. Check Alloy writers, VictoriaLogs availability, and vmagent scraping.
+
+        # The seven-day observed peak was 819 streams/hour during collector
+        # corrections and rollouts. This threshold leaves room for normal pod
+        # churn while detecting cardinality explosions well before retention is
+        # materially affected.
+        - alert: VictoriaLogsStreamChurnHigh
+          expr: increase(vl_streams_created_total[1h]) > 1500
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: VictoriaLogs stream creation is abnormally high
+            description: More than 1,500 streams were created in one hour. Look for volatile stream fields, duplicated collectors, or runaway pod churn.
