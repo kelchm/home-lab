@@ -1,0 +1,36 @@
+---
+# smartctl-exporter serves node disk-health metrics only. It does not call
+# the Kubernetes API and makes no outbound connections, so only ingress is
+# granted — namespace-level default-deny already blocks all egress.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: smartctl-exporter
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus-smartctl-exporter
+      app.kubernetes.io/instance: smartctl-exporter
+  ingress:
+    # Scrape via the chart's ServiceMonitor (service 80 targets 9633;
+    # Cilium evaluates this rule against the selected backend endpoint) and
+    # node-level kubectl port-forward handoffs.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: vmagent
+            app.kubernetes.io/instance: victoria-metrics-k8s-stack
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: prometheus
+            prometheus: kube-prometheus-stack-prometheus
+      toPorts:
+        - ports:
+            - port: "9633"
+              protocol: TCP
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "9633"
+              protocol: TCP

@@ -1,0 +1,21 @@
+---
+# Namespace-wide default-deny for both ingress and egress. Every workload in
+# observability must be covered by an explicit per-workload CiliumNetworkPolicy
+# in its own app directory (alloy, grafana, kube-prometheus-stack, loki,
+# smartctl-exporter, victoria-logs-single, victoria-metrics-k8s-stack).
+#
+# Motivation: Loki runs auth_enabled: false and the Prometheus, VMSingle, and
+# VictoriaLogs query APIs have no auth layer, so any pod that can reach them
+# can read every log and metric in the cluster. Only the scrapers and the
+# explicitly listed consumers get access.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: default-deny
+spec:
+  endpointSelector: {}
+  enableDefaultDeny:
+    ingress: true
+    egress: true
+  ingress: []
+  egress: []

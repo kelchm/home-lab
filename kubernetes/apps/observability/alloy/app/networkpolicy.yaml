@@ -28,3 +28,39 @@ spec:
         - ports:
             - port: "12345"
               protocol: TCP
+  egress:
+    # discovery.kubernetes reads the pod list from the API server.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    - toEntities:
+        - kube-apiserver
+    # Dual-write push to the surviving VictoriaLogs path and the temporarily
+    # retained Loki rollback sink.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: victoria-logs-single
+            app.kubernetes.io/instance: victoria-logs-single
+            app.kubernetes.io/component: server
+      toPorts:
+        - ports:
+            - port: "9428"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: loki
+            app.kubernetes.io/instance: loki
+            app.kubernetes.io/component: single-binary
+      toPorts:
+        - ports:
+            - port: "3100"
+              protocol: TCP

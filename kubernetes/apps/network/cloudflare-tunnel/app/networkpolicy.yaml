@@ -1,0 +1,98 @@
+---
+# cloudflared serves *.kelch.io inbound through Cloudflare's edge and
+# proxies to the public gateway over in-cluster HTTPS. Ingress is
+# metrics-only; egress is the Cloudflare edge, the public Traefik
+# instance, and DNS.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: cloudflare-tunnel
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: cloudflare-tunnel
+      app.kubernetes.io/instance: cloudflare-tunnel
+  ingress:
+    # Scrape via the chart's ServiceMonitor (TUNNEL_METRICS 0.0.0.0:8080)
+    # and node-level kubectl port-forward handoffs. Pair the scraper
+    # workload labels with their dedicated ServiceAccount identities so a
+    # compromised pod cannot gain access merely by forging an app label.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: vmagent
+            app.kubernetes.io/instance: victoria-metrics-k8s-stack
+            io.cilium.k8s.policy.serviceaccount: vmagent-victoria-metrics-k8s-stack
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: prometheus
+            prometheus: kube-prometheus-stack-prometheus
+            io.cilium.k8s.policy.serviceaccount: kube-prometheus-stack-prometheus
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    # Tunnel origin: the tunnel ingress forwards *.kelch.io to
+    # https://traefik-public.network.svc:443, whose service port 443
+    # targets container port 8443. Cilium evaluates this rule against the
+    # selected backend endpoint.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: network
+            app.kubernetes.io/name: traefik
+            app.kubernetes.io/instance: traefik-public-network
+            io.cilium.k8s.policy.serviceaccount: traefik-public
+      toPorts:
+        - ports:
+            - port: "8443"
+              protocol: TCP
+    # Cloudflare edge over QUIC (UDP 7844) with the http2 fallback (TCP
+    # 7844), plus generic TLS 443 for control-plane fetches. Deliberately
+    # CIDR-scoped with private-space exceptions rather than toFQDNs: the
+    # argotunnel edge hostnames churn their addresses on ~2 minute TTLs,
+    # and a missed DNS interception would flap the tunnel that carries all
+    # public ingress. The same trade is documented on media/seerr. Revisit
+    # with a soak if that risk posture changes. IPv6 is disabled
+    # cluster-wide; add equivalent IPv6 policy before enabling it.
+    - toCIDRSet:
+        - cidr: 0.0.0.0/0
+          except:
+            - 0.0.0.0/8
+            - 10.0.0.0/8
+            - 100.64.0.0/10
+            - 127.0.0.0/8
+            - 169.254.0.0/16
+            - 172.16.0.0/12
+            - 192.0.0.0/24
+            - 192.0.2.0/24
+            - 192.168.0.0/16
+            - 198.18.0.0/15
+            - 198.51.100.0/24
+            - 203.0.113.0/24
+            - 224.0.0.0/4
+            - 240.0.0.0/4
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+            - port: "7844"
+              protocol: TCP
+            - port: "7844"
+              protocol: UDP

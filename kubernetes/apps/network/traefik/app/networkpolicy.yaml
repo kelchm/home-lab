@@ -1,0 +1,480 @@
+---
+# Three single-purpose Traefik instances. Ingress is the edge surface (LAN
+# via the LoadBalancer IPs, cloudflared for the public instance) plus
+# scraper metrics; egress is pinned to the exact backends each gateway
+# routes to, DNS, and the API server that feeds the Gateway/IngressRoute
+# providers. Cross-namespace grants pair the workload label with the
+# backend's dedicated ServiceAccount identity so a compromised pod cannot
+# gain access merely by forging an app label.
+#
+# Container ports, not service ports: Cilium evaluates these rules against
+# the selected backend endpoint (traefik 8000/8443, gateway services map
+# their LoadBalancer/service ports onto them).
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: traefik-public
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: traefik
+      app.kubernetes.io/instance: traefik-public-network
+  ingress:
+    # cloudflared is the only consumer: the tunnel origin points at
+    # traefik-public.network.svc:443 (container 8443). The service is
+    # ClusterIP with no LoadBalancer exposure.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: network
+            app.kubernetes.io/name: cloudflare-tunnel
+            app.kubernetes.io/instance: cloudflare-tunnel
+            io.cilium.k8s.policy.serviceaccount: cloudflare-tunnel
+      toPorts:
+        - ports:
+            - port: "8443"
+              protocol: TCP
+    # Scrape via the chart's ServiceMonitor. The Services currently expose
+    # only web/websecure so the SMs resolve zero targets today — this keeps
+    # the scrape working if the metrics port is added.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: vmagent
+            app.kubernetes.io/instance: victoria-metrics-k8s-stack
+            io.cilium.k8s.policy.serviceaccount: vmagent-victoria-metrics-k8s-stack
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: prometheus
+            prometheus: kube-prometheus-stack-prometheus
+            io.cilium.k8s.policy.serviceaccount: kube-prometheus-stack-prometheus
+      toPorts:
+        - ports:
+            - port: "9100"
+              protocol: TCP
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
+            - port: "8443"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    # Gateway API and IngressRoute providers watch the API server.
+    - toEntities:
+        - kube-apiserver
+    # Gateway-public backends: the Flux webhook receiver (currently not
+    # deployed — the rule is inert until it returns) and the echo service.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: flux-system
+            app.kubernetes.io/name: webhook-receiver
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: default
+            app.kubernetes.io/name: echo
+            io.cilium.k8s.policy.serviceaccount: echo
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: traefik-services
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: traefik
+      app.kubernetes.io/instance: traefik-services-network
+  ingress:
+    # LAN edge traffic to the services-prod LoadBalancer IP. remote-node
+    # covers LoadBalancer SNAT forwarding, world covers DSR-preserved
+    # client addresses, and host covers kubelet probes and node-local
+    # debugging. Grafana and the admin instance also terminate their Kanidm
+    # OIDC flows (auth.home.kelch.io) on this instance.
+    - fromEntities:
+        - world
+        - remote-node
+        - host
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
+            - port: "8443"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: grafana
+            io.cilium.k8s.policy.serviceaccount: grafana
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: network
+            app.kubernetes.io/instance: traefik-admin-network
+            app.kubernetes.io/name: traefik
+            io.cilium.k8s.policy.serviceaccount: traefik-admin
+      toPorts:
+        - ports:
+            - port: "8443"
+              protocol: TCP
+    # Scrape via the chart's ServiceMonitor; zero targets today (see the
+    # public instance note).
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: vmagent
+            app.kubernetes.io/instance: victoria-metrics-k8s-stack
+            io.cilium.k8s.policy.serviceaccount: vmagent-victoria-metrics-k8s-stack
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: prometheus
+            prometheus: kube-prometheus-stack-prometheus
+            io.cilium.k8s.policy.serviceaccount: kube-prometheus-stack-prometheus
+      toPorts:
+        - ports:
+            - port: "9100"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    # Gateway API and IngressRoute providers watch the API server.
+    - toEntities:
+        - kube-apiserver
+    # auth.home.kelch.io terminates here and proxies to Kanidm over HTTPS
+    # (ServersTransport with system CA trust; container port 8443).
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: identity
+            kanidm.kaniop.rs/cluster: kanidm
+      toPorts:
+        - ports:
+            - port: "8443"
+              protocol: TCP
+    # Gateway-services backends.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: iot
+            app.kubernetes.io/name: broadsheet
+            io.cilium.k8s.policy.serviceaccount: broadsheet
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: media
+            app.kubernetes.io/name: jellyfin
+            io.cilium.k8s.policy.serviceaccount: jellyfin
+      toPorts:
+        - ports:
+            - port: "8096"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: media
+            app.kubernetes.io/name: seerr
+            io.cilium.k8s.policy.serviceaccount: seerr
+      toPorts:
+        - ports:
+            - port: "5055"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: traefik-admin
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: traefik
+      app.kubernetes.io/instance: traefik-admin-network
+  ingress:
+    # LAN edge traffic to the admin-prod LoadBalancer IP. remote-node
+    # covers LoadBalancer SNAT forwarding, world covers DSR-preserved
+    # client addresses, and host covers kubelet probes and node-local
+    # debugging.
+    - fromEntities:
+        - world
+        - remote-node
+        - host
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
+            - port: "8443"
+              protocol: TCP
+    # Scrape via the chart's ServiceMonitor; zero targets today (see the
+    # public instance note).
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: vmagent
+            app.kubernetes.io/instance: victoria-metrics-k8s-stack
+            io.cilium.k8s.policy.serviceaccount: vmagent-victoria-metrics-k8s-stack
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: prometheus
+            prometheus: kube-prometheus-stack-prometheus
+            io.cilium.k8s.policy.serviceaccount: kube-prometheus-stack-prometheus
+      toPorts:
+        - ports:
+            - port: "9100"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    # Gateway API and IngressRoute providers watch the API server.
+    - toEntities:
+        - kube-apiserver
+    # The traefik-oidc-auth plugin validates sessions against
+    # auth.home.kelch.io, which resolves to the services gateway
+    # LoadBalancer IP and terminates on the traefik-services pods.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: network
+            app.kubernetes.io/instance: traefik-services-network
+            app.kubernetes.io/name: traefik
+            io.cilium.k8s.policy.serviceaccount: traefik-services
+      toPorts:
+        - ports:
+            - port: "8443"
+              protocol: TCP
+    # Gateway-admin backends: ai tools.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: ai
+            app.kubernetes.io/name: mcphub
+            io.cilium.k8s.policy.serviceaccount: mcphub
+      toPorts:
+        - ports:
+            - port: "3000"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: ai
+            app.kubernetes.io/name: metamcp
+            io.cilium.k8s.policy.serviceaccount: metamcp
+      toPorts:
+        - ports:
+            - port: "12008"
+              protocol: TCP
+    # Gateway-admin backends: infrastructure UIs.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: longhorn-system
+            app: longhorn-ui
+            io.cilium.k8s.policy.serviceaccount: longhorn-ui-service-account
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: grafana
+            io.cilium.k8s.policy.serviceaccount: grafana
+      toPorts:
+        - ports:
+            - port: "3000"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: prometheus
+            prometheus: kube-prometheus-stack-prometheus
+            io.cilium.k8s.policy.serviceaccount: kube-prometheus-stack-prometheus
+      toPorts:
+        - ports:
+            - port: "9090"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: vmagent
+            app.kubernetes.io/instance: victoria-metrics-k8s-stack
+            io.cilium.k8s.policy.serviceaccount: vmagent-victoria-metrics-k8s-stack
+      toPorts:
+        - ports:
+            - port: "8429"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: vmalert
+            app.kubernetes.io/instance: victoria-metrics-k8s-stack
+            io.cilium.k8s.policy.serviceaccount: vmalert-victoria-metrics-k8s-stack
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: vmalertmanager
+            app.kubernetes.io/instance: victoria-metrics-k8s-stack
+            io.cilium.k8s.policy.serviceaccount: vmalertmanager-victoria-metrics-k8s-stack
+      toPorts:
+        - ports:
+            - port: "9093"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: vmsingle
+            app.kubernetes.io/instance: victoria-metrics-k8s-stack
+            io.cilium.k8s.policy.serviceaccount: vmsingle-victoria-metrics-k8s-stack
+      toPorts:
+        - ports:
+            - port: "8428"
+              protocol: TCP
+    # victoria-logs-single runs as the namespace-default ServiceAccount, so
+    # only its workload labels can pin the identity here.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: victoria-logs-single
+            app.kubernetes.io/instance: victoria-logs-single
+            app.kubernetes.io/component: server
+      toPorts:
+        - ports:
+            - port: "9428"
+              protocol: TCP
+    # Gateway-admin backends: household apps.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: lemon-manuals
+            app.kubernetes.io/name: lemon-website
+            io.cilium.k8s.policy.serviceaccount: lemon-website
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: printing
+            app.kubernetes.io/name: bambuddy
+            io.cilium.k8s.policy.serviceaccount: bambuddy
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: media
+            app.kubernetes.io/name: radarr
+            io.cilium.k8s.policy.serviceaccount: radarr
+      toPorts:
+        - ports:
+            - port: "7878"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: media
+            app.kubernetes.io/name: sonarr
+            io.cilium.k8s.policy.serviceaccount: sonarr
+      toPorts:
+        - ports:
+            - port: "8989"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: media
+            app.kubernetes.io/name: lidarr
+            io.cilium.k8s.policy.serviceaccount: lidarr
+      toPorts:
+        - ports:
+            - port: "8686"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: media
+            app.kubernetes.io/name: prowlarr
+            io.cilium.k8s.policy.serviceaccount: prowlarr
+      toPorts:
+        - ports:
+            - port: "9696"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: media
+            app.kubernetes.io/name: bazarr
+            io.cilium.k8s.policy.serviceaccount: bazarr
+      toPorts:
+        - ports:
+            - port: "6767"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: media
+            app.kubernetes.io/name: qbittorrent
+            io.cilium.k8s.policy.serviceaccount: qbittorrent
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: media
+            app.kubernetes.io/name: sabnzbd
+            io.cilium.k8s.policy.serviceaccount: sabnzbd
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    # The traefik-oidc-auth plugin is a yaegi module: Traefik downloads it
+    # from the plugin catalog at pod start. Everything else is denied,
+    # including lateral movement into pod, Service, node, LAN, storage,
+    # loopback, link-local, CGNAT, or reserved space. IPv6 is disabled
+    # cluster-wide; add equivalent IPv6 policy before enabling it.
+    - toCIDRSet:
+        - cidr: 0.0.0.0/0
+          except:
+            - 0.0.0.0/8
+            - 10.0.0.0/8
+            - 100.64.0.0/10
+            - 127.0.0.0/8
+            - 169.254.0.0/16
+            - 172.16.0.0/12
+            - 192.0.0.0/24
+            - 192.0.2.0/24
+            - 192.168.0.0/16
+            - 198.18.0.0/15
+            - 198.51.100.0/24
+            - 203.0.113.0/24
+            - 224.0.0.0/4
+            - 240.0.0.0/4
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP

@@ -1,0 +1,68 @@
+---
+# external-dns reconciles Cloudflare records from Gateway HTTPRoutes and
+# DNSEndpoints. Ingress is metrics-only; egress is the API server, DNS, and
+# the Cloudflare API.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: cloudflare-dns
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: external-dns
+      app.kubernetes.io/instance: cloudflare-dns
+  ingress:
+    # Scrape via the chart's ServiceMonitor and node-level kubectl
+    # port-forward handoffs. Pair the scraper workload labels with their
+    # dedicated ServiceAccount identities so a compromised pod cannot gain
+    # access merely by forging an app label.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: vmagent
+            app.kubernetes.io/instance: victoria-metrics-k8s-stack
+            io.cilium.k8s.policy.serviceaccount: vmagent-victoria-metrics-k8s-stack
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: prometheus
+            prometheus: kube-prometheus-stack-prometheus
+            io.cilium.k8s.policy.serviceaccount: kube-prometheus-stack-prometheus
+      toPorts:
+        - ports:
+            - port: "7979"
+              protocol: TCP
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "7979"
+              protocol: TCP
+  egress:
+    # The DNS proxy must intercept DNS so the toFQDNs Cloudflare rule
+    # below learns the API's addresses.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    # Watches Gateway HTTPRoutes and DNSEndpoint CRs.
+    - toEntities:
+        - kube-apiserver
+    # Cloudflare API — the sole public destination. Everything else is
+    # denied, including lateral movement into pod, Service, node, LAN,
+    # storage, loopback, link-local, CGNAT, or reserved space. IPv6 is
+    # disabled cluster-wide; add equivalent IPv6 policy before enabling it.
+    - toFQDNs:
+        - matchName: api.cloudflare.com
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
