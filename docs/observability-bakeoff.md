@@ -1,17 +1,19 @@
 # Observability stack bake-off
 
+**Status:** Historical evaluation record. VictoriaMetrics and VictoriaLogs won; current rollout and cleanup state is tracked in the [observability rework execution plan](plans/20260703-observability-rework.md).
+
 ## Why
 
-The cluster currently runs OpenObserve as a unified observability stack
+At the start of the bake-off, the cluster ran OpenObserve as a unified observability stack
 (metrics + logs + traces, single binary, local-disk storage). OpenObserve
-is functionally fine but requires significant manual work to be useful in a
+was functionally fine but required significant manual work to be useful in a
 Kubernetes context — no pre-baked dashboards, no auto-discovered scrape
 configs, manual rule authoring. The Grafana ecosystem ships with
 substantially more out-of-the-box integration.
 
 After working through criteria around ergonomics, retention, and ingest
 robustness when the Synology is unavailable, OpenObserve fell out of
-contention on every axis. The remaining real comparison is between two
+contention on every axis. The remaining real comparison was between two
 Grafana-front-door stacks:
 
 - **kube-prometheus-stack + Loki** — most ecosystem-pre-baked artifacts
@@ -22,15 +24,13 @@ Grafana-front-door stacks:
   story, but materially fewer pre-built dashboards/queries on the
   VictoriaLogs side.
 
-This doc is the canonical record of the bake-off going forward. Each
-commit on the bake-off branch references it; findings are appended below
-as they accumulate; the final decision lands in this same doc.
+This doc is the canonical historical record of the bake-off. The findings and final decision are retained below; current execution state lives in the [observability rework plan](plans/20260703-observability-rework.md).
 
 ## Stacks under test
 
-Both pipelines run in parallel in the `observability` namespace, sharing
+During the bake-off, both pipelines ran in parallel in the `observability` namespace, sharing
 a single standalone Grafana instance as the front-door UI. OpenObserve
-remains running but is not part of the evaluation.
+remained running but was not part of the evaluation.
 
 ### Pipeline A — kube-prometheus-stack + Loki
 

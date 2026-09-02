@@ -116,7 +116,8 @@ spec:
 
     # Talos exposes these components on the node addresses rather than pods.
     # Controller-manager and scheduler require bearer-token authorization and
-    # use localhost-only certificates, so retain TLS but skip hostname checks.
+    # generate self-signed localhost certificates, so retain TLS but skip
+    # verification when scraping the node IPs.
     # Etcd exposes a separate plaintext, metrics-only listener and receives no
     # Kubernetes service-account token.
     kubeControllerManager:
