@@ -68,10 +68,14 @@ spec:
             # coredns prometheus listener (Corefile: prometheus :9153)
             - port: "9153"
               protocol: TCP
-            # cilium-agent metrics + hubble-metrics
+            # cilium-agent metrics
             - port: "9962"
               protocol: TCP
+            # cilium-envoy metrics
             - port: "9964"
+              protocol: TCP
+            # hubble metrics
+            - port: "9965"
               protocol: TCP
             # cilium-operator metrics
             - port: "9963"

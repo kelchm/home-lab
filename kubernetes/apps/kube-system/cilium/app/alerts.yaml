@@ -1,0 +1,20 @@
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: cilium-policy-drops
+spec:
+  groups:
+    - name: cilium
+      rules:
+        - alert: CiliumPolicyDrops
+          expr: |
+            sum by (source_namespace, source, destination_namespace, destination, traffic_direction) (
+              rate(hubble_drop_total{reason="POLICY_DENIED"}[10m])
+            ) > 0.05
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: Cilium policy is dropping {{ $labels.source_namespace }}/{{ $labels.source }} -> {{ $labels.destination_namespace }}/{{ $labels.destination }} ({{ $labels.traffic_direction }})
+            description: Sustained policy-denied drops for 15 minutes. Ports are not in the metric; get them with `kubectl -n kube-system exec <cilium-agent-pod> -c cilium-agent -- hubble observe --verdict DROPPED --since 10m`.
