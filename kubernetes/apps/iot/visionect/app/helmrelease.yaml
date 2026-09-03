@@ -18,7 +18,14 @@ spec:
         # commit changes this to 1 after the final dump/config import.
         replicas: 1
         strategy: Recreate
+        # nginx reads this externally-managed Secret only at process startup.
+        # Reloader handles future cert-manager renewals; this pod annotation
+        # forces one rollout now to load the certificate already renewed.
+        annotations:
+          secret.reloader.stakater.com/reload: vss-tls
         pod:
+          annotations:
+            kubectl.kubernetes.io/restartedAt: "2026-09-03T02:28:05Z"
           terminationGracePeriodSeconds: 60
         initContainers:
           prepare-data:

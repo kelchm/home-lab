@@ -447,6 +447,34 @@ spec:
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
+  name: victoria-metrics-sync-job
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: victoria-metrics-k8s-stack
+      app.kubernetes.io/instance: victoria-metrics-k8s-stack
+      app.kubernetes.io/component: syncJob
+      io.cilium.k8s.policy.serviceaccount: victoria-metrics-k8s-stack-sync-job
+  egress:
+    # The post-install/post-upgrade hook synchronizes chart objects through
+    # the Kubernetes API. It otherwise becomes isolated by the namespace
+    # default-deny policy before it can complete a future upgrade.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    - toEntities:
+        - kube-apiserver
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
   name: kube-state-metrics
 spec:
   endpointSelector:

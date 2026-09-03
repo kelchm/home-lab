@@ -127,14 +127,12 @@ spec:
         - ports:
             - port: "8443"
               protocol: TCP
-    # GF_INSTALL_PLUGINS downloads the pinned datasource plugins from
-    # grafana.com at pod start. Verified: the download URL is served
-    # directly by grafana.com with no redirect to other hosts. If grafana
-    # ever redirects plugin downloads to a CDN, the init fails visibly at
-    # pod start and the hostname lands here. Failures of this rule are
-    # therefore loud, not silent.
+    # GF_INSTALL_PLUGINS downloads the pinned datasource plugins at pod start.
+    # grafana.com redirects the release archives to Google Cloud Storage, so
+    # both hostnames are required for startup to complete.
     - toFQDNs:
         - matchName: grafana.com
+        - matchName: storage.googleapis.com
       toPorts:
         - ports:
             - port: "443"

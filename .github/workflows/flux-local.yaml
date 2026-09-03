@@ -60,6 +60,8 @@ jobs:
               - '.mise.toml'
               - 'kubernetes/**'
               - 'scripts/ci/validate-alloy-log-paths.sh'
+              - 'scripts/ci/test-validate-cilium-policies.sh'
+              - 'scripts/ci/validate-cilium-policies.sh'
               - 'scripts/ci/test-validate-unsafe-sysctls.sh'
               - 'scripts/ci/validate-unsafe-sysctls.sh'
               - 'talos/patches/global/machine-kubelet.yaml'
@@ -226,6 +228,12 @@ jobs:
           -kubernetes-version 1.36.0
           -summary
           /tmp/flux-render.yaml
+
+      - name: Validate Cilium policy rules
+        if: needs.pre-job.outputs.kubernetes_changed == 'true'
+        run: |
+          scripts/ci/test-validate-cilium-policies.sh
+          scripts/ci/validate-cilium-policies.sh
 
       - name: Validate pod sysctls against Talos
         if: needs.pre-job.outputs.kubernetes_changed == 'true'

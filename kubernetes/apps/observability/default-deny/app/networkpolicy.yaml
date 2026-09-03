@@ -17,5 +17,9 @@ spec:
   enableDefaultDeny:
     ingress: true
     egress: true
-  ingress: []
-  egress: []
+  # Empty rule objects activate default deny without granting any peers.
+  # Empty rule arrays are rejected by Cilium as an invalid policy.
+  ingress:
+    - {}
+  egress:
+    - {}

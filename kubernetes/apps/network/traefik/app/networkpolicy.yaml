@@ -106,8 +106,9 @@ spec:
     # LAN edge traffic to the services-prod LoadBalancer IP. remote-node
     # covers LoadBalancer SNAT forwarding, world covers DSR-preserved
     # client addresses, and host covers kubelet probes and node-local
-    # debugging. Grafana and the admin instance also terminate their Kanidm
-    # OIDC flows (auth.home.kelch.io) on this instance.
+    # debugging. Grafana, MetaMCP, Bambuddy, and the admin instance also
+    # terminate their Kanidm OIDC flows (auth.home.kelch.io) on this instance;
+    # Visionect fetches Broadsheet through the same gateway.
     - fromEntities:
         - world
         - remote-node
@@ -128,6 +129,18 @@ spec:
             app.kubernetes.io/instance: traefik-admin-network
             app.kubernetes.io/name: traefik
             io.cilium.k8s.policy.serviceaccount: traefik-admin
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: ai
+            app.kubernetes.io/name: metamcp
+            io.cilium.k8s.policy.serviceaccount: metamcp
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: printing
+            app.kubernetes.io/name: bambuddy
+            io.cilium.k8s.policy.serviceaccount: bambuddy
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: iot
+            app.kubernetes.io/name: visionect
+            io.cilium.k8s.policy.serviceaccount: visionect
       toPorts:
         - ports:
             - port: "8443"
@@ -224,6 +237,17 @@ spec:
         - ports:
             - port: "8000"
               protocol: TCP
+            - port: "8443"
+              protocol: TCP
+    # MetaMCP calls its public APP_URL for server-side self-inspection. The
+    # hostname terminates on this gateway, so admit that exact workload.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: ai
+            app.kubernetes.io/name: metamcp
+            io.cilium.k8s.policy.serviceaccount: metamcp
+      toPorts:
+        - ports:
             - port: "8443"
               protocol: TCP
     # Scrape via the chart's ServiceMonitor; zero targets today (see the
