@@ -78,6 +78,9 @@ spec:
     metrics:
       prometheus:
         enabled: true
+        # Dedicated metrics Service; the chart's ServiceMonitor selects it.
+        service:
+          enabled: true
         # Skip the chart's `.Capabilities.APIVersions.Has
         # "monitoring.coreos.com/v1"` guard. On the live cluster the CRD is
         # supplied by kube-prometheus-stack, but flux-local renders charts

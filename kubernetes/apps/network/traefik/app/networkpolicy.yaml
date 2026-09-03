@@ -33,9 +33,7 @@ spec:
         - ports:
             - port: "8443"
               protocol: TCP
-    # Scrape via the chart's ServiceMonitor. The Services currently expose
-    # only web/websecure so the SMs resolve zero targets today — this keeps
-    # the scrape working if the metrics port is added.
+    # Scrape via the chart's ServiceMonitor (dedicated metrics Service).
     - fromEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: observability
@@ -145,8 +143,7 @@ spec:
         - ports:
             - port: "8443"
               protocol: TCP
-    # Scrape via the chart's ServiceMonitor; zero targets today (see the
-    # public instance note).
+    # Scrape via the chart's ServiceMonitor (dedicated metrics Service).
     - fromEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: observability
@@ -250,8 +247,7 @@ spec:
         - ports:
             - port: "8443"
               protocol: TCP
-    # Scrape via the chart's ServiceMonitor; zero targets today (see the
-    # public instance note).
+    # Scrape via the chart's ServiceMonitor (dedicated metrics Service).
     - fromEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: observability

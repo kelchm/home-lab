@@ -168,9 +168,7 @@ spec:
               protocol: TCP
             - port: "8080"
               protocol: TCP
-            # traefik metrics entrypoint; the Services currently expose only
-            # web/websecure so the SMs resolve zero targets today — this
-            # keeps the scrape working if the metrics port is added.
+            # traefik metrics entrypoint (dedicated metrics Service)
             - port: "9100"
               protocol: TCP
     # Host-network targets: prometheus-node-exporter listens on the node
@@ -218,6 +216,17 @@ spec:
       toPorts:
         - ports:
             - port: "8080"
+              protocol: TCP
+    # vmagent scrapes the config-reloader sidecar's metrics (the operator
+    # adds this reloader-http endpoint to the VMServiceScrape).
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: vmagent
+            app.kubernetes.io/instance: victoria-metrics-k8s-stack
+      toPorts:
+        - ports:
+            - port: "8435"
               protocol: TCP
     - fromEntities:
         - host
@@ -308,6 +317,17 @@ spec:
               protocol: TCP
             - port: "9094"
               protocol: UDP
+    # vmagent scrapes the config-reloader sidecar's metrics (the operator
+    # adds this reloader-http endpoint to the VMServiceScrape).
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: vmagent
+            app.kubernetes.io/instance: victoria-metrics-k8s-stack
+      toPorts:
+        - ports:
+            - port: "8435"
+              protocol: TCP
     - fromEntities:
         - host
       toPorts:
