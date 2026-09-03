@@ -81,7 +81,9 @@ spec:
     # later doesn't require a Grafana restart cycle.
     plugins:
       - victoriametrics-metrics-datasource
-      - victoriametrics-logs-datasource
+      # Pin the reviewed release instead of silently taking a new plugin on a
+      # future Grafana restart.
+      - https://grafana.com/api/plugins/victoriametrics-logs-datasource/versions/0.31.0/download;victoriametrics-logs-datasource
 
     # Sidecars discover datasources/dashboards by ConfigMap label. Each
     # subsequent bake-off commit lands labeled ConfigMaps; Grafana picks
@@ -112,6 +114,8 @@ spec:
         reporting_enabled: false
       log:
         mode: console
+      log.console:
+        format: json
       auth.generic_oauth:
         enabled: true
         name: Kanidm
