@@ -11,6 +11,16 @@ spec:
   values:
     fullnameOverride: *app
     provider: cloudflare
+    # ndots:1 makes the CF API hostname resolve as an absolute name. With
+    # the default ndots:5, the resolver tries search-suffixed queries
+    # first, CoreDNS autopath answers them server-side while keeping the
+    # suffixed question name, and Cilium's DNS proxy caches the IPs under
+    # api.cloudflare.com.network.svc.cluster.local. — so the network
+    # policy's toFQDNs matchName never matches and egress is denied.
+    dnsConfig:
+      options:
+        - name: ndots
+          value: "1"
     env:
       - name: CF_API_TOKEN
         valueFrom:
