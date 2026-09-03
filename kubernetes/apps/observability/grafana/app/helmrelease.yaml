@@ -21,6 +21,16 @@ spec:
   values:
     replicas: 1
 
+    # ndots:1 so grafana.com resolves as an absolute name for the plugin
+    # download — see the cloudflare-dns HelmRelease for the
+    # ndots/search-path interaction that breaks Cilium toFQDNs rules
+    # otherwise. Datasources and OIDC use full .svc.cluster.local names
+    # and are unaffected.
+    dnsConfig:
+      options:
+        - name: ndots
+          value: "1"
+
     # Break-glass local admin. Kanidm lives in this same cluster — if it's
     # down, we still need a way into Grafana to diagnose. The OIDC button
     # is the everyday path (auto_login=true below); /login?disableAutoLogin=true

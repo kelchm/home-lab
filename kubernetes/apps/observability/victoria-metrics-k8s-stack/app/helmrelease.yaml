@@ -91,6 +91,13 @@ spec:
         enabled: false
       spec:
         configSecret: vmalertmanager-config
+        # ndots:1 so api.pushover.net resolves as an absolute name — see
+        # the cloudflare-dns HelmRelease for the ndots/search-path
+        # interaction that breaks Cilium toFQDNs rules otherwise.
+        dnsConfig:
+          options:
+            - name: ndots
+              value: "1"
         storage:
           volumeClaimTemplate:
             spec:
