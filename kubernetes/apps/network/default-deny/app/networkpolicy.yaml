@@ -1,13 +1,9 @@
 ---
-# Namespace-wide default-deny for both ingress and egress. Every workload in
-# network must be covered by an explicit per-workload CiliumNetworkPolicy in
-# its own app directory (cloudflare-dns, cloudflare-tunnel, k8s-gateway,
-# traefik). The kube-system/flux-system namespaces are a deliberate separate
-# follow-up phase per the issue scope.
-#
-# This namespace terminates everything arriving from the LAN and tunnels in
-# from Cloudflare, so east-west hygiene here is what keeps a compromised
-# edge pod from becoming cluster-wide access.
+# Namespace baseline: default-deny both directions, then the flows every
+# workload here shares — intra-namespace traffic, node processes in, and
+# DNS + API server out. The DNS rule runs the DNS proxy so per-workload
+# toFQDNs rules can match. Per-workload policies declare only
+# cross-namespace and external flows.
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
@@ -17,9 +13,30 @@ spec:
   enableDefaultDeny:
     ingress: true
     egress: true
-  # Empty rule objects activate default deny without granting any peers.
-  # Empty rule arrays are rejected by Cilium as an invalid policy.
   ingress:
-    - {}
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: network
+    # kubelet probes, kubectl port-forward, API-server webhooks and proxy
+    - fromEntities:
+        - host
+        - remote-node
   egress:
-    - {}
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: network
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toEntities:
+        - kube-apiserver

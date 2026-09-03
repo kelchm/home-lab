@@ -1,13 +1,9 @@
 ---
-# Namespace-wide default-deny for both ingress and egress. Every workload in
-# observability must be covered by an explicit per-workload CiliumNetworkPolicy
-# in its own app directory (alloy, grafana, kube-prometheus-stack, loki,
-# smartctl-exporter, victoria-logs-single, victoria-metrics-k8s-stack).
-#
-# Motivation: Loki runs auth_enabled: false and the Prometheus, VMSingle, and
-# VictoriaLogs query APIs have no auth layer, so any pod that can reach them
-# can read every log and metric in the cluster. Only the scrapers and the
-# explicitly listed consumers get access.
+# Namespace baseline: default-deny both directions, then the flows every
+# workload here shares — intra-namespace traffic, node processes in, and
+# DNS + API server out. The DNS rule runs the DNS proxy so per-workload
+# toFQDNs rules can match. Per-workload policies declare only
+# cross-namespace and external flows.
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
@@ -17,9 +13,30 @@ spec:
   enableDefaultDeny:
     ingress: true
     egress: true
-  # Empty rule objects activate default deny without granting any peers.
-  # Empty rule arrays are rejected by Cilium as an invalid policy.
   ingress:
-    - {}
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+    # kubelet probes, kubectl port-forward, API-server webhooks and proxy
+    - fromEntities:
+        - host
+        - remote-node
   egress:
-    - {}
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toEntities:
+        - kube-apiserver
