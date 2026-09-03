@@ -1,7 +1,5 @@
 ---
-# Grafana: admin-gateway UI access, the MCP integration edge, and node-level
-# debugging in; datasources, Kanidm OIDC via the services gateway, plugin
-# install, API access for the sidecars, and DNS out.
+# Grafana policies declare cross-namespace and external flows only.
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
@@ -12,9 +10,7 @@ spec:
       app.kubernetes.io/name: grafana
       app.kubernetes.io/instance: grafana
   ingress:
-    # Admin gateway (grafana.home.kelch.io) and node-level kubectl
-    # port-forward handoffs. The service maps 80 to container port 3000;
-    # Cilium evaluates this rule against the selected backend endpoint.
+    # Traefik admin access.
     - fromEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: network
@@ -25,9 +21,7 @@ spec:
         - ports:
             - port: "3000"
               protocol: TCP
-    # grafana-mcp (ai namespace) talks to the Grafana HTTP API. Pair the
-    # workload label with its dedicated ServiceAccount identity so a
-    # compromised pod cannot gain access merely by forging an app label.
+    # Grafana MCP API access.
     - fromEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: ai
@@ -37,86 +31,8 @@ spec:
         - ports:
             - port: "3000"
               protocol: TCP
-    - fromEntities:
-        - host
-      toPorts:
-        - ports:
-            - port: "3000"
-              protocol: TCP
   egress:
-    # Grafana itself and both sidecars resolve service and OIDC names. The
-    # rules.dns block activates Cilium's DNS proxy so the toFQDNs rules
-    # below learn the addresses they allow.
-    - toEndpoints:
-        - matchLabels:
-            k8s:io.kubernetes.pod.namespace: kube-system
-            k8s-app: kube-dns
-      toPorts:
-        - ports:
-            - port: "53"
-              protocol: UDP
-            - port: "53"
-              protocol: TCP
-          rules:
-            dns:
-              - matchPattern: "*"
-    # The dashboard sidecar has a ClusterRole and watches every namespace.
-    - toEntities:
-        - kube-apiserver
-    # Datasources: VictoriaMetrics, Alertmanager, Prometheus, VictoriaLogs,
-    # and Loki. The service maps 80/8428/8429/9093/9428/3100 to the
-    # container ports below; Cilium evaluates these rules against the
-    # selected backend endpoints.
-    - toEndpoints:
-        - matchLabels:
-            k8s:io.kubernetes.pod.namespace: observability
-            app.kubernetes.io/name: vmsingle
-            app.kubernetes.io/instance: victoria-metrics-k8s-stack
-      toPorts:
-        - ports:
-            - port: "8428"
-              protocol: TCP
-    - toEndpoints:
-        - matchLabels:
-            k8s:io.kubernetes.pod.namespace: observability
-            app.kubernetes.io/name: vmalertmanager
-            app.kubernetes.io/instance: victoria-metrics-k8s-stack
-      toPorts:
-        - ports:
-            - port: "9093"
-              protocol: TCP
-    - toEndpoints:
-        - matchLabels:
-            k8s:io.kubernetes.pod.namespace: observability
-            app.kubernetes.io/name: prometheus
-            prometheus: kube-prometheus-stack-prometheus
-      toPorts:
-        - ports:
-            - port: "9090"
-              protocol: TCP
-    - toEndpoints:
-        - matchLabels:
-            k8s:io.kubernetes.pod.namespace: observability
-            app.kubernetes.io/name: victoria-logs-single
-            app.kubernetes.io/instance: victoria-logs-single
-            app.kubernetes.io/component: server
-      toPorts:
-        - ports:
-            - port: "9428"
-              protocol: TCP
-    - toEndpoints:
-        - matchLabels:
-            k8s:io.kubernetes.pod.namespace: observability
-            app.kubernetes.io/name: loki
-            app.kubernetes.io/instance: loki
-            app.kubernetes.io/component: single-binary
-      toPorts:
-        - ports:
-            - port: "3100"
-              protocol: TCP
-    # OIDC (auth_url/token_url/api_url point at auth.home.kelch.io, which
-    # resolves to the services gateway LoadBalancer IP and terminates on the
-    # traefik-services pods).
+    # OIDC via Traefik services.
     - toEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: network
@@ -127,12 +43,24 @@ spec:
         - ports:
             - port: "8443"
               protocol: TCP
-    # GF_INSTALL_PLUGINS downloads the pinned datasource plugins at pod start.
-    # grafana.com redirects the release archives to Google Cloud Storage, so
-    # both hostnames are required for startup to complete.
-    - toFQDNs:
-        - matchName: grafana.com
-        - matchName: storage.googleapis.com
+    # Plugin downloads at pod start; the vendor redirects between CDNs.
+    - toCIDRSet:
+        - cidr: 0.0.0.0/0
+          except:
+            - 0.0.0.0/8
+            - 10.0.0.0/8
+            - 100.64.0.0/10
+            - 127.0.0.0/8
+            - 169.254.0.0/16
+            - 172.16.0.0/12
+            - 192.0.0.0/24
+            - 192.0.2.0/24
+            - 192.168.0.0/16
+            - 198.18.0.0/15
+            - 198.51.100.0/24
+            - 203.0.113.0/24
+            - 224.0.0.0/4
+            - 240.0.0.0/4
       toPorts:
         - ports:
             - port: "443"

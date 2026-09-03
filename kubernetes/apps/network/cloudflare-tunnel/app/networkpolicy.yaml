@@ -1,8 +1,5 @@
 ---
-# cloudflared serves *.kelch.io inbound through Cloudflare's edge and
-# proxies to the public gateway over in-cluster HTTPS. Ingress is
-# metrics-only; egress is the Cloudflare edge, the public Traefik
-# instance, and DNS.
+# Cloudflare Tunnel policy declares cross-namespace and external flows only.
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
@@ -13,10 +10,7 @@ spec:
       app.kubernetes.io/name: cloudflare-tunnel
       app.kubernetes.io/instance: cloudflare-tunnel
   ingress:
-    # Scrape via the chart's ServiceMonitor (TUNNEL_METRICS 0.0.0.0:8080)
-    # and node-level kubectl port-forward handoffs. Pair the scraper
-    # workload labels with their dedicated ServiceAccount identities so a
-    # compromised pod cannot gain access merely by forging an app label.
+    # Scraper metrics.
     - fromEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: observability
@@ -32,37 +26,7 @@ spec:
         - ports:
             - port: "8080"
               protocol: TCP
-    - fromEntities:
-        - host
-      toPorts:
-        - ports:
-            - port: "8080"
-              protocol: TCP
   egress:
-    - toEndpoints:
-        - matchLabels:
-            k8s:io.kubernetes.pod.namespace: kube-system
-            k8s-app: kube-dns
-      toPorts:
-        - ports:
-            - port: "53"
-              protocol: UDP
-            - port: "53"
-              protocol: TCP
-    # Tunnel origin: the tunnel ingress forwards *.kelch.io to
-    # https://traefik-public.network.svc:443, whose service port 443
-    # targets container port 8443. Cilium evaluates this rule against the
-    # selected backend endpoint.
-    - toEndpoints:
-        - matchLabels:
-            k8s:io.kubernetes.pod.namespace: network
-            app.kubernetes.io/name: traefik
-            app.kubernetes.io/instance: traefik-public-network
-            io.cilium.k8s.policy.serviceaccount: traefik-public
-      toPorts:
-        - ports:
-            - port: "8443"
-              protocol: TCP
     # Cloudflare edge over QUIC (UDP 7844) with the http2 fallback (TCP
     # 7844), plus generic TLS 443 for control-plane fetches. Deliberately
     # CIDR-scoped with private-space exceptions rather than toFQDNs: the
