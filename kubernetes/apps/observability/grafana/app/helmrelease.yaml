@@ -9,9 +9,6 @@ apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
   name: grafana
-  annotations:
-    # Clear the failed Helm action left behind by the default-deny incident.
-    reconcile.fluxcd.io/requestedAt: default-deny-recovery-2026-09-03
 spec:
   chart:
     spec:
@@ -21,6 +18,9 @@ spec:
         kind: HelmRepository
         name: grafana
   interval: 1h
+  # Plugin downloads happen during container startup. Allow enough time for a
+  # transient failure plus Kubernetes' CrashLoopBackOff retry to recover.
+  timeout: 10m
   values:
     replicas: 1
 
