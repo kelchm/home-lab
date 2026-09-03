@@ -33,10 +33,8 @@ function main() {
              select(([.rule.ingress[]?, .rule.ingressDeny[]?,
                       .rule.egress[]?, .rule.egressDeny[]?] | length) == 0) |
              .name' "${file}")
-    done < <(rg --files-with-matches --null \
-        --glob '*.yaml' --glob '*.yml' \
-        '^kind: Cilium(Network|ClusterwideNetwork)Policy$' \
-        "${MANIFEST_DIR}")
+    done < <(find "${MANIFEST_DIR}" -type f \
+        \( -name '*.yaml' -o -name '*.yml' \) -print0)
 
     if ((failed != 0)); then
         return 1
