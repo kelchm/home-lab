@@ -256,6 +256,11 @@ spec:
         - ports:
             - port: "9093"
               protocol: TCP
+    # VM/operator config-reloaders watch their config Secrets through the
+    # API server; without this the pod cannot start (config-init fatal) or
+    # re-render config after an operator rotation.
+    - toEntities:
+        - kube-apiserver
 ---
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
@@ -347,6 +352,11 @@ spec:
         - ports:
             - port: "443"
               protocol: TCP
+    # VM/operator config-reloaders watch their config Secrets through the
+    # API server; without this the pod cannot start (config-init fatal) or
+    # re-render config after an operator rotation.
+    - toEntities:
+        - kube-apiserver
 ---
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy

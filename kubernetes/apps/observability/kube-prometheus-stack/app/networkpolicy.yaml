@@ -258,6 +258,10 @@ spec:
               protocol: TCP
             - port: "9094"
               protocol: UDP
+    # The prometheus-operator's config-reloader sidecar watches the
+    # routing config Secret through the API server.
+    - toEntities:
+        - kube-apiserver
 ---
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
