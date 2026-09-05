@@ -16,6 +16,9 @@ spec:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: ai
             app.kubernetes.io/name: metamcp
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: ai
+            app.kubernetes.io/name: dbhub-mcp
       toPorts:
         - ports:
             - port: "5432"
