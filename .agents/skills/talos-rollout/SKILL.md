@@ -42,7 +42,7 @@ talosctl health --nodes <healthy-control-plane-ip>
 
 Preflight prints a one-line summary per check and expands raw output only for checks that fail. Set `VERBOSE=1` to see every table. It exits non-zero listing every failure it found, so read the whole list rather than fixing the first line and re-running.
 
-It gates on: routes to every rollout destination, Talos reachable at each node, etcd quorum, all Kubernetes nodes Ready **and uncordoned**, Multus safeguards Ready, all Longhorn volumes healthy, and all instance-managers Ready with `lhnet1`. It reports without judging: which interface carries your API and Talos paths, which node hosts each Tailscale pod, every CloudNativePG cluster with its instance count and primary placement, every suspended Flux Kustomization, and every PodDisruptionBudget at zero allowed disruptions.
+It gates on: routes to every rollout destination, Talos reachable at each node, etcd quorum, all Kubernetes nodes Ready **and uncordoned**, Multus safeguards Ready, every in-use Longhorn volume attached and healthy, and all instance-managers Ready with `lhnet1`. It reports without judging: which interface carries your API and Talos paths, any idle Longhorn volume, every CloudNativePG cluster with its instance count and primary placement, every suspended Flux Kustomization, and every PodDisruptionBudget at zero allowed disruptions.
 
 Then, in order:
 
@@ -54,7 +54,7 @@ Then, in order:
 
    Verify the snapshot at that path before relying on it.
 
-2. **Settle the access path.** Preflight reports whether your route to the Kubernetes API and each Talos node runs over a direct link or a tunnel, and whether the candidate hosts the Tailscale subnet router or operator. If your path depends on a pod the candidate hosts, choose deliberately: pre-move the router to a surviving node and confirm the Connector is Ready there, or accept that eviction will transiently reset your API connection. Do not discover this mid-drain.
+2. **Settle the access path.** Preflight reports whether your route to the Kubernetes API and each Talos node runs over a direct link or a tunnel, and names the peer serving a tunnelled path. A direct link survives the rollout. A tunnelled path only survives if the router serving it lives outside this cluster — confirm that before you start, not mid-drain.
 
 3. **Decide about database primaries.** Preflight flags any CloudNativePG singleton primary on the candidate. This needs an explicit availability decision — a temporary replica and switchover, or accepted downtime with a verified restorable backup. Follow [references/cnpg-failover.md](references/cnpg-failover.md). Do not automatically patch or scale a database cluster.
 
@@ -104,7 +104,7 @@ After all nodes have been rolled:
 talosctl health --nodes <healthy-control-plane-ip>
 ```
 
-Confirm every Talos server reports the target version, all three nodes are Ready and uncordoned, etcd is healthy, all Longhorn volumes are healthy, all instance-managers are Running and Ready with `lhnet1`, and the Tailscale connector is Ready.
+Confirm every Talos server reports the target version, all three nodes are Ready and uncordoned, etcd is healthy, every in-use Longhorn volume is attached and healthy, and all instance-managers are Running and Ready with `lhnet1`.
 
 The rollout is not complete until every temporary change is reversed: database topologies restored with no leftover PVCs, Longhorn volumes, or inactive replication slots; and no Flux Kustomization left suspended. Preflight lists suspended Kustomizations for exactly this reason.
 
