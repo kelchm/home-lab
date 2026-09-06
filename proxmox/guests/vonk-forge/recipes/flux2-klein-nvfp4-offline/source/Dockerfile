@@ -25,6 +25,7 @@ ENV PATH=/opt/venv/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/s
 
 COPY . /opt/vonk/source/
 RUN test -x /opt/venv/bin/python3 \
+    && /opt/venv/bin/python3 /opt/vonk/source/repair_cusparselt_metadata.py \
     && /opt/venv/bin/python3 /opt/vonk/source/build_checks.py \
     && if ! getent group 10001 >/dev/null; then groupadd --gid 10001 vonk; fi \
     && if ! getent passwd 10001 >/dev/null; then useradd --uid 10001 --gid 10001 --home-dir /tmp --no-create-home --shell /usr/sbin/nologin vonk; fi \

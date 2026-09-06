@@ -1,6 +1,6 @@
 # Vonk Forge evaluation
 
-Experimental deployment on 2026-09-05, authorized to replace the active Spark workload temporarily. The controller is at **https://vonk.home.kelch.io**, with native Vonk administrator login. The username is `admin`; the generated password is in the controller bundle's `secrets/admin-password` (also retained locally under the ignored `.private/vonk-evaluation/vonk-forge/` directory). No Tailscale OAuth client is needed.
+Experimental deployment on 2026-09-05, authorized to replace the active Spark workload temporarily. Evaluation paused at the user's request on September 6 after the corrected offline FLUX checks; the existing Qwen3.6 model remains serving. The controller is at **https://vonk.home.kelch.io**, with native Vonk administrator login. The username is `admin`; the generated password is in the controller bundle's `secrets/admin-password` (also retained locally under the ignored `.private/vonk-evaluation/vonk-forge/` directory). No Tailscale OAuth client is needed.
 
 ## Controller
 

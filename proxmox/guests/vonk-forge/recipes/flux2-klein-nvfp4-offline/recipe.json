@@ -40,8 +40,8 @@
   "build": {
     "context": {
       "path": "proxmox/guests/vonk-forge/recipes/flux2-klein-nvfp4-offline/source",
-      "sha256": "07e8e27a1dc03acee621158b240c3cfa48dc415d9b77ed39a31ae4bed7eb1bd9",
-      "expected_bytes": 40960,
+      "sha256": "ded22d1d3cf8dc24d8845c063b6e2b0ecf2ee863f609ffc3652faa7c1155e538",
+      "expected_bytes": 61440,
       "media_type": "application/vnd.vonk-forge.source-bundle.v1+tar"
     },
     "dockerfile": "Dockerfile",

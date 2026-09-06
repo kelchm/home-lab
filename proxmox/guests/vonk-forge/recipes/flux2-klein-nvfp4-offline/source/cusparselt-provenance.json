@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "base_image_digest": "sha256:7fda74d7af1d86455bfa58df5d36e761964017c7bce6f5d2f3564ba0b2deee3a",
+  "official_wheel": {
+    "source_url": "https://files.pythonhosted.org/packages/46/10/8dcd1175260706a2fc92a16a52e306b71d4c1ea0b0cc4a9484183399818a/nvidia_cusparselt_cu13-0.8.0-py3-none-manylinux2014_aarch64.whl",
+    "filename": "nvidia_cusparselt_cu13-0.8.0-py3-none-manylinux2014_aarch64.whl",
+    "size": 220791277,
+    "sha256": "400c6ed1cf6780fc6efedd64ec9f1345871767e6a1a0a552a1ea0578117ea77c"
+  },
+  "files_before": {
+    "nvidia/cusparselt/LICENSE.txt": {
+      "bytes": 17948,
+      "sha256": "e8d158885a681b95ec7a6fc06dd8d4a52989f374cb1380c8a4c8fb27fd3d5d5e"
+    },
+    "nvidia/cusparselt/include/cusparseLt.h": {
+      "bytes": 18157,
+      "sha256": "5892d5ae6b58f63ac9583965d8baef44801ec77af214516dcb1542e9b395ecef"
+    },
+    "nvidia/cusparselt/lib/libcusparseLt.so.0": {
+      "bytes": 273881681,
+      "sha256": "20de6b36cbbf5753b26826eec753a2005608e14cbc3bfdd4681138098be86941",
+      "elf_machine": 183
+    },
+    "nvidia_cusparselt_cu13-0.8.0.dist-info/METADATA": {
+      "bytes": 12641,
+      "sha256": "72e9b5bb91a38047d99145a1a802ad947ff555431e3bf33751cb31a5fa91f6e2"
+    },
+    "nvidia_cusparselt_cu13-0.8.0.dist-info/WHEEL": {
+      "bytes": 106,
+      "sha256": "f44130c350c4a5261dabead1793c18f3c1b9d54a075af0015ae445e92cbff01b"
+    },
+    "nvidia_cusparselt_cu13-0.8.0.dist-info/top_level.txt": {
+      "bytes": 18,
+      "sha256": "a1f202f9d6cad2cdb68cde79b207d5a5b847593eb765d24b59e49be8aff5f812"
+    },
+    "nvidia_cusparselt_cu13-0.8.0.dist-info/INSTALLER": {
+      "bytes": 4,
+      "sha256": "ceebae7b8927a3227e5303cf5e0f1f7b34bb542ad7250ac03fbcde36ec2f1508"
+    }
+  },
+  "record_before": {
+    "bytes": 755,
+    "sha256": "40bbb69546071b4c1bf0ec63daf2fb4378b40169f8a2e8934dc3dd62082db3b1"
+  },
+  "wheel_after": {
+    "bytes": 101,
+    "sha256": "1f20804e980bd7375854f7846be573991f2310d352476aaa03845a7ec0f63b30"
+  },
+  "record_after": {
+    "bytes": 755,
+    "sha256": "bfa906941044335c2bdffafca7be80a2e7f1b86d70eec9bc67984a8824ba9215"
+  },
+  "torch_metadata_sha256": "6a3cacf846425d9c8a3aa9929623a3d1ca261d185064c912be2ab5902d4f0e37",
+  "minimum_observed_glibc": "2.27",
+  "old_tag": "py3-none-manylinux2014_sbsa",
+  "new_tag": "py3-none-linux_aarch64"
+}

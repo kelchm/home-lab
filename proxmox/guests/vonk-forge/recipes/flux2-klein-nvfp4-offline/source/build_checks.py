@@ -29,6 +29,10 @@ import torch
 assert versions["torch"] == "2.9.1+cu130", versions["torch"]
 assert torch.version.cuda == "13.0", torch.version.cuda
 subprocess.run([sys.executable, "-m", "pip", "check"], check=True, timeout=120)
+correction = json.loads(Path("/opt/vonk/cusparselt-metadata-correction.json").read_text())
+assert correction["new_tag"] == "py3-none-linux_aarch64"
+assert correction["all_package_hashes_and_record_verified"]
+assert correction["pip_check_after"]["returncode"] == 0
 
 source_hashes = json.loads((SOURCE / "comfy-source-sha256.json").read_text())
 for relative, expected in source_hashes.items():
@@ -81,6 +85,7 @@ receipt = {
     "versions": versions,
     "torch_cuda": torch.version.cuda,
     "pip_check_passed": True,
+    "cusparselt_metadata_correction": "/opt/vonk/cusparselt-metadata-correction.json",
     "core_source_hashes_passed": True,
     "adapter_cli_passed": True,
     "workflow_node_schemas": sorted(set(checked_nodes)),
