@@ -1,0 +1,98 @@
+{
+  "schema_version": 1,
+  "kind": "runtime-distribution",
+  "identity": {
+    "publisher": "vonk-forge",
+    "slug": "kelchm-comfyui-aeon-0-20-1-cu130-arm64"
+  },
+  "metadata": {
+    "title": "Community ComfyUI 0.20.1 CUDA 13.0.2 ARM64 offline runtime",
+    "description": "Immutable AEON-7 slim image, with core ComfyUI source and Kitchen CUDA binary independently compared with upstream. No publisher build attestation or aggregate license is implied. Runtime imports and GPU execution are separately qualified.",
+    "tags": [
+      "comfyui",
+      "community",
+      "cuda",
+      "arm64",
+      "spark",
+      "offline",
+      "candidate"
+    ]
+  },
+  "implements_harness": {
+    "kind": "execution-harness",
+    "publisher": "vonk-forge",
+    "slug": "comfyui",
+    "content_sha256": "0d97fceaa9a7ab64bf3d826b5d9ca427ea10be79b54a8d4fe9190711c9bf70d6"
+  },
+  "platform": "linux/arm64",
+  "source": {
+    "repository": "https://github.com/Comfy-Org/ComfyUI",
+    "revision": "fce0398470fe3ecdb7ab4c5c69555ad0fcbdc09e",
+    "license": "GPL-3.0-only",
+    "archive_sha256": "d3b220dcbaf32d9847381e0d2e905e56ab9f3329ddf1472c21c8b9cfd38e8056"
+  },
+  "image": "ghcr.io/aeon-7/comfyui-aeon-spark@sha256:7fda74d7af1d86455bfa58df5d36e761964017c7bce6f5d2f3564ba0b2deee3a",
+  "image_manifest": {
+    "digest": "7fda74d7af1d86455bfa58df5d36e761964017c7bce6f5d2f3564ba0b2deee3a",
+    "size": 8100,
+    "config_digest": "6a561adfb47b51ab9373b48814b3341b3271104c820008d696346bc54d011d1a",
+    "compressed_layers_bytes": 9582485178
+  },
+  "dependencies": [
+    {
+      "name": "ComfyUI",
+      "version": "0.20.1",
+      "source": "https://github.com/Comfy-Org/ComfyUI/tree/fce0398470fe3ecdb7ab4c5c69555ad0fcbdc09e",
+      "license": "GPL-3.0-only"
+    },
+    {
+      "name": "PyTorch",
+      "version": "2.9.1+cu130",
+      "source": "https://download.pytorch.org/whl/cu130",
+      "license": "BSD-3-Clause"
+    },
+    {
+      "name": "TorchVision",
+      "version": "0.24.1+cu130",
+      "source": "https://download.pytorch.org/whl/cu130",
+      "license": "BSD-3-Clause"
+    },
+    {
+      "name": "TorchAudio",
+      "version": "2.9.1+cu130",
+      "source": "https://download.pytorch.org/whl/cu130",
+      "license": "BSD-2-Clause"
+    },
+    {
+      "name": "comfy-kitchen",
+      "version": "0.2.8",
+      "source": "https://pypi.org/project/comfy-kitchen/0.2.8/",
+      "license": "Apache-2.0"
+    },
+    {
+      "name": "Triton",
+      "version": "3.5.1",
+      "source": "https://pypi.org/project/triton/3.5.1/",
+      "license": "MIT"
+    },
+    {
+      "name": "CUDA runtime",
+      "version": "13.0.2-ubuntu24.04",
+      "source": "https://catalog.ngc.nvidia.com/orgs/nvidia/containers/cuda",
+      "license": "NVIDIA CUDA Toolkit EULA"
+    }
+  ],
+  "build": {
+    "network_hosts": [],
+    "offline_after_installation": true
+  },
+  "capabilities": {
+    "distributed_vllm": null
+  },
+  "security": {
+    "network_mode": "none",
+    "user": "10001:10001",
+    "no_new_privileges": true,
+    "capabilities": []
+  }
+}

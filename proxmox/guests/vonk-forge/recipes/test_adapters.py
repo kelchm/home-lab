@@ -19,19 +19,21 @@ ROOT = Path(__file__).resolve().parent
 
 
 class FluxAdapterTests(unittest.TestCase):
+    folder = "flux2-klein-nvfp4"
+
     def test_controller_can_execute_script_without_a_shell(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             executable = Path(directory) / "comfyui-job"
-            shutil.copyfile(ROOT / "flux2-klein-nvfp4/source/comfyui_job.py", executable)
+            shutil.copyfile(ROOT / self.folder / "source/comfyui_job.py", executable)
             executable.chmod(0o555)
             result = subprocess.run([str(executable), "--help"], capture_output=True, text=True, timeout=10)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("--workflow-sha256", result.stdout)
 
     def test_http_artifact_directory_mounts_resolve_to_regular_model_files(self) -> None:
-        namespace = runpy.run_path(str(ROOT / "flux2-klein-nvfp4/source/comfyui_job.py"))
+        namespace = runpy.run_path(str(ROOT / self.folder / "source/comfyui_job.py"))
         link = namespace["link_models"]
-        document = json.loads((ROOT / "flux2-klein-nvfp4/source/workflows/flux-2-klein-4b.json").read_text())
+        document = json.loads((ROOT / self.folder / "source/workflows/flux-2-klein-4b.json").read_text())
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory)
             for model in document["models"]:
@@ -49,12 +51,24 @@ class FluxAdapterTests(unittest.TestCase):
                     link(document, base / "missing")
 
     def test_comfyui_state_directories_exist_before_unprivileged_launch(self) -> None:
-        namespace = runpy.run_path(str(ROOT / "flux2-klein-nvfp4/source/comfyui_job.py"))
+        namespace = runpy.run_path(str(ROOT / self.folder / "source/comfyui_job.py"))
         main = namespace["main"]
         globals_ = main.__globals__
         process = SimpleNamespace(terminate=lambda: None, wait=lambda timeout: 0)
 
         def launch(command, **kwargs):
+            if self.folder.endswith("-offline"):
+                for name in ("HF_HOME", "PIP_CACHE_DIR", "CCACHE_DIR"):
+                    self.assertTrue(Path(kwargs["env"][name]).is_dir())
+                    self.assertNotIn("/workspace", kwargs["env"][name])
+                    self.assertNotIn("/root", kwargs["env"][name])
+                for option in ("--disable-all-custom-nodes", "--disable-api-nodes", "--use-pytorch-cross-attention", "--disable-pinned-memory"):
+                    self.assertIn(option, command)
+                database = command[command.index("--database-url") + 1]
+                self.assertTrue(database.startswith("sqlite:////"))
+                database_path = Path(database.removeprefix("sqlite:///"))
+                self.assertTrue(database_path.parent.is_dir())
+                self.assertNotIn("/opt", str(database_path))
             for name in ("HOME", "XDG_CACHE_HOME", "TRITON_CACHE_DIR", "TORCH_HOME", "TORCH_EXTENSIONS_DIR", "TORCHINDUCTOR_CACHE_DIR", "CUDA_CACHE_PATH"):
                 directory = Path(kwargs["env"][name])
                 self.assertTrue(directory.is_dir())
@@ -81,6 +95,10 @@ class FluxAdapterTests(unittest.TestCase):
         }
         with patch.dict(globals_, replacements), patch("subprocess.Popen", side_effect=launch):
             self.assertEqual(main(), 0)
+
+
+class OfflineFluxAdapterTests(FluxAdapterTests):
+    folder = "flux2-klein-nvfp4-offline"
 
 
 class GlmAdapterTests(unittest.TestCase):

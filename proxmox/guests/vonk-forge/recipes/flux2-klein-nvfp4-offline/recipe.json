@@ -1,0 +1,361 @@
+{
+  "schema_version": 1,
+  "identity": {
+    "publisher": "vonk-forge",
+    "slug": "kelchm-flux2-klein-nvfp4-offline"
+  },
+  "metadata": {
+    "title": "FLUX.2 Klein 4B NVFP4 offline ComfyUI single Spark \u2014 home-lab evaluation",
+    "description": "Separate community-image experiment using ComfyUI 0.20.1, CUDA 13.0.2 and the same exact four-step FLUX.2 Klein NVFP4 artifacts. The immutable ARM64 base is adapted without network, startup updates or custom/API nodes. Per-job database and caches are writable. Build imports and actual image generation remain qualification gates.",
+    "tags": [
+      "executable",
+      "candidate",
+      "flux",
+      "image",
+      "text-to-image",
+      "comfyui",
+      "nvfp4",
+      "distilled",
+      "single",
+      "spark",
+      "offline-build"
+    ],
+    "alignment": "unspecified"
+  },
+  "model": {
+    "kind": "model-version",
+    "publisher": "black-forest-labs",
+    "slug": "flux-2-klein-4b-nvfp4-1db2b2f7",
+    "content_sha256": "0bbb725d275f9562193171fc17391ce0f5a2156e365d1b208eaba0f1691a6914"
+  },
+  "execution": {
+    "harness": {
+      "kind": "execution-harness",
+      "publisher": "vonk-forge",
+      "slug": "comfyui",
+      "content_sha256": "0d97fceaa9a7ab64bf3d826b5d9ca427ea10be79b54a8d4fe9190711c9bf70d6"
+    },
+    "patch_bundle": null
+  },
+  "build": {
+    "context": {
+      "path": "proxmox/guests/vonk-forge/recipes/flux2-klein-nvfp4-offline/source",
+      "sha256": "07e8e27a1dc03acee621158b240c3cfa48dc415d9b77ed39a31ae4bed7eb1bd9",
+      "expected_bytes": 40960,
+      "media_type": "application/vnd.vonk-forge.source-bundle.v1+tar"
+    },
+    "dockerfile": "Dockerfile",
+    "platform": "linux/arm64",
+    "arguments": [],
+    "network": {
+      "mode": "none",
+      "hosts": []
+    },
+    "resources": {
+      "download_bytes": 12000000000,
+      "temporary_bytes": 65000000000,
+      "memory_bytes": 8000000000,
+      "timeout_seconds": 7200,
+      "cpu_cores": 8,
+      "processes": 4096
+    },
+    "options": {
+      "additional_contexts": [],
+      "annotations": [],
+      "environment": [],
+      "format": "oci",
+      "identity_label": true,
+      "ignorefile": null,
+      "jobs": 1,
+      "labels": [
+        {
+          "name": "ai.vonkforge.runtime-interface",
+          "value": "v1"
+        }
+      ],
+      "layer_compression": "disabled",
+      "layer_labels": [],
+      "layers": true,
+      "no_hostname": false,
+      "no_hosts": false,
+      "omit_history": false,
+      "os_features": [],
+      "os_version": null,
+      "shm_bytes": 67108864,
+      "skip_unused_stages": true,
+      "squash": "none",
+      "timestamp": null,
+      "unset_environment": [],
+      "unset_labels": []
+    },
+    "security": {
+      "capabilities": [
+        "CHOWN",
+        "DAC_OVERRIDE",
+        "FOWNER"
+      ]
+    }
+  },
+  "parameters": [],
+  "provenance": {
+    "source_kind": "fork",
+    "source_reference": "https://github.com/CarstVaartjes/vonk-forge-recipes/blob/5bbb0be4e604768499ccbcf82bbea181575c31d6/recipes/flux-2-klein-4b-nvfp4-comfyui-single.json",
+    "attribution": [
+      "Black Forest Labs",
+      "Comfy-Org",
+      "CarstVaartjes/vonk-forge-recipes@5bbb0be4e604768499ccbcf82bbea181575c31d6",
+      "AEON-7/comfyui-aeon-spark immutable community image"
+    ]
+  },
+  "artifacts": [
+    {
+      "id": "target",
+      "kind": "http.file",
+      "repository": "https://huggingface.co/black-forest-labs/FLUX.2-klein-4b-nvfp4/resolve/1db2b2f776c24b76f1122e5f69ab1949fc620068/flux-2-klein-4b-nvfp4.safetensors",
+      "revision": "sha256:d8c5007b6a3bbbdfd38538bbcef5101a55dfde81894f58d2e3c8701cdef3542b",
+      "download_bytes": 2460413488,
+      "installed_bytes": 2460413488,
+      "mount": {
+        "target": "/models/target",
+        "read_only": true
+      },
+      "roles": [
+        "entrypoint"
+      ]
+    },
+    {
+      "id": "text-encoder",
+      "kind": "http.file",
+      "repository": "https://huggingface.co/Comfy-Org/vae-text-encorder-for-flux-klein-4b/resolve/5f526678002e43af5551dadb73ce2e8c91b43afe/split_files/text_encoders/qwen_3_4b.safetensors",
+      "revision": "sha256:6c671498573ac2f7a5501502ccce8d2b08ea6ca2f661c458e708f36b36edfc5a",
+      "download_bytes": 8044982048,
+      "installed_bytes": 8044982048,
+      "mount": {
+        "target": "/models/text-encoder",
+        "read_only": true
+      },
+      "roles": [
+        "entrypoint"
+      ]
+    },
+    {
+      "id": "vae",
+      "kind": "http.file",
+      "repository": "https://huggingface.co/Comfy-Org/vae-text-encorder-for-flux-klein-4b/resolve/5f526678002e43af5551dadb73ce2e8c91b43afe/split_files/vae/flux2-vae.safetensors",
+      "revision": "sha256:868fe7b343cc8f3a19dbcfcafbc3d5f888802be3f89bd81b65b3621a066ce8f3",
+      "download_bytes": 336211292,
+      "installed_bytes": 336211292,
+      "mount": {
+        "target": "/models/vae",
+        "read_only": true
+      },
+      "roles": [
+        "entrypoint"
+      ]
+    }
+  ],
+  "runtime": {
+    "distribution": {
+      "publisher": "vonk-forge",
+      "slug": "kelchm-comfyui-aeon-0-20-1-cu130-arm64",
+      "kind": "runtime-distribution",
+      "content_sha256": "2c91322fe8ccfa6591de1a502412f8df9ad28de92fb1f0f68d5346db53ff25fe"
+    },
+    "entrypoint": [
+      "/opt/vonk/bin/comfyui-job"
+    ],
+    "arguments": [
+      {
+        "name": "workflow",
+        "value": "/opt/vonk/source/workflows/flux-2-klein-4b.json"
+      },
+      {
+        "name": "workflow-sha256",
+        "value": "45a661704ab13616339be8af5148cc7df9318a1a6f09406b1bcf09a083813825"
+      },
+      {
+        "name": "output-mime",
+        "value": "image/png"
+      },
+      {
+        "name": "seed",
+        "value": 0
+      }
+    ],
+    "environment": [
+      {
+        "name": "HF_HUB_OFFLINE",
+        "value": "1"
+      },
+      {
+        "name": "COMFYUI_DISABLE_TELEMETRY",
+        "value": "1"
+      }
+    ],
+    "security": {
+      "devices": [
+        "nvidia.com/gpu=all"
+      ],
+      "capabilities": [],
+      "host_network": false,
+      "privileged": false,
+      "user": "10001:10001",
+      "mounts": [
+        {
+          "source": "model",
+          "target": "/models",
+          "read_only": true
+        },
+        {
+          "source": "inputs",
+          "target": "/inputs",
+          "read_only": true
+        },
+        {
+          "source": "outputs",
+          "target": "/outputs",
+          "read_only": false
+        }
+      ]
+    },
+    "lifecycle": {
+      "pre_start": [],
+      "post_stop": [],
+      "stop_timeout_seconds": 120,
+      "readiness": {
+        "strategy": "endpoint-owner",
+        "path": "/outputs",
+        "timeout_seconds": 1800
+      },
+      "failure": {
+        "rank_loss": "not-applicable",
+        "recovery": "restart-entrypoint"
+      }
+    }
+  },
+  "topology": {
+    "name": "solo",
+    "mode": "single",
+    "node_count": 1,
+    "roles": [
+      {
+        "name": "entrypoint",
+        "count": 1,
+        "endpoint_owner": true,
+        "artifacts": [
+          "target",
+          "text-encoder",
+          "vae"
+        ],
+        "resources": {
+          "disk": {
+            "image_bytes": 40000000000,
+            "artifact_bytes": 10841606828,
+            "staging_bytes": 15000000000,
+            "cache_bytes": 6000000000,
+            "rollback_bytes": 0,
+            "safety_margin_bytes": 12000000000
+          },
+          "memory": {
+            "kind": "unified",
+            "startup_peak_bytes": 36000000000,
+            "steady_state_bytes": 28000000000,
+            "runtime_growth_bytes": 6000000000,
+            "system_reserve_bytes": 8000000000
+          }
+        }
+      }
+    ],
+    "parallelism": {
+      "world_size": 1,
+      "tensor": 1,
+      "pipeline": 1,
+      "data": 1,
+      "backend": "local"
+    },
+    "fabric": {
+      "connectivity": "none",
+      "minimum_bandwidth_mbps": 0
+    },
+    "start_order": [
+      "entrypoint"
+    ],
+    "stop_order": [
+      "entrypoint"
+    ]
+  },
+  "interfaces": [
+    {
+      "adapter": "image-job",
+      "path": "/outputs",
+      "input": {
+        "path": "/inputs",
+        "required": true,
+        "media_types": [
+          "text/plain"
+        ],
+        "max_bytes": 16384,
+        "slots": [
+          {
+            "id": "prompt",
+            "label": "Prompt",
+            "description": "UTF-8 text prompt for image generation.",
+            "media_types": [
+              "text/plain"
+            ],
+            "extensions": [
+              ".txt"
+            ],
+            "min_files": 1,
+            "max_files": 1,
+            "max_file_bytes": 16384,
+            "max_total_bytes": 16384
+          }
+        ]
+      },
+      "output": {
+        "path": "/outputs",
+        "max_total_bytes": 16777216,
+        "slots": [
+          {
+            "id": "image",
+            "label": "Generated image",
+            "description": "Single generated PNG image.",
+            "media_types": [
+              "image/png"
+            ],
+            "extensions": [
+              ".png"
+            ],
+            "min_files": 1,
+            "max_files": 1,
+            "max_file_bytes": 16777216,
+            "max_total_bytes": 16777216
+          }
+        ]
+      }
+    }
+  ],
+  "validation": {
+    "validators": [
+      {
+        "interface": "image-job",
+        "checks": [
+          "artifact.mime.image-png"
+        ]
+      }
+    ],
+    "benchmarks": [
+      {
+        "name": "flux-2-klein-nvfp4-four-step",
+        "framework": "comfyui",
+        "configuration": {
+          "width": 1024,
+          "height": 1024,
+          "steps": 4,
+          "timeout_seconds": 7200
+        }
+      }
+    ]
+  }
+}

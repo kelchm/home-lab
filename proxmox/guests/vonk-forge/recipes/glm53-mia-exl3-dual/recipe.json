@@ -58,7 +58,7 @@
       "hosts": []
     },
     "resources": {
-      "download_bytes": 9788994117,
+      "download_bytes": 12000000000,
       "temporary_bytes": 65000000000,
       "memory_bytes": 8000000000,
       "timeout_seconds": 7200,
