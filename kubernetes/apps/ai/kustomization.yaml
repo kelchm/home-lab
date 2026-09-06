@@ -10,6 +10,7 @@ components:
 resources:
   - ./namespace.yaml
   - ./networkpolicy.yaml
+  - ./dbhub-mcp/ks.yaml
   - ./digikey-mcp/ks.yaml
   - ./flux-operator-mcp/ks.yaml
   - ./grafana-mcp/ks.yaml

@@ -45,6 +45,7 @@ spec:
             - key: app.kubernetes.io/name
               operator: In
               values:
+                - dbhub-mcp
                 - digikey-mcp
                 - flux-operator-mcp
                 - grafana-mcp
