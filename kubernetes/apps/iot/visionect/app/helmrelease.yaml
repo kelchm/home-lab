@@ -176,7 +176,7 @@ spec:
           redis:
             image:
               repository: docker.io/valkey/valkey
-              tag: 7.2.14@sha256:421ea3061a040b8aaa4545d83be0bd03f15ea6102d0d81bb7d13ea83e853481d
+              tag: 7.2.14@sha256:e43f1af85c1d502ab7286594e987e66c7f99109637252fc24d71dc73d4bbff5a
             command: ["valkey-server"]
             args:
               - --save
