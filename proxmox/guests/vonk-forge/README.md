@@ -2,6 +2,8 @@
 
 Experimental deployment on 2026-09-05, authorized to replace the active Spark workload temporarily. Evaluation paused at the user's request on September 6 after the corrected offline FLUX checks; the existing Qwen3.6 model remains serving. The controller is at **https://vonk.home.kelch.io**, with native Vonk administrator login. The username is `admin`; the generated password is in the controller bundle's `secrets/admin-password` (also retained locally under the ignored `.private/vonk-evaluation/vonk-forge/` directory). No Tailscale OAuth client is needed.
 
+For source development, use the [source workflow](WORKFLOW.md), which separates the upstream mirror, submission branches, exact tested aggregate and private handoff. [Source reassessment](SOURCE-REBASE.md) records the submitted corrections and CI evidence. Those source changes do not update the deployed platform described below.
+
 ## Controller
 
 VM 201 `vonk-forge` runs on `pve-sbx-1`, cloned from template 9000. It has 4 vCPU, 12 GiB RAM, a 256 GiB thin disk, and `10.32.21.101/24` on VLAN 21, with gateway/DNS `10.32.21.1`. The VM is excluded from `daily-backups` and has automatic PVE startup disabled. It is disposable; existing VM 200 `hermes-1` is independent.
@@ -27,7 +29,7 @@ The existing `k8s-gateway` resolver supplies the four `vonk*.home.kelch.io` A re
 | Input | Identity |
 |---|---|
 | Platform checkout | `~/Development/kelchm/vonk-forge`, origin `kelchm/vonk-forge`, upstream `CarstVaartjes/vonk-forge` |
-| Platform main inspected | `0ab88b4fa0d95804bf9b3cce10a1c16a5e624eeb` |
+| Platform main inspected for the original deployment | `0ab88b4fa0d95804bf9b3cce10a1c16a5e624eeb` |
 | Published dev source | `3cacd73b7817ae884a90d1749380bb1cc246f680` |
 | Evaluated controller patch | `ba27bde2c9bd031967f32d91f2113451953f9655` |
 | Installer generation | `f08e8b4a0650f3b88b94b215a45149e68fc65be87e70fec35d7c5f133e59d00e` |

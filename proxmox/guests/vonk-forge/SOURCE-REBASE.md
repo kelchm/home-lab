@@ -1,6 +1,6 @@
 # Vonk Forge source reassessment — September 6, 2026
 
-Nine scoped signed drafts are prepared in the user fork. All 19 required combined Linux CI jobs passed at `9462ef6548eea46d7df3765a79ca11314e63a02e`; seven release/publication jobs were skipped. Two old UI patches are superseded, and two newly found upstream execution defects are corrected. The proposed contribution order is below.
+The September 6 source pass prepared nine scoped signed proposals in the user fork. All 19 required combined Linux CI jobs passed at `9462ef6548eea46d7df3765a79ca11314e63a02e`; seven release/publication jobs were skipped. Two old UI patches are superseded, and two newly found upstream execution defects are corrected. The contribution order and historical review artifacts are below. [Source workflow](WORKFLOW.md) records the accepted fork organization, review queue and completed cleanup.
 
 The first two upstream contributions are now open at the user's request: [PR 608 — architecture policy](https://github.com/CarstVaartjes/vonk-forge/pull/608) is ready for review, and [PR 609 — retained temporary files](https://github.com/CarstVaartjes/vonk-forge/pull/609) is a dependent draft. Both target upstream `main`; PR 609 includes PR 608's commit and links the incremental diff, because an upstream-hosted PR cannot use a fork-only branch as its base. After PR 608 lands, rebase PR 609 to leave only its own change before marking it ready. No merge or deployment occurred.
 
@@ -8,11 +8,13 @@ The submission branches use upstream `35ba13ea81adada84ec9f98b2c63db1032e11b98`.
 
 This source-only pass follows the [physical evaluation pause](EVALUATION.md). It rebases the proposed fixes onto upstream `4430d6e7b21b05fed22f4c354c5184efddf74699`, the canonical Model/Recipe rewrite merged in [PR 603](https://github.com/CarstVaartjes/vonk-forge/pull/603). The physical controller, native packages, serving model, recipe-v1 library and rollback artifacts remain unchanged. Source tests against the new contracts do not qualify a platform upgrade or resolve the measured transfer bottleneck.
 
-The apparent 585-commit jump is the 584-commit integration branch plus its merge commit. The fork's `main` remains at `0ab88b4fa0d95804bf9b3cce10a1c16a5e624eeb`; the new review branches already include the merged upstream history. Drafts target the frozen `review/upstream-4430` branch so their diffs contain the proposed corrections instead of that upstream history. The original five drafts and all old/deployed source branches are preserved.
+The apparent 585-commit jump was the 584-commit integration branch plus its merge commit. At that review baseline, the fork's `main` was `0ab88b4fa0d95804bf9b3cce10a1c16a5e624eeb`; the review branches already included the merged upstream history. The frozen `review/upstream-4430` base kept those draft diffs scoped to the proposed corrections. The completed cleanup made `main` an upstream mirror, retained the exact tested aggregate as `integration/evaluation`, and closed redundant own-fork PRs while preserving their branches. See [source workflow](WORKFLOW.md) for the retained queue and completion boundary.
 
 ## Fix disposition
 
-| Change | Current-main result | Review artifact |
+The table preserves the original fork review references. Architecture and retained-inspection now have upstream PRs 608 and 609 above; own-fork PRs 13 and 11 were closed as redundant during cleanup. Remaining own-fork reviews stay on their frozen bases.
+
+| Change | Result at the September 6 review baseline | Historical fork review artifact |
 | --- | --- | --- |
 | Compiled image architecture policy | Newly found upstream defect: valid compiled plans require `linux-arm64`, but image verification compares that literally with OCI `linux/arm64`, rejecting install and start preparation. Match only the explicit supported pair; retain every interface, label and digest check. | [Draft 13](https://github.com/kelchm/vonk-forge/pull/13), standalone `6a408962` |
 | Fragmented egress-probe responses | Still applicable; patch-equivalent port and seven focused native tests. | [Draft 6](https://github.com/kelchm/vonk-forge/pull/6), `0171592b` |
