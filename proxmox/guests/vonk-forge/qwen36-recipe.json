@@ -7,7 +7,7 @@
   "metadata": {
     "alignment": "unspecified",
     "title": "Qwen3.6 NVFP4 \u2014 home-lab Spark evaluation",
-    "description": "Executable Candidate binding of NVIDIA's official agent-ready Qwen3.6 35B-A3B NVFP4 checkpoint and stable vLLM 0.28 ARM64 image for one DGX Spark. Current qualification proves bounded text chat only; vision serving remains unproven on Spark.",
+    "description": "Home-lab evaluation of NVIDIA Qwen3.6 35B-A3B NVFP4 on one DGX Spark, using vLLM 0.28 with adjustable memory utilization and context length. Initial defaults are 50% memory utilization and a 64K context; vision serving is not qualified by this experiment.",
     "tags": [
       "executable",
       "candidate",
@@ -21,7 +21,6 @@
       "reasoning",
       "agentic",
       "tool-use",
-      "text-qualified",
       "vision-unproven",
       "vllm",
       "openai",
@@ -103,7 +102,29 @@
       ]
     }
   },
-  "parameters": [],
+  "parameters": [
+    {
+      "name": "gpu_memory_utilization",
+      "description": "Fraction of Spark unified memory available to vLLM, including its KV cache.",
+      "type": "enum",
+      "default": "0.50",
+      "allowed_values": [
+        "0.45",
+        "0.50",
+        "0.55"
+      ],
+      "change_effect": "restart"
+    },
+    {
+      "name": "max_model_len",
+      "description": "Maximum context length in tokens for the evaluation model.",
+      "type": "integer",
+      "default": 65536,
+      "minimum": 4096,
+      "maximum": 262144,
+      "change_effect": "restart"
+    }
+  ],
   "artifacts": [
     {
       "id": "weights",
@@ -156,11 +177,11 @@
       },
       {
         "name": "gpu-memory-utilization",
-        "value": "0.40"
+        "parameter": "gpu_memory_utilization"
       },
       {
         "name": "max-model-len",
-        "value": 262144
+        "parameter": "max_model_len"
       },
       {
         "name": "max-num-seqs",
@@ -268,8 +289,8 @@
           },
           "memory": {
             "kind": "unified",
-            "startup_peak_bytes": 70000000000,
-            "steady_state_bytes": 56000000000,
+            "startup_peak_bytes": 80000000000,
+            "steady_state_bytes": 70000000000,
             "runtime_growth_bytes": 8000000000,
             "system_reserve_bytes": 8000000000
           }
