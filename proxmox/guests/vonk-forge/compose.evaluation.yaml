@@ -1,7 +1,7 @@
 services:
   control-api:
-    image: vonk-evaluation-api:4d9e967f
+    image: vonk-evaluation-api:ba27bde2
     pull_policy: never
   control-worker:
-    image: vonk-evaluation-worker:4d9e967f
+    image: vonk-evaluation-worker:ba27bde2
     pull_policy: never

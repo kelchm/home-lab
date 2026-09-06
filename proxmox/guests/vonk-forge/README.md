@@ -14,7 +14,7 @@ sudo docker compose -f docker-compose.yaml -f compose.local.yaml -f compose.eval
 sudo docker compose -f docker-compose.yaml -f compose.local.yaml -f compose.evaluation.yaml up -d
 ```
 
-The second evaluation pass applies the signed, published-compatible controller patch `4d9e967fd67eaa7a73584d4fa2c46f384e26ea64` through `compose.evaluation.yaml`. Include that override in controller Compose commands to retain the evaluated API and worker images. The generated signed Compose file remains intact. See [evaluation results](EVALUATION.md) for measurements and limitations and [custom recipes](recipes/README.md) for current X research, exact model/runtime pins and qualification status.
+The second evaluation pass applies the signed, published-compatible controller patch `ba27bde2c9bd031967f32d91f2113451953f9655` through `compose.evaluation.yaml`. Include that override in controller Compose commands to retain the evaluated API and worker images. The generated signed Compose file remains intact. See [evaluation results](EVALUATION.md) for measurements and limitations and [custom recipes](recipes/README.md) for current X research, exact model/runtime pins and qualification status.
 
 `compose.local.yaml` profiles out both Tailscale services and adds a Caddy HTTPS front end on the VM's LAN address, proxying to Vonk's native browser edge. The signed generated Compose file is retained intact. `Caddyfile.controller.local` copies the generated native Caddy config and serves its internal recipe-library requests from a read-only cache of the compatible snapshot below. Content comes from the real upstream repository at immutable Git object IDs and passes Vonk's normal digest checks. The adjacent MIT license covers that copied upstream configuration. After changing a Compose config-file source, recreate Caddy with `docker compose -f docker-compose.yaml -f compose.local.yaml -f compose.evaluation.yaml up -d --no-deps --force-recreate caddy`; an ordinary `up` may retain the previous mount. Wait for all active agent operations to finish before recreating the native edge. Hermes is disabled in the installer bundle. Placeholder Tailscale fields are unused; the generated LiteLLM upstream key is only a placeholder for this local-model evaluation.
 
@@ -29,7 +29,7 @@ The existing `k8s-gateway` resolver supplies the four `vonk*.home.kelch.io` A re
 | Platform checkout | `~/Development/kelchm/vonk-forge`, origin `kelchm/vonk-forge`, upstream `CarstVaartjes/vonk-forge` |
 | Platform main inspected | `0ab88b4fa0d95804bf9b3cce10a1c16a5e624eeb` |
 | Published dev source | `3cacd73b7817ae884a90d1749380bb1cc246f680` |
-| Evaluated controller patch | `4d9e967fd67eaa7a73584d4fa2c46f384e26ea64` |
+| Evaluated controller patch | `ba27bde2c9bd031967f32d91f2113451953f9655` |
 | Installer generation | `f08e8b4a0650f3b88b94b215a45149e68fc65be87e70fec35d7c5f133e59d00e` |
 | Agent package | `0.1.1~dev.540+gf23e9336f7e9` |
 | Compatible recipe snapshot | `5bbb0be4e604768499ccbcf82bbea181575c31d6` |
@@ -60,7 +60,7 @@ Vonk reported the failed vLLM process as a readiness-deadline failure and remove
 
 The original deployment misclassified successful model installations as `rank-incomplete-bytes`: its completeness projection compared installed artifact bytes with the larger disk reservation for download, staging, and cache. The verified installation reports 23,462,480,292 bytes including metadata against a 74,387,433,571-byte reservation. The evaluated controller patch now uses successful exact-rank installation state, and the actual Fleet UI reports complete installations without false warnings. No receipt values were altered. Removal of the obsolete inactive installation released its 74,387,433,571-byte reservation while removing zero shared model bytes; the serving installation remained healthy.
 
-Admission inventory can also appear stale during a long build or transfer. The agent checks its 60-second inventory timer between operations on the same control loop, while telemetry continues independently. After the operation returns, overdue inventory is refreshed before the next job claim. If a preview races that refresh, wait for a new inventory timestamp and retry the preview; restarting the agent is unnecessary.
+Admission inventory can also appear stale during a long build or transfer. The installed agent checks its 60-second inventory timer between operations on the same control loop. Model observations also stop during a long operation, and synchronous installation can block the telemetry future polled beside control. The separate operation heartbeat does continue, but does not attest model health; the measured long installation interrupted an otherwise healthy model's serving route. After the operation returns, overdue inventory is refreshed before the next job claim. If a preview races that refresh, wait for a new inventory timestamp and retry the preview; restarting the agent is unnecessary.
 
 Private deployment artifacts, generated credentials, exact controller image digests, API operation receipts, and baseline Docker inspections are retained in `.private/vonk-evaluation/`. Detached checkouts there preserve the published importer and compatible recipe snapshot. Never commit that directory or the generated bundle.
 
