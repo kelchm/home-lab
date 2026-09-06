@@ -2,7 +2,7 @@
 
 Experimental deployment on 2026-09-05, authorized to replace the active Spark workload temporarily. Evaluation paused at the user's request on September 6 after the corrected offline FLUX checks; the existing Qwen3.6 model remains serving. The controller is at **https://vonk.home.kelch.io**, with native Vonk administrator login. The username is `admin`; the generated password is in the controller bundle's `secrets/admin-password` (also retained locally under the ignored `.private/vonk-evaluation/vonk-forge/` directory). No Tailscale OAuth client is needed.
 
-For source development, use the [source workflow](WORKFLOW.md), which separates the upstream mirror, submission branches, exact tested aggregate and private handoff. [Source reassessment](SOURCE-REBASE.md) records the submitted corrections and CI evidence. Those source changes do not update the deployed platform described below.
+For source development, use the [source workflow](WORKFLOW.md), which separates the upstream mirror, submission branches, exact tested aggregate and private handoff. [Source reassessment](SOURCE-REBASE.md) records the submitted corrections and CI evidence. Those source changes do not update the deployed platform described below. The user has since directed the receiving agent to resume evaluation for current, on-demand swappable recipes; the workflow records that objective. The pause and deployed state below remain the last measured checkpoint, not a new live-health claim.
 
 ## Controller
 

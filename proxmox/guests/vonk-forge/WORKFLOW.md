@@ -1,6 +1,18 @@
 # Vonk Forge source workflow
 
-Cleanup completed September 6, 2026. Four active worktrees were relocated, 22 historical checkouts were removed, and seven superseded fork PRs were closed with replacement links. Every existing local branch was retained; a verified all-refs bundle and exact dirty-worktree backup preserve recovery. The source evaluation remains separate from the paused physical deployment. See [source reassessment](SOURCE-REBASE.md) for dated findings and exact CI evidence, and [deployment notes](README.md) for the deployed generation and rollback.
+Cleanup completed September 6, 2026. Four active worktrees were relocated, 22 historical checkouts were removed, and seven superseded fork PRs were closed with replacement links. Every existing local branch was retained; a verified all-refs bundle and exact dirty-worktree backup preserve recovery. These cleanup results describe the completed checkpoint. The user subsequently directed the receiving agent to resume physical evaluation under the objective below; source CI and physical acceptance remain distinct evidence. See [source reassessment](SOURCE-REBASE.md) for dated findings and exact CI evidence, and [deployment notes](README.md) for the deployed generation and rollback.
+
+## Receiving-agent evaluation objective
+
+Resume evaluation to deliver current working recipes that can be swapped on demand. Discover recipes through fresh Mia AI Lab / MiaAI-Lab research on X or equivalent credible current sources, corroborated by primary repositories, model cards and release documentation. Record sources, dates and exact revisions; do not limit candidates to Vonk's existing catalog. Create custom recipes where needed and carry selected feasible candidates through actual deployment and acceptance.
+
+Match reference requirements as exactly as possible and record requirements versus actual configuration, including model/quantization, runtime and dependencies, launch settings, memory/context, hardware, topology and fabric. Tell the user about unmet, substituted or unverified requirements and their effects. For every accepted recipe, demonstrate functionality and a reproducible performance baseline with relevant latency, throughput, memory, errors and cold/warm behavior. Compare against credible expectations for comparable hardware and workloads; investigate significant shortfalls and state when a comparable reference is unavailable.
+
+Prove on-demand A → B → A swapping through normal Vonk lifecycle, verifying routing, usable outputs, resource release/reacquisition and switch/readiness timing. Leave a useful accepted recipe available, with exact pins, baseline results, known gaps, repeatable switching instructions and rollback. Rediscover live state before mutations; the previous pause measurements remain historical evidence. Existing evaluation authorization covers replacing experimental workloads and deploying evaluation changes while preserving unrelated workloads, rollback, native package trust and normal authority checks. Coordinate shared mutations through one owner.
+
+Record evaluation issues with affected versions, reproduction, evidence, impact and disposition. Address necessary defects with scoped, tested fixes following the branch/review workflow below, preserving potential upstreamability. Track upstream commits, releases, issues and PR feedback as evaluation progresses, particularly before new fixes or upgrades, and validate the exact combinations adopted.
+
+Subagents may be used for bounded tasks with effort selected for the specific task; do not default to high/xhigh. Opus 5 or Fable 5.1 may be used for adversarial review when useful, especially before an upstream PR. Verify actual availability and report any substitution. The orchestrator retains prioritization, coordination, evidence review and integration.
 
 ## Repository and branches
 
@@ -26,7 +38,7 @@ The cleanup closed superseded own-fork PRs **1–5, 11 and 13**, preserving all 
 
 All new commits must be signed and verified; use `git commit -S` and never fall back to an unsigned commit. Carry one new upstream candidate at a time. Reassess it against current upstream, reproduce the relevant defect, preserve current contracts, and resolve its dependencies before submission. Use focused checks during iteration and the required Linux workflow on the actual signed submission head. Record that head and workflow result; earlier or aggregate passes cannot substitute for them. Give independent review extra attention for concurrency, authority, lifecycle and cross-component changes. Keep effort proportional to the remaining uncertainty rather than repeatedly rerunning unchanged checks or developing held ideas without a concrete need.
 
-A reviewed PR, passing checks, merge, published package, installed package, and successful physical workload are distinct states. Merge and deployment remain separate decisions. Do not resume physical evaluation, change the serving workload, or deploy an integration branch merely because source cleanup or CI succeeded.
+A reviewed PR, passing checks, merge, published package, installed package, and successful physical workload are distinct states. Merges and new upstream communications retain their existing approval boundaries. Evaluation deployments are authorized by the resumed objective above, subject to compatibility, trust, lifecycle and rollback requirements; cleanup or green source CI alone does not qualify an integration branch for deployment.
 
 ## Worktrees and retained evidence
 
