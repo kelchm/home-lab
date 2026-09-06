@@ -72,6 +72,7 @@ jobs:
             scripts:
               - '.github/workflows/flux-local.yaml'
               - '.mise.toml'
+              - '.renovaterc.json5'
               - '.shellcheckrc'
               - '**/*.sh'
             skills:
@@ -368,6 +369,10 @@ jobs:
       - name: Run ShellCheck
         if: needs.pre-job.outputs.scripts_changed == 'true'
         run: git ls-files -z -- '*.sh' | xargs -0 shellcheck
+
+      - name: Validate Kanidm ceiling sync
+        if: needs.pre-job.outputs.scripts_changed == 'true'
+        run: scripts/ci/test-sync-kanidm-version-ceiling.sh
 
       - name: No shell changes
         if: needs.pre-job.outputs.scripts_changed != 'true'
