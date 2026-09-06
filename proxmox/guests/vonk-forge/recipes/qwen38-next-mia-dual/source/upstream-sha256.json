@@ -1,0 +1,8 @@
+{
+  "upstream/LICENSE": "0d96a4ff68ad6d4b6f1f30f713b18d5184912ba8dd389f86aa7710db079abcb0",
+  "upstream/files/patch_modelopt_fp8_block_moe.py": "00a01640bfdfa406c6da28f8f19a200f89f096dc93b29343c8253f546a241324",
+  "upstream/files/patch_modelopt_mxfp8.py": "adf72c590969a8a690fdca83e0cb2428df0dc7c7debdd2cb1983013492d9f285",
+  "upstream/files/detect_ple_dtype.py": "03bccc515c7b65ac7570c378347e9cd9db242ebb8d600b2dd90d2e37a646be83",
+  "upstream/files/patch_ple_layer.py": "6cb1bb9d8a4700e23c9b3114e1f3d360456669d598c7481c739ecf03d82bb964",
+  "upstream/files/patch_checkpoint_config.py": "8f05c0d4ee3a3d7847c35ecee5916baedbcd14d25fdcff641ea33179031d645e"
+}

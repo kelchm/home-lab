@@ -1,0 +1,409 @@
+{
+  "schema_version": 1,
+  "identity": {
+    "publisher": "vonk-forge",
+    "slug": "kelchm-qwen38-next-mia-dual"
+  },
+  "metadata": {
+    "title": "Qwen3.8 Flash Next NVIDIA NVFP4 \u2014 Mia dual-Spark evaluation",
+    "description": "Current MiaAI-Lab c2325b22 native-mp vLLM recipe adapted to exact NVIDIA fab0aecb weights and our f0 RoCE fabric. Initial64K context,two sequences,0.75 utilization,BF16 KV and full-vocabulary MTP3. Experimental110GB startup+8GBsystem reserve per node. Throughput,tools,vision,long context and distributed inference are pending hardware qualification.",
+    "tags": [
+      "executable",
+      "candidate",
+      "nvidia",
+      "qwen3-8",
+      "miaai-lab",
+      "nvfp4",
+      "vllm",
+      "dual",
+      "spark",
+      "multimodal"
+    ],
+    "alignment": "unspecified"
+  },
+  "model": {
+    "kind": "model-version",
+    "publisher": "nvidia",
+    "slug": "qwen3-8-flash-next-nvfp4-fab0aecb",
+    "content_sha256": "9d7488e4bd181f8e4152513cc9529476cbbd32744bb3a9ffae7c0bb887647e61"
+  },
+  "execution": {
+    "harness": {
+      "kind": "execution-harness",
+      "publisher": "vonk-forge",
+      "slug": "vllm",
+      "content_sha256": "c0d297318f223378fe573964291bc90fc950242e0d16d1d301c7d3cb4251487d"
+    },
+    "patch_bundle": {
+      "kind": "patch-bundle",
+      "publisher": "vonk-forge",
+      "slug": "kelchm-qwen38-next-mia-eval-profile",
+      "content_sha256": "e43380799f85186da265c4701e2c44cd884d43fc1050d78b377f6cd1b1f8f0ae"
+    }
+  },
+  "build": {
+    "context": {
+      "path": "proxmox/guests/vonk-forge/recipes/qwen38-next-mia-dual/source",
+      "sha256": "06c1bc835341ab1165e3f216c6c3367ed70ff7b8e0dee1889ec03300e8840b4f",
+      "expected_bytes": 122880,
+      "media_type": "application/vnd.vonk-forge.source-bundle.v1+tar"
+    },
+    "dockerfile": "Dockerfile",
+    "platform": "linux/arm64",
+    "arguments": [],
+    "network": {
+      "mode": "none",
+      "hosts": []
+    },
+    "resources": {
+      "download_bytes": 12000000000,
+      "temporary_bytes": 65000000000,
+      "memory_bytes": 8000000000,
+      "timeout_seconds": 7200,
+      "cpu_cores": 8,
+      "processes": 4096
+    },
+    "options": {
+      "additional_contexts": [],
+      "annotations": [],
+      "environment": [],
+      "format": "oci",
+      "identity_label": true,
+      "ignorefile": null,
+      "jobs": 1,
+      "labels": [
+        {
+          "name": "ai.vonkforge.runtime-interface",
+          "value": "v1"
+        }
+      ],
+      "layer_compression": "disabled",
+      "layer_labels": [],
+      "layers": true,
+      "no_hostname": false,
+      "no_hosts": false,
+      "omit_history": false,
+      "os_features": [],
+      "os_version": null,
+      "shm_bytes": 67108864,
+      "skip_unused_stages": true,
+      "squash": "none",
+      "timestamp": null,
+      "unset_environment": [],
+      "unset_labels": []
+    },
+    "security": {
+      "capabilities": [
+        "CHOWN",
+        "DAC_OVERRIDE",
+        "FOWNER"
+      ]
+    }
+  },
+  "parameters": [
+    {
+      "name": "max_model_len",
+      "description": "Context limit for bounded initial qualification; larger limits require separate testing.",
+      "type": "integer",
+      "default": 65536,
+      "minimum": 4096,
+      "maximum": 262144,
+      "change_effect": "restart"
+    },
+    {
+      "name": "max_num_seqs",
+      "description": "Maximum simultaneous vLLM sequences; initial evaluation uses two.",
+      "type": "integer",
+      "default": 2,
+      "minimum": 1,
+      "maximum": 4,
+      "change_effect": "restart"
+    }
+  ],
+  "artifacts": [
+    {
+      "id": "weights",
+      "kind": "huggingface.snapshot",
+      "repository": "nvidia/Qwen3.8-Flash-Next-NVFP4",
+      "revision": "fab0aecb760cec45227f6656abcaafa11abca87a",
+      "download_bytes": 132734506208,
+      "installed_bytes": 132734506208,
+      "mount": {
+        "target": "/models",
+        "read_only": true
+      },
+      "roles": [
+        "entrypoint",
+        "worker"
+      ]
+    }
+  ],
+  "runtime": {
+    "distribution": {
+      "kind": "runtime-distribution",
+      "publisher": "vonk-forge",
+      "slug": "kelchm-qwen38-next-mia-c2325b22-arm64",
+      "content_sha256": "ec4f514c147a8003c6279a4470640756cc7d5c21d492796b58ab447e41bc670a"
+    },
+    "entrypoint": [
+      "/opt/vonk/bin/vllm",
+      "serve",
+      "/models"
+    ],
+    "arguments": [
+      {
+        "name": "served-model-name",
+        "value": "qwen3.8-flash-next"
+      },
+      {
+        "name": "gpu-memory-utilization",
+        "value": "0.75"
+      },
+      {
+        "name": "max-num-batched-tokens",
+        "value": 2048
+      },
+      {
+        "name": "kv-cache-dtype",
+        "value": "auto"
+      },
+      {
+        "name": "speculative-config",
+        "value": "{\"method\":\"mtp\",\"num_speculative_tokens\":3}"
+      },
+      {
+        "name": "enable-prefix-caching",
+        "value": true
+      },
+      {
+        "name": "enable-chunked-prefill",
+        "value": true
+      },
+      {
+        "name": "compilation-config",
+        "value": "{\"mode\":0,\"cudagraph_mode\":\"FULL_DECODE_ONLY\"}"
+      },
+      {
+        "name": "mm-encoder-tp-mode",
+        "value": "data"
+      },
+      {
+        "name": "limit-mm-per-prompt",
+        "value": "{\"image\":1,\"video\":0}"
+      },
+      {
+        "name": "tool-call-parser",
+        "value": "qwen3_coder"
+      },
+      {
+        "name": "enable-auto-tool-choice",
+        "value": true
+      },
+      {
+        "name": "reasoning-parser",
+        "value": "qwen3"
+      },
+      {
+        "name": "trust-remote-code",
+        "value": true
+      },
+      {
+        "name": "max-model-len",
+        "parameter": "max_model_len"
+      },
+      {
+        "name": "max-num-seqs",
+        "parameter": "max_num_seqs"
+      }
+    ],
+    "environment": [
+      {
+        "name": "HF_HUB_OFFLINE",
+        "value": "1"
+      },
+      {
+        "name": "TRANSFORMERS_OFFLINE",
+        "value": "1"
+      },
+      {
+        "name": "VLLM_NO_USAGE_STATS",
+        "value": "1"
+      },
+      {
+        "name": "NCCL_IB_DISABLE",
+        "value": "0"
+      },
+      {
+        "name": "NCCL_NET",
+        "value": "IB"
+      },
+      {
+        "name": "NCCL_DEBUG",
+        "value": "INFO"
+      },
+      {
+        "name": "NCCL_NVLS_ENABLE",
+        "value": "0"
+      },
+      {
+        "name": "NCCL_CUMEM_ENABLE",
+        "value": "0"
+      }
+    ],
+    "security": {
+      "devices": [
+        "nvidia.com/gpu=all"
+      ],
+      "capabilities": [],
+      "host_network": true,
+      "privileged": false,
+      "user": "10001:10001",
+      "mounts": [
+        {
+          "source": "model",
+          "target": "/models",
+          "read_only": true
+        },
+        {
+          "source": "outputs",
+          "target": "/outputs",
+          "read_only": false
+        }
+      ]
+    },
+    "lifecycle": {
+      "pre_start": [],
+      "post_stop": [],
+      "stop_timeout_seconds": 180,
+      "readiness": {
+        "strategy": "endpoint-owner-after-all-ranks",
+        "path": "/v1/models",
+        "timeout_seconds": 3600
+      },
+      "failure": {
+        "rank_loss": "withdraw-endpoint",
+        "recovery": "restart-worker-then-entrypoint"
+      }
+    }
+  },
+  "topology": {
+    "name": "dual",
+    "mode": "distributed",
+    "node_count": 2,
+    "roles": [
+      {
+        "name": "entrypoint",
+        "count": 1,
+        "endpoint_owner": true,
+        "artifacts": [
+          "weights"
+        ],
+        "resources": {
+          "disk": {
+            "image_bytes": 40000000000,
+            "artifact_bytes": 132734506208,
+            "staging_bytes": 140000000000,
+            "cache_bytes": 20000000000,
+            "rollback_bytes": 0,
+            "safety_margin_bytes": 24000000000
+          },
+          "memory": {
+            "kind": "unified",
+            "startup_peak_bytes": 110000000000,
+            "steady_state_bytes": 102000000000,
+            "runtime_growth_bytes": 8000000000,
+            "system_reserve_bytes": 8000000000
+          }
+        }
+      },
+      {
+        "name": "worker",
+        "count": 1,
+        "endpoint_owner": false,
+        "artifacts": [
+          "weights"
+        ],
+        "resources": {
+          "disk": {
+            "image_bytes": 40000000000,
+            "artifact_bytes": 132734506208,
+            "staging_bytes": 140000000000,
+            "cache_bytes": 20000000000,
+            "rollback_bytes": 0,
+            "safety_margin_bytes": 24000000000
+          },
+          "memory": {
+            "kind": "unified",
+            "startup_peak_bytes": 110000000000,
+            "steady_state_bytes": 102000000000,
+            "runtime_growth_bytes": 8000000000,
+            "system_reserve_bytes": 8000000000
+          }
+        }
+      }
+    ],
+    "parallelism": {
+      "world_size": 2,
+      "tensor": 2,
+      "pipeline": 1,
+      "data": 1,
+      "backend": "mp"
+    },
+    "fabric": {
+      "connectivity": "connected",
+      "minimum_bandwidth_mbps": 200000
+    },
+    "start_order": [
+      "worker",
+      "entrypoint"
+    ],
+    "stop_order": [
+      "entrypoint",
+      "worker"
+    ]
+  },
+  "interfaces": [
+    {
+      "adapter": "openai",
+      "port": 8888,
+      "model_aliases": [
+        "qwen3.8-flash-next"
+      ],
+      "health_path": "/v1/models"
+    }
+  ],
+  "validation": {
+    "validators": [
+      {
+        "interface": "openai",
+        "checks": [
+          "endpoint.healthy",
+          "chat.nonempty",
+          "chat.max-output-64"
+        ]
+      }
+    ],
+    "benchmarks": [
+      {
+        "name": "bounded-chat",
+        "framework": "openai",
+        "configuration": {
+          "max_output_tokens": 64,
+          "requests": 1,
+          "timeout_seconds": 600
+        }
+      }
+    ]
+  },
+  "provenance": {
+    "source_kind": "fork",
+    "source_reference": "https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Dual-DGX-Sparks/tree/c2325b22602b51a5faf55fc2bebccc34f3f80b9f",
+    "attribution": [
+      "MiaAI Lab",
+      "NVIDIA",
+      "Qwen",
+      "vLLM contributors",
+      "CarstVaartjes/vonk-forge-recipes"
+    ]
+  }
+}

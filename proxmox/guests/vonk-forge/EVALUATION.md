@@ -1,0 +1,80 @@
+# Vonk Forge evaluation — September 6, 2026
+
+The second pass is in progress. The platform is useful for controlled single-Spark inference: bounded text, tool and vision probes passed, and one complete normal stop/start cycle now works with the evaluated controller fixes. Practical operation still requires recipe corrections, several minutes of startup and explicit checks of the serving endpoint. New online builds remain blocked at the native egress proxy, and dual-Spark execution is unqualified. Successful enrollment, a built image and a running container are separate from inference qualification. The current experiment uses the published recipe-v1 contract; it does not silently upgrade the controller or library to current upstream schemas.
+
+## Reproducible baseline
+
+Two DGX Sparks have GB10 unified memory (130.66 GB reported per node), NVIDIA driver 580.173.02, Docker 29.2.1 and agent package `0.1.1~dev.540+gf23e9336f7e9`. The controller is a 4-vCPU/12-GiB PVE VM. Initial platform source is `3cacd73b7817ae884a90d1749380bb1cc246f680`; the compatible library is `5bbb0be4e604768499ccbcf82bbea181575c31d6`. The browser certificate expires September 12 at 18:02:05 UTC; renewal copying remains manual as documented in the [deployment guide](README.md).
+
+The existing model is `nvidia/Qwen3.6-35B-A3B-NVFP4@1355db6a052410cfd62085d94b58866fd0f2c3c5`, vLLM fingerprint `vllm-0.28.0-b0890d9e`, one Spark, 50% GPU memory utilization, 65,536 context and MTP with three speculative tokens. Requests use the real authenticated HTTPS route at `https://vonk.home.kelch.io/v1`, alias `qwen36-eval`, thinking disabled for the throughput fixtures.
+
+| Check | Result | Limit of evidence |
+| --- | --- | --- |
+| Streaming, concurrency 1 | Three 256-token outputs; estimated decode 93.8–101.4 tokens/s, median 99.45; TTFT 0.115–0.810s, median 0.120s | Warm runtime, short bounded outputs; client SSE timing is approximate because deltas contain multiple tokens. |
+| Streaming, concurrency 3 | Two batches of 768 output tokens: 132.87 and 178.82 aggregate tokens/s; approximately 61–65 tokens/s per request | Aggregate is total tokens divided by complete batch wall time. First-batch TTFT reached 1.596s. No endurance or saturation claim. |
+| Longer context | Correct retrieval from 17,593 prompt tokens; TTFT 3.461s, total 3.514s | One needle at the start; does not qualify maximum context or broad retrieval quality. |
+| Tools | Valid `get_weather` call and Philadelphia JSON argument; correct use of a synthetic tool result | One schema and one fixture, not live weather or broad agent reliability. |
+| Vision | Correctly identified a red circle left and blue square right; 224×224 image, 0.678s | One synthetic image, not OCR or a general vision benchmark. |
+| Admission | Second run correctly blocked for occupied port and memory reservation | Memory accounting is deliberately conservative; see below. |
+| Active installation removal | Actual browser preview identified `uninstall.active_run` and disabled removal | Preview was cancelled; no attempt to bypass the safeguard. |
+| Obsolete installation removal | Normal uninstall completed in 2.223s; installations 2→1, reservation 148.775→74.387 GB, zero model bytes removed; serving inference remained healthy | Tests shared-artifact retention for this exact pair of installations. |
+| Normal stop after fix | Completed in 54.285s, withdrew alias, released 80 GB memory reservation and port, retained installed artifacts | Public inference returned HTTP 400 invalid model after the alias was withdrawn. |
+| Normal start after fix | Runtime healthy in 248.284s; route published automatically in 298.640s; public inference returned `RESTARTED` in 1.554s | One complete stop/start cycle, with no route recovery intervention during the successful start. A second consecutive cycle is not yet tested. |
+
+Decode estimates use `(completion_tokens−1)/(last content delta−first content delta)` and include MTP batching effects. Runtime logs reported approximately 49–53% draft acceptance and mean accepted length 2.46–2.59 during the short benchmark. Prefix caching was enabled, but observed cache hit rate was zero; these results must not be described as a demonstrated prefix-cache benefit. The private benchmark script, exact requests, SSE times, usage and resource receipts are retained under `.private/vonk-evaluation/pass2-baseline/`.
+
+The proven lifecycle cycle stopped original run `9e7b43ea-8726-457c-9a4f-9607cdc64474` through operation `2c7f9d38-0fb2-489f-b14d-d4fe7f14d785`, then started run `6f12c443-c4fb-4a21-8a68-3092e77ca3fe` through operation `91461173-7db6-40a8-a345-b9c101adfa7c`. The new run was published and served successfully at 11:32 UTC on September 6. Both use retained installation `c7feb8ed-0e6d-4add-b1d6-b8f5f0ebbad0`, build `e866f750-1bc5-47e5-8046-440c6468e852` and recipe revision `f54214a4-0a81-4f5d-892f-6ceb039e5d77`. After the start, the actual Fleet showed two live nodes, one complete installation, one loaded recipe and zero warnings.
+
+Startup is a material operating cost. This retained-weight start loaded 21.99 GiB of model memory in 28.18s and spent 124.03s initializing the engine, including compilation, profiling and kernel warmup. The runtime reported 22.94s for `torch.compile` and created a fresh cache under the new run's `/outputs/cache`. Imports and other startup work bring request-to-readiness to 248s; approximately another 50.4s elapsed while LiteLLM activated the new route. A successful container start is therefore insufficient evidence that a client can infer, and ordinary stop/start is disruptive for several minutes even without downloading weights.
+
+The removed inactive installation was `0ac79dba-999c-4afe-8849-192f7e9e79bc`, uninstalled through operation `eafcfe7f-3b6b-4eec-b1ee-1e7a917199a5`. Its fresh preview had zero active runs, no model-cleanup nodes and Spark 2 explicitly retaining the shared model. The current installation and serving run stayed healthy. The UI's “21.9 GiB will be removed” headline described logical installation bytes despite the model-retention detail; the actual result removed zero model bytes and released a 74,387,433,571-byte reservation. Physical reclamation and reservation release should be reported separately.
+
+## Controller defects and applied fixes
+
+Signed patch source is [4d9e967f](https://github.com/kelchm/vonk-forge/commit/4d9e967fd67eaa7a73584d4fa2c46f384e26ea64), based on the exact published source. The same changes are forward-ported onto the fork's main in [draft PR #1](https://github.com/kelchm/vonk-forge/pull/1). Only API and worker images changed; there is no database/schema migration or agent upgrade.
+
+| Finding | Correction and evidence |
+| --- | --- |
+| Library discarded part of a complete API page | Its 40-model window retained 42 hydrated recipes from 73 models/85 local recipes; 42 public actions remained stuck on Syncing and the custom Qwen recipe disappeared from search. The bounded window now retains a complete 100-row page, and known imported rows outside it can open exact details. Actual postdeployment UI showed all 86 then-current local recipes actionable. |
+| Fleet compared unlike byte counts | Installed artifact bytes were compared with staging/cache/image reservations. Completeness now follows successful exact-rank installation state. Actual Fleet warnings cleared without receipt changes. |
+| Public builds rejected valid egress capability | A static job-claim capability list was incorrectly used for a host-probed feature. The controller now checks the existing fresh inventory evidence; absent and stale evidence still fail. The real FLUX build then passed this gate. |
+| Slow initial route publication became permanently failed | Acknowledgement now allows the supervisor's 120-second startup budget while remaining bounded by model evidence expiry. Delayed retries use normal authority checks; stale evidence waits for refresh and stopped runs do not retry. The real replacement Qwen run published automatically about 50s after runtime readiness. |
+| Normal stop activated an empty route but returned 500 | The API reused its 30-second model-evidence freshness as the empty-route maintenance lease. Real inference became 503 while the API still reported running/published. Normal publication recovered the service; an independent 120-second empty-route lease then allowed the real 54-second withdrawal to finish. Model evidence freshness was not relaxed. |
+
+The source lanes passed 287 controller tests with six existing skips, 47 Library-related frontend tests and production typecheck/build. The final withdrawal change separately passed 161 related tests with six existing skips; its forward-port passed 57 focused route tests. Regressions include missing ranks, absent/stale egress evidence, a complete and paginated Library, 45-second delayed acknowledgement, expiry, stale-to-fresh recovery and stopped-run rejection. These are code-level evidence, supplemented by the physical tests above.
+
+Two remaining limitations matter for packing and recovery. Run admission subtracts full active reservations from current measured free memory, so already resident workloads can effectively be counted twice; this can reject small colocated workloads even with substantial free RAM. Route acknowledgement holds the publication lock and blocks the same worker's housekeeping while waiting; retries have a minimum 30-second delay, and generation files remain append-only as in stock renewal. Neither behavior was broadly redesigned during this pass.
+
+Existing browser URLs also retained an old HTML entry point after deployment, restoring the old 40-model window in that tab. A unique-URL navigation and direct uncached HTTP both returned the correct new asset, 73 models and all 86 then-current local recipe actions; the custom Qwen recipe and public Qwen recipes were searchable. The observed HTML response supplied ETag and Last-Modified but no explicit Cache-Control. Treat this as a stale HTML cache limitation rather than a failed image deployment, and refresh the HTML shell when verifying an upgrade. The corrected Library still retains bounded local history; imported catalog rows outside it can open exact details, while custom recipes outside the retained window require paging or a known direct URL.
+
+## Transfer investigation
+
+All MB/s values below use decimal bytes. The Spark management link is 10 Gbit/s; the PVE uplink is 2.5 Gbit/s. The separate 200 Gbit/s Spark fabric does not carry controller uploads.
+
+| Path | Measurement | Boundary |
+| --- | --- | --- |
+| Raw Spark→controller TCP | 512 MiB in 1.838s, 292.0 MB/s (2.34 Gbit/s) | Memory-to-memory, not artifact transfer. |
+| Controller write plus fsync | 512 MiB at 935.0 MB/s | Buffered ext4 write; not proof of sustained storage throughput. |
+| Controller warm read plus SHA256 | 512 MiB at 282.6 MB/s | Hashing included; warm filesystem cache. |
+| Original upload body, direct HTTP | Approximately 141 MB/s median | Actual extracted hash/write/fsync loop in the pinned API runtime; excludes native authentication, artifact authority and image lifecycle. |
+| Original body, direct TLS | Approximately 87 MB/s with 4 KiB sender; 102 MB/s with 256 KiB sender | Synthetic sender and isolated endpoint. |
+| Original body behind isolated Caddy TLS | Approximately 132 MB/s median | Caddy-like pipeline, not the complete native mTLS artifact operation. |
+| Previous real 20.8-GB image upload | Approximately 20–40 MB/s | Actual build artifact upload; export, download/import and model loading are separate phases. |
+
+The proposed 1-MiB controller write aggregation improved a local body-only microbenchmark but was slower in direct network tests and showed only a small within-variance change behind Caddy (approximately 132→141 MB/s). It was excluded from deployment. These results do not establish the remaining gap's precise cause. A faithful Tokio file-stream comparison and actual recipe phase capture continue; the default 4-KiB agent reader remains an unproven contributor until those measurements resolve it.
+
+A native-edge interruption in the earlier pass also caused the agent heartbeat task to exit on one transport error, despite successful local image import. The separate [signed heartbeat proposal](https://github.com/kelchm/vonk-forge/pull/2) retries only transient errors within the last confirmed lease and passed all 69 Rust agent library tests on Linux. It is not deployed: physical agents retain the officially signed package and its trust configuration.
+
+## Recipes and current experiments
+
+See the [recipe research and pins](recipes/README.md) for the genuine X search scope, direct dated posts, primary-source verification, licenses and exact initial profiles. Mia Qwen3.8 Flash Next dual is the fresh first-pass distributed candidate; FLUX.2 Klein NVFP4/ComfyUI is the complementary image job. GLM-5.3 EXL3/DFlash2 is a prepared fallback. Structural validation is complete; hardware acceptance is in progress.
+
+FLUX's corrected source fixes missing executable dispatch and the distinction between a directory-mounted HTTP artifact and the model file inside it. Its first real native build passed controller admission and base-image import, then failed starting the installed egress proxy before Dockerfile execution. The first differential reproduced a missing `/dev/net/tun` inside the agent's private device namespace; moving only the proxy run command into a clean user service did not help because it reused existing rootless state. Further isolated diagnosis is in progress; no service hardening or hostname policy has been changed. Qwen's pinned build is offline after image acquisition and remains an independent path forward.
+
+Base-image preparation has a different resource boundary from the Dockerfile step. The failed FLUX attempt reached a 61.97 GB peak agent cgroup charge, while a later 33.42 GB snapshot contained 32.45 GB of file cache and only 4.1 MB of anonymous memory. The peak's exact composition was not sampled. The recipe's 8 GB limit applies to the later transient build service; the agent preparation cgroup itself was unlimited. These counters do not support treating the peak as model RSS.
+
+## Deployment provenance and rollback
+
+The active override is [compose.evaluation.yaml](compose.evaluation.yaml). Local image tags are `vonk-evaluation-api:4d9e967f` and `vonk-evaluation-worker:4d9e967f`; exact IDs are `sha256:e41c1742e9b5d90a3b8b6ccb5a61d665055fcb1fc15d5ee2cd4c9406eed823c4` and `sha256:4b14b4d1979c4c33dbc33d5225d079a6843308d55c47cb10e5ab8e3836d4da7b`. The exact source archive SHA256 is `a41e29c8eca87e5f8e23944e7306b71dfb2f54b03927f74e3cda512a094bb5d1`. Build the `api` and `worker` targets of that source's `control/Dockerfile`, retaining the full source SHA in each image's `org.opencontainers.image.revision` label. Verified scripts, source archives and build logs remain in `/srv/vonk/evaluation-pass2` and private local receipts.
+
+Wait for all active agent operations to finish before changing controller images. Preserve the generated Compose file, secrets and volumes. Recreate only API and worker using all three Compose files. To roll back, copy `/srv/vonk/evaluation-pass2/compose.rollback-02dfd49c.yaml` for the preceding evaluation or `compose.rollback.yaml` for the original immutable upstream images to the bundle's `compose.evaluation.yaml`, then recreate those same two services. Full return to the retained pre-Vonk GLM workload remains documented in the [deployment guide](README.md#sparks-and-rollback).
