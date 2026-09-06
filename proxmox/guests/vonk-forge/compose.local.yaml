@@ -1,0 +1,38 @@
+# Use together with the signed installer-generated docker-compose.yaml.
+services:
+  tailscale-gateway:
+    profiles: [tailscale]
+  tailscale-configurator:
+    profiles: [tailscale]
+  local-https:
+    image: caddy:latest
+    restart: unless-stopped
+    read_only: true
+    ports:
+      - "${NAS_LAN_IP}:443:443"
+    volumes:
+      - ./Caddyfile.local:/etc/caddy/Caddyfile:ro
+      - ./secrets/local-https:/certs:ro
+      - local-caddy-data:/data
+      - local-caddy-config:/config
+    tmpfs:
+      - /tmp
+    networks:
+      - ingress
+      - tailnet-web-edge
+    depends_on:
+      caddy:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, "http://127.0.0.1:8082/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+volumes:
+  local-caddy-data:
+  local-caddy-config:
+
+# Override only the Caddyfile config from the signed installer generation.
+configs:
+  vonk_runtime_c7a4bdca25a46ade:
+    file: ./Caddyfile.controller.local

@@ -1,0 +1,53 @@
+# Vonk Forge evaluation
+
+Experimental deployment on 2026-09-05, authorized to replace the active Spark workload temporarily. The controller is at **https://vonk.home.kelch.io**, with native Vonk administrator login. The username is `admin`; the generated password is in the controller bundle's `secrets/admin-password` (also retained locally under the ignored `.private/vonk-evaluation/vonk-forge/` directory). No Tailscale OAuth client is needed.
+
+## Controller
+
+VM 201 `vonk-forge` runs on `pve-sbx-1`, cloned from template 9000. It has 4 vCPU, 12 GiB RAM, a 256 GiB thin disk, and `10.32.21.101/24` on VLAN 21, with gateway/DNS `10.32.21.1`. The VM is excluded from `daily-backups` and has automatic PVE startup disabled. It is disposable; existing VM 200 `hermes-1` is independent.
+
+`vendor-data.yaml` installs Docker and prepares `/srv/vonk`. Its deployed PVE snippet is `library-pve:snippets/vonk-controller.yaml`. The generated controller bundle is `/srv/vonk/vonk-forge` on the VM. Manage it with:
+
+```sh
+cd /srv/vonk/vonk-forge
+sudo docker compose -f docker-compose.yaml -f compose.local.yaml ps
+sudo docker compose -f docker-compose.yaml -f compose.local.yaml up -d
+```
+
+`compose.local.yaml` profiles out both Tailscale services and adds a Caddy HTTPS front end on the VM's LAN address, proxying to Vonk's native browser edge. The signed generated Compose file is retained intact. `Caddyfile.controller.local` copies the generated native Caddy config and pins only its recipe-library commit lookup to the compatible snapshot below. Content still comes from the real upstream repository at immutable Git object IDs and passes Vonk's normal digest checks. The adjacent MIT license covers that copied upstream configuration. After changing a Compose config-file source, recreate Caddy with `docker compose -f docker-compose.yaml -f compose.local.yaml up -d --no-deps --force-recreate caddy`; an ordinary `up` may retain the previous mount. Hermes is disabled in the installer bundle. Placeholder Tailscale fields are unused; the generated LiteLLM upstream key is only a placeholder for this local-model evaluation.
+
+Browser HTTPS uses a dedicated certificate from `certificate.yaml`, applied manually to cert-manager in namespace `network`. The cluster's current issuer supplies short-lived certificates: the initially installed certificate expires **2026-09-12 18:02 UTC**. Cert-manager renews its Secret, but copying that renewal to the VM is manual for this experiment. Run `./proxmox/guests/vonk-forge/refresh-certificate` before expiry and after subsequent renewals. No cluster credentials or wildcard private key are stored on the VM.
+
+The existing `k8s-gateway` resolver supplies the four `vonk*.home.kelch.io` A records through its hosts plugin. UniFi already delegates `home.kelch.io` to this resolver; no public A record or UniFi policy change is involved. Spark enrollment also installs Vonk's own managed host mappings. The native enrollment, agent mTLS, and registry boundaries remain on TCP 8443 with installer-generated PKI.
+
+## Exact inputs
+
+| Input | Identity |
+|---|---|
+| Platform checkout | `~/Development/kelchm/vonk-forge`, origin `kelchm/vonk-forge`, upstream `CarstVaartjes/vonk-forge` |
+| Platform main inspected | `0ab88b4fa0d95804bf9b3cce10a1c16a5e624eeb` |
+| Published dev source | `3cacd73b7817ae884a90d1749380bb1cc246f680` |
+| Installer generation | `f08e8b4a0650f3b88b94b215a45149e68fc65be87e70fec35d7c5f133e59d00e` |
+| Agent package | `0.1.1~dev.540+gf23e9336f7e9` |
+| Compatible recipe snapshot | `5bbb0be4e604768499ccbcf82bbea181575c31d6` |
+
+The published controller still consumes the recipe-v1 runtime contract, while the current upstream recipe library has moved to schema 2. Import the compatible snapshot with the importer and validator from the published platform source. This experiment does not add a compatibility shim to the fork. The Qwen3.6 35B-A3B NVFP4 single-Spark recipe and its four catalog dependencies passed that validator and imported successfully, including the verified source bundle. The pinned repository view was validated against all 84 recipes, 250 catalog entities, and every source bundle. Current upstream-main updates are not a usable source of recipes for this controller version.
+
+The first stock Qwen build failed with `permission-denied`. Its Dockerfile runs `groupadd`, `useradd`, and `install --owner=10001`, but declares no build capabilities. A bounded reproduction of those commands failed with all capabilities dropped, and succeeded with `CHOWN`, `DAC_OVERRIDE`, and `FOWNER`. The local catalog fork `kelchm-qwen36-nvfp4-single` adds those three capabilities during image construction only; runtime capabilities remain empty. `qwen36-recipe.json` records that custom entry. That change allowed Podman to complete, exposing a second contract omission: the source image lacks the required `ai.vonkforge.runtime-interface=v1` label. The custom recipe adds that label through build options and reserves 40 GB for Vonk's uncompressed image export (the stock 12 GB budget does not accommodate an uncompressed vLLM image of this size). The exact pinned Hugging Face revision totals 23,462,477,857 bytes; the stock recipe retained a total 67 bytes smaller from an earlier README revision. The custom recipe corrects those exact artifact sizes, matching the already-correct model-version entry. Full export/install/inference qualification is recorded separately from these fixes.
+
+Private deployment artifacts, generated credentials, exact controller image digests, API operation receipts, and baseline Docker inspections are retained in `.private/vonk-evaluation/`. Detached checkouts there preserve the published importer and compatible recipe snapshot. Never commit that directory or the generated bundle.
+
+## Sparks and rollback
+
+Both agents use their existing management addresses (`10.32.21.31` and `.32`). Their configured primary fabric is `198.19.240.11` ↔ `.12`, with 200 Gbit/s bandwidth. Both physical fabric links and the original no-transit nftables guard remain in place; the default route stays on VLAN 21. No model caches or old images were deleted.
+
+Before installing either agent, the active `glm53-exl3-head` and `glm53-exl3-worker` containers were stopped. Each host retains `/home/kelchm/vonk-evaluation-backup/`, containing Docker inspections, image digests, network state, host configuration, and the original GLM launcher files. The launch checkout was `/home/kelchm/glm53-guide` at `c707598ebcf02fd827d079a7c47e785069425efe`.
+
+To return to the previous workload:
+
+1. Stop active Vonk recipe runs through the controller and confirm their containers have exited.
+2. Stop any remaining Vonk build/install operations, then disable the agent, helper socket, and firewall on both Sparks: `sudo systemctl disable --now vonk-forge-agent.service vonk-forge-package-helper.socket vonk-forge-docker-firewall.service`; stop `vonk-forge-package-helper.service` too. Vonk's Docker firewall now limits host endpoint port 8888 to the controller. Verify the `vonk-forge-managed-v1` marker in `iptables -S VONK-FORGE` and `iptables -S VONK-FORGE-HOST`, remove the `DOCKER-USER → VONK-FORGE` and `INPUT → VONK-FORGE-HOST` jumps, then flush/delete only those two chains. Disabling the firewall service also removes its `docker.service.wants` link. Preserve `dgx-fabric-isolation.service` and the `inet dgx_fabric_guard` table. Compare against `host-config.tgz` and `nftables.txt` in the baseline backup; do not flush the entire firewall.
+3. Start the retained worker container on Spark 2, then the head on Spark 1: `docker start glm53-exl3-worker` and `docker start glm53-exl3-head`. Validate the original endpoint before resuming clients. If the retained containers cannot start, compare their inspected configuration and firewall state to the backup, then relaunch from the retained `glm53-guide` checkout and launcher files.
+4. Stop VM 201. To fully tear down the experiment, revert the entire `extraZonePlugins` addition in `k8s-gateway` to restore chart defaults, delete the dedicated Certificate and Secret, and clear VM 201 from the backup exclusion in the same teardown window immediately before deleting the stopped VM. Preserve the baseline backups until GLM has passed a real inference request.
+
+The separate `/opt/spark-models`, Hugging Face caches, and prior inference stack were retained. This deployment does not prove dual-node model execution merely by enrolling both Sparks.
