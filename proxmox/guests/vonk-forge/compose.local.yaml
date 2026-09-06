@@ -4,6 +4,9 @@ services:
     profiles: [tailscale]
   tailscale-configurator:
     profiles: [tailscale]
+  caddy:
+    volumes:
+      - ./recipe-library-cache:/srv/recipe-library-cache:ro
   local-https:
     image: caddy:latest
     restart: unless-stopped

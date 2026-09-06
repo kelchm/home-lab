@@ -105,23 +105,32 @@ http://127.0.0.1:8082 {
 	respond 404
 }
 
-# The control API has no general egress network. Relay only read-only GitHub API
-# calls for the one reviewed public recipe repository; never forward credentials.
+# Serve the pinned recipe Git objects locally, avoiding GitHub's anonymous API
+# limit. The Controller still validates the index, source blobs, and bundles.
 http://:8083 {
 	@recipe_library_api {
 		method GET
 		path /repos/CarstVaartjes/vonk-forge-recipes/*
 	}
 	handle @recipe_library_api {
-		# Pin the experiment to the last compatible recipe catalog; the client
-		# binds its index and source blobs to this resolved immutable commit.
-		@catalog_main path /repos/CarstVaartjes/vonk-forge-recipes/commits/main
-		rewrite @catalog_main /repos/CarstVaartjes/vonk-forge-recipes/commits/5bbb0be4e604768499ccbcf82bbea181575c31d6
-		reverse_proxy https://api.github.com {
-			header_up Host api.github.com
-			header_up -Authorization
-			header_up -Cookie
+		root * /srv/recipe-library-cache
+		header Content-Type application/json
+		@catalog_index {
+			path /repos/CarstVaartjes/vonk-forge-recipes/contents/catalog-index.json
+			query ref=5bbb0be4e604768499ccbcf82bbea181575c31d6
 		}
+		handle @catalog_index {
+			file_server
+		}
+		@catalog_objects {
+			path /repos/CarstVaartjes/vonk-forge-recipes/commits/main /repos/CarstVaartjes/vonk-forge-recipes/commits/5bbb0be4e604768499ccbcf82bbea181575c31d6 /repos/CarstVaartjes/vonk-forge-recipes/git/blobs/*
+		}
+		handle @catalog_objects {
+			@catalog_main path /repos/CarstVaartjes/vonk-forge-recipes/commits/main
+			rewrite @catalog_main /repos/CarstVaartjes/vonk-forge-recipes/commits/5bbb0be4e604768499ccbcf82bbea181575c31d6
+			file_server
+		}
+		respond 404
 	}
 	respond 404
 }
