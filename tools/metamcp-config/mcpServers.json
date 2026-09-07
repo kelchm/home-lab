@@ -44,11 +44,6 @@
       "type": "streamable_http",
       "url": "http://open-meteo-mcp.ai.svc.cluster.local:3000/mcp",
       "description": "Read-only weather over the free Open-Meteo APIs (forecast/archive/air-quality/marine/geocoding). No API key."
-    },
-    "markitdown-mcp": {
-      "type": "streamable_http",
-      "url": "http://markitdown-mcp.ai.svc.cluster.local:3001/mcp",
-      "description": "Read-only file/URL -> Markdown conversion (PDF/DOCX/XLSX/PPTX/images/etc.)."
     }
   }
 }

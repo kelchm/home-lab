@@ -6,6 +6,25 @@ namespace/endpoint **registry lives only in `metamcp-db` Postgres** and is confi
 through the web UI at `https://metamcp.home.kelch.io`. See
 `docs/plans/20260620-metamcp-mcp-rollout.md` for the full rollout design.
 
+## Offline state
+
+MetaMCP is intentionally scaled to zero replicas in its HelmRelease. Its PostgreSQL cluster, PVC, Secrets, OIDC client, Service, and HTTPRoute remain available for recovery; the gateway and its MCP endpoints cannot serve requests while no pods run. MCPHub remains separately configured, and this shutdown does not migrate clients.
+
+After the shutdown reconciles, remove the retired MarkItDown registration with the one-time cleanup below. Removing an entry from `tools/metamcp-config/mcpServers.json` does not delete it from PostgreSQL. To restore MetaMCP later, set one replica through GitOps and verify the remaining backends before reconnecting clients. The scheduled Grafana MCP functional probe calls Grafana MCP directly and stays enabled while MetaMCP is offline.
+
+The cleanup targets the verified MarkItDown UUID, name, and URL; foreign keys remove only that server's tools, namespace mappings, and upstream OAuth sessions. Other registry data remains intact. Run from the repository root after merging the shutdown:
+
+```sh
+test "$(kubectl -n ai get deployment metamcp -o jsonpath='{.spec.replicas}')" = 0 &&
+test -z "$(kubectl -n ai get pods -l app.kubernetes.io/name=metamcp -o name)" &&
+metamcp_primary="$(kubectl -n ai get cluster metamcp-db -o jsonpath='{.status.currentPrimary}')" &&
+kubectl -n ai exec -i "$metamcp_primary" -c postgres -- \
+  psql -U postgres -d metamcp -v ON_ERROR_STOP=1 \
+  < tools/metamcp-config/remove-markitdown.sql
+```
+
+A successful first run returns the single `markitdown-mcp` row and commits; subsequent runs delete zero rows. An unexpected MarkItDown entry aborts the transaction for inspection. Do not execute this while MetaMCP is running, because its in-memory session pools also cache registry state.
+
 ## DR / backup
 
 `metamcp-db` DR is the Longhorn snapshot policy on the CNPG data PVC (see

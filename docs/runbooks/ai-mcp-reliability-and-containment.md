@@ -148,7 +148,7 @@ successful connection to any negative target is a policy failure.
 ```sh
 kubectl -n ai run ai-egress-test --rm -i --restart=Never \
   --image=docker.io/curlimages/curl:8.16.0 \
-  --labels=app.kubernetes.io/name=markitdown-mcp -- \
+  --labels=app.kubernetes.io/name=open-meteo-mcp -- \
   sh -eu -c '
     curl -fsSI --connect-timeout 5 https://example.com >/dev/null
     ! nc -z -w 3 10.43.0.1 443

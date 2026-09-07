@@ -11,6 +11,8 @@ spec:
   values:
     controllers:
       metamcp:
+        # Intentionally offline; retain registry data and configuration for recovery.
+        replicas: 0
         # kaniop rotates the OIDC client_secret into metamcp-kanidm-oauth2-credentials;
         # Reloader restarts the pod so OIDC_CLIENT_SECRET propagates from the Secret.
         annotations:

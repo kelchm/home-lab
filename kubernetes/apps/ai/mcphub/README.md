@@ -1,6 +1,6 @@
 # MCPHub pilot
 
-This is a parallel, file-backed MCPHub evaluation. MetaMCP remains authoritative and no client has been cut over.
+This is a file-backed MCPHub evaluation. MetaMCP is intentionally offline (zero replicas), with its database and configuration retained for recovery. Taking MetaMCP offline does not migrate clients; clients still configured for its endpoints will be unavailable until explicitly pointed at MCPHub.
 
 ## Authorization model
 
@@ -11,7 +11,6 @@ MCPHub groups represent reusable capability and failure boundaries. They are not
 | `homelab-read` | Grafana, Flux Operator, Kubernetes | Read-only homelab observation; the backends also enforce read-only mode and credentials/RBAC. |
 | `automotive-reference` | Lemon Manuals | Automotive reference data suitable for the friend-facing Flatrate persona. |
 | `electronics-reference` | DigiKey, PCBParts | Electronics and component reference data. |
-| `documents` | MarkItDown | Document conversion. |
 | `weather` | Open-Meteo | Weather lookup. |
 | `hacker-news` | Hacker News | Read-only HN feeds, threads, users, and full-text search. |
 | `browser` | Playwright Stealth | High prompt-injection surface; isolated from every other capability and given a per-session upstream client. |
@@ -20,7 +19,7 @@ Static system bearer keys represent workload principals. The initial pilot matri
 
 | Principal | Allowed groups |
 |---|---|
-| `operator-interactive` | All seven groups. |
+| `operator-interactive` | All six groups. |
 | `hermes-personal` | Every non-browser group. |
 | `hermes-ops-cron` | `homelab-read` only. |
 | `flatrate-discord` | `automotive-reference` only. |

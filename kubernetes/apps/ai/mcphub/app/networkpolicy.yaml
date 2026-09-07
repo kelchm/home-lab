@@ -80,14 +80,6 @@ spec:
     - toEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: ai
-            app.kubernetes.io/name: markitdown-mcp
-      toPorts:
-        - ports:
-            - port: "3001"
-              protocol: TCP
-    - toEndpoints:
-        - matchLabels:
-            k8s:io.kubernetes.pod.namespace: ai
             app.kubernetes.io/name: open-meteo-mcp
       toPorts:
         - ports:
@@ -218,24 +210,6 @@ spec:
       toPorts:
         - ports:
             - port: "8787"
-              protocol: TCP
----
-apiVersion: cilium.io/v2
-kind: CiliumNetworkPolicy
-metadata:
-  name: mcphub-to-markitdown-mcp
-spec:
-  endpointSelector:
-    matchLabels:
-      app.kubernetes.io/name: markitdown-mcp
-  ingress:
-    - fromEndpoints:
-        - matchLabels:
-            k8s:io.kubernetes.pod.namespace: ai
-            app.kubernetes.io/name: mcphub
-      toPorts:
-        - ports:
-            - port: "3001"
               protocol: TCP
 ---
 apiVersion: cilium.io/v2
