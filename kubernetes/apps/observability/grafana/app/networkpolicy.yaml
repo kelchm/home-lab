@@ -1,0 +1,67 @@
+---
+# Grafana policies declare cross-namespace and external flows only.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: grafana
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: grafana
+      app.kubernetes.io/instance: grafana
+  ingress:
+    # Traefik admin access.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: network
+            app.kubernetes.io/instance: traefik-admin-network
+            app.kubernetes.io/name: traefik
+            io.cilium.k8s.policy.serviceaccount: traefik-admin
+      toPorts:
+        - ports:
+            - port: "3000"
+              protocol: TCP
+    # Grafana MCP API access.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: ai
+            app.kubernetes.io/name: grafana-mcp
+            io.cilium.k8s.policy.serviceaccount: grafana-mcp
+      toPorts:
+        - ports:
+            - port: "3000"
+              protocol: TCP
+  egress:
+    # OIDC via Traefik services.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: network
+            app.kubernetes.io/instance: traefik-services-network
+            app.kubernetes.io/name: traefik
+            io.cilium.k8s.policy.serviceaccount: traefik-services
+      toPorts:
+        - ports:
+            - port: "8443"
+              protocol: TCP
+    # Plugin downloads at pod start; the vendor redirects between CDNs.
+    - toCIDRSet:
+        - cidr: 0.0.0.0/0
+          except:
+            - 0.0.0.0/8
+            - 10.0.0.0/8
+            - 100.64.0.0/10
+            - 127.0.0.0/8
+            - 169.254.0.0/16
+            - 172.16.0.0/12
+            - 192.0.0.0/24
+            - 192.0.2.0/24
+            - 192.168.0.0/16
+            - 198.18.0.0/15
+            - 198.51.100.0/24
+            - 203.0.113.0/24
+            - 224.0.0.0/4
+            - 240.0.0.0/4
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP

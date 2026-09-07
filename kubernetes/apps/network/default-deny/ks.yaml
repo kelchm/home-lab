@@ -1,0 +1,34 @@
+---
+# The namespace-wide default-deny baseline is deliberately its own
+# Kustomization so it can depend on every workload-policy Kustomization in
+# the namespace. The parent cluster-apps reconciliation applies this Flux
+# Kustomization object and the per-app ones together; without dependsOn,
+# the default-deny CNP would activate while the per-workload allow policies
+# still only exist as pending child reconciliations — and a failing child
+# would leave the namespace fully denied indefinitely. In this namespace
+# that would mean all ingress (traefik) is down until manual intervention.
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: default-deny
+spec:
+  dependsOn:
+    - name: cloudflare-dns
+    - name: cloudflare-tunnel
+    - name: gateway-api
+    - name: gateway-certificates
+    - name: k8s-gateway
+    - name: traefik
+  interval: 1h
+  path: ./kubernetes/apps/network/default-deny/app
+  postBuild:
+    substituteFrom:
+      - name: cluster-secrets
+        kind: Secret
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+    namespace: flux-system
+  targetNamespace: network
+  wait: false

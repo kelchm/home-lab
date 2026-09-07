@@ -1,0 +1,233 @@
+---
+# VictoriaMetrics stack policies declare cross-namespace flows only.
+# Shared namespace, node, DNS, and API-server flows are in the baseline.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: vmagent
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: vmagent
+      app.kubernetes.io/instance: victoria-metrics-k8s-stack
+  ingress:
+    # Traefik admin access.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: network
+            app.kubernetes.io/instance: traefik-admin-network
+            app.kubernetes.io/name: traefik
+            io.cilium.k8s.policy.serviceaccount: traefik-admin
+      toPorts:
+        - ports:
+            - port: "8429"
+              protocol: TCP
+  egress:
+    # Kubernetes component metrics.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+      toPorts:
+        - ports:
+            # coredns prometheus listener (Corefile: prometheus :9153)
+            - port: "9153"
+              protocol: TCP
+            # cilium-agent metrics
+            - port: "9962"
+              protocol: TCP
+            # cilium-envoy metrics
+            - port: "9964"
+              protocol: TCP
+            # hubble metrics
+            - port: "9965"
+              protocol: TCP
+            # cilium-operator metrics
+            - port: "9963"
+              protocol: TCP
+            # metrics-server
+            - port: "10250"
+              protocol: TCP
+            # reloader (PodMonitor)
+            - port: "9090"
+              protocol: TCP
+    # cert-manager metrics.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: cert-manager
+      toPorts:
+        - ports:
+            # cert-manager + cainjector metrics; webhook pod also lists 10250
+            - port: "9402"
+              protocol: TCP
+            - port: "10250"
+              protocol: TCP
+    # CloudNativePG operator metrics.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: cnpg-system
+      toPorts:
+        - ports:
+            # cloudnative-pg operator manager metrics
+            - port: "8080"
+              protocol: TCP
+    # Flux operator metrics and health.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: flux-system
+      toPorts:
+        - ports:
+            # flux-operator metrics + health
+            - port: "8080"
+              protocol: TCP
+            - port: "9080"
+              protocol: TCP
+    # Kaniop metrics.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: identity
+      toPorts:
+        - ports:
+            # kaniop metrics
+            - port: "8080"
+              protocol: TCP
+    # Visionect database metrics.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: iot
+      toPorts:
+        - ports:
+            # visionect-db postgres metrics
+            - port: "9187"
+              protocol: TCP
+    # Bambuddy database metrics.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: printing
+      toPorts:
+        - ports:
+            # bambuddy-db postgres metrics
+            - port: "9187"
+              protocol: TCP
+    # Longhorn manager metrics.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: longhorn-system
+      toPorts:
+        - ports:
+            # longhorn-manager metrics via longhorn-backend
+            - port: "9500"
+              protocol: TCP
+    # Echo metrics.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: default
+      toPorts:
+        - ports:
+            # echo metrics
+            - port: "80"
+              protocol: TCP
+    # Network namespace metrics.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: network
+      toPorts:
+        - ports:
+            # external-dns + cloudflared metrics
+            - port: "7979"
+              protocol: TCP
+            - port: "8080"
+              protocol: TCP
+            # traefik metrics entrypoint (dedicated metrics Service)
+            - port: "9100"
+              protocol: TCP
+    # Node and control-plane metrics.
+    - toEntities:
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "9100"
+              protocol: TCP
+            - port: "10257"
+              protocol: TCP
+            - port: "10259"
+              protocol: TCP
+            - port: "2381"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: vmalert
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: vmalert
+      app.kubernetes.io/instance: victoria-metrics-k8s-stack
+  ingress:
+    # Traefik admin access.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: network
+            app.kubernetes.io/instance: traefik-admin-network
+            app.kubernetes.io/name: traefik
+            io.cilium.k8s.policy.serviceaccount: traefik-admin
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: vmalertmanager
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: vmalertmanager
+      app.kubernetes.io/instance: victoria-metrics-k8s-stack
+  ingress:
+    # Traefik admin access.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: network
+            app.kubernetes.io/instance: traefik-admin-network
+            app.kubernetes.io/name: traefik
+            io.cilium.k8s.policy.serviceaccount: traefik-admin
+      toPorts:
+        - ports:
+            - port: "9093"
+              protocol: TCP
+  egress:
+    # Outbound paging: Pushover is the sole configured receiver host.
+    # Everything else is denied. When the independent dead-man watchdog
+    # lands (#218), its receiver hostname must be added here — a missing
+    # allowlist entry fails silently at deliver-time, not at apply-time.
+    - toFQDNs:
+        - matchName: api.pushover.net
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: vmsingle
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: vmsingle
+      app.kubernetes.io/instance: victoria-metrics-k8s-stack
+  ingress:
+    # Traefik admin access.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: network
+            app.kubernetes.io/instance: traefik-admin-network
+            app.kubernetes.io/name: traefik
+            io.cilium.k8s.policy.serviceaccount: traefik-admin
+      toPorts:
+        - ports:
+            - port: "8428"
+              protocol: TCP

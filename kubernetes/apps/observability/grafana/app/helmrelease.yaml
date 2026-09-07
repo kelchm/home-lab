@@ -18,8 +18,21 @@ spec:
         kind: HelmRepository
         name: grafana
   interval: 1h
+  # Plugin downloads happen during container startup. Allow enough time for a
+  # transient failure plus Kubernetes' CrashLoopBackOff retry to recover.
+  timeout: 10m
   values:
     replicas: 1
+
+    # ndots:1 so grafana.com resolves as an absolute name for the plugin
+    # download — see the cloudflare-dns HelmRelease for the
+    # ndots/search-path interaction that breaks Cilium toFQDNs rules
+    # otherwise. Datasources and OIDC use full .svc.cluster.local names
+    # and are unaffected.
+    dnsConfig:
+      options:
+        - name: ndots
+          value: "1"
 
     # Break-glass local admin. Kanidm lives in this same cluster — if it's
     # down, we still need a way into Grafana to diagnose. The OIDC button
@@ -71,7 +84,9 @@ spec:
     # later doesn't require a Grafana restart cycle.
     plugins:
       - victoriametrics-metrics-datasource
-      - victoriametrics-logs-datasource
+      # Pin the reviewed release instead of silently taking a new plugin on a
+      # future Grafana restart.
+      - https://grafana.com/api/plugins/victoriametrics-logs-datasource/versions/0.31.0/download;victoriametrics-logs-datasource
 
     # Sidecars discover datasources/dashboards by ConfigMap label. Each
     # subsequent bake-off commit lands labeled ConfigMaps; Grafana picks
@@ -102,6 +117,8 @@ spec:
         reporting_enabled: false
       log:
         mode: console
+      log.console:
+        format: json
       auth.generic_oauth:
         enabled: true
         name: Kanidm

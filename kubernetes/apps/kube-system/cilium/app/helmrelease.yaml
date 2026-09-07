@@ -47,7 +47,18 @@ spec:
     gatewayAPI:
       enabled: false
     hubble:
-      enabled: false
+      enabled: true
+      # Metrics only: no observation API listener on the host network.
+      listenAddress: ""
+      tls:
+        enabled: false
+      metrics:
+        enabled:
+          - drop:sourceContext=workload-name|reserved-identity;destinationContext=workload-name|reserved-identity;labelsContext=source_namespace,destination_namespace,traffic_direction
+        serviceMonitor:
+          enabled: true
+        dashboards:
+          enabled: true
     ipam:
       mode: kubernetes
     ipv4NativeRoutingCIDR: "10.42.0.0/16"

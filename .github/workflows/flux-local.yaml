@@ -60,6 +60,8 @@ jobs:
               - '.mise.toml'
               - 'kubernetes/**'
               - 'scripts/ci/validate-alloy-log-paths.sh'
+              - 'scripts/ci/test-validate-cilium-policies.sh'
+              - 'scripts/ci/validate-cilium-policies.sh'
               - 'scripts/ci/test-validate-unsafe-sysctls.sh'
               - 'scripts/ci/validate-unsafe-sysctls.sh'
               - 'talos/patches/global/machine-kubelet.yaml'
@@ -70,6 +72,7 @@ jobs:
             scripts:
               - '.github/workflows/flux-local.yaml'
               - '.mise.toml'
+              - '.renovaterc.json5'
               - '.shellcheckrc'
               - '**/*.sh'
             skills:
@@ -106,7 +109,7 @@ jobs:
 
       - name: Run flux-local test
         if: needs.pre-job.outputs.kubernetes_changed == 'true'
-        uses: docker://ghcr.io/allenporter/flux-local:v8.2.0
+        uses: docker://ghcr.io/allenporter/flux-local:v8.4.0
         with:
           args: test --enable-helm --all-namespaces --path /github/workspace/kubernetes/flux/cluster -v
 
@@ -144,7 +147,7 @@ jobs:
 
       - name: Run flux-local diff
         if: github.event_name == 'pull_request' && needs.pre-job.outputs.kubernetes_changed == 'true'
-        uses: docker://ghcr.io/allenporter/flux-local:v8.2.0
+        uses: docker://ghcr.io/allenporter/flux-local:v8.4.0
         with:
           args: >-
             diff ${{ matrix.resources }}
@@ -226,6 +229,12 @@ jobs:
           -kubernetes-version 1.36.0
           -summary
           /tmp/flux-render.yaml
+
+      - name: Validate Cilium policy rules
+        if: needs.pre-job.outputs.kubernetes_changed == 'true'
+        run: |
+          scripts/ci/test-validate-cilium-policies.sh
+          scripts/ci/validate-cilium-policies.sh
 
       - name: Validate pod sysctls against Talos
         if: needs.pre-job.outputs.kubernetes_changed == 'true'
@@ -361,6 +370,10 @@ jobs:
         if: needs.pre-job.outputs.scripts_changed == 'true'
         run: git ls-files -z -- '*.sh' | xargs -0 shellcheck
 
+      - name: Validate Kanidm ceiling sync
+        if: needs.pre-job.outputs.scripts_changed == 'true'
+        run: scripts/ci/test-sync-kanidm-version-ceiling.sh
+
       - name: No shell changes
         if: needs.pre-job.outputs.scripts_changed != 'true'
         run: echo "Shell validation is not required."
@@ -380,7 +393,7 @@ jobs:
         if: needs.pre-job.outputs.skills_changed == 'true'
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
-          version: "0.12.7"
+          version: "0.12.10"
           enable-cache: false
 
       - name: Validate Agent Skills

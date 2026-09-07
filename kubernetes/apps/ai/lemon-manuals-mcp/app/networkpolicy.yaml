@@ -1,5 +1,5 @@
 ---
-# Only MetaMCP may reach the MCP transport. Egress is limited to DNS and the
+# Only MCPHub may reach the MCP transport. Egress is limited to DNS and the
 # exact lemon-website backend used to fetch manual pages.
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
@@ -13,7 +13,7 @@ spec:
     - fromEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: ai
-            app.kubernetes.io/name: metamcp
+            app.kubernetes.io/name: mcphub
       toPorts:
         - ports:
             - port: "8787"

@@ -1,5 +1,5 @@
 ---
-# In-cluster HTTP MCP server reached by metamcp via Service DNS at
+# In-cluster HTTP MCP server reached by MCPHub via Service DNS at
 # http://kubernetes-mcp.ai.svc.cluster.local:8080/mcp. Not on any Gateway.
 #
 # Read-only Kubernetes introspection for the CRDs Flux doesn't model (Cilium,

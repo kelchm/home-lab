@@ -45,6 +45,9 @@ spec:
       compactor:
         retention_enabled: true
         delete_request_store: filesystem
+      # No anonymous usage reporting to stats.grafana.org.
+      analytics:
+        reporting_enabled: false
 
     singleBinary:
       replicas: 1
@@ -76,6 +79,11 @@ spec:
       enabled: false
     lokiCanary:
       enabled: false
+    # No rule ConfigMaps are shipped (monitoring.rules below), so the
+    # API-watching rules sidecar has nothing to sync.
+    sidecar:
+      rules:
+        enabled: false
 
     monitoring:
       serviceMonitor:

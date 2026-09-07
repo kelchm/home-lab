@@ -10,3 +10,4 @@ resources:
   - ./oauth2-arr-suite.yaml
   - ./oauth2-ops-suite.yaml
   - ./secret-oidc-session-key.sops.yaml
+  - ./networkpolicy.yaml

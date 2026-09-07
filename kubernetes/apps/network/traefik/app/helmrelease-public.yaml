@@ -57,6 +57,9 @@ spec:
     metrics:
       prometheus:
         enabled: true
+        # Dedicated metrics Service; the chart's ServiceMonitor selects it.
+        service:
+          enabled: true
         # See helmrelease-admin.yaml for rationale.
         disableAPICheck: true
         serviceMonitor:
@@ -64,5 +67,7 @@ spec:
           namespace: network
     log:
       level: INFO
+      format: json
     accessLog:
       enabled: true
+      format: json

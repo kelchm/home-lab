@@ -1,6 +1,6 @@
 # Network topology: workloads VLAN, DGX Spark placement, VLAN 40 retirement
 
-**Status:** Active — 2026-08-27; partially implemented; current host state and remaining phase-3 work: [DGX Spark bring-up runbook](../runbooks/dgx-spark-bringup.md).
+**Status:** Active — 2026-09-02; partially implemented; current host state and remaining phase-3 work: [DGX Spark bring-up runbook](../runbooks/dgx-spark-bringup.md). The later Remote Admin extension is tracked separately in the [Tailscale remote-admin plan](20260902-tailscale-remote-admin.md).
 
 **Scope:** VLAN/zone model for the whole lab — DGX Spark placement and
 interconnect, PVE guest wiring (integrated into the
@@ -34,15 +34,17 @@ revalidated after the move.
 - The Spark-to-Spark QSFP interconnect is one physical, unrouted point-to-point link with two logical PCIe/RDMA paths — not a VLAN, not in `10.32.0.0/16`, never advertised.
 - The PVE plan puts guests on the 2.5 GbE trunk; the onboard 1 GbE carries only management + Corosync link 0. Guest network is VLAN 21, not VLAN 31.
 - VLAN 31, LB pools `10.32.131/141.0/24`, ASN 65021, and storage slots `10.32.25.41-.43` + `.144/28` stay coherently reserved for a second Kubernetes cluster — whether it lands as PVE VMs or bare metal.
+- VLAN 19 is a later, deliberately narrow Remote Admin trust zone for two independent Tailscale router VMs. It is not a general-purpose management or guest network.
 - Service reachability policy continues to live on routed BGP prefixes; VLANs are reserved for genuinely different link-layer needs (quorum latency, bulk L2 adjacency, RDMA, management blast radius, client trust grades).
 
 ## Traffic and trust model
 
-Six classes, and only six:
+Seven classes:
 
 | Class | Members | Boundary mechanism |
 |---|---|---|
 | Client zones | Main, IoT, Guest, Cameras | VLANs 10/90/99/5 + gateway policy |
+| Remote ingress | Two Tailscale subnet-router VMs | VLAN 19; dedicated zone; explicit destination allows only |
 | Management plane | NAS admin, PVE/Talos/K8s APIs, GLKVM, PDM/PBS | VLAN 20; admin-clients-only ingress |
 | Bulk storage | Longhorn replication, NFS, migration, backups, Spark model reads | VLAN 25, switched at L2, off the gateway |
 | Workload servers | Sparks, general PVE guests, future standalone servers | VLAN 21; client-reachable service ports only |
@@ -111,7 +113,7 @@ This wiring is integrated into the
 IaC, and rollout content stands.
 
 - **Onboard 1 GbE**: access port on VLAN 20, plain static interface, no bridge. Carries PVE UI/API, SSH, and Corosync link 0 — nothing else. UI/SSH traffic is negligible, so this is effectively the dedicated Corosync NIC the [Proxmox docs](https://pve.proxmox.com/pve-docs/chapter-pvecm.html) recommend.
-- **RTL8125 2.5 GbE**: trunk carrying one VLAN-aware bridge (`bridge-vids 10 21 25 90`, no native VLAN — an untagged guest NIC still fails closed). Host addresses only on the `.25` subinterface (storage, migration, Corosync link 1). Guests attach tagged: 21 by default; 90 or 10 require deliberate zone placement, and 25 is only for a registered storage-attached guest with an explicit per-IP NAS/export ACL. Keep the explicit bridge tag set identical on all three hosts; defer an SDN zone/VNet layer until it solves a repeated management problem.
+- **RTL8125 2.5 GbE**: trunk carrying one VLAN-aware bridge (`bridge-vids 10 19 21 25 90`, no native VLAN — an untagged guest NIC still fails closed). Host addresses only on the `.25` subinterface (storage, migration, Corosync link 1). Guests attach tagged: 21 by default; 19 is restricted to the two remote-admin routers; 90 or 10 require deliberate zone placement; and 25 is only for a registered storage-attached guest with an explicit per-IP NAS/export ACL. Keep the explicit bridge tag set identical on all three hosts; defer an SDN zone/VNet layer until it solves a repeated management problem.
 - Rationale for moving guests off the 1 GbE: the original wiring put guest traffic on the same physical link as Corosync link 0, contradicting its own jitter rationale for keeping link 0 off VLAN 25 — a guest saturating 1 GbE creates exactly the congestion [Proxmox staff warn about](https://forum.proxmox.com/threads/proxmox-corosync-cluster-dedicated-network-why.139557/). Under this wiring a 2.5 GbE/RTL8125 failure costs a node its storage and guests but not quorum or management; the reverse held before.
 - Trade accepted: guests now contend with storage/migration/backup on the 2.5 GbE. Quorum stability is the higher-value invariant, and guests also gain 2.5× the bandwidth ceiling.
 - A VM needing L2/mDNS adjacency to IoT (Home Assistant) starts in VLAN 21 with an allow rule plus the UniFi mDNS repeater; a second vNIC tagged 90 is the escalation if discovery breaks empirically.
@@ -123,7 +125,7 @@ IaC, and rollout content stands.
 | `mgmt-infra` (access 20) | 20 | — | PVE 1 GbE ×3, NAS 1 GbE, GLKVM |
 | `storage` (access 25) | 25 | — | k8s 2.5 GbE ×3, NAS SFP+ |
 | `k8s-node` (access 30) | 30 | — (VLAN 40 tag removed) | k8s 1 GbE ×3 |
-| `pve-guest-trunk` | none | 10, 21, 25, 90 (+31 when cluster 2 lands) | PVE 2.5 GbE ×3 |
+| `pve-guest-trunk` | none | 10, 19, 21, 25, 90 (+31 when cluster 2 lands) | PVE 2.5 GbE ×3 |
 | `spark-trunk` | 21 | 25 | Spark 10 GbE ×2 (aggregation switch) |
 | Uplinks/LAGs | all | — | Restore the lab-switch LAG to 2×10 G first |
 
@@ -143,6 +145,8 @@ One UniFi zone per VLAN — never merge two VLANs into a zone, since intra-zone 
 | WAN | deny | deny | deny | deny | deny | deny | deny | deny | — |
 
 Most of this table does not exist on the controller today, and the general `bgp-lb-restricted` IoT/Guest posture remains unapplied intent. Three PVE-specific rules were applied and negative-tested on 2026-08-27: Workloads is blocked from Infra Mgmt, Storage, K8s Prod, and `admin-prod`; K8s Prod is blocked from initiating into Workloads. `services-prod`, DNS, Internet access, and Main administration remained available. UniFi classifies the Cilium BGP-routed `admin-prod` prefix in the `External` destination zone, so the live rule matches `10.32.130.0/24` there rather than treating it as an `Internal` network. Exact policy names and probe results are in [`network/unifi/README.md`](../../network/unifi/README.md).
+
+Remote Admin is intentionally outside the older matrix. Its applied baseline is a dedicated zone with default blocks to Internal, VPN, Hotspot, DMZ, and itself; gateway and Internet access remain available. Both Tailscale routers advertise the aggregate `10.32.0.0/16`, independently of gateway authorization. `Allow Main to Tailscale Routers` permits Main to reach only `10.32.19.101` and `.102`. `Allow Tailscale Routers to Routed LAN` permits those two sources to six destination prefixes only: `10.32.1.0/24`, `10.32.10.0/24`, `10.32.20.0/24`, `10.32.30.0/24`, `10.32.130.0/24`, and `10.32.140.0/24`. Both policies have generated established/related return rules; all other Remote Admin → Internal initiation remains blocked.
 
 ## Migration phases
 

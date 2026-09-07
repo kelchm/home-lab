@@ -1,5 +1,5 @@
 ---
-# Default-deny shape: only MCP gateways in the ai namespace reach the
+# Default-deny shape: only MCPHub in the ai namespace reaches the
 # playwright-stealth-mcp HTTP transport. Public-only HTTP(S) egress and DNS are
 # supplied by the namespace-level ai-public-web-egress policy.
 apiVersion: cilium.io/v2
@@ -14,7 +14,7 @@ spec:
     - fromEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: ai
-            app.kubernetes.io/name: metamcp
+            app.kubernetes.io/name: mcphub
       toPorts:
         - ports:
             - port: "8931"

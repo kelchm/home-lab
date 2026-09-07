@@ -49,13 +49,19 @@ Both stores use hard NFSv4.1 mounts and are allowed only from the three PVE stor
 
 The cluster job `daily-backups` backs up all non-disposable guests to `backups-pve-sbx` at 05:00 America/New_York in snapshot mode with Zstandard compression. The live job uses `all=1`; add every disposable VMID to its explicit `exclude` field. The field is currently unset because no disposable guest remains. Its retention policy is last 3, daily 7, weekly 4, and monthly 6. The built-in matcher currently targets `mail-to-root`, but direct delivery to Gmail failed with `550 5.7.1`; do not depend on email alerts until an authenticated SMTP relay is configured and tested.
 
+## Guest trunk
+
+Every node's RTL8125-backed `vmbr0` is VLAN-aware with an explicit `bridge-vids 10 19 21 25 90` allowlist. The corresponding UniFi `pve-guest-trunk` profile has no native network and carries only those five tagged VLANs on Lab Switch ports 13–15. An untagged guest therefore fails closed, and adding a new guest VLAN requires an intentional change on both PVE and UniFi.
+
 ## Persistent guests
 
 | VMID | Guest | Address | Purpose | Source |
 |---|---|---|---|---|
+| `101` | `tailscale-router-1` | `10.32.19.101` | Tailscale subnet-router candidate 1 | [`guests/tailscale-router`](guests/tailscale-router/) |
+| `102` | `tailscale-router-2` | `10.32.19.102` | Tailscale subnet-router candidate 2 | [`guests/tailscale-router`](guests/tailscale-router/) |
 | `200` | `hermes-1` | `10.32.21.100` | Hermes Agent, dashboard, and client API | [`guests/hermes-1`](guests/hermes-1/) |
 
-`hermes-1` is enabled at host boot and is covered by `daily-backups`. Its application state lives on its local VM disk under `/srv/hermes`; it is not a PVE HA resource.
+All three guests are enabled at host boot, covered by `daily-backups`, and intentionally not PVE HA resources. The Tailscale routers live on different PVE nodes and provide application-level failover by advertising the same route set; PVE must not restart both onto one surviving host. `hermes-1` keeps its application state on its local VM disk under `/srv/hermes`.
 
 ## Applied guest network policy
 

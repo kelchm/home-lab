@@ -1,0 +1,21 @@
+---
+# k8s-gateway exposes LAN DNS through the LoadBalancer IP.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: k8s-gateway
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: k8s-gateway
+      app.kubernetes.io/instance: k8s-gateway
+  ingress:
+    # LAN DNS via the LoadBalancer IP
+    - fromEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "1053"
+              protocol: UDP
+            - port: "1053"
+              protocol: TCP

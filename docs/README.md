@@ -38,8 +38,8 @@ or fixing.
 | [seerr-bootstrap](runbooks/seerr-bootstrap.md) | Wiring Seerr to Jellyfin/Radarr/Sonarr, household request policy, and break-glass admin (the non-GitOps UI steps). |
 | [multus-conf-absent-recovery](runbooks/multus-conf-absent-recovery.md) | Recovering pods stuck on an absent Multus network config. |
 | [multus-fail-closed-cutover](runbooks/multus-fail-closed-cutover.md) | Moving Cilium's conflist out of containerd's live CNI directory so Multus is the only publisher. |
-| [metamcp-bootstrap](runbooks/metamcp-bootstrap.md) | Initialising the MetaMCP gateway and onboarding backend MCP servers (the non-GitOps registry steps). |
-| [ai-mcp-reliability-and-containment](runbooks/ai-mcp-reliability-and-containment.md) | Post-deploy checks for MetaMCP reliability, session hygiene, and network-policy containment. |
+| [metamcp-bootstrap](runbooks/metamcp-bootstrap.md) | Retirement notice and pointer to the current MCPHub gateway. |
+| [ai-mcp-reliability-and-containment](runbooks/ai-mcp-reliability-and-containment.md) | Post-deploy checks for MCPHub/backend connectivity and Grafana MCP functional monitoring. |
 | [bambuddy-bootstrap](runbooks/bambuddy-bootstrap.md) | Bringing up Bambuddy, validating printer containment and OIDC, and exercising backup recovery. |
 | [visionect-migration](runbooks/visionect-migration.md) | Staging, cutting over, validating, and rolling back the Synology-to-k8s Visionect migration. |
 | [dgx-spark-bringup](runbooks/dgx-spark-bringup.md) | Configuring, validating, troubleshooting, and recovering the two-node DGX Spark LAN/storage/RDMA setup. |
@@ -61,13 +61,14 @@ The status header form is `**Status:** <Proposed|Active|Implemented|Superseded> 
 - [20260620-metamcp-mcp-rollout](plans/20260620-metamcp-mcp-rollout.md) — MetaMCP gateway + curated backend MCP server rollout.
 - [20260620-nas-out-of-cluster-workloads](plans/20260620-nas-out-of-cluster-workloads.md) — Synology-hosted S3 backup target and Git-driven deployment model for workloads outside Kubernetes.
 - [20260622-sequenced-dependency-upgrades](plans/20260622-sequenced-dependency-upgrades.md) — ordered major-version upgrade pass for k8s-prod (Longhorn → Talos → k8s → Gateway API/Traefik → kaniop).
-- [20260622-tailscale-operator](plans/20260622-tailscale-operator.md) — Tailscale Kubernetes operator subnet router for off-LAN access to home VLANs and gateways.
+- [20260622-tailscale-operator](plans/20260622-tailscale-operator.md) — superseded Kubernetes-operator subnet-router design retained as historical context.
 - [20260703-observability-rework](plans/20260703-observability-rework.md) — converge on VictoriaMetrics/VictoriaLogs and cover Kubernetes, PVE, DGX Spark, Synology, UniFi, logs, flows, and security events through one operating model.
 - [20260705-broadsheet-rename-migration](plans/20260705-broadsheet-rename-migration.md) — paperboy → broadsheet rename with PVC-preserving migration.
 - [20260802-lemon-manuals-selfhost](plans/20260802-lemon-manuals-selfhost.md) — self-host the LEMON manuals archive on NFS with an MCP server in front.
 - [20260814-pve-cluster](plans/20260814-pve-cluster.md) — implemented core design for the independent three-node PVE cluster, with remaining hardware acceptance and identity/certificate gates tracked in the live operator documentation.
 - [20260818-sn770-zfs-qualification-procedure](plans/20260818-sn770-zfs-qualification-procedure.md) — the bounded, destructive test procedure and safety guards used for the SN770 reproduction run.
 - [20260821-network-topology](plans/20260821-network-topology.md) — active, partially implemented VLAN/zone topology, DGX placement, PVE wiring, and second-cluster reservations.
+- [20260902-tailscale-remote-admin](plans/20260902-tailscale-remote-admin.md) — implemented independent two-VM PVE subnet-router pair on isolated VLAN 19, replacing the Kubernetes-hosted route.
 
 ## Decision records & benchmarks
 

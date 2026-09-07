@@ -1,0 +1,93 @@
+#cloud-config
+
+package_update: true
+package_upgrade: false
+
+packages:
+  - ca-certificates
+  - curl
+  - ethtool
+  - qemu-guest-agent
+
+write_files:
+  - path: /etc/sysctl.d/99-tailscale-router.conf
+    owner: root:root
+    permissions: "0644"
+    content: |
+      net.ipv4.ip_forward = 1
+      net.ipv6.conf.all.forwarding = 1
+
+  - path: /usr/local/sbin/tailscale-router-bootstrap
+    owner: root:root
+    permissions: "0755"
+    content: |
+      #!/bin/sh
+      set -eu
+
+      work_dir="$(mktemp -d)"
+      trap 'rm -rf "$work_dir"' EXIT HUP INT TERM
+
+      curl --proto '=https' --tlsv1.2 --fail --show-error --location \
+        --output "$work_dir/tailscale-archive-keyring.gpg" \
+        https://pkgs.tailscale.com/stable/debian/trixie.noarmor.gpg
+      printf '%s  %s\n' \
+        '3e03dacf222698c60b8e2f990b809ca1b3e104de127767864284e6c228f1fb39' \
+        "$work_dir/tailscale-archive-keyring.gpg" | sha256sum --check --status
+      install -o root -g root -m 0644 \
+        "$work_dir/tailscale-archive-keyring.gpg" \
+        /usr/share/keyrings/tailscale-archive-keyring.gpg
+
+      curl --proto '=https' --tlsv1.2 --fail --show-error --location \
+        --output "$work_dir/tailscale.list" \
+        https://pkgs.tailscale.com/stable/debian/trixie.tailscale-keyring.list
+      install -o root -g root -m 0644 \
+        "$work_dir/tailscale.list" \
+        /etc/apt/sources.list.d/tailscale.list
+
+      apt-get update
+      DEBIAN_FRONTEND=noninteractive apt-get install --yes tailscale
+
+  - path: /usr/local/sbin/tailscale-gro-forwarding
+    owner: root:root
+    permissions: "0755"
+    content: |
+      #!/bin/sh
+      set -eu
+
+      netdev="$(ip -o route show default | awk '{print $5; exit}')"
+      [ -n "$netdev" ] || exit 0
+
+      features="$(ethtool -k "$netdev")"
+      if printf '%s\n' "$features" | grep -q '^rx-udp-gro-forwarding:'; then
+        ethtool -K "$netdev" rx-udp-gro-forwarding on || true
+      fi
+      if printf '%s\n' "$features" | grep -q '^rx-gro-list:'; then
+        ethtool -K "$netdev" rx-gro-list off || true
+      fi
+
+  - path: /etc/systemd/system/tailscale-gro-forwarding.service
+    owner: root:root
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=Tune the Tailscale router interface for UDP forwarding
+      Wants=network-online.target
+      After=network-online.target
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/sbin/tailscale-gro-forwarding
+      RemainAfterExit=yes
+
+      [Install]
+      WantedBy=multi-user.target
+
+runcmd:
+  - [sysctl, --system]
+  - [/usr/local/sbin/tailscale-router-bootstrap]
+  - [systemctl, daemon-reload]
+  - [systemctl, enable, --now, qemu-guest-agent.service]
+  - [systemctl, enable, --now, tailscaled.service]
+  - [systemctl, enable, --now, tailscale-gro-forwarding.service]
+
+final_message: "Tailscale router bootstrap complete; authentication and route advertisement remain intentionally manual."
