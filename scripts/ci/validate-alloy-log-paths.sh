@@ -29,7 +29,7 @@ readonly EXPECTED_LEVEL_SELECTOR='selector=`{level_candidate=~"trace|debug|info|
 readonly EXPECTED_TEMPLATE_ESCAPE='template={{printf"%q"`'
 # shellcheck disable=SC2016
 readonly EXPECTED_LOGFMT_GATE='{{-$is_logfmt:=and(regexMatch"^[[:space:]]*[A-Za-z_][A-Za-z0-9_.-]*=".Entry)$has_logfmt_envelope-}}'
-readonly EXPECTED_DUAL_WRITE='forward_to=[loki.write.loki.receiver,loki.write.vl.receiver,]'
+readonly EXPECTED_FAN_OUT='forward_to=[loki.write.vl.receiver,]'
 # shellcheck disable=SC2016
 readonly EXPECTED_LEVEL_ALLOWLIST_CHAIN='stage.labels{values={level_candidate="level",}}stage.match{selector=`{level_candidate=~"trace|debug|info|warning|error|critical"}`stage.labels{values={level="level",}}}stage.label_drop{values=["level_candidate"]}'
 
@@ -131,8 +131,10 @@ function main() {
             ;;
     esac
 
-    if [[ "$(count_occurrences "${compact}" "${EXPECTED_DUAL_WRITE}")" != 1 ]]; then
-        echo "Alloy must keep exactly one Loki and VictoriaLogs dual-write fan-out until convergence is accepted." >&2
+    if [[ "$(count_occurrences "${compact}" "${EXPECTED_FAN_OUT}")" != 1 || \
+          "$(count_occurrences "${compact}" 'loki.write"')" != 1 || \
+          "${compact}" == *'loki.observability.svc'* ]]; then
+        echo "Alloy must forward to VictoriaLogs alone; no second log sink may be reintroduced." >&2
         return 1
     fi
 

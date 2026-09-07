@@ -5,8 +5,7 @@ metadata:
   name: alloy
 spec:
   dependsOn:
-    - name: loki                   # temporarily retained rollback sink
-    - name: victoria-logs-single   # surviving log backend
+    - name: victoria-logs-single
   healthChecks:
     - apiVersion: helm.toolkit.fluxcd.io/v2
       kind: HelmRelease
