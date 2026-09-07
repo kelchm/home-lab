@@ -170,16 +170,6 @@ spec:
         - ports:
             - port: "3000"
               protocol: TCP
-    # MetaMCP backend.
-    - toEndpoints:
-        - matchLabels:
-            k8s:io.kubernetes.pod.namespace: ai
-            app.kubernetes.io/name: metamcp
-            io.cilium.k8s.policy.serviceaccount: metamcp
-      toPorts:
-        - ports:
-            - port: "12008"
-              protocol: TCP
     # Longhorn UI backend.
     - toEndpoints:
         - matchLabels:

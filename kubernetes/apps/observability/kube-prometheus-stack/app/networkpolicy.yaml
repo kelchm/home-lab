@@ -90,15 +90,6 @@ spec:
             # kaniop metrics
             - port: "8080"
               protocol: TCP
-    # MetaMCP database metrics.
-    - toEndpoints:
-        - matchLabels:
-            k8s:io.kubernetes.pod.namespace: ai
-      toPorts:
-        - ports:
-            # metamcp-db (CloudNativePG instance metrics)
-            - port: "9187"
-              protocol: TCP
     # Visionect database metrics.
     - toEndpoints:
         - matchLabels:

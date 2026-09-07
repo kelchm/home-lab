@@ -2,6 +2,8 @@
 
 **Status:** Implemented — 2026-08-24; the gateway and backend set are live under `kubernetes/apps/ai/`; bootstrap procedure: [metamcp-bootstrap runbook](../runbooks/metamcp-bootstrap.md).
 
+MetaMCP and MarkItDown were retired in September 2026. The deployment and bootstrap details below are historical; see the [MCPHub guide](../../kubernetes/apps/ai/mcphub/README.md) for the current gateway.
+
 ## Context
 
 MetaMCP (`ghcr.io/metatool-ai/metamcp`, ns `ai`) is the cluster's MCP gateway, fronting
@@ -291,7 +293,9 @@ Each entry lists only the deltas from the `digikey-mcp` template. Verified corre
   **no API key**. Forecast/historical/air-quality/marine/elevation/geocoding. Read-only.
 - Egress allowlist: `api.open-meteo.com` only.
 
-### markitdown — `markitdown-mcp` (Phase 4)
+### markitdown — `markitdown-mcp` (Phase 4, retired)
+
+Retired in September 2026: unused by the operator and its bundled MCP SDK leaked memory until the container thrashed at its memory limit. The historical deployment notes below describe the original rollout.
 
 - `microsoft/markitdown` (markitdown-mcp), HTTP-native (streamable-http + SSE), one tool
   `convert_to_markdown(uri)`. First-party Microsoft.

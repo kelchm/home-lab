@@ -1,7 +1,7 @@
 """Exercise Grafana MCP with a real tool call.
 
 The scheduled probe uses the direct Grafana MCP Service. The same script can
-exercise the authenticated MetaMCP endpoint during rollout by overriding
+exercise an authenticated aggregator endpoint during rollout by overriding
 MCP_SCHEME/HOST/PORT/PATH, MCP_TOOL_NAME, and MCP_API_KEY.
 """
 

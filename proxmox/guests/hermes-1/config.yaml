@@ -42,14 +42,6 @@ dashboard:
       scopes: openid profile email
 
 mcp_servers:
-  metamcp:
-    url: https://metamcp.home.kelch.io/metamcp/hermes/mcp
-    headers:
-      X-API-Key: "${METAMCP_HERMES_API_KEY}"
-    enabled: true
-    connect_timeout: 30
-    timeout: 120
-    trust: full
   mcphub_hacker_news:
     url: https://mcphub.home.kelch.io/mcp/hacker-news
     headers:

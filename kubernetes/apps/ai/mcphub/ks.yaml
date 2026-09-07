@@ -11,7 +11,6 @@ spec:
     - name: hackernews-mcp
     - name: kubernetes-mcp
     - name: lemon-manuals-mcp
-    - name: markitdown-mcp
     - name: open-meteo-mcp
     - name: pcbparts-mcp
     - name: playwright-stealth-mcp

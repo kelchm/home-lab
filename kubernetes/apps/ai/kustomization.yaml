@@ -16,9 +16,7 @@ resources:
   - ./hackernews-mcp/ks.yaml
   - ./kubernetes-mcp/ks.yaml
   - ./lemon-manuals-mcp/ks.yaml
-  - ./markitdown-mcp/ks.yaml
   - ./mcphub/ks.yaml
-  - ./metamcp/ks.yaml
   - ./open-meteo-mcp/ks.yaml
   - ./pcbparts-mcp/ks.yaml
   - ./playwright-stealth-mcp/ks.yaml

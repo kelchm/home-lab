@@ -74,7 +74,7 @@ The following policies remain live in UniFi Network 10.6.101 and ordered above t
 | `Block Workloads to Admin Prod Routed` | `Internal`; network `Workloads` | `External`; IP `10.32.130.0/24` | Block; all protocols |
 | `Block K8s Prod to Workloads` | `Internal`; network `K8s Prod` | `Internal`; network `Workloads` | Block; all protocols |
 
-`Allow Hermes to MetaMCP` is ordered immediately above `Block Workloads to Admin Prod Routed`; all other Workloads clients remain denied from `admin-prod`. An unauthenticated HTTPS probe from Hermes reached MetaMCP and returned HTTP 401, while the earlier disposable-guest test remained blocked.
+The legacy-named `Allow Hermes to MetaMCP` rule also carries MCPHub traffic through the same admin-gateway IP and remains needed after MetaMCP retirement. It is ordered immediately above `Block Workloads to Admin Prod Routed`; all other Workloads clients remain denied from `admin-prod`. An unauthenticated HTTPS probe from Hermes reached MetaMCP and returned HTTP 401, while the earlier disposable-guest test remained blocked.
 
 `admin-prod` is a Cilium BGP-routed prefix, not a UniFi network. A live negative test proved that UniFi classifies this routed destination through the `External` zone: an `Internal` destination rule did not block Traefik at `10.32.130.1`, while the otherwise identical `External` rule did. This classification is controller behavior, not a statement that the service is Internet-hosted. Retest it after controller upgrades or routing changes.
 

@@ -51,10 +51,7 @@ Workloads are organised one namespace per concern under [`kubernetes/apps/`](kub
 - **`identity`** — Kanidm as the OIDC provider / user directory, run by the
   kaniop operator.
 - **`observability`** — Grafana defaults to VictoriaMetrics; vmalert and VMAlertmanager own Pushover delivery, and VictoriaLogs is the surviving log backend. OpenObserve is retired, while KPS and Loki remain briefly as Git-revert rollback components under the completed [bake-off decision](docs/observability-bakeoff.md).
-- **`ai`** — MetaMCP as a single MCP gateway (web UI + OIDC via Kanidm, server
-  registry in CloudNative-PG Postgres) fronting a set of backend MCP servers:
-  Playwright (standard + stealth), Digi-Key, Grafana, Kubernetes, and Flux
-  Operator. See the [rollout plan](docs/plans/20260620-metamcp-mcp-rollout.md).
+- **`ai`** — MCPHub as a file-backed MCP gateway with capability groups and workload-scoped bearer keys, fronting nine backend MCP servers. MetaMCP and MarkItDown are retired. See the [MCPHub guide](kubernetes/apps/ai/mcphub/README.md).
 - **`network`**, **`cert-manager`**, **`longhorn-system`**, **`cnpg-system`**,
   **`kube-system`** — the platform plumbing the above sits on.
 
