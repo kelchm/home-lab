@@ -293,4 +293,4 @@ spec:
           }
 
     serviceMonitor:
-      enabled: true   # converted for vmagent; retained KPS also scrapes during the rollback soak
+      enabled: true   # converted to a VMServiceScrape for vmagent

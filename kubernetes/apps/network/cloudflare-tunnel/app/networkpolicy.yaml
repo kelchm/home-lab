@@ -17,11 +17,6 @@ spec:
             app.kubernetes.io/name: vmagent
             app.kubernetes.io/instance: victoria-metrics-k8s-stack
             io.cilium.k8s.policy.serviceaccount: vmagent-victoria-metrics-k8s-stack
-        - matchLabels:
-            k8s:io.kubernetes.pod.namespace: observability
-            app.kubernetes.io/name: prometheus
-            prometheus: kube-prometheus-stack-prometheus
-            io.cilium.k8s.policy.serviceaccount: kube-prometheus-stack-prometheus
       toPorts:
         - ports:
             - port: "8080"

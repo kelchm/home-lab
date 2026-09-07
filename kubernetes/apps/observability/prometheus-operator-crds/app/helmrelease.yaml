@@ -1,7 +1,7 @@
 ---
-# Standalone ownership for the monitoring.coreos.com CRDs used by charts across
-# the cluster. Version 31.0.1 carries Prometheus Operator v0.93.1 CRDs, matching
-# kube-prometheus-stack 88.6.1 at the point ownership moves off that release.
+# Sole owner of the monitoring.coreos.com CRDs used by charts across the
+# cluster. Version 31.0.1 carries Prometheus Operator v0.93.1 CRDs; the
+# VictoriaMetrics operator converts the resulting objects for vmagent.
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
@@ -15,7 +15,7 @@ spec:
         kind: HelmRepository
         name: prometheus-community-crds
   install:
-    # Adopt the identical CRDs initially installed by kube-prometheus-stack.
+    # Adopt identical CRDs already present rather than failing on conflict.
     disableTakeOwnership: false
   interval: 1h
   values:

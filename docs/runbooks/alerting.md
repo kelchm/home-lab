@@ -15,7 +15,7 @@ Alertmanager routes as follows:
 | `alertname="Watchdog"` | `null` | N/A | N/A |
 | Everything else | `null` | N/A | N/A |
 
-vmalert is the delivery authority. It attaches `cluster=k8s-prod` and `evaluator=vmalert`, sends to VMAlertmanager, and is the only evaluator whose warning and critical alerts match an outbound route. The temporarily retained KPS Prometheus still evaluates the shared `PrometheusRule` set, but sends to its own null-only rollback Alertmanager. The SOPS-encrypted `vmalertmanager-config` Secret owns VMAlertmanager routing and the Pushover application token/user key; it lives with the VictoriaMetrics stack so deleting the KPS directory cannot remove it. Do not put either credential in Helm values, shell history, issue comments, or screenshots.
+vmalert is the delivery authority and the cluster's only rule evaluator. It attaches `cluster=k8s-prod` and `evaluator=vmalert`, and sends to VMAlertmanager. The SOPS-encrypted `vmalertmanager-config` Secret owns VMAlertmanager routing and the Pushover application token/user key. Do not put either credential in Helm values, shell history, issue comments, or screenshots.
 
 Use a source-specific Pushover application for each independent alert producer. Kubernetes uses `k8s-prod Alerts`; a future Proxmox setup should use a separate application such as `pve-prod Alerts` rather than sharing this token. Both applications can deliver to the same Pushover user and devices while retaining distinct names, icons, quotas, audit history, and revocation boundaries.
 
@@ -24,7 +24,7 @@ Firing critical alerts use Pushover priority `1`, which bypasses quiet hours but
 ## First response
 
 1. Open `https://alertmanager.home.kelch.io` and inspect the complete label and annotation set. Pushover is a prompt to investigate, not the full source of truth.
-2. Confirm the alert has `evaluator=vmalert`. During the temporary KPS rollback window, compare the Prometheus copy in the KPS Alertmanager only when evaluator parity matters; it never routes externally.
+2. Confirm the alert has `evaluator=vmalert`. Any alert without that label did not come from the production evaluator.
 3. Follow the alert description and linked subsystem runbook. For Flux failures, inspect the named Kustomization or HelmRelease before forcing a reconcile. For Longhorn backup alerts, use [longhorn-backup-restore](longhorn-backup-restore.md#routine-monitoring).
 4. Silence only when the cause and maintenance window are understood. Fix the signal or its rule instead of leaving a recurring silence.
 
@@ -174,7 +174,7 @@ If the vmalert `Watchdog` disappears from VMAlertmanager, treat the absence as a
 
 ## Grafana survivor check
 
-Open Grafana's data-source settings and confirm VictoriaMetrics (`victoriametrics`) is the default metrics datasource and Alertmanager (`alertmanager-vm`) resolves through VMAlertmanager. KPS Prometheus may remain available during the rollback soak, but it must not be the default. Render representative cluster, node-exporter, and node-hardware dashboards over a recent time range, then use Explore against VictoriaMetrics to confirm the target-count and Longhorn queries above return current data without materially duplicated series.
+Open Grafana's data-source settings and confirm VictoriaMetrics (`victoriametrics`) is the default metrics datasource and Alertmanager (`alertmanager-vm`) resolves through VMAlertmanager. No `Prometheus` or `Loki` datasource should be present. Render representative cluster, node-exporter, and node-hardware dashboards over a recent time range, then use Explore against VictoriaMetrics to confirm the target-count and Longhorn queries above return current data without materially duplicated series.
 
 ## Credential rotation
 

@@ -7,7 +7,7 @@ metadata:
     kustomize.toolkit.fluxcd.io/prune: disabled
   labels:
     # Required by node-exporter (hostNetwork, hostPID, host filesystem
-    # mounts) deployed as part of kube-prometheus-stack. PSA on Talos
+    # mounts) deployed as part of victoria-metrics-k8s-stack. PSA on Talos
     # enforces strict defaults outside kube-system, so workloads needing
     # privileged access need this enforcement label on their namespace.
     # Restricted warn/audit telemetry remains enabled cluster-wide.

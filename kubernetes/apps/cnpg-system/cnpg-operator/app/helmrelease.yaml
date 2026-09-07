@@ -9,7 +9,7 @@ spec:
     name: cnpg-operator
   interval: 1h
   values:
-    # PodMonitor → kube-prometheus-stack picks up operator metrics. CR-level
+    # PodMonitor → converted to a VMPodScrape for vmagent. CR-level
     # PodMonitors for individual Clusters are still controlled per-Cluster via
     # spec.monitoring.enablePodMonitor.
     monitoring:

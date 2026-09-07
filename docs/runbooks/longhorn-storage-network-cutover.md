@@ -26,10 +26,7 @@ All currently in `observability`:
 
 | Workload | Kind | PVC | Owned by operator? |
 |---|---|---|---|
-| `alertmanager-kube-prometheus-stack-alertmanager` | StatefulSet | 1 Gi | yes — kube-prometheus-stack-operator |
 | `vmalertmanager-victoria-metrics-k8s-stack` | StatefulSet | 1 Gi | yes — victoria-metrics-operator |
-| `prometheus-kube-prometheus-stack-prometheus` | StatefulSet | 50 Gi | yes — kube-prometheus-stack-operator |
-| `loki` | StatefulSet | 30 Gi | no — **but** chart sets `pvcRetentionPolicy: Delete` so scaling to 0 wipes data; see "Loki caveat" below |
 | `victoria-logs-single-server` | StatefulSet | 30 Gi | no |
 | `vmsingle-victoria-metrics-k8s-stack` | Deployment | 50 Gi | yes — victoria-metrics-operator |
 | `grafana` | Deployment | 10 Gi | no |
@@ -44,23 +41,18 @@ Estimated 30–60 min including verification. Outage of the observability stack 
 
 ```sh
 flux suspend hr -n observability \
-  kube-prometheus-stack loki victoria-logs-single \
-  victoria-metrics-k8s-stack grafana
+  victoria-logs-single victoria-metrics-k8s-stack grafana
 ```
 
 ### 2. Scale operators to 0 first, then their workloads
 
 ```sh
 kubectl -n observability scale deployment \
-  kube-prometheus-stack-operator \
   victoria-metrics-k8s-stack-victoria-metrics-operator \
   --replicas=0
 
 kubectl -n observability scale statefulset \
-  alertmanager-kube-prometheus-stack-alertmanager \
   vmalertmanager-victoria-metrics-k8s-stack \
-  prometheus-kube-prometheus-stack-prometheus \
-  loki \
   victoria-logs-single-server \
   --replicas=0
 
@@ -128,23 +120,20 @@ Helm doesn't reset replica counts after a `kubectl scale --replicas=0`, so scali
 
 ```sh
 flux resume hr -n observability \
-  kube-prometheus-stack loki victoria-logs-single \
-  victoria-metrics-k8s-stack grafana
+  victoria-logs-single victoria-metrics-k8s-stack grafana
 
 kubectl -n observability scale deployment \
-  kube-prometheus-stack-operator \
   victoria-metrics-k8s-stack-victoria-metrics-operator \
   grafana \
   vmsingle-victoria-metrics-k8s-stack \
   --replicas=1
 
 kubectl -n observability scale statefulset \
-  loki \
   victoria-logs-single-server \
   --replicas=1
 ```
 
-The Prometheus, KPS Alertmanager, and VMAlertmanager StatefulSets are recreated by their operators from the CRs once the operators are back; no manual scaling is needed for those.
+The VMAlertmanager StatefulSet is recreated by its operator from the CR once the operators are back; no manual scaling is needed for it.
 
 ### 8. Verify replica traffic on VLAN 25
 
@@ -171,23 +160,14 @@ If the cutover goes sideways:
 
 The Multus, Whereabouts, NAD, and Talos bridge config can stay deployed — they're inert without the Longhorn `storage-network` setting referencing the NAD.
 
-## Loki caveat
+## PVC retention caveat
 
-The Loki Helm chart sets `persistentVolumeClaimRetentionPolicy: whenScaled=Delete, whenDeleted=Delete` on its StatefulSet. Combined with our `longhorn` StorageClass `reclaimPolicy: Delete`, **scaling Loki to 0 destroys its data.** The volume gets deleted; on scale-up Loki gets a fresh empty PVC. Every other observability stateful workload defaults to `Retain` and survives scale-to-0 with data intact.
+Every observability stateful workload defaults to `persistentVolumeClaimRetentionPolicy: Retain` and survives scale-to-0 with data intact. Before adding a workload to the scale-down list, check its StatefulSet: a chart that sets `whenScaled: Delete` combined with the `longhorn` StorageClass `reclaimPolicy: Delete` destroys the volume on scale-to-0 and returns an empty PVC on scale-up.
 
-If Loki retention matters for the maintenance window, override before starting:
-
-```yaml
-# kubernetes/apps/observability/loki/app/helmrelease.yaml
-spec:
-  values:
-    singleBinary:
-      persistentVolumeClaimRetentionPolicy:
-        whenScaled: Retain
-        whenDeleted: Retain
+```sh
+kubectl -n observability get statefulset -o custom-columns=\
+'NAME:.metadata.name,WHEN_SCALED:.spec.persistentVolumeClaimRetentionPolicy.whenScaled'
 ```
-
-For a homelab where Loki retention is short anyway, accepting the data loss is reasonable — Alloy keeps shipping current logs and the gap is small.
 
 ## Lessons from the prod cutover (2026-05-02)
 

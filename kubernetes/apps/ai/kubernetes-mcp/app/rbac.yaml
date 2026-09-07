@@ -5,8 +5,9 @@
 # `view` omits) plus the CRD groups present in this cluster that `view` does not
 # aggregate. resources:["*"] stays read-only via get/list/watch verbs and
 # future-proofs new kinds in groups already installed. nodes/proxy is
-# deliberately NOT granted — node logs/stats are served by Grafana/Loki/
-# Prometheus and the kubelet proxy is an escalation-adjacent grant.
+# deliberately NOT granted — node logs/stats are served by Grafana over
+# VictoriaLogs and VictoriaMetrics, and the kubelet proxy is an
+# escalation-adjacent grant.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:

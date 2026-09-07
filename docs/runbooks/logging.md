@@ -1,6 +1,6 @@
 # Kubernetes logging
 
-All Kubernetes container stdout/stderr is collected node-locally by Alloy from `/var/log/pods` and stored in VictoriaLogs. Loki remains a temporary rollback sink only until the observability cleanup.
+All Kubernetes container stdout/stderr is collected node-locally by Alloy from `/var/log/pods` and stored in VictoriaLogs, which is the only log backend.
 
 ## Query logs
 

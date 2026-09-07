@@ -77,4 +77,4 @@ kubectl -n ai delete job grafana-mcp-manual-probe
 
 ## Alerts and memory monitoring
 
-`ai-mcp-reliability` alerts on a failed/stale functional probe or twelve minutes with no probe success metric. `GrafanaMCPFunctionalProbeFailed` and `GrafanaMCPFunctionalProbeMissing` route through VMAlertmanager. vmalert owns external delivery; the temporarily retained Prometheus copy remains local to KPS's null-only rollback Alertmanager. Use the [alerting runbook](alerting.md) to test or troubleshoot the notification path.
+`ai-mcp-reliability` alerts on a failed/stale functional probe or twelve minutes with no probe success metric. `GrafanaMCPFunctionalProbeFailed` and `GrafanaMCPFunctionalProbeMissing` route through VMAlertmanager, which vmalert delivers to. Use the [alerting runbook](alerting.md) to test or troubleshoot the notification path.

@@ -14,8 +14,6 @@ spec:
   dependsOn:
     - name: alloy
     - name: grafana
-    - name: kube-prometheus-stack
-    - name: loki
     - name: prometheus-operator-crds
     - name: smartctl-exporter
     - name: victoria-logs-single
