@@ -20,7 +20,6 @@ spec:
     url: https://auth.home.kelch.io/pkg/icons/ops-suite.svg
   origin: https://home.kelch.io
   redirectUrl:
-    - https://prometheus.home.kelch.io/oidc/callback
     - https://alertmanager.home.kelch.io/oidc/callback
     - https://vm.home.kelch.io/oidc/callback
     - https://vmagent.home.kelch.io/oidc/callback

@@ -67,7 +67,7 @@ spec:
         # it is read from kube-state-metrics and renamed to match Longhorn's
         # pvc_namespace/pvc. Defined once here; the backup alerts below subtract
         # it with `unless`. Requires kube-state-metrics metricLabelsAllowlist to
-        # include this label -- see the kube-prometheus-stack HelmRelease.
+        # include this label -- see the victoria-metrics-k8s-stack HelmRelease.
         #
         # Failure direction is deliberate: if kube-state-metrics is down this
         # series empties, exempt volumes start alerting, and the result is a

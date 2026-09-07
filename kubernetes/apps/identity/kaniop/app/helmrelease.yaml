@@ -39,10 +39,10 @@ spec:
           cpu: 2
           memory: 128Mi
 
-    # Prometheus integration. kube-prometheus-stack runs with
-    # serviceMonitorSelectorNilUsesHelmValues: false, so a ServiceMonitor in
-    # any namespace is auto-discovered. The grafana sidecar discovers the
-    # bundled dashboards via the default `grafana_dashboard=1` label.
+    # Metrics integration. The VictoriaMetrics operator converts a
+    # ServiceMonitor in any namespace into a VMServiceScrape for vmagent. The
+    # grafana sidecar discovers the bundled dashboards via the default
+    # `grafana_dashboard=1` label.
     metrics:
       enabled: true
       serviceMonitor:
