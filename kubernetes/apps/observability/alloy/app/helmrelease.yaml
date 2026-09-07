@@ -1,7 +1,6 @@
 ---
 # Alloy — node-local Kubernetes pod-log collector. Tails exact pod paths under
-# /var/log/pods and sends the same CRI-decoded entries to VictoriaLogs and the
-# temporarily retained Loki rollback sink.
+# /var/log/pods and sends the CRI-decoded entries to VictoriaLogs.
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
@@ -84,7 +83,7 @@ spec:
             role = "pod"
           }
 
-          // Map Kubernetes metadata to Loki labels and compute the log
+          // Map Kubernetes metadata to stream labels and compute the log
           // file path on disk.
           discovery.relabel "pod_logs" {
             targets = discovery.kubernetes.pods.targets
@@ -108,7 +107,7 @@ spec:
               source_labels = ["__meta_kubernetes_pod_container_name"]
               target_label  = "container"
             }
-            // Give both log backends a stable logical service identity. Start
+            // Give each workload a stable logical service identity. Start
             // with the container name, then prefer legacy and recommended
             // Kubernetes application labels when they are non-empty.
             rule {
@@ -273,15 +272,8 @@ spec:
             }
 
             forward_to = [
-              loki.write.loki.receiver,
               loki.write.vl.receiver,
             ]
-          }
-
-          loki.write "loki" {
-            endpoint {
-              url = "http://loki.observability.svc.cluster.local:3100/loki/api/v1/push"
-            }
           }
 
           // Prefix structured payload fields so an application cannot replace
