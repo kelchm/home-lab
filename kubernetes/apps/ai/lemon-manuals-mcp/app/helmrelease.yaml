@@ -1,5 +1,5 @@
 ---
-# In-cluster HTTP MCP server reached by metamcp via Service DNS at
+# In-cluster HTTP MCP server reached by MCPHub via Service DNS at
 # http://lemon-manuals-mcp.ai.svc.cluster.local:8787/mcp. Not on any Gateway.
 #
 # Browse/search over the self-hosted LEMON/CHARM manual archive: vehicle

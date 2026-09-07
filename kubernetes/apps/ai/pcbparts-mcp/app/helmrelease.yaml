@@ -1,5 +1,5 @@
 ---
-# In-cluster HTTP MCP server reached by metamcp via Service DNS at
+# In-cluster HTTP MCP server reached by MCPHub via Service DNS at
 # http://pcbparts-mcp.ai.svc.cluster.local:8080/mcp. Not on any Gateway.
 #
 # Read-only component search: keyless JLCPCB in-stock DB + EasyEDA footprint
@@ -25,7 +25,7 @@ spec:
               repository: ghcr.io/averyy/pcbparts-mcp
               tag: main-ed3d4df-20260507
             env:
-              # Every client arrives from the single metamcp pod IP, so the
+              # Every client arrives from the single MCPHub pod IP, so the
               # per-IP limiter is one global bucket; raise it from the default.
               RATE_LIMIT_REQUESTS: "500"
               # Light up the DigiKey cross-reference tools by reusing the

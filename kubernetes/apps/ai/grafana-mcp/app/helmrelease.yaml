@@ -1,5 +1,5 @@
 ---
-# In-cluster HTTP MCP server reached by metamcp via Service DNS at
+# In-cluster HTTP MCP server reached by MCPHub via Service DNS at
 # http://grafana-mcp.ai.svc.cluster.local:8000/mcp. Not on any Gateway.
 #
 # Read-only window into Grafana and every datasource it fronts (Prometheus,
@@ -35,7 +35,7 @@ spec:
               - 0.0.0.0:8000
               - --endpoint-path
               - /mcp
-              # MetaMCP connects with this exact Host header. Keep the
+              # MCPHub connects with this exact Host header. Keep the
               # upstream DNS-rebinding guard enabled; only admit the
               # in-cluster Service name rather than using a wildcard.
               - --allowed-hosts=grafana-mcp.ai.svc.cluster.local:8000

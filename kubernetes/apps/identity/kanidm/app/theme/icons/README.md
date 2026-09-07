@@ -30,7 +30,6 @@ stores the bytes in kanidm. kanidm's `validate_is_svg` preserves the embedded
 | `grafana`   | `chart-line`     |
 | `arr-suite` | `movie`          |
 | `ops-suite` | `server-cog`     |
-| `metamcp`   | `plug-connected` |
 
 ## `brand/` — UI marks
 

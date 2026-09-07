@@ -7,27 +7,6 @@ spec:
   groups:
     - name: ai-mcp-reliability
       rules:
-        - alert: MetaMCPOOMKilled
-          expr: |
-            increase(kube_pod_container_status_restarts_total{namespace="ai", container="app", pod=~"metamcp-.*"}[15m]) > 0
-            and on (namespace, pod, container)
-            kube_pod_container_status_last_terminated_reason{namespace="ai", container="app", pod=~"metamcp-.*", reason="OOMKilled"} == 1
-          for: 1m
-          labels:
-            severity: critical
-          annotations:
-            summary: MetaMCP was OOM-killed
-            description: MetaMCP restarted after exceeding its memory limit in the last 15 minutes.
-
-        - alert: MetaMCPRepeatedRestarts
-          expr: increase(kube_pod_container_status_restarts_total{namespace="ai", container="app", pod=~"metamcp-.*"}[30m]) >= 2
-          for: 1m
-          labels:
-            severity: warning
-          annotations:
-            summary: MetaMCP is repeatedly restarting
-            description: MetaMCP restarted at least twice in the last 30 minutes.
-
         - alert: GrafanaMCPFunctionalProbeFailed
           expr: |
             (

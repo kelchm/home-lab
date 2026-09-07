@@ -1,5 +1,5 @@
 ---
-# Default-deny shape: only MCP gateways in the ai namespace reach the
+# Default-deny shape: only MCPHub in the ai namespace reaches the
 # flux-operator-mcp HTTP transport. Egress is limited to DNS and Cilium's
 # kube-apiserver identity. Port is the chart's hardcoded 9090.
 apiVersion: cilium.io/v2
@@ -14,7 +14,7 @@ spec:
     - fromEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: ai
-            app.kubernetes.io/name: metamcp
+            app.kubernetes.io/name: mcphub
       toPorts:
         - ports:
             - port: "9090"

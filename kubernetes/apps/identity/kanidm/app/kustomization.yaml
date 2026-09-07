@@ -31,7 +31,6 @@ configMapGenerator:
       - theme/icons/apps/grafana.svg
       - theme/icons/apps/arr-suite.svg
       - theme/icons/apps/ops-suite.svg
-      - theme/icons/apps/metamcp.svg
       - theme/icons/brand/logo.svg
       - theme/icons/brand/logo-nav.svg
 generatorOptions:

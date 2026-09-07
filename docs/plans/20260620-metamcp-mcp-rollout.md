@@ -2,6 +2,8 @@
 
 **Status:** Implemented — 2026-08-24; the gateway and backend set are live under `kubernetes/apps/ai/`; bootstrap procedure: [metamcp-bootstrap runbook](../runbooks/metamcp-bootstrap.md).
 
+MetaMCP and MarkItDown were retired in September 2026. The deployment and bootstrap details below are historical; see the [MCPHub guide](../../kubernetes/apps/ai/mcphub/README.md) for the current gateway.
+
 ## Context
 
 MetaMCP (`ghcr.io/metatool-ai/metamcp`, ns `ai`) is the cluster's MCP gateway, fronting

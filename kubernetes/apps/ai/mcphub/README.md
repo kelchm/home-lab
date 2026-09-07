@@ -1,6 +1,6 @@
 # MCPHub pilot
 
-This is a file-backed MCPHub evaluation. MetaMCP is intentionally offline (zero replicas), with its database and configuration retained for recovery. Taking MetaMCP offline does not migrate clients; clients still configured for its endpoints will be unavailable until explicitly pointed at MCPHub.
+MCPHub is the file-backed MCP gateway. MetaMCP and MarkItDown have been removed. Clients must use their explicitly authorized MCPHub groups; former MetaMCP endpoints are no longer available.
 
 ## Authorization model
 
