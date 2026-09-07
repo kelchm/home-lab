@@ -39,7 +39,7 @@ or fixing.
 | [multus-conf-absent-recovery](runbooks/multus-conf-absent-recovery.md) | Recovering pods stuck on an absent Multus network config. |
 | [multus-fail-closed-cutover](runbooks/multus-fail-closed-cutover.md) | Moving Cilium's conflist out of containerd's live CNI directory so Multus is the only publisher. |
 | [metamcp-bootstrap](runbooks/metamcp-bootstrap.md) | Retirement notice and pointer to the current MCPHub gateway. |
-| [ai-mcp-reliability-and-containment](runbooks/ai-mcp-reliability-and-containment.md) | Post-deploy checks for MetaMCP reliability, session hygiene, and network-policy containment. |
+| [ai-mcp-reliability-and-containment](runbooks/ai-mcp-reliability-and-containment.md) | Post-deploy checks for MCPHub/backend connectivity and Grafana MCP functional monitoring. |
 | [bambuddy-bootstrap](runbooks/bambuddy-bootstrap.md) | Bringing up Bambuddy, validating printer containment and OIDC, and exercising backup recovery. |
 | [visionect-migration](runbooks/visionect-migration.md) | Staging, cutting over, validating, and rolling back the Synology-to-k8s Visionect migration. |
 | [dgx-spark-bringup](runbooks/dgx-spark-bringup.md) | Configuring, validating, troubleshooting, and recovering the two-node DGX Spark LAN/storage/RDMA setup. |
