@@ -27,7 +27,7 @@ def digest(path):
     return h.hexdigest()
 
 
-def copy_object(source, destination, sha, size):
+def copy_object(source, destination, sha, size, verify_destination=True):
     if source.is_symlink() or not stat.S_ISREG(source.stat().st_mode):
         raise RuntimeError('Source must be a regular, non-symlink file')
     before = source.stat()
@@ -37,10 +37,10 @@ def copy_object(source, destination, sha, size):
     if destination.is_symlink():
         raise RuntimeError('Destination symlink rejected')
     if destination.exists():
-        if destination.stat().st_size != size or digest(destination) != sha:
+        if destination.stat().st_size != size or (verify_destination and digest(destination) != sha):
             raise RuntimeError('Existing destination is corrupt; preserve for inspection')
-        return 'verified_existing'
-    fd, temporary = tempfile.mkstemp(prefix='.import-', dir=destination.parent)
+        return 'verified_existing' if verify_destination else 'existing_pending_server_verification'
+    fd, temporary = tempfile.mkstemp(prefix=f'.import-{sha}-', dir=destination.parent)
     tmp = Path(temporary)
     try:
         h = hashlib.sha256()
@@ -54,13 +54,13 @@ def copy_object(source, destination, sha, size):
         after = source.stat()
         if (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns) != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns):
             raise RuntimeError('Source changed during copy')
-        if h.hexdigest() != sha or tmp.stat().st_size != size or digest(tmp) != sha:
+        if h.hexdigest() != sha or tmp.stat().st_size != size or (verify_destination and digest(tmp) != sha):
             raise RuntimeError('Source or copied bytes failed canonical hash verification')
         # Atomic, no overwrite: another writer may have published this object.
         try:
             os.link(tmp, destination)
         except FileExistsError:
-            if destination.is_symlink() or destination.stat().st_size != size or digest(destination) != sha:
+            if destination.is_symlink() or destination.stat().st_size != size or (verify_destination and digest(destination) != sha):
                 raise RuntimeError('Concurrent destination failed verification')
         tmp.unlink()
         dfd = os.open(destination.parent, os.O_RDONLY | os.O_DIRECTORY)
@@ -68,7 +68,7 @@ def copy_object(source, destination, sha, size):
             os.fsync(dfd)
         finally:
             os.close(dfd)
-        return 'copied_verified'
+        return 'copied_verified' if verify_destination else 'copied_pending_server_verification'
     finally:
         tmp.unlink(missing_ok=True)
 
@@ -77,6 +77,8 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument('--plan', type=Path, required=True)
     p.add_argument('--jobs', type=int, choices=range(1, 5), default=1)
+    p.add_argument('--defer-destination-hash', action='store_true',
+                   help='Require a separate complete server-side hash pass before use; copy output is not acceptance')
     p.add_argument('--source-root', type=Path, required=True)
     p.add_argument('--destination-root', type=Path, required=True)
     args = p.parse_args()
@@ -100,7 +102,8 @@ def main():
         sha, size = item['sha256'], item['bytes']
         relative = Path('objects') / sha[:2] / sha
         t = time.monotonic()
-        result = copy_object(args.source_root / relative, args.destination_root / relative, sha, size)
+        result = copy_object(args.source_root / relative, args.destination_root / relative, sha, size,
+                             verify_destination=not args.defer_destination_hash)
         return {'sha256': sha, 'bytes': size, 'result': result, 'seconds': time.monotonic() - t}
     with ThreadPoolExecutor(max_workers=args.jobs) as pool:
         pending = [pool.submit(copy_one, item) for item in items]
