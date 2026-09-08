@@ -184,6 +184,12 @@ def main():
                 cli(ACL, '-del', str(path))
             os.chown(path, admin.pw_uid, administrators.gr_gid)
             os.chmod(path, 0o2750 if record['directory'] else 0o640)
+        for record in records:
+            path = ROOT/record['path']
+            info = path.stat()
+            expected_mode = 0o2750 if record['directory'] else 0o640
+            if (info.st_uid, info.st_gid, stat.S_IMODE(info.st_mode)) != (admin.pw_uid, administrators.gr_gid, expected_mode):
+                raise RuntimeError('Native ownership/mode verification failed: '+str(path))
         api('save', share_name=SHARE, rule=[NEW_RULE])
         if api('load', share_name=SHARE).get('rule') != [NEW_RULE]:
             raise RuntimeError('New NFS policy did not persist')
