@@ -6,6 +6,7 @@ run while services are up: source changes fail verification. Quiesce writers
 and revalidate the complete object inventory before the actual cutover.
 """
 import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import hashlib
 import json
 import os
@@ -75,6 +76,7 @@ def copy_object(source, destination, sha, size):
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('--plan', type=Path, required=True)
+    p.add_argument('--jobs', type=int, choices=range(1, 5), default=1)
     p.add_argument('--source-root', type=Path, required=True)
     p.add_argument('--destination-root', type=Path, required=True)
     args = p.parse_args()
@@ -83,19 +85,31 @@ def main():
     items = json.loads(args.plan.read_text())['objects']
     seen = set()
     for item in items:
+        if set(item) != {'sha256', 'bytes'}:
+            raise SystemExit('This tool accepts only CAS objects, not path-based imports or checkpoints')
         sha, size = item['sha256'], item['bytes']
         if not re.fullmatch('[0-9a-f]{64}', sha) or type(size) is not int or size < 0 or sha in seen:
             raise SystemExit('Invalid or duplicate object in plan')
         seen.add(sha)
+    orphans = list((args.destination_root / 'objects').glob('*/.import-*'))
+    if orphans:
+        raise SystemExit(f'{len(orphans)} interrupted import files require inspection before resuming')
     start = time.monotonic()
     total = 0
-    for i, item in enumerate(items):
+    def copy_one(item):
         sha, size = item['sha256'], item['bytes']
         relative = Path('objects') / sha[:2] / sha
         t = time.monotonic()
         result = copy_object(args.source_root / relative, args.destination_root / relative, sha, size)
-        total += size
-        print(json.dumps({'index': i + 1, 'count': len(items), 'sha256': sha, 'bytes': size, 'result': result, 'seconds': time.monotonic() - t, 'total_bytes': total, 'elapsed_seconds': time.monotonic() - start}), flush=True)
+        return {'sha256': sha, 'bytes': size, 'result': result, 'seconds': time.monotonic() - t}
+    with ThreadPoolExecutor(max_workers=args.jobs) as pool:
+        pending = [pool.submit(copy_one, item) for item in items]
+        for i, completed in enumerate(as_completed(pending)):
+            result = completed.result()
+            total += result['bytes']
+            print(json.dumps(dict(result, index=i + 1, count=len(items), total_bytes=total,
+                                  elapsed_seconds=time.monotonic() - start)), flush=True)
+
 
 
 if __name__ == '__main__':
