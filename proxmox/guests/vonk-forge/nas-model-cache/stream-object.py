@@ -12,11 +12,13 @@ from __future__ import annotations
 import argparse
 import errno
 import hashlib
+import glob
 import hmac
 import json
 import math
 import os
 import re
+import signal
 import stat
 import sys
 import tempfile
@@ -41,7 +43,7 @@ RECEIVE_UID = 10001
 RECEIVE_GID = 10001
 OBJECT_MODE = 0o640
 DIR_MODE = 0o750
-TEMP_PREFIX = ".stream-import-"
+TEMP_PREFIX = ".import-"
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -153,14 +155,18 @@ def _require_existing_dir_not_symlink(path, label):
 def _ensure_dir_not_symlink(path, label, create_mode=None):
     # type: (str, str, Optional[int]) -> None
     if os.path.lexists(path):
-        _require_existing_dir_not_symlink(path, label)
+        st = _require_existing_dir_not_symlink(path, label)
+        if create_mode is not None and stat.S_IMODE(st.st_mode) & 0o777 != create_mode:
+            raise StreamObjectError("existing directory has unexpected permissions")
         return
     if create_mode is None:
         raise StreamObjectError("{} does not exist".format(label))
     try:
         os.mkdir(path, create_mode)
     except FileExistsError:
-        _require_existing_dir_not_symlink(path, label)
+        st = _require_existing_dir_not_symlink(path, label)
+        if create_mode is not None and stat.S_IMODE(st.st_mode) & 0o777 != create_mode:
+            raise StreamObjectError("concurrent directory has unexpected permissions")
         return
     except OSError as exc:
         raise StreamObjectError("failed to create {}: {}".format(label, exc)) from exc
@@ -172,6 +178,10 @@ def _ensure_dir_not_symlink(path, label, create_mode=None):
     # mkdir inherits the NAS parent setgid bit. chmod(0750) would strip it,
     # breaking native administrators-group inheritance on later descendants.
     if stat.S_IMODE(st.st_mode) & 0o777 != create_mode:
+        try:
+            os.rmdir(path)  # Only the new empty directory; preserve concurrent contents.
+        except OSError:
+            pass
         raise StreamObjectError("umask prevented required directory permissions")
 
 
@@ -257,6 +267,10 @@ def _prepare_destination(destination_root, sha256):
     _require_existing_dir_not_symlink(root, "destination-root")
     objects_path = os.path.join(root, "objects")
     _ensure_dir_not_symlink(objects_path, "objects", create_mode=DIR_MODE)
+    orphans = glob.glob(os.path.join(objects_path, "*", ".import-*"))
+    orphans += glob.glob(os.path.join(objects_path, "*", ".stream-import-*"))
+    if orphans:
+        raise StreamObjectError("interrupted import files require inspection before resuming")
     prefix_path = os.path.join(objects_path, sha256[:2])
     _ensure_dir_not_symlink(prefix_path, "object prefix", create_mode=DIR_MODE)
     dest_path = os.path.join(prefix_path, sha256)
@@ -507,10 +521,18 @@ def _build_parser():
     return parser
 
 
+def install_signal_handlers():
+    def interrupted(signum, frame):
+        raise StreamObjectError("interrupted by signal {}".format(signum))
+    signal.signal(signal.SIGTERM, interrupted)
+    signal.signal(signal.SIGINT, interrupted)
+
+
 def main(argv=None):
     # type: (Optional[List[str]]) -> int
     parser = _build_parser()
     args = parser.parse_args(argv)
+    install_signal_handlers()
     try:
         if args.command == "send":
             send_object(

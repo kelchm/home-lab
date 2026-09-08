@@ -10,6 +10,8 @@ import os
 import shutil
 import stat
 import sys
+import subprocess
+import time
 import tempfile
 import unittest
 
@@ -44,7 +46,7 @@ def _leftover_temps(root):
     found = []
     for dirpath, dirnames, filenames in os.walk(root):
         for name in filenames:
-            if name.startswith(".stream-import-"):
+            if name.startswith(stream_object.TEMP_PREFIX):
                 found.append(os.path.join(dirpath, name))
     return found
 
@@ -330,6 +332,47 @@ class TestStreamObject(unittest.TestCase):
             mode = os.stat(os.path.join(self.dest_root, relative)).st_mode
             self.assertTrue(mode & stat.S_ISGID)
             self.assertEqual(stat.S_IMODE(mode) & 0o777, 0o750)
+
+    def test_restrictive_umask_does_not_leave_bad_directory(self):
+        old = os.umask(0o077)
+        try:
+            with self.assertRaises(stream_object.StreamObjectError):
+                self._receive(self._send())
+        finally:
+            os.umask(old)
+        self.assertFalse(os.path.exists(os.path.join(self.dest_root, "objects")))
+        self._receive(self._send())
+
+    def test_existing_bad_mode_rejected(self):
+        os.mkdir(os.path.join(self.dest_root, "objects"), 0o700)
+        with self.assertRaises(stream_object.StreamObjectError):
+            self._receive(self._send())
+
+    def test_interrupted_import_is_reported_and_preserved(self):
+        prefix = os.path.join(self.dest_root, "objects", "aa")
+        os.makedirs(prefix, mode=0o750)
+        orphan = os.path.join(prefix, ".import-old")
+        _write_file(orphan, b"partial preserved")
+        with self.assertRaises(stream_object.StreamObjectError):
+            self._receive(self._send())
+        with open(orphan, "rb") as f:
+            self.assertEqual(f.read(), b"partial preserved")
+
+    def test_sigterm_unwinds_partial_file(self):
+        code = "import importlib.util; s=importlib.util.spec_from_file_location('stream', {module!r}); m=importlib.util.module_from_spec(s); s.loader.exec_module(m); m.install_signal_handlers(); m.receive_object({root!r}, {sha!r}, {size!r}, __import__('sys').stdin.buffer, __import__('sys').stdout.buffer)".format(module=stream_object.__file__, root=self.dest_root, sha=self.sha, size=self.size)
+        process = subprocess.Popen([sys.executable, "-c", code], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        try:
+            deadline = time.monotonic()+5
+            while not _leftover_temps(self.dest_root) and time.monotonic()<deadline:
+                time.sleep(0.01)
+            self.assertTrue(_leftover_temps(self.dest_root))
+            process.terminate()
+            process.communicate(timeout=5)
+            self.assertNotEqual(process.returncode, 0)
+            self.assertEqual(_leftover_temps(self.dest_root), [])
+        finally:
+            if process.poll() is None:
+                process.kill(); process.communicate()
 
     def test_cli_receive_rejects_wrong_uid(self):
         if os.getuid() == stream_object.RECEIVE_UID and os.getgid() == stream_object.RECEIVE_GID:
