@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 """Run as root on Athena; creates only the reviewed, previously absent share."""
 import argparse
+import grp
 import json
 import os
 from pathlib import Path
+import pwd
 import subprocess
 
 NAME = 'vonk-forge-models-pve-sbx'
 ROOT = Path('/volume1') / NAME
-RULE = {'client': '10.32.21.101', 'privilege': 'rw', 'root_squash': 'guest',
+RULE = {'client': '10.32.21.101', 'privilege': 'rw', 'root_squash': 'all_admin',
         'async': False, 'insecure': False, 'crossmnt': False,
         'security_flavor': {'sys': True, 'kerberos': False,
                             'kerberos_integrity': False, 'kerberos_privacy': False}}
@@ -34,12 +36,16 @@ def main():
                               capture_output=True, text=True)
     if existing.returncode == 0 and not args.resume_created:
         raise SystemExit('DSM share already exists; inspect instead of overwriting it')
+    owner = pwd.getpwnam('admin').pw_uid
+    group = grp.getgrnam('administrators').gr_gid
+    if owner == 0 or group == 0:
+        raise RuntimeError('Unexpected DSM native identity')
     exports = Path('/etc/exports').read_text()
     if str(ROOT) in exports:
         raise SystemExit('An export already references this share')
     print(json.dumps({'name': NAME, 'path': str(ROOT), 'nfs_rule': RULE,
-                      'numeric_owner': '10001:10001', 'mode': '0750',
-                      'access': 'POSIX permissions; root squashed to guest; reserved ports',
+                      'owner': 'admin', 'uid': owner, 'group': 'administrators', 'gid': group, 'mode': '02750',
+                      'access': 'Controller-only NFS mapped to DSM admin; native administrators group; reserved ports',
                       'applied': args.apply}), flush=True)
     if not args.apply:
         return
@@ -67,18 +73,13 @@ def main():
         raise RuntimeError('Unexpected symlink in DSM share metadata')
     # Only the newly created empty share. Do not change other shares or global NFS policy.
     subprocess.run(['/usr/syno/bin/synoacltool', '-del', str(ROOT)], check=True)
-    os.chown(ROOT, 10001, 10001)
-    os.chmod(ROOT, 0o750)
+    os.chown(ROOT, owner, group)
+    os.chmod(ROOT, 0o2750)
     for name in ('objects', 'partials', 'locks', 'manifests', 'quarantine'):
         child = ROOT/name
-        child.mkdir(mode=0o750)
-        os.chown(child, 10001, 10001)
-        os.chmod(child, 0o750)
-    # DSM administrator browsing without granting cache writes or changing NFS identity.
-    for path in [ROOT] + [ROOT/name for name in ('objects', 'partials', 'locks', 'manifests', 'quarantine')]:
-        for entry in ('owner:*:allow:rwxpdDaARWcCo:fd--',
-                      'group:administrators:allow:r-x---a-R-c--:fd--'):
-            subprocess.run(['/usr/syno/bin/synoacltool', '-add', str(path), entry], check=True)
+        child.mkdir(mode=0o2750)
+        os.chown(child, owner, group)
+        os.chmod(child, 0o2750)
     api('save', share_name=NAME, rule=[RULE])
     actual = api('load', share_name=NAME)
     (backup/'receipt.json').write_text(json.dumps({'share': share, 'nfs': actual}, indent=2)+'\n')

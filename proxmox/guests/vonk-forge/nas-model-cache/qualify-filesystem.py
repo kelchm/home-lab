@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Run inside a disposable UID10001 container with the NFS volume at /cache."""
+import argparse
 import errno
 import fcntl
 import hashlib
@@ -7,6 +8,7 @@ import json
 import multiprocessing
 import os
 from pathlib import Path
+import stat
 import tempfile
 import time
 
@@ -23,6 +25,11 @@ def contender(path, connection):
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--expected-owner', type=int, default=10001)
+    parser.add_argument('--expected-group', type=int, default=10001)
+    parser.add_argument('--require-setgid', action='store_true')
+    args = parser.parse_args()
     if os.getuid() != 10001 or os.getgid() != 10001:
         raise SystemExit('Run as UID/GID10001')
     started = time.monotonic()
@@ -59,11 +66,23 @@ def main():
                 os.close(fd)
             assert reader.read() == b'old'
             assert hashlib.sha256(first.read_bytes()).digest() == hashlib.sha256(data).digest()
-        assert first.stat().st_uid == 10001
+        assert first.stat().st_uid == args.expected_owner
+        assert first.stat().st_gid == args.expected_group
+        nested = root/'nested'
+        nested.mkdir(mode=0o750)
+        nested_file = nested/'object'
+        nested_file.write_bytes(b'inherited native group')
+        assert nested.stat().st_gid == args.expected_group
+        assert nested_file.stat().st_gid == args.expected_group
+        assert nested_file.stat().st_uid == args.expected_owner
+        if args.require_setgid:
+            assert nested.stat().st_mode & stat.S_ISGID
         capacity = os.statvfs(root)
     print(json.dumps({'passed': True, 'cross_process_flock': True,
                       'file_and_directory_fsync': True, 'atomic_replace_open_reader': True,
                       'sha256_verified': True, 'uid': os.getuid(),
+                      'server_uid': args.expected_owner, 'server_gid': args.expected_group,
+                      'nested_group_inheritance': True, 'setgid_required': args.require_setgid,
                       'available_bytes': capacity.f_bavail*capacity.f_frsize,
                       'elapsed_seconds': time.monotonic()-started,
                       'scope': 'small physical filesystem probe; not throughput or outage acceptance'}))
