@@ -74,6 +74,11 @@ def main():
         child.mkdir(mode=0o750)
         os.chown(child, 10001, 10001)
         os.chmod(child, 0o750)
+    # DSM administrator browsing without granting cache writes or changing NFS identity.
+    for path in [ROOT] + [ROOT/name for name in ('objects', 'partials', 'locks', 'manifests', 'quarantine')]:
+        for entry in ('owner:*:allow:rwxpdDaARWcCo:fd--',
+                      'group:administrators:allow:r-x---a-R-c--:fd--'):
+            subprocess.run(['/usr/syno/bin/synoacltool', '-add', str(path), entry], check=True)
     api('save', share_name=NAME, rule=[RULE])
     actual = api('load', share_name=NAME)
     (backup/'receipt.json').write_text(json.dumps({'share': share, 'nfs': actual}, indent=2)+'\n')
