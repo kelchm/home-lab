@@ -26,12 +26,13 @@ def api(method, **kwargs):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--apply', action='store_true')
+    parser.add_argument('--resume-created', action='store_true', help='Resume only this script’s newly created, unpopulated share')
     args = parser.parse_args()
-    if ROOT.exists() or ROOT.is_symlink():
+    if not args.resume_created and (ROOT.exists() or ROOT.is_symlink()):
         raise SystemExit('Share path already exists; inspect instead of overwriting it')
     existing = subprocess.run(['/usr/syno/sbin/synoshare', '--get', NAME],
                               capture_output=True, text=True)
-    if existing.returncode == 0:
+    if existing.returncode == 0 and not args.resume_created:
         raise SystemExit('DSM share already exists; inspect instead of overwriting it')
     exports = Path('/etc/exports').read_text()
     if str(ROOT) in exports:
@@ -43,18 +44,27 @@ def main():
     if not args.apply:
         return
     backup = Path('/var/tmp') / (NAME+'-creation')
-    backup.mkdir(mode=0o700, exist_ok=False)
-    (backup/'exports.before').write_text(exports)
-    subprocess.run(['/usr/syno/sbin/synoshare', '--add', NAME,
-                    'Vonk Forge model cache for the pve-sbx Controller',
-                    str(ROOT), '', '', '', '0', '0'], check=True)
-    if not ROOT.is_dir() or ROOT.is_symlink() or any(ROOT.iterdir()):
+    if args.resume_created:
+        if existing.returncode != 0 or not (backup/'exports.before').is_file():
+            raise RuntimeError('No creation checkpoint to resume')
+        if (backup/'exports.before').read_text() != exports:
+            raise RuntimeError('Exports changed since creation checkpoint')
+    else:
+        backup.mkdir(mode=0o700, exist_ok=False)
+        (backup/'exports.before').write_text(exports)
+        subprocess.run(['/usr/syno/sbin/synoshare', '--add', NAME,
+                        'Vonk Forge model cache for the pve-sbx Controller',
+                        str(ROOT), '', '', '', '0', '0'], check=True)
+    # DSM creates its own @eaDir metadata on an otherwise empty shared folder.
+    if not ROOT.is_dir() or ROOT.is_symlink() or {p.name for p in ROOT.iterdir()} - {'@eaDir'}:
         raise RuntimeError('Unexpected new share contents; inspect before permissions change')
     share = subprocess.check_output(['/usr/syno/sbin/synoshare', '--get', NAME], text=True)
     (backup/'share.after.txt').write_text(share)
     for required in ('['+NAME+']', '['+str(ROOT)+']', 'fBrowseable [no]', 'RecycleBin....[no]'):
         if required not in share:
             raise RuntimeError('Unexpected DSM share properties; inspect saved receipt')
+    if (ROOT/'@eaDir').is_symlink():
+        raise RuntimeError('Unexpected symlink in DSM share metadata')
     # Only the newly created empty share. Do not change other shares or global NFS policy.
     subprocess.run(['/usr/syno/bin/synoacltool', '-del', str(ROOT)], check=True)
     os.chown(ROOT, 10001, 10001)
