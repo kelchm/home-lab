@@ -1,0 +1,579 @@
+{
+  "schema_version": 1,
+  "identity": {
+    "publisher": "vonk-forge",
+    "slug": "kelchm-glm53-mia-exl3-dual"
+  },
+  "metadata": {
+    "alignment": "unspecified",
+    "title": "GLM 5.3 Flash EXL3 DFlash2 vLLM two Sparks \u2014 home-lab evaluation",
+    "description": "Candidate dual-Spark GLM-5.3 Flash EXL3 DFlash2 K7 text/multimodal serving using MiaAI-Lab pinned image 493cb88f and exact target/drafter revisions. Starts with 64K context and two sequences; uses experimental0.80 memory utilization with116GB startup+8GBsystem reserve and Controller-owned native-mp/RoCE placement. Corrects build permissions, runtime label, exact artifact accounting and disk budgets. Distributed serving, quality, tools, vision and throughput remain unqualified until measured.",
+    "tags": [
+      "candidate",
+      "dflash2",
+      "executable",
+      "exl3",
+      "glm-5.3",
+      "multimodal",
+      "native-mp",
+      "pending",
+      "reasoning",
+      "spark",
+      "tool-use",
+      "vllm"
+    ]
+  },
+  "model": {
+    "kind": "model-version",
+    "publisher": "mia-ai-lab",
+    "slug": "glm-5-3-flash-exl3-tr3-4bpw-dflash2-024db9f7",
+    "content_sha256": "158c894be21cc8bcd7c4e76e6367f02d9c1c389a3720f995e343d6db4f93ba3f"
+  },
+  "execution": {
+    "harness": {
+      "kind": "execution-harness",
+      "publisher": "vonk-forge",
+      "slug": "vllm",
+      "content_sha256": "c0d297318f223378fe573964291bc90fc950242e0d16d1d301c7d3cb4251487d"
+    },
+    "patch_bundle": {
+      "kind": "patch-bundle",
+      "publisher": "vonk-forge",
+      "slug": "kelchm-glm53-mia-exl3-eval-profile",
+      "content_sha256": "6208d2471c000e609c2964f26d384d230c58e5b9fce6478bb8e51011c03f6cfa"
+    }
+  },
+  "build": {
+    "context": {
+      "path": "proxmox/guests/vonk-forge/recipes/glm53-mia-exl3-dual/source",
+      "sha256": "348858c6571af1fc7a5fca3e174c567c850858468021c1f519c557dc9328e709",
+      "expected_bytes": 30720,
+      "media_type": "application/vnd.vonk-forge.source-bundle.v1+tar"
+    },
+    "dockerfile": "Dockerfile",
+    "platform": "linux/arm64",
+    "arguments": [],
+    "network": {
+      "mode": "none",
+      "hosts": []
+    },
+    "resources": {
+      "download_bytes": 12000000000,
+      "temporary_bytes": 65000000000,
+      "memory_bytes": 8000000000,
+      "timeout_seconds": 7200,
+      "cpu_cores": 8,
+      "processes": 4096
+    },
+    "options": {
+      "additional_contexts": [],
+      "annotations": [],
+      "environment": [],
+      "format": "oci",
+      "identity_label": true,
+      "ignorefile": null,
+      "jobs": 1,
+      "labels": [
+        {
+          "name": "ai.vonkforge.runtime-interface",
+          "value": "v1"
+        }
+      ],
+      "layer_compression": "disabled",
+      "layer_labels": [],
+      "layers": true,
+      "no_hostname": false,
+      "no_hosts": false,
+      "omit_history": false,
+      "os_features": [],
+      "os_version": null,
+      "shm_bytes": 67108864,
+      "skip_unused_stages": true,
+      "squash": "none",
+      "timestamp": null,
+      "unset_environment": [],
+      "unset_labels": []
+    },
+    "security": {
+      "capabilities": [
+        "CHOWN",
+        "DAC_OVERRIDE",
+        "FOWNER"
+      ]
+    }
+  },
+  "parameters": [
+    {
+      "name": "max_model_len",
+      "description": "Context limit for bounded initial qualification; larger limits require separate testing.",
+      "type": "integer",
+      "default": 65536,
+      "minimum": 4096,
+      "maximum": 1000000,
+      "change_effect": "restart"
+    },
+    {
+      "name": "max_num_seqs",
+      "description": "Maximum simultaneous vLLM sequences; initial evaluation uses two.",
+      "type": "integer",
+      "default": 2,
+      "minimum": 1,
+      "maximum": 4,
+      "change_effect": "restart"
+    }
+  ],
+  "artifacts": [
+    {
+      "id": "target",
+      "kind": "huggingface.snapshot",
+      "repository": "Mia-AiLab/GLM-5.3-Flash-EXL3-TR3-4bpw",
+      "revision": "024db9f7e9871e8efdf21538ba55af7442be3cd5",
+      "download_bytes": 175715854761,
+      "installed_bytes": 175715854761,
+      "mount": {
+        "target": "/models/target",
+        "read_only": true
+      },
+      "roles": [
+        "entrypoint",
+        "worker"
+      ]
+    },
+    {
+      "id": "drafter",
+      "kind": "huggingface.snapshot",
+      "repository": "incoai/GLM-5.3-Flash-DFlash2",
+      "revision": "bf582e4eacc1810f76656d1811693ff6c6737d2a",
+      "download_bytes": 2342460697,
+      "installed_bytes": 2342460697,
+      "mount": {
+        "target": "/models/drafter",
+        "read_only": true
+      },
+      "roles": [
+        "entrypoint",
+        "worker"
+      ]
+    }
+  ],
+  "runtime": {
+    "distribution": {
+      "kind": "runtime-distribution",
+      "publisher": "vonk-forge",
+      "slug": "kelchm-glm53-exl3-mia-493cb88f-f0-arm64",
+      "content_sha256": "0d8e61496707e7a8b90be83f3fbdcfae9caaed1be7f47a566a6f08f7723637b4"
+    },
+    "entrypoint": [
+      "/opt/vonk/bin/vllm",
+      "serve",
+      "/models/target"
+    ],
+    "arguments": [
+      {
+        "name": "served-model-name",
+        "value": "glm-5.3-flash-exl3"
+      },
+      {
+        "name": "trust-remote-code",
+        "value": true
+      },
+      {
+        "name": "tensor-parallel-size",
+        "value": 2
+      },
+      {
+        "name": "pipeline-parallel-size",
+        "value": 1
+      },
+      {
+        "name": "gpu-memory-utilization",
+        "value": "0.80"
+      },
+      {
+        "name": "max-model-len",
+        "parameter": "max_model_len"
+      },
+      {
+        "name": "max-num-seqs",
+        "parameter": "max_num_seqs"
+      },
+      {
+        "name": "max-num-batched-tokens",
+        "value": 2048
+      },
+      {
+        "name": "kv-cache-dtype",
+        "value": "fp8"
+      },
+      {
+        "name": "speculative-config",
+        "value": "{\"method\":\"dflash\",\"model\":\"/models/drafter\",\"num_speculative_tokens\":7,\"kv_cache_dtype\":\"auto\",\"draft_tensor_parallel_size\":2,\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"standard\"}"
+      },
+      {
+        "name": "enable-prefix-caching",
+        "value": true
+      },
+      {
+        "name": "disable-flashinfer-autotune",
+        "value": true
+      },
+      {
+        "name": "skip-mm-profiling",
+        "value": true
+      },
+      {
+        "name": "allowed-local-media-path",
+        "value": "/inputs"
+      },
+      {
+        "name": "limit-mm-per-prompt",
+        "value": "{\"image\":4,\"video\":1}"
+      },
+      {
+        "name": "tool-call-parser",
+        "value": "glm47"
+      },
+      {
+        "name": "enable-auto-tool-choice",
+        "value": true
+      },
+      {
+        "name": "reasoning-parser",
+        "value": "glm45"
+      }
+    ],
+    "environment": [
+      {
+        "name": "HF_HUB_OFFLINE",
+        "value": "1"
+      },
+      {
+        "name": "TRANSFORMERS_OFFLINE",
+        "value": "1"
+      },
+      {
+        "name": "VLLM_NO_USAGE_STATS",
+        "value": "1"
+      },
+      {
+        "name": "DO_NOT_TRACK",
+        "value": "1"
+      },
+      {
+        "name": "VLLM_ENGINE_READY_TIMEOUT_S",
+        "value": "3600"
+      },
+      {
+        "name": "VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS",
+        "value": "1800"
+      },
+      {
+        "name": "VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS",
+        "value": "1"
+      },
+      {
+        "name": "GLM53_SUPPRESS_STOPS_IN_REASONING",
+        "value": "1"
+      },
+      {
+        "name": "GLM53_MIXED_PREFILL_CHUNK",
+        "value": "skip"
+      },
+      {
+        "name": "EXL3_FUSED_MOE",
+        "value": "1"
+      },
+      {
+        "name": "EXL3_MOE_ROW_TILE",
+        "value": "0"
+      },
+      {
+        "name": "EXL3_TEMP_ROWS_FUSED",
+        "value": "128"
+      },
+      {
+        "name": "TORCH_CUDA_ARCH_LIST",
+        "value": "12.1a"
+      },
+      {
+        "name": "FLASHINFER_CUDA_ARCH_LIST",
+        "value": "12.1a"
+      },
+      {
+        "name": "FLASHINFER_DISABLE_VERSION_CHECK",
+        "value": "1"
+      },
+      {
+        "name": "PYTORCH_CUDA_ALLOC_CONF",
+        "value": "expandable_segments:True"
+      },
+      {
+        "name": "NCCL_IB_DISABLE",
+        "value": "0"
+      },
+      {
+        "name": "NCCL_IB_ROCE_VERSION_NUM",
+        "value": "2"
+      },
+      {
+        "name": "NCCL_NET",
+        "value": "IB"
+      },
+      {
+        "name": "NCCL_NET_PLUGIN",
+        "value": "none"
+      },
+      {
+        "name": "NCCL_NVLS_ENABLE",
+        "value": "0"
+      },
+      {
+        "name": "NCCL_CUMEM_ENABLE",
+        "value": "0"
+      },
+      {
+        "name": "NCCL_IB_MERGE_NICS",
+        "value": "0"
+      },
+      {
+        "name": "NCCL_CROSS_NIC",
+        "value": "0"
+      },
+      {
+        "name": "NCCL_IGNORE_CPU_AFFINITY",
+        "value": "1"
+      },
+      {
+        "name": "NCCL_DEBUG",
+        "value": "WARN"
+      }
+    ],
+    "security": {
+      "devices": [
+        "nvidia.com/gpu=all"
+      ],
+      "capabilities": [],
+      "host_network": true,
+      "privileged": false,
+      "user": "10001:10001",
+      "mounts": [
+        {
+          "source": "model",
+          "target": "/models",
+          "read_only": true
+        },
+        {
+          "source": "inputs",
+          "target": "/inputs",
+          "read_only": true
+        },
+        {
+          "source": "outputs",
+          "target": "/outputs",
+          "read_only": false
+        }
+      ]
+    },
+    "lifecycle": {
+      "pre_start": [],
+      "post_stop": [],
+      "stop_timeout_seconds": 180,
+      "readiness": {
+        "strategy": "endpoint-owner-after-all-ranks",
+        "path": "/v1/models",
+        "timeout_seconds": 3600
+      },
+      "failure": {
+        "rank_loss": "withdraw-endpoint",
+        "recovery": "restart-worker-then-entrypoint"
+      }
+    }
+  },
+  "topology": {
+    "name": "dual",
+    "mode": "distributed",
+    "node_count": 2,
+    "roles": [
+      {
+        "name": "entrypoint",
+        "count": 1,
+        "endpoint_owner": true,
+        "artifacts": [
+          "target",
+          "drafter"
+        ],
+        "resources": {
+          "disk": {
+            "image_bytes": 40000000000,
+            "artifact_bytes": 178058315458,
+            "staging_bytes": 180000000000,
+            "cache_bytes": 40000000000,
+            "rollback_bytes": 0,
+            "safety_margin_bytes": 24000000000
+          },
+          "memory": {
+            "kind": "unified",
+            "startup_peak_bytes": 116000000000,
+            "steady_state_bytes": 108000000000,
+            "runtime_growth_bytes": 8000000000,
+            "system_reserve_bytes": 8000000000
+          }
+        }
+      },
+      {
+        "name": "worker",
+        "count": 1,
+        "endpoint_owner": false,
+        "artifacts": [
+          "target",
+          "drafter"
+        ],
+        "resources": {
+          "disk": {
+            "image_bytes": 40000000000,
+            "artifact_bytes": 178058315458,
+            "staging_bytes": 180000000000,
+            "cache_bytes": 40000000000,
+            "rollback_bytes": 0,
+            "safety_margin_bytes": 24000000000
+          },
+          "memory": {
+            "kind": "unified",
+            "startup_peak_bytes": 116000000000,
+            "steady_state_bytes": 108000000000,
+            "runtime_growth_bytes": 8000000000,
+            "system_reserve_bytes": 8000000000
+          }
+        }
+      }
+    ],
+    "parallelism": {
+      "world_size": 2,
+      "tensor": 2,
+      "pipeline": 1,
+      "data": 1,
+      "backend": "mp"
+    },
+    "fabric": {
+      "connectivity": "connected",
+      "minimum_bandwidth_mbps": 200000
+    },
+    "start_order": [
+      "worker",
+      "entrypoint"
+    ],
+    "stop_order": [
+      "entrypoint",
+      "worker"
+    ]
+  },
+  "interfaces": [
+    {
+      "adapter": "openai",
+      "port": 8888,
+      "model_aliases": [
+        "glm-5.3-flash-exl3"
+      ],
+      "health_path": "/v1/models"
+    }
+  ],
+  "validation": {
+    "validators": [
+      {
+        "interface": "openai",
+        "checks": [
+          "endpoint.healthy",
+          "collective.two-ranks",
+          "chat.nonempty",
+          "chat.max-output-64",
+          "rank-loss.withdrawal",
+          "rank-recovery.healthy"
+        ]
+      }
+    ],
+    "benchmarks": [
+      {
+        "name": "bounded-chat",
+        "framework": "openai",
+        "configuration": {
+          "max_output_tokens": 64,
+          "requests": 1,
+          "timeout_seconds": 600
+        }
+      },
+      {
+        "name": "cold-prefill-8k",
+        "framework": "openai",
+        "configuration": {
+          "prompt_tokens": 8000,
+          "max_output_tokens": 8,
+          "requests": 1,
+          "temperature": 0,
+          "thinking": false,
+          "timeout_seconds": 180
+        }
+      },
+      {
+        "name": "cold-prefill-16k",
+        "framework": "openai",
+        "configuration": {
+          "prompt_tokens": 16000,
+          "max_output_tokens": 8,
+          "requests": 1,
+          "temperature": 0,
+          "thinking": false,
+          "timeout_seconds": 180
+        }
+      },
+      {
+        "name": "cold-prefill-100k",
+        "framework": "openai",
+        "configuration": {
+          "prompt_tokens": 100000,
+          "max_output_tokens": 8,
+          "requests": 1,
+          "temperature": 0,
+          "thinking": false,
+          "timeout_seconds": 600
+        }
+      },
+      {
+        "name": "cold-prefill-256k",
+        "framework": "openai",
+        "configuration": {
+          "prompt_tokens": 256000,
+          "max_output_tokens": 8,
+          "requests": 1,
+          "temperature": 0,
+          "thinking": false,
+          "timeout_seconds": 1200
+        }
+      },
+      {
+        "name": "cold-prefill-300k",
+        "framework": "openai",
+        "configuration": {
+          "prompt_tokens": 300000,
+          "max_output_tokens": 8,
+          "requests": 1,
+          "temperature": 0,
+          "thinking": false,
+          "timeout_seconds": 1200
+        }
+      }
+    ]
+  },
+  "provenance": {
+    "source_kind": "fork",
+    "source_reference": "https://github.com/CarstVaartjes/vonk-forge-recipes/blob/5bbb0be4e604768499ccbcf82bbea181575c31d6/recipes/glm-5-3-flash-exl3-dflash2-vllm-dual.json",
+    "attribution": [
+      "Z.AI",
+      "Brandon M. Music",
+      "MiaAI-Lab",
+      "IncoAI",
+      "Turboderp",
+      "vLLM contributors",
+      "CarstVaartjes/vonk-forge-recipes@5bbb0be4e604768499ccbcf82bbea181575c31d6"
+    ]
+  }
+}

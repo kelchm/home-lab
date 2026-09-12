@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "kind": "patch-bundle",
+  "identity": {
+    "publisher": "vonk-forge",
+    "slug": "kelchm-qwen38-next-mia-eval-profile"
+  },
+  "metadata": {
+    "title": "Mia Qwen3.8 Flash Next exact patches and bounded evaluation wrapper",
+    "description": "Unchanged source patches correct PLE mixed quantization, unsupported MXFP8 shapes, and FP8_BLOCK_SCALES MTP expert dispatch. Runtime overlays immutable config copies for MTP absolute layer aliases and PLE dtype. No custom GPU kernel changes, FP8 QSA, YaRN or reduced draft vocabulary. Initial64K context,two sequences,0.75 utilization,BF16 KV,TP2+EP+MTP3.",
+    "tags": [
+      "candidate",
+      "qwen3-8",
+      "vllm",
+      "spark",
+      "tp2"
+    ]
+  },
+  "applies_to": {
+    "kind": "runtime-distribution",
+    "publisher": "vonk-forge",
+    "slug": "kelchm-qwen38-next-mia-c2325b22-arm64",
+    "content_sha256": "ec4f514c147a8003c6279a4470640756cc7d5c21d492796b58ab447e41bc670a"
+  },
+  "removal_condition": "Remove only after a digest-pinned vLLM image natively implements the required Qwen3.8 Flash Next PLE, mixed quantization and MTP alias behavior and two-Spark qualification is repeated.",
+  "license": {
+    "spdx": "AGPL-3.0-or-later AND Apache-2.0",
+    "attribution": [
+      "MiaAI Lab",
+      "vLLM contributors",
+      "NVIDIA",
+      "Qwen"
+    ]
+  },
+  "source_bundle": {
+    "sha256": "06c1bc835341ab1165e3f216c6c3367ed70ff7b8e0dee1889ec03300e8840b4f",
+    "expected_bytes": 122880,
+    "media_type": "application/vnd.vonk-forge.source-bundle.v1+tar"
+  },
+  "sha256": "06c1bc835341ab1165e3f216c6c3367ed70ff7b8e0dee1889ec03300e8840b4f"
+}

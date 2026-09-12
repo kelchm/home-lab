@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "kind": "patch-bundle",
+  "identity": {
+    "publisher": "vonk-forge",
+    "slug": "kelchm-glm53-mia-exl3-eval-profile"
+  },
+  "metadata": {
+    "title": "Home-lab bounded-context GLM 5.3 EXL3 DFlash2 dual-Spark profile",
+    "description": "Home-lab evaluation wrapper derived from MiaAI-Lab 493cb88f: initial 65,536-token context, two sequences, 0.80 utilization, and an experimental 116 GB startup envelope plus 8 GB system reserve. Bounded context from 4,096 to 1,000,000 tokens and one to four sequences preserve the exact K7 draft, TP2, FP8 target KV, controller rendezvous, and K-pool tail-slot correctness fix. Larger context, quality, and throughput require separate qualification.",
+    "tags": [
+      "candidate",
+      "dflash2",
+      "exl3",
+      "glm-5.3",
+      "multimodal",
+      "spark",
+      "topology",
+      "tp2"
+    ]
+  },
+  "applies_to": {
+    "kind": "runtime-distribution",
+    "publisher": "vonk-forge",
+    "slug": "kelchm-glm53-exl3-mia-493cb88f-f0-arm64",
+    "content_sha256": "0d8e61496707e7a8b90be83f3fbdcfae9caaed1be7f47a566a6f08f7723637b4"
+  },
+  "removal_condition": "Remove only after stock vLLM supports the exact GLM 5.3 NoPE sparse-MLA, EXL3, DFlash2, hybrid-KV, reasoning, tool, and SM121 behavior and the two-Spark qualification is repeated.",
+  "license": {
+    "spdx": "MIT AND Apache-2.0",
+    "attribution": [
+      "MiaAI-Lab",
+      "vLLM contributors",
+      "Turboderp",
+      "IncoAI"
+    ]
+  },
+  "source_bundle": {
+    "sha256": "348858c6571af1fc7a5fca3e174c567c850858468021c1f519c557dc9328e709",
+    "expected_bytes": 30720,
+    "media_type": "application/vnd.vonk-forge.source-bundle.v1+tar"
+  },
+  "sha256": "348858c6571af1fc7a5fca3e174c567c850858468021c1f519c557dc9328e709"
+}
