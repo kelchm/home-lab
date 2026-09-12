@@ -149,14 +149,31 @@ while true; do
     now="$(date +%s)"
     volume_json="$(kubectl -n longhorn-system get volumes.longhorn.io -o json)"
     volume_count="$(jq '.items | length' <<<"$volume_json")"
-    bad_volumes="$(jq -r '.items[] | select(.status.robustness != "healthy") | [.metadata.name, (.status.state // "unknown"), (.status.robustness // "unknown")] | @tsv' <<<"$volume_json")"
+    # In use (any workload in a non-terminal pod state): must be attached and healthy.
+    # Idle: must only avoid degraded and faulted. Longhorn keeps workloadsStatus after
+    # a pod ends, so the pod state -- not the entry -- marks a live claim.
+    bad_volumes="$(jq -r '
+      .items[]
+      | (.status.state // "unknown") as $state
+      | (.status.robustness // "unknown") as $rob
+      | ((.status.kubernetesStatus.workloadsStatus // [])
+          | any(.podStatus != "Succeeded" and .podStatus != "Failed")) as $inuse
+      | select($rob == "degraded" or $rob == "faulted"
+          or ($state == "attached" and $rob != "healthy")
+          or ($state != "attached" and $inuse))
+      | [.metadata.name, $state, $rob, (.status.kubernetesStatus.pvcName // "-")] | @tsv
+    ' <<<"$volume_json")"
     bad_count="$(grep -c . <<<"${bad_volumes:-}" || true)"
+    idle_count="$(jq '[.items[]
+      | select((.status.state // "unknown") != "attached"
+          and (((.status.kubernetesStatus.workloadsStatus // [])
+            | any(.podStatus != "Succeeded" and .podStatus != "Failed")) | not))] | length' <<<"$volume_json")"
     names="$(cut -f1 <<<"${bad_volumes:-}" | sort | tr '\n' ' ' | sed 's/  */ /g;s/^ //;s/ $//')"
 
     if (( volume_count == 0 )); then
         line 'no Longhorn volumes found yet'
     elif (( bad_count == 0 )); then
-        line "all ${volume_count} volumes healthy after $(elapsed_since $(( now - watch_start )))"
+        line "all in-use volumes healthy after $(elapsed_since $(( now - watch_start ))) (${volume_count} total, ${idle_count} idle)"
         break
     fi
 
@@ -225,8 +242,7 @@ if [[ -n "$cordoned" ]]; then
 fi
 
 detail "$(kubectl get nodes -o wide)"
-detail "$(kubectl -n tailscale get pods -o wide)"
 
-printf '\nNODE CHECKS PASSED: %s is Ready on %s, all %s nodes are Ready and uncordoned, all %s instance-managers are Ready with lhnet1, and all %s Longhorn volumes are healthy.\n' \
-    "$node_name" "$server_version" "$node_total" "$instance_count" "$volume_count"
+printf '\nNODE CHECKS PASSED: %s is Ready on %s, all %s nodes are Ready and uncordoned, all %s instance-managers are Ready with lhnet1, and all %s in-use Longhorn volumes are healthy (%s idle).\n' \
+    "$node_name" "$server_version" "$node_total" "$instance_count" "$(( volume_count - idle_count ))" "$idle_count"
 printf 'Run talosctl health on a healthy control-plane node, then re-check the access path and CloudNativePG placement before selecting the next candidate.\n'
