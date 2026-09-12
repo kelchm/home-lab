@@ -1,12 +1,14 @@
 # Tailscale remote-admin architecture
 
-**Status:** Implemented — 2026-09-02; the PVE router pair is carrying the aggregate lab route, split DNS and bidirectional failover are validated, and the Kubernetes Connector routes are withdrawn. Its Flux resources are removed by this change and will be pruned after merge.
+**Status:** Active — 2026-09-03; the PVE router pair, aggregate route, UniFi authorization, split DNS, and bidirectional failover were implemented and validated on 2026-09-02 and the Kubernetes Connector was removed. The [client location policy](#client-location-policy) is pending rollout.
 
 ## Outcome
 
 Remote administration survives a Kubernetes outage and covers devices that cannot run a native Tailscale client. Native clients remain the preferred path for laptops, phones, workstations, and capable servers. Two ordinary PVE VMs provide the subnet-router path for everything else.
 
 The routers do not live in Kubernetes because Kubernetes is one of the systems remote access must recover. They are not PVE HA guests because application-level route failover is simpler and preserves failure-domain separation: one VM on `pve-sbx-2`, one on `pve-sbx-3`, both advertising an identical route set.
+
+A client on the home network is not connected to Tailscale. Remote access is for when the operator is away; at home, every device uses the ordinary UniFi path and the routers carry nothing.
 
 ## Network boundary
 
@@ -24,7 +26,7 @@ The dedicated UniFi zone allows Gateway and External egress for package updates 
 
 ## Aggregate route and enforcement set
 
-Both routers advertise one route: `10.32.0.0/16`. The aggregate deliberately describes the lab's whole addressing domain and is less specific than every local VLAN `/24`. On macOS and Windows, [Tailscale's documented longest-prefix behavior](https://tailscale.com/docs/reference/troubleshooting/network-configuration/lan-traffic-overlapping-subnets) therefore keeps a client on its directly connected home `/24` while sending the rest of the lab aggregate through Tailscale. Linux clients that accept subnet routes require an explicit higher-priority policy rule for their connected home subnet because Tailscale uses policy routing there.
+Both routers advertise one route: `10.32.0.0/16`. The aggregate describes the lab's whole addressing domain, so remote reachability is a single HA route that never changes when destinations are added or removed. It is not a mechanism for at-home behavior: only a client's directly connected `/24` is more specific than it, so a connected at-home client would send every other home VLAN into the routers. That is why at-home clients are disconnected.
 
 Advertising reachability is separate from authorizing it. The UniFi rule allows the router pair to initiate traffic only to these six destination prefixes:
 
@@ -62,11 +64,30 @@ The relevant live policy fragment is:
 
 Both routers must advertise the exact same `/16`. [Tailscale groups only exact prefix matches for high-availability failover](https://tailscale.com/kb/1115/subnet-failover/); a broader route is not a fallback for a narrower one. Neither router may enable `--accept-routes`, because the non-selected router accepting the selected router's LAN route can send locally reachable traffic back through its peer.
 
-## Client and DNS policy
+## Client location policy
 
-Subnet routes are for destinations that cannot run a native client. Always-home clients may keep `accept-routes=false` because their physical gateway already reaches the LAN. Travel clients on macOS and Windows can leave routes enabled at home: the connected `10.32.10.0/24` is more specific than the advertised `/16` and wins longest-prefix matching, while the rest of `10.32.0.0/16` uses Tailscale. The applied macOS test confirmed that behavior. Linux uses Tailscale policy routing and requires a higher-priority rule such as `ip rule add to 10.32.10.0/24 priority 2500 lookup main`; mobile platforms should be rechecked after major client updates. A foreign network using a more-specific overlapping RFC 1918 prefix can shadow the corresponding home addresses and must be handled as a client/network exception.
+Subnet routes are for destinations that cannot run a native client, and they are installed on a client only while it is away from home. A client at home has a connected route for its own VLAN and a default route through UniFi for everything else; any advertised Tailscale prefix beats that default route, so a connected at-home client would hairpin admin VIPs through the routers and lose IoT, Guest, and every other excluded VLAN entirely. iOS accepts subnet routes unconditionally. No advertisement shape avoids this: a `/32` still beats the default route and a `/24` collides with the connected `/24`.
 
-The Tailnet's restricted nameserver for `home.kelch.io` remains the UniFi resolver at `10.32.30.1`. It answers static infrastructure records and forwards application names to `k8s-gateway`. DNS depends on the `10.32.30.0/24` route and is part of every failover drill.
+Location awareness therefore comes from the operating system's VPN On Demand rules, which Tailscale exposes on iOS 1.48+ and macOS 1.60+, not from route precedence, DHCP-injected routes, or per-destination route inventories. Nothing on the tailnet other than the two routers is reachable only through Tailscale, so disconnecting at home loses no access. The client population is the operator's iPhone and Mac; no other platform is in scope, and family access to a service such as Seerr is deferred until that service has its own independently grantable identity.
+
+**iPhone:** Wi-Fi rule Except On every home SSID; Cellular rule Always. A phone that falls back to cellular while at home behaves as a remote client, which is correct.
+
+**Mac:** Wi-Fi rule Except On every home SSID; Ethernet rule Never; the "connect when a `*.ts.net` name is used" option off; `accept-routes` on. Client 1.102.3 has two traps. With any interface on Do Nothing the app installs an unconditional `*.ts.net` EvaluateConnection rule ahead of the SSID rules, and macOS stops at the first matching rule, so Except On never fires; the option is only visible in the Manage sheet while an interface is on Do Nothing, and the app rewrites the installed rules only when the sheet is saved. And while On Demand holds the session down at home, any `tailscale` CLI command asks macOS to start the tunnel, On Demand rejects it, and the CLI retries about three times a second, leaking one `utun` interface per attempt until the CLI process is killed; on 2026-09-03 two CLI invocations produced 1018 start attempts and 806 leaked interfaces, after which the network extension failed every start with `TunnelError error 0` until reboot, and with On Demand enabled every application that touched the network re-triggered a failing start. Only a reboot clears the leaked interfaces and the wedged extension. Change preferences through the menu bar app or from a network where On Demand permits the connection. Verify with `scutil --nc show Tailscale` that the first rule is the Wi-Fi SSID Disconnect, and judge state with `scutil --nc status Tailscale` and `route -n get 10.32.99.141` rather than the menu bar.
+
+Rollout:
+
+1. On each device, confirm no other VPN profile has On Demand enabled, then apply the rules above and, on the Mac, check the installed rule order.
+2. From cellular or foreign Wi-Fi: Tailscale connects on its own; `sonarr.home.kelch.io`, `seerr.home.kelch.io`, and the PVE UI load; `home.kelch.io` names resolve.
+3. At home: joining home Wi-Fi disconnects Tailscale within a few seconds; AirPlay to the basement speaker connects; `jellyfin.home.kelch.io` plays; neither router sees traffic from the device.
+4. Toggle Wi-Fi off and on at home to confirm On Demand reconnects on cellular and disconnects again on Wi-Fi.
+
+Acceptance: on home Wi-Fi the device reports Tailscale disconnected, AirPlay connects, and Jellyfin direct-plays with no packets on either router; on cellular or foreign Wi-Fi every remote-admin destination works with its ordinary `*.home.kelch.io` URL; the transition needs no user action. Rollback is setting the Wi-Fi rule back to Do Nothing on the device, which touches nothing server-side.
+
+A foreign network using a more-specific overlapping RFC 1918 prefix can shadow the corresponding home addresses and must be handled as a client/network exception.
+
+## DNS
+
+The Tailnet's restricted nameserver for `home.kelch.io` is the UniFi resolver at `10.32.30.1`. It answers static infrastructure records and forwards application names to `k8s-gateway`. DNS depends on the `10.32.30.0/24` route and is part of every failover drill. An at-home client is disconnected and uses the LAN resolver directly.
 
 ## Host design
 
@@ -80,12 +101,18 @@ On 2026-09-02, an enrolled Main client temporarily enabled route acceptance. Its
 
 Stopping `tailscaled` on the selected router moved the `/16` to its peer in about 16 seconds, after which every probe and DNS still passed. Repeating the drill in the other direction produced the same result. This validated daemon and route-selection failover; guest power, PVE host, and physical VLAN trunk failures were not exercised. Both daemons were restored and the test client returned to `accept-routes=false`. Selection can remain on the surviving router after its peer returns, so the VMs are equivalent candidates rather than permanently assigned primary and standby roles.
 
-The former Kubernetes `lan-subnet-router` still advertises the six prefixes until Flux prunes it, but none are approved and `tag:k8s` is no longer an auto-approver. It is not a failover candidate.
+On 2026-09-03, an at-home iPhone with Tailscale connected could not reach the AirPlay speaker at `10.32.99.141` on Guest: the `/16` captured the flow and UniFi dropped it. The 2026-09-02 drill had recorded the same behavior for Workloads and Storage hosts as a negative-authorization pass without testing an excluded destination that an at-home client legitimately needs. The client location policy is the response; its rollout and acceptance are pending.
 
 ## Operations and rollback
 
 Normal checks are `systemctl is-active tailscaled tailscale-gro-forwarding`, `tailscale status`, `10.32.0.0/16` in `tailscale debug prefs`, and the Tailscale admin console showing both tagged nodes connected with one owning that `PrimaryRoutes` entry. PVE backups cover both guests, but a router restore must retain the VMID/IP mapping and should reauthenticate rather than copy a live Tailscale state directory between machines.
 
-Before the Kubernetes resources are pruned, rollback is to withdraw the PVE advertisements and manually reapprove the old Connector routes. After pruning, revert the Git change and restore the old Tailnet auto-approver before reconciling Flux. If the new UniFi path misbehaves, pause `Allow Tailscale Routers to Routed LAN`; the zone immediately returns to egress-only isolation.
+Server-side rollback is to revert the Git change and restore the old Tailnet auto-approver before reconciling Flux. If the new UniFi path misbehaves, pause `Allow Tailscale Routers to Routed LAN`; the zone immediately returns to egress-only isolation.
 
 After Flux confirms deletion of the old Connector and operator, remove the stale `lan-subnet-router` and `tailscale-operator` machines from the Tailnet, delete the unused OAuth client, and remove the legacy Kubernetes tag-owner definitions from the policy.
+
+## Follow-ups tracked separately
+
+- Native Tailscale on GLKVM and PVE, which gives recovery access that does not depend on the router VMs. This first requires replacing the Tailnet allow-all policy with grants.
+- Move the basement speaker from Guest to IoT with a reservation and fix the ULA `/64` currently shared across VLANs. Test AirPlay with Tailscale disconnected before attributing any remaining failure to routing.
+- Family access to Seerr, when wanted, through a Tailscale Service or operator ingress rather than a subnet route.
