@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "kind": "model",
+  "identity": {
+    "publisher": "nvidia",
+    "slug": "qwen3-8-flash-next-nvfp4"
+  },
+  "metadata": {
+    "title": "NVIDIA Qwen3.8 Flash Next NVFP4",
+    "description": "Official NVIDIA Model Optimizer Qwen3.8 Flash Next NVFP4 checkpoint with FP8 PLE embeddings and FP8 block-scaled MTP experts.",
+    "tags": [
+      "nvidia",
+      "qwen3-8",
+      "multimodal",
+      "moe",
+      "nvfp4"
+    ]
+  },
+  "model_group": {
+    "kind": "model-group",
+    "publisher": "nvidia",
+    "slug": "nvidia-qwen",
+    "content_sha256": "23cb50b7480cbcf80dd835e7a1db7ea790761f70a535b9eeafda7f10055cfebd"
+  },
+  "architecture": "Qwen3.8 Flash Next sparse hybrid Gated DeltaNet and attention MoE with PLE embeddings"
+}

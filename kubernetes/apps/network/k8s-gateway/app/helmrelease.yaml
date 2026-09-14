@@ -21,3 +21,25 @@ spec:
         lbipam.cilium.io/ips: "10.32.130.2"
       externalTrafficPolicy: Cluster
     watchedResources: ["HTTPRoute", "Service"]
+    # External controller VM for the Vonk evaluation. UniFi already delegates
+    # home.kelch.io to this resolver; these records stay LAN-only.
+    extraZonePlugins:
+      - name: hosts
+        configBlock: |-
+          10.32.21.101 vonk.home.kelch.io vonk-enroll.home.kelch.io vonk-agents.home.kelch.io vonk-registry.home.kelch.io
+          ttl 60
+          no_reverse
+          fallthrough
+      - name: log
+      - name: errors
+      - name: health
+        configBlock: |-
+          lameduck 5s
+      - name: ready
+      - name: prometheus
+        parameters: 0.0.0.0:9153
+      - name: forward
+        parameters: . /etc/resolv.conf
+      - name: loop
+      - name: reload
+      - name: loadbalance

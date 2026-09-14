@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# Copy the dedicated cert-manager certificate to the experimental VM.
+set -euo pipefail
+umask 077
+
+target="${VONK_SSH_TARGET:-kelchm@10.32.21.101}"
+ssh_options=()
+if [[ -n "${VONK_SSH_CONTROL_PATH:-}" ]]; then
+  ssh_options=(-o "ControlPath=$VONK_SSH_CONTROL_PATH")
+fi
+scratch="$(mktemp -d "${TMPDIR:-/tmp}/vonk-certificate.XXXXXX")"
+trap 'rm -rf "$scratch"' EXIT
+kubectl -n network wait certificate/vonk-forge-evaluation --for=condition=Ready --timeout=60s
+kubectl -n network get secret vonk-forge-evaluation-tls -o json > "$scratch/secret.json"
+python3 - "$scratch" <<'PY'
+import base64
+import json
+import pathlib
+import sys
+
+root = pathlib.Path(sys.argv[1])
+data = json.loads((root / "secret.json").read_text())["data"]
+for name in ("tls.crt", "tls.key"):
+    path = root / name
+    path.write_bytes(base64.b64decode(data[name], validate=True))
+    path.chmod(0o600)
+PY
+openssl x509 -in "$scratch/tls.crt" -noout -checkend 0
+remote="$(ssh "${ssh_options[@]}" "$target" 'mktemp -d /srv/vonk/vonk-forge/secrets/.tls-refresh.XXXXXX')"
+scp "${ssh_options[@]}" -q "$scratch/tls.crt" "$scratch/tls.key" "$target:$remote/"
+# The temporary path returned by the VM deliberately expands on this client.
+# shellcheck disable=SC2029
+ssh "${ssh_options[@]}" "$target" "set -eu
+  cd /srv/vonk/vonk-forge
+  install -m 600 '$remote/tls.crt' secrets/local-https/tls.crt
+  install -m 600 '$remote/tls.key' secrets/local-https/tls.key
+  rm -rf '$remote'
+  sudo docker compose -f docker-compose.yaml -f compose.local.yaml restart local-https
+"
+curl --fail --silent --show-error --retry 8 --retry-connrefused --retry-delay 1 \
+  --resolve vonk.home.kelch.io:443:10.32.21.101 \
+  https://vonk.home.kelch.io/healthz

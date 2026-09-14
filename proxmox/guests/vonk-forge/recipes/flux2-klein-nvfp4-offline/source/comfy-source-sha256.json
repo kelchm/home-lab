@@ -1,0 +1,9 @@
+{
+  "comfyui_version.py": "7f125e55ed6be2e6792186138fbc03f063ef27d7df3b757b41c40385fc4b02ab",
+  "comfy/cli_args.py": "01122dc9444f6c8c85342831f2c0501a741b7004e2a55f8e1345273249f1d0fb",
+  "nodes.py": "32fbada1c42644319f4f5d117ff4712120704afd56dc9a3e7ef66a6656bc3c33",
+  "comfy_extras/nodes_custom_sampler.py": "7e06b75ee557082508a3493cdddac9c131acd80c002c7e79fb8592c78f84dc5c",
+  "comfy_extras/nodes_flux.py": "1539dc519622750dcd2bca2269c23383f7dc40c847c9ccb1a72cf07dce2593f1",
+  "comfy/model_management.py": "c408fc9eddaa9073963f58bf89e7abfd31b16d50ab11b4e039a414385fe6e7b5",
+  "LICENSE": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986"
+}
