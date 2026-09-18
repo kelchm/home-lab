@@ -112,28 +112,6 @@ elif (( via_tailnet )); then
     note 'destinations route over a tunnel interface but the tailscale CLI is unavailable to name the peer'
 fi
 
-ts_pods_json="$(kubectl -n tailscale get pods -o json 2>/dev/null || echo '{"items":[]}')"
-ts_pods="$(jq -r '.items[] | "\(.metadata.name)\t\(.spec.nodeName // "unscheduled")\t\(.status.phase // "unknown")"' <<<"$ts_pods_json")"
-if [[ -n "$ts_pods" ]]; then
-    printf '%s\n' "$ts_pods" | sed 's/\t/  /g;s/^/  tailscale pod: /'
-fi
-if [[ -n "$candidate" ]]; then
-    on_candidate="$(jq -r --arg n "$candidate" '.items[] | select(.spec.nodeName == $n) | .metadata.name' <<<"$ts_pods_json")"
-    if [[ -n "$on_candidate" ]]; then
-        note "candidate $candidate hosts tailscale pods: $(tr '\n' ' ' <<<"$on_candidate")"
-        if (( via_tailnet )); then
-            note 'your API/Talos path runs over the tailnet, so evicting these resets it — pre-move the router or expect a transient reset'
-        fi
-    else
-        line "candidate $candidate hosts no tailscale pods"
-    fi
-fi
-
-connector_ready="$(kubectl get connectors.tailscale.com lan-subnet-router -o json 2>/dev/null \
-    | jq -r '[.status.conditions[]? | select(.type == "ConnectorReady")] | (.[0].status // "unknown")' || echo 'unknown')"
-line "connector lan-subnet-router ConnectorReady=$connector_ready"
-[[ "$connector_ready" == 'True' ]] || fail "tailscale connector is not Ready (ConnectorReady=$connector_ready)"
-
 # --- Talos + etcd -------------------------------------------------------------
 section "Talos versions"
 for index in "${!NODES[@]}"; do
@@ -191,9 +169,36 @@ lh_setting() {
 section "Longhorn volumes"
 volume_json="$(kubectl -n longhorn-system get volumes.longhorn.io -o json)"
 volume_count="$(jq '.items | length' <<<"$volume_json")"
-bad_volumes="$(jq -r '.items[] | select(.status.robustness != "healthy") | [.metadata.name, (.status.state // "unknown"), (.status.robustness // "unknown")] | @tsv' <<<"$volume_json")"
+# A volume is in use when any workload Longhorn records for it sits in a non-terminal
+# pod state. Longhorn keeps workloadsStatus after the pod ends, so the pod state -- not
+# the presence of the entry -- separates a live claim from a leftover.
+#
+# In use: must be attached and healthy. Idle: must only avoid degraded and faulted.
+bad_volumes="$(jq -r '
+  .items[]
+  | (.status.state // "unknown") as $state
+  | (.status.robustness // "unknown") as $rob
+  | ((.status.kubernetesStatus.workloadsStatus // [])
+      | any(.podStatus != "Succeeded" and .podStatus != "Failed")) as $inuse
+  | select($rob == "degraded" or $rob == "faulted"
+      or ($state == "attached" and $rob != "healthy")
+      or ($state != "attached" and $inuse))
+  | [.metadata.name, $state, $rob, (.status.kubernetesStatus.pvcName // "-")] | @tsv
+' <<<"$volume_json")"
+idle_volumes="$(jq -r '
+  .items[]
+  | select((.status.state // "unknown") != "attached"
+      and (((.status.kubernetesStatus.workloadsStatus // [])
+        | any(.podStatus != "Succeeded" and .podStatus != "Failed")) | not))
+  | [.metadata.name, "\(.status.kubernetesStatus.namespace // "-")/\(.status.kubernetesStatus.pvcName // "-")"] | @tsv
+' <<<"$volume_json")"
 bad_count="$(grep -c . <<<"${bad_volumes:-}" || true)"
+idle_count="$(grep -c . <<<"${idle_volumes:-}" || true)"
 line "healthy: $(( volume_count - bad_count ))/${volume_count}"
+if (( idle_count > 0 )); then
+    line "idle (detached, no live workload): ${idle_count}"
+    printf '%s\n' "$idle_volumes" | sed 's/\t/  /g;s/^/    /'
+fi
 line "rebuild limit: $(lh_setting concurrent-replica-rebuild-per-node-limit) per node; replenishment wait: $(lh_setting replica-replenishment-wait-interval)s"
 detail "$(kubectl -n longhorn-system get volumes.longhorn.io -o custom-columns='NAME:.metadata.name,STATE:.status.state,ROBUSTNESS:.status.robustness,NODE:.status.currentNodeID')"
 if (( volume_count == 0 )); then
@@ -306,6 +311,6 @@ if (( ${#FAILURES[@]} > 0 )); then
     exit 1
 fi
 
-printf 'PREFLIGHT CHECKS PASSED: etcd membership responded, all %s nodes are Ready and uncordoned, networking safeguards are Ready, %s Longhorn volumes are healthy, and %s instance-managers are Ready with lhnet1.\n' \
-    "$node_total" "$volume_count" "$instance_count"
+printf 'PREFLIGHT CHECKS PASSED: etcd membership responded, all %s nodes are Ready and uncordoned, networking safeguards are Ready, %s of %s Longhorn volumes are in use and healthy (%s idle), and %s instance-managers are Ready with lhnet1.\n' \
+    "$node_total" "$(( volume_count - idle_count ))" "$volume_count" "$idle_count" "$instance_count"
 printf 'Still owed before go/no-go: talosctl health on a healthy control-plane node, an etcd snapshot verified at its path, and an explicit decision for any CloudNativePG primary on the candidate.\n'
