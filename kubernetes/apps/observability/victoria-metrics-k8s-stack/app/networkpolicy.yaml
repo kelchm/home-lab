@@ -231,3 +231,24 @@ spec:
         - ports:
             - port: "8428"
               protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: sync-job
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/component: syncJob
+      app.kubernetes.io/instance: victoria-metrics-k8s-stack
+  egress:
+    # Dashboard and runbook downloads during helm upgrades. The job runs as
+    # an upgrade hook, so egress denial here blocks the entire rollout, not
+    # just dashboard sync.
+    - toFQDNs:
+        - matchName: raw.githubusercontent.com
+        - matchName: runbooks.prometheus-operator.dev
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
