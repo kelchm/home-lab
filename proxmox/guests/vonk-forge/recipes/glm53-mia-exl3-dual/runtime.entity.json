@@ -1,0 +1,150 @@
+{
+  "schema_version": 1,
+  "kind": "runtime-distribution",
+  "identity": {
+    "publisher": "vonk-forge",
+    "slug": "kelchm-glm53-exl3-mia-493cb88f-f0-arm64"
+  },
+  "metadata": {
+    "title": "Mia GLM5.3 EXL3 DFlash2 runtime with verified home-lab f0 fabric bindings",
+    "description": "Digest-pinned ARM64 vLLM image and Controller-native mp wrapper for MiaAI-Lab's 493cb88f GLM 5.3 Flash EXL3/TR3 plus DFlash2 K7 two-Spark profile. The consumed Dockerfile and overlays are byte-identical to the prior source pin; the newer source adds fail-closed numeric launch validation and a cold-prefill harness, while the Controller wrapper already fixes and validates those numeric knobs without SSH. Local adapter selects the observed active f0 primary rail and GID3 on both Sparks; the original f1 interfaces are down here. Local GPU execution remains unqualified.",
+    "tags": [
+      "candidate",
+      "dflash2",
+      "distributed",
+      "exl3",
+      "glm-5.3",
+      "native-mp",
+      "spark",
+      "vllm"
+    ]
+  },
+  "implements_harness": {
+    "kind": "execution-harness",
+    "publisher": "vonk-forge",
+    "slug": "vllm",
+    "content_sha256": "c0d297318f223378fe573964291bc90fc950242e0d16d1d301c7d3cb4251487d"
+  },
+  "platform": "linux/arm64",
+  "source": {
+    "repository": "https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks",
+    "revision": "493cb88fc69f8ba73ac87404f429d763e2739d89",
+    "archive_sha256": "bdd535e461ab85d16d93a3d2c6970674f560ba1e0a7d27a0d13839c1bc15b88d",
+    "license": "MIT"
+  },
+  "image": "ghcr.io/miaai-lab/glm-5.3-flash-2x-dgx-sparks@sha256:9bb1557a4234fce63d59599e44d10747eabd742beb337eebf9e7070be8a0fd58",
+  "image_manifest": {
+    "digest": "9bb1557a4234fce63d59599e44d10747eabd742beb337eebf9e7070be8a0fd58",
+    "size": 11197,
+    "config_digest": "ad0cdd86d1ddd15ee758f519d16da15ac237f7f0648a5c52fbc20f9554944263",
+    "compressed_layers_bytes": 9788994117
+  },
+  "dependencies": [
+    {
+      "name": "vLLM GLM 5.3 day-zero",
+      "version": "487ecf187",
+      "source": "docker.io/vllm/vllm-openai@sha256:905c02933be6021301db2dc284e24e3727467aa3a0f63b41d609885778a07bce",
+      "license": "Apache-2.0"
+    },
+    {
+      "name": "MiaAI-Lab GLM 5.3 EXL3 Spark overlay",
+      "version": "493cb88fc69f8ba73ac87404f429d763e2739d89",
+      "source": "https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks/tree/493cb88fc69f8ba73ac87404f429d763e2739d89",
+      "license": "MIT"
+    },
+    {
+      "name": "ExLlamaV3",
+      "version": "c5d9c657966ffeeaa9353f0cc899f18629da4a13",
+      "source": "https://github.com/turboderp-org/exllamav3/tree/c5d9c657966ffeeaa9353f0cc899f18629da4a13",
+      "license": "MIT"
+    },
+    {
+      "name": "DFlash runtime",
+      "version": "Mia-493cb88f",
+      "source": "https://github.com/z-lab/dflash",
+      "license": "MIT"
+    },
+    {
+      "name": "FlashInfer",
+      "version": "0.6.17",
+      "source": "https://github.com/flashinfer-ai/flashinfer",
+      "license": "Apache-2.0"
+    },
+    {
+      "name": "NCCL",
+      "version": "2.30.7",
+      "source": "https://pypi.org/project/nvidia-nccl-cu13/2.30.7/",
+      "license": "BSD-3-Clause"
+    }
+  ],
+  "build": {
+    "network_hosts": [],
+    "offline_after_installation": true
+  },
+  "capabilities": {
+    "runtime_environment": {
+      "allowed_names": [
+        "DO_NOT_TRACK",
+        "EXL3_FUSED_MOE",
+        "EXL3_MOE_ROW_TILE",
+        "EXL3_TEMP_ROWS_FUSED",
+        "GLM53_MIXED_PREFILL_CHUNK",
+        "GLM53_SUPPRESS_STOPS_IN_REASONING",
+        "NCCL_NET_PLUGIN",
+        "VLLM_ENGINE_READY_TIMEOUT_S"
+      ]
+    },
+    "distributed_vllm": {
+      "verified": true,
+      "mechanism": "vllm-mp",
+      "topology_mode": "distributed",
+      "node_count": 2,
+      "world_size": 2,
+      "tensor_parallel_size": 2,
+      "pipeline_parallel_size": 1,
+      "data_parallel_size": 1,
+      "fabric": "nccl-roce",
+      "endpoint_role": "entrypoint",
+      "worker_role": "worker",
+      "rank_loss_withdraws_endpoint": true,
+      "launch": {
+        "rendezvous": {
+          "local_address_environment": "VONK_LOCAL_ADDR",
+          "master_address_environment": "VONK_MASTER_ADDR",
+          "master_port_environment": "VONK_MASTER_PORT",
+          "master_role": "entrypoint"
+        },
+        "rank_profiles": [
+          {
+            "rank": 0,
+            "role": "entrypoint",
+            "environment": {
+              "GLOO_SOCKET_IFNAME": "enp1s0f0np0",
+              "NCCL_IB_GID_INDEX": "3",
+              "NCCL_IB_HCA": "=rocep1s0f0:1",
+              "NCCL_SOCKET_IFNAME": "=enp1s0f0np0",
+              "TP_SOCKET_IFNAME": "enp1s0f0np0"
+            }
+          },
+          {
+            "rank": 1,
+            "role": "worker",
+            "environment": {
+              "GLOO_SOCKET_IFNAME": "enp1s0f0np0",
+              "NCCL_IB_GID_INDEX": "3",
+              "NCCL_IB_HCA": "=rocep1s0f0:1",
+              "NCCL_SOCKET_IFNAME": "=enp1s0f0np0",
+              "TP_SOCKET_IFNAME": "enp1s0f0np0"
+            }
+          }
+        ]
+      }
+    }
+  },
+  "security": {
+    "network_mode": "none",
+    "user": "10001:10001",
+    "no_new_privileges": true,
+    "capabilities": []
+  }
+}

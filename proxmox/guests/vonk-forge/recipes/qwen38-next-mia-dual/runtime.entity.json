@@ -1,0 +1,112 @@
+{
+  "schema_version": 1,
+  "kind": "runtime-distribution",
+  "identity": {
+    "publisher": "vonk-forge",
+    "slug": "kelchm-qwen38-next-mia-c2325b22-arm64"
+  },
+  "metadata": {
+    "title": "Mia Qwen3.8 Flash Next native-mp vLLM Spark evaluation",
+    "description": "Exact NVIDIA ARM64 image and unchanged Mia c2325b22 PLE/MXFP8/FP8-block MTP patches, adapted to Vonk recipe-v1 with f0 primary RoCE profiles. Distributed launch mechanism is corroborated by upstream; local hardware qualification is pending. BF16 KV and full-vocabulary MTP3 initially; no FP8 QSA, draft-vocabulary or YaRN patch is applied.",
+    "tags": [
+      "candidate",
+      "qwen3-8",
+      "vllm",
+      "native-mp",
+      "spark",
+      "distributed"
+    ]
+  },
+  "implements_harness": {
+    "kind": "execution-harness",
+    "publisher": "vonk-forge",
+    "slug": "vllm",
+    "content_sha256": "c0d297318f223378fe573964291bc90fc950242e0d16d1d301c7d3cb4251487d"
+  },
+  "platform": "linux/arm64",
+  "source": {
+    "repository": "https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Dual-DGX-Sparks",
+    "revision": "c2325b22602b51a5faf55fc2bebccc34f3f80b9f",
+    "archive_sha256": "fb8bbc7b241153278f68d754544e25c187fb43e7684ff9187996ca73e602e7bf",
+    "license": "AGPL-3.0-or-later"
+  },
+  "image": "docker.io/vllm/vllm-openai@sha256:3b0e188ffceb3d07e09c3cb5215433a0020eacf02d7f882ed3a8bfd15454477e",
+  "image_manifest": {
+    "digest": "3b0e188ffceb3d07e09c3cb5215433a0020eacf02d7f882ed3a8bfd15454477e",
+    "size": 7023,
+    "config_digest": "d464f3b466fa9c45ddbff8a812e80564503b6879a9fd95c1a47514f3f0df5a4a",
+    "compressed_layers_bytes": 9702868146
+  },
+  "dependencies": [
+    {
+      "name": "vLLM NVIDIA Qwen3.8 Flash Next image",
+      "version": "image-config-d464f3b466fa",
+      "source": "docker.io/vllm/vllm-openai@sha256:3b0e188ffceb3d07e09c3cb5215433a0020eacf02d7f882ed3a8bfd15454477e",
+      "license": "Apache-2.0"
+    },
+    {
+      "name": "MiaAI-Lab Spark patches",
+      "version": "c2325b22602b51a5faf55fc2bebccc34f3f80b9f",
+      "source": "https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Dual-DGX-Sparks/tree/c2325b22602b51a5faf55fc2bebccc34f3f80b9f",
+      "license": "AGPL-3.0-or-later"
+    }
+  ],
+  "build": {
+    "network_hosts": [],
+    "offline_after_installation": true
+  },
+  "capabilities": {
+    "distributed_vllm": {
+      "verified": true,
+      "mechanism": "vllm-mp",
+      "topology_mode": "distributed",
+      "node_count": 2,
+      "world_size": 2,
+      "tensor_parallel_size": 2,
+      "pipeline_parallel_size": 1,
+      "data_parallel_size": 1,
+      "fabric": "nccl-roce",
+      "endpoint_role": "entrypoint",
+      "worker_role": "worker",
+      "rank_loss_withdraws_endpoint": true,
+      "launch": {
+        "rendezvous": {
+          "local_address_environment": "VONK_LOCAL_ADDR",
+          "master_address_environment": "VONK_MASTER_ADDR",
+          "master_port_environment": "VONK_MASTER_PORT",
+          "master_role": "entrypoint"
+        },
+        "rank_profiles": [
+          {
+            "rank": 0,
+            "role": "entrypoint",
+            "environment": {
+              "GLOO_SOCKET_IFNAME": "enp1s0f0np0",
+              "NCCL_IB_GID_INDEX": "3",
+              "NCCL_IB_HCA": "=rocep1s0f0:1",
+              "NCCL_SOCKET_IFNAME": "=enp1s0f0np0",
+              "TP_SOCKET_IFNAME": "enp1s0f0np0"
+            }
+          },
+          {
+            "rank": 1,
+            "role": "worker",
+            "environment": {
+              "GLOO_SOCKET_IFNAME": "enp1s0f0np0",
+              "NCCL_IB_GID_INDEX": "3",
+              "NCCL_IB_HCA": "=rocep1s0f0:1",
+              "NCCL_SOCKET_IFNAME": "=enp1s0f0np0",
+              "TP_SOCKET_IFNAME": "enp1s0f0np0"
+            }
+          }
+        ]
+      }
+    }
+  },
+  "security": {
+    "network_mode": "none",
+    "user": "10001:10001",
+    "no_new_privileges": true,
+    "capabilities": []
+  }
+}
