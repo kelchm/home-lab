@@ -244,10 +244,25 @@ spec:
   egress:
     # Dashboard and runbook downloads during helm upgrades. The job runs as
     # an upgrade hook, so egress denial here blocks the entire rollout, not
-    # just dashboard sync.
-    - toFQDNs:
-        - matchName: raw.githubusercontent.com
-        - matchName: runbooks.prometheus-operator.dev
+    # just dashboard sync. Sources resolve to rotating GitHub Pages IPs, so
+    # FQDN matching misses; allow public 443 like the grafana policy does.
+    - toCIDRSet:
+        - cidr: 0.0.0.0/0
+          except:
+            - 0.0.0.0/8
+            - 10.0.0.0/8
+            - 100.64.0.0/10
+            - 127.0.0.0/8
+            - 169.254.0.0/16
+            - 172.16.0.0/12
+            - 192.0.0.0/24
+            - 192.0.2.0/24
+            - 192.168.0.0/16
+            - 198.18.0.0/15
+            - 198.51.100.0/24
+            - 203.0.113.0/24
+            - 224.0.0.0/4
+            - 240.0.0.0/4
       toPorts:
         - ports:
             - port: "443"
