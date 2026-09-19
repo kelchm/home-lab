@@ -14,6 +14,15 @@ import urllib.request
 
 
 def verify(root, lock):
+    runtime_names = [Path(name).name for name in lock["files"]
+                     if name.startswith(("overlay/", "files/", "scripts/"))]
+    if len(runtime_names) != len(set(runtime_names)):
+        raise ValueError("Runtime file names collide in /opt/glm53")
+    if len(lock["patches"]) != len(set(lock["patches"])) or any(
+        name not in lock["files"] or Path(name).name not in runtime_names
+        for name in lock["patches"]
+    ):
+        raise ValueError("Patch sequence must contain unique, locked runtime files")
     for name, expected in lock["files"].items():
         path = root / name
         if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != expected:
