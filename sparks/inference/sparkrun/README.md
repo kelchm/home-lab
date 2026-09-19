@@ -73,6 +73,23 @@ python3 ~/sparkrun/mia-glm-ca855766/tests/bench_decode.py --phase prose --runs 3
 python3 ~/sparkrun/mia-glm-ca855766/tests/bench_decode.py --phase concurrent --structured --concurrency 4 --runs 2 --max-tokens 400 --out /tmp/glm53-c4.json
 ```
 
+## NCCL comparison, 2026-09-19
+
+A controlled 8 → 16 → 8 channel run kept InstantTensor, the image and overlays, 850k context, 0.85 utilization, graph estimation disabled, and `GLM53_MIXED_PREFILL_CHUNK=skip` fixed. The [comparison summary](benchmark-20260919-nccl.json) records medians and ranges. Each phase excluded one warmup per workload, then measured three 400-token decode requests and two unique-prefix ~32.6k-token prompts. An initial identical-prompt prefill series showed cache effects and was excluded.
+
+| Measurement | 8 channels before | 16 channels | 8 channels restored |
+|---|---:|---:|---:|
+| Structured decode, tok/s | 64.1 | 64.8 | 64.1 |
+| Prose decode, tok/s | 26.0 | 27.3 | 27.4 |
+| Uncached ~32.6k prompt TTFT, seconds | 19.14 | 18.70 | 19.08 |
+| Available KV, GiB | 14.47 | 13.52 | 14.68 |
+| Reported capacity equivalent, tokens | 913,909 | 853,195 | 925,093 |
+| Usable KV block IDs (532 required at 850k) | 571 | 533 | 578 |
+
+Eight channels remains deployed. The decode ranges overlap, prose speculative acceptance varies, and the approximately 2% prefill difference is too small in this sample to justify the reduced KV margin. Allocation varies slightly between launches, but the restored eight-channel run recovered the margin. Six API acceptance checks passed after restoration; both hosts remained healthy. This experiment did not retest 64 channels or execute a full 850k request. Raw results, the harness, and serving logs are retained at `/home/kelchm/sparkrun/receipts/nccl-comparison` on spark-1 and `.private/nccl-comparison` in this checkout.
+
+Earlier concurrency tests also exposed an independent limitation of `GLM53_MIXED_PREFILL_CHUNK=skip`: a one-word question submitted two seconds into a prose response waited 20.3 seconds for its first token. Mixed-topic four-request batches reached approximately 37 aggregate tok/s with 23–25 second waits for three requests, versus approximately 56 aggregate tok/s for repeated prompts admitted together. The pinned scheduler explicitly defers prefill while a peer decodes in `skip` mode. Comparing `fair` scheduling is a separate, unperformed experiment; changing NCCL channels does not address this policy.
+
 ## Reprovisioning
 
 The YAML intentionally contains site-specific absolute mounts. Copy it to `~/sparkrun/recipes/mia-glm53-exl3.yaml` on spark-1. Stage the exact Mia commit at the path above on both nodes and verify both model inventories before launching. On fresh hosts, obtain the target and draft snapshots through Mia's documented download process; this recipe skips download because its model is an absolute local path.
