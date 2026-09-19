@@ -11,6 +11,8 @@ metadata:
   kv_vram_per_token: 7.331371307373047e-06
   kv_lora_rank: 512
   overlay_source_revision: ca8557665bffa6529758f2c330ba8fb44c1e801a
+  target_model_revision: 25a44fdbf16862a46b7cc9921142c6c81350af2f
+  draft_model_revision: dc77ff1c99eeb2df044ee3d4f0094eb033fee410
 defaults:
   port: 8888
   host: 0.0.0.0
@@ -25,14 +27,27 @@ defaults:
   quantization: exl3
   load_format: instanttensor
   kv_cache_dtype: fp8
-  local_speculative_config: '{"method":"dflash","model":"/opt/sparkrun/models/glm53-dflash2","num_speculative_tokens":7,"kv_cache_dtype":"auto","draft_tensor_parallel_size":2,"draft_sample_method":"probabilistic","rejection_sample_method":"standard"}'
+  local_speculative_config: '{"method":"dflash","model":"/opt/sparkrun/models/glm53-dflash2-dc77ff1c","num_speculative_tokens":7,"kv_cache_dtype":"auto","draft_tensor_parallel_size":2,"draft_sample_method":"probabilistic","rejection_sample_method":"standard"}'
 env:
   EXL3_FUSED_MOE: '1'
   EXL3_MOE_ROW_TILE: '0'
   EXL3_TEMP_ROWS_FUSED: '32'
   FLASHINFER_CUDA_ARCH_LIST: 12.1a
   FLASHINFER_DISABLE_VERSION_CHECK: '1'
-  GLM53_MIXED_PREFILL_CHUNK: skip
+  GLM53_MIXED_PREFILL_CHUNK: fair
+  GLM53_FAIR_PREFILL_CHUNK: '256'
+  GLM53_FAIR_PREFILL_SHARE: '0.30'
+  GLM53_FAIR_PREFILL_MAX_INTERVAL_MS: '2000'
+  GLM53_FAIR_PREFILL_MAX_STEP_MS: '2000'
+  GLM53_FAIR_PREFILL_MAX_CHUNKS: '1'
+  GLM53_SPINWAIT_MS: stock
+  GLM53_ADAPTIVE_K: 'off'
+  GLM53_DENSE_FP8: 'off'
+  GLM53_EXL3_MOE_FAST: '0'
+  GLM53_EXPOSE_CACHE_RESET: '0'
+  TILELANG_CACHE_DIR: /cache/runtime/tilelang
+  VLLM_ENGINE_READY_TIMEOUT_S: '3600'
+  NCCL_IB_ROCE_VERSION_NUM: '2'
   GLM53_SUPPRESS_STOPS_IN_REASONING: '1'
   NCCL_CROSS_NIC: '0'
   NCCL_CUMEM_ENABLE: '0'
@@ -53,23 +68,27 @@ env:
   ABLIT: '0'
   HF_HUB_OFFLINE: '1'
   TRANSFORMERS_OFFLINE: '1'
-  NCCL_DEBUG: INFO
+  NCCL_DEBUG: WARN
   DEFAULT_MAX_NEW_TOKENS: '65536'
   NCCL_MIN_NCHANNELS: '8'
   NCCL_MAX_NCHANNELS: '8'
 executor_config:
   entrypoint: ''
   user: root
+  privileged: false
+  ipc: host
+  devices:
+  - /dev/infiniband
   shm_size: 32gb
   cap_add:
   - IPC_LOCK
-  - SYS_PTRACE
   ulimit:
   - memlock=-1:-1
   - stack=67108864
   - nofile=65535:65535
   volumes:
-  - /opt/sparkrun/models/glm53-dflash2:/opt/sparkrun/models/glm53-dflash2:ro
+  - /home/kelchm/sparkrun/mia-glm-ca855766/scripts/boot-shape-warmup.sh:/opt/glm53/boot-shape-warmup.sh:ro
+  - /opt/sparkrun/models/glm53-dflash2-dc77ff1c:/opt/sparkrun/models/glm53-dflash2-dc77ff1c:ro
   - /home/kelchm/sparkrun/mia-glm-ca855766/overlay/patch_glm_video_placeholders.py:/opt/glm53/patch_glm_video_placeholders.py:ro
   - /home/kelchm/sparkrun/mia-glm-ca855766/overlay/patch_suppress_stops_in_reasoning.py:/opt/glm53/patch_suppress_stops_in_reasoning.py:ro
   - /home/kelchm/sparkrun/mia-glm-ca855766/overlay/patch_scheduler_decode_floor.py:/opt/glm53/patch_scheduler_decode_floor.py:ro
@@ -94,6 +113,7 @@ executor_config:
   - /home/kelchm/sparkrun/mia-glm-ca855766/ablit:/opt/glm53/ablit:ro
   auto_remove: false
 pre_exec:
+- mkdir -p /cache/runtime/tilelang
 - python3 /opt/glm53/patch_glm_video_placeholders.py
 - python3 /opt/glm53/patch_suppress_stops_in_reasoning.py
 - python3 /opt/glm53/patch_scheduler_decode_floor.py
@@ -112,6 +132,11 @@ pre_exec:
 - python3 /opt/glm53/patch_indexer_workspace.py
 - python3 /opt/glm53/patch_cache_reset.py
 - python3 /opt/glm53/patch_ablit.py
+post_exec:
+- >-
+  GLM53_WARMUP_MAX_CONCURRENCY=4 GLM53_WARMUP_REQ_TIMEOUT=240
+  GLM53_WARMUP_DFLASH_K=7 GLM53_WARMUP_TRITON_CACHE_DIR=/cache/runtime/triton
+  bash /opt/glm53/boot-shape-warmup.sh http://127.0.0.1:8888 GLM-5.3-Flash-EXL3
 command: |
   vllm serve {model} \
     --served-model-name {served_model_name} \
@@ -133,8 +158,9 @@ command: |
     --enable-prefix-caching \
     --no-enable-flashinfer-autotune \
     --chat-template /opt/glm53/chat_template.jinja \
-    --limit-mm-per-prompt '{"image":4,"video":1}' \
+    --limit-mm-per-prompt '{"image":48,"video":1}' \
     --mm-processor-kwargs '{"max_image_tokens":2048}' \
+    --mm-processor-cache-gb 1 \
     --skip-mm-profiling \
     --cudagraph-capture-sizes 1 2 4 8 16 24 32 \
     --speculative-config '{local_speculative_config}'

@@ -1,0 +1,61 @@
+{
+  "date": "2026-09-19",
+  "upstream_commit": "ca8557665bffa6529758f2c330ba8fb44c1e801a",
+  "upstream_head_matches_pin": true,
+  "upstream_image_tag_matches_digest": true,
+  "recipe_sha256": "811a12461b703ba062c1a221a4ee0c7a6beccc5a6cf81cd986f3e3ef23ee0b7b",
+  "target_revision": "25a44fdbf16862a46b7cc9921142c6c81350af2f",
+  "target_shards_verified_per_node": 120,
+  "target_json_files_verified_per_node": 15,
+  "draft_revision": "dc77ff1c99eeb2df044ee3d4f0094eb033fee410",
+  "draft_sha256_verified_both_nodes": "b33c03475ba7322cf398828f2d8d1be376df30dc05c6b40c28c8ea8da23e410b",
+  "mounted_source_files_verified_per_node": 22,
+  "patch_sequence_matches": 18,
+  "static_parity_checks": 61,
+  "negative_skip_regression_rejected": true,
+  "runtime_recipe_env_matches_both_nodes": true,
+  "warmup": {
+    "script": "scripts/boot-shape-warmup.sh",
+    "post_exec_exit_code": 0,
+    "note": "SparkRun suppresses successful hook stdout; its fail-fast post hook completed with exit 0. Upstream script returns 0 only after requests and sampler-cache postconditions pass."
+  },
+  "api_acceptance_passed": 6,
+  "five_image_request_passed": true,
+  "staggered_request": {
+    "second_request_start_offset_s": 2.006111958064139,
+    "second_request_ttft_s": 0.8654521249700338,
+    "second_request_wall_s": 1.0308329579420388,
+    "first_request_wall_s": 22.24692291696556,
+    "first_request_decode_tok_s": 27.50223780801933,
+    "second_completed_before_first": true,
+    "response": "Paris",
+    "old_deployment_second_request_ttft_s": 20.29638845892623,
+    "note": "Behavioral validation after multiple parity corrections, not an isolated scheduler performance experiment."
+  },
+  "kv_available_gib": 15.03,
+  "capacity_equivalent_tokens": 944266,
+  "max_model_len": 850000,
+  "gpu_memory_utilization": 0.85,
+  "load_format": "instanttensor",
+  "nccl_channels": 8,
+  "mixed_prefill": "fair",
+  "mm_processor_cache_gb": 1,
+  "mm_limits": {
+    "image": 48,
+    "video": 1
+  },
+  "host_available_memory_gib": {
+    "spark-1": 5.4,
+    "spark-2": 7.5
+  },
+  "health_http": 200,
+  "preemption_metric": [
+    "vllm:num_preemptions_total{engine=\"0\",model_name=\"GLM-5.3-Flash-EXL3\"} 0.0"
+  ],
+  "limits": [
+    "No full 850k request tested.",
+    "Five images tested; the 48-image maximum and video path were not load-tested.",
+    "Earlier benchmark receipts used the old draft and skip policy."
+  ],
+  "receipts": "/home/kelchm/sparkrun/receipts/upstream-audit"
+}
