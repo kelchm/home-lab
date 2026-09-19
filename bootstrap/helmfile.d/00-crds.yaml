@@ -13,6 +13,10 @@ releases:
     namespace: network
     chart: oci://ghcr.io/home-operations/charts-mirror/external-dns
     version: 1.22.0
+    # Only CRDs are extracted from this render. The chart's values schema
+    # requires `policy` since 1.22.0; mirror the Flux HelmRelease value.
+    values:
+      - policy: sync
 
   - name: prometheus-operator-crds
     namespace: observability
