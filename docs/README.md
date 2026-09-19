@@ -69,6 +69,7 @@ The status header form is `**Status:** <Proposed|Active|Implemented|Superseded> 
 - [20260818-sn770-zfs-qualification-procedure](plans/20260818-sn770-zfs-qualification-procedure.md) — the bounded, destructive test procedure and safety guards used for the SN770 reproduction run.
 - [20260821-network-topology](plans/20260821-network-topology.md) — active, partially implemented VLAN/zone topology, DGX placement, PVE wiring, and second-cluster reservations.
 - [20260902-tailscale-remote-admin](plans/20260902-tailscale-remote-admin.md) — implemented independent two-VM PVE subnet-router pair on isolated VLAN 19, replacing the Kubernetes-hosted route.
+- [20260919-log-collector-replatform](plans/20260919-log-collector-replatform.md) — proposed Alloy → vlagent/Vector evaluation: durability drill, schema-contract parity, and cutover gates for the pod-log collector.
 
 ## Decision records & benchmarks
 
