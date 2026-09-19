@@ -27,7 +27,7 @@ spec:
             image:
               repository: docker.io/samanhappy/mcphub
               # v1.0.33 release, pinned to its multi-architecture OCI index.
-              tag: 1.0.38@sha256:c8c4991f6e40a12089c6c9b9f7ae9ee67f0083d4bce401c1eb14cd602b883e20
+              tag: 1.0.39@sha256:0d1d22251247cc8b010730fdb0fa194beb13224f18eec3c82f89c99dfdecd055
             env:
               NODE_ENV: production
               PORT: "3000"
