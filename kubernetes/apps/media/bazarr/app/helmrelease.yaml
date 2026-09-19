@@ -17,7 +17,7 @@ spec:
             image:
               # renovate: datasource=docker depName=ghcr.io/home-operations/bazarr
               repository: ghcr.io/home-operations/bazarr
-              tag: 1.6.0
+              tag: 1.6.1
             env:
               TZ: America/New_York
             probes:
