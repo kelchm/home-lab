@@ -30,8 +30,8 @@ Measured 2026-09-18 over a 24-hour window against the live backend with `stats b
 | Source | 24h entries | Plain text | Documented structured output | Decision |
 | --- | --- | --- | --- | --- |
 | kanidm | 163k | all | None. Only `log_level` (info/debug/trace); the OTLP integration exports trace spans to a tracing backend, not log events. | Keep plain text. Volume is dominated by `repl_run_consumer` heartbeat ticks at INFO (~every 2.5s per replica) plus per-request logs; pursue upstream before any collector-side transform. |
-| iperf3 | 138k | all | N/A (test workload, network-perf). | No action; expected churn while the benchmark runs. |
-| echo | 17k | all | N/A (connectivity/health-probe target in `default`). | No action. |
+| iperf3 | 138k | all | N/A (hostNetwork benchmark server, network-perf). | Idle: no benchmark traffic was observed — the entire volume is probe self-noise. The tcpSocket readiness/liveness probes (10s/30s) connect-and-close, which the iperf3 server logs as failed clients (~4 lines per 10s burst per pod). Replace with exec probes or retire the DaemonSet if the benchmark target is no longer wanted. |
+| echo | 17k | all | N/A (http-echo canary in `default`, HTTPRoute on gateway-public). | Idle: the volume is kubelet healthz probe spam (two probes every 10s). Also publicly unreachable — the `echo.kelch.io` DNS record no longer resolves even though the HTTPRoute is Accepted, so the canary serves no purpose today. Decide: restore DNS, move it under the internal zone, or decommission. |
 | kaniop | 12k | all | None documented. | Keep plain text. |
 | kube-apiserver | 11k | all | Yes: `--logging-format=json`. | Not flipped: apiserver args are Talos-managed control-plane config outside Flux, so this is a manual rollout decision via the talos-rollout process, not a HelmRelease change. |
 | csi-driver-nfs | 9.1k | all | None (klog emitters). | Keep plain text. |
