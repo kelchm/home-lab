@@ -25,6 +25,11 @@ tasks:
       # DeepSeek shard risks the documented UMA collapse, which has no watchdog.
       - |
         for h in {{.SPARK_HOSTS}}; do
+          spark_jobs=$(ssh "$h" 'docker ps -q --filter name=sparkrun_') || exit 1
+          if [ -n "$spark_jobs" ]; then
+            echo "REFUSING: SparkRun is active on $h. Stop it with sparkrun first (sparks/inference/sparkrun/README.md)." >&2
+            exit 1
+          fi
           if ssh "$h" 'docker ps -q --filter name={{.DSPARK_PROJECT}}' | grep -q .; then
             echo "REFUSING: DeepSeek is running on $h. Run 'task sparks:down' first." >&2
             exit 1
@@ -74,4 +79,3 @@ tasks:
           curl -s --max-time 5 http://{{.ITEM}}:8000/v1/models | head -c 160 || true
           curl -s --max-time 5 http://{{.ITEM}}:8888/v1/models | head -c 160 || true
           echo
-

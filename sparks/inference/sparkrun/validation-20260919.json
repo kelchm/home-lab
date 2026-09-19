@@ -1,0 +1,145 @@
+{
+  "date": "2026-09-19",
+  "sparkrun_version": "0.3.9",
+  "overlay_commit": "ca8557665bffa6529758f2c330ba8fb44c1e801a",
+  "image_digest": "sha256:447114ee77d14c9b4732ee23978ada2a0ee9027868a231d6fd42700a8b25be1d",
+  "hardware": "2x NVIDIA DGX Spark GB10",
+  "driver": "580.173.02",
+  "settings": {
+    "max_model_len": 850000,
+    "gpu_memory_utilization": 0.85,
+    "max_num_seqs": 4,
+    "max_num_batched_tokens": 7168,
+    "draft_k": 7,
+    "draft_tp": 2,
+    "nccl_channels": 8,
+    "estimate_cudagraph_memory": false,
+    "load_format": "instanttensor",
+    "ablit": false
+  },
+  "api_checks": [
+    {
+      "name": "basic",
+      "passed": true,
+      "seconds": 0.379
+    },
+    {
+      "name": "tool_call",
+      "passed": true,
+      "seconds": 1.042
+    },
+    {
+      "name": "tool_result",
+      "passed": true,
+      "seconds": 2.001
+    },
+    {
+      "name": "json_schema",
+      "passed": true,
+      "seconds": 0.592
+    },
+    {
+      "name": "reasoning",
+      "passed": true,
+      "seconds": 1.432
+    },
+    {
+      "name": "vision",
+      "passed": true,
+      "seconds": 0.582
+    }
+  ],
+  "decode": {
+    "structured": {
+      "prompt": "structured-count-1-200",
+      "concurrency": 1,
+      "thinking": false,
+      "temperature": 0,
+      "tok_s_median": 67.42641735205733,
+      "ttft_median_s": 0.34476935397833586,
+      "aggregate_tok_s_median": null,
+      "any_nan": false,
+      "health_code_after": 200,
+      "runs": 3
+    },
+    "prose": {
+      "prompt": "hashmap-prose",
+      "concurrency": 1,
+      "thinking": false,
+      "temperature": 0,
+      "tok_s_median": 26.0497252739382,
+      "ttft_median_s": 0.23444688599556684,
+      "aggregate_tok_s_median": null,
+      "any_nan": false,
+      "health_code_after": 200,
+      "runs": 3
+    },
+    "c4": {
+      "prompt": "structured-count-1-200",
+      "concurrency": 4,
+      "thinking": false,
+      "temperature": 0,
+      "tok_s_median": 45.55327265868935,
+      "ttft_median_s": 0.41657578735612333,
+      "aggregate_tok_s_median": 171.06764053363855,
+      "any_nan": false,
+      "health_code_after": 200,
+      "runs": 2
+    }
+  },
+  "coherence": {
+    "paris": {
+      "ok": true,
+      "text": "Paris",
+      "http": 200
+    },
+    "cmp": {
+      "ok": false,
+      "text": "No. 9.9 is greater than 9.11 because 9.9 equals 9.90, and 90 hundredths is more than 11 hundredths.",
+      "http": 200
+    },
+    "sky": {
+      "ok": true,
+      "text": "The sky-blue color of the morning sky stretched endlessly above the quiet hills.",
+      "http": 200
+    },
+    "nan": false
+  },
+  "prefill": [
+    {
+      "prompt_tokens": 8506,
+      "ttft_s": 11.824454772751778,
+      "wall_s": 64.19844374898821,
+      "prefill_tok_s": 719.3566353352029,
+      "text": "BLUEBIRD"
+    },
+    {
+      "prompt_tokens": 8506,
+      "ttft_s": 5.636896909214556,
+      "wall_s": 5.753526239190251,
+      "prefill_tok_s": 1508.9862626537238,
+      "text": "BLUEBIRD"
+    },
+    {
+      "prompt_tokens": 8508,
+      "ttft_s": 5.1981304148212075,
+      "wall_s": 5.304822547826916,
+      "prefill_tok_s": 1636.74231330201,
+      "text": "BLUEBIRD"
+    },
+    {
+      "prompt_tokens": 32561,
+      "ttft_s": 18.895176019053906,
+      "wall_s": 19.106134238187224,
+      "prefill_tok_s": 1723.244068600656,
+      "text": "SILVERFOX"
+    }
+  ],
+  "limitations": [
+    "850k configured context; longest tested prompt 32,561 tokens.",
+    "Non-thinking decimal comparison returned No followed by a correct explanation; retained as a failed coherence probe.",
+    "First 8.5k prompt took 64.20 seconds end to end; later unique prompts were faster.",
+    "Source and image separately pinned; image source commit is not asserted.",
+    "Raw receipts on spark-1 at /home/kelchm/sparkrun/receipts/20260919."
+  ]
+}

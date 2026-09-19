@@ -1,0 +1,140 @@
+recipe_version: '2'
+model: /opt/sparkrun/models/glm53-exl3
+runtime: vllm
+container: ghcr.io/miaai-lab/glm-5.3-flash-2x-dgx-sparks@sha256:447114ee77d14c9b4732ee23978ada2a0ee9027868a231d6fd42700a8b25be1d
+min_nodes: 2
+max_nodes: 2
+metadata:
+  description: GLM-5.3-Flash EXL3/TR3 4 bpw with DFlash2 k=7 on two DGX Sparks
+  model_vram: 164.0
+  kv_dtype: fp8_ds_mla
+  kv_vram_per_token: 7.331371307373047e-06
+  kv_lora_rank: 512
+  overlay_source_revision: ca8557665bffa6529758f2c330ba8fb44c1e801a
+defaults:
+  port: 8888
+  host: 0.0.0.0
+  served_model_name: GLM-5.3-Flash-EXL3
+  tensor_parallel: 2
+  pipeline_parallel: 1
+  distributed_executor_backend: mp
+  gpu_memory_utilization: 0.85
+  max_model_len: 850000
+  max_num_seqs: 4
+  max_num_batched_tokens: 7168
+  quantization: exl3
+  load_format: instanttensor
+  kv_cache_dtype: fp8
+  local_speculative_config: '{"method":"dflash","model":"/opt/sparkrun/models/glm53-dflash2","num_speculative_tokens":7,"kv_cache_dtype":"auto","draft_tensor_parallel_size":2,"draft_sample_method":"probabilistic","rejection_sample_method":"standard"}'
+env:
+  EXL3_FUSED_MOE: '1'
+  EXL3_MOE_ROW_TILE: '0'
+  EXL3_TEMP_ROWS_FUSED: '32'
+  FLASHINFER_CUDA_ARCH_LIST: 12.1a
+  FLASHINFER_DISABLE_VERSION_CHECK: '1'
+  GLM53_MIXED_PREFILL_CHUNK: skip
+  GLM53_SUPPRESS_STOPS_IN_REASONING: '1'
+  NCCL_CROSS_NIC: '0'
+  NCCL_CUMEM_ENABLE: '0'
+  NCCL_IB_MERGE_NICS: '0'
+  NCCL_NET_PLUGIN: none
+  NCCL_NVLS_ENABLE: '0'
+  PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+  TORCH_CUDA_ARCH_LIST: 12.1a
+  VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: '1800'
+  VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS: '0'
+  VLLM_NO_USAGE_STATS: '1'
+  DO_NOT_TRACK: '1'
+  EXL3_FAT_GROUPED: '1'
+  EXL3_FAT_KERNEL: '1'
+  GLM53_INDEXER_WORKSPACE: rightsize
+  GLM53_APC_NO_STORE: '1'
+  GLM53_KV_CAPACITY_LOG: '1'
+  ABLIT: '0'
+  HF_HUB_OFFLINE: '1'
+  TRANSFORMERS_OFFLINE: '1'
+  NCCL_DEBUG: INFO
+  DEFAULT_MAX_NEW_TOKENS: '65536'
+  NCCL_MIN_NCHANNELS: '8'
+  NCCL_MAX_NCHANNELS: '8'
+executor_config:
+  entrypoint: ''
+  user: root
+  shm_size: 32gb
+  cap_add:
+  - IPC_LOCK
+  - SYS_PTRACE
+  ulimit:
+  - memlock=-1:-1
+  - stack=67108864
+  - nofile=65535:65535
+  volumes:
+  - /opt/sparkrun/models/glm53-dflash2:/opt/sparkrun/models/glm53-dflash2:ro
+  - /home/kelchm/sparkrun/mia-glm-ca855766/overlay/patch_glm_video_placeholders.py:/opt/glm53/patch_glm_video_placeholders.py:ro
+  - /home/kelchm/sparkrun/mia-glm-ca855766/overlay/patch_suppress_stops_in_reasoning.py:/opt/glm53/patch_suppress_stops_in_reasoning.py:ro
+  - /home/kelchm/sparkrun/mia-glm-ca855766/overlay/patch_scheduler_decode_floor.py:/opt/glm53/patch_scheduler_decode_floor.py:ro
+  - /home/kelchm/sparkrun/mia-glm-ca855766/overlay/patch_glm5_drafter_group.py:/opt/glm53/patch_glm5_drafter_group.py:ro
+  - /home/kelchm/sparkrun/mia-glm-ca855766/overlay/patch_hybrid_prefix_hit.py:/opt/glm53/patch_hybrid_prefix_hit.py:ro
+  - /home/kelchm/sparkrun/mia-glm-ca855766/overlay/patch_apc_per_group_retention.py:/opt/glm53/patch_apc_per_group_retention.py:ro
+  - /home/kelchm/sparkrun/mia-glm-ca855766/overlay/patch_apc_no_store.py:/opt/glm53/patch_apc_no_store.py:ro
+  - /home/kelchm/sparkrun/mia-glm-ca855766/overlay/patch_kv_capacity_log.py:/opt/glm53/patch_kv_capacity_log.py:ro
+  - /home/kelchm/sparkrun/mia-glm-ca855766/overlay/patch_tool_choice_none.py:/opt/glm53/patch_tool_choice_none.py:ro
+  - /home/kelchm/sparkrun/mia-glm-ca855766/overlay/patch_xgrammar_termination.py:/opt/glm53/patch_xgrammar_termination.py:ro
+  - /home/kelchm/sparkrun/mia-glm-ca855766/overlay/patch_kpool_tail_slotmap.py:/opt/glm53/patch_kpool_tail_slotmap.py:ro
+  - /home/kelchm/sparkrun/mia-glm-ca855766/overlay/patch_spinwait.py:/opt/glm53/patch_spinwait.py:ro
+  - /home/kelchm/sparkrun/mia-glm-ca855766/overlay/patch_adaptive_k.py:/opt/glm53/patch_adaptive_k.py:ro
+  - /home/kelchm/sparkrun/mia-glm-ca855766/overlay/patch_dense_fp8.py:/opt/glm53/patch_dense_fp8.py:ro
+  - /home/kelchm/sparkrun/mia-glm-ca855766/overlay/patch_default_max_new_tokens.py:/opt/glm53/patch_default_max_new_tokens.py:ro
+  - /home/kelchm/sparkrun/mia-glm-ca855766/overlay/patch_indexer_workspace.py:/opt/glm53/patch_indexer_workspace.py:ro
+  - /home/kelchm/sparkrun/mia-glm-ca855766/overlay/patch_cache_reset.py:/opt/glm53/patch_cache_reset.py:ro
+  - /home/kelchm/sparkrun/mia-glm-ca855766/overlay/patch_ablit.py:/opt/glm53/patch_ablit.py:ro
+  - /home/kelchm/sparkrun/mia-glm-ca855766/overlay/exl3.py:/opt/glm53/exl3.py:ro
+  - /home/kelchm/sparkrun/mia-glm-ca855766/overlay/ablit_runtime.py:/opt/glm53/ablit_runtime.py:ro
+  - /home/kelchm/sparkrun/mia-glm-ca855766/files/chat_template.jinja:/opt/glm53/chat_template.jinja:ro
+  - /home/kelchm/sparkrun/mia-glm-ca855766/ablit:/opt/glm53/ablit:ro
+  auto_remove: false
+pre_exec:
+- python3 /opt/glm53/patch_glm_video_placeholders.py
+- python3 /opt/glm53/patch_suppress_stops_in_reasoning.py
+- python3 /opt/glm53/patch_scheduler_decode_floor.py
+- python3 /opt/glm53/patch_glm5_drafter_group.py
+- python3 /opt/glm53/patch_hybrid_prefix_hit.py
+- python3 /opt/glm53/patch_apc_per_group_retention.py
+- python3 /opt/glm53/patch_apc_no_store.py
+- python3 /opt/glm53/patch_kv_capacity_log.py
+- python3 /opt/glm53/patch_tool_choice_none.py
+- python3 /opt/glm53/patch_xgrammar_termination.py
+- python3 /opt/glm53/patch_kpool_tail_slotmap.py
+- python3 /opt/glm53/patch_spinwait.py
+- python3 /opt/glm53/patch_adaptive_k.py
+- python3 /opt/glm53/patch_dense_fp8.py
+- python3 /opt/glm53/patch_default_max_new_tokens.py
+- python3 /opt/glm53/patch_indexer_workspace.py
+- python3 /opt/glm53/patch_cache_reset.py
+- python3 /opt/glm53/patch_ablit.py
+command: |
+  vllm serve {model} \
+    --served-model-name {served_model_name} \
+    --host {host} \
+    --port {port} \
+    --tensor-parallel-size {tensor_parallel} \
+    --pipeline-parallel-size {pipeline_parallel} \
+    --distributed-executor-backend {distributed_executor_backend} \
+    --quantization {quantization} \
+    --load-format {load_format} \
+    --kv-cache-dtype {kv_cache_dtype} \
+    --max-model-len {max_model_len} \
+    --max-num-seqs {max_num_seqs} \
+    --max-num-batched-tokens {max_num_batched_tokens} \
+    --gpu-memory-utilization {gpu_memory_utilization} \
+    --tool-call-parser glm47 \
+    --enable-auto-tool-choice \
+    --reasoning-parser glm45 \
+    --enable-prefix-caching \
+    --no-enable-flashinfer-autotune \
+    --chat-template /opt/glm53/chat_template.jinja \
+    --limit-mm-per-prompt '{"image":4,"video":1}' \
+    --mm-processor-kwargs '{"max_image_tokens":2048}' \
+    --skip-mm-profiling \
+    --cudagraph-capture-sizes 1 2 4 8 16 24 32 \
+    --speculative-config '{local_speculative_config}'

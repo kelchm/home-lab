@@ -2,9 +2,13 @@
 
 Temporary, operator-driven deployment of the two DGX Spark hosts. Hardware bring-up (network, RDMA, fabric isolation) lives in [`docs/runbooks/dgx-spark-bringup.md`](../docs/runbooks/dgx-spark-bringup.md); this directory covers what runs *on* them.
 
-**Not GitOps.** These hosts are outside Flux and outside Talos automation. The stack is committed here and pushed over SSH with `task sparks:*`. That is a deliberate placeholder for the deploy model in [`docs/plans/20260620-nas-out-of-cluster-workloads.md`](../docs/plans/20260620-nas-out-of-cluster-workloads.md) — when doco-cd lands, it can consume `sparks/inference/compose.yaml` unchanged.
+**Not GitOps.** These hosts are outside Flux and outside Talos automation. SparkRun manages the current GLM deployment; the older Compose stack uses `task sparks:*` over SSH. Recipes and site configuration are recorded here. The Compose workflow is a deliberate placeholder for the deploy model in [`docs/plans/20260620-nas-out-of-cluster-workloads.md`](../docs/plans/20260620-nas-out-of-cluster-workloads.md) — when doco-cd lands, it can consume `sparks/inference/compose.yaml` unchanged.
 
 ## What runs today
+
+GLM 5.3 Flash EXL3/DFlash2 now runs across both Sparks through **SparkRun**, at `http://10.32.21.31:8888/v1`, served model `GLM-5.3-Flash-EXL3`. See [`inference/sparkrun/`](inference/sparkrun/) for the pinned recipe, launch/stop commands and validation. Vonk remains disabled. The older Qwen and DeepSeek deployments below are retained alternatives and are not running alongside GLM.
+
+## Retained Qwen and DeepSeek alternatives
 
 | | |
 |---|---|
@@ -25,10 +29,10 @@ task sparks:logs HOST=10.32.21.31
 task sparks:down HOST=10.32.21.31     # full teardown
 ```
 
-`task sparks:down` stops both routes on **both** hosts. To reclaim disk as well, on each host:
+`task sparks:down` stops the retained Qwen and DeepSeek routes on **both** hosts; it does not stop SparkRun. Use the SparkRun stop command in its runbook first. The cleanup below belongs to the older deployments; `/opt/spark-cache` is also used by SparkRun, so retain it while SparkRun is in use. To reclaim the older deployments' disk when no longer needed, on each host:
 
 ```sh
-sudo rm -rf /opt/spark-models /opt/spark-stack /opt/spark-cache
+sudo rm -rf /opt/spark-models /opt/spark-stack
 rm -rf ~/dspark-guide
 # Only the images this work pulled or built - `prune -a` would take unrelated ones.
 docker rmi vllm-dspark-runtime:dspark-nvfp4-stage-c \
