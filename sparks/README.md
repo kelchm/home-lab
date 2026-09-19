@@ -20,13 +20,13 @@ GLM 5.3 Flash EXL3/DFlash2 now runs across both Sparks through **SparkRun**, at 
 
 A second route runs `deepseek-ai/DeepSeek-V4-Flash-0731` across **both** nodes at tensor-parallel 2 on **:8888** — see [`inference/deepseek/`](inference/deepseek/). It is not deployed from this repo: it runs [tonyd2wild's DSpark guide](https://github.com/tonyd2wild/DeepSeek-v4-Flash-0731-DSpark-1M-NVFP4-KV-2x-DGX-Spark) cloned onto each host, which builds its own runtime image locally. This directory carries only the site overrides. The two routes are mutually exclusive: TP=2 claims both hosts. Spark's unified memory disables GPUDirect RDMA, so NCCL all-reduce over the ConnectX-7 fabric runs far below raw RDMA line rate — two independent single-node servers beat tensor-parallel for any model that fits in one node. Reach for TP=2 only for models that genuinely exceed ~104 GB.
 
-## Operating it
+## Operating the retained Compose alternatives
 
 ```sh
 task sparks:deploy HOST=10.32.21.31   # push compose + start
 task sparks:status                    # both nodes: GPU, containers, endpoint
 task sparks:logs HOST=10.32.21.31
-task sparks:down HOST=10.32.21.31     # full teardown
+task sparks:down                     # both legacy routes on both hosts
 ```
 
 `task sparks:down` stops the retained Qwen and DeepSeek routes on **both** hosts; it does not stop SparkRun. Use the SparkRun stop command in its runbook first. The cleanup below belongs to the older deployments; `/opt/spark-cache` is also used by SparkRun, so retain it while SparkRun is in use. To reclaim the older deployments' disk when no longer needed, on each host:

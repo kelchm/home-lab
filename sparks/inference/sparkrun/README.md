@@ -1,99 +1,71 @@
-# GLM 5.3 Flash with SparkRun
+# Mia GLM-5.3-Flash through SparkRun
 
-This is the site-specific SparkRun deployment for `spark-1` (`10.32.21.31`) and `spark-2` (`10.32.21.32`). Both nodes are outside Flux. Vonk services remain stopped and disabled; its packages, model cache and rollback data are retained.
+Two DGX Sparks serve `GLM-5.3-Flash-EXL3` at `http://10.32.21.31:8888/v1`. SparkRun 0.3.9 owns model/image distribution, fabric detection, containers, runtime caches, readiness, warmup, logs, stop, and standard benchmarking. These hosts are outside Flux. Vonk, Qwen and DeepSeek remain stopped.
 
-## Pins
+## Deploy
 
-- SparkRun: `0.3.9`, installed in `/home/kelchm/.local/share/sparkrun-venv` on spark-1, with `~/.local/bin/sparkrun` pointing to its executable.
-- Mia source: [`ca8557665bffa6529758f2c330ba8fb44c1e801a`](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks/tree/ca8557665bffa6529758f2c330ba8fb44c1e801a), staged at `/home/kelchm/sparkrun/mia-glm-ca855766` on both nodes. The recipe mounts that source's overlays and chat template into the published image.
-- Published InstantTensor image: `ghcr.io/miaai-lab/glm-5.3-flash-2x-dgx-sparks@sha256:447114ee77d14c9b4732ee23978ada2a0ee9027868a231d6fd42700a8b25be1d`. This is an immutable registry digest, not a claim that the image was built from the overlay commit above.
-- Target weights: EXL3/TR3 4bpw, 120 shards, 175,642,157,752 bytes, at `/opt/sparkrun/models/glm53-exl3` on both nodes.
-- DFlash2 weights: upstream revision `dc77ff1c99eeb2df044ee3d4f0094eb033fee410`, one shard, 2,342,169,800 bytes, at `/opt/sparkrun/models/glm53-dflash2-dc77ff1c` on both nodes. SHA-256: `b33c03475ba7322cf398828f2d8d1be376df30dc05c6b40c28c8ea8da23e410b`.
-
-The target and retained old draft directories are independent directory trees with hardlinked files from retained Vonk installation `17b3f02c-b091-42fc-9423-c7ba6c06ce9c`. The parity audit downloaded the pinned draft into a new independent directory because the retained draft did not match upstream. All 120 target shards were verified against the upstream manifest on both nodes. Treat these files as immutable: in-place edits would affect both links. Removing one directory tree does not remove the other links. Container root can read the retained file permissions; no recursive file ownership or permission changes were applied.
-
-The saved `sparks` cluster has hosts `10.32.21.31,10.32.21.32`, SSH user `kelchm`, greedy scheduling, cache `/opt/spark-cache/huggingface`, and management-network image transfers. SparkRun detects the two ConnectX-7 adapters for inference communication. Management transfers avoid unknown fabric-address SSH host keys; they do not select the inference transport.
-
-## Site settings
-
-The [upstream parity audit](upstream-audit-20260919.md) records the corrected recipe, verified matches and intentional site differences. The configuration uses upstream `fair` scheduling, its 48-image/1-video limit and 1 GiB multimodal processor cache, persistent TileLang cache, and post-ready shape warmup. It keeps InstantTensor, 850,000 context, 0.85 memory utilization, four sequences, 7,168-token batches, DFlash2 k=7 with draft TP=2, FP8 KV, E3 grouped prefill, and unmodified target weights (`ABLIT=0`). It applies two supported settings: `NCCL_MIN_NCHANNELS=NCCL_MAX_NCHANNELS=8` (Mia's `NCCL_NCHANNELS=8`) and `VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0` (Mia's `CG_ESTIMATE=0`). The latter disables the memory estimate, not CUDA graphs.
-
-Before the parity correction, the first direct SparkRun attempt with automatic channel selection (64 channels) and graph estimation enabled failed with 9.98 GiB available KV against 13.46 GiB required. The two memory overrides passed allocation on that original deployment with 14.47 GiB available KV and a reported 913,909-token capacity equivalent. These two changes were tested together; this is not an isolated measurement of either change's contribution. InstantTensor weight loading took 34.49 seconds on the head. Neither the loader nor the serving framework was patched locally.
-
-The reported capacity equivalent does not mean that much reusable prefix cache: the hybrid model's boot log reports approximately 53,760 tokens of aligned idle cached-conversation capacity with dense retention. Similarly, SparkRun's prelaunch memory estimate is approximate and does not replace vLLM's actual hybrid-KV allocation check. An 850k configured context is not evidence of a successful full-length workload test.
-
-## Operations
-
-Run on spark-1:
+On the workstation, copy this directory to the head; on a fresh control host install SparkRun 0.3.9 and uv (the benchmark runner needs `uvx` on PATH). Keep the relative mod directory beside the recipe. The worker needs no Mia source checkout.
 
 ```sh
-~/.local/bin/sparkrun run ~/sparkrun/recipes/mia-glm53-exl3.yaml --cluster sparks --no-auto-detect --no-sync-tuning --no-follow
-~/.local/bin/sparkrun status --cluster sparks
-~/.local/bin/sparkrun logs ~/sparkrun/recipes/mia-glm53-exl3.yaml --cluster sparks
-~/.local/bin/sparkrun stop ~/sparkrun/recipes/mia-glm53-exl3.yaml --cluster sparks
+rsync -a --exclude evidence --exclude __pycache__ sparks/inference/sparkrun/ kelchm@10.32.21.31:sparkrun/recipes/glm53/
+ssh kelchm@10.32.21.31
+export PATH="$HOME/.local/bin:$PATH"
+cd ~/sparkrun/recipes/glm53
+python3 mods/mia-glm53/prepare.py
+sparkrun run ./mia-glm53-exl3.yaml --cluster sparks --no-auto-detect --no-sync-tuning --no-follow --dry-run
+# Stop the current workload before running the candidate on these same GPUs.
+sparkrun run ./mia-glm53-exl3.yaml --cluster sparks --no-auto-detect --no-sync-tuning --no-follow
 ```
 
-`run` creates detached containers, waits for readiness, and runs upstream shape warmup through `post_exec`. A warmup failure surfaces as a failed launch command; inspect its output and serving logs. Run the API acceptance checks separately. Check `http://10.32.21.31:8888/health`, then use the verification and benchmark steps below. Do not run a second inference workload on either node while this two-node recipe is active.
+The saved `sparks` cluster uses head `10.32.21.31`, worker `10.32.21.32`, SSH user `kelchm`, cache `/opt/spark-cache/huggingface`, greedy placement, management-network transfers, and `transfer_mode: auto`. Set the latter with `sparkrun cluster update sparks --transfer-mode auto`. SparkRun downloads missing pinned models into its cache and synchronizes them to the worker; populated caches are reused. Initial provisioning can transfer about 164 GiB over management Ethernet. The optional `pull` path in 0.3.9 fails at image distribution with an unexpected `ssh_options` argument, so it is not used. SparkRun still detects both CX7 rails for inference. On fresh hosts create the cache directory owned by the SSH user and ensure Docker and SSH access first. SparkRun clears host page cache after distribution; its sudo cache-clear operation must be available (use `sparkrun setup clear-cache --cluster sparks --save-sudo` if it reports a permissions failure).
 
-The API base URL is `http://10.32.21.31:8888/v1`; the served model is `GLM-5.3-Flash-EXL3`. This direct LAN endpoint does not use Vonk's proxy or client credentials. Containers do not automatically restart after a host reboot; use the launch command after both hosts are ready.
+`prepare.py` fetches only the reviewed upstream files, verifies every checksum in `upstream.lock.json`, and materializes an ignored `upstream/` directory. It does not launch anything or manage weights. SparkRun's native `mods` mechanism copies that bundle into both containers; `run.sh` verifies it again and applies Mia's ordered patches. A missing or modified file fails before serving. The pinned image supplies compiled kernels. No custom loader, service supervisor, or Docker launcher is maintained here.
 
-The retained Vonk INPUT chain blocks port 8888 except from localhost and its controller. A separate INPUT rule permits only workstation `10.32.10.244/32` to `10.32.21.31:8888` via `enP7s7`, tagged `sparkrun-glm-workstation`; no Vonk chains were flushed. The rule is a live iptables change, not a new persistent firewall service. Check access after host reboot or a workstation address change. Its exact removal command on spark-1 is:
+For an upstream update, review the image, launcher, runtime files and tests together; update the source revision and file hashes in the lock, update recipe metadata, and rerun parity and live acceptance. Do not update the lock merely to silence a checksum failure. Stop/relaunch after mod updates and use fresh benchmark runs: SparkRun fingerprints the declared mod reference, not its file contents. `check_upstream.py /path/to/pinned/mia` (PyYAML) checks upstream defaults, patch ordering and deliberate site settings.
+
+For a fresh head (after Docker, SSH and cache-directory provisioning), the equivalent tool/cluster setup is:
 
 ```sh
-sudo iptables -D INPUT -i enP7s7 -s 10.32.10.244/32 -d 10.32.21.31/32 -p tcp --dport 8888 -m comment --comment sparkrun-glm-workstation -j ACCEPT
+python3 -m venv ~/.local/share/sparkrun-venv
+~/.local/share/sparkrun-venv/bin/pip install sparkrun==0.3.9 uv==0.12.6
+export PATH="$HOME/.local/share/sparkrun-venv/bin:$PATH"
+sparkrun cluster create sparks --hosts 10.32.21.31,10.32.21.32 --user kelchm --cache-dir /opt/spark-cache/huggingface --transfer-mode auto --transfer-interface mgmt --scheduler greedy
 ```
 
-## Verification
+## Serving profile and memory
 
-The [post-audit validation](upstream-validation-20260919.json) records the current corrected deployment: upstream shape warmup completed, all six API checks and a five-image request passed, and the staggered newcomer received its first token in 0.865 seconds while the original response continued. Boot reported 15.03 GiB KV / 944,266 equivalent tokens. See the [parity audit](upstream-audit-20260919.md) for scope and limits.
+[Recipe](mia-glm53-exl3.yaml): InstantTensor 0.2.0, EXL3/TR3 target, TP2, DFlash2 k=7 with draft TP2, 850,000 context, four sequences, 7,168-token batches, FP8 KV, E3 grouped prefill, CUDA graphs enabled, `fair` mixed-prefill scheduling, and abliteration disabled. Image, target and draft are immutable pins. The current Mia source pin has identical runtime files to the previous `ca855766` pin; its intervening change is launcher override reporting.
 
-The [initial 2026-09-19 validation summary](validation-20260919.json) records the deployment **before the parity correction**, using the old draft and `skip` scheduling. Its measurements below are historical. All six API checks passed both on spark-1 and from the workstation: arithmetic output, automatic tool call, tool-result round trip, JSON schema, reasoning output, and image input. Both containers remained running after the benchmarks.
+The 2 GiB `INSTANTTENSOR_BUFFER_SIZE` replaces the installed loader's 4 GiB TP2 default I/O buffer. InstantTensor automatically reduces I/O depth to fit; the largest target tensor is 1,268,776,960 bytes. This is a loading allocation, not a promise of 2 GiB lower steady-state RAM. The separate 14 GiB `kv_cache_memory_bytes` setting bounds the serving KV pool instead of allowing `.85` utilization to consume reclaimed memory. With an explicit KV size vLLM uses that size rather than deriving the pool from utilization. Eight NCCL channels, right-sized indexer workspace, 1 GiB multimodal processor cache, and graph estimation disabled remain; graph execution is enabled. The latest [evaluation](evidence/20260919-integration/README.md) records the measurements and limits.
 
-| Workload | Samples | Measured result |
-|---|---|---|
-| Structured decode, C1, 400 output tokens | 3 | 67.4 tok/s median; 0.345 s median TTFT |
-| Prose decode, C1, 400 output tokens | 3 | 26.0 tok/s median; 0.234 s median TTFT |
-| Structured decode, C4, 400 tokens/request | 2 batches | 171.1 aggregate tok/s; 45.6 median stream tok/s |
-| Unique ~8.5k-token prompts after first sample | 2 | 1,509–1,637 prompt tok/s; correct marker retrieval |
-| Unique 32,561-token prompt | 1 | 1,723 prompt tok/s; 18.90 s TTFT; correct marker retrieval |
+SparkRun’s fit estimate does not account for the full hybrid cache state; vLLM’s actual allocation and host telemetry determine fit. The synthetic 850k-budget request completed correctly, with five KV preemptions/replays; this is not an uninterrupted-prefill guarantee. 850k is a per-request ceiling, not four guaranteed simultaneous 850k requests. The hybrid cache also has much smaller idle prefix retention than its advertised equivalent-token capacity. Multimodal configuration remains upstream's 48 images/1 video with 2048 tokens/image; configured maxima are not a workload qualification.
 
-Decode uses Mia's `tests/bench_decode.py`, temperature 0 and thinking off. Its published stock reference is approximately 63–65 tok/s structured and 27 tok/s prose on two Sparks; these measurements are broadly consistent. The first 8.5k prompt was an outlier: 11.82 s TTFT and 64.20 s end-to-end for four output tokens, versus 5.30–5.75 s end-to-end for the following unique prompts. Its precise cause was not isolated. No full 850k request was tested.
+## Operate and validate
 
-The upstream coherence probe has one recorded failure: with thinking off, the model answered “No” to whether 9.9 exceeds 9.11, then correctly explained that 9.90 exceeds 9.11. The Paris and sky-color probes passed. This is a model-output limitation, not a clean quality-gate pass. Raw receipts live at `/home/kelchm/sparkrun/receipts/20260919` on spark-1 and the ignored `.private/sparkrun-20260919` directory in the deployment checkout.
-
-From this checkout:
+On the head, from `~/sparkrun/recipes/glm53`:
 
 ```sh
-python3 sparks/inference/sparkrun/verify.py --out /tmp/glm53-api-acceptance.json
+sparkrun status --cluster sparks
+sparkrun logs ./mia-glm53-exl3.yaml --cluster sparks
+sparkrun stop ./mia-glm53-exl3.yaml --cluster sparks
+# Against an already running instance; never submit to Spark Arena implicitly.
+sparkrun benchmark ./mia-glm53-exl3.yaml --cluster sparks --skip-run --no-stop --fresh --profile ./benchmark.yaml --output /tmp/glm53-benchmark.yaml
+python3 verify.py --url http://127.0.0.1:8888 --out /tmp/glm53-api.json
+python3 mixed_workload.py --url http://127.0.0.1:8888 --out /tmp/glm53-mixed.json
+# Optional expensive boundary qualification; run alone, after the bounded checks.
+python3 long_context.py --url http://127.0.0.1:8888 --out /tmp/glm53-long.json
 ```
 
-For upstream's bounded decode benchmarks, run on spark-1:
+Run the profile on the head; its tokenizer path follows the saved cluster cache directory (adjust it if that cache moves). The native benchmark sweeps 2k/32k prompts at C1/C4 with the tokenizer from the pinned native cache snapshot, warmups and two measured repetitions. The complementary SSE probe submits a short newcomer and a roughly 36k prompt during an existing long decode, records TTFT/delivery gaps, and requires short-newcomer content before the original finishes. Its short-request threshold is five seconds; the longer prefill may finish later and its timings are reported without an artificial latency pass threshold. It is a behavioral regression check, not a benchmark framework.
 
-```sh
-python3 ~/sparkrun/mia-glm-ca855766/tests/bench_decode.py --phase structured --structured --runs 3 --max-tokens 400 --out /tmp/glm53-structured.json
-python3 ~/sparkrun/mia-glm-ca855766/tests/bench_decode.py --phase prose --runs 3 --max-tokens 400 --out /tmp/glm53-prose.json
-python3 ~/sparkrun/mia-glm-ca855766/tests/bench_decode.py --phase concurrent --structured --concurrency 4 --runs 2 --max-tokens 400 --out /tmp/glm53-c4.json
-```
+`run --no-follow` still waits for readiness and upstream shape warmup because the recipe has `post_exec`. A failed hook makes the command fail but does not automatically stop the server; inspect logs and stop the failed candidate before rollback. Containers do not automatically restart after a host reboot. Start again with SparkRun after both hosts are ready. Persistent caches are managed by SparkRun under the head/worker user's cache directory.
 
-## NCCL comparison, 2026-09-19
+The endpoint is unauthenticated on the trusted LAN. The existing, nonpersistent INPUT exception permits workstation `10.32.10.244/32` to head port 8888 via `enP7s7`; retained Vonk firewall rules remain. Check access after a host reboot or workstation address change. This work does not introduce another firewall manager.
 
-This historical comparison predates the parity correction and used the old draft checkpoint. A controlled 8 → 16 → 8 channel run kept InstantTensor, the image and overlays, 850k context, 0.85 utilization, graph estimation disabled, and `GLM53_MIXED_PREFILL_CHUNK=skip` fixed. The [comparison summary](benchmark-20260919-nccl.json) records medians and ranges. Each phase excluded one warmup per workload, then measured three 400-token decode requests and two unique-prefix ~32.6k-token prompts. An initial identical-prompt prefill series showed cache effects and was excluded.
+## Rollback and retained data
 
-| Measurement | 8 channels before | 16 channels | 8 channels restored |
-|---|---:|---:|---:|
-| Structured decode, tok/s | 64.1 | 64.8 | 64.1 |
-| Prose decode, tok/s | 26.0 | 27.3 | 27.4 |
-| Uncached ~32.6k prompt TTFT, seconds | 19.14 | 18.70 | 19.08 |
-| Available KV, GiB | 14.47 | 13.52 | 14.68 |
-| Reported capacity equivalent, tokens | 913,909 | 853,195 | 925,093 |
-| Usable KV block IDs (532 required at 850k) | 571 | 533 | 578 |
+Before replacing a working recipe, retain its exact YAML, mod bundle and logs under `~/sparkrun/receipts/`. Stop the candidate with its own recipe path, then run the retained recipe through SparkRun. Do not run two workloads on these GPUs.
 
-Eight channels remains deployed. The decode ranges overlap, prose speculative acceptance varies, and the approximately 2% prefill difference is too small in this sample to justify the reduced KV margin. Allocation varies slightly between launches, but the restored eight-channel run recovered the margin. Six API acceptance checks passed after restoration; both hosts remained healthy. This experiment did not retest 64 channels or execute a full 850k request. Raw results, the harness, and serving logs are retained at `/home/kelchm/sparkrun/receipts/nccl-comparison` on spark-1 and `.private/nccl-comparison` in this checkout.
+The permanent deployment path is `~/sparkrun/recipes/glm53/mia-glm53-exl3.yaml`; the old top-level deployed YAML was archived to avoid leaving two apparently current launch recipes. For this transition the original working recipe is retained at `~/sparkrun/receipts/integration-20260919/baseline.yaml`, with its original Mia checkout and `/opt/sparkrun/models/` paths on both hosts. Stop the current recipe, then run that baseline with the same cluster and launch flags. Its recipe fingerprint differs from the new recipe; stop/status/log commands must address the appropriate recipe. `cluster-before.yaml` records the old transfer configuration if needed.
 
-Earlier concurrency tests also exposed an independent limitation of `GLM53_MIXED_PREFILL_CHUNK=skip`: a one-word question submitted two seconds into a prose response waited 20.3 seconds for its first token. Mixed-topic four-request batches reached approximately 37 aggregate tok/s with 23–25 second waits for three requests, versus approximately 56 aggregate tok/s for repeated prompts admitted together. The pinned scheduler explicitly defers prefill while a peer decodes in `skip` mode. The parity correction switches to upstream `fair`; changing NCCL channels alone does not address this policy.
-
-## Reprovisioning
-
-The YAML intentionally contains site-specific absolute mounts. Copy it to `~/sparkrun/recipes/mia-glm53-exl3.yaml` on spark-1. Stage the exact Mia commit at the path above on both nodes and verify both model inventories before launching. On fresh hosts, obtain the target and draft snapshots through Mia's documented download process; this recipe skips download because its model is an absolute local path.
-
-To roll back this deployment, stop it with SparkRun. That frees both GPUs while preserving all caches. Re-enabling Vonk is a separate operation and is not part of this rollback.
+A one-time hash-verified import populated standard HF `hub/models--…/blobs` and pinned snapshot symlinks from the retained models, without redownloading their weights. These blobs are hardlinked to the old immutable files: do not edit them in place. SparkRun normalized cache ownership during native synchronization, which also changes ownership of those retained links; the root-run baseline remains readable. Fresh provisioning uses SparkRun's native downloads; the import is not required. Removing one link does not remove the retained weight data. Historical pre-integration results are isolated under [baseline evidence](evidence/20260919-baseline/).

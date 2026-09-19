@@ -5,6 +5,7 @@ This complements the manual audit and live/checkpoint checks; it does not claim
 that static YAML can prove image contents, checkpoint bytes, or runtime defaults.
 """
 import argparse
+import hashlib
 import json
 import re
 import shlex
@@ -48,13 +49,26 @@ for key, expected in {"NCCL_MIN_NCHANNELS":"8", "NCCL_MAX_NCHANNELS":"8", "VLLM_
 for key in r["env"]:
     if key in up and key not in {"TILELANG_CACHE_DIR"}:
         check(key, str(r["env"][key]), up[key])
+check("model id", r["model"], "Mia-AiLab/GLM-5.3-Flash-EXL3-TR3-4bpw")
+check("native target pin", r["model_revision"], up["MODEL_REVISION"])
+check("serve target pin", r["defaults"]["revision"], up["MODEL_REVISION"])
+check("native models", r["distribution_config"]["models"]["entries"], [
+    {"name": r["model"], "revision": up["MODEL_REVISION"], "target": [-1]},
+    {"name": "incoai/GLM-5.3-Flash-DFlash2", "revision": up["DFLASH_REVISION"], "target": [-1]},
+])
+check("InstantTensor buffer", r["env"]["INSTANTTENSOR_BUFFER_SIZE"], "2147483648")
+check("KV pool bytes", r["defaults"]["kv_cache_memory_bytes"], 15032385536)
+lock = json.loads((args.recipe.parent / "mods/mia-glm53/upstream.lock.json").read_text())
+check("mod source pin", lock["revision"], head)
+for name, digest in lock["files"].items():
+    check(f"mod checksum {name}", hashlib.sha256((args.upstream / name).read_bytes()).hexdigest(), digest)
 check("target revision", r["metadata"]["target_model_revision"], up["MODEL_REVISION"])
 check("draft revision", r["metadata"]["draft_model_revision"], up["DFLASH_REVISION"])
 spec = json.loads(r["defaults"]["local_speculative_config"])
 check("speculator", spec["method"], up["SPEC_METHOD"])
 check("draft length", str(spec["num_speculative_tokens"]), up["DFLASH_TOKENS"])
 check("draft TP", str(spec["draft_tensor_parallel_size"]), up["DFLASH_DRAFT_TP"])
-check("draft path revision", Path(spec["model"]).name, "glm53-dflash2-" + up["DFLASH_REVISION"][:8])
+check("draft path revision", Path(spec["model"]).name, up["DFLASH_REVISION"])
 command = r["command"]
 for key, value in r["defaults"].items():
     command = command.replace("{" + key + "}", str(value))
@@ -66,12 +80,14 @@ check("MM cache", flag("--mm-processor-cache-gb"), up["MM_PROCESSOR_CACHE_GB"])
 check("image token limit", json.loads(flag("--mm-processor-kwargs"))["max_image_tokens"], int(up["MM_IMAGE_TOKENS"]))
 for flag_name in ["--enable-auto-tool-choice", "--enable-prefix-caching", "--no-enable-flashinfer-autotune", "--skip-mm-profiling"]:
     check(flag_name, flag_name in tokens, True)
+check("serve revision flag", flag("--revision"), up["MODEL_REVISION"])
+check("serve KV cap", flag("--kv-cache-memory-bytes"), "15032385536")
 check("tool parser", flag("--tool-call-parser"), "glm47")
 check("reasoning parser", flag("--reasoning-parser"), "glm45")
 a = start.index("    patch_glm_video_placeholders.py\n")
 b = start.index("\n)", a)
 patches = re.findall(r"^    (patch_\w+\.py)$", start[a:b], re.M)
-check("patch sequence", [x.split("/")[-1] for x in r["pre_exec"] if x.startswith("python3 ")], patches)
+check("patch sequence", [Path(x).name for x in json.loads((args.recipe.parent / "mods/mia-glm53/upstream.lock.json").read_text())["patches"]], patches)
 check("TileLang persistence", r["env"].get("TILELANG_CACHE_DIR"), "/cache/runtime/tilelang")
 check("post-ready warmup", any("boot-shape-warmup.sh" in x for x in r.get("post_exec", [])), True)
 check("upstream IPC", r["executor_config"].get("ipc"), "host")

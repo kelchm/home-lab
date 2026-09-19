@@ -47,7 +47,7 @@ tasks:
 
 
   down:
-    desc: Stop and remove every inference stack on BOTH Sparks
+    desc: Stop retained Qwen/DeepSeek stacks on BOTH Sparks (not SparkRun)
     cmds:
       - for: {var: SPARK_HOSTS}
         cmd: |
@@ -59,7 +59,7 @@ tasks:
 
 
   logs:
-    desc: Tail logs of whichever inference stack is running [HOST=required]
+    desc: Tail retained Qwen/DeepSeek logs [HOST=required]
     cmd: |
       ssh {{.HOST}} 'c=$(docker ps -q --filter "name={{.DSPARK_PROJECT}}" --filter "name={{.QWEN_CONTAINER}}" | head -1);
         [ -n "$c" ] || { echo "no inference container running on this host" >&2; exit 1; }

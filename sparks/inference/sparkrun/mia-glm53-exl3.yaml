@@ -1,6 +1,7 @@
+# Pinned Mia runtime via a SparkRun mod; prepare the mod before launch (README.md).
 recipe_version: '2'
-model: /opt/sparkrun/models/glm53-exl3
-runtime: vllm
+model: Mia-AiLab/GLM-5.3-Flash-EXL3-TR3-4bpw
+runtime: vllm-distributed
 container: ghcr.io/miaai-lab/glm-5.3-flash-2x-dgx-sparks@sha256:447114ee77d14c9b4732ee23978ada2a0ee9027868a231d6fd42700a8b25be1d
 min_nodes: 2
 max_nodes: 2
@@ -10,7 +11,7 @@ metadata:
   kv_dtype: fp8_ds_mla
   kv_vram_per_token: 7.331371307373047e-06
   kv_lora_rank: 512
-  overlay_source_revision: ca8557665bffa6529758f2c330ba8fb44c1e801a
+  overlay_source_revision: 11f6cd45d39d860e290362e22fb5df9ef42196e2
   target_model_revision: 25a44fdbf16862a46b7cc9921142c6c81350af2f
   draft_model_revision: dc77ff1c99eeb2df044ee3d4f0094eb033fee410
 defaults:
@@ -27,7 +28,9 @@ defaults:
   quantization: exl3
   load_format: instanttensor
   kv_cache_dtype: fp8
-  local_speculative_config: '{"method":"dflash","model":"/opt/sparkrun/models/glm53-dflash2-dc77ff1c","num_speculative_tokens":7,"kv_cache_dtype":"auto","draft_tensor_parallel_size":2,"draft_sample_method":"probabilistic","rejection_sample_method":"standard"}'
+  kv_cache_memory_bytes: 15032385536
+  local_speculative_config: '{"method":"dflash","model":"/cache/huggingface/hub/models--incoai--GLM-5.3-Flash-DFlash2/snapshots/dc77ff1c99eeb2df044ee3d4f0094eb033fee410","num_speculative_tokens":7,"kv_cache_dtype":"auto","draft_tensor_parallel_size":2,"draft_sample_method":"probabilistic","rejection_sample_method":"standard"}'
+  revision: 25a44fdbf16862a46b7cc9921142c6c81350af2f
 env:
   EXL3_FUSED_MOE: '1'
   EXL3_MOE_ROW_TILE: '0'
@@ -72,6 +75,7 @@ env:
   DEFAULT_MAX_NEW_TOKENS: '65536'
   NCCL_MIN_NCHANNELS: '8'
   NCCL_MAX_NCHANNELS: '8'
+  INSTANTTENSOR_BUFFER_SIZE: '2147483648'
 executor_config:
   entrypoint: ''
   user: root
@@ -86,59 +90,15 @@ executor_config:
   - memlock=-1:-1
   - stack=67108864
   - nofile=65535:65535
-  volumes:
-  - /home/kelchm/sparkrun/mia-glm-ca855766/scripts/boot-shape-warmup.sh:/opt/glm53/boot-shape-warmup.sh:ro
-  - /opt/sparkrun/models/glm53-dflash2-dc77ff1c:/opt/sparkrun/models/glm53-dflash2-dc77ff1c:ro
-  - /home/kelchm/sparkrun/mia-glm-ca855766/overlay/patch_glm_video_placeholders.py:/opt/glm53/patch_glm_video_placeholders.py:ro
-  - /home/kelchm/sparkrun/mia-glm-ca855766/overlay/patch_suppress_stops_in_reasoning.py:/opt/glm53/patch_suppress_stops_in_reasoning.py:ro
-  - /home/kelchm/sparkrun/mia-glm-ca855766/overlay/patch_scheduler_decode_floor.py:/opt/glm53/patch_scheduler_decode_floor.py:ro
-  - /home/kelchm/sparkrun/mia-glm-ca855766/overlay/patch_glm5_drafter_group.py:/opt/glm53/patch_glm5_drafter_group.py:ro
-  - /home/kelchm/sparkrun/mia-glm-ca855766/overlay/patch_hybrid_prefix_hit.py:/opt/glm53/patch_hybrid_prefix_hit.py:ro
-  - /home/kelchm/sparkrun/mia-glm-ca855766/overlay/patch_apc_per_group_retention.py:/opt/glm53/patch_apc_per_group_retention.py:ro
-  - /home/kelchm/sparkrun/mia-glm-ca855766/overlay/patch_apc_no_store.py:/opt/glm53/patch_apc_no_store.py:ro
-  - /home/kelchm/sparkrun/mia-glm-ca855766/overlay/patch_kv_capacity_log.py:/opt/glm53/patch_kv_capacity_log.py:ro
-  - /home/kelchm/sparkrun/mia-glm-ca855766/overlay/patch_tool_choice_none.py:/opt/glm53/patch_tool_choice_none.py:ro
-  - /home/kelchm/sparkrun/mia-glm-ca855766/overlay/patch_xgrammar_termination.py:/opt/glm53/patch_xgrammar_termination.py:ro
-  - /home/kelchm/sparkrun/mia-glm-ca855766/overlay/patch_kpool_tail_slotmap.py:/opt/glm53/patch_kpool_tail_slotmap.py:ro
-  - /home/kelchm/sparkrun/mia-glm-ca855766/overlay/patch_spinwait.py:/opt/glm53/patch_spinwait.py:ro
-  - /home/kelchm/sparkrun/mia-glm-ca855766/overlay/patch_adaptive_k.py:/opt/glm53/patch_adaptive_k.py:ro
-  - /home/kelchm/sparkrun/mia-glm-ca855766/overlay/patch_dense_fp8.py:/opt/glm53/patch_dense_fp8.py:ro
-  - /home/kelchm/sparkrun/mia-glm-ca855766/overlay/patch_default_max_new_tokens.py:/opt/glm53/patch_default_max_new_tokens.py:ro
-  - /home/kelchm/sparkrun/mia-glm-ca855766/overlay/patch_indexer_workspace.py:/opt/glm53/patch_indexer_workspace.py:ro
-  - /home/kelchm/sparkrun/mia-glm-ca855766/overlay/patch_cache_reset.py:/opt/glm53/patch_cache_reset.py:ro
-  - /home/kelchm/sparkrun/mia-glm-ca855766/overlay/patch_ablit.py:/opt/glm53/patch_ablit.py:ro
-  - /home/kelchm/sparkrun/mia-glm-ca855766/overlay/exl3.py:/opt/glm53/exl3.py:ro
-  - /home/kelchm/sparkrun/mia-glm-ca855766/overlay/ablit_runtime.py:/opt/glm53/ablit_runtime.py:ro
-  - /home/kelchm/sparkrun/mia-glm-ca855766/files/chat_template.jinja:/opt/glm53/chat_template.jinja:ro
-  - /home/kelchm/sparkrun/mia-glm-ca855766/ablit:/opt/glm53/ablit:ro
   auto_remove: false
 pre_exec:
 - mkdir -p /cache/runtime/tilelang
-- python3 /opt/glm53/patch_glm_video_placeholders.py
-- python3 /opt/glm53/patch_suppress_stops_in_reasoning.py
-- python3 /opt/glm53/patch_scheduler_decode_floor.py
-- python3 /opt/glm53/patch_glm5_drafter_group.py
-- python3 /opt/glm53/patch_hybrid_prefix_hit.py
-- python3 /opt/glm53/patch_apc_per_group_retention.py
-- python3 /opt/glm53/patch_apc_no_store.py
-- python3 /opt/glm53/patch_kv_capacity_log.py
-- python3 /opt/glm53/patch_tool_choice_none.py
-- python3 /opt/glm53/patch_xgrammar_termination.py
-- python3 /opt/glm53/patch_kpool_tail_slotmap.py
-- python3 /opt/glm53/patch_spinwait.py
-- python3 /opt/glm53/patch_adaptive_k.py
-- python3 /opt/glm53/patch_dense_fp8.py
-- python3 /opt/glm53/patch_default_max_new_tokens.py
-- python3 /opt/glm53/patch_indexer_workspace.py
-- python3 /opt/glm53/patch_cache_reset.py
-- python3 /opt/glm53/patch_ablit.py
 post_exec:
-- >-
-  GLM53_WARMUP_MAX_CONCURRENCY=4 GLM53_WARMUP_REQ_TIMEOUT=240
-  GLM53_WARMUP_DFLASH_K=7 GLM53_WARMUP_TRITON_CACHE_DIR=/cache/runtime/triton
+- GLM53_WARMUP_MAX_CONCURRENCY=4 GLM53_WARMUP_REQ_TIMEOUT=240 GLM53_WARMUP_DFLASH_K=7 GLM53_WARMUP_TRITON_CACHE_DIR=/cache/runtime/triton
   bash /opt/glm53/boot-shape-warmup.sh http://127.0.0.1:8888 GLM-5.3-Flash-EXL3
 command: |
   vllm serve {model} \
+    --revision {revision} \
     --served-model-name {served_model_name} \
     --host {host} \
     --port {port} \
@@ -148,6 +108,7 @@ command: |
     --quantization {quantization} \
     --load-format {load_format} \
     --kv-cache-dtype {kv_cache_dtype} \
+    --kv-cache-memory-bytes {kv_cache_memory_bytes} \
     --max-model-len {max_model_len} \
     --max-num-seqs {max_num_seqs} \
     --max-num-batched-tokens {max_num_batched_tokens} \
@@ -164,3 +125,17 @@ command: |
     --skip-mm-profiling \
     --cudagraph-capture-sizes 1 2 4 8 16 24 32 \
     --speculative-config '{local_speculative_config}'
+model_revision: 25a44fdbf16862a46b7cc9921142c6c81350af2f
+mods:
+- mods/mia-glm53
+distribution_config:
+  models:
+    entries:
+    - name: Mia-AiLab/GLM-5.3-Flash-EXL3-TR3-4bpw
+      revision: 25a44fdbf16862a46b7cc9921142c6c81350af2f
+      target:
+      - -1
+    - name: incoai/GLM-5.3-Flash-DFlash2
+      revision: dc77ff1c99eeb2df044ee3d4f0094eb033fee410
+      target:
+      - -1

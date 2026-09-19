@@ -1,0 +1,12 @@
+# Small repeatable native SparkRun sweep. Mixed-arrival behavior is checked separately.
+framework: llama-benchy
+timeout: 1800
+args:
+  tokenizer: /opt/spark-cache/huggingface/hub/models--Mia-AiLab--GLM-5.3-Flash-EXL3-TR3-4bpw/snapshots/25a44fdbf16862a46b7cc9921142c6c81350af2f
+  prefix_caching: false
+  depth: [0]
+  pp: [2048, 32768]
+  tg: [256]
+  concurrency: [1, 4]
+  runs: 2
+  no_cache: true

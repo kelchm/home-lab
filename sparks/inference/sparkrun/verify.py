@@ -58,6 +58,9 @@ def main():
         messages += [answer, {'role': 'tool', 'tool_call_id': answer['tool_calls'][0]['id'],
                               'content': '{"temperature_c":18,"conditions":"sunny"}'}]
         chat('tool_result', messages, lambda m: '18' in m.get('content', ''), tools=[tool])
+    chat('tool_choice_none', [user('What is 17 multiplied by 19? Reply with only the integer.')],
+         lambda m: not m.get('tool_calls') and (m.get('content') or '').strip() == '323',
+         tools=[tool], tool_choice='none')
     chat('json_schema', [user('Return the sum of 17 and 19 in the requested JSON schema.')],
          lambda m: json.loads(m['content']) == {'sum': 36},
          response_format={'type': 'json_schema', 'json_schema': {
@@ -77,6 +80,11 @@ def main():
         {'type': 'text', 'text': 'What color fills this image? Reply with one color word.'},
         {'type': 'image_url', 'image_url': {'url': 'data:image/png;base64,' + base64.b64encode(png).decode()}}
     ])], lambda m: 'red' in m.get('content', '').lower())
+    chat('five_images', [user([
+        {'type': 'text', 'text': 'What color fills all five images? Reply with one color word.'},
+        *[{'type': 'image_url', 'image_url': {'url': 'data:image/png;base64,' + base64.b64encode(png).decode()}}
+          for _ in range(5)]
+    ])], lambda m: 'red' in (m.get('content') or '').lower())
     if not all(r['passed'] for r in results):
         raise SystemExit(1)
 
