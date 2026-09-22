@@ -33,6 +33,9 @@ spec:
       - --crd-source-apiversion=externaldns.k8s.io/v1alpha1
       - --crd-source-kind=DNSEndpoint
       - --gateway-name=gateway-public
+      # v0.22 rollout gate: observe one full sync plan before enabling writes.
+      # Remove once logs confirm the only planned action is NO CHANGES.
+      - --dry-run=true
     triggerLoopOnEvent: true
     policy: sync
     sources: ["crd", "gateway-httproute"]

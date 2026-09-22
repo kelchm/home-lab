@@ -41,7 +41,7 @@ kind: Gateway
 metadata:
   name: gateway-public
   annotations:
-    external-dns.alpha.kubernetes.io/target: external.${SECRET_DOMAIN}
+    external-dns.kubernetes.io/target: external.${SECRET_DOMAIN}
 spec:
   gatewayClassName: traefik-public
   listeners:
@@ -98,7 +98,7 @@ kind: Gateway
 metadata:
   name: gateway-services
   annotations:
-    external-dns.alpha.kubernetes.io/target: internal.${SECRET_DOMAIN}
+    external-dns.kubernetes.io/target: internal.${SECRET_DOMAIN}
 spec:
   gatewayClassName: traefik-services
   listeners:
