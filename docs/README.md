@@ -47,27 +47,38 @@ or fixing.
 | [talos-pod-security-rollout](runbooks/talos-pod-security-rollout.md) | Applying and validating Talos Pod Security Admission namespace exceptions after Flux reconciles the labels. |
 | [traefik-oidc-plugin-startup](runbooks/traefik-oidc-plugin-startup.md) | Recovering OIDC-protected routes when traefik-admin started without the OIDC plugin. |
 
-## Plans
+## Planning and work tracking
 
-Forward-looking design docs. Dated implementation plans carry a status header;
-once executed, the current state lives in the corresponding runbook or
-reference document.
-The status header form is `**Status:** <Proposed|Active|Implemented|Superseded> — <date>; <detail or current-state link>`.
+New plans live in [GitHub issues](https://github.com/kelchm/home-lab/issues). Use [Work item](../.github/ISSUE_TEMPLATE/1-work-item.md) for a change or operational task and [Investigation](../.github/ISSUE_TEMPLATE/2-investigation.md) for a question or evaluation. The [working conventions](../AGENTS.md#planning-issues-and-documentation) cover scope, completion, and documentation updates.
 
-- [roadmap](roadmap.md) — rolling overview of the planned PVE environment, reserved second Kubernetes cluster, and deferred work.
+The [roadmap](roadmap.md) provides orientation to future work; issues own its execution status. Repository documentation preserves current behavior, operating procedures, decisions, and useful evidence.
+
+## Existing plans
+
+These documents predate issue-based planning. Do not add new plan files. Retire the existing ones incrementally after their unfinished work and durable knowledge have appropriate homes, following the [working conventions](../AGENTS.md#planning-issues-and-documentation).
+
+Retained dated plans keep the status header `**Status:** <Proposed|Active|Implemented|Superseded> — <date>; <detail or current-state link>`. The grouping below reflects those headers; it does not replace verification of outstanding work.
+
+### Unfinished
+
+- [20260620-nas-out-of-cluster-workloads](plans/20260620-nas-out-of-cluster-workloads.md) — Synology-hosted S3 backup target and Git-driven deployment model for workloads outside Kubernetes.
+- [20260703-observability-rework](plans/20260703-observability-rework.md) — converge on VictoriaMetrics/VictoriaLogs and cover Kubernetes, PVE, DGX Spark, Synology, UniFi, logs, flows, and security events through one operating model.
+- [20260814-pve-cluster](plans/20260814-pve-cluster.md) — implemented core design for the independent three-node PVE cluster, with remaining hardware acceptance and identity/certificate gates tracked in the live operator documentation.
+- [20260821-network-topology](plans/20260821-network-topology.md) — active, partially implemented VLAN/zone topology, DGX placement, PVE wiring, and second-cluster reservations.
+
+### Historical
+
+Implemented or superseded plans preserve context. Use the maintained documentation linked from each plan for current operations.
+
 - [20260508-arr-suite-setup](plans/20260508-arr-suite-setup.md) — the original media-stack deployment plan.
 - [20260509-kaniop-migration](plans/20260509-kaniop-migration.md) — Kanidm → kaniop operator pivot.
 - [20260513-arr-hardlink-rework](plans/20260513-arr-hardlink-rework.md) — single share-root mount + NFSv4 ACL isolation.
 - [20260620-metamcp-mcp-rollout](plans/20260620-metamcp-mcp-rollout.md) — MetaMCP gateway + curated backend MCP server rollout.
-- [20260620-nas-out-of-cluster-workloads](plans/20260620-nas-out-of-cluster-workloads.md) — Synology-hosted S3 backup target and Git-driven deployment model for workloads outside Kubernetes.
 - [20260622-sequenced-dependency-upgrades](plans/20260622-sequenced-dependency-upgrades.md) — ordered major-version upgrade pass for k8s-prod (Longhorn → Talos → k8s → Gateway API/Traefik → kaniop).
 - [20260622-tailscale-operator](plans/20260622-tailscale-operator.md) — superseded Kubernetes-operator subnet-router design retained as historical context.
-- [20260703-observability-rework](plans/20260703-observability-rework.md) — converge on VictoriaMetrics/VictoriaLogs and cover Kubernetes, PVE, DGX Spark, Synology, UniFi, logs, flows, and security events through one operating model.
 - [20260705-broadsheet-rename-migration](plans/20260705-broadsheet-rename-migration.md) — paperboy → broadsheet rename with PVC-preserving migration.
 - [20260802-lemon-manuals-selfhost](plans/20260802-lemon-manuals-selfhost.md) — self-host the LEMON manuals archive on NFS with an MCP server in front.
-- [20260814-pve-cluster](plans/20260814-pve-cluster.md) — implemented core design for the independent three-node PVE cluster, with remaining hardware acceptance and identity/certificate gates tracked in the live operator documentation.
 - [20260818-sn770-zfs-qualification-procedure](plans/20260818-sn770-zfs-qualification-procedure.md) — the bounded, destructive test procedure and safety guards used for the SN770 reproduction run.
-- [20260821-network-topology](plans/20260821-network-topology.md) — active, partially implemented VLAN/zone topology, DGX placement, PVE wiring, and second-cluster reservations.
 - [20260902-tailscale-remote-admin](plans/20260902-tailscale-remote-admin.md) — implemented independent two-VM PVE subnet-router pair on isolated VLAN 19, replacing the Kubernetes-hosted route.
 
 ## Decision records & benchmarks
@@ -79,4 +90,4 @@ The status header form is `**Status:** <Proposed|Active|Implemented|Superseded> 
 ## Related docs elsewhere in the repo
 
 - [network/unifi/README.md](../network/unifi/README.md) — UniFi-side BGP/FRR, firewall, and IDS/IPS suppression intent (UniFi isn't GitOps-managed).
-- [AGENTS.md](../AGENTS.md) — conventions for working in this repo (branch vs. direct-to-main).
+- [AGENTS.md](../AGENTS.md) — working conventions, including branch vs. direct-to-main, issue-based planning, and documentation ownership.
