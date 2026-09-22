@@ -3,7 +3,7 @@ name: Investigation
 about: Resolve a question through research, diagnosis, or a bounded evaluation.
 ---
 
-<!-- Keep this proportional to the investigation. Routine implementation choices can stay in a work item. -->
+<!-- Keep the body easy to scan: the question, brief context, investigation tasks, and a clear finish. Link detailed research; keep decision criteria and experimental boundaries here. Routine implementation choices can stay in a work item. -->
 
 ## Question
 
@@ -15,10 +15,10 @@ about: Resolve a question through research, diagnosis, or a bounded evaluation.
 
 ## Evaluation
 
-<!-- Alternatives or hypotheses, tests, and decision criteria. State the limits of the investigation and what evidence is sufficient to decide; retaining the current approach may be a valid outcome. Identify isolation or recovery requirements for experiments. Keep the next step, blocker, or revisit trigger visible here. -->
+<!-- List the comparisons or tests as actionable checkboxes. State the evidence needed to decide and the investigation's limits, including isolation or recovery requirements. Keep the next step, blocker, or revisit trigger visible. -->
+
+- [ ] Describe the next comparison or test.
 
 ## Done when
 
-<!-- Define the evidence and conclusion needed to answer the question. Record limitations and accepted tradeoffs. Link follow-on implementation only if the result calls for it; deployment is not implied by completing the evaluation. Close with the conclusion and evidence links. -->
-
-- [ ] State the evidence and conclusion needed to answer the question.
+<!-- State what answers the question, rather than repeating the test checklist. Keeping the current approach can be valid. Close with the conclusion, evidence, limitations, and tradeoffs; link implementation only if the result calls for it. Do not pre-write a production rollout here. -->

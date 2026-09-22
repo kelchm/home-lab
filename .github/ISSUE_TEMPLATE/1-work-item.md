@@ -3,7 +3,7 @@ name: Work item
 about: Make and verify a bounded change, fix, or operational task.
 ---
 
-<!-- Keep this proportional to the work. Adapt the prompts and omit irrelevant detail. -->
+<!-- Keep the body easy to scan: brief context, actionable work, and a clear finish. Link detailed research and procedures; keep constraints needed to act safely here. Adapt the prompts and omit irrelevant detail. -->
 
 ## Goal
 
@@ -15,10 +15,10 @@ about: Make and verify a bounded change, fix, or operational task.
 
 ## Work
 
-<!-- Proposed steps, if known. For operational changes, identify prerequisites, ordering, and recovery or rollback; link a runbook when useful. For a parent issue, link independently finishable work instead of copying its checklists. Keep the current next step or blocker visible here as work progresses. -->
+<!-- List actions, if known, using checkboxes where progress needs tracking. Include operational gates or link a runbook. Parent issues link independently finishable work. Keep the next step, blocker, or revisit trigger visible. -->
+
+- [ ] Describe the next action.
 
 ## Done when
 
-<!-- Use observable completion criteria, including live verification and documentation updates where relevant. A merged PR alone does not prove a manual operation happened. Close with the outcome and verification links. -->
-
-- [ ] Describe the result and how it will be verified.
+<!-- State the observable result that closes this issue, rather than repeating the work checklist. Include live verification and documentation where relevant. A merged PR alone does not prove a manual operation happened. Close with the outcome and verification links. -->
