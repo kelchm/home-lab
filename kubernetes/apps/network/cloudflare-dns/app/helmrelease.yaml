@@ -34,8 +34,9 @@ spec:
       - --crd-source-kind=DNSEndpoint
       - --gateway-name=gateway-public
       # v0.22 rollout gate: observe one full sync plan before enabling writes.
-      # Remove once logs confirm the only planned action is NO CHANGES.
-      - --dry-run=true
+      # Remove once logs confirm the only planned action is NO CHANGES. Bare
+      # form required: v0.22 flag parsing rejects an explicit "=true".
+      - --dry-run
     triggerLoopOnEvent: true
     policy: sync
     sources: ["crd", "gateway-httproute"]
