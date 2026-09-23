@@ -4,11 +4,11 @@ Evaluated 2026-09-22–23 for [#581](https://github.com/kelchm/home-lab/issues/5
 
 ## Conclusion
 
-Qualify vlagent as the preferred successor to Alloy. It recovered every numbered record in the tested backend-outage/graceful-restart case and exposes counters for persistent-buffer overflow. Built-in Kubernetes collection and direct VictoriaLogs delivery make it a useful fit for this single-backend pipeline. Its schema differences need a deliberate compatibility implementation; the evidence supports that work without establishing production readiness.
+Proceed with implementing vlagent as Alloy's successor. It recovered every numbered record in the tested backend-outage/graceful-restart case and exposes counters for persistent-buffer overflow. Built-in Kubernetes collection and direct VictoriaLogs delivery make it a useful fit for this single-backend pipeline. The remaining work is to implement its schema compatibility and deployable configuration.
 
-Keep Alloy operating while qualification is completed. Vector remains an alternative if preserving the current schema at ingestion is the overriding requirement: its transforms can reproduce that schema, replacing custom logic already maintained in Alloy. The tests do not establish that Vector is unsuitable.
+Keep Alloy operating until the replacement configuration is reviewed and rollout is approved. Vector remains an alternative if preserving the current schema at ingestion is the overriding requirement: its transforms can reproduce that schema, replacing custom logic already maintained in Alloy. The tests do not establish that Vector is unsuitable.
 
-Production cutover requires a chosen build, verified query/UI behavior, measured buffer capacity, and an explicit recovery contract for abrupt termination. [#583](https://github.com/kelchm/home-lab/issues/583) tracks qualification and the disposition of the scratch resources.
+[The migration work item](https://github.com/kelchm/home-lab/issues/583) owns the image pin, GitOps configuration, query compatibility, buffer and alert settings, rollout/rollback, and scratch cleanup. It uses this evaluation as its basis. Validation should exercise the final implementation and address the stated limits, including untested abrupt termination, without reopening the collector comparison.
 
 ## Delivery evidence
 
@@ -54,7 +54,7 @@ Production throughput and alert history do not provide a reference sequence agai
 
 ### stdout/stderr and severity
 
-vlagent v1.52.0 does not retain a stdout/stderr field. [Upstream change #1791](https://github.com/VictoriaMetrics/VictoriaLogs/pull/1791) adds `output_stream` and was merged September 17. As of this evaluation, [v1.52.0](https://github.com/VictoriaMetrics/VictoriaLogs/releases/tag/v1.52.0), published July 16, was still the latest published release. Qualify a pinned build containing the field, or explicitly accept its omission; renaming a field cannot recover values absent from stored rows.
+vlagent v1.52.0 does not retain a stdout/stderr field. [Upstream change #1791](https://github.com/VictoriaMetrics/VictoriaLogs/pull/1791) adds `output_stream` and was merged September 17. As of this evaluation, [v1.52.0](https://github.com/VictoriaMetrics/VictoriaLogs/releases/tag/v1.52.0), published July 16, was still the latest published release. Use a pinned build containing the field, or explicitly accept its omission; renaming a field cannot recover values absent from stored rows.
 
 Production was queried over the half-open window `2026-09-16T20:11:00Z` to `2026-09-23T20:11:00Z`, excluding `log-drill`. The initial grouped result contained 3,751,265 rows: 2,841,805 stdout and 909,460 stderr. Of 123 namespace/service/container groups, 22 used both streams. These are row counts, not incident counts; small late-arrival differences occurred between queries.
 
@@ -75,7 +75,7 @@ The field omission itself does not discard log messages. A direct production/vla
 
 ### Schema and query behavior
 
-| Concern | Supported finding | Qualification implication |
+| Concern | Supported finding | Migration implication |
 | --- | --- | --- |
 | Service grouping | LogsQL `coalesce` can apply the current fallback: recommended app label, legacy app label, container name. | Verify actual operator queries and saved Grafana queries; repository text matches are not a count of deployed queries. |
 | Structured severity | In `2026-09-23T18:30–19:30Z`, both backends contained 20,868 non-drill rows. vlagent lacked a stored level on 1,674 ordinary logfmt rows, including 36 warnings. `unpack_logfmt` recovered their raw levels and matching per-container counts. | Handle guarded logfmt parsing, JSON severity fields, and alias normalization; a regex on an absent `level` is insufficient. Verify Grafana coloring and filtering. |
@@ -84,7 +84,7 @@ The field omission itself does not discard log messages. A direct production/vla
 | Stream identity | Query-time aliases do not change ingestion-time stream identity. | Choose stream fields deliberately and verify the cardinality alert against the resulting schema. |
 | Labels and filename | In-place label changes are cached; the tested change was absent after 100 seconds. No operational filename query dependency was found in the repository. | Accept or address label staleness and check operator needs outside Git. |
 
-The parsing distinctions are visible in the [v1.52.0 collector](https://github.com/VictoriaMetrics/VictoriaLogs/blob/v1.52.0/app/vlagent/kubernetescollector/processor.go); see also [metadata configuration](https://docs.victoriametrics.com/victorialogs/vlagent/#kubernetes-metadata-configuration) and [`unpack_logfmt`](https://docs.victoriametrics.com/victorialogs/logsql/#unpack_logfmt-pipe). Equal aggregate totals alone do not prove record identity or full schema parity. Static-pod attribution, CRI partial records, permissions, host mounts, and collision behavior remain acceptance checks for the selected configuration. Source-format work is coordinated with [#485](https://github.com/kelchm/home-lab/issues/485) and [#556](https://github.com/kelchm/home-lab/pull/556).
+The parsing distinctions are visible in the [v1.52.0 collector](https://github.com/VictoriaMetrics/VictoriaLogs/blob/v1.52.0/app/vlagent/kubernetescollector/processor.go); see also [metadata configuration](https://docs.victoriametrics.com/victorialogs/vlagent/#kubernetes-metadata-configuration) and [`unpack_logfmt`](https://docs.victoriametrics.com/victorialogs/logsql/#unpack_logfmt-pipe). Equal aggregate totals alone do not prove record identity or full schema parity. Carry the existing static-pod, CRI partial-record, metadata-isolation, and hardening requirements into the deployed configuration and its validation. Source-format work is coordinated with [#485](https://github.com/kelchm/home-lab/issues/485) and [#556](https://github.com/kelchm/home-lab/pull/556).
 
 ## Reproducing the measurements
 
