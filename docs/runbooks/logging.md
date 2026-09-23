@@ -33,4 +33,4 @@ Restarting Alloy while its sender queue contains unsent entries can lose those e
 
 The [logging alert rules](../../kubernetes/apps/observability/victoria-metrics-k8s-stack/app/platform-alerts.yaml) provide partial detection. `AlloyNodeLogIngestionSilent` requires zero sent entries over a ten-minute window followed by fifteen minutes in that condition; it cannot detect partial loss while other entries continue arriving. The sustained-retry alert also waits fifteen minutes. Neither provides a guarantee that an alert will arrive before the retry budget is exhausted, and quiet alert history does not establish complete delivery.
 
-The [collector evaluation](../log-collector-evaluation.md) records delivery measurements and candidate tradeoffs. Alloy remains the deployed collector; its experimental writer WAL is disabled.
+The [collector evaluation](../evaluations/kubernetes-log-collectors.md) records delivery measurements and candidate tradeoffs. Alloy remains the deployed collector; its experimental writer WAL is disabled.

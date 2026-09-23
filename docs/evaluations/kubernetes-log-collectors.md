@@ -1,6 +1,6 @@
 # Kubernetes log collector evaluation
 
-Evaluated 2026-09-22–23 for [#581](https://github.com/kelchm/home-lab/issues/581). Scope: Kubernetes container logs sent to VictoriaLogs. The [logging runbook](runbooks/logging.md) describes the deployed Alloy pipeline.
+Evaluated 2026-09-22–23 for [#581](https://github.com/kelchm/home-lab/issues/581). Scope: Kubernetes container logs sent to VictoriaLogs. The [logging runbook](../runbooks/logging.md) describes the deployed Alloy pipeline.
 
 ## Conclusion
 
@@ -48,7 +48,7 @@ The Vector saturation configuration used a 512 MiB disk buffer with `when_full: 
 
 Outage capacity must be sized per node from representative compressed input and incident bursts. The short rate samples do not establish a days-long outage guarantee. Queue payload bytes and allocated directory size are different quantities.
 
-Production throughput and alert history do not provide a reference sequence against which to count missing records. The [current alerts](../kubernetes/apps/observability/victoria-metrics-k8s-stack/app/platform-alerts.yaml) can detect several failures, but partial loss may occur while records continue arriving. The investigation therefore does not establish a historical production loss count.
+Production throughput and alert history do not provide a reference sequence against which to count missing records. The [current alerts](../../kubernetes/apps/observability/victoria-metrics-k8s-stack/app/platform-alerts.yaml) can detect several failures, but partial loss may occur while records continue arriving. The investigation therefore does not establish a historical production loss count.
 
 ## Application compatibility
 
@@ -67,7 +67,7 @@ Production was queried over the half-open window `2026-09-16T20:11:00Z` to `2026
 | iperf3 / app | 725,574 | 241,858 | In the 24-hour subset, all 34,560 stderr rows contain the same unable-to-receive-cookie error; stdout is listener output. |
 | Kanidm / kanidm | About 1.26 million | 5,833 | stderr contains 5,818 INFO-formatted rows and 15 initialization lines. stdout includes 3,552 ERROR and 2,935 WARN rows. |
 
-Broadsheet, Bambuddy, MCPHub, and the probe lack a stored top-level `level` on those stderr rows in the deployed pipeline. Source-specific parsing nevertheless extracts the explicit levels shown above. The patterns were executed using VictoriaLogs `extract_regexp`, scoped to each application and container; stream was used only to report coverage. Bambuddy's [formatter includes the logger level](https://github.com/maziggy/bambuddy/blob/v1.2.5.5/backend/app/main.py). The [owned probe](../kubernetes/apps/ai/grafana-mcp/app/probe.py) can emit one structured failure event with the traceback as a string, avoiding per-line inference.
+Broadsheet, Bambuddy, MCPHub, and the probe lack a stored top-level `level` on those stderr rows in the deployed pipeline. Source-specific parsing nevertheless extracts the explicit levels shown above. The patterns were executed using VictoriaLogs `extract_regexp`, scoped to each application and container; stream was used only to report coverage. Bambuddy's [formatter includes the logger level](https://github.com/maziggy/bambuddy/blob/v1.2.5.5/backend/app/main.py). The [owned probe](../../kubernetes/apps/ai/grafana-mcp/app/probe.py) can emit one structured failure event with the traceback as a string, avoiding per-line inference.
 
 MCPHub's continuation grouping was checked within each pod's stderr output. That does not establish safe reconstruction after stream metadata is removed or across interleaved events. Preserve unknown levels for unfamiliar formats. Severity also cannot replace every use of stream: Bambuddy's access logs and application diagnostics both include INFO, so separating them needs a category or format selector.
 
