@@ -83,6 +83,7 @@ Implemented or superseded plans preserve context. Use the maintained documentati
 
 ## Decision records & benchmarks
 
+- [log-collector-evaluation](log-collector-evaluation.md) — Kubernetes collector delivery measurements, application query compatibility, and qualification recommendation.
 - [storage-benchmarks](storage-benchmarks.md) — Longhorn fio results, pre/post storage-network cutover.
 - [**sn770-zfs-qualification.md**](sn770-zfs-qualification.md) — WD_BLACK SN770 reproduction matrix, evidence index, and the remaining qualification gates for the PVE storage decision.
 - [observability-bakeoff](observability-bakeoff.md) — VictoriaMetrics/Logs vs. Prometheus/Loki evaluation.
