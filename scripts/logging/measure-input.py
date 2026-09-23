@@ -17,13 +17,15 @@ p.add_argument('--namespace', default='log-drill')
 p.add_argument('--selector', default='app=log-drill-collector,arm=vlagent')
 p.add_argument('--seconds', type=int, default=300)
 a = p.parse_args()
-base = ['kubectl', '--kubeconfig', a.kubeconfig, '-n', a.namespace]
-pods = json.loads(subprocess.check_output(base + ['get', 'pods', '-l', a.selector, '-o', 'json']))['items']
+base = ['kubectl', '--kubeconfig', a.kubeconfig, '--request-timeout=15s', '-n', a.namespace]
+pods = json.loads(subprocess.check_output(base + ['get', 'pods', '-l', a.selector, '-o', 'json'], timeout=20))['items']
+if not pods:
+    raise SystemExit(f'No collector pods match {a.selector!r} in namespace {a.namespace!r}')
 
 
 def sample(pod):
     name = pod['metadata']['name']
-    raw = subprocess.check_output(base + ['get', '--raw', f'/api/v1/namespaces/{a.namespace}/pods/{name}:9429/proxy/metrics'], text=True)
+    raw = subprocess.check_output(base + ['get', '--raw', f'/api/v1/namespaces/{a.namespace}/pods/{name}:9429/proxy/metrics'], text=True, timeout=20)
     values = {}
     for family in text_string_to_metric_families(raw):
         for metric in family.samples:
@@ -48,5 +50,5 @@ for node in start:
     delta = end[node][metric] - start[node][metric]
     assert delta >= 0, 'Collector restarted; discard the interval'
     result[node] = {'compressed_bytes': delta, 'bytes_per_second': round(delta / elapsed, 2),
-                    'uncompressed_bytes': end[node]['vl_bytes_ingested_total'] - start[node]['vl_bytes_ingested_total']}
+                    'estimated_json_bytes': end[node]['vl_bytes_ingested_total'] - start[node]['vl_bytes_ingested_total']}
 print(json.dumps({'seconds': round(elapsed, 2), 'nodes': result}, indent=2))
