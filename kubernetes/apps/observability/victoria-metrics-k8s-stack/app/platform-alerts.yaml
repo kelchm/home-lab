@@ -99,6 +99,65 @@ spec:
             summary: Namespace {{ $labels.namespace }} is accumulating failed pods
             description: At least {{ printf "%.0f" $value }} failed pod objects have remained in {{ $labels.namespace }} for five minutes. Identify the owning controller before the namespace's count/pods quota blocks healthy replacements.
 
+    - name: vlagent-pipeline
+      rules:
+        - alert: VlagentCollectorTargetMissing
+          expr: |
+            (count(count by (node) (up{job="vlagent"} == 1)) or vector(0))
+            < scalar(max(kube_daemonset_status_desired_number_scheduled{namespace="observability",daemonset="vlagent"}))
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: A selected node has no healthy vlagent scrape target
+            description: Check DaemonSet scheduling, PodMonitor conversion, node labels and the metrics network path. Zero selected nodes during staged rollout is intentional.
+
+        - alert: VlagentBacklogSustained
+          expr: vlagent_remotewrite_pending_data_bytes{job="vlagent"} > 0
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: vlagent on {{ $labels.node }} has a sustained backlog
+            description: Pending compressed bytes have remained nonzero for ten minutes. Restore the sink; do not restart the collector or remove its hostPath buffer.
+
+        - alert: VlagentBufferNearCapacity
+          expr: vlagent_remotewrite_pending_data_bytes{job="vlagent"} > 3221225472
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: vlagent on {{ $labels.node }} has used 75% of its queue budget
+            description: The per-URL queue budget is 4 GiB. Old blocks are evicted at capacity; inspect backend health and node disk space now.
+
+        - alert: VlagentPersistentQueueLoss
+          expr: |
+            increase(vm_persistentqueue_blocks_dropped_total{job="vlagent"}[10m]) > 0
+            or increase(vm_persistentqueue_bytes_dropped_total{job="vlagent"}[10m]) > 0
+          labels:
+            severity: critical
+          annotations:
+            summary: vlagent on {{ $labels.node }} evicted persistent queue data
+            description: Irrecoverable queue overflow was observed. Counters measure blocks and compressed bytes, not lost log rows. Preserve metrics and restore delivery before the next eviction.
+
+        - alert: VlagentRemoteWriteLoss
+          expr: increase(vlagent_remotewrite_packets_dropped_total{job="vlagent"}[10m]) > 0
+          labels:
+            severity: critical
+          annotations:
+            summary: vlagent on {{ $labels.node }} dropped remote-write packets
+            description: Inspect backend response codes and collector errors. This loss is separate from persistent-queue eviction.
+
+        - alert: VlagentNodeLogIngestionSilent
+          expr: increase(vl_rows_ingested_total{job="vlagent",type="kubernetes_logs"}[10m]) == 0
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: vlagent on {{ $labels.node }} is reading no Kubernetes logs
+            description: Check API discovery, symlinks, file permissions and checkpoints. A healthy scrape target alone does not prove log collection.
+
+    # Retain Alloy rules until the staged cutover and rollback window end.
     - name: logging-pipeline
       rules:
         - alert: AlloyVictoriaLogsEntriesDropped
@@ -120,13 +179,13 @@ spec:
             description: VictoriaLogs write retries have remained present for 15 minutes. The in-memory retry budget is finite; restore the sink before queued entries are dropped.
 
         - alert: AlloyLogCollectorTargetMissing
-          expr: (count(up{job="alloy"} == 1) < count(kube_node_status_condition{condition="Ready",status="true"} == 1)) or absent(up{job="alloy"})
+          expr: (count(up{job="alloy"} == 1) or vector(0)) < scalar(max(kube_daemonset_status_desired_number_scheduled{namespace="observability",daemonset="alloy"}))
           for: 10m
           labels:
             severity: critical
           annotations:
-            summary: Fewer Alloy collectors than Ready nodes are being scraped
-            description: vmagent cannot see one healthy Alloy target per Ready Kubernetes node. Check the DaemonSet, ServiceMonitor conversion, and Cilium ingress policy.
+            summary: Fewer Alloy collectors than scheduled nodes are being scraped
+            description: vmagent cannot see one healthy Alloy target per node still assigned to Alloy. Check the DaemonSet, ServiceMonitor conversion, and Cilium ingress policy.
 
         - alert: AlloyNodeLogIngestionSilent
           expr: sum by (pod) (increase(loki_write_sent_entries_total{component_id="loki.write.vl"}[10m])) == 0
@@ -162,7 +221,7 @@ spec:
             severity: critical
           annotations:
             summary: VictoriaLogs storage is read-only
-            description: VictoriaLogs has marked its storage path read-only. Inspect the PVC, Longhorn volume, and filesystem before ingestion exhausts Alloy's retry budget.
+            description: VictoriaLogs has marked its storage path read-only. Inspect the PVC, Longhorn volume, and filesystem before collector buffers overflow.
 
         - alert: VictoriaLogsDiskSpaceLow
           expr: min(vl_free_disk_space_bytes / vl_total_disk_space_bytes) < 0.10
@@ -174,18 +233,18 @@ spec:
             description: Free space is below the emergency threshold despite the 80% retention ceiling. Inspect partition cleanup, daily ingest volume, and Longhorn capacity.
 
         - alert: VictoriaLogsIngestionSilent
-          expr: (sum(increase(vl_rows_ingested_total{type=~"loki.*"}[10m])) == 0) or absent(vl_rows_ingested_total{type=~"loki.*"})
+          expr: (sum(increase(vl_rows_ingested_total{job="victoria-logs-single-server",type=~"loki.*|nativeinsert"}[10m])) == 0) or absent(vl_rows_ingested_total{job="victoria-logs-single-server",type=~"loki.*|nativeinsert"})
           for: 15m
           labels:
             severity: critical
           annotations:
-            summary: VictoriaLogs has no observable Loki ingestion
-            description: No Loki-protocol rows have reached VictoriaLogs for 15 minutes, or the ingestion metric is absent. Check Alloy writers, VictoriaLogs availability, and vmagent scraping.
+            summary: VictoriaLogs has no observable collector ingestion
+            description: No Loki or native-protocol rows have reached the production VictoriaLogs backend for 15 minutes, or the ingestion metric is absent. Check collector queues, VictoriaLogs availability, and vmagent scraping.
 
-        # The seven-day observed peak was 819 streams/hour during collector
-        # corrections and rollouts. This threshold leaves room for normal pod
-        # churn while detecting cardinality explosions well before retention is
-        # materially affected.
+        # The prior seven-day peak was 819 streams/hour. vlagent keeps one
+        # identity per pod/container/node, with no severity or output stream.
+        # Retain 1500/hour through the one-time schema adoption/replay, then
+        # rebaseline after the approved whole-cluster cutover.
         - alert: VictoriaLogsStreamChurnHigh
           expr: increase(vl_streams_created_total[1h]) > 1500
           for: 15m

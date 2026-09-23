@@ -1,0 +1,63 @@
+rule_files: [rules.yaml]
+evaluation_interval: 1m
+tests:
+  - name: No vlagent targets is expected before node selection
+    interval: 1m
+    input_series:
+      - series: kube_daemonset_status_desired_number_scheduled{namespace="observability",daemonset="vlagent"}
+        values: 0+0x20
+    promql_expr_test:
+      - expr: ALERTS{alertname="VlagentCollectorTargetMissing",alertstate="firing"}
+        eval_time: 20m
+        exp_samples: []
+  - name: Missing target, backlog, capacity and evictions are detected
+    interval: 1m
+    input_series:
+      - series: kube_daemonset_status_desired_number_scheduled{namespace="observability",daemonset="vlagent"}
+        values: 3+0x30
+      - series: up{job="vlagent",node="n1"}
+        values: 1+0x30
+      - series: up{job="vlagent",node="n2"}
+        values: 1+0x30
+      - series: vlagent_remotewrite_pending_data_bytes{job="vlagent",node="n1"}
+        values: 3500000000+0x30
+      - series: vm_persistentqueue_blocks_dropped_total{job="vlagent",node="n1"}
+        values: 0 1+0x29
+      - series: vm_persistentqueue_bytes_dropped_total{job="vlagent",node="n1"}
+        values: 0 500+0x29
+    promql_expr_test:
+      - expr: count(ALERTS{alertname="VlagentCollectorTargetMissing",alertstate="firing"})
+        eval_time: 6m
+        exp_samples: [{labels: '{}', value: 1}]
+      - expr: count(ALERTS{alertname="VlagentBufferNearCapacity",alertstate="firing"})
+        eval_time: 3m
+        exp_samples: [{labels: '{}', value: 1}]
+      - expr: count(ALERTS{alertname="VlagentBacklogSustained",alertstate="firing"})
+        eval_time: 11m
+        exp_samples: [{labels: '{}', value: 1}]
+      - expr: count(ALERTS{alertname="VlagentPersistentQueueLoss",alertstate="firing"})
+        eval_time: 2m
+        exp_samples: [{labels: '{}', value: 1}]
+      - expr: ALERTS{alertname="VlagentPersistentQueueLoss",alertstate="firing"}
+        eval_time: 20m
+        exp_samples: []
+  - name: Scratch ingestion cannot mask production silence
+    interval: 1m
+    input_series:
+      - series: vl_rows_ingested_total{job="vlagent",type="kubernetes_logs"}
+        values: 0+100x30
+      - series: vl_rows_ingested_total{job="victoria-logs-single-server",type="nativeinsert"}
+        values: 0+0x30
+    promql_expr_test:
+      - expr: count(ALERTS{alertname="VictoriaLogsIngestionSilent",alertstate="firing"})
+        eval_time: 20m
+        exp_samples: [{labels: '{}', value: 1}]
+  - name: Native ingestion is healthy after the cutover
+    interval: 1m
+    input_series:
+      - series: vl_rows_ingested_total{job="victoria-logs-single-server",type="nativeinsert"}
+        values: 0+100x30
+    promql_expr_test:
+      - expr: ALERTS{alertname="VictoriaLogsIngestionSilent",alertstate="firing"}
+        eval_time: 20m
+        exp_samples: []

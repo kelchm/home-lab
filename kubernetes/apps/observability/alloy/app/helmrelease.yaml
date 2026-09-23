@@ -18,6 +18,15 @@ spec:
     controller:
       type: daemonset
       hostPID: false
+      # Drain/cut over one node at a time after rollout approval.
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: logging.home.kelch.io/collector
+                    operator: NotIn
+                    values: [vlagent]
       # Chart doesn't checksum the config ConfigMap into the pod template,
       # so HelmRelease upgrades change the mounted config without rolling
       # the pods. Stakater reloader watches the ConfigMap and triggers

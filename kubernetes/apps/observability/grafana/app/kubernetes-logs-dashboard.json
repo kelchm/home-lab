@@ -1,0 +1,92 @@
+{
+  "uid": "kubernetes-logs",
+  "title": "Kubernetes logs",
+  "schemaVersion": 39,
+  "tags": [
+    "logging"
+  ],
+  "timezone": "browser",
+  "refresh": "30s",
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "namespace",
+        "label": "Namespace (regex)",
+        "type": "textbox",
+        "query": ".*",
+        "current": {
+          "text": ".*",
+          "value": ".*"
+        }
+      },
+      {
+        "name": "service",
+        "label": "Service (regex)",
+        "type": "textbox",
+        "query": ".*",
+        "current": {
+          "text": ".*",
+          "value": ".*"
+        }
+      },
+      {
+        "name": "stream",
+        "label": "stdout / stderr (regex)",
+        "type": "textbox",
+        "query": ".*",
+        "current": {
+          "text": ".*",
+          "value": ".*"
+        }
+      },
+      {
+        "name": "level",
+        "label": "Canonical severity (regex)",
+        "type": "textbox",
+        "query": ".*",
+        "current": {
+          "text": ".*",
+          "value": ".*"
+        }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "logs",
+      "title": "Container logs \u2014 Alloy history and vlagent",
+      "description": "Explicit severity only. Namespace selection precedes compatibility parsing. Use a narrow time range.",
+      "datasource": {
+        "type": "victoriametrics-logs-datasource",
+        "uid": "victorialogs"
+      },
+      "gridPos": {
+        "h": 22,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(kubernetes.pod_namespace:~\"$${namespace:raw}\" OR namespace:~\"$${namespace:raw}\")\n| coalesce(kubernetes.pod_namespace, namespace) as namespace\n| coalesce(kubernetes.pod_name, pod) as pod\n| coalesce(kubernetes.container_name, container) as container\n| coalesce(kubernetes.pod_node_name, node) as node\n| format if (kubernetes.pod_name:*) \"<kubernetes.container_name>\" as service_name\n| coalesce(kubernetes.pod_labels.app.kubernetes.io/name, kubernetes.pod_labels.app, service_name, container) as service_name\n| format if (kubernetes.pod_name:*) \"<kubernetes.pod_labels.app.kubernetes.io/instance>\" as app_instance\n| coalesce(kubernetes.pod_labels.app.kubernetes.io/instance, app_instance) as app_instance\n| coalesce(output_stream, stream) as stream\n| unpack_logfmt if (_msg:~\"^[[:space:]]*[A-Za-z_][A-Za-z0-9_.-]*=\") fields (level, severity_text, severity, lvl, msg, message, ts, time, timestamp) result_prefix \"compat_logfmt.\"\n| coalesce(compat_logfmt.msg, compat_logfmt.message, compat_logfmt.ts, compat_logfmt.time, compat_logfmt.timestamp) as compat_envelope\n| coalesce(compat_logfmt.level, compat_logfmt.severity_text, compat_logfmt.severity, compat_logfmt.lvl) as compat_logfmt_candidate\n| format if (compat_envelope:*) \"<compat_logfmt_candidate>\" as compat_logfmt_level\n| extract_regexp if (namespace:=iot service_name:=broadsheet container:=app) \"^(?P<compat_source_level>warning|error): \"\n| extract_regexp if (namespace:=printing service_name:=bambuddy container:=app) \"^(?:[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2},[0-9]{3} )?(?P<compat_source_level>DEBUG|INFO|WARNING|ERROR|CRITICAL)(?: \\\\[|:\\\\s+)\" skip_empty_results\n| extract_regexp if (namespace:=ai service_name:=mcphub container:=app) \"^\\\\[[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\\\.[0-9]{3}(?:Z|[+-][0-9]{2}:[0-9]{2})\\\\] \\\\[(?P<compat_source_level>TRACE|DEBUG|INFO|WARN|ERROR|FATAL)\\\\] \\\\[[0-9]+\\\\] \\\\[[^\\\\]]+\\\\] \" skip_empty_results\n| coalesce(level, log.level, severity_text, SeverityText, severity, lvl, msg.level, msg.log.level, msg.severity_text, msg.SeverityText, msg.severity, msg.lvl, compat_logfmt_level, compat_source_level) as compat_level\n| format \"<lc:compat_level>\" as compat_level\n| replace_regexp (\"^\\\\s+|\\\\s+$\", \"\") at compat_level\n| format \"\" as level\n| format if (compat_level:in(trace,trc)) \"trace\" as level\n| format if (compat_level:in(debug,dbg,verbose)) \"debug\" as level\n| format if (compat_level:in(info,inf,information,informational,notice)) \"info\" as level\n| format if (compat_level:in(warn,wrn,warning)) \"warning\" as level\n| format if (compat_level:in(error,err,severe)) \"error\" as level\n| format if (compat_level:in(critical,crit,alert,emergency,emerg,fatal,panic)) \"critical\" as level\n| delete compat_*\n| filter namespace:~\"$${namespace:raw}\" service_name:~\"$${service:raw}\" stream:~\"$${stream:raw}\" level:~\"$${level:raw}\"",
+          "editorMode": "code",
+          "queryType": "instant",
+          "maxLines": 1000,
+          "adHocFiltersMode": "off"
+        }
+      ]
+    }
+  ]
+}
