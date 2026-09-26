@@ -22,7 +22,9 @@ Static system bearer keys represent workload principals. The current matrix is:
 | `operator-interactive` | All six groups. |
 | `operator-claude-code` | All six groups; Claude Code on the operator workstation. |
 | `operator-claude-desktop` | All six groups; Claude Desktop on the operator workstation. |
-| `operator-codex` | All six groups; Codex CLI and the ChatGPT app's Codex on the operator workstation. |
+| `operator-codex` | All six groups; Codex CLI and the ChatGPT desktop app on the operator workstation, which share `~/.codex/config.toml`. |
+| `operator-opencode` | All six groups; OpenCode on the operator workstation. |
+| `operator-grok` | All six groups; Grok CLI on the operator workstation. |
 | `hermes-personal` | Every non-browser group. |
 | `hermes-ops-cron` | `homelab-read` only. |
 | `flatrate-discord` | `automotive-reference` only. |
