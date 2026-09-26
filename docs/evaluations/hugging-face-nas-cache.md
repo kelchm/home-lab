@@ -6,9 +6,9 @@ Evaluated September 26, 2026. **Read-only lab inspection, source review and isol
 
 Make a retained filesystem library on Athena the foundation. A NAS-side downloader or cache service owns ingestion; LAN consumers download through its HTTP endpoint or stage pinned snapshots locally. Preserve the files independently of the HTTP service's continued availability. Public retention and private training-output preservation must not depend on deploying an OCI registry, S3 service or paid product.
 
-**Shpiel v0.3.1 is the first lightweight public-only endpoint to qualify further.** Its filesystem layout and measured reuse are a closer fit than the initial Nexus-first shortlist suggested. This is a pilot recommendation: private-read authorization, native llama.cpp compatibility, large cold-file delays, recovery and upgrades remain material gaps. Use one writer, no private upstream token, and a read-only LAN-facing boundary. Its write APIs should not be exposed by a public download service.
+**Shpiel v0.3.1 is the measured public-only baseline, not a selected winner.** Its filesystem layout and measured reuse fit the retention goal, but the [broader community-project survey](hugging-face-cache-landscape.md) found additional candidates that deserve comparison before a NAS pilot: DingoSpeed, standalone hfd, ModelKeep and Bodaay's managed-library approach. Shpiel's private-read authorization, native llama.cpp compatibility, large cold-file delays, recovery and upgrades remain material gaps. Any public Shpiel trial should use one writer, no private upstream token, and a read-only LAN-facing boundary; its write APIs should not be exposed by a public download service.
 
-**MatrixHub v0.2.0 is the alternative to qualify if a full private Hub becomes important.** Its new single-process SQLite deployment fits this NAS better than older MySQL-based descriptions suggest. It has hosted models and project permissions, but source review found offline-refresh and integrity questions. Nexus CE remains a conventional alternative when its database/JVM cost is acceptable; it is no longer the default merely because its documentation is established.
+**MatrixHub v0.2.0 is a candidate if a full private Hub becomes important.** Its new single-process SQLite deployment fits this NAS better than older MySQL-based descriptions suggest. It has hosted models and project permissions, but source review found offline-refresh and integrity questions. Nexus CE remains a conventional alternative when its database/JVM cost is acceptable; it is no longer the default merely because its documentation is established.
 
 Preserve existing Spark and Vonk cache contents until a hash-verified LAN import succeeds. If an endpoint cannot reuse them, stage those models by local path rather than downloading the collection again for a new storage format.
 
@@ -30,9 +30,11 @@ This establishes capacity for a trial, not throughput or a service memory budget
 
 ## Candidate comparison
 
+This is the initial comparison. The [expanded landscape](hugging-face-cache-landscape.md) adds direct mirror servers, NAS download managers and model-distribution systems, with project history and concrete reasons to pursue or deprioritize them. Project age, transparent mirroring and durable retention are separate properties.
+
 | Candidate | Evidence and fit | Disposition |
 |---|---|---|
-| **[Shpiel](https://github.com/loewenthal-corp/shpiel)** | Apache-2.0; one Go process, filesystem backend, no database required. Repository created July 2026. | Public-only pilot; measured reuse and gaps below. |
+| **[Shpiel](https://github.com/loewenthal-corp/shpiel)** | Apache-2.0; one Go process, filesystem backend, no database required. Repository created July 2026. | Measured public-only baseline; reuse and gaps below. |
 | **[MatrixHub](https://github.com/matrixhub-ai/matrixhub/releases/tag/v0.2.0)** | Apache-2.0; September 18 release added SQLite for single-node Compose. Proxy projects and hosted models with permissions. | Private-Hub candidate; source findings need live tests. |
 | **[Nexus CE](https://help.sonatype.com/en/hugging-face-repositories.html)** | Documented models/datasets proxy with local permissions and upstream bearer credentials. Broader repository manager. | Conventional fallback; HTTP-only, buffering, quotas and import cost matter. |
 | **[Olah](https://github.com/vtuber-plan/olah)** | MIT; block cache and offline mode. README instructs deleting incompatible caches across upgrades; [issue #85](https://github.com/vtuber-plan/olah/issues/85) reports a missing llama.cpp refs endpoint. | Poor default for permanent retention. That client report was not reproduced locally. |
@@ -41,7 +43,7 @@ This establishes capacity for a trial, not throughput or a service memory budget
 | **[HuggingHack](https://github.com/tyedalwaves/HuggingHack)** | MIT; NAS file library, download UI, existing-folder indexing and private uploads. | Relevant path-based UI; not documented as an HF_ENDPOINT proxy. |
 | **[KohakuHub](https://github.com/KohakuBlueleaf/KohakuHub)** | AGPL-3.0 full Hub; LakeFS/S3/database stack, external-source fallback. | More infrastructure than the initial cache needs; fallback is not retention evidence. |
 | **[Shardline](https://github.com/STEXS-Technologies/shardline)** | MIT/Apache-2.0 multiprotocol store; filesystem/SQLite options. [Hub API is beta](https://github.com/STEXS-Technologies/shardline/blob/main/docs/COMPATIBILITY_STATUS.md). | Future artifact-backend candidate; Hub compatibility does not establish upstream pull-through. |
-| **[Artifactory](https://jfrog.com/blog/native-xet-support-in-jfrog-artifactory/)** | Native Xet and hosted/remote HF. [Self-managed feature matrix](https://docs.jfrog.com/installation/docs/feature-comparison-matrix-for-self-mangaged-jpds) excludes HF from free editions. | Excluded by the no-paid-license requirement. |
+| **[Artifactory](https://jfrog.com/blog/native-xet-support-in-jfrog-artifactory/)** | Native Xet and hosted/remote HF. [Self-managed feature matrix](https://docs.jfrog.com/installation/docs/feature-comparison-matrix-for-self-mangaged-jpds) excludes HF from free editions. | Outside the preferred community-software scope for the initial cache. |
 | **[Native HF cache](https://huggingface.co/docs/huggingface_hub/en/guides/manage-cache)** | Official client, retained files, explicit revision prefetch/staging. No Hub server required. | Architectural fallback when transparent on-demand HTTP is not essential. |
 
 ## Shpiel: measured behavior
