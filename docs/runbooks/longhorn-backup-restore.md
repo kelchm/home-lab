@@ -92,7 +92,13 @@ kubectl -n longhorn-system delete backupvolumes.longhorn.io <backup-volume-name>
 
 ## Routine monitoring
 
-Prometheus and vmalert evaluate the Longhorn rules in `kubernetes/apps/longhorn-system/longhorn/app/alerts.yaml`; Alertmanager delivers warnings and critical alerts through the `k8s-prod Alerts` Pushover application. The rules cover BackupTarget availability, cluster-wide backup staleness, per-volume stale or never-completed backups, volume robustness, Longhorn node readiness, disk capacity/schedulability, and missing metric coverage. See [alerting](alerting.md) for ownership, silence policy, and end-to-end tests.
+vmalert evaluates the Longhorn rules in `kubernetes/apps/longhorn-system/longhorn/app/alerts.yaml`; VMAlertmanager delivers warnings and critical alerts through the `k8s-prod Alerts` Pushover application. The rules cover BackupTarget availability, cluster-wide backup staleness, per-volume stale or never-completed backups, volume robustness, Longhorn node readiness, disk capacity/schedulability, and missing metric coverage. See [alerting](alerting.md) for ownership, silence policy, and end-to-end tests.
+
+Open [Longhorn / Operations in Grafana](https://grafana.home.kelch.io/d/longhorn-operations) for volume health, backup freshness, capacity, and I/O. Start with **Scrape coverage**: expect 100% of desired Longhorn manager pods; anything else is red because missing scrapes can undercount the other panels. Namespace and PVC selectors filter volume and backup panels; node capacity, node conditions, CPU, and BackupTarget availability remain cluster-wide. Missing metrics display **No data**, not a healthy zero. **Unknown health** is advisory (amber): detached volumes normally report unknown robustness. Check attachment state in the Longhorn UI before treating this as a fault.
+
+Backup counts exclude PVCs explicitly labeled `no-backup`, using the same exemption rule as the alerts. **Stale backup** uses the per-volume 30-hour threshold; **Never backed up** shows new volumes immediately, while the alert grants 30 hours for a first backup. **Missing timestamps** identifies expected volumes with no timestamp metric. The separate cluster-wide stalled-backup alert still uses 26 hours. Backup age proves freshness only; use the restore drill below to verify recoverability.
+
+Node disk usage measures physical storage, while scheduled replica sizes represent logical allocations. Volume actual size includes snapshots and is not the filesystem usage inside the PVC. The dashboard is provisioned from [versioned JSON](../../kubernetes/apps/observability/grafana/app/longhorn-dashboard.json), adapted from the pinned onzack upstream source linked in its description. Change it in Git; Grafana UI edits are not the source of truth.
 
 Use these checks to investigate a notification or audit the automation:
 

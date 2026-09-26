@@ -120,6 +120,27 @@ spec:
     # only VM datasource Grafana actually sees.
     defaultDashboards:
       enabled: true
+      # This cluster has Linux nodes and uses VictoriaMetrics. The sync job
+      # prunes these unused dashboard ConfigMaps without changing collectors.
+      dashboards:
+        k8s-resources-windows-cluster:
+          enabled: false
+        k8s-resources-windows-namespace:
+          enabled: false
+        k8s-resources-windows-pod:
+          enabled: false
+        k8s-windows-cluster-rsrc-use:
+          enabled: false
+        k8s-windows-node-rsrc-use:
+          enabled: false
+        nodes-aix:
+          enabled: false
+        nodes-darwin:
+          enabled: false
+        prometheus:
+          enabled: false
+        prometheus-remote-write:
+          enabled: false
 
     # Talos exposes these components on the node addresses rather than pods.
     # Controller-manager and scheduler require bearer-token authorization and
