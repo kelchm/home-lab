@@ -10,6 +10,7 @@ metadata:
     gethomepage.dev/enabled: "true"
     gethomepage.dev/group: Observability
     gethomepage.dev/name: VictoriaMetrics
+    gethomepage.dev/href: https://vm.home.kelch.io
     gethomepage.dev/icon: victoriametrics-light.svg
     gethomepage.dev/description: Metrics query UI
     gethomepage.dev/weight: "30"
@@ -40,6 +41,7 @@ metadata:
     gethomepage.dev/enabled: "true"
     gethomepage.dev/group: Observability
     gethomepage.dev/name: vmagent
+    gethomepage.dev/href: https://vmagent.home.kelch.io
     gethomepage.dev/icon: victoriametrics-light.svg
     gethomepage.dev/description: Scrape targets
     gethomepage.dev/weight: "60"
@@ -69,6 +71,7 @@ metadata:
     gethomepage.dev/enabled: "true"
     gethomepage.dev/group: Observability
     gethomepage.dev/name: vmalert
+    gethomepage.dev/href: https://vmalert.home.kelch.io
     gethomepage.dev/icon: victoriametrics-light.svg
     gethomepage.dev/description: Alerting rules
     gethomepage.dev/weight: "50"
@@ -100,6 +103,7 @@ metadata:
     gethomepage.dev/enabled: "true"
     gethomepage.dev/group: Observability
     gethomepage.dev/name: Alertmanager
+    gethomepage.dev/href: https://alertmanager.home.kelch.io
     gethomepage.dev/icon: alertmanager.svg
     gethomepage.dev/description: Alert routing and silences
     gethomepage.dev/weight: "20"

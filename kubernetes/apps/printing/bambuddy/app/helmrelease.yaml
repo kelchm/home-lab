@@ -130,6 +130,7 @@ spec:
           gethomepage.dev/enabled: "true"
           gethomepage.dev/group: Home
           gethomepage.dev/name: Bambuddy
+          gethomepage.dev/href: https://bambuddy.home.kelch.io
           gethomepage.dev/icon: bambu-lab.svg
           gethomepage.dev/description: 3D printer
           gethomepage.dev/weight: "30"

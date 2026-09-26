@@ -78,6 +78,7 @@ spec:
           gethomepage.dev/enabled: "true"
           gethomepage.dev/group: Media
           gethomepage.dev/name: Bazarr
+          gethomepage.dev/href: https://bazarr.home.kelch.io
           gethomepage.dev/icon: bazarr.svg
           gethomepage.dev/description: Subtitles
           gethomepage.dev/weight: "60"

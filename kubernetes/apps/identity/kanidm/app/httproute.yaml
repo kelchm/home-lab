@@ -17,6 +17,7 @@ metadata:
     gethomepage.dev/enabled: "true"
     gethomepage.dev/group: Infrastructure
     gethomepage.dev/name: Kanidm
+    gethomepage.dev/href: https://auth.home.kelch.io
     gethomepage.dev/icon: kanidm.svg
     gethomepage.dev/description: Identity and SSO
     gethomepage.dev/weight: "20"

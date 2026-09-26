@@ -60,6 +60,7 @@ spec:
           gethomepage.dev/enabled: "true"
           gethomepage.dev/group: Media
           gethomepage.dev/name: Seerr
+          gethomepage.dev/href: https://seerr.home.kelch.io
           gethomepage.dev/icon: seerr.svg
           gethomepage.dev/description: Requests
           gethomepage.dev/weight: "20"

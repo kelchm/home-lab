@@ -128,6 +128,7 @@ spec:
           gethomepage.dev/enabled: "true"
           gethomepage.dev/group: Media
           gethomepage.dev/name: Jellyfin
+          gethomepage.dev/href: https://jellyfin.home.kelch.io
           gethomepage.dev/icon: jellyfin.svg
           gethomepage.dev/description: Media server
           gethomepage.dev/weight: "10"

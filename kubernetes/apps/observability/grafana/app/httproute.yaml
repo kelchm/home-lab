@@ -10,6 +10,7 @@ metadata:
     gethomepage.dev/enabled: "true"
     gethomepage.dev/group: Observability
     gethomepage.dev/name: Grafana
+    gethomepage.dev/href: https://grafana.home.kelch.io
     gethomepage.dev/icon: grafana.svg
     gethomepage.dev/description: Dashboards
     gethomepage.dev/weight: "10"

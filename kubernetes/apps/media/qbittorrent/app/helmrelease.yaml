@@ -207,6 +207,7 @@ spec:
           gethomepage.dev/enabled: "true"
           gethomepage.dev/group: Media
           gethomepage.dev/name: qBittorrent
+          gethomepage.dev/href: https://qbittorrent.home.kelch.io
           gethomepage.dev/icon: qbittorrent.svg
           gethomepage.dev/description: Torrents
           gethomepage.dev/weight: "80"
