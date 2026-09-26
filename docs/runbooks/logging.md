@@ -4,7 +4,7 @@ All Kubernetes container stdout/stderr is collected node-locally by Alloy from `
 
 ## Query logs
 
-- **Grafana Explore:** `https://grafana.home.kelch.io/explore` — select the `VictoriaLogs` datasource. This is the normal single-pane entry point. The query editor's `Run in VMUI` action opens the query in the external VMUI. `View as JSON` is useful when the complete structured row is more useful than the selected `_msg`.
+- **Grafana Explore:** `https://grafana.home.kelch.io/explore` — select the `VictoriaLogs` datasource. This is the normal single-pane entry point. The query editor's `Run in VMUI` action opens the query in the external VMUI. Open a row's log menu and select `Show log details` to inspect its structured fields alongside `_msg`.
 - **VictoriaLogs VMUI:** `https://vlogs.home.kelch.io/select/vmui/` — use the native LogsQL explorer and live-stream view. The bare hostname redirects here.
 
 The datasource plugin v0.31.0 serializes the VMUI handoff's absolute end time as UTC without a timezone suffix; VictoriaLogs v1.52.0 VMUI interprets it in its selected timezone. In an America/New_York browser, the September 26 check shifted a historical window by four hours. The plugin also omits seconds. For exact historical windows, set and verify the time range explicitly in VMUI; automatic absolute-time handoff is not yet accepted under [#485](https://github.com/kelchm/home-lab/issues/485). Upstream datasource v0.32.0 still uses the same serialization.
@@ -41,7 +41,7 @@ Measured 2026-09-18 over a 24-hour window with `stats by (service_name) count()`
 | mcphub | 8.3k | all | None documented in the evaluation. | Keep native output; explicit logger prefixes are covered in the later collector evaluation. |
 | multus | 7.4k | all | None established for the deployed klog emitter. | Keep native output. |
 
-Traefik access-log JSON has queryable request/status fields but lacks a message field selected by the ingestion configuration, so `_msg` displays a missing-message placeholder. Use Grafana's `View as JSON` to inspect these rows. Revisit message presentation during [#583](https://github.com/kelchm/home-lab/issues/583)'s operator-workflow acceptance; do not infer severity from arbitrary access-log text. Native source-format changes, noisy-log reduction and secret/PII redaction remain separate from the collector migration.
+Traefik access-log JSON has queryable request/status fields but lacks a message field selected by the ingestion configuration, so `_msg` displays a missing-message placeholder. Use Grafana's `Show log details` to inspect these rows. Revisit message presentation during [#583](https://github.com/kelchm/home-lab/issues/583)'s operator-workflow acceptance; do not infer severity from arbitrary access-log text. Native source-format changes, noisy-log reduction and secret/PII redaction remain separate from the collector migration.
 
 ## Pipeline failures
 
