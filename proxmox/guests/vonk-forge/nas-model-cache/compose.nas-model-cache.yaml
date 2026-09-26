@@ -1,0 +1,25 @@
+# Apply alongside the existing three Compose files. PostgreSQL stays local.
+# Docker mounts NFS itself: failure to mount cannot fall back to a local directory.
+services:
+  control-api:
+    volumes:
+      - type: volume
+        source: nas-model-cache
+        target: /state/model-cache
+        volume:
+          nocopy: true
+  control-worker:
+    volumes:
+      - type: volume
+        source: nas-model-cache
+        target: /state/model-cache
+        volume:
+          nocopy: true
+volumes:
+  nas-model-cache:
+    name: vonk-forge-models-pve-sbx-nconnect4
+    driver: local
+    driver_opts:
+      type: nfs
+      o: addr=10.32.25.5,nfsvers=4.1,proto=tcp,hard,timeo=600,retrans=2,nosuid,nodev,noexec,nconnect=4
+      device: :/volume1/vonk-forge-models-pve-sbx
