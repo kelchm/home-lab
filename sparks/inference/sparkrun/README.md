@@ -1,6 +1,6 @@
 # Mia GLM-5.3-Flash through SparkRun
 
-Two DGX Sparks serve `GLM-5.3-Flash-EXL3` at `http://10.32.21.31:8888/v1`. SparkRun 0.3.9 owns model/image distribution, fabric detection, containers, runtime caches, readiness, warmup, logs, stop, and benchmarking. These hosts are outside Flux. Vonk, Qwen and DeepSeek remain stopped.
+When launched, this recipe serves `GLM-5.3-Flash-EXL3` across two DGX Sparks at `http://10.32.21.31:8888/v1`. SparkRun 0.3.9 owns model/image distribution, fabric detection, containers, runtime caches, readiness, warmup, logs, stop, and benchmarking. These hosts are outside Flux. Check actual host state before launching; other experiments can use either GPU.
 
 ## Deploy
 
@@ -45,7 +45,7 @@ sparkrun stop ./mia-glm53-exl3.yaml --cluster sparks
 
 `run --no-follow` waits for readiness and upstream shape warmup because the recipe has `post_exec`. A failed hook makes the command fail but does not automatically stop the server; inspect logs and stop the failed candidate before rollback. Containers require an explicit SparkRun launch after a host reboot. Persistent runtime caches are managed by SparkRun.
 
-Before an upgrade, retain the exact working recipe and prepared mod bundle outside the checkout. Stop the candidate with its own recipe, then launch the retained recipe with the same cluster and launch flags. Recipe fingerprints can differ, so use the corresponding recipe for stop and logs. Never run two inference stacks on these GPUs; the legacy Qwen Taskfile has a SparkRun interlock.
+Before an upgrade, retain the exact working recipe and prepared mod bundle outside the checkout. Stop the candidate with its own recipe, then launch the retained recipe with the same cluster and launch flags. Recipe fingerprints can differ, so use the corresponding recipe for stop and logs. Never overlap inference stacks on these GPUs. Inspect running containers, GPU processes and available host memory on both hosts before launch, and stop conflicting workloads with their own lifecycle commands. The legacy Qwen Compose recipe and its Taskfile interlock are retired; they provide no admission guard for SparkRun or other experiments.
 
 For the initial migration, the previous recipe remains at `~/sparkrun/receipts/integration-20260919/baseline.yaml`, with its original Mia checkout and `/opt/sparkrun/models/` paths on both hosts. Those model files share hardlinks with the native HF cache: do not edit weights in place. Native synchronization normalized ownership; the root-run baseline remains readable. Fresh provisioning uses native downloads and does not require the migration script.
 

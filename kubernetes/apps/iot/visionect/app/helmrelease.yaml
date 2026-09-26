@@ -134,7 +134,7 @@ spec:
           proxy:
             image:
               repository: docker.io/nginxinc/nginx-unprivileged
-              tag: 1.31.5-alpine@sha256:1905fed0833f52c25fdda4d37e17740615f44e9520b62782a0affcfa8448cb96
+              tag: 1.31.6-alpine@sha256:334791b789e0dfab66415dc74e0680434afbd340fb427be9b1c569f8796762eb
             probes:
               readiness:
                 enabled: true
@@ -176,7 +176,7 @@ spec:
           redis:
             image:
               repository: docker.io/valkey/valkey
-              tag: 7.2.14@sha256:1bbb912679bea3ec2c1b21af3860beb4397774e9118eddad4ae50d8e97fabb99
+              tag: 7.2.14@sha256:ef0f9fb533b1f06fb7aba6478d758ca1c077d49e2bcb2b4365a4ea7f50b6d42e
             command: ["valkey-server"]
             args:
               - --save

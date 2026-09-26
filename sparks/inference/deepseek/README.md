@@ -1,5 +1,7 @@
 # DeepSeek-V4-Flash-0731 across both Sparks
 
+This is the retained legacy DSpark guide, not the preferred inference lifecycle. Use [SparkRun](../../README.md#sparkrun-operation) for current operation. The measurements and patch checks below describe this pinned historical runtime, not a claim that it is currently running or qualified against newer dependencies.
+
 Runs [tonyd2wild's DSpark guide](https://github.com/tonyd2wild/DeepSeek-v4-Flash-0731-DSpark-1M-NVFP4-KV-2x-DGX-Spark) — the recipe behind the [Level1Techs dual-Spark thread](https://forum.level1techs.com/t/dual-sparks-in-nvfp4-vs-4x-rtx-pro-6000-with-native-deepseek-v4-0731-quants-and-speed/253539). This directory carries only our site overrides; the guide is cloned onto each host and owns the build and launch.
 
 **Do not substitute a prebuilt image.** The guide builds `vllm-dspark-runtime:dspark-nvfp4-stage-c` locally as a four-stage overlay on vLLM 0.21.x. That overlay is what supplies `nvfp4_ds_mla` and `--speculative-config method=dspark`; a stock image rejects both at argument parsing. An earlier attempt here read that rejection as "the published config cannot run" and switched to a different prebuilt image — that was wrong, and cost a working deployment.
@@ -33,7 +35,16 @@ Then, on the head only (it rsyncs and rebuilds on the worker):
 ./start-deepseek-v4-flash-dspark.sh     # worker-first launch
 ```
 
-Serves `deepseek-v4-flash-dspark` on **:8888** (not :8000, which is the Qwen stack's port). Mutually exclusive with Qwen: TP=2 claims both hosts.
+Serves `deepseek-v4-flash-dspark` on **:8888**. TP=2 claims both hosts, so stop other GPU workloads through their own lifecycle commands before launching it. The former Qwen Compose path is retired.
+
+The repository's optional helpers are scoped to this guide's containers:
+
+```sh
+task sparks:deepseek:logs HOST=10.32.21.31
+task sparks:deepseek:down  # removes dspark-guide containers on both hosts
+```
+
+These helpers do not stop or inspect SparkRun jobs; use SparkRun with the recipe that launched them.
 
 ## 0731 needs Patch 4, or you silently lose half your throughput
 

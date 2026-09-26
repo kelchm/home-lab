@@ -30,6 +30,17 @@
   },
   packageRules: [
     {
+      // external-dns v0.22.0 (chart 1.22.0) changed the default annotation
+      // prefix with no fallback; the first `policy: sync` pass then deleted
+      // every managed record in the zone (2026-09-19 incident). Any future
+      // bump must be reviewed against the external-dns upgrade playbook and
+      // rolled out with a dry-run gate, never unattended.
+      description: "external-dns: DNS-mutating, require manual dashboard approval",
+      matchPackageNames: ["ghcr.io/home-operations/charts-mirror/external-dns"],
+      automerge: false,
+      dependencyDashboardApproval: true,
+    },
+    {
       // VSS 7.7.0 introduced mandatory server licensing. Keep the proven
       // pre-license deployment byte-for-byte pinned unless this rule and the
       // image pins are deliberately changed together.
