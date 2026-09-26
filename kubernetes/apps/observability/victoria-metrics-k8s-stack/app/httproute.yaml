@@ -10,7 +10,7 @@ metadata:
     gethomepage.dev/enabled: "true"
     gethomepage.dev/group: Observability
     gethomepage.dev/name: VictoriaMetrics
-    gethomepage.dev/icon: victoriametrics.svg
+    gethomepage.dev/icon: victoriametrics-light.svg
     gethomepage.dev/description: Metrics query UI
     gethomepage.dev/weight: "30"
 spec:
@@ -40,7 +40,7 @@ metadata:
     gethomepage.dev/enabled: "true"
     gethomepage.dev/group: Observability
     gethomepage.dev/name: vmagent
-    gethomepage.dev/icon: victoriametrics.svg
+    gethomepage.dev/icon: victoriametrics-light.svg
     gethomepage.dev/description: Scrape targets
     gethomepage.dev/weight: "60"
 spec:
@@ -69,7 +69,7 @@ metadata:
     gethomepage.dev/enabled: "true"
     gethomepage.dev/group: Observability
     gethomepage.dev/name: vmalert
-    gethomepage.dev/icon: victoriametrics.svg
+    gethomepage.dev/icon: victoriametrics-light.svg
     gethomepage.dev/description: Alerting rules
     gethomepage.dev/weight: "50"
 spec:

@@ -25,6 +25,10 @@ sudo -i
 
 PVE retains its cluster-managed `root@pve-sbx-*` SSH keys for node-to-node operations. The human `personal:home-lab` key is not authorized directly for root; ordinary administration and the encrypted configuration-capture workflow connect as `kelchm` and elevate with sudo.
 
+### Service accounts
+
+`homepage@pve` is a read-only account for the Homepage Proxmox widget. Its privilege-separated API token `homepage@pve!homepage` holds `PVEAuditor` on `/`, as does the user; the token secret lives only in `kubernetes/apps/homepage/homepage/app/secret.sops.yaml`. Created 2026-09-26. To rotate it, remove and re-add the token with `pveum user token`, re-grant the ACL, and update the Secret.
+
 ## Certificates
 
 Each node serves an independently issued Let's Encrypt certificate for its exact `pve-sbx-N.home.kelch.io` FQDN. The cluster ACME account is `letsencrypt-production`, and the DNS-01 plugin is `pve-sbx-acme-dns01`, limited to the three PVE nodes and backed by a dedicated Cloudflare token with DNS Edit and Zone Read only for `kelch.io`. The authoritative token remains in 1Password; PVE's encrypted recovery capture contains the cluster runtime copy. Do not reuse the Kubernetes cert-manager credential.

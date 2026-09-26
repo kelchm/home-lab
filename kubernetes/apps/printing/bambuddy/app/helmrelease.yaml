@@ -128,7 +128,7 @@ spec:
       app:
         annotations:
           gethomepage.dev/enabled: "true"
-          gethomepage.dev/group: Apps
+          gethomepage.dev/group: Home
           gethomepage.dev/name: Bambuddy
           gethomepage.dev/icon: bambu-lab.svg
           gethomepage.dev/description: 3D printer
