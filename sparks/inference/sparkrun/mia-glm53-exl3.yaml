@@ -1,0 +1,141 @@
+# Pinned Mia runtime via a SparkRun mod; prepare the mod before launch (README.md).
+recipe_version: '2'
+model: Mia-AiLab/GLM-5.3-Flash-EXL3-TR3-4bpw
+runtime: vllm-distributed
+container: ghcr.io/miaai-lab/glm-5.3-flash-2x-dgx-sparks@sha256:447114ee77d14c9b4732ee23978ada2a0ee9027868a231d6fd42700a8b25be1d
+min_nodes: 2
+max_nodes: 2
+metadata:
+  description: GLM-5.3-Flash EXL3/TR3 4 bpw with DFlash2 k=7 on two DGX Sparks
+  model_vram: 164.0
+  kv_dtype: fp8_ds_mla
+  kv_vram_per_token: 7.331371307373047e-06
+  kv_lora_rank: 512
+  overlay_source_revision: 11f6cd45d39d860e290362e22fb5df9ef42196e2
+  target_model_revision: 25a44fdbf16862a46b7cc9921142c6c81350af2f
+  draft_model_revision: dc77ff1c99eeb2df044ee3d4f0094eb033fee410
+defaults:
+  port: 8888
+  host: 0.0.0.0
+  served_model_name: GLM-5.3-Flash-EXL3
+  tensor_parallel: 2
+  pipeline_parallel: 1
+  distributed_executor_backend: mp
+  gpu_memory_utilization: 0.85
+  max_model_len: 850000
+  max_num_seqs: 4
+  max_num_batched_tokens: 7168
+  quantization: exl3
+  load_format: instanttensor
+  kv_cache_dtype: fp8
+  kv_cache_memory_bytes: 15032385536
+  local_speculative_config: '{"method":"dflash","model":"/cache/huggingface/hub/models--incoai--GLM-5.3-Flash-DFlash2/snapshots/dc77ff1c99eeb2df044ee3d4f0094eb033fee410","num_speculative_tokens":7,"kv_cache_dtype":"auto","draft_tensor_parallel_size":2,"draft_sample_method":"probabilistic","rejection_sample_method":"standard"}'
+  revision: 25a44fdbf16862a46b7cc9921142c6c81350af2f
+env:
+  EXL3_FUSED_MOE: '1'
+  EXL3_MOE_ROW_TILE: '0'
+  EXL3_TEMP_ROWS_FUSED: '32'
+  FLASHINFER_CUDA_ARCH_LIST: 12.1a
+  FLASHINFER_DISABLE_VERSION_CHECK: '1'
+  GLM53_MIXED_PREFILL_CHUNK: fair
+  GLM53_FAIR_PREFILL_CHUNK: '256'
+  GLM53_FAIR_PREFILL_SHARE: '0.30'
+  GLM53_FAIR_PREFILL_MAX_INTERVAL_MS: '2000'
+  GLM53_FAIR_PREFILL_MAX_STEP_MS: '2000'
+  GLM53_FAIR_PREFILL_MAX_CHUNKS: '1'
+  GLM53_SPINWAIT_MS: stock
+  GLM53_ADAPTIVE_K: 'off'
+  GLM53_DENSE_FP8: 'off'
+  GLM53_EXL3_MOE_FAST: '0'
+  GLM53_EXPOSE_CACHE_RESET: '0'
+  TILELANG_CACHE_DIR: /cache/runtime/tilelang
+  VLLM_ENGINE_READY_TIMEOUT_S: '3600'
+  NCCL_IB_ROCE_VERSION_NUM: '2'
+  GLM53_SUPPRESS_STOPS_IN_REASONING: '1'
+  NCCL_CROSS_NIC: '0'
+  NCCL_CUMEM_ENABLE: '0'
+  NCCL_IB_MERGE_NICS: '0'
+  NCCL_NET_PLUGIN: none
+  NCCL_NVLS_ENABLE: '0'
+  PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+  TORCH_CUDA_ARCH_LIST: 12.1a
+  VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: '1800'
+  VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS: '0'
+  VLLM_NO_USAGE_STATS: '1'
+  DO_NOT_TRACK: '1'
+  EXL3_FAT_GROUPED: '1'
+  EXL3_FAT_KERNEL: '1'
+  GLM53_INDEXER_WORKSPACE: rightsize
+  GLM53_APC_NO_STORE: '1'
+  GLM53_KV_CAPACITY_LOG: '1'
+  ABLIT: '0'
+  HF_HUB_OFFLINE: '1'
+  TRANSFORMERS_OFFLINE: '1'
+  NCCL_DEBUG: WARN
+  DEFAULT_MAX_NEW_TOKENS: '65536'
+  NCCL_MIN_NCHANNELS: '8'
+  NCCL_MAX_NCHANNELS: '8'
+  INSTANTTENSOR_BUFFER_SIZE: '2147483648'
+executor_config:
+  entrypoint: ''
+  user: root
+  privileged: false
+  ipc: host
+  devices:
+  - /dev/infiniband
+  shm_size: 32gb
+  cap_add:
+  - IPC_LOCK
+  ulimit:
+  - memlock=-1:-1
+  - stack=67108864
+  - nofile=65535:65535
+  auto_remove: false
+pre_exec:
+- mkdir -p /cache/runtime/tilelang
+post_exec:
+- GLM53_WARMUP_MAX_CONCURRENCY=4 GLM53_WARMUP_REQ_TIMEOUT=240 GLM53_WARMUP_DFLASH_K=7 GLM53_WARMUP_TRITON_CACHE_DIR=/cache/runtime/triton
+  bash /opt/glm53/boot-shape-warmup.sh http://127.0.0.1:8888 GLM-5.3-Flash-EXL3
+command: |
+  vllm serve {model} \
+    --revision {revision} \
+    --served-model-name {served_model_name} \
+    --host {host} \
+    --port {port} \
+    --tensor-parallel-size {tensor_parallel} \
+    --pipeline-parallel-size {pipeline_parallel} \
+    --distributed-executor-backend {distributed_executor_backend} \
+    --quantization {quantization} \
+    --load-format {load_format} \
+    --kv-cache-dtype {kv_cache_dtype} \
+    --kv-cache-memory-bytes {kv_cache_memory_bytes} \
+    --max-model-len {max_model_len} \
+    --max-num-seqs {max_num_seqs} \
+    --max-num-batched-tokens {max_num_batched_tokens} \
+    --gpu-memory-utilization {gpu_memory_utilization} \
+    --tool-call-parser glm47 \
+    --enable-auto-tool-choice \
+    --reasoning-parser glm45 \
+    --enable-prefix-caching \
+    --no-enable-flashinfer-autotune \
+    --chat-template /opt/glm53/chat_template.jinja \
+    --limit-mm-per-prompt '{"image":48,"video":1}' \
+    --mm-processor-kwargs '{"max_image_tokens":2048}' \
+    --mm-processor-cache-gb 1 \
+    --skip-mm-profiling \
+    --cudagraph-capture-sizes 1 2 4 8 16 24 32 \
+    --speculative-config '{local_speculative_config}'
+model_revision: 25a44fdbf16862a46b7cc9921142c6c81350af2f
+mods:
+- mods/mia-glm53
+distribution_config:
+  models:
+    entries:
+    - name: Mia-AiLab/GLM-5.3-Flash-EXL3-TR3-4bpw
+      revision: 25a44fdbf16862a46b7cc9921142c6c81350af2f
+      target:
+      - -1
+    - name: incoai/GLM-5.3-Flash-DFlash2
+      revision: dc77ff1c99eeb2df044ee3d4f0094eb033fee410
+      target:
+      - -1
