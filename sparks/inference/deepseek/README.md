@@ -37,7 +37,7 @@ Then, on the head only (it rsyncs and rebuilds on the worker):
 
 Serves `deepseek-v4-flash-dspark` on **:8888**. TP=2 claims both hosts, so stop other GPU workloads through their own lifecycle commands before launching it. The former Qwen Compose path is retired.
 
-The repository's optional helpers are scoped to this guide's containers:
+The repository's optional helpers select the exact Docker Compose labels `com.docker.compose.project=dspark-guide` and `com.docker.compose.service=vllm-dspark`, matching the pinned guide launched from `~/dspark-guide`. A container name containing `dspark-guide` alone does not qualify. If you customize the Compose project name, use the guide's lifecycle scripts with that same project instead.
 
 ```sh
 task sparks:deepseek:logs HOST=10.32.21.31
