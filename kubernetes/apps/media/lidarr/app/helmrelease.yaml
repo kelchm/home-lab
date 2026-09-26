@@ -75,6 +75,17 @@ spec:
           - path: /data
     route:
       app:
+        annotations:
+          gethomepage.dev/enabled: "true"
+          gethomepage.dev/group: Media
+          gethomepage.dev/name: Lidarr
+          gethomepage.dev/icon: lidarr.svg
+          gethomepage.dev/description: Music
+          gethomepage.dev/weight: "50"
+          gethomepage.dev/widget.type: lidarr
+          gethomepage.dev/widget.url: http://lidarr.media.svc.cluster.local:8686
+          # Escaped from Helm's tpl; Homepage fills it from homepage-secret.
+          gethomepage.dev/widget.key: '{{ "{{HOMEPAGE_VAR_LIDARR_KEY}}" }}'
         hostnames: ["lidarr.home.kelch.io"]
         parentRefs:
           - name: gateway-admin

@@ -1,0 +1,49 @@
+---
+# Off-cluster systems and in-cluster apps without an HTTPRoute. Everything
+# with a route declares its own tile through gethomepage.dev/* annotations.
+- Infrastructure:
+    - Proxmox VE:
+        icon: proxmox.svg
+        href: https://pve-sbx-1.home.kelch.io:8006
+        description: pve-sbx cluster
+        siteMonitor: https://pve-sbx-1.home.kelch.io:8006
+        weight: 30
+    - Synology:
+        icon: synology-dsm.svg
+        href: https://10.32.20.5:5001
+        description: DS1821+ NAS
+        siteMonitor: https://10.32.20.5:5001
+        weight: 40
+    - UniFi:
+        icon: unifi.svg
+        href: https://10.32.1.1
+        description: Gateway and network
+        siteMonitor: https://10.32.1.1
+        weight: 50
+    - GLKVM:
+        icon: pikvm.svg
+        href: https://10.32.20.10
+        description: GL-RM1PE KVM
+        siteMonitor: https://10.32.20.10
+        weight: 60
+    - netboot.xyz:
+        icon: netbootxyz.svg
+        href: http://10.32.20.5:3000
+        description: PXE menus
+        siteMonitor: http://10.32.20.5:3000
+        weight: 70
+
+- Apps:
+    - Visionect:
+        icon: mdi-tablet
+        href: https://vss.home.kelch.io
+        description: E-paper display server
+        namespace: iot
+        app: visionect
+        weight: 20
+    - Hermes:
+        icon: mdi-robot-outline
+        href: https://hermes.home.kelch.io
+        description: Agent
+        siteMonitor: https://hermes.home.kelch.io
+        weight: 50

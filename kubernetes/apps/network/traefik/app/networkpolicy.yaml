@@ -150,6 +150,16 @@ spec:
             - port: "9100"
               protocol: TCP
   egress:
+    # Homepage backend.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: homepage
+            app.kubernetes.io/name: homepage
+            io.cilium.k8s.policy.serviceaccount: homepage
+      toPorts:
+        - ports:
+            - port: "3000"
+              protocol: TCP
     # MCPHub backend.
     - toEndpoints:
         - matchLabels:

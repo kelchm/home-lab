@@ -1,0 +1,128 @@
+---
+# Homepage — the home.kelch.io start page. In-cluster tiles come from
+# gethomepage.dev/* annotations on each app's HTTPRoute; off-cluster systems,
+# info widgets, bookmarks, and group layout live in config/.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: homepage
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: homepage
+  interval: 1h
+  values:
+    controllers:
+      homepage:
+        # Widget keys arrive as env vars, which only a restart refreshes.
+        annotations:
+          secret.reloader.stakater.com/reload: homepage-secret
+        containers:
+          app:
+            image:
+              # renovate: datasource=docker depName=ghcr.io/gethomepage/homepage
+              repository: ghcr.io/gethomepage/homepage
+              tag: v2.4.0@sha256:643bd0be730d40f69d58028a55d1a896739333e8815786df42bc97f109ecbe61
+            env:
+              TZ: America/New_York
+              HOMEPAGE_ALLOWED_HOSTS: home.kelch.io
+              # Kubernetes sets HOSTNAME to the pod name, which Next.js would
+              # otherwise bind to instead of all interfaces.
+              HOSTNAME: 0.0.0.0
+              PORT: &port 3000
+              LOG_TARGETS: stdout
+            envFrom:
+              - secretRef:
+                  name: homepage-secret
+            probes:
+              liveness: &probe
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: /api/healthcheck
+                    port: *port
+                    # Host validation covers the health check too; localhost
+                    # is always allowed.
+                    httpHeaders:
+                      - name: Host
+                        value: localhost:3000
+                  initialDelaySeconds: 10
+                  periodSeconds: 30
+                  timeoutSeconds: 5
+                  failureThreshold: 3
+              readiness: *probe
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities: { drop: ["ALL"] }
+            resources:
+              requests:
+                cpu: 20m
+                memory: 256Mi
+              limits:
+                memory: 1Gi
+    defaultPodOptions:
+      # Service discovery, pod status, and the cluster widgets read the API.
+      automountServiceAccountToken: true
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+    serviceAccount:
+      homepage: {}
+    rbac:
+      roles:
+        homepage:
+          type: ClusterRole
+          rules:
+            - apiGroups: [""]
+              resources: ["namespaces", "nodes", "pods"]
+              verbs: ["get", "list"]
+            - apiGroups: ["gateway.networking.k8s.io"]
+              resources: ["gateways", "httproutes"]
+              verbs: ["get", "list"]
+            - apiGroups: ["metrics.k8s.io"]
+              resources: ["nodes", "pods"]
+              verbs: ["get", "list"]
+      bindings:
+        homepage:
+          type: ClusterRoleBinding
+          roleRef:
+            identifier: homepage
+          subjects:
+            - identifier: homepage
+    service:
+      app:
+        controller: homepage
+        ports:
+          http:
+            port: *port
+    persistence:
+      # Directory mount, so edits reach the pod without a restart and Homepage
+      # picks them up on the next page load. Every file Homepage would
+      # otherwise copy from its skeleton must exist in the ConfigMap, because
+      # the mount is read-only.
+      config:
+        type: configMap
+        name: homepage-config
+        globalMounts:
+          - path: /app/config
+            readOnly: true
+    route:
+      app:
+        hostnames: ["home.kelch.io"]
+        parentRefs:
+          - name: gateway-admin
+            namespace: network
+            sectionName: https
+        rules:
+          - backendRefs:
+              - identifier: app
+                port: *port
+            filters:
+              - type: ExtensionRef
+                extensionRef:
+                  group: traefik.io
+                  kind: Middleware
+                  name: kanidm-oidc

@@ -13,6 +13,14 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: kanidm
+  annotations:
+    gethomepage.dev/enabled: "true"
+    gethomepage.dev/group: Infrastructure
+    gethomepage.dev/name: Kanidm
+    gethomepage.dev/icon: kanidm.svg
+    gethomepage.dev/description: Identity and SSO
+    gethomepage.dev/weight: "20"
+    gethomepage.dev/pod-selector: kanidm.kaniop.rs/cluster=kanidm
 spec:
   hostnames: ["auth.home.kelch.io"]
   parentRefs:

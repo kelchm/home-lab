@@ -1,0 +1,25 @@
+---
+- home-lab:
+    - Repository:
+        - icon: github.svg
+          href: https://github.com/kelchm/home-lab
+    - Issues:
+        - icon: mdi-record-circle-outline
+          href: https://github.com/kelchm/home-lab/issues
+    - Pull requests:
+        - icon: mdi-source-pull
+          href: https://github.com/kelchm/home-lab/pulls
+    - Renovate:
+        - icon: mdi-update
+          href: https://github.com/kelchm/home-lab/issues/2
+
+- Consoles:
+    - Cloudflare:
+        - icon: cloudflare.svg
+          href: https://dash.cloudflare.com
+    - Tailscale:
+        - icon: tailscale.svg
+          href: https://login.tailscale.com/admin
+    - UniFi Site Manager:
+        - icon: unifi.svg
+          href: https://unifi.ui.com

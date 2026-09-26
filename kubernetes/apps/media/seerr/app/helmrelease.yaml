@@ -56,6 +56,17 @@ spec:
     route:
       main:
         enabled: true
+        annotations:
+          gethomepage.dev/enabled: "true"
+          gethomepage.dev/group: Media
+          gethomepage.dev/name: Seerr
+          gethomepage.dev/icon: seerr.svg
+          gethomepage.dev/description: Requests
+          gethomepage.dev/weight: "20"
+          gethomepage.dev/widget.type: seerr
+          gethomepage.dev/widget.url: http://seerr.media.svc.cluster.local:5055
+          # Homepage fills this from homepage-secret.
+          gethomepage.dev/widget.key: "{{HOMEPAGE_VAR_SEERR_KEY}}"
         hostnames: ["seerr.home.kelch.io"]
         parentRefs:
           - name: gateway-services

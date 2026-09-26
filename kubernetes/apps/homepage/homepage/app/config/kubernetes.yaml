@@ -1,0 +1,6 @@
+---
+# In-cluster tiles come from HTTPRoutes annotated gethomepage.dev/enabled.
+mode: cluster
+ingress: false
+traefik: false
+gateway: true

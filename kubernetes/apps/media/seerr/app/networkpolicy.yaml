@@ -34,6 +34,16 @@ spec:
         - ports:
             - port: "5055"
               protocol: TCP
+    # Homepage's request widget, authenticated by Seerr's API key.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: homepage
+            app.kubernetes.io/name: homepage
+            io.cilium.k8s.policy.serviceaccount: homepage
+      toPorts:
+        - ports:
+            - port: "5055"
+              protocol: TCP
   egress:
     - toEndpoints:
         - matchLabels:

@@ -1,0 +1,137 @@
+---
+# Default-deny policy for Homepage. The only inbound path is gateway-admin.
+# Outbound is the API server (discovery, pod status, cluster widgets), the
+# service widget backends, and the off-cluster status checks in config/.
+# Browsers load icons and follow links directly; Homepage fetches neither.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: homepage
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: homepage
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: network
+            app.kubernetes.io/instance: traefik-admin-network
+            io.cilium.k8s.policy.serviceaccount: traefik-admin
+      toPorts:
+        - ports:
+            - port: "3000"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    - toEntities:
+        - kube-apiserver
+    # Service widgets. Cilium evaluates L4 policy against the backend
+    # endpoint, so these are container ports.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: media
+            app.kubernetes.io/name: sonarr
+      toPorts:
+        - ports:
+            - port: "8989"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: media
+            app.kubernetes.io/name: radarr
+      toPorts:
+        - ports:
+            - port: "7878"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: media
+            app.kubernetes.io/name: lidarr
+      toPorts:
+        - ports:
+            - port: "8686"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: media
+            app.kubernetes.io/name: bazarr
+      toPorts:
+        - ports:
+            - port: "6767"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: media
+            app.kubernetes.io/name: prowlarr
+      toPorts:
+        - ports:
+            - port: "9696"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: media
+            app.kubernetes.io/name: sabnzbd
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: media
+            app.kubernetes.io/name: qbittorrent
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: media
+            app.kubernetes.io/name: seerr
+      toPorts:
+        - ports:
+            - port: "5055"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: vmalertmanager
+            app.kubernetes.io/instance: victoria-metrics-k8s-stack
+      toPorts:
+        - ports:
+            - port: "9093"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: longhorn-system
+            app: longhorn-manager
+      toPorts:
+        - ports:
+            - port: "9500"
+              protocol: TCP
+    # Off-cluster status checks.
+    - toCIDR:
+        - 10.32.20.21/32 # pve-sbx-1
+      toPorts:
+        - ports:
+            - port: "8006"
+              protocol: TCP
+    - toCIDR:
+        - 10.32.20.5/32 # nas
+      toPorts:
+        - ports:
+            - port: "5001" # DSM
+              protocol: TCP
+            - port: "3000" # netboot.xyz
+              protocol: TCP
+    - toCIDR:
+        - 10.32.1.1/32 # UniFi gateway
+        - 10.32.20.10/32 # glkvm
+        - 10.32.21.100/32 # hermes
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP

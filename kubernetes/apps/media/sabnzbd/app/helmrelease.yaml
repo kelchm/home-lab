@@ -93,6 +93,17 @@ spec:
                 subPath: .downloads/usenet
     route:
       app:
+        annotations:
+          gethomepage.dev/enabled: "true"
+          gethomepage.dev/group: Media
+          gethomepage.dev/name: SABnzbd
+          gethomepage.dev/icon: sabnzbd.svg
+          gethomepage.dev/description: Usenet
+          gethomepage.dev/weight: "90"
+          gethomepage.dev/widget.type: sabnzbd
+          gethomepage.dev/widget.url: http://sabnzbd.media.svc.cluster.local:8080
+          # Escaped from Helm's tpl; Homepage fills it from homepage-secret.
+          gethomepage.dev/widget.key: '{{ "{{HOMEPAGE_VAR_SABNZBD_KEY}}" }}'
         hostnames: ["sabnzbd.home.kelch.io"]
         parentRefs:
           - name: gateway-admin
