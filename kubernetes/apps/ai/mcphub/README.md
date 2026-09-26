@@ -20,14 +20,16 @@ Static system bearer keys represent workload principals. The current matrix is:
 | Principal | Allowed groups |
 |---|---|
 | `operator-interactive` | All six groups. |
-| `operator-claude-code` | All six groups; Claude Code on the operator workstation. |
-| `operator-claude-desktop` | All six groups; Claude Desktop on the operator workstation. |
-| `operator-codex` | All six groups; Codex CLI and the ChatGPT desktop app on the operator workstation, which share `~/.codex/config.toml`. |
-| `operator-opencode` | All six groups; OpenCode on the operator workstation. |
-| `operator-grok` | All six groups; Grok CLI on the operator workstation. |
+| `operator-claude-code` | All six groups. |
+| `operator-codex` | All six groups; covers the Codex CLI and the ChatGPT desktop app, which share `~/.codex/config.toml`. |
+| `operator-grok` | All six groups. |
+| `operator-opencode` | Every group except `homelab-read`. |
+| `operator-claude-desktop` | `automotive-reference`, `electronics-reference`, `weather`, and `hacker-news`. |
 | `hermes-personal` | Every non-browser group. |
 | `hermes-ops-cron` | `homelab-read` only. |
 | `flatrate-discord` | `automotive-reference` only. |
+
+The `operator-*` keys belong to agent clients on the operator workstation. `homelab-read` is the sensitive group: Kubernetes and Flux run under the `view` ClusterRole and cannot read Secrets, but Grafana's Viewer token queries every datasource, including all pod logs. `browser` and `hacker-news` return untrusted text, and `browser` can send data to any public host. Claude Code, Codex, and Grok already have shell, web, and cluster access, so MCPHub adds no new reach for them. OpenCode omits `homelab-read` because its `opencode-go` provider sends tool output to third-party model hosts. Claude Desktop is used for reference lookups and has no unrestricted outbound channel of its own, so it omits both `homelab-read` and `browser`. Delegated, unattended agent runs must not load MCPHub connections; they read untrusted input without an operator reviewing each tool call.
 
 These are service identities. Individual Discord members are authorized and audited by the Flatrate Hermes profile, not by MCPHub. Likewise, MCPHub does not turn a shared upstream identity into per-user authorization: a future client that needs different Kubernetes access must use a separately deployed backend with its own ServiceAccount and group.
 
