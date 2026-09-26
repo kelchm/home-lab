@@ -74,6 +74,14 @@ Tool evaluation uses the upstream `tool-eval-bench` v1.8.0 CLI directly for 15 c
 
 The [acceptance gate](tests/acceptance.py) checks five-image input and the known scheduler regression: a correct short reply must begin within five seconds while an earlier decode is still active. It exits nonzero on failure. For deeper mixed-prefill diagnosis, use Mia's [upstream probe at the locked revision](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks/blob/11f6cd45d39d860e290362e22fb5df9ef42196e2/tests/test_mixed_prefill_decode.py) on the head; it measures decode overlap and newcomer latency but does not enforce the short-arrival gate. Benchmark output and experimental receipts are disposable working data, not tracked repository content.
 
+### Token usage accounting
+
+For correct cached-input reporting, add [`--enable-prompt-tokens-details`](https://docs.vllm.ai/en/latest/cli/serve/#--enable-prompt-tokens-details) to the recipe's `vllm serve` command before the next serving launch. It exposes `usage.prompt_tokens_details.cached_tokens` in API responses and is independent of `--enable-prefix-caching`. `usage.prompt_tokens` includes both cached and fresh input; a missing cache breakdown does not mean every prompt token was freshly processed.
+
+The [September 26 usage investigation](https://app.t3.codes/085bbae7-4da9-4bfa-86ed-ac1a17ad3763/8c1a694a-b03e-4b5d-80f1-79b1d9f778e4) confirmed that the previous GLM launch omitted this flag: vLLM recorded cache reuse internally, while OpenCode stored the whole prompt as ordinary input and Codeburn lost that distinction. The checked-in recipe still omits the flag. Enablement and verification through the client remain pending for the next launch.
+
+After enabling it, repeat an identical long prompt while its prefix is still cached and confirm a warm response reports nonzero `usage.prompt_tokens_details.cached_tokens`. For streaming requests, send `"stream_options": {"include_usage": true}` and inspect the final usage chunk. Then verify the same call's cache reads reach OpenCode's saved `tokens.cache.read` and Codeburn's cache breakdown. Server metrics alone do not establish that the client captured them, and missing details must not be interpreted as zero cache reuse.
+
 ## Settings and limits
 
 The [recipe](mia-glm53-exl3.yaml) keeps InstantTensor, EXL3/TR3 target TP2, DFlash2 k=7 with draft TP2, 850,000 context, four sequences, 7,168-token batches, FP8 KV, CUDA graphs, fair mixed-prefill scheduling, and abliteration disabled. Image and model revisions are immutable pins. Source and image are pinned separately; the source revision is not a claim about image build provenance.
