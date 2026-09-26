@@ -85,10 +85,10 @@
           "uid": "victoriametrics"
         },
         "query": {
-          "query": "label_values(longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\"${namespace:regex}\"}, pvc)",
+          "query": "label_values(longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\"}, pvc)",
           "refId": "StandardVariableQuery"
         },
-        "definition": "label_values(longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\"${namespace:regex}\"}, pvc)",
+        "definition": "label_values(longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\"}, pvc)",
         "refresh": 1,
         "sort": 1,
         "multi": true,
@@ -243,7 +243,7 @@
             "uid": "victoriametrics"
           },
           "editorMode": "code",
-          "expr": "count(longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\"${namespace:regex}\",pvc=~\"${pvc:regex}\"})",
+          "expr": "count(longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"})",
           "refId": "A",
           "legendFormat": "",
           "range": false,
@@ -310,7 +310,7 @@
             "uid": "victoriametrics"
           },
           "editorMode": "code",
-          "expr": "sum(longhorn_volume_robustness{cluster=\"k8s-prod\",pvc_namespace=~\"${namespace:regex}\",pvc=~\"${pvc:regex}\",state=\"healthy\"})",
+          "expr": "sum(longhorn_volume_robustness{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\",state=\"healthy\"})",
           "refId": "A",
           "legendFormat": "",
           "range": false,
@@ -381,7 +381,7 @@
             "uid": "victoriametrics"
           },
           "editorMode": "code",
-          "expr": "sum(longhorn_volume_robustness{cluster=\"k8s-prod\",pvc_namespace=~\"${namespace:regex}\",pvc=~\"${pvc:regex}\",state=~\"degraded|faulted\"})",
+          "expr": "sum(longhorn_volume_robustness{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\",state=~\"degraded|faulted\"})",
           "refId": "A",
           "legendFormat": "",
           "range": false,
@@ -452,7 +452,7 @@
             "uid": "victoriametrics"
           },
           "editorMode": "code",
-          "expr": "sum(longhorn_volume_robustness{cluster=\"k8s-prod\",pvc_namespace=~\"${namespace:regex}\",pvc=~\"${pvc:regex}\",state=\"unknown\"})",
+          "expr": "sum(longhorn_volume_robustness{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\",state=\"unknown\"})",
           "refId": "A",
           "legendFormat": "",
           "range": false,
@@ -606,7 +606,7 @@
             "uid": "victoriametrics"
           },
           "editorMode": "code",
-          "expr": "longhorn_volume_robustness{cluster=\"k8s-prod\",pvc_namespace=~\"${namespace:regex}\",pvc=~\"${pvc:regex}\"} == 1",
+          "expr": "longhorn_volume_robustness{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"} == 1",
           "refId": "A",
           "legendFormat": "",
           "range": false,
@@ -828,7 +828,7 @@
             "uid": "victoriametrics"
           },
           "editorMode": "code",
-          "expr": "count((longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\"${namespace:regex}\",pvc=~\"${pvc:regex}\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"})) or (0 * count(longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\"${namespace:regex}\",pvc=~\"${pvc:regex}\"}))",
+          "expr": "count((longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"})) or (0 * count(longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"}))",
           "refId": "A",
           "legendFormat": "",
           "range": false,
@@ -898,7 +898,7 @@
             "uid": "victoriametrics"
           },
           "editorMode": "code",
-          "expr": "sum((time() - ((longhorn_volume_last_backup_at{cluster=\"k8s-prod\",pvc_namespace=~\"${namespace:regex}\",pvc=~\"${pvc:regex}\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}) > 0)) <= bool 108000) or (0 * count((longhorn_volume_last_backup_at{cluster=\"k8s-prod\",pvc_namespace=~\"${namespace:regex}\",pvc=~\"${pvc:regex}\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"})))",
+          "expr": "sum((time() - ((longhorn_volume_last_backup_at{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}) > 0)) <= bool 108000) or (0 * count((longhorn_volume_last_backup_at{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"})))",
           "refId": "A",
           "legendFormat": "",
           "range": false,
@@ -972,7 +972,7 @@
             "uid": "victoriametrics"
           },
           "editorMode": "code",
-          "expr": "sum((time() - ((longhorn_volume_last_backup_at{cluster=\"k8s-prod\",pvc_namespace=~\"${namespace:regex}\",pvc=~\"${pvc:regex}\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}) > 0)) > bool 108000) or (0 * count((longhorn_volume_last_backup_at{cluster=\"k8s-prod\",pvc_namespace=~\"${namespace:regex}\",pvc=~\"${pvc:regex}\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"})))",
+          "expr": "sum((time() - ((longhorn_volume_last_backup_at{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}) > 0)) > bool 108000) or (0 * count((longhorn_volume_last_backup_at{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"})))",
           "refId": "A",
           "legendFormat": "",
           "range": false,
@@ -1046,7 +1046,7 @@
             "uid": "victoriametrics"
           },
           "editorMode": "code",
-          "expr": "sum((longhorn_volume_last_backup_at{cluster=\"k8s-prod\",pvc_namespace=~\"${namespace:regex}\",pvc=~\"${pvc:regex}\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}) == bool 0)",
+          "expr": "sum((longhorn_volume_last_backup_at{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}) == bool 0)",
           "refId": "A",
           "legendFormat": "",
           "range": false,
@@ -1120,7 +1120,7 @@
             "uid": "victoriametrics"
           },
           "editorMode": "code",
-          "expr": "count((longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\"${namespace:regex}\",pvc=~\"${pvc:regex}\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}) unless on (cluster,volume) longhorn_volume_last_backup_at{cluster=\"k8s-prod\"}) or (0 * count(longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\"${namespace:regex}\",pvc=~\"${pvc:regex}\"}))",
+          "expr": "count((longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}) unless on (cluster,volume) longhorn_volume_last_backup_at{cluster=\"k8s-prod\"}) or (0 * count(longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"}))",
           "refId": "A",
           "legendFormat": "",
           "range": false,
@@ -1190,7 +1190,7 @@
             "uid": "victoriametrics"
           },
           "editorMode": "code",
-          "expr": "count(longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\"${namespace:regex}\",pvc=~\"${pvc:regex}\"} and on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}) or (0 * count(longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\"${namespace:regex}\",pvc=~\"${pvc:regex}\"}))",
+          "expr": "count(longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"} and on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}) or (0 * count(longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"}))",
           "refId": "A",
           "legendFormat": "",
           "range": false,
@@ -1267,7 +1267,7 @@
             "uid": "victoriametrics"
           },
           "editorMode": "code",
-          "expr": "time() - ((longhorn_volume_last_backup_at{cluster=\"k8s-prod\",pvc_namespace=~\"${namespace:regex}\",pvc=~\"${pvc:regex}\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}) > 0)",
+          "expr": "time() - ((longhorn_volume_last_backup_at{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}) > 0)",
           "refId": "A",
           "legendFormat": "",
           "range": false,
@@ -1363,7 +1363,7 @@
             "uid": "victoriametrics"
           },
           "editorMode": "code",
-          "expr": "longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\"${namespace:regex}\",pvc=~\"${pvc:regex}\"} and on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}",
+          "expr": "longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"} and on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}",
           "refId": "A",
           "legendFormat": "",
           "range": false,
@@ -1731,7 +1731,7 @@
             "uid": "victoriametrics"
           },
           "editorMode": "code",
-          "expr": "longhorn_volume_actual_size_bytes{cluster=\"k8s-prod\",pvc_namespace=~\"${namespace:regex}\",pvc=~\"${pvc:regex}\"}",
+          "expr": "longhorn_volume_actual_size_bytes{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"}",
           "refId": "A",
           "legendFormat": "{{pvc_namespace}} / {{pvc}}",
           "range": true,
@@ -1838,7 +1838,7 @@
             "uid": "victoriametrics"
           },
           "editorMode": "code",
-          "expr": "longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\"${namespace:regex}\",pvc=~\"${pvc:regex}\"}",
+          "expr": "longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"}",
           "refId": "A",
           "legendFormat": "{{pvc_namespace}} / {{pvc}}",
           "range": true,
@@ -1958,7 +1958,7 @@
             "uid": "victoriametrics"
           },
           "editorMode": "code",
-          "expr": "longhorn_volume_read_throughput{cluster=\"k8s-prod\",pvc_namespace=~\"${namespace:regex}\",pvc=~\"${pvc:regex}\"}",
+          "expr": "longhorn_volume_read_throughput{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"}",
           "refId": "A",
           "legendFormat": "{{pvc_namespace}} / {{pvc}} read",
           "range": true,
@@ -1970,7 +1970,7 @@
             "uid": "victoriametrics"
           },
           "editorMode": "code",
-          "expr": "longhorn_volume_write_throughput{cluster=\"k8s-prod\",pvc_namespace=~\"${namespace:regex}\",pvc=~\"${pvc:regex}\"}",
+          "expr": "longhorn_volume_write_throughput{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"}",
           "refId": "B",
           "legendFormat": "{{pvc_namespace}} / {{pvc}} write",
           "range": true,
@@ -2077,7 +2077,7 @@
             "uid": "victoriametrics"
           },
           "editorMode": "code",
-          "expr": "longhorn_volume_read_iops{cluster=\"k8s-prod\",pvc_namespace=~\"${namespace:regex}\",pvc=~\"${pvc:regex}\"}",
+          "expr": "longhorn_volume_read_iops{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"}",
           "refId": "A",
           "legendFormat": "{{pvc_namespace}} / {{pvc}} read",
           "range": true,
@@ -2089,7 +2089,7 @@
             "uid": "victoriametrics"
           },
           "editorMode": "code",
-          "expr": "longhorn_volume_write_iops{cluster=\"k8s-prod\",pvc_namespace=~\"${namespace:regex}\",pvc=~\"${pvc:regex}\"}",
+          "expr": "longhorn_volume_write_iops{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"}",
           "refId": "B",
           "legendFormat": "{{pvc_namespace}} / {{pvc}} write",
           "range": true,
@@ -2196,7 +2196,7 @@
             "uid": "victoriametrics"
           },
           "editorMode": "code",
-          "expr": "longhorn_volume_read_latency{cluster=\"k8s-prod\",pvc_namespace=~\"${namespace:regex}\",pvc=~\"${pvc:regex}\"}",
+          "expr": "longhorn_volume_read_latency{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"}",
           "refId": "A",
           "legendFormat": "{{pvc_namespace}} / {{pvc}} read",
           "range": true,
@@ -2208,7 +2208,7 @@
             "uid": "victoriametrics"
           },
           "editorMode": "code",
-          "expr": "longhorn_volume_write_latency{cluster=\"k8s-prod\",pvc_namespace=~\"${namespace:regex}\",pvc=~\"${pvc:regex}\"}",
+          "expr": "longhorn_volume_write_latency{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"}",
           "refId": "B",
           "legendFormat": "{{pvc_namespace}} / {{pvc}} write",
           "range": true,
