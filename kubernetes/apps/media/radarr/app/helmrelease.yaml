@@ -75,6 +75,17 @@ spec:
           - path: /data
     route:
       app:
+        annotations:
+          gethomepage.dev/enabled: "true"
+          gethomepage.dev/group: Media
+          gethomepage.dev/name: Radarr
+          gethomepage.dev/icon: radarr.svg
+          gethomepage.dev/description: Movies
+          gethomepage.dev/weight: "40"
+          gethomepage.dev/widget.type: radarr
+          gethomepage.dev/widget.url: http://radarr.media.svc.cluster.local:7878
+          # Escaped from Helm's tpl; Homepage fills it from homepage-secret.
+          gethomepage.dev/widget.key: '{{ "{{HOMEPAGE_VAR_RADARR_KEY}}" }}'
         hostnames: ["radarr.home.kelch.io"]
         parentRefs:
           - name: gateway-admin

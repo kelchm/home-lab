@@ -16,6 +16,7 @@ function main() {
         # Cilium rejects a policy rule when all four traffic rule lists are
         # absent or empty. An empty object inside ingress/egress is valid and
         # intentionally enables default deny without granting an allow rule.
+        # Non-map documents (e.g. app config lists) are skipped.
         # $name below is a yq variable, not a shell variable.
         # shellcheck disable=SC2016
         while IFS= read -r policy; do
@@ -24,7 +25,8 @@ function main() {
                 "${policy}" "${file#"${ROOT_DIR}"/}" >&2
             failed=1
         done < <(yq eval --unwrapScalar \
-            'select(.kind == "CiliumNetworkPolicy" or
+            'select(tag == "!!map") |
+             select(.kind == "CiliumNetworkPolicy" or
                     .kind == "CiliumClusterwideNetworkPolicy") |
              [{"name": .metadata.name, "rule": .spec},
               (.metadata.name as $name | .specs[]? |

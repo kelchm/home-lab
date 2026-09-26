@@ -74,6 +74,17 @@ spec:
               - path: /config
     route:
       app:
+        annotations:
+          gethomepage.dev/enabled: "true"
+          gethomepage.dev/group: Media
+          gethomepage.dev/name: Prowlarr
+          gethomepage.dev/icon: prowlarr.svg
+          gethomepage.dev/description: Indexers
+          gethomepage.dev/weight: "70"
+          gethomepage.dev/widget.type: prowlarr
+          gethomepage.dev/widget.url: http://prowlarr.media.svc.cluster.local:9696
+          # Escaped from Helm's tpl; Homepage fills it from homepage-secret.
+          gethomepage.dev/widget.key: '{{ "{{HOMEPAGE_VAR_PROWLARR_KEY}}" }}'
         hostnames: ["prowlarr.home.kelch.io"]
         parentRefs:
           - name: gateway-admin

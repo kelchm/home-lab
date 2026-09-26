@@ -198,6 +198,21 @@ spec:
         - ports:
             - port: "9093"
               protocol: TCP
+    # Homepage's alert count. The API is unauthenticated and also creates
+    # silences, so the HTTP rule narrows it to reading alerts.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: homepage
+            app.kubernetes.io/name: homepage
+            io.cilium.k8s.policy.serviceaccount: homepage
+      toPorts:
+        - ports:
+            - port: "9093"
+              protocol: TCP
+          rules:
+            http:
+              - method: GET
+                path: /api/v2/alerts(\?.*)?
   egress:
     # Outbound paging: Pushover is the sole configured receiver host.
     # Everything else is denied. When the independent dead-man watchdog

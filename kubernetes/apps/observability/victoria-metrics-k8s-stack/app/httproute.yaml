@@ -6,6 +6,13 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: vmsingle
+  annotations:
+    gethomepage.dev/enabled: "true"
+    gethomepage.dev/group: Observability
+    gethomepage.dev/name: VictoriaMetrics
+    gethomepage.dev/icon: victoriametrics.svg
+    gethomepage.dev/description: Metrics query UI
+    gethomepage.dev/weight: "30"
 spec:
   hostnames: ["vm.home.kelch.io"]
   parentRefs:
@@ -29,6 +36,13 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: vmagent
+  annotations:
+    gethomepage.dev/enabled: "true"
+    gethomepage.dev/group: Observability
+    gethomepage.dev/name: vmagent
+    gethomepage.dev/icon: victoriametrics.svg
+    gethomepage.dev/description: Scrape targets
+    gethomepage.dev/weight: "60"
 spec:
   hostnames: ["vmagent.home.kelch.io"]
   parentRefs:
@@ -51,6 +65,13 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: vmalert
+  annotations:
+    gethomepage.dev/enabled: "true"
+    gethomepage.dev/group: Observability
+    gethomepage.dev/name: vmalert
+    gethomepage.dev/icon: victoriametrics.svg
+    gethomepage.dev/description: Alerting rules
+    gethomepage.dev/weight: "50"
 spec:
   hostnames: ["vmalert.home.kelch.io"]
   parentRefs:
@@ -75,6 +96,17 @@ metadata:
   # Use a new object identity for the Flux Kustomization handoff so pruning
   # the old KPS-owned HTTPRoute cannot delete this route after it is applied.
   name: vmalertmanager
+  annotations:
+    gethomepage.dev/enabled: "true"
+    gethomepage.dev/group: Observability
+    gethomepage.dev/name: Alertmanager
+    gethomepage.dev/icon: alertmanager.svg
+    gethomepage.dev/description: Alert routing and silences
+    gethomepage.dev/weight: "20"
+    gethomepage.dev/widget.type: customapi
+    gethomepage.dev/widget.url: http://vmalertmanager-victoria-metrics-k8s-stack.observability.svc.cluster.local:9093/api/v2/alerts?active=true&silenced=false&inhibited=false&filter=severity%3D~%22warning%7Ccritical%22
+    gethomepage.dev/widget.mappings.0.label: Warning / critical
+    gethomepage.dev/widget.mappings.0.format: size
 spec:
   hostnames: ["alertmanager.home.kelch.io"]
   parentRefs:

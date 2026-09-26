@@ -1,0 +1,52 @@
+---
+# OIDC RP middleware that gates the Homepage HTTPRoute. Same shape as
+# longhorn-system/ and observability/ — Gateway API ExtensionRef is
+# LocalObjectReference so each namespace owns its own copy. The plugin
+# itself runs once inside traefik-admin (network ns);
+# OPS_SUITE_CLIENT_SECRET is set on that pod from the kaniop-emitted
+# Secret in network/.
+#
+# Lives at the namespace top so it is reconciled by `cluster-apps`, which
+# has no postBuild.substituteFrom — the literal ${OPS_SUITE_CLIENT_SECRET}
+# below must survive to the cluster so traefik-oidc-auth can expand it
+# from the pod env at request time.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: kanidm-oidc
+spec:
+  plugin:
+    traefik-oidc-auth:
+      # Plugin session-state encryption key, shared across traefik-admin
+      # replicas. Without this each pod generates its own random default
+      # and cross-pod auth-flow handoffs fail.
+      Secret: ${OIDC_SESSION_SECRET}
+      CookieNamePrefix: ops-suite
+      Provider:
+        Url: https://auth.home.kelch.io/oauth2/openid/ops-suite
+        ClientId: ops-suite
+        ClientSecret: ${OPS_SUITE_CLIENT_SECRET}
+        UsePkce: true
+      Scopes:
+        - openid
+        - profile
+        - email
+        - groups
+      Authorization:
+        # Re-evaluate group membership on every request so revocations
+        # take effect without waiting for session expiry.
+        CheckOnEveryRequest: true
+        AssertClaims:
+          - Name: groups
+            AnyOf:
+              - ops-admins@auth.home.kelch.io
+      Headers:
+        - Name: Remote-User
+          Value: "{{ .claims.preferred_username }}"
+        - Name: Remote-Email
+          Value: "{{ .claims.email }}"
+      SessionCookie:
+        Secure: true
+        HttpOnly: true
+        SameSite: lax
+        MaxAge: 43200

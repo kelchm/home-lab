@@ -203,6 +203,15 @@ spec:
               - path: /dev/net/tun
     route:
       app:
+        annotations:
+          gethomepage.dev/enabled: "true"
+          gethomepage.dev/group: Media
+          gethomepage.dev/name: qBittorrent
+          gethomepage.dev/icon: qbittorrent.svg
+          gethomepage.dev/description: Torrents
+          gethomepage.dev/weight: "80"
+          gethomepage.dev/widget.type: qbittorrent
+          gethomepage.dev/widget.url: http://qbittorrent.media.svc.cluster.local:8080
         hostnames: ["qbittorrent.home.kelch.io"]
         parentRefs:
           - name: gateway-admin

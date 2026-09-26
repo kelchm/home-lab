@@ -40,3 +40,19 @@ spec:
             app.kubernetes.io/name: sonarr
             io.cilium.k8s.policy.serviceaccount: sonarr
       toPorts: *webui-port
+
+    # Homepage's queue widget. With native auth bypassed, an L4 rule would
+    # grant full control, so the HTTP rule narrows it to the one read call.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: homepage
+            app.kubernetes.io/name: homepage
+            io.cilium.k8s.policy.serviceaccount: homepage
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+          rules:
+            http:
+              - method: GET
+                path: /api/v2/torrents/info

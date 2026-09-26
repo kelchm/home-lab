@@ -1,0 +1,30 @@
+---
+title: home-lab
+theme: dark
+color: slate
+headerStyle: clean
+statusStyle: dot
+useEqualHeights: true
+target: _self
+# Renovate owns version bumps; this also keeps api.github.com out of egress.
+disableUpdateCheck: true
+
+quicklaunch:
+  searchDescriptions: true
+  hideInternetSearch: false
+  provider: google
+
+# Group order, left to right. Groups not listed here would sort after these.
+layout:
+  Media:
+    icon: mdi-play-circle-outline
+  Observability:
+    icon: mdi-chart-line
+  Infrastructure:
+    icon: mdi-server-network
+  Apps:
+    icon: mdi-apps
+
+providers:
+  longhorn:
+    url: http://longhorn-backend.longhorn-system.svc.cluster.local:9500

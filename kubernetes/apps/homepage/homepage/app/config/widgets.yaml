@@ -1,0 +1,27 @@
+---
+- kubernetes:
+    cluster:
+      show: true
+      cpu: true
+      memory: true
+      showLabel: true
+      label: k8s-prod
+    nodes:
+      show: true
+      cpu: true
+      memory: true
+      showLabel: true
+- longhorn:
+    expanded: true
+    total: true
+    labels: true
+    nodes: true
+- search:
+    provider: google
+    focus: true
+    target: _self
+- datetime:
+    text_size: l
+    format:
+      dateStyle: long
+      timeStyle: short

@@ -74,6 +74,17 @@ spec:
           - path: /data
     route:
       app:
+        annotations:
+          gethomepage.dev/enabled: "true"
+          gethomepage.dev/group: Media
+          gethomepage.dev/name: Bazarr
+          gethomepage.dev/icon: bazarr.svg
+          gethomepage.dev/description: Subtitles
+          gethomepage.dev/weight: "60"
+          gethomepage.dev/widget.type: bazarr
+          gethomepage.dev/widget.url: http://bazarr.media.svc.cluster.local:6767
+          # Escaped from Helm's tpl; Homepage fills it from homepage-secret.
+          gethomepage.dev/widget.key: '{{ "{{HOMEPAGE_VAR_BAZARR_KEY}}" }}'
         hostnames: ["bazarr.home.kelch.io"]
         parentRefs:
           - name: gateway-admin

@@ -98,6 +98,13 @@ spec:
           - path: /data
     route:
       app:
+        annotations:
+          gethomepage.dev/enabled: "true"
+          gethomepage.dev/group: Apps
+          gethomepage.dev/name: Broadsheet
+          gethomepage.dev/icon: mdi-newspaper-variant-outline
+          gethomepage.dev/description: E-ink front pages
+          gethomepage.dev/weight: "10"
         hostnames: ["broadsheet.home.kelch.io"]
         parentRefs:
           - name: gateway-services

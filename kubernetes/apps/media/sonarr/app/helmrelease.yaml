@@ -75,6 +75,17 @@ spec:
           - path: /data
     route:
       app:
+        annotations:
+          gethomepage.dev/enabled: "true"
+          gethomepage.dev/group: Media
+          gethomepage.dev/name: Sonarr
+          gethomepage.dev/icon: sonarr.svg
+          gethomepage.dev/description: TV
+          gethomepage.dev/weight: "30"
+          gethomepage.dev/widget.type: sonarr
+          gethomepage.dev/widget.url: http://sonarr.media.svc.cluster.local:8989
+          # Escaped from Helm's tpl; Homepage fills it from homepage-secret.
+          gethomepage.dev/widget.key: '{{ "{{HOMEPAGE_VAR_SONARR_KEY}}" }}'
         hostnames: ["sonarr.home.kelch.io"]
         parentRefs:
           - name: gateway-admin

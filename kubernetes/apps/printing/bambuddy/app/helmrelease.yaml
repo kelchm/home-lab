@@ -126,6 +126,13 @@ spec:
               - path: /app/logs
     route:
       app:
+        annotations:
+          gethomepage.dev/enabled: "true"
+          gethomepage.dev/group: Apps
+          gethomepage.dev/name: Bambuddy
+          gethomepage.dev/icon: bambu-lab.svg
+          gethomepage.dev/description: 3D printer
+          gethomepage.dev/weight: "30"
         hostnames: ["bambuddy.home.kelch.io"]
         parentRefs:
           - name: gateway-admin
