@@ -12,7 +12,7 @@ metadata:
   name: default-deny
 spec:
   dependsOn:
-    - name: alloy
+    - name: vlagent
     - name: grafana
     - name: prometheus-operator-crds
     - name: smartctl-exporter

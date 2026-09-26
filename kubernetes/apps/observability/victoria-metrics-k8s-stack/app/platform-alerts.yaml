@@ -157,45 +157,8 @@ spec:
             summary: vlagent on {{ $labels.node }} is reading no Kubernetes logs
             description: Check API discovery, symlinks, file permissions and checkpoints. A healthy scrape target alone does not prove log collection.
 
-    # Retain Alloy rules until the staged cutover and rollback window end.
     - name: logging-pipeline
       rules:
-        - alert: AlloyVictoriaLogsEntriesDropped
-          expr: sum by (pod, reason) (increase(loki_write_dropped_entries_total{component_id="loki.write.vl"}[10m])) > 0
-          for: 5m
-          labels:
-            severity: critical
-          annotations:
-            summary: Alloy {{ $labels.pod }} is dropping VictoriaLogs entries
-            description: Alloy has dropped entries bound for VictoriaLogs for five minutes (reason={{ $labels.reason }}). Check the writer queue, response codes, and VictoriaLogs health before restarting the collector.
-
-        - alert: AlloyVictoriaLogsRetriesSustained
-          expr: sum by (pod) (increase(loki_write_batch_retries_total{component_id="loki.write.vl"}[5m])) > 0
-          for: 15m
-          labels:
-            severity: warning
-          annotations:
-            summary: Alloy {{ $labels.pod }} is persistently retrying VictoriaLogs writes
-            description: VictoriaLogs write retries have remained present for 15 minutes. The in-memory retry budget is finite; restore the sink before queued entries are dropped.
-
-        - alert: AlloyLogCollectorTargetMissing
-          expr: (count(up{job="alloy"} == 1) or vector(0)) < scalar(max(kube_daemonset_status_desired_number_scheduled{namespace="observability",daemonset="alloy"}))
-          for: 10m
-          labels:
-            severity: critical
-          annotations:
-            summary: Fewer Alloy collectors than scheduled nodes are being scraped
-            description: vmagent cannot see one healthy Alloy target per node still assigned to Alloy. Check the DaemonSet, ServiceMonitor conversion, and Cilium ingress policy.
-
-        - alert: AlloyNodeLogIngestionSilent
-          expr: sum by (pod) (increase(loki_write_sent_entries_total{component_id="loki.write.vl"}[10m])) == 0
-          for: 15m
-          labels:
-            severity: warning
-          annotations:
-            summary: Alloy {{ $labels.pod }} is not sending logs to VictoriaLogs
-            description: This node-local collector has sent no entries for 15 minutes while its metrics remain available. Check file discovery, positions, and the VictoriaLogs writer graph.
-
         - alert: VictoriaLogsRowsDropped
           expr: sum by (reason) (increase(vl_rows_dropped_total{reason!="debug"}[10m])) > 0
           for: 5m
@@ -233,7 +196,7 @@ spec:
             description: Free space is below the emergency threshold despite the 80% retention ceiling. Inspect partition cleanup, daily ingest volume, and Longhorn capacity.
 
         - alert: VictoriaLogsIngestionSilent
-          expr: (sum(increase(vl_rows_ingested_total{job="victoria-logs-single-server",type=~"loki.*|nativeinsert"}[10m])) == 0) or absent(vl_rows_ingested_total{job="victoria-logs-single-server",type=~"loki.*|nativeinsert"})
+          expr: (sum(increase(vl_rows_ingested_total{job="victoria-logs-single-server",type="nativeinsert"}[10m])) == 0) or absent(vl_rows_ingested_total{job="victoria-logs-single-server",type="nativeinsert"})
           for: 15m
           labels:
             severity: critical

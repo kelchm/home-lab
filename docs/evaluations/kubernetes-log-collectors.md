@@ -1,6 +1,6 @@
 # Kubernetes log collector evaluation
 
-Evaluated 2026-09-22–23 for [#581](https://github.com/kelchm/home-lab/issues/581). Scope: Kubernetes container logs sent to VictoriaLogs. The [logging runbook](../runbooks/logging.md) describes the current production collector and rollout state.
+Evaluated 2026-09-22–23 for [#581](https://github.com/kelchm/home-lab/issues/581). Scope: Kubernetes container logs sent to VictoriaLogs. vlagent replaced Alloy on all three production nodes on September 26; the conclusions below preserve the decision at evaluation time. The [logging runbook](../runbooks/logging.md) describes current production operation and the accepted cutover gap.
 
 ## Conclusion
 

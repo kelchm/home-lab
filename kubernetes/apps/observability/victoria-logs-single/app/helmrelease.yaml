@@ -1,7 +1,6 @@
 ---
-# VictoriaLogs single-node — the surviving Kubernetes log backend. Alloy uses
-# its Loki-compatible ingestion endpoint; operators query it through Grafana or
-# the OIDC-protected native VMUI.
+# VictoriaLogs single-node receives native ingestion from vlagent. Operators
+# query it through Grafana or the OIDC-protected native VMUI.
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
@@ -16,7 +15,7 @@ spec:
         name: victoriametrics
   interval: 1h
   values:
-    # The chart bundles a Vector subchart. We use Alloy instead — disable.
+    # vlagent is managed separately; disable the bundled Vector collector.
     vector:
       enabled: false
 
