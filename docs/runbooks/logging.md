@@ -25,24 +25,30 @@ Retention is nominally 30 days, but VictoriaLogs begins deleting the oldest part
 
 ## Source inventory
 
-Measured 2026-09-18 over a 24-hour window against the live backend with `stats by (service_name) count()` and its `NOT level:~".+"` variant, so the "plain text" column is exactly the share of each source's entries that the normalizer could not classify. Sources absent from the table were either below ~7k entries/day or already emit a recognizable top-level `level` (logfmt emitters such as cilium-agent, longhorn, and broadsheet normalize cleanly). Per #485 Phase 2, native structured output is enabled only where the application documents it, and noisy-log reduction plus secret/PII redaction are tracked separately rather than via generic collector regexes.
+Measured 2026-09-18 over a 24-hour window with `stats by (service_name) count()` and its `NOT level:~".+"` variant. "No recognized severity" means the stored top-level `level` is absent or empty; it does not establish that a row is unstructured. This is a dated inventory of the deployed Alloy pipeline, not a complete list of sources or a current traffic baseline. The later [collector evaluation](../evaluations/kubernetes-log-collectors.md#stdoutstderr-and-severity) records additional source-level findings, including Broadsheet renderer warnings whose explicit prefix is not normalized by Alloy.
 
-| Source | 24h entries | Plain text | Documented structured output | Decision |
+| Source | 24h entries | No recognized severity | Documented structured output | Decision |
 | --- | --- | --- | --- | --- |
-| kanidm | 163k | all | None. Only `log_level` (info/debug/trace); the OTLP integration exports trace spans to a tracing backend, not log events. | Keep plain text. Volume is dominated by `repl_run_consumer` heartbeat ticks at INFO (~every 2.5s per replica) plus per-request logs; pursue upstream before any collector-side transform. |
-| iperf3 | 138k | all | N/A (hostNetwork benchmark server, network-perf). | Idle: no benchmark traffic was observed — the entire volume is probe self-noise. The tcpSocket readiness/liveness probes (10s/30s) connect-and-close, which the iperf3 server logs as failed clients (~4 lines per 10s burst per pod). Replace with exec probes or retire the DaemonSet if the benchmark target is no longer wanted. |
-| echo | 17k | all | N/A (http-echo canary in `default`, HTTPRoute on gateway-public). | Idle: the volume is kubelet healthz probe spam (two probes every 10s). Also publicly unreachable — the `echo.kelch.io` DNS record no longer resolves even though the HTTPRoute is Accepted, so the canary serves no purpose today. Decide: restore DNS, move it under the internal zone, or decommission. |
-| kaniop | 12k | all | None documented. | Keep plain text. |
-| kube-apiserver | 11k | all | Yes: `--logging-format=json`. | Not flipped: apiserver args are Talos-managed control-plane config outside Flux, so this is a manual rollout decision via the talos-rollout process, not a HelmRelease change. |
-| csi-driver-nfs | 9.1k | all | None (klog emitters). | Keep plain text. |
-| csi-snapshotter | 9.0k | all | None (klog emitters). | Keep plain text. |
-| mcphub | 8.3k | all | None documented. | Keep plain text. |
-| multus | 7.4k | all | None (klog emitters). | Keep plain text. |
+| kanidm | 163k | all | No JSON/log-event export found in the tested v1.11.2. `log_level` controls verbosity; OTLP exports trace spans. | Keep native output. The sample is dominated by INFO replication heartbeats and requests; any volume reduction must preserve useful operational and audit events. |
+| iperf3 | 138k | all | Not evaluated for the idle benchmark server. | Observed bursts match tcpSocket readiness/liveness probes (10s/30s). Probe noise and whether to retain an always-on benchmark target belong to [#226](https://github.com/kelchm/home-lab/issues/226). |
+| echo | 17k | all | Not needed to identify the observed health-check requests. | The sample is dominated by kubelet `/healthz` requests. It does not establish that the canary is unused; the earlier DNS observation is not a current reachability claim. Retention and exposure belong to [#226](https://github.com/kelchm/home-lab/issues/226). |
+| kaniop | 12k | all | None documented in the evaluation. | Keep native output. |
+| kube-apiserver | 11k | all | Yes: `--logging-format=json`. | Deferred: Talos-managed control-plane arguments require a separate manual rollout. Revisit if native JSON materially improves the accepted query workflow. |
+| csi-driver-nfs | 9.1k | all | None established for the deployed klog emitter. | Keep native output. |
+| csi-snapshotter | 9.0k | all | None established for the deployed klog emitter. | Keep native output. |
+| mcphub | 8.3k | all | None documented in the evaluation. | Keep native output; explicit logger prefixes are covered in the later collector evaluation. |
+| multus | 7.4k | all | None established for the deployed klog emitter. | Keep native output. |
 
-A known presentation wart: Traefik access-log JSON rows carry no `msg` key (fields such as `msg.RequestAddr` and `msg.DownstreamStatus` hold the request detail), so VictoriaLogs substitutes its `missing _msg field` placeholder for those rows. The underlying fields remain fully queryable and console-log rows are unaffected. Synthesizing a readable `_msg` for Traefik would require a collector-side transform targeted at one source, which the Phase 2 guardrails rule out for now; revisit only if VMUI access-log readability becomes a real workflow gap.
+Traefik access-log JSON has queryable request/status fields but lacks a message field selected by the ingestion configuration, so `_msg` displays a missing-message placeholder. Use Grafana's `View as JSON` to inspect these rows. Revisit message presentation during [#583](https://github.com/kelchm/home-lab/issues/583)'s operator-workflow acceptance; do not infer severity from arbitrary access-log text. Native source-format changes, noisy-log reduction and secret/PII redaction remain separate from the collector migration.
 
 ## Pipeline failures
 
 Metrics-native rules page through VMAlertmanager when an Alloy target disappears, a node stops sending entries, retries persist, either layer drops data, VictoriaLogs becomes read-only or nearly fills its PVC, ingestion goes silent, or stream creation exceeds the measured rollout envelope. These alerts deliberately depend on the metrics path rather than querying the log backend they diagnose.
 
 If an alert fires, inspect the affected Alloy component graph and writer metrics, the `victoria-logs-single-server-0` workload and PVC, and the corresponding vmagent scrape targets before restarting anything. Alloy persists file positions in `/var/lib/alloy`, but its sender queue is memory-only; prolonged sink outages can exhaust the bounded retry window.
+
+Restarting Alloy while its sender queue contains unsent entries can lose those entries even though file positions survive. If backpressure prevents the tailer from reading files before rotation removes them, the writer's dropped-entry counter does not account for those unread records. Preserve collector state and inspect backend health before restarting a collector during an outage.
+
+The [logging alert rules](../../kubernetes/apps/observability/victoria-metrics-k8s-stack/app/platform-alerts.yaml) provide partial detection. `AlloyNodeLogIngestionSilent` requires zero sent entries over a ten-minute window followed by fifteen minutes in that condition; it cannot detect partial loss while other entries continue arriving. The sustained-retry alert also waits fifteen minutes. Neither provides a guarantee that an alert will arrive before the retry budget is exhausted, and quiet alert history does not establish complete delivery.
+
+The [collector evaluation](../evaluations/kubernetes-log-collectors.md) records delivery measurements and candidate tradeoffs. Alloy remains the deployed collector; its experimental writer WAL is disabled.

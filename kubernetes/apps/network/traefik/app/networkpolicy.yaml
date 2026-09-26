@@ -23,14 +23,19 @@ spec:
             - port: "9100"
               protocol: TCP
   egress:
-    # Flux webhook receiver.
+    # Flux webhook receiver. The notification-controller pod carries no
+    # app.kubernetes.io/name label of its own; its service maps port 80 to
+    # container port 9292, so both are allowed.
     - toEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: flux-system
-            app.kubernetes.io/name: webhook-receiver
+            app.kubernetes.io/part-of: flux
+            app.kubernetes.io/component: notification-controller
       toPorts:
         - ports:
             - port: "80"
+              protocol: TCP
+            - port: "9292"
               protocol: TCP
     # Echo backend.
     - toEndpoints:

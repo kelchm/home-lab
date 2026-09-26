@@ -13,8 +13,12 @@ releases:
     namespace: network
     chart: oci://ghcr.io/home-operations/charts-mirror/external-dns
     version: 1.21.1
+    # Only CRDs are extracted from this render. `policy` satisfies the values
+    # schema of chart >= 1.22.0 (binary v0.22.0) ahead of a guarded retry.
+    values:
+      - policy: sync
 
   - name: prometheus-operator-crds
     namespace: observability
     chart: oci://ghcr.io/prometheus-community/charts/prometheus-operator-crds
-    version: 31.0.1
+    version: 32.0.1

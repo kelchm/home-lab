@@ -77,7 +77,10 @@ try:
         },
     )
     session_id = response.getheader("Mcp-Session-Id")
-    if not session_id or initialized.get("error"):
+    # mcp-grafana 1.5.1+ negotiates protocol 2025-06-18 and may run stateless,
+    # issuing no Mcp-Session-Id; only its absence alongside a JSON-RPC error
+    # means initialize actually failed.
+    if initialized.get("error"):
         raise RuntimeError(f"MCP initialize failed: {initialized}")
 
     rpc(
