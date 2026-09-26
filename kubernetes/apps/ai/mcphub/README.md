@@ -15,11 +15,14 @@ MCPHub groups represent reusable capability and failure boundaries. They are not
 | `hacker-news` | Hacker News | Read-only HN feeds, threads, users, and full-text search. |
 | `browser` | Playwright Stealth | High prompt-injection surface; isolated from every other capability and given a per-session upstream client. |
 
-Static system bearer keys represent workload principals. The initial pilot matrix is:
+Static system bearer keys represent workload principals. The current matrix is:
 
 | Principal | Allowed groups |
 |---|---|
 | `operator-interactive` | All six groups. |
+| `operator-claude-code` | All six groups; Claude Code on the operator workstation. |
+| `operator-claude-desktop` | All six groups; Claude Desktop on the operator workstation. |
+| `operator-codex` | All six groups; Codex CLI and the ChatGPT app's Codex on the operator workstation. |
 | `hermes-personal` | Every non-browser group. |
 | `hermes-ops-cron` | `homelab-read` only. |
 | `flatrate-discord` | `automotive-reference` only. |
@@ -27,6 +30,8 @@ Static system bearer keys represent workload principals. The initial pilot matri
 These are service identities. Individual Discord members are authorized and audited by the Flatrate Hermes profile, not by MCPHub. Likewise, MCPHub does not turn a shared upstream identity into per-user authorization: a future client that needs different Kubernetes access must use a separately deployed backend with its own ServiceAccount and group.
 
 Clients connect once per capability, for example `https://mcphub.home.kelch.io/mcp/homelab-read` and `https://mcphub.home.kelch.io/mcp/automotive-reference`, and may reuse their principal key across every allowed group. MCPHub has no separate endpoint-composition object. Keeping capabilities as separate client connections is intentional: it avoids duplicating group membership into client-specific bundles and prevents one Hermes MCP circuit breaker from disabling unrelated capabilities.
+
+Claude and Codex reject tool names longer than 64 characters, and they expose MCPHub group tools as `mcp__<connection>__<server>__<tool>`. Operator clients therefore name the `automotive-reference` and `electronics-reference` connections `automotive` and `electronics`. ChatGPT chat connectors call from OpenAI's cloud and cannot reach this LAN-only route.
 
 The global `/mcp` and `/sse` routes are disabled in MCPHub even though their prefixes reach the Gateway. A restricted key cannot call a direct server route; it must use an allowed group name.
 
