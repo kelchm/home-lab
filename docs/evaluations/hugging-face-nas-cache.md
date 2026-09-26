@@ -1,70 +1,111 @@
 # Hugging Face downloads retained on Athena
 
-Evaluated September 26, 2026. **Source review and read-only NAS inspection only; no mirror is deployed or qualified.** [Investigation #608](https://github.com/kelchm/home-lab/issues/608) owns the bounded live evaluation and its acceptance evidence.
+Evaluated September 26, 2026. **Read-only lab inspection, source review and isolated macOS probes; no NAS mirror is deployed or qualified.** [Investigation #608](https://github.com/kelchm/home-lab/issues/608) owns remaining qualification. [Probe evidence](hugging-face-nas-cache-evidence.json) records versions, hashes and observed upstream requests.
 
 ## Recommendation
 
-Use a NAS-hosted pull-through service for public Hugging Face models, with its persistent state bind-mounted directly from Athena's filesystem. Nexus Repository CE is the first candidate to qualify: it has a documented HF proxy and client configuration, but its resource cost, cold-download behavior and actual client compatibility still need measurement. It is not yet a production selection.
+Make a retained filesystem library on Athena the foundation. A NAS-side downloader or cache service owns ingestion; LAN consumers download through its HTTP endpoint or stage pinned snapshots locally. Preserve the files independently of the HTTP service's continued availability. Public retention and private training-output preservation must not depend on deploying an OCI registry, S3 service or paid product.
 
-Keep an access-controlled archive for locally trained models and adapters alongside this service. Cache retention and private artifact preservation have different failure consequences. A private artifact archive is useful immediately and must not depend on the mirror evaluation, a model registry or an S3 deployment finishing first. Required capabilities must have no paid-license dependency.
+**Shpiel v0.3.1 is the first lightweight public-only endpoint to qualify further.** Its filesystem layout and measured reuse are a closer fit than the initial Nexus-first shortlist suggested. This is a pilot recommendation: private-read authorization, native llama.cpp compatibility, large cold-file delays, recovery and upgrades remain material gaps. Use one writer, no private upstream token, and a read-only LAN-facing boundary. Its write APIs should not be exposed by a public download service.
 
-## Local evidence
+**MatrixHub v0.2.0 is the alternative to qualify if a full private Hub becomes important.** Its new single-process SQLite deployment fits this NAS better than older MySQL-based descriptions suggest. It has hosted models and project permissions, but source review found offline-refresh and integrity questions. Nexus CE remains a conventional alternative when its database/JVM cost is acceptable; it is no longer the default merely because its documentation is established.
+
+Preserve existing Spark and Vonk cache contents until a hash-verified LAN import succeeds. If an endpoint cannot reuse them, stage those models by local path rather than downloading the collection again for a new storage format.
+
+## Local environment
 
 The September 26 read-only SSH inspection of Athena returned:
 
 | Property | Observed value |
 |---|---|
 | Architecture | `x86_64` |
-| RAM | 32,071 MiB total; 29,894 MiB available at inspection |
+| RAM | 32,071 MiB total; 29,894 MiB available |
 | `/volume1` | `df -h`: 49T total, 20T used, 29T available |
 | Docker Engine | 24.0.2 |
 | Docker Compose | 2.20.1-6047-g6817716 |
 
-This establishes capacity for a trial, not sustained throughput or an acceptable service memory budget. The [architecture reference](../architecture.md) identifies the DS1821+, disk pool and storage network. The current [NAS workload model](../../synology/README.md) is explicitly applied Compose; [#379](https://github.com/kelchm/home-lab/issues/379) tracks the unimplemented shared deployment plane.
+This establishes capacity for a trial, not throughput or a service memory budget. The [architecture reference](../architecture.md) identifies the DS1821+, disk pool and storage network. The [NAS workload model](../../synology/README.md) is explicitly applied Compose; [#379](https://github.com/kelchm/home-lab/issues/379) tracks the shared deployment plane. Run the service and bind-mount its storage directly on Athena.
 
-[SparkRun](../../sparks/inference/sparkrun/README.md) presently downloads into `/opt/spark-cache/huggingface` and synchronizes to the worker. Its model-loading cache can remain local while the NAS supplies downloads. Recipe environment settings do not by themselves prove that SparkRun's earlier host-side download process uses the mirror.
-
-[The Vonk cache PR](https://github.com/kelchm/home-lab/pull/529) describes retained data on Athena and the Sparks. It is evidence of existing data to preserve, not evidence that a general HF service exists or that those objects can be dropped into another cache's internal storage.
+[SparkRun](../../sparks/inference/sparkrun/README.md) uses `/opt/spark-cache/huggingface` and synchronizes to its worker. Inspection of the primary Spark's host download environment found SparkRun 0.3.9, `huggingface_hub` 1.8.0 and `hf-xet` 1.6.0. Recipe environment settings do not prove that the earlier host-side downloader uses a mirror. [PR #529](https://github.com/kelchm/home-lab/pull/529) describes existing Vonk/NAS data to preserve, not a general HF endpoint.
 
 ## Candidate comparison
 
-| Candidate | Evidence and fit | Verdict |
+| Candidate | Evidence and fit | Disposition |
 |---|---|---|
-| **Nexus Repository CE** | [HF models/datasets proxying is supported in CE](https://help.sonatype.com/en/hugging-face-repositories.html). Standard HF client endpoint configuration is documented. It is a broader repository manager with a database and JVM. | First conventional candidate for an isolated trial. |
-| **Olah** | Lightweight, on-demand block cache with offline mode. Its [README](https://github.com/vtuber-plan/olah) warns that caches cannot migrate between versions and instructs deletion on upgrade. [Issue #85](https://github.com/vtuber-plan/olah/issues/85) reports a missing endpoint in llama.cpp's native downloader. | Poor default for long-lived retention across heterogeneous clients; the reported llama.cpp issue is not a local reproduction. |
-| **`guilt/xet-server` / `xet-proxyd`** | [Upstream](https://github.com/guilt/xet-server) claims native Xet pull-through caching and offline handoff. Repository created September 11; latest inspected release is [v1.1.0](https://github.com/guilt/xet-server/releases/tag/v1.1.0), September 16. | Promising protocol fit, but very new. Upstream tests do not establish lab compatibility or durability. Revisit if conventional proxy limitations are unacceptable. |
-| **JFrog Artifactory** | Vendor documents [native Xet support](https://jfrog.com/blog/native-xet-support-in-jfrog-artifactory/) and hosted/remote HF repositories. Its [self-managed package matrix](https://docs.jfrog.com/installation/docs/feature-comparison-matrix-for-self-mangaged-jpds) excludes HF from the free editions. | Excluded by the zero-paid-license requirement. |
-| **Native HF cache on a NAS share** | [HF's cache layout](https://huggingface.co/docs/huggingface_hub/en/guides/manage-cache) preserves revisions and reuses downloaded blobs. A NAS-side downloader can populate it, with readers mounting it or staging verified snapshots locally. | Simpler retention fallback; explicit prefetch/staging replaces transparent HTTP pull-through. |
+| **[Shpiel](https://github.com/loewenthal-corp/shpiel)** | Apache-2.0; one Go process, filesystem backend, no database required. Repository created July 2026. | Public-only pilot; measured reuse and gaps below. |
+| **[MatrixHub](https://github.com/matrixhub-ai/matrixhub/releases/tag/v0.2.0)** | Apache-2.0; September 18 release added SQLite for single-node Compose. Proxy projects and hosted models with permissions. | Private-Hub candidate; source findings need live tests. |
+| **[Nexus CE](https://help.sonatype.com/en/hugging-face-repositories.html)** | Documented models/datasets proxy with local permissions and upstream bearer credentials. Broader repository manager. | Conventional fallback; HTTP-only, buffering, quotas and import cost matter. |
+| **[Olah](https://github.com/vtuber-plan/olah)** | MIT; block cache and offline mode. README instructs deleting incompatible caches across upgrades; [issue #85](https://github.com/vtuber-plan/olah/issues/85) reports a missing llama.cpp refs endpoint. | Poor default for permanent retention. That client report was not reproduced locally. |
+| **[guilt/xet-server](https://github.com/guilt/xet-server)** | MIT; native Xet proxy/server. Created September 11; inspected release v1.1.0. Its [mirroring guide](https://github.com/guilt/xet-server/blob/22c4aa1df566041b804aee2d4b1df1b97e2f04df/docs/MIRRORING.md#91-important-what-the-proxy-can-and-cannot-cache) says real-Hub pull-through can relay uncached content directly from the CDN. | Transparent proxy does not guarantee retention. Complete offline seeding requires download then upload. |
+| **[Pulp HF plugin](https://github.com/pulp/pulp_hugging_face)** | GPL-2.0-or-later; on-demand files within Pulp. Metadata API requests are forwarded live upstream. | Additional platform and unresolved offline behavior here. |
+| **[HuggingHack](https://github.com/tyedalwaves/HuggingHack)** | MIT; NAS file library, download UI, existing-folder indexing and private uploads. | Relevant path-based UI; not documented as an HF_ENDPOINT proxy. |
+| **[KohakuHub](https://github.com/KohakuBlueleaf/KohakuHub)** | AGPL-3.0 full Hub; LakeFS/S3/database stack, external-source fallback. | More infrastructure than the initial cache needs; fallback is not retention evidence. |
+| **[Shardline](https://github.com/STEXS-Technologies/shardline)** | MIT/Apache-2.0 multiprotocol store; filesystem/SQLite options. [Hub API is beta](https://github.com/STEXS-Technologies/shardline/blob/main/docs/COMPATIBILITY_STATUS.md). | Future artifact-backend candidate; Hub compatibility does not establish upstream pull-through. |
+| **[Artifactory](https://jfrog.com/blog/native-xet-support-in-jfrog-artifactory/)** | Native Xet and hosted/remote HF. [Self-managed feature matrix](https://docs.jfrog.com/installation/docs/feature-comparison-matrix-for-self-mangaged-jpds) excludes HF from free editions. | Excluded by the no-paid-license requirement. |
+| **[Native HF cache](https://huggingface.co/docs/huggingface_hub/en/guides/manage-cache)** | Official client, retained files, explicit revision prefetch/staging. No Hub server required. | Architectural fallback when transparent on-demand HTTP is not essential. |
 
-Download managers that populate or synchronize an HF cache are not automatically compatible servers for `HF_ENDPOINT`. Likewise, a generic reverse proxy may relay Hub metadata while redirected weight downloads bypass it.
+## Shpiel: measured behavior
 
-## Nexus tradeoffs that matter here
+The checksum-verified Darwin ARM64 [v0.3.1 release](https://github.com/loewenthal-corp/shpiel/releases/tag/v0.3.1), commit `18156f1299234f084ba623c910351d1dbf6c25ba`, ran on loopback with scratch storage. An instrumented gateway relayed public HF traffic, then returned errors to simulate unavailable upstream. No real HF credentials or existing user caches were used. Isolated clients were `huggingface_hub` 2.0.0 and 1.8.0, both with `hf-xet` 1.6.0.
 
-[Sonatype's client guide](https://help.sonatype.com/en/configure-hugging-face-with-nexus.html) requires `HF_HUB_DISABLE_XET=1`: Nexus does not yet support native Xet. It also documents that a cold file is served only after it has finished caching. Large first downloads can therefore time out and require longer client timeouts or explicit prewarming. Serving already-cached bytes is the important repeat case, but the initial experience still needs qualification with representative shard sizes.
+The fixture was `sshleifer/tiny-gpt2` at `5f91d94bd9cd7190a9f3216ff93cd1dd95f2c7be`: `config.json` (662 bytes) and `pytorch_model.bin` (2,514,146 bytes). This tests protocols, not a complete usable snapshot or NAS performance.
 
-The intended client shape is a local `HF_ENDPOINT` plus disabled Xet in the process actually performing downloads. These variables must be set before importing the HF client. `HF_HUB_OFFLINE=1` is different: it prevents the client from making HTTP requests, including requests to the LAN mirror. Reserve it for runtimes whose required files are already staged. See [HF environment variables](https://huggingface.co/docs/huggingface_hub/en/package_reference/environment_variables).
+| Probe | Observed result |
+|---|---|
+| Cold HF 2.0 client, then second empty client | Cold payload fetched once; repeat returned identical SHA-256 hashes and made zero upstream gateway requests. |
+| Restart, unavailable upstream, new empty client | Pinned revision succeeded with matching hashes and zero upstream requests. A `main` repeat worked within the metadata refresh interval; expiry was not tested. |
+| Four simultaneous cold HF 1.8 clients | Matching files; each payload fetched once. Metadata fetched three times, so this is not zero-request deduplication. |
+| Warm byte-range read | HTTP 206, exactly bytes 100–199. Cold-range and interrupted-resume behavior not tested. |
+| Classic HF cache import without Shpiel sidecars | Offline lookup failed. One upstream metadata request made both existing blobs usable without another payload download. New shared-blob layouts not tested. |
+| Direct native-client filesystem read | HF 2.0 offline/local-only reads returned both retained files with matching hashes while the service was stopped. |
+| Native Xet upload/download of synthetic local file | HF 2.0 transferred 2 MiB with matching hash. Logs confirm xorb/shard/reconstruction traffic and fallback from unsupported v2 routes to v1. A separate buffer upload used LFS/HTTP. |
+| `GET /api/models/sshleifer/tiny-gpt2/refs` | HTTP 404. Do not claim native llama.cpp downloader compatibility. |
+| Synthetic repo created with `private=True` | Anonymous cached-file GET succeeded after restarting with `auth.mode: passthrough`. This setting is not a private-artifact access boundary. |
 
-[CE limits](https://help.sonatype.com/en/usage-center.html) are currently 40,000 components and 100,000 requests per day; exceeding either prevents new components being added. Measure HF accounting rather than treating one model as one component. [System requirements](https://help.sonatype.com/en/sonatype-nexus-repository-system-requirements.html) recommend 16 GiB for their smallest cloud-native profile, which targets 100 requests/second; this is not a measured homelab requirement. They also explicitly exclude containerized H2 from supported deployments and recommend PostgreSQL. A production choice must resolve that database shape and its NAS resource cost; a one-container example is insufficient evidence. If PostgreSQL is selected, it and its data must also run on Athena to meet the host-local requirement.
+Public upstream weights used ordinary HTTP even with Xet enabled: HEAD did not advertise reconstruction metadata. [The handler](https://github.com/loewenthal-corp/shpiel/blob/v0.3.1/internal/server/handlers.go) advertises Xet when it holds local reconstruction records. Native Xet for uploaded content is distinct from upstream Xet mirroring. Public probes did not require disabling Xet globally.
 
-## What “download once” must mean
+[Relay source](https://github.com/loewenthal-corp/shpiel/blob/v0.3.1/internal/relay/relay.go) caches a cold file completely before serving it. Prewarming and a measured client timeout are necessary for large files. [Filesystem source](https://github.com/loewenthal-corp/shpiel/blob/v0.3.1/internal/backend/fsbackend/fsbackend.go) verifies newly fetched content but trusts existing blobs, keeps per-repository objects and needs sidecar manifests. Atomic rename does not establish power-loss durability. Verify imported hashes and preserve sidecars; the small probes do not establish cross-repository deduplication or crash recovery.
 
-For a completed, retained repository revision, a second client with an empty local cache should receive its payload entirely from the NAS. Clients may still retain local copies and transfer bytes over the LAN. This does not promise zero upstream metadata requests, zero transfers after an interrupted initial download, or automatic interception of applications using hardcoded HF URLs or another registry.
+## MatrixHub: source findings
 
-Use immutable revision identities and retain complete required snapshots: weights alone omit tokenizers, configuration, indexes and other dependencies. Keep retained payloads out of automatic cleanup policies, alert before the volume fills, and explicitly test upgrades and restart recovery. Refuse new writes cleanly at capacity rather than evicting retained models. Deduplication across different repositories or quantizations is a separate property to measure, not implied by a warm-cache hit.
+The v0.2.0 [Compose deployment](https://github.com/matrixhub-ai/matrixhub/blob/v0.2.0/deploy/docker-compose.yml) uses one service. [SQLite configuration](https://github.com/matrixhub-ai/matrixhub/blob/v0.2.0/deploy/config.yaml) keeps the database in its data directory. Its [guide](https://github.com/matrixhub-ai/matrixhub/blob/v0.2.0/docs/development.md) excludes SQLite on NFS/SMB or shared by multiple processes; direct NAS bind mounts fit.
 
-Nexus [cache-age settings](https://help.sonatype.com/en/configurable-repository-fields.html) govern revalidation, and its blocked-upstream mode can serve cached components. Neither is sufficient proof that an entire HF snapshot can be fetched with the WAN unavailable. The trial must use empty client caches and verify both content hashes and upstream payload bytes.
+Proxy setup is per organization/project: the [guide](https://github.com/matrixhub-ai/matrixhub/blob/v0.2.0/website/docs/guides/mirror-from-huggingface.md) creates a `Qwen` proxy project before requests to `Qwen/...`. [Read handlers](https://github.com/matrixhub-ai/matrixhub/blob/v0.2.0/internal/apiserver/handler/hf/handler_hf_download.go) check repository permission and can stream in-progress weight downloads. Its route table includes `/refs`. These are source findings, not client acceptance.
 
-Existing Spark/HF caches and Vonk objects require an inventory and verified import path. Do not write files directly into Nexus blob storage. If supported cache seeding is unavailable, preserve a native HF archive and stage existing models from there; adopting a proxy must not force re-downloading the retained collection merely to populate its database.
+- **Offline after refresh expiry:** [synchronization](https://github.com/matrixhub-ai/matrixhub/blob/v0.2.0/internal/domain/model/model_service.go) propagates remote-pull failures before opening a proxy repo, with a [one-minute TTL](https://github.com/matrixhub-ai/matrixhub/blob/v0.2.0/internal/domain/model/model.go). This suggests cached reads can fail when refresh is due. Test unavailable upstream after expiry and restart; an immediate warm repeat is insufficient.
+- **Integrity and unwanted prefetch:** the pinned [hfd cache](https://github.com/matrixhub-ai/hfd/blob/73bc92d77d19/pkg/mirror/tee_cache.go) queues background objects beyond an immediate file request. Its local persistence path checks length then calls [MovePut](https://github.com/matrixhub-ai/hfd/blob/73bc92d77d19/pkg/lfs/local_storage.go), which renames without hashing. This identifies a missing check, not reproduced corruption. Test same-length wrong content, interrupted transfers and whether selecting one GGUF downloads unrelated variants/history. [Issue #598](https://github.com/matrixhub-ai/matrixhub/issues/598) also requests complete-model verification.
 
-## Gated models and private fine-tunes
+The [roadmap](https://github.com/matrixhub-ai/matrixhub/blob/v0.2.0/ROADMAP.md) places several README-advertised features in later phases, including Xet downloads, S3 and scanning. Qualify the pinned release instead of treating its feature list as shipped behavior.
 
-These are two distinct extensions:
+## Nexus tradeoffs
 
-- **Gated/private content hosted on HF:** Nexus documents an [upstream HF bearer token](https://help.sonatype.com/en/create-a-hugging-face-repository.html) for gated downloads. Qualify the selected private repositories too. Use a separate authenticated repository/access boundary and scoped credentials; clients authorized for the public cache must not inherit the upstream token's private access. Revocation and cached-content access need testing as well as initial authentication.
-- **Models/adapters created locally:** Nexus's [HF format supports proxy repositories, not hosted ones](https://help.sonatype.com/en/formats.html). Preserve these as immutable private artifact bundles on the NAS, recording base-model revision, adapter/weight hashes, training recipe and dataset identity. Keep publication explicit, stage bundles to the serving host and load by local path. Maintain a recovery copy on another device and test restoration. An S3 interface can be added when a consumer needs it; native HF upload/API hosting would be a separate future requirement.
+[Sonatype's client guide](https://help.sonatype.com/en/configure-hugging-face-with-nexus.html) requires `HF_HUB_DISABLE_XET=1` and says cold files finish caching before being served. [CE limits](https://help.sonatype.com/en/usage-center.html) are 40,000 components and 100,000 requests/day; exceeding them blocks new additions. These differ from H2 database sizing limits, and one model need not equal one component.
 
-Public models are reproducible inputs; private training outputs may be irreplaceable and contain source-derived information. Give the archive its own ACLs and backup policy, separate from the public cache. Container/OCI image publication is another protocol and remains outside this HF evaluation.
+[System requirements](https://help.sonatype.com/en/sonatype-nexus-repository-system-requirements.html) recommend 16 GiB for a smallest cloud-native profile targeting 100 requests/second, not a measured homelab minimum. They exclude containerized H2 from supported deployments and recommend PostgreSQL. Resolve that NAS database/resource cost before a trial. No supported no-redownload import from HF caches was established; do not inject objects into Nexus blob storage. HF is [proxy-only](https://help.sonatype.com/en/formats.html), leaving private locally trained models needing another archive/hosting path.
 
-## Evidence boundary
+Opus also surfaced [issue #1071](https://github.com/sonatype/nexus-public/issues/1071), an open September 23 report against 3.96.3-01: model file downloads work, but dataset metadata, organization lookups and kernel paths return errors. This is an upstream operator report, not a local reproduction or proof that every required client fails. It reinforces testing actual inference-client behavior rather than equating successful weight downloads with full Hub compatibility. Nexus client credentials and the repository's upstream HF credentials are separate authorization domains.
 
-No Nexus, Olah or Xet server was run during this review. No live client was redirected, credential copied, existing cache imported, service restarted or model file changed. The open investigation holds the live compatibility, no-redownload and recovery checks; this document records the findings and constraints rather than a production runbook.
+## Storage and client contract
+
+“Download once” means a completed retained revision can reach another empty LAN client with zero WAN payload transfer. It does not promise zero metadata requests, zero client copies or coverage of hardcoded external URLs. Retain weights, tokenizer, configuration and indexes; pin commits and verify hashes. Keep retained revisions outside automatic eviction and alert before capacity runs out.
+
+Use a service-owned public cache/library and a separate private archive. [HF_HOME includes token storage](https://huggingface.co/docs/huggingface_hub/en/package_reference/environment_variables); use `HF_HUB_CACHE` for shared model storage instead. Preserve whole cache trees and symlink targets, including newer shared blob directories. Current clients write `CACHEDIR.TAG`: backup tools configured to honor cache exclusions can skip it. Explicitly include any retained library needing backup, and keep irreplaceable artifacts outside disposable-cache policy.
+
+| Consumer | Initial integration |
+|---|---|
+| SparkRun / vLLM | Configure the actual host download stage before HF imports; preserve local runtime caches and worker sync. Verify a real pinned recipe after library tests. |
+| llama.cpp | Stage a verified GGUF by local path initially. Test its native HF downloader separately from Python clients. |
+| ComfyUI / other tools | Use verified paths or the endpoint where supported; plugins with hardcoded HF/CDN URLs need individual coverage. |
+| WAN-unavailable runtime | Stage complete files first, then use paths or `HF_HUB_OFFLINE=1`. That variable disables HTTP to the LAN mirror too. |
+
+## Gated repositories and private fine-tunes
+
+Gated/private HF downloads need a separate authenticated boundary and scoped upstream credentials. Upstream authentication does not authorize reads of already-cached bytes. Test anonymous denial, unrelated-user denial, direct file/CAS URLs and revocation against warm content. The public service must not inherit a server token's private access. Shpiel's measured passthrough behavior does not supply this boundary; MatrixHub's project permissions still need qualification.
+
+Local training outputs should be immutable private bundles on Athena: weights/adapters, base-model repository and commit, hashes, training recipe and dataset identity. Use filesystem ACLs and an independent encrypted recovery copy; verify restoration. Promote artifacts explicitly and stage them onto serving hosts. Add S3 or a hosted HF API when a consumer needs it, without delaying preservation. OCI/container publication remains separate.
+
+## Independent research and evidence boundary
+
+A separate Claude Opus 5.5 research run received the requirements without the initial candidate shortlist or recommendation. Execution metadata confirmed `claude-opus-5-5`. It independently recommended a standard NAS-owned HF library and separate backed-up private artifacts, with Olah as an optional disposable frontend. The durable-layer conclusion is supported here; the Olah preference is not adopted because its cache lifecycle conflicts with the retention priority and Shpiel now has local reuse evidence. The independent report did not evaluate Shpiel. Its source-based suggestions do not replace live acceptance.
+
+Only Shpiel ran, on the Mac with public/synthetic scratch files. No NAS service, serving workload, real private model, credential store or existing user cache changed. Nexus, MatrixHub and the other candidates were not executed. Complete production snapshots, large shards, actual application integration, disk-full behavior, interruption/power-loss recovery, upgrades and sustained NAS load remain unqualified.
