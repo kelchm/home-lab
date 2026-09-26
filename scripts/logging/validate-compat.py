@@ -23,20 +23,20 @@ rows = []
 expected = {}
 
 
-def add(message, level='', *, payload=None, namespace='fixture', service='fixture', legacy=False):
+def add(message, level='', *, payload=None, namespace='fixture', service='fixture', stream='stderr', legacy=False):
     index = str(len(rows))
     row = {'_time': dt.datetime.now(dt.timezone.utc).isoformat(), '_msg': message,
            'fixture_run': run, 'fixture_id': index}
     if legacy:
-        row.update(namespace=namespace, service_name=service, pod='fixture', container='app', node='fixture-node', stream='stderr')
+        row.update(namespace=namespace, service_name=service, pod='fixture', container='app', node='fixture-node', stream=stream)
     else:
         row.update({'kubernetes.pod_namespace': namespace, 'kubernetes.pod_name': 'fixture',
                     'kubernetes.container_name': 'app', 'kubernetes.pod_node_name': 'fixture-node',
                     'kubernetes.pod_labels.app.kubernetes.io/name': service,
-                    'kubernetes.pod_labels.app': 'wrong-legacy', 'output_stream': 'stderr'})
+                    'kubernetes.pod_labels.app': 'wrong-legacy', 'output_stream': stream})
     row.update(payload or {})
     rows.append(row)
-    expected[index] = {'level': level, 'namespace': namespace, 'service_name': service, 'stream': 'stderr',
+    expected[index] = {'level': level, 'namespace': namespace, 'service_name': service, 'stream': stream,
                        'app_instance': row.get('app_instance', '') if legacy else row.get('kubernetes.pod_labels.app.kubernetes.io/instance', '')}
 
 
@@ -70,6 +70,9 @@ expected[str(len(rows)-1)]['service_name'] = 'app'
 add('instance label', payload={'kubernetes.pod_labels.app.kubernetes.io/instance': 'release', 'app_instance': 'application'})
 add('instance absent', payload={'app_instance': 'application'})
 add('retained instance', legacy=True, payload={'app_instance': 'release'})
+add('retained-only service', legacy=True, namespace='retained-only', service='archived.v1')
+add('native-only service', namespace='native-only', service='checkout-api')
+add('level=info msg="stdout event"', 'info', stream='stdout')
 
 
 def request(path, body, content_type):
@@ -102,4 +105,65 @@ for row in result:
     seen.add(index)
     for field, value in expected[index].items():
         assert row.get(field, '') == value, (index, field, row, expected[index])
-print(json.dumps({'fixtures':len(rows), 'passed':len(seen), 'tenant':'583:0'}))
+
+# Exercise the generated dashboard's queries against both schemas. Grafana's
+# interpolation and dropdown interaction are checked separately in the browser.
+dashboard_path = Path(__file__).resolve().parents[2] / 'kubernetes/apps/observability/grafana/app/kubernetes-logs-dashboard.json'
+dashboard = json.loads(dashboard_path.read_text())
+variables = {variable['name']: variable for variable in dashboard['templating']['list']}
+panel_query = dashboard['panels'][0]['targets'][0]['expr']
+
+
+def interpolate(query, selection):
+    for name in variables:
+        values = selection.get(name)
+        literal = '*' if values is None else ','.join(json.dumps(value) for value in values)
+        query = query.replace('$${' + name + '}', literal)
+    assert '$${' not in query, query
+    return f'_time:10m fixture_run:="{run}" AND ' + query
+
+
+def field_values(name, selection):
+    variable_query = variables[name]['query']
+    response = request('/select/logsql/field_values', urllib.parse.urlencode({
+        'query': interpolate(variable_query['query'], selection),
+        'field': variable_query['field'], 'limit': variable_query['limit'],
+    }).encode(), 'application/x-www-form-urlencoded')
+    return {item['value'] for item in json.loads(response)['values']}
+
+
+assert field_values('namespace', {}) == {row['namespace'] for row in expected.values()}
+suggestion_cases = (None, ['fixture'], ['retained-only'], ['native-only'], ['printing', 'ai'], ['application-namespace'])
+for namespaces in suggestion_cases:
+    wanted = {row['service_name'] for row in expected.values()
+              if namespaces is None or row['namespace'] in namespaces}
+    assert field_values('service', {'namespace': namespaces}) == wanted, namespaces
+
+selection_cases = [
+    {},
+    {'namespace': ['retained-only'], 'service': ['archived.v1']},
+    {'namespace': ['native-only'], 'service': ['checkout-api']},
+    {'namespace': ['printing', 'ai'], 'level': ['info', 'error']},
+    {'namespace': ['fixture'], 'level': ['trace']},
+    {'namespace': ['fixture'], 'level': ['unknown']},
+    {'stream': ['stdout']},
+    {'stream': ['stdout', 'stderr'], 'level': ['info', 'warning']},
+    {'service': ['app', 'wrong-legacy']},
+    {'namespace': ['application-namespace']},
+    {'service': ['application-service']},
+]
+fields = {'namespace': 'namespace', 'service': 'service_name', 'stream': 'stream', 'level': 'level'}
+for selection in selection_cases:
+    query = interpolate(panel_query, selection) + '\n| fields fixture_id'
+    result = [json.loads(line) for line in request('/select/logsql/query',
+        urllib.parse.urlencode({'query': query, 'limit': 1000}).encode(),
+        'application/x-www-form-urlencoded').splitlines()]
+    wanted = {index for index, row in expected.items()
+              if all((row[fields[name]] or ('unknown' if name == 'level' else '')) in values
+                     for name, values in selection.items())}
+    assert {row['fixture_id'] for row in result} == wanted, selection
+    assert len(result) == len(wanted), ('duplicate', selection)
+
+print(json.dumps({'fixtures':len(rows), 'passed':len(seen), 'tenant':'583:0',
+                  'dashboard_suggestions': 1 + len(suggestion_cases),
+                  'dashboard_selections': len(selection_cases)}))

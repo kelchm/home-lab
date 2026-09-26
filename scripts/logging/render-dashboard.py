@@ -6,21 +6,53 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 pipe = (ROOT / 'scripts/logging/compat.logsql').read_text().strip()
-expr = '(kubernetes.pod_namespace:~"$${namespace:raw}" OR namespace:~"$${namespace:raw}")\n' + pipe + '\n| filter namespace:~"$${namespace:raw}" service_name:~"$${service:raw}" stream:~"$${stream:raw}" level:~"$${level:raw}"'
+# Suggestions need the same metadata aliases as the logs, without parsing severity.
+metadata_pipe = pipe.split('\n| unpack_logfmt ', 1)[0]
+namespace_scope = '(kubernetes.pod_namespace:in($${namespace}) OR namespace:in($${namespace}))'
+namespace_query = '*\n' + metadata_pipe + '\n| filter namespace:*'
+service_query = namespace_scope + '\n' + metadata_pipe + '\n| filter namespace:in($${namespace}) service_name:*'
+expr = (namespace_scope + '\n' + pipe
+        + '\n| format if (level:="") "unknown" as level'
+        + '\n| filter namespace:in($${namespace}) service_name:in($${service}) stream:in($${stream}) level:in($${level})')
+datasource = {'type': 'victoriametrics-logs-datasource', 'uid': 'victorialogs'}
+
+
+def variable(name, label, *, query=None, field=None, values=()):
+    result = {
+        'name': name, 'label': label, 'type': 'query' if query else 'custom',
+        'multi': True, 'includeAll': True, 'allValue': '*', 'allowCustomValue': False,
+        'current': {}, 'options': [],
+    }
+    if query:
+        result.update(
+            datasource=datasource, refresh=2, sort=1,
+            description='Search values present in the selected time range (up to 1,000 suggestions).',
+            query={'type': 'fieldValue', 'field': field, 'query': query, 'limit': 1000,
+                   'refId': 'VictoriaLogsVariableQueryEditor-VariableQuery'},
+        )
+    else:
+        result.update(query=','.join(values),
+                      options=[{'text': value, 'value': value, 'selected': False} for value in values])
+    return result
+
+
+variables = [
+    variable('namespace', 'Namespace', query=namespace_query, field='namespace'),
+    variable('service', 'Service', query=service_query, field='service_name'),
+    variable('stream', 'Stream', values=('stdout', 'stderr')),
+    variable('level', 'Severity', values=('trace', 'debug', 'info', 'warning', 'error', 'critical', 'unknown')),
+]
+# Start with a bounded part of the cluster; users can choose any namespace or All.
+variables[0]['current'] = {'text': ['observability'], 'value': ['observability']}
 dashboard = {
     'uid': 'kubernetes-logs', 'title': 'Kubernetes logs', 'schemaVersion': 39,
     'tags': ['logging'], 'timezone': 'browser', 'refresh': '30s',
     'time': {'from': 'now-15m', 'to': 'now'},
-    'templating': {'list': [
-        {'name': name, 'label': label, 'type': 'textbox', 'query': '.*',
-         'current': {'text': '.*', 'value': '.*'}}
-        for name, label in [('namespace', 'Namespace (regex)'), ('service', 'Service (regex)'),
-                            ('stream', 'stdout / stderr (regex)'), ('level', 'Canonical severity (regex)')]]
-    },
+    'templating': {'list': variables},
     'panels': [{
-        'id': 1, 'type': 'logs', 'title': 'Container logs — Alloy history and vlagent',
-        'description': 'Explicit severity only. Namespace selection precedes compatibility parsing. Use a narrow time range.',
-        'datasource': {'type': 'victoriametrics-logs-datasource', 'uid': 'victorialogs'},
+        'id': 1, 'type': 'logs', 'title': 'Container logs',
+        'description': 'Choose a namespace, service and time range. Stream and severity start at All. Shows up to 1,000 matching lines; narrow the time range if needed. Open a row\'s log menu for details and surrounding logs.',
+        'datasource': datasource,
         'gridPos': {'h': 22, 'w': 24, 'x': 0, 'y': 0},
         'options': {'showTime': True, 'showLabels': False, 'wrapLogMessage': True, 'sortOrder': 'Descending'},
         'targets': [{'refId': 'A', 'expr': expr, 'editorMode': 'code', 'queryType': 'instant',
