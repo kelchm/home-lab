@@ -44,6 +44,6 @@
     - Hermes:
         icon: mdi-robot-outline
         href: https://hermes.home.kelch.io
+        # No status check: Workloads-VLAN guests are firewalled from K8s Prod.
         description: Agent
-        siteMonitor: https://hermes.home.kelch.io
         weight: 50

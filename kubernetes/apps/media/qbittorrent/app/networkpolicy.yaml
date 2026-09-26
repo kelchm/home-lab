@@ -43,6 +43,8 @@ spec:
 
     # Homepage's queue widget. With native auth bypassed, an L4 rule would
     # grant full control, so the HTTP rule narrows it to the one read call.
+    # The L7 proxy's upstream source is outside the bypass CIDR, so Homepage
+    # authenticates with qBittorrent's API key.
     - fromEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: homepage
