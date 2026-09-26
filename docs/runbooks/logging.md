@@ -23,6 +23,24 @@ Grafana and all three Traefik instances emit their supported JSON console/access
 
 Retention is nominally 30 days, but VictoriaLogs begins deleting the oldest partitions at 80% disk use. The effective retention is whichever limit is reached first.
 
+## Source inventory
+
+Measured 2026-09-18 over a 24-hour window against the live backend with `stats by (service_name) count()` and its `NOT level:~".+"` variant, so the "plain text" column is exactly the share of each source's entries that the normalizer could not classify. Sources absent from the table were either below ~7k entries/day or already emit a recognizable top-level `level` (logfmt emitters such as cilium-agent, longhorn, and broadsheet normalize cleanly). Per #485 Phase 2, native structured output is enabled only where the application documents it, and noisy-log reduction plus secret/PII redaction are tracked separately rather than via generic collector regexes.
+
+| Source | 24h entries | Plain text | Documented structured output | Decision |
+| --- | --- | --- | --- | --- |
+| kanidm | 163k | all | None. Only `log_level` (info/debug/trace); the OTLP integration exports trace spans to a tracing backend, not log events. | Keep plain text. Volume is dominated by `repl_run_consumer` heartbeat ticks at INFO (~every 2.5s per replica) plus per-request logs; pursue upstream before any collector-side transform. |
+| iperf3 | 138k | all | N/A (hostNetwork benchmark server, network-perf). | Idle: no benchmark traffic was observed — the entire volume is probe self-noise. The tcpSocket readiness/liveness probes (10s/30s) connect-and-close, which the iperf3 server logs as failed clients (~4 lines per 10s burst per pod). Replace with exec probes or retire the DaemonSet if the benchmark target is no longer wanted. |
+| echo | 17k | all | N/A (http-echo canary in `default`, HTTPRoute on gateway-public). | Idle: the volume is kubelet healthz probe spam (two probes every 10s). Also publicly unreachable — the `echo.kelch.io` DNS record no longer resolves even though the HTTPRoute is Accepted, so the canary serves no purpose today. Decide: restore DNS, move it under the internal zone, or decommission. |
+| kaniop | 12k | all | None documented. | Keep plain text. |
+| kube-apiserver | 11k | all | Yes: `--logging-format=json`. | Not flipped: apiserver args are Talos-managed control-plane config outside Flux, so this is a manual rollout decision via the talos-rollout process, not a HelmRelease change. |
+| csi-driver-nfs | 9.1k | all | None (klog emitters). | Keep plain text. |
+| csi-snapshotter | 9.0k | all | None (klog emitters). | Keep plain text. |
+| mcphub | 8.3k | all | None documented. | Keep plain text. |
+| multus | 7.4k | all | None (klog emitters). | Keep plain text. |
+
+A known presentation wart: Traefik access-log JSON rows carry no `msg` key (fields such as `msg.RequestAddr` and `msg.DownstreamStatus` hold the request detail), so VictoriaLogs substitutes its `missing _msg field` placeholder for those rows. The underlying fields remain fully queryable and console-log rows are unaffected. Synthesizing a readable `_msg` for Traefik would require a collector-side transform targeted at one source, which the Phase 2 guardrails rule out for now; revisit only if VMUI access-log readability becomes a real workflow gap.
+
 ## Pipeline failures
 
 Metrics-native rules page through VMAlertmanager when an Alloy target disappears, a node stops sending entries, retries persist, either layer drops data, VictoriaLogs becomes read-only or nearly fills its PVC, ingestion goes silent, or stream creation exceeds the measured rollout envelope. These alerts deliberately depend on the metrics path rather than querying the log backend they diagnose.
