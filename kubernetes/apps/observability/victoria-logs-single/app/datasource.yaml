@@ -26,37 +26,67 @@ data:
           # handoff to the browser-reachable, OIDC-protected native VMUI.
           maxLines: 1000
           vmuiUrl: https://vlogs.home.kelch.io/select/vmui/
-          # New entries receive a normalized top-level level field in Alloy.
-          # These bounded rules keep severity filters and colors working for
-          # retained rows whose structured severity exists only as msg.level.
+          # The provisioned Kubernetes logs dashboard normalizes explicit JSON,
+          # guarded logfmt and the three measured source formats at query time.
+          # These rules also color raw JSON and retained msg.level rows.
           logLevelRules:
+            - field: level
+              value: ^([cC][rR][iI][tT][iI][cC][aA][lL]|[cC][rR][iI][tT]|[aA][lL][eE][rR][tT]|[eE][mM][eE][rR][gG][eE][nN][cC][yY]|[eE][mM][eE][rR][gG]|[fF][aA][tT][aA][lL]|[pP][aA][nN][iI][cC])$
+              level: critical
+              operator: regex
+              enabled: true
+            - field: level
+              value: ^([eE][rR][rR][oO][rR]|[eE][rR][rR]|[sS][eE][vV][eE][rR][eE])$
+              level: error
+              operator: regex
+              enabled: true
+            - field: level
+              value: ^([wW][aA][rR][nN]|[wW][rR][nN]|[wW][aA][rR][nN][iI][nN][gG])$
+              level: warning
+              operator: regex
+              enabled: true
+            - field: level
+              value: ^([iI][nN][fF][oO]|[iI][nN][fF]|[iI][nN][fF][oO][rR][mM][aA][tT][iI][oO][nN]|[iI][nN][fF][oO][rR][mM][aA][tT][iI][oO][nN][aA][lL]|[nN][oO][tT][iI][cC][eE])$
+              level: info
+              operator: regex
+              enabled: true
+            - field: level
+              value: ^([dD][eE][bB][uU][gG]|[dD][bB][gG]|[vV][eE][rR][bB][oO][sS][eE])$
+              level: debug
+              operator: regex
+              enabled: true
+            - field: level
+              value: ^([tT][rR][aA][cC][eE]|[tT][rR][cC])$
+              level: trace
+              operator: regex
+              enabled: true
             - field: msg.level
-              value: ^(critical|CRITICAL|crit|CRIT|alert|ALERT|emergency|EMERGENCY|emerg|EMERG|fatal|FATAL|panic|PANIC)$
+              value: ^([cC][rR][iI][tT][iI][cC][aA][lL]|[cC][rR][iI][tT]|[aA][lL][eE][rR][tT]|[eE][mM][eE][rR][gG][eE][nN][cC][yY]|[eE][mM][eE][rR][gG]|[fF][aA][tT][aA][lL]|[pP][aA][nN][iI][cC])$
               level: critical
               operator: regex
               enabled: true
             - field: msg.level
-              value: ^(error|ERROR|err|ERR|severe|SEVERE)$
+              value: ^([eE][rR][rR][oO][rR]|[eE][rR][rR]|[sS][eE][vV][eE][rR][eE])$
               level: error
               operator: regex
               enabled: true
             - field: msg.level
-              value: ^(warn|WARN|wrn|WRN|warning|WARNING)$
+              value: ^([wW][aA][rR][nN]|[wW][rR][nN]|[wW][aA][rR][nN][iI][nN][gG])$
               level: warning
               operator: regex
               enabled: true
             - field: msg.level
-              value: ^(info|INFO|inf|INF|information|INFORMATION|informational|INFORMATIONAL|notice|NOTICE)$
+              value: ^([iI][nN][fF][oO]|[iI][nN][fF]|[iI][nN][fF][oO][rR][mM][aA][tT][iI][oO][nN]|[iI][nN][fF][oO][rR][mM][aA][tT][iI][oO][nN][aA][lL]|[nN][oO][tT][iI][cC][eE])$
               level: info
               operator: regex
               enabled: true
             - field: msg.level
-              value: ^(debug|DEBUG|dbg|DBG|verbose|VERBOSE)$
+              value: ^([dD][eE][bB][uU][gG]|[dD][bB][gG]|[vV][eE][rR][bB][oO][sS][eE])$
               level: debug
               operator: regex
               enabled: true
             - field: msg.level
-              value: ^(trace|TRACE|trc|TRC)$
+              value: ^([tT][rR][aA][cC][eE]|[tT][rR][cC])$
               level: trace
               operator: regex
               enabled: true

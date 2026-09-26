@@ -1,0 +1,27 @@
+| coalesce(kubernetes.pod_namespace, namespace) as namespace
+| coalesce(kubernetes.pod_name, pod) as pod
+| coalesce(kubernetes.container_name, container) as container
+| coalesce(kubernetes.pod_node_name, node) as node
+| format if (kubernetes.pod_name:*) "<kubernetes.container_name>" as service_name
+| coalesce(kubernetes.pod_labels.app.kubernetes.io/name, kubernetes.pod_labels.app, service_name, container) as service_name
+| format if (kubernetes.pod_name:*) "<kubernetes.pod_labels.app.kubernetes.io/instance>" as app_instance
+| coalesce(kubernetes.pod_labels.app.kubernetes.io/instance, app_instance) as app_instance
+| coalesce(output_stream, stream) as stream
+| unpack_logfmt if (_msg:~"^[[:space:]]*[A-Za-z_][A-Za-z0-9_.-]*=") fields (level, severity_text, severity, lvl, msg, message, ts, time, timestamp) result_prefix "compat_logfmt."
+| coalesce(compat_logfmt.msg, compat_logfmt.message, compat_logfmt.ts, compat_logfmt.time, compat_logfmt.timestamp) as compat_envelope
+| coalesce(compat_logfmt.level, compat_logfmt.severity_text, compat_logfmt.severity, compat_logfmt.lvl) as compat_logfmt_candidate
+| format if (compat_envelope:*) "<compat_logfmt_candidate>" as compat_logfmt_level
+| extract_regexp if (namespace:=iot service_name:=broadsheet container:=app) "^(?P<compat_source_level>warning|error): "
+| extract_regexp if (namespace:=printing service_name:=bambuddy container:=app) "^(?:[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2},[0-9]{3} )?(?P<compat_source_level>DEBUG|INFO|WARNING|ERROR|CRITICAL)(?: \\[|:\\s+)" skip_empty_results
+| extract_regexp if (namespace:=ai service_name:=mcphub container:=app) "^\\[[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}(?:Z|[+-][0-9]{2}:[0-9]{2})\\] \\[(?P<compat_source_level>TRACE|DEBUG|INFO|WARN|ERROR|FATAL)\\] \\[[0-9]+\\] \\[[^\\]]+\\] " skip_empty_results
+| coalesce(level, log.level, severity_text, SeverityText, severity, lvl, msg.level, msg.log.level, msg.severity_text, msg.SeverityText, msg.severity, msg.lvl, compat_logfmt_level, compat_source_level) as compat_level
+| format "<lc:compat_level>" as compat_level
+| replace_regexp ("^\\s+|\\s+$", "") at compat_level
+| format "" as level
+| format if (compat_level:in(trace,trc)) "trace" as level
+| format if (compat_level:in(debug,dbg,verbose)) "debug" as level
+| format if (compat_level:in(info,inf,information,informational,notice)) "info" as level
+| format if (compat_level:in(warn,wrn,warning)) "warning" as level
+| format if (compat_level:in(error,err,severe)) "error" as level
+| format if (compat_level:in(critical,crit,alert,emergency,emerg,fatal,panic)) "critical" as level
+| delete compat_*
