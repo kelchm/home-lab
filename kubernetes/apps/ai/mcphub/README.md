@@ -45,6 +45,7 @@ The SOPS-encrypted settings Secret is the only source of truth. It includes an a
 - Onboard a workload by adding a uniquely named system key with `accessType: groups` and the minimum `allowedGroups` set.
 - Rotate without a flag day by adding a replacement key, updating the client, and removing the old key in a later change.
 - Revoke a client by disabling or removing only its key.
+- Copy each `operator-*` key into a 1Password item named `MCPHub - <key name>` so clients can be configured on devices without this repository. The Secret stays authoritative; update or delete the item in the same change that rotates or revokes the key. Give a new or portable device its own key rather than reusing another client's.
 - Do not use `accessType: all` for a deployed workload; it is reserved from this configuration.
 - Do not configure upstream headers, OAuth, or `passthroughHeaders`. Client credentials terminate at MCPHub.
 
