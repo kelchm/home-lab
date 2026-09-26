@@ -32,9 +32,9 @@ spec:
       resources:
         requests:
           cpu: 100m
-          memory: 256Mi
+          memory: 2Gi
         limits:
-          memory: 1Gi
+          memory: 4Gi
       serviceMonitor:
         enabled: true   # converted for vmagent; retained KPS also scrapes during the rollback soak
 

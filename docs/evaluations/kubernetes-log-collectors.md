@@ -1,6 +1,6 @@
 # Kubernetes log collector evaluation
 
-Evaluated 2026-09-22–23 for [#581](https://github.com/kelchm/home-lab/issues/581). Scope: Kubernetes container logs sent to VictoriaLogs. The [logging runbook](../runbooks/logging.md) describes the deployed Alloy pipeline.
+Evaluated 2026-09-22–23 for [#581](https://github.com/kelchm/home-lab/issues/581). Scope: Kubernetes container logs sent to VictoriaLogs. The [logging runbook](../runbooks/logging.md) describes the current production collector and rollout state.
 
 ## Conclusion
 
