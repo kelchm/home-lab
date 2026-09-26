@@ -124,19 +124,27 @@
         "type": "prometheus",
         "uid": "victoriametrics"
       },
-      "description": "Cluster-wide. Expect one successful manager scrape per node (currently 3). Partial scrape loss can undercount the panels below. Missing metrics remain No data; they are not filled with zero.",
+      "description": "Cluster-wide. Successful manager scrapes as a percentage of desired Longhorn manager pods. Anything other than 100% is red. Partial scrape loss can undercount health and backup panels. Missing metrics remain No data.",
       "fieldConfig": {
         "defaults": {
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "blue",
+                "color": "red",
                 "value": null
+              },
+              {
+                "color": "green",
+                "value": 100
+              },
+              {
+                "color": "red",
+                "value": 100.000001
               }
             ]
           },
-          "unit": "short",
+          "unit": "percent",
           "noValue": "No data",
           "min": 0,
           "mappings": [],
@@ -176,14 +184,14 @@
             "uid": "victoriametrics"
           },
           "editorMode": "code",
-          "expr": "sum(up{cluster=\"k8s-prod\",job=\"longhorn-backend\"})",
+          "expr": "100 * sum(up{cluster=\"k8s-prod\",job=\"longhorn-backend\"}) / max(kube_daemonset_status_desired_number_scheduled{cluster=\"k8s-prod\",namespace=\"longhorn-system\",daemonset=\"longhorn-manager\"})",
           "refId": "A",
           "legendFormat": "",
           "range": false,
           "instant": true
         }
       ],
-      "title": "Scrapes up",
+      "title": "Scrape coverage",
       "type": "stat"
     },
     {
@@ -843,7 +851,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
       },
-      "description": "A successful backup within 30 hours. This is a snapshot of freshness, not proof a restore will work.",
+      "description": "A successful backup within 30 hours. This is a snapshot of freshness, not proof a restore will work. Shows zero when all selected volumes are explicitly exempt; absent timestamps for expected volumes remain No data.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -898,7 +906,7 @@
             "uid": "victoriametrics"
           },
           "editorMode": "code",
-          "expr": "sum((time() - ((longhorn_volume_last_backup_at{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}) > 0)) <= bool 108000) or (0 * count((longhorn_volume_last_backup_at{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"})))",
+          "expr": "sum((time() - ((longhorn_volume_last_backup_at{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}) > 0)) <= bool 108000) or (0 * count((longhorn_volume_last_backup_at{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}))) or ((count((longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"})) or (0 * count(longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"}))) == 0)",
           "refId": "A",
           "legendFormat": "",
           "range": false,
@@ -913,7 +921,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
       },
-      "description": "Positive backup timestamp older than 30 hours, matching the per-volume alert threshold before its 15-minute pending period.",
+      "description": "Positive backup timestamp older than 30 hours, matching the per-volume alert threshold before its 15-minute pending period. Shows zero when all selected volumes are explicitly exempt; absent timestamps for expected volumes remain No data.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -972,7 +980,7 @@
             "uid": "victoriametrics"
           },
           "editorMode": "code",
-          "expr": "sum((time() - ((longhorn_volume_last_backup_at{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}) > 0)) > bool 108000) or (0 * count((longhorn_volume_last_backup_at{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"})))",
+          "expr": "sum((time() - ((longhorn_volume_last_backup_at{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}) > 0)) > bool 108000) or (0 * count((longhorn_volume_last_backup_at{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}))) or ((count((longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"})) or (0 * count(longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"}))) == 0)",
           "refId": "A",
           "legendFormat": "",
           "range": false,
@@ -987,7 +995,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
       },
-      "description": "Timestamp is zero. New volumes appear immediately here; the alert allows 30 hours to complete the first backup.",
+      "description": "Timestamp is zero. New volumes appear immediately here; the alert allows 30 hours to complete the first backup. Shows zero when all selected volumes are explicitly exempt; absent timestamps for expected volumes remain No data.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1046,7 +1054,7 @@
             "uid": "victoriametrics"
           },
           "editorMode": "code",
-          "expr": "sum((longhorn_volume_last_backup_at{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}) == bool 0)",
+          "expr": "sum((longhorn_volume_last_backup_at{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}) == bool 0) or ((count((longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"})) or (0 * count(longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"}))) == 0)",
           "refId": "A",
           "legendFormat": "",
           "range": false,
