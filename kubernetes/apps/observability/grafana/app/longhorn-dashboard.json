@@ -404,7 +404,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
       },
-      "description": "",
+      "description": "Detached volumes normally report unknown robustness. Check attachment state in Longhorn before treating this as a fault; unknown on an attached volume needs investigation.",
       "fieldConfig": {
         "defaults": {
           "thresholds": {
@@ -415,7 +415,7 @@
                 "value": null
               },
               {
-                "color": "red",
+                "color": "yellow",
                 "value": 1
               }
             ]
@@ -700,7 +700,22 @@
           "unit": "short",
           "noValue": "No data"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Ready / enabled"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "x": 12,
@@ -851,7 +866,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
       },
-      "description": "A successful backup within 30 hours. This is a snapshot of freshness, not proof a restore will work. Shows zero when all selected volumes are explicitly exempt; absent timestamps for expected volumes remain No data.",
+      "description": "A successful backup within 30 hours. This is a snapshot of freshness, not proof a restore will work. Shows zero when all selected volumes are explicitly exempt; if every expected volume lacks a timestamp, this shows No data. Partial gaps are counted in Missing timestamps.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -921,7 +936,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
       },
-      "description": "Positive backup timestamp older than 30 hours, matching the per-volume alert threshold before its 15-minute pending period. Shows zero when all selected volumes are explicitly exempt; absent timestamps for expected volumes remain No data.",
+      "description": "Positive backup timestamp older than 30 hours, matching the per-volume alert threshold before its 15-minute pending period. Shows zero when all selected volumes are explicitly exempt; if every expected volume lacks a timestamp, this shows No data. Partial gaps are counted in Missing timestamps.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -995,7 +1010,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
       },
-      "description": "Timestamp is zero. New volumes appear immediately here; the alert allows 30 hours to complete the first backup. Shows zero when all selected volumes are explicitly exempt; absent timestamps for expected volumes remain No data.",
+      "description": "Timestamp is zero. New volumes appear immediately here; the alert allows 30 hours to complete the first backup. Shows zero when all selected volumes are explicitly exempt; if every expected volume lacks a timestamp, this shows No data. Partial gaps are counted in Missing timestamps.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1245,7 +1260,22 @@
           "unit": "s",
           "noValue": "No data"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Backup age"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "x": 0,
@@ -2267,7 +2297,6 @@
               "mode": "off"
             }
           },
-          "decimals": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
