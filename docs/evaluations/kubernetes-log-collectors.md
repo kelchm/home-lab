@@ -130,3 +130,45 @@ _time:[2026-09-16T20:11:00Z,2026-09-23T20:11:00Z) namespace:ai service_name:mcph
 | extract_regexp "^\\[[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}(?:Z|[+-][0-9]{2}:[0-9]{2})\\] \\[(?P<extracted_level>TRACE|DEBUG|INFO|WARN|ERROR|FATAL)\\] \\[[0-9]+\\] \\[[^\\]]+\\] "
 | stats by (stream, extracted_level) count() as rows
 ```
+
+
+## Metadata collision: supported diagnostic output (2026-09-23)
+
+A temporary stock Vector 0.58.0 pod (`vector-console-proof`) read the existing unlabeled heartbeat fixture using its `kubernetes_logs` source and wrote events through its JSON `console` sink. Vector automatically adds Kubernetes fields; no transform or manually inserted conflicting field was used. This is a supported diagnostic configuration ([source documentation](https://vector.dev/docs/reference/configuration/sources/kubernetes_logs/), [console documentation](https://vector.dev/docs/reference/configuration/sinks/console/)). It is not the deployed configuration of the production applications.
+
+During 23:01:00–23:02:00 UTC, direct pod output contained 30 events. Production Alloy stored all 30. The scratch stock vlagent v1.52.0 path stored zero. VictoriaLogs reported duplicate `kubernetes.container_name` stream tags (`hb` from Vector's event and `vector` from the emitting container), alongside duplicate pod names, and explicitly skipped the log entry. This demonstrates whole-record loss when a collector's enriched diagnostic output is collected again. The temporary Vector pod and ConfigMap were removed after verification.
+
+Minimal Vector configuration, with the source restricted to the existing fixture to avoid collecting its own output:
+
+```yaml
+data_dir: /vector-data
+sources:
+  pods:
+    type: kubernetes_logs
+    self_node_name: ${VECTOR_SELF_NODE_NAME}
+    extra_label_selector: variant=unlabeled
+    read_from: end
+sinks:
+  console:
+    type: console
+    inputs: [pods]
+    target: stdout
+    encoding:
+      codec: json
+```
+
+Production query returned `total=30`, `console_events=30`:
+
+```logsql
+_time:[2026-09-23T23:01:00Z,2026-09-23T23:02:00Z) namespace:=log-drill pod:=vector-console-proof
+| stats count() as total, count() if (msg.source_type:=kubernetes_logs) as console_events
+```
+
+Scratch `vl-vlagent` query returned `console_events=0` (searching all pods also avoids overlooking misattributed events):
+
+```logsql
+_time:[2026-09-23T23:01:00Z,2026-09-23T23:02:00Z)
+| stats count() if (source_type:=kubernetes_logs) as console_events
+```
+
+A separate production audit, excluding `log-drill`, examined 3,755,960 records from 2026-09-16T22:59:06Z through 2026-09-23T22:59:06Z. It found zero occurrences of the indexed payload fields `msg.kubernetes.pod_name`, `msg.kubernetes.pod_namespace`, `msg.kubernetes.container_name`, `msg.kubernetes.pod_node_name`, `msg.kubernetes.container_id`, `msg.kubernetes.pod_ip`, and `msg.output_stream`. This bounds the observed exposure; it does not cover every possible metadata key or unparsed text. An ordinary application field named `namespace` does not collide with `kubernetes.pod_namespace`. These findings establish a diagnostic edge case, not an observed defect affecting current production application logs, and do not by themselves justify a downstream source fork or a collector switch.

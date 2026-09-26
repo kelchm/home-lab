@@ -60,6 +60,8 @@ jobs:
               - '.mise.toml'
               - 'kubernetes/**'
               - 'scripts/ci/validate-alloy-log-paths.sh'
+              - 'scripts/ci/validate-vlagent.sh'
+              - 'scripts/logging/**'
               - 'scripts/ci/test-validate-cilium-policies.sh'
               - 'scripts/ci/validate-cilium-policies.sh'
               - 'scripts/ci/test-validate-unsafe-sysctls.sh'
@@ -208,7 +210,11 @@ jobs:
         if: needs.pre-job.outputs.kubernetes_changed == 'true'
         uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
         with:
-          install_args: "aqua:fluxcd/flux2 aqua:yannh/kubeconform aqua:mikefarah/yq"
+          install_args: "aqua:fluxcd/flux2 aqua:yannh/kubeconform aqua:mikefarah/yq aqua:prometheus/prometheus"
+
+      - name: Validate vlagent configuration and pipeline alerts
+        if: needs.pre-job.outputs.kubernetes_changed == 'true'
+        run: scripts/ci/validate-vlagent.sh
 
       - name: Render Flux Kustomizations recursively
         if: needs.pre-job.outputs.kubernetes_changed == 'true'

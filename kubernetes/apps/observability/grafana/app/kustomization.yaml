@@ -18,3 +18,11 @@ configMapGenerator:
         grafana_dashboard: "1"
       annotations:
         grafana_folder: Hardware
+  - name: grafana-dashboard-kubernetes-logs
+    files:
+      - kubernetes-logs.json=./kubernetes-logs-dashboard.json
+    options:
+      labels:
+        grafana_dashboard: "1"
+      annotations:
+        grafana_folder: Observability

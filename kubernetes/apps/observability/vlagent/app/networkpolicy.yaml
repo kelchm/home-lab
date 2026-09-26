@@ -1,0 +1,30 @@
+---
+# Namespace baseline already permits observability peers, DNS and API access.
+# This records the collector's required flows; Cilium allow rules are additive.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: vlagent
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: vlagent
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: vmagent
+      toPorts:
+        - ports:
+            - port: '9429'
+              protocol: TCP
+  egress:
+    - toEntities: [kube-apiserver]
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: victoria-logs-single
+      toPorts:
+        - ports:
+            - port: '9428'
+              protocol: TCP
