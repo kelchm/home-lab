@@ -1,6 +1,6 @@
 {
   "evaluated_at": "2026-09-26",
-  "decision": "no-go for MatrixHub v0.2.0 NAS pilot; failed selection and integrity gates in addition to offline expiry",
+  "decision": "Unrestricted transparent proxy has failed selection, integrity and offline-expiry gates; curated hosted-library evaluation continues",
   "server": {
     "tag": "v0.2.0",
     "commit": "b39cfcbd5bb1f29f6d9a0722dd6bee3b9835d6ea",
@@ -421,7 +421,19 @@
     "complete_model_claim": false,
     "worker_and_nas_scanned": false
   },
-  "not_run_after_stop": [
+  "revisit_trigger": "Unrestricted proxy qualification needs expired-metadata offline reads, bounded selected-file acquisition and corruption rejection. Curated externally verified hosted imports resumed separately; no runtime fix was implemented.",
+  "independent_byte_comparison": {
+    "reference": "previously verified baseline fixture, unchanged expected SHA-256",
+    "equal_length": true,
+    "differing_byte_offsets": [
+      1024
+    ],
+    "xor_value": 1,
+    "reference_sha256": "b706b24034032bdfe765ded5ab6403d201d295a995b790cb24c74becca5c04e6",
+    "persisted_sha256": "9fa26e3e067c00a629f71bc75abe6af326dbecafb521600cbe8338d96dd516b1"
+  },
+  "assessment_update": "The initial blanket NAS-pilot no-go was narrowed after actual Mac import/restart/offline success. Gate measurements are unchanged; the not-run list describes this earlier phase only. See matrixhub-mac-import-evidence.json and hugging-face-nas-cache.md.",
+  "not_run_during_gate_phase": [
     "offline patch and its regression suite",
     "four-client cold MatrixHub concurrency",
     "representative sharded and multi-GGUF selection/import",
@@ -432,16 +444,5 @@
     "full UI completion/progress/lifecycle checks",
     "native llama.cpp and actual SparkRun/vLLM inference",
     "unrelated-user/private LFS route and real gated/private upstream checks"
-  ],
-  "revisit_trigger": "A pinned candidate must pass expired-metadata offline reads, bounded selected-file acquisition and corruption rejection before resuming expensive import/recovery/NAS checks. No runtime fix was implemented.",
-  "independent_byte_comparison": {
-    "reference": "previously verified baseline fixture, unchanged expected SHA-256",
-    "equal_length": true,
-    "differing_byte_offsets": [
-      1024
-    ],
-    "xor_value": 1,
-    "reference_sha256": "b706b24034032bdfe765ded5ab6403d201d295a995b790cb24c74becca5c04e6",
-    "persisted_sha256": "9fa26e3e067c00a629f71bc75abe6af326dbecafb521600cbe8338d96dd516b1"
-  }
+  ]
 }
