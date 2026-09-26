@@ -20,4 +20,4 @@ Annotation keys cannot contain brackets, so write list indices as `widget.mappin
 
 ## Credentials
 
-`homepage-secret` holds copies of the Sonarr, Radarr, Lidarr, Prowlarr, Bazarr, SABnzbd, and Seerr API keys. Rotating one of those keys in its app means updating this Secret too (Reloader then restarts Homepage); the Sonarr, Radarr, and Lidarr keys are also in `media/arr-api-keys.sops.yaml`. qBittorrent needs no credential because it bypasses authentication for the pod CIDR; its network policy is the boundary.
+`homepage-secret` holds copies of the Sonarr, Radarr, Lidarr, Prowlarr, Bazarr, SABnzbd, Seerr, and qBittorrent API keys. Rotating one of those keys in its app means updating this Secret too (Reloader then restarts Homepage); the Sonarr, Radarr, and Lidarr keys are also in `media/arr-api-keys.sops.yaml`. qBittorrent's pod-CIDR authentication bypass does not apply to Homepage: its HTTP-restricted policy routes the connection through Cilium's L7 proxy, whose upstream source is outside that CIDR, so Homepage uses the API key.

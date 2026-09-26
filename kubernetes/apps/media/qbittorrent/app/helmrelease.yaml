@@ -212,6 +212,8 @@ spec:
           gethomepage.dev/weight: "80"
           gethomepage.dev/widget.type: qbittorrent
           gethomepage.dev/widget.url: http://qbittorrent.media.svc.cluster.local:8080
+          # Escaped from Helm's tpl; Homepage fills it from homepage-secret.
+          gethomepage.dev/widget.key: '{{ "{{HOMEPAGE_VAR_QBITTORRENT_KEY}}" }}'
         hostnames: ["qbittorrent.home.kelch.io"]
         parentRefs:
           - name: gateway-admin
