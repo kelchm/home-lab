@@ -1,0 +1,14 @@
+{
+	admin off
+	auto_https off
+}
+
+https://vonk.home.kelch.io {
+	tls /certs/tls.crt /certs/tls.key
+	reverse_proxy caddy:8080
+}
+
+http://127.0.0.1:8082 {
+	bind 127.0.0.1
+	respond /healthz 200
+}

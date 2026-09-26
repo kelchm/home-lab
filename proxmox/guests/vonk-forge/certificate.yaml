@@ -1,0 +1,13 @@
+# Apply manually for the disposable controller VM; this is not watched by Flux.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: vonk-forge-evaluation
+  namespace: network
+spec:
+  secretName: vonk-forge-evaluation-tls
+  dnsNames:
+    - vonk.home.kelch.io
+  issuerRef:
+    name: letsencrypt-production
+    kind: ClusterIssuer
