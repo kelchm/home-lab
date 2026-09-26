@@ -83,6 +83,7 @@ Implemented or superseded plans preserve context. Use the maintained documentati
 
 ## Decision records & benchmarks
 
+- [Hugging Face cache on Athena](evaluations/hugging-face-nas-cache.md) — source-based mirror comparison, NAS capacity evidence, retention requirements and private-artifact boundary; live qualification remains open.
 - [Kubernetes log collectors](evaluations/kubernetes-log-collectors.md) — delivery measurements, application query compatibility, and migration recommendation.
 - [storage-benchmarks](storage-benchmarks.md) — Longhorn fio results, pre/post storage-network cutover.
 - [**sn770-zfs-qualification.md**](sn770-zfs-qualification.md) — WD_BLACK SN770 reproduction matrix, evidence index, and the remaining qualification gates for the PVE storage decision.
