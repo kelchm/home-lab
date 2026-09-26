@@ -1,6 +1,6 @@
 # Hugging Face downloads retained on Athena
 
-Evaluated September 26, 2026. **Read-only lab inspection, source review and isolated macOS probes; no NAS mirror is deployed or qualified.** [Investigation #608](https://github.com/kelchm/home-lab/issues/608) owns remaining qualification. [Shpiel evidence](hugging-face-nas-cache-evidence.json) and [MatrixHub evidence](matrixhub-local-evidence.json) record versions, hashes and observed upstream requests.
+Evaluated September 26, 2026. **Read-only lab inspection, source review and isolated macOS probes; no NAS mirror is deployed or qualified.** [Investigation #608](https://github.com/kelchm/home-lab/issues/608) owns remaining qualification. [Shpiel evidence](hugging-face-nas-cache-evidence.json), [MatrixHub behavior](matrixhub-local-evidence.json) and [MatrixHub import evidence](matrixhub-import-evidence.json) record versions, hashes and observed upstream requests.
 
 ## Recommendation
 
@@ -94,6 +94,21 @@ Proxy setup is per organization/project: the [guide](https://github.com/matrixhu
 - **Integrity and unwanted prefetch:** the pinned [hfd cache](https://github.com/matrixhub-ai/hfd/blob/73bc92d77d19/pkg/mirror/tee_cache.go) queues background objects beyond an immediate file request. Its local persistence path checks length then calls [MovePut](https://github.com/matrixhub-ai/hfd/blob/73bc92d77d19/pkg/lfs/local_storage.go), which renames without hashing. This identifies a missing check, not reproduced corruption. Test same-length wrong content, interrupted transfers and whether selecting one GGUF downloads unrelated variants/history. [Issue #598](https://github.com/matrixhub-ai/matrixhub/issues/598) also requests complete-model verification.
 
 The [roadmap](https://github.com/matrixhub-ai/matrixhub/blob/v0.2.0/ROADMAP.md) places several README-advertised features in later phases, including Xet downloads, S3 and scanning. Qualify the pinned release instead of treating its feature list as shipped behavior.
+
+### Loading existing local files
+
+MatrixHub's [upload guide](https://github.com/matrixhub-ai/matrixhub/blob/v0.2.0/website/docs/operations/model-repo/upload-download.md) documents `hf upload` into a hosted project and explicitly excludes uploads to proxy projects. A plain local model folder can therefore become a hosted repository, with a new local commit. A native HF snapshot needs its referenced blobs available; the [HF cache guide](https://huggingface.co/docs/huggingface_hub/en/guides/manage-cache) explains the snapshot symlinks. Treat an existing folder as a candidate input, not proof of a complete model or its upstream identity.
+
+A second, fresh v0.2.0 instance tested whether supported uploads can also seed a transparent proxy. Its initial data directory contained only SQLite files. The source was our already-downloaded HF 1.8.0 tiny-gpt2 snapshot: nine symlinks resolving to 4,734,064 bytes. The probe copied it into ordinary files and verified hashes; no real Spark/NAS collection was touched.
+
+1. With the instrumented HF upstream blocked, upload the folder through `HfApi.upload_folder` to the non-proxy `library-seed/tiny-gpt2-seed` repository. A fresh client retrieved all nine files with matching hashes and zero upstream requests. The upload created a new local commit; the original HF commit did not resolve to a file in this hosted repository.
+2. Create the original `sshleifer` proxy project against the instrumented HF registry, restore upstream access, and request `sshleifer/tiny-gpt2` at its original `5f91d94bd9cd7190a9f3216ff93cd1dd95f2c7be` commit. The complete snapshot matched the source. Six Git requests transferred 555,660 response bytes; **there were no upstream LFS/CDN requests or weight downloads**. A second empty client needed zero upstream requests.
+
+The [shared LFS storage wiring](https://github.com/matrixhub-ai/matrixhub/blob/v0.2.0/internal/apiserver/apiserver.go) and [existing-object checks](https://github.com/matrixhub-ai/hfd/blob/73bc92d77d19/pkg/mirror/tee_cache.go) explain the observed reuse: the hosted upload supplied the content-addressed weights before the proxy acquired the original Git repository. This composition of supported APIs is a measured migration route for this fixture, not a documented bulk importer or native-cache mount. It preserves original proxy repo/commit identity while avoiding repeat weight downloads, but still needs Git data and does not fix the proxy's offline-refresh failure.
+
+[Import evidence](matrixhub-import-evidence.json) records both revisions, file hashes, initial empty-store proof and gateway traffic. The hosted original-revision `model_info` request returned an empty SHA rather than an error; a direct file read returned 404. Import verification must check the actual revision and files, not merely HTTP success. Originals were hash-checked after the run; the disposable import instance was stopped.
+
+[Evaluation #614](https://github.com/kelchm/home-lab/issues/614) expands this into a read-only inventory and dry-run manifest for Spark native caches, retained Vonk/NAS objects and ordinary GGUF/fine-tune folders. Remaining checks include completeness and symlink resolution, original repo/commit mapping, idempotent/resumable ingestion, missing/corrupt-file refusal, newer cache layouts, large shards, extra disk usage, and whether removing a staging repository or running cleanup preserves proxy objects. Keep the staging copy and originals until that lifecycle is qualified. Private or locally modified artifacts need their own hosted identity and access boundary rather than being represented as unchanged public upstream content.
 
 ## Nexus tradeoffs
 
