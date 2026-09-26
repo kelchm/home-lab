@@ -7,7 +7,7 @@
 # model that fits in one node's budget.
 services:
   vllm:
-    image: vllm/vllm-openai:latest@sha256:c2914767605584b6d8f45686b82de173ecc99e781897aa3d0a66dacd72c51ae1
+    image: vllm/vllm-openai:latest@sha256:8a69ffad015f138d7170c4ddc429e230a3bc1c1719f67e14324749df200a4b90
     container_name: vllm-qwen
     restart: unless-stopped
     # Host networking keeps the endpoint off the docker bridge, which the
