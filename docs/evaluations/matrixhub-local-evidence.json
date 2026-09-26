@@ -1,0 +1,678 @@
+{
+  "evaluated": "2026-09-26",
+  "candidate": {
+    "name": "MatrixHub",
+    "version": "v0.2.0",
+    "commit": "b39cfcbd5bb1f29f6d9a0722dd6bee3b9835d6ea",
+    "runtime": "native macOS arm64, Go 1.27.0, SQLite, built UI with pnpm 10.17.0",
+    "test_only_patch": "diff --git a/internal/apiserver/apiserver.go b/internal/apiserver/apiserver.go\nindex 46818a6..49a6d7b 100644\n--- a/internal/apiserver/apiserver.go\n+++ b/internal/apiserver/apiserver.go\n@@ -531,7 +531,7 @@ func (server *APIServer) registerRoutersAndHandlers() {\n \toptions := &handler.ServerOptions{\n \t\tGatewayMux: server.gatewayMux,\n \t\tGRPCServer: server.grpcServer,\n-\t\tGRPCAddr:   fmt.Sprintf(\":%d\", server.port),\n+\t\tGRPCAddr:   fmt.Sprintf(\"127.0.0.1:%d\", server.port),\n \t\tGRPCDialOpt: []grpc.DialOption{\n \t\t\tgrpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithDefaultCallOptions(\n \t\t\t\tgrpc.MaxCallRecvMsgSize(maxGrpcMsgSize),\n@@ -546,7 +546,7 @@ func (server *APIServer) registerRoutersAndHandlers() {\n \n func (server *APIServer) Start() <-chan error {\n \t// Create the main listener.\n-\taddr := fmt.Sprintf(\":%d\", server.port)\n+\taddr := fmt.Sprintf(\"127.0.0.1:%d\", server.port)\n \tl, err := net.Listen(\"tcp\", addr)\n \tif err != nil {\n \t\tlog.Fatal(err)\n",
+    "patch_scope": "HTTP/gRPC listener and internal gRPC dial address changed to loopback only. No cache, authentication or refresh behavior changed."
+  },
+  "fixture": {
+    "repo": "sshleifer/tiny-gpt2",
+    "revision": "5f91d94bd9cd7190a9f3216ff93cd1dd95f2c7be",
+    "file_count": 9,
+    "total_bytes": 4734064
+  },
+  "method": "Isolated HF 1.8.0 and 2.0.0 clients, each snapshot in an empty cache; hf-xet 1.6.0 installed. A loopback gateway relayed public HF Git/LFS/CDN requests, rewrote download action URLs through itself, counted response bodies and injected HTTP 503 upstream outages. No real HF tokens, existing model caches, NAS state or serving workload were used. The gateway buffers bodies; timings are not NAS performance evidence.",
+  "outcome": "Normal repeat downloads and restart before metadata expiry reuse all files; pinned and main reads fail with HTTP 500 after the one-minute metadata refresh expires during upstream outage. Recovery reuses weight bytes.",
+  "tests": [
+    {
+      "ok": true,
+      "client": "1.8.0",
+      "files": {
+        ".gitattributes": {
+          "size": 391,
+          "sha256": "f049f7c0d16eaffe605baca479013bcb7a3847077cf6e548ba7b228831cf9c38"
+        },
+        "config.json": {
+          "size": 662,
+          "sha256": "77a9e9830c3abeba929f5c61e0e97c398f98b4481ad75516c0be5bf038b340b0"
+        },
+        "flax_model.msgpack": {
+          "size": 411642,
+          "sha256": "3cd4987249615ca870f2c18e657a62f0962aecad0eac790dd89362227310fd30"
+        },
+        "merges.txt": {
+          "size": 456318,
+          "sha256": "1ce1664773c50f3e0cc8842619a93edc4624525b728b188a9e0be33b7726adc5"
+        },
+        "pytorch_model.bin": {
+          "size": 2514146,
+          "sha256": "b706b24034032bdfe765ded5ab6403d201d295a995b790cb24c74becca5c04e6"
+        },
+        "special_tokens_map.json": {
+          "size": 90,
+          "sha256": "c0b3c279b6ecdb71996a86ffb4d4ab94dfdb5df95f00bac9515688faef2ff5dd"
+        },
+        "tf_model.h5": {
+          "size": 452120,
+          "sha256": "09166c56d46ec8eca5f1e46e4e4a62265fca5975a70a2b263c1795291a685cf7"
+        },
+        "tokenizer_config.json": {
+          "size": 26,
+          "sha256": "5e04eb606e3a1583530a42e36c2a6b6615c86f34fe77e44d9ddeb43ff940931f"
+        },
+        "vocab.json": {
+          "size": 898669,
+          "sha256": "03087853bc70c618b66e7c7a43e787d2db4c469416beac9a483e53dad1f72f27"
+        }
+      },
+      "test": "snapshot-cold",
+      "started": 1790460902.799287,
+      "seconds": 3.194,
+      "upstream": [
+        {
+          "time": 1790460903.209516,
+          "method": "GET",
+          "host": "huggingface.co",
+          "path": "/sshleifer/tiny-gpt2/info/refs",
+          "status": 200,
+          "bytes": 191,
+          "sha256": "f6bcd05d6f476a149154052d028ae3e80256900d66a1b752802fbb6db94a9366"
+        },
+        {
+          "time": 1790460903.410033,
+          "method": "POST",
+          "host": "huggingface.co",
+          "path": "/sshleifer/tiny-gpt2/git-upload-pack",
+          "status": 200,
+          "bytes": 365,
+          "sha256": "07a8a96f21051a15d74a836587fc83e91bab42f1f11b51e0d38be9628da3ad32"
+        },
+        {
+          "time": 1790460903.5693812,
+          "method": "GET",
+          "host": "huggingface.co",
+          "path": "/sshleifer/tiny-gpt2/info/refs",
+          "status": 200,
+          "bytes": 191,
+          "sha256": "f6bcd05d6f476a149154052d028ae3e80256900d66a1b752802fbb6db94a9366"
+        },
+        {
+          "time": 1790460903.802098,
+          "method": "POST",
+          "host": "huggingface.co",
+          "path": "/sshleifer/tiny-gpt2/git-upload-pack",
+          "status": 200,
+          "bytes": 65,
+          "sha256": "9c99045be4498a0b02ab5d151e947aeae999a541c51e6b37879fcfa21bd8f6a7"
+        },
+        {
+          "time": 1790460903.97339,
+          "method": "POST",
+          "host": "huggingface.co",
+          "path": "/sshleifer/tiny-gpt2/git-upload-pack",
+          "status": 200,
+          "bytes": 32,
+          "sha256": "c77e15361659a5f35b4d8fe2e93d85fa319c332575197c59fd874f25411b0f59"
+        },
+        {
+          "time": 1790460904.1509812,
+          "method": "POST",
+          "host": "huggingface.co",
+          "path": "/sshleifer/tiny-gpt2/git-upload-pack",
+          "status": 200,
+          "bytes": 554816,
+          "sha256": "d7dcf04431279b794b7e82193f370d5e2a5f940f9addddc0307c0b4e7fac2bfd"
+        },
+        {
+          "time": 1790460904.609507,
+          "method": "POST",
+          "host": "huggingface.co",
+          "path": "/sshleifer/tiny-gpt2.git/info/lfs/objects/batch",
+          "status": 200,
+          "bytes": 1421,
+          "sha256": "4dff165c76271e72b0c2555ef7a56aadfd8fad51635d570abca4e40b3626ec7f"
+        },
+        {
+          "time": 1790460904.640092,
+          "method": "POST",
+          "host": "huggingface.co",
+          "path": "/sshleifer/tiny-gpt2.git/info/lfs/objects/batch",
+          "status": 200,
+          "bytes": 1420,
+          "sha256": "0053a14a866f7bf127dc3a4467bbef6c1d20727429a249ef0484f3c3a6bcc8f2"
+        },
+        {
+          "time": 1790460904.648482,
+          "method": "POST",
+          "host": "huggingface.co",
+          "path": "/sshleifer/tiny-gpt2.git/info/lfs/objects/batch",
+          "status": 200,
+          "bytes": 1417,
+          "sha256": "738732fc93093055a981abc8eb4a5912ed4681d2641ac82affbcc2c2e613757e"
+        },
+        {
+          "time": 1790460904.753143,
+          "method": "HEAD",
+          "host": "us.aws.cdn.hf.co",
+          "path": "/xet-bridge-us/621ffdc136468d709f18090c/7456179281f3fc8a13cd7b19a475a804dc903361c8b2cc2d62b4bd8ccff93d4e",
+          "status": 200,
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "time": 1790460904.791945,
+          "method": "HEAD",
+          "host": "us.aws.cdn.hf.co",
+          "path": "/xet-bridge-us/621ffdc136468d709f18090c/b84c5886e78dcb987e5b2776af99b7eac99cee407fa64cb8183e7ded7d873539",
+          "status": 200,
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "time": 1790460904.810858,
+          "method": "HEAD",
+          "host": "us.aws.cdn.hf.co",
+          "path": "/xet-bridge-us/621ffdc136468d709f18090c/f3a9bc36b0e9b1e0fbf7487d851c4c41182fac9c15383e356987e04e76ef3cce",
+          "status": 200,
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "time": 1790460904.926071,
+          "method": "GET",
+          "host": "us.aws.cdn.hf.co",
+          "path": "/xet-bridge-us/621ffdc136468d709f18090c/f3a9bc36b0e9b1e0fbf7487d851c4c41182fac9c15383e356987e04e76ef3cce",
+          "status": 206,
+          "bytes": 452120,
+          "sha256": "09166c56d46ec8eca5f1e46e4e4a62265fca5975a70a2b263c1795291a685cf7"
+        },
+        {
+          "time": 1790460904.902495,
+          "method": "GET",
+          "host": "us.aws.cdn.hf.co",
+          "path": "/xet-bridge-us/621ffdc136468d709f18090c/7456179281f3fc8a13cd7b19a475a804dc903361c8b2cc2d62b4bd8ccff93d4e",
+          "status": 206,
+          "bytes": 411642,
+          "sha256": "3cd4987249615ca870f2c18e657a62f0962aecad0eac790dd89362227310fd30"
+        },
+        {
+          "time": 1790460904.910562,
+          "method": "GET",
+          "host": "us.aws.cdn.hf.co",
+          "path": "/xet-bridge-us/621ffdc136468d709f18090c/b84c5886e78dcb987e5b2776af99b7eac99cee407fa64cb8183e7ded7d873539",
+          "status": 206,
+          "bytes": 2514146,
+          "sha256": "b706b24034032bdfe765ded5ab6403d201d295a995b790cb24c74becca5c04e6"
+        }
+      ]
+    },
+    {
+      "ok": true,
+      "client": "1.8.0",
+      "files": {
+        ".gitattributes": {
+          "size": 391,
+          "sha256": "f049f7c0d16eaffe605baca479013bcb7a3847077cf6e548ba7b228831cf9c38"
+        },
+        "config.json": {
+          "size": 662,
+          "sha256": "77a9e9830c3abeba929f5c61e0e97c398f98b4481ad75516c0be5bf038b340b0"
+        },
+        "flax_model.msgpack": {
+          "size": 411642,
+          "sha256": "3cd4987249615ca870f2c18e657a62f0962aecad0eac790dd89362227310fd30"
+        },
+        "merges.txt": {
+          "size": 456318,
+          "sha256": "1ce1664773c50f3e0cc8842619a93edc4624525b728b188a9e0be33b7726adc5"
+        },
+        "pytorch_model.bin": {
+          "size": 2514146,
+          "sha256": "b706b24034032bdfe765ded5ab6403d201d295a995b790cb24c74becca5c04e6"
+        },
+        "special_tokens_map.json": {
+          "size": 90,
+          "sha256": "c0b3c279b6ecdb71996a86ffb4d4ab94dfdb5df95f00bac9515688faef2ff5dd"
+        },
+        "tf_model.h5": {
+          "size": 452120,
+          "sha256": "09166c56d46ec8eca5f1e46e4e4a62265fca5975a70a2b263c1795291a685cf7"
+        },
+        "tokenizer_config.json": {
+          "size": 26,
+          "sha256": "5e04eb606e3a1583530a42e36c2a6b6615c86f34fe77e44d9ddeb43ff940931f"
+        },
+        "vocab.json": {
+          "size": 898669,
+          "sha256": "03087853bc70c618b66e7c7a43e787d2db4c469416beac9a483e53dad1f72f27"
+        }
+      },
+      "test": "snapshot-second-empty",
+      "started": 1790460905.994488,
+      "seconds": 0.718,
+      "upstream": []
+    },
+    {
+      "ok": true,
+      "status": 200,
+      "bytes": 137,
+      "sha256": "398fddef0f945b73aeee79ebb45912b547e28d398c94768bcbc536f291c2e754",
+      "content_range": null,
+      "body": {
+        "branches": [
+          {
+            "name": "main",
+            "ref": "refs/heads/main",
+            "targetCommit": "5f91d94bd9cd7190a9f3216ff93cd1dd95f2c7be"
+          }
+        ],
+        "converts": [],
+        "tags": []
+      },
+      "test": "refs-warm",
+      "started": 1790460906.712592,
+      "seconds": 0.516,
+      "upstream": []
+    },
+    {
+      "ok": true,
+      "status": 206,
+      "bytes": 100,
+      "sha256": "e8f6adf6f79b3fa22914d931ef5852bb75967aa19670f163c9d5fd7fff3b0a04",
+      "content_range": "bytes 100-199/2514146",
+      "test": "range-warm",
+      "started": 1790460907.229569,
+      "seconds": 0.507,
+      "upstream": []
+    },
+    {
+      "ok": true,
+      "client": "1.8.0",
+      "files": {
+        ".gitattributes": {
+          "size": 391,
+          "sha256": "f049f7c0d16eaffe605baca479013bcb7a3847077cf6e548ba7b228831cf9c38"
+        },
+        "config.json": {
+          "size": 662,
+          "sha256": "77a9e9830c3abeba929f5c61e0e97c398f98b4481ad75516c0be5bf038b340b0"
+        },
+        "flax_model.msgpack": {
+          "size": 411642,
+          "sha256": "3cd4987249615ca870f2c18e657a62f0962aecad0eac790dd89362227310fd30"
+        },
+        "merges.txt": {
+          "size": 456318,
+          "sha256": "1ce1664773c50f3e0cc8842619a93edc4624525b728b188a9e0be33b7726adc5"
+        },
+        "pytorch_model.bin": {
+          "size": 2514146,
+          "sha256": "b706b24034032bdfe765ded5ab6403d201d295a995b790cb24c74becca5c04e6"
+        },
+        "special_tokens_map.json": {
+          "size": 90,
+          "sha256": "c0b3c279b6ecdb71996a86ffb4d4ab94dfdb5df95f00bac9515688faef2ff5dd"
+        },
+        "tf_model.h5": {
+          "size": 452120,
+          "sha256": "09166c56d46ec8eca5f1e46e4e4a62265fca5975a70a2b263c1795291a685cf7"
+        },
+        "tokenizer_config.json": {
+          "size": 26,
+          "sha256": "5e04eb606e3a1583530a42e36c2a6b6615c86f34fe77e44d9ddeb43ff940931f"
+        },
+        "vocab.json": {
+          "size": 898669,
+          "sha256": "03087853bc70c618b66e7c7a43e787d2db4c469416beac9a483e53dad1f72f27"
+        }
+      },
+      "test": "snapshot-restart-offline",
+      "started": 1790460921.335115,
+      "seconds": 0.741,
+      "upstream": []
+    },
+    {
+      "ok": true,
+      "client": "1.8.0",
+      "files": {
+        ".gitattributes": {
+          "size": 391,
+          "sha256": "f049f7c0d16eaffe605baca479013bcb7a3847077cf6e548ba7b228831cf9c38"
+        },
+        "config.json": {
+          "size": 662,
+          "sha256": "77a9e9830c3abeba929f5c61e0e97c398f98b4481ad75516c0be5bf038b340b0"
+        },
+        "flax_model.msgpack": {
+          "size": 411642,
+          "sha256": "3cd4987249615ca870f2c18e657a62f0962aecad0eac790dd89362227310fd30"
+        },
+        "merges.txt": {
+          "size": 456318,
+          "sha256": "1ce1664773c50f3e0cc8842619a93edc4624525b728b188a9e0be33b7726adc5"
+        },
+        "pytorch_model.bin": {
+          "size": 2514146,
+          "sha256": "b706b24034032bdfe765ded5ab6403d201d295a995b790cb24c74becca5c04e6"
+        },
+        "special_tokens_map.json": {
+          "size": 90,
+          "sha256": "c0b3c279b6ecdb71996a86ffb4d4ab94dfdb5df95f00bac9515688faef2ff5dd"
+        },
+        "tf_model.h5": {
+          "size": 452120,
+          "sha256": "09166c56d46ec8eca5f1e46e4e4a62265fca5975a70a2b263c1795291a685cf7"
+        },
+        "tokenizer_config.json": {
+          "size": 26,
+          "sha256": "5e04eb606e3a1583530a42e36c2a6b6615c86f34fe77e44d9ddeb43ff940931f"
+        },
+        "vocab.json": {
+          "size": 898669,
+          "sha256": "03087853bc70c618b66e7c7a43e787d2db4c469416beac9a483e53dad1f72f27"
+        }
+      },
+      "test": "snapshot-main-fresh-offline",
+      "started": 1790460922.076969,
+      "seconds": 0.727,
+      "upstream": []
+    },
+    {
+      "ok": true,
+      "client": "2.0.0",
+      "files": {
+        ".gitattributes": {
+          "size": 391,
+          "sha256": "f049f7c0d16eaffe605baca479013bcb7a3847077cf6e548ba7b228831cf9c38"
+        },
+        "config.json": {
+          "size": 662,
+          "sha256": "77a9e9830c3abeba929f5c61e0e97c398f98b4481ad75516c0be5bf038b340b0"
+        },
+        "flax_model.msgpack": {
+          "size": 411642,
+          "sha256": "3cd4987249615ca870f2c18e657a62f0962aecad0eac790dd89362227310fd30"
+        },
+        "merges.txt": {
+          "size": 456318,
+          "sha256": "1ce1664773c50f3e0cc8842619a93edc4624525b728b188a9e0be33b7726adc5"
+        },
+        "pytorch_model.bin": {
+          "size": 2514146,
+          "sha256": "b706b24034032bdfe765ded5ab6403d201d295a995b790cb24c74becca5c04e6"
+        },
+        "special_tokens_map.json": {
+          "size": 90,
+          "sha256": "c0b3c279b6ecdb71996a86ffb4d4ab94dfdb5df95f00bac9515688faef2ff5dd"
+        },
+        "tf_model.h5": {
+          "size": 452120,
+          "sha256": "09166c56d46ec8eca5f1e46e4e4a62265fca5975a70a2b263c1795291a685cf7"
+        },
+        "tokenizer_config.json": {
+          "size": 26,
+          "sha256": "5e04eb606e3a1583530a42e36c2a6b6615c86f34fe77e44d9ddeb43ff940931f"
+        },
+        "vocab.json": {
+          "size": 898669,
+          "sha256": "03087853bc70c618b66e7c7a43e787d2db4c469416beac9a483e53dad1f72f27"
+        }
+      },
+      "test": "snapshot-hf2-fresh-offline",
+      "started": 1790460922.80435,
+      "seconds": 0.757,
+      "upstream": []
+    },
+    {
+      "ok": false,
+      "status": 500,
+      "body": "{\"error\":\"failed to open repository \\\"sshleifer/tiny-gpt2\\\": failed to list remote refs: failed to list remote refs: exit status 128\"}\n",
+      "test": "range-expired-offline",
+      "started": 1790460972.840536,
+      "seconds": 0.542,
+      "upstream": [
+        {
+          "time": 1790460972.876443,
+          "method": "GET",
+          "host": "huggingface.co",
+          "path": "/sshleifer/tiny-gpt2/info/refs",
+          "status": 503,
+          "bytes": 0,
+          "injected": true
+        }
+      ]
+    },
+    {
+      "ok": false,
+      "status": 500,
+      "body": "{\"error\":\"failed to open repository \\\"sshleifer/tiny-gpt2\\\": failed to list remote refs: failed to list remote refs: exit status 128\"}\n",
+      "test": "refs-expired-offline",
+      "started": 1790460973.383358,
+      "seconds": 0.532,
+      "upstream": [
+        {
+          "time": 1790460973.412008,
+          "method": "GET",
+          "host": "huggingface.co",
+          "path": "/sshleifer/tiny-gpt2/info/refs",
+          "status": 503,
+          "bytes": 0,
+          "injected": true
+        }
+      ]
+    },
+    {
+      "ok": false,
+      "client": "1.8.0",
+      "error_type": "LocalEntryNotFoundError",
+      "error": "Got: HfHubHTTPError: Server error '500 Internal Server Error' for url 'http://127.0.0.1:57227/api/models/sshleifer/tiny-gpt2/revision/5f91d94bd9cd7190a9f3216ff93cd1dd95f2c7be'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/500\n\nfailed to open repository \"sshleifer/tiny-gpt2\": failed to list remote refs: failed to list remote refs: exit status 128\nAn error happened while trying to locate the files on the Hub and we cannot find the appropriate snapshot folder for the specified revision on the local disk. Please check your internet connection and try again.",
+      "test": "snapshot-expired-offline",
+      "started": 1790460973.916065,
+      "seconds": 0.713,
+      "upstream": [
+        {
+          "time": 1790460974.093459,
+          "method": "GET",
+          "host": "huggingface.co",
+          "path": "/sshleifer/tiny-gpt2/info/refs",
+          "status": 503,
+          "bytes": 0,
+          "injected": true
+        }
+      ]
+    },
+    {
+      "ok": false,
+      "client": "1.8.0",
+      "error_type": "LocalEntryNotFoundError",
+      "error": "Got: HfHubHTTPError: Server error '500 Internal Server Error' for url 'http://127.0.0.1:57227/api/models/sshleifer/tiny-gpt2/revision/main'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/500\n\nfailed to open repository \"sshleifer/tiny-gpt2\": failed to list remote refs: failed to list remote refs: exit status 128\nAn error happened while trying to locate the files on the Hub and we cannot find the appropriate snapshot folder for the specified revision on the local disk. Please check your internet connection and try again.",
+      "test": "snapshot-main-expired-offline",
+      "started": 1790460974.629855,
+      "seconds": 0.707,
+      "upstream": [
+        {
+          "time": 1790460974.805944,
+          "method": "GET",
+          "host": "huggingface.co",
+          "path": "/sshleifer/tiny-gpt2/info/refs",
+          "status": 503,
+          "bytes": 0,
+          "injected": true
+        }
+      ]
+    },
+    {
+      "ok": false,
+      "client": "2.0.0",
+      "error_type": "HfHubHTTPError",
+      "error": "Server error '500 Internal Server Error' for url 'http://127.0.0.1:57227/api/models/sshleifer/tiny-gpt2/tree/5f91d94bd9cd7190a9f3216ff93cd1dd95f2c7be?recursive=true&expand=false'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/500\n\nfailed to open repository \"sshleifer/tiny-gpt2\": failed to list remote refs: failed to list remote refs: exit status 128",
+      "test": "snapshot-hf2-expired-offline",
+      "started": 1790460975.337234,
+      "seconds": 0.7,
+      "upstream": [
+        {
+          "time": 1790460975.507509,
+          "method": "GET",
+          "host": "huggingface.co",
+          "path": "/sshleifer/tiny-gpt2/info/refs",
+          "status": 503,
+          "bytes": 0,
+          "injected": true
+        }
+      ]
+    },
+    {
+      "ok": true,
+      "client": "1.8.0",
+      "files": {
+        ".gitattributes": {
+          "size": 391,
+          "sha256": "f049f7c0d16eaffe605baca479013bcb7a3847077cf6e548ba7b228831cf9c38"
+        },
+        "config.json": {
+          "size": 662,
+          "sha256": "77a9e9830c3abeba929f5c61e0e97c398f98b4481ad75516c0be5bf038b340b0"
+        },
+        "flax_model.msgpack": {
+          "size": 411642,
+          "sha256": "3cd4987249615ca870f2c18e657a62f0962aecad0eac790dd89362227310fd30"
+        },
+        "merges.txt": {
+          "size": 456318,
+          "sha256": "1ce1664773c50f3e0cc8842619a93edc4624525b728b188a9e0be33b7726adc5"
+        },
+        "pytorch_model.bin": {
+          "size": 2514146,
+          "sha256": "b706b24034032bdfe765ded5ab6403d201d295a995b790cb24c74becca5c04e6"
+        },
+        "special_tokens_map.json": {
+          "size": 90,
+          "sha256": "c0b3c279b6ecdb71996a86ffb4d4ab94dfdb5df95f00bac9515688faef2ff5dd"
+        },
+        "tf_model.h5": {
+          "size": 452120,
+          "sha256": "09166c56d46ec8eca5f1e46e4e4a62265fca5975a70a2b263c1795291a685cf7"
+        },
+        "tokenizer_config.json": {
+          "size": 26,
+          "sha256": "5e04eb606e3a1583530a42e36c2a6b6615c86f34fe77e44d9ddeb43ff940931f"
+        },
+        "vocab.json": {
+          "size": 898669,
+          "sha256": "03087853bc70c618b66e7c7a43e787d2db4c469416beac9a483e53dad1f72f27"
+        }
+      },
+      "test": "snapshot-recovered",
+      "started": 1790460989.414531,
+      "seconds": 1.181,
+      "upstream": [
+        {
+          "time": 1790460989.598499,
+          "method": "GET",
+          "host": "huggingface.co",
+          "path": "/sshleifer/tiny-gpt2/info/refs",
+          "status": 200,
+          "bytes": 191,
+          "sha256": "f6bcd05d6f476a149154052d028ae3e80256900d66a1b752802fbb6db94a9366"
+        },
+        {
+          "time": 1790460989.814351,
+          "method": "POST",
+          "host": "huggingface.co",
+          "path": "/sshleifer/tiny-gpt2/git-upload-pack",
+          "status": 200,
+          "bytes": 365,
+          "sha256": "07a8a96f21051a15d74a836587fc83e91bab42f1f11b51e0d38be9628da3ad32"
+        }
+      ]
+    },
+    {
+      "ok": true,
+      "client": "2.0.0",
+      "files": {
+        ".gitattributes": {
+          "size": 391,
+          "sha256": "f049f7c0d16eaffe605baca479013bcb7a3847077cf6e548ba7b228831cf9c38"
+        },
+        "config.json": {
+          "size": 662,
+          "sha256": "77a9e9830c3abeba929f5c61e0e97c398f98b4481ad75516c0be5bf038b340b0"
+        },
+        "flax_model.msgpack": {
+          "size": 411642,
+          "sha256": "3cd4987249615ca870f2c18e657a62f0962aecad0eac790dd89362227310fd30"
+        },
+        "merges.txt": {
+          "size": 456318,
+          "sha256": "1ce1664773c50f3e0cc8842619a93edc4624525b728b188a9e0be33b7726adc5"
+        },
+        "pytorch_model.bin": {
+          "size": 2514146,
+          "sha256": "b706b24034032bdfe765ded5ab6403d201d295a995b790cb24c74becca5c04e6"
+        },
+        "special_tokens_map.json": {
+          "size": 90,
+          "sha256": "c0b3c279b6ecdb71996a86ffb4d4ab94dfdb5df95f00bac9515688faef2ff5dd"
+        },
+        "tf_model.h5": {
+          "size": 452120,
+          "sha256": "09166c56d46ec8eca5f1e46e4e4a62265fca5975a70a2b263c1795291a685cf7"
+        },
+        "tokenizer_config.json": {
+          "size": 26,
+          "sha256": "5e04eb606e3a1583530a42e36c2a6b6615c86f34fe77e44d9ddeb43ff940931f"
+        },
+        "vocab.json": {
+          "size": 898669,
+          "sha256": "03087853bc70c618b66e7c7a43e787d2db4c469416beac9a483e53dad1f72f27"
+        }
+      },
+      "test": "snapshot-hf2-recovered",
+      "started": 1790460990.595693,
+      "seconds": 0.737,
+      "upstream": []
+    }
+  ],
+  "private_project_smoke": [
+    {
+      "test": "private-cached-anonymous",
+      "status": 403,
+      "body": "{\"error\":\"permission denied\"}\n"
+    },
+    {
+      "test": "private-cached-admin-session",
+      "status": 403,
+      "body": "{\"error\":\"permission denied\"}\n"
+    },
+    {
+      "test": "private-cached-invalid-token",
+      "status": 403,
+      "body": "{\"error\":\"permission denied\"}\n"
+    },
+    {
+      "test": "private-refs-anonymous",
+      "status": 403,
+      "body": "{\"error\":\"permission denied\"}\n"
+    },
+    {
+      "test": "private-cached-valid-admin-token",
+      "status": 200,
+      "bytes": 2514146,
+      "sha256": "b706b24034032bdfe765ded5ab6403d201d295a995b790cb24c74becca5c04e6"
+    },
+    {
+      "test": "private-cached-anonymous-with-token-existing",
+      "status": 403,
+      "body": "{\"error\":\"permission denied\"}\n"
+    },
+    {
+      "test": "private-cached-revoked-admin-token",
+      "status": 403,
+      "body": "{\"error\":\"permission denied\"}\n"
+    }
+  ],
+  "ui_observations": [
+    "Browser UI requires login even for public fixture; public HF API reads worked anonymously.",
+    "Logged in as disposable local admin, browsed project/model/nine-file listing and config source.",
+    "Download Model offers an HF_ENDPOINT + hf download command; Use This Model offers HF_ENDPOINT + vllm serve. No inference workload was run."
+  ],
+  "limitations": [
+    "Small 4.7 MB public fixture, not large-shard or NAS throughput qualification.",
+    "Private check changed the public fixture project visibility temporarily, tested an admin bearer token and revocation, then restored public visibility; it is not gated/private upstream ingestion, non-admin isolation, alternate-object-route or auth-cache qualification. Browser session cookies were insufficient on the HF download route.",
+    "No cold concurrency, interrupted download, corruption injection, disk full, power loss, upgrade, existing-cache import or direct export qualification.",
+    "No NAS/container test and no real SparkRun/vLLM/llama.cpp/ComfyUI integration."
+  ]
+}
