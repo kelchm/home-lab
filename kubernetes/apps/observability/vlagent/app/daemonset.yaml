@@ -18,7 +18,7 @@ spec:
         app.kubernetes.io/name: vlagent
     spec:
       serviceAccountName: vlagent
-      # Explicit per-node cutover; unlabelled nodes remain on Alloy.
+      # Required on every logging node; apply this label when adding a node.
       nodeSelector:
         logging.home.kelch.io/collector: vlagent
       tolerations:
