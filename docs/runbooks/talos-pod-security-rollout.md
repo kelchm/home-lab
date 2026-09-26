@@ -10,7 +10,7 @@ workloads require baseline-prohibited host access:
 | `longhorn-system` | Privileged CSI and storage-engine host access |
 | `media` | qBittorrent's Gluetun sidecar uses `NET_ADMIN` and `/dev/net/tun` |
 | `network-perf` | iperf3 uses the host network to measure the underlay |
-| `observability` | node-exporter and Alloy use host namespaces and paths |
+| `observability` | node-exporter uses host namespaces; vlagent reads host log paths and persists node-local queues |
 | `tailscale` | The operator-generated subnet router runs privileged containers |
 
 The five namespace exceptions relax only enforcement. They, and every other

@@ -202,7 +202,7 @@ spec:
             severity: critical
           annotations:
             summary: VictoriaLogs has no observable collector ingestion
-            description: No Loki or native-protocol rows have reached the production VictoriaLogs backend for 15 minutes, or the ingestion metric is absent. Check collector queues, VictoriaLogs availability, and vmagent scraping.
+            description: No native-protocol rows from vlagent have reached the production VictoriaLogs backend for 15 minutes, or the ingestion metric is absent. Check collector queues, VictoriaLogs availability, and vmagent scraping.
 
         # The prior seven-day peak was 819 streams/hour. vlagent keeps one
         # identity per pod/container/node, with no severity or output stream.

@@ -72,3 +72,12 @@ tests:
       - expr: count(ALERTS{alertname="VictoriaLogsIngestionSilent",alertstate="firing"})
         eval_time: 20m
         exp_samples: [{labels: '{}', value: 1}]
+  - name: Missing native ingestion series fires despite legacy traffic
+    interval: 1m
+    input_series:
+      - series: vl_rows_ingested_total{job="victoria-logs-single-server",type="loki"}
+        values: 0+100x30
+    promql_expr_test:
+      - expr: count(ALERTS{alertname="VictoriaLogsIngestionSilent",alertstate="firing"})
+        eval_time: 20m
+        exp_samples: [{labels: '{}', value: 1}]
