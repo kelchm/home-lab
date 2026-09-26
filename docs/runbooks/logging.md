@@ -25,6 +25,24 @@ Grafana and all three Traefik instances emit their supported JSON console/access
 
 Retention is nominally 30 days, but VictoriaLogs begins deleting the oldest partitions at 80% disk use. The effective retention is whichever limit is reached first.
 
+## Source inventory
+
+Measured 2026-09-18 over a 24-hour window with `stats by (service_name) count()` and its `NOT level:~".+"` variant. "No recognized severity" means the stored top-level `level` is absent or empty; it does not establish that a row is unstructured. This is a dated inventory of the deployed Alloy pipeline, not a complete list of sources or a current traffic baseline. The later [collector evaluation](../evaluations/kubernetes-log-collectors.md#stdoutstderr-and-severity) records additional source-level findings, including Broadsheet renderer warnings whose explicit prefix is not normalized by Alloy.
+
+| Source | 24h entries | No recognized severity | Documented structured output | Decision |
+| --- | --- | --- | --- | --- |
+| kanidm | 163k | all | No JSON/log-event export found in the tested v1.11.2. `log_level` controls verbosity; OTLP exports trace spans. | Keep native output. The sample is dominated by INFO replication heartbeats and requests; any volume reduction must preserve useful operational and audit events. |
+| iperf3 | 138k | all | Not evaluated for the idle benchmark server. | Observed bursts match tcpSocket readiness/liveness probes (10s/30s). Probe noise and whether to retain an always-on benchmark target belong to [#226](https://github.com/kelchm/home-lab/issues/226). |
+| echo | 17k | all | Not needed to identify the observed health-check requests. | The sample is dominated by kubelet `/healthz` requests. It does not establish that the canary is unused; the earlier DNS observation is not a current reachability claim. Retention and exposure belong to [#226](https://github.com/kelchm/home-lab/issues/226). |
+| kaniop | 12k | all | None documented in the evaluation. | Keep native output. |
+| kube-apiserver | 11k | all | Yes: `--logging-format=json`. | Deferred: Talos-managed control-plane arguments require a separate manual rollout. Revisit if native JSON materially improves the accepted query workflow. |
+| csi-driver-nfs | 9.1k | all | None established for the deployed klog emitter. | Keep native output. |
+| csi-snapshotter | 9.0k | all | None established for the deployed klog emitter. | Keep native output. |
+| mcphub | 8.3k | all | None documented in the evaluation. | Keep native output; explicit logger prefixes are covered in the later collector evaluation. |
+| multus | 7.4k | all | None established for the deployed klog emitter. | Keep native output. |
+
+Traefik access-log JSON has queryable request/status fields but lacks a message field selected by the ingestion configuration, so `_msg` displays a missing-message placeholder. Use Grafana's `Show log details` to inspect these rows. Revisit message presentation during [#583](https://github.com/kelchm/home-lab/issues/583)'s operator-workflow acceptance; do not infer severity from arbitrary access-log text. Native source-format changes, noisy-log reduction and secret/PII redaction remain separate from the collector migration.
+
 ## Pipeline failures
 
 Metrics-native rules page through VMAlertmanager when an Alloy target disappears, a node stops sending entries, retries persist, either layer drops data, VictoriaLogs becomes read-only or nearly fills its PVC, ingestion goes silent, or stream creation exceeds the measured rollout envelope. These alerts deliberately depend on the metrics path rather than querying the log backend they diagnose.
