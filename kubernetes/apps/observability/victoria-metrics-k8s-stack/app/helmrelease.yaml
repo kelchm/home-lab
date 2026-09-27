@@ -235,6 +235,9 @@ spec:
             relabelConfigs:
               - targetLabel: cluster
                 replacement: k8s-prod
+        # null omits the field. Server-side apply of the chart's `{}`
+        # default can yield null, which the VMAgent schema rejects.
+        externalLabels: null
         resources:
           requests:
             cpu: 100m
