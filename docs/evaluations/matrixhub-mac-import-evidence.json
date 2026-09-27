@@ -904,7 +904,7 @@
       "allocated_bytes": 8125812736
     },
     "disposable_client_logical_bytes_removed": 24333472975,
-    "server_store_retained": true,
+    "server_store_retained": false,
     "originals_retained": true
   },
   "ui": {
@@ -931,5 +931,16 @@
     "Selected Qwen runtime files/shards validated; source README and .gitattributes absent. Orpheus covers one GGUF, not every dependency of a TTS application.",
     "No inference, native llama.cpp downloader, NAS throughput, full-collection migration, staging-repository deletion, garbage collection, export/restore, upgrade, full-disk or broader private/gated authorization qualification."
   ],
-  "temporary_upload_token_revoked": true
+  "temporary_upload_token_revoked": true,
+  "cleanup": {
+    "date": "2026-09-27",
+    "requested_by_user": true,
+    "all_local_evaluation_services_stopped": true,
+    "test_ports_verified_closed": 10,
+    "removed": "All five MatrixHub trial stores, imported copies, disposable client caches, and temporary candidate source/build/virtual-environment workspace",
+    "original_selected_files_unchanged": 12,
+    "verification": "Original file inode, size, mtime and resolved symlink target unchanged across cleanup; all removal paths confined to disposable evaluation directories",
+    "research_records_retained": true,
+    "runtime_recreation_required": true
+  }
 }
