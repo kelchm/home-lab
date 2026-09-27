@@ -6,7 +6,7 @@ Compose projects that run directly on the Synology NAS (`Athena`), outside Kuber
 |---|---|---|
 | [`platform/doco-cd`](platform/doco-cd/) | Git-driven deployer for the projects in `.doco-cd.yml` | Manual apply over SSH |
 | [`doco-cd-canary`](doco-cd-canary/) | Disposable canary for the deployer's acceptance checks | doco-cd |
-| [`netbootxyz`](netbootxyz/) | PXE menus and local boot assets for lab hosts | Manual Compose apply through DSM Container Manager or SSH |
+| [`netbootxyz`](netbootxyz/) | PXE menus and local boot assets for lab hosts | doco-cd |
 
 doco-cd has run on Athena since 2026-09-26; the remaining acceptance checks are tracked in [home-lab#379](https://github.com/kelchm/home-lab/issues/379). A project that doco-cd does not deploy must still have its running Compose definition match its directory, and any out-of-band DSM edit must be brought back to Git.
 

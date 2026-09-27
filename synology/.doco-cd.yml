@@ -4,3 +4,10 @@ name: doco-cd-canary
 working_dir: synology/doco-cd-canary
 prune_images: false
 reconciliation: false
+---
+name: netbootxyz-nas
+working_dir: synology/netbootxyz
+prune_images: false
+reconciliation: false
+# First start on an empty config/ downloads menus before the health gate.
+timeout: 300

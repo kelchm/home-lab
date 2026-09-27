@@ -14,8 +14,8 @@ services:
       - "10.32.20.5:3000:3000/tcp"
       - "10.32.20.5:8080:80/tcp"
     volumes:
-      - ./config:/config
-      - ./assets:/assets
+      - /volume1/docker/netbootxyz/config:/config
+      - /volume1/docker/netbootxyz/assets:/assets
     healthcheck:
       test:
         - CMD-SHELL
@@ -28,3 +28,24 @@ services:
       start_period: 90s
     restart: unless-stopped
     stop_grace_period: 30s
+
+  # Publishes the committed menus after first-start menu generation. local/
+  # holds overrides that netboot.xyz re-applies after a web-UI menu refresh.
+  menus:
+    image: ghcr.io/netbootxyz/netbootxyz:0.7.6-nbxyz24@sha256:7bd0964fd3648cd3323772ad6ad8b0a507afe797385e4c0f587a8c23972ee4e3
+    entrypoint: ["/bin/sh", "-euc"]
+    command:
+      - |
+        for menu in /source/*.ipxe; do
+          install -D -o 1000 -g 1000 -m 0755 "$$menu" "/config/menus/local/$${menu##*/}"
+          install -o 1000 -g 1000 -m 0755 "$$menu" "/config/menus/$${menu##*/}"
+        done
+    labels:
+      cd.doco.deployment.one_shot: "true"
+    volumes:
+      - ./menus:/source:ro
+      - /volume1/docker/netbootxyz/config:/config
+    depends_on:
+      netbootxyz:
+        condition: service_healthy
+    restart: "no"
