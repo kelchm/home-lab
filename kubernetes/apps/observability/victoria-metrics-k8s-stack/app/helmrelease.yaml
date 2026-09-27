@@ -228,7 +228,7 @@ spec:
         # `cluster=k8s-prod`, which bundled dashboards' `$cluster` variable
         # filters on. Targets outside the cluster must name another class.
         # Never also set `externalLabels.cluster`: vmagent would rename this
-        # label to `exported_cluster` on every series.
+        # label to `exported_cluster` on every scrape without honorLabels.
         scrapeClasses:
           - name: kubernetes
             default: true

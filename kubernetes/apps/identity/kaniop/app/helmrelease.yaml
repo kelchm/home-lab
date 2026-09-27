@@ -49,16 +49,20 @@ spec:
         enabled: true
       prometheusRules:
         enabled: true
-        # These rules aggregate away the source series' `cluster` label.
-        overrides:
-          KaniopReconcileDurationHigh:
-            labels:
-              cluster: k8s-prod
-          KaniopFrequentResourceDeleteCreate:
-            labels:
-              cluster: k8s-prod
-          KaniopK8sApiErrors:
-            labels:
-              cluster: k8s-prod
       dashboards:
         enabled: true
+
+  # Some chart rules aggregate away the source series' `cluster` label, and
+  # the chart has no group-label knob. A group label, unlike a per-rule
+  # label, leaves vmalert's rule IDs and alert state unchanged.
+  postRenderers:
+    - kustomize:
+        patches:
+          - target:
+              kind: PrometheusRule
+              name: kaniop
+            patch: |
+              - op: add
+                path: /spec/groups/0/labels
+                value:
+                  cluster: k8s-prod
