@@ -49,5 +49,16 @@ spec:
         enabled: true
       prometheusRules:
         enabled: true
+        # These rules aggregate away the source series' `cluster` label.
+        overrides:
+          KaniopReconcileDurationHigh:
+            labels:
+              cluster: k8s-prod
+          KaniopFrequentResourceDeleteCreate:
+            labels:
+              cluster: k8s-prod
+          KaniopK8sApiErrors:
+            labels:
+              cluster: k8s-prod
       dashboards:
         enabled: true

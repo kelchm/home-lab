@@ -224,13 +224,17 @@ spec:
         # so KPS's ServiceMonitors flow through transparently.
         selectAllByDefault: true
         scrapeInterval: 30s
-        # vmagent's externalLabels are scrape-time labels (unlike Prometheus,
-        # which only applies external_labels at federation/remote_write/alert
-        # boundaries). Stamping `cluster` here makes every series in vmsingle
-        # carry it, which is what bundled dashboards' `$cluster` template
-        # variable filters on.
-        externalLabels:
-          cluster: k8s-prod
+        # Scrape objects that name no class are Kubernetes sources and get
+        # `cluster=k8s-prod`, which bundled dashboards' `$cluster` variable
+        # filters on. Targets outside the cluster must name another class.
+        # Never also set `externalLabels.cluster`: vmagent would rename this
+        # label to `exported_cluster` on every series.
+        scrapeClasses:
+          - name: kubernetes
+            default: true
+            relabelConfigs:
+              - targetLabel: cluster
+                replacement: k8s-prod
         resources:
           requests:
             cpu: 100m
@@ -257,6 +261,11 @@ spec:
 
     defaultRules:
       create: true
+      # Every bundled rule describes this cluster.
+      group:
+        spec:
+          labels:
+            cluster: k8s-prod
       groups:
         kube-apiserver-availability.rules:
           rules:

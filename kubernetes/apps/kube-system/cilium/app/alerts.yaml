@@ -6,6 +6,8 @@ metadata:
 spec:
   groups:
     - name: cilium
+      labels:
+        cluster: k8s-prod
       rules:
         - alert: CiliumPolicyDrops
           expr: |
