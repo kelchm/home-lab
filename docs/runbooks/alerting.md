@@ -15,7 +15,7 @@ Alertmanager routes as follows:
 | `alertname="Watchdog"` and `evaluator="vmalert"` | `healthchecks-watchdog` webhook to healthchecks.io | 1 minute | None |
 | Everything else | `null` | N/A | N/A |
 
-vmalert is the delivery authority and the cluster's only rule evaluator. It attaches `cluster=k8s-prod` and `evaluator=vmalert`, and sends to VMAlertmanager. The SOPS-encrypted `vmalertmanager-config` Secret owns VMAlertmanager routing, the Pushover application token/user key, and the healthchecks.io ping URL. Do not put any of these credentials in Helm values, shell history, issue comments, or screenshots.
+vmalert is the delivery authority and the cluster's only rule evaluator. It attaches `evaluator=vmalert` to every alert and sends to VMAlertmanager; `cluster` comes from each rule group, as described in [Cluster labels](#cluster-labels). The SOPS-encrypted `vmalertmanager-config` Secret owns VMAlertmanager routing, the Pushover application token/user key, and the healthchecks.io ping URL. Do not put any of these credentials in Helm values, shell history, issue comments, or screenshots.
 
 Use a source-specific Pushover application for each independent alert producer. Kubernetes uses `k8s-prod Alerts`; a future Proxmox setup should use a separate application such as `pve-prod Alerts` rather than sharing this token. Both applications can deliver to the same Pushover user and devices while retaining distinct names, icons, quotas, audit history, and revocation boundaries.
 
@@ -74,6 +74,8 @@ metadata:
 spec:
   groups:
     - name: observability-pipeline-test
+      labels:
+        cluster: k8s-prod
       rules:
         - alert: ObservabilityPipelineTest
           expr: vector(1)
@@ -160,6 +162,15 @@ Verified 2026-09-27 in #218: a 20-minute silence produced the "down" Pushover an
 For planned whole-cluster downtime, pause the check after the heartbeat stops, not before: any ping resumes a paused check. Shut the cluster down, confirm healthchecks.io shows no ping since, and pause within ten minutes of the last ping. The first ping after the cluster returns resumes monitoring; confirm the check shows up.
 
 The ping URL is a credential: anyone who holds it can mask an outage by pinging. To rotate it, create a replacement check with the same schedule and integrations, replace the URL in `vmalertmanager-config.sops.yaml`, confirm pings arrive on the new check, and then delete the old check.
+
+## Cluster labels
+
+`cluster` names a real clustered system. It is set where each series or alert originates rather than globally, so scrape targets and rules outside `k8s-prod` do not inherit it.
+
+- **Scrapes:** vmagent's default `kubernetes` scrape class adds `cluster=k8s-prod` to every scrape object that names no class. A target outside the cluster must name a different scrape class, defined on the VMAgent, that sets its own identity labels. Never add `externalLabels.cluster` to vmagent. Together with the class, it renames the label to `exported_cluster` on every scrape without `honorLabels`. VMProbe objects inherit only authentication from a class, so each probe sets its own labels.
+- **Rules:** every Kubernetes rule group carries `labels: {cluster: k8s-prod}`. Bundled rules get it through the chart's `defaultRules.group.spec`, repo rules on each group, and kaniop's group through a post-renderer. Use a group label, not a per-rule label: vmalert derives a rule's ID from the rule's own labels, so changing per-rule labels resets that rule's alert state. Rules about systems outside the cluster omit the label and keep their source series' labels.
+
+`count({__name__=~".+", cluster=""})` lists series without the label; every Kubernetes series should have one. CNPG's database exporters expose their own `cluster` label, which vmagent keeps as `exported_cluster` (4 series on 2026-09-27); any other `exported_cluster` means a source collided with the scrape class.
 
 ## Coverage checks
 
