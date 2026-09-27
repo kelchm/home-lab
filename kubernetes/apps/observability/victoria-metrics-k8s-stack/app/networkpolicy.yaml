@@ -214,12 +214,12 @@ spec:
               - method: GET
                 path: /api/v2/alerts(\?.*)?
   egress:
-    # Outbound paging: Pushover is the sole configured receiver host.
-    # Everything else is denied. When the independent dead-man watchdog
-    # lands (#218), its receiver hostname must be added here — a missing
-    # allowlist entry fails silently at deliver-time, not at apply-time.
+    # Receiver hosts: Pushover paging and the healthchecks.io Watchdog
+    # heartbeat. Everything else is denied; a missing entry fails silently
+    # at delivery time, not at apply time.
     - toFQDNs:
         - matchName: api.pushover.net
+        - matchName: hc-ping.com
       toPorts:
         - ports:
             - port: "443"
