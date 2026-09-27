@@ -34,29 +34,3 @@ spec:
             http:
               - method: GET
                 path: /metrics
----
-# Homepage's Longhorn widget reads node storage from the same unauthenticated
-# REST API, so it gets the same treatment: one read path, nothing else.
-apiVersion: cilium.io/v2
-kind: CiliumNetworkPolicy
-metadata:
-  name: longhorn-manager-homepage
-  namespace: longhorn-system
-spec:
-  endpointSelector:
-    matchLabels:
-      app: longhorn-manager
-  ingress:
-    - fromEndpoints:
-        - matchLabels:
-            k8s:io.kubernetes.pod.namespace: homepage
-            app.kubernetes.io/name: homepage
-            io.cilium.k8s.policy.serviceaccount: homepage
-      toPorts:
-        - ports:
-            - port: "9500"
-              protocol: TCP
-          rules:
-            http:
-              - method: GET
-                path: /v1/nodes
