@@ -1,21 +1,6 @@
 ---
-- kubernetes:
-    cluster:
-      show: true
-      cpu: true
-      memory: true
-      showLabel: true
-      label: k8s-prod
-    nodes:
-      show: true
-      cpu: true
-      memory: true
-      showLabel: true
-- longhorn:
-    expanded: true
-    total: true
-    labels: true
-    nodes: true
+# Cluster and storage totals live on the k8s-prod tile (services.yaml), not
+# up here, so the page opens on search and tiles.
 - search:
     provider: google
     focus: true

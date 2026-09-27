@@ -121,14 +121,6 @@ spec:
         - ports:
             - port: "9093"
               protocol: TCP
-    - toEndpoints:
-        - matchLabels:
-            k8s:io.kubernetes.pod.namespace: longhorn-system
-            app: longhorn-manager
-      toPorts:
-        - ports:
-            - port: "9500"
-              protocol: TCP
     # Off-cluster status checks.
     - toCIDR:
         - 10.32.20.21/32 # pve-sbx-1

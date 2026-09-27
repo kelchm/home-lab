@@ -84,14 +84,9 @@ body {
   color: rgb(165 180 252) !important;
 }
 
-/* Phones. Header: cluster-wide stats and total storage only, no clock (the
- * phone shows one); per-node detail filled the first screen. Tiles: link
- * tiles two-up, widget tiles full width, no descriptions, tighter cards.
- * Homepage's Longhorn widget class really is spelled "infomation". */
+/* Phones: no clock (the phone shows one); link tiles two-up, widget tiles
+ * full width, no descriptions, tighter cards. */
 @media (max-width: 639px) {
-  .information-widget-kubernetes > div > div:not(:first-child),
-  .infomation-widget-longhorn > div > div:not(:last-child),
-  .information-widget-longhorn > div > div:not(:last-child),
   .information-widget-datetime,
   .service-description {
     display: none !important;

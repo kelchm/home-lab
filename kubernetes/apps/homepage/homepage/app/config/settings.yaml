@@ -26,7 +26,3 @@ layout:
     icon: mdi-server-network
   Observability:
     icon: mdi-chart-line
-
-providers:
-  longhorn:
-    url: http://longhorn-backend.longhorn-system.svc.cluster.local:9500

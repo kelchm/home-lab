@@ -7,19 +7,36 @@
         href: https://grafana.home.kelch.io
         description: Talos · Flux · Longhorn
         weight: 5
-        widget:
-          type: prometheusmetric
-          url: http://vmsingle-victoria-metrics-k8s-stack.observability.svc.cluster.local:8428
-          refreshInterval: 30000
-          metrics:
-            - label: Nodes ready
-              query: count(kube_node_status_condition{condition="Ready",status="true"} == 1)
-            - label: Flux not ready
-              query: count(flux_resource_info{ready="False"}) or vector(0)
-            - label: Failing pods
-              query: sum(kube_pod_status_phase{phase=~"Pending|Failed|Unknown"} == 1) or vector(0)
-            - label: Degraded volumes
-              query: count(longhorn_volume_robustness{state!="healthy"} == 1) or vector(0)
+        widgets:
+          - type: prometheusmetric
+            url: http://vmsingle-victoria-metrics-k8s-stack.observability.svc.cluster.local:8428
+            refreshInterval: 30000
+            metrics:
+              - label: CPU
+                query: 100 * (1 - avg(rate(node_cpu_seconds_total{mode="idle"}[5m])))
+                format: &pct
+                  type: number
+                  suffix: "%"
+                  options:
+                    maximumFractionDigits: 0
+              - label: Memory
+                query: 100 * (1 - sum(node_memory_MemAvailable_bytes) / sum(node_memory_MemTotal_bytes))
+                format: *pct
+              - label: Storage
+                query: 100 * sum(longhorn_node_storage_usage_bytes) / sum(longhorn_node_storage_capacity_bytes)
+                format: *pct
+          - type: prometheusmetric
+            url: http://vmsingle-victoria-metrics-k8s-stack.observability.svc.cluster.local:8428
+            refreshInterval: 30000
+            metrics:
+              - label: Nodes ready
+                query: count(kube_node_status_condition{condition="Ready",status="true"} == 1)
+              - label: Flux not ready
+                query: count(flux_resource_info{ready="False"}) or vector(0)
+              - label: Failing pods
+                query: sum(kube_pod_status_phase{phase=~"Pending|Failed|Unknown"} == 1) or vector(0)
+              - label: Degraded volumes
+                query: count(longhorn_volume_robustness{state!="healthy"} == 1) or vector(0)
     - Proxmox VE:
         icon: proxmox.svg
         href: https://pve-sbx-1.home.kelch.io:8006
