@@ -52,6 +52,22 @@ spec:
                   timeoutSeconds: 5
                   failureThreshold: 3
               readiness: *probe
+              # Homepage serves the page prerendered at image build, with
+              # default settings, until something revalidates it; browsers
+              # only do so when a stored config hash changes. Revalidating as
+              # the startup check applies config/ on every pod start.
+              startup:
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: /api/revalidate
+                    port: *port
+                    httpHeaders:
+                      - name: Host
+                        value: localhost:3000
+                  periodSeconds: 5
+                  failureThreshold: 24
             securityContext:
               allowPrivilegeEscalation: false
               capabilities: { drop: ["ALL"] }

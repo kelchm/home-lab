@@ -11,6 +11,7 @@ metadata:
     gethomepage.dev/enabled: "true"
     gethomepage.dev/group: Infrastructure
     gethomepage.dev/name: Longhorn
+    gethomepage.dev/href: https://longhorn.home.kelch.io
     gethomepage.dev/icon: longhorn.svg
     gethomepage.dev/description: Block storage
     gethomepage.dev/weight: "10"

@@ -18,12 +18,14 @@ quicklaunch:
 layout:
   Media:
     icon: mdi-play-circle-outline
-  Observability:
-    icon: mdi-chart-line
+    style: row
+    columns: 3
+  Home:
+    icon: mdi-home-outline
   Infrastructure:
     icon: mdi-server-network
-  Apps:
-    icon: mdi-apps
+  Observability:
+    icon: mdi-chart-line
 
 providers:
   longhorn:

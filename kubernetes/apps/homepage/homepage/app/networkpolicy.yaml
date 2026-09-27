@@ -90,10 +90,27 @@ spec:
     - toEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: media
+            app.kubernetes.io/name: jellyfin
+      toPorts:
+        - ports:
+            - port: "8096"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: media
             app.kubernetes.io/name: seerr
       toPorts:
         - ports:
             - port: "5055"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: vmsingle
+            app.kubernetes.io/instance: victoria-metrics-k8s-stack
+      toPorts:
+        - ports:
+            - port: "8428"
               protocol: TCP
     - toEndpoints:
         - matchLabels:
@@ -126,6 +143,12 @@ spec:
             - port: "5001" # DSM
               protocol: TCP
             - port: "3000" # netboot.xyz
+              protocol: TCP
+    - toCIDR:
+        - 10.32.1.244/32 # Home Assistant
+      toPorts:
+        - ports:
+            - port: "8123"
               protocol: TCP
     - toCIDR:
         - 10.32.1.1/32 # UniFi gateway

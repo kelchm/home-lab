@@ -9,6 +9,7 @@ metadata:
     gethomepage.dev/enabled: "true"
     gethomepage.dev/group: Observability
     gethomepage.dev/name: VictoriaLogs
+    gethomepage.dev/href: https://vlogs.home.kelch.io
     gethomepage.dev/icon: victorialogs.svg
     gethomepage.dev/description: Log query UI
     gethomepage.dev/weight: "40"

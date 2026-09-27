@@ -2,12 +2,36 @@
 # Off-cluster systems and in-cluster apps without an HTTPRoute. Everything
 # with a route declares its own tile through gethomepage.dev/* annotations.
 - Infrastructure:
+    - k8s-prod:
+        icon: kubernetes.svg
+        href: https://grafana.home.kelch.io
+        description: Talos · Flux · Longhorn
+        weight: 5
+        widget:
+          type: prometheusmetric
+          url: http://vmsingle-victoria-metrics-k8s-stack.observability.svc.cluster.local:8428
+          refreshInterval: 30000
+          metrics:
+            - label: Nodes ready
+              query: count(kube_node_status_condition{condition="Ready",status="true"} == 1)
+            - label: Flux not ready
+              query: count(flux_resource_info{ready="False"}) or vector(0)
+            - label: Failing pods
+              query: sum(kube_pod_status_phase{phase=~"Pending|Failed|Unknown"} == 1) or vector(0)
+            - label: Degraded volumes
+              query: count(longhorn_volume_robustness{state!="healthy"} == 1) or vector(0)
     - Proxmox VE:
         icon: proxmox.svg
         href: https://pve-sbx-1.home.kelch.io:8006
         description: pve-sbx cluster
         siteMonitor: https://pve-sbx-1.home.kelch.io:8006
         weight: 30
+        widget:
+          type: proxmox
+          url: https://pve-sbx-1.home.kelch.io:8006
+          # PVEAuditor-only API token; see proxmox/README.md.
+          username: homepage@pve!homepage
+          password: "{{HOMEPAGE_VAR_PVE_TOKEN_SECRET}}"
     - Synology:
         icon: synology-dsm.svg
         href: https://10.32.20.5:5001
@@ -21,7 +45,7 @@
         siteMonitor: https://10.32.1.1
         weight: 50
     - GLKVM:
-        icon: pikvm.svg
+        icon: pikvm-light.svg
         href: https://10.32.20.10
         description: GL-RM1PE KVM
         siteMonitor: https://10.32.20.10
@@ -33,7 +57,19 @@
         siteMonitor: http://10.32.20.5:3000
         weight: 70
 
-- Apps:
+- Home:
+    - Home Assistant:
+        icon: home-assistant.svg
+        href: http://homeassistant.home.kelch.io:8123
+        description: Home automation
+        siteMonitor: http://10.32.1.244:8123
+        weight: 1
+    - UniFi Protect:
+        icon: mdi-cctv
+        href: https://10.32.1.1/protect/
+        description: Cameras
+        siteMonitor: https://10.32.1.1/protect/
+        weight: 2
     - Visionect:
         icon: mdi-tablet
         href: https://vss.home.kelch.io

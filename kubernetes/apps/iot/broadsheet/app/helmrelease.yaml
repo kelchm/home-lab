@@ -100,8 +100,9 @@ spec:
       app:
         annotations:
           gethomepage.dev/enabled: "true"
-          gethomepage.dev/group: Apps
+          gethomepage.dev/group: Home
           gethomepage.dev/name: Broadsheet
+          gethomepage.dev/href: https://broadsheet.home.kelch.io
           gethomepage.dev/icon: mdi-newspaper-variant-outline
           gethomepage.dev/description: E-ink front pages
           gethomepage.dev/weight: "10"

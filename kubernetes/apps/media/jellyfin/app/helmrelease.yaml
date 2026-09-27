@@ -128,9 +128,18 @@ spec:
           gethomepage.dev/enabled: "true"
           gethomepage.dev/group: Media
           gethomepage.dev/name: Jellyfin
+          gethomepage.dev/href: https://jellyfin.home.kelch.io
           gethomepage.dev/icon: jellyfin.svg
           gethomepage.dev/description: Media server
           gethomepage.dev/weight: "10"
+          gethomepage.dev/widget.type: jellyfin
+          gethomepage.dev/widget.url: http://jellyfin.media.svc.cluster.local:8096
+          gethomepage.dev/widget.enableBlocks: "true"
+          gethomepage.dev/widget.enableNowPlaying: "false"
+          gethomepage.dev/widget.enableMediaControl: "false"
+          gethomepage.dev/widget.fields: '["movies", "series", "episodes"]'
+          # Escaped from Helm's tpl; Homepage fills it from homepage-secret.
+          gethomepage.dev/widget.key: '{{ "{{HOMEPAGE_VAR_JELLYFIN_KEY}}" }}'
         hostnames: ["jellyfin.home.kelch.io"]
         parentRefs:
           - name: gateway-services

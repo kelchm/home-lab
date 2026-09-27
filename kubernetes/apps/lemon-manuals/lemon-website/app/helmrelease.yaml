@@ -103,8 +103,9 @@ spec:
       app:
         annotations:
           gethomepage.dev/enabled: "true"
-          gethomepage.dev/group: Apps
+          gethomepage.dev/group: Home
           gethomepage.dev/name: LEMON Manuals
+          gethomepage.dev/href: https://lemon.home.kelch.io
           gethomepage.dev/icon: mdi-car-wrench
           gethomepage.dev/description: Car repair manuals
           gethomepage.dev/weight: "40"

@@ -246,6 +246,22 @@ spec:
         - ports:
             - port: "8428"
               protocol: TCP
+    # Homepage's cluster-health queries. The API is unauthenticated and also
+    # deletes series, so the HTTP rule narrows it to instant queries. Only
+    # Homepage's connections take the L7 proxy; ingestion is unaffected.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: homepage
+            app.kubernetes.io/name: homepage
+            io.cilium.k8s.policy.serviceaccount: homepage
+      toPorts:
+        - ports:
+            - port: "8428"
+              protocol: TCP
+          rules:
+            http:
+              - method: GET
+                path: /api/v1/query(\?.*)?
 ---
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy

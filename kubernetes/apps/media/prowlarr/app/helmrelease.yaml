@@ -78,6 +78,7 @@ spec:
           gethomepage.dev/enabled: "true"
           gethomepage.dev/group: Media
           gethomepage.dev/name: Prowlarr
+          gethomepage.dev/href: https://prowlarr.home.kelch.io
           gethomepage.dev/icon: prowlarr.svg
           gethomepage.dev/description: Indexers
           gethomepage.dev/weight: "70"

@@ -1,0 +1,85 @@
+/* Indigo Aurora — the same palette as Kanidm's theme
+ * (kubernetes/apps/identity/kanidm/app/theme/override.css), dark mode only.
+ * Homepage builds its Tailwind palette from --color-* on .theme-<color>;
+ * settings.yaml selects slate, so these values replace it. */
+
+.theme-slate {
+  --color-50: 231 233 243;
+  --color-100: 214 218 236;
+  --color-200: 199 205 228;
+  --color-300: 154 163 189;
+  --color-400: 123 132 166;
+  --color-500: 92 101 138;
+  --color-600: 58 66 104;
+  --color-700: 35 42 69;
+  --color-800: 19 23 42;
+  --color-900: 11 14 28;
+  --color-logo-start: 199 208 255;
+  --color-logo-stop: 129 140 248;
+}
+
+html,
+body {
+  background-color: rgb(19 23 42);
+}
+
+/* Top aurora wash, as on Kanidm. No backdrop-filter on cards: with many
+ * cards it left parts of the page unpainted. */
+#page_wrapper {
+  background:
+    radial-gradient(1100px 560px at 8% -10%, rgba(124, 58, 237, 0.2), transparent 60%),
+    radial-gradient(1000px 520px at 92% -14%, rgba(79, 70, 229, 0.22), transparent 62%);
+}
+
+.service-card {
+  border: 1px solid rgba(129, 140, 248, 0.1);
+  border-radius: 14px !important;
+  background-color: rgba(27, 32, 54, 0.78) !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 14px 34px -20px rgba(0, 0, 0, 0.7) !important;
+}
+
+.service-card:hover {
+  border-color: rgba(129, 140, 248, 0.34);
+  background-color: rgba(35, 42, 69, 0.78) !important;
+}
+
+.service-block {
+  background-color: rgba(11, 14, 28, 0.38) !important;
+  border-radius: 9px !important;
+}
+
+.service-group-name {
+  font-size: 0.78rem !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgb(165 180 252) !important;
+}
+
+.service-group-icon {
+  width: 1.25rem !important;
+  height: 1.25rem !important;
+}
+
+.service-name {
+  font-weight: 600;
+  color: rgb(231 233 243);
+}
+
+.service-description {
+  color: rgb(154 163 189) !important;
+}
+
+#information-widgets input {
+  background: rgba(27, 32, 54, 0.7) !important;
+  border-color: rgba(129, 140, 248, 0.18) !important;
+  border-radius: 12px !important;
+}
+
+.bookmark-group-name {
+  font-size: 0.78rem !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgb(165 180 252) !important;
+}

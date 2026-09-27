@@ -79,6 +79,7 @@ spec:
           gethomepage.dev/enabled: "true"
           gethomepage.dev/group: Media
           gethomepage.dev/name: Lidarr
+          gethomepage.dev/href: https://lidarr.home.kelch.io
           gethomepage.dev/icon: lidarr.svg
           gethomepage.dev/description: Music
           gethomepage.dev/weight: "50"

@@ -79,6 +79,7 @@ spec:
           gethomepage.dev/enabled: "true"
           gethomepage.dev/group: Media
           gethomepage.dev/name: Radarr
+          gethomepage.dev/href: https://radarr.home.kelch.io
           gethomepage.dev/icon: radarr.svg
           gethomepage.dev/description: Movies
           gethomepage.dev/weight: "40"
