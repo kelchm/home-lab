@@ -62,7 +62,7 @@ Ports 1–3 use the VLAN 20 access profile. Ports 13–15 use `pve-guest-trunk`,
 6. Confirm GLKVM mass storage is disabled and the target host's onboard 1 GbE switch port is an untagged VLAN 20 member.
 7. Keep physical power access available. The KVM cannot recover a node that is off or hard-hung.
 
-The committed `synology/netbootxyz/proxmox.ipxe` pins the PVE `9.2-1` asset-mirror release rather than pointing the deployment at netboot.xyz's development menu. Deploy the override and verify all three assets as described in `synology/netbootxyz/README.md` before the cold-boot test.
+The committed `synology/netbootxyz/menus/proxmox.ipxe` pins the PVE `9.2-1` asset-mirror release rather than pointing the deployment at netboot.xyz's development menu. Deploy the override and verify all three assets as described in `synology/netbootxyz/README.md` before the cold-boot test.
 
 ## Normalize BIOS configuration
 

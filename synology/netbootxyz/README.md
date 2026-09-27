@@ -4,9 +4,7 @@
 serves PXE clients on Lab Infra VLAN 20. UniFi remains the only DHCP server;
 this project provides TFTP, the iPXE menu, and HTTP-hosted boot assets.
 
-This is deliberately an explicit-apply Compose project. The future Git-driven
-Synology deployment plane is tracked in
-[home-lab#379](https://github.com/kelchm/home-lab/issues/379).
+doco-cd deploys this project from `main`; the [Synology README](../README.md) describes the deployment model, rollback, and break-glass apply.
 
 ## Endpoints
 
@@ -16,16 +14,14 @@ Synology deployment plane is tracked in
 | `http://10.32.20.5:3000/` | netboot.xyz administration UI; restrict to trusted management clients |
 | `http://10.32.20.5:8080/` | Local boot assets |
 
-Runtime state is adjacent to the deployed Compose file:
+Runtime state lives on Athena outside the repository:
 
 ```text
 /volume1/docker/netbootxyz/
-├── compose.yaml       # copied from this directory
 ├── config/            # generated menus and web-app state
 │   └── menus/
-│       ├── local-vars.ipxe    # copied from this directory
-│       ├── proxmox.ipxe       # copied from this directory
-│       └── systemrescue.ipxe  # copied from this directory
+│       ├── local/     # committed menus; re-applied after a web-UI menu refresh
+│       └── *.ipxe     # generated menus, overlaid with the committed menus
 └── assets/            # downloaded installers and live-image assets
 ```
 
@@ -34,49 +30,17 @@ reconstructable cache and should not be committed to Git.
 
 ## Deploy or update
 
-Validate locally first:
+Edit [`compose.yaml`](compose.yaml) or the files in [`menus/`](menus/), run `scripts/ci/validate-synology.sh`, and merge. doco-cd applies the change on its next poll. Its one-shot `menus` service waits for `netbootxyz` to become healthy, then copies every `menus/*.ipxe` file into `config/menus/` and `config/menus/local/` as `1000:1000`, mode `0755`. The running service is not restarted for a menu-only change; the new menus are served on the next request.
+
+Before merging a menu change that points at new local assets, stage and verify those assets on Athena, as in the PVE procedure below. Merging publishes the menu within one poll, so a boot selection must never reference a kernel, initrd, or ISO path that is still absent.
+
+`MENU_VERSION` selects the netboot.xyz release that is downloaded only when `config/menus/remote/` is empty. Changing it does not refresh an existing deployment's generated menus; use the administration UI's menu refresh, which re-applies `config/menus/local/` afterwards.
+
+To republish the committed menus without a new commit, for example after restoring `config/`, rerun the existing one-shot container:
 
 ```sh
-docker compose -f synology/netbootxyz/compose.yaml config --quiet
+ssh kelchm@10.32.20.5 'sudo /usr/local/bin/docker start -a netbootxyz-nas-menus-1'
 ```
-
-Copy the authoritative file to the NAS and apply it. Athena's SSH file-transfer
-subsystem rejects `scp`, so use `rsync`; create the bind-mount targets before the
-first start:
-
-On the first PVE `9.2-1` deployment, complete the asset-staging procedure below before copying `proxmox.ipxe`. Do not publish a boot selection whose kernel, initrd, or ISO path is still absent.
-
-```sh
-ssh kelchm@10.32.20.5 \
-  'mkdir -p /volume1/docker/netbootxyz/config/menus /volume1/docker/netbootxyz/assets'
-rsync -av synology/netbootxyz/compose.yaml \
-  kelchm@10.32.20.5:/volume1/docker/netbootxyz/compose.yaml
-rsync -av synology/netbootxyz/local-vars.ipxe \
-  kelchm@10.32.20.5:/volume1/docker/netbootxyz/config/menus/local-vars.ipxe
-rsync -av synology/netbootxyz/proxmox.ipxe \
-  kelchm@10.32.20.5:/volume1/docker/netbootxyz/config/menus/proxmox.ipxe
-rsync -av synology/netbootxyz/systemrescue.ipxe \
-  kelchm@10.32.20.5:/volume1/docker/netbootxyz/config/menus/systemrescue.ipxe
-ssh kelchm@10.32.20.5 '
-  sudo chown 1000:1000 \
-    /volume1/docker/netbootxyz/config/menus/local-vars.ipxe \
-    /volume1/docker/netbootxyz/config/menus/proxmox.ipxe \
-    /volume1/docker/netbootxyz/config/menus/systemrescue.ipxe
-  sudo chmod 0755 \
-    /volume1/docker/netbootxyz/config/menus/local-vars.ipxe \
-    /volume1/docker/netbootxyz/config/menus/proxmox.ipxe \
-    /volume1/docker/netbootxyz/config/menus/systemrescue.ipxe
-  cd /volume1/docker/netbootxyz
-  sudo /usr/local/bin/docker-compose pull
-  sudo /usr/local/bin/docker-compose up -d
-  sudo /usr/local/bin/docker-compose ps
-'
-```
-
-The equivalent DSM path is **Container Manager → Project** with project name
-`netbootxyz-nas`, path `/volume1/docker/netbootxyz`, and the committed YAML as
-the project definition. DSM is an apply/inspection surface, not a second source
-of truth.
 
 The image and menu release are pinned independently. Renovate can update the
 image tag/digest in the Compose file, but Synology changes must not be merged or
@@ -145,10 +109,9 @@ not include SystemRescue's optional `airootfs.sha512`, so do not add
 above before booting instead. Stock SystemRescue does not include OpenZFS; do
 not mistake this boot for the later ZFS workload environment.
 
-The committed `local-vars.ipxe` sets `live_endpoint` to Athena's HTTP endpoint.
+The committed `menus/local-vars.ipxe` sets `live_endpoint` to Athena's HTTP endpoint.
 The netboot.xyz bootloader requests this override before the generated menus,
-whose asset paths are then resolved beneath `http://10.32.20.5:8080`. Copy the
-override and the committed `proxmox.ipxe` and `systemrescue.ipxe` files after initial menu generation, after recreating `config/`, and after upstream menu refreshes. The downloaded files in `assets/` remain runtime cache rather than Git-managed content.
+whose asset paths are then resolved beneath `http://10.32.20.5:8080`. The `menus` service publishes it with the committed `proxmox.ipxe` and `systemrescue.ipxe` after initial menu generation, and netboot.xyz re-applies them from `config/menus/local/` after a web-UI menu refresh. The downloaded files in `assets/` remain runtime cache rather than Git-managed content.
 
 ## Verification
 
@@ -166,9 +129,8 @@ Also verify a container restart does not lose menus or assets:
 
 ```sh
 ssh kelchm@10.32.20.5 '
-  cd /volume1/docker/netbootxyz
-  sudo /usr/local/bin/docker-compose restart
-  sudo /usr/local/bin/docker-compose ps
+  sudo /usr/local/bin/docker restart netbootxyz-nas-netbootxyz-1
+  sudo /usr/local/bin/docker ps --filter name=netbootxyz-nas
 '
 ```
 
@@ -184,10 +146,7 @@ and SSH session; the second served the full image locally at about 110 MB/s.
 
 ## Rollback
 
-The former GLKVM endpoint no longer exists and is not a rollback target. For a
-bad container update, restore the prior pinned Compose file with `git revert`,
-copy it to the NAS, and run
-`sudo /usr/local/bin/docker-compose up -d` again.
+The former GLKVM endpoint no longer exists and is not a rollback target. For a bad container or menu update, `git revert` the change and merge; doco-cd redeploys the previous definition and republishes the previous menus. If doco-cd is unavailable, use the [break-glass apply](../README.md#break-glass-apply-over-ssh).
 
 The container is not in the data path after Linux finishes booting. A complete
 NAS or Container Manager outage can always be bypassed with a physical
