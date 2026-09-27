@@ -25,7 +25,7 @@ Firing critical alerts use Pushover priority `1`, which bypasses quiet hours but
 
 1. Open `https://alertmanager.home.kelch.io` and inspect the complete label and annotation set. Pushover is a prompt to investigate, not the full source of truth.
 2. Confirm the alert has `evaluator=vmalert`. Any alert without that label did not come from the production evaluator.
-3. Follow the alert description and linked subsystem runbook. For Flux failures, inspect the named Kustomization or HelmRelease before forcing a reconcile. For Longhorn backup alerts, use [longhorn-backup-restore](longhorn-backup-restore.md#routine-monitoring).
+3. Follow the alert description and linked subsystem runbook. For Flux failures, inspect the named Kustomization or HelmRelease before forcing a reconcile. For Longhorn backup alerts, use [longhorn-backup-restore](longhorn-backup-restore.md#routine-monitoring). For alerts about the monitoring stack itself, the [Observability Pipeline](https://grafana.home.kelch.io/d/observability-pipeline/observability-pipeline) dashboard shows which stage is failing: scrape and store, evaluate and notify, or log collection.
 4. Silence only when the cause and maintenance window are understood. Fix the signal or its rule instead of leaving a recurring silence.
 
 Useful inventory commands:

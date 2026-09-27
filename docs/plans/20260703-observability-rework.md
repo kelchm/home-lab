@@ -458,7 +458,7 @@ Completed by PRs #526 and #528 on 2026-09-06.
 - **Stale-backup delivery (#218, 2026-09-27).** The production Longhorn stale-backup condition notified through VMAlertmanager and Pushover and resolved.
 - **External dead-man (#627, verified in #218, 2026-09-27).** The central Watchdog routes to a healthchecks.io check. A 20-minute silence produced the external "down" notification 10 minutes after the last ping and the "up" notification 18 seconds after the silence expired.
 - Add the edge-Pi Gatus configuration in the `rpi-nixos` repository with its own heartbeat, direct external notification path, and minimal observability, gateway, WAN, and critical-service probes. Neither missed-heartbeat check may depend on Grafana, VictoriaMetrics, VictoriaLogs, or VMAlertmanager for delivery.
-- Add the minimal Alert Delivery and Observability Pipeline dashboard without waiting for the general dashboard phase.
+- **Pipeline dashboard (#632, 2026-09-27).** The Observability Pipeline dashboard shows each stage's health: scrape and store, evaluate and notify, and log collection. Every signal on it also has an alert; it is for diagnosis and for confirming health after changes.
 
 **Gate:** partially passed — the stale-backup condition notifies and resolves, and blocking the central Watchdog causes the external dead-man alert (2026-09-27). Still open: blocking the Pi heartbeat also alerts externally, and a Pi-side probe failure delivers without the central stack.
 
