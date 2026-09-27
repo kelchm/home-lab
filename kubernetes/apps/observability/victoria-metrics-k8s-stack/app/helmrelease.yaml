@@ -250,10 +250,10 @@ spec:
       spec:
         selectAllByDefault: true
         evaluationInterval: 30s
-        # The evaluator label is the VMAlertmanager routing authority. It keeps
-        # the temporary KPS evaluator copy from becoming a second notification.
+        # The evaluator label is the VMAlertmanager routing authority. Rule
+        # groups set `cluster` themselves, so rules about systems outside the
+        # cluster don't inherit it.
         externalLabels:
-          cluster: k8s-prod
           evaluator: vmalert
         resources:
           requests:
