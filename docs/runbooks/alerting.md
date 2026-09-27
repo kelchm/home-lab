@@ -133,7 +133,7 @@ kubectl -n observability delete prometheusrule longhorn-backup-delivery-test
 
 ## Independent dead-man heartbeat
 
-vmalert's always-firing `Watchdog` routes to the `healthchecks-watchdog` webhook, which POSTs to the healthchecks.io check `k8s-prod Watchdog` about once a minute. The check expects a ping every 5 minutes with a 5-minute grace period, so a heartbeat that stops for roughly ten minutes pages through healthchecks.io's own Pushover integration and email. Neither notification depends on this cluster. The next ping after recovery sends an "up" notification. The route sets `send_resolved: false`, because a resolved webhook would reach the same ping URL and count as a heartbeat.
+vmalert's always-firing `Watchdog` routes to the `healthchecks-watchdog` webhook, which POSTs to the healthchecks.io check `k8s-prod Watchdog` every two minutes. The check expects a ping every 5 minutes with a 5-minute grace period, so a heartbeat that stops for roughly ten minutes pages through healthchecks.io's own Pushover integration and email. Neither notification depends on this cluster. The next ping after recovery sends an "up" notification. The route sets `send_resolved: false`, because a resolved webhook would reach the same ping URL and count as a heartbeat.
 
 The heartbeat stops if the cluster, vmalert evaluation (Watchdog's `vector(1)` is evaluated against VMSingle), VMAlertmanager, DNS, the `vmalertmanager` egress policy, or the WAN fails. It does not exercise the `k8s-prod Alerts` Pushover credentials; the delivery tests above do.
 
@@ -154,6 +154,8 @@ kubectl -n observability exec vmalertmanager-victoria-metrics-k8s-stack-0 -c ale
 ```
 
 Confirm the healthchecks.io "down" Pushover and email arrive within about ten minutes, then expire the silence and confirm the "up" notification follows within about two minutes.
+
+Verified 2026-09-27 in #218: a 20-minute silence produced the "down" Pushover and email 10 minutes after the last ping, and the "up" notification arrived 18 seconds after the silence expired, with zero webhook delivery failures.
 
 For planned whole-cluster downtime, pause the check after the heartbeat stops, not before: any ping resumes a paused check. Shut the cluster down, confirm healthchecks.io shows no ping since, and pause within ten minutes of the last ping. The first ping after the cluster returns resumes monitoring; confirm the check shows up.
 

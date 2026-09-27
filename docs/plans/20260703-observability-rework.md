@@ -25,7 +25,7 @@ This baseline is historical evidence rather than the implementation starting poi
 
 The stated pain was “I do not have time to hand-build Grafana.” The live inventory showed the opposite problem: the estate already had 51 generated dashboards and 296 generated rules. After the survivor cutover, the priorities are:
 
-1. Production alert delivery now works through VMAlertmanager and Pushover, but the stale-backup delivery exercise and an independent Watchdog/dead-man path are still open under #218.
+1. Production alert delivery works through VMAlertmanager and Pushover. #218 verified the stale-backup delivery exercise and the external Watchdog dead-man path on 2026-09-27; the edge-Pi Gatus path remains open.
 2. The duplicate KPS and Loki paths remain only as rollback components. Their cleanup follows the post-cutover and corrected-log-path soak under #470.
 3. The dashboard gap is bounded, but imported artifacts need curation, stable datasource ownership, and useful navigation.
 4. No anomaly layer exists, but deterministic alerting, data quality, and delivery must work before adding one.
@@ -84,7 +84,7 @@ Video, packet capture, full endpoint detection and response, and indefinite flow
 - Alloy runs as a hardened DaemonSet, tails Kubernetes CRI logs, labels them with cluster, namespace, service_name, pod, container, and node, and writes to VictoriaLogs alone. PR #483 corrected path correlation to exact pod UIDs and Talos mirror-pod config hashes after the soak found 461 incorrect label/file pairs among 742 active pairs; pre-fix log-volume and label-quality measurements are invalid, and contaminated retained history must age out naturally. PR #484 then bounded position-corruption recovery and VictoriaLogs retries at `max_backoff_retries=15`, added collision-safe `msg.*` payload fields and fixed stream identity, hardened the pod, installed Alloy and VictoriaLogs ingress policies, and added the metrics-native `logging-pipeline` alerts. Those changes restart the correctness, field-contract, and reliability observation window from #484.
 - Grafana provisions dashboards from labelled ConfigMaps, uses VictoriaMetrics as the default metrics datasource, and points its Alertmanager datasource at VMAlertmanager. Its sidecar supports the `grafana_folder` annotation and `foldersFromFilesStructure`; a Grafana operator is not required for repository-owned dashboards.
 - Standalone `prometheus-operator-crds` owns the shared CRDs. OpenObserve, Loki, and kube-prometheus-stack are removed, so VictoriaMetrics is the only metrics backend, VictoriaLogs the only log backend, and VMAlertmanager the only notification authority.
-- Metric vmalert evaluates the production rules and sends to persistent VMAlertmanager. A live synthetic warning produced exactly one Pushover notification and one resolution with zero delivery failures. The stale-backup delivery exercise and external Watchdog/dead-man path remain unverified.
+- Metric vmalert evaluates the production rules and sends to persistent VMAlertmanager. A live synthetic warning produced exactly one Pushover notification and one resolution with zero delivery failures. #218 verified the stale-backup condition's notification and resolution, and the external healthchecks.io Watchdog dead-man path, on 2026-09-27.
 
 ### Live UniFi inventory
 
@@ -108,10 +108,10 @@ The offline Flex must be classified in inventory as `expected_offline`, `spare`,
 - VictoriaLogs is the operational log and security-event system of record.
 - Grafana remains the single pane, using the existing ConfigMap sidecar for dashboards-as-code.
 - Alloy remains the Kubernetes log collector. External systems use built-in or explicitly installed syslog forwarding and send to a centrally exposed VictoriaLogs syslog ingress; another general agent fleet is not introduced.
-- VMAlertmanager handles notification routing with a Longhorn-backed 1 GiB volume, a stable Grafana datasource and OIDC-protected route, and SOPS-managed Pushover delivery. The independent Watchdog receiver remains a gate before the observability design can claim protection from central-cluster failure.
+- VMAlertmanager handles notification routing with a Longhorn-backed 1 GiB volume, a stable Grafana datasource and OIDC-protected route, and SOPS-managed Pushover delivery. The always-firing Watchdog heartbeats to an external healthchecks.io check that pages without the cluster when the heartbeat stops; see the [alerting runbook](../runbooks/alerting.md#independent-dead-man-heartbeat).
 - The current metric vmalert owns production metric rules, stamps `evaluator=vmalert`, and notifies the VMAlertmanager route that authorizes that evaluator label. When LogsQL rules are introduced, use a separate VMAlert instance that also stamps `evaluator=vmalert` as the notification-authority identity while `signal=logs` distinguishes its output. LogsQL sources carry `observability.kelch.io/rule-datasource=vlogs`; the vlogs evaluator positively selects that label, while the metric evaluator selects every rule except `vlogs`, preserving a safe default for future unlabeled metric rules. The selector label may live on a native VMRule, chart default-rule metadata, or PrometheusRule metadata preserved through vm-operator conversion; no mandatory resource rewrite is implied. Vlogs groups use `type: vlogs`, query VictoriaLogs, persist alert state through VictoriaMetrics remote-read/write, and notify VMAlertmanager. A standing CI/rendered-config coverage check detects rules selected by zero or multiple evaluators, and the Alertmanager render check proves both evaluator instances reach a non-null route.
 - Native platform alerts are the preferred independent path for failures that could take the central stack with them, but they are not assumed healthy merely because the platform supports them. DSM disk/storage alerts, UniFi console notifications, and Proxmox cluster notifications each require a configured destination plus a synthetic delivery test; PVE currently has no authoritative notification path because direct mail failed with Gmail `550 5.7.1` and authenticated SMTP remains open work.
-- The planned independent failure path uses a healthchecks-style endpoint outside the estate for the central VMAlertmanager Watchdog plus a second small Gatus instance on one edge Pi. The Pi sends its own heartbeat and direct alerts through a route that does not depend on `k8s-prod` and probes a minimal set of observability, gateway, WAN, and critical-service outcomes without becoming another storage backend.
+- The independent failure path is a healthchecks.io check outside the estate for the central VMAlertmanager Watchdog, live since #627, plus a planned second small Gatus instance on one edge Pi. The Pi sends its own heartbeat and direct alerts through a route that does not depend on `k8s-prod` and probes a minimal set of observability, gateway, WAN, and critical-service outcomes without becoming another storage backend.
 
 ### Collection posture
 
@@ -457,12 +457,12 @@ Completed by PRs #526 and #528 on 2026-09-06.
 
 #### Phase 1C — independent alert resilience
 
-- Preserve the tested VMAlertmanager-to-Pushover path and explicitly exercise the production Longhorn stale-backup condition tracked in #218.
-- Provision the external healthchecks-style dead-man endpoint and route the central Watchdog heartbeat to it.
+- **Stale-backup delivery (#218, 2026-09-27).** The production Longhorn stale-backup condition notified through VMAlertmanager and Pushover and resolved.
+- **External dead-man (#627, verified in #218, 2026-09-27).** The central Watchdog routes to a healthchecks.io check. A 20-minute silence produced the external "down" notification 10 minutes after the last ping and the "up" notification 18 seconds after the silence expired.
 - Add the edge-Pi Gatus configuration in the `rpi-nixos` repository with its own heartbeat, direct external notification path, and minimal observability, gateway, WAN, and critical-service probes. Neither missed-heartbeat check may depend on Grafana, VictoriaMetrics, VictoriaLogs, or VMAlertmanager for delivery.
 - Add the minimal Alert Delivery and Observability Pipeline dashboard without waiting for the general dashboard phase.
 
-**Gate:** the stale-backup condition notifies and resolves; blocking the central Watchdog causes the external dead-man alert; blocking the Pi heartbeat also alerts externally; and a Pi-side probe failure delivers without the central stack.
+**Gate:** partially passed — the stale-backup condition notifies and resolves, and blocking the central Watchdog causes the external dead-man alert (2026-09-27). Still open: blocking the Pi heartbeat also alerts externally, and a Pi-side probe failure delivers without the central stack.
 
 #### Phase 1D — estate label migration
 
@@ -472,7 +472,7 @@ Completed by PRs #526 and #528 on 2026-09-06.
 
 **Gate:** Kubernetes series, alerts, and new log rows retain correct identity without either metric global cluster default; standalone target fixtures remain clusterless; PVE fixtures carry only `cluster=pve-sbx`; and representative dashboards, rules, alerts, log queries, and historical queries pass the compatibility matrix defined in Phase 0.
 
-**Phase 1 exit gate:** #470 cleanup is complete (2026-09-06); #218's stale-backup and external dead-man work is complete; CRD, scrape, rule, notification, dashboard, datasource, and estate-label ownership is independent of KPS; Kubernetes metric continuity and post-#484 log correctness are accepted; and later external collection can proceed without reopening the bake-off architecture.
+**Phase 1 exit gate:** #470 cleanup is complete (2026-09-06); #218's stale-backup and external dead-man work is complete (2026-09-27); CRD, scrape, rule, notification, dashboard, datasource, and estate-label ownership is independent of KPS; Kubernetes metric continuity and post-#484 log correctness are accepted; and later external collection can proceed without reopening the bake-off architecture.
 
 ### Phase 2 — low-cost estate metrics
 
