@@ -48,6 +48,8 @@ ssh kelchm@10.32.20.5 "sudo /usr/local/bin/docker ps -a \
   --format '{{.Label \"cd.doco.deployment.name\"}}  {{.Names}}  {{.Status}}  {{.Label \"cd.doco.deployment.target.sha\"}}'"
 ```
 
+Each new commit on `main` logs one "skipping file that could not be decrypted" warning per SOPS-encrypted file in the repository. These are the cluster's secrets; Athena deliberately has no key for them.
+
 A container's `cd.doco.deployment.target.sha` label is the `main` revision of the deployment that created it. Containers whose configuration did not change in a later deployment keep an earlier revision. doco-cd reads the newest label in a project as that project's deployed commit. Polls that find no change to the project leave every label untouched.
 
 ## Acceptance checks
