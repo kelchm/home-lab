@@ -231,9 +231,10 @@ Talos nodes do NOT have IPs on Infra Mgmt. Talos has no classic management plane
 10.32.19.1        gateway-remote-admin       Router interface; DNS and Internet egress
 10.32.19.101      tailscale-router-1         PVE VM on pve-sbx-2
 10.32.19.102      tailscale-router-2         PVE VM on pve-sbx-3
+10.32.19.103      netbird-pilot-router       Disposable PVE VM on pve-sbx-1 (#625)
 ```
 
-DHCP and IPv6 are disabled on this network. The two VMs are single-homed VLAN-local endpoints and therefore sit outside the cross-VLAN system identity rule. Both advertise the aggregate `10.32.0.0/16`, allowing each local VLAN `/24` to remain more specific on at-home clients. VLAN 19 has its own UniFi zone: it can reach the gateway and Internet for Tailscale coordination, while `Allow Tailscale Routers to Routed LAN` permits only `.101/.102` to the six authorized destination prefixes. UniFi evaluates the BGP-routed `10.32.130.0/24` and `10.32.140.0/24` paths through the Internal transition for this custom source zone, so those exact prefixes are included in the rule alongside the four VLAN subnets. The generated reverse rule accepts only established and related traffic.
+DHCP and IPv6 are disabled on this network. The two VMs are single-homed VLAN-local endpoints and therefore sit outside the cross-VLAN system identity rule. Both advertise the aggregate `10.32.0.0/16`, allowing each local VLAN `/24` to remain more specific on at-home clients. VLAN 19 has its own UniFi zone: it can reach the gateway and Internet for Tailscale coordination, while `Allow Tailscale Routers to Routed LAN` permits only `.101/.102` to the six authorized destination prefixes. UniFi evaluates the BGP-routed `10.32.130.0/24` and `10.32.140.0/24` paths through the Internal transition for this custom source zone, so those exact prefixes are included in the rule alongside the four VLAN subnets. The generated reverse rule accepts only established and related traffic. `.103` is a disposable NetBird routing peer for the location-aware routing evaluation in #625; `Allow NetBird Pilot Router to Services VIP` permits it only to `10.32.140.1` on TCP 443.
 
 ## LB Pool Allocation
 
