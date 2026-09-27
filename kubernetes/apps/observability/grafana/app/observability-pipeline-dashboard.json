@@ -101,9 +101,9 @@
         "type": "prometheus",
         "uid": "$${datasource}"
       },
-      "description": "Webhook notifications from Alertmanager in the last 10 minutes; healthchecks.io is the only webhook receiver. Expect about 5, one every two minutes. healthchecks.io pages if none arrives for 10 minutes.",
+      "description": "Webhook deliveries from Alertmanager in the last 10 minutes, excluding failed attempts; healthchecks.io is the only webhook receiver. Expect about 5, one every two minutes. healthchecks.io pages if none arrives for 10 minutes.",
       "id": 1,
-      "title": "Watchdog heartbeats (10 min)",
+      "title": "Watchdog heartbeats delivered (10 min)",
       "type": "stat",
       "gridPos": {
         "h": 4,
@@ -118,10 +118,11 @@
             "uid": "$${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(increase(alertmanager_notifications_total{integration=\"webhook\"}[10m]))",
+          "expr": "(sum(increase(alertmanager_notifications_total{integration=\"webhook\"}[10m])) - (sum(increase(alertmanager_notifications_failed_total{integration=\"webhook\"}[10m])) or vector(0))) and on() (max(up{job=\"vmalertmanager-victoria-metrics-k8s-stack\"}) == 1)",
           "legendFormat": "",
           "refId": "A",
-          "range": true
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -131,6 +132,7 @@
           },
           "decimals": 0,
           "mappings": [],
+          "noValue": "Alertmanager down",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -191,10 +193,11 @@
             "uid": "$${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(increase(alertmanager_notifications_failed_total[1h]))",
+          "expr": "sum(increase(alertmanager_notifications_failed_total[1h])) and on() (max(up{job=\"vmalertmanager-victoria-metrics-k8s-stack\"}) == 1)",
           "legendFormat": "",
           "refId": "A",
-          "range": true
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -204,6 +207,7 @@
           },
           "decimals": 0,
           "mappings": [],
+          "noValue": "Alertmanager down",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -243,7 +247,7 @@
         "type": "prometheus",
         "uid": "$${datasource}"
       },
-      "description": "Critical and warning alerts currently firing. Both route to Pushover.",
+      "description": "Critical and warning alerts currently firing; both route to Pushover. Shows no data when vmalert's always-firing Watchdog is missing, because then vmalert is not evaluating.",
       "id": 3,
       "title": "Alerts firing",
       "type": "stat",
@@ -260,10 +264,11 @@
             "uid": "$${datasource}"
           },
           "editorMode": "code",
-          "expr": "count(ALERTS{alertstate=\"firing\",severity=\"critical\"}) or vector(0)",
+          "expr": "(count(ALERTS{alertstate=\"firing\",severity=\"critical\"}) or vector(0)) and on() count(ALERTS{alertname=\"Watchdog\",alertstate=\"firing\"})",
           "legendFormat": "critical",
           "refId": "A",
-          "range": true
+          "instant": true,
+          "range": false
         },
         {
           "datasource": {
@@ -271,10 +276,11 @@
             "uid": "$${datasource}"
           },
           "editorMode": "code",
-          "expr": "count(ALERTS{alertstate=\"firing\",severity=\"warning\"}) or vector(0)",
+          "expr": "(count(ALERTS{alertstate=\"firing\",severity=\"warning\"}) or vector(0)) and on() count(ALERTS{alertname=\"Watchdog\",alertstate=\"firing\"})",
           "legendFormat": "warning",
           "refId": "B",
-          "range": true
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -284,6 +290,7 @@
           },
           "decimals": 0,
           "mappings": [],
+          "noValue": "vmalert silent",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -365,10 +372,11 @@
             "uid": "$${datasource}"
           },
           "editorMode": "code",
-          "expr": "max(alertmanager_silences{state=\"active\"})",
+          "expr": "max(alertmanager_silences{state=\"active\"}) and on() (max(up{job=\"vmalertmanager-victoria-metrics-k8s-stack\"}) == 1)",
           "legendFormat": "",
           "refId": "A",
-          "range": true
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -378,6 +386,7 @@
           },
           "decimals": 0,
           "mappings": [],
+          "noValue": "Alertmanager down",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -417,7 +426,7 @@
         "type": "prometheus",
         "uid": "$${datasource}"
       },
-      "description": "vmagent scrape targets whose last scrape failed. The Scrape targets down table names them.",
+      "description": "vmagent scrape targets whose last scrape failed; the Scrape targets down table names them. Shows no data when no scrape results arrive at all.",
       "id": 5,
       "title": "Scrape targets down",
       "type": "stat",
@@ -434,10 +443,11 @@
             "uid": "$${datasource}"
           },
           "editorMode": "code",
-          "expr": "count(up == 0) or vector(0)",
+          "expr": "(count(up == 0) or vector(0)) and on() count(up)",
           "legendFormat": "",
           "refId": "A",
-          "range": true
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -447,6 +457,7 @@
           },
           "decimals": 0,
           "mappings": [],
+          "noValue": "No scrape data",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -486,9 +497,9 @@
         "type": "prometheus",
         "uid": "$${datasource}"
       },
-      "description": "Rows VictoriaLogs accepted through native ingestion in the last 10 minutes. 0 means log collection or storage has stopped; VictoriaLogsIngestionSilent fires after 15 minutes.",
+      "description": "Rows VictoriaLogs received through native ingestion in the last 10 minutes, including any it then rejected (see Log loss). 0 means log collection or ingestion has stopped; VictoriaLogsIngestionSilent fires after 15 minutes.",
       "id": 6,
-      "title": "Log rows stored (10 min)",
+      "title": "Log rows received (10 min)",
       "type": "stat",
       "gridPos": {
         "h": 4,
@@ -506,7 +517,8 @@
           "expr": "sum(increase(vl_rows_ingested_total{job=\"victoria-logs-single-server\",type=\"nativeinsert\"}[10m]))",
           "legendFormat": "",
           "refId": "A",
-          "range": true
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -516,6 +528,7 @@
           },
           "decimals": 0,
           "mappings": [],
+          "noValue": "VictoriaLogs down",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -595,7 +608,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "noValue": "All scrape targets are up",
+          "noValue": "No down targets reported",
           "custom": {
             "align": "auto"
           }
@@ -916,7 +929,7 @@
         "type": "prometheus",
         "uid": "$${datasource}"
       },
-      "description": "Share of rows that missed VMSingle's series cache. The line marks TooHighSlowInsertsRate's 5% threshold, which must hold for 15 minutes.",
+      "description": "Share of inserted rows that missed VMSingle's series cache, over 5 minutes: TooHighSlowInsertsRate's expression. The line marks its 5% threshold, which must hold for 15 minutes to fire.",
       "id": 12,
       "title": "Slow inserts",
       "type": "timeseries",
@@ -933,7 +946,7 @@
             "uid": "$${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(vm_slow_row_inserts_total[$__rate_interval])) / sum(rate(vm_rows_added_to_storage_total[$__rate_interval]))",
+          "expr": "sum(rate(vm_slow_row_inserts_total[5m])) / sum(rate(vm_rows_inserted_total[5m]))",
           "legendFormat": "slow inserts",
           "refId": "A",
           "range": true
@@ -1407,9 +1420,9 @@
         "type": "prometheus",
         "uid": "$${datasource}"
       },
-      "description": "Alertmanager deliveries per interval for each integration that has sent anything. webhook is the Watchdog heartbeat to healthchecks.io; pushover is paging.",
+      "description": "Alertmanager notifications per interval for each integration that has attempted one; delivered excludes failed attempts. webhook is the Watchdog heartbeat to healthchecks.io; pushover is paging.",
       "id": 17,
-      "title": "Notifications sent and failed",
+      "title": "Notifications delivered and failed",
       "type": "timeseries",
       "gridPos": {
         "h": 8,
@@ -1424,8 +1437,8 @@
             "uid": "$${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum by (integration) (increase(alertmanager_notifications_total[$__interval])) and on (integration) (sum by (integration) (alertmanager_notifications_total) > 0)",
-          "legendFormat": "{{integration}} sent",
+          "expr": "(sum by (integration) (increase(alertmanager_notifications_total[$__interval])) - sum by (integration) (increase(alertmanager_notifications_failed_total[$__interval]))) and on (integration) (sum by (integration) (alertmanager_notifications_total) > 0)",
+          "legendFormat": "{{integration}} delivered",
           "refId": "A",
           "range": true
         },
@@ -1543,7 +1556,7 @@
         "type": "prometheus",
         "uid": "$${datasource}"
       },
-      "description": "Rows vlagent read from container logs on each node, and rows VictoriaLogs stored. Stored should track the sum of collected.",
+      "description": "Rows vlagent read from container logs on each node, and rows VictoriaLogs received. Received should track the sum of collected.",
       "id": 19,
       "title": "Log rows per second",
       "type": "timeseries",
@@ -1572,7 +1585,7 @@
           },
           "editorMode": "code",
           "expr": "sum(rate(vl_rows_ingested_total{job=\"victoria-logs-single-server\",type=\"nativeinsert\"}[$__rate_interval]))",
-          "legendFormat": "stored",
+          "legendFormat": "received by VictoriaLogs",
           "refId": "B",
           "range": true
         }
@@ -1746,7 +1759,7 @@
         "type": "prometheus",
         "uid": "$${datasource}"
       },
-      "description": "Log rows lost per interval. Expect all three at 0.",
+      "description": "Log data lost per interval, by pipeline stage and reason. Expect nothing above 0.",
       "id": 21,
       "title": "Log loss",
       "type": "timeseries",
@@ -1764,7 +1777,7 @@
           },
           "editorMode": "code",
           "expr": "sum(increase(vm_persistentqueue_blocks_dropped_total{job=\"vlagent\"}[$__interval]))",
-          "legendFormat": "queue blocks evicted",
+          "legendFormat": "vlagent queue blocks evicted",
           "refId": "A",
           "range": true
         },
@@ -1775,7 +1788,7 @@
           },
           "editorMode": "code",
           "expr": "sum(increase(vlagent_remotewrite_packets_dropped_total{job=\"vlagent\"}[$__interval]))",
-          "legendFormat": "send packets dropped",
+          "legendFormat": "vlagent send packets dropped",
           "refId": "B",
           "range": true
         },
@@ -1785,9 +1798,20 @@
             "uid": "$${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(increase(vl_rows_dropped_total{reason!=\"debug\"}[$__interval]))",
-          "legendFormat": "rows rejected by VictoriaLogs",
+          "expr": "sum by (reason) (increase(vl_rows_dropped_total{job=\"vlagent\",reason!=\"debug\"}[$__interval]))",
+          "legendFormat": "vlagent rows dropped: {{reason}}",
           "refId": "C",
+          "range": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (reason) (increase(vl_rows_dropped_total{job=\"victoria-logs-single-server\",reason!=\"debug\"}[$__interval]))",
+          "legendFormat": "VictoriaLogs rows rejected: {{reason}}",
+          "refId": "D",
           "range": true
         }
       ],
