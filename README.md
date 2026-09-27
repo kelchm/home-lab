@@ -69,7 +69,7 @@ home-lab/
 ├── network/unifi/  # versioned UniFi-side artifacts (FRR/BGP, firewall intent)
 ├── devices/        # manually applied config for appliances outside Kubernetes
 ├── proxmox/        # PVE operator docs and deliberately applied host baseline
-├── synology/       # manually applied Compose workloads on the Synology NAS
+├── synology/       # Compose workloads on the Synology NAS, deployed from Git by doco-cd
 ├── scripts/        # helper scripts (CI checks, bootstrap, operator helpers)
 ├── tools/          # benchmarks, smoke tests, migrations, manual re-import assets
 └── docs/           # architecture, runbooks, plans, decision records

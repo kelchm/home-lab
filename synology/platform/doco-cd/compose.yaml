@@ -1,0 +1,25 @@
+name: doco-cd
+
+services:
+  doco-cd:
+    image: ghcr.io/kimdre/doco-cd:0.121.0@sha256:c07f6d0b0df5026ce67708bfda7ff26e0e645c284914dd8be3a9b8277375603b
+    container_name: doco-cd
+    environment:
+      TZ: America/New_York
+      DEPLOY_CONFIG_BASE_DIR: synology
+      POLL_CONFIG: |
+        - url: https://github.com/kelchm/home-lab.git
+          reference: main
+          interval: 3m
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /volume1/docker/doco-cd/data:/data
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "/doco-cd", "healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped

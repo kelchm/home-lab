@@ -15,6 +15,7 @@ Current-state, authoritative docs.
   concurrency, aggregate-check invariants, and the boundary between validation
   and Flux deployment.
 - [**proxmox/README.md**](../proxmox/README.md) — live `pve-sbx` endpoints, routine checks, shared storage, backups, restore drills, and manually applied host baseline.
+- [**synology/README.md**](../synology/README.md) — Compose workloads on the Synology NAS: the doco-cd deployment model, project contract, rollback, and break-glass apply.
 
 ## Further reading
 

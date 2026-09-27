@@ -10,9 +10,14 @@
   color: "0e8a16"
 - name: area/mise
   color: "0e8a16"
+- name: area/network
+  color: "0e8a16"
+  description: "Networking: UniFi controller, VLANs, firewall, switching, DNS"
 - name: area/renovate
   color: "0e8a16"
 - name: area/scripts
+  color: "0e8a16"
+- name: area/synology
   color: "0e8a16"
 - name: area/talos
   color: "0e8a16"
@@ -25,6 +30,9 @@
   color: "5319e7"
   description: "Deploy a new application, service, or infrastructure workload"
 # Priority
+- name: priority/critical
+  color: "5c0000"
+  description: "Blocks or silently invalidates other work"
 - name: priority/high
   color: "b60205"
 - name: priority/medium
