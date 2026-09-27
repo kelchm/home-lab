@@ -2,7 +2,7 @@
 
 [doco-cd](https://github.com/kimdre/doco-cd) deploys the Compose projects declared in [`synology/.doco-cd.yml`](../../.doco-cd.yml) from `main`; the [Synology README](../../README.md) covers the deployment model and project contract. This directory is the deployer itself. It is applied manually and is never one of its own targets.
 
-State as of 2026-09-26: defined and CI-validated, not yet bootstrapped on Athena. [home-lab#379](https://github.com/kelchm/home-lab/issues/379) tracks bootstrap and the acceptance checks below.
+State as of 2026-09-26: running on Athena, and acceptance checks 1–6 below have passed. Checks 7 and 8 are tracked in [home-lab#379](https://github.com/kelchm/home-lab/issues/379).
 
 ## Configuration
 

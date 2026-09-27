@@ -8,7 +8,7 @@ Compose projects that run directly on the Synology NAS (`Athena`), outside Kuber
 | [`doco-cd-canary`](doco-cd-canary/) | Disposable canary for the deployer's acceptance checks | doco-cd |
 | [`netbootxyz`](netbootxyz/) | PXE menus and local boot assets for lab hosts | Manual Compose apply through DSM Container Manager or SSH |
 
-doco-cd is defined here but not yet bootstrapped on Athena; bootstrap and acceptance are tracked in [home-lab#379](https://github.com/kelchm/home-lab/issues/379). Until a project is deployed by doco-cd, its running Compose definition must match its directory, and any out-of-band DSM edit must be brought back to Git.
+doco-cd has run on Athena since 2026-09-26; the remaining acceptance checks are tracked in [home-lab#379](https://github.com/kelchm/home-lab/issues/379). A project that doco-cd does not deploy must still have its running Compose definition match its directory, and any out-of-band DSM edit must be brought back to Git.
 
 ## How deployment works
 
@@ -54,7 +54,7 @@ Also check in review: bind published ports to a specific Athena address, as `net
 3. Run `scripts/ci/validate-synology.sh`.
 4. Merge, then [verify the deployment](platform/doco-cd/README.md#observe-deployments).
 
-To adopt a project that was applied manually, keep its Compose project name. doco-cd takes it over, but Compose recreates only containers whose configuration changed. An unchanged container keeps running without doco-cd's labels until a later change recreates it.
+To adopt a project that was applied manually, keep its Compose project name. DSM's Compose 2.20.1 and doco-cd's embedded Compose compute different configuration hashes, so the first doco-cd deployment recreates each container once.
 
 ## Update and roll back
 
@@ -79,6 +79,6 @@ ssh kelchm@10.32.20.5 '
 '
 ```
 
-The project name comes from `compose.yaml`, so this applies the local definition to the doco-cd-managed project, and Compose recreates every container whose configuration differs. `up -d` still waits for health dependencies before starting a publisher. Check that long-running services are running and healthy and that one-shot services exited `0`. Do not use `--wait`: Compose 2.20.1 treats a completed publisher without dependents as a failure.
+The project name comes from `compose.yaml`, so this applies the local definition to the doco-cd-managed project. Because the two Compose versions compute different configuration hashes, expect every container to be recreated, both here and when doco-cd next deploys. `up -d` still waits for health dependencies before starting a publisher. Check that long-running services are running and healthy and that one-shot services exited `0`. Do not use `--wait`: Compose 2.20.1 treats a completed publisher without dependents as a failure.
 
-Land the same change on `main`, then run `sudo /usr/local/bin/docker start doco-cd`. Its next poll deploys `main` because the project's files differ from the commit it last deployed. After that deployment has rerun the one-shot services, which were the only ones mounting the staged files, remove `/volume1/docker/break-glass/<project>`.
+Land the same change on `main`, then run `sudo /usr/local/bin/docker start doco-cd`. Its first poll redeploys `main`, because the break-glass containers carry no doco-cd labels and it treats the project as undeployed. After that deployment, remove `/volume1/docker/break-glass/<project>`.
