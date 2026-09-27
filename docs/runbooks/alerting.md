@@ -114,6 +114,8 @@ metadata:
 spec:
   groups:
     - name: longhorn-backup-delivery-test
+      labels:
+        cluster: k8s-prod
       rules:
         - alert: LonghornBackupsStalled
           expr: time() - max(longhorn_volume_last_backup_at > 0) > 0
