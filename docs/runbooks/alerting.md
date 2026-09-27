@@ -12,10 +12,10 @@ Alertmanager routes as follows:
 |---|---|---:|---|
 | `severity="critical"` and `evaluator="vmalert"` | `k8s-prod Alerts` in Pushover, high priority | 12 hours | Quiet priority |
 | `severity="warning"` and `evaluator="vmalert"` | `k8s-prod Alerts` in Pushover, normal priority | 12 hours | Quiet priority |
-| `alertname="Watchdog"` | `null` | N/A | N/A |
+| `alertname="Watchdog"` and `evaluator="vmalert"` | `healthchecks-watchdog` webhook to healthchecks.io | 1 minute | None |
 | Everything else | `null` | N/A | N/A |
 
-vmalert is the delivery authority and the cluster's only rule evaluator. It attaches `cluster=k8s-prod` and `evaluator=vmalert`, and sends to VMAlertmanager. The SOPS-encrypted `vmalertmanager-config` Secret owns VMAlertmanager routing and the Pushover application token/user key. Do not put either credential in Helm values, shell history, issue comments, or screenshots.
+vmalert is the delivery authority and the cluster's only rule evaluator. It attaches `cluster=k8s-prod` and `evaluator=vmalert`, and sends to VMAlertmanager. The SOPS-encrypted `vmalertmanager-config` Secret owns VMAlertmanager routing, the Pushover application token/user key, and the healthchecks.io ping URL. Do not put any of these credentials in Helm values, shell history, issue comments, or screenshots.
 
 Use a source-specific Pushover application for each independent alert producer. Kubernetes uses `k8s-prod Alerts`; a future Proxmox setup should use a separate application such as `pve-prod Alerts` rather than sharing this token. Both applications can deliver to the same Pushover user and devices while retaining distinct names, icons, quotas, audit history, and revocation boundaries.
 
@@ -59,7 +59,7 @@ kubectl -n observability exec vmalertmanager-victoria-metrics-k8s-stack-0 -c ale
   amtool --alertmanager.url=http://localhost:9093 silence expire <silence-id>
 ```
 
-Never silence all `critical` alerts or all alerts from a namespace. Do not silence `Watchdog` during an ordinary maintenance window; its presence in Alertmanager proves that rule evaluation and Alertmanager ingestion are working. External dead-man monitoring is still required to detect failures of Alertmanager itself or its outbound delivery path.
+Never silence all `critical` alerts or all alerts from a namespace. Do not silence `Watchdog`: it is the [dead-man heartbeat](#independent-dead-man-heartbeat), so any silence longer than about ten minutes pages through healthchecks.io. For planned whole-cluster downtime, pause the healthchecks.io check as described there.
 
 ## End-to-end delivery test
 
@@ -131,6 +131,34 @@ Confirm one high-priority Pushover notification, then clean up and confirm a qui
 kubectl -n observability delete prometheusrule longhorn-backup-delivery-test
 ```
 
+## Independent dead-man heartbeat
+
+vmalert's always-firing `Watchdog` routes to the `healthchecks-watchdog` webhook, which POSTs to the healthchecks.io check `k8s-prod Watchdog` about once a minute. The check expects a ping every 5 minutes with a 5-minute grace period, so a heartbeat that stops for roughly ten minutes pages through healthchecks.io's own Pushover integration and email. Neither notification depends on this cluster. The next ping after recovery sends an "up" notification. The route sets `send_resolved: false`, because a resolved webhook would reach the same ping URL and count as a heartbeat.
+
+The heartbeat stops if the cluster, vmalert evaluation (Watchdog's `vector(1)` is evaluated against VMSingle), VMAlertmanager, DNS, the `vmalertmanager` egress policy, or the WAN fails. It does not exercise the `k8s-prod Alerts` Pushover credentials; the delivery tests above do.
+
+Healthchecks.io check settings:
+
+| Setting | Value |
+|---|---|
+| Schedule | Simple: period 5 minutes, grace 5 minutes |
+| Pushover integration | Down: high priority; up: low priority |
+| Email integration | Account email, enabled |
+
+To test, silence the heartbeat for longer than the detection window:
+
+```sh
+kubectl -n observability exec vmalertmanager-victoria-metrics-k8s-stack-0 -c alertmanager -- \
+  amtool --alertmanager.url=http://localhost:9093 silence add \
+  alertname=Watchdog --duration=20m --comment='dead-man heartbeat test'
+```
+
+Confirm the healthchecks.io "down" Pushover and email arrive within about ten minutes, then expire the silence and confirm the "up" notification follows within about two minutes.
+
+For planned whole-cluster downtime, pause the check after the heartbeat stops, not before: any ping resumes a paused check. Shut the cluster down, confirm healthchecks.io shows no ping since, and pause within ten minutes of the last ping. The first ping after the cluster returns resumes monitoring; confirm the check shows up.
+
+The ping URL is a credential: anyone who holds it can mask an outage by pinging. To rotate it, create a replacement check with the same schedule and integrations, replace the URL in `vmalertmanager-config.sops.yaml`, confirm pings arrive on the new check, and then delete the old check.
+
 ## Coverage checks
 
 VM-native ownership must produce one healthy kube-state-metrics target; three healthy targets for node-exporter and each Talos control-plane job; three healthy API-server endpoints; three healthy kubelet endpoints for each enabled path; and the live CoreDNS replica count:
@@ -164,13 +192,13 @@ Check the rest of the signal path with:
 ```promql
 ALERTS{alertstate="firing",severity=~"warning|critical",evaluator="vmalert"}
 alertmanager_config_last_reload_successful{job="vmalertmanager-victoria-metrics-k8s-stack"}
-alertmanager_notifications_failed_total{job="vmalertmanager-victoria-metrics-k8s-stack",integration="pushover"}
+alertmanager_notifications_failed_total{job="vmalertmanager-victoria-metrics-k8s-stack",integration=~"pushover|webhook"}
 longhorn_backup_target_available{backup_target="default"}
 ```
 
-The operator-generated VMServiceScrape gives VMAlertmanager the `job="vmalertmanager-victoria-metrics-k8s-stack"` label. The steady state has the vmalert `Watchdog` in VMAlertmanager without an outbound notification, `alertmanager_config_last_reload_successful == 1`, no firing warning/critical alerts, no Pushover delivery failures, and `longhorn_backup_target_available == 1`.
+The operator-generated VMServiceScrape gives VMAlertmanager the `job="vmalertmanager-victoria-metrics-k8s-stack"` label. The steady state has the vmalert `Watchdog` in VMAlertmanager, `alertmanager_config_last_reload_successful == 1`, no firing warning/critical alerts, no Pushover or webhook delivery failures, the healthchecks.io check up, and `longhorn_backup_target_available == 1`.
 
-If the vmalert `Watchdog` disappears from VMAlertmanager, treat the absence as an observability incident and check vmalert rule health plus VMAlertmanager ingestion. A future external dead-man monitor should consume the Watchdog heartbeat and notify through a failure domain independent of this cluster; until then, do not rely on a daily self-notification as proof that the outbound path works.
+If the vmalert `Watchdog` disappears from VMAlertmanager, healthchecks.io pages within about ten minutes. Treat that as an observability incident and check vmalert rule health, VMAlertmanager ingestion, and `alertmanager_notifications_failed_total{integration="webhook"}`.
 
 ## Grafana survivor check
 
