@@ -33,7 +33,7 @@ The `operator-*` keys belong to agent clients on the operator workstation. `home
 
 Separate keys give each client its own log attribution, revocation, and default tool set. They do not isolate agents that run as the same macOS user: any client with shell access can read another client's configuration and key.
 
-Delegated, unattended agent runs load no MCPHub connections because they read untrusted input without an operator reviewing each tool call. The delegation skills start Codex with `--ignore-user-config`, or disable the MCPHub connections by name when computer use needs the user configuration, and start Grok with `GROK_CLAUDE_MCPS_ENABLED=0`.
+Agent runs delegated from one client to another use the delegate's normal configuration, so they receive the same groups as direct use of that client.
 
 These are service identities. Individual Discord members are authorized and audited by the Flatrate Hermes profile, not by MCPHub. Likewise, MCPHub does not turn a shared upstream identity into per-user authorization: a future client that needs different Kubernetes access must use a separately deployed backend with its own ServiceAccount and group.
 
