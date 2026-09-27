@@ -133,12 +133,28 @@ spec:
             namespace: network
             sectionName: https
         rules:
-          - backendRefs:
+          - backendRefs: &backend
               - identifier: app
                 port: *port
             filters:
-              - type: ExtensionRef
+              - &oidc
+                type: ExtensionRef
                 extensionRef:
                   group: traefik.io
                   kind: Middleware
                   name: kanidm-oidc
+          # Homepage serves custom.css and custom.js without cache headers,
+          # and Safari then reuses a stale copy across reloads. Force
+          # revalidation; unchanged files cost a 304.
+          - matches:
+              - path:
+                  type: PathPrefix
+                  value: /api/config/
+            backendRefs: *backend
+            filters:
+              - type: ResponseHeaderModifier
+                responseHeaderModifier:
+                  set:
+                    - name: Cache-Control
+                      value: no-cache
+              - *oidc
