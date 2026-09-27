@@ -11,3 +11,8 @@ prune_images: false
 reconciliation: false
 # First start on an empty config/ downloads menus before the health gate.
 timeout: 300
+---
+name: matrixhub
+working_dir: synology/matrixhub
+prune_images: false
+reconciliation: false

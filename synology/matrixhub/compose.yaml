@@ -1,0 +1,33 @@
+name: matrixhub
+
+services:
+  config:
+    image: docker.io/library/busybox:1.38.0@sha256:fd7dc98638c8e305f4dc34e979f1c0fdfdcaeb0fbf8fcff77ae834b6da3d7e6e
+    command: ["cp", "/source/config.yaml", "/config/config.yaml"]
+    labels:
+      cd.doco.deployment.one_shot: "true"
+    volumes:
+      - ./config.yaml:/source/config.yaml:ro
+      - /volume1/docker/matrixhub/config:/config
+    restart: "no"
+
+  matrixhub:
+    image: ghcr.io/matrixhub-ai/matrixhub:v0.2.0@sha256:0c80ba6c2543da4d72969825e8bf5cc292de930be0617bda72bb7204538b705e
+    working_dir: /workspace
+    command: ["/usr/local/bin/matrixhub", "apiserver", "-c", "/etc/matrixhub/conf/config.yaml"]
+    ports:
+      - "127.0.0.1:3001:3001"
+    volumes:
+      - /volume1/hf-models-athena/matrixhub:/data
+      - /volume1/docker/matrixhub/config:/etc/matrixhub/conf:ro
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3001/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    depends_on:
+      config:
+        condition: service_completed_successfully
+        restart: true
+    restart: unless-stopped
