@@ -20,7 +20,6 @@ Static system bearer keys represent workload principals. The current matrix is:
 
 | Principal | Allowed groups |
 |---|---|
-| `operator-interactive` | Every group except `digikey-lists`. |
 | `operator-claude-code` | Every group except `digikey-lists`; Grok CLI imports Claude Code's MCP servers and shares this key. |
 | `operator-codex` | Every group except `digikey-lists`; covers the Codex CLI and the ChatGPT desktop app, which share `~/.codex/config.toml`. |
 | `operator-opencode` | Every group except `homelab-read` and `digikey-lists`. |
