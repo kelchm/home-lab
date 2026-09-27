@@ -39,7 +39,7 @@ Also check in review: bind published ports to a specific Athena address, as `net
 
 ## Add a project
 
-1. Create `synology/<project>/compose.yaml` following the contract. If a service runs as a non-root user, create its runtime directory with the right owner first; Docker creates missing bind sources as `root`.
+1. Create `synology/<project>/compose.yaml` following the contract. Before the first deploy, create every bind-mount source on Athena, owned by the user each service runs as. DSM's Docker refuses to start a container whose bind source is missing.
 2. Declare it in `.doco-cd.yml`:
 
    ```yaml

@@ -10,7 +10,7 @@ State as of 2026-09-26: defined and CI-validated, not yet bootstrapped on Athena
 |---|---|
 | Source | Anonymous HTTPS poll of `https://github.com/kelchm/home-lab.git`, `main`, every 3 minutes |
 | Deploy config | `synology/.doco-cd.yml` (`DEPLOY_CONFIG_BASE_DIR=synology`) |
-| Inbound endpoints | None published. The webhook listener and REST API stay disabled because no secret is set. |
+| Inbound endpoints | None published. The health endpoint listens on container port 8080; the webhook listener and REST API stay disabled because no secret is set. |
 | State | `/volume1/docker/doco-cd/data`: a bare mirror of the repository and a read-only export per deployed commit |
 | Docker access | `/var/run/docker.sock` |
 
@@ -23,7 +23,7 @@ No workload data lives under the state directory. Only one-shot `publish` servic
 Apply from a checkout of `main`, so the running definition matches Git:
 
 ```sh
-ssh kelchm@10.32.20.5 'mkdir -p /volume1/docker/doco-cd'
+ssh kelchm@10.32.20.5 'sudo mkdir -p /volume1/docker/doco-cd/data'
 rsync -av synology/platform/doco-cd/compose.yaml \
   kelchm@10.32.20.5:/volume1/docker/doco-cd/compose.yaml
 ssh kelchm@10.32.20.5 '
@@ -35,7 +35,7 @@ ssh kelchm@10.32.20.5 '
 '
 ```
 
-The first start creates `data/` and clones the repository, then deploys every declared project.
+DSM's Docker refuses to start a container whose bind-mount source is missing, so `data/` must exist before the first start. doco-cd then clones the repository and deploys every declared project.
 
 Renovate proposes doco-cd image updates like any other image. Merging one changes only Git, so run the same apply immediately afterwards. doco-cd is pre-1.0 and releases often; read the release notes before merging, particularly for changes to the data layout or deploy configuration.
 
@@ -52,7 +52,7 @@ A container's `cd.doco.deployment.target.sha` label is the `main` revision of th
 
 ## Acceptance checks
 
-Run these after the first bootstrap, in order, and stop at the first failure. The canary is disposable and exists only for them. Checks 1–6 gate adopting further projects; the canary stays declared until check 7 is done.
+Create the canary's state directory before the first bootstrap with `sudo mkdir -p /volume1/docker/doco-cd-canary`. Then run these checks in order and stop at the first failure. The canary is disposable and exists only for them. Checks 1–6 gate adopting further projects; the canary stays declared until check 7 is done.
 
 1. **Deployer healthy.** `doco-cd` reports `healthy`, and its log shows a poll of `main` without errors.
 2. **Canary deployed from `main`.** Within one poll, `doco-cd-canary-canary-1` is healthy, `doco-cd-canary-publish-1` exited `0`, and `/volume1/docker/doco-cd-canary/message.txt` reads `generation 1`. Both containers carry the revision that doco-cd's log reports for that deployment, and later polls leave it unchanged.
