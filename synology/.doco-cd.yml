@@ -1,0 +1,6 @@
+# Compose projects doco-cd deploys from main. Only projects listed here are
+# managed; see README.md for the target contract.
+name: doco-cd-canary
+working_dir: synology/doco-cd-canary
+prune_images: false
+reconciliation: false

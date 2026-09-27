@@ -1,6 +1,6 @@
 # Out-of-cluster workloads on the Synology — S3 DB-backup target
 
-**Status:** Proposed — 2026-06-20; research and recommendation only; nothing implemented.
+**Status:** Active — 2026-09-26; the Git-driven deployment model is implemented as doco-cd in [synology/](../../synology/README.md), with bootstrap tracked in [#379](https://github.com/kelchm/home-lab/issues/379); the S3 target remains a proposal under [#297](https://github.com/kelchm/home-lab/issues/297).
 
 This doc decides *where*, *what*, and *how* for workloads that must live outside the Talos cluster, using the first concrete one — a clean S3 DB-backup target — as the worked example. The management pattern is meant to generalize to future out-of-cluster services.
 

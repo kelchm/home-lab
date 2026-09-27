@@ -30,6 +30,7 @@ jobs:
       scripts_changed: ${{ steps.changed-files.outputs.scripts_any_changed || 'true' }}
       skills_changed: ${{ steps.changed-files.outputs.skills_any_changed || 'true' }}
       sops_changed: ${{ steps.changed-files.outputs.sops_any_changed || 'true' }}
+      synology_changed: ${{ steps.changed-files.outputs.synology_any_changed || 'true' }}
       talos_changed: ${{ steps.changed-files.outputs.talos_any_changed || 'true' }}
     steps:
       - name: Checkout
@@ -86,6 +87,12 @@ jobs:
               - '**/*.sops.yaml'
               - '**/*.sops.yml'
               - 'scripts/ci/validate-sops.sh'
+            synology:
+              - '.github/workflows/flux-local.yaml'
+              - '.mise.toml'
+              - 'synology/**'
+              - 'scripts/ci/test-validate-synology.sh'
+              - 'scripts/ci/validate-synology.sh'
             talos:
               - '.github/workflows/flux-local.yaml'
               - '.mise.toml'
@@ -346,6 +353,34 @@ jobs:
         if: needs.pre-job.outputs.sops_changed != 'true'
         run: echo "SOPS validation is not required."
 
+  synology:
+    name: Synology Compose Validation
+    needs: pre-job
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        if: needs.pre-job.outputs.synology_changed == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install yq
+        if: needs.pre-job.outputs.synology_changed == 'true'
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        with:
+          install_args: "aqua:mikefarah/yq"
+
+      - name: Validate Compose projects and doco-cd targets
+        if: needs.pre-job.outputs.synology_changed == 'true'
+        run: |
+          docker compose version
+          scripts/ci/test-validate-synology.sh
+          scripts/ci/validate-synology.sh
+
+      - name: No Synology changes
+        if: needs.pre-job.outputs.synology_changed != 'true'
+        run: echo "Synology Compose validation is not required."
+
   scripts:
     name: Shell Validation
     needs: pre-job
@@ -492,6 +527,7 @@ jobs:
       - talos
       - bootstrap
       - sops
+      - synology
       - scripts
       - skills
       - network

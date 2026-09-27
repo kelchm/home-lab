@@ -29,6 +29,10 @@ area/scripts:
   - changed-files:
       - any-glob-to-any-file:
           - scripts/**/*
+area/synology:
+  - changed-files:
+      - any-glob-to-any-file:
+          - synology/**/*
 area/talos:
   - changed-files:
       - any-glob-to-any-file:

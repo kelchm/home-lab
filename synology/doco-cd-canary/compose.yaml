@@ -1,0 +1,31 @@
+# Disposable canary for the doco-cd acceptance checks in
+# ../platform/doco-cd/README.md. It uses the same publish-after-healthy
+# pattern as workloads that ship Git-owned files into runtime state.
+name: doco-cd-canary
+
+services:
+  canary:
+    image: docker.io/library/busybox:1.38.0@sha256:fd7dc98638c8e305f4dc34e979f1c0fdfdcaeb0fbf8fcff77ae834b6da3d7e6e
+    command: ["sh", "-c", "date >> /state/starts.log && exec sleep 2147483647"]
+    volumes:
+      - /volume1/docker/doco-cd-canary:/state
+    healthcheck:
+      test: ["CMD", "test", "-s", "/state/starts.log"]
+      interval: 5s
+      timeout: 2s
+      retries: 3
+    stop_signal: SIGKILL
+    restart: unless-stopped
+
+  publish:
+    image: docker.io/library/busybox:1.38.0@sha256:fd7dc98638c8e305f4dc34e979f1c0fdfdcaeb0fbf8fcff77ae834b6da3d7e6e
+    command: ["cp", "/source/message.txt", "/state/message.txt"]
+    labels:
+      cd.doco.deployment.one_shot: "true"
+    volumes:
+      - ./message.txt:/source/message.txt:ro
+      - /volume1/docker/doco-cd-canary:/state
+    depends_on:
+      canary:
+        condition: service_healthy
+    restart: "no"
