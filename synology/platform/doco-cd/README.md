@@ -48,19 +48,20 @@ ssh kelchm@10.32.20.5 "sudo /usr/local/bin/docker ps -a \
   --format '{{.Label \"cd.doco.deployment.name\"}}  {{.Names}}  {{.Status}}  {{.Label \"cd.doco.deployment.target.sha\"}}'"
 ```
 
-A deployed container's `cd.doco.deployment.target.sha` label is the commit that last deployed its project. Commits that do not touch the project do not change it.
+A container's `cd.doco.deployment.target.sha` label is the `main` revision of the deployment that created it. Containers whose configuration did not change in a later deployment keep an earlier revision. doco-cd reads the newest label in a project as that project's deployed commit. Polls that find no change to the project leave every label untouched.
 
 ## Acceptance checks
 
-Run these once after the first bootstrap, in order, and stop at the first failure. The canary is disposable and exists only for them.
+Run these after the first bootstrap, in order, and stop at the first failure. The canary is disposable and exists only for them. Checks 1–6 gate adopting further projects; the canary stays declared until check 7 is done.
 
 1. **Deployer healthy.** `doco-cd` reports `healthy`, and its log shows a poll of `main` without errors.
-2. **Canary deployed from `main`.** Within one poll, `doco-cd-canary-canary-1` is healthy, `doco-cd-canary-publish-1` exited `0`, `/volume1/docker/doco-cd-canary/message.txt` reads `generation 1`, and the label SHA is the latest commit touching `synology/doco-cd-canary/`.
+2. **Canary deployed from `main`.** Within one poll, `doco-cd-canary-canary-1` is healthy, `doco-cd-canary-publish-1` exited `0`, and `/volume1/docker/doco-cd-canary/message.txt` reads `generation 1`. Both containers carry the revision that doco-cd's log reports for that deployment, and later polls leave it unchanged.
 3. **Update keeps data.** Merge a change that sets `message.txt` to `generation 2` and pins both canary services to `docker.io/library/busybox:1.37.0@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e`. The message updates, the canary is recreated on the new image, and `starts.log` gains a line while keeping the first.
 4. **Revert restores.** `git revert` that change and merge. The message and image return to `generation 1` and `1.38.0`, `docker image ls` shows both images, and `starts.log` keeps every line.
-5. **Unrelated commits are inert.** After a merge that does not touch the canary, its container ID, start time, and label SHA are unchanged.
-6. **Break-glass works.** Apply the canary with the [break-glass procedure](../../README.md#break-glass-apply-over-ssh), confirm the project is running, then start doco-cd and confirm its next poll redeploys the canary with its labels.
-7. **Undeclared removal is inert.** Merge a change that removes the canary target from `.doco-cd.yml` and deletes `synology/doco-cd-canary/`. The canary keeps running through the following polls. Then clean it up by hand:
+5. **Unrelated commits are inert.** After a merge that does not touch the canary, its container IDs, start times, and labels are unchanged.
+6. **Break-glass works.** Change `message.txt` locally to `generation 3` and apply it with the [break-glass procedure](../../README.md#break-glass-apply-over-ssh); the message updates while doco-cd is stopped. Merge the same change, start doco-cd, and confirm its next poll deploys that commit: the publisher carries the new revision and the message stays `generation 3`.
+7. **Reboot survival without the deployer.** During a planned DSM update or restart, stop doco-cd first (`sudo /usr/local/bin/docker stop doco-cd`; `unless-stopped` keeps it down across the reboot). Afterwards, every declared project's long-running services are running with their data intact, which proves workloads do not depend on the deployer. Then start doco-cd and confirm its first poll leaves projects without Git changes untouched. Athena serves NFS to `k8s-prod`, so do not reboot it just for this check.
+8. **Undeclared removal is inert.** Merge a change that removes the canary target from `.doco-cd.yml` and deletes `synology/doco-cd-canary/`. The canary keeps running through the following polls. Then clean it up by hand:
 
    ```sh
    ssh kelchm@10.32.20.5 '
@@ -68,8 +69,6 @@ Run these once after the first bootstrap, in order, and stop at the first failur
      sudo rm -rf /volume1/docker/doco-cd-canary
    '
    ```
-
-8. **Reboot survival.** During a planned DSM update or restart, confirm that `doco-cd` and every declared project return without intervention. Athena serves NFS to `k8s-prod`, so do not reboot it just for this check.
 
 ## Failure handling
 
