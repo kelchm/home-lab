@@ -59,7 +59,7 @@ kubectl -n observability exec vmalertmanager-victoria-metrics-k8s-stack-0 -c ale
   amtool --alertmanager.url=http://localhost:9093 silence expire <silence-id>
 ```
 
-Never silence all `critical` alerts or all alerts from a namespace. Do not silence `Watchdog`: it is the [dead-man heartbeat](#independent-dead-man-heartbeat), so a silence pages through healthchecks.io within about ten minutes. For planned whole-cluster downtime, pause the healthchecks.io check instead.
+Never silence all `critical` alerts or all alerts from a namespace. Do not silence `Watchdog`: it is the [dead-man heartbeat](#independent-dead-man-heartbeat), so any silence longer than about ten minutes pages through healthchecks.io. For planned whole-cluster downtime, pause the healthchecks.io check as described there.
 
 ## End-to-end delivery test
 
@@ -155,7 +155,7 @@ kubectl -n observability exec vmalertmanager-victoria-metrics-k8s-stack-0 -c ale
 
 Confirm the healthchecks.io "down" Pushover and email arrive within about ten minutes, then expire the silence and confirm the "up" notification follows within about two minutes.
 
-For planned whole-cluster downtime, pause the check in healthchecks.io; the first ping after the cluster returns resumes monitoring.
+For planned whole-cluster downtime, pause the check after the heartbeat stops, not before: any ping resumes a paused check. Shut the cluster down, confirm healthchecks.io shows no ping since, and pause within ten minutes of the last ping. The first ping after the cluster returns resumes monitoring; confirm the check shows up.
 
 The ping URL is a credential: anyone who holds it can mask an outage by pinging. To rotate it, create a replacement check with the same schedule and integrations, replace the URL in `vmalertmanager-config.sops.yaml`, confirm pings arrive on the new check, and then delete the old check.
 
