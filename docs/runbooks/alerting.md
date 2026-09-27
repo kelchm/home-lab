@@ -172,7 +172,7 @@ The ping URL is a credential: anyone who holds it can mask an outage by pinging.
 - **Scrapes:** vmagent's default `kubernetes` scrape class adds `cluster=k8s-prod` to every scrape object that names no class. A target outside the cluster must name a different scrape class, defined on the VMAgent, that sets its own identity labels. Never add `externalLabels.cluster` to vmagent. Together with the class, it renames the label to `exported_cluster` on every scrape without `honorLabels`. VMProbe objects inherit only authentication from a class, so each probe sets its own labels.
 - **Rules:** every Kubernetes rule group carries `labels: {cluster: k8s-prod}`. Bundled rules get it through the chart's `defaultRules.group.spec`, repo rules on each group, and kaniop's group through a post-renderer. Use a group label, not a per-rule label: vmalert derives a rule's ID from the rule's own labels, so changing per-rule labels resets that rule's alert state. Rules about systems outside the cluster omit the label and keep their source series' labels.
 
-`count({__name__=~".+", cluster=""})` lists series without the label; every Kubernetes series should have one. CNPG's database exporters expose their own `cluster` label, which vmagent keeps as `exported_cluster` (4 series on 2026-09-27); any other `exported_cluster` means a source collided with the scrape class.
+`count by (job) ({__name__=~".+", cluster=""})` returns no rows while every Kubernetes series has the label; any row names a scrape job whose series lack it. CNPG's database exporters expose their own `cluster` label, which vmagent keeps as `exported_cluster` (4 series on 2026-09-27); any other `exported_cluster` means a source collided with the scrape class.
 
 ## Coverage checks
 
