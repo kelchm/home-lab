@@ -84,14 +84,65 @@ body {
   color: rgb(165 180 252) !important;
 }
 
-/* Phones: cluster-wide stats and total storage only, no clock (the phone
- * shows one). Per-node detail filled the first screen before any tile.
+/* Phones. Header: cluster-wide stats and total storage only, no clock (the
+ * phone shows one); per-node detail filled the first screen. Tiles: link
+ * tiles two-up, widget tiles full width, no descriptions, tighter cards.
  * Homepage's Longhorn widget class really is spelled "infomation". */
 @media (max-width: 639px) {
   .information-widget-kubernetes > div > div:not(:first-child),
   .infomation-widget-longhorn > div > div:not(:last-child),
   .information-widget-longhorn > div > div:not(:last-child),
-  .information-widget-datetime {
-    display: none;
+  .information-widget-datetime,
+  .service-description {
+    display: none !important;
+  }
+
+  .services-list {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    column-gap: 0.5rem !important;
+  }
+
+  .services-list > li.service:has(.service-block) {
+    grid-column: 1 / -1;
+  }
+
+  .service-card {
+    margin-bottom: 0.5rem !important;
+  }
+
+  .service-icon {
+    width: 2.5rem !important;
+  }
+
+  .service-icon img,
+  .service-icon > div > div {
+    max-width: 1.75rem !important;
+    max-height: 1.75rem !important;
+  }
+
+  .service-title-text {
+    min-width: 0;
+    padding-right: 1.4rem;
+  }
+
+  .service-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .service-block {
+    margin: 0.15rem !important;
+    padding: 0.15rem 0.25rem !important;
+  }
+
+  .service-block > div:first-child {
+    font-size: 0.8rem !important;
+  }
+
+  .service-block > div:last-child {
+    font-size: 0.6rem !important;
+    letter-spacing: 0.02em;
   }
 }
