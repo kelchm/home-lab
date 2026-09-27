@@ -6,6 +6,8 @@ metadata:
 spec:
   groups:
     - name: ai-mcp-reliability
+      labels:
+        cluster: k8s-prod
       rules:
         - alert: GrafanaMCPFunctionalProbeFailed
           expr: |

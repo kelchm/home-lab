@@ -13,6 +13,8 @@ metadata:
 spec:
   groups:
     - name: flux-reconciliation
+      labels:
+        cluster: k8s-prod
       rules:
         - alert: FluxReconciliationFailed
           expr: flux_resource_info{kind=~"Kustomization|HelmRelease",ready="False",suspended="False"} == 1
@@ -42,6 +44,8 @@ spec:
             description: flux_resource_info has been absent for 15 minutes, so reconciliation failures cannot be detected. Check the Flux Operator ServiceMonitor and scrape target.
 
     - name: certificate-lifecycle
+      labels:
+        cluster: k8s-prod
       rules:
         # Public certificates now have a roughly 160-hour lifetime. A fixed
         # 14-day threshold would therefore be permanently firing; 24 hours is
@@ -86,6 +90,8 @@ spec:
             description: Certificate expiration timestamps have been absent for 15 minutes, so expiry cannot be detected. Check the cert-manager ServiceMonitor and scrape target.
 
     - name: pod-object-churn
+      labels:
+        cluster: k8s-prod
       rules:
         # Namespace count/pods quotas cap the blast radius at 50 objects for
         # most namespaces. Alert at five failed objects so the operator sees a
@@ -100,6 +106,8 @@ spec:
             description: At least {{ printf "%.0f" $value }} failed pod objects have remained in {{ $labels.namespace }} for five minutes. Identify the owning controller before the namespace's count/pods quota blocks healthy replacements.
 
     - name: vlagent-pipeline
+      labels:
+        cluster: k8s-prod
       rules:
         - alert: VlagentCollectorTargetMissing
           expr: |
@@ -158,6 +166,8 @@ spec:
             description: Check API discovery, symlinks, file permissions and checkpoints. A healthy scrape target alone does not prove log collection.
 
     - name: logging-pipeline
+      labels:
+        cluster: k8s-prod
       rules:
         - alert: VictoriaLogsRowsDropped
           expr: sum by (reason) (increase(vl_rows_dropped_total{reason!="debug"}[10m])) > 0

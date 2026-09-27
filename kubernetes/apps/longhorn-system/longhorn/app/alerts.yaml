@@ -26,6 +26,8 @@ metadata:
 spec:
   groups:
     - name: longhorn-backups
+      labels:
+        cluster: k8s-prod
       rules:
         # kube-state-metrics exports status.available from BackupTarget/default
         # because Longhorn's native collector exposes only a backup-volume
@@ -128,6 +130,8 @@ spec:
             description: Volume {{ $labels.volume }} ({{ $labels.pvc_namespace }}/{{ $labels.pvc }}) has reported no successful backup for over 30 hours, so backups were never configured for it or every attempt has failed.
 
     - name: longhorn-volume-health
+      labels:
+        cluster: k8s-prod
       rules:
         # Faulted means no usable replica -- the volume is down, not just
         # thin. Short `for` because there is no benign transient version.
@@ -162,6 +166,8 @@ spec:
             description: Longhorn reports node {{ $labels.node }} as not ready, so its replicas are unavailable and rebuilds may be blocked.
 
     - name: longhorn-capacity
+      labels:
+        cluster: k8s-prod
       rules:
         # Longhorn stops scheduling new replicas well before a disk is full
         # (storageMinimalAvailablePercentage is 15), so these thresholds are
@@ -196,6 +202,8 @@ spec:
             description: Disk {{ $labels.disk }} on node {{ $labels.node }} cannot accept new replicas. Usually capacity pressure or a failed disk condition.
 
     - name: longhorn-monitoring-coverage
+      labels:
+        cluster: k8s-prod
       rules:
         # The meta-alert. Longhorn shipped its ServiceMonitor disabled, so
         # this cluster ran with zero longhorn_* series and every rule above
