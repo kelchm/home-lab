@@ -83,3 +83,15 @@ body {
   text-transform: uppercase;
   color: rgb(165 180 252) !important;
 }
+
+/* Phones: cluster-wide stats and total storage only, no clock (the phone
+ * shows one). Per-node detail filled the first screen before any tile.
+ * Homepage's Longhorn widget class really is spelled "infomation". */
+@media (max-width: 639px) {
+  .information-widget-kubernetes > div > div:not(:first-child),
+  .infomation-widget-longhorn > div > div:not(:last-child),
+  .information-widget-longhorn > div > div:not(:last-child),
+  .information-widget-datetime {
+    display: none;
+  }
+}
