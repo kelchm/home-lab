@@ -44,18 +44,13 @@ A failed drain leaves state behind. Retrying on top of it stacks a second attemp
 3. Let the workloads that were evicted reschedule, and let Longhorn return to fully healthy. Rebuilds triggered by the partial drain are still in flight.
 4. Re-run the **full** preflight, not a spot check: `preflight.sh <candidate>` plus `talosctl health`. Then make a fresh go/no-go decision.
 
-## Tailscale route moves
+## The access path moves
 
-The destination address does not tell you which link you are using. `10.32.30.x` is a LAN range, but reaching it from the workstation may still traverse the tailnet — which means it depends on a pod running inside the cluster you are about to reboot. `preflight.sh` resolves this by asking the host routing table which interface actually carries the Kubernetes API endpoint and each Talos node address, and reports whether that is a direct link or a tunnel.
+The destination address does not tell you which link you are using. `10.32.30.x` is a LAN range, but reaching it from the workstation may still traverse a tunnel. `preflight.sh` resolves this by asking the host routing table which interface actually carries the Kubernetes API endpoint and each Talos node address, reports whether that is a direct link or a tunnel, and names the peer advertising the route.
 
-Before rolling a candidate, know two things: whether your path runs over the tailnet, and whether the candidate hosts the subnet router or the operator. Preflight prints both and flags the overlap.
+A direct link is unaffected by the rollout. A tunnelled path is only safe when the router serving it runs outside this cluster; a router hosted on the candidate would be evicted by the drain and reset your API connection mid-rollout. Establish which case you are in before you start.
 
-When the candidate hosts the router on a path you depend on, pick one deliberately:
-
-- **Pre-move it.** Evict or reschedule the subnet-router pod onto a surviving node first, confirm the Connector is Ready there and your route still resolves, then start the rollout with a stable path.
-- **Expect the reset.** Accept that draining the node will reset your API connection while the pod reschedules, and know in advance that this is the expected transient rather than a failure.
-
-Either way, when the connection drops: reconnect, confirm the router is Ready on a surviving node and the route resolves again, then inspect cluster state. Do not retry anything until a clean health check passes — a reconnect that lands mid-drain tells you nothing about whether the drain succeeded. A loss of access that does not recover is a stop condition, not an expected transient.
+When the connection drops: reconnect, confirm the route resolves again, then inspect cluster state. Do not retry anything until a clean health check passes — a reconnect that lands mid-drain tells you nothing about whether the drain succeeded. A loss of access that does not recover is a stop condition, not an expected transient.
 
 ## Instance-manager is missing `lhnet1`
 
