@@ -14,7 +14,6 @@ This directory is the source for the application deployment and its operating re
 | Dashboard backend | `http://127.0.0.1:9119` in the guest |
 | API | `http://127.0.0.1:8642` in the guest; not exposed to the LAN |
 | MCPHub Hacker News | `https://mcphub.home.kelch.io/mcp/hacker-news` through the existing TCP 443 allow |
-| Flatrate automotive reference | `https://mcphub.home.kelch.io/mcp/automotive-reference` through the existing TCP 443 allow |
 | State | `/srv/hermes` in the guest, mounted at `/opt/data` in the container |
 | TLS state | `/srv/caddy`, with the DNS credential in root-only `/srv/caddy/.env` |
 | Backup | Included in cluster job `daily-backups` |
@@ -31,27 +30,15 @@ The Hermes runtime `.env` is intentionally not in Git. It contains the dashboard
 
 Telegram is enabled for the private `@MaiaRelayBot` adapter. Its BotFather token is stored authoritatively in the `Telegram - hermes-1` 1Password item and copied at runtime to `TELEGRAM_BOT_TOKEN` in `/srv/hermes/.env`. `TELEGRAM_ALLOWED_USERS` contains the single operator's numeric Telegram user ID; neither `TELEGRAM_ALLOW_ALL_USERS` nor `GATEWAY_ALLOW_ALL_USERS` is set. Gateway streaming is enabled with the `auto` transport, which selects Telegram's native draft transport for direct messages and retains the adapter's edit-based fallback. Do not commit the token or numeric allowlist value.
 
-## Flatrate Discord profile
+## Retired Flatrate profile
 
-Flatrate is a separate Hermes profile and gateway runtime for the private Discord application `Flatrate Bot`. It is not multiplexed through the personal profile. Its persistent state lives at `/srv/hermes/profiles/flatrate`, the in-container wrapper is `/opt/data/.local/bin/flatrate`, and its s6 service is `gateway-flatrate`. This keeps its conversations, prompt, platform credentials, MCP authorization, tools, and gateway lifecycle separate from the personal agent while sharing the same container and Spark inference endpoint.
+Flatrate was retired from Hermes on 2026-09-20 because it is being rebuilt as a standalone bot. Its dedicated gateway was stopped, its `gateway-flatrate` s6 service was unregistered, and its profile and CLI wrapper were moved out of the Hermes container's mounted state. Boot reconciliation no longer discovers Flatrate. The personal Hermes gateway remains active.
 
-Hermes's live profile state is authoritative for profile settings. The dashboard, Hermes CLI, and Hermes upgrades may evolve that state over time, so Git deliberately does not mirror the entire generated profile configuration. Git records the deployment substrate, the reviewed behavioral contract in `flatrate/SOUL.md`, capability and security boundaries, recovery commands, and promotion checklist. When a live change materially alters those boundaries or recovery behavior, update this operating record; do not overwrite the profile wholesale from a stale checked-in snapshot.
+The former `/srv/hermes/profiles/flatrate` state is preserved at `/srv/retired-hermes/flatrate-2026-09-20/profile` on the VM, with its wrapper alongside it as `wrapper`. The archive parent is root-owned with mode `0700`; it contains credentials and conversation history and must not be committed or copied into an active Hermes profile. It remains covered by VM backups. The checked-in `flatrate/SOUL.md` is historical reference for the rebuild, not an active deployment input.
 
-The primary model is the local OpenAI-compatible `deepseek-v4-flash-dspark` endpoint at `http://10.32.21.31:8888/v1`. Because that model does not accept images, auxiliary vision uses provider `codex` with explicit model `gpt-5.6-luna`; Hermes supplies the available `openai-codex` OAuth credential. The explicit model is required: this Hermes version does not choose a Codex OAuth model automatically and otherwise falls through to the non-vision main model. The same `openai-codex` provider and `gpt-5.6-luna` model are the sole text fallback when the local endpoint is unavailable. No static OpenAI API key is required. A forced-outage test on 2026-08-29 used an unreachable local primary and completed through Luna, proving the provider name, credential resolution, and fallback path rather than merely testing Luna directly.
+The Discord application and the MCPHub `flatrate-discord` principal were left intact for the standalone bot migration. Do not restore or start the Hermes profile while the replacement uses the same Discord application.
 
-Discord group channels use one shared session per channel (`group_sessions_per_user: false`), and threads use one shared session per thread (`thread_sessions_per_user: false`). DMs remain separate. `display.busy_input_mode: steer` lets a follow-up join the active tool loop; unrelated work should be moved into a thread because Hermes does not classify steer-versus-queue by topic. Both the global busy acknowledgment and the steer-specific acknowledgment are disabled. The agent is capped at 10 model/tool iterations per turn. Tool-loop warnings remain enabled, but `tool_loop_guardrails.hard_stop_enabled` is false: this Hermes release turns a hard stop into a user-visible implementation message containing the tool name and guardrail code. The behavioral contract tells Flatrate to stop a broken reference path after two failed detail lookups, while the 10-iteration cap remains the final runaway bound. This avoids leaking control-plane chatter without imposing a single-session concurrency cap across independent DMs, channels, or threads.
-
-Flatrate reaches MCPHub only through the `automotive-reference` group using the `flatrate-discord` workload principal. The principal is scoped to that group alone. Its bearer token is authoritative in the SOPS-encrypted `kubernetes/apps/ai/mcphub/app/secret.sops.yaml` and copied at runtime to `/srv/hermes/profiles/flatrate/.env` as `MCPHUB_FLATRATE_DISCORD_TOKEN`; the live profile configuration contains only the environment reference. Do not attach Flatrate to `homelab-read`, `browser`, or any other MCPHub group. General public research is provided by Hermes's built-in isolated headless browser, which denies private URLs and does not use a real browser profile. In this Hermes release, `browser.backend: 'off'` explicitly turns off the alternate Browser Use CLI backend and exposes the built-in `browser_*` tools. The Flatrate profile also needs its own agent-browser Chrome cache under `/srv/hermes/profiles/flatrate/home/.agent-browser`; a schema/readiness check alone can incorrectly pass when only the container's shared Playwright browser is present.
-
-The Discord platform exposes only web, isolated browser, vision, the automotive-reference tools, and Hermes's non-admin Discord tool restricted by `discord.server_actions` to `create_thread`. Terminal, files, code execution, memory, delegation, home automation, personal-agent tools, Discord administration, and the stock Discord participation toolset remain disabled. Stock progress reactions are disabled. A future personality-driven reaction action must be narrowly limited to reacting to the current Discord message; do not enable broad Discord administration to obtain that behavior.
-
-Flatrate's dedicated gateway suppresses Hermes control chatter in Discord. Set `HERMES_GATEWAY_BUSY_ACK_ENABLED=false` in `/srv/hermes/profiles/flatrate/.env`, `display.busy_steer_ack_enabled=false`, and `platforms.discord.gateway_restart_notification=false` in the live profile configuration so follow-ups and lifecycle operations do not post orchestration chatter into the conversation. The similarly named top-level `discord.gateway_restart_notification` path is not consumed by the gateway and must not be used.
-
-Flatrate intentionally registers no Discord application commands. Hermes's full operator command catalog is inappropriate for a conversational friends-server bot and exposes implementation vocabulary even when command execution is access-controlled. Set `DISCORD_COMMAND_SYNC_POLICY=off` in the profile environment, then bulk-overwrite the Flatrate application's global command list with an empty array through Discord's API. Keep the `applications.commands` installation scope for the existing User Install and future Guild Install flow, but do not re-enable Hermes command synchronization. Flatrate handles depth changes and thread creation conversationally.
-
-The rollout is DM-first. User Install remains enabled with only `applications.commands`, allowing the operator to install the application to their account and open a direct conversation. Guild Install retains `applications.commands` plus `bot` with only View Channels, Send Messages, Create Public Threads, Send Messages in Threads, Embed Links, Attach Files, Read Message History, and Add Reactions. `MANAGE_THREADS` is not required. Keep the bot out of `The guys` and leave free-response channels unset until the DM checks pass. Promotion to `#tire-talk` requires verified factual behavior, silence without status chatter, the already-working image and remote-text fallback paths, an operator-only Discord allowlist, and a tested narrow thread action. Shared-channel silence uses Hermes's exact `NO_REPLY` suppression marker from the reviewed soul.
-
-Flatrate uses a two-stage depth policy in Discord. DMs get one compact answer and the next one to three useful checks. In `#tire-talk`, the parent-channel reply stays under roughly 900 characters; vehicle-specific asides stay to one sentence. When a worthwhile answer needs detailed procedures, multiple specifications, bulletin detail, or a long diagnostic tree, Flatrate gives the useful short answer first and offers to continue in a public thread. It creates that thread from the current message only after an explicit request to dig in, then continues there. The action is unavailable in DMs and cannot manage, archive, delete, or moderate threads.
+## Dashboard access
 
 Hermes Desktop for macOS and compatible native clients connect to the canonical HTTPS dashboard through Hermes's server-mediated native PKCE flow, while Safari on iOS uses the same authenticated web UI. Kanidm therefore needs the dashboard's `/auth/callback` redirect rather than a native-client redirect URI. The dashboard offers Kanidm through a public PKCE client and retains the local password provider for break-glass access. UniFi local DNS resolves `hermes.home.kelch.io` directly to the VM at `10.32.21.100`.
 
@@ -105,31 +92,6 @@ Validate the MCPHub runtime reference and HN discovery without printing any bear
 
 ```sh
 ssh kelchm@hermes.home.kelch.io 'set -e; test "$(grep -c "^MCPHUB_HERMES_PERSONAL_TOKEN=" /srv/hermes/.env)" -eq 1; test "$(stat -c "%a" /srv/hermes/.env)" = 600; sudo docker exec --user hermes hermes /opt/hermes/.venv/bin/hermes mcp test mcphub_hacker_news 2>&1 | grep -E "Connected|Tools discovered"'
-```
-
-Install the reviewed Flatrate soul without replacing its generated profile configuration:
-
-```sh
-scp proxmox/guests/hermes-1/flatrate/SOUL.md kelchm@hermes.home.kelch.io:/tmp/flatrate-SOUL.md
-ssh kelchm@hermes.home.kelch.io 'sudo install -o 10000 -g 10000 -m 0644 /tmp/flatrate-SOUL.md /srv/hermes/profiles/flatrate/SOUL.md && rm /tmp/flatrate-SOUL.md'
-```
-
-If Flatrate's built-in browser reports that Chrome is missing, install its isolated browser cache as the Hermes user and then rerun a real navigation/snapshot smoke test; do not rely only on `doctor`:
-
-```sh
-ssh kelchm@hermes.home.kelch.io "sudo docker exec --user hermes -e HERMES_HOME=/opt/data/profiles/flatrate -e HOME=/opt/data/profiles/flatrate/home hermes npx --ignore-scripts -y 'agent-browser@^0.26.0' install"
-```
-
-Validate Flatrate's isolation and automotive-reference connection without resolving or printing its token:
-
-```sh
-ssh kelchm@hermes.home.kelch.io 'set -e; test "$(grep -c "^MCPHUB_FLATRATE_DISCORD_TOKEN=" /srv/hermes/profiles/flatrate/.env)" -eq 1; test "$(grep -c "^HERMES_GATEWAY_BUSY_ACK_ENABLED=false$" /srv/hermes/profiles/flatrate/.env)" -eq 1; test "$(grep -c "^DISCORD_COMMAND_SYNC_POLICY=off$" /srv/hermes/profiles/flatrate/.env)" -eq 1; test "$(stat -c "%a" /srv/hermes/profiles/flatrate/.env)" = 600; ! grep -Eq "^(DISCORD_ALLOW_ALL_USERS|GATEWAY_ALLOW_ALL_USERS)=" /srv/hermes/profiles/flatrate/.env; test "$(sudo docker exec --user hermes hermes /opt/data/.local/bin/flatrate config get platforms.discord.gateway_restart_notification)" = false; test "$(sudo docker exec --user hermes hermes /opt/data/.local/bin/flatrate config get display.busy_input_mode)" = steer; test "$(sudo docker exec --user hermes hermes /opt/data/.local/bin/flatrate config get display.busy_steer_ack_enabled)" = false; test "$(sudo docker exec --user hermes hermes /opt/data/.local/bin/flatrate config get group_sessions_per_user)" = false; test "$(sudo docker exec --user hermes hermes /opt/data/.local/bin/flatrate config get thread_sessions_per_user)" = false; test "$(sudo docker exec --user hermes hermes /opt/data/.local/bin/flatrate config get agent.max_turns)" = 10; test "$(sudo docker exec --user hermes hermes /opt/data/.local/bin/flatrate config get tool_loop_guardrails.hard_stop_enabled)" = false; test "$(sudo docker exec --user hermes hermes /opt/data/.local/bin/flatrate config get browser.backend)" = off; test "$(sudo docker exec --user hermes hermes /opt/data/.local/bin/flatrate config get auxiliary.vision.provider)" = codex; test "$(sudo docker exec --user hermes hermes /opt/data/.local/bin/flatrate config get auxiliary.vision.model)" = gpt-5.6-luna; sudo docker exec --user hermes hermes /opt/data/.local/bin/flatrate fallback list | grep -q "gpt-5.6-luna  (via openai-codex)"; sudo docker exec --user hermes hermes /opt/data/.local/bin/flatrate auth status openai-codex | grep -q "logged in"; sudo docker exec --user hermes hermes /opt/data/.local/bin/flatrate mcp test mcphub_automotive_reference 2>&1 | grep -E "Connected|Tools discovered"'
-```
-
-After installing `DISCORD_BOT_TOKEN` and the operator's numeric `DISCORD_ALLOWED_USERS` value in the profile environment, start only Flatrate's gateway and inspect its status without disturbing the personal gateway:
-
-```sh
-ssh kelchm@hermes.home.kelch.io 'sudo docker exec --user hermes hermes /opt/data/.local/bin/flatrate gateway start && sudo docker exec --user hermes hermes /opt/data/.local/bin/flatrate gateway status'
 ```
 
 Retrieve the dashboard username/password or API-server token only when configuring a client:
