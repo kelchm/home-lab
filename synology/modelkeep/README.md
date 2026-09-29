@@ -66,10 +66,10 @@ ssh kelchm@10.32.20.5 '
   ep=http://10.32.10.5:8090
   repo=Qwen/Qwen2.5-7B-Instruct
   include="\\.(json|safetensors|txt)$"
-  info=$(curl -fsS "$ep/api/models/$repo/revision/main")
+  info=$(curl -fsS --connect-timeout 10 --max-time 300 "$ep/api/models/$repo/revision/main")
   sha=$(printf "%s" "$info" | jq -r .sha)
   [ ${#sha} -eq 40 ] || { echo "no commit for $repo" >&2; exit 1; }
-  tree=$(curl -fsS "$ep/api/models/$repo/tree/$sha?recursive=true")
+  tree=$(curl -fsS --connect-timeout 10 --max-time 300 "$ep/api/models/$repo/tree/$sha?recursive=true")
   files=$(printf "%s" "$tree" | jq -r --arg re "$include" ".[] | select(.type == \"file\" and (.path | test(\$re))) | .path")
   [ -n "$files" ] || { echo "no files in $repo match $include" >&2; exit 1; }
   printf "%s\n" "$files" | while IFS= read -r file; do
