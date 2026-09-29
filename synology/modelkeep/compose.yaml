@@ -1,0 +1,31 @@
+name: modelkeep
+
+services:
+  modelkeep:
+    image: ghcr.io/kaznak/modelkeep:v0.4.12@sha256:ce4a960abe4068a1f328e68627f6a8ecfb6f26349fc22438d8e139e62a3070c0
+    # The DSM service account `modelkeep`, so archive ACLs name a real principal.
+    user: "1045:100"
+    read_only: true
+    ports:
+      - "10.32.10.5:8092:8090"
+      - "10.32.25.5:8092:8090"
+    volumes:
+      - /volume1/models/modelkeep:/data
+    tmpfs:
+      # The official client creates HF_HOME here; the default tmpfs mode is root-only.
+      - /tmp:mode=1777
+    environment:
+      RUST_LOG: info
+      HF_HOME: /tmp/huggingface
+      HF_XET_CACHE: /data/cache/xet
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "/bin/modelkeep", "ready"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
