@@ -58,7 +58,7 @@ The archive can be rebuilt by downloading again, so it is not backed up.
 
 ## Archive a model ahead of use
 
-List the repository's files through the mirror, pin the commit, and request each wanted file until it is archived. The `include` expression selects files by path:
+List the repository's files through the mirror, pin the commit, and request each wanted file until it is archived. The `include` expression selects files by path. The script stops with an error if the commit or file list cannot be read, or nothing matches:
 
 ```sh
 ssh kelchm@10.32.20.5 '
@@ -66,28 +66,34 @@ ssh kelchm@10.32.20.5 '
   ep=http://10.32.10.5:8090
   repo=Qwen/Qwen2.5-7B-Instruct
   include="\\.(json|safetensors|txt)$"
-  sha=$(curl -fsS "$ep/api/models/$repo/revision/main" | jq -r .sha)
-  curl -fsS "$ep/api/models/$repo/tree/$sha?recursive=true" |
-    jq -r --arg re "$include" ".[] | select(.type == \"file\" and (.path | test(\$re))) | .path" |
-    while IFS= read -r file; do
-      until curl -fsS -I -o /dev/null "$ep/$repo/resolve/$sha/$file"; do sleep 30; done
-      echo "archived $file"
-    done
+  info=$(curl -fsS "$ep/api/models/$repo/revision/main")
+  sha=$(printf "%s" "$info" | jq -r .sha)
+  [ ${#sha} -eq 40 ] || { echo "no commit for $repo" >&2; exit 1; }
+  tree=$(curl -fsS "$ep/api/models/$repo/tree/$sha?recursive=true")
+  files=$(printf "%s" "$tree" | jq -r --arg re "$include" ".[] | select(.type == \"file\" and (.path | test(\$re))) | .path")
+  [ -n "$files" ] || { echo "no files in $repo match $include" >&2; exit 1; }
+  printf "%s\n" "$files" | while IFS= read -r file; do
+    until curl -fsS -I -o /dev/null "$ep/$repo/resolve/$sha/$file"; do sleep 30; done
+    echo "archived $file"
+  done
 '
 ```
 
 ## Verify against upstream hashes
 
-Each revision records Hugging Face's LFS SHA-256 for its files. This compares them with ModelKeep's manifest and prints only mismatches; small files stored directly in Git are not covered:
+Each revision records Hugging Face's LFS SHA-256 for its files. This compares them with ModelKeep's manifest. It prints each `MISMATCH`, each revision it could not read (`ERROR`), and each revision without a record (`NO-RECORD`, for revisions archived without upstream metadata), then counts every result; `NOT-ARCHIVED` counts files that a partial revision does not hold. It exits non-zero on any mismatch or error. Small files stored directly in Git are not covered:
 
 ```sh
 ssh kelchm@10.32.20.5 '
-  cd /volume1/models/modelkeep/models
+  cd /volume1/models/modelkeep/models || exit 1
   for r in */*/revisions/*/; do
+    [ -d "$r" ] || continue
+    u="$r.modelkeep-upstream-files.json"
+    if [ ! -f "$u" ]; then echo "NO-RECORD $r"; continue; fi
     sudo jq -r --slurpfile m "$r.modelkeep-manifest.json" \
-      ".files[] | select(.lfs_sha256) | . as \$u | (\$m[0].files[] | select(.path == \$u.path) | .sha256) as \$s | select(\$s) | \"\(if \$s == \$u.lfs_sha256 then \"match\" else \"MISMATCH\" end) $r\(\$u.path)\"" \
-      "$r.modelkeep-upstream-files.json"
-  done | grep -v "^match" || echo "all LFS files match"
+      ".files[] | select(.lfs_sha256) | . as \$u | ([\$m[0].files[] | select(.path == \$u.path) | .sha256][0]) as \$s | \"\(if \$s == null then \"NOT-ARCHIVED\" elif \$s == \$u.lfs_sha256 then \"match\" else \"MISMATCH\" end) $r\(\$u.path)\"" \
+      "$u" || echo "ERROR $r"
+  done | awk "{ n[\$1]++ } \$1 == \"MISMATCH\" || \$1 == \"ERROR\" || \$1 == \"NO-RECORD\" { print } END { if (NR == 0) print \"no revisions found\"; for (k in n) print n[k], k; exit (n[\"MISMATCH\"] + n[\"ERROR\"] > 0) }"
 '
 ```
 
