@@ -1,16 +1,16 @@
 # Hugging Face downloads retained on Athena
 
-Evaluated September 26, 2026. **Read-only lab inspection, source review and isolated macOS probes; no NAS mirror is deployed or qualified.** [Investigation #608](https://github.com/kelchm/home-lab/issues/608) owns remaining qualification. [Shpiel evidence](hugging-face-nas-cache-evidence.json), [MatrixHub behavior](matrixhub-local-evidence.json), [MatrixHub small import](matrixhub-import-evidence.json), [actual Mac imports](matrixhub-mac-import-evidence.json) and [MatrixHub acceptance gates](matrixhub-gate-evidence.json) record versions, hashes and observed upstream requests.
+Evaluated September 26–28, 2026: source review and isolated macOS probes, then disposable pull-through instances on Athena. **ModelKeep v0.4.12 was selected as a public-models pull-through mirror;** deployment is tracked in [#634](https://github.com/kelchm/home-lab/issues/634). [Investigation #608](https://github.com/kelchm/home-lab/issues/608) recorded the decision. [Shpiel evidence](hugging-face-nas-cache-evidence.json), [MatrixHub behavior](matrixhub-local-evidence.json), [MatrixHub small import](matrixhub-import-evidence.json), [actual Mac imports](matrixhub-mac-import-evidence.json) and [MatrixHub acceptance gates](matrixhub-gate-evidence.json) record versions, hashes and observed upstream requests; the [Athena pull-through evaluation](#athena-pull-through-evaluation) records the NAS measurements.
 
 ## Recommendation
 
-Make a retained filesystem library on Athena the foundation. A NAS-side downloader or cache service owns ingestion; LAN consumers download through its HTTP endpoint or stage pinned snapshots locally. Preserve the files independently of the HTTP service's continued availability. Public retention and private training-output preservation must not depend on deploying an OCI registry, S3 service or paid product.
+**Run ModelKeep v0.4.12 on Athena as a pull-through mirror for public repositories.** The requirement is a transparent proxy: any LAN client sets `HF_ENDPOINT`, requests original repository IDs, and each file crosses the internet once. In the [Athena evaluation](#athena-pull-through-evaluation), ModelKeep fetched only requested files, served everything archived with Hugging Face unreachable and after a restart, shared one upstream transfer among concurrent clients, and matched Hugging Face's hashes throughout. It stores ordinary files that stay readable without the service, which keeps the retained-library principle below.
 
-**Shpiel v0.3.1 is the measured public-only baseline, not a selected winner.** Its filesystem layout and measured reuse fit the retention goal, but the [broader community-project survey](hugging-face-cache-landscape.md) found additional candidates that deserve comparison before a NAS pilot: DingoSpeed, standalone hfd, ModelKeep and Bodaay's managed-library approach. Shpiel's private-read authorization, native llama.cpp compatibility, large cold-file delays, recovery and upgrades remain material gaps. Any public Shpiel trial should use one writer, no private upstream token, and a read-only LAN-facing boundary; its write APIs should not be exposed by a public download service.
+Its known limits are operational: a large file that is not archived yet returns `503` after 8 seconds, so archive large models ahead of use; it compares nothing with Hugging Face's published digests, so an external hash check runs against its records; and a code review found bounded defects to report upstream. The deployment serves public repositories only, without a management listener or Hugging Face token.
 
-**Continue MatrixHub v0.2.0 qualification as a curated, verified hosted library.** [Actual Mac imports](#actual-mac-import-results) reused 8.1 GB of existing Qwen MLX and Orpheus GGUF files, served matching files to empty HF 1.8/2.0 clients with upstream blocked, and survived backend restart. Hosted imports also seeded the original proxy identities without fetching weights again. This supersedes the earlier blanket rejection: the measured failures constrain particular workflows, rather than making all use unsuitable.
+**HugRS v0.7.1 is rejected.** It streamed cold files well, but every cached model failed with Hugging Face unreachable, and clients joining an in-progress download received the file shifted by one 4 MiB chunk; one client finished with exit 0 and wrong content. Both causes are architectural. **MatrixHub v0.2.0 is not used for this role.** Its hosted-library mode serves MatrixHub names rather than original repository IDs, and its proxy mode retains the fetching, offline and verification failures recorded below. That supersedes the September 27 recommendation to continue MatrixHub as a curated hosted library. Shpiel remains the first measured baseline; its `/refs` 404 breaks llama.cpp and it buffers whole cold files before serving.
 
-Transparent proxy use still needs work. Cached proxy reads fail after offline metadata expiry, new proxy ingestion needs external hash verification, and selected-file requests do not bound server prefetch. The real Orpheus test attempted another 53.5 GB of distinct objects; the gateway blocked every unwanted transfer. A hosted repository containing only the selected GGUF avoids that acquisition path and already serves offline. No NAS pilot is qualified yet. Retention/export/restore and actual-client integration are the next checks under [#614](https://github.com/kelchm/home-lab/issues/614); Bodaay remains an alternative if the hosted-library workflow falls short.
+A retained filesystem library on Athena remains the foundation: public retention and private training-output preservation must not depend on an OCI registry, S3 service or paid product.
 
 Preserve existing Spark and Vonk cache contents until a hash-verified LAN import succeeds. If an endpoint cannot reuse them, stage those models by local path rather than downloading the collection again for a new storage format.
 
@@ -156,6 +156,55 @@ The useful operating mode is explicit selection → independent verification →
 
 This is an import and byte-serving result, not an inference benchmark: no model was loaded, the selected GGUF is not a complete TTS application bundle, and loopback timings do not establish NAS performance. Full inventory, resumable import, hosted-seed deletion/garbage collection, service-independent export/restore and actual consumer integration remain in [#614](https://github.com/kelchm/home-lab/issues/614). Keep originals until that lifecycle is qualified. Private or locally modified artifacts need their own hosted identity and tested access boundary rather than being represented as unchanged public upstream content.
 
+## Athena pull-through evaluation
+
+On September 28, ModelKeep v0.4.12 and HugRS v0.7.1 ran on Athena (DSM 7.3.2, Docker 24.0.2) as disposable Compose projects hardened like production: non-root, read-only root filesystem, all capabilities dropped. Each service joined an internet-connected network and an internal one; test clients joined only the internal network, so a client that tried to bypass the proxy would fail instead of succeeding silently. Clients were `huggingface_hub` 1.8.0 and 2.0.0 with `hf-xet` 1.6.0 (Xet not disabled) and llama.cpp's `light` image (build 11223) using `-hf`. Internet transfer is the byte count received on the proxy container's upstream interface. Hashes were compared with Hugging Face's LFS SHA-256 values. An outage was simulated by detaching the upstream network, which fails fast; a blackholed network was not tested.
+
+### ModelKeep v0.4.12
+
+| Check | Result |
+|---|---|
+| One file (`config.json`) from `sshleifer/tiny-gpt2` | Only that file acquired; 23.7 KB from the internet |
+| Full `tiny-gpt2` snapshot with HF 1.8, then an empty HF 2.0 client | Hashes match; the second download used 0 bytes from the internet |
+| One quantization from `Qwen/Qwen2.5-0.5B-Instruct-GGUF` (491 MB of nine variants) | 507 MB from the internet; only that file archived; nothing fetched afterwards |
+| `Qwen/Qwen2.5-0.5B-Instruct` (1 GB) cold with HF 1.8, then warm with HF 2.0 | Succeeded on HF 1.8's fifth and final retry after 24 × `503`; warm download 0 bytes; hashes match |
+| llama.cpp `-hf`, archived quantization | `/refs`, tree and file served locally; 0 bytes from the internet |
+| llama.cpp `-hf`, cold quantization | Failed on the first `503` while the acquisition continued; the third run succeeded; 427 MB in total for a 415 MB file |
+| Upstream detached: by commit, by `main`, GGUF, full model, llama.cpp, then a container restart | Everything archived was served |
+| Uncached repository while upstream was detached | `503` until the client gave up after about 113 seconds |
+| Three concurrent cold clients for a 3.95 GB shard of `Qwen/Qwen2.5-7B-Instruct` | One upstream transfer (3.59 GB); both HF 1.8 clients exhausted their retries; HF 2.0 succeeded with the correct hash |
+| Upstream detached for 2 minutes during a 3.86 GB transfer | The helper resumed when upstream returned; 4.04 GB in total; hash correct |
+| `modelkeep audit`; manifest digests against recorded upstream LFS SHA-256 | Clean; all 20 LFS files match |
+
+It used about one CPU core while downloading at 150–245 Mbit/s. Docker reported up to 3.5 GiB of memory, which on DSM's cgroup v1 likely includes page cache. A HEAD-driven warm-up that pins the commit and requests each selected file until it is archived worked without the management API.
+
+### HugRS v0.7.1
+
+| Check | Result |
+|---|---|
+| One file, and one GGUF quantization | Only the requested file fetched; streamed without `503` |
+| `Qwen/Qwen2.5-0.5B-Instruct` (1 GB) cold with HF 1.8 | Streamed with no client retries; hashes match |
+| llama.cpp `-hf`, cold quantization | Succeeded on the first run |
+| Warm download of an archived model | 70–100 KB from the internet per model: every `HEAD`, revision and tree request goes upstream |
+| Upstream detached | Every cached model failed: revision requests returned `500` after 10–60 seconds, and one download failed after 418 seconds |
+| Three concurrent cold clients for the 3.95 GB shard | One upstream transfer (about 4.15 GB). Two clients received the file without its first 4 MiB chunk, 3,941,247,136 bytes in total. HF 1.8 failed; HF 2.0 resumed the tail and exited 0 with a full-size file whose every offset was shifted by one chunk. HugRS logged no error and its own cached copy was correct |
+
+A code review reproduced the causes with deterministic tests. Completed chunks are tracked for the whole download rather than per client, so a client that joins late never receives chunk 0; this also happens for fully cached files. Mixed range and full-file requests can reorder content. The cache is keyed by repository and path without the revision, and a test served commit A for a request for commit B. Revision, tree and refs metadata is always forwarded upstream with no fallback, and a failed `HEAD` leaves a single-flight entry that later requests wait on indefinitely.
+
+### Code review
+
+Both projects were reviewed against the same rubric: an Opus 5.5 code audit of ModelKeep, then gpt-6-astra architecture reviews of both. ModelKeep's architecture suits a durable mirror. Commit-keyed immutable revisions are stored as ordinary files, responses are built locally, the official client performs acquisition, and one acquisition is shared per request selection. Its confirmed defects, reproduced by tests where marked:
+
+- Published bytes are not compared with Hugging Face's recorded LFS SHA-256 or Git blob ID.
+- Payload files are not fsynced before a revision is first published; extension and import do fsync.
+- A miss under an archived ref acquires upstream's current commit and moves the ref, contrary to its ADR-0012 (reproduced).
+- Partial downloads are discarded when the helper reports its own failure, a regression from its commit 0722668 (reproduced).
+- Wildcards in a resolve path are passed to the client as file patterns, so one request can acquire a whole repository (reproduced).
+- A refresh always downloads the whole snapshot and discards files the archived revision does not list.
+- The download port has no authentication; when trust of the Tailscale capability header is enabled, the management API accepts that header from any client that can reach it.
+
+Each is a bounded patch. Replacing the cold-miss `503` with streaming would be a multi-week change. HugRS would need a redesigned download session, revision-keyed storage and cached metadata, estimated at several person-weeks, and it has had no commits since July.
+
 ## Nexus tradeoffs
 
 [Sonatype's client guide](https://help.sonatype.com/en/configure-hugging-face-with-nexus.html) requires `HF_HUB_DISABLE_XET=1` and says cold files finish caching before being served. [CE limits](https://help.sonatype.com/en/usage-center.html) are 40,000 components and 100,000 requests/day; exceeding them blocks new additions. These differ from H2 database sizing limits, and one model need not equal one component.
@@ -187,4 +236,4 @@ Local training outputs should be immutable private bundles on Athena: weights/ad
 
 A separate Claude Opus 5.5 research run received the requirements without the initial candidate shortlist or recommendation. Execution metadata confirmed `claude-opus-5-5`. It independently recommended a standard NAS-owned HF library and separate backed-up private artifacts, with Olah as an optional disposable frontend. The durable-layer conclusion is supported here; the Olah preference is not adopted because its cache lifecycle conflicts with the retention priority and Shpiel now has local reuse evidence. The independent report did not evaluate Shpiel. Its source-based suggestions do not replace live acceptance.
 
-Shpiel and MatrixHub ran on the Mac with isolated service/client state. MatrixHub additionally imported actual public Mac downloads read only and verified the originals unchanged. No NAS service, serving workload, real private model, real HF credential store or existing user cache changed. Nexus and the other candidates were not executed. MatrixHub passed complete tiny snapshots and selected real large-shard/GGUF imports; actual application integration, disk-full behavior, interruption/power-loss recovery, upgrades and sustained NAS load remain unqualified.
+Shpiel and MatrixHub ran on the Mac with isolated service/client state. MatrixHub additionally imported actual public Mac downloads read only and verified the originals unchanged. No serving workload, real private model, real HF credential store or existing user cache changed; the later [Athena evaluation](#athena-pull-through-evaluation) used disposable NAS instances. Nexus and the other candidates were not executed. MatrixHub passed complete tiny snapshots and selected real large-shard/GGUF imports; actual application integration, disk-full behavior, interruption/power-loss recovery, upgrades and sustained NAS load remain unqualified.
