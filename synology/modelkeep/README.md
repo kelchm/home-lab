@@ -8,15 +8,15 @@ doco-cd deploys this project from `main`; the [Synology README](../README.md) de
 
 | Address | Clients |
 |---|---|
-| `http://10.32.10.5:8092` | Main VLAN devices |
-| `http://10.32.25.5:8092` | Storage VLAN hosts, such as the Sparks |
+| `http://10.32.10.5:8090` | Main VLAN devices |
+| `http://10.32.25.5:8090` | Storage VLAN hosts, such as the Sparks |
 
 The download port has no authentication, and any client that reaches it can make Athena download public repositories. There is no management listener and no Hugging Face token, so gated and private repositories are unavailable.
 
 ## Client configuration
 
 ```sh
-export HF_ENDPOINT=http://10.32.10.5:8092
+export HF_ENDPOINT=http://10.32.10.5:8090
 export HF_HUB_DISABLE_XET=1
 hf download Qwen/Qwen2.5-0.5B-Instruct
 ```
@@ -63,7 +63,7 @@ List the repository's files through the mirror, pin the commit, and request each
 ```sh
 ssh kelchm@10.32.20.5 '
   set -eu
-  ep=http://10.32.10.5:8092
+  ep=http://10.32.10.5:8090
   repo=Qwen/Qwen2.5-7B-Instruct
   include="\\.(json|safetensors|txt)$"
   sha=$(curl -fsS "$ep/api/models/$repo/revision/main" | jq -r .sha)

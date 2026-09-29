@@ -7,8 +7,8 @@ services:
     user: "1045:100"
     read_only: true
     ports:
-      - "10.32.10.5:8092:8090"
-      - "10.32.25.5:8092:8090"
+      - "10.32.10.5:8090:8090"
+      - "10.32.25.5:8090:8090"
     volumes:
       - /volume1/models/modelkeep:/data
     tmpfs:
