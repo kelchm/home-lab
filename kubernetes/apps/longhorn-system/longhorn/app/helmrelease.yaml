@@ -21,11 +21,9 @@ spec:
     annotations:
       k8s.v1.cni.cncf.io/networks: longhorn-system/storage-network
 
-    # Scrape longhorn-manager. The chart ships this disabled, so nothing was
-    # collecting longhorn_* series at all. Prometheus and VMAgent both select
-    # ServiceMonitors cluster-wide with empty selectors, and the VM operator
-    # converts ServiceMonitor -> VMServiceScrape automatically, so this one
-    # resource feeds both stacks without a separate VMServiceScrape.
+    # Scrape longhorn-manager. The chart ships this disabled. The VM operator
+    # converts ServiceMonitor -> VMServiceScrape automatically, so VMAgent
+    # picks this up without a separate VMServiceScrape.
     #
     # longhorn-manager binds its metrics listener to the pod IP rather than
     # 0.0.0.0, so a ServiceMonitor (which targets endpoint pod IPs) reaches it
@@ -52,7 +50,7 @@ spec:
 
     service:
       ui:
-        type: ClusterIP   # access via port-forward initially; ingress added later
+        type: ClusterIP   # exposed via httproute.yaml
 
     ingress:
       enabled: false
@@ -65,7 +63,7 @@ spec:
       # complete graceful shutdown, the StatefulSet "at most one" guarantee
       # then blocks replacement creation, and CSI keeps the VolumeAttachment
       # pinned to the dead node. Setting this is what enables HA failover
-      # for our stateful workloads (VictoriaLogs, Loki, etc.).
+      # for our stateful workloads (VictoriaLogs, etc.).
       nodeDownPodDeletionPolicy: delete-statefulset-pod
 
       # Point Longhorn at the dedicated user volume (talos UserVolumeConfig

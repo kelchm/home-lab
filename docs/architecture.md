@@ -305,7 +305,7 @@ Every Service falls into one of three buckets; the bucket determines exposure:
 
 | Bucket | Exposure | Examples |
 |---|---|---|
-| Admin / control-plane HTTP | HTTPRoute on admin Traefik gateway, regardless of native-auth maturity | Longhorn UI, Grafana, Prometheus, Alertmanager, kubernetes-dashboard |
+| Admin / control-plane HTTP | HTTPRoute on admin Traefik gateway, regardless of native-auth maturity | Longhorn UI, Grafana, VictoriaMetrics, Alertmanager, kubernetes-dashboard |
 | Household HTTP with mature native auth | Per-service LB IP from `services-prod`, own DNS A record, TLS terminated by app or per-service ingress | Jellyfin, Nextcloud, Home Assistant |
 | Non-HTTP | Per-service LB IP, port-scoped firewall rules | MQTT, NTP, game servers |
 
@@ -404,7 +404,7 @@ jellyfin-sbx.home.kelch.io          10.32.141.50
 
 ## Storage Strategy
 
-- **Longhorn on NVMe**: dedicated user volume per node mounted at `/var/mnt/longhorn` (~890 GiB on the 1 TB SN770, xfs); 3-replica for critical PVCs (databases, stateful apps), 2-replica default. Replica engine ↔ replica engine traffic rides VLAN 25 (2.5GbE storage NIC) via Multus + bridge CNI. Each node carries a Linux bridge `br-storage` (configured per-node in Talos `machine.network`) with `enp6s0` as its only slave; the host's `10.32.25.X/24` IP lives on the bridge. Longhorn's `storage-network` setting points at a NetworkAttachmentDefinition that attaches an `lhnet1` veth from each instance-manager pod into `br-storage`, with the pod IP coming from the Whereabouts pool `.128/28` (see [Storage VLAN registry](#storage-vlan-registry)). Bridge sits host and pods on one L2 broadcast domain, which is required so the host's `iscsiadm` can reach the same-node engine's iSCSI target — macvlan and ipvlan L2 both break this with kernel-level host-to-same-host-pod isolation. Cutover runbook at [`docs/runbooks/longhorn-storage-network-cutover.md`](runbooks/longhorn-storage-network-cutover.md).
+- **Longhorn on NVMe**: dedicated user volume per node mounted at `/var/mnt/longhorn` (~829 GiB on the 1 TB SN770, xfs); 3-replica for critical PVCs (databases, stateful apps), 2-replica default. Replica engine ↔ replica engine traffic rides VLAN 25 (2.5GbE storage NIC) via Multus + bridge CNI. Each node carries a Linux bridge `br-storage` (configured per-node in Talos `machine.network`) with `enp6s0` as its only slave; the host's `10.32.25.X/24` IP lives on the bridge. Longhorn's `storage-network` setting points at a NetworkAttachmentDefinition that attaches an `lhnet1` veth from each instance-manager pod into `br-storage`, with the pod IP coming from the Whereabouts pool `.128/28` (see [Storage VLAN registry](#storage-vlan-registry)). Bridge sits host and pods on one L2 broadcast domain, which is required so the host's `iscsiadm` can reach the same-node engine's iSCSI target — macvlan and ipvlan L2 both break this with kernel-level host-to-same-host-pod isolation. Cutover runbook at [`docs/runbooks/longhorn-storage-network-cutover.md`](runbooks/longhorn-storage-network-cutover.md).
 - **NFS from Synology**: bulk storage via `csi-driver-nfs` (media libraries, *arr content, Nextcloud data, anything large and sequential)
 - **Rule of thumb**: Longhorn for default Helm chart PVCs (Postgres, Redis, Grafana); NFS for bulk sequential data
 
@@ -417,7 +417,7 @@ nvme0n1p1   2.2 GB    EFI         (Talos default)
 nvme0n1p2   1 MB      META        (Talos default)
 nvme0n1p3   105 MB    STATE       (Talos default, holds machine config)
 nvme0n1p4   100 GiB   EPHEMERAL   (/var, capped via VolumeConfig)
-nvme0n1p5   ~890 GiB  u-longhorn  (/var/mnt/longhorn, xfs, Longhorn defaultDataPath)
+nvme0n1p5   ~829 GiB  u-longhorn  (/var/mnt/longhorn, xfs, Longhorn defaultDataPath)
 ```
 
 Capping EPHEMERAL prevents container-image churn and pod logs from competing with Longhorn for space; the dedicated `u-longhorn` partition makes capacity planning explicit. Patches live in `talos/patches/global/volume-ephemeral.yaml` and `user-volume-longhorn.yaml`.
@@ -432,8 +432,7 @@ Capping EPHEMERAL prevents container-image churn and pod logs from competing wit
 - **Traefik** — Gateway API implementation (admin / services / public instances)
 - **cert-manager** — Automated TLS via Let's Encrypt DNS-01
 - **Longhorn** — Replicated block storage
-- **Velero** — Cluster backup to NFS target on Synology
-- **VictoriaMetrics + VictoriaLogs** — Surviving metrics, alerting, and log backends behind Grafana
+- **VictoriaMetrics + VictoriaLogs** — Metrics, alerting, and log backends behind Grafana
 
 ## Repository Structure
 

@@ -92,4 +92,5 @@ Implemented or superseded plans preserve context. Use the maintained documentati
 ## Related docs elsewhere in the repo
 
 - [network/unifi/README.md](../network/unifi/README.md) — UniFi-side BGP/FRR, firewall, and IDS/IPS suppression intent (UniFi isn't GitOps-managed).
+- [sparks/README.md](../sparks/README.md) — DGX Spark workloads: SparkRun operation and host status (outside Flux and Talos).
 - [AGENTS.md](../AGENTS.md) — working conventions, including branch vs. direct-to-main, issue-based planning, and documentation ownership.

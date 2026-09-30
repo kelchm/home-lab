@@ -98,7 +98,7 @@ prod-3 (4 replicas hosted) consistently beat prod-1 (6 replicas hosted) by 5–8
 
 The 2-replica default still holds, with a slightly different rationale than the 2026-04-25 doc gave:
 
-- **2-rep is the right default** for most workloads. Sequential write throughput is ~2× 3-rep, which matters for backup staging, image churn, log writers. Recovery from full data loss is via NFS/Velero backup anyway, so the durability difference between 2-rep and 3-rep is "tolerate one host failure" vs. "tolerate two simultaneous host failures" — a low-probability incremental gain in a 3-node homelab.
+- **2-rep is the right default** for most workloads. Sequential write throughput is ~2× 3-rep, which matters for backup staging, image churn, log writers. Recovery from full data loss is via Longhorn's NFS backups anyway, so the durability difference between 2-rep and 3-rep is "tolerate one host failure" vs. "tolerate two simultaneous host failures" — a low-probability incremental gain in a 3-node homelab.
 - **3-rep specifically for stateful databases** (Postgres, Redis with persistence) where the workload is small random IO and the marginal IOPS hit is small (~16 % on 1 GbE; should be similar percentage post-cutover).
 - **Avoid 3-rep for**: bulk media ingest, backup landing zones, anything write-heavy at large block sizes.
 

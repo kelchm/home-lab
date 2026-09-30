@@ -97,7 +97,7 @@ The native `docker-compose` manager (from `config:recommended`) reads `image: re
 
 Sync already-*sealed* objects rather than locking a live restic/Kopia repo bucket (their index/lock files need mutation; a fully-locked bucket breaks them). CNPG/Barman's write-once-then-sealed pattern fits COMPLIANCE lock directly.
 
-**Recovery posture:** because objects are plain files, a full-cluster-loss restore needs neither the cluster nor versitygw — read backups directly off the Btrfs share or off B2. This S3 store is independent of and complementary to the existing Velero/Longhorn NFS backup at `nfs://10.32.25.5:/volume1/backups-k8s-prod` (that protects the cluster; this is the clean, separate DB-backup-of-record target).
+**Recovery posture:** because objects are plain files, a full-cluster-loss restore needs neither the cluster nor versitygw — read backups directly off the Btrfs share or off B2. This S3 store is independent of and complementary to the existing Longhorn NFS backup at `nfs://10.32.25.5:/volume1/backups-k8s-prod/longhorn` (that protects the cluster; this is the clean, separate DB-backup-of-record target).
 
 ## Phased rollout
 
