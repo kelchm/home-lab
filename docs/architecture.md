@@ -37,6 +37,7 @@ coupling every control plane.
 - Longhorn for replicated block storage on NVMe
 - NFS from Synology for bulk storage
 - Flux for GitOps
+- PodDisruptionBudgets with `maxUnavailable: 1` on the multi-replica login and ingress path: kanidm (3 replicas), each Traefik instance (2) and CoreDNS (2). A drain evicts one replica of each at a time. Single-replica workloads have no budget, because one would only block drains; the `talos-rollout` skill plans those moves, and CloudNativePG adds its own primary budgets.
 
 **DGX Spark hosts:** two standalone systems on the Workloads and Storage VLANs,
 with one closed, non-routed ConnectX-7 link. Applied state and recovery are in

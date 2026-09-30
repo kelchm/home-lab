@@ -19,6 +19,8 @@ spec:
       name: kube-dns
       clusterIP: "10.43.0.10"
     replicaCount: 2
+    podDisruptionBudget:
+      maxUnavailable: 1
 
     servers:
       # Deliberately route the household/internal zone directly to UniFi.

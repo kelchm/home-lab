@@ -4,6 +4,7 @@ kind: Kustomization
 resources:
   - ./certificate.yaml
   - ./kanidm.yaml
+  - ./poddisruptionbudget.yaml
   - ./group-arr-admins.yaml
   - ./group-ops-admins.yaml
   - ./person-kelchm.yaml
