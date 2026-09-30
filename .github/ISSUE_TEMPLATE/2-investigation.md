@@ -1,6 +1,7 @@
 ---
 name: Investigation
 about: Resolve a question through research, diagnosis, or a bounded evaluation.
+labels: kind/investigation
 ---
 
 <!-- Keep the body easy to scan: the question, brief context, investigation tasks, and a clear finish. Link detailed research; keep decision criteria and experimental boundaries here. Routine implementation choices can stay in a work item. -->

@@ -1,44 +1,51 @@
 ---
-area/bootstrap:
+area/devices:
   - changed-files:
       - any-glob-to-any-file:
-          - bootstrap/**/*
+          - devices/**
 area/docs:
   - changed-files:
       - any-glob-to-any-file:
           - README.md
-          - docs/**/*
-area/github:
-  - changed-files:
-      - any-glob-to-any-file:
-          - .github/**/*
+          - assets/**
+          - docs/**
 area/kubernetes:
   - changed-files:
       - any-glob-to-any-file:
-          - kubernetes/**/*
-area/mise:
+          - bootstrap/**
+          - kubernetes/**
+          - .taskfiles/bootstrap/**
+area/network:
   - changed-files:
       - any-glob-to-any-file:
-          - .mise.toml
-area/renovate:
+          - network/**
+area/proxmox:
   - changed-files:
       - any-glob-to-any-file:
-          - .renovate/**/*
-          - .renovaterc.json5
-area/scripts:
+          - proxmox/**
+area/sparks:
   - changed-files:
       - any-glob-to-any-file:
-          - scripts/**/*
+          - sparks/**
+          - .taskfiles/sparks/**
 area/synology:
   - changed-files:
       - any-glob-to-any-file:
-          - synology/**/*
+          - synology/**
+          - scripts/synology/**
 area/talos:
   - changed-files:
       - any-glob-to-any-file:
-          - talos/**/*
-area/taskfile:
+          - talos/**
+          - .taskfiles/talos/**
+area/tooling:
   - changed-files:
       - any-glob-to-any-file:
-          - .taskfiles/**/*
+          # Root dotfiles and dot-directories: CI, Renovate, mise, SOPS, Taskfiles, agent config
+          - ".*"
+          - ".*/**"
+          - AGENTS.md
+          - CLAUDE.md
           - Taskfile.yaml
+          - scripts/**
+          - tools/**

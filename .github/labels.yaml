@@ -1,56 +1,67 @@
 ---
-# Areas
-- name: area/bootstrap
-  color: "0e8a16"
+# Areas: the systems a change touches. Labeler sets them on PRs; apply by hand on issues.
+- name: area/devices
+  color: "bfd4f2"
+  description: "Standalone appliances under devices/, such as the GLKVM"
 - name: area/docs
-  color: "0e8a16"
-- name: area/github
-  color: "0e8a16"
+  color: "bfd4f2"
+  description: "Cross-cutting documentation: README and docs/"
 - name: area/kubernetes
-  color: "0e8a16"
-- name: area/mise
-  color: "0e8a16"
+  color: "bfd4f2"
+  description: "Kubernetes clusters: workloads, Flux, and cluster bootstrap"
+  aliases: ["area/bootstrap"]
 - name: area/network
-  color: "0e8a16"
-  description: "Networking: UniFi controller, VLANs, firewall, switching, DNS"
-- name: area/renovate
-  color: "0e8a16"
-- name: area/scripts
-  color: "0e8a16"
+  color: "bfd4f2"
+  description: "Networking: UniFi controller, VLANs, firewall, switching, DNS, remote access"
+- name: area/proxmox
+  color: "bfd4f2"
+  description: "Proxmox VE cluster hosts and guests"
+- name: area/sparks
+  color: "bfd4f2"
+  description: "DGX Spark hosts and inference workloads"
 - name: area/synology
-  color: "0e8a16"
+  color: "bfd4f2"
+  description: "Synology NAS: DSM, storage, and doco-cd Compose projects"
 - name: area/talos
-  color: "0e8a16"
-- name: area/templates
-  color: "0e8a16"
-- name: area/taskfile
-  color: "0e8a16"
-# Work Kinds
+  color: "bfd4f2"
+  description: "Talos machine config, upgrades, and k8s-prod node hardware"
+- name: area/tooling
+  color: "bfd4f2"
+  description: "Repo automation: CI, Renovate, mise, Taskfile, scripts, tools, agent skills"
+  aliases: ["area/mise", "area/github", "area/renovate", "area/scripts", "area/taskfile"]
+# Kinds: optional, at most one per issue
+- name: kind/bug
+  color: "5319e7"
+  description: "Something is broken or behaves differently than intended"
 - name: kind/deployment
   color: "5319e7"
   description: "Deploy a new application, service, or infrastructure workload"
-# Priority
+- name: kind/investigation
+  color: "5319e7"
+  description: "Resolve a question through research, diagnosis, or evaluation"
+# Priority: exactly one per open issue
 - name: priority/critical
   color: "5c0000"
   description: "Blocks or silently invalidates other work"
 - name: priority/high
   color: "b60205"
+  description: "Real risk or recurring pain; do soon"
 - name: priority/medium
   color: "fbca04"
+  description: "Worthwhile improvement or risk reduction"
 - name: priority/low
   color: "0e8a16"
-# Renovate Types
+  description: "Nice to have; do opportunistically"
+# Renovate Types: set by Renovate (.renovaterc.json5)
 - name: renovate/container
   color: "027fa0"
 - name: renovate/github-action
-  color: "027fa0"
-- name: renovate/grafana-dashboard
   color: "027fa0"
 - name: renovate/github-release
   color: "027fa0"
 - name: renovate/helm
   color: "027fa0"
-# Semantic Types
+# Semantic Types: set by Renovate (.renovaterc.json5)
 - name: type/digest
   color: "ffeC19"
 - name: type/patch
@@ -59,8 +70,7 @@
   color: "ff9800"
 - name: type/major
   color: "f6412d"
-# Uncategorized
-- name: community
-  color: "370fb2"
+# Status
 - name: hold
   color: "ee0701"
+  description: "Parked on a named blocker or revisit trigger; on a PR, do not merge"
