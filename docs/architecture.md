@@ -385,7 +385,8 @@ Cluster-wide values are written as literals wherever they are used, so searching
 
 | Constant | Value | Notes |
 |---|---|---|
-| Service domain | `home.kelch.io` | Cloudflare-published names use the apex `kelch.io`; see [DNS Plan](#dns-plan) |
+| Service domain | `home.kelch.io` | LAN admin and household routes and the `*.home.kelch.io` certificate; see [DNS Plan](#dns-plan) |
+| Public apex | `kelch.io` | ClusterIssuer and k8s-gateway zone, Cloudflare DNS and tunnel, and the `*.kelch.io` certificate (`kelch-io-production-tls`) |
 | Timezone | `America/New_York` | Container `TZ` and CronJob `timeZone`; Longhorn RecurringJobs run in UTC ([backup runbook](runbooks/longhorn-backup-restore.md)) |
 | NAS storage address | `10.32.25.5` (`nas-storage`) | NFS PVs and the Longhorn BackupTarget; see [Storage VLAN registry](#storage-vlan-registry) |
 | NAS management address | `10.32.20.5` (`nas`) | DSM and container UIs |
