@@ -465,7 +465,7 @@ Completed by PRs #526 and #528 on 2026-09-06.
 #### Phase 1D — estate label migration
 
 - **Kubernetes sources labelled explicitly (#630, 2026-09-27).** A default scrape class and rule-group labels reproduce every existing label, with no new series identities and no rule-ID changes.
-- **Global defaults removed (#628).** vmagent's `externalLabels.cluster` went with #630 and vmalert's with #631. vmalert now adds `evaluator=vmalert` through notifier relabeling rather than an external label, so neither stored alerts nor recording-rule output carry it.
+- **Global defaults removed (#628).** vmagent's `externalLabels.cluster` went with #630 and vmalert's with #631. vmalert now adds `evaluator=vmalert` through notifier relabeling rather than an external label, so vmalert writes it to neither `ALERTS` nor recording-rule output.
 - **Deferred:** `site=home` until a second site exists, and fixed log fields until the first non-Kubernetes log source. vlagent already stamps `cluster=k8s-prod` on log rows.
 
 **Gate:** Kubernetes series, alerts, and new log rows retain correct identity without either metric global cluster default; #628 records the live verification. Standalone and PVE targets are checked when the first one is added in Phase 2: standalone targets stay clusterless, and PVE targets carry only `cluster=pve-sbx`.
