@@ -368,7 +368,19 @@ To repeat the drill:
 - Run `postgres -D /var/lib/postgresql/data/pgdata` as uid 26 with `-c ssl=off -c archive_mode=off -c logging_collector=off -c log_destination=stderr -c unix_socket_directories=/tmp -c listen_addresses=`, because CNPG's configuration points at `/controller` paths that exist only in CNPG pods.
 - Pod Security `baseline` rejects added capabilities. A root container with the default capability set can read the app volume.
 
+## Rollback retired (2026-09-30)
+
+After the restore drill, the Athena rollback path was removed:
+- the `vss`, `pdb` and `visionect-redis-1` containers
+- their seven anonymous volumes and the `visionect_default` network
+- `/volume1/docker/dockerge/`, which held the source `pgdata` and the final dump `migration/20260822T220805`
+- the `visionect/visionect-server-v3:7.6.5`, `postgres:latest` and `redis:latest` images
+
+Recovery now relies on the in-cluster Longhorn backups of `visionect` and `visionect-db-1`. [Restore drill](#restore-drill-2026-09-30) records the procedure.
+
 ## Rollback
+
+Retired on 2026-09-30: the Athena source no longer exists, so these steps cannot be run. They remain as a record of the cutover plan.
 
 The source database is unchanged after the source VSS stops. If any target gate
 fails:
