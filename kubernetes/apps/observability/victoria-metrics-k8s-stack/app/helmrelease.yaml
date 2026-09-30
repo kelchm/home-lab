@@ -285,6 +285,10 @@ spec:
             "cluster_verb_scope_le:apiserver_request_sli_duration_seconds_bucket:increase30d":
               spec:
                 expr: sum((avg_over_time(cluster_verb_scope_le:apiserver_request_sli_duration_seconds_bucket:increase1h{evaluator=""}[30d]) * 24) * 30) by(cluster,verb,scope,le)
+        # count:up0/count:up1 have no consumers, and count:up0 is empty while
+        # every target is up, which keeps RecordingRulesNoData firing.
+        kube-prometheus-general.rules:
+          enabled: false
       rules:
         # Talos uses Cilium kube-proxy replacement, so this component is
         # intentionally absent. KPS disables the matching scrape and rule too.
