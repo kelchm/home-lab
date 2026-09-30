@@ -59,6 +59,7 @@ spec:
         endpoints:
           - port: http
     route:
+      # Intentionally public and unauthenticated: a canary for the public gateway path.
       app:
         hostnames: ["{{ .Release.Name }}.kelch.io"]
         parentRefs:
