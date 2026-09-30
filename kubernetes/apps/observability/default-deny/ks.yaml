@@ -20,10 +20,6 @@ spec:
     - name: victoria-metrics-k8s-stack
   interval: 1h
   path: ./kubernetes/apps/observability/default-deny/app
-  postBuild:
-    substituteFrom:
-      - name: cluster-secrets
-        kind: Secret
   prune: true
   sourceRef:
     kind: GitRepository

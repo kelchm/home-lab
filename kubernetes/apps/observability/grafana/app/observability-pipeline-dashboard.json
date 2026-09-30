@@ -99,7 +99,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "$${datasource}"
+        "uid": "${datasource}"
       },
       "description": "Webhook deliveries from Alertmanager in the last 10 minutes, excluding failed attempts; healthchecks.io is the only webhook receiver. Expect about 5, one every two minutes. healthchecks.io pages if none arrives for 10 minutes.",
       "id": 1,
@@ -115,7 +115,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "$${datasource}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "(sum(increase(alertmanager_notifications_total{integration=\"webhook\"}[10m])) - (sum(increase(alertmanager_notifications_failed_total{integration=\"webhook\"}[10m])) or vector(0))) and on() (max(up{job=\"vmalertmanager-victoria-metrics-k8s-stack\"}) == 1)",
@@ -174,7 +174,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "$${datasource}"
+        "uid": "${datasource}"
       },
       "description": "Failed Alertmanager deliveries to any integration in the last hour. Expect 0.",
       "id": 2,
@@ -190,7 +190,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "$${datasource}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "sum(increase(alertmanager_notifications_failed_total[1h])) and on() (max(up{job=\"vmalertmanager-victoria-metrics-k8s-stack\"}) == 1)",
@@ -245,7 +245,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "$${datasource}"
+        "uid": "${datasource}"
       },
       "description": "Critical and warning alerts currently firing; both route to Pushover. Shows no data when vmalert's always-firing Watchdog is missing, because then vmalert is not evaluating.",
       "id": 3,
@@ -261,7 +261,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "$${datasource}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "(count(ALERTS{alertstate=\"firing\",severity=\"critical\"}) or vector(0)) and on() count(ALERTS{alertname=\"Watchdog\",alertstate=\"firing\"})",
@@ -273,7 +273,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "$${datasource}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "(count(ALERTS{alertstate=\"firing\",severity=\"warning\"}) or vector(0)) and on() count(ALERTS{alertname=\"Watchdog\",alertstate=\"firing\"})",
@@ -353,7 +353,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "$${datasource}"
+        "uid": "${datasource}"
       },
       "description": "Silenced alerts do not notify. Never silence Watchdog: healthchecks.io pages after about 10 minutes.",
       "id": 4,
@@ -369,7 +369,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "$${datasource}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "max(alertmanager_silences{state=\"active\"}) and on() (max(up{job=\"vmalertmanager-victoria-metrics-k8s-stack\"}) == 1)",
@@ -424,7 +424,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "$${datasource}"
+        "uid": "${datasource}"
       },
       "description": "vmagent scrape targets whose last scrape failed; the Scrape targets down table names them. Shows no data when no scrape results arrive at all.",
       "id": 5,
@@ -440,7 +440,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "$${datasource}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "(count(up == 0) or vector(0)) and on() count(up)",
@@ -495,7 +495,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "$${datasource}"
+        "uid": "${datasource}"
       },
       "description": "Rows VictoriaLogs received through native ingestion in the last 10 minutes, including any it then rejected (see Log loss). 0 means log collection or ingestion has stopped; VictoriaLogsIngestionSilent fires after 15 minutes.",
       "id": 6,
@@ -511,7 +511,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "$${datasource}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "sum(increase(vl_rows_ingested_total{job=\"victoria-logs-single-server\",type=\"nativeinsert\"}[10m]))",
@@ -579,7 +579,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "$${datasource}"
+        "uid": "${datasource}"
       },
       "id": 8,
       "title": "Scrape targets down",
@@ -595,7 +595,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "$${datasource}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "up == 0",
@@ -645,7 +645,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "$${datasource}"
+        "uid": "${datasource}"
       },
       "description": "Rows VMSingle inserted per second, across all ingestion paths.",
       "id": 9,
@@ -661,7 +661,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "$${datasource}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "sum(rate(vm_rows_inserted_total[$__rate_interval]))",
@@ -739,7 +739,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "$${datasource}"
+        "uid": "${datasource}"
       },
       "description": "Bytes vmagent has scraped but not yet delivered to VMSingle. Expect 0; a growing queue means VMSingle is not accepting writes.",
       "id": 10,
@@ -755,7 +755,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "$${datasource}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "sum(vmagent_remotewrite_pending_data_bytes)",
@@ -833,7 +833,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "$${datasource}"
+        "uid": "${datasource}"
       },
       "description": "Series VMSingle created for the first time. Pod restarts and rollouts cause short bursts; a sustained rise means label churn.",
       "id": 11,
@@ -849,7 +849,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "$${datasource}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "sum(rate(vm_new_timeseries_created_total[$__rate_interval])) * 60",
@@ -927,7 +927,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "$${datasource}"
+        "uid": "${datasource}"
       },
       "description": "Share of inserted rows that missed VMSingle's series cache, over 5 minutes: TooHighSlowInsertsRate's expression. The line marks its 5% threshold, which must hold for 15 minutes to fire.",
       "id": 12,
@@ -943,7 +943,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "$${datasource}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "sum(rate(vm_slow_row_inserts_total[5m])) / sum(rate(vm_rows_inserted_total[5m]))",
@@ -1025,7 +1025,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "$${datasource}"
+        "uid": "${datasource}"
       },
       "description": "Free space on the VMSingle and VictoriaLogs volumes. The line marks VictoriaLogsDiskSpaceLow's 10% threshold.",
       "id": 13,
@@ -1041,7 +1041,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "$${datasource}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "min(kubelet_volume_stats_available_bytes{namespace=\"observability\",persistentvolumeclaim=\"vmsingle-victoria-metrics-k8s-stack\"} / kubelet_volume_stats_capacity_bytes{namespace=\"observability\",persistentvolumeclaim=\"vmsingle-victoria-metrics-k8s-stack\"})",
@@ -1052,7 +1052,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "$${datasource}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "min(kubelet_volume_stats_available_bytes{namespace=\"observability\",persistentvolumeclaim=\"server-volume-victoria-logs-single-server-0\"} / kubelet_volume_stats_capacity_bytes{namespace=\"observability\",persistentvolumeclaim=\"server-volume-victoria-logs-single-server-0\"})",
@@ -1148,7 +1148,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "$${datasource}"
+        "uid": "${datasource}"
       },
       "description": "Errors per interval. Expect all four at 0.",
       "id": 15,
@@ -1164,7 +1164,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "$${datasource}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "sum(increase({__name__=~\"vmalert_(alerting|recording)_rules_errors_total\"}[$__interval]))",
@@ -1175,7 +1175,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "$${datasource}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "sum(increase(vmalert_iteration_missed_total[$__interval]))",
@@ -1186,7 +1186,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "$${datasource}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "sum(increase(vmalert_alerts_send_errors_total[$__interval]))",
@@ -1197,7 +1197,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "$${datasource}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "sum(increase(vmalert_remotewrite_errors_total[$__interval]))",
@@ -1277,7 +1277,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "$${datasource}"
+        "uid": "${datasource}"
       },
       "description": "Firing alerts, excluding Watchdog and InfoInhibitor. Info alerts are not delivered.",
       "id": 16,
@@ -1293,7 +1293,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "$${datasource}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "count by (severity) (ALERTS{alertstate=\"firing\",alertname!~\"Watchdog|InfoInhibitor\"})",
@@ -1418,7 +1418,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "$${datasource}"
+        "uid": "${datasource}"
       },
       "description": "Alertmanager notifications per interval for each integration that has attempted one; delivered excludes failed attempts. webhook is the Watchdog heartbeat to healthchecks.io; pushover is paging.",
       "id": 17,
@@ -1434,7 +1434,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "$${datasource}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "(sum by (integration) (increase(alertmanager_notifications_total[$__interval])) - sum by (integration) (increase(alertmanager_notifications_failed_total[$__interval]))) and on (integration) (sum by (integration) (alertmanager_notifications_total) > 0)",
@@ -1445,7 +1445,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "$${datasource}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "sum by (integration) (increase(alertmanager_notifications_failed_total[$__interval])) and on (integration) (sum by (integration) (alertmanager_notifications_total) > 0)",
@@ -1554,7 +1554,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "$${datasource}"
+        "uid": "${datasource}"
       },
       "description": "Rows vlagent read from container logs on each node, and rows VictoriaLogs received. Received should track the sum of collected.",
       "id": 19,
@@ -1570,7 +1570,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "$${datasource}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "sum by (node) (rate(vl_rows_ingested_total{job=\"vlagent\",type=\"kubernetes_logs\"}[$__rate_interval]))",
@@ -1581,7 +1581,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "$${datasource}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "sum(rate(vl_rows_ingested_total{job=\"victoria-logs-single-server\",type=\"nativeinsert\"}[$__rate_interval]))",
@@ -1659,7 +1659,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "$${datasource}"
+        "uid": "${datasource}"
       },
       "description": "Bytes waiting in each node's persistent queue for VictoriaLogs. The line marks VlagentBufferNearCapacity at 3 GiB of the 4 GiB budget.",
       "id": 20,
@@ -1675,7 +1675,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "$${datasource}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "sum by (node) (vlagent_remotewrite_pending_data_bytes{job=\"vlagent\"})",
@@ -1757,7 +1757,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "$${datasource}"
+        "uid": "${datasource}"
       },
       "description": "Log data lost per interval, by pipeline stage and reason. Expect nothing above 0.",
       "id": 21,
@@ -1773,7 +1773,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "$${datasource}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "sum(increase(vm_persistentqueue_blocks_dropped_total{job=\"vlagent\"}[$__interval]))",
@@ -1784,7 +1784,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "$${datasource}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "sum(increase(vlagent_remotewrite_packets_dropped_total{job=\"vlagent\"}[$__interval]))",
@@ -1795,7 +1795,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "$${datasource}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "sum by (reason) (increase(vl_rows_dropped_total{job=\"vlagent\",reason!=\"debug\"}[$__interval]))",
@@ -1806,7 +1806,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "$${datasource}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "sum by (reason) (increase(vl_rows_dropped_total{job=\"victoria-logs-single-server\",reason!=\"debug\"}[$__interval]))",

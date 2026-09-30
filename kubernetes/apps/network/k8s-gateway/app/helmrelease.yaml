@@ -10,7 +10,7 @@ spec:
   interval: 1h
   values:
     fullnameOverride: k8s-gateway
-    domain: "${SECRET_DOMAIN}"
+    domain: "kelch.io"
     ttl: 1
     service:
       type: LoadBalancer

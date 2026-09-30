@@ -9,10 +9,8 @@
 # OPS_SUITE_CLIENT_SECRET is set on that pod from the kaniop-emitted
 # Secret in network/.
 #
-# Lives at the namespace top so it is reconciled by `cluster-apps`, which
-# has no postBuild.substituteFrom — the literal ${OPS_SUITE_CLIENT_SECRET}
-# below must survive to the cluster so traefik-oidc-auth can expand it
-# from the pod env at request time.
+# traefik-oidc-auth expands ${OPS_SUITE_CLIENT_SECRET} from the
+# traefik-admin pod env when it reads this Middleware at request time.
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:

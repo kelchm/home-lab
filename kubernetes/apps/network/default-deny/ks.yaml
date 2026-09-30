@@ -21,10 +21,6 @@ spec:
     - name: traefik
   interval: 1h
   path: ./kubernetes/apps/network/default-deny/app
-  postBuild:
-    substituteFrom:
-      - name: cluster-secrets
-        kind: Secret
   prune: true
   sourceRef:
     kind: GitRepository

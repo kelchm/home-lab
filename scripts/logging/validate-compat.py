@@ -118,8 +118,8 @@ def interpolate(query, selection):
     for name in variables:
         values = selection.get(name)
         literal = '*' if values is None else ','.join(json.dumps(value) for value in values)
-        query = query.replace('$${' + name + '}', literal)
-    assert '$${' not in query, query
+        query = query.replace('${' + name + '}', literal)
+    assert '${' not in query, query
     return f'_time:10m fixture_run:="{run}" AND ' + query
 
 

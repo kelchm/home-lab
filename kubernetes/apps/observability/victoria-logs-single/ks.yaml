@@ -13,10 +13,6 @@ spec:
       namespace: observability
   interval: 1h
   path: ./kubernetes/apps/observability/victoria-logs-single/app
-  postBuild:
-    substituteFrom:
-      - name: cluster-secrets
-        kind: Secret
   prune: true
   sourceRef:
     kind: GitRepository

@@ -38,7 +38,7 @@ spec:
     sources: ["crd", "gateway-httproute"]
     txtPrefix: k8s.
     txtOwnerId: default
-    domainFilters: ["${SECRET_DOMAIN}"]
+    domainFilters: ["kelch.io"]
     serviceMonitor:
       enabled: true
     podAnnotations:

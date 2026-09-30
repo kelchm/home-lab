@@ -35,13 +35,13 @@ spec:
 ---
 # Public gateway — fronts Cloudflare-tunneled apps. Served by traefik-public
 # (ClusterIP, accessed by cloudflared via service DNS). Hostnames are
-# *.${SECRET_DOMAIN} (i.e., *.kelch.io), so it uses the *.kelch.io cert.
+# *.kelch.io, so it uses the *.kelch.io cert.
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
   name: gateway-public
   annotations:
-    external-dns.kubernetes.io/target: external.${SECRET_DOMAIN}
+    external-dns.kubernetes.io/target: external.kelch.io
 spec:
   gatewayClassName: traefik-public
   listeners:
@@ -60,7 +60,7 @@ spec:
       tls:
         certificateRefs:
           - kind: Secret
-            name: ${SECRET_DOMAIN/./-}-production-tls
+            name: kelch-io-production-tls
 ---
 # Admin gateway — fronts LAN-only operator UIs (Longhorn, Grafana, etc.) at
 # *.home.kelch.io. Uses the *.home.kelch.io cert. No external-dns annotation
@@ -92,13 +92,13 @@ spec:
 ---
 # Services gateway — fronts LAN household-facing apps at *.home.kelch.io
 # (DMZ pattern). Uses the *.home.kelch.io cert. The internal hostname for
-# external-dns is internal.${SECRET_DOMAIN} so we keep that annotation.
+# external-dns is internal.kelch.io so we keep that annotation.
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
   name: gateway-services
   annotations:
-    external-dns.kubernetes.io/target: internal.${SECRET_DOMAIN}
+    external-dns.kubernetes.io/target: internal.kelch.io
 spec:
   gatewayClassName: traefik-services
   listeners:
