@@ -16,3 +16,7 @@ configMapGenerator:
         grafana_dashboard: "1"
       annotations:
         grafana_folder: Hardware
+# Hash suffix disabled so dashboard edits update the ConfigMap in place; the
+# Grafana sidecar removes a dashboard file when a renamed predecessor is pruned.
+generatorOptions:
+  disableNameSuffixHash: true
