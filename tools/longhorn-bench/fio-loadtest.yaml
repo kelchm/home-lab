@@ -96,7 +96,7 @@ spec:
   nodeName: k8s-prod-1
   containers:
     - name: fio
-      image: xridge/fio:latest
+      image: docker.io/xridge/fio:latest@sha256:c58227616c9d2ef4c7d9c762a382d5921608ee3cf4b6aef7d99c4f964089d9c3
       env:
         - name: FIO_RUNTIME
           value: "1h"
@@ -135,7 +135,7 @@ spec:
   nodeName: k8s-prod-2
   containers:
     - name: fio
-      image: xridge/fio:latest
+      image: docker.io/xridge/fio:latest@sha256:c58227616c9d2ef4c7d9c762a382d5921608ee3cf4b6aef7d99c4f964089d9c3
       env:
         - name: FIO_RUNTIME
           value: "1h"
@@ -174,7 +174,7 @@ spec:
   nodeName: k8s-prod-3
   containers:
     - name: fio
-      image: xridge/fio:latest
+      image: docker.io/xridge/fio:latest@sha256:c58227616c9d2ef4c7d9c762a382d5921608ee3cf4b6aef7d99c4f964089d9c3
       env:
         - name: FIO_RUNTIME
           value: "1h"
