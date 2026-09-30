@@ -5,7 +5,6 @@ namespace: identity
 
 components:
   - ../../components/pod-quota
-  - ../../components/sops
 
 resources:
   - ./namespace.yaml

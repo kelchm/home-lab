@@ -5,7 +5,6 @@ namespace: network-perf
 
 components:
   - ../../components/pod-quota
-  - ../../components/sops
 
 resources:
   - ./namespace.yaml
