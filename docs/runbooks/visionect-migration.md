@@ -352,6 +352,22 @@ printf '%s\n' "$visionect_cutover_dir"
 - Keep the source containers and final migration artifacts through at least
   2026-08-30 and one successful restore drill before retiring rollback.
 
+## Restore drill (2026-09-30)
+
+The nightly Longhorn backups restore to a working Visionect data set. This is the successful restore drill the post-cutover retention condition requires.
+
+- **Restored:** `backup-b8c4d30bda6b4978` of `visionect-db-1` (07:02 UTC, 3.7 GB) and `backup-33e02874eb3340fb` of `visionect` (07:00 UTC) into new single-replica Longhorn volumes in a disposable namespace. Production volumes and pods were not touched.
+- **Database:** PostgreSQL 17.11 from the production CNPG image started on the restored data directory and completed crash recovery from the snapshot's WAL. `device` 9, `session` 10, `settings` 4, 14 public tables, and `schema_migrations` version 5 not dirty all matched production at the same moment. `device_events` (3,244,778) and `status` (3,998,330) fell between the cutover counts and the live counts (3,245,901 and 3,999,787). `pg_amcheck --heapallindexed` exited 0.
+- **App volume:** `config/config.json` and `customfonts/.uuid` had the same SHA-256 as production; `ac_apps`, `certs` and `devices` were empty in both.
+- **Cleanup:** the drill pod, claims, PVs, Longhorn volumes and namespace were deleted, and no backups of the drill volumes were created.
+
+To repeat the drill:
+
+- Create a Longhorn `Volume` with `spec.fromBackup` set to the backup's `status.url`, one replica, and a `recurring-job-group.longhorn.io/<unused-group>: enabled` label. Without a group label, Longhorn applies the `default` recurring jobs and backs the drill volume up. Bind it with a static PV (`driver.longhorn.io`, `volumeHandle` set to the volume name, reclaim policy `Retain`) and a matching claim.
+- Do not set a pod `fsGroup`. Kubelet's recursive ownership change leaves `pgdata` group-writable, and PostgreSQL refuses to start until it is `0700` again.
+- Run `postgres -D /var/lib/postgresql/data/pgdata` as uid 26 with `-c ssl=off -c archive_mode=off -c logging_collector=off -c log_destination=stderr -c unix_socket_directories=/tmp -c listen_addresses=`, because CNPG's configuration points at `/controller` paths that exist only in CNPG pods.
+- Pod Security `baseline` rejects added capabilities. A root container with the default capability set can read the app volume.
+
 ## Rollback
 
 The source database is unchanged after the source VSS stops. If any target gate
