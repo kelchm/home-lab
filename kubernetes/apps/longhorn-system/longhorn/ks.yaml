@@ -16,10 +16,6 @@ spec:
       namespace: longhorn-system
   interval: 1h
   path: ./kubernetes/apps/longhorn-system/longhorn/app
-  postBuild:
-    substituteFrom:
-      - name: cluster-secrets
-        kind: Secret
   prune: true
   sourceRef:
     kind: GitRepository

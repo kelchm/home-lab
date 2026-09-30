@@ -6,7 +6,6 @@
 # hardlink-across-subdirs requirement that *arr atomic imports rely on.
 #
 # Server is the NAS storage NIC IP (matching the Longhorn BackupTarget pattern).
-# Swap to a DNS hostname when nas-storage.home.kelch.io is published.
 #
 # storageClassName is a non-empty string that does NOT resolve to a real
 # StorageClass — required to prevent a default-class binding race during

@@ -69,10 +69,10 @@ spec:
         data:
           config.yaml: |-
             ingress:
-              - hostname: "*.${SECRET_DOMAIN}"
+              - hostname: "*.kelch.io"
                 originRequest:
                   http2Origin: true
-                  originServerName: external.${SECRET_DOMAIN}
+                  originServerName: external.kelch.io
                 service: https://traefik-public.{{ .Release.Namespace }}.svc.cluster.local:443
               - service: http_status:404
     persistence:

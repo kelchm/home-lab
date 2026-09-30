@@ -5,6 +5,6 @@ metadata:
   name: cloudflare-tunnel
 spec:
   endpoints:
-    - dnsName: "external.${SECRET_DOMAIN}"
+    - dnsName: "external.kelch.io"
       recordType: CNAME
       targets: ["c863a55d-d577-4ab2-b14c-396d2da3e07f.cfargotunnel.com"]

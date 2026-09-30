@@ -8,10 +8,6 @@ spec:
     - name: media-storage
   interval: 1h
   path: ./kubernetes/apps/media/radarr/app
-  postBuild:
-    substituteFrom:
-      - name: cluster-secrets
-        kind: Secret
   prune: true
   sourceRef:
     kind: GitRepository

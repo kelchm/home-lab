@@ -379,6 +379,26 @@ jellyfin-sbx.home.kelch.io          10.32.141.50
 
 **Certs:** cert-manager with DNS-01 challenge → wildcard `*.home.kelch.io`. Each cluster issues independently; both certs valid simultaneously (no coordination needed).
 
+## Shared constants
+
+Cluster-wide values are written as literals wherever they are used, so searching for a hostname or address finds every manifest that uses it. This table is their registry.
+
+| Constant | Value | Notes |
+|---|---|---|
+| Service domain | `home.kelch.io` | Cloudflare-published names use the apex `kelch.io`; see [DNS Plan](#dns-plan) |
+| Timezone | `America/New_York` | Container `TZ` and CronJob `timeZone`; Longhorn RecurringJobs run in UTC ([backup runbook](runbooks/longhorn-backup-restore.md)) |
+| NAS storage address | `10.32.25.5` (`nas-storage`) | NFS PVs and the Longhorn BackupTarget; see [Storage VLAN registry](#storage-vlan-registry) |
+| NAS management address | `10.32.20.5` (`nas`) | DSM and container UIs |
+
+Flux post-build substitution is not used. Reserve it for values that differ between deployments sharing the same manifests, such as the `-sbx` hostname suffix a second cluster would need. When it returns:
+
+- Keep the values in a plaintext ConfigMap holding only what varies; SOPS hides them from PR diffs and CI.
+- Set `substituteFrom` only on Kustomizations that consume a variable.
+- Mark resources that embed scripts or dashboards `kustomize.toolkit.fluxcd.io/substitute: disabled`.
+- Add a pre-merge check that loads the declared inputs, honors that annotation, and fails on undefined variables as the controller's strict mode does. flux-local renders undefined variables as `null`.
+
+The evidence behind this rule is in [#53](https://github.com/kelchm/home-lab/issues/53).
+
 ## BGP
 
 - Prod cluster ASN: **65020**. UniFi gateway ASN: **65000**. Future sandbox ASN: **65021**.
