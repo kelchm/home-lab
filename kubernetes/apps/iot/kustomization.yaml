@@ -5,7 +5,6 @@ namespace: iot
 
 components:
   - ../../components/pod-quota
-  - ../../components/sops
 
 resources:
   - ./namespace.yaml
