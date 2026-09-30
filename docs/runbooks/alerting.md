@@ -15,7 +15,7 @@ Alertmanager routes as follows:
 | `alertname="Watchdog"` and `evaluator="vmalert"` | `healthchecks-watchdog` webhook to healthchecks.io | 1 minute | None |
 | Everything else | `null` | N/A | N/A |
 
-vmalert is the delivery authority and the cluster's only rule evaluator. It attaches `evaluator=vmalert` to every alert and sends to VMAlertmanager; `cluster` comes from each rule group, as described in [Cluster labels](#cluster-labels). The SOPS-encrypted `vmalertmanager-config` Secret owns VMAlertmanager routing, the Pushover application token/user key, and the healthchecks.io ping URL. Do not put any of these credentials in Helm values, shell history, issue comments, or screenshots.
+vmalert is the delivery authority and the cluster's only rule evaluator. Its notifier configuration (`vmalert.additionalNotifierConfigs`) adds `evaluator=vmalert` to every alert it sends to VMAlertmanager. The label exists only on notifications: vmalert does not write it to `ALERTS` or recording-rule output, so joins between raw and recorded series need no `ignoring(evaluator)`. `cluster` comes from each rule group, as described in [Cluster labels](#cluster-labels). The SOPS-encrypted `vmalertmanager-config` Secret owns VMAlertmanager routing, the Pushover application token/user key, and the healthchecks.io ping URL. Do not put any of these credentials in Helm values, shell history, issue comments, or screenshots.
 
 Use a source-specific Pushover application for each independent alert producer. Kubernetes uses `k8s-prod Alerts`; a future Proxmox setup should use a separate application such as `pve-prod Alerts` rather than sharing this token. Both applications can deliver to the same Pushover user and devices while retaining distinct names, icons, quotas, audit history, and revocation boundaries.
 
@@ -205,7 +205,7 @@ Expected results: `1` for kube-state-metrics, `3` for node-exporter and each Tal
 Check the rest of the signal path with:
 
 ```promql
-ALERTS{alertstate="firing",severity=~"warning|critical",evaluator="vmalert"}
+ALERTS{alertstate="firing",severity=~"warning|critical"}
 alertmanager_config_last_reload_successful{job="vmalertmanager-victoria-metrics-k8s-stack"}
 alertmanager_notifications_failed_total{job="vmalertmanager-victoria-metrics-k8s-stack",integration=~"pushover|webhook"}
 longhorn_backup_target_available{backup_target="default"}
