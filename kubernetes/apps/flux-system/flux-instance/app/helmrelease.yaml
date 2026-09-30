@@ -19,6 +19,7 @@ spec:
         - kustomize-controller
         - helm-controller
         - notification-controller
+      # Anonymous HTTPS: sync requires this repository to stay public.
       sync:
         kind: GitRepository
         url: "https://github.com/kelchm/home-lab.git"

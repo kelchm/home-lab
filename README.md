@@ -11,6 +11,8 @@ life as a fork of [onedr0p/cluster-template](https://github.com/onedr0p/cluster-
 and has diverged substantially since. Borrow freely; nothing here is meant to be
 a drop-in template.
 
+Public is also a runtime dependency: Flux and Athena's doco-cd both pull `main` anonymously over HTTPS, so making the repository private would stop both until each is given a read credential.
+
 ## 🧰 What it runs on
 
 | Role | Hardware | Specs |
