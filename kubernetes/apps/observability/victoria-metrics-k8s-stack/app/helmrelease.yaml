@@ -247,14 +247,19 @@ spec:
 
     vmalert:
       enabled: true
+      # `evaluator` is the VMAlertmanager routing authority. It is added to
+      # notifications only: as an external label it would also land on
+      # recording-rule output and break one-to-one joins with raw series.
+      additionalNotifierConfigs:
+        alert_relabel_configs:
+          - target_label: evaluator
+            replacement: vmalert
       spec:
         selectAllByDefault: true
         evaluationInterval: 30s
-        # The evaluator label is the VMAlertmanager routing authority. Rule
-        # groups set `cluster` themselves, so rules about systems outside the
-        # cluster don't inherit it.
-        externalLabels:
-          evaluator: vmalert
+        # null omits the field. Rule groups set `cluster` themselves, so rules
+        # about systems outside the cluster don't inherit it.
+        externalLabels: null
         resources:
           requests:
             cpu: 50m
@@ -272,12 +277,14 @@ spec:
       groups:
         kube-apiserver-availability.rules:
           rules:
-            # The evaluator label changes the output identity of every
-            # recording rule. Start this long-range estimate from the VM
-            # identity instead of merging the retained pre-cutover output.
+            # These 30-day estimates read only series without `evaluator`.
+            # Retained output that carries it would be counted twice.
             "code_verb:apiserver_request_total:increase30d":
               spec:
-                expr: avg_over_time(code_verb:apiserver_request_total:increase1h{evaluator="vmalert"}[30d]) * 24 * 30
+                expr: avg_over_time(code_verb:apiserver_request_total:increase1h{evaluator=""}[30d]) * 24 * 30
+            "cluster_verb_scope_le:apiserver_request_sli_duration_seconds_bucket:increase30d":
+              spec:
+                expr: sum((avg_over_time(cluster_verb_scope_le:apiserver_request_sli_duration_seconds_bucket:increase1h{evaluator=""}[30d]) * 24) * 30) by(cluster,verb,scope,le)
       rules:
         # Talos uses Cilium kube-proxy replacement, so this component is
         # intentionally absent. KPS disables the matching scrape and rule too.
