@@ -1,0 +1,64 @@
+---
+# iperf3 servers on every node's host network, for measuring underlay NIC
+# throughput between nodes rather than the CNI overlay. The servers accept
+# unauthenticated connections on TCP/5201, so apply this only for a test and
+# delete it afterwards. Deleting the file also removes the namespace.
+#
+# Usage:
+#   kubectl apply -f tools/iperf3/iperf3.yaml
+#   kubectl -n network-perf rollout status daemonset/iperf3
+#   client=$(kubectl -n network-perf get pod -l app.kubernetes.io/name=iperf3 \
+#     --field-selector spec.nodeName=k8s-prod-1 -o name)
+#   kubectl -n network-perf exec "$client" -- iperf3 -c 10.32.30.12 -t 30
+#   kubectl delete -f tools/iperf3/iperf3.yaml
+#
+# Target another node's address on the network under test, for example
+# 10.32.30.x for the node network or 10.32.25.x for the storage VLAN.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: network-perf
+  labels:
+    # Host networking is prohibited by the baseline Pod Security Standard.
+    pod-security.kubernetes.io/enforce: privileged
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: iperf3
+  namespace: network-perf
+  labels:
+    app.kubernetes.io/name: iperf3
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: iperf3
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: iperf3
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: iperf3
+          image: docker.io/networkstatic/iperf3:latest@sha256:5b99d62400dc1ffd8ac212dba1c576f27ce4df01d6cd3cba0fbdca6850ca1e90
+          args: ["-s"]
+          readinessProbe:
+            tcpSocket:
+              port: 5201
+            initialDelaySeconds: 2
+            periodSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              memory: 256Mi

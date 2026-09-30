@@ -9,11 +9,11 @@ workloads require baseline-prohibited host access:
 | --- | --- |
 | `longhorn-system` | Privileged CSI and storage-engine host access |
 | `media` | qBittorrent's Gluetun sidecar uses `NET_ADMIN` and `/dev/net/tun` |
-| `network-perf` | iperf3 uses the host network to measure the underlay |
 | `observability` | node-exporter uses host namespaces; vlagent reads host log paths and persists node-local queues |
-| `tailscale` | The operator-generated subnet router runs privileged containers |
 
-The five namespace exceptions relax only enforcement. They, and every other
+The on-demand iperf3 tool in [`tools/iperf3/iperf3.yaml`](../../tools/iperf3/iperf3.yaml) creates `network-perf` with the same exception while a test runs, and removes it with the tool.
+
+The three namespace exceptions relax only enforcement. They, and every other
 namespace, retain Talos' cluster-wide `restricted` warn/audit settings so the
 exceptions do not suppress security telemetry. All other namespaces also
 inherit `baseline` enforcement. Existing non-compliant pods are not evicted;
@@ -31,12 +31,12 @@ git pull --ff-only
 flux reconcile kustomization flux-system --with-source
 kubectl wait --for=condition=Ready kustomization --all --all-namespaces --timeout=10m
 
-kubectl get namespace longhorn-system media network-perf observability tailscale \
+kubectl get namespace longhorn-system media observability \
   -L pod-security.kubernetes.io/enforce \
   -L pod-security.kubernetes.io/warn \
   -L pod-security.kubernetes.io/audit
 
-for namespace in longhorn-system media network-perf observability tailscale; do
+for namespace in longhorn-system media observability; do
   namespace_json="$(kubectl get namespace "${namespace}" -o json)" || exit 1
   jq -e '
     .metadata.labels["pod-security.kubernetes.io/enforce"] == "privileged"
@@ -56,7 +56,7 @@ for config in talos/clusterconfig/kubernetes-k8s-prod-*.yaml; do
 done
 ```
 
-The five namespaces must show `privileged` only in the `ENFORCE` column. Their
+The three namespaces must show `privileged` only in the `ENFORCE` column. Their
 `WARN` and `AUDIT` columns must be blank so the Talos `restricted` defaults
 continue to apply.
 
@@ -217,7 +217,7 @@ The rollback has two deliberately ordered phases:
 
 1. Prepare a rollback Talos configuration that restores the
    `cluster.apiServer.admissionControl: {$$patch: delete}` override. Keep all
-   five namespace `enforce: privileged` labels in Git and on the live cluster.
+   three namespace `enforce: privileged` labels in Git and on the live cluster.
    The doubled dollar is intentional in the repository source: Talhelper's
    environment expansion emits the Talos `$patch: delete` directive in the
    rendered patch. Confirm the generated configuration has an empty admission
@@ -240,7 +240,7 @@ The rollback has two deliberately ordered phases:
    `$$patch: delete` state retains the Talos resource with `spec.config: []`;
    it does not make the resource return `NotFound`. Skip nodes that were never
    changed.
-4. Only after no API server enforces the restored policy, remove the five
+4. Only after no API server enforces the restored policy, remove the three
    namespace labels in a second Git change (or complete the original PR
    revert) and let Flux reconcile them.
 
