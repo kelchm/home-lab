@@ -12,9 +12,9 @@ releases:
   - name: cloudflare-dns
     namespace: network
     chart: oci://ghcr.io/home-operations/charts-mirror/external-dns
-    version: 1.21.1
-    # Only CRDs are extracted from this render. `policy` satisfies the values
-    # schema of chart >= 1.22.0 (binary v0.22.0) ahead of a guarded retry.
+    version: 1.22.0
+    # Only CRDs are extracted from this render. The chart's values schema
+    # requires `policy`.
     values:
       - policy: sync
 
