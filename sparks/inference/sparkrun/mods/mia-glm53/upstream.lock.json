@@ -1,13 +1,13 @@
 {
   "repository": "MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks",
-  "revision": "674155dec2f2f62bb879801b5ce2cfc759a0bebf",
+  "revision": "6278ecb01034cea9ef6de0f851d09fccafe3e835",
   "files": {
     "overlay/patch_cold_load_uma.py": "42a9504353c13e6f6ed6fd901d736e8246625d6df451a1f27c876d9e66d99486",
     "overlay/patch_skip_cudagraph_profile.py": "f2d5abb4598e141fccb53b02144e36a3c841209e7114572d1576fd5520c2094c",
     "overlay/patch_glm_video_placeholders.py": "68a27e9030ef1c2c750727a651107020d700cb5305e02fd2f3e6c95c6017ea10",
     "overlay/patch_suppress_stops_in_reasoning.py": "14602ea4350bad1eb8a6e76de3e17e2d5ef1229340bcd199351e20334f5e15d7",
-    "overlay/patch_scheduler_decode_floor.py": "763bd30eeb24241e2c627819082be3550e7d336de1ee37a93170cb4f3b4e2285",
-    "overlay/patch_mamba_align_chunking.py": "78e4b754b70fa474306a410d753614e4ba5965ef44e53abc864a493c6f193b89",
+    "overlay/patch_scheduler_decode_floor.py": "30e87cb1e99750e1fac674c8244db5b2f0caab0369d5b920d644c1d8402561c2",
+    "overlay/patch_mamba_align_chunking.py": "4ed12013ed8091d711350ed2dac838ad9988c3c8b7350b9f4e67ec8cabe89e04",
     "overlay/patch_glm5_drafter_group.py": "56cea092c1bd80de80ba844a151b38e898186854ccb8debebc12d6b1d2f07ece",
     "overlay/patch_hybrid_prefix_hit.py": "892adc99bfab6c1a649b3b0da0fc3b186ba2d9f57adadc97a344471b7074ab0b",
     "overlay/patch_apc_per_group_retention.py": "1885eca6737cb256bed198414b2ae9c430ed432cdcc2a02088625b41133a3014",
@@ -34,7 +34,9 @@
     "files/chat_template.jinja": "7a5a0dda1331a7c40d930961cc1cb3b57c3b52625250c13372fe006ba2e9dfdb",
     "scripts/boot-shape-warmup.sh": "c7968734a2c4e459e5cd74f2bf2491271bd33677c15b3fbe13d7760eded91461",
     "LICENSE": "8d56b405468aad11f87ab5763f901e276e08d9646ff5c8481b1762b6b789e9ed",
-    "LICENSE.MIT": "d48b01844af2aa68bc3fbea765069b94d70adb0c67dc4a62ca605c067aec9ab3"
+    "LICENSE.MIT": "d48b01844af2aa68bc3fbea765069b94d70adb0c67dc4a62ca605c067aec9ab3",
+    "tests/test_scheduler_decode_floor.py": "40f8f425fd1237d044c3e6760d385b4d28f9c37687106c50453d24b59f6b3b75",
+    "tests/fixtures/legacy_scheduler_helpers.py": "5081235ba1913f9ef9244d3cf251b2b8063fed697f380e4c0e11f09e6c493d65"
   },
   "patches": [
     "overlay/patch_cold_load_uma.py",

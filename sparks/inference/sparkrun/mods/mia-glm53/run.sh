@@ -15,7 +15,12 @@ root.mkdir(parents=True, exist_ok=True)
 for name in lock["files"]:
     if name.startswith(("overlay/", "files/", "scripts/")):
         shutil.copyfile(Path("upstream") / name, root / Path(name).name)
+    elif name.startswith("tests/"):
+        target = root / Path(name).relative_to("tests")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(Path("upstream") / name, target)
 for patch in lock["patches"]:
     subprocess.run(["python3", str(root / Path(patch).name)], check=True)
+subprocess.run(["python3", str(root / "test_scheduler_decode_floor.py")], check=True)
 PATCHES
 python3 site_fixes.py

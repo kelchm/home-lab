@@ -11,7 +11,8 @@ metadata:
   kv_dtype: fp8_ds_mla
   kv_vram_per_token: 7.331371307373047e-06
   kv_lora_rank: 512
-  overlay_source_revision: 674155dec2f2f62bb879801b5ce2cfc759a0bebf
+  base_image_source_revision: 674155dec2f2f62bb879801b5ce2cfc759a0bebf
+  overlay_source_revision: 6278ecb01034cea9ef6de0f851d09fccafe3e835
   site_backports: vllm/54282, vllm/58454
   target_model_revision: 25a44fdbf16862a46b7cc9921142c6c81350af2f
   draft_model_revision: dc77ff1c99eeb2df044ee3d4f0094eb033fee410
