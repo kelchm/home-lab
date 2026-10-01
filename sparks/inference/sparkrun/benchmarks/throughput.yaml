@@ -10,3 +10,6 @@ args:
   concurrency: [1, 4]
   runs: 2
   no_cache: true
+  extra_body:
+  - temperature=0
+  - seed=20260930
