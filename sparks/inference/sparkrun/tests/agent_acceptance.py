@@ -107,10 +107,13 @@ class Qualification:
     def isolation(self):
         def initial(secret):
             history = [{"role": "system", "content": f"Private session marker: {secret}. Remember it."},
-                       {"role": "user", "content": "Use multiply on 17 and 19, then answer with the private marker, a colon, and the result. "
+                       {"role": "user", "content": "Use multiply with factors x and y. First solve 3*x+7=58 and 4*y-5=71. "
+                        "Work out both factors carefully before calling the tool; do not multiply them yourself. "
+                        "After the tool returns, answer with the private marker, a colon, and the result. "
                         "Never mention any other session marker."}]
             result, elapsed = self.request(history, True, tools=[TOOL], tool_choice="auto",
-                                            reasoning_effort="high", chat_template_kwargs={"enable_thinking": True})
+                                            reasoning_effort="high", chat_template_kwargs={
+                                                "enable_thinking": True, "reasoning_effort": "high"})
             message = result["choices"][0]["message"]
             calls = message.get("tool_calls") or []
             assert len(calls) == 1 and json.loads(calls[0]["function"]["arguments"]) == {"a": 17, "b": 19}, result
