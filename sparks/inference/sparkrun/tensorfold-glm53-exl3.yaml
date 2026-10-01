@@ -1,0 +1,122 @@
+# Evaluation candidate. Install the adjacent external runtime plugin first.
+recipe_version: '2'
+model: Mia-AiLab/GLM-5.3-Flash-EXL3-TR3-4bpw
+model_revision: 25a44fdbf16862a46b7cc9921142c6c81350af2f
+runtime: tensorfold
+container: sha256:5570200f589f6f1a793bae825c6800007e8fb27a77d3fa0b9cca96145b1d1b68
+min_nodes: 2
+max_nodes: 2
+metadata:
+  description: Stock TR3 TensorFold W20 with four shared-pool streams on two DGX Sparks
+  kit_revision: b463237b014c1fd11915accc40ed6133691e5ea5
+  engine_revision: 2f8e514b0b7d615df7c971627ce3c0fb7e55d93a
+  site_backports: LimeChain/9002, LimeChain/9004
+  target_model_revision: 25a44fdbf16862a46b7cc9921142c6c81350af2f
+  draft_model_revision: 7d74cdd881ed7e32c31175984a67823127b66cfe
+defaults:
+  tensor_parallel: 2
+  pipeline_parallel: 1
+  host: 0.0.0.0
+  port: 8888
+  served_model_name: GLM-5.3-Flash-EXL3
+  context: 850000
+  max_tokens: 32768
+  drafter: incoai/GLM-5.3-Flash-DFlash2
+  drafter_revision: 7d74cdd881ed7e32c31175984a67823127b66cfe
+env:
+  NCCL_PASSTHROUGH: '1'
+  NCCL_MIN_NCHANNELS: '4'
+  NCCL_MAX_NCHANNELS: '4'
+  NCCL_CUMEM_ENABLE: '0'
+  GLM53_TF_NONEXPERT: q4mse
+  GLM53_TF_LATENT_KV: '1'
+  GLM53_TF_KV_DTYPE: fp8
+  GLM53_TF_PREFILL_ROWS: auto
+  GLM53_TF_PREFILL_ROWS_MAX: '4096'
+  GLM53_TF_FAST_PREFILL: '1'
+  GLM53_TF_LEAN_PREFILL: '1'
+  GLM53_TF_LEAN_BLOCK: '512'
+  GLM53_TF_PREFILL_OVERLAP: '1'
+  GLM53_TF_PREFILL_PP: '1'
+  GLM53_TF_FAST_GATHER: bf16
+  GLM53_TF_FP8_PREFILL: '0'
+  GLM53_TF_FAST_EXPERTS: fat
+  GLM53_TF_MOE_GLUE: '5'
+  GLM53_TF_ATTN_BM32: '1'
+  GLM53_TF_MTP_PREFILL_CACHE: '1'
+  GLM53_TF_EXPERT_LOOP: '1'
+  GLM53_TF_EXPERT_LOOP_CFG: 4,2
+  GLM53_TF_CALIB_ONLINE: '1'
+  GLM53_TF_DEPTH: cost
+  GLM53_TF_LOOKUP: '1'
+  GLM53_TF_AUTO_FDRAFTS: '7'
+  GLM53_TF_PROFILE: '0'
+  GLM53_TF_COMM_BACKEND: roce
+  GLM53_TF_ROCE_MARK: /cache/runtime/roce-failed
+  GLM53_TF_B12X: '4'
+  GLM53_TF_MLA_EXPAND: v2
+  GLM53_TF_DECODE_OVERLAP: '1'
+  GLM53_TF_MAX_DRAFT_ROWS: '16'
+  GLM53_TF_L2PF: '1'
+  GLM53_TF_L2PF_MB: '8'
+  GLM53_TF_BATCH: '4'
+  GLM53_TF_BATCH_PIECE: '2048'
+  GLM53_TF_SOLO_PIECE: '4096'
+  GLM53_TF_BATCH_RESERVE_GB: '11'
+  GLM53_TF_BATCH_ADMIT_GB: '2'
+  GLM53_TF_BATCH_CAPTURE_AFTER: '8'
+  GLM53_TF_BATCH_PARITY_KEY: '1'
+  GLM53_TF_BATCH_MTP: '1'
+  GLM53_TF_BATCH_ROW_MS: '6.5'
+  GLM53_TF_BATCH_SHORT: '1024'
+  GLM53_TF_BATCH_SESSIONS: '1'
+  GLM53_TF_SESSION_GIB: '2'
+  GLM53_TF_SESSION_RESERVE_GIB: '6'
+  GLM53_TF_SESSION_DISK_GIB: '64'
+  GLM53_TF_KV_POOL_TOKENS: '1048576'
+  GLM53_TF_PREFIX_SHARE: '1'
+  GLM53_TF_REQUEST_LOG: /cache/runtime/sessions/requests.jsonl
+  GLM53_TF_DEFAULT_EFFORT: high
+  GLM53_TF_EFFORT_FIELD: '1'
+  GLM53_TF_VISION: '1'
+  GLM53_TF_VISION_CACHE_MB: '64'
+  GLM53_TF_VISION_PREP_MB: '64'
+  GLM53_TF_REASONING_FIELDS: both
+  GLM53_TF_MULTI_PREFILL: '1'
+  GLM53_TF_ADMIT_MEM: free
+  GLM53_TF_SELECT_SCRATCH: grow
+  GLM53_TF_ALLOC_TRIM_GB: '0'
+  GLM53_TF_DEC_EXPERT_LOADS: '1'
+  GLM53_TF_DEC_EXPERT_LOADS_CFG: nc,8,1
+  GLM53_TF_CPU_PIN: http
+  GLM53_TF_GRAMMAR: '1'
+  GLM53_TF_TOOL_FIXES: all
+  GLM53_TF_HEALTH: strict
+  GLM53_TF_STALL_S: '180'
+  GLM53_TF_STATS: summary
+executor_config:
+  entrypoint: ''
+  user: root
+  ipc: host
+  devices:
+  - /dev/infiniband
+  cap_add:
+  - IPC_LOCK
+  ulimit:
+  - memlock=-1:-1
+  - stack=67108864
+  - nofile=65535:65535
+  auto_remove: false
+post_exec:
+- python3 /opt/glm53-tensorfold/readiness.py
+distribution_config:
+  models:
+    entries:
+    - name: Mia-AiLab/GLM-5.3-Flash-EXL3-TR3-4bpw
+      revision: 25a44fdbf16862a46b7cc9921142c6c81350af2f
+      target:
+      - -1
+    - name: incoai/GLM-5.3-Flash-DFlash2
+      revision: 7d74cdd881ed7e32c31175984a67823127b66cfe
+      target:
+      - -1

@@ -18,3 +18,4 @@ for name in lock["files"]:
 for patch in lock["patches"]:
     subprocess.run(["python3", str(root / Path(patch).name)], check=True)
 PATCHES
+python3 site_fixes.py
