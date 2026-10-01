@@ -11,6 +11,8 @@ The September 30 candidates are under evaluation in [#645](https://github.com/ke
 
 This compares complete recipes: the draft weights, arithmetic, scheduler and cache implementation differ. Normal evaluation is C4 at 128k–250k, with C1/C2 controls; four 262k prompts plus reserved output exceed TensorFold's shared pool and must queue. C8 is a secondary short/warm workload. Neither recipe promises four simultaneous 850k requests.
 
+Grok's native-X follow-up checked Mia, Netrunner and Jay from September 30 14:27 to October 1 02:27 UTC and found no published Mia GLM TensorFold kit; W21 replies were sparse. Upstream [TensorFold 0.6.0](https://github.com/ashhart/TensorFold/releases/tag/v0.6.0) adds GLM CUDA conversation resume and lighter DFlash buffers. Our W20 kit pins engine 0.3.4 plus its selected patches. A 0.6-based recipe is a follow-up candidate once its stock-TR3 TP2/C4 setup and SparkRun lifecycle are available for qualification; the release's short-context and other-model numbers do not establish this campaign's long-stream result.
+
 ## Deploy
 
 The saved `sparks` cluster uses head `10.32.21.31`, worker `10.32.21.32`, SSH user `kelchm`, cache `/opt/spark-cache/huggingface`, greedy placement, and management-network transfers. Use `transfer_mode: auto`. SparkRun detects both CX7 rails for inference; do not copy another operator's interface names into the TensorFold recipe. Its TCPStore rendezvous may use the management address while GPU traffic uses the detected fabric.
