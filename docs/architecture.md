@@ -397,7 +397,7 @@ Flux post-build substitution is not used. Reserve it for values that differ betw
 - Keep the values in a plaintext ConfigMap holding only what varies; SOPS hides them from PR diffs and CI.
 - Set `substituteFrom` only on Kustomizations that consume a variable.
 - Mark resources that embed scripts or dashboards `kustomize.toolkit.fluxcd.io/substitute: disabled`.
-- Add a pre-merge check that loads the declared inputs, honors that annotation, and fails on undefined variables as the controller's strict mode does. flux-local renders undefined variables as `null`.
+- Add a pre-merge check that loads the declared inputs, honors that annotation, and fails on undefined variables as the controller's strict mode does. flate leaves undefined variables as literal `${VAR}` placeholders.
 
 The evidence behind this rule is in [#53](https://github.com/kelchm/home-lab/issues/53).
 

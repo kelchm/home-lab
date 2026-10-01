@@ -86,8 +86,8 @@ spec:
           enabled: true
         # Skip the chart's `.Capabilities.APIVersions.Has
         # "monitoring.coreos.com/v1"` guard. On the live cluster the CRD is
-        # supplied by prometheus-operator-crds, but flux-local renders charts
-        # offline with no cluster context, so the guard's `fail` aborts the
+        # supplied by prometheus-operator-crds, but offline rendering (flate
+        # in CI) has no cluster context, so the guard's `fail` aborts the
         # render and breaks PR CI. This setting is the chart's documented
         # escape hatch (traefik/traefik-helm-chart PR #769, issue #679).
         disableAPICheck: true
