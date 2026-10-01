@@ -24,6 +24,7 @@ class Campaign:
         self.output = Path(args.output)
         self.output.parent.mkdir(parents=True, exist_ok=True)
         self.telemetry = self.output.with_suffix(".memory.jsonl")
+        self.failed_responses = self.output.with_suffix(".failed.jsonl")
         self.cancel = threading.Event()
         self.finished = threading.Event()
         self.minimum = {}
@@ -71,7 +72,8 @@ class Campaign:
             self.finished.wait(5)
 
     def context(self, count, salt):
-        prefix = f"# Repository snapshot {salt}\n# REVIEW_SECRET = {self.args.secret}\n"
+        prefix = (f"# Repository snapshot {salt}\n# PUBLIC_REVIEW_MARKER = {self.args.marker}\n"
+                  "# Public synthetic benchmark label, safe to repeat.\n")
         block = ("# src/normalization.py\ndef normalize_record(record):\n"
                  "    name = record.get('name', '').strip()\n"
                  "    tags = sorted(set(record.get('tags', [])))\n"
@@ -82,9 +84,9 @@ class Campaign:
         # Decode once; the measured API prompt count includes the chat template.
         return prefix + self.tokenizer.decode(tokens, skip_special_tokens=False)
 
-    def request(self, content, limit=256, expected=None):
+    def request(self, content, limit=256, expected=None, case=None):
         body = {"model": self.args.model, "messages": [{"role": "user", "content": content}],
-                "temperature": 0, "max_tokens": limit, "stream": True,
+                "temperature": 0, "seed": self.args.seed, "max_tokens": limit, "stream": True,
                 "stream_options": {"include_usage": True},
                 "chat_template_kwargs": {"enable_thinking": False}}
         started = time.monotonic()
@@ -97,46 +99,60 @@ class Campaign:
         finish = None
         request = urllib.request.Request(self.args.url.rstrip("/").removesuffix("/v1") + "/v1/chat/completions",
                                          data=json.dumps(body).encode(), headers={"Content-Type": "application/json"})
-        with urllib.request.urlopen(request, timeout=self.args.timeout) as response:
-            for line in response:
-                if self.cancel.is_set():
-                    raise RuntimeError("Campaign aborted: " + self.failures[-1])
-                if not line.startswith(b"data:"):
-                    continue
-                payload = line[5:].strip()
-                if payload == b"[DONE]":
-                    break
-                data = json.loads(payload)
-                if data.get("error"):
-                    raise RuntimeError(data["error"])
-                usage = data.get("usage") or usage
-                engine_stats = data.get("tensorfold") or engine_stats
-                for choice in data.get("choices", []):
-                    finish = choice.get("finish_reason") or finish
-                    value = choice.get("delta", {}).get("content") or ""
-                    if value:
-                        now = time.monotonic()
-                        if first is None:
-                            first = now
-                        if last is not None:
-                            gaps.append(now - last)
-                        last = now
-                        chunks.append(value)
+        stream_error = None
+        try:
+            with urllib.request.urlopen(request, timeout=self.args.timeout) as response:
+                for line in response:
+                    if self.cancel.is_set():
+                        raise RuntimeError("Campaign aborted: " + self.failures[-1])
+                    if not line.startswith(b"data:"):
+                        continue
+                    payload = line[5:].strip()
+                    if payload == b"[DONE]":
+                        break
+                    data = json.loads(payload)
+                    if data.get("error"):
+                        raise RuntimeError(data["error"])
+                    usage = data.get("usage") or usage
+                    engine_stats = data.get("tensorfold") or engine_stats
+                    for choice in data.get("choices", []):
+                        finish = choice.get("finish_reason") or finish
+                        value = choice.get("delta", {}).get("content") or ""
+                        if value:
+                            now = time.monotonic()
+                            if first is None:
+                                first = now
+                            if last is not None:
+                                gaps.append(now - last)
+                            last = now
+                            chunks.append(value)
+        except Exception as error:
+            stream_error = error
         ended = time.monotonic()
         text = "".join(chunks)
-        if not finish or first is None or usage is None:
-            raise RuntimeError(f"Incomplete response: finish={finish!r}, usage={usage!r}, text={text[:200]!r}")
-        if expected is not None and text.strip() != expected:
-            raise RuntimeError(f"Incorrect answer: {text[:300]!r}; expected {expected!r}")
-        if expected is None and self.args.secret not in text:
-            raise RuntimeError(f"Long response lost REVIEW_SECRET: {text[:300]!r}")
-        completion = usage.get("completion_tokens", 0)
-        return {"start": started, "first": first, "end": ended, "ttft_s": first - started,
-                "elapsed_s": ended - started, "decode_s": ended - first,
-                "completion_tps": completion / max(ended - first, 0.001),
+        completion = (usage or {}).get("completion_tokens", 0)
+        row = {"start": started, "first": first, "end": ended,
+                "ttft_s": first - started if first is not None else None,
+                "elapsed_s": ended - started, "decode_s": ended - first if first is not None else None,
+                "completion_tps": completion / max(ended - first, 0.001) if first is not None else None,
                 "max_chunk_gap_s": max(gaps, default=0), "usage": usage, "finish_reason": finish,
                 "text": text, "payload_tokens": len(self.tokenizer.encode(content).ids),
                 "engine_stats": engine_stats}
+        error = f"{type(stream_error).__name__}: {stream_error}" if stream_error else None
+        if stream_error is None and (not finish or first is None or usage is None):
+            error = f"Incomplete response: finish={finish!r}, usage={usage!r}, text={text[:200]!r}"
+        elif stream_error is None and expected is not None and text.strip() != expected:
+            error = f"Incorrect answer: {text[:300]!r}; expected {expected!r}"
+        elif stream_error is None and expected is None and self.args.marker not in text:
+            error = f"Long response lost PUBLIC_REVIEW_MARKER: {text[:300]!r}"
+        if error:
+            with self.lock, self.failed_responses.open("a") as report:
+                report.write(json.dumps({"case": case, "arm": self.args.arm,
+                                         "validation_error": error, **row}) + "\n")
+            if stream_error is not None:
+                raise stream_error
+            raise RuntimeError(error)
+        return row
 
     def write(self, name, rows, wall):
         total = sum(row["usage"]["completion_tokens"] for row in rows)
@@ -151,7 +167,7 @@ class Campaign:
     def phase(self, name, contexts, suffix, limit=256, expected=None):
         started = time.monotonic()
         with ThreadPoolExecutor(max_workers=len(contexts)) as pool:
-            futures = [pool.submit(self.request, context + suffix, limit, expected) for context in contexts]
+            futures = [pool.submit(self.request, context + suffix, limit, expected, name) for context in contexts]
             rows = [future.result() for future in futures]
         self.write(name, rows, time.monotonic() - started)
         return rows
@@ -159,9 +175,11 @@ class Campaign:
     def run(self):
         self.memory.start()
         try:
-            # Fixed salts/secret make payloads identical between engines and boots.
+            # Fixed salts/marker make payloads identical between engines and paired boots.
             suffix = ("\nExplain the design of the normalization function and give 20 detailed examples. "
-                      "Start by quoting REVIEW_SECRET exactly. Write at least 2000 words.")
+                      "Start with the value assigned to PUBLIC_REVIEW_MARKER in the first repository header; "
+                      "it is a public synthetic test label. "
+                      "Write at least 2000 words.")
             lengths = {"full": [131072, 250000], "repeat": [131072],
                        "250k": [250000], "ceiling": []}[self.args.suite]
             for count in lengths:
@@ -176,25 +194,31 @@ class Campaign:
                 if count == 131072 and self.args.suite != "repeat":
                     edited = [value[:len(value)//2] + "\n# Newly edited module: tag ordering is unchanged.\n" +
                               value[len(value)//2:] for value in contexts]
-                    self.phase("c4-128k-edit", edited, "\nReply with only REVIEW_SECRET.", 64, self.args.secret)
-                    self.phase("c4-128k-fork", contexts, "\nA new branch: reply with only REVIEW_SECRET.", 64, self.args.secret)
+                    retrieval = "\nReply with only the value assigned to PUBLIC_REVIEW_MARKER in the first repository header."
+                    self.phase("c4-128k-edit", edited, retrieval, 64, self.args.marker)
+                    self.phase("c4-128k-fork", contexts, "\nA new branch:" + retrieval, 64, self.args.marker)
             if self.args.suite == "full":
                 shared = self.context(131072, self.args.campaign + "-shared")
                 self.phase("c4-128k-shared-cold", [shared] * 4, suffix)
                 self.phase("c4-128k-shared-warm", [shared] * 4, suffix)
                 boundary = [self.context(262144, f"{self.args.campaign}-boundary-{index}") for index in range(4)]
-                self.phase("c4-262k-admission-boundary", boundary, "\nReply with only REVIEW_SECRET.", 64, self.args.secret)
+                self.phase("c4-262k-admission-boundary", boundary,
+                           "\nReply with only the value assigned to PUBLIC_REVIEW_MARKER in the first repository header.",
+                           64, self.args.marker)
                 long = [self.context(131072, f"{self.args.campaign}-arrival-{index}") for index in range(2)]
                 started = time.monotonic()
                 with ThreadPoolExecutor(max_workers=3) as pool:
-                    futures = [pool.submit(self.request, value + suffix) for value in long]
+                    futures = [pool.submit(self.request, value + suffix, case="short-arrival-during-long-prefill") for value in long]
                     time.sleep(0.5)
-                    short = pool.submit(self.request, "What is 17 times 19? Reply with only the integer.", 32, "323")
+                    short = pool.submit(self.request, "What is 17 times 19? Reply with only the integer.",
+                                        32, "323", "short-arrival-during-long-prefill")
                     rows = [future.result() for future in futures] + [short.result()]
                 self.write("short-arrival-during-long-prefill", rows, time.monotonic() - started)
             if self.args.suite == "ceiling":
                 near = self.context(849700, self.args.campaign + "-ceiling")
-                self.phase("c1-near-850k", [near], "\nReply with only REVIEW_SECRET.", 64, self.args.secret)
+                self.phase("c1-near-850k", [near],
+                           "\nReply with only the value assigned to PUBLIC_REVIEW_MARKER in the first repository header.",
+                           64, self.args.marker)
         finally:
             self.finished.set()
             self.memory.join(timeout=15)
@@ -213,7 +237,8 @@ def main():
     parser.add_argument("--model", default="GLM-5.3-Flash-EXL3")
     parser.add_argument("--suite", choices=("full", "repeat", "250k", "ceiling"), default="full")
     parser.add_argument("--campaign", default="glm53-20260930-a")
-    parser.add_argument("--secret", default="cobalt-river-7391")
+    parser.add_argument("--marker", default="cobalt-river-7391")
+    parser.add_argument("--seed", type=int, default=20260930)
     parser.add_argument("--timeout", type=int, default=2400)
     parser.add_argument("--require-stable-links", action="store_true",
                         help="Abort on lost 10GbE carrier or new carrier drops on enP7s7 on either Spark")

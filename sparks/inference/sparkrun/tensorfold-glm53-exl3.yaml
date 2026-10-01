@@ -3,14 +3,14 @@ recipe_version: '2'
 model: Mia-AiLab/GLM-5.3-Flash-EXL3-TR3-4bpw
 model_revision: 25a44fdbf16862a46b7cc9921142c6c81350af2f
 runtime: tensorfold
-container: sha256:5570200f589f6f1a793bae825c6800007e8fb27a77d3fa0b9cca96145b1d1b68
+container: sha256:17d8d02dd565c33113fa2f06cd8f245764905d5fc3fb1d64649b0bf9ad1b165e
 min_nodes: 2
 max_nodes: 2
 metadata:
   description: Stock TR3 TensorFold W20 with four shared-pool streams on two DGX Sparks
   kit_revision: b463237b014c1fd11915accc40ed6133691e5ea5
   engine_revision: 2f8e514b0b7d615df7c971627ce3c0fb7e55d93a
-  site_backports: LimeChain/9002, LimeChain/9004
+  site_backports: LimeChain/9002, LimeChain/9004, exact-tool-turn-reasoning
   target_model_revision: 25a44fdbf16862a46b7cc9921142c6c81350af2f
   draft_model_revision: 7d74cdd881ed7e32c31175984a67823127b66cfe
 defaults:

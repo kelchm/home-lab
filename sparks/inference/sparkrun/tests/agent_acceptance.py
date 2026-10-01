@@ -116,8 +116,9 @@ class Qualification:
             assert len(calls) == 1 and json.loads(calls[0]["function"]["arguments"]) == {"a": 17, "b": 19}, result
             assert message.get("reasoning_content") or message.get("reasoning"), result
             self.record("high-thinking-tool-" + secret, result, elapsed)
-            # Deliberately omit reasoning on resubmission. W20's fallback cache
-            # must restore the matching history, even with identical arguments.
+            # Deliberately omit reasoning while preserving the server call IDs.
+            # Renumbered-ID cache isolation is checked against installed code by
+            # tensorfold_tool_history.py; output alone cannot prove that lookup.
             return secret, history + [{"role": "assistant", "content": None, "tool_calls": calls},
                                      {"role": "tool", "tool_call_id": calls[0]["id"], "content": "323"},
                                      {"role": "user", "content": "Reply with exactly marker:result and no extra text."}]

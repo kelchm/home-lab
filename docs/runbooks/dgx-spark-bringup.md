@@ -6,7 +6,7 @@ cluster. This runbook implements phase 3 of the
 
 **Status (2026-08-27):** LAN, storage VLAN, direct fabric, host anti-transit, raw RDMA, NCCL, and the RTL8127 burn-in are configured and tested. The live No Workloads containment slice is applied and validated; the broader UniFi firewall matrix, Synology export changes, Spark-to-NAS throughput, DNS, and final temporary-access cleanup remain open. The incomplete items are listed explicitly under [Remaining work](#remaining-work).
 
-**Current blocker (2026-09-30):** spark-2's management/storage link is intermittently losing carrier. Host logs and Core Aggregation port 8 SFP receive-signal-loss events corroborate the fault. The NIC acceptance gate is reopened in [#649](https://github.com/kelchm/home-lab/issues/649); the GLM comparison is stopped pending physical isolation and recovery verification.
+**Recovery in progress (2026-09-30):** spark-2's management/storage carrier drops were corroborated by host logs and Core Aggregation port 8 SFP receive-signal-loss events. After swapping the port 7/8 modules and replugging both cable ends, both links passed 30 minutes idle and remained stable during the first 250k cold phase. That load check failed its synthetic-prompt content check; the corrected cold/replay pair and switch fault-history recheck remain pending in [#649](https://github.com/kelchm/home-lab/issues/649). Candidate comparisons remain paused, and the fault's cause is unconfirmed.
 
 ## Invariants
 

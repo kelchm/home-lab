@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Port LimeChain 9002/9004 behavior onto Jay's W20 without replacing W17 files.
+"""Port LimeChain 9002/9004 behavior and isolate W20's reasoning cache.
 
 Stop-token behavior derives from LimeChain/glm-5.3-flash-2xdgx-spark@441de756.
 Response stats remain available in full mode; normal agent responses stay small.
@@ -89,12 +89,34 @@ def patch_server(text):
     return text + "\n\n" + source_of("response_stats") + "\n\n" + source_of("stats_mode") + "\n"
 
 
+def patch_tool_history(text):
+    text = replace_once(text,
+                        '                kept = self.memory.get(keys + [signature(last_user(messages, i), m["tool_calls"])])',
+                        '                # Match the exact server tool turn; repeated user text and arguments\n'
+                        '                # cannot distinguish parallel conversations.\n'
+                        '                kept = self.memory.get(keys)')
+    text = replace_once(text,
+                        '            self.memory.put([c.get("id") for c in calls] + [signature(last_user(messages), calls)], reasoning)',
+                        '            self.memory.put([c.get("id") for c in calls], reasoning)')
+    text = replace_once(text,
+                        '  (``call_<24 hex>``, unique) and by a signature of the calls (names, arguments) with the last user message before\n'
+                        '  them (for clients that renumber the ids), and put back into a later request\'s assistant turn that carries those\n',
+                        '  (``call_<24 hex>``, unique), and put back into a later request\'s assistant turn that carries those\n')
+    text = replace_once(text,
+                        '    its keys: the call ids this server made, and a signature of the calls with the last user message before them\n'
+                        '    (clients that renumber the ids, as spark-bench does). A key put again points at the newer reply.',
+                        '    its keys: the call ids this server made. Clients that renumber ids must retain their reasoning;\n'
+                        '    matching user text and arguments can mix parallel histories. A key put again points at the newer reply.')
+    return text
+
+
 def main():
     import tensorfold
     root = Path(tensorfold.__file__).parent
     changes = {
         root / "families/glm5_next/cuda/engine.py": patch_engine,
         root / "cuda/server.py": patch_server,
+        root / "families/glm5_next/cuda/toolfix.py": patch_tool_history,
     }
     prepared = {path: transform(path.read_text()) for path, transform in changes.items()}
     for path, text in prepared.items():
@@ -103,7 +125,7 @@ def main():
         path.write_text(text)
         for pyc in (path.parent / "__pycache__").glob(path.stem + ".*.pyc"):
             pyc.unlink()
-    print("TensorFold W20 stop tokens and bounded response stats verified")
+    print("TensorFold W20 stop tokens, bounded response stats and exact tool-turn reasoning verified")
 
 
 if __name__ == "__main__":
