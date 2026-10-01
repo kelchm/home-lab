@@ -185,7 +185,7 @@ class Campaign:
                       "Write at least 2000 words.")
             retrieval = "\nReply with only the value assigned to PUBLIC_REVIEW_MARKER in the first repository header."
             lengths = {"full": [131072, 250000], "repeat": [131072],
-                       "250k": [250000], "growth": [250000], "ceiling": []}[self.args.suite]
+                       "250k": [250000], "growth": [250000], "boundary": [], "ceiling": []}[self.args.suite]
             for count in lengths:
                 contexts = [self.context(count, f"{self.args.campaign}-{count}-{index}") for index in range(4)]
                 if self.args.suite == "growth":
@@ -209,10 +209,11 @@ class Campaign:
                               value[len(value)//2:] for value in contexts]
                     self.phase("c4-128k-edit", edited, retrieval, 64, self.args.marker)
                     self.phase("c4-128k-fork", contexts, "\nA new branch:" + retrieval, 64, self.args.marker)
-            if self.args.suite == "full":
-                shared = self.context(131072, self.args.campaign + "-shared")
-                self.phase("c4-128k-shared-cold", [shared] * 4, suffix)
-                self.phase("c4-128k-shared-warm", [shared] * 4, suffix)
+            if self.args.suite in ("full", "boundary"):
+                if self.args.suite == "full":
+                    shared = self.context(131072, self.args.campaign + "-shared")
+                    self.phase("c4-128k-shared-cold", [shared] * 4, suffix)
+                    self.phase("c4-128k-shared-warm", [shared] * 4, suffix)
                 boundary = [self.context(262144, f"{self.args.campaign}-boundary-{index}") for index in range(4)]
                 self.phase("c4-262k-admission-boundary", boundary, retrieval, 64, self.args.marker)
                 long = [self.context(131072, f"{self.args.campaign}-arrival-{index}") for index in range(2)]
@@ -243,7 +244,7 @@ def main():
     parser.add_argument("--worker", default="kelchm@10.32.21.32")
     parser.add_argument("--url", default="http://127.0.0.1:8888/v1")
     parser.add_argument("--model", default="GLM-5.3-Flash-EXL3")
-    parser.add_argument("--suite", choices=("full", "repeat", "250k", "growth", "ceiling"), default="full")
+    parser.add_argument("--suite", choices=("full", "repeat", "250k", "growth", "boundary", "ceiling"), default="full")
     parser.add_argument("--campaign", default="glm53-20260930-a")
     parser.add_argument("--marker", default="cobalt-river-7391")
     parser.add_argument("--seed", type=int, default=20260930)
