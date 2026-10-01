@@ -14,8 +14,11 @@ function log() {
         [error]=4
     )
 
-    # Get the current log level's priority
-    local current_priority=${level_priority[$level]:-2} # Default to "info" priority
+    if [[ -z "${level_priority[$level]+set}" ]]; then
+        printf 'log: unknown level "%s"; use debug, info, warn or error\n' "${level}" >&2
+        exit 1
+    fi
+    local current_priority=${level_priority[$level]}
 
     # Get the configured log level from the environment, default to "info"
     local configured_level=${LOG_LEVEL:-info}
@@ -34,8 +37,7 @@ function log() {
         [error]="\033[1m\033[38;5;198m" # Red
     )
 
-    # Fallback to "info" if the color for the given level is not defined
-    local color="${colors[$level]:-${colors[info]}}"
+    local color="${colors[$level]}"
     local msg="$1"
     shift
 

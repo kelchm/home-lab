@@ -410,6 +410,10 @@ jobs:
         if: needs.pre-job.outputs.scripts_changed == 'true'
         run: scripts/ci/test-sync-kanidm-version-ceiling.sh
 
+      - name: Test bootstrap scripts
+        if: needs.pre-job.outputs.scripts_changed == 'true'
+        run: scripts/ci/test-bootstrap-scripts.sh
+
       - name: No shell changes
         if: needs.pre-job.outputs.scripts_changed != 'true'
         run: echo "Shell validation is not required."
