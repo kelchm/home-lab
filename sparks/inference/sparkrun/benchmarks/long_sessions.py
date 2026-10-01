@@ -87,7 +87,7 @@ class Campaign:
         with urllib.request.urlopen(request, timeout=self.args.timeout) as response:
             for line in response:
                 if self.cancel.is_set():
-                    raise RuntimeError("Campaign aborted by memory gate")
+                    raise RuntimeError("Campaign aborted: " + self.failures[-1])
                 if not line.startswith(b"data:"):
                     continue
                 payload = line[5:].strip()
@@ -149,7 +149,8 @@ class Campaign:
             # Fixed salts/secret make payloads identical between engines and boots.
             suffix = ("\nExplain the design of the normalization function and give 20 detailed examples. "
                       "Start by quoting REVIEW_SECRET exactly. Write at least 2000 words.")
-            lengths = [] if self.args.suite == "ceiling" else [131072] if self.args.suite == "repeat" else [131072, 250000]
+            lengths = {"full": [131072, 250000], "repeat": [131072],
+                       "250k": [250000], "ceiling": []}[self.args.suite]
             for count in lengths:
                 contexts = [self.context(count, f"{self.args.campaign}-{count}-{index}") for index in range(4)]
                 if self.args.suite != "repeat" and count == 131072:
@@ -197,7 +198,7 @@ def main():
     parser.add_argument("--worker", default="kelchm@10.32.21.32")
     parser.add_argument("--url", default="http://127.0.0.1:8888/v1")
     parser.add_argument("--model", default="GLM-5.3-Flash-EXL3")
-    parser.add_argument("--suite", choices=("full", "repeat", "ceiling"), default="full")
+    parser.add_argument("--suite", choices=("full", "repeat", "250k", "ceiling"), default="full")
     parser.add_argument("--campaign", default="glm53-20260930-a")
     parser.add_argument("--secret", default="cobalt-river-7391")
     parser.add_argument("--timeout", type=int, default=2400)
