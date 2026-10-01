@@ -14,8 +14,8 @@ import urllib.request
 
 
 def verify(root, lock):
-    runtime_names = [Path(name).name for name in lock["files"]
-                     if name.startswith(("overlay/", "files/", "scripts/"))]
+    runtime_names = [str(Path(name).relative_to("tests")) if name.startswith("tests/") else Path(name).name
+                     for name in lock["files"] if name.startswith(("overlay/", "files/", "scripts/", "tests/"))]
     if len(runtime_names) != len(set(runtime_names)):
         raise ValueError("Runtime file names collide in /opt/glm53")
     if len(lock["patches"]) != len(set(lock["patches"])) or any(

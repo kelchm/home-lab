@@ -6,6 +6,8 @@ cluster. This runbook implements phase 3 of the
 
 **Status (2026-08-27):** LAN, storage VLAN, direct fabric, host anti-transit, raw RDMA, NCCL, and the RTL8127 burn-in are configured and tested. The live No Workloads containment slice is applied and validated; the broader UniFi firewall matrix, Synology export changes, Spark-to-NAS throughput, DNS, and final temporary-access cleanup remain open. The incomplete items are listed explicitly under [Remaining work](#remaining-work).
 
+**Host recovery checks passed (2026-09-30):** after swapping the port 7/8 modules and replugging both cable ends, both links passed 30 minutes idle and a complete C4 250k cold/replay pair at 10GbE with zero new carrier drops. Both inference containers are stopped through SparkRun; management/storage probes and GPU-idle checks pass. The switch SFP fault-history recheck still requires controller sign-in in [#649](https://github.com/kelchm/home-lab/issues/649). Candidate comparisons remain paused, and the fault's cause is unconfirmed.
+
 ## Invariants
 
 - The 10GbE NIC is the only default-route interface.
@@ -401,10 +403,28 @@ trend the vendor counter, but do not equate it with `rx_errors`. Reopen the NIC
 investigation if it correlates with standard-counter growth, retransmits, link
 flaps, or application-visible loss.
 
+### Management SSH drops with NIC carrier loss
+
+Match `journalctl -k` carrier timestamps on `enP7s7` against UniFi's **Receive SFP Signal Loss** events and the switch port's cumulative `link_down_count`. On September 30, spark-2 recorded carrier loss beginning at 20:42 EDT; Core Aggregation port 8 independently reported `SFP_RECEIVED_FAULT` at 21:42:15 and 21:48:26. Drops continued after inference stopped. Both ports retained `spark-trunk`, host and profile EEE were disabled, and UniFi showed no configuration changes in the last day. These observations locate the failing link but do not distinguish the cable, SFP-to-Ethernet module, switch port or host PHY. Zero switch-port RX/TX errors and a reported module temperature near 32°C do not rule out those faults.
+
+The retained host journal also contains carrier drops on September 28 and earlier dates, so carrier loss predates this recipe trial. Earlier events have not been classified as operational resets or unplanned faults; they do not establish that every historical drop has the same cause. The since-boot journal and current host/switch receipts are retained outside git under `~/sparkrun/experiments/glm53-20260930/receipts/` on spark-1.
+
+The live switch port name is `SFP+ 8`. Use the inventory map rather than relying on auto-generated client aliases. Inspect the controller at `https://unifi.home.kelch.io/`. Its generic OEM `SFP-10G-SR` identity must be checked against the physical module before replacement procurement. Keep identifying details and raw diagnostics local; public issues need only a short status note.
+
+When worker management SSH is unavailable but spark-1 is reachable, use the existing private fabric only for explicit operator diagnostics. Preserve host-key verification by matching the worker's already verified management identity:
+
+```sh
+ssh kelchm@10.32.21.31 \
+  "ssh -o BatchMode=yes -o HostKeyAlias=10.32.21.32 -o ConnectTimeout=5 kelchm@198.19.240.12 'ip -s link show enP7s7; sudo -n journalctl -k --since \"1 hour ago\" --no-pager'"
+```
+
+Save host/switch evidence before resetting a link or rebooting. Stop affected inference workloads through their corresponding SparkRun recipe. Test a known-good short cable first, then a known-good module, changing one component at a time. If neither resolves the fault, test a spare switch port with the same native Workloads VLAN 21 and tagged Storage VLAN 25 profile before pursuing the host NIC/driver. Record counter deltas; cumulative counts are not a count of the current incident. Reaccept the link only after management/storage probes succeed, at least 30 minutes idle and a complete C4 250k cold/replay pair produce no new carrier or SFP receive-signal-loss events, and the cause/fix is recorded in #649.
+
 ## Remaining work
 
 Do not mark this runbook complete until these are resolved:
 
+- [ ] Resolve spark-2 management/storage carrier loss and pass the recovery gate in [#649](https://github.com/kelchm/home-lab/issues/649).
 - [ ] In DSM, identify only the NFS exports the Sparks need and scope them to
       `10.32.25.31` and `10.32.25.32`. Do not broaden unrelated exports.
 - [ ] Run Spark-to-NAS `iperf3` over VLAN 25 and record at least 9 Gb/s plus a

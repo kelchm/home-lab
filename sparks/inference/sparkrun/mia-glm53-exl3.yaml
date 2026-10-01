@@ -2,7 +2,7 @@
 recipe_version: '2'
 model: Mia-AiLab/GLM-5.3-Flash-EXL3-TR3-4bpw
 runtime: vllm-distributed
-container: ghcr.io/miaai-lab/glm-5.3-flash-2x-dgx-sparks@sha256:447114ee77d14c9b4732ee23978ada2a0ee9027868a231d6fd42700a8b25be1d
+container: sha256:911f773be72ac2d3a3c6cdb65033982810499a529c113a3c118d675b96c607b1
 min_nodes: 2
 max_nodes: 2
 metadata:
@@ -11,7 +11,9 @@ metadata:
   kv_dtype: fp8_ds_mla
   kv_vram_per_token: 7.331371307373047e-06
   kv_lora_rank: 512
-  overlay_source_revision: 11f6cd45d39d860e290362e22fb5df9ef42196e2
+  base_image_source_revision: 674155dec2f2f62bb879801b5ce2cfc759a0bebf
+  overlay_source_revision: 6278ecb01034cea9ef6de0f851d09fccafe3e835
+  site_backports: vllm/54282, vllm/58454
   target_model_revision: 25a44fdbf16862a46b7cc9921142c6c81350af2f
   draft_model_revision: dc77ff1c99eeb2df044ee3d4f0094eb033fee410
 defaults:
@@ -28,7 +30,7 @@ defaults:
   quantization: exl3
   load_format: instanttensor
   kv_cache_dtype: fp8
-  kv_cache_memory_bytes: 15032385536
+  kv_cache_memory_bytes: 11811160064
   local_speculative_config: '{"method":"dflash","model":"/cache/huggingface/hub/models--incoai--GLM-5.3-Flash-DFlash2/snapshots/dc77ff1c99eeb2df044ee3d4f0094eb033fee410","num_speculative_tokens":7,"kv_cache_dtype":"auto","draft_tensor_parallel_size":2,"draft_sample_method":"probabilistic","rejection_sample_method":"standard"}'
   revision: 25a44fdbf16862a46b7cc9921142c6c81350af2f
 env:
@@ -45,7 +47,11 @@ env:
   GLM53_FAIR_PREFILL_MAX_CHUNKS: '1'
   GLM53_SPINWAIT_MS: stock
   GLM53_ADAPTIVE_K: 'off'
-  GLM53_DENSE_FP8: 'off'
+  GLM53_DENSE_FP8: all
+  GLM53_KDA_BF16_LARGE_M: '1'
+  GLM53_DRAFT_KV_COMPACT: '1'
+  GLM53_LOAD_CLONE: '1'
+  GLM53_LOAD_PREFETCH: '0'
   GLM53_EXL3_MOE_FAST: '0'
   GLM53_EXPOSE_CACHE_RESET: '0'
   TILELANG_CACHE_DIR: /cache/runtime/tilelang
@@ -117,6 +123,7 @@ command: |
     --enable-auto-tool-choice \
     --reasoning-parser glm45 \
     --enable-prefix-caching \
+    --enable-prompt-tokens-details \
     --no-enable-flashinfer-autotune \
     --chat-template /opt/glm53/chat_template.jinja \
     --limit-mm-per-prompt '{"image":48,"video":1}' \
