@@ -1,0 +1,12 @@
+---
+# kaniop exposes no disruption-budget setting for the replica group.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: kanidm
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kanidm
+      kanidm.kaniop.rs/cluster: kanidm

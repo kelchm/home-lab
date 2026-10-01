@@ -23,6 +23,9 @@ spec:
   interval: 1h
   values:
     fullnameOverride: traefik-public
+    podDisruptionBudget:
+      enabled: true
+      maxUnavailable: 1
     deployment:
       replicas: 2
     providers:

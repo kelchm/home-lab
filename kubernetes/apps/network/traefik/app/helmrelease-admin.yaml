@@ -32,6 +32,9 @@ spec:
           # renovate: datasource=github-releases depName=sevensolutions/traefik-oidc-auth
           version: v0.21.0
 
+    podDisruptionBudget:
+      enabled: true
+      maxUnavailable: 1
     deployment:
       replicas: 2
       # Restart the Deployment when kaniop rotates either OAuth2 client_secret
