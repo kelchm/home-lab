@@ -409,7 +409,7 @@ Match `journalctl -k` carrier timestamps on `enP7s7` against UniFi's **Receive S
 
 The retained host journal also contains carrier drops on September 28 and earlier dates, so carrier loss predates this recipe trial. Earlier events have not been classified as operational resets or unplanned faults; they do not establish that every historical drop has the same cause. The since-boot journal and current host/switch receipts are retained outside git under `~/sparkrun/experiments/glm53-20260930/receipts/` on spark-1.
 
-The live switch port name is `SFP+ 8`; its client alias is `spark-2bb4 2b:b4`, and the MAC is `4c:bb:47:2e:2b:b4`. Use the inventory map and MAC rather than relying on the displayed alias. Inspect the controller at `https://unifi.home.kelch.io/`. Its generic OEM `SFP-10G-SR` identity must be checked against the physical module before replacement procurement.
+The live switch port name is `SFP+ 8`. Use the inventory map rather than relying on auto-generated client aliases. Inspect the controller at `https://unifi.home.kelch.io/`. Its generic OEM `SFP-10G-SR` identity must be checked against the physical module before replacement procurement. Keep identifying details and raw diagnostics local; public issues need only a short status note.
 
 When worker management SSH is unavailable but spark-1 is reachable, use the existing private fabric only for explicit operator diagnostics. Preserve host-key verification by matching the worker's already verified management identity:
 
