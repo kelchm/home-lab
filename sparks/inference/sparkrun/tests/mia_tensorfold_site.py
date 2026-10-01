@@ -9,7 +9,9 @@ from urllib.error import HTTPError
 from urllib.request import urlopen
 
 from tensorfold.cuda.http import make_handler
+from tensorfold.cuda.reply_text import GlmCallStreamer
 from tensorfold.families.glm5_next.cuda.kept_reasoning import KeptReasoning
+from tensorfold.families.glm5_next.prompts import agent_history
 
 
 def call(call_id):
@@ -87,7 +89,60 @@ def check_http_health():
         server.server_close()
 
 
+def check_history_recovery():
+    messages = history()
+    for index, arguments in enumerate(('{"path":', '[]', 'null')):
+        bad = call(f"bad-{index}")
+        bad["function"]["arguments"] = arguments
+        good = call(f"good-{index}")
+        messages += [{"role": "assistant", "content": "Keep this content.",
+                      "reasoning_content": "Keep this reasoning.", "tool_calls": [bad, good]},
+                     {"role": "tool", "tool_call_id": bad["id"], "content": "Discard this result."},
+                     {"role": "tool", "tool_call_id": good["id"], "content": f"Good result {index}."}]
+    original = deepcopy(messages)
+    recovered = agent_history(messages)
+    assert messages == original, "Recovery must not mutate the caller's history"
+    assert recovered == agent_history(recovered), "Recovered history must remain stable"
+    turns = recovered[len(history()):]
+    assert len(turns) == 6
+    for index in range(3):
+        assistant, result = turns[index * 2:index * 2 + 2]
+        assert assistant["content"] == "Keep this content."
+        assert assistant["reasoning_content"] == "Keep this reasoning."
+        assert [c["id"] for c in assistant["tool_calls"]] == [f"good-{index}"]
+        assert result["tool_call_id"] == f"good-{index}"
+        assert result["content"] == f"Good result {index}."
+    bad = call("only-bad")
+    bad["function"]["arguments"] = '{"path":'
+    messages = history() + [{"role": "assistant", "content": "Retain this reply.", "tool_calls": [bad]},
+                            {"role": "tool", "tool_call_id": bad["id"], "content": "Discard this result."},
+                            {"role": "user", "content": "Continue the conversation."}]
+    recovered = agent_history(messages)
+    assert [m["role"] for m in recovered] == ["system", "user", "assistant", "user"]
+    assert recovered[-2] == {"role": "assistant", "content": "Retain this reply."}
+    assert recovered[-1] == messages[-1]
+
+
+def check_whole_tool_calls():
+    tools = [{"type": "function", "function": {"name": "read_file", "parameters": {
+        "type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}}}]
+    stream = GlmCallStreamer(tools)
+    partial = "<tool_call>read_file<arg_key>path</arg_key><arg_value>README"
+    assert stream.feed(partial) == [], "A cut tool call must not reach the client"
+    assert stream.open and stream.sent == 0
+    complete = partial + ".md</arg_value></tool_call>"
+    deltas = stream.feed(complete)
+    assert len(deltas) == 1 and stream.sent == 1 and not stream.open
+    tool = deltas[0]["tool_calls"][0]
+    assert tool["id"] and tool["index"] == 0 and tool["type"] == "function"
+    assert tool["function"]["name"] == "read_file"
+    assert json.loads(tool["function"]["arguments"]) == {"path": "README.md"}
+    assert stream.feed(complete) == [], "A complete call must be emitted only once"
+
+
 if __name__ == "__main__":
     check_reasoning()
     check_http_health()
-    print("PASS exact tool turns, identical parallel histories, caller reasoning, eviction and HTTP health failures")
+    check_history_recovery()
+    check_whole_tool_calls()
+    print("PASS exact tool turns, identical parallel histories, caller reasoning, eviction, HTTP health, malformed-history recovery and whole tool calls")

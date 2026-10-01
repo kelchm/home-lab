@@ -36,6 +36,7 @@ class Qualification:
                 result = json.load(response)
             else:
                 message, calls, usage, finish, done = {"content": "", "reasoning_content": ""}, {}, None, None, False
+                engine_stats = None
                 for line in response:
                     if not line.startswith(b"data:"):
                         continue
@@ -47,6 +48,7 @@ class Qualification:
                     if data.get("error"):
                         raise RuntimeError(data["error"])
                     usage = data.get("usage") or usage
+                    engine_stats = data.get("tensorfold") or engine_stats
                     for choice in data.get("choices", []):
                         finish = choice.get("finish_reason") or finish
                         delta = choice.get("delta") or {}
@@ -64,6 +66,8 @@ class Qualification:
                 if calls:
                     message["tool_calls"] = [calls[index] for index in sorted(calls)]
                 result = {"choices": [{"message": message, "finish_reason": finish}], "usage": usage}
+                if engine_stats is not None:
+                    result["tensorfold"] = engine_stats
         if result.get("error"):
             raise RuntimeError(result["error"])
         if not result.get("choices") or not result["choices"][0].get("finish_reason"):
