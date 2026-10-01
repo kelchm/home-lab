@@ -33,23 +33,36 @@ class Campaign:
 
     def monitor(self):
         low = {}
+        link_baseline = {}
+        paths = ["/proc/meminfo"]
+        if self.args.require_stable_links:
+            paths += [f"/sys/class/net/enP7s7/{key}" for key in ("carrier", "speed", "carrier_down_count")]
         while not self.finished.is_set():
             for host in ("head", self.args.worker):
                 try:
-                    raw = Path("/proc/meminfo").read_text() if host == "head" else subprocess.check_output(
-                        ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", host, "cat /proc/meminfo"],
+                    raw = "\n".join(Path(path).read_text().strip() for path in paths) if host == "head" else subprocess.check_output(
+                        ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", host, "cat", *paths],
                         text=True, timeout=10)
+                    link = None
+                    if self.args.require_stable_links:
+                        raw, carrier, speed, drops = raw.rstrip().rsplit("\n", 3)
+                        link = {"carrier": int(carrier), "speed": int(speed), "carrier_down_count": int(drops)}
                     values = {line.split(":")[0]: int(line.split()[1]) for line in raw.splitlines()}
                     gib = values["MemAvailable"] / 1024 ** 2
                     self.minimum[host] = min(self.minimum.get(host, gib), gib)
                     with self.telemetry.open("a") as report:
                         report.write(json.dumps({"time": time.time(), "host": host, "available_gib": gib,
-                                                 "swap_used_gib": (values["SwapTotal"] - values["SwapFree"]) / 1024 ** 2}) + "\n")
+                                                 "swap_used_gib": (values["SwapTotal"] - values["SwapFree"]) / 1024 ** 2,
+                                                 **({"link": link} if link else {})}) + "\n")
+                    if link is not None:
+                        baseline = link_baseline.setdefault(host, link["carrier_down_count"])
+                        if link["carrier"] != 1 or link["speed"] != 10000 or link["carrier_down_count"] != baseline:
+                            raise RuntimeError(f"{host} management link changed: {link}")
                     low[host] = low.get(host, 0) + 1 if gib < 2 else 0
                     if low[host] >= 3:
                         raise RuntimeError(f"{host} MemAvailable below 2 GiB for three samples")
                 except Exception as error:
-                    self.failures.append(f"Memory monitoring failed: {error}")
+                    self.failures.append(f"Campaign monitoring failed: {error}")
                     self.cancel.set()
                     # Evaluation abort only; never replace a stack or launch a watchdog.
                     subprocess.run(["sparkrun", "stop", self.args.recipe, "--cluster", "sparks"],
@@ -202,6 +215,8 @@ def main():
     parser.add_argument("--campaign", default="glm53-20260930-a")
     parser.add_argument("--secret", default="cobalt-river-7391")
     parser.add_argument("--timeout", type=int, default=2400)
+    parser.add_argument("--require-stable-links", action="store_true",
+                        help="Abort on lost 10GbE carrier or new carrier drops on enP7s7 on either Spark")
     Campaign(parser.parse_args()).run()
 
 
