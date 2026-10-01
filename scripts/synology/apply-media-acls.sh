@@ -3,6 +3,7 @@
 # per the design in docs/plans/20260513-arr-hardlink-rework.md.
 #
 # Run on the Synology NAS as root (sudo -i). Idempotent — safe to re-run.
+# `--verify` checks the final state without changing anything.
 # Source of truth for the per-folder ACL state; the DSM Properties UI is for
 # inspection, not modification.
 
@@ -55,6 +56,7 @@ INHERIT_ALL="fd--"
 INHERIT_LOCAL="---n"
 
 # ---- target folders (must exist) --------------------------------------
+SHARE_ROOT=/volume1/media
 PATHS="
 /volume1/media
 /volume1/media/tv
@@ -111,6 +113,43 @@ strip_comments_and_blanks() {
     printf '%s\n' "$1" | grep -v '^[[:space:]]*$' | grep -v '^[[:space:]]*#'
 }
 
+verify_error() {
+    echo "ERROR: final ACL state: $*" >&2
+    verify_failed=1
+}
+
+# Asserts that each path's local (level:0) ACEs are exactly the ACE list,
+# that every child inherits the share root's inheritable ACEs, and that no
+# allow entry precedes a deny entry.
+verify_final_state() {
+    verify_failed=0
+    aces=$(strip_comments_and_blanks "$ACES")
+    root_inherited=$(printf '%s\n' "$aces" | awk -F'\t' -v root="$SHARE_ROOT" -v all="$INHERIT_ALL" \
+        '$1 == root && $6 == all { print $2 ":" $3 ":" $4 ":" $5 ":" $6 }')
+    for p in $(strip_comments_and_blanks "$PATHS"); do
+        state=$(synoacltool -get "$p")
+        expected=$(printf '%s\n' "$aces" | awk -F'\t' -v path="$p" \
+            '$1 == path { print $2 ":" $3 ":" $4 ":" $5 ":" $6 }')
+        expected_count=$(printf '%s' "$expected" | grep -c . || true)
+        local_count=$(printf '%s\n' "$state" | grep -c '(level:0)' || true)
+        if [ "$local_count" -ne "$expected_count" ]; then
+            verify_error "$p has $local_count local ACEs, expected $expected_count"
+        fi
+        for ace in $expected; do
+            printf '%s\n' "$state" | grep -qF "] $ace (level:0)" || verify_error "$p is missing local ACE $ace"
+        done
+        if [ "$p" != "$SHARE_ROOT" ]; then
+            printf '%s\n' "$state" | grep -q '^Archive:.*is_inherit' || verify_error "$p does not inherit"
+            for ace in $root_inherited; do
+                printf '%s\n' "$state" | grep -qF "] $ace (level:1)" || verify_error "$p does not inherit $ace"
+            done
+        fi
+        printf '%s\n' "$state" | awk '/\] [^ ]*:deny:/ { if (allow) bad = 1 } /\] [^ ]*:allow:/ { allow = 1 } END { exit bad }' \
+            || verify_error "$p lists an allow entry before a deny entry"
+    done
+    [ "$verify_failed" -eq 0 ]
+}
+
 main() {
     if [ "$(id -u)" -ne 0 ]; then
         echo "ERROR: must run as root (sudo -i)" >&2
@@ -124,6 +163,12 @@ main() {
             exit 1
         fi
     done
+
+    if [ "${1:-}" = "--verify" ]; then
+        verify_final_state || exit 1
+        echo "Final ACL state verified."
+        return
+    fi
 
     backup="/var/log/media-acls-backup-$(date +%Y%m%d-%H%M%S).txt"
     echo "=== Backing up current ACL state to $backup ==="
@@ -177,12 +222,20 @@ main() {
     # the ACEs, and `-add` doesn't restore it — the result is a
     # category folder in ACL mode with only its own level:0 ACEs and no
     # inherited entries from /volume1/media. Explicitly re-enable
-    # inheritance on each managed path. Safe to call on the share root
-    # (no-op when there's no parent ACL to inherit from).
+    # inheritance on each managed path. A failure is fatal for the category
+    # folders. The share root is the one path allowed to fail, when there is
+    # no parent ACL to inherit from.
     echo "=== Re-enabling inheritance on managed folders ==="
     for p in $paths; do
         printf 'set-archive is_inherit: %s\n' "$p"
-        synoacltool -set-archive "$p" is_inherit 2>&1 || true
+        if ! synoacltool -set-archive "$p" is_inherit; then
+            if [ "$p" = "$SHARE_ROOT" ]; then
+                echo "note: share root has no parent ACL to inherit; continuing"
+            else
+                echo "ERROR: could not re-enable inheritance on $p" >&2
+                exit 1
+            fi
+        fi
     done
 
     # NOTE: we don't migrate Linux-mode descendants here. `synoacltool
@@ -209,8 +262,14 @@ main() {
         synoacltool -get "$p"
     done
 
+    if ! verify_final_state; then
+        echo "ACLs were changed but do not match the target state. Backup: $backup" >&2
+        exit 1
+    fi
+
     echo
-    echo "Done. Backup: $backup"
+    echo "Done. Final state verified. Backup: $backup"
 }
 
-main "$@"
+# Tests source this file for its functions.
+[ "${APPLY_MEDIA_ACLS_SOURCE_ONLY:-}" = 1 ] || main "$@"

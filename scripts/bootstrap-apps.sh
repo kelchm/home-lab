@@ -1,24 +1,47 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-source "$(dirname "${0}")/lib/common.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 
 export LOG_LEVEL="debug"
 export ROOT_DIR="$(git rev-parse --show-toplevel)"
 
-# Talos requires the nodes to be 'Ready=False' before applying resources
+# Reads `kubectl get nodes --output=json` on stdin and prints a summary.
+# Succeeds once at least the expected number of nodes are registered and every
+# registered node reports Ready=True or Ready=False; before the CNI exists,
+# Talos nodes report Ready=False.
+function node_readiness() {
+    local -r expected="$1"
+    local nodes
+    nodes=$(cat)
+    jq -r --argjson expected "${expected}" '
+        [.items[] | ([.status.conditions[]? | select(.type == "Ready") | .status][0] // "Unknown")] as $ready
+        | "registered=\($ready | length)/\($expected) ready=\([$ready[] | select(. == "True")] | length) not_ready=\([$ready[] | select(. == "False")] | length) unknown=\([$ready[] | select(. != "True" and . != "False")] | length)"
+    ' <<<"${nodes}"
+    jq -e --argjson expected "${expected}" '
+        [.items[] | ([.status.conditions[]? | select(.type == "Ready") | .status][0] // "Unknown")]
+        | length >= $expected and all(. == "True" or . == "False")
+    ' <<<"${nodes}" >/dev/null
+}
+
+# Waits for every node in talconfig.yaml to register. BOOTSTRAP_NODE_COUNT
+# lowers the count when bootstrapping with nodes deliberately offline.
 function wait_for_nodes() {
-    log debug "Waiting for nodes to be available"
+    local -r expected="${BOOTSTRAP_NODE_COUNT:-$(yq '.nodes | length' "${ROOT_DIR}/talos/talconfig.yaml")}"
+    local -r timeout="${BOOTSTRAP_NODE_TIMEOUT:-600}"
+    local -r deadline=$((SECONDS + timeout))
+    local summary
 
-    # Skip waiting if all nodes are 'Ready=True'
-    if kubectl wait nodes --for=condition=Ready=True --all --timeout=10s &>/dev/null; then
-        log info "Nodes are available and ready, skipping wait for nodes"
-        return
-    fi
-
-    # Wait for all nodes to be 'Ready=False'
-    until kubectl wait nodes --for=condition=Ready=False --all --timeout=10s &>/dev/null; do
-        log info "Nodes are not available, waiting for nodes to be available. Retrying in 10 seconds..."
+    log debug "Waiting for nodes to register" "expected=${expected}" "timeout=${timeout}s"
+    while true; do
+        if summary=$(kubectl get nodes --output=json 2>/dev/null | node_readiness "${expected}"); then
+            log info "Nodes are registered" "${summary}"
+            return
+        fi
+        if ((SECONDS >= deadline)); then
+            log error "Nodes did not register before the timeout" "${summary:-api=unreachable}" "timeout=${timeout}s"
+        fi
+        log info "Waiting for nodes to register; retrying in 10 seconds" "${summary:-api=unreachable}"
         sleep 10
     done
 }
@@ -58,14 +81,12 @@ function apply_sops_secrets() {
     log debug "Applying secrets"
 
     local -r secrets=(
-        "${ROOT_DIR}/bootstrap/github-deploy-key.sops.yaml"
         "${ROOT_DIR}/bootstrap/sops-age.sops.yaml"
     )
 
     for secret in "${secrets[@]}"; do
         if [ ! -f "${secret}" ]; then
-            log warn "File does not exist" "file=${secret}"
-            continue
+            log error "File does not exist" "file=${secret}"
         fi
 
         # Check if the secret resources are up-to-date
@@ -90,11 +111,11 @@ function apply_crds() {
     local -r helmfile_file="${ROOT_DIR}/bootstrap/helmfile.d/00-crds.yaml"
 
     if [[ ! -f "${helmfile_file}" ]]; then
-        log fatal "File does not exist" "file" "${helmfile_file}"
+        log error "File does not exist" "file=${helmfile_file}"
     fi
 
     if ! crds=$(helmfile --file "${helmfile_file}" template --quiet | yq eval-all --exit-status 'select(.kind == "CustomResourceDefinition")') || [[ -z "${crds}" ]]; then
-        log fatal "Failed to render CRDs from Helmfile" "file" "${helmfile_file}"
+        log error "Failed to render CRDs from Helmfile" "file=${helmfile_file}"
     fi
 
     if echo "${crds}" | kubectl diff --filename - &>/dev/null; then
@@ -103,7 +124,7 @@ function apply_crds() {
     fi
 
     if ! echo "${crds}" | kubectl apply --server-side --filename - &>/dev/null; then
-        log fatal "Failed to apply crds from Helmfile" "file" "${helmfile_file}"
+        log error "Failed to apply CRDs from Helmfile" "file=${helmfile_file}"
     fi
 
     log info "CRDs applied successfully"
@@ -128,7 +149,7 @@ function sync_helm_releases() {
 
 function main() {
     check_env KUBECONFIG TALOSCONFIG
-    check_cli helmfile kubectl kustomize sops talhelper yq
+    check_cli helmfile jq kubectl kustomize sops talhelper yq
 
     # Apply resources and Helm releases
     wait_for_nodes
@@ -140,4 +161,6 @@ function main() {
     log info "Congrats! The cluster is bootstrapped and Flux is syncing the Git repository"
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi
