@@ -1,13 +1,13 @@
 {
   "kit_repository": "MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold",
-  "kit_revision": "ed026ef92d1650120dada1294a112acb6c8f2f48",
+  "kit_revision": "1f3d909b00b7be7aa8f00d3a33e0b9e7aa56d221",
   "engine_repository": "ashhart/TensorFold",
   "engine_revision": "9cd52ab4daba68ddd09be89be8f23ad43175e821",
   "engine_version": "0.5.0",
-  "upstream_patch_count": 52,
-  "upstream_patch_hash": "cefe8bf45d07",
-  "image": "ghcr.io/miaai-lab/glm-5.3-flash-exl3-2x-dgx-sparks-tensorfold@sha256:7bcbb617b1f40f1ce12d37e5ba5e42caf1b1c53b444be9951915e966314c3e1d",
-  "image_id": "sha256:67e82cade069474645782275e2bec5326e91fa0a886831adab8d490f41bbff3f",
+  "upstream_patch_count": 53,
+  "upstream_patch_hash": "cb7c56f7f921",
+  "image": "ghcr.io/miaai-lab/glm-5.3-flash-exl3-2x-dgx-sparks-tensorfold@sha256:6ee3c6e0430040b69ddcb0c96c7fbbcb94a5bed47d48a8ba092626369ae533b9",
+  "image_id": "sha256:3306d33921f9383480e7459e51d751efe1de13aaec3bf978b2f8a0c0c15d475b",
   "readiness_sha256": "df73445447dd9efed396403b410e4f6ceb66e6c252d6676dccc393f63ffe718b",
   "installed_files": {
     "families/glm5_next/cuda/kept_reasoning.py": {
@@ -19,8 +19,8 @@
       "site_sha256": "278aa5fd07b267c47bf39b954057a10c9e5add91259d2a091a3a6758700045f0"
     },
     "cuda/http.py": {
-      "upstream_sha256": "c8d3be04fe99c546c15c1174a40ef60cd550f6138a99ff7cdcaede1be0849663",
-      "site_sha256": "283cc9a81c29d68a8c5cd2586ddbb9ce7138b98ec68dd9766df9bcf0d03eb4de"
+      "upstream_sha256": "b2a3fecfb6620059c7718a7ed4317418ad23c56fbf6d5e26270aad603794add2",
+      "site_sha256": "73eb48b671aa91b5b5651ded27c56af407faf3fd9c8323cb6703c60ea933fd8d"
     }
   }
 }

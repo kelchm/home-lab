@@ -3,15 +3,15 @@ recipe_version: '2'
 model: Mia-AiLab/GLM-5.3-Flash-EXL3-TR3-4bpw
 model_revision: 25a44fdbf16862a46b7cc9921142c6c81350af2f
 runtime: tensorfold
-container: ghcr.io/miaai-lab/glm-5.3-flash-exl3-2x-dgx-sparks-tensorfold@sha256:7bcbb617b1f40f1ce12d37e5ba5e42caf1b1c53b444be9951915e966314c3e1d
+container: ghcr.io/miaai-lab/glm-5.3-flash-exl3-2x-dgx-sparks-tensorfold@sha256:6ee3c6e0430040b69ddcb0c96c7fbbcb94a5bed47d48a8ba092626369ae533b9
 min_nodes: 2
 max_nodes: 2
 metadata:
   description: Mia TensorFold 0.5.0 with four streams and a dynamically sized FP8 KV pool
-  kit_revision: ed026ef92d1650120dada1294a112acb6c8f2f48
+  kit_revision: 1f3d909b00b7be7aa8f00d3a33e0b9e7aa56d221
   engine_revision: 9cd52ab4daba68ddd09be89be8f23ad43175e821
-  upstream_patch_count: 52
-  upstream_patch_hash: cefe8bf45d07
+  upstream_patch_count: 53
+  upstream_patch_hash: cb7c56f7f921
   site_backports: exact-tool-turn-reasoning, strict-concurrent-health
   target_model_revision: 25a44fdbf16862a46b7cc9921142c6c81350af2f
   draft_model_revision: bf582e4eacc1810f76656d1811693ff6c6737d2a
@@ -34,7 +34,7 @@ env:
   TENSORFOLD_NO_UPDATE_CHECK: '1'
   # Four GiB more host reserve than upstream, toward our 8 GiB headroom goal.
   TENSORFOLD_MEMORY_RESERVE_GIB: '18.5'
-  TF_GLM_CACHE_GIB: '11'
+  TF_GLM_CACHE_GIB: '12.5'
   TF_GLM_KV: fp8
   TF_GLM_DENSE: q4
   TF_GLM_COMM: roce
@@ -57,6 +57,10 @@ env:
   TENSORFOLD_GLM_IMAGE_TOKENS: '2048'
   TENSORFOLD_GLM_VIDEO_TOKENS: '16384'
   TENSORFOLD_GLM_VIDEO_FRAMES: '128'
+  TENSORFOLD_GLM_MAX_IMAGES: '50'
+  TENSORFOLD_GLM_MAX_VIDEOS: '4'
+  TENSORFOLD_GLM_REQUEST_IMAGE_TOKENS: '16384'
+  TENSORFOLD_GLM_REQUEST_VIDEO_TOKENS: '32768'
 executor_config:
   entrypoint: ''
   user: root
