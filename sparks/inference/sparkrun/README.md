@@ -171,6 +171,57 @@ For the initial migration, the previous recipe remains at `~/sparkrun/receipts/i
 
 The endpoint is unauthenticated on the trusted LAN. The existing nonpersistent firewall exception permits workstation `10.32.10.244/32` to head port 8888 via `enP7s7`. Check access after a host reboot or workstation address change.
 
+### OpenCode client configuration
+
+The October 1 operator instance runs the previously validated Mia TensorFold v1.2 recipe through SparkRun, with C4, an 850,000-token request window and a 2,310,144-token shared pool. Its temporary benchmark monitor and timed stop were removed at the operator's request. It remains running until manually stopped; client request timeouts do not stop the model service. The v1.3 candidate above still awaits live qualification.
+
+Use the OpenAI-compatible chat-completions provider for this endpoint. The workstation's `~/.config/opencode/opencode.jsonc` supplies the machine-specific Spark provider and local model defaults; the current chezmoi modifier preserves those fields. The relevant settings for OpenCode 1.18.33 are:
+
+```json
+{
+  "provider": {
+    "spark": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Sparks",
+      "options": {
+        "baseURL": "http://10.32.21.31:8888/v1",
+        "chunkTimeout": 1800000,
+        "headerTimeout": 120000,
+        "timeout": false,
+        "includeUsage": true
+      },
+      "models": {
+        "GLM-5.3-Flash-EXL3": {
+          "name": "GLM-5.3-Flash",
+          "reasoning": true,
+          "temperature": true,
+          "attachment": true,
+          "modalities": { "input": ["text", "image"], "output": ["text"] },
+          "limit": { "context": 850000, "output": 32000 },
+          "options": { "reasoningEffort": "max" },
+          "variants": {
+            "none": { "reasoningEffort": "none" },
+            "low": { "reasoningEffort": "low" },
+            "high": { "reasoningEffort": "high" },
+            "max": { "reasoningEffort": "max" }
+          }
+        }
+      }
+    }
+  },
+  "model": "spark/GLM-5.3-Flash-EXL3",
+  "small_model": "spark/GLM-5.3-Flash-EXL3"
+}
+```
+
+GLM has three native reasoning levels: `low`, `high` and `max`. `none` disables thinking and provides a fourth selectable mode. The live v1.2 `/tokenize`/`/detokenize` check renders `medium` exactly like `max`; accepting that API value does not give it a distinct effort level. This agrees with the [pinned Mia recipe's support guidance](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold/tree/1f3d909b00b7be7aa8f00d3a33e0b9e7aa56d221). OpenCode 1.18.33's [pinned transform](https://github.com/anomalyco/opencode/blob/51ef4be1d3c122f18fefb510dca8d778571f4f18/packages/opencode/src/provider/transform.ts) does not generate GLM-5.3 variants automatically, so configure them explicitly as supported by its [custom-variant documentation](https://opencode.ai/docs/models/#custom-variants). The default remains the server's native `max`; select another mode with the variant picker or `opencode run --variant low`.
+
+The 30-minute chunk timeout accommodates cold prefill: the measured C4 250k run needed more than ten minutes before content, and this TensorFold HTTP server emits no heartbeat between its initial role chunk and generation. The two-minute header timeout covers request preparation, while `timeout: false` avoids a separate overall deadline. These settings still cancel an individual request after a stalled stream. The client retains 850k context and 32k output: this OpenCode version internally caps output at 32,000 even when a larger model limit is declared. Automatic compaction remains enabled, with the effective 818,000-token threshold including cache reads. Ordinary coding requests leave sampling overrides unset and use TensorFold's native temperature 1.0, top-p 0.95 and top-k 20. The server's shared pool and four slots still govern simultaneous capacity.
+
+Live OpenCode checks passed all four variants plus the default, with captured requests proving `reasoning_effort`, `max_tokens: 32000` and `stream_options.include_usage: true`. `none` produced no reasoning; the three native levels produced reasoning and correct synthetic arithmetic replies. A read-only tool call and a new-user continuation preserved assistant `reasoning_content` and exact tool-call IDs, and API cache reads reached OpenCode's saved token accounting. Its bundled OpenAI-compatible SDK forwards reasoning automatically, even though the effective model metadata reports `interleaved: false`. A normal CLI request using the workstation's local configuration outside the repository also returned `OPENCODE_CONFIG_READY`, with the selected `high` effort and the same output/usage fields captured at the wire.
+
+The separate `chat_template_kwargs.clear_thinking=false` control passed the same small reasoning/tool loop and reused 13,376 tokens on the next user turn, versus 3,456 with default clearing. It retains earlier reasoning in the rendered prefix; the client already sent that reasoning in both cases. Generated histories differ, so these are two accounting/retention observations rather than a matched speed benchmark. Keep it out of the workstation default pending the parallel long-session comparison described above. Local audit receipts remain outside git: `live-template-efforts.json`, `wire-template-renders.json`, `live-client-summary.json`, `preserved-live-client-summary.json` and `actual-local-config-summary.json`.
+
 ## Validate
 
 Run these against the existing instance, with no other workload submitting requests. Use a working directory outside the recipe checkout for native reports and the evaluator's local database:
