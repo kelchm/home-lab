@@ -51,7 +51,7 @@ Rate a PR by what changes on the running system, not by its semver label.
 - Renovate's embedded notes are only a pointer: they have described the wrong project, and digest bumps have none. Read upstream notes for every release in the range, covering both the chart and the app it ships.
 - Grep the repo for each breaking change or new default. An option the repo leaves unset takes the new default.
 - If the notes are ambiguous, read the source at the tag. For compiled dependencies, read the lockfile, not the manifest's range.
-- Render with `flate diff all --path kubernetes/flux/cluster --path-orig <primary-checkout>/kubernetes/flux/cluster -o github`. Leaving out `--path-orig` has produced an empty diff. flate is a static binary (brew install --cask home-operations/tap/flate); the diff is of rendered output, not a git patch.
+- Render with `flate diff all --path kubernetes/flux/cluster --path-orig <primary-checkout>/kubernetes/flux/cluster -o github`. Leaving out `--path-orig` has produced an empty diff. flate is pinned in `.mise.toml`; the diff is of rendered output, not a git patch.
 - CI's Flate PR Diff comments are not a full diff. They strip chart and version labels by default and are omitted when empty, so a missing comment doesn't mean nothing changed. The job summary holds the same diff.
 
 ## Merge
