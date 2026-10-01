@@ -84,7 +84,7 @@ class Campaign:
         # Decode once; the measured API prompt count includes the chat template.
         return prefix + self.tokenizer.decode(tokens, skip_special_tokens=False)
 
-    def request(self, content, limit=256, expected=None, case=None):
+    def request(self, content, limit=256, expected=None, case=None, min_completion=0):
         body = {"model": self.args.model, "messages": [{"role": "user", "content": content}],
                 "temperature": 0, "seed": self.args.seed, "max_tokens": limit, "stream": True,
                 "stream_options": {"include_usage": True},
@@ -146,6 +146,8 @@ class Campaign:
             error = f"Incorrect answer: {text[:300]!r}; expected {expected!r}"
         elif stream_error is None and expected is None and self.args.marker not in text:
             error = f"Long response lost PUBLIC_REVIEW_MARKER: {text[:300]!r}"
+        elif stream_error is None and completion < min_completion:
+            error = f"Output-growth probe needs at least {min_completion} completion tokens, got {completion}"
         if error:
             with self.lock, self.failed_responses.open("a") as report:
                 report.write(json.dumps({"case": case, "arm": self.args.arm,
@@ -165,10 +167,10 @@ class Campaign:
             report.write(json.dumps(result) + "\n")
         print(json.dumps({key: value for key, value in result.items() if key != "streams"}), flush=True)
 
-    def phase(self, name, contexts, suffix, limit=256, expected=None):
+    def phase(self, name, contexts, suffix, limit=256, expected=None, min_completion=0):
         started = time.monotonic()
         with ThreadPoolExecutor(max_workers=len(contexts)) as pool:
-            futures = [pool.submit(self.request, context + suffix, limit, expected, name) for context in contexts]
+            futures = [pool.submit(self.request, context + suffix, limit, expected, name, min_completion) for context in contexts]
             rows = [future.result() for future in futures]
         self.write(name, rows, time.monotonic() - started)
         return rows
@@ -183,9 +185,15 @@ class Campaign:
                       "Write at least 2000 words.")
             retrieval = "\nReply with only the value assigned to PUBLIC_REVIEW_MARKER in the first repository header."
             lengths = {"full": [131072, 250000], "repeat": [131072],
-                       "250k": [250000], "ceiling": []}[self.args.suite]
+                       "250k": [250000], "growth": [250000], "ceiling": []}[self.args.suite]
             for count in lengths:
                 contexts = [self.context(count, f"{self.args.campaign}-{count}-{index}") for index in range(4)]
+                if self.args.suite == "growth":
+                    # Enough actual decode to grow beyond a 2,048-token pool extent;
+                    # a high max_tokens value with a short answer does not test that.
+                    self.phase("c4-250k-output-growth", contexts, suffix + " Write at least 4000 words.",
+                               4096, min_completion=2048)
+                    continue
                 if self.args.suite != "repeat" and count == 131072:
                     self.phase("c1-128k-cold", contexts[:1], suffix)
                     self.phase("c2-128k-cold", contexts[1:3], suffix)
@@ -194,9 +202,8 @@ class Campaign:
                 self.phase(f"c4-{count}-cold", contexts, suffix)
                 self.phase(f"c4-{count}-warm", contexts, suffix)
                 if count == 250000 and self.args.suite == "full":
-                    # Exercise a normal client's 32k output reservation even
-                    # though this retrieval should finish after a few tokens.
-                    self.phase("c4-250k-client-output-reservation", contexts, retrieval, 32768, self.args.marker)
+                    # W20 reserves this budget; Mia TensorFold grows the pool during decode.
+                    self.phase("c4-250k-client-output-budget", contexts, retrieval, 32768, self.args.marker)
                 if count == 131072 and self.args.suite != "repeat":
                     edited = [value[:len(value)//2] + "\n# Newly edited module: tag ordering is unchanged.\n" +
                               value[len(value)//2:] for value in contexts]
@@ -236,7 +243,7 @@ def main():
     parser.add_argument("--worker", default="kelchm@10.32.21.32")
     parser.add_argument("--url", default="http://127.0.0.1:8888/v1")
     parser.add_argument("--model", default="GLM-5.3-Flash-EXL3")
-    parser.add_argument("--suite", choices=("full", "repeat", "250k", "ceiling"), default="full")
+    parser.add_argument("--suite", choices=("full", "repeat", "250k", "growth", "ceiling"), default="full")
     parser.add_argument("--campaign", default="glm53-20260930-a")
     parser.add_argument("--marker", default="cobalt-river-7391")
     parser.add_argument("--seed", type=int, default=20260930)

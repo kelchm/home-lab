@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import importlib.util
 import shlex
 import sys
 import threading
@@ -11,6 +12,7 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
+import yaml
 
 PLUGINS = Path(__file__).resolve().parents[1] / "plugins"
 if str(PLUGINS) not in sys.path:
@@ -216,6 +218,42 @@ def test_prepare_distributes_declared_drafter(runtime):
     assert DRAFT in names
     assert names[DRAFT] == DRAFT_REV
     assert DRAFT not in before
+
+
+def test_mia_recipe_reuses_native_rank_wiring(runtime):
+    root = Path(__file__).resolve().parents[1]
+    recipe = Recipe.from_dict(yaml.safe_load((root / "mia-tensorfold-glm53-exl3.yaml").read_text()))
+    assert not [issue for issue in runtime.validate_recipe(recipe) if getattr(issue, "severity", None) == ERROR]
+    spec = importlib.util.spec_from_file_location("mia_serve", root / "mods/mia-tensorfold/serve.py")
+    serve = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(serve)
+    for rank in (0, 1):
+        env, argv = _parse_env_command(_node_command(runtime, recipe, rank, init_port=29511))
+        assert argv == ["/usr/local/bin/glm53-mia-tf-entrypoint"]
+        assert env["MODEL_PATH"] == hf_snapshot_path(TARGET, TARGET_REV)
+        assert env["DRAFTER"] == hf_snapshot_path(DRAFT, "bf582e4eacc1810f76656d1811693ff6c6737d2a")
+        args = serve.command(env)
+        assert args[:3] == ["tensorfold", "serve", env["MODEL_PATH"]]
+        for flag, expected in (("--tp", "2"), ("--rank", str(rank)), ("--master", FABRIC_HEAD),
+                               ("--master-port", "29511"), ("--context", "850000"),
+                               ("--parallel", "4"), ("--max-tokens", "32768")):
+            assert args[args.index(flag) + 1] == expected
+        assert ("--name" in args) is (rank == 0)
+        assert "--vision" in args and "--thinking" in args
+    assert recipe.runtime_cache["key_by_image"] is True
+
+
+def test_readiness_requires_reported_pool_capacity():
+    path = Path(__file__).resolve().parents[1] / "mods/tensorfold/readiness.py"
+    spec = importlib.util.spec_from_file_location("tf_readiness", path)
+    ready = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(ready)
+    body = {"ok": True, "mode": "strict", "streams": {"max": 4}, "context_length": 850000}
+    ready.check_health(body, 4, 850000)  # Existing W20 gate does not require a pool field.
+    for pool in (None, True, "1200000", 1199999):
+        with pytest.raises(RuntimeError, match="pool tokens"):
+            ready.check_health({**body, "pool_tokens": pool}, 4, 850000, 1200000)
+    ready.check_health({**body, "pool_tokens": 1200000}, 4, 850000, 1200000)
 
 
 def test_runtime_cache_and_extra_env_stay_on_managed_namespace(runtime):

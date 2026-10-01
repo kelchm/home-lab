@@ -1,0 +1,26 @@
+{
+  "kit_repository": "MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold",
+  "kit_revision": "ed026ef92d1650120dada1294a112acb6c8f2f48",
+  "engine_repository": "ashhart/TensorFold",
+  "engine_revision": "9cd52ab4daba68ddd09be89be8f23ad43175e821",
+  "engine_version": "0.5.0",
+  "upstream_patch_count": 52,
+  "upstream_patch_hash": "cefe8bf45d07",
+  "image": "ghcr.io/miaai-lab/glm-5.3-flash-exl3-2x-dgx-sparks-tensorfold@sha256:7bcbb617b1f40f1ce12d37e5ba5e42caf1b1c53b444be9951915e966314c3e1d",
+  "image_id": "sha256:67e82cade069474645782275e2bec5326e91fa0a886831adab8d490f41bbff3f",
+  "readiness_sha256": "df73445447dd9efed396403b410e4f6ceb66e6c252d6676dccc393f63ffe718b",
+  "installed_files": {
+    "families/glm5_next/cuda/kept_reasoning.py": {
+      "upstream_sha256": "a7878f3c737859898d83de953a0a4e6eafffa3f5930bbac0b96073994a3be9fa",
+      "site_sha256": "bc41f4bf57e23a61fbb1a277cab190a809612ddfce2417e929c2b7438a26524b"
+    },
+    "cuda/health.py": {
+      "upstream_sha256": "e1130533211b585ef6811c095afaa625c8e7baff834977470cc3df2b1cfbc639",
+      "site_sha256": "278aa5fd07b267c47bf39b954057a10c9e5add91259d2a091a3a6758700045f0"
+    },
+    "cuda/http.py": {
+      "upstream_sha256": "c8d3be04fe99c546c15c1174a40ef60cd550f6138a99ff7cdcaede1be0849663",
+      "site_sha256": "283cc9a81c29d68a8c5cd2586ddbb9ce7138b98ec68dd9766df9bcf0d03eb4de"
+    }
+  }
+}
