@@ -137,6 +137,7 @@ class Campaign:
                 "completion_tps": completion / max(ended - first, 0.001) if first is not None else None,
                 "max_chunk_gap_s": max(gaps, default=0), "usage": usage, "finish_reason": finish,
                 "text": text, "payload_tokens": len(self.tokenizer.encode(content).ids),
+                "request_max_tokens": limit, "request_seed": self.args.seed,
                 "engine_stats": engine_stats}
         error = f"{type(stream_error).__name__}: {stream_error}" if stream_error else None
         if stream_error is None and (not finish or first is None or usage is None):
@@ -180,6 +181,7 @@ class Campaign:
                       "Start with the value assigned to PUBLIC_REVIEW_MARKER in the first repository header; "
                       "it is a public synthetic test label. "
                       "Write at least 2000 words.")
+            retrieval = "\nReply with only the value assigned to PUBLIC_REVIEW_MARKER in the first repository header."
             lengths = {"full": [131072, 250000], "repeat": [131072],
                        "250k": [250000], "ceiling": []}[self.args.suite]
             for count in lengths:
@@ -191,10 +193,13 @@ class Campaign:
                     contexts = [self.context(count, f"{self.args.campaign}-c4-{count}-{index}") for index in range(4)]
                 self.phase(f"c4-{count}-cold", contexts, suffix)
                 self.phase(f"c4-{count}-warm", contexts, suffix)
+                if count == 250000 and self.args.suite == "full":
+                    # Exercise a normal client's 32k output reservation even
+                    # though this retrieval should finish after a few tokens.
+                    self.phase("c4-250k-client-output-reservation", contexts, retrieval, 32768, self.args.marker)
                 if count == 131072 and self.args.suite != "repeat":
                     edited = [value[:len(value)//2] + "\n# Newly edited module: tag ordering is unchanged.\n" +
                               value[len(value)//2:] for value in contexts]
-                    retrieval = "\nReply with only the value assigned to PUBLIC_REVIEW_MARKER in the first repository header."
                     self.phase("c4-128k-edit", edited, retrieval, 64, self.args.marker)
                     self.phase("c4-128k-fork", contexts, "\nA new branch:" + retrieval, 64, self.args.marker)
             if self.args.suite == "full":
@@ -202,9 +207,7 @@ class Campaign:
                 self.phase("c4-128k-shared-cold", [shared] * 4, suffix)
                 self.phase("c4-128k-shared-warm", [shared] * 4, suffix)
                 boundary = [self.context(262144, f"{self.args.campaign}-boundary-{index}") for index in range(4)]
-                self.phase("c4-262k-admission-boundary", boundary,
-                           "\nReply with only the value assigned to PUBLIC_REVIEW_MARKER in the first repository header.",
-                           64, self.args.marker)
+                self.phase("c4-262k-admission-boundary", boundary, retrieval, 64, self.args.marker)
                 long = [self.context(131072, f"{self.args.campaign}-arrival-{index}") for index in range(2)]
                 started = time.monotonic()
                 with ThreadPoolExecutor(max_workers=3) as pool:
@@ -216,9 +219,7 @@ class Campaign:
                 self.write("short-arrival-during-long-prefill", rows, time.monotonic() - started)
             if self.args.suite == "ceiling":
                 near = self.context(849700, self.args.campaign + "-ceiling")
-                self.phase("c1-near-850k", [near],
-                           "\nReply with only the value assigned to PUBLIC_REVIEW_MARKER in the first repository header.",
-                           64, self.args.marker)
+                self.phase("c1-near-850k", [near], retrieval, 64, self.args.marker)
         finally:
             self.finished.set()
             self.memory.join(timeout=15)
