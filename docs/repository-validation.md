@@ -39,7 +39,7 @@ ever becomes the goal.
 
 ## Workflow invariants
 
-Keep these properties when extending `.github/workflows/flux-local.yaml`:
+Keep these properties when extending `.github/workflows/repository-validation.yaml`:
 
 1. Pull requests may use changed-file filtering; pushes to `main` must select
    every validation surface.

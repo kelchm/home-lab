@@ -46,18 +46,18 @@ jobs:
         with:
           files_yaml: |
             bootstrap:
-              - '.github/workflows/flux-local.yaml'
+              - '.github/workflows/repository-validation.yaml'
               - '.mise.toml'
               - '.taskfiles/bootstrap/**'
               - 'Taskfile.yaml'
               - 'bootstrap/**'
             docs:
-              - '.github/workflows/flux-local.yaml'
+              - '.github/workflows/repository-validation.yaml'
               - '.mise.toml'
               - '**/*.md'
               - 'scripts/ci/validate-docs-index.sh'
             kubernetes:
-              - '.github/workflows/flux-local.yaml'
+              - '.github/workflows/repository-validation.yaml'
               - '.mise.toml'
               - 'kubernetes/**'
               - 'scripts/ci/validate-vlagent.sh'
@@ -68,33 +68,33 @@ jobs:
               - 'scripts/ci/validate-unsafe-sysctls.sh'
               - 'talos/patches/global/machine-kubelet.yaml'
             network:
-              - '.github/workflows/flux-local.yaml'
+              - '.github/workflows/repository-validation.yaml'
               - '.mise.toml'
               - 'network/**'
             scripts:
-              - '.github/workflows/flux-local.yaml'
+              - '.github/workflows/repository-validation.yaml'
               - '.mise.toml'
               - '.renovaterc.json5'
               - '.shellcheckrc'
               - '**/*.sh'
             skills:
-              - '.github/workflows/flux-local.yaml'
+              - '.github/workflows/repository-validation.yaml'
               - '.agents/skills/**'
             sops:
-              - '.github/workflows/flux-local.yaml'
+              - '.github/workflows/repository-validation.yaml'
               - '.mise.toml'
               - '.sops.yaml'
               - '**/*.sops.yaml'
               - '**/*.sops.yml'
               - 'scripts/ci/validate-sops.sh'
             synology:
-              - '.github/workflows/flux-local.yaml'
+              - '.github/workflows/repository-validation.yaml'
               - '.mise.toml'
               - 'synology/**'
               - 'scripts/ci/test-validate-synology.sh'
               - 'scripts/ci/validate-synology.sh'
             talos:
-              - '.github/workflows/flux-local.yaml'
+              - '.github/workflows/repository-validation.yaml'
               - '.mise.toml'
               - '.taskfiles/talos/**'
               - 'Taskfile.yaml'
@@ -104,8 +104,8 @@ jobs:
         if: github.event_name == 'push'
         run: echo "Every validation surface runs for pushes to main."
 
-  flux-local-test:
-    name: Flux Local Test
+  flate-test:
+    name: Flate Render Test
     needs: pre-job
     runs-on: ubuntu-latest
     steps:
@@ -115,18 +115,21 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Run flux-local test
+      - name: Run flate test
         if: needs.pre-job.outputs.kubernetes_changed == 'true'
-        uses: docker://ghcr.io/allenporter/flux-local:v8.4.0
+        uses: docker://ghcr.io/home-operations/flate@sha256:e0e2d2de97539b3141977e8bb3bbb50ea5c5afe89477950e5fa972c9862478da # 0.6.5
+        env:
+          XDG_CACHE_HOME: /tmp/flate-cache
+          FLATE_NO_PROGRESS: "1"
         with:
-          args: test --enable-helm --all-namespaces --path /github/workspace/kubernetes/flux/cluster -v
+          args: test all --path /github/workspace/kubernetes/flux/cluster
 
       - name: No Kubernetes changes
         if: needs.pre-job.outputs.kubernetes_changed != 'true'
-        run: echo "Flux Local test is not required."
+        run: echo "Flate render test is not required."
 
-  flux-local-diff:
-    name: Flux Local Diff
+  flate-diff:
+    name: Flate PR Diff
     needs: pre-job
     runs-on: ubuntu-latest
     permissions:
@@ -134,7 +137,7 @@ jobs:
       pull-requests: write
     strategy:
       matrix:
-        resources: ["helmrelease", "kustomization"]
+        resources: ["hr", "ks"]
       max-parallel: 4
       fail-fast: false
     steps:
@@ -153,35 +156,37 @@ jobs:
           ref: "${{ github.event.repository.default_branch }}"
           path: default
 
-      - name: Run flux-local diff
+      - name: Run flate diff
         if: github.event_name == 'pull_request' && needs.pre-job.outputs.kubernetes_changed == 'true'
-        uses: docker://ghcr.io/allenporter/flux-local:v8.4.0
-        with:
-          args: >-
-            diff ${{ matrix.resources }}
-            --unified 6
-            --path /github/workspace/pull/kubernetes/flux/cluster
-            --path-orig /github/workspace/default/kubernetes/flux/cluster
-            --strip-attrs "helm.sh/chart,checksum/config,app.kubernetes.io/version,chart"
-            --limit-bytes 10000
-            --all-namespaces
-            --sources "flux-system"
-            --output-file diff.patch
+        run: >-
+          docker run --rm
+          --user 1001:1001
+          --volume "${GITHUB_WORKSPACE}:/workspace"
+          --workdir /workspace
+          --env XDG_CACHE_HOME=/tmp/flate-cache
+          --env FLATE_NO_PROGRESS=1
+          ghcr.io/home-operations/flate@sha256:e0e2d2de97539b3141977e8bb3bbb50ea5c5afe89477950e5fa972c9862478da
+          diff ${{ matrix.resources }}
+          --path pull/kubernetes/flux/cluster
+          --path-orig default/kubernetes/flux/cluster
+          --no-progress
+          -o github
+          > diff.txt
 
       - name: Generate Diff
         id: diff
         if: github.event_name == 'pull_request' && needs.pre-job.outputs.kubernetes_changed == 'true'
         run: |
-          cat diff.patch
+          cat diff.txt
           {
               echo 'diff<<EOF'
-              cat diff.patch
+              cat diff.txt
               echo EOF
           } >> "$GITHUB_OUTPUT"
           {
               echo "### Diff"
               echo '```diff'
-              cat diff.patch
+              cat diff.txt
               echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -199,7 +204,7 @@ jobs:
 
       - name: Diff not required
         if: github.event_name != 'pull_request' || needs.pre-job.outputs.kubernetes_changed != 'true'
-        run: echo "Flux Local diff is only produced for Kubernetes pull requests."
+        run: echo "Flate diff is only produced for Kubernetes pull requests."
 
   kubernetes:
     name: Kubernetes Static Validation
@@ -521,12 +526,12 @@ jobs:
         if: needs.pre-job.outputs.docs_changed != 'true'
         run: echo "Markdown link validation is not required."
 
-  flux-local-status:
-    name: Flux Local Success
+  validation-status:
+    name: Validation Success
     needs:
       - pre-job
-      - flux-local-test
-      - flux-local-diff
+      - flate-test
+      - flate-diff
       - kubernetes
       - talos
       - bootstrap
