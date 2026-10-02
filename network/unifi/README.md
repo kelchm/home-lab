@@ -24,11 +24,29 @@ Applied on 2026-10-01 in UniFi OS 5.1.33 / Network 10.6.106 for issue [#349](htt
 | `Camera Out Test` | Internal; network Cameras | External; any | Paused |
 | `Camera Access` and its return policy | Main → Cameras; Cameras → Main established/related replies | Internal | Existing local access preserved |
 
-The exception covers `ing-wyze-cam3-47e2` (`10.32.5.30`, MAC `02:ec:09:70:47:e2`) and `ing-wyze-cam2-0304` (`10.32.5.31`, MAC `02:be:2d:75:03:04`). Both devices' web interfaces identify as Thingino. Its [updater](https://github.com/themactep/thingino-firmware/blob/ciao/package/thingino-sysupgrade/files/sysupgrade) fetches scripts from `raw.githubusercontent.com` and firmware/checksums from GitHub releases; a HEAD request through the current Wyze Cam 2 release URL redirected to `release-assets.githubusercontent.com` and returned HTTP 200. This is a host-and-port exception, not a repository or URL-path restriction: those two cameras may reach other content on the allowed GitHub hosts too. No public NTP, generic HTTPS, or Wyze cloud exception was added. Keep these IPs stable or revise the source match when renumbering the cameras.
+The exception covers `ing-wyze-cam3-47e2` (`10.32.5.30`, MAC `02:ec:09:70:47:e2`) and `ing-wyze-cam2-0304` (`10.32.5.31`, MAC `02:be:2d:75:03:04`). Both run Thingino; their installed firmware was verified through `/etc/os-release` over SSH:
+
+| Camera IP | Firmware profile | Installed build |
+|---|---|---|
+| `10.32.5.30` | `wyze_cam3_t31x_gc2053_rtl8189ftv` | `stable+b6fb2ff`, built 2025-11-14 |
+| `10.32.5.31` | `wyze_cam2_t20x_jxf23_rtl8189ftv` | `stable+0598a56`, built 2026-03-16 |
+
+Thingino's [updater](https://github.com/themactep/thingino-firmware/blob/ciao/package/thingino-sysupgrade/files/sysupgrade), including the installed scripts inspected on both cameras, fetches scripts from `raw.githubusercontent.com` and firmware/checksums from GitHub releases. Camera-origin requests through each matching firmware release URL redirected to `release-assets.githubusercontent.com`. This is a host-and-port exception, not a repository or URL-path restriction: those two cameras may reach other content on the allowed GitHub hosts too. No public NTP, generic HTTPS, or Wyze cloud exception was added. Keep these IPs stable or revise the source match when renumbering the cameras.
 
 Site Magic's local `magic_site_to_site_vpn.enabled` setting was changed from `true` to `false` and read back as disabled. The local VPN UI reports no VPN servers or Site-to-Site VPNs configured. Remote management remains enabled.
 
-Controller API read-back verified the exact enabled flags, IP/domain/port matches, rule indexes (update allow `10003`; generated Internet block `30002`), and preserved Main-access policies. Both Thingino web interfaces remain reachable from Main, and the UniFi devices, including both Protect cameras, remain online. Camera-origin positive and negative egress probes are pending an authenticated camera session; controller configuration read-back alone does not prove the GitHub exception works through the generated block.
+Controller API read-back verified the exact enabled flags, IP/domain/port matches, rule indexes (update allow `10003`; generated Internet block `30002`), and preserved Main-access policies. Both Thingino web interfaces and SSH remain reachable from Main; UniFi devices and both Protect cameras remained online after the policy changes. A final read-back after camera tests confirmed Site Magic disabled, the blanket override paused, and the scoped allow and generated deny active.
+
+Camera-origin validation on 2026-10-01 (2026-10-02 UTC) used authenticated SSH, gateway DNS queries, and IPv4 `curl` requests with certificate verification, a four-second connection timeout, and a twelve-second total limit. Downloads were discarded to `/dev/null`; no updater was executed and no firmware was installed.
+
+| Probe from each camera | `10.32.5.30` | `10.32.5.31` |
+|---|---|---|
+| Resolve `github.com` and `example.com` through `10.32.5.1` | DNS answers received | DNS answers received |
+| GET installed updater script from `raw.githubusercontent.com` (`master` for Cam 3; `stable` for Cam 2), and current `ciao` script | HTTP 200 | HTTP 200 |
+| GET bytes 0–4095 of the matching latest firmware through GitHub redirects | HTTP 206; 4096 bytes | HTTP 206; 4096 bytes |
+| GET matching `.bin.sha256sum` through GitHub redirects | HTTP 200 | HTTP 200 |
+| HTTPS to `example.com` and `1.1.1.1` | Connection timeout; curl exit 28 | Connection timeout; curl exit 28 |
+| HTTP to `github.com` on TCP 80 | Connection timeout; curl exit 28 | Connection timeout; curl exit 28 |
 
 ### Operations and rollback
 
