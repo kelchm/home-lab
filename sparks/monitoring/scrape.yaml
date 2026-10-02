@@ -2,8 +2,8 @@
 # Temporary workstation evaluation. No Kubernetes cluster label: the target
 # is one TP=2 service outside the cluster, not two independent Spark servers.
 global:
-  scrape_interval: 5s
-  scrape_timeout: 3s
+  scrape_interval: 1s
+  scrape_timeout: 800ms
 scrape_configs:
   - job_name: spark-inference
     metrics_path: /metrics
