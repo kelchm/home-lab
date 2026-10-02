@@ -1,0 +1,32 @@
+{
+  "ok": true,
+  "backend": "tensorfold",
+  "busy": false,
+  "requests_running": 0,
+  "requests_total": 127,
+  "prompt_tokens_total": 11699893,
+  "completion_tokens_total": 40870,
+  "prefill_seconds_total": 786.8584,
+  "decode_seconds_total": 1161.4763,
+  "cached_tokens_total": 10543424,
+  "rounds_total": 14425,
+  "drafted_total": 43504,
+  "accepted_total": 26324,
+  "streams": {
+    "decoding": 0,
+    "prefilling": 0,
+    "max": 4,
+    "filling": 0,
+    "paused": 0
+  },
+  "pool_tokens": 2310144,
+  "pool_free_tokens": 2103296,
+  "kept_prompts": 7,
+  "multi_prefill": {
+    "chunks": 21,
+    "pieces": 46,
+    "rows": 39210
+  },
+  "context_length": 850000,
+  "mode": "strict"
+}

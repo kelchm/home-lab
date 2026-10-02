@@ -22,6 +22,10 @@ The [retirement investigation](https://github.com/kelchm/home-lab/issues/605) re
 
 Host cleanup is a separate operation. Establish which recipes and experiments own each path before removing anything; model files and caches can be shared or hardlinked. This retirement does not authorize deleting `/opt/spark-models`, `/opt/spark-cache` or other retained working data.
 
+## Model-performance monitoring
+
+The [TensorFold monitoring runbook](monitoring/README.md) describes the initial Grafana evaluation for GLM-5.3-Flash across both Sparks (TP=2). It scrapes the existing leader endpoint without changing inference lifecycle. Collection is currently a temporary workstation pilot; the permanent network and collector path remains tracked in [#653](https://github.com/kelchm/home-lab/issues/653), independently of PVE monitoring and host automation.
+
 ## Legacy DeepSeek guide
 
 The [DeepSeek-V4-Flash-0731 guide and site overrides](inference/deepseek/) remain as historical operating material for the externally built DSpark runtime. Its build, launch and patch requirements belong to that guide. The remaining `task sparks:deepseek:logs HOST=...` and `task sparks:deepseek:down` helpers target only its `dspark-guide` containers; they do not operate SparkRun or other experiments.

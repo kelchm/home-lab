@@ -1,0 +1,10 @@
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "GLM-5.3-Flash-EXL3",
+      "object": "model",
+      "owned_by": "tensorfold"
+    }
+  ]
+}
