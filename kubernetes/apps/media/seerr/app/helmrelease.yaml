@@ -28,7 +28,7 @@ spec:
     nameOverride: seerr
     image:
       # renovate: datasource=docker depName=ghcr.io/seerr-team/seerr
-      tag: v3.4.1
+      tag: v3.5.0
     extraEnv:
       - name: TZ
         value: America/New_York
