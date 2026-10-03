@@ -1,0 +1,9 @@
+[Unit]
+Description=Fetch and apply bounded PVE host configuration
+After=network-online.target
+Wants=network-online.target
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/pve-hostcfg/controller.py sync
+TimeoutStartSec=10min
+KillMode=control-group

@@ -1,0 +1,18 @@
+[Unit]
+Description=PVE loopback node exporter (hostcfg owned)
+After=network.target
+[Service]
+User=root
+ExecStart=/usr/bin/prometheus-node-exporter --web.listen-address=127.0.0.1:9100 --collector.textfile.directory={{ textfile_dir }}{% for collector in collectors %} --collector.{{ collector }}{% endfor %}
+
+Restart=on-failure
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+CapabilityBoundingSet=
+[Install]
+WantedBy=multi-user.target
