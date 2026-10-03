@@ -32,13 +32,11 @@
         mode: '0755'
       when: exporter_state == 'present'
     - name: Validate flags and the unit before atomic activation
-      ansible.builtin.template:
-        src: node-exporter.service.j2
-        dest: /etc/systemd/system/prometheus-node-exporter.service
-        owner: root
-        group: root
-        mode: '0644'
-        validate: "{{ engine_dir }}/validate-unit %s"
+      ansible.builtin.command:
+        argv: ["{{ engine_dir }}/publish-unit", "{{ engine_dir }}/validate-unit", "{{ 'check' if ansible_check_mode else 'apply' }}"]
+        stdin: "{{ lookup('ansible.builtin.template', 'node-exporter.service.j2') }}"
+      check_mode: false
+      changed_when: exporter_unit.stdout == 'changed'
       register: exporter_unit
       when: exporter_state == 'present'
     - name: Activate the validated loopback exporter

@@ -1,0 +1,66 @@
+#!/usr/bin/python3
+"""Compare on check; validate a private candidate before atomic apply."""
+import os
+from pathlib import Path
+import re
+import signal
+import stat
+import subprocess
+import sys
+import tempfile
+
+assert os.geteuid() == 0
+validator, mode = sys.argv[1:]
+assert mode in ('check', 'apply')
+destination = Path('/etc/systemd/system/prometheus-node-exporter.service')
+content = sys.stdin.buffer.read(16385)
+if len(content) > 16384:
+    raise ValueError('exporter unit exceeds bound')
+try:
+    existing = destination.lstat()
+    unchanged = (stat.S_ISREG(existing.st_mode) and existing.st_uid == existing.st_gid == 0
+                 and stat.S_IMODE(existing.st_mode) == 0o644 and existing.st_size == len(content)
+                 and destination.read_bytes() == content)
+except FileNotFoundError:
+    unchanged = False
+if mode == 'check':
+    print('unchanged' if unchanged else 'changed')
+    raise SystemExit(0)
+
+# Only this helper's root-owned non-unit candidates can survive an abrupt kill.
+for stale in destination.parent.glob('.pve-hostcfg-node-*.tmp'):
+    if re.fullmatch(r'\.pve-hostcfg-node-[a-z0-9_]{8}\.tmp', stale.name):
+        info = stale.lstat()
+        if stat.S_ISREG(info.st_mode) and info.st_uid == info.st_gid == 0:
+            stale.unlink()
+
+
+def interrupted(signum, _frame):
+    raise SystemExit(128 + signum)
+
+
+signal.signal(signal.SIGTERM, interrupted)
+candidate_path = None
+try:
+    with tempfile.NamedTemporaryFile(dir=destination.parent, prefix='.pve-hostcfg-node-', suffix='.tmp', delete=False) as candidate:
+        candidate_path = Path(candidate.name)
+        candidate.write(content)
+        candidate.flush()
+        os.fchmod(candidate.fileno(), 0o644)
+        os.fchown(candidate.fileno(), 0, 0)
+        os.fsync(candidate.fileno())
+    result = subprocess.run([validator, str(candidate_path)], timeout=15, capture_output=True, text=True)
+    # Keep stdout reserved for Ansible's changed contract; retain diagnostics.
+    sys.stderr.write(result.stdout + result.stderr)
+    result.check_returncode()
+    if not unchanged:
+        os.replace(candidate_path, destination)
+        descriptor = os.open(destination.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+    print('unchanged' if unchanged else 'changed')
+finally:
+    if candidate_path is not None:
+        candidate_path.unlink(missing_ok=True)

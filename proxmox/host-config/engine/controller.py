@@ -182,9 +182,9 @@ class Controller:
             print(f"drift check failed: {error}", flush=True)
         try:
             result = subprocess.run(["systemctl", "is-active", "--quiet", "prometheus-node-exporter.service"],
-                                    env=self.env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                                    env=self.env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
             self.s["service_active"] = int(result.returncode == 0)
-        except FileNotFoundError:
+        except (OSError, subprocess.TimeoutExpired):
             self.s["service_active"] = -1
 
     def tick(self, command):

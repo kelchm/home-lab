@@ -301,6 +301,7 @@ module.main()
         stop.set()
         watcher.join()
         # No live task can outlast teardown: every controller path settled its unit.
+        UNIT.unlink(missing_ok=True)
         UNIT.write_bytes(original_unit)
         UNIT.chmod(0o644)
         if subprocess.run(['dpkg-query', '-W', '-f=${Status}', 'prometheus-node-exporter'], capture_output=True).stdout != b'install ok installed':
