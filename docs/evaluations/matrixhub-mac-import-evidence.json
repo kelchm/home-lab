@@ -1,0 +1,946 @@
+{
+  "evaluated_at": "2026-09-26",
+  "conclusion": "Selected real Mac files import successfully, reuse weights under original proxy identity, and serve offline from hosted repositories before and after restart. Continue qualification of verified hosted-library workflow; transparent proxy limitations remain.",
+  "server": {
+    "tag": "v0.2.0",
+    "commit": "b39cfcbd5bb1f29f6d9a0722dd6bee3b9835d6ea",
+    "platform": "darwin/arm64",
+    "go": "1.27.0",
+    "database": "SQLite",
+    "patch": "Only two loopback-address changes recorded in matrixhub-local-evidence.json; no cache/auth changes"
+  },
+  "isolation": {
+    "fresh_server_store": true,
+    "source_access": "Read-only actual LM Studio folder and native HF snapshot; no materialized staging copy",
+    "client_network": "Request hooks reject any non-loopback destination; proxy environment ignored; HF tokens removed; isolated caches",
+    "server_gateway": "Offline for all hosted uploads and four hosted downloads including backend restart. Then permit only huggingface.co Git info/refs and git-upload-pack; reject LFS/CDN before contacting upstream. No upstream weight bytes permitted.",
+    "metadata_lookup_response_bytes": 31118,
+    "hosted_offline_phase_end": {
+      "time": 1790465837.242968,
+      "hosted_tests_completed": 4,
+      "note": "All hosted imports/downloads/restart completed with gateway offline; proxy phase permits Git metadata only"
+    },
+    "timings": "Mac loopback only; not NAS/LAN benchmarks"
+  },
+  "fixtures": [
+    {
+      "label": "qwen-mlx",
+      "kind": "ordinary LM Studio folder",
+      "repo": "lmstudio-community/Qwen3.5-9B-MLX-4bit",
+      "hosted_repo": "mac-import/qwen3.5-9b-mlx-4bit",
+      "upstream_revision": "b455506b0f574c74616dbcd56879bde38fafcff3",
+      "hosted_revision": "b42d1ed5acec269663ca8934dc83ec073cb82c95",
+      "files": 11,
+      "bytes": 5977078858,
+      "indexes": [
+        {
+          "path": "model.safetensors.index.json",
+          "shards": [
+            "model-00001-of-00002.safetensors",
+            "model-00002-of-00002.safetensors"
+          ],
+          "tensor_count": 1260,
+          "all_indexed_tensors_present": true,
+          "all_tensor_offsets_in_bounds": true
+        }
+      ],
+      "matches_upstream_selected_files": true,
+      "upstream_files_not_in_source": [
+        ".gitattributes",
+        "README.md"
+      ],
+      "manifest": {
+        "chat_template.jinja": {
+          "bytes": 7756,
+          "sha256": "a4aee8afcf2e0711942cf848899be66016f8d14a889ff9ede07bca099c28f715",
+          "git_blob_sha1": "a585dec894e63da457d9440ec6aa7caa16d20860",
+          "matches_upstream": true,
+          "source_symlink": false
+        },
+        "config.json": {
+          "bytes": 3331,
+          "sha256": "a96942cb6a8a1d3f1d17514d81a1925d04362a6a3233b389d13012211baaa9f8",
+          "git_blob_sha1": "0435ae3f4b3c8b907f7359a2f8f7150d316f3435",
+          "matches_upstream": true,
+          "source_symlink": false
+        },
+        "model-00001-of-00002.safetensors": {
+          "bytes": 5349771292,
+          "sha256": "973cc1efdedb4d327993fb9c27865f0bcfd9015897d5f0ca9ffb6cda6a0768e5",
+          "git_blob_sha1": "5019ddc5d0ffee131e4f1a25960b232adf365dfd",
+          "matches_upstream": true,
+          "source_symlink": false
+        },
+        "model-00002-of-00002.safetensors": {
+          "bytes": 600449850,
+          "sha256": "597dae0ed72b60acc07382e8ea0cdb9509c54128e07b0eaa9cf4996373d5ca7d",
+          "git_blob_sha1": "c33da2f0779ca62a2606f932e275dc3009b5308a",
+          "matches_upstream": true,
+          "source_symlink": false
+        },
+        "model.safetensors.index.json": {
+          "bytes": 123592,
+          "sha256": "dd023913fb87cfdae27fb11dcf695117c925833796ccac3c64117d6652d8ff1e",
+          "git_blob_sha1": "d366fa524ccd8f4ed93a67c7857597dc56172b92",
+          "matches_upstream": true,
+          "source_symlink": false
+        },
+        "preprocessor_config.json": {
+          "bytes": 390,
+          "sha256": "27225450ac9c6529872ee1924fcb0962ff5634834f817040f444118116f4e516",
+          "git_blob_sha1": "2ea84a437d448ff71b08df68fdd949d5cc4ebb64",
+          "matches_upstream": true,
+          "source_symlink": false
+        },
+        "processor_config.json": {
+          "bytes": 991,
+          "sha256": "45fc17c8dd2474af6b493b52483c26c0584b0082d368c480f9fa611e73070040",
+          "git_blob_sha1": "8f29fe38a79a9d8367009ebebd25c35b1f3c4e40",
+          "matches_upstream": true,
+          "source_symlink": false
+        },
+        "tokenizer.json": {
+          "bytes": 19989325,
+          "sha256": "06b9509352d2af50381ab2247e083b80d32d5c0aba91c272ca9ff729b6a0e523",
+          "git_blob_sha1": "d5967dbafffa6c5b250a02b35723f53e702d0d62",
+          "matches_upstream": true,
+          "source_symlink": false
+        },
+        "tokenizer_config.json": {
+          "bytes": 9187,
+          "sha256": "fa71760892f5c601d345e626ebd602055825a50beed7ee160709c95fffa475f0",
+          "git_blob_sha1": "803283d87369d6d9ff8d970a8a49a602ca306544",
+          "matches_upstream": true,
+          "source_symlink": false
+        },
+        "video_preprocessor_config.json": {
+          "bytes": 385,
+          "sha256": "7768af27c1fafa9cc9011c1dc20067e03f8915e03b63504550e11d5066986d13",
+          "git_blob_sha1": "3ba673a5ad7d4d13f54155ecd38b2a94a6dac8fe",
+          "matches_upstream": true,
+          "source_symlink": false
+        },
+        "vocab.json": {
+          "bytes": 6722759,
+          "sha256": "ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003",
+          "git_blob_sha1": "0aa0ce0658d60ac4a5d609f4eadb0e8e43514176",
+          "matches_upstream": true,
+          "source_symlink": false
+        }
+      },
+      "source_unchanged_after_test": true
+    },
+    {
+      "label": "orpheus-gguf",
+      "kind": "HF snapshot symlink to shared hub/blobs store",
+      "repo": "unsloth/orpheus-3b-0.1-ft-GGUF",
+      "hosted_repo": "mac-import/orpheus-3b-gguf-selected",
+      "upstream_revision": "e2b00302c46af8205f521f60016600aa25a068e6",
+      "hosted_revision": "cc7e4cdf3fdf0c125c6e0f9e0e18d58099ef24c0",
+      "files": 1,
+      "bytes": 2134077984,
+      "indexes": [],
+      "matches_upstream_selected_files": true,
+      "upstream_files_not_in_source": [
+        ".gitattributes",
+        "README.md",
+        "imatrix_unsloth.dat",
+        "orpheus-3b-0.1-ft-F16.gguf",
+        "orpheus-3b-0.1-ft-IQ4_NL.gguf",
+        "orpheus-3b-0.1-ft-IQ4_XS.gguf",
+        "orpheus-3b-0.1-ft-Q2_K.gguf",
+        "orpheus-3b-0.1-ft-Q2_K_L.gguf",
+        "orpheus-3b-0.1-ft-Q3_K_M.gguf",
+        "orpheus-3b-0.1-ft-Q3_K_S.gguf",
+        "orpheus-3b-0.1-ft-Q4_0.gguf",
+        "orpheus-3b-0.1-ft-Q4_1.gguf",
+        "orpheus-3b-0.1-ft-Q4_K_M.gguf",
+        "orpheus-3b-0.1-ft-Q4_K_S.gguf",
+        "orpheus-3b-0.1-ft-Q5_K_M.gguf",
+        "orpheus-3b-0.1-ft-Q5_K_S.gguf",
+        "orpheus-3b-0.1-ft-Q6_K.gguf",
+        "orpheus-3b-0.1-ft-Q8_0.gguf",
+        "orpheus-3b-0.1-ft-UD-IQ1_M.gguf",
+        "orpheus-3b-0.1-ft-UD-IQ1_S.gguf",
+        "orpheus-3b-0.1-ft-UD-IQ2_M.gguf",
+        "orpheus-3b-0.1-ft-UD-IQ2_XXS.gguf",
+        "orpheus-3b-0.1-ft-UD-IQ3_XXS.gguf",
+        "orpheus-3b-0.1-ft-UD-Q2_K_XL.gguf",
+        "orpheus-3b-0.1-ft-UD-Q3_K_XL.gguf",
+        "orpheus-3b-0.1-ft-UD-Q5_K_XL.gguf",
+        "orpheus-3b-0.1-ft-UD-Q6_K_XL.gguf",
+        "orpheus-3b-0.1-ft-UD-Q8_K_XL.gguf"
+      ],
+      "manifest": {
+        "orpheus-3b-0.1-ft-UD-Q4_K_XL.gguf": {
+          "bytes": 2134077984,
+          "sha256": "a71f69da4ea6afcbdcf33a936cbb2dd5e04276edf68da93ca833af4c1641f4d0",
+          "git_blob_sha1": "a888ff84f4d45b0217ca381d37943b612719edc9",
+          "matches_upstream": true,
+          "source_symlink": true
+        }
+      },
+      "source_unchanged_after_test": true
+    }
+  ],
+  "imports": [
+    {
+      "test": "qwen-mlx-hosted-import",
+      "ok": true,
+      "commit": "8332694e84768dd2b4b4ff297acb53992e97f3dc",
+      "declared_files": 11,
+      "declared_bytes": 5977078858,
+      "seconds": 8.143,
+      "lfs_puts": 3,
+      "lfs_put_bytes": 5970210467,
+      "upstream_requests": 0,
+      "lfs_objects_after": 3,
+      "lfs_logical_bytes_after": 5970210467,
+      "same_commit_as_initial": null
+    },
+    {
+      "test": "qwen-mlx-repeat-identical-import",
+      "ok": true,
+      "commit": "b42d1ed5acec269663ca8934dc83ec073cb82c95",
+      "declared_files": 11,
+      "declared_bytes": 5977078858,
+      "seconds": 3.502,
+      "lfs_puts": 0,
+      "lfs_put_bytes": 0,
+      "upstream_requests": 0,
+      "lfs_objects_after": 3,
+      "lfs_logical_bytes_after": 5970210467,
+      "same_commit_as_initial": false
+    },
+    {
+      "test": "orpheus-gguf-hosted-import",
+      "ok": true,
+      "commit": "6a94e5e811c0ffcfa76ff16ed3706bd2a2390f30",
+      "declared_files": 1,
+      "declared_bytes": 2134077984,
+      "seconds": 3.126,
+      "lfs_puts": 1,
+      "lfs_put_bytes": 2134077984,
+      "upstream_requests": 0,
+      "lfs_objects_after": 4,
+      "lfs_logical_bytes_after": 8104288451,
+      "same_commit_as_initial": null
+    },
+    {
+      "test": "orpheus-gguf-repeat-identical-import",
+      "ok": true,
+      "commit": "cc7e4cdf3fdf0c125c6e0f9e0e18d58099ef24c0",
+      "declared_files": 1,
+      "declared_bytes": 2134077984,
+      "seconds": 1.212,
+      "lfs_puts": 0,
+      "lfs_put_bytes": 0,
+      "upstream_requests": 0,
+      "lfs_objects_after": 4,
+      "lfs_logical_bytes_after": 8104288451,
+      "same_commit_as_initial": false
+    }
+  ],
+  "downloads": [
+    {
+      "ok": true,
+      "files": 11,
+      "bytes": 5977078858,
+      "matches_source_and_upstream": true,
+      "indexes": [
+        {
+          "path": "model.safetensors.index.json",
+          "shards": [
+            "model-00001-of-00002.safetensors",
+            "model-00002-of-00002.safetensors"
+          ],
+          "tensor_count": 1260,
+          "all_indexed_tensors_present": true,
+          "all_tensor_offsets_in_bounds": true
+        }
+      ],
+      "download_seconds": 5.097,
+      "test": "hosted-first-qwen-mlx",
+      "mode": "hosted",
+      "client": "1.8.0",
+      "repo": "mac-import/qwen3.5-9b-mlx-4bit",
+      "revision": "b42d1ed5acec269663ca8934dc83ec073cb82c95",
+      "seconds": 11.275,
+      "empty_cache_at_start": true,
+      "hashes": "All selected files match fixture manifest",
+      "gateway_offline": true
+    },
+    {
+      "ok": true,
+      "files": 1,
+      "bytes": 2134077984,
+      "matches_source_and_upstream": true,
+      "indexes": [],
+      "download_seconds": 1.879,
+      "test": "hosted-first-orpheus-gguf",
+      "mode": "hosted",
+      "client": "1.8.0",
+      "repo": "mac-import/orpheus-3b-gguf-selected",
+      "revision": "cc7e4cdf3fdf0c125c6e0f9e0e18d58099ef24c0",
+      "seconds": 4.021,
+      "empty_cache_at_start": true,
+      "hashes": "All selected files match fixture manifest",
+      "gateway_offline": true
+    },
+    {
+      "ok": true,
+      "files": 11,
+      "bytes": 5977078858,
+      "matches_source_and_upstream": true,
+      "indexes": [
+        {
+          "path": "model.safetensors.index.json",
+          "shards": [
+            "model-00001-of-00002.safetensors",
+            "model-00002-of-00002.safetensors"
+          ],
+          "tensor_count": 1260,
+          "all_indexed_tensors_present": true,
+          "all_tensor_offsets_in_bounds": true
+        }
+      ],
+      "download_seconds": 4.938,
+      "test": "hosted-restart-hf2-qwen-mlx",
+      "mode": "hosted",
+      "client": "2.0.0",
+      "repo": "mac-import/qwen3.5-9b-mlx-4bit",
+      "revision": "b42d1ed5acec269663ca8934dc83ec073cb82c95",
+      "seconds": 11.246,
+      "empty_cache_at_start": true,
+      "hashes": "All selected files match fixture manifest",
+      "gateway_offline": true
+    },
+    {
+      "ok": true,
+      "files": 1,
+      "bytes": 2134077984,
+      "matches_source_and_upstream": true,
+      "indexes": [],
+      "download_seconds": 2.063,
+      "test": "hosted-restart-hf2-orpheus-gguf",
+      "mode": "hosted",
+      "client": "2.0.0",
+      "repo": "mac-import/orpheus-3b-gguf-selected",
+      "revision": "cc7e4cdf3fdf0c125c6e0f9e0e18d58099ef24c0",
+      "seconds": 4.249,
+      "empty_cache_at_start": true,
+      "hashes": "All selected files match fixture manifest",
+      "gateway_offline": true
+    },
+    {
+      "ok": true,
+      "files": 11,
+      "bytes": 5977078858,
+      "matches_source_and_upstream": true,
+      "indexes": [
+        {
+          "path": "model.safetensors.index.json",
+          "shards": [
+            "model-00001-of-00002.safetensors",
+            "model-00002-of-00002.safetensors"
+          ],
+          "tensor_count": 1260,
+          "all_indexed_tensors_present": true,
+          "all_tensor_offsets_in_bounds": true
+        }
+      ],
+      "download_seconds": 6.208,
+      "test": "proxy-original-revision-qwen-mlx",
+      "mode": "proxy",
+      "client": "1.8.0",
+      "repo": "lmstudio-community/Qwen3.5-9B-MLX-4bit",
+      "revision": "b455506b0f574c74616dbcd56879bde38fafcff3",
+      "seconds": 12.273,
+      "empty_cache_at_start": true,
+      "hashes": "All selected files match fixture manifest",
+      "gateway_offline": false
+    },
+    {
+      "ok": true,
+      "files": 1,
+      "bytes": 2134077984,
+      "matches_source_and_upstream": true,
+      "indexes": [],
+      "download_seconds": 3.101,
+      "test": "proxy-original-revision-orpheus-gguf",
+      "mode": "proxy",
+      "client": "1.8.0",
+      "repo": "unsloth/orpheus-3b-0.1-ft-GGUF",
+      "revision": "e2b00302c46af8205f521f60016600aa25a068e6",
+      "seconds": 5.139,
+      "empty_cache_at_start": true,
+      "hashes": "All selected files match fixture manifest",
+      "gateway_offline": false
+    }
+  ],
+  "proxy_traffic": {
+    "allowed_git_requests": 12,
+    "allowed_git_response_bytes": 2110585,
+    "upstream_weight_bytes": 0,
+    "blocked_lfs_batch_requests": 25,
+    "orpheus_unrequested_unique_objects": 25,
+    "orpheus_unrequested_unique_bytes": 53537172811,
+    "unrequested_bytes_downloaded": 0,
+    "backend_oids_and_expected_sizes_match_unseeded_upstream": true,
+    "blocked_objects": [
+      {
+        "oid": "0845947e208a8636eeb9d60014551d41a42458e417407d5f347ef5684076e60e",
+        "bytes": 973833984
+      },
+      {
+        "oid": "17e147bfb781f3762594e8a283b93feb8899c777be57ac62d74f460b004d9be8",
+        "bytes": 2400973344
+      },
+      {
+        "oid": "1f11731ace630829c5918d9f18a7db0d88eb10514d5dce4d1b169c53ca091aa0",
+        "bytes": 1437127200
+      },
+      {
+        "oid": "21fb4fd734c107af7d4a4048fda391b00cea88790393012ef426c46be0316a47",
+        "bytes": 4381295616
+      },
+      {
+        "oid": "32128e4c75261cf813b8f598be8e7f995d48bfdca3cbc6464003a54cd493e9a8",
+        "bytes": 1995100704
+      },
+      {
+        "oid": "3dd5ed613707e4314b2d21cde977e9918370d5dc6960e202bb2b358667b80639",
+        "bytes": 1902301728
+      },
+      {
+        "oid": "3f887c6ecb54d41800ac26b7547a7232c420eadefca7fcd832e51c2c8848cb53",
+        "bytes": 1317750528
+      },
+      {
+        "oid": "4949d2ac118a1003c3b0c214ad8fe9eedde316eb1337f9ce0af4ce09d6e4a327",
+        "bytes": 2342703648
+      },
+      {
+        "oid": "4e94a925593c8fc1c20ee50e5b0e4bf915ea106a0bda3b917ff69b02559f7ab9",
+        "bytes": 2092569120
+      },
+      {
+        "oid": "6360c6b9c43f0fed847817281ad2f03d2c4644e1d45a45b721a0af8346e76ef2",
+        "bytes": 1021904640
+      },
+      {
+        "oid": "6814ac8f25a3dcd7acdd4bebe28323acd7839cdc9f46204f77aad5d607048408",
+        "bytes": 2001392160
+      },
+      {
+        "oid": "6b32a1ca38beb77f19de72cadd4569154412a2de6e346317b6d3f43aeeb50931",
+        "bytes": 1431635712
+      },
+      {
+        "oid": "6f3559383ceae734454dae168b8f296993c3c9d1339347ef35393be9280a4dc5",
+        "bytes": 1616040480
+      },
+      {
+        "oid": "8c15fe5c3c7693ddc578cf903f96f4bf0f717ccfabfdb9916fb971ea4d75bbe5",
+        "bytes": 1815622176
+      },
+      {
+        "oid": "9a01ea76b66dd66d08a0952ed72932f0ecce59db3d5c9b1a33621ff7200ba531",
+        "bytes": 3516431616
+      },
+      {
+        "oid": "a3bcc15333c5a1ebaa88a8f478d006ec69b57579afb3d10c551cec8afcae4f17",
+        "bytes": 1108068096
+      },
+      {
+        "oid": "be3ae2ce574b280a45548ef8839931db6b45a1805d909117a2fdfe17714f96c5",
+        "bytes": 2395345440
+      },
+      {
+        "oid": "c1aed51c603742e0c71a0442ca429f3b780e32b95ad55eaf011755c8e8ca0bd5",
+        "bytes": 1760350752
+      },
+      {
+        "oid": "cfd93ddaafea970e36168dbb1d95ab653ff4c88b683299ac6776ef210a28b9ea",
+        "bytes": 3062365440
+      },
+      {
+        "oid": "d321fb60c252f2e7fa0d7b4db47e673353deae24cd24305a319ca6cdc39f5f45",
+        "bytes": 1990382112
+      },
+      {
+        "oid": "d3cc79ca683f44f2bc58cb852e240413c18a9f8a97454818db12e92e29faa905",
+        "bytes": 2166542880
+      },
+      {
+        "oid": "e511df5ba6448dc9fabd61933f1d51fc1d680b4fdf522828ac341f3c887cc7aa",
+        "bytes": 1476571680
+      },
+      {
+        "oid": "e6a19288767e505e59383d598f95399649c3b26814235a14581957e1fcb8c414",
+        "bytes": 2717045280
+      },
+      {
+        "oid": "ec47422bcbb7e21ce82a8c814a6bf5888fd45f7ae54119ee422e8eebf3dbdbd4",
+        "bytes": 2988395
+      },
+      {
+        "oid": "fc70e45d1d8d4b332babb4e734575833b72ec42ef06880991a0ed0520eea1a25",
+        "bytes": 6610830080
+      }
+    ],
+    "note": "The 25 other unique objects were attempted prefetches, blocked before acquisition; not downloaded. Qwen selected files already supplied all upstream LFS objects.",
+    "requests": [
+      {
+        "time": 1790465837.646139,
+        "method": "GET",
+        "host": "huggingface.co",
+        "path": "/lmstudio-community/Qwen3.5-9B-MLX-4bit/info/refs",
+        "status": 200,
+        "bytes": 191,
+        "sha256": "f6bcd05d6f476a149154052d028ae3e80256900d66a1b752802fbb6db94a9366"
+      },
+      {
+        "time": 1790465837.866498,
+        "method": "POST",
+        "host": "huggingface.co",
+        "path": "/lmstudio-community/Qwen3.5-9B-MLX-4bit/git-upload-pack",
+        "status": 200,
+        "bytes": 145,
+        "sha256": "5ecc6bd60f36dd24f206cbb0c14111831bfda1f0c826c5583db1c021a8ab8207"
+      },
+      {
+        "time": 1790465838.107949,
+        "method": "GET",
+        "host": "huggingface.co",
+        "path": "/lmstudio-community/Qwen3.5-9B-MLX-4bit/info/refs",
+        "status": 200,
+        "bytes": 191,
+        "sha256": "f6bcd05d6f476a149154052d028ae3e80256900d66a1b752802fbb6db94a9366"
+      },
+      {
+        "time": 1790465838.2639759,
+        "method": "POST",
+        "host": "huggingface.co",
+        "path": "/lmstudio-community/Qwen3.5-9B-MLX-4bit/git-upload-pack",
+        "status": 200,
+        "bytes": 65,
+        "sha256": "6cd451b7c5b5089b0add7e8b36cd80f69eceaa98f0a0372001f9974f75d4c235"
+      },
+      {
+        "time": 1790465838.432776,
+        "method": "POST",
+        "host": "huggingface.co",
+        "path": "/lmstudio-community/Qwen3.5-9B-MLX-4bit/git-upload-pack",
+        "status": 200,
+        "bytes": 32,
+        "sha256": "c77e15361659a5f35b4d8fe2e93d85fa319c332575197c59fd874f25411b0f59"
+      },
+      {
+        "time": 1790465838.587306,
+        "method": "POST",
+        "host": "huggingface.co",
+        "path": "/lmstudio-community/Qwen3.5-9B-MLX-4bit/git-upload-pack",
+        "status": 200,
+        "bytes": 2075872,
+        "sha256": "6393d646b437e14b9c34e5f7f126dc7ce023cf0b6da1839f77203874d42a4ff9"
+      },
+      {
+        "time": 1790465849.918584,
+        "method": "GET",
+        "host": "huggingface.co",
+        "path": "/unsloth/orpheus-3b-0.1-ft-GGUF/info/refs",
+        "status": 200,
+        "bytes": 191,
+        "sha256": "f6bcd05d6f476a149154052d028ae3e80256900d66a1b752802fbb6db94a9366"
+      },
+      {
+        "time": 1790465850.074508,
+        "method": "POST",
+        "host": "huggingface.co",
+        "path": "/unsloth/orpheus-3b-0.1-ft-GGUF/git-upload-pack",
+        "status": 200,
+        "bytes": 145,
+        "sha256": "e9e5326d41141cc6d023fb2f4decb40520cd431800712d86c49d01040cb76344"
+      },
+      {
+        "time": 1790465850.26406,
+        "method": "GET",
+        "host": "huggingface.co",
+        "path": "/unsloth/orpheus-3b-0.1-ft-GGUF/info/refs",
+        "status": 200,
+        "bytes": 191,
+        "sha256": "f6bcd05d6f476a149154052d028ae3e80256900d66a1b752802fbb6db94a9366"
+      },
+      {
+        "time": 1790465850.415057,
+        "method": "POST",
+        "host": "huggingface.co",
+        "path": "/unsloth/orpheus-3b-0.1-ft-GGUF/git-upload-pack",
+        "status": 200,
+        "bytes": 65,
+        "sha256": "6ec4e0ecedba455a35a85ca6bd96d27cee44fd5d9ddd2ba02c78356ef1bce518"
+      },
+      {
+        "time": 1790465850.583497,
+        "method": "POST",
+        "host": "huggingface.co",
+        "path": "/unsloth/orpheus-3b-0.1-ft-GGUF/git-upload-pack",
+        "status": 200,
+        "bytes": 32,
+        "sha256": "c77e15361659a5f35b4d8fe2e93d85fa319c332575197c59fd874f25411b0f59"
+      },
+      {
+        "time": 1790465850.750813,
+        "method": "POST",
+        "host": "huggingface.co",
+        "path": "/unsloth/orpheus-3b-0.1-ft-GGUF/git-upload-pack",
+        "status": 200,
+        "bytes": 33465,
+        "sha256": "03a3067f84d5e178c687e90074bb2987d4dd7e8d0c06ebe937c3ff9c3d52ed0e"
+      },
+      {
+        "time": 1790465851.016185,
+        "method": "POST",
+        "host": "huggingface.co",
+        "path": "/unsloth/orpheus-3b-0.1-ft-GGUF.git/info/lfs/objects/batch",
+        "status": 403,
+        "bytes": 0,
+        "blocked": "metadata-only-gateway"
+      },
+      {
+        "time": 1790465851.016959,
+        "method": "POST",
+        "host": "huggingface.co",
+        "path": "/unsloth/orpheus-3b-0.1-ft-GGUF.git/info/lfs/objects/batch",
+        "status": 403,
+        "bytes": 0,
+        "blocked": "metadata-only-gateway"
+      },
+      {
+        "time": 1790465851.0175738,
+        "method": "POST",
+        "host": "huggingface.co",
+        "path": "/unsloth/orpheus-3b-0.1-ft-GGUF.git/info/lfs/objects/batch",
+        "status": 403,
+        "bytes": 0,
+        "blocked": "metadata-only-gateway"
+      },
+      {
+        "time": 1790465851.0180428,
+        "method": "POST",
+        "host": "huggingface.co",
+        "path": "/unsloth/orpheus-3b-0.1-ft-GGUF.git/info/lfs/objects/batch",
+        "status": 403,
+        "bytes": 0,
+        "blocked": "metadata-only-gateway"
+      },
+      {
+        "time": 1790465851.018486,
+        "method": "POST",
+        "host": "huggingface.co",
+        "path": "/unsloth/orpheus-3b-0.1-ft-GGUF.git/info/lfs/objects/batch",
+        "status": 403,
+        "bytes": 0,
+        "blocked": "metadata-only-gateway"
+      },
+      {
+        "time": 1790465851.018976,
+        "method": "POST",
+        "host": "huggingface.co",
+        "path": "/unsloth/orpheus-3b-0.1-ft-GGUF.git/info/lfs/objects/batch",
+        "status": 403,
+        "bytes": 0,
+        "blocked": "metadata-only-gateway"
+      },
+      {
+        "time": 1790465851.019518,
+        "method": "POST",
+        "host": "huggingface.co",
+        "path": "/unsloth/orpheus-3b-0.1-ft-GGUF.git/info/lfs/objects/batch",
+        "status": 403,
+        "bytes": 0,
+        "blocked": "metadata-only-gateway"
+      },
+      {
+        "time": 1790465851.019958,
+        "method": "POST",
+        "host": "huggingface.co",
+        "path": "/unsloth/orpheus-3b-0.1-ft-GGUF.git/info/lfs/objects/batch",
+        "status": 403,
+        "bytes": 0,
+        "blocked": "metadata-only-gateway"
+      },
+      {
+        "time": 1790465851.020364,
+        "method": "POST",
+        "host": "huggingface.co",
+        "path": "/unsloth/orpheus-3b-0.1-ft-GGUF.git/info/lfs/objects/batch",
+        "status": 403,
+        "bytes": 0,
+        "blocked": "metadata-only-gateway"
+      },
+      {
+        "time": 1790465851.020736,
+        "method": "POST",
+        "host": "huggingface.co",
+        "path": "/unsloth/orpheus-3b-0.1-ft-GGUF.git/info/lfs/objects/batch",
+        "status": 403,
+        "bytes": 0,
+        "blocked": "metadata-only-gateway"
+      },
+      {
+        "time": 1790465851.021097,
+        "method": "POST",
+        "host": "huggingface.co",
+        "path": "/unsloth/orpheus-3b-0.1-ft-GGUF.git/info/lfs/objects/batch",
+        "status": 403,
+        "bytes": 0,
+        "blocked": "metadata-only-gateway"
+      },
+      {
+        "time": 1790465851.0216162,
+        "method": "POST",
+        "host": "huggingface.co",
+        "path": "/unsloth/orpheus-3b-0.1-ft-GGUF.git/info/lfs/objects/batch",
+        "status": 403,
+        "bytes": 0,
+        "blocked": "metadata-only-gateway"
+      },
+      {
+        "time": 1790465851.021973,
+        "method": "POST",
+        "host": "huggingface.co",
+        "path": "/unsloth/orpheus-3b-0.1-ft-GGUF.git/info/lfs/objects/batch",
+        "status": 403,
+        "bytes": 0,
+        "blocked": "metadata-only-gateway"
+      },
+      {
+        "time": 1790465851.022348,
+        "method": "POST",
+        "host": "huggingface.co",
+        "path": "/unsloth/orpheus-3b-0.1-ft-GGUF.git/info/lfs/objects/batch",
+        "status": 403,
+        "bytes": 0,
+        "blocked": "metadata-only-gateway"
+      },
+      {
+        "time": 1790465851.0227242,
+        "method": "POST",
+        "host": "huggingface.co",
+        "path": "/unsloth/orpheus-3b-0.1-ft-GGUF.git/info/lfs/objects/batch",
+        "status": 403,
+        "bytes": 0,
+        "blocked": "metadata-only-gateway"
+      },
+      {
+        "time": 1790465851.023085,
+        "method": "POST",
+        "host": "huggingface.co",
+        "path": "/unsloth/orpheus-3b-0.1-ft-GGUF.git/info/lfs/objects/batch",
+        "status": 403,
+        "bytes": 0,
+        "blocked": "metadata-only-gateway"
+      },
+      {
+        "time": 1790465851.023436,
+        "method": "POST",
+        "host": "huggingface.co",
+        "path": "/unsloth/orpheus-3b-0.1-ft-GGUF.git/info/lfs/objects/batch",
+        "status": 403,
+        "bytes": 0,
+        "blocked": "metadata-only-gateway"
+      },
+      {
+        "time": 1790465851.023762,
+        "method": "POST",
+        "host": "huggingface.co",
+        "path": "/unsloth/orpheus-3b-0.1-ft-GGUF.git/info/lfs/objects/batch",
+        "status": 403,
+        "bytes": 0,
+        "blocked": "metadata-only-gateway"
+      },
+      {
+        "time": 1790465851.0242429,
+        "method": "POST",
+        "host": "huggingface.co",
+        "path": "/unsloth/orpheus-3b-0.1-ft-GGUF.git/info/lfs/objects/batch",
+        "status": 403,
+        "bytes": 0,
+        "blocked": "metadata-only-gateway"
+      },
+      {
+        "time": 1790465851.024682,
+        "method": "POST",
+        "host": "huggingface.co",
+        "path": "/unsloth/orpheus-3b-0.1-ft-GGUF.git/info/lfs/objects/batch",
+        "status": 403,
+        "bytes": 0,
+        "blocked": "metadata-only-gateway"
+      },
+      {
+        "time": 1790465851.025171,
+        "method": "POST",
+        "host": "huggingface.co",
+        "path": "/unsloth/orpheus-3b-0.1-ft-GGUF.git/info/lfs/objects/batch",
+        "status": 403,
+        "bytes": 0,
+        "blocked": "metadata-only-gateway"
+      },
+      {
+        "time": 1790465851.025712,
+        "method": "POST",
+        "host": "huggingface.co",
+        "path": "/unsloth/orpheus-3b-0.1-ft-GGUF.git/info/lfs/objects/batch",
+        "status": 403,
+        "bytes": 0,
+        "blocked": "metadata-only-gateway"
+      },
+      {
+        "time": 1790465851.026104,
+        "method": "POST",
+        "host": "huggingface.co",
+        "path": "/unsloth/orpheus-3b-0.1-ft-GGUF.git/info/lfs/objects/batch",
+        "status": 403,
+        "bytes": 0,
+        "blocked": "metadata-only-gateway"
+      },
+      {
+        "time": 1790465851.0264478,
+        "method": "POST",
+        "host": "huggingface.co",
+        "path": "/unsloth/orpheus-3b-0.1-ft-GGUF.git/info/lfs/objects/batch",
+        "status": 403,
+        "bytes": 0,
+        "blocked": "metadata-only-gateway"
+      },
+      {
+        "time": 1790465851.0267708,
+        "method": "POST",
+        "host": "huggingface.co",
+        "path": "/unsloth/orpheus-3b-0.1-ft-GGUF.git/info/lfs/objects/batch",
+        "status": 403,
+        "bytes": 0,
+        "blocked": "metadata-only-gateway"
+      }
+    ]
+  },
+  "guards": {
+    "implementation": "External evaluation helper, not a MatrixHub built-in import/verification feature",
+    "negative_cases": [
+      {
+        "test": "missing-shard",
+        "rejected": true,
+        "error": "Missing indexed shard: model-00002-of-00002.safetensors"
+      },
+      {
+        "test": "broken-link",
+        "rejected": true,
+        "error": "Broken symlink: model-00002-of-00002.safetensors"
+      },
+      {
+        "test": "wrong-config-checksum",
+        "rejected": true,
+        "error": "Source checksum mismatch: config.json"
+      }
+    ],
+    "stored_lfs_objects": [
+      {
+        "oid": "06b9509352d2af50381ab2247e083b80d32d5c0aba91c272ca9ff729b6a0e523",
+        "bytes": 19989325,
+        "sha256_verified": true
+      },
+      {
+        "oid": "597dae0ed72b60acc07382e8ea0cdb9509c54128e07b0eaa9cf4996373d5ca7d",
+        "bytes": 600449850,
+        "sha256_verified": true
+      },
+      {
+        "oid": "973cc1efdedb4d327993fb9c27865f0bcfd9015897d5f0ca9ffb6cda6a0768e5",
+        "bytes": 5349771292,
+        "sha256_verified": true
+      },
+      {
+        "oid": "a71f69da4ea6afcbdcf33a936cbb2dd5e04276edf68da93ca833af4c1641f4d0",
+        "bytes": 2134077984,
+        "sha256_verified": true
+      }
+    ],
+    "source_rehash_after_import_and_downloads": true,
+    "native_shared_blob_note": "Resolve and hash file contents. The native HF shared-blob filename differs from this GGUF SHA-256; it is not used as an integrity assertion."
+  },
+  "storage": {
+    "after_hosted_imports": {
+      "matrixhub.db": {
+        "files": 1,
+        "logical_bytes": 4096,
+        "allocated_bytes": 4096
+      },
+      "matrixhub.db-shm": {
+        "files": 1,
+        "logical_bytes": 32768,
+        "allocated_bytes": 32768
+      },
+      "matrixhub.db-wal": {
+        "files": 1,
+        "logical_bytes": 531512,
+        "allocated_bytes": 544768
+      },
+      "lfs": {
+        "files": 4,
+        "logical_bytes": 8104288451,
+        "allocated_bytes": 8119558144
+      },
+      "repositories": {
+        "files": 66,
+        "logical_bytes": 2502949,
+        "allocated_bytes": 2723840
+      }
+    },
+    "after_proxy_server_store": {
+      "files": 167,
+      "logical_bytes": 8110033673,
+      "allocated_bytes": 8125812736
+    },
+    "disposable_client_logical_bytes_removed": 24333472975,
+    "server_store_retained": false,
+    "originals_retained": true
+  },
+  "ui": {
+    "login_and_model_listing": true,
+    "hosted_file_lists_verified": true,
+    "qwen_selected_files": 11,
+    "orpheus_selected_files": 1,
+    "generated_gitattributes_also_present": true,
+    "proxy_size_note": "Orpheus proxy card shows 57.1 GB from repository metadata although only selected 2.1 GB content is retained. Listing is not cache-completeness evidence.",
+    "model_card_note": "Source folders had no README; hosted introduction is empty."
+  },
+  "reproduction": [
+    "Hash selected actual files; compare LFS SHA-256 and ordinary Git-blob SHA-1/size against pinned public metadata; validate native symlinks and all indexed shard tensors.",
+    "Start separate fresh v0.2.0 instance with recorded loopback patch and offline upstream gateway. Create public hosted project and two hosted repositories.",
+    "Use HF 1.8 HfApi.upload_folder with explicit selected filenames and a temporary local admin token. Repeat identical uploads and compare commits, PUT requests and LFS store size. Revoke temporary token.",
+    "Use snapshot_download at each hosted commit with selected filenames and separate empty caches, then independently hash results. Restart backend with same store and offline gateway; repeat with HF 2.0.",
+    "Permit only Git metadata upstream; create original-organization proxy projects against that registry. Download selected filenames at original upstream commits into new empty HF 1.8 caches. Compare all hashes and gateway requests.",
+    "Match denied-object OIDs and expected sizes in backend log to public metadata; verify stored LFS hashes and rehash original sources. Inspect hosted UI file lists. Remove only disposable new client caches."
+  ],
+  "limitations": [
+    "Hosted imports create new local commits; they do not preserve original HF commit identity. Seeded proxy identities still depend on Git metadata and retain offline-refresh failure.",
+    "Identical re-import avoids additional LFS uploads/storage but creates new Git commits; no interrupted/resumable ingestion test.",
+    "External SHA validation compensates for this specific trusted import, not all future unverified proxy ingestion or ongoing bit rot.",
+    "Selected Qwen runtime files/shards validated; source README and .gitattributes absent. Orpheus covers one GGUF, not every dependency of a TTS application.",
+    "No inference, native llama.cpp downloader, NAS throughput, full-collection migration, staging-repository deletion, garbage collection, export/restore, upgrade, full-disk or broader private/gated authorization qualification."
+  ],
+  "temporary_upload_token_revoked": true,
+  "cleanup": {
+    "date": "2026-09-27",
+    "requested_by_user": true,
+    "all_local_evaluation_services_stopped": true,
+    "test_ports_verified_closed": 10,
+    "removed": "All five MatrixHub trial stores, imported copies, disposable client caches, and temporary candidate source/build/virtual-environment workspace",
+    "original_selected_files_unchanged": 12,
+    "verification": "Original file inode, size, mtime and resolved symlink target unchanged across cleanup; all removal paths confined to disposable evaluation directories",
+    "research_records_retained": true,
+    "runtime_recreation_required": true
+  }
+}

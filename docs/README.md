@@ -84,6 +84,7 @@ Implemented or superseded plans preserve context. Use the maintained documentati
 
 ## Decision records & benchmarks
 
+- [Hugging Face cache on Athena](evaluations/hugging-face-nas-cache.md) — mirror comparison, measured Athena pull-through results for ModelKeep and HugRS, retention requirements and private-artifact boundary; ModelKeep v0.4.12 selected.
 - [Kubernetes log collectors](evaluations/kubernetes-log-collectors.md) — delivery measurements, application query compatibility, and migration recommendation.
 - [storage-benchmarks](storage-benchmarks.md) — Longhorn fio results, pre/post storage-network cutover.
 - [**sn770-zfs-qualification.md**](sn770-zfs-qualification.md) — WD_BLACK SN770 reproduction matrix, evidence index, and the remaining qualification gates for the PVE storage decision.

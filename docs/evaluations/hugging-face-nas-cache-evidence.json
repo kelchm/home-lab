@@ -1,0 +1,260 @@
+{
+  "evaluated_at": "2026-09-26",
+  "service": {
+    "name": "Shpiel",
+    "version": "0.3.1",
+    "commit": "18156f1299234f084ba623c910351d1dbf6c25ba",
+    "platform": "darwin_arm64",
+    "release_archive_sha256": "e9144afd438adca723c07a82927294a7223cd053720177dab9ae57d76888720c"
+  },
+  "environment": {
+    "runtime": "isolated macOS loopback listeners and temporary storage; not Athena",
+    "clients": [
+      "huggingface_hub 2.0.0 + hf-xet 1.6.0",
+      "huggingface_hub 1.8.0 + hf-xet 1.6.0"
+    ],
+    "upstream": "Instrumented loopback gateway to public huggingface.co; HTTP errors when marked unavailable",
+    "credentials": "No Hugging Face tokens; private probe used synthetic local data",
+    "limitations": [
+      "Two public files, not a complete usable model snapshot",
+      "No sustained NAS throughput, large shard, full disk, interrupted write, power loss, or upgrade tests",
+      "Classic per-repository native cache import only; new global shared blobs not tested",
+      "Moving-ref unavailable test was within the metadata refresh interval",
+      "Only client-library layer tested; no SparkRun orchestration, vLLM runtime, llama.cpp binary, or ComfyUI integration"
+    ]
+  },
+  "public_repo": "sshleifer/tiny-gpt2",
+  "public_revision": "5f91d94bd9cd7190a9f3216ff93cd1dd95f2c7be",
+  "runs": [
+    {
+      "huggingface_hub": "2.0.0",
+      "tests": [
+        {
+          "test": "cold_download",
+          "ok": true,
+          "result": {
+            "config.json": "77a9e9830c3abeba929f5c61e0e97c398f98b4481ad75516c0be5bf038b340b0",
+            "pytorch_model.bin": "b706b24034032bdfe765ded5ab6403d201d295a995b790cb24c74becca5c04e6"
+          },
+          "upstream": [
+            {
+              "method": "GET",
+              "path": "/sshleifer/tiny-gpt2/resolve/5f91d94bd9cd7190a9f3216ff93cd1dd95f2c7be/config.json",
+              "status": 200,
+              "bytes": 662
+            },
+            {
+              "method": "GET",
+              "path": "/sshleifer/tiny-gpt2/resolve/5f91d94bd9cd7190a9f3216ff93cd1dd95f2c7be/pytorch_model.bin",
+              "status": 200,
+              "bytes": 2514146
+            }
+          ]
+        },
+        {
+          "test": "second_empty_client",
+          "ok": true,
+          "result": {
+            "config.json": "77a9e9830c3abeba929f5c61e0e97c398f98b4481ad75516c0be5bf038b340b0",
+            "pytorch_model.bin": "b706b24034032bdfe765ded5ab6403d201d295a995b790cb24c74becca5c04e6"
+          },
+          "upstream": []
+        },
+        {
+          "test": "refs_endpoint",
+          "ok": false,
+          "error": "HTTP Error 404: Not Found",
+          "type": "HTTPError",
+          "upstream": []
+        },
+        {
+          "test": "warm_range",
+          "ok": true,
+          "result": {
+            "status": 206,
+            "length": 100,
+            "content_range": "bytes 100-199/2514146"
+          },
+          "upstream": []
+        },
+        {
+          "test": "restart_with_upstream_unavailable",
+          "ok": true,
+          "result": {
+            "config.json": "77a9e9830c3abeba929f5c61e0e97c398f98b4481ad75516c0be5bf038b340b0",
+            "pytorch_model.bin": "b706b24034032bdfe765ded5ab6403d201d295a995b790cb24c74becca5c04e6"
+          },
+          "upstream": []
+        },
+        {
+          "test": "moving_ref_with_upstream_unavailable",
+          "ok": true,
+          "result": {
+            "config.json": "77a9e9830c3abeba929f5c61e0e97c398f98b4481ad75516c0be5bf038b340b0",
+            "pytorch_model.bin": "b706b24034032bdfe765ded5ab6403d201d295a995b790cb24c74becca5c04e6"
+          },
+          "upstream": []
+        },
+        {
+          "test": "create_private_flag",
+          "ok": true,
+          "result": "Created synthetic local repo/commit",
+          "upstream": []
+        },
+        {
+          "test": "upload_synthetic_private_file",
+          "ok": true,
+          "result": "Created synthetic local repo/commit",
+          "upstream": []
+        },
+        {
+          "test": "anonymous_cached_private_read_with_passthrough",
+          "ok": true,
+          "result": "synthetic private probe; no user data\n",
+          "upstream": []
+        },
+        {
+          "test": "native_offline_read_of_server_filesystem",
+          "ok": true,
+          "result": {
+            "config.json": "77a9e9830c3abeba929f5c61e0e97c398f98b4481ad75516c0be5bf038b340b0",
+            "pytorch_model.bin": "b706b24034032bdfe765ded5ab6403d201d295a995b790cb24c74becca5c04e6"
+          },
+          "upstream": []
+        }
+      ]
+    },
+    {
+      "huggingface_hub": "1.8.0",
+      "tests": [
+        {
+          "test": "native_cache_seed_offline_without_sidecars",
+          "ok": false,
+          "error": "Got: HfHubHTTPError: Server error '500 Internal Server Error' for url 'http://127.0.0.1:PORT/api/models/sshleifer/tiny-gpt2/revision/5f91d94bd9cd7190a9f3216ff93cd1dd95f2c7be'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/500\n\nInternal error.\nAn error happened while trying to locate the files on the Hub and we cannot find the appropriate snapshot folder for the specified revision on the local disk. Please check your internet connection and try again.",
+          "type": "LocalEntryNotFoundError",
+          "upstream": [
+            {
+              "method": "GET",
+              "path": "/api/models/sshleifer/tiny-gpt2/revision/5f91d94bd9cd7190a9f3216ff93cd1dd95f2c7be",
+              "status": 503,
+              "bytes": 0
+            }
+          ]
+        },
+        {
+          "test": "native_cache_seed_with_metadata_refresh",
+          "ok": true,
+          "result": {
+            "config.json": "77a9e9830c3abeba929f5c61e0e97c398f98b4481ad75516c0be5bf038b340b0",
+            "pytorch_model.bin": "b706b24034032bdfe765ded5ab6403d201d295a995b790cb24c74becca5c04e6"
+          },
+          "upstream": [
+            {
+              "method": "GET",
+              "path": "/api/models/sshleifer/tiny-gpt2/revision/5f91d94bd9cd7190a9f3216ff93cd1dd95f2c7be",
+              "status": 200,
+              "bytes": 4946
+            }
+          ]
+        },
+        {
+          "test": "pullthrough_file_xet_headers",
+          "ok": true,
+          "result": {
+            "Etag": "\"b706b24034032bdfe765ded5ab6403d201d295a995b790cb24c74becca5c04e6\""
+          },
+          "upstream": []
+        },
+        {
+          "test": "four_cold_concurrent_clients",
+          "ok": true,
+          "result": [
+            {
+              "config.json": "77a9e9830c3abeba929f5c61e0e97c398f98b4481ad75516c0be5bf038b340b0",
+              "pytorch_model.bin": "b706b24034032bdfe765ded5ab6403d201d295a995b790cb24c74becca5c04e6"
+            },
+            {
+              "config.json": "77a9e9830c3abeba929f5c61e0e97c398f98b4481ad75516c0be5bf038b340b0",
+              "pytorch_model.bin": "b706b24034032bdfe765ded5ab6403d201d295a995b790cb24c74becca5c04e6"
+            },
+            {
+              "config.json": "77a9e9830c3abeba929f5c61e0e97c398f98b4481ad75516c0be5bf038b340b0",
+              "pytorch_model.bin": "b706b24034032bdfe765ded5ab6403d201d295a995b790cb24c74becca5c04e6"
+            },
+            {
+              "config.json": "77a9e9830c3abeba929f5c61e0e97c398f98b4481ad75516c0be5bf038b340b0",
+              "pytorch_model.bin": "b706b24034032bdfe765ded5ab6403d201d295a995b790cb24c74becca5c04e6"
+            }
+          ],
+          "upstream": [
+            {
+              "method": "GET",
+              "path": "/api/models/sshleifer/tiny-gpt2/revision/5f91d94bd9cd7190a9f3216ff93cd1dd95f2c7be",
+              "status": 200,
+              "bytes": 4946
+            },
+            {
+              "method": "GET",
+              "path": "/api/models/sshleifer/tiny-gpt2/revision/5f91d94bd9cd7190a9f3216ff93cd1dd95f2c7be",
+              "status": 200,
+              "bytes": 4947
+            },
+            {
+              "method": "GET",
+              "path": "/api/models/sshleifer/tiny-gpt2/revision/5f91d94bd9cd7190a9f3216ff93cd1dd95f2c7be",
+              "status": 200,
+              "bytes": 4946
+            },
+            {
+              "method": "GET",
+              "path": "/sshleifer/tiny-gpt2/resolve/5f91d94bd9cd7190a9f3216ff93cd1dd95f2c7be/config.json",
+              "status": 200,
+              "bytes": 662
+            },
+            {
+              "method": "GET",
+              "path": "/sshleifer/tiny-gpt2/resolve/5f91d94bd9cd7190a9f3216ff93cd1dd95f2c7be/pytorch_model.bin",
+              "status": 200,
+              "bytes": 2514146
+            }
+          ]
+        },
+        {
+          "test": "LFS_upload_2MiB_from_buffer",
+          "ok": true,
+          "result": "Created synthetic local repo/commit",
+          "upstream": []
+        },
+        {
+          "test": "HTTP_download_2MiB_uploaded_from_buffer",
+          "ok": true,
+          "result": "91d3beb88a9b2f778a6c44a1c53b63d3c79931845a9aef84b3fb414610bd1938",
+          "upstream": []
+        }
+      ]
+    },
+    {
+      "huggingface_hub": "2.0.0",
+      "tests": [
+        {
+          "test": "upload_path_native_xet",
+          "ok": true,
+          "result": "Created synthetic local repo/commit",
+          "upstream": []
+        },
+        {
+          "test": "download_native_xet",
+          "ok": true,
+          "result": "65b51d3b39daddba5fd2dbb5349b54ca1a659b8b3fbce5c731b448f7f6726772",
+          "upstream": []
+        }
+      ],
+      "expected_payload_sha256": "65b51d3b39daddba5fd2dbb5349b54ca1a659b8b3fbce5c731b448f7f6726772"
+    }
+  ],
+  "notes": [
+    "An ok result means the operation succeeded, not that it is desirable: anonymous cached private read is an access-control gap.",
+    "The 2 MiB buffer upload used LFS/HTTP. The separate path-based upload used native Xet, confirmed by server xorb/shard/reconstruction/data logs; v2 routes returned 404 before v1 fallback succeeded.",
+    "Public upstream files were served over ordinary HTTP even with Xet enabled; their HEAD responses did not advertise Xet reconstruction metadata."
+  ]
+}
