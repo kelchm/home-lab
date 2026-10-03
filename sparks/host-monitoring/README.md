@@ -16,7 +16,7 @@ Live enrollment and sustained-load acceptance are tracked in [#697](https://gith
 
 The GPU exporter uses its ARM64 `exec` backend and NVIDIA CDI device injection. The NVML image is AMD64-only at the qualified version. GB10 reports framebuffer memory as unavailable, and memory utilization is misleading for its unified memory: use `node_memory_MemAvailable_bytes` and pressure instead. A power-cap event alone is ordinary operation; thermal throttling and memory pressure are separate signals. Do not collect per-process GPU metrics or add process-ID labels.
 
-Images are pinned by digest. The runtime paths are `/var/lib/spark-monitoring/{config,queue,textfile}` and `/etc/spark-monitoring/credentials/token`. They are independent of doco-cd's per-commit Git exports. Every long-running service uses host networking so it can reach host loopback, runs as UID/GID 65534 with a read-only filesystem and no added capabilities, and has CPU/memory limits. node-exporter additionally reads the host root and PID namespace; the GPU exporter receives the utility driver/device access required by `nvidia-smi`.
+Images are pinned by digest. The runtime paths are `/var/lib/spark-monitoring/{config,queue,textfile}` and `/etc/spark-monitoring/credentials/token`. They are independent of doco-cd's per-commit Git exports. Every long-running service in the monitoring project uses host networking so it can reach host loopback, runs as UID/GID 65534 with a read-only filesystem and no added capabilities, and has CPU/memory limits. node-exporter additionally reads the host root and PID namespace; the GPU exporter receives the utility driver/device access required by `nvidia-smi`.
 
 ## Configuration delivery and failures
 
