@@ -3,7 +3,7 @@ name: "Repository Validation"
 
 on:
   pull_request:
-    branches: ["main"]
+    branches: ["**"]
   push:
     branches: ["main"]
 
