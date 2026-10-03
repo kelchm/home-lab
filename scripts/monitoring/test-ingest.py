@@ -20,14 +20,23 @@ import urllib.error
 import urllib.request
 
 ROOT = Path(__file__).resolve().parents[2]
-CONFIG = ROOT / "kubernetes/apps/observability/external-metrics-ingest/app/auth.yaml"
+CONFIG = ROOT / "kubernetes/apps/observability/external-metrics-ingest/app/auth.template"
 # Inspect the actual Deployment and encrypted Secret's public key names. Kubelet
 # rejects missing required secretKeyRefs; envFrom would silently omit the key.
 def yaml_document(path, expression="."):
     return json.loads(subprocess.check_output(["yq", "-o=json", expression, str(path)]))
 
 container = yaml_document(CONFIG.with_name("deployment.yaml"), 'select(.kind == "Deployment")')["spec"]["template"]["spec"]["containers"][0]
-keys = re.findall(r"%\{([A-Z0-9_]+)\}", CONFIG.read_text())
+template = CONFIG.read_text()
+keys = re.findall(r"%\{([A-Z0-9_]+)\}", template)
+expanded = template
+for index, name in enumerate(keys):
+    expanded = expanded.replace("%{" + name + "}", f"fixture-{index}")
+users = json.loads(subprocess.check_output(["yq", "-o=json", ".", "-"], input=expanded.encode()))["users"]
+assert len(users) == len(keys), "every user must have one token placeholder"
+assert [user["bearer_token"] for user in users] == [f"fixture-{index}" for index in range(len(keys))]
+bearer_lines = re.findall(r"(?m)^\s*bearer_token:\s*(.*?)\s*$", template)
+assert len(bearer_lines) == len(users) and all(re.fullmatch(r"%\{[A-Z0-9_]+\}", value) for value in bearer_lines), "tokens must be unquoted canonical placeholders"
 assert keys and len(keys) == len(set(keys)), "token placeholders must be distinct"
 assert set(yaml_document(CONFIG.with_name("auth.sops.yaml"))["stringData"]) == set(keys)
 assert "envFrom" not in container, "envFrom allows missing credentials to become literal placeholders"
@@ -131,14 +140,23 @@ with tempfile.TemporaryDirectory(prefix="ingest-test-") as directory:
         finally:
             process.terminate()
             process.wait(timeout=5)
-            receiver.shutdown()
-    empty_environment = dict(environment, **{keys[0]: ""})
-    with (scratch / "empty-token.log").open("w") as log:
-        process = subprocess.Popen(args, env=empty_environment, stdout=log, stderr=log)
+        environment[keys[0]] = "0" * 64
+        process = start(environment, log)
         try:
-            assert process.wait(timeout=10) != 0, "empty token must refuse startup"
+            assert request(write, "/api/v1/write", "0" * 64, b"numeric-hex-token") == 204
         finally:
-            if process.poll() is None:
-                process.terminate()
-                process.wait(timeout=5)
+            process.terminate()
+            process.wait(timeout=5)
+            receiver.shutdown()
+    missing_environment = dict(environment)
+    missing_environment.pop(keys[0])
+    for bad_environment in [dict(environment, **{keys[0]: ""}), missing_environment]:
+        with (scratch / "bad-token.log").open("w") as log:
+            process = subprocess.Popen(args, env=bad_environment, stdout=log, stderr=log)
+            try:
+                assert process.wait(timeout=10) != 0, "empty or unresolved token must refuse startup"
+            finally:
+                if process.poll() is None:
+                    process.terminate()
+                    process.wait(timeout=5)
     print("Passed: required token keys, TLS, all host tokens, write-only routes, internal listener, credential stripping and rotation.")

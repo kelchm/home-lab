@@ -1,20 +1,21 @@
+# Expanded by VMAuth before YAML parsing. Unresolved placeholders must fail parsing.
 # VMAuth expands %{...} from its environment. Tokens live in auth.sops.yaml.
 users:
   - name: spark-1
-    bearer_token: "%{SPARK_1_TOKEN}"
+    bearer_token: %{SPARK_1_TOKEN}
     url_map: &write_only
       - src_paths: ["/api/v1/write"]
         headers: ["Authorization:"]
         url_prefix: http://vmsingle-victoria-metrics-k8s-stack.observability.svc.cluster.local:8428/
   - name: spark-2
-    bearer_token: "%{SPARK_2_TOKEN}"
+    bearer_token: %{SPARK_2_TOKEN}
     url_map: *write_only
   - name: pve-sbx-1
-    bearer_token: "%{PVE_SBX_1_TOKEN}"
+    bearer_token: %{PVE_SBX_1_TOKEN}
     url_map: *write_only
   - name: pve-sbx-2
-    bearer_token: "%{PVE_SBX_2_TOKEN}"
+    bearer_token: %{PVE_SBX_2_TOKEN}
     url_map: *write_only
   - name: pve-sbx-3
-    bearer_token: "%{PVE_SBX_3_TOKEN}"
+    bearer_token: %{PVE_SBX_3_TOKEN}
     url_map: *write_only

@@ -4,7 +4,7 @@ kind: Kustomization
 configMapGenerator:
   - name: external-metrics-ingest-config
     files:
-      - auth.yml=auth.yaml
+      - auth.yml=auth.template
 resources:
   - ./deployment.yaml
   - ./service.yaml
