@@ -1,0 +1,107 @@
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: pve-api
+spec:
+  groups:
+    - name: pve-api
+      interval: 30s
+      rules:
+        - record: pve:up:dedup
+          expr: min without (api_source, instance, job) ((pve_up{job="pve-api-cluster"} and on (cluster, api_source) (up{job="pve-api-cluster"} == 1)) and (time() - timestamp(pve_up{job="pve-api-cluster"}) < 90))
+        - record: pve:cpu_usage_ratio:dedup
+          expr: max without (api_source, instance, job) ((pve_cpu_usage_ratio{job="pve-api-cluster"} and on (cluster, api_source) (up{job="pve-api-cluster"} == 1)) and (time() - timestamp(pve_cpu_usage_ratio{job="pve-api-cluster"}) < 90))
+        - record: pve:cpu_usage_limit:dedup
+          expr: max without (api_source, instance, job) ((pve_cpu_usage_limit{job="pve-api-cluster"} and on (cluster, api_source) (up{job="pve-api-cluster"} == 1)) and (time() - timestamp(pve_cpu_usage_limit{job="pve-api-cluster"}) < 90))
+        - record: pve:memory_size_bytes:dedup
+          expr: max without (api_source, instance, job) ((pve_memory_size_bytes{job="pve-api-cluster"} and on (cluster, api_source) (up{job="pve-api-cluster"} == 1)) and (time() - timestamp(pve_memory_size_bytes{job="pve-api-cluster"}) < 90))
+        - record: pve:memory_usage_bytes:dedup
+          expr: max without (api_source, instance, job) ((pve_memory_usage_bytes{job="pve-api-cluster"} and on (cluster, api_source) (up{job="pve-api-cluster"} == 1)) and (time() - timestamp(pve_memory_usage_bytes{job="pve-api-cluster"}) < 90))
+        - record: pve:disk_size_bytes:dedup
+          expr: max without (api_source, instance, job) ((pve_disk_size_bytes{job="pve-api-cluster"} and on (cluster, api_source) (up{job="pve-api-cluster"} == 1)) and (time() - timestamp(pve_disk_size_bytes{job="pve-api-cluster"}) < 90))
+        - record: pve:disk_usage_bytes:dedup
+          expr: max without (api_source, instance, job) ((pve_disk_usage_bytes{job="pve-api-cluster"} and on (cluster, api_source) (up{job="pve-api-cluster"} == 1)) and (time() - timestamp(pve_disk_usage_bytes{job="pve-api-cluster"}) < 90))
+        - record: pve:network_transmit_bytes_total:dedup
+          expr: max without (api_source, instance, job) ((pve_network_transmit_bytes_total{job="pve-api-cluster"} and on (cluster, api_source) (up{job="pve-api-cluster"} == 1)) and (time() - timestamp(pve_network_transmit_bytes_total{job="pve-api-cluster"}) < 90))
+        - record: pve:network_receive_bytes_total:dedup
+          expr: max without (api_source, instance, job) ((pve_network_receive_bytes_total{job="pve-api-cluster"} and on (cluster, api_source) (up{job="pve-api-cluster"} == 1)) and (time() - timestamp(pve_network_receive_bytes_total{job="pve-api-cluster"}) < 90))
+        - record: pve:disk_written_bytes_total:dedup
+          expr: max without (api_source, instance, job) ((pve_disk_written_bytes_total{job="pve-api-cluster"} and on (cluster, api_source) (up{job="pve-api-cluster"} == 1)) and (time() - timestamp(pve_disk_written_bytes_total{job="pve-api-cluster"}) < 90))
+        - record: pve:disk_read_bytes_total:dedup
+          expr: max without (api_source, instance, job) ((pve_disk_read_bytes_total{job="pve-api-cluster"} and on (cluster, api_source) (up{job="pve-api-cluster"} == 1)) and (time() - timestamp(pve_disk_read_bytes_total{job="pve-api-cluster"}) < 90))
+        - record: pve:uptime_seconds:dedup
+          expr: max without (api_source, instance, job) ((pve_uptime_seconds{job="pve-api-cluster"} and on (cluster, api_source) (up{job="pve-api-cluster"} == 1)) and (time() - timestamp(pve_uptime_seconds{job="pve-api-cluster"}) < 90))
+        - record: pve:guest_info:dedup
+          expr: max without (api_source, instance, job) ((pve_guest_info{job="pve-api-cluster"} and on (cluster, api_source) (up{job="pve-api-cluster"} == 1)) and (time() - timestamp(pve_guest_info{job="pve-api-cluster"}) < 90))
+        - record: pve:storage_info:dedup
+          expr: max without (api_source, instance, job) ((pve_storage_info{job="pve-api-cluster"} and on (cluster, api_source) (up{job="pve-api-cluster"} == 1)) and (time() - timestamp(pve_storage_info{job="pve-api-cluster"}) < 90))
+        - record: pve:node_info:dedup
+          expr: max without (api_source, instance, job) ((pve_node_info{job="pve-api-cluster"} and on (cluster, api_source) (up{job="pve-api-cluster"} == 1)) and (time() - timestamp(pve_node_info{job="pve-api-cluster"}) < 90))
+        - record: pve:cluster_info:dedup
+          expr: max without (api_source, instance, job) ((pve_cluster_info{job="pve-api-cluster"} and on (cluster, api_source) (up{job="pve-api-cluster"} == 1)) and (time() - timestamp(pve_cluster_info{job="pve-api-cluster"}) < 90))
+        - record: pve:ha_state:dedup
+          expr: max without (api_source, instance, job) ((pve_ha_state{job="pve-api-cluster"} and on (cluster, api_source) (up{job="pve-api-cluster"} == 1)) and (time() - timestamp(pve_ha_state{job="pve-api-cluster"}) < 90))
+        - record: pve:lock_state:dedup
+          expr: max without (api_source, instance, job) ((pve_lock_state{job="pve-api-cluster"} and on (cluster, api_source) (up{job="pve-api-cluster"} == 1)) and (time() - timestamp(pve_lock_state{job="pve-api-cluster"}) < 90))
+        - record: pve:version_info:dedup
+          expr: max without (api_source, instance, job) ((pve_version_info{job="pve-api-cluster"} and on (cluster, api_source) (up{job="pve-api-cluster"} == 1)) and (time() - timestamp(pve_version_info{job="pve-api-cluster"}) < 90))
+        - record: pve:not_backed_up_total:dedup
+          expr: max without (api_source, instance, job) ((pve_not_backed_up_total{job="pve-api-cluster"} and on (cluster, api_source) (up{job="pve-api-cluster"} == 1)) and (time() - timestamp(pve_not_backed_up_total{job="pve-api-cluster"}) < 90))
+        - record: pve:not_backed_up_info:dedup
+          expr: max without (api_source, instance, job) ((pve_not_backed_up_info{job="pve-api-cluster"} and on (cluster, api_source) (up{job="pve-api-cluster"} == 1)) and (time() - timestamp(pve_not_backed_up_info{job="pve-api-cluster"}) < 90))
+        - record: pve:api_expected_source
+          expr: vector(1)
+          labels:
+            cluster: pve-sbx
+            api_source: pve-sbx-1
+        - record: pve:api_expected_source
+          expr: vector(1)
+          labels:
+            cluster: pve-sbx
+            api_source: pve-sbx-2
+        - record: pve:api_expected_source
+          expr: vector(1)
+          labels:
+            cluster: pve-sbx
+            api_source: pve-sbx-3
+        - alert: PVEAPISourceUnavailable
+          expr: pve:api_expected_source unless on (cluster, api_source) ((up{job="pve-api-cluster"} == 1) and (time() - timestamp(up{job="pve-api-cluster"}) < 90))
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: PVE API source {{ $labels.api_source }} is unavailable
+            description: Check API TLS, DNS, exporter credentials and the exact 8006 route. Other fresh sources retain cluster facts.
+        - alert: PVEAPIAllSourcesUnavailable
+          expr: absent((up{job="pve-api-cluster"} == 1) and (time() - timestamp(up{job="pve-api-cluster"}) < 90))
+          for: 5m
+          labels:
+            severity: critical
+            cluster: pve-sbx
+          annotations:
+            summary: PVE cluster API facts have no fresh source
+            description: Cluster and guest state is unknown. Check the exporter and all three APIs; host-local metrics are an independent path.
+        - alert: PVEQuorumLost
+          expr: pve:cluster_info:dedup{quorate="0"} == 1
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: PVE cluster reports lost quorum
+            description: A fresh cluster API source reports quorate=0. Verify pvecm status and Corosync before any hypervisor operation.
+        - alert: PVENodeOffline
+          expr: pve:up:dedup{id=~"node/.*"} == 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: PVE reports {{ $labels.id }} offline
+            description: Confirm the node independently. API status and host-local metrics have different failure paths.
+        - alert: PVEPersistentGuestNotCoveredByBackup
+          expr: pve:not_backed_up_info:dedup == 1 and on (cluster, id) pve:guest_info:dedup{tags=~"(^|.*;)persistent(;.*|$)",template="0"}
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: Persistent PVE guest {{ $labels.id }} has no configured backup coverage
+            description: This checks backup-job selection only. It does not prove a backup completed or can be restored.

@@ -1,0 +1,65 @@
+rule_files:
+  - rules.yaml
+evaluation_interval: 30s
+tests:
+  - name: Three API sources produce one resource; failed source excluded
+    interval: 30s
+    input_series:
+      - series: 'up{job="pve-api-cluster",cluster="pve-sbx",api_source="pve-sbx-1"}'
+        values: '1+0x24'
+      - series: 'up{job="pve-api-cluster",cluster="pve-sbx",api_source="pve-sbx-2"}'
+        values: '1+0x24'
+      - series: 'up{job="pve-api-cluster",cluster="pve-sbx",api_source="pve-sbx-3"}'
+        values: '0+0x24'
+      - series: 'pve_memory_usage_bytes{job="pve-api-cluster",cluster="pve-sbx",api_source="pve-sbx-1",instance="pve-sbx-1",id="qemu/101"}'
+        values: '100+0x24'
+      - series: 'pve_memory_usage_bytes{job="pve-api-cluster",cluster="pve-sbx",api_source="pve-sbx-2",instance="pve-sbx-2",id="qemu/101"}'
+        values: '110+0x24'
+      - series: 'pve_memory_usage_bytes{job="pve-api-cluster",cluster="pve-sbx",api_source="pve-sbx-3",instance="pve-sbx-3",id="qemu/101"}'
+        values: '999+0x24'
+    promql_expr_test:
+      - expr: 'pve:memory_usage_bytes:dedup'
+        eval_time: 2m
+        exp_samples:
+          - labels: 'pve:memory_usage_bytes:dedup{cluster="pve-sbx",id="qemu/101"}'
+            value: 110
+      - expr: 'sum(pve:memory_usage_bytes:dedup)'
+        eval_time: 2m
+        exp_samples:
+          - labels: '{}'
+            value: 110
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: PVEAPIAllSourcesUnavailable
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: PVEAPISourceUnavailable
+        exp_alerts:
+          - exp_labels:
+              cluster: pve-sbx
+              api_source: pve-sbx-3
+              severity: warning
+            exp_annotations:
+              summary: PVE API source pve-sbx-3 is unavailable
+              description: Check API TLS, DNS, exporter credentials and the exact 8006 route. Other fresh sources retain cluster facts.
+  - name: Old API samples become unknown even within lookback
+    interval: 30s
+    input_series:
+      - series: 'up{job="pve-api-cluster",cluster="pve-sbx",api_source="pve-sbx-1"}'
+        values: '1 1 1 _x28'
+      - series: 'pve_memory_usage_bytes{job="pve-api-cluster",cluster="pve-sbx",api_source="pve-sbx-1",instance="pve-sbx-1",id="qemu/101"}'
+        values: '100 100 100 _x28'
+    promql_expr_test:
+      - expr: 'pve:memory_usage_bytes:dedup'
+        eval_time: 3m
+        exp_samples: []
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: PVEAPIAllSourcesUnavailable
+        exp_alerts:
+          - exp_labels:
+              cluster: pve-sbx
+              severity: critical
+            exp_annotations:
+              summary: PVE cluster API facts have no fresh source
+              description: Cluster and guest state is unknown. Check the exporter and all three APIs; host-local metrics are an independent path.

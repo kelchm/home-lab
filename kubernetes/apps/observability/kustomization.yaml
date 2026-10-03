@@ -12,6 +12,7 @@ resources:
   - ./middleware-kanidm-oidc.yaml
   - ./grafana/ks.yaml
   - ./external-metrics-ingest/ks.yaml
+  - ./pve-api-exporter/ks.yaml
   - ./prometheus-operator-crds/ks.yaml
   - ./smartctl-exporter/ks.yaml
   - ./vlagent/ks.yaml

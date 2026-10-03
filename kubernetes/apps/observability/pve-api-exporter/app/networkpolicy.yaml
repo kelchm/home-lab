@@ -1,0 +1,20 @@
+---
+# Same-namespace and node access plus DNS are trusted by the baseline.
+# External allows cover the three exact API destinations; baseline flows remain trusted.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: pve-api-exporter
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: pve-api-exporter
+  egress:
+    - toCIDR:
+        - 10.32.20.21/32
+        - 10.32.20.22/32
+        - 10.32.20.23/32
+      toPorts:
+        - ports:
+            - port: "8006"
+              protocol: TCP
