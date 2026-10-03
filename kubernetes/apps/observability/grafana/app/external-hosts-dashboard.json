@@ -1098,7 +1098,7 @@
     {
       "id": 20,
       "title": "PVE drift / interrupted apply",
-      "description": "Dirty=1 means an interrupted/failed apply; drift=1 means detected drift and -1 means check unknown. Detection does not repair successful-revision drift automatically.",
+      "description": "Dirty=1 means an interrupted/failed apply or pending reconvergence after explicit engine installation; drift=1 means detected drift and -1 means check unknown. Detection does not repair successful-revision drift automatically.",
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
