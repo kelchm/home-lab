@@ -6,7 +6,7 @@ PVE host metrics use the native [host-config channel](https://github.com/kelchm/
 
 ## Deployment and trust
 
-The pinned `prompve/prometheus-pve-exporter:3.10.1` runs as UID/GID 101 with a read-only filesystem, no capabilities or service-account token, and CPU/memory bounds. Its Service is internal only. The exporter uses verified HTTPS to each exact `pve-sbx-N.home.kelch.io:8006` name and a privilege-separated `metrics@pve!exporter` token. Both the user and token need `PVEAuditor` on `/`; no write role, root token or Homepage credential is used for permanent monitoring.
+The pinned `prompve/prometheus-pve-exporter:3.10.1` runs as UID/GID 101 with a read-only root filesystem, a bounded 16 MiB memory-backed `/tmp` for Gunicorn, no capabilities or service-account token, and CPU/memory bounds. Its Service is internal only. The exporter uses verified HTTPS to each exact `pve-sbx-N.home.kelch.io:8006` name and a privilege-separated `metrics@pve!exporter` token. Both the user and token need `PVEAuditor` on `/`; no write role, root token or Homepage credential is used for permanent monitoring.
 
 The workload's external Cilium allow covers only `10.32.20.21–23:8006`. The namespace baseline also trusts same-namespace traffic, DNS and the Kubernetes API. The multi-target exporter is an internal trusted service, not an endpoint for untrusted target selection. Requests remain bounded to the declared API targets operationally; keep its API credential out of URLs, logs and public dashboards. The cluster's ordinary node egress identity is used; this is not the independently isolated observability egress proposed in #355.
 
@@ -16,13 +16,13 @@ The Kubernetes exporter and vmagent have a central failure domain. Local host co
 
 On October 3, 2026, the pinned Python exporter package ran on a trusted workstation against all three live PVE APIs, temporarily using the existing read-only Auditor credential there. Hostname verification succeeded. With the per-guest config collector disabled, each cluster scrape returned 368 samples in 0.33–0.96 seconds; each node-only scrape returned seven samples in 0.13–0.19 seconds. Metrics parsed without duplicate label sets. Cluster facts were repeated by all three sources; node-only facts were subscription and configured replication state. Credential scratch files and the exporter process were removed.
 
-The pinned container image also ran credential-free TLS probes as UID 101 with the intended filesystem/capability protections from each Kubernetes node. All nine node-to-PVE combinations resolved the exact management IP, verified TLS and received the expected unauthenticated 401. The temporary three pods and exact-target Cilium policy were removed. This qualifies DNS, image trust roots and the current Kubernetes API route; it does not qualify the dedicated credential, final exporter process under load or its future firewall behavior.
+The pinned container image also ran credential-free TLS probes as UID 101 with the intended filesystem/capability protections from each Kubernetes node. All nine node-to-PVE combinations resolved the exact management IP, verified TLS and received the expected unauthenticated 401. The temporary three pods and exact-target Cilium policy were removed. This qualifies DNS, image trust roots and the current Kubernetes API route. A further disposable pod ran the actual image entrypoint with the declared UID, read-only root filesystem and bounded `/tmp`, using a placeholder token without making API requests: Gunicorn started, the pod became Ready, and `/metrics` returned 200. All temporary pods were removed. These checks do not qualify the dedicated credential, authenticated collection under load or future firewall behavior.
 
 The manifests pass Kubernetes schema checks and live server dry-run, including both VMStaticScrapes. Promtool fixture tests prove normalization of three source observations into one resource, exclusion of failed sources, and expiry of old observations. Actual authenticated container scraping, alert delivery and dashboards remain live acceptance gates.
 
 ## Credential bootstrap and activation
 
-Perform the cluster account operation once on a PVE node after reviewing this procedure:
+Perform the cluster account operation once on a PVE node after reviewing this procedure. Token creation prints its secret once: redirect that command’s output directly into a private file on the trusted operator workstation with tracing disabled and `umask 077`; do not run it in a terminal recording or expose the result in chat. The commands below describe the PVE operations; execute the token-add command through the privately redirected SSH session.
 
 ```sh
 sudo pveum user add metrics@pve --comment 'Read-only metrics exporter'
@@ -31,7 +31,7 @@ sudo pveum user token add metrics@pve exporter --privsep 1
 sudo pveum acl modify / --tokens 'metrics@pve!exporter' --roles PVEAuditor
 ```
 
-Token creation prints its secret once. Capture that result directly into a private file on the trusted operator workstation with tracing disabled and `umask 077`; do not expose it in chat or a terminal recording. Extract the `value` into another private file, without putting it in an argument. Create `pve-api-credentials` in the `observability` namespace as an encrypted Git Secret with key `PVE_TOKEN_VALUE`, using `kubectl create secret generic --from-file=PVE_TOKEN_VALUE=/private/path/token --dry-run=client -o yaml`. Set the namespace, write it to `kubernetes/apps/observability/pve-api-exporter/app/credentials.sops.yaml`, encrypt it immediately with SOPS, and add it to the app's Kustomization. Delete the plaintext temporary files after verifying encryption. Never distribute the age key to PVE.
+Extract the `value` from that private token-add result into another private file, without putting it in an argument. Create `pve-api-credentials` in the `observability` namespace as an encrypted Git Secret with key `PVE_TOKEN_VALUE`, using `kubectl create secret generic --from-file=PVE_TOKEN_VALUE=/private/path/token --dry-run=client -o yaml`. Set the namespace, write it to `kubernetes/apps/observability/pve-api-exporter/app/credentials.sops.yaml`, encrypt it immediately with SOPS, and add it to the app's Kustomization. Delete the plaintext temporary files after verifying encryption. Never distribute the age key to PVE.
 
 Inspect both ACLs and the token's privilege separation. Revalidate verified HTTPS with this dedicated token on the workstation and check that all required families are returned. Review a separate activation change containing the encrypted Secret and `suspend: false`; confirm the external scrape class has reconciled first. Do not make the namespace baseline depend on a deliberately suspended Kustomization.
 
