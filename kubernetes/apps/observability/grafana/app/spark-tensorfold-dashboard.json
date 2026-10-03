@@ -1,0 +1,1676 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "liveNow": false,
+  "schemaVersion": 40,
+  "timezone": "browser",
+  "uid": "spark-tensorfold-performance",
+  "title": "Sparks / TensorFold performance",
+  "description": "Native TensorFold application-performance evaluation for one TP=2 GLM-5.3-Flash service. Temporary workstation collection, existing VictoriaMetrics storage.",
+  "editable": false,
+  "version": 3,
+  "refresh": "1s",
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
+  "tags": [
+    "sparks",
+    "inference",
+    "tensorfold"
+  ],
+  "links": [],
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "GLM-5.3-Flash on the Sparks",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 5
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "**TensorFold \u00b7 CUDA \u00b7 GLM-5.3-Flash-EXL3 \u00b7 TP=2 \u00b7 spark-1 + spark-2**\n\nOne serving deployment, scraped at the leader every second. **Evaluation collector runs on the workstation** and stops collecting when it sleeps or its Kubernetes tunnel closes. Runtime/model revisions remain unverified. See the [monitoring runbook](https://github.com/kelchm/home-lab/blob/main/sparks/monitoring/README.md) for semantics and limitations."
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Metrics reachable",
+      "description": "Fresh successful /metrics scrape; this does not prove the model can serve a request. Unavailable includes a stopped collector, stale ingestion, or failed target. Requires a sample younger than 10s.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 4,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "unit": "short",
+          "decimals": 0,
+          "noValue": "Unavailable",
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "Unavailable",
+                  "color": "red"
+                },
+                "1": {
+                  "text": "Scraping",
+                  "color": "green"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "min(up{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"} and (time() - timestamp(up{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}) < 10)) or vector(0)",
+          "legendFormat": "",
+          "refId": "A",
+          "range": false,
+          "instant": true,
+          "interval": "1s"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Live output \u00b7 tokens/s",
+      "description": "Aggregate generated output across all streams, including replies in progress, over the latest 1-second scrape interval. Includes idle time; neither per-request decode speed nor SSE chunk rate. Supplied natively by this TensorFold build.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 4,
+        "y": 5,
+        "w": 5,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "unit": "suffix:tok/s",
+          "decimals": 1,
+          "noValue": "Unavailable",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "(irate(tensorfold_health:completion_tokens_total{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}[10s])) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}) < 10))",
+          "legendFormat": "",
+          "refId": "A",
+          "range": false,
+          "instant": true,
+          "interval": "1s"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Running requests",
+      "description": "Current requests in prefill or decode. This counts requests, not TP ranks.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 9,
+        "y": 5,
+        "w": 4,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "unit": "short",
+          "decimals": 0,
+          "noValue": "Unavailable",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "(tensorfold:requests_running{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}) < 10))",
+          "legendFormat": "",
+          "refId": "A",
+          "range": false,
+          "instant": true,
+          "interval": "1s"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Waiting requests",
+      "description": "Native queued/held requests. Does not expose queue-wait duration or failed requests.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 13,
+        "y": 5,
+        "w": 4,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "unit": "short",
+          "decimals": 0,
+          "noValue": "Unavailable",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "(tensorfold:requests_waiting{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}) < 10))",
+          "legendFormat": "",
+          "refId": "A",
+          "range": false,
+          "instant": true,
+          "interval": "1s"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Shared cache pool used",
+      "description": "Allocated shared pool rows minus free rows, divided by pool capacity. Includes retained prompt states. This is not GPU/host-memory usage or per-stream context occupancy.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 17,
+        "y": 5,
+        "w": 7,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "unit": "percentunit",
+          "decimals": 1,
+          "noValue": "Unavailable",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "(1 - tensorfold_health:pool_free_tokens{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"} / (tensorfold_health:pool_tokens{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"} > 0)) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}) < 10))",
+          "legendFormat": "",
+          "refId": "A",
+          "range": false,
+          "instant": true,
+          "interval": "1s"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Output throughput",
+      "description": "Live output includes active replies. The fast trace uses the latest one-second scrape interval; the two one-minute averages show the broader trend and finished-request accounting. Finished output books the entire reply at completion and can spike after a long request. Zoom to 30 minutes or less for one-second query steps.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 9,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "suffix:tok/s",
+          "decimals": 1,
+          "noValue": "Unavailable",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "(irate(tensorfold_health:completion_tokens_total{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}[10s])) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}) < 10))",
+          "legendFormat": "Live output (latest scrape interval)",
+          "refId": "C",
+          "range": true,
+          "instant": false,
+          "interval": "1s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "(rate(tensorfold_health:completion_tokens_total{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}[1m])) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}) < 10))",
+          "legendFormat": "Live output (1m average)",
+          "refId": "A",
+          "range": true,
+          "instant": false,
+          "interval": "1s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "(rate(tensorfold:generation_tokens_total{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}[1m])) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}) < 10))",
+          "legendFormat": "Finished-request output (1m average)",
+          "refId": "B",
+          "range": true,
+          "instant": false,
+          "interval": "1s"
+        }
+      ],
+      "interval": "1s",
+      "maxDataPoints": 2000
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Time to first token \u00b7 completed requests",
+      "description": "Server arrival to first generated token, recorded after the request finishes. Not client-visible TTFT. 5-minute window; quantiles require 20 samples and no >300s observations. Histogram buckets are coarse.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 9,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "s",
+          "decimals": 1,
+          "noValue": "No recent samples",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "(rate(tensorfold:time_to_first_token_seconds_sum{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}[5m]) / (rate(tensorfold:time_to_first_token_seconds_count{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}[5m]) > 0)) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}) < 10))",
+          "legendFormat": "Mean",
+          "refId": "A",
+          "range": true,
+          "instant": false,
+          "interval": "1s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "(histogram_quantile(0.5, rate(tensorfold:time_to_first_token_seconds_bucket{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}[5m])) and on(job,instance,deployment,collector) (increase(tensorfold:time_to_first_token_seconds_count{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}[5m]) >= 20) and on(job,instance,deployment,collector) (increase(tensorfold:time_to_first_token_seconds_bucket{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\",le=\"300\"}[5m]) >= ignoring(le) increase(tensorfold:time_to_first_token_seconds_count{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}[5m]))) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}) < 10))",
+          "legendFormat": "p50 (20+ samples)",
+          "refId": "B",
+          "range": true,
+          "instant": false,
+          "interval": "1s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "(histogram_quantile(0.95, rate(tensorfold:time_to_first_token_seconds_bucket{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}[5m])) and on(job,instance,deployment,collector) (increase(tensorfold:time_to_first_token_seconds_count{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}[5m]) >= 20) and on(job,instance,deployment,collector) (increase(tensorfold:time_to_first_token_seconds_bucket{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\",le=\"300\"}[5m]) >= ignoring(le) increase(tensorfold:time_to_first_token_seconds_count{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}[5m]))) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}) < 10))",
+          "legendFormat": "p95 (20+ samples)",
+          "refId": "C",
+          "range": true,
+          "instant": false,
+          "interval": "1s"
+        }
+      ],
+      "interval": "1s",
+      "maxDataPoints": 2000
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Request latency \u00b7 completed requests",
+      "description": "Server arrival to reply completion, recorded on completion. 5-minute window. Quantiles are hidden with fewer than 20 samples or observations above the largest finite bucket (300s); mean still includes those observations.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 17,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "s",
+          "decimals": 1,
+          "noValue": "No recent samples",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "(rate(tensorfold:request_latency_seconds_sum{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}[5m]) / (rate(tensorfold:request_latency_seconds_count{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}[5m]) > 0)) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}) < 10))",
+          "legendFormat": "Mean",
+          "refId": "A",
+          "range": true,
+          "instant": false,
+          "interval": "1s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "(histogram_quantile(0.5, rate(tensorfold:request_latency_seconds_bucket{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}[5m])) and on(job,instance,deployment,collector) (increase(tensorfold:request_latency_seconds_count{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}[5m]) >= 20) and on(job,instance,deployment,collector) (increase(tensorfold:request_latency_seconds_bucket{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\",le=\"300\"}[5m]) >= ignoring(le) increase(tensorfold:request_latency_seconds_count{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}[5m]))) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}) < 10))",
+          "legendFormat": "p50 (20+ samples)",
+          "refId": "B",
+          "range": true,
+          "instant": false,
+          "interval": "1s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "(histogram_quantile(0.95, rate(tensorfold:request_latency_seconds_bucket{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}[5m])) and on(job,instance,deployment,collector) (increase(tensorfold:request_latency_seconds_count{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}[5m]) >= 20) and on(job,instance,deployment,collector) (increase(tensorfold:request_latency_seconds_bucket{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\",le=\"300\"}[5m]) >= ignoring(le) increase(tensorfold:request_latency_seconds_count{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}[5m]))) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}) < 10))",
+          "legendFormat": "p95 (20+ samples)",
+          "refId": "C",
+          "range": true,
+          "instant": false,
+          "interval": "1s"
+        }
+      ],
+      "interval": "1s",
+      "maxDataPoints": 2000
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Completed requests \u00b7 last 5 minutes",
+      "description": "Counts finished latency observations in the window. Zero means no finished observations while the scrape is healthy; missing means unavailable. Fractional values can occur through counter extrapolation.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 17,
+        "w": 6,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short",
+          "decimals": 0,
+          "noValue": "Unavailable",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "(increase(tensorfold:request_latency_seconds_count{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}[5m])) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}) < 10))",
+          "legendFormat": "Completed requests",
+          "refId": "A",
+          "range": true,
+          "instant": false,
+          "interval": "1s"
+        }
+      ],
+      "interval": "1s",
+      "maxDataPoints": 2000
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Concurrency and stream states",
+      "description": "Native stream states supplied by the concurrent engine. Filling is multi-prefill activity; it is not a count of HTTP requests. Limit is the current stream ceiling.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 17,
+        "w": 6,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short",
+          "decimals": 0,
+          "noValue": "Unavailable",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "(tensorfold_health:streams{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}) < 10))",
+          "legendFormat": "{{state}}",
+          "refId": "A",
+          "range": true,
+          "instant": false,
+          "interval": "1s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "(tensorfold_health:streams_max{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}) < 10))",
+          "legendFormat": "Stream limit",
+          "refId": "B",
+          "range": true,
+          "instant": false,
+          "interval": "1s"
+        }
+      ],
+      "interval": "1s",
+      "maxDataPoints": 2000
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Prompt reuse \u00b7 completed work",
+      "description": "Cached prompt tokens / prompt tokens across finished requests in a 5-minute window. Full prompt throughput includes cached input; uncached input estimates newly processed tokens. No data without finished prompt accounting.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 25,
+        "w": 8,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "percentunit",
+          "decimals": 1,
+          "noValue": "No recent samples",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "(rate(tensorfold_health:cached_tokens_total{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}[5m]) / (rate(tensorfold:prompt_tokens_total{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}[5m]) > 0)) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}) < 10))",
+          "legendFormat": "Prompt cache hit fraction",
+          "refId": "A",
+          "range": true,
+          "instant": false,
+          "interval": "1s"
+        }
+      ],
+      "interval": "1s",
+      "maxDataPoints": 2000
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Prompt throughput \u00b7 completed work",
+      "description": "Prompt tokens book at request completion, not while prefill is running. Uncached input = prompt minus cached prompt tokens; neither is a live prefill-speed measurement.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 25,
+        "w": 8,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "suffix:tok/s",
+          "decimals": 1,
+          "noValue": "Unavailable",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "(rate(tensorfold:prompt_tokens_total{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}[5m])) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}) < 10))",
+          "legendFormat": "All prompt input",
+          "refId": "A",
+          "range": true,
+          "instant": false,
+          "interval": "1s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "(rate(tensorfold:prompt_tokens_total{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}[5m]) - rate(tensorfold_health:cached_tokens_total{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}[5m])) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}) < 10))",
+          "legendFormat": "Uncached input",
+          "refId": "B",
+          "range": true,
+          "instant": false,
+          "interval": "1s"
+        }
+      ],
+      "interval": "1s",
+      "maxDataPoints": 2000
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "Speculative acceptance \u00b7 completed work",
+      "description": "Accepted / drafted tokens over finished requests in 5 minutes. No value when no drafts were verified. The mtp metric prefix does not establish which speculative drafter or MTP policy is active.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 25,
+        "w": 8,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "percentunit",
+          "decimals": 1,
+          "noValue": "No recent samples",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "(rate(tensorfold:mtp_accepted_total{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}[5m]) / (rate(tensorfold:mtp_drafted_total{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}[5m]) > 0)) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}) < 10))",
+          "legendFormat": "Accepted draft fraction",
+          "refId": "A",
+          "range": true,
+          "instant": false,
+          "interval": "1s"
+        }
+      ],
+      "interval": "1s",
+      "maxDataPoints": 2000
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "Shared cache pool \u00b7 tokens",
+      "description": "Pool capacity, occupied rows and free rows; includes kept prompt states. Distinct from tensorfold:kv_cache_usage_ratio, which uses a stream context window as its denominator.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 33,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "suffix:tokens",
+          "decimals": 0,
+          "noValue": "Unavailable",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "(tensorfold_health:pool_tokens{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}) < 10))",
+          "legendFormat": "Pool capacity",
+          "refId": "A",
+          "range": true,
+          "instant": false,
+          "interval": "1s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "(tensorfold_health:pool_tokens{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"} - tensorfold_health:pool_free_tokens{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}) < 10))",
+          "legendFormat": "Occupied",
+          "refId": "B",
+          "range": true,
+          "instant": false,
+          "interval": "1s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "(tensorfold_health:pool_free_tokens{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}) < 10))",
+          "legendFormat": "Free",
+          "refId": "C",
+          "range": true,
+          "instant": false,
+          "interval": "1s"
+        }
+      ],
+      "interval": "1s",
+      "maxDataPoints": 2000
+    },
+    {
+      "id": 16,
+      "type": "timeseries",
+      "title": "Retained prompts and context ceiling",
+      "description": "Kept prompt states may occupy the pool while idle. The effective context ceiling is per request, not currently used tokens.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 33,
+        "w": 6,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short",
+          "decimals": 0,
+          "noValue": "Unavailable",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "(tensorfold_health:kept_prompts{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}) < 10))",
+          "legendFormat": "Retained prompts",
+          "refId": "A",
+          "range": true,
+          "instant": false,
+          "interval": "1s"
+        }
+      ],
+      "interval": "1s",
+      "maxDataPoints": 2000
+    },
+    {
+      "id": 17,
+      "type": "stat",
+      "title": "Context ceiling",
+      "description": "Effective per-request context ceiling reported by the running engine.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 33,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "unit": "suffix:tokens",
+          "decimals": 0,
+          "noValue": "Unavailable",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "(tensorfold_health:context_length{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}) < 10))",
+          "legendFormat": "",
+          "refId": "A",
+          "range": false,
+          "instant": true,
+          "interval": "1s"
+        }
+      ]
+    },
+    {
+      "id": 18,
+      "type": "stat",
+      "title": "Scrape duration",
+      "description": "Target scrape wall time. Timeout is 800ms; interval 1s. No inference request is made by this collector.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 37,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "unit": "s",
+          "decimals": 3,
+          "noValue": "Unavailable",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "(scrape_duration_seconds{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",deployment=\"$deployment\",collector=\"workstation-pilot\"}) < 10))",
+          "legendFormat": "",
+          "refId": "A",
+          "range": false,
+          "instant": true,
+          "interval": "1s"
+        }
+      ]
+    },
+    {
+      "id": 19,
+      "type": "text",
+      "title": "What this first pass can tell us",
+      "gridPos": {
+        "x": 0,
+        "y": 41,
+        "w": 24,
+        "h": 4
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "Use this view to correlate **throughput, latency, concurrency, prompt reuse and pool pressure** during normal TensorFold use. Rates account for counter resets; ongoing requests contribute only to the live-output counter.\n\n**Still unmeasured:** per-request decode speed / inter-token latency, client-visible TTFT, queue-wait duration, generation-stall detection, reliable error/cancellation counts, and node hardware / TP fabric health. A successful scrape is not an inference health check. Latency percentiles describe a mixed workload and are approximate; inspect sample counts before comparing runs."
+      }
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "text": "VictoriaMetrics",
+          "value": "victoriametrics"
+        },
+        "includeAll": false,
+        "name": "datasource",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "regex": "",
+        "type": "datasource"
+      },
+      {
+        "name": "deployment",
+        "label": "Deployment",
+        "type": "constant",
+        "query": "spark-glm53-tp2",
+        "current": {
+          "text": "spark-glm53-tp2",
+          "value": "spark-glm53-tp2"
+        },
+        "hide": 2
+      }
+    ]
+  },
+  "timepicker": {
+    "refresh_intervals": [
+      "1s",
+      "5s",
+      "10s",
+      "30s",
+      "1m",
+      "5m",
+      "15m",
+      "30m",
+      "1h"
+    ]
+  }
+}

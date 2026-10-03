@@ -1,0 +1,25 @@
+---
+# Temporary workstation evaluation. No Kubernetes cluster label: the target
+# is one TP=2 service outside the cluster, not two independent Spark servers.
+global:
+  scrape_interval: 1s
+  scrape_timeout: 800ms
+scrape_configs:
+  - job_name: spark-inference
+    metrics_path: /metrics
+    honor_labels: false
+    sample_limit: 1000
+    static_configs:
+      - targets:
+          - 10.32.21.31:8888
+        labels:
+          deployment: spark-glm53-tp2
+          model: GLM-5.3-Flash-EXL3
+          runtime: tensorfold
+          backend: cuda
+          tp: "2"
+          collector: workstation-pilot
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: "(tensorfold|tensorfold_health):.*"
+        action: keep
