@@ -9,4 +9,5 @@ resources:
   - ./vmalertmanager-config.sops.yaml
   - ./alerts.yaml
   - ./platform-alerts.yaml
+  - ./external-host-alerts.yaml
   - ./networkpolicy.yaml
