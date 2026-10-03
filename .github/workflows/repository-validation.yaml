@@ -3,7 +3,7 @@ name: "Repository Validation"
 
 on:
   pull_request:
-    branches: ["main"]
+    branches: ["**"]
   push:
     branches: ["main"]
 
@@ -62,6 +62,7 @@ jobs:
               - 'kubernetes/**'
               - 'scripts/ci/validate-vlagent.sh'
               - 'scripts/logging/**'
+              - 'scripts/monitoring/test-ingest.py'
               - 'scripts/ci/test-validate-cilium-policies.sh'
               - 'scripts/ci/validate-cilium-policies.sh'
               - 'scripts/ci/test-validate-unsafe-sysctls.sh'
@@ -258,6 +259,20 @@ jobs:
         run: |
           scripts/ci/test-validate-unsafe-sysctls.sh
           scripts/ci/validate-unsafe-sysctls.sh
+
+      - name: Qualify external ingestion authorization
+        if: needs.pre-job.outputs.kubernetes_changed == 'true'
+        run: |
+          version="$(yq 'select(.kind == "Deployment") | .spec.template.spec.containers[0].image' kubernetes/apps/observability/external-metrics-ingest/app/deployment.yaml | cut -d: -f2 | cut -d@ -f1)"
+          [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          scratch="$(mktemp -d)"
+          trap 'rm -rf "$scratch"' EXIT
+          release="https://github.com/VictoriaMetrics/VictoriaMetrics/releases/download/${version}"
+          curl --fail --silent --show-error --location "$release/vmutils-linux-amd64-${version}.tar.gz" -o "$scratch/vmutils.tar.gz"
+          curl --fail --silent --show-error --location "$release/vmutils-linux-amd64-${version}_checksums.txt" -o "$scratch/checksums.txt"
+          tar -xzf "$scratch/vmutils.tar.gz" -C "$scratch" vmauth-prod
+          (cd "$scratch" && awk '$2 == "vmauth-prod"' checksums.txt | sha256sum --check --strict)
+          VMAUTH_BIN="$scratch/vmauth-prod" python3 scripts/monitoring/test-ingest.py
 
       - name: No Kubernetes changes
         if: needs.pre-job.outputs.kubernetes_changed != 'true'

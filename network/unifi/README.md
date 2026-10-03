@@ -13,6 +13,10 @@ of truth and changes are applied manually.
 
 The "Firewall rules" and "IDS/IPS signature suppression" sections below distinguish applied state from intent for configuration that lives only in the UniFi UI; no exportable artifact lives in this repo.
 
+## External metrics ingestion
+
+The [external metrics runbook](../../docs/runbooks/external-metrics.md) defines a dedicated TLS write endpoint at `10.32.140.2:443` for Spark management addresses `10.32.21.31–32` and PVE management addresses `10.32.20.21–23`. Its precise source/destination/port allow followed by an explicit deny for other routed sources, and any local DNS record, are intended configuration, pending the rollout in [#694](https://github.com/kelchm/home-lab/issues/694). The Kubernetes source policy and per-host authentication are separate controls; neither opens cluster-to-Workloads scraping. Record the actual UniFi rule and positive/negative probes here after deployment.
+
 ## Remote Admin applied state
 
 The Tailscale router rollout created an isolated VLAN and replaced the PVE trunk's repeated per-port overrides with one reusable port profile in UniFi Network 10.6.101:

@@ -1,0 +1,22 @@
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: external-metrics-ingest
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: external-metrics-ingest
+  ingress:
+    # externalTrafficPolicy: Local preserves these client source addresses.
+    # Namespace/node traffic is supplied by the observability baseline.
+    - fromCIDR:
+        - 10.32.21.31/32
+        - 10.32.21.32/32
+        - 10.32.20.21/32
+        - 10.32.20.22/32
+        - 10.32.20.23/32
+      toPorts:
+        - ports:
+            - port: "8427"
+              protocol: TCP

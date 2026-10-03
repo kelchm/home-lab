@@ -23,6 +23,8 @@ On `main`, the absent changed-file outputs default to `true`, selecting every
 surface. This fail-open-for-coverage default is intentional and must be
 preserved when outputs are added or refactored.
 
+Pull-request validation also covers feature-branch bases so independently reviewed layers of a PR stack receive the same checks. Only pushes to `main` trigger full-state validation and Flux deployment.
+
 ## Relationship to Flux
 
 Flux remains pull-based, but its GitHub receiver triggers a pull and immediate

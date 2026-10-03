@@ -1,0 +1,14 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+configMapGenerator:
+  - name: external-metrics-ingest-config
+    files:
+      - auth.yml=auth.template
+resources:
+  - ./deployment.yaml
+  - ./service.yaml
+  - ./certificate.yaml
+  - ./auth.sops.yaml
+  - ./networkpolicy.yaml
+  - ./monitoring.yaml
