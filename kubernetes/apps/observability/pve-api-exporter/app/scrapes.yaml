@@ -1,0 +1,85 @@
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMStaticScrape
+metadata:
+  name: pve-api-cluster
+spec:
+  jobName: pve-api-cluster
+  scrapeClass: external
+  targetEndpoints:
+    - targets:
+        - pve-sbx-1.home.kelch.io
+        - pve-sbx-2.home.kelch.io
+        - pve-sbx-3.home.kelch.io
+      labels:
+        cluster: pve-sbx
+        platform: proxmox
+        collector: pve-api-exporter
+      interval: 30s
+      scrapeTimeout: 10s
+      sampleLimit: 3000
+      path: /pve
+      params:
+        module: [default]
+        cluster: ["1"]
+        node: ["0"]
+      relabelConfigs:
+        - sourceLabels: [__address__]
+          targetLabel: __param_target
+        - sourceLabels: [__address__]
+          regex: '(pve-sbx-[123])\.home\.kelch\.io'
+          targetLabel: api_source
+          replacement: '$1'
+        - sourceLabels: [api_source]
+          targetLabel: instance
+        - targetLabel: __address__
+          replacement: pve-api-exporter.observability.svc.cluster.local:9221
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMStaticScrape
+metadata:
+  name: pve-api-node
+spec:
+  jobName: pve-api-node
+  scrapeClass: external
+  targetEndpoints:
+    - targets:
+        - pve-sbx-1.home.kelch.io
+        - pve-sbx-2.home.kelch.io
+        - pve-sbx-3.home.kelch.io
+      labels:
+        cluster: pve-sbx
+        platform: proxmox
+        collector: pve-api-exporter
+      interval: 30s
+      scrapeTimeout: 10s
+      sampleLimit: 3000
+      path: /pve
+      params:
+        module: [default]
+        cluster: ["0"]
+        node: ["1"]
+      relabelConfigs:
+        - sourceLabels: [__address__]
+          targetLabel: __param_target
+        - sourceLabels: [__address__]
+          regex: '(pve-sbx-[123])\.home\.kelch\.io'
+          targetLabel: api_source
+          replacement: '$1'
+        - sourceLabels: [api_source]
+          targetLabel: instance
+        - targetLabel: __address__
+          replacement: pve-api-exporter.observability.svc.cluster.local:9221
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMServiceScrape
+metadata:
+  name: pve-api-exporter
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pve-api-exporter
+  endpoints:
+    - port: metrics
+      interval: 30s
+      scrapeTimeout: 5s

@@ -235,6 +235,8 @@ spec:
             relabelConfigs:
               - targetLabel: cluster
                 replacement: k8s-prod
+          # External API targets retain their actual system identity.
+          - name: external
         # null omits the field. Server-side apply of the chart's `{}`
         # default can yield null, which the VMAgent schema rejects.
         externalLabels: null

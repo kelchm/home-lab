@@ -63,6 +63,8 @@ jobs:
               - 'scripts/ci/validate-vlagent.sh'
               - 'scripts/logging/**'
               - 'scripts/monitoring/test-ingest.py'
+              - 'scripts/monitoring/pve-api/**'
+              - 'scripts/ci/test-pve-api.sh'
               - 'scripts/ci/test-validate-cilium-policies.sh'
               - 'scripts/ci/validate-cilium-policies.sh'
               - 'scripts/ci/test-validate-unsafe-sysctls.sh'
@@ -124,6 +126,10 @@ jobs:
           FLATE_NO_PROGRESS: "1"
         with:
           args: test all --path /github/workspace/kubernetes/flux/cluster
+
+      - name: Qualify PVE API normalization and source failures
+        if: needs.pre-job.outputs.kubernetes_changed == 'true'
+        run: scripts/ci/test-pve-api.sh
 
       - name: No Kubernetes changes
         if: needs.pre-job.outputs.kubernetes_changed != 'true'

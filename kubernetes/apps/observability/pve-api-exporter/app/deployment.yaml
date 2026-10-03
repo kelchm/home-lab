@@ -1,0 +1,69 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pve-api-exporter
+  annotations:
+    secret.reloader.stakater.com/reload: pve-api-credentials
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pve-api-exporter
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pve-api-exporter
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        runAsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: exporter
+          image: docker.io/prompve/prometheus-pve-exporter:3.10.1@sha256:5678b230735a80816755dc8b5e0fb139a6595e1d4271ace2d22ff82983d1bdf1
+          args:
+            - --web.listen-address=0.0.0.0:9221
+            - --no-collector.config
+            - --collector.pve-api-metrics
+            - --collector.target-metrics
+          env:
+            - name: PVE_USER
+              value: metrics@pve
+            - name: PVE_TOKEN_NAME
+              value: exporter
+            - name: PVE_VERIFY_SSL
+              value: "true"
+            - name: PVE_TOKEN_VALUE
+              valueFrom:
+                secretKeyRef:
+                  name: pve-api-credentials
+                  key: PVE_TOKEN_VALUE
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+          ports:
+            - name: metrics
+              containerPort: 9221
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: "1"
+              memory: 256Mi
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
