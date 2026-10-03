@@ -4,7 +4,7 @@ kind: Kustomization
 metadata:
   name: pve-api-exporter
 spec:
-  # Enable only with the dedicated encrypted credential and acceptance in #650.
+  # Enable only with the dedicated encrypted credential and acceptance in #701.
   suspend: true
   dependsOn:
     - name: victoria-metrics-k8s-stack
