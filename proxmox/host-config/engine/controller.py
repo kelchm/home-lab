@@ -10,6 +10,7 @@ import signal
 import subprocess
 import tempfile
 import time
+import uuid
 
 PAYLOAD = "proxmox/host-config/payload"
 VERSIONS = {"git": "1:2.47.3-0+deb13u1", "ansible-core": "2.19.11-0+deb13u1"}
@@ -30,16 +31,24 @@ def atomic(path, data):
         os.close(descriptor)
 
 
-def run(args, timeout=60, env=None, cwd=None):
+def run(args, timeout=60, env=None, cwd=None, on_interrupt=None):
     # Kill the process group as well: a hung Git transport must not retain the lock.
     with subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                           text=True, env=env, cwd=cwd, start_new_session=True) as proc:
         try:
             output, _ = proc.communicate(timeout=timeout)
-        except subprocess.TimeoutExpired:
-            os.killpg(proc.pid, signal.SIGKILL)
-            output, _ = proc.communicate()
-            raise RuntimeError(f"timeout: {args[0]} after {timeout}s")
+        except BaseException as error:
+            if proc.poll() is None:
+                try:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+            if on_interrupt:
+                on_interrupt()
+            proc.communicate()
+            if isinstance(error, subprocess.TimeoutExpired):
+                raise RuntimeError(f"timeout: {args[0]} after {timeout}s") from error
+            raise
         if proc.returncode:
             raise RuntimeError(f"exit {proc.returncode}: {' '.join(args)}\n{output}")
         return output
@@ -54,6 +63,11 @@ class Controller:
         self.engine = Path(config["engine_dir"])
         self.status = self.base / "status.json"
         self.s = json.loads(self.status.read_text()) if self.status.exists() else {}
+        self.fixture = config.get("unscoped_fixture_executor", False)
+        if self.fixture and Path("/etc/pve").exists():
+            raise RuntimeError("unscoped fixture executor is forbidden on PVE")
+        if not self.fixture and (os.geteuid() != 0 or not Path("/run/systemd/system").exists()):
+            raise RuntimeError("production plays require root and systemd; harmless CI must explicitly select the unscoped fixture executor")
         self.env = {"PATH": "/usr/bin:/bin", "HOME": str(self.base), "LANG": "C.UTF-8",
                     "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/dev/null",
                     "GIT_TERMINAL_PROMPT": "0", "GIT_SSH_COMMAND": "ssh -oBatchMode=yes -oConnectTimeout=5",
@@ -74,14 +88,40 @@ class Controller:
                 not isinstance(x, str) or not re.fullmatch(r"[a-z][a-z0-9_]{0,31}", x)
                 for x in node["collectors"]):
             raise ValueError("invalid collectors")
+        if len(set(node["collectors"])) != len(node["collectors"]):
+            raise ValueError("duplicate collectors")
         return node
 
-    def play(self, revision, mode):
+    def stop_play(self, unit):
+        if not re.fullmatch(r"pve-hostcfg-play-[0-9a-f]{32}\.service", unit):
+            raise RuntimeError("invalid recorded play unit")
+        # Fail closed: keep the controller lock until this exact unit is gone.
+        # A process group cannot contain Ansible workers that call setsid().
+        stopped = False
+        while True:
+            if not stopped:
+                try:
+                    run(["systemctl", "stop", "--no-block", unit], 10, self.env)
+                    stopped = True
+                except (RuntimeError, OSError):
+                    pass  # A collected unit is already absent; show confirms it below.
+            try:
+                result = subprocess.run(["systemctl", "show", unit, "-p", "LoadState", "--value"],
+                                        env=self.env, text=True, capture_output=True, timeout=10)
+            except (OSError, subprocess.TimeoutExpired):
+                time.sleep(1)
+                continue
+            if result.stdout.strip() == "not-found":
+                return
+            time.sleep(0.1)
+
+    def play(self, revision, mode, force_restart=False):
         node = self.node(revision)
         # Only immutable JSON from git-show enters the engine-owned playbook.
         vars_file = self.base / "vars.json"
         atomic(vars_file, json.dumps({"exporter_state": node["node_exporter"],
                                      "collectors": node["collectors"],
+                                     "force_restart": force_restart,
                                      "engine_dir": str(self.engine),
                                      "textfile_dir": self.c["textfile_dir"]}))
         args = [self.c.get("ansible", "/usr/bin/ansible-playbook"),
@@ -91,8 +131,24 @@ class Controller:
             args.append("--syntax-check")
         elif mode == "check":
             args.append("--check")
-        timeout = 30 if mode == "syntax" else 120 if mode == "check" else self.c.get("apply_timeout", 300)
-        output = run(args, timeout, self.env, self.engine)
+        timeout = 30 if mode == "syntax" else 120 if mode == "check" else min(self.c.get("apply_timeout", 300), 300)
+        if self.fixture:
+            output = run(args, timeout, self.env, self.engine)
+        else:
+            unit = "pve-hostcfg-play-" + uuid.uuid4().hex + ".service"
+            self.s["play_unit"] = unit
+            self.report()
+            scoped = ["systemd-run", "--unit=" + unit, "--wait", "--pipe", "--collect",
+                      "--property=RuntimeMaxSec=" + str(timeout), "--property=KillMode=control-group",
+                      "--property=TimeoutStopSec=5", "--working-directory=" + str(self.engine),
+                      "/usr/bin/env", "-i", *[f"{k}={v}" for k, v in self.env.items()], *args]
+            try:
+                output = run(scoped, timeout + 15, self.env, self.engine,
+                             on_interrupt=lambda: self.stop_play(unit))
+            finally:
+                self.stop_play(unit)
+                self.s.pop("play_unit", None)
+                self.report()
         print(output, flush=True)
         if mode == "syntax":
             return 0
@@ -142,6 +198,12 @@ class Controller:
                 print("another controller holds the lock", flush=True)
                 return int(command == "resume")
             self.s = json.loads(self.status.read_text()) if self.status.exists() else {}
+            # A forcibly killed manual controller can leave its bounded play alive.
+            # Settle it before another apply/check can overlap its mutations.
+            if self.s.get("play_unit"):
+                self.stop_play(self.s["play_unit"])
+                self.s.pop("play_unit")
+                self.report()
             if command in ("pause", "resume"):
                 if command == "resume":
                     (self.base / "paused").unlink(missing_ok=True)
@@ -161,13 +223,14 @@ class Controller:
                     relevant = not applied or self.git("rev-parse", f"{desired}:{PAYLOAD}") != self.git(
                         "rev-parse", f"{applied}:{PAYLOAD}")
                     if node["enabled"] and not (self.base / "paused").exists() and (relevant or self.s.get("dirty")):
+                        force_restart = bool(self.s.get("dirty"))
                         self.s.update(attempt=desired, attempt_timestamp_seconds=int(time.time()), attempt_success=0)
                         self.report()
                         self.play(desired, "syntax")
                         # A failed/interrupted apply can have changed the host. Never skip its recovery.
                         self.s["dirty"] = 1
                         self.report()
-                        self.play(desired, "apply")
+                        self.play(desired, "apply", force_restart=force_restart)
                         self.git("update-ref", "refs/heads/applied", desired)
                         self.s.update(applied=desired, dirty=0, attempt_success=1,
                                       success_timestamp_seconds=int(time.time()))
@@ -184,10 +247,16 @@ class Controller:
 
 
 def main():
+    def interrupted(signum, _frame):
+        raise SystemExit(128 + signum)
+    signal.signal(signal.SIGTERM, interrupted)
     parser = argparse.ArgumentParser()
     parser.add_argument("command", choices=("sync", "check", "pause", "resume"))
     args = parser.parse_args()
-    config = json.loads(Path("/etc/pve-hostcfg/config.json").read_text())
+    config_path = Path("/etc/pve-hostcfg/config.json")
+    if config_path.stat().st_uid != 0 or config_path.stat().st_mode & 0o022:
+        raise RuntimeError("engine config must be root-owned and not writable by group/other")
+    config = json.loads(config_path.read_text())
     for package, version in (VERSIONS.items() if args.command in ("sync", "check") else []):
         if run(["dpkg-query", "-W", "-f=${Version}", package]).strip() != version:
             raise RuntimeError(f"{package} engine version differs; explicitly re-bootstrap")

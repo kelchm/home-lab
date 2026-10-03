@@ -71,6 +71,8 @@ with tempfile.TemporaryDirectory(prefix='pve-hostcfg-test-') as temp:
     config = dict(state_dir=str(base / 'state'), engine_dir=str(engine),
                   textfile_dir=str(base / 'textfile'), repository=str(remote), branch='main',
                   host_id='pve-sbx-1', ansible=os.environ['ANSIBLE_PLAYBOOK'], fetch_timeout=2)
+    # Explicit harmless fixture only; production always uses a systemd cgroup.
+    config['unscoped_fixture_executor'] = True
 
     def tick(command='sync', expected=0):
         rc = module.Controller(config).tick(command)
@@ -115,6 +117,11 @@ with tempfile.TemporaryDirectory(prefix='pve-hostcfg-test-') as temp:
         s = tick(expected=1)
         assert s['desired'] == invalid and s['attempt'] == invalid and s['applied'] == first
         assert s['attempt_success'] == 0 and (engine / 'owned').read_text() == 'systemd'
+    node['collectors'] = ['systemd', 'systemd']
+    duplicate = commit('duplicate collectors')
+    s = tick(expected=1)
+    assert s['desired'] == duplicate and s['applied'] == first and s['attempt_success'] == 0
+    assert (engine / 'owned').read_text() == 'systemd'
     # Partial apply: failed revision remains dirty; same SHA succeeds after fault clears.
     node['collectors'] = ['cpu']
     partial = commit('partial')

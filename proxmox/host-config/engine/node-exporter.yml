@@ -14,14 +14,13 @@
         dest: /etc/systemd/system/prometheus-node-exporter.service
         state: link
       when: exporter_state == 'present' and not unit_path.stat.exists
-    - name: Install the exact exporter without maintainer service activation
+    - name: Install the exact exporter while its default unit is masked
       ansible.builtin.apt:
         name: prometheus-node-exporter=1.9.0-1+b4
         state: present
         install_recommends: false
         fail_on_autoremove: true
         auto_install_module_deps: false
-        policy_rc_d: 101
         lock_timeout: 30
       when: exporter_state == 'present'
     - name: Create the read-only textfile input directory
@@ -45,9 +44,9 @@
     - name: Activate the validated loopback exporter
       ansible.builtin.systemd_service:
         name: prometheus-node-exporter.service
-        daemon_reload: "{{ exporter_unit.changed }}"
+        daemon_reload: "{{ not ansible_check_mode }}"
         enabled: true
-        state: "{{ 'restarted' if exporter_unit.changed and not ansible_check_mode else 'started' }}"
+        state: "{{ 'restarted' if (exporter_unit.changed or force_restart | default(false)) and not ansible_check_mode else 'started' }}"
       when: exporter_state == 'present'
     - name: Inspect the package for explicit removal
       ansible.builtin.package_facts:
