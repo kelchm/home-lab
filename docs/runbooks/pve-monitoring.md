@@ -1,6 +1,6 @@
 # PVE monitoring
 
-PVE host metrics use the native [host-config channel](https://github.com/kelchm/home-lab/pull/698) and local persistent push to the [external ingestion endpoint](external-metrics.md). This runbook covers the separate read-only PVE API exporter in Kubernetes. It supplies guest, storage, cluster/quorum, HA/lock, version, backup-selection, subscription and replication facts that a node exporter cannot provide. [#650](https://github.com/kelchm/home-lab/issues/650) owns live acceptance.
+PVE host metrics use the native [host-config channel](https://github.com/kelchm/home-lab/pull/698) and local persistent push to the [external ingestion endpoint](external-metrics.md). This runbook covers the separate read-only PVE API exporter in Kubernetes. It supplies guest, storage, cluster/quorum, HA/lock, version, backup-selection, subscription and replication facts that a node exporter cannot provide. [#701](https://github.com/kelchm/home-lab/issues/701) owns live API acceptance; [#650](https://github.com/kelchm/home-lab/issues/650) records the architecture decision.
 
 **Prepared state:** the `pve-api-exporter` Flux Kustomization is suspended. Its dedicated API user/token and encrypted Secret have not been created. Merge adds reviewed code and the external scrape class; it does not activate API collection or enroll PVE hosts. Keep suspension until the credential, target policy and acceptance are ready.
 
@@ -35,7 +35,7 @@ Extract the `value` from that private token-add result into another private file
 
 Inspect both ACLs and the token's privilege separation. Revalidate verified HTTPS with this dedicated token on the workstation and check that all required families are returned. Review a separate activation change containing the encrypted Secret and `suspend: false`; confirm the external scrape class has reconciled first. Do not make the namespace baseline depend on a deliberately suspended Kustomization.
 
-After activation, require the exporter Ready and all six declared cluster/node API targets up. Verify external targets carry `cluster=pve-sbx`, not `k8s-prod`, and distinct `api_source` labels. Compare a guest and node against the PVE console; normalized totals must agree with one cluster observation. Stop one API scrape in a bounded acceptance test, verify remaining fresh sources retain the facts, then verify target/all-source alert behavior and recover. Test notification delivery through the normal alert route. Record the actual acceptance and account creation in #650 and the PVE service-account documentation.
+After activation, require the exporter Ready and all six declared cluster/node API targets up. Verify external targets carry `cluster=pve-sbx`, not `k8s-prod`, and distinct `api_source` labels. Compare a guest and node against the PVE console; normalized totals must agree with one cluster observation. Stop one API scrape in a bounded acceptance test, verify remaining fresh sources retain the facts, then verify target/all-source alert behavior and recover. Test notification delivery through the normal alert route. Record the actual acceptance and account creation in #701 and the PVE service-account documentation.
 
 ## Source normalization and interpretation
 
