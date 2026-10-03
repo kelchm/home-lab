@@ -1,0 +1,100 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: external-metrics-ingest
+  annotations:
+    secret.reloader.stakater.com/reload: external-metrics-ingest-auth,external-metrics-ingest-tls
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: external-metrics-ingest
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: external-metrics-ingest
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: external-metrics-ingest
+      containers:
+        - name: vmauth
+          image: docker.io/victoriametrics/vmauth:v1.152.0@sha256:486d8acf3665554ab362846272095b51832b5300e242d2e7d612d203a23ba145
+          envFrom:
+            - secretRef:
+                name: external-metrics-ingest-auth
+          args:
+            - -auth.config=/auth/auth.yml
+            - -httpListenAddr=:8427
+            # Keeps /metrics, /flags, /debug and /-/reload off the write listener.
+            - -httpInternalListenAddr=:8426
+            - -tls
+            - -tlsCertFile=/tls/tls.crt
+            - -tlsKeyFile=/tls/tls.key
+            - -maxConcurrentRequests=32
+            - -maxConcurrentPerUserRequests=4
+            - -responseTimeout=30s
+          ports:
+            - name: write
+              containerPort: 8427
+            - name: internal
+              containerPort: 8426
+          readinessProbe:
+            httpGet:
+              scheme: HTTPS
+              path: /health
+              port: internal
+          livenessProbe:
+            httpGet:
+              scheme: HTTPS
+              path: /health
+              port: internal
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          volumeMounts:
+            - name: auth
+              mountPath: /auth
+              readOnly: true
+            - name: tls
+              mountPath: /tls
+              readOnly: true
+      volumes:
+        - name: auth
+          configMap:
+            name: external-metrics-ingest-config
+        - name: tls
+          secret:
+            secretName: external-metrics-ingest-tls
+            defaultMode: 0440
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: external-metrics-ingest
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: external-metrics-ingest

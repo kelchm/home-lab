@@ -30,6 +30,7 @@ or fixing.
 |---|---|
 | [alerting](runbooks/alerting.md) | Receiving, silencing, testing, and troubleshooting Alertmanager notifications and control-plane coverage. |
 | [logging](runbooks/logging.md) | Querying Kubernetes logs and diagnosing the vlagent-to-VictoriaLogs ingestion path. |
+| [external-metrics](runbooks/external-metrics.md) | Bootstrapping and verifying authenticated host metrics ingestion, credentials, and outage recovery. |
 | [longhorn-backup-restore](runbooks/longhorn-backup-restore.md) | Restoring a PV from a Longhorn backup; DR drills. |
 | [longhorn-storage-network-cutover](runbooks/longhorn-storage-network-cutover.md) | Moving Longhorn replica traffic onto the dedicated storage VLAN. |
 | [kanidm-restore](runbooks/kanidm-restore.md) | Recovering Kanidm from DB corruption or PVC loss. |

@@ -1,0 +1,34 @@
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMServiceScrape
+metadata:
+  name: external-metrics-ingest
+spec:
+  jobLabel: app.kubernetes.io/name
+  selector:
+    matchLabels:
+      homelab.kelch.io/metrics: external-metrics-ingest
+  endpoints:
+    - port: internal
+      scheme: https
+      tlsConfig:
+        serverName: metrics-ingest.home.kelch.io
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: external-metrics-ingest
+spec:
+  groups:
+    - name: external-metrics-ingest
+      labels:
+        cluster: k8s-prod
+      rules:
+        - alert: ExternalMetricsIngestUnavailable
+          expr: sum(up{job="external-metrics-ingest"}) == 0 or absent(up{job="external-metrics-ingest"})
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: External metrics ingestion has no healthy replicas
+            description: Host collectors buffer on disk while this endpoint is unavailable. Check VMAuth, its certificate, and VictoriaMetrics; host freshness alerts cover the complete write path.
