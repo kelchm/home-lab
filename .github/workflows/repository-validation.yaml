@@ -219,7 +219,7 @@ jobs:
 
       - name: Install Kubernetes validation tools
         if: needs.pre-job.outputs.kubernetes_changed == 'true'
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5.0.1
         with:
           install_args: "aqua:fluxcd/flux2 aqua:yannh/kubeconform aqua:mikefarah/yq aqua:prometheus/prometheus"
 
@@ -276,7 +276,7 @@ jobs:
 
       - name: Install talhelper
         if: needs.pre-job.outputs.talos_changed == 'true'
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5.0.1
         with:
           install_args: "aqua:budimanjojo/talhelper"
 
@@ -302,7 +302,7 @@ jobs:
 
       - name: Install bootstrap validation tools
         if: needs.pre-job.outputs.bootstrap_changed == 'true'
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5.0.1
         with:
           install_args: "aqua:helm/helm aqua:helmfile/helmfile aqua:yannh/kubeconform"
 
@@ -340,7 +340,7 @@ jobs:
 
       - name: Install SOPS
         if: needs.pre-job.outputs.sops_changed == 'true'
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5.0.1
         with:
           install_args: "aqua:getsops/sops"
 
@@ -371,7 +371,7 @@ jobs:
 
       - name: Install yq
         if: needs.pre-job.outputs.synology_changed == 'true'
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5.0.1
         with:
           install_args: "aqua:mikefarah/yq"
 
@@ -399,7 +399,7 @@ jobs:
 
       - name: Install ShellCheck
         if: needs.pre-job.outputs.scripts_changed == 'true'
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5.0.1
         with:
           install_args: "aqua:koalaman/shellcheck"
 
@@ -510,7 +510,7 @@ jobs:
 
       - name: Install lychee
         if: needs.pre-job.outputs.docs_changed == 'true'
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5.0.1
         with:
           install_args: "aqua:lycheeverse/lychee"
 
