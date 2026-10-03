@@ -76,34 +76,7 @@ jobs:
               - '.github/workflows/repository-validation.yaml'
               - '.mise.toml'
               - 'network/**'
-            pve-hostcfg:
-    name: PVE Host Configuration Qualification
-    needs: pre-job
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        if: needs.pre-job.outputs.pve_hostcfg_changed == 'true'
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Install isolated qualification engine
-        if: needs.pre-job.outputs.pve_hostcfg_changed == 'true'
-        run: |
-          python3 -m venv /tmp/pve-hostcfg-ansible
-          /tmp/pve-hostcfg-ansible/bin/pip install ansible-core==2.19.11
-
-      - name: Exercise real Git and local Ansible
-        if: needs.pre-job.outputs.pve_hostcfg_changed == 'true'
-        env:
-          ANSIBLE_PLAYBOOK: /tmp/pve-hostcfg-ansible/bin/ansible-playbook
-        run: scripts/ci/test-pve-hostcfg.sh
-
-      - name: No PVE host configuration changes
-        if: needs.pre-job.outputs.pve_hostcfg_changed != 'true'
-        run: echo "PVE host configuration qualification is not required."
-
-  scripts:
+            scripts:
               - '.github/workflows/repository-validation.yaml'
               - '.mise.toml'
               - '.renovaterc.json5'
@@ -417,6 +390,33 @@ jobs:
       - name: No Synology changes
         if: needs.pre-job.outputs.synology_changed != 'true'
         run: echo "Synology Compose validation is not required."
+
+  pve-hostcfg:
+    name: PVE Host Configuration Qualification
+    needs: pre-job
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        if: needs.pre-job.outputs.pve_hostcfg_changed == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install isolated qualification engine
+        if: needs.pre-job.outputs.pve_hostcfg_changed == 'true'
+        run: |
+          python3 -m venv /tmp/pve-hostcfg-ansible
+          /tmp/pve-hostcfg-ansible/bin/pip install ansible-core==2.19.11
+
+      - name: Exercise real Git and local Ansible
+        if: needs.pre-job.outputs.pve_hostcfg_changed == 'true'
+        env:
+          ANSIBLE_PLAYBOOK: /tmp/pve-hostcfg-ansible/bin/ansible-playbook
+        run: scripts/ci/test-pve-hostcfg.sh
+
+      - name: No PVE host configuration changes
+        if: needs.pre-job.outputs.pve_hostcfg_changed != 'true'
+        run: echo "PVE host configuration qualification is not required."
 
   scripts:
     name: Shell Validation
