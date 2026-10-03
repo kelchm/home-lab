@@ -58,6 +58,17 @@ with tempfile.TemporaryDirectory(prefix='pve-hostcfg-test-') as temp:
         content: "{{ collectors | join(',') }}"
         mode: '0644'
       when: exporter_state == 'present'
+    - name: Simulated vmagent owned config (controller identity, never fetched labels)
+      ansible.builtin.copy:
+        dest: "{{ engine_dir }}/owned-vmagent"
+        content: "{{ host_id }}:proxmox:pve-host-vmagent"
+        mode: '0644'
+      when: vmagent_state == 'present'
+    - name: Simulated vmagent explicit removal
+      ansible.builtin.file:
+        path: "{{ engine_dir }}/owned-vmagent"
+        state: absent
+      when: vmagent_state == 'absent'
     - name: Controlled failure after the first mutation
       ansible.builtin.command: /bin/false
       changed_when: false
@@ -82,6 +93,7 @@ with tempfile.TemporaryDirectory(prefix='pve-hostcfg-test-') as temp:
     first = commit('initial')
     s = tick()
     assert s['applied'] == first and s['drift'] == 0 and s['attempt_success'] == 1
+    assert module.Controller(config).node(first)['vmagent'] == 'absent'
     stamp = s['attempt_timestamp_seconds']
     modified = (engine / 'owned').stat().st_mtime_ns
     s = tick()
@@ -141,6 +153,25 @@ with tempfile.TemporaryDirectory(prefix='pve-hostcfg-test-') as temp:
     node['collectors'] = ['cpu']
     recovered = commit('revert failed config')
     assert tick()['applied'] == recovered
+    assert (engine / 'owned').read_text() == 'cpu'
+    # Bounded optional state and strict schema; fetched identity/flags/URLs are rejected.
+    good = dict(node)
+    for field, value in [('vmagent', 'invalid'), ('vmagent', True), ('host_id', 'pve-sbx-2'),
+                         ('remote_write_url', 'http://untrusted'), ('flags', ['-evil'])]:
+        node.clear(); node.update(good); node[field] = value
+        commit('invalid vmagent/schema ' + field)
+        before = (engine / 'owned').read_bytes()
+        assert tick(expected=1)['applied'] == recovered
+        assert (engine / 'owned').read_bytes() == before and not (engine / 'owned-vmagent').exists()
+    node.clear(); node.update(good); node['vmagent'] = 'present'
+    push = commit('explicit local push')
+    assert tick()['applied'] == push and (engine / 'owned-vmagent').read_text() == 'pve-sbx-1:proxmox:pve-host-vmagent'
+    assert tick()['drift'] == 0
+    (engine / 'owned-vmagent').write_text('drift')
+    assert tick('check')['drift'] == 1 and (engine / 'owned-vmagent').read_text() == 'drift'
+    node['vmagent'] = 'absent'
+    recovered = commit('remove push independently')
+    assert tick()['applied'] == recovered and not (engine / 'owned-vmagent').exists()
     assert (engine / 'owned').read_text() == 'cpu'
     # Nonblocking lock never fetches or applies or corrupts status.
     with (base / 'state/lock').open('a') as lock:

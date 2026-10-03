@@ -80,7 +80,9 @@ class Controller:
 
     def node(self, revision):
         node = json.loads(self.git("show", f"{revision}:{PAYLOAD}/nodes.json"))[self.c["host_id"]]
-        if set(node) != {"enabled", "node_exporter", "collectors"}:
+        if not isinstance(node, dict) or set(node) not in (
+                {"enabled", "node_exporter", "collectors"},
+                {"enabled", "node_exporter", "collectors", "vmagent"}):
             raise ValueError("unexpected node keys")
         if type(node["enabled"]) is not bool or node["node_exporter"] not in ("present", "absent"):
             raise ValueError("invalid enrollment/exporter state")
@@ -88,6 +90,9 @@ class Controller:
                 not isinstance(x, str) or not re.fullmatch(r"[a-z][a-z0-9_]{0,31}", x)
                 for x in node["collectors"]):
             raise ValueError("invalid collectors")
+        node.setdefault("vmagent", "absent")  # Older applied trees remain checkable.
+        if node["vmagent"] not in ("present", "absent"):
+            raise ValueError("invalid vmagent state")
         if len(set(node["collectors"])) != len(node["collectors"]):
             raise ValueError("duplicate collectors")
         return node
@@ -117,10 +122,14 @@ class Controller:
 
     def play(self, revision, mode, force_restart=False):
         node = self.node(revision)
+        if not re.fullmatch(r"pve-sbx-[123]", self.c["host_id"]):
+            raise ValueError("invalid engine-owned host identity")
         # Only immutable JSON from git-show enters the engine-owned playbook.
         vars_file = self.base / "vars.json"
         atomic(vars_file, json.dumps({"exporter_state": node["node_exporter"],
                                      "collectors": node["collectors"],
+                                     "vmagent_state": node["vmagent"],
+                                     "host_id": self.c["host_id"],
                                      "force_restart": force_restart,
                                      "engine_dir": str(self.engine),
                                      "textfile_dir": self.c["textfile_dir"]}))
@@ -163,7 +172,7 @@ class Controller:
         atomic(self.status, json.dumps(self.s, sort_keys=True) + "\n")
         metrics = []
         for key in ("paused", "dirty", "fetch_success", "attempt_success", "drift", "service_active",
-                    "status_timestamp_seconds", "fetch_timestamp_seconds", "attempt_timestamp_seconds",
+                    "vmagent_service_active", "status_timestamp_seconds", "fetch_timestamp_seconds", "attempt_timestamp_seconds",
                     "success_timestamp_seconds", "drift_timestamp_seconds"):
             metrics.append(f"pve_hostcfg_{key} {self.s.get(key, -1)}")
         for key in ("desired", "applied", "attempt"):
@@ -180,12 +189,14 @@ class Controller:
         except Exception as error:
             self.s["drift"] = -1
             print(f"drift check failed: {error}", flush=True)
-        try:
-            result = subprocess.run(["systemctl", "is-active", "--quiet", "prometheus-node-exporter.service"],
-                                    env=self.env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
-            self.s["service_active"] = int(result.returncode == 0)
-        except (OSError, subprocess.TimeoutExpired):
-            self.s["service_active"] = -1
+        for metric, unit in (("service_active", "prometheus-node-exporter.service"),
+                             ("vmagent_service_active", "pve-host-vmagent.service")):
+            try:
+                result = subprocess.run(["systemctl", "is-active", "--quiet", unit],
+                                        env=self.env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
+                self.s[metric] = int(result.returncode == 0)
+            except (OSError, subprocess.TimeoutExpired):
+                self.s[metric] = -1
 
     def tick(self, command):
         # Emergency pause must persist even while an apply owns the lock.

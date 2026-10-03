@@ -1,0 +1,35 @@
+[Unit]
+Description=PVE local push collector (pve-hostcfg owned)
+After=network-online.target
+Wants=network-online.target
+[Service]
+User=65534
+Group=65534
+ExecStart=/usr/local/lib/pve-hostcfg/vmagent-prod -httpListenAddr=127.0.0.1:8429 -promscrape.config=/etc/pve-hostcfg/vmagent-scrape.yml -remoteWrite.url=https://metrics-ingest.home.kelch.io/api/v1/write -remoteWrite.bearerTokenFile=/etc/pve-host-vmagent/token -remoteWrite.tmpDataPath=/var/lib/pve-host-vmagent -remoteWrite.maxDiskUsagePerURL=1GiB -remoteWrite.queues=1 -remoteWrite.forcePromProto -memory.allowedBytes=64MiB -loggerLevel=WARN
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=30s
+KillSignal=SIGTERM
+UMask=0077
+NoNewPrivileges=true
+CapabilityBoundingSet=
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/pve-host-vmagent
+ReadOnlyPaths=/etc/pve-host-vmagent
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+MemoryMax=256M
+CPUQuota=25%
+TasksMax=64
+[Install]
+WantedBy=multi-user.target

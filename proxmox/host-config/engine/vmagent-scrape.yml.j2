@@ -1,0 +1,21 @@
+# pve-hostcfg owned; host identity comes only from the local controller.
+global:
+  scrape_interval: 15s
+  scrape_timeout: 10s
+  external_labels:
+    host: {{ host_id }}
+    platform: proxmox
+    collector: pve-host-vmagent
+scrape_configs:
+  - job_name: pve-node
+    static_configs:
+      - targets: ['127.0.0.1:9100']
+    relabel_configs:
+      - target_label: instance
+        replacement: {{ host_id }}
+  - job_name: pve-vmagent
+    static_configs:
+      - targets: ['127.0.0.1:8429']
+    relabel_configs:
+      - target_label: instance
+        replacement: {{ host_id }}

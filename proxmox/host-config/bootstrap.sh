@@ -6,7 +6,7 @@ set -euo pipefail
 repository=$1 branch=$2 host_id=$(hostname -s)
 source_dir=$(cd "$(dirname "$0")/engine" && pwd)
 . /etc/os-release
-[[ $ID == debian && $VERSION_ID == 13 ]] || { echo 'requires Debian 13 / PVE 9' >&2; exit 1; }
+[[ $ID == debian && $VERSION_ID == 13 && $(uname -m) == x86_64 ]] || { echo 'requires Debian 13 / PVE 9' >&2; exit 1; }
 if [[ $# == 4 ]]; then
     [[ $3 == --guest-host-id && $host_id == monitoring-eval-990 && ! -d /etc/pve ]] || exit 1
     host_id=$4
@@ -52,9 +52,12 @@ controller.s['dirty'] = 1
 controller.report()
 PYDIRTY
 fi
+bootstrap_stage=$(mktemp -d)
+trap 'rm -rf "$bootstrap_stage"' EXIT
+python3 "$source_dir/../download-vmagent.py" "$bootstrap_stage"
 apt-get update
 apt-get install -y --no-install-recommends --no-remove git=1:2.47.3-0+deb13u1 ansible-core=2.19.11-0+deb13u1
-python3 - "$source_dir/controller.py" "$source_dir/validate-unit" "$source_dir/publish-unit" <<'PYCODE'
+python3 - "$source_dir/controller.py" "$source_dir/validate-unit" "$source_dir/publish-unit" "$source_dir/validate-vmagent" <<'PYCODE'
 import pathlib, sys
 for path in sys.argv[1:]:
     compile(pathlib.Path(path).read_text(), path, 'exec')
@@ -63,17 +66,20 @@ ANSIBLE_CONFIG="$source_dir/ansible.cfg" /usr/bin/ansible-playbook "$source_dir/
 systemd-analyze verify "$source_dir/pve-hostcfg.service" "$source_dir/pve-hostcfg.timer" 2>/dev/null || {
     # verify needs the not-yet-installed ExecStart path; verify using a staged path.
     stage=$(mktemp -d /tmp/pve-hostcfg-verify.XXXXXXXX)
-    trap 'rm -rf "$stage"' EXIT
+    trap 'rm -rf "$stage" "$bootstrap_stage"' EXIT
     install -m 0755 "$source_dir/controller.py" "$stage/controller.py"
     sed "s|/usr/local/lib/pve-hostcfg/controller.py|$stage/controller.py|" "$source_dir/pve-hostcfg.service" > "$stage/pve-hostcfg.service"
     cp "$source_dir/pve-hostcfg.timer" "$stage/"
     systemd-analyze verify "$stage/pve-hostcfg.service" "$stage/pve-hostcfg.timer"
 }
 install -d -m 0755 /usr/local/lib/pve-hostcfg /etc/pve-hostcfg
-for file in controller.py validate-unit publish-unit; do
+install -m 0555 "$bootstrap_stage/vmagent-prod" /usr/local/lib/pve-hostcfg/vmagent-prod.new
+mv -f /usr/local/lib/pve-hostcfg/vmagent-prod.new /usr/local/lib/pve-hostcfg/vmagent-prod
+install -m 0444 "$bootstrap_stage/vmagent.sha256" /usr/local/lib/pve-hostcfg/vmagent.sha256
+for file in controller.py validate-unit publish-unit validate-vmagent; do
     install -m 0755 "$source_dir/$file" "/usr/local/lib/pve-hostcfg/$file"
 done
-for file in ansible.cfg node-exporter.yml node-exporter.service.j2; do
+for file in ansible.cfg node-exporter.yml node-exporter.service.j2 vmagent.yml vmagent-scrape.yml.j2 pve-host-vmagent.service; do
     install -m 0644 "$source_dir/$file" "/usr/local/lib/pve-hostcfg/$file"
 done
 python3 - "$repository" "$branch" "$host_id" <<'PY'

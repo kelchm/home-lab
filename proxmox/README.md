@@ -83,7 +83,7 @@ Validated from a disposable VLAN 21 guest on 2026-08-27: PVE management and stor
 
 ## Host monitoring delivery
 
-[host-config](host-config/) defines a native, narrowly scoped Git/local-Ansible delivery channel for loopback monitoring services. It is prepared for an explicit `pve-sbx-1` canary bootstrap; production nodes have not been enrolled. [The qualification record](host-config/qualification.md) distinguishes tested Debian guest behavior from the remaining PVE acceptance. The initial payload owns node exporter only; persistent remote write and API monitoring are separate slices tracked by [#650](https://github.com/kelchm/home-lab/issues/650).
+[host-config](host-config/) defines a native, narrowly scoped Git/local-Ansible delivery channel for loopback monitoring services. It is prepared for an explicit `pve-sbx-1` canary bootstrap; production nodes have not been enrolled. [The qualification record](host-config/qualification.md) distinguishes tested Debian guest behavior from the remaining PVE acceptance. The initial payload enables node exporter only; all three nodes keep native vmagent absent. The bounded local push engine and its [disposable guest qualification](host-config/vmagent-qualification.md) are prepared for separate explicit credential provisioning and canary enrollment. API monitoring remains a separate slice tracked by [#650](https://github.com/kelchm/home-lab/issues/650).
 
 ## Routine checks
 

@@ -1,5 +1,26 @@
 {
-  "pve-sbx-1": {"enabled": true, "node_exporter": "present", "collectors": ["systemd"]},
-  "pve-sbx-2": {"enabled": false, "node_exporter": "present", "collectors": ["systemd"]},
-  "pve-sbx-3": {"enabled": false, "node_exporter": "present", "collectors": ["systemd"]}
+  "pve-sbx-1": {
+    "enabled": true,
+    "node_exporter": "present",
+    "collectors": [
+      "systemd"
+    ],
+    "vmagent": "absent"
+  },
+  "pve-sbx-2": {
+    "enabled": false,
+    "node_exporter": "present",
+    "collectors": [
+      "systemd"
+    ],
+    "vmagent": "absent"
+  },
+  "pve-sbx-3": {
+    "enabled": false,
+    "node_exporter": "present",
+    "collectors": [
+      "systemd"
+    ],
+    "vmagent": "absent"
+  }
 }
