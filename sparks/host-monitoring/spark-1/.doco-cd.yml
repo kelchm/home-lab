@@ -1,0 +1,5 @@
+name: spark-1-monitoring
+working_dir: sparks/host-monitoring/spark-1
+prune_images: false
+reconciliation: false
+timeout: 120

@@ -1,0 +1,129 @@
+name: spark-2-monitoring
+
+x-security: &security
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  pids_limit: 128
+
+services:
+  publish:
+    <<: *security
+    image: docker.io/victoriametrics/vmagent:v1.152.0@sha256:21d51831acfed657c1d4a805353c278f3669b061cb3a2cd46c0d4f1a4402cb1b
+    user: "65534:65534"
+    network_mode: none
+    entrypoint: [/bin/sh, -ec]
+    command:
+      - |
+        desired=$$(sha256sum /source/scrape.yaml | cut -d ' ' -f 1)
+        success=0
+        if /vmagent-prod -promscrape.config=/source/scrape.yaml -promscrape.config.dryRun; then
+          cp /source/scrape.yaml /runtime/scrape.yaml.next
+          chmod 0644 /runtime/scrape.yaml.next
+          mv /runtime/scrape.yaml.next /runtime/scrape.yaml
+          success=1
+        else
+          # Keep collection running on the validated applied file. Failing this
+          # job makes doco-cd force-recreate the entire project on its next retry.
+          /vmagent-prod -promscrape.config=/runtime/scrape.yaml -promscrape.config.dryRun
+          echo 'Rejected candidate; retaining applied configuration' >&2
+        fi
+        applied=$$(sha256sum /runtime/scrape.yaml | cut -d ' ' -f 1)
+        printf 'spark_monitoring_config_attempt_timestamp_seconds %s\nspark_monitoring_config_success %s\nspark_monitoring_config_info{kind="desired",sha256="%s"} 1\nspark_monitoring_config_info{kind="applied",sha256="%s"} 1\n' "$$(date +%s)" "$$success" "$$desired" "$$applied" > /textfile/config.prom.next
+        mv /textfile/config.prom.next /textfile/config.prom
+    labels:
+      cd.doco.deployment.one_shot: "true"
+    volumes:
+      - ./scrape.yaml:/source/scrape.yaml:ro
+      - /var/lib/spark-monitoring/config:/runtime
+      - /var/lib/spark-monitoring/textfile:/textfile
+    mem_limit: 128m
+    cpus: 0.25
+    restart: "no"
+
+  node-exporter:
+    <<: *security
+    image: quay.io/prometheus/node-exporter:v1.12.1@sha256:1b4e4438faca4dd7e001dd445d161a4a2091b0fededa84093b3a8dfeae1f1be0
+    user: "65534:65534"
+    network_mode: host
+    pid: host
+    command:
+      - --web.listen-address=127.0.0.1:9100
+      - --path.rootfs=/host
+      - --collector.disable-defaults
+      - --collector.cpu
+      - --collector.meminfo
+      - --collector.filesystem
+      - --collector.netdev
+      - --collector.netclass
+      - --collector.hwmon
+      - --collector.thermal_zone
+      - --collector.diskstats
+      - --collector.uname
+      - --collector.loadavg
+      - --collector.time
+      - --collector.vmstat
+      - --collector.stat
+      - --collector.infiniband
+      - --collector.pressure
+      - --collector.textfile
+      - --collector.textfile.directory=/textfile
+      - --collector.netclass.ignored-devices=^(lo|docker.*|veth.*|br-.*)$$
+      - --collector.netdev.device-exclude=^(lo|docker.*|veth.*|br-.*)$$
+      - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/docker/.+|var/lib/containers/storage/.+)($$|/)
+    volumes:
+      - /:/host:ro,rslave
+      - /var/lib/spark-monitoring/textfile:/textfile:ro
+    mem_limit: 128m
+    cpus: 0.25
+    restart: unless-stopped
+
+  gpu-exporter:
+    <<: *security
+    image: docker.io/utkuozdemir/nvidia_gpu_exporter:1.15.1@sha256:7aee2d42836ad29d4adb2722b7cfdc806ec9cc8d45fd0b8971ebbad2d9f3d087
+    user: "65534:65534"
+    network_mode: host
+    devices: ["nvidia.com/gpu=all"]
+    environment:
+      NVIDIA_DRIVER_CAPABILITIES: utility
+    command:
+      - --web.listen-address=127.0.0.1:9835
+      - --collect.backend=exec
+      - --collect.timeout=3s
+      - --web.max-requests=2
+      - --query-field-names=uuid,driver_version,index,pci.bus_id,compute_cap,gpu_recovery_action,pstate,temperature.gpu,temperature.gpu.tlimit,utilization.gpu,power.draw,clocks.current.sm,clocks.max.sm,clocks_event_reasons.hw_thermal_slowdown,clocks_event_reasons.hw_slowdown,clocks_event_reasons.sw_thermal_slowdown,clocks_event_reasons.sw_power_cap,clocks_event_reasons.gpu_idle,clocks_event_reasons_counters.hw_thermal_slowdown,clocks_event_reasons_counters.sw_power_cap
+    mem_limit: 128m
+    cpus: 0.5
+    restart: unless-stopped
+
+  vmagent:
+    <<: *security
+    image: docker.io/victoriametrics/vmagent:v1.152.0@sha256:21d51831acfed657c1d4a805353c278f3669b061cb3a2cd46c0d4f1a4402cb1b
+    user: "65534:65534"
+    network_mode: host
+    command:
+      - -httpListenAddr=127.0.0.1:8429
+      - -promscrape.config=/config/scrape.yaml
+      - -promscrape.configCheckInterval=5s
+      - -remoteWrite.url=https://metrics-ingest.home.kelch.io/api/v1/write
+      - -remoteWrite.bearerTokenFile=/credentials/token
+      - -remoteWrite.tmpDataPath=/queue
+      - -remoteWrite.maxDiskUsagePerURL=1GiB
+      - -remoteWrite.queues=1
+      - -memory.allowedBytes=64MiB
+    volumes:
+      - /var/lib/spark-monitoring/config:/config:ro
+      - /var/lib/spark-monitoring/queue:/queue
+      - /etc/spark-monitoring/credentials:/credentials:ro
+    depends_on:
+      publish:
+        condition: service_completed_successfully
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, http://127.0.0.1:8429/health]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    mem_limit: 256m
+    cpus: 0.5
+    stop_grace_period: 30s
+    restart: unless-stopped

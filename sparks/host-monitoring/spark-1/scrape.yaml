@@ -1,0 +1,68 @@
+global:
+  scrape_interval: 15s
+  scrape_timeout: 5s
+scrape_configs:
+  - job_name: spark-node
+    scrape_interval: 15s
+    scrape_timeout: 5s
+    sample_limit: 4000
+    static_configs:
+      - targets: ["127.0.0.1:9100"]
+        labels:
+          instance: spark-1
+          host: spark-1
+          platform: dgx_spark
+          collector: spark-host-vmagent
+  - job_name: spark-gpu
+    scrape_interval: 5s
+    scrape_timeout: 4s
+    sample_limit: 500
+    static_configs:
+      - targets: ["127.0.0.1:9835"]
+        labels:
+          instance: spark-1
+          host: spark-1
+          platform: dgx_spark
+          collector: spark-host-vmagent
+  - job_name: spark-collector
+    scrape_interval: 15s
+    scrape_timeout: 3s
+    sample_limit: 4000
+    static_configs:
+      - targets: ["127.0.0.1:8429"]
+        labels:
+          instance: spark-1
+          host: spark-1
+          platform: dgx_spark
+          collector: spark-host-vmagent
+  - job_name: spark-inference
+    scrape_interval: 1s
+    scrape_timeout: 800ms
+    sample_limit: 1000
+    static_configs:
+      - targets: ["127.0.0.1:8888"]
+        labels:
+          instance: spark-1
+          host: spark-1
+          platform: dgx_spark
+          collector: spark-host-vmagent
+          deployment: spark-glm53-tp2
+          model: GLM-5.3-Flash-EXL3
+          runtime: tensorfold
+          backend: cuda
+          tp: "2"
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: "(tensorfold|tensorfold_health):.*"
+        action: keep
+  - job_name: spark-deployer
+    scrape_interval: 15s
+    scrape_timeout: 3s
+    sample_limit: 2000
+    static_configs:
+      - targets: ["127.0.0.1:9120"]
+        labels:
+          instance: spark-1
+          host: spark-1
+          platform: dgx_spark
+          collector: spark-host-vmagent

@@ -31,6 +31,7 @@ jobs:
       skills_changed: ${{ steps.changed-files.outputs.skills_any_changed || 'true' }}
       sops_changed: ${{ steps.changed-files.outputs.sops_any_changed || 'true' }}
       synology_changed: ${{ steps.changed-files.outputs.synology_any_changed || 'true' }}
+      spark_monitoring_changed: ${{ steps.changed-files.outputs.spark_monitoring_any_changed || 'true' }}
       talos_changed: ${{ steps.changed-files.outputs.talos_any_changed || 'true' }}
     steps:
       - name: Checkout
@@ -88,6 +89,10 @@ jobs:
               - '**/*.sops.yaml'
               - '**/*.sops.yml'
               - 'scripts/ci/validate-sops.sh'
+            spark_monitoring:
+              - '.github/workflows/repository-validation.yaml'
+              - '.mise.toml'
+              - 'sparks/host-monitoring/**'
             synology:
               - '.github/workflows/repository-validation.yaml'
               - '.mise.toml'
@@ -401,6 +406,41 @@ jobs:
         if: needs.pre-job.outputs.synology_changed != 'true'
         run: echo "Synology Compose validation is not required."
 
+  spark-monitoring:
+    name: Spark Host Monitoring Qualification
+    needs: pre-job
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        if: needs.pre-job.outputs.spark_monitoring_changed == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install yq
+        if: needs.pre-job.outputs.spark_monitoring_changed == 'true'
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        with:
+          install_args: "aqua:mikefarah/yq"
+
+      - name: Validate exposure, scrape configuration and publisher failures
+        if: needs.pre-job.outputs.spark_monitoring_changed == 'true'
+        run: |
+          version="$(yq '.services.vmagent.image' sparks/host-monitoring/spark-1/compose.yaml | cut -d: -f2 | cut -d@ -f1)"
+          [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          scratch="$(mktemp -d)"
+          trap 'rm -rf "$scratch"' EXIT
+          release="https://github.com/VictoriaMetrics/VictoriaMetrics/releases/download/${version}"
+          curl --fail --silent --show-error --location "$release/vmutils-linux-amd64-${version}.tar.gz" -o "$scratch/vmutils.tar.gz"
+          curl --fail --silent --show-error --location "$release/vmutils-linux-amd64-${version}_checksums.txt" -o "$scratch/checksums.txt"
+          tar -xzf "$scratch/vmutils.tar.gz" -C "$scratch" vmagent-prod
+          (cd "$scratch" && awk '$2 == "vmagent-prod"' checksums.txt | sha256sum --check --strict)
+          VMAGENT_BIN="$scratch/vmagent-prod" python3 sparks/host-monitoring/tests/validate.py
+
+      - name: No Spark monitoring changes
+        if: needs.pre-job.outputs.spark_monitoring_changed != 'true'
+        run: echo "Spark monitoring qualification is not required."
+
   scripts:
     name: Shell Validation
     needs: pre-job
@@ -552,6 +592,7 @@ jobs:
       - bootstrap
       - sops
       - synology
+      - spark-monitoring
       - scripts
       - skills
       - network

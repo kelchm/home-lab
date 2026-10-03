@@ -1,6 +1,6 @@
 # DGX Spark workloads
 
-SparkRun is the preferred operating approach for inference on the two DGX Sparks. These hosts are outside Flux and Talos automation; merging repository changes does not deploy or restart their workloads. Hardware bring-up, networking, RDMA and fabric isolation are documented in the [bring-up runbook](../docs/runbooks/dgx-spark-bringup.md).
+SparkRun is the preferred operating approach for inference on the two DGX Sparks. These hosts are outside Flux and Talos automation. Inference stays manually managed by SparkRun; merging a serving recipe does not restart it. The prepared [host-monitoring project](host-monitoring/) has its own doco-cd deployment channel, which takes effect only after explicit per-host enrollment. Hardware bring-up, networking, RDMA and fabric isolation are documented in the [bring-up runbook](../docs/runbooks/dgx-spark-bringup.md).
 
 ## SparkRun operation
 

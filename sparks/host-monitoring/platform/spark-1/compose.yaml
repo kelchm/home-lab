@@ -1,0 +1,28 @@
+name: spark-doco-cd
+
+services:
+  doco-cd:
+    image: ghcr.io/kimdre/doco-cd:0.123.0@sha256:11b474122ed530614cbe4cb8390f94b646d3fc8ba40d74c0f0b7f55a8ca719f8
+    container_name: spark-doco-cd
+    environment:
+      TZ: America/New_York
+      HTTP_PORT: "8080"
+      DEPLOY_CONFIG_BASE_DIR: sparks/host-monitoring/spark-1
+      POLL_CONFIG: |
+        - url: https://github.com/kelchm/home-lab.git
+          reference: main
+          interval: 3m
+    ports:
+      - "127.0.0.1:9120:9120"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/lib/spark-doco-cd/data:/data
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: [CMD, /doco-cd, healthcheck]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
