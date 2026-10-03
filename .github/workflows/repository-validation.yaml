@@ -263,7 +263,8 @@ jobs:
       - name: Qualify external ingestion authorization
         if: needs.pre-job.outputs.kubernetes_changed == 'true'
         run: |
-          version="$(yq '.spec.template.spec.containers[0].image' kubernetes/apps/observability/external-metrics-ingest/app/deployment.yaml | cut -d: -f2 | cut -d@ -f1)"
+          version="$(yq 'select(.kind == "Deployment") | .spec.template.spec.containers[0].image' kubernetes/apps/observability/external-metrics-ingest/app/deployment.yaml | cut -d: -f2 | cut -d@ -f1)"
+          [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
           scratch="$(mktemp -d)"
           trap 'rm -rf "$scratch"' EXIT
           release="https://github.com/VictoriaMetrics/VictoriaMetrics/releases/download/${version}"
