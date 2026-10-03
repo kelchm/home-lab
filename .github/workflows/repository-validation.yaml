@@ -127,10 +127,6 @@ jobs:
         with:
           args: test all --path /github/workspace/kubernetes/flux/cluster
 
-      - name: Qualify PVE API normalization and source failures
-        if: needs.pre-job.outputs.kubernetes_changed == 'true'
-        run: scripts/ci/test-pve-api.sh
-
       - name: No Kubernetes changes
         if: needs.pre-job.outputs.kubernetes_changed != 'true'
         run: echo "Flate render test is not required."
@@ -279,6 +275,10 @@ jobs:
           tar -xzf "$scratch/vmutils.tar.gz" -C "$scratch" vmauth-prod
           (cd "$scratch" && awk '$2 == "vmauth-prod"' checksums.txt | sha256sum --check --strict)
           VMAUTH_BIN="$scratch/vmauth-prod" python3 scripts/monitoring/test-ingest.py
+
+      - name: Qualify PVE API normalization and source failures
+        if: needs.pre-job.outputs.kubernetes_changed == 'true'
+        run: scripts/ci/test-pve-api.sh
 
       - name: No Kubernetes changes
         if: needs.pre-job.outputs.kubernetes_changed != 'true'
