@@ -81,6 +81,10 @@ The `admin-prod` pool is a BGP-routed prefix rather than a UniFi network. Networ
 
 Validated from a disposable VLAN 21 guest on 2026-08-27: PVE management and storage addresses, NAS NFS, the Talos API, and `admin-prod` were blocked; `services-prod`, local DNS, and Internet HTTP remained reachable. A pod on `k8s-prod` could not initiate TCP to the guest, while the Main admin workstation retained SSH access. The complete applied record lives in [`network/unifi/README.md`](../network/unifi/README.md).
 
+## Host monitoring delivery
+
+[host-config](host-config/) defines a native, narrowly scoped Git/local-Ansible delivery channel for loopback monitoring services. It is prepared for an explicit `pve-sbx-1` canary bootstrap; production nodes have not been enrolled. [The qualification record](host-config/qualification.md) distinguishes tested Debian guest behavior from the remaining PVE acceptance. The initial payload owns node exporter only; persistent remote write and API monitoring are separate slices tracked by [#650](https://github.com/kelchm/home-lab/issues/650).
+
 ## Routine checks
 
 Run cluster-wide checks from any node:

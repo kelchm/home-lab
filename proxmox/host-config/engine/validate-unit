@@ -1,0 +1,13 @@
+#!/usr/bin/python3
+import pathlib
+import shlex
+import subprocess
+import sys
+import tempfile
+source = pathlib.Path(sys.argv[1]).read_text()
+with tempfile.TemporaryDirectory() as directory:
+    unit = pathlib.Path(directory) / "prometheus-node-exporter.service"
+    unit.write_text(source)
+    subprocess.run(["systemd-analyze", "verify", str(unit)], check=True)
+command = next(line.split("=", 1)[1] for line in source.splitlines() if line.startswith("ExecStart="))
+subprocess.run(shlex.split(command) + ["--version"], check=True)

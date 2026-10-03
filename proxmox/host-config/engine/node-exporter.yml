@@ -1,0 +1,76 @@
+- name: Own only the native monitoring exporter
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Inspect the owned unit path before first installation
+      ansible.builtin.stat:
+        path: /etc/systemd/system/prometheus-node-exporter.service
+        follow: false
+      register: unit_path
+      when: exporter_state == 'present'
+    - name: Mask the default unit until a validated override exists (also across interruptions)
+      ansible.builtin.file:
+        src: /dev/null
+        dest: /etc/systemd/system/prometheus-node-exporter.service
+        state: link
+      when: exporter_state == 'present' and not unit_path.stat.exists
+    - name: Install the exact exporter while its default unit is masked
+      ansible.builtin.apt:
+        name: prometheus-node-exporter=1.9.0-1+b4
+        state: present
+        install_recommends: false
+        fail_on_autoremove: true
+        auto_install_module_deps: false
+        lock_timeout: 30
+      when: exporter_state == 'present'
+    - name: Create the read-only textfile input directory
+      ansible.builtin.file:
+        path: "{{ textfile_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+      when: exporter_state == 'present'
+    - name: Validate flags and the unit before atomic activation
+      ansible.builtin.command:
+        argv: ["{{ engine_dir }}/publish-unit", "{{ engine_dir }}/validate-unit", "{{ 'check' if ansible_check_mode else 'apply' }}"]
+        stdin: "{{ lookup('ansible.builtin.template', 'node-exporter.service.j2') }}"
+      check_mode: false
+      changed_when: exporter_unit.stdout == 'changed'
+      register: exporter_unit
+      when: exporter_state == 'present'
+    - name: Activate the validated loopback exporter
+      ansible.builtin.systemd_service:
+        name: prometheus-node-exporter.service
+        daemon_reload: "{{ not ansible_check_mode }}"
+        enabled: true
+        state: "{{ 'restarted' if (exporter_unit.changed or force_restart | default(false)) and not ansible_check_mode else 'started' }}"
+      when: exporter_state == 'present'
+    - name: Inspect the package for explicit removal
+      ansible.builtin.package_facts:
+        manager: apt
+      when: exporter_state == 'absent'
+    - name: Stop before removing any owned files
+      ansible.builtin.systemd_service:
+        name: prometheus-node-exporter.service
+        state: stopped
+        enabled: false
+      when: exporter_state == 'absent' and 'prometheus-node-exporter' in ansible_facts.packages
+    - name: Remove only the exporter package (retain dependencies)
+      ansible.builtin.apt:
+        name: prometheus-node-exporter
+        state: absent
+        purge: true
+        autoremove: false
+        auto_install_module_deps: false
+      when: exporter_state == 'absent'
+    - name: Remove only our unit override
+      ansible.builtin.file:
+        path: /etc/systemd/system/prometheus-node-exporter.service
+        state: absent
+      register: removed_unit
+      when: exporter_state == 'absent'
+    - name: Reload after removal
+      ansible.builtin.systemd_service:
+        daemon_reload: true
+      when: exporter_state == 'absent' and removed_unit.changed and not ansible_check_mode
