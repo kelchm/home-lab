@@ -96,7 +96,7 @@ Validation from disposable PVE guest `10.32.21.201` produced the following matri
 | `k8s-prod` pod to guest TCP 22 | Blocked |
 | Main admin workstation to guest TCP 22 | Open |
 
-These rules implement the PVE-specific slice of the network-topology matrix. They do not make the complete phase-2 firewall posture applied: the broader Main, IoT, Guest, Cameras, Spark inference, and BGP-pool restrictions still require their own implementation and negative tests.
+These rules implement the PVE-specific slice of the network-topology matrix. They do not make the complete phase-2 firewall posture applied: the broader Main, IoT, Guest, Cameras inter-VLAN, Spark inference, and BGP-pool restrictions still require their own implementation and negative tests. Cameras Internet egress is separately enforced as documented under "Firewall rules" below.
 
 ## Applying `frr.conf`
 
@@ -134,7 +134,26 @@ allocates from it.
 
 ## Firewall rules
 
-UniFi default inter-VLAN posture is allow, so the BGP LB pool prefixes need explicit denies from untrusted VLANs. The IoT and Guest rules in this section remain unapplied intent; the separately documented Workloads-to-`admin-prod` rule is live. These rules are configured in the UniFi UI, and this section is the source of truth because there is no committable controller artifact.
+Rules are configured manually in the UniFi UI; this section distinguishes applied policies from remaining intent because there is no committable controller artifact.
+
+### Cameras
+
+Cameras (VLAN 5, `10.32.5.0/24`) has `Allow Internet Access` off, `Isolate Network` on, and IPv6 disabled. Internet egress is blocked except for Thingino firmware downloads from the Wyze Cam 3 at `10.32.5.30` and Cam 2 at `10.32.5.31`:
+
+| Policy | Source | Destination | State |
+|---|---|---|---|
+| `Allow Thingino Cameras to GitHub Updates` | Internal; `10.32.5.30`, `10.32.5.31` | External; `github.com`, `raw.githubusercontent.com`, `release-assets.githubusercontent.com`; TCP 443 | Active; IPv4; above the Internet block |
+| `Block 10.32.5.0/24 Internet Access` | Internal; `10.32.5.0/24` | External; any | Active; all protocols |
+| `Camera Out Test` | Internal; network Cameras | External; any | Paused |
+| `Camera Access` and its return policy | Main → Cameras; established/related replies to Main | Internal | Active |
+
+The update exception permits any HTTPS content on those GitHub hosts. Keep the two camera IPs stable or update the source matches when renumbering them. In Settings → Policy Engine → Policy Table, keep the update allow above the generated block and `Camera Out Test` paused; resuming that legacy rule restores blanket Internet access despite the network toggle. Pause the update allow to withdraw just the exception.
+
+After policy changes, test gateway DNS and updater-script and release-asset downloads from each camera, confirm unrelated HTTPS is blocked, and confirm Main can still access both cameras. Validate downloads without invoking `sysupgrade`. The acceptance results and firmware snapshots are recorded in [#349](https://github.com/kelchm/home-lab/issues/349).
+
+### BGP load-balancer pools
+
+UniFi default inter-VLAN posture is allow, so the BGP LB pool prefixes need explicit denies from untrusted VLANs. The IoT and Guest rules below remain unapplied intent; the separately documented Workloads-to-`admin-prod` rule is live.
 
 **Network object:** `bgp-lb-restricted`
 
@@ -161,7 +180,7 @@ across the network, replace these denies with the corresponding allows from
 Main and revisit the per-pool firewall posture in
 [`docs/architecture.md`](../../docs/architecture.md#lb-pool-allocation).
 
-### shared-prod tenant rules
+#### shared-prod tenant rules
 
 Shared-pool policy is explicit per tenant. Keep these Visionect rules ordered
 above the final deny for `10.32.150.30`:
@@ -179,6 +198,12 @@ reaching the cluster at all.
 Validate by running `curl --max-time 2 http://10.32.130.99/` from a device on
 each restricted VLAN — should time out or be refused. The synthetic test
 below exercises this as gate 4.
+
+## VPN
+
+Site Magic is disabled (`magic_site_to_site_vpn.enabled: false`) for this single-site deployment. No UniFi VPN servers or Site-to-Site VPNs are configured; remote management remains enabled.
+
+Network 10.6.106 redirects the SD-WAN UI to Site Manager. To change the local enable flag, use the authenticated controller API: read `GET /proxy/network/api/s/default/rest/setting`, select `key: magic_site_to_site_vpn`, and post that complete object with only `enabled` changed to `POST /proxy/network/api/s/default/set/setting/magic_site_to_site_vpn`. Use the `x-csrf-token` response header from `GET /api/users/self`, preserve all other fields, and read the flag back after saving. The object contains private key material; do not log or commit it.
 
 ## IDS/IPS signature suppression
 
