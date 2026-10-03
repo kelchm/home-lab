@@ -4,9 +4,14 @@ kind: Deployment
 metadata:
   name: external-metrics-ingest
   annotations:
-    secret.reloader.stakater.com/reload: external-metrics-ingest-auth,external-metrics-ingest-tls
+    secret.reloader.stakater.com/reload: external-metrics-ingest-auth
 spec:
   replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   selector:
     matchLabels:
       app.kubernetes.io/name: external-metrics-ingest
@@ -33,9 +38,33 @@ spec:
       containers:
         - name: vmauth
           image: docker.io/victoriametrics/vmauth:v1.152.0@sha256:486d8acf3665554ab362846272095b51832b5300e242d2e7d612d203a23ba145
-          envFrom:
-            - secretRef:
-                name: external-metrics-ingest-auth
+          # Missing keys must stop startup; VMAuth preserves unresolved placeholders.
+          env:
+            - name: SPARK_1_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: external-metrics-ingest-auth
+                  key: SPARK_1_TOKEN
+            - name: SPARK_2_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: external-metrics-ingest-auth
+                  key: SPARK_2_TOKEN
+            - name: PVE_SBX_1_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: external-metrics-ingest-auth
+                  key: PVE_SBX_1_TOKEN
+            - name: PVE_SBX_2_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: external-metrics-ingest-auth
+                  key: PVE_SBX_2_TOKEN
+            - name: PVE_SBX_3_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: external-metrics-ingest-auth
+                  key: PVE_SBX_3_TOKEN
           args:
             - -auth.config=/auth/auth.yml
             - -httpListenAddr=:8427

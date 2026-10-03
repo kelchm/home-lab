@@ -6,6 +6,8 @@ cluster connection are used. Tests TLS, all host tokens, listener separation,
 revocation, rejected paths, and removal of credentials before forwarding.
 """
 import http.server
+import json
+import re
 import os
 from pathlib import Path
 import socket
@@ -19,6 +21,20 @@ import urllib.request
 
 ROOT = Path(__file__).resolve().parents[2]
 CONFIG = ROOT / "kubernetes/apps/observability/external-metrics-ingest/app/auth.yaml"
+# Inspect the actual Deployment and encrypted Secret's public key names. Kubelet
+# rejects missing required secretKeyRefs; envFrom would silently omit the key.
+def yaml_document(path, expression="."):
+    return json.loads(subprocess.check_output(["yq", "-o=json", expression, str(path)]))
+
+container = yaml_document(CONFIG.with_name("deployment.yaml"), 'select(.kind == "Deployment")')["spec"]["template"]["spec"]["containers"][0]
+keys = re.findall(r"%\{([A-Z0-9_]+)\}", CONFIG.read_text())
+assert keys and len(keys) == len(set(keys)), "token placeholders must be distinct"
+assert set(yaml_document(CONFIG.with_name("auth.sops.yaml"))["stringData"]) == set(keys)
+assert "envFrom" not in container, "envFrom allows missing credentials to become literal placeholders"
+refs = {entry["name"]: entry["valueFrom"]["secretKeyRef"] for entry in container["env"]}
+assert len(refs) == len(container["env"]) and set(refs) == set(keys)
+for name, ref in refs.items():
+    assert ref["name"] == "external-metrics-ingest-auth" and ref["key"] == name and not ref.get("optional", False)
 received = []
 
 
@@ -55,12 +71,13 @@ with tempfile.TemporaryDirectory(prefix="ingest-test-") as directory:
                     "-keyout", str(key), "-out", str(cert)], check=True, capture_output=True)
     context = ssl.create_default_context(cafile=str(cert))
     write, internal = free_port(), free_port()
-    keys = ["SPARK_1_TOKEN", "SPARK_2_TOKEN", "PVE_SBX_1_TOKEN", "PVE_SBX_2_TOKEN", "PVE_SBX_3_TOKEN"]
     environment = dict(os.environ, **{name: f"fixture-{index}" for index, name in enumerate(keys)})
     binary = os.environ["VMAUTH_BIN"]
-    args = [binary, f"-auth.config={config}", f"-httpListenAddr=127.0.0.1:{write}",
-            f"-httpInternalListenAddr=127.0.0.1:{internal}", "-tls",
-            f"-tlsCertFile={cert}", f"-tlsKeyFile={key}"]
+    replacements = {"-auth.config": str(config), "-httpListenAddr": f"127.0.0.1:{write}",
+                    "-httpInternalListenAddr": f"127.0.0.1:{internal}",
+                    "-tlsCertFile": str(cert), "-tlsKeyFile": str(key)}
+    args = [binary] + [f"{flag.split('=', 1)[0]}={replacements[flag.split('=', 1)[0]]}"
+                       if flag.split('=', 1)[0] in replacements else flag for flag in container["args"]]
 
     def request(port, path, token=None, data=None):
         headers = {"Authorization": f"Bearer {token}"} if token else {}
@@ -90,21 +107,22 @@ with tempfile.TemporaryDirectory(prefix="ingest-test-") as directory:
     with (scratch / "vmauth.log").open("w+") as log:
         process = start(environment, log)
         try:
-            for index in range(5):
+            for index in range(len(keys)):
                 assert request(write, "/api/v1/write", f"fixture-{index}", b"fixture-write") == 204
-            assert len(received) == 5 and all(not entry[1] for entry in received)
+            assert len(received) == len(keys) and all(not entry[1] for entry in received)
             assert request(write, "/api/v1/write", data=b"bad") == 401
             assert request(write, "/api/v1/write", "invalid", b"bad") == 401
+            assert request(write, "/api/v1/write", "%{" + keys[0] + "}", b"bad") == 401
             for path in ["/api/v1/query", "/api/v1/query_range", "/api/v1/admin/tsdb/delete_series",
                          "/api/v1/import/prometheus", "/api/v1/write/extra", "/metrics", "/flags",
                          "/health", "/-/reload", "/debug/pprof/", "/api/v1/write/../query"]:
                 assert request(write, path, "fixture-0", b"bad") >= 400, path
-            assert len(received) == 5, "denied requests reached the receiver"
+            assert len(received) == len(keys), "denied requests reached the receiver"
             assert request(internal, "/metrics") == 200
         finally:
             process.terminate()
             process.wait(timeout=5)
-        environment["SPARK_1_TOKEN"] = "rotated-token"
+        environment[keys[0]] = "rotated-token"
         process = start(environment, log)
         try:
             assert request(write, "/api/v1/write", "fixture-0", b"bad") == 401
@@ -114,4 +132,13 @@ with tempfile.TemporaryDirectory(prefix="ingest-test-") as directory:
             process.terminate()
             process.wait(timeout=5)
             receiver.shutdown()
-    print("Passed: TLS, five host tokens, write-only routes, internal listener, credential stripping and rotation.")
+    empty_environment = dict(environment, **{keys[0]: ""})
+    with (scratch / "empty-token.log").open("w") as log:
+        process = subprocess.Popen(args, env=empty_environment, stdout=log, stderr=log)
+        try:
+            assert process.wait(timeout=10) != 0, "empty token must refuse startup"
+        finally:
+            if process.poll() is None:
+                process.terminate()
+                process.wait(timeout=5)
+    print("Passed: required token keys, TLS, all host tokens, write-only routes, internal listener, credential stripping and rotation.")

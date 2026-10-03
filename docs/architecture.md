@@ -266,6 +266,7 @@ Sandbox-side pools (`admin-sandbox` 10.32.131.0/24, `services-sandbox` 10.32.141
 
 ```
 .1     traefik-services         Household apps without mature native auth via HTTPRoute.
+.2     external-metrics-ingest  TLS host writes only; intended allocation, live acceptance in #694.
 .30-.99 per-service IPs:
   .50  jellyfin                 Native auth, dedicated IP   (example, future)
   .51  nextcloud                Native auth, dedicated IP   (example, future)
@@ -309,6 +310,8 @@ Every Service falls into one of three buckets; the bucket determines exposure:
 | Admin / control-plane HTTP | HTTPRoute on admin Traefik gateway, regardless of native-auth maturity | Longhorn UI, Grafana, VictoriaMetrics, Alertmanager, kubernetes-dashboard |
 | Household HTTP with mature native auth | Per-service LB IP from `services-prod`, own DNS A record, TLS terminated by app or per-service ingress | Jellyfin, Nextcloud, Home Assistant |
 | Non-HTTP | Per-service LB IP, port-scoped firewall rules | MQTT, NTP, game servers |
+
+The external host-metrics receiver uses a dedicated `services-prod` IP so Workloads can push metrics without opening operator access to `admin-prod`. It exposes only the authenticated remote-write path, with exact host source allows followed by a per-VIP deny for other routed sources and Cilium enforcement. [The ingestion runbook](runbooks/external-metrics.md) owns commissioning and credential handling; operator query and management surfaces stay on the admin gateway.
 
 Operator surfaces stay behind admin Traefik even when they have native auth — centralizing gives consistent IP allowlisting, future SSO, and uniform security headers/middleware. Native auth alone isn't sufficient to bypass that.
 
@@ -361,6 +364,9 @@ gateway.home.kelch.io               10.32.1.1
 longhorn.home.kelch.io              10.32.130.1
 grafana.home.kelch.io               10.32.130.1
 …etc                                10.32.130.1
+
+# Authenticated host-metrics write endpoint (intended; #694 acceptance)
+metrics-ingest.home.kelch.io        10.32.140.2
 
 # Per-service household IPs (when allocated)
 jellyfin.home.kelch.io              10.32.140.50
