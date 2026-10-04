@@ -11,7 +11,9 @@ resources:
   - ./default-deny/ks.yaml
   - ./middleware-kanidm-oidc.yaml
   - ./grafana/ks.yaml
+  - ./metrics-ingest/ks.yaml
   - ./prometheus-operator-crds/ks.yaml
+  - ./pve-exporter/ks.yaml
   - ./smartctl-exporter/ks.yaml
   - ./vlagent/ks.yaml
   - ./victoria-metrics-k8s-stack/ks.yaml

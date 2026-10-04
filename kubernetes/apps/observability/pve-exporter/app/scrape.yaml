@@ -1,0 +1,29 @@
+---
+# Each node answers for the whole cluster, so cluster-wide series arrive once
+# per node. Queries and rules take max/min by `id` rather than storing a
+# de-duplicated copy.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMStaticScrape
+metadata:
+  name: pve-exporter
+spec:
+  jobName: pve-api
+  scrapeClass: external
+  targetEndpoints:
+    - targets:
+        - pve-sbx-1.home.kelch.io
+        - pve-sbx-2.home.kelch.io
+        - pve-sbx-3.home.kelch.io
+      labels:
+        cluster: pve-sbx
+        platform: pve
+      path: /pve
+      interval: 30s
+      scrapeTimeout: 20s
+      relabelConfigs:
+        - sourceLabels: [__address__]
+          targetLabel: __param_target
+        - sourceLabels: [__param_target]
+          targetLabel: instance
+        - targetLabel: __address__
+          replacement: pve-exporter.observability.svc.cluster.local:9221

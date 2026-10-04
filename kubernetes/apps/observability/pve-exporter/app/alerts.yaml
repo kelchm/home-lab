@@ -1,0 +1,75 @@
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: pve
+spec:
+  groups:
+    - name: pve
+      rules:
+        - alert: PVEAPIUnavailable
+          expr: sum(up{job="pve-api"}) == 0 or absent(up{job="pve-api"})
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: No Proxmox API answers the exporter
+            description: >-
+              Cluster, guest, storage and backup state is unknown. Check the
+              exporter pod, its token and reachability of port 8006.
+
+        - alert: PVEQuorumLost
+          expr: min by (cluster, id) (pve_up{job="pve-api", id=~"cluster/.*"}) == 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: Proxmox cluster {{ $labels.cluster }} has a node without quorum
+            description: >-
+              At least one node reports the cluster as not quorate. Check
+              `pvecm status` before any guest or host operation.
+
+        - alert: PVENodeOffline
+          expr: min by (cluster, id) (pve_up{job="pve-api", id=~"node/.*"}) == 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: Proxmox reports {{ $labels.id }} offline
+            description: >-
+              A cluster member sees {{ $labels.id }} as offline.
+
+        - alert: PVEGuestNotRunning
+          expr: |
+            max by (cluster, id) (pve_up{job="pve-api", id=~"(qemu|lxc)/.*"}) == 0
+            and on (id) max by (id) (pve_onboot_status{job="pve-api"}) == 1
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: Guest {{ $labels.id }} is set to start on boot but is not running
+
+        - alert: PVEStorageNearlyFull
+          expr: |
+            max by (cluster, id) (
+              pve_disk_usage_bytes{job="pve-api", id=~"storage/.*"}
+              / pve_disk_size_bytes{job="pve-api", id=~"storage/.*"}
+            ) > 0.9
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: Proxmox storage {{ $labels.id }} is {{ $value | humanizePercentage }} full
+
+        - alert: PVEPersistentGuestNotBackedUp
+          expr: |
+            max by (cluster, id) (pve_not_backed_up_info{job="pve-api"}) == 1
+            and on (id) max by (id) (pve_guest_info{job="pve-api", template="0", tags=~"(.*;)?persistent(;.*)?"})
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: Persistent guest {{ $labels.id }} is in no backup job
+            description: >-
+              This checks backup-job selection only. It does not show that a
+              backup ran or can be restored.

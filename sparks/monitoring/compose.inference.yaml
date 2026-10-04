@@ -1,0 +1,5 @@
+# Added on the node that serves the inference endpoint.
+services:
+  vmagent:
+    volumes:
+      - ./inference.yaml:/etc/vmagent/scrape.d/inference.yaml:ro

@@ -1,0 +1,4 @@
+name: monitoring
+working_dir: proxmox/monitoring
+prune_images: false
+reconciliation: false

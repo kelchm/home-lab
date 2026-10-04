@@ -14,6 +14,10 @@ task sparks:status
 
 This reports GPU utilization, host memory and running containers. Use SparkRun's recipe-specific checks to determine serving readiness; a container listing is not an API health check. Check for other GPU workloads before launching: GB10 shares its 121 GiB memory pool between CPU and GPU, and an idle GPU can still have model weights resident. Host memory, rather than the container memory limit, is the relevant capacity gate. See the [measured thermal and memory limits](../docs/dgx-spark-thermal.md).
 
+## Monitoring
+
+Host, GPU and inference metrics are collected by the [monitoring project](monitoring/README.md), which doco-cd deploys from `main` once a node is enrolled. It is the one part of this directory that a merge can change on a Spark.
+
 ## Retired Qwen Compose path
 
 The standalone Qwen3.6 Compose recipe and `task sparks:deploy` are retired in favor of SparkRun. The old generic `sparks:down` and `sparks:logs` commands are also removed; use the workload's own lifecycle commands. Retirement removes the repository launch path, not host files, containers, images, model weights or caches. Copies staged under `/opt/spark-stack` may remain and are no longer maintained by this repository.

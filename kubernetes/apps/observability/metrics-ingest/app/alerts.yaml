@@ -1,0 +1,97 @@
+---
+# Hosts outside the cluster. Series keep the `instance` (node) and `platform`
+# (type) their ingestion token gives them; these groups add no cluster label.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: external-hosts
+spec:
+  groups:
+    - name: external-hosts
+      rules:
+        # A node is enrolled once it has reported; one that falls silent keeps
+        # alerting for a week, after which it counts as retired.
+        - alert: ExternalHostMetricsMissing
+          expr: time() - tlast_over_time(up{job=~"(pve|spark)-node"}[7d]) > 600
+          labels:
+            severity: warning
+          annotations:
+            summary: No metrics from {{ $labels.instance }} for {{ $value | humanizeDuration }}
+            description: >-
+              Check the node, its collector containers, its token and the
+              ingestion endpoint. Samples queued on the node replay with their
+              original timestamps once delivery resumes.
+
+        - alert: ExternalHostCollectorDown
+          expr: up{job=~"(pve|spark)-(node|gpu|vmagent|deployer)"} == 0
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: Collector {{ $labels.job }} is down on {{ $labels.instance }}
+
+        - alert: ExternalHostFilesystemLow
+          expr: |
+            node_filesystem_avail_bytes{job=~"(pve|spark)-node", fstype!~"tmpfs|overlay|squashfs|ramfs|efivarfs|nfs.*|cifs|fuse.*"}
+            / node_filesystem_size_bytes{job=~"(pve|spark)-node", fstype!~"tmpfs|overlay|squashfs|ramfs|efivarfs|nfs.*|cifs|fuse.*"}
+            < 0.10
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.mountpoint }} on {{ $labels.instance }} has {{ $value | humanizePercentage }} free"
+
+        # Available memory is low by design on a Spark with a model loaded, so
+        # this uses stall time rather than a free-memory threshold.
+        - alert: ExternalHostMemoryStalled
+          expr: rate(node_pressure_memory_stalled_seconds_total{job=~"(pve|spark)-node"}[5m]) > 0.10
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.instance }} is stalled on memory {{ $value | humanizePercentage }} of the time"
+
+        - alert: ExternalHostNvmeHot
+          expr: |
+            (
+              node_hwmon_temp_celsius{job=~"(pve|spark)-node"}
+              * on (instance, chip, sensor) group_left (label)
+                node_hwmon_sensor_label{job=~"(pve|spark)-node", label="Composite"}
+            ) > 75
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: NVMe on {{ $labels.instance }} is at {{ printf "%.0f" $value }} C
+
+        - alert: SparkGpuThermalThrottling
+          expr: |
+            max by (instance, platform) (
+              {__name__=~"nvidia_smi_clocks_event_reasons_(hw|sw)_thermal_slowdown", job="spark-gpu"}
+            ) == 1
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: GPU on {{ $labels.instance }} is thermally throttled
+
+        - alert: ExternalHostQueueDropping
+          expr: increase(vm_persistentqueue_bytes_dropped_total{job=~"(pve|spark)-vmagent"}[15m]) > 0
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.instance }} discarded queued metrics"
+            description: >-
+              The 1 GiB on-disk queue filled while the ingestion endpoint was
+              unreachable, so the oldest samples were dropped.
+
+        - alert: ExternalHostDeployFailing
+          expr: increase(doco_cd_deployment_errors_total{job=~"(pve|spark)-deployer"}[15m]) > 0
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.instance }} cannot deploy {{ $labels.deployment }} from Git"
+            description: >-
+              The node keeps running its last deployed collectors. Check the
+              doco-cd container log on the node.

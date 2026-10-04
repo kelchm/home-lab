@@ -1,0 +1,18 @@
+global:
+  scrape_interval: 15s
+scrape_config_files:
+  - /etc/vmagent/scrape.d/*.yaml
+scrape_configs:
+  - job_name: spark-node
+    static_configs:
+      - targets: ["127.0.0.1:9100"]
+  - job_name: spark-gpu
+    scrape_interval: 5s
+    static_configs:
+      - targets: ["127.0.0.1:9835"]
+  - job_name: spark-vmagent
+    static_configs:
+      - targets: ["127.0.0.1:8429"]
+  - job_name: spark-deployer
+    static_configs:
+      - targets: ["127.0.0.1:9120"]
