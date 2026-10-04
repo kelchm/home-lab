@@ -4,8 +4,6 @@ kind: Kustomization
 metadata:
   name: pve-exporter
 spec:
-  # Suspended while the pve-exporter-credentials Secret does not exist.
-  suspend: true
   dependsOn:
     - name: victoria-metrics-k8s-stack
   interval: 1h
