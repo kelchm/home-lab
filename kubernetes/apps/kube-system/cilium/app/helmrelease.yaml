@@ -40,6 +40,8 @@ spec:
     devices: "eno+ eno+.40"
     dashboards:
       enabled: true
+      annotations:
+        grafana_folder: Platforms/Kubernetes
     endpointRoutes:
       enabled: true
     envoy:
@@ -58,7 +60,7 @@ spec:
         serviceMonitor:
           enabled: true
         dashboards:
-          enabled: true
+          enabled: false
     ipam:
       mode: kubernetes
     ipv4NativeRoutingCIDR: "10.42.0.0/16"
@@ -76,6 +78,8 @@ spec:
     operator:
       dashboards:
         enabled: true
+        annotations:
+          grafana_folder: Platforms/Kubernetes
       prometheus:
         enabled: true
         serviceMonitor:

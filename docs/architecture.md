@@ -59,6 +59,22 @@ vlagent runs on each node labeled `logging.home.kelch.io/collector=vlagent`, fol
 
 The `monitoring.coreos.com` CRDs are owned independently by `prometheus-operator-crds`, and the VictoriaMetrics operator converts third-party ServiceMonitors and shared PrometheusRules with owner references. VictoriaMetrics and VictoriaLogs are the only metric and log backends; kube-prometheus-stack, Loki, and OpenObserve are removed.
 
+### Dashboards
+
+A dashboard has one home, chosen by its subject: the thing whose state it shows. The subject is never the tool used to show it, and a panel showing something the subject depends on does not change its home. The first match decides:
+
+1. **A service** goes in `Services/<service>`. A service is a capability that a person in the house, or a system on another platform, would name as something they use, wherever it runs. Its folder also holds the internals of the software that delivers it, and an operator that exists only for that service.
+2. **Part of one platform** goes in `Platforms/<platform>`: its machines, its operating layer and its plumbing. Plumbing is whatever makes that platform's own workloads run or be reachable, such as the network plugin, ingress, cluster DNS, cluster storage, certificates, GitOps and general-purpose operators. Views of one platform's own logs or alerts belong there too.
+3. **Anything else** goes in `Overview`: several platforms or services side by side, and views that fit any machine.
+
+| Group | Homes in use | Not yet in use |
+|---|---|---|
+| Services | Observability (whether monitoring itself works), AI, Identity | Storage, Network, Media, Home automation, Printing |
+| Platforms | Kubernetes (the cluster, its nodes, Talos and cluster plumbing) | Proxmox, Sparks, Synology, UniFi, Devices |
+| Overview | Views across platforms, and the any-machine host detail | |
+
+The home is the `grafana_folder` annotation on the dashboard's ConfigMap. Charts that ship dashboards set it through their values. The victoria-metrics-k8s-stack chart gives its whole set one folder, so the dashboards that belong elsewhere are disabled in the chart and delivered from `kubernetes/apps/observability/victoria-metrics-k8s-stack/app/dashboards/` with the JSON the chart produces. Grafana 12.3 files a dashboard under the last segment of the path, so the folders are flat (`Overview`, `Kubernetes`, `Observability`, `AI`, `Identity`); they nest from Grafana 13.1.
+
 ## VLAN Layout
 
 | VLAN | Name | Subnet | Purpose |

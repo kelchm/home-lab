@@ -6,3 +6,19 @@ resources:
   - ./ocirepository.yaml
   - ./networks.yaml
   - ./alerts.yaml
+
+# Drops are the only Hubble metric exported, so the chart's Hubble dashboards
+# stay off and this one covers them.
+configMapGenerator:
+  - name: grafana-dashboard-cilium-network-drops
+    files:
+      - lab-cilium-network-drops.json=./dashboards/cilium-network-drops.json
+    options:
+      annotations:
+        grafana_folder: Platforms/Kubernetes
+generatorOptions:
+  disableNameSuffixHash: true
+  labels:
+    grafana_dashboard: "1"
+  annotations:
+    kustomize.toolkit.fluxcd.io/substitute: disabled

@@ -10,3 +10,56 @@ resources:
   - ./alerts.yaml
   - ./platform-alerts.yaml
   - ./networkpolicy.yaml
+
+# Dashboards as this chart's sync Job produces them, delivered from here so
+# each can have its own folder. Upstream: VictoriaMetrics, kube-prometheus and
+# rfmoz/grafana-dashboards.
+configMapGenerator:
+  - name: grafana-dashboard-node-exporter-full
+    files:
+      - lab-node-exporter-full.json=./dashboards/node-exporter-full.json
+    options:
+      annotations:
+        grafana_folder: Overview
+  - name: grafana-dashboard-alertmanager-overview
+    files:
+      - lab-alertmanager-overview.json=./dashboards/alertmanager-overview.json
+    options:
+      annotations:
+        grafana_folder: Services/Observability
+  - name: grafana-dashboard-victoriametrics-single-node
+    files:
+      - lab-victoriametrics-single-node.json=./dashboards/victoriametrics-single-node.json
+    options:
+      annotations:
+        grafana_folder: Services/Observability
+  - name: grafana-dashboard-victoriametrics-vmagent
+    files:
+      - lab-victoriametrics-vmagent.json=./dashboards/victoriametrics-vmagent.json
+    options:
+      annotations:
+        grafana_folder: Services/Observability
+  - name: grafana-dashboard-victoriametrics-vmalert
+    files:
+      - lab-victoriametrics-vmalert.json=./dashboards/victoriametrics-vmalert.json
+    options:
+      annotations:
+        grafana_folder: Services/Observability
+  - name: grafana-dashboard-victoriametrics-operator
+    files:
+      - lab-victoriametrics-operator.json=./dashboards/victoriametrics-operator.json
+    options:
+      annotations:
+        grafana_folder: Services/Observability
+  - name: grafana-dashboard-cluster-total
+    files:
+      - lab-cluster-total.json=./dashboards/cluster-total.json
+    options:
+      annotations:
+        grafana_folder: Platforms/Kubernetes
+generatorOptions:
+  disableNameSuffixHash: true
+  labels:
+    grafana_dashboard: "1"
+  annotations:
+    kustomize.toolkit.fluxcd.io/substitute: disabled

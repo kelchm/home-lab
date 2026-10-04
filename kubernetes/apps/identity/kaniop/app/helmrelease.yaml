@@ -51,6 +51,8 @@ spec:
         enabled: true
       dashboards:
         enabled: true
+        annotations:
+          grafana_folder: Services/Identity
 
   # Some chart rules aggregate away the source series' `cluster` label, and
   # the chart has no group-label knob. A group label, unlike a per-rule
