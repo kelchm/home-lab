@@ -25,6 +25,7 @@ jobs:
       # default to true on main so the latest commit is validated as a whole.
       bootstrap_changed: ${{ steps.changed-files.outputs.bootstrap_any_changed || 'true' }}
       docs_changed: ${{ steps.changed-files.outputs.docs_any_changed || 'true' }}
+      hf_archive_changed: ${{ steps.changed-files.outputs.hf_archive_any_changed || 'true' }}
       kubernetes_changed: ${{ steps.changed-files.outputs.kubernetes_any_changed || 'true' }}
       network_changed: ${{ steps.changed-files.outputs.network_any_changed || 'true' }}
       scripts_changed: ${{ steps.changed-files.outputs.scripts_any_changed || 'true' }}
@@ -56,6 +57,9 @@ jobs:
               - '.mise.toml'
               - '**/*.md'
               - 'scripts/ci/validate-docs-index.sh'
+            hf_archive:
+              - '.github/workflows/repository-validation.yaml'
+              - 'tools/hf-archive/**'
             kubernetes:
               - '.github/workflows/repository-validation.yaml'
               - '.mise.toml'
@@ -526,6 +530,36 @@ jobs:
         if: needs.pre-job.outputs.docs_changed != 'true'
         run: echo "Markdown link validation is not required."
 
+  hf-archive:
+    name: HF Archive Acceptance Tests
+    needs: pre-job
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        if: needs.pre-job.outputs.hf_archive_changed == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        if: needs.pre-job.outputs.hf_archive_changed == 'true'
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: "0.12.21"
+          enable-cache: false
+
+      - name: Run storage and real SDK acceptance tests
+        if: needs.pre-job.outputs.hf_archive_changed == 'true'
+        working-directory: tools/hf-archive
+        run: |
+          uv sync --locked --dev --python 3.12
+          uv run --no-sync ruff check .
+          uv run --no-sync pytest
+
+      - name: No HF archive changes
+        if: needs.pre-job.outputs.hf_archive_changed != 'true'
+        run: echo "HF archive acceptance tests are not required."
+
   validation-status:
     name: Validation Success
     needs:
@@ -541,6 +575,7 @@ jobs:
       - skills
       - network
       - docs
+      - hf-archive
     runs-on: ubuntu-latest
     if: ${{ always() }}
     steps:
