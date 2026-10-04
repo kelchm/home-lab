@@ -608,7 +608,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(kube_pod_status_phase{cluster=\"k8s-prod\",phase=~\"Pending|Failed|Unknown\"} == 1) or vector(0)",
+          "expr": "sum((kube_pod_status_phase{cluster=\"k8s-prod\",phase=~\"Pending|Failed|Unknown\"} == 1) and on (namespace, pod) (kube_pod_status_phase{cluster=\"k8s-prod\",phase=~\"Pending|Failed|Unknown\"} offset 5m == 1)) or vector(0)",
           "legendFormat": "Failing pods",
           "refId": "B",
           "instant": true,
@@ -620,7 +620,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "count(flux_resource_info{cluster=\"k8s-prod\",ready=\"False\"}) or vector(0)",
+          "expr": "count(flux_resource_info{cluster=\"k8s-prod\",kind=~\"Kustomization|HelmRelease\",ready=\"False\",suspended=\"False\"} and on (kind, name, exported_namespace) (flux_resource_info{cluster=\"k8s-prod\",kind=~\"Kustomization|HelmRelease\",ready=\"False\",suspended=\"False\"} offset 10m)) or vector(0)",
           "legendFormat": "Flux not ready",
           "refId": "C",
           "instant": true,
@@ -647,7 +647,7 @@
           "keepTime": true
         }
       ],
-      "description": "Healthy: all three nodes ready and no failing pods, unready Flux resources or unhealthy Longhorn volumes."
+      "description": "Healthy: three nodes ready and zeros elsewhere. Failing pods and Flux resources count only once they have been in that state for 5 and 10 minutes, so a rollout in progress does not turn the tile red."
     },
     {
       "id": 4,
