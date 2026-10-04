@@ -24,7 +24,7 @@ or human error. Use the latest in-PVC `.bak` — fastest path, no NAS round-trip
 ```sh
 # 1. Suspend Flux and scale the Kanidm replicaGroup to 0. The PVC must be
 #    free (no pod attached) before a debug pod can mount it RWO.
-flux suspend kustomization kanidm -n flux-system
+flux suspend kustomization kanidm -n identity
 kubectl -n identity patch kanidm kanidm --type merge \
   -p '{"spec":{"replicaGroups":[{"name":"default","replicas":0,"role":"write_replica","primaryNode":true}]}}'
 kubectl -n identity wait --for=delete pod -l app.kubernetes.io/name=kanidm --timeout=120s
@@ -56,8 +56,8 @@ kubectl -n identity run kanidm-restore --rm -it \
 # kanidmd reads its config from env vars when no /etc/kanidm/server.toml is
 # present. Container exits when restore completes.
 
-# 4. Resume Flux → Kanidm CR reconciles the StatefulSet back to replicas: 1.
-flux resume kustomization kanidm -n flux-system
+# 4. Resume Flux → Kanidm CR reconciles the StatefulSet back to the declared replica count.
+flux resume kustomization kanidm -n identity
 
 # 5. Sanity-check by logging in as idm_admin (password unchanged across restore).
 ```
@@ -80,7 +80,7 @@ want a known-good point in time vs. the latest snapshot.
 
 ```sh
 # 1. Suspend Flux and scale the Kanidm replicaGroup to 0 (as in DB-only).
-flux suspend kustomization kanidm -n flux-system
+flux suspend kustomization kanidm -n identity
 kubectl -n identity patch kanidm kanidm --type merge \
   -p '{"spec":{"replicaGroups":[{"name":"default","replicas":0,"role":"write_replica","primaryNode":true}]}}'
 
@@ -96,9 +96,9 @@ kubectl -n identity patch kanidm kanidm --type merge \
 # 4. Optionally restore from .bak inside the new PVC (path (b) above) using
 #    the debug-pod sequence from "DB-only corruption" step 3.
 
-# 5. Resume Flux. Kanidm CR reconciles the StatefulSet back to replicas: 1
+# 5. Resume Flux. Kanidm CR reconciles the StatefulSet back to the declared replica count
 #    against the restored PVC.
-flux resume kustomization kanidm -n flux-system
+flux resume kustomization kanidm -n identity
 ```
 
 ### NAS loss (catastrophic)
