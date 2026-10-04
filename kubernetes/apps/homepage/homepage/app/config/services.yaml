@@ -13,14 +13,14 @@
             refreshInterval: 30000
             metrics:
               - label: CPU
-                query: 100 * (1 - avg(rate(node_cpu_seconds_total{mode="idle"}[5m])))
+                query: 100 * (1 - avg(rate(node_cpu_seconds_total{cluster="k8s-prod",mode="idle"}[5m])))
                 format: &pct
                   type: number
                   suffix: "%"
                   options:
                     maximumFractionDigits: 0
               - label: Memory
-                query: 100 * (1 - sum(node_memory_MemAvailable_bytes) / sum(node_memory_MemTotal_bytes))
+                query: 100 * (1 - sum(node_memory_MemAvailable_bytes{cluster="k8s-prod"}) / sum(node_memory_MemTotal_bytes{cluster="k8s-prod"}))
                 format: *pct
               - label: Storage
                 query: 100 * sum(longhorn_node_storage_usage_bytes) / sum(longhorn_node_storage_capacity_bytes)
