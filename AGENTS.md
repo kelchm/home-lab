@@ -29,6 +29,8 @@ Do not hard-wrap prose in Markdown. Keep each paragraph on one source line and r
 
 ## Talos operations
 
-Before any Talos upgrade or node reboot, load and follow the repository's `talos-rollout` skill. Run the guarded `task talos:upgrade-node IP=<node-ip>` task for upgrades; it deliberately uses `--reboot-mode=powercycle` because these nodes have hung during the default kexec reboot path.
+Before any Talos upgrade or node reboot, load and follow the repository's `talos-rollout` skill. Run the guarded `task talos:upgrade-node IP=<node-ip>` task for upgrades. It runs the skill's preflight for that node, refuses to start if any gate fails, and asks for confirmation before upgrading; it deliberately uses `--reboot-mode=powercycle` because these nodes have hung during the default kexec reboot path.
+
+Apply configuration with `task talos:apply-node IP=<node-ip>`. It regenerates `talos/clusterconfig/` from the current sources, shows the dry-run diff against the node, and asks before applying. It does not check cluster health: when the dry-run reports that the change needs a reboot, run preflight first.
 
 Operate on one node at a time. Do not continue until etcd has quorum, every Kubernetes node is Ready, every Longhorn volume is healthy, and every Longhorn instance-manager is Running and Ready with its `longhorn-system/storage-network` attachment on `lhnet1`.

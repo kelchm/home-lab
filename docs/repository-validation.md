@@ -8,7 +8,7 @@ not part of the correctness model for the deployed `main` branch.
 
 | Event | Validation scope | Concurrency behavior |
 |---|---|---|
-| Pull request | Only surfaces affected by the complete PR diff. A workflow or toolchain change deliberately selects every related surface. | A newer run for the same PR cancels the older run because it covers the complete, updated PR diff. |
+| Pull request | Repository configuration checks always run; other surfaces run when affected by the complete PR diff. A workflow or toolchain change deliberately selects every related surface. | A newer run for the same PR cancels the older run because it covers the complete, updated PR diff. |
 | Push to `main` | Every validation surface runs against the complete repository state. Flux diffs remain PR-only because there is no review comment to produce after merge. | A newer `main` run cancels the older run because the newer commit contains the resulting repository state and validates it in full. |
 
 This is deliberately different from validating only the files changed by each
@@ -22,6 +22,10 @@ The workflow encodes this by running `changed-files` only for pull requests.
 On `main`, the absent changed-file outputs default to `true`, selecting every
 surface. This fail-open-for-coverage default is intentional and must be
 preserved when outputs are added or refactored.
+
+## Repository configuration checks
+
+The Repository Configuration Validation job runs on every pull request and push to `main`, independently of changed-file filtering. It uses actionlint and ShellCheck pinned in `.mise.toml` to check all GitHub workflows, then invokes `renovate-config-validator --no-global .renovaterc.json5` from a digest-pinned Renovate image to validate repository configuration. Either failure fails the job and the aggregate `Validation Success` check. Label dry-run and deletion checks remain deferred under [#657](https://github.com/kelchm/home-lab/issues/657) until [#742](https://github.com/kelchm/home-lab/pull/742) merges.
 
 ## Relationship to Flux
 
@@ -52,9 +56,7 @@ Keep these properties when extending `.github/workflows/repository-validation.ya
    checked on PRs; decryption is required only on trusted `main` pushes.
 5. Flux diffs are review artifacts and therefore remain PR-only. Flux build,
    Kubernetes schema, and policy validation run for both event types.
-6. A new validation surface must be added to the scope outputs, given a PR
-   filter that includes this workflow and its toolchain inputs, and added to the
-   aggregate job's `needs` list.
+6. Every new validation surface must be added to the aggregate job's `needs` list. If it uses PR filtering, add scope outputs and a filter that includes this workflow and its toolchain inputs. The repository configuration job always runs and needs no scope output or filter.
 
 This model follows the same broad pattern used by large monorepos: optimize PR
 feedback using affected paths, then validate the complete trunk state. For a
