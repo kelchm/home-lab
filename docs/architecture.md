@@ -73,7 +73,7 @@ A dashboard has one home, chosen by its subject: the thing whose state it shows.
 | Platforms | Kubernetes (the cluster, its nodes, Talos and cluster plumbing) | Proxmox, Sparks, Synology, UniFi, Devices |
 | Overview | Views across platforms, and the any-machine host detail | |
 
-The home is the `grafana_folder` annotation on the dashboard's ConfigMap. Charts that ship dashboards set it through their values. The victoria-metrics-k8s-stack chart gives its whole set one folder, so the dashboards that belong elsewhere are disabled in the chart and delivered from `kubernetes/apps/observability/victoria-metrics-k8s-stack/app/dashboards/` with the JSON the chart produces. Grafana 12.3 files a dashboard under the last segment of the path, so the folders are flat (`Kubernetes`, `Observability`, `Overview`); they nest from Grafana 13.1.
+The home is the `grafana_folder` annotation on the dashboard's ConfigMap. Charts that ship dashboards set it through their values. The victoria-metrics-k8s-stack chart gives its whole set one folder, so the dashboards that belong elsewhere are disabled in the chart and delivered from `kubernetes/apps/observability/victoria-metrics-k8s-stack/app/dashboards/` with the JSON the chart produces. Grafana 12.3 files a dashboard under the last segment of the path, so the folders are flat (`Overview`, `Kubernetes`, `Observability`, `AI`, `Identity`); they nest from Grafana 13.1.
 
 ## VLAN Layout
 
