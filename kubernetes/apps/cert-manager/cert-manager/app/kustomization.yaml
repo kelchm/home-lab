@@ -6,3 +6,17 @@ resources:
   - ./helmrelease.yaml
   - ./ocirepository.yaml
   - ./secret.sops.yaml
+
+configMapGenerator:
+  # grafana.com 20842 revision 3; clear the unavailable saved datasource.
+  - name: grafana-dashboard-stock-cert-manager
+    files:
+      - stock-cert-manager.json=./dashboards/stock-cert-manager.json
+    options:
+      annotations:
+        grafana_folder: Platforms/Kubernetes
+        kustomize.toolkit.fluxcd.io/substitute: disabled
+      labels:
+        grafana_dashboard: "1"
+generatorOptions:
+  disableNameSuffixHash: true

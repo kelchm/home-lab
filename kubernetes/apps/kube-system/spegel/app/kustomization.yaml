@@ -4,3 +4,17 @@ kind: Kustomization
 resources:
   - ./helmrelease.yaml
   - ./ocirepository.yaml
+
+configMapGenerator:
+  # spegel chart 0.7.4 dashboard; datasource provisioning, scrape-safe rate interval.
+  - name: grafana-dashboard-stock-spegel
+    files:
+      - stock-spegel.json=./dashboards/stock-spegel.json
+    options:
+      annotations:
+        grafana_folder: Platforms/Kubernetes
+        kustomize.toolkit.fluxcd.io/substitute: disabled
+      labels:
+        grafana_dashboard: "1"
+generatorOptions:
+  disableNameSuffixHash: true

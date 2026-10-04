@@ -11,3 +11,17 @@ resources:
   - ./oauth2-ops-suite.yaml
   - ./secret-oidc-session-key.sops.yaml
   - ./networkpolicy.yaml
+
+configMapGenerator:
+  # grafana.com 17347 revision 9; datasource provisioning; exporter service label -> exported_service.
+  - name: grafana-dashboard-stock-traefik
+    files:
+      - stock-traefik.json=./dashboards/stock-traefik.json
+    options:
+      annotations:
+        grafana_folder: Platforms/Kubernetes
+        kustomize.toolkit.fluxcd.io/substitute: disabled
+      labels:
+        grafana_dashboard: "1"
+generatorOptions:
+  disableNameSuffixHash: true

@@ -10,3 +10,17 @@ resources:
   - ./backuptarget.yaml
   - ./alerts.yaml
   - ./networkpolicy.yaml
+
+configMapGenerator:
+  # grafana.com 16888 revision 14; datasource provisioning.
+  - name: grafana-dashboard-stock-longhorn
+    files:
+      - stock-longhorn.json=./dashboards/stock-longhorn.json
+    options:
+      annotations:
+        grafana_folder: Platforms/Kubernetes
+        kustomize.toolkit.fluxcd.io/substitute: disabled
+      labels:
+        grafana_dashboard: "1"
+generatorOptions:
+  disableNameSuffixHash: true

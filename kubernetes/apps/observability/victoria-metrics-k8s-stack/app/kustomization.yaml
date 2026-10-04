@@ -57,6 +57,20 @@ configMapGenerator:
     options:
       annotations:
         grafana_folder: Platforms/Kubernetes
+  # grafana.com 24553 revision 5; remove import inputs; reuse ds datasource variable.
+  - name: grafana-dashboard-stock-alert-statistics
+    files:
+      - stock-alert-statistics.json=./dashboards/stock-alert-statistics.json
+    options:
+      annotations:
+        grafana_folder: Services/Observability
+  # grafana.com 14279 revision 1; datasource provisioning.
+  - name: grafana-dashboard-stock-cronjobs
+    files:
+      - stock-cronjobs.json=./dashboards/stock-cronjobs.json
+    options:
+      annotations:
+        grafana_folder: Platforms/Kubernetes
 generatorOptions:
   disableNameSuffixHash: true
   labels:
