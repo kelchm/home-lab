@@ -1,33 +1,55 @@
 ---
-# Areas: the systems a change touches. Labeler sets them on PRs; apply by hand on issues.
-- name: area/devices
+# Scope labels are additive. Definitions and migration procedure: docs/repository-labels.md.
+# Platforms: managed environments and operating layers directly involved in the work.
+- name: platform/devices
+  color: "c5def5"
+  description: "Standalone appliances not covered by another platform, such as the GLKVM"
+  aliases: ["area/devices"]
+- name: platform/kubernetes
+  color: "c5def5"
+  description: "Kubernetes clusters: workloads, cluster resources, Flux, and bootstrap"
+  aliases: ["area/kubernetes", "area/bootstrap"]
+- name: platform/proxmox
+  color: "c5def5"
+  description: "Proxmox VE hosts, guests, and integrations targeting Proxmox"
+  aliases: ["area/proxmox"]
+- name: platform/sparks
+  color: "c5def5"
+  description: "DGX Spark hosts, direct fabric, inference runtimes, and targeted integrations"
+  aliases: ["area/sparks"]
+- name: platform/synology
+  color: "c5def5"
+  description: "Synology NAS: DSM, storage configuration, Compose services, and targeted integrations"
+  aliases: ["area/synology"]
+- name: platform/talos
+  color: "c5def5"
+  description: "Talos machine configuration, OS lifecycle, and cluster-node hardware"
+  aliases: ["area/talos"]
+- name: platform/unifi
+  color: "c5def5"
+  description: "UniFi controller, gateway, switching, wireless, and targeted integrations"
+# Areas: domains directly involved, including operations on their components.
+- name: area/ai
   color: "bfd4f2"
-  description: "Standalone appliances under devices/, such as the GLKVM"
+  description: "Model acquisition and serving, inference qualification, agent services, and MCP"
 - name: area/docs
   color: "bfd4f2"
-  description: "Cross-cutting documentation: README and docs/"
-- name: area/kubernetes
+  description: "Documentation in docs/, documentation assets, and READMEs throughout the repository"
+- name: area/identity
   color: "bfd4f2"
-  description: "Kubernetes clusters: workloads, Flux, and cluster bootstrap"
-  aliases: ["area/bootstrap"]
+  description: "Identity services, shared sign-in, SSO integrations, and account/access policy"
 - name: area/network
   color: "bfd4f2"
-  description: "Networking: UniFi controller, VLANs, firewall, switching, DNS, remote access"
-- name: area/proxmox
+  description: "Connectivity, routing, DNS, ingress, firewall policy, and remote access"
+- name: area/observability
   color: "bfd4f2"
-  description: "Proxmox VE cluster hosts and guests"
-- name: area/sparks
+  description: "Metrics, logs, dashboards, alerts, probes, and telemetry collection"
+- name: area/storage
   color: "bfd4f2"
-  description: "DGX Spark hosts and inference workloads"
-- name: area/synology
-  color: "bfd4f2"
-  description: "Synology NAS: DSM, storage, and doco-cd Compose projects"
-- name: area/talos
-  color: "bfd4f2"
-  description: "Talos machine config, upgrades, and k8s-prod node hardware"
+  description: "Persistence, filesystems, volumes, shares, backups, restore, and data integrity"
 - name: area/tooling
   color: "bfd4f2"
-  description: "Repo automation: CI, Renovate, mise, Taskfile, scripts, tools, agent skills"
+  description: "CI, dependency automation, repo validation, agent instructions, and shared operator tooling"
   aliases: ["area/mise", "area/github", "area/renovate", "area/scripts", "area/taskfile"]
 # Kinds: optional, at most one per issue
 - name: kind/bug

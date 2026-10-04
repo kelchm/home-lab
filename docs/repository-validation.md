@@ -23,6 +23,10 @@ On `main`, the absent changed-file outputs default to `true`, selecting every
 surface. This fail-open-for-coverage default is intentional and must be
 preserved when outputs are added or refactored.
 
+## Live label changes
+
+The label validation surface checks the catalog and labeler keys, previews label-sync changes on PRs, and rejects live-label deletions or merges. It runs on changes to label configuration, its workflows, or its validators, and on every push to `main`. The separate Label Sync workflow repeats the live check immediately before applying the catalog; repository validation alone does not gate that write. See [repository labels](repository-labels.md#changing-the-catalog) for migration preparation and association verification.
+
 ## Relationship to Flux
 
 Flux remains pull-based, but its GitHub receiver triggers a pull and immediate

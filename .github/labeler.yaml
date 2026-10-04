@@ -1,51 +1,127 @@
 ---
-area/devices:
+# Inclusive path scopes, not a claim about the PR's primary purpose.
+# Add scopes by hand when content hides them; see docs/repository-labels.md.
+platform/devices:
   - changed-files:
       - any-glob-to-any-file:
           - devices/**
+platform/kubernetes:
+  - changed-files:
+      - any-glob-to-any-file:
+          - bootstrap/**
+          - kubernetes/**
+          - .taskfiles/bootstrap/**
+          - scripts/bootstrap-apps.sh
+          - scripts/deploy-broadsheet.sh
+          - scripts/verify-*.sh
+          - scripts/logging/**
+          - tools/iperf3/**
+          - tools/longhorn-bench/**
+          - tools/media-nfs-smoke/**
+          - network/unifi/bgp-test.yaml
+platform/proxmox:
+  - changed-files:
+      - any-glob-to-any-file:
+          - proxmox/**
+          - kubernetes/apps/observability/pve-exporter/**
+          - tools/sn770-zfs-qualification/**
+          - kubernetes/apps/homepage/homepage/app/config/proxmox.yaml
+          - synology/netbootxyz/menus/proxmox.ipxe
+platform/sparks:
+  - changed-files:
+      - any-glob-to-any-file:
+          - sparks/**
+          - .taskfiles/sparks/**
+          - kubernetes/apps/observability/grafana/app/spark-*-dashboard.json
+platform/synology:
+  - changed-files:
+      - any-glob-to-any-file:
+          - synology/**
+          - scripts/synology/**
+platform/talos:
+  - changed-files:
+      - any-glob-to-any-file:
+          - talos/**
+          - .taskfiles/talos/**
+platform/unifi:
+  - changed-files:
+      - any-glob-to-any-file:
+          - network/unifi/**
+area/ai:
+  - changed-files:
+      - any-glob-to-any-file:
+          - kubernetes/apps/ai/**
+          - sparks/inference/**
+          - synology/modelkeep/**
+          - proxmox/guests/hermes-1/**
+          - kubernetes/apps/observability/grafana/app/spark-tensorfold-dashboard.json
 area/docs:
   - changed-files:
       - any-glob-to-any-file:
           - README.md
           - assets/**
           - docs/**
-area/kubernetes:
+          - '**/README.md'
+area/identity:
   - changed-files:
       - any-glob-to-any-file:
-          - bootstrap/**
-          - kubernetes/**
-          - .taskfiles/bootstrap/**
+          - kubernetes/apps/identity/**
+          - kubernetes/**/oauth2-*.yaml
+          - kubernetes/**/middleware-kanidm-oidc.yaml
+          - kubernetes/apps/network/traefik/app/secret-oidc-session-key.sops.yaml
 area/network:
   - changed-files:
       - any-glob-to-any-file:
           - network/**
-area/proxmox:
+          - kubernetes/apps/network/**
+          - kubernetes/apps/kube-system/cilium/**
+          - kubernetes/apps/kube-system/cilium-bgp/**
+          - kubernetes/apps/kube-system/coredns/**
+          - kubernetes/apps/kube-system/multus/**
+          - kubernetes/apps/kube-system/whereabouts/**
+          - kubernetes/apps/tailscale/**
+          - proxmox/guests/tailscale-router/**
+          - kubernetes/**/networkpolicy.yaml
+          - kubernetes/**/networkattachmentdefinition.yaml
+          - talos/patches/global/machine-network.yaml
+          - talos/patches/*/network-extras.yaml
+          - tools/iperf3/**
+          - scripts/verify-qbittorrent-boundary.sh
+area/observability:
   - changed-files:
       - any-glob-to-any-file:
-          - proxmox/**
-area/sparks:
+          - kubernetes/apps/observability/**
+          - proxmox/monitoring/**
+          - sparks/monitoring/**
+          - scripts/logging/**
+          - kubernetes/**/alerts.yaml
+          - kubernetes/**/scrape.yaml
+          - kubernetes/**/dashboards/**
+area/storage:
   - changed-files:
       - any-glob-to-any-file:
-          - sparks/**
-          - .taskfiles/sparks/**
-area/synology:
-  - changed-files:
-      - any-glob-to-any-file:
-          - synology/**
-          - scripts/synology/**
-area/talos:
-  - changed-files:
-      - any-glob-to-any-file:
-          - talos/**
-          - .taskfiles/talos/**
+          - kubernetes/apps/longhorn-system/**
+          - kubernetes/apps/kube-system/csi-driver-nfs/**
+          - tools/longhorn-bench/**
+          - tools/media-nfs-smoke/**
+          - tools/sn770-zfs-qualification/**
+          - kubernetes/apps/*/storage/**
+          - kubernetes/**/*-pv.yaml
+          - kubernetes/**/*-pvc.yaml
+          - talos/patches/global/user-volume-longhorn.yaml
+          - talos/patches/global/volume-ephemeral.yaml
+          - scripts/synology/apply-media-acls.sh
+          - kubernetes/apps/observability/grafana/app/longhorn-dashboard.*
 area/tooling:
   - changed-files:
       - any-glob-to-any-file:
-          # Root dotfiles and dot-directories: CI, Renovate, mise, SOPS, Taskfiles, agent config
           - ".*"
-          - ".*/**"
+          - .github/**
+          - .agents/**
+          - .claude/**
+          - .vscode/**
           - AGENTS.md
           - CLAUDE.md
           - Taskfile.yaml
-          - scripts/**
-          - tools/**
+          - scripts/ci/**
+          - scripts/lib/**
