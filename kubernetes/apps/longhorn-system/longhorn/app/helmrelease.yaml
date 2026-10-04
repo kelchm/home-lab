@@ -48,6 +48,31 @@ spec:
       defaultClassReplicaCount: 2
       reclaimPolicy: Delete
 
+    # The chart only has a dedicated values block for its default class.
+    # Use its extraObjects hook for the opt-in database tier and inherit the
+    # default class's other parameters; never mutate an existing class's parameters.
+    extraObjects:
+      - apiVersion: storage.k8s.io/v1
+        kind: StorageClass
+        metadata:
+          name: longhorn-3replica
+          annotations:
+            storageclass.kubernetes.io/is-default-class: "false"
+        provisioner: driver.longhorn.io
+        allowVolumeExpansion: true
+        reclaimPolicy: '{{ .Values.persistence.reclaimPolicy }}'
+        volumeBindingMode: '{{ .Values.persistence.volumeBindingMode }}'
+        parameters:
+          numberOfReplicas: "3"
+          staleReplicaTimeout: "30"
+          fromBackup: ""
+          fsType: '{{ .Values.persistence.defaultFsType }}'
+          dataLocality: '{{ .Values.persistence.defaultDataLocality }}'
+          unmapMarkSnapChainRemoved: '{{ .Values.persistence.unmapMarkSnapChainRemoved }}'
+          disableRevisionCounter: '{{ .Values.persistence.disableRevisionCounter }}'
+          dataEngine: '{{ .Values.persistence.dataEngine }}'
+          backupTargetName: '{{ .Values.persistence.backupTargetName }}'
+
     service:
       ui:
         type: ClusterIP   # exposed via httproute.yaml
