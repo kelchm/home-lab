@@ -23,7 +23,7 @@
   "timezone": "browser",
   "uid": "spark-tensorfold-performance",
   "title": "Sparks / TensorFold performance",
-  "description": "Native TensorFold application performance for one TP=2 GLM-5.3-Flash service, scraped at the leader every second.",
+  "description": "Native TensorFold application performance for whatever SparkRun is serving, scraped at the head node every second.",
   "editable": false,
   "version": 3,
   "refresh": "1s",
@@ -41,7 +41,7 @@
     {
       "id": 1,
       "type": "text",
-      "title": "GLM-5.3-Flash on the Sparks",
+      "title": "Serving deployment",
       "gridPos": {
         "x": 0,
         "y": 0,
@@ -50,7 +50,7 @@
       },
       "options": {
         "mode": "markdown",
-        "content": "**TensorFold · CUDA · GLM-5.3-Flash-EXL3 · TP=2 · spark-1 + spark-2**\n\nOne serving deployment, scraped at the leader every second. The leader's own agent collects it and buffers on disk while the cluster is unreachable. Runtime/model revisions remain unverified. See the [monitoring runbook](https://github.com/kelchm/home-lab/blob/main/sparks/monitoring/README.md) for semantics and limitations."
+        "content": "**TensorFold on the Sparks**\n\nOne serving deployment, scraped at the head node every second. Model, recipe and runtime come from the labels SparkRun puts on its containers, so a swap appears here without any configuration change. The head node's own agent collects it and buffers on disk while the cluster is unreachable. Runtime/model revisions remain unverified. See the [monitoring runbook](https://github.com/kelchm/home-lab/blob/main/sparks/monitoring/README.md) for semantics and limitations."
       }
     },
     {
@@ -125,7 +125,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "min(up{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"} and (time() - timestamp(up{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}) < 10)) or vector(0)",
+          "expr": "min(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} and (time() - timestamp(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) < 10)) or vector(0)",
           "legendFormat": "",
           "refId": "A",
           "range": false,
@@ -192,7 +192,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(irate(tensorfold_health:completion_tokens_total{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}[10s])) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}) < 10))",
+          "expr": "(irate(tensorfold_health:completion_tokens_total{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[10s])) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) < 10))",
           "legendFormat": "",
           "refId": "A",
           "range": false,
@@ -259,7 +259,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(tensorfold:requests_running{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}) < 10))",
+          "expr": "(tensorfold:requests_running{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) < 10))",
           "legendFormat": "",
           "refId": "A",
           "range": false,
@@ -326,7 +326,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(tensorfold:requests_waiting{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}) < 10))",
+          "expr": "(tensorfold:requests_waiting{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) < 10))",
           "legendFormat": "",
           "refId": "A",
           "range": false,
@@ -393,7 +393,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(1 - tensorfold_health:pool_free_tokens{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"} / (tensorfold_health:pool_tokens{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"} > 0)) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}) < 10))",
+          "expr": "(1 - tensorfold_health:pool_free_tokens{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} / (tensorfold_health:pool_tokens{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} > 0)) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) < 10))",
           "legendFormat": "",
           "refId": "A",
           "range": false,
@@ -486,7 +486,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(irate(tensorfold_health:completion_tokens_total{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}[10s])) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}) < 10))",
+          "expr": "(irate(tensorfold_health:completion_tokens_total{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[10s])) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) < 10))",
           "legendFormat": "Live output (latest scrape interval)",
           "refId": "C",
           "range": true,
@@ -499,7 +499,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(rate(tensorfold_health:completion_tokens_total{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}[1m])) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}) < 10))",
+          "expr": "(rate(tensorfold_health:completion_tokens_total{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[1m])) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) < 10))",
           "legendFormat": "Live output (1m average)",
           "refId": "A",
           "range": true,
@@ -512,7 +512,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(rate(tensorfold:generation_tokens_total{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}[1m])) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}) < 10))",
+          "expr": "(rate(tensorfold:generation_tokens_total{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[1m])) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) < 10))",
           "legendFormat": "Finished-request output (1m average)",
           "refId": "B",
           "range": true,
@@ -607,7 +607,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(rate(tensorfold:time_to_first_token_seconds_sum{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}[5m]) / (rate(tensorfold:time_to_first_token_seconds_count{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}[5m]) > 0)) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}) < 10))",
+          "expr": "(rate(tensorfold:time_to_first_token_seconds_sum{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[5m]) / (rate(tensorfold:time_to_first_token_seconds_count{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[5m]) > 0)) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) < 10))",
           "legendFormat": "Mean",
           "refId": "A",
           "range": true,
@@ -620,7 +620,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(histogram_quantile(0.5, rate(tensorfold:time_to_first_token_seconds_bucket{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}[5m])) and on(job,instance,deployment,collector) (increase(tensorfold:time_to_first_token_seconds_count{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}[5m]) >= 20) and on(job,instance,deployment,collector) (increase(tensorfold:time_to_first_token_seconds_bucket{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\",le=\"300\"}[5m]) >= ignoring(le) increase(tensorfold:time_to_first_token_seconds_count{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}[5m]))) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}) < 10))",
+          "expr": "(histogram_quantile(0.5, rate(tensorfold:time_to_first_token_seconds_bucket{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[5m])) and on(job,instance,deployment,collector) (increase(tensorfold:time_to_first_token_seconds_count{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[5m]) >= 20) and on(job,instance,deployment,collector) (increase(tensorfold:time_to_first_token_seconds_bucket{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\",le=\"300\"}[5m]) >= ignoring(le) increase(tensorfold:time_to_first_token_seconds_count{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[5m]))) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) < 10))",
           "legendFormat": "p50 (20+ samples)",
           "refId": "B",
           "range": true,
@@ -633,7 +633,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(histogram_quantile(0.95, rate(tensorfold:time_to_first_token_seconds_bucket{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}[5m])) and on(job,instance,deployment,collector) (increase(tensorfold:time_to_first_token_seconds_count{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}[5m]) >= 20) and on(job,instance,deployment,collector) (increase(tensorfold:time_to_first_token_seconds_bucket{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\",le=\"300\"}[5m]) >= ignoring(le) increase(tensorfold:time_to_first_token_seconds_count{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}[5m]))) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}) < 10))",
+          "expr": "(histogram_quantile(0.95, rate(tensorfold:time_to_first_token_seconds_bucket{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[5m])) and on(job,instance,deployment,collector) (increase(tensorfold:time_to_first_token_seconds_count{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[5m]) >= 20) and on(job,instance,deployment,collector) (increase(tensorfold:time_to_first_token_seconds_bucket{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\",le=\"300\"}[5m]) >= ignoring(le) increase(tensorfold:time_to_first_token_seconds_count{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[5m]))) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) < 10))",
           "legendFormat": "p95 (20+ samples)",
           "refId": "C",
           "range": true,
@@ -728,7 +728,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(rate(tensorfold:request_latency_seconds_sum{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}[5m]) / (rate(tensorfold:request_latency_seconds_count{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}[5m]) > 0)) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}) < 10))",
+          "expr": "(rate(tensorfold:request_latency_seconds_sum{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[5m]) / (rate(tensorfold:request_latency_seconds_count{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[5m]) > 0)) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) < 10))",
           "legendFormat": "Mean",
           "refId": "A",
           "range": true,
@@ -741,7 +741,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(histogram_quantile(0.5, rate(tensorfold:request_latency_seconds_bucket{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}[5m])) and on(job,instance,deployment,collector) (increase(tensorfold:request_latency_seconds_count{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}[5m]) >= 20) and on(job,instance,deployment,collector) (increase(tensorfold:request_latency_seconds_bucket{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\",le=\"300\"}[5m]) >= ignoring(le) increase(tensorfold:request_latency_seconds_count{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}[5m]))) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}) < 10))",
+          "expr": "(histogram_quantile(0.5, rate(tensorfold:request_latency_seconds_bucket{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[5m])) and on(job,instance,deployment,collector) (increase(tensorfold:request_latency_seconds_count{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[5m]) >= 20) and on(job,instance,deployment,collector) (increase(tensorfold:request_latency_seconds_bucket{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\",le=\"300\"}[5m]) >= ignoring(le) increase(tensorfold:request_latency_seconds_count{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[5m]))) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) < 10))",
           "legendFormat": "p50 (20+ samples)",
           "refId": "B",
           "range": true,
@@ -754,7 +754,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(histogram_quantile(0.95, rate(tensorfold:request_latency_seconds_bucket{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}[5m])) and on(job,instance,deployment,collector) (increase(tensorfold:request_latency_seconds_count{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}[5m]) >= 20) and on(job,instance,deployment,collector) (increase(tensorfold:request_latency_seconds_bucket{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\",le=\"300\"}[5m]) >= ignoring(le) increase(tensorfold:request_latency_seconds_count{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}[5m]))) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}) < 10))",
+          "expr": "(histogram_quantile(0.95, rate(tensorfold:request_latency_seconds_bucket{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[5m])) and on(job,instance,deployment,collector) (increase(tensorfold:request_latency_seconds_count{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[5m]) >= 20) and on(job,instance,deployment,collector) (increase(tensorfold:request_latency_seconds_bucket{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\",le=\"300\"}[5m]) >= ignoring(le) increase(tensorfold:request_latency_seconds_count{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[5m]))) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) < 10))",
           "legendFormat": "p95 (20+ samples)",
           "refId": "C",
           "range": true,
@@ -849,7 +849,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(increase(tensorfold:request_latency_seconds_count{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}[5m])) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}) < 10))",
+          "expr": "(increase(tensorfold:request_latency_seconds_count{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[5m])) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) < 10))",
           "legendFormat": "Completed requests",
           "refId": "A",
           "range": true,
@@ -944,7 +944,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(tensorfold_health:streams{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}) < 10))",
+          "expr": "(tensorfold_health:streams{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) < 10))",
           "legendFormat": "{{state}}",
           "refId": "A",
           "range": true,
@@ -957,7 +957,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(tensorfold_health:streams_max{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}) < 10))",
+          "expr": "(tensorfold_health:streams_max{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) < 10))",
           "legendFormat": "Stream limit",
           "refId": "B",
           "range": true,
@@ -1052,7 +1052,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(rate(tensorfold_health:cached_tokens_total{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}[5m]) / (rate(tensorfold:prompt_tokens_total{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}[5m]) > 0)) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}) < 10))",
+          "expr": "(rate(tensorfold_health:cached_tokens_total{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[5m]) / (rate(tensorfold:prompt_tokens_total{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[5m]) > 0)) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) < 10))",
           "legendFormat": "Prompt cache hit fraction",
           "refId": "A",
           "range": true,
@@ -1147,7 +1147,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(rate(tensorfold:prompt_tokens_total{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}[5m])) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}) < 10))",
+          "expr": "(rate(tensorfold:prompt_tokens_total{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[5m])) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) < 10))",
           "legendFormat": "All prompt input",
           "refId": "A",
           "range": true,
@@ -1160,7 +1160,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(rate(tensorfold:prompt_tokens_total{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}[5m]) - rate(tensorfold_health:cached_tokens_total{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}[5m])) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}) < 10))",
+          "expr": "(rate(tensorfold:prompt_tokens_total{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[5m]) - rate(tensorfold_health:cached_tokens_total{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[5m])) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) < 10))",
           "legendFormat": "Uncached input",
           "refId": "B",
           "range": true,
@@ -1255,7 +1255,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(rate(tensorfold:mtp_accepted_total{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}[5m]) / (rate(tensorfold:mtp_drafted_total{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}[5m]) > 0)) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}) < 10))",
+          "expr": "(rate(tensorfold:mtp_accepted_total{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[5m]) / (rate(tensorfold:mtp_drafted_total{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[5m]) > 0)) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) < 10))",
           "legendFormat": "Accepted draft fraction",
           "refId": "A",
           "range": true,
@@ -1350,7 +1350,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(tensorfold_health:pool_tokens{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}) < 10))",
+          "expr": "(tensorfold_health:pool_tokens{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) < 10))",
           "legendFormat": "Pool capacity",
           "refId": "A",
           "range": true,
@@ -1363,7 +1363,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(tensorfold_health:pool_tokens{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"} - tensorfold_health:pool_free_tokens{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}) < 10))",
+          "expr": "(tensorfold_health:pool_tokens{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} - tensorfold_health:pool_free_tokens{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) < 10))",
           "legendFormat": "Occupied",
           "refId": "B",
           "range": true,
@@ -1376,7 +1376,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(tensorfold_health:pool_free_tokens{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}) < 10))",
+          "expr": "(tensorfold_health:pool_free_tokens{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) < 10))",
           "legendFormat": "Free",
           "refId": "C",
           "range": true,
@@ -1471,7 +1471,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(tensorfold_health:kept_prompts{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}) < 10))",
+          "expr": "(tensorfold_health:kept_prompts{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) < 10))",
           "legendFormat": "Retained prompts",
           "refId": "A",
           "range": true,
@@ -1540,7 +1540,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(tensorfold_health:context_length{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}) < 10))",
+          "expr": "(tensorfold_health:context_length{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) < 10))",
           "legendFormat": "",
           "refId": "A",
           "range": false,
@@ -1607,7 +1607,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(scrape_duration_seconds{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",deployment=\"$deployment\",instance=~\"$node\"}) < 10))",
+          "expr": "(scrape_duration_seconds{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) < 10))",
           "legendFormat": "",
           "refId": "A",
           "range": false,
@@ -1648,15 +1648,50 @@
         "type": "datasource"
       },
       {
-        "name": "deployment",
-        "label": "Deployment",
-        "type": "constant",
-        "query": "spark-glm53-tp2",
-        "current": {
-          "text": "spark-glm53-tp2",
-          "value": "spark-glm53-tp2"
+        "name": "model",
+        "label": "Model",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
         },
-        "hide": 2
+        "definition": "label_values({__name__=\"tensorfold:requests_running\",job=\"spark-inference\"}, model)",
+        "query": {
+          "query": "label_values({__name__=\"tensorfold:requests_running\",job=\"spark-inference\"}, model)",
+          "refId": "model"
+        },
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "refresh": 2,
+        "sort": 1,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "recipe",
+        "label": "Recipe",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "definition": "label_values({__name__=\"tensorfold:requests_running\",job=\"spark-inference\",model=~\"$model\"}, recipe)",
+        "query": {
+          "query": "label_values({__name__=\"tensorfold:requests_running\",job=\"spark-inference\",model=~\"$model\"}, recipe)",
+          "refId": "recipe"
+        },
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "refresh": 2,
+        "sort": 1,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
       },
       {
         "name": "node",
@@ -1666,9 +1701,9 @@
           "type": "prometheus",
           "uid": "${datasource}"
         },
-        "definition": "label_values({__name__=\"tensorfold:requests_running\",job=\"spark-inference\",deployment=\"$deployment\"}, instance)",
+        "definition": "label_values({__name__=\"tensorfold:requests_running\",job=\"spark-inference\",model=~\"$model\"}, instance)",
         "query": {
-          "query": "label_values({__name__=\"tensorfold:requests_running\",job=\"spark-inference\",deployment=\"$deployment\"}, instance)",
+          "query": "label_values({__name__=\"tensorfold:requests_running\",job=\"spark-inference\",model=~\"$model\"}, instance)",
           "refId": "node"
         },
         "includeAll": true,

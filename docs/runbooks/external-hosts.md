@@ -15,8 +15,9 @@ Verified in disposable fixtures on 2026-10-03, not on the production hosts: iden
 | `instance` | Physical node, such as `spark-1` | The host's ingestion token |
 | `platform` | Node type: `pve` or `spark` | The host's ingestion token |
 | `job` | Collector, such as `spark-node` or `pve-vmagent` | The scrape configuration |
+| `model`, `runtime`, `recipe` | What a Spark is serving | SparkRun's container labels |
 
-Each host has one `VMUser` in [metrics-ingest](../../kubernetes/apps/observability/metrics-ingest/app/vmusers.yaml). VMAuth adds that user's `instance` and `platform` to every sample and a host cannot override them, so the Compose and scrape files are identical on every host of a type. Host series carry no `cluster` label, and every Kubernetes rule group is restricted to `cluster="k8s-prod"`, so the two never mix. The **External Hosts** dashboard and the stock **Node Exporter Full** dashboard filter by type and node; **Sparks / TensorFold performance** filters by node.
+Each host has one `VMUser` in [metrics-ingest](../../kubernetes/apps/observability/metrics-ingest/app/vmusers.yaml). VMAuth adds that user's `instance` and `platform` to every sample and a host cannot override them, so the Compose and scrape files are identical on every host of a type. Host series carry no `cluster` label, and every Kubernetes rule group is restricted to `cluster="k8s-prod"`, so the two never mix. The **External Hosts** dashboard and the stock **Node Exporter Full** dashboard filter by type and node; **Sparks / TensorFold performance** filters by model, recipe and node.
 
 ## Enroll a Spark
 
@@ -26,10 +27,10 @@ Run from a workstation that holds the cluster age key. Do one node, verify it, t
 sops decrypt --extract '["stringData"]["SPARK_1_TOKEN"]' kubernetes/apps/observability/metrics-ingest/app/tokens.sops.yaml \
   | ssh kelchm@spark-1 'sudo install -d -m 0755 /etc/monitoring && sudo install -m 0600 /dev/stdin /etc/monitoring/token'
 scp sparks/platform/doco-cd/compose.yaml kelchm@spark-1:/tmp/doco-cd.yaml
-ssh kelchm@spark-1 'sudo install -D -m 0644 /tmp/doco-cd.yaml /opt/doco-cd/compose.yaml && cd /opt/doco-cd && sudo HOST=$(hostname) docker compose up -d'
+ssh kelchm@spark-1 'sudo install -D -m 0644 /tmp/doco-cd.yaml /opt/doco-cd/compose.yaml && cd /opt/doco-cd && sudo docker compose up -d'
 ```
 
-doco-cd deploys the `monitoring` and `monitoring-gpu` projects within three minutes. The GPU exporter needs NVIDIA CDI devices in Docker (`nvidia-ctk cdi list` shows `nvidia.com/gpu=all`); if it cannot start, the other collectors are unaffected and `ExternalHostCollectorDown` names it. The inference container is not touched. `spark-1` also scrapes the TensorFold endpoint every second; stop the workstation pilot once those samples arrive so the two do not overlap.
+doco-cd deploys the `monitoring` and `monitoring-gpu` projects within three minutes. The GPU exporter needs NVIDIA CDI devices in Docker (`nvidia-ctk cdi list` shows `nvidia.com/gpu=all`); if it cannot start, the other collectors are unaffected and `ExternalHostCollectorDown` names it. The inference container is not touched. Whichever Spark runs SparkRun's head rank scrapes the serving endpoint every second and labels the series with the model, runtime and recipe SparkRun reports; see [Spark monitoring](../../sparks/monitoring/README.md#inference). Stop the workstation pilot once those samples arrive so the two do not overlap.
 
 ## PVE node
 
@@ -40,7 +41,7 @@ scp proxmox/platform/doco-cd/daemon.json proxmox/platform/doco-cd/compose.yaml k
 ssh kelchm@pve-sbx-3 'sudo install -D -m 0644 /tmp/daemon.json /etc/docker/daemon.json && sudo apt-get install --no-install-recommends -y docker.io docker-cli docker-compose'
 ```
 
-Before going further, confirm on the node that guests still pass traffic, `sysctl net.ipv4.ip_forward` and `sudo nft list ruleset` are unchanged from before the install, and `docker network ls` shows no `bridge` network. If any check fails, `sudo apt-get purge docker.io` and stop. Then install the token and deployer as for a Spark, using the node's `PVE_SBX_N_TOKEN` key, `/tmp/compose.yaml`, and `sudo docker compose up -d` without `HOST`.
+Before going further, confirm on the node that guests still pass traffic, `sysctl net.ipv4.ip_forward` and `sudo nft list ruleset` are unchanged from before the install, and `docker network ls` shows no `bridge` network. If any check fails, `sudo apt-get purge docker.io` and stop. Then install the token and deployer as for a Spark, using the node's `PVE_SBX_N_TOKEN` key and `/tmp/compose.yaml`.
 
 Containers on a PVE node use host networking only. doco-cd has no bind-address setting, so its health and metrics ports (8080, 9120) listen on every interface of the node; its webhook and API stay disabled without a secret.
 
@@ -51,7 +52,7 @@ time() - tlast_over_time(up{instance="spark-1"}[1h])
 count by (job) (up{instance="spark-1"} == 1)
 ```
 
-The first is a few seconds on a healthy host. The second lists `spark-node`, `spark-gpu`, `spark-vmagent` and `spark-deployer`, plus `spark-inference` on the leader. On the host, `curl -s 127.0.0.1:8429/targets` shows each scrape target and `docker logs doco-cd` shows deployments.
+The first is a few seconds on a healthy host. The second lists `spark-node`, `spark-gpu`, `spark-vmagent` and `spark-deployer`, plus `spark-inference` on the node serving the head rank. On the host, `curl -s 127.0.0.1:8429/targets` shows each scrape target and `docker logs doco-cd` shows deployments.
 
 ## Change, pause, rotate, remove
 

@@ -1,4 +1,4 @@
-# Applied by hand on each Spark: HOST=$(hostname) docker compose up -d
+# Applied by hand on each Spark: docker compose up -d
 name: doco-cd
 
 services:
@@ -8,7 +8,7 @@ services:
     environment:
       TZ: America/New_York
       HTTP_PORT: "8080"
-      DEPLOY_CONFIG_BASE_DIR: sparks/monitoring/${HOST:?set HOST to this node's name}
+      DEPLOY_CONFIG_BASE_DIR: sparks/monitoring
       POLL_CONFIG: |
         - url: https://github.com/kelchm/home-lab.git
           reference: main

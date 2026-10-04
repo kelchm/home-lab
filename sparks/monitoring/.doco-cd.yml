@@ -1,8 +1,5 @@
 name: monitoring
 working_dir: sparks/monitoring
-compose_files:
-  - compose.yaml
-  - compose.inference.yaml
 prune_images: false
 reconciliation: false
 ---

@@ -78,7 +78,7 @@ while IFS= read -r config; do
 done <<<"${configs}"
 
 for deployer in sparks proxmox; do
-    if ! HOST=validate docker compose -f "${ROOT_DIR}/${deployer}/platform/doco-cd/compose.yaml" config --quiet; then
+    if ! docker compose -f "${ROOT_DIR}/${deployer}/platform/doco-cd/compose.yaml" config --quiet; then
         violation "${deployer}/platform/doco-cd/compose.yaml: Compose render failed"
     fi
 done

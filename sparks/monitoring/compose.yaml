@@ -35,6 +35,8 @@ services:
     volumes:
       - ./scrape.yaml:/etc/vmagent/scrape.yaml:ro
       - /etc/monitoring:/etc/monitoring:ro
+      # Read to find the serving container and its SparkRun labels.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
       - queue:/queue
     mem_limit: 256m
     stop_grace_period: 30s

@@ -4,16 +4,21 @@ Host, GPU and inference metrics for the two DGX Sparks. Enrollment, verification
 
 | File | Purpose |
 |---|---|
-| [compose.yaml](compose.yaml) | node-exporter and vmagent. Identical on both Sparks. |
+| [compose.yaml](compose.yaml) | node-exporter and vmagent. |
 | [gpu/compose.yaml](gpu/compose.yaml) | The NVIDIA GPU exporter, as its own project. |
-| [scrape.yaml](scrape.yaml) | Host, GPU, vmagent and deployer scrape jobs. |
-| [compose.inference.yaml](compose.inference.yaml), [inference.yaml](inference.yaml) | Adds the one-second scrape of the serving endpoint. Used only on the leader. |
-| `spark-N/.doco-cd.yml` | Which projects and Compose files that node deploys. |
+| [scrape.yaml](scrape.yaml) | Host, GPU, vmagent, deployer and inference scrape jobs. |
+| [.doco-cd.yml](.doco-cd.yml) | The two deployments every Spark's doco-cd applies. |
 | [../platform/doco-cd](../platform/doco-cd/compose.yaml) | The deployer, applied by hand once per node. |
 
-SparkRun owns inference. This project never starts, stops or restarts an inference container.
+Every file is identical on both Sparks. SparkRun owns inference; this project never starts, stops or restarts an inference container.
 
-Both TP ranks serve one deployment, so only the leader's endpoint is scraped. The labels in `inference.yaml` describe that deployment. Before changing a recipe, identify the installed runtime, model revision, TP and concurrency, then update those labels and give a materially different evaluation its own `deployment` value. Move `compose.inference.yaml` to the other node's `.doco-cd.yml` if the leader moves.
+## Inference
+
+Nothing here names a model. vmagent asks Docker for running containers that carry a `sparkrun.runtime` label and scrapes the serving endpoint of the head rank (`sparkrun.rank` 0, or a single-node run) every second. The series take their `model`, `runtime` and `recipe` labels from SparkRun's own container labels (`sparkrun.served_model_name`, `sparkrun.runtime`, and the recipe file name), so swapping a model or runtime with SparkRun is followed within about 30 seconds and needs no change in Git. While nothing is being served there is no target, so a swap does not produce failed scrapes. Both TP ranks serve one deployment; the worker rank is not scraped.
+
+Two things are still fixed. Port 8888 is the serving port every recipe uses; a recipe on another port shows as a down target. Reading container labels requires the Docker socket, so on a Spark vmagent can reach the Docker API like the deployer can.
+
+All metrics the endpoint exposes are kept, whatever the runtime. The TensorFold dashboard reads the `tensorfold:*` families; another runtime's metrics are collected the same way but need their own dashboard.
 
 doco-cd recreates every container of a project on each poll while one of its services cannot start. The GPU exporter depends on the driver and CDI, so it is a separate project: if it cannot start after a driver or OS update, host and inference collection keep running. It runs `nvidia-smi` through NVIDIA CDI; its NVML build is AMD64-only. GB10 has no dedicated framebuffer, so GPU memory is not reported: read host memory and memory pressure instead. A power-cap flag is ordinary operation; thermal slowdown is not.
 

@@ -1,7 +1,5 @@
 global:
   scrape_interval: 15s
-scrape_config_files:
-  - /etc/vmagent/scrape.d/*.yaml
 scrape_configs:
   - job_name: spark-node
     static_configs:
@@ -16,3 +14,30 @@ scrape_configs:
   - job_name: spark-deployer
     static_configs:
       - targets: ["127.0.0.1:9120"]
+
+  # Whatever SparkRun is serving. The target exists only while a SparkRun
+  # container runs, and its identity comes from the labels SparkRun sets, so a
+  # model or runtime swap needs no change here. 8888 is the serving port every
+  # recipe uses.
+  - job_name: spark-inference
+    scrape_interval: 1s
+    scrape_timeout: 800ms
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        filters:
+          - name: label
+            values: ["sparkrun.runtime"]
+    relabel_configs:
+      # Only the head rank serves HTTP; single-node runs carry no rank.
+      - source_labels: [__meta_docker_container_label_sparkrun_rank]
+        regex: "0|"
+        action: keep
+      - target_label: __address__
+        replacement: 127.0.0.1:8888
+      - source_labels: [__meta_docker_container_label_sparkrun_served_model_name]
+        target_label: model
+      - source_labels: [__meta_docker_container_label_sparkrun_runtime]
+        target_label: runtime
+      - source_labels: [__meta_docker_container_label_sparkrun_recipe]
+        regex: "(?:.*/)?([^/]+?)(?:\\.ya?ml)?"
+        target_label: recipe
