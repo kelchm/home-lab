@@ -1,15 +1,14 @@
 {
   "uid": "hosts",
   "title": "Hosts",
-  "description": "PVE nodes and DGX Sparks. Type and Node come from each host's ingestion token.",
+  "description": "All enrolled Kubernetes, Proxmox and Spark machines, with collection status and comparable host signals.",
   "editable": false,
   "schemaVersion": 40,
   "version": 1,
-  "refresh": "30s",
+  "refresh": "1m",
   "tags": [
-    "hosts",
-    "proxmox",
-    "sparks"
+    "overview",
+    "hosts"
   ],
   "time": {
     "from": "now-6h",
@@ -28,15 +27,15 @@
       },
       {
         "name": "platform",
-        "label": "Type",
+        "label": "Platform",
         "type": "query",
         "datasource": {
           "type": "prometheus",
           "uid": "${datasource}"
         },
-        "definition": "label_values(node_uname_info{job=~\"(pve|spark)-node\"}, platform)",
+        "definition": "label_values(up{job=~\"node-exporter|(pve|spark)-node\",platform!=\"\"}, platform)",
         "query": {
-          "query": "label_values(node_uname_info{job=~\"(pve|spark)-node\"}, platform)",
+          "query": "label_values(up{job=~\"node-exporter|(pve|spark)-node\",platform!=\"\"}, platform)",
           "refId": "platform"
         },
         "includeAll": true,
@@ -57,9 +56,9 @@
           "type": "prometheus",
           "uid": "${datasource}"
         },
-        "definition": "label_values(node_uname_info{job=~\"(pve|spark)-node\",platform=~\"$platform\"}, instance)",
+        "definition": "label_values(up{job=~\"node-exporter|(pve|spark)-node\",platform!=\"\",platform=~\"$platform\"}, instance)",
         "query": {
-          "query": "label_values(node_uname_info{job=~\"(pve|spark)-node\",platform=~\"$platform\"}, instance)",
+          "query": "label_values(up{job=~\"node-exporter|(pve|spark)-node\",platform!=\"\",platform=~\"$platform\"}, instance)",
           "refId": "node"
         },
         "includeAll": true,
@@ -80,37 +79,25 @@
       "type": "link",
       "icon": "dashboard",
       "url": "/d/rYdddlPWk",
-      "targetBlank": false
+      "targetBlank": false,
+      "keepTime": true
     }
   ],
   "panels": [
     {
-      "id": 1,
-      "type": "row",
-      "title": "Nodes",
-      "collapsed": false,
-      "gridPos": {
-        "x": 0,
-        "y": 0,
-        "w": 24,
-        "h": 1
-      },
-      "panels": []
-    },
-    {
       "id": 2,
       "type": "table",
-      "title": "Nodes",
-      "description": "One row per physical node. Last sample is the age of the newest node metric; a node that stopped reporting stays listed for a day.",
+      "title": "Machines",
+      "description": "Current values per machine. Memory pressure is the share of time tasks stalled waiting for memory; a Spark with a model loaded keeps memory high without pressure. A machine stays listed for seven days after its last scrape.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
       },
       "gridPos": {
         "x": 0,
-        "y": 1,
+        "y": 0,
         "w": 24,
-        "h": 8
+        "h": 9
       },
       "fieldConfig": {
         "defaults": {
@@ -119,13 +106,164 @@
             "cellOptions": {
               "type": "auto"
             }
-          }
+          },
+          "noValue": ""
         },
         "overrides": [
           {
             "matcher": {
               "id": "byName",
-              "options": "Last sample"
+              "options": "CPU"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Memory"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Memory pressure"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 10
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Fullest filesystem"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 90
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "NVMe temperature"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "celsius"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 75
+                    },
+                    {
+                      "color": "red",
+                      "value": 80
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Last seen"
             },
             "properties": [
               {
@@ -147,127 +285,7 @@
                     },
                     {
                       "color": "orange",
-                      "value": 60
-                    },
-                    {
-                      "color": "red",
                       "value": 600
-                    }
-                  ]
-                }
-              },
-              {
-                "id": "custom.cellOptions",
-                "value": {
-                  "type": "color-text"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "CPU used"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "percent"
-              },
-              {
-                "id": "decimals",
-                "value": 1
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Memory available"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "percent"
-              },
-              {
-                "id": "decimals",
-                "value": 1
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Root filesystem free"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "percent"
-              },
-              {
-                "id": "decimals",
-                "value": 1
-              },
-              {
-                "id": "thresholds",
-                "value": {
-                  "mode": "absolute",
-                  "steps": [
-                    {
-                      "color": "red",
-                      "value": null
-                    },
-                    {
-                      "color": "orange",
-                      "value": 10
-                    },
-                    {
-                      "color": "green",
-                      "value": 20
-                    }
-                  ]
-                }
-              },
-              {
-                "id": "custom.cellOptions",
-                "value": {
-                  "type": "color-text"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Hottest sensor"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "celsius"
-              },
-              {
-                "id": "decimals",
-                "value": 0
-              },
-              {
-                "id": "thresholds",
-                "value": {
-                  "mode": "absolute",
-                  "steps": [
-                    {
-                      "color": "green",
-                      "value": null
-                    },
-                    {
-                      "color": "orange",
-                      "value": 75
-                    },
-                    {
-                      "color": "red",
-                      "value": 90
                     }
                   ]
                 }
@@ -287,89 +305,321 @@
         "cellHeight": "sm",
         "footer": {
           "show": false
-        }
+        },
+        "sortBy": [
+          {
+            "displayName": "Machine",
+            "desc": false
+          }
+        ]
       },
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "time() - max by (instance, platform) (tlast_over_time(up{job=~\"node-exporter|(pve|spark)-node\",platform!=\"\",platform=~\"$platform\",instance=~\"$node\"}[7d]))",
           "refId": "A",
-          "expr": "max by (instance, platform) (time() - tlast_over_time(node_uname_info{job=~\"(pve|spark)-node\",platform=~\"$platform\",instance=~\"$node\"}[1d]))",
           "format": "table",
           "instant": true,
-          "range": false,
-          "editorMode": "code"
+          "range": false
         },
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "100 * sum by (instance) (avg by (instance, mode) (rate(node_cpu_seconds_total{job=~\"node-exporter|(pve|spark)-node\",platform!=\"\",platform=~\"$platform\",instance=~\"$node\",mode!~\"idle|iowait\"}[2m])))",
           "refId": "B",
-          "expr": "100 * (1 - avg by (instance, platform) (rate(node_cpu_seconds_total{job=~\"(pve|spark)-node\",platform=~\"$platform\",instance=~\"$node\",mode=\"idle\"}[5m])))",
           "format": "table",
           "instant": true,
-          "range": false,
-          "editorMode": "code"
+          "range": false
         },
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "100 * (1 - max by (instance) (node_memory_MemAvailable_bytes{job=~\"node-exporter|(pve|spark)-node\",platform!=\"\",platform=~\"$platform\",instance=~\"$node\"} / node_memory_MemTotal_bytes{job=~\"node-exporter|(pve|spark)-node\",platform!=\"\",platform=~\"$platform\",instance=~\"$node\"}))",
           "refId": "C",
-          "expr": "max by (instance, platform) (100 * node_memory_MemAvailable_bytes{job=~\"(pve|spark)-node\",platform=~\"$platform\",instance=~\"$node\"} / node_memory_MemTotal_bytes{job=~\"(pve|spark)-node\",platform=~\"$platform\",instance=~\"$node\"})",
           "format": "table",
           "instant": true,
-          "range": false,
-          "editorMode": "code"
+          "range": false
         },
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "100 * max by (instance) (rate(node_pressure_memory_stalled_seconds_total{job=~\"node-exporter|(pve|spark)-node\",platform!=\"\",platform=~\"$platform\",instance=~\"$node\"}[5m]))",
           "refId": "D",
-          "expr": "max by (instance, platform) (100 * node_filesystem_avail_bytes{job=~\"(pve|spark)-node\",platform=~\"$platform\",instance=~\"$node\",mountpoint=\"/\"} / node_filesystem_size_bytes{job=~\"(pve|spark)-node\",platform=~\"$platform\",instance=~\"$node\",mountpoint=\"/\"})",
           "format": "table",
           "instant": true,
-          "range": false,
-          "editorMode": "code"
+          "range": false
         },
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "100 * max by (instance) (1 - node_filesystem_avail_bytes{job=~\"node-exporter|(pve|spark)-node\",platform!=\"\",platform=~\"$platform\",instance=~\"$node\",fstype=~\"ext4|xfs|vfat\"} / (node_filesystem_size_bytes{job=~\"node-exporter|(pve|spark)-node\",platform!=\"\",platform=~\"$platform\",instance=~\"$node\",fstype=~\"ext4|xfs|vfat\"} > 0))",
           "refId": "E",
-          "expr": "max by (instance, platform) (node_hwmon_temp_celsius{job=~\"(pve|spark)-node\",platform=~\"$platform\",instance=~\"$node\"})",
           "format": "table",
           "instant": true,
-          "range": false,
-          "editorMode": "code"
+          "range": false
         },
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "max by (instance) (node_hwmon_temp_celsius{job=~\"node-exporter|(pve|spark)-node\",platform!=\"\",platform=~\"$platform\",instance=~\"$node\",chip=~\"nvme.*\"} * on (instance, chip, sensor) group_left node_hwmon_sensor_label{job=~\"node-exporter|(pve|spark)-node\",platform!=\"\",platform=~\"$platform\",instance=~\"$node\",chip=~\"nvme.*\",label=\"Composite\"})",
           "refId": "F",
-          "expr": "max by (instance, platform, release) (node_uname_info{job=~\"(pve|spark)-node\",platform=~\"$platform\",instance=~\"$node\"})",
           "format": "table",
           "instant": true,
-          "range": false,
-          "editorMode": "code"
+          "range": false
         }
       ],
       "transformations": [
         {
-          "id": "merge",
-          "options": {}
+          "id": "joinByField",
+          "options": {
+            "byField": "instance",
+            "mode": "outerTabular"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "indexByName": {
+              "instance": 0,
+              "platform": 1,
+              "Value #B": 2,
+              "Value #C": 3,
+              "Value #D": 4,
+              "Value #E": 5,
+              "Value #F": 6,
+              "Value #A": 7
+            },
+            "renameByName": {
+              "instance": "Machine",
+              "platform": "Platform",
+              "Value #B": "CPU",
+              "Value #C": "Memory",
+              "Value #D": "Memory pressure",
+              "Value #E": "Fullest filesystem",
+              "Value #F": "NVMe temperature",
+              "Value #A": "Last seen"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 20,
+      "type": "table",
+      "title": "Collection",
+      "description": "Latest scrape result for each collector. A blank cell means that collector does not report for that machine.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 9,
+        "w": 24,
+        "h": 9
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          },
+          "noValue": ""
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^(Node exporter|vmagent|Deployer|Proxmox API|GPU|Inference)$"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "1": {
+                        "text": "up",
+                        "color": "green",
+                        "index": 0
+                      },
+                      "0": {
+                        "text": "down",
+                        "color": "red",
+                        "index": 1
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "sortBy": [
+          {
+            "displayName": "Machine",
+            "desc": false
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "max by (instance, platform) (tlast_over_time(up{job=~\"node-exporter|(pve|spark)-node\",platform!=\"\",platform=~\"$platform\",instance=~\"$node\"}[7d]))",
+          "refId": "A",
+          "format": "table",
+          "instant": true,
+          "range": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "min by (instance) (up{job=~\"node-exporter|(pve|spark)-node\",platform!=\"\",platform=~\"$platform\",instance=~\"$node\"})",
+          "refId": "B",
+          "format": "table",
+          "instant": true,
+          "range": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "min by (instance) (up{job=~\"(pve|spark)-vmagent\",platform=~\"$platform\",instance=~\"$node\"})",
+          "refId": "C",
+          "format": "table",
+          "instant": true,
+          "range": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "min by (instance) (up{job=~\"(pve|spark)-deployer\",platform=~\"$platform\",instance=~\"$node\"})",
+          "refId": "D",
+          "format": "table",
+          "instant": true,
+          "range": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "min by (instance) (label_replace(up{job=\"pve-api\",cluster=\"pve-sbx\",platform=~\"$platform\",instance=~\"($node)[.].*\"}, \"instance\", \"$1\", \"instance\", \"([^.]+)[.].*\"))",
+          "refId": "E",
+          "format": "table",
+          "instant": true,
+          "range": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "min by (instance) (up{job=~\"spark-gpu\",platform=~\"$platform\",instance=~\"$node\"})",
+          "refId": "F",
+          "format": "table",
+          "instant": true,
+          "range": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "min by (instance) (up{job=~\"spark-inference\",platform=~\"$platform\",instance=~\"$node\"})",
+          "refId": "G",
+          "format": "table",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "transformations": [
+        {
+          "id": "joinByField",
+          "options": {
+            "byField": "instance",
+            "mode": "outerTabular"
+          }
         },
         {
           "id": "organize",
           "options": {
             "excludeByName": {
               "Time": true,
-              "Value #F": true
+              "Value #A": true
             },
             "indexByName": {
               "instance": 0,
               "platform": 1,
-              "Value #A": 2,
-              "Value #B": 3,
-              "Value #C": 4,
-              "Value #D": 5,
-              "Value #E": 6,
-              "release": 7
+              "Value #B": 2,
+              "Value #C": 3,
+              "Value #D": 4,
+              "Value #E": 5,
+              "Value #F": 6,
+              "Value #G": 7
             },
             "renameByName": {
-              "instance": "Node",
-              "platform": "Type",
-              "Value #A": "Last sample",
-              "Value #B": "CPU used",
-              "Value #C": "Memory available",
-              "Value #D": "Root filesystem free",
-              "Value #E": "Hottest sensor",
-              "release": "Kernel"
+              "instance": "Machine",
+              "platform": "Platform",
+              "Value #B": "Node exporter",
+              "Value #C": "vmagent",
+              "Value #D": "Deployer",
+              "Value #E": "Proxmox API",
+              "Value #F": "GPU",
+              "Value #G": "Inference"
             }
           }
         }
@@ -378,11 +628,11 @@
     {
       "id": 3,
       "type": "row",
-      "title": "Host",
+      "title": "Trends",
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 9,
+        "y": 18,
         "w": 24,
         "h": 1
       },
@@ -392,14 +642,14 @@
       "id": 4,
       "type": "timeseries",
       "title": "CPU used",
-      "description": "Busy CPU time across all cores.",
+      "description": "CPU time outside idle and I/O wait, averaged across cores over two minutes.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
       },
       "gridPos": {
         "x": 0,
-        "y": 10,
+        "y": 19,
         "w": 12,
         "h": 7
       },
@@ -432,26 +682,30 @@
       },
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "100 * sum by (instance) (avg by (instance, mode) (rate(node_cpu_seconds_total{job=~\"node-exporter|(pve|spark)-node\",platform!=\"\",platform=~\"$platform\",instance=~\"$node\",mode!~\"idle|iowait\"}[2m])))",
           "refId": "A",
-          "expr": "100 * (1 - avg by (instance) (rate(node_cpu_seconds_total{job=~\"(pve|spark)-node\",platform=~\"$platform\",instance=~\"$node\",mode=\"idle\"}[5m])))",
           "legendFormat": "{{instance}}",
-          "range": true,
-          "editorMode": "code"
+          "range": true
         }
       ]
     },
     {
       "id": 5,
       "type": "timeseries",
-      "title": "Memory available",
-      "description": "On a Spark the GPU shares this memory, so a loaded model keeps it low by design; use pressure to judge trouble.",
+      "title": "Memory used",
+      "description": "Memory in use after subtracting available memory; a loaded Spark model can keep this high.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
       },
       "gridPos": {
         "x": 12,
-        "y": 10,
+        "y": 19,
         "w": 12,
         "h": 7
       },
@@ -484,32 +738,92 @@
       },
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "100 * (1 - max by (instance) (node_memory_MemAvailable_bytes{job=~\"node-exporter|(pve|spark)-node\",platform!=\"\",platform=~\"$platform\",instance=~\"$node\"} / node_memory_MemTotal_bytes{job=~\"node-exporter|(pve|spark)-node\",platform!=\"\",platform=~\"$platform\",instance=~\"$node\"}))",
           "refId": "A",
-          "expr": "100 * node_memory_MemAvailable_bytes{job=~\"(pve|spark)-node\",platform=~\"$platform\",instance=~\"$node\"} / node_memory_MemTotal_bytes{job=~\"(pve|spark)-node\",platform=~\"$platform\",instance=~\"$node\"}",
           "legendFormat": "{{instance}}",
-          "range": true,
-          "editorMode": "code"
+          "range": true
         }
       ]
     },
     {
-      "id": 6,
+      "id": 7,
       "type": "timeseries",
-      "title": "Memory pressure",
-      "description": "Share of time every runnable task was stalled waiting for memory.",
+      "title": "Fullest filesystem",
+      "description": "Highest used percentage across local ext4, XFS and VFAT filesystems with non-zero capacity.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
       },
       "gridPos": {
         "x": 0,
-        "y": 17,
+        "y": 26,
         "w": 12,
         "h": 7
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "percentunit",
+          "unit": "percent",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "fillOpacity": 5,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": false
+          },
+          "min": 0,
+          "max": 100
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "100 * max by (instance) (1 - node_filesystem_avail_bytes{job=~\"node-exporter|(pve|spark)-node\",platform!=\"\",platform=~\"$platform\",instance=~\"$node\",fstype=~\"ext4|xfs|vfat\"} / (node_filesystem_size_bytes{job=~\"node-exporter|(pve|spark)-node\",platform!=\"\",platform=~\"$platform\",instance=~\"$node\",fstype=~\"ext4|xfs|vfat\"} > 0))",
+          "refId": "A",
+          "legendFormat": "{{instance}}",
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Network throughput",
+      "description": "Combined receive and transmit throughput across physical wired NICs. VLAN subinterfaces and virtual devices are excluded.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 26,
+        "w": 12,
+        "h": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bps",
           "color": {
             "mode": "palette-classic"
           },
@@ -535,834 +849,15 @@
       },
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "8 * sum by (instance) (rate(node_network_receive_bytes_total{job=~\"node-exporter|(pve|spark)-node\",platform!=\"\",platform=~\"$platform\",instance=~\"$node\",device=~\"(en|eth|nic|ib)[a-zA-Z0-9_]+\"}[5m]) + rate(node_network_transmit_bytes_total{job=~\"node-exporter|(pve|spark)-node\",platform!=\"\",platform=~\"$platform\",instance=~\"$node\",device=~\"(en|eth|nic|ib)[a-zA-Z0-9_]+\"}[5m]))",
           "refId": "A",
-          "expr": "rate(node_pressure_memory_stalled_seconds_total{job=~\"(pve|spark)-node\",platform=~\"$platform\",instance=~\"$node\"}[5m])",
           "legendFormat": "{{instance}}",
-          "range": true,
-          "editorMode": "code"
-        }
-      ]
-    },
-    {
-      "id": 7,
-      "type": "timeseries",
-      "title": "Filesystem free",
-      "description": "Local filesystems only.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "gridPos": {
-        "x": 12,
-        "y": 17,
-        "w": 12,
-        "h": 7
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percent",
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "fillOpacity": 5,
-            "lineWidth": 1,
-            "showPoints": "never",
-            "spanNulls": false
-          },
-          "min": 0,
-          "max": 100
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "100 * node_filesystem_avail_bytes{job=~\"(pve|spark)-node\",platform=~\"$platform\",instance=~\"$node\",fstype!~\"tmpfs|overlay|squashfs|ramfs|efivarfs|nfs.*|cifs|fuse.*\"} / node_filesystem_size_bytes{job=~\"(pve|spark)-node\",platform=~\"$platform\",instance=~\"$node\",fstype!~\"tmpfs|overlay|squashfs|ramfs|efivarfs|nfs.*|cifs|fuse.*\"}",
-          "legendFormat": "{{instance}} {{mountpoint}}",
-          "range": true,
-          "editorMode": "code"
-        }
-      ]
-    },
-    {
-      "id": 8,
-      "type": "timeseries",
-      "title": "Network throughput",
-      "description": "Receive is positive, transmit negative.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 24,
-        "w": 12,
-        "h": 7
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "bps",
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "fillOpacity": 5,
-            "lineWidth": 1,
-            "showPoints": "never",
-            "spanNulls": false
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "8 * rate(node_network_receive_bytes_total{job=~\"(pve|spark)-node\",platform=~\"$platform\",instance=~\"$node\",device!~\"lo|veth.*|docker.*|br-.*|tap.*|fw.*|vmbr.*\"}[1m]) > 0",
-          "legendFormat": "{{instance}} {{device}} rx",
-          "range": true,
-          "editorMode": "code"
-        },
-        {
-          "refId": "B",
-          "expr": "-8 * rate(node_network_transmit_bytes_total{job=~\"(pve|spark)-node\",platform=~\"$platform\",instance=~\"$node\",device!~\"lo|veth.*|docker.*|br-.*|tap.*|fw.*|vmbr.*\"}[1m]) < 0",
-          "legendFormat": "{{instance}} {{device}} tx",
-          "range": true,
-          "editorMode": "code"
-        }
-      ]
-    },
-    {
-      "id": 9,
-      "type": "timeseries",
-      "title": "Link changes and errors",
-      "description": "Carrier changes per 5 minutes and interface errors per second.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "gridPos": {
-        "x": 12,
-        "y": 24,
-        "w": 12,
-        "h": 7
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "fillOpacity": 5,
-            "lineWidth": 1,
-            "showPoints": "never",
-            "spanNulls": false
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "increase(node_network_carrier_changes_total{job=~\"(pve|spark)-node\",platform=~\"$platform\",instance=~\"$node\",device!~\"lo|veth.*|docker.*|br-.*|tap.*|fw.*|vmbr.*\"}[5m]) > 0",
-          "legendFormat": "{{instance}} {{device}} carrier changes",
-          "range": true,
-          "editorMode": "code"
-        },
-        {
-          "refId": "B",
-          "expr": "rate(node_network_receive_errs_total{job=~\"(pve|spark)-node\",platform=~\"$platform\",instance=~\"$node\",device!~\"lo|veth.*|docker.*|br-.*|tap.*|fw.*|vmbr.*\"}[5m]) + rate(node_network_transmit_errs_total{job=~\"(pve|spark)-node\",platform=~\"$platform\",instance=~\"$node\",device!~\"lo|veth.*|docker.*|br-.*|tap.*|fw.*|vmbr.*\"}[5m]) > 0",
-          "legendFormat": "{{instance}} {{device}} errors/s",
-          "range": true,
-          "editorMode": "code"
-        }
-      ]
-    },
-    {
-      "id": 10,
-      "type": "timeseries",
-      "title": "Temperatures",
-      "description": "Hardware sensors with their kernel label where one exists.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 31,
-        "w": 24,
-        "h": 7
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "celsius",
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "fillOpacity": 5,
-            "lineWidth": 1,
-            "showPoints": "never",
-            "spanNulls": false
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "node_hwmon_temp_celsius{job=~\"(pve|spark)-node\",platform=~\"$platform\",instance=~\"$node\"} * on (instance, chip, sensor) group_left (label) node_hwmon_sensor_label{job=~\"(pve|spark)-node\",platform=~\"$platform\",instance=~\"$node\"}",
-          "legendFormat": "{{instance}} {{label}}",
-          "range": true,
-          "editorMode": "code"
-        },
-        {
-          "refId": "B",
-          "expr": "node_hwmon_temp_celsius{job=~\"(pve|spark)-node\",platform=~\"$platform\",instance=~\"$node\"} unless on (instance, chip, sensor) node_hwmon_sensor_label{job=~\"(pve|spark)-node\",platform=~\"$platform\",instance=~\"$node\"}",
-          "legendFormat": "{{instance}} {{chip}} {{sensor}}",
-          "range": true,
-          "editorMode": "code"
-        }
-      ]
-    },
-    {
-      "id": 11,
-      "type": "row",
-      "title": "GPU (Sparks)",
-      "collapsed": false,
-      "gridPos": {
-        "x": 0,
-        "y": 38,
-        "w": 24,
-        "h": 1
-      },
-      "panels": []
-    },
-    {
-      "id": 12,
-      "type": "timeseries",
-      "title": "GPU utilization",
-      "description": "",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 39,
-        "w": 8,
-        "h": 7
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percentunit",
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "fillOpacity": 5,
-            "lineWidth": 1,
-            "showPoints": "never",
-            "spanNulls": false
-          },
-          "min": 0,
-          "max": 1
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "nvidia_smi_utilization_gpu_ratio{job=\"spark-gpu\",platform=~\"$platform\",instance=~\"$node\"}",
-          "legendFormat": "{{instance}}",
-          "range": true,
-          "editorMode": "code"
-        }
-      ]
-    },
-    {
-      "id": 13,
-      "type": "timeseries",
-      "title": "GPU temperature",
-      "description": "",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "gridPos": {
-        "x": 8,
-        "y": 39,
-        "w": 8,
-        "h": 7
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "celsius",
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "fillOpacity": 5,
-            "lineWidth": 1,
-            "showPoints": "never",
-            "spanNulls": false
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "nvidia_smi_temperature_gpu{job=\"spark-gpu\",platform=~\"$platform\",instance=~\"$node\"}",
-          "legendFormat": "{{instance}}",
-          "range": true,
-          "editorMode": "code"
-        }
-      ]
-    },
-    {
-      "id": 14,
-      "type": "timeseries",
-      "title": "GPU power",
-      "description": "",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "gridPos": {
-        "x": 16,
-        "y": 39,
-        "w": 8,
-        "h": 7
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "watt",
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "fillOpacity": 5,
-            "lineWidth": 1,
-            "showPoints": "never",
-            "spanNulls": false
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "nvidia_smi_power_draw_watts{job=\"spark-gpu\",platform=~\"$platform\",instance=~\"$node\"}",
-          "legendFormat": "{{instance}}",
-          "range": true,
-          "editorMode": "code"
-        }
-      ]
-    },
-    {
-      "id": 15,
-      "type": "timeseries",
-      "title": "GPU clock limits",
-      "description": "1 while the named limit is active. A power cap is ordinary operation; thermal slowdown is not.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 46,
-        "w": 24,
-        "h": 6
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "fillOpacity": 5,
-            "lineWidth": 1,
-            "showPoints": "never",
-            "spanNulls": false
-          },
-          "min": 0,
-          "max": 1
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "max by (instance, __name__) ({__name__=~\"nvidia_smi_clocks_event_reasons_(hw_thermal_slowdown|sw_thermal_slowdown|hw_slowdown|sw_power_cap)\",job=\"spark-gpu\",platform=~\"$platform\",instance=~\"$node\"})",
-          "legendFormat": "{{instance}} {{__name__}}",
-          "range": true,
-          "editorMode": "code"
-        }
-      ]
-    },
-    {
-      "id": 16,
-      "type": "row",
-      "title": "Proxmox guests and storage",
-      "collapsed": false,
-      "gridPos": {
-        "x": 0,
-        "y": 52,
-        "w": 24,
-        "h": 1
-      },
-      "panels": []
-    },
-    {
-      "id": 17,
-      "type": "table",
-      "title": "Guests",
-      "description": "From the Proxmox API. Filtered by Node; shown when a PVE node is selected.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 53,
-        "w": 14,
-        "h": 8
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "align": "auto",
-            "cellOptions": {
-              "type": "auto"
-            }
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Running"
-            },
-            "properties": [
-              {
-                "id": "mappings",
-                "value": [
-                  {
-                    "type": "value",
-                    "options": {
-                      "0": {
-                        "text": "stopped",
-                        "color": "orange"
-                      },
-                      "1": {
-                        "text": "running",
-                        "color": "green"
-                      }
-                    }
-                  }
-                ]
-              },
-              {
-                "id": "custom.cellOptions",
-                "value": {
-                  "type": "color-text"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "CPU"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "percentunit"
-              },
-              {
-                "id": "decimals",
-                "value": 1
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Memory"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "percentunit"
-              },
-              {
-                "id": "decimals",
-                "value": 1
-              }
-            ]
-          }
-        ]
-      },
-      "options": {
-        "showHeader": true,
-        "cellHeight": "sm",
-        "footer": {
-          "show": false
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "max by (id) (pve_up{id=~\"(qemu|lxc)/.*\"}) * on (id) group_left (name, node) max by (id, name, node) (pve_guest_info{template=\"0\",node=~\"$node\"})",
-          "format": "table",
-          "instant": true,
-          "range": false,
-          "editorMode": "code"
-        },
-        {
-          "refId": "B",
-          "expr": "max by (id) (pve_cpu_usage_ratio{id=~\"(qemu|lxc)/.*\"}) * on (id) group_left (name, node) max by (id, name, node) (pve_guest_info{template=\"0\",node=~\"$node\"})",
-          "format": "table",
-          "instant": true,
-          "range": false,
-          "editorMode": "code"
-        },
-        {
-          "refId": "C",
-          "expr": "max by (id) (pve_memory_usage_bytes{id=~\"(qemu|lxc)/.*\"} / pve_memory_size_bytes{id=~\"(qemu|lxc)/.*\"}) * on (id) group_left (name, node) max by (id, name, node) (pve_guest_info{template=\"0\",node=~\"$node\"})",
-          "format": "table",
-          "instant": true,
-          "range": false,
-          "editorMode": "code"
-        }
-      ],
-      "transformations": [
-        {
-          "id": "merge",
-          "options": {}
-        },
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Time": true
-            },
-            "indexByName": {
-              "name": 0,
-              "id": 1,
-              "node": 2,
-              "Value #A": 3,
-              "Value #B": 4,
-              "Value #C": 5
-            },
-            "renameByName": {
-              "name": "Guest",
-              "id": "ID",
-              "node": "Node",
-              "Value #A": "Running",
-              "Value #B": "CPU",
-              "Value #C": "Memory"
-            }
-          }
-        }
-      ]
-    },
-    {
-      "id": 18,
-      "type": "timeseries",
-      "title": "Storage used",
-      "description": "Per node and storage, from the Proxmox API.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "gridPos": {
-        "x": 14,
-        "y": 53,
-        "w": 10,
-        "h": 8
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percentunit",
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "fillOpacity": 5,
-            "lineWidth": 1,
-            "showPoints": "never",
-            "spanNulls": false
-          },
-          "min": 0,
-          "max": 1
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "max by (id) (pve_disk_usage_bytes{id=~\"storage/($node)/.*\"} / pve_disk_size_bytes{id=~\"storage/($node)/.*\"})",
-          "legendFormat": "{{id}}",
-          "range": true,
-          "editorMode": "code"
-        }
-      ]
-    },
-    {
-      "id": 19,
-      "type": "row",
-      "title": "Collection",
-      "collapsed": false,
-      "gridPos": {
-        "x": 0,
-        "y": 61,
-        "w": 24,
-        "h": 1
-      },
-      "panels": []
-    },
-    {
-      "id": 20,
-      "type": "timeseries",
-      "title": "Queued for delivery",
-      "description": "Bytes waiting on disk for the ingestion endpoint. Non-zero for long means the endpoint is unreachable.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 62,
-        "w": 8,
-        "h": 7
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "bytes",
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "fillOpacity": 5,
-            "lineWidth": 1,
-            "showPoints": "never",
-            "spanNulls": false
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "vmagent_remotewrite_pending_data_bytes{job=~\"(pve|spark)-vmagent\",platform=~\"$platform\",instance=~\"$node\"}",
-          "legendFormat": "{{instance}}",
-          "range": true,
-          "editorMode": "code"
-        }
-      ]
-    },
-    {
-      "id": 21,
-      "type": "timeseries",
-      "title": "Dropped from queue",
-      "description": "Bytes discarded because the 1 GiB queue was full.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "gridPos": {
-        "x": 8,
-        "y": 62,
-        "w": 8,
-        "h": 7
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "bytes",
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "fillOpacity": 5,
-            "lineWidth": 1,
-            "showPoints": "never",
-            "spanNulls": false
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "increase(vm_persistentqueue_bytes_dropped_total{job=~\"(pve|spark)-vmagent\",platform=~\"$platform\",instance=~\"$node\"}[15m])",
-          "legendFormat": "{{instance}}",
-          "range": true,
-          "editorMode": "code"
-        }
-      ]
-    },
-    {
-      "id": 22,
-      "type": "timeseries",
-      "title": "Deployment errors",
-      "description": "Failed Git deployments on the node in the last 15 minutes.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "gridPos": {
-        "x": 16,
-        "y": 62,
-        "w": 8,
-        "h": 7
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "fillOpacity": 5,
-            "lineWidth": 1,
-            "showPoints": "never",
-            "spanNulls": false
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "increase(doco_cd_deployment_errors_total{job=~\"(pve|spark)-deployer\",platform=~\"$platform\",instance=~\"$node\"}[15m])",
-          "legendFormat": "{{instance}}",
-          "range": true,
-          "editorMode": "code"
+          "range": true
         }
       ]
     }

@@ -10,6 +10,16 @@ resources:
   - ./httproute.yaml
 
 configMapGenerator:
+  # grafana.com 10347 revision 5; datasource, API/node scope, CPU ratios, instant gauges, alert coverage.
+  - name: grafana-dashboard-proxmox
+    files:
+      - proxmox.json=./proxmox-dashboard.json
+    options:
+      labels:
+        grafana_dashboard: "1"
+      annotations:
+        grafana_folder: Platforms/Proxmox
+        kustomize.toolkit.fluxcd.io/substitute: disabled
   - name: grafana-dashboard-hosts
     files:
       - hosts.json=./hosts-dashboard.json
@@ -27,6 +37,15 @@ configMapGenerator:
         grafana_dashboard: "1"
       annotations:
         grafana_folder: Services/AI
+        kustomize.toolkit.fluxcd.io/substitute: disabled
+  - name: grafana-dashboard-sparks
+    files:
+      - sparks.json=./sparks-dashboard.json
+    options:
+      labels:
+        grafana_dashboard: "1"
+      annotations:
+        grafana_folder: Platforms/Sparks
         kustomize.toolkit.fluxcd.io/substitute: disabled
   - name: grafana-dashboard-node-hardware
     files:

@@ -45,9 +45,13 @@ variables = [
 # Start with a bounded part of the cluster; users can choose any namespace or All.
 variables[0]['current'] = {'text': ['observability'], 'value': ['observability']}
 dashboard = {
-    'uid': 'kubernetes-logs', 'title': 'Kubernetes logs', 'schemaVersion': 39,
-    'tags': ['logging'], 'timezone': 'browser', 'refresh': '30s',
+    'uid': 'kubernetes-logs', 'title': 'Kubernetes / Logs', 'schemaVersion': 39,
+    'description': 'Container logs from the cluster. Opens on the last 15 minutes because log queries over long ranges are slow.',
+    'tags': ['kubernetes', 'logs'], 'timezone': 'browser', 'refresh': '30s',
+    'editable': False, 'graphTooltip': 1,
     'time': {'from': 'now-15m', 'to': 'now'},
+    'links': [{'title': 'Observability / Pipeline', 'url': '/d/observability-pipeline', 'type': 'link',
+               'keepTime': True, 'includeVars': False, 'targetBlank': False}],
     'templating': {'list': variables},
     'panels': [{
         'id': 1, 'type': 'logs', 'title': 'Container logs',

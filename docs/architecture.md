@@ -53,7 +53,7 @@ PVE host or on later bare metal; no implementation is selected.
 
 Grafana is the single operator-facing UI and uses VictoriaMetrics as its default metrics datasource. The VictoriaMetrics k8s stack owns VMSingle storage, vmagent ingestion, vmalert evaluation, VMAlertmanager delivery, kube-state-metrics, node-exporter, API-server, kubelet, CoreDNS, and the controller-manager, scheduler, and etcd scrapes for all three Talos nodes. node-exporter's `instance` on k8s-prod is the Kubernetes node name. vmagent's default scrape class and each rule group supply `cluster=k8s-prod`, and vmalert adds `evaluator=vmalert` to the alerts it sends but not to the series it writes; VMAlertmanager alone matches that evaluator for warning and critical Pushover delivery.
 
-The same VMSingle is the metrics store for the rest of the lab. Enrolled PVE nodes and DGX Sparks push host metrics to it through the write-only `metrics-ingest` endpoint, where each host's token fixes its `instance` (node) and `platform` (type) labels, and an in-cluster exporter reads the Proxmox API. Their series carry no `cluster=k8s-prod`, and the Kubernetes rule groups are restricted to that label, so each system's rules see only its own series. On node-exporter series, `instance` is the machine name for every machine in the lab. Which hosts are enrolled, and whether the exporter is running, is tracked in the [host monitoring runbook](runbooks/host-monitoring.md).
+The same VMSingle is the metrics store for the rest of the lab. Enrolled PVE nodes and DGX Sparks push host metrics to it through the write-only `metrics-ingest` endpoint, where each host's token fixes its `instance` (node) and `platform` (type) labels, and an in-cluster exporter reads the Proxmox API. Their series carry no `cluster=k8s-prod`, and the Kubernetes rule groups are restricted to that label, so each system's rules see only its own series. On node-exporter series, `instance` is the machine name for every machine in the lab, and `platform` is `k8s`, `pve`, or `spark`. The cluster's node-exporter scrape sets `platform=k8s`; the PVE nodes and Sparks get theirs from their ingestion token. Which hosts are enrolled, and whether the exporter is running, is tracked in the [host monitoring runbook](runbooks/host-monitoring.md).
 
 vlagent runs on each node labeled `logging.home.kelch.io/collector=vlagent`, follows Kubernetes container-log symlinks into `/var/log/pods`, reconstructs CRI records and sends them to VictoriaLogs through native ingestion. New streams use `cluster`, `kubernetes.pod_namespace`, `kubernetes.pod_name`, `kubernetes.container_name` and `kubernetes.pod_node_name`; application fields remain at their upstream top-level names. The Kubernetes logs dashboard is the primary browser, with Grafana Explore and the OIDC-protected VictoriaLogs VMUI available for direct queries. The [logging runbook](runbooks/logging.md) owns the capture boundaries, retained Alloy schema compatibility, failure handling and durability limits.
 
@@ -70,10 +70,29 @@ A dashboard has one home, chosen by its subject: the thing whose state it shows.
 | Group | Homes in use | Not yet in use |
 |---|---|---|
 | Services | Observability (whether monitoring itself works), AI, Identity | Storage, Network, Media, Home automation, Printing |
-| Platforms | Kubernetes (the cluster, its nodes, Talos and cluster plumbing) | Proxmox, Sparks, Synology, UniFi, Devices |
+| Platforms | Kubernetes (the cluster, its nodes, Talos and cluster plumbing), Proxmox, Sparks | Synology, UniFi, Devices |
 | Overview | Views across platforms, and the any-machine host detail | |
 
-The home is the `grafana_folder` annotation on the dashboard's ConfigMap. Charts that ship dashboards set it through their values. The victoria-metrics-k8s-stack chart gives its whole set one folder, so the dashboards that belong elsewhere are disabled in the chart and delivered from `kubernetes/apps/observability/victoria-metrics-k8s-stack/app/dashboards/` with the JSON the chart produces. Grafana 12.3 files a dashboard under the last segment of the path, so the folders are flat (`Overview`, `Kubernetes`, `Observability`, `AI`, `Identity`); they nest from Grafana 13.1.
+The home is the `grafana_folder` annotation on the dashboard's ConfigMap. Charts that ship dashboards set it through their values. The victoria-metrics-k8s-stack chart gives its whole set one folder, so the dashboards that belong elsewhere are disabled in the chart and delivered from `kubernetes/apps/observability/victoria-metrics-k8s-stack/app/dashboards/` with the JSON the chart produces. Grafana 12.3 files a dashboard under the last segment of the path, so the folders are flat (`Overview`, `Kubernetes`, `Proxmox`, `Sparks`, `Observability`, `AI`, `Identity`); they nest from Grafana 13.1.
+
+#### Conventions
+
+These apply to dashboards written in this repository. A stock dashboard kept as upstream JSON, with its patches named in a kustomization comment, keeps its upstream title, uid and tags.
+
+- **Title:** `<Subject> / <View>` in sentence case. The subject is the platform, component or service shown, never the exporter or tool that collects the data. A subject with one view is just the subject (`Hosts`).
+- **uid:** an existing uid never changes; a new dashboard gets a readable slug.
+- **Tags:** lowercase. The first is the home (`kubernetes`, `proxmox`, `sparks`, `observability`, `ai`, `identity`, `overview`); at most two more name the subject.
+- **Scope:** a query on a metric that more than one platform exports states its scope: `cluster="k8s-prod"` for the cluster, `platform` for machines. A dashboard does not rely on a metric existing on only one platform today.
+- **Machines:** shown by name through `instance`, never by IP.
+- **Data source:** metrics panels use a `datasource` variable; log panels use the `victorialogs` uid.
+- **Variables:** named for what they select (`node`, `namespace`, `platform`), multi-select, All by default.
+- **Time and refresh:** `now-6h` and `1m`, unless the data moves at a different pace; the dashboard description says why when it does.
+- **Current values:** stat, gauge and table cells use instant queries. Time series leave gaps where collection stopped.
+- **Thresholds:** match the alert rule for the same signal, drawn as lines on time series.
+- **Links:** to another dashboard by `/d/<uid>`, keeping the time range, and the variables only when both dashboards share them.
+- **Units and legends:** every panel sets a unit; legends name the machine or workload.
+
+Removing or moving many dashboards at once can leave stale files in the Grafana pod when the sidecar misses delete events. Grafana then finds a uid twice, logs `the same UID is used more than once` and stops saving provisioned dashboards. Restarting the Grafana Deployment clears the stale files.
 
 ## VLAN Layout
 

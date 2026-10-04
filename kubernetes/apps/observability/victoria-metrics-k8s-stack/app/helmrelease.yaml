@@ -74,6 +74,8 @@ spec:
               relabelConfigs:
                 - sourceLabels: [__meta_kubernetes_pod_node_name]
                   targetLabel: instance
+                - targetLabel: platform
+                  replacement: k8s
               metricRelabelConfigs:
                 - action: drop
                   sourceLabels: [mountpoint]

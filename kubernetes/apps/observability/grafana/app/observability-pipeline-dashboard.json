@@ -88,7 +88,7 @@
       "keepTime": true,
       "tags": [],
       "targetBlank": false,
-      "title": "Kubernetes logs",
+      "title": "Kubernetes / Logs",
       "tooltip": "",
       "type": "link",
       "url": "/d/kubernetes-logs"
@@ -1887,10 +1887,7 @@
   "refresh": "1m",
   "schemaVersion": 40,
   "tags": [
-    "observability",
-    "alerting",
-    "victoriametrics",
-    "victorialogs"
+    "observability"
   ],
   "templating": {
     "list": [
@@ -1912,7 +1909,7 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "Observability Pipeline",
+  "title": "Observability / Pipeline",
   "uid": "observability-pipeline",
   "version": 1,
   "weekStart": ""

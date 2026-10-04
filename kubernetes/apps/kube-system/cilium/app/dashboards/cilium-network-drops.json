@@ -34,7 +34,7 @@
           "custom": {
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "",
+            "axisLabel": "Drops per minute",
             "axisPlacement": "auto",
             "barAlignment": 0,
             "drawStyle": "line",
@@ -76,7 +76,7 @@
               }
             ]
           },
-          "unit": "pps"
+          "unit": "suffix:drops/min"
         },
         "overrides": []
       },
@@ -109,14 +109,15 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(hubble_drop_total{cluster=\"k8s-prod\", source_namespace=~\"$source_namespace\", destination_namespace=~\"$destination_namespace\"}[$__rate_interval])) by (source, reason) > 0",
+          "expr": "60 * label_replace(sum(rate(hubble_drop_total{cluster=\"k8s-prod\", source_namespace=~\"$source_namespace\", destination_namespace=~\"$destination_namespace\"}[$__rate_interval])) by (source, reason) > 0, \"source\", \"unknown\", \"source\", \"^$\")",
           "legendFormat": "{{source}}: {{reason}}",
           "range": true,
           "refId": "A"
         }
       ],
       "title": "Drops by source",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "Dropped packets per minute by source and reason. Empty source labels are shown as unknown."
     },
     {
       "datasource": {
@@ -131,7 +132,7 @@
           "custom": {
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "",
+            "axisLabel": "Drops per minute",
             "axisPlacement": "auto",
             "barAlignment": 0,
             "drawStyle": "line",
@@ -173,7 +174,7 @@
               }
             ]
           },
-          "unit": "pps"
+          "unit": "suffix:drops/min"
         },
         "overrides": []
       },
@@ -206,21 +207,22 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(hubble_drop_total{cluster=\"k8s-prod\", source_namespace=~\"$source_namespace\", destination_namespace=~\"$destination_namespace\"}[$__rate_interval])) by (destination, reason) > 0",
+          "expr": "60 * label_replace(sum(rate(hubble_drop_total{cluster=\"k8s-prod\", source_namespace=~\"$source_namespace\", destination_namespace=~\"$destination_namespace\"}[$__rate_interval])) by (destination, reason) > 0, \"destination\", \"unknown\", \"destination\", \"^$\")",
           "legendFormat": "{{destination}}: {{reason}}",
           "range": true,
           "refId": "A"
         }
       ],
       "title": "Drops by destination",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "Dropped packets per minute by destination and reason. Empty destination labels are shown as unknown."
     }
   ],
   "refresh": "1m",
   "schemaVersion": 40,
   "tags": [
+    "kubernetes",
     "cilium",
-    "hubble",
     "network"
   ],
   "templating": {
@@ -237,7 +239,10 @@
       },
       {
         "allValue": ".*",
-        "current": {},
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
         "datasource": {
           "type": "prometheus",
           "uid": "${datasource}"
@@ -259,7 +264,10 @@
       },
       {
         "allValue": ".*",
-        "current": {},
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
         "datasource": {
           "type": "prometheus",
           "uid": "${datasource}"
