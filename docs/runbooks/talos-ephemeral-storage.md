@@ -93,6 +93,7 @@ umask 077
 var_gc_dir=$(mktemp -d)
 node_name=k8s-prod-1
 node_ip=10.32.30.11
+health_peer_ip=10.32.30.12 # Choose a healthy control-plane node other than node_ip.
 
 timeout 30 mise exec -- kubectl get --raw "/api/v1/nodes/${node_name}/proxy/configz" \
   | jq '{machine:{kubelet:{extraConfig:(.kubeletconfig | {imageGCHighThresholdPercent,imageGCLowThresholdPercent})}}}' \
@@ -105,13 +106,13 @@ cat "$var_gc_dir/gc.yaml" "$var_gc_dir/rollback.json"
 mise exec -- talosctl -n "$node_ip" patch machineconfig --mode=no-reboot --dry-run --patch "@$var_gc_dir/gc.yaml"
 ```
 
-Reject missing/non-numeric rollback values or a preview containing other changes. The pinned talosctl is 1.14.2 against 1.13.10 servers; client-side re-encoding can expose version skew. Any diff beyond the two GC fields means stop and investigate. Only after approving that exact diff, apply in the same bash shell:
+Reject missing/non-numeric rollback values or a preview containing other changes. The pinned talosctl is 1.14.2 against 1.13.10 servers; client-side re-encoding can expose version skew. Any diff beyond the two GC fields means stop and investigate. Record the node and private rollback path before applying; if interrupted, reuse that original patch rather than capturing the changed settings as a new baseline. Only after approving that exact diff, apply in the same bash shell:
 
 ```bash
 mise exec -- talosctl -n "$node_ip" patch machineconfig --mode=no-reboot --patch "@$var_gc_dir/gc.yaml"
 ```
 
-Record the private rollback path. Verify `/configz` now reports 75/70 and retains the prior eviction/age settings. Observe actual `/var` available bytes and GC events for at least 15 minutes (several cycles), including the two-minute minimum image age. Compare against the pre-apply baseline; do not treat the nominal freed-byte count as measured free space. Recheck image-pull health and running workloads. The first pass may remove substantial unused cache, increasing later pulls; other nodes retain their caches and Spegel remains configured.
+Verify `/configz` now reports 75/70 and retains the prior eviction/age settings. Observe actual `/var` available bytes and GC events for at least 15 minutes (several cycles), including the two-minute minimum image age. Compare against the pre-apply baseline; do not treat the nominal freed-byte count as measured free space. Recheck image-pull health and running workloads. The first pass may remove substantial unused cache, increasing later pulls; other nodes retain their caches and Spegel remains configured.
 
 Investigate `FreeDiskSpaceFailed` even if usage drops: compressed-size accounting can exhaust the eligible list before its nominal target is met. A failure message alone does not establish the active physical footprint. Stop on repeated failures, DiskPressure, failed pulls or usage remaining at/above the high threshold; do not continue to the next node or manually delete images. Attribute in-use images, image pins, logs and emptyDirs before choosing another policy or a capacity change.
 
@@ -119,7 +120,7 @@ Re-run the read-only preflight and Talos health checks under `mise exec --`:
 
 ```bash
 timeout 180 mise exec -- .agents/skills/talos-rollout/scripts/preflight.sh "$node_name"
-timeout 180 mise exec -- talosctl health --nodes 10.32.30.12
+timeout 180 mise exec -- talosctl health --nodes "$health_peer_ip"
 ```
 
 Choose a healthy control-plane peer for the health check. Require etcd quorum, every node Ready and uncordoned, all in-use Longhorn volumes healthy, and every instance-manager Running and Ready with its storage-network attachment on `lhnet1` before repeating preflight for the next node. The post-upgrade `verify-node.sh` requires the OS version in `talenv.yaml` and would reject these 1.13.10 nodes against the 1.13.11 target; an OS upgrade is outside this GC application. Nodes 2 and 3 initially sit below 75%; immediate collection there is not an acceptance requirement. Confirm their effective settings nonetheless.
