@@ -42,6 +42,8 @@ kubectl -n flux-system get kustomizations,helmreleases
 
 Prefer the Alertmanager UI. Match the smallest stable label set—normally `alertname` plus `namespace`, and a workload/PVC label when present. Every silence needs a bounded duration and a comment containing the reason and maintenance reference.
 
+PVE backup events have no `namespace`: use `alertname=PVEBackupFailed`, `source=pve`, and `cluster=pve-sbx`, adding `node` or `backup_job` when only one source is under maintenance. Include `event_id` to silence a single event rather than subsequent failures.
+
 The CLI equivalent runs `amtool` inside the Alertmanager pod:
 
 ```sh
