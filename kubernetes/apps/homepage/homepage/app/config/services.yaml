@@ -36,7 +36,7 @@
               - label: Failing pods
                 query: sum(kube_pod_status_phase{phase=~"Pending|Failed|Unknown"} == 1) or vector(0)
               - label: Degraded volumes
-                query: count(longhorn_volume_robustness{state!="healthy"} == 1) or vector(0)
+                query: count(longhorn_volume_robustness{state=~"degraded|faulted"} == 1) or vector(0)
     - Proxmox VE:
         icon: proxmox.svg
         href: https://pve-sbx-1.home.kelch.io:8006

@@ -539,7 +539,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Volumes not healthy"
+              "options": "Volumes degraded"
             },
             "properties": [
               {
@@ -632,8 +632,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "count(longhorn_volume_robustness{cluster=\"k8s-prod\",state!=\"healthy\"} == 1) or vector(0)",
-          "legendFormat": "Volumes not healthy",
+          "expr": "count(longhorn_volume_robustness{cluster=\"k8s-prod\",state=~\"degraded|faulted\"} == 1) or vector(0)",
+          "legendFormat": "Volumes degraded",
           "refId": "D",
           "instant": true,
           "range": false
