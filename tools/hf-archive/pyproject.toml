@@ -1,0 +1,36 @@
+[project]
+name = "hf-archive"
+version = "0.1.0"
+description = "Verified, selective, offline-capable archive of Hugging Face model files served through HF_ENDPOINT"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "huggingface-hub==2.1.1",
+]
+
+[project.scripts]
+hf-archive = "hf_archive.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest==8.4.2",
+    "ruff==0.14.0",
+]
+
+[build-system]
+requires = ["hatchling==1.27.0"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/hf_archive"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]

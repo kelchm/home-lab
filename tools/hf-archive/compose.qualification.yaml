@@ -1,0 +1,39 @@
+# Standalone qualification stack. Not part of the synology/ tree that deploys from main.
+name: hf-archive-qualification
+
+x-image: &image
+  image: hf-archive:qualification
+  build: .
+  user: "${HF_ARCHIVE_UID:-1000}:${HF_ARCHIVE_GID:-1000}"
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  read_only: true
+
+services:
+  serve:
+    <<: *image
+    command: ["serve", "--host", "0.0.0.0", "--port", "8080"]
+    ports:
+      - "${HF_ARCHIVE_PORT:-8080}:8080"
+    volumes:
+      - "${HF_ARCHIVE_DIR:?set HF_ARCHIVE_DIR to the archive directory}:/archive:ro"
+    healthcheck:
+      # 200 only once warm-up has verified every referenced blob.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30m
+    restart: unless-stopped
+
+  # Run on demand: docker compose -f compose.qualification.yaml run --rm acquire pull ORG/NAME --all
+  acquire:
+    <<: *image
+    profiles: [acquire]
+    environment:
+      HF_TOKEN: "${HF_TOKEN:-}"
+    tmpfs:
+      - /tmp
+    volumes:
+      - "${HF_ARCHIVE_DIR:?set HF_ARCHIVE_DIR to the archive directory}:/archive"
+      - "${HF_ARCHIVE_IMPORT_DIR:-/var/empty}:/import:ro"
