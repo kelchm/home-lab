@@ -46,7 +46,7 @@ spec:
     # client_secret is rotated by kaniop into grafana-kanidm-oauth2-credentials
     # (see oauth2-client.yaml). Stakater reloader restarts the Deployment on
     # rotation so the env-from-Secret value propagates to the running pod.
-    deploymentAnnotations:
+    annotations:
       secret.reloader.stakater.com/reload: grafana-kanidm-oauth2-credentials
 
     env:
