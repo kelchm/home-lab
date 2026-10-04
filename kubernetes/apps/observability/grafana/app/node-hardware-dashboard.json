@@ -15,7 +15,7 @@
       }
     ]
   },
-  "description": "Curated node hardware temperatures from node-exporter hwmon. Shows CPU Tctl, AMD GPU edge, NVMe composite, and the hottest NVMe sensor without duplicate ACPI zones or invalid device limit values.",
+  "description": "CPU, GPU and NVMe temperatures for the Kubernetes nodes, without duplicate ACPI zones or invalid device limits. The 24-hour window shows daily thermal cycles.",
   "editable": false,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -28,8 +28,8 @@
       "keepTime": true,
       "tags": [],
       "targetBlank": false,
-      "title": "SMART details",
-      "tooltip": "Open the smartctl_exporter dashboard",
+      "title": "Kubernetes / Drive health",
+      "tooltip": "Open Kubernetes / Drive health",
       "type": "link",
       "url": "/d/f8f249a0-be78-41b1-97fe-8d0a92a71b93"
     }
@@ -831,12 +831,11 @@
       "type": "timeseries"
     }
   ],
-  "refresh": "30s",
+  "refresh": "1m",
   "schemaVersion": 40,
   "tags": [
-    "hardware",
-    "node-exporter",
-    "temperature"
+    "kubernetes",
+    "hardware"
   ],
   "templating": {
     "list": [
@@ -879,7 +878,7 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "Node Hardware",
+  "title": "Kubernetes / Node hardware",
   "uid": "node-hardware",
   "version": 1,
   "weekStart": ""

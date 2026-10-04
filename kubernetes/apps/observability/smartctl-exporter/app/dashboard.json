@@ -66,10 +66,10 @@
       }
     ]
   },
-  "description": "prometheus-community\r\n/\r\nsmartctl_exporter\r\n",
-  "editable": true,
+  "description": "Drive health for the Kubernetes nodes. The 30-day window shows slow changes in wear, errors and temperature.",
+  "editable": false,
   "fiscalYearStartMonth": 0,
-  "graphTooltip": 0,
+  "graphTooltip": 1,
   "links": [],
   "panels": [
     {
@@ -2828,9 +2828,13 @@
       "type": "row"
     }
   ],
-  "refresh": "",
+  "refresh": "1m",
   "schemaVersion": 40,
-  "tags": [],
+  "tags": [
+    "kubernetes",
+    "hardware",
+    "storage"
+  ],
   "templating": {
     "list": [
       {
@@ -2875,8 +2879,8 @@
     "to": "now"
   },
   "timepicker": {},
-  "timezone": "",
-  "title": "smartctl_exporter",
+  "timezone": "browser",
+  "title": "Kubernetes / Drive health",
   "uid": "f8f249a0-be78-41b1-97fe-8d0a92a71b93",
   "version": 1,
   "weekStart": "",

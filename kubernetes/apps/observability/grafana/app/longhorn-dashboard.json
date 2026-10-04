@@ -6,9 +6,9 @@
   "version": 1,
   "editable": false,
   "tags": [
+    "kubernetes",
     "longhorn",
-    "storage",
-    "operations"
+    "storage"
   ],
   "timezone": "browser",
   "time": {
@@ -35,11 +35,11 @@
     },
     {
       "title": "Longhorn logs",
-      "url": "/d/kubernetes-logs/kubernetes-logs?var-namespace=longhorn-system",
+      "url": "/d/kubernetes-logs?var-namespace=longhorn-system",
       "type": "link",
       "targetBlank": true,
       "includeVars": false,
-      "keepTime": false
+      "keepTime": true
     },
     {
       "title": "Upstream dashboard",
@@ -53,12 +53,23 @@
   "templating": {
     "list": [
       {
+        "name": "datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {
+          "text": "VictoriaMetrics",
+          "value": "victoriametrics"
+        },
+        "options": [],
+        "refresh": 1
+      },
+      {
         "name": "namespace",
         "label": "Namespace",
         "type": "query",
         "datasource": {
           "type": "prometheus",
-          "uid": "victoriametrics"
+          "uid": "${datasource}"
         },
         "query": {
           "query": "label_values(longhorn_volume_capacity_bytes{cluster=\"k8s-prod\"}, pvc_namespace)",
@@ -82,7 +93,7 @@
         "type": "query",
         "datasource": {
           "type": "prometheus",
-          "uid": "victoriametrics"
+          "uid": "${datasource}"
         },
         "query": {
           "query": "label_values(longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\"}, pvc)",
@@ -122,7 +133,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "victoriametrics"
+        "uid": "${datasource}"
       },
       "description": "Cluster-wide. Successful manager scrapes as a percentage of desired Longhorn manager pods. Anything other than 100% is red. Partial scrape loss can undercount health and backup panels. Missing metrics remain No data.",
       "fieldConfig": {
@@ -181,7 +192,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "victoriametrics"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "100 * sum(up{cluster=\"k8s-prod\",job=\"longhorn-backend\"}) / max(kube_daemonset_status_desired_number_scheduled{cluster=\"k8s-prod\",namespace=\"longhorn-system\",daemonset=\"longhorn-manager\"})",
@@ -197,7 +208,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "victoriametrics"
+        "uid": "${datasource}"
       },
       "description": "",
       "fieldConfig": {
@@ -248,7 +259,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "victoriametrics"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "count(longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"})",
@@ -264,7 +275,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "victoriametrics"
+        "uid": "${datasource}"
       },
       "description": "",
       "fieldConfig": {
@@ -315,7 +326,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "victoriametrics"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "sum(longhorn_volume_robustness{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\",state=\"healthy\"})",
@@ -331,7 +342,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "victoriametrics"
+        "uid": "${datasource}"
       },
       "description": "",
       "fieldConfig": {
@@ -386,7 +397,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "victoriametrics"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "sum(longhorn_volume_robustness{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\",state=~\"degraded|faulted\"})",
@@ -402,7 +413,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "victoriametrics"
+        "uid": "${datasource}"
       },
       "description": "Detached volumes normally report unknown robustness. Check attachment state in Longhorn before treating this as a fault; unknown on an attached volume needs investigation.",
       "fieldConfig": {
@@ -457,7 +468,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "victoriametrics"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "sum(longhorn_volume_robustness{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\",state=\"unknown\"})",
@@ -473,7 +484,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "victoriametrics"
+        "uid": "${datasource}"
       },
       "description": "Cluster-wide BackupTarget/default availability, exported from the CR by kube-state-metrics.",
       "fieldConfig": {
@@ -538,7 +549,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "victoriametrics"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "min(longhorn_backup_target_available{cluster=\"k8s-prod\",backup_target=\"default\"})",
@@ -554,7 +565,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "victoriametrics"
+        "uid": "${datasource}"
       },
       "description": "The active one-hot robustness state for every selected volume. Unknown is displayed explicitly.",
       "fieldConfig": {
@@ -611,7 +622,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "victoriametrics"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "longhorn_volume_robustness{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"} == 1",
@@ -656,7 +667,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "victoriametrics"
+        "uid": "${datasource}"
       },
       "description": "Ready, schedulable, and allowScheduling must all be true for a node to accept replicas. Namespace and PVC filters do not apply.",
       "fieldConfig": {
@@ -742,7 +753,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "victoriametrics"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "longhorn_node_status{cluster=\"k8s-prod\",condition=~\"ready|schedulable|allowScheduling\"}",
@@ -794,7 +805,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "victoriametrics"
+        "uid": "${datasource}"
       },
       "description": "Selected Longhorn volumes excluding the no-backup PVC label. Uses the same exemption recording rule as the alerts.",
       "fieldConfig": {
@@ -848,7 +859,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "victoriametrics"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "count((longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"})) or (0 * count(longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"}))",
@@ -864,7 +875,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "victoriametrics"
+        "uid": "${datasource}"
       },
       "description": "A successful backup within 30 hours. This is a snapshot of freshness, not proof a restore will work. Shows zero when all selected volumes are explicitly exempt; if every expected volume lacks a timestamp, this shows No data. Partial gaps are counted in Missing timestamps.",
       "fieldConfig": {
@@ -918,7 +929,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "victoriametrics"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "sum((time() - ((longhorn_volume_last_backup_at{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}) > 0)) <= bool 108000) or (0 * count((longhorn_volume_last_backup_at{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}))) or ((count((longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"})) or (0 * count(longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"}))) == 0)",
@@ -934,7 +945,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "victoriametrics"
+        "uid": "${datasource}"
       },
       "description": "Positive backup timestamp older than 30 hours, matching the per-volume alert threshold before its 15-minute pending period. Shows zero when all selected volumes are explicitly exempt; if every expected volume lacks a timestamp, this shows No data. Partial gaps are counted in Missing timestamps.",
       "fieldConfig": {
@@ -992,7 +1003,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "victoriametrics"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "sum((time() - ((longhorn_volume_last_backup_at{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}) > 0)) > bool 108000) or (0 * count((longhorn_volume_last_backup_at{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}))) or ((count((longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"})) or (0 * count(longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"}))) == 0)",
@@ -1008,7 +1019,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "victoriametrics"
+        "uid": "${datasource}"
       },
       "description": "Timestamp is zero. New volumes appear immediately here; the alert allows 30 hours to complete the first backup. Shows zero when all selected volumes are explicitly exempt; if every expected volume lacks a timestamp, this shows No data. Partial gaps are counted in Missing timestamps.",
       "fieldConfig": {
@@ -1066,7 +1077,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "victoriametrics"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "sum((longhorn_volume_last_backup_at{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}) == bool 0) or ((count((longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"})) or (0 * count(longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"}))) == 0)",
@@ -1082,7 +1093,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "victoriametrics"
+        "uid": "${datasource}"
       },
       "description": "Expected volumes without a backup timestamp metric. A zero timestamp is counted separately as Never backed up.",
       "fieldConfig": {
@@ -1140,7 +1151,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "victoriametrics"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "count((longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}) unless on (cluster,volume) longhorn_volume_last_backup_at{cluster=\"k8s-prod\"}) or (0 * count(longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"}))",
@@ -1156,7 +1167,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "victoriametrics"
+        "uid": "${datasource}"
       },
       "description": "Intentional no-backup PVCs. If the exemption metric disappears, these volumes return to the backup-expected set, matching the alert rules.",
       "fieldConfig": {
@@ -1210,7 +1221,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "victoriametrics"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "count(longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"} and on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}) or (0 * count(longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"}))",
@@ -1226,7 +1237,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "victoriametrics"
+        "uid": "${datasource}"
       },
       "description": "Only volumes with a successful backup appear. Never-backed-up and missing timestamps are counted above. Opt-outs are excluded.",
       "fieldConfig": {
@@ -1302,7 +1313,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "victoriametrics"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "time() - ((longhorn_volume_last_backup_at{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}) > 0)",
@@ -1341,7 +1352,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "victoriametrics"
+        "uid": "${datasource}"
       },
       "description": "Only explicitly opted-out volumes appear. An empty table is expected when none of the selected PVCs are exempt.",
       "fieldConfig": {
@@ -1398,7 +1409,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "victoriametrics"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"} and on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}",
@@ -1447,7 +1458,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "victoriametrics"
+        "uid": "${datasource}"
       },
       "fieldConfig": {
         "defaults": {
@@ -1532,7 +1543,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "victoriametrics"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "longhorn_node_storage_usage_bytes{cluster=\"k8s-prod\"}",
@@ -1544,7 +1555,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "victoriametrics"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "longhorn_node_storage_capacity_bytes{cluster=\"k8s-prod\"} - longhorn_node_storage_usage_bytes{cluster=\"k8s-prod\"}",
@@ -1561,7 +1572,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "victoriametrics"
+        "uid": "${datasource}"
       },
       "fieldConfig": {
         "defaults": {
@@ -1646,7 +1657,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "victoriametrics"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "longhorn_node_storage_scheduled_bytes{cluster=\"k8s-prod\"}",
@@ -1658,7 +1669,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "victoriametrics"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "longhorn_node_storage_capacity_bytes{cluster=\"k8s-prod\"} - longhorn_node_storage_reservation_bytes{cluster=\"k8s-prod\"}",
@@ -1675,7 +1686,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "victoriametrics"
+        "uid": "${datasource}"
       },
       "description": "Longhorn actual size includes snapshot data. It is not filesystem usage inside the PVC and may exceed provisioned size.",
       "fieldConfig": {
@@ -1766,7 +1777,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "victoriametrics"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "longhorn_volume_actual_size_bytes{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"}",
@@ -1782,7 +1793,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "victoriametrics"
+        "uid": "${datasource}"
       },
       "description": "Logical volume size, not the total physical space consumed by its replicas.",
       "fieldConfig": {
@@ -1873,7 +1884,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "victoriametrics"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"}",
@@ -1902,7 +1913,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "victoriametrics"
+        "uid": "${datasource}"
       },
       "description": "Native Longhorn gauge; do not apply rate(). Idle volumes can report zero. Gaps are left visible.",
       "fieldConfig": {
@@ -1993,7 +2004,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "victoriametrics"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "longhorn_volume_read_throughput{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"}",
@@ -2005,7 +2016,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "victoriametrics"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "longhorn_volume_write_throughput{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"}",
@@ -2021,7 +2032,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "victoriametrics"
+        "uid": "${datasource}"
       },
       "description": "Native Longhorn gauge; do not apply rate(). Idle volumes can report zero. Gaps are left visible.",
       "fieldConfig": {
@@ -2112,7 +2123,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "victoriametrics"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "longhorn_volume_read_iops{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"}",
@@ -2124,7 +2135,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "victoriametrics"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "longhorn_volume_write_iops{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"}",
@@ -2140,7 +2151,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "victoriametrics"
+        "uid": "${datasource}"
       },
       "description": "Native Longhorn gauge; do not apply rate(). Idle volumes can report zero. Gaps are left visible.",
       "fieldConfig": {
@@ -2231,7 +2242,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "victoriametrics"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "longhorn_volume_read_latency{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"}",
@@ -2243,7 +2254,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "victoriametrics"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "longhorn_volume_write_latency{cluster=\"k8s-prod\",pvc_namespace=~\"$namespace\",pvc=~\"$pvc\"}",
@@ -2259,7 +2270,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "victoriametrics"
+        "uid": "${datasource}"
       },
       "description": "Storage engine CPU consumption. Namespace and PVC filters do not apply.",
       "fieldConfig": {
@@ -2339,7 +2350,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "victoriametrics"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "longhorn_instance_manager_cpu_usage_millicpu{cluster=\"k8s-prod\"} / 1000",
@@ -2351,6 +2362,463 @@
       ],
       "title": "Instance-manager CPU \u00b7 cluster-wide",
       "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "One means the alert\u2019s metric family is absent. Both missing-data alerts fire after 15 minutes.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "short",
+          "noValue": "No data",
+          "min": 0,
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 61,
+        "w": 8,
+        "h": 4
+      },
+      "id": 29,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.3.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum(absent(longhorn_volume_robustness{cluster=\"k8s-prod\"})) or vector(0)",
+          "refId": "A",
+          "legendFormat": "Volume health",
+          "range": false,
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum(absent(longhorn_backup_target_available{cluster=\"k8s-prod\",backup_target=\"default\"})) or vector(0)",
+          "refId": "B",
+          "legendFormat": "Backup target",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "title": "Missing metric families \u00b7 cluster-wide",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Counts backups in Error state (4), deduplicated across manager scrapes. The alert fires when a backup stays in Error for five minutes.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "short",
+          "noValue": "No data",
+          "min": 0,
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 61,
+        "w": 8,
+        "h": 4
+      },
+      "id": 30,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.3.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum(max by (volume, backup, recurring_job) (longhorn_backup_state{cluster=\"k8s-prod\"} == bool 4))",
+          "refId": "A",
+          "legendFormat": "Failed backups",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "title": "Failed backups \u00b7 cluster-wide",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Age of the newest positive backup timestamp across all volumes. The stalled-backups alert fires above 26 hours for 15 minutes; zero timestamps are excluded.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 93600
+              }
+            ]
+          },
+          "unit": "s",
+          "noValue": "No data",
+          "min": 0,
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 65,
+        "w": 12,
+        "h": 8
+      },
+      "id": 31,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.3.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "time() - max(longhorn_volume_last_backup_at{cluster=\"k8s-prod\"} > 0)",
+          "refId": "A",
+          "legendFormat": "Latest successful backup",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "title": "Latest successful backup age \u00b7 cluster-wide",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Disk usage as a percentage of capacity. Alerts fire above 80% for 30 minutes and above 90% for 10 minutes.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 80
+              },
+              {
+                "color": "red",
+                "value": 90
+              }
+            ]
+          },
+          "unit": "percent",
+          "noValue": "No data",
+          "min": 0,
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 65,
+        "w": 12,
+        "h": 8
+      },
+      "id": 32,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.3.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "label_replace(100 * max by (node, disk) (longhorn_disk_usage_bytes{cluster=\"k8s-prod\"} / (longhorn_disk_capacity_bytes{cluster=\"k8s-prod\"} > 0)), \"instance\", \"$1\", \"node\", \"(.*)\")",
+          "refId": "A",
+          "legendFormat": "{{instance}} / {{disk}}",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "title": "Disk space used \u00b7 cluster-wide",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "One means the disk can accept replicas; zero means it cannot. The alert fires when a disk remains unschedulable for 15 minutes.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "bool",
+          "noValue": "No data",
+          "min": 0,
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 73,
+        "w": 24,
+        "h": 7
+      },
+      "id": 33,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.3.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "label_replace(min by (node, disk) (longhorn_disk_status{cluster=\"k8s-prod\",condition=\"schedulable\"}), \"instance\", \"$1\", \"node\", \"(.*)\")",
+          "refId": "A",
+          "legendFormat": "{{instance}} / {{disk}}",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "title": "Disk schedulability \u00b7 cluster-wide",
+      "type": "timeseries"
     }
-  ]
+  ],
+  "graphTooltip": 1
 }
