@@ -1,18 +1,30 @@
 {
   "uid": "kubernetes-logs",
-  "description": "Container logs from the cluster. Opens on the last 15 minutes because log queries over long ranges are slow.",
   "title": "Kubernetes / Logs",
   "schemaVersion": 39,
+  "description": "Container logs from the cluster. Opens on the last 15 minutes because log queries over long ranges are slow.",
   "tags": [
     "kubernetes",
     "logs"
   ],
   "timezone": "browser",
   "refresh": "30s",
+  "editable": false,
+  "graphTooltip": 1,
   "time": {
     "from": "now-15m",
     "to": "now"
   },
+  "links": [
+    {
+      "title": "Observability / Pipeline",
+      "url": "/d/observability-pipeline",
+      "type": "link",
+      "keepTime": true,
+      "includeVars": false,
+      "targetBlank": false
+    }
+  ],
   "templating": {
     "list": [
       {
@@ -177,18 +189,6 @@
           "adHocFiltersMode": "off"
         }
       ]
-    }
-  ],
-  "editable": false,
-  "graphTooltip": 1,
-  "links": [
-    {
-      "title": "Observability / Pipeline",
-      "url": "/d/observability-pipeline",
-      "type": "link",
-      "keepTime": true,
-      "includeVars": false,
-      "targetBlank": false
     }
   ]
 }
