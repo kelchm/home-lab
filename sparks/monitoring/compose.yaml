@@ -23,6 +23,8 @@ services:
     command:
       - --web.listen-address=127.0.0.1:9100
       - --path.rootfs=/host
+      # This collector never returns on a Spark and stalls the whole scrape.
+      - --no-collector.cpufreq
     volumes:
       - /:/host:ro,rslave
     mem_limit: 128m
