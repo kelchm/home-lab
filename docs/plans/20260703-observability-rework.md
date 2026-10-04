@@ -348,6 +348,8 @@ High-frequency inference diagnosis should eventually use request-level structure
 
 ## Dashboard information architecture
 
+Superseded by the dashboard taxonomy in [architecture.md](../architecture.md#dashboards). The table below is the earlier design.
+
 | Folder | Purpose | Initial dashboards |
 |---|---|---|
 | `Home` | Whole-estate status and current work | Estate Overview, Active Incidents, Capacity Outlook |
