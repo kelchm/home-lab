@@ -40,6 +40,8 @@ spec:
     devices: "eno+ eno+.40"
     dashboards:
       enabled: true
+      annotations:
+        grafana_folder: Platforms/Kubernetes
     endpointRoutes:
       enabled: true
     envoy:
@@ -59,6 +61,8 @@ spec:
           enabled: true
         dashboards:
           enabled: true
+          annotations:
+            grafana_folder: Platforms/Kubernetes
     ipam:
       mode: kubernetes
     ipv4NativeRoutingCIDR: "10.42.0.0/16"
@@ -76,6 +80,8 @@ spec:
     operator:
       dashboards:
         enabled: true
+        annotations:
+          grafana_folder: Platforms/Kubernetes
       prometheus:
         enabled: true
         serviceMonitor:
@@ -117,3 +123,33 @@ spec:
       rollingUpdate:
         maxUnavailable: 1
     upgradeCompatibility: "1.19"
+  postRenderers:
+    - kustomize:
+        patches:
+          - target:
+              kind: ConfigMap
+              name: hubble-dns-namespace
+            patch: |
+              apiVersion: v1
+              kind: ConfigMap
+              metadata:
+                name: hubble-dns-namespace
+              $patch: delete
+          - target:
+              kind: ConfigMap
+              name: hubble-l7-http-metrics-by-workload
+            patch: |
+              apiVersion: v1
+              kind: ConfigMap
+              metadata:
+                name: hubble-l7-http-metrics-by-workload
+              $patch: delete
+          - target:
+              kind: ConfigMap
+              name: hubble-dashboard
+            patch: |
+              apiVersion: v1
+              kind: ConfigMap
+              metadata:
+                name: hubble-dashboard
+              $patch: delete

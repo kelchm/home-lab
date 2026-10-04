@@ -120,6 +120,8 @@ spec:
     # only VM datasource Grafana actually sees.
     defaultDashboards:
       enabled: true
+      annotations:
+        grafana_folder: Platforms/Kubernetes
       # This cluster has Linux nodes and uses VictoriaMetrics. The sync job
       # prunes these unused dashboard ConfigMaps without changing collectors.
       dashboards:
@@ -140,6 +142,28 @@ spec:
         prometheus:
           enabled: false
         prometheus-remote-write:
+          enabled: false
+        k8s-resources-multicluster:
+          enabled: false
+        kubernetes-views-namespaces:
+          enabled: false
+        nodes:
+          enabled: false
+        node-rsrc-use:
+          enabled: false
+        node-exporter-full:
+          enabled: false
+        alertmanager-overview:
+          enabled: false
+        victoriametrics-single-node:
+          enabled: false
+        victoriametrics-vmagent:
+          enabled: false
+        victoriametrics-vmalert:
+          enabled: false
+        victoriametrics-operator:
+          enabled: false
+        cluster-total:
           enabled: false
 
     # Talos exposes these components on the node addresses rather than pods.

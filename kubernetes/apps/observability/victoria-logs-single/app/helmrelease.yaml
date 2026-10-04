@@ -41,3 +41,17 @@ spec:
       enabled: true
       labels:
         grafana_dashboard: "1"
+      annotations:
+        grafana_folder: Services/Observability
+  postRenderers:
+    - kustomize:
+        patches:
+          - target:
+              kind: ConfigMap
+              name: victoria-logs-single-vector-k8s-monitoring
+            patch: |
+              apiVersion: v1
+              kind: ConfigMap
+              metadata:
+                name: victoria-logs-single-vector-k8s-monitoring
+              $patch: delete
