@@ -91,7 +91,7 @@ spec:
           labels:
             severity: warning
           annotations:
-            summary: "{{ $labels.instance }} cannot deploy the monitoring project from Git"
+            summary: "{{ $labels.instance }} cannot deploy {{ $labels.deployment }} from Git"
             description: >-
               The node keeps running its last deployed collectors. Check the
               doco-cd container log on the node.
