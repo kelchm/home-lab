@@ -41,9 +41,9 @@ scp proxmox/platform/doco-cd/daemon.json proxmox/platform/doco-cd/compose.yaml k
 ssh kelchm@pve-sbx-3 'sudo install -D -m 0644 /tmp/daemon.json /etc/docker/daemon.json && sudo apt-get install --no-install-recommends -y docker.io docker-cli docker-compose'
 ```
 
-Before going further, confirm on the node that guests still pass traffic, `sysctl net.ipv4.ip_forward` and `sudo nft list ruleset` are unchanged from before the install, and `docker network ls` shows no `bridge` network. If any check fails, `sudo apt-get purge docker.io` and stop. Then install the token and deployer as for a Spark, using the node's `PVE_SBX_N_TOKEN` key and `/tmp/compose.yaml`.
+Before going further, confirm on the node that guests still pass traffic, `cat /proc/sys/net/ipv4/ip_forward`, `sudo iptables -S FORWARD` and `sudo nft list ruleset` are unchanged from before the install, `lsmod` shows no `br_netfilter`, and `sudo docker network ls` shows no `bridge` network. If any check fails, `sudo apt-get purge docker.io` and stop. Then install the token and deployer as for a Spark, using the node's `PVE_SBX_N_TOKEN` key and `/tmp/compose.yaml`.
 
-Containers on a PVE node use host networking only. doco-cd has no bind-address setting, so its health and metrics ports (8080, 9120) listen on every interface of the node; its webhook and API stay disabled without a secret.
+The deployer runs without Docker's default AppArmor profile: on PVE's kernel that profile denies Unix sockets, including the Docker socket. Containers on a PVE node use host networking only. doco-cd has no bind-address setting, so its health and metrics ports (8080, 9120) listen on every interface of the node; its webhook and API stay disabled without a secret.
 
 ## Verify a host
 
