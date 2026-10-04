@@ -3,4 +3,4 @@
 cluster:
   controllerManager:
     extraArgs:
-      terminated-pod-gc-threshold: "25"
+      terminated-pod-gc-threshold: "500"
