@@ -1,0 +1,50 @@
+# Host and collector metrics for one Spark. Identical on every Spark: node
+# identity comes from the host's ingestion token, not from this file.
+name: monitoring
+
+x-service: &service
+  network_mode: host
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: "3"
+
+services:
+  node-exporter:
+    <<: *service
+    image: quay.io/prometheus/node-exporter:v1.12.1@sha256:1b4e4438faca4dd7e001dd445d161a4a2091b0fededa84093b3a8dfeae1f1be0
+    user: "65534:65534"
+    pid: host
+    command:
+      - --web.listen-address=127.0.0.1:9100
+      - --path.rootfs=/host
+    volumes:
+      - /:/host:ro,rslave
+    mem_limit: 128m
+
+  vmagent:
+    <<: *service
+    image: docker.io/victoriametrics/vmagent:v1.152.0@sha256:21d51831acfed657c1d4a805353c278f3669b061cb3a2cd46c0d4f1a4402cb1b
+    command:
+      - -httpListenAddr=127.0.0.1:8429
+      - -promscrape.config=/etc/vmagent/scrape.yaml
+      - -remoteWrite.url=https://metrics-ingest.home.kelch.io/api/v1/write
+      - -remoteWrite.bearerTokenFile=/etc/monitoring/token
+      - -remoteWrite.tmpDataPath=/queue
+      - -remoteWrite.maxDiskUsagePerURL=1GiB
+    volumes:
+      - ./scrape.yaml:/etc/vmagent/scrape.yaml:ro
+      - /etc/monitoring:/etc/monitoring:ro
+      # Read to find the serving container and its SparkRun labels.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - queue:/queue
+    mem_limit: 256m
+    stop_grace_period: 30s
+
+volumes:
+  queue:

@@ -1,0 +1,30 @@
+# Its own project: doco-cd recreates a whole project while any service in it
+# fails to start, and a GPU exporter that cannot start must not take the
+# other collectors with it.
+name: monitoring-gpu
+
+services:
+  gpu-exporter:
+    image: docker.io/utkuozdemir/nvidia_gpu_exporter:1.15.1@sha256:7aee2d42836ad29d4adb2722b7cfdc806ec9cc8d45fd0b8971ebbad2d9f3d087
+    user: "65534:65534"
+    network_mode: host
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    devices: ["nvidia.com/gpu=all"]
+    environment:
+      NVIDIA_DRIVER_CAPABILITIES: utility
+    command:
+      - --web.listen-address=127.0.0.1:9835
+      # The NVML backend is AMD64-only; GB10 has no framebuffer memory to report.
+      - --collect.backend=exec
+      - --collect.timeout=3s
+      - --web.max-requests=2
+      - --query-field-names=uuid,driver_version,index,pci.bus_id,compute_cap,gpu_recovery_action,pstate,temperature.gpu,temperature.gpu.tlimit,utilization.gpu,power.draw,clocks.current.sm,clocks.max.sm,clocks_event_reasons.hw_thermal_slowdown,clocks_event_reasons.hw_slowdown,clocks_event_reasons.sw_thermal_slowdown,clocks_event_reasons.sw_power_cap,clocks_event_reasons.gpu_idle,clocks_event_reasons_counters.hw_thermal_slowdown,clocks_event_reasons_counters.sw_power_cap
+    mem_limit: 128m
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    restart: unless-stopped

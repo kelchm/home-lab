@@ -10,6 +10,7 @@
 # Scope the rule to those exact names so bridges, VLANs, veths, and Cilium
 # devices cannot generate false positives. node_uname_info adds the hostname;
 # node_network_speed_bytes itself only identifies the node-exporter instance.
+# Its cluster matcher keeps the lab's other hosts out of these rules.
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
@@ -34,7 +35,7 @@ spec:
                 "expected_mbps", "2500", "", ".*"
               )
             )
-            * on (instance) group_left (nodename) node_uname_info
+            * on (instance) group_left (nodename) node_uname_info{cluster="k8s-prod"}
           for: 5m
           labels:
             severity: warning
@@ -70,7 +71,7 @@ spec:
               node_hwmon_temp_celsius
               * on (instance, chip, sensor) group_left (label)
                 node_hwmon_sensor_label{label="Tctl"}
-              * on (instance) group_left (nodename) node_uname_info
+              * on (instance) group_left (nodename) node_uname_info{cluster="k8s-prod"}
             ) > 85
           for: 15m
           labels:
@@ -88,7 +89,7 @@ spec:
               node_hwmon_temp_celsius
               * on (instance, chip, sensor) group_left (label)
                 node_hwmon_sensor_label{label="Tctl"}
-              * on (instance) group_left (nodename) node_uname_info
+              * on (instance) group_left (nodename) node_uname_info{cluster="k8s-prod"}
             ) > 92
           for: 5m
           labels:
@@ -106,7 +107,7 @@ spec:
               node_hwmon_temp_celsius
               * on (instance, chip, sensor) group_left (label)
                 node_hwmon_sensor_label{label="edge"}
-              * on (instance) group_left (nodename) node_uname_info
+              * on (instance) group_left (nodename) node_uname_info{cluster="k8s-prod"}
             ) > 85
           for: 15m
           labels:
@@ -124,7 +125,7 @@ spec:
               node_hwmon_temp_celsius
               * on (instance, chip, sensor) group_left (label)
                 node_hwmon_sensor_label{label="edge"}
-              * on (instance) group_left (nodename) node_uname_info
+              * on (instance) group_left (nodename) node_uname_info{cluster="k8s-prod"}
             ) > 92
           for: 5m
           labels:
@@ -142,7 +143,7 @@ spec:
               node_hwmon_temp_celsius
               * on (instance, chip, sensor) group_left (label)
                 node_hwmon_sensor_label{label="Composite"}
-              * on (instance) group_left (nodename) node_uname_info
+              * on (instance) group_left (nodename) node_uname_info{cluster="k8s-prod"}
             ) > 75
           for: 15m
           labels:
@@ -160,7 +161,7 @@ spec:
               node_hwmon_temp_celsius
               * on (instance, chip, sensor) group_left (label)
                 node_hwmon_sensor_label{label="Composite"}
-              * on (instance) group_left (nodename) node_uname_info
+              * on (instance) group_left (nodename) node_uname_info{cluster="k8s-prod"}
             ) > 80
           for: 5m
           labels:
@@ -175,7 +176,7 @@ spec:
         - alert: NodeNvmeSensorTemperatureHigh
           expr: |
             max by (instance) (node_hwmon_temp_celsius{chip=~"nvme.*"})
-            * on (instance) group_left (nodename) node_uname_info
+            * on (instance) group_left (nodename) node_uname_info{cluster="k8s-prod"}
             > 85
           for: 15m
           labels:
@@ -190,7 +191,7 @@ spec:
         - alert: NodeNvmeSensorTemperatureCritical
           expr: |
             max by (instance) (node_hwmon_temp_celsius{chip=~"nvme.*"})
-            * on (instance) group_left (nodename) node_uname_info
+            * on (instance) group_left (nodename) node_uname_info{cluster="k8s-prod"}
             > 90
           for: 5m
           labels:
@@ -205,7 +206,7 @@ spec:
         - alert: NodeHardwareTemperatureAlarm
           expr: |
             (node_hwmon_temp_alarm != 0)
-            * on (instance) group_left (nodename) node_uname_info
+            * on (instance) group_left (nodename) node_uname_info{cluster="k8s-prod"}
           for: 1m
           labels:
             severity: critical
@@ -217,7 +218,7 @@ spec:
 
         - alert: NodeCpuTemperatureSensorMissing
           expr: |
-            node_uname_info
+            node_uname_info{cluster="k8s-prod"}
             unless on (instance)
             (
               node_hwmon_temp_celsius
@@ -235,7 +236,7 @@ spec:
 
         - alert: NodeNvmeTemperatureSensorMissing
           expr: |
-            node_uname_info
+            node_uname_info{cluster="k8s-prod"}
             unless on (instance)
             node_hwmon_temp_celsius{chip=~"nvme.*"}
           for: 15m

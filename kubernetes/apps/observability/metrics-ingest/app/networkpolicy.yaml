@@ -1,0 +1,23 @@
+---
+# Cross-namespace flows only; the namespace baseline covers the rest.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: metrics-ingest
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: vmauth
+      app.kubernetes.io/instance: metrics-ingest
+  ingress:
+    # Traefik services gateway.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: network
+            app.kubernetes.io/instance: traefik-services-network
+            app.kubernetes.io/name: traefik
+            io.cilium.k8s.policy.serviceaccount: traefik-services
+      toPorts:
+        - ports:
+            - port: "8427"
+              protocol: TCP
