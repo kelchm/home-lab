@@ -292,7 +292,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "max by (instance, platform) (time() - tlast_over_time(up{job=~\"(pve|spark)-node\",platform=~\"$platform\",instance=~\"$node\"}[1d]))",
+          "expr": "max by (instance, platform) (time() - tlast_over_time(node_uname_info{job=~\"(pve|spark)-node\",platform=~\"$platform\",instance=~\"$node\"}[1d]))",
           "format": "table",
           "instant": true,
           "range": false,
