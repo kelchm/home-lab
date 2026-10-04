@@ -492,9 +492,9 @@ gitignored.
 4. **Boot nodes**: Flash the Talos ISO for the [Image Factory](https://factory.talos.dev) schematic in [`talos/schematic.yaml`](../talos/schematic.yaml) (`amd-ucode`, `amdgpu`, `iscsi-tools` and `util-linux-tools` for Longhorn, `realtek-firmware`) from `https://factory.talos.dev/image/<schematic-id>/<talos-version>/metal-amd64.iso`. Boot all three nodes from USB. The schematic ID is content-derived: `talhelper genurl installer --customization-file talos/schematic.yaml --offline-mode -v <talos-version>` prints it without contacting the factory, and it must match every `talosImageURL` in `talos/talconfig.yaml`. The file is the factory's canonical form, so its SHA-256 is also the ID. After changing extensions, register the new schematic with `curl -X POST --data-binary @talos/schematic.yaml https://factory.talos.dev/schematics`, update all three `talosImageURL` entries, and roll the nodes with the `talos-rollout` skill.
 5. **Apply configs**: `talhelper gencommand apply --extra-flags="--insecure" | bash`
 6. **Bootstrap cluster**: `talhelper gencommand bootstrap | bash` then `talhelper gencommand kubeconfig | bash`
-7. **Install Cilium**: Via Helm with `kubeProxyReplacement: true` and `bgpControlPlane.enabled: true`; nodes go `Ready` and BGP sessions establish.
-8. **Bootstrap Flux**: Point at git repo; from this point everything is GitOps-managed.
-9. **Deploy infra**: cert-manager, Gateway API CRDs, Longhorn.
+7. **Bootstrap the cluster**: `task bootstrap:talos` — talhelper generates the sops-encrypted secrets and node configs, applies machine configs with `--insecure`, bootstraps etcd, and writes kubeconfig to the repo root.
+8. **Bootstrap apps**: `task bootstrap:apps` — `scripts/bootstrap-apps.sh` waits for every node to register, applies namespaces and the SOPS age secret to `flux-system`, applies the CRD set from `bootstrap/helmfile.d/00-crds.yaml`, then helmfile-syncs `bootstrap/helmfile.d/01-apps.yaml`: Cilium (kube-proxy replacement + BGP control plane — nodes go `Ready` and BGP sessions establish), CoreDNS, Spegel, cert-manager, and the Flux operator and instance. CoreDNS and Spegel are installed by this step and by no other, so a from-scratch recovery must not skip it.
+9. **Deploy infra**: from this point everything is GitOps-managed — the installed Flux instance reconciles `kubernetes/flux/cluster`, bringing up Gateway API CRDs, Longhorn, and the rest of `kubernetes/apps/`.
 10. **Deploy first app** end-to-end to validate the full loop.
 
 ## Key Design Decisions (and why)

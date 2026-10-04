@@ -52,7 +52,7 @@ Workloads are organised one namespace per concern under [`kubernetes/apps/`](kub
   NAS identity and NFSv4 ACL isolation.
 - **`identity`** — Kanidm as the OIDC provider / user directory, run by the
   kaniop operator.
-- **`observability`** — Grafana defaults to VictoriaMetrics; vmalert and VMAlertmanager own Pushover delivery, and VictoriaLogs is the surviving log backend. OpenObserve is retired, while KPS and Loki remain briefly as Git-revert rollback components under the completed [bake-off decision](docs/observability-bakeoff.md).
+- **`observability`** — Grafana defaults to VictoriaMetrics; vmalert and VMAlertmanager own Pushover delivery, and VictoriaLogs is the surviving log backend. OpenObserve, kube-prometheus-stack, and Loki are removed per the completed [bake-off decision](docs/observability-bakeoff.md) — the rollback is reverting the bake-off merge.
 - **`homepage`** — [Homepage](https://gethomepage.dev) at `home.kelch.io`, the operator start page. Apps declare their own tiles through annotations on their routes. See the [Homepage guide](kubernetes/apps/homepage/README.md).
 - **`ai`** — MCPHub as a file-backed MCP gateway with capability groups and workload-scoped bearer keys, fronting nine backend MCP servers. MetaMCP and MarkItDown are retired. See the [MCPHub guide](kubernetes/apps/ai/mcphub/README.md).
 - **`network`**, **`cert-manager`**, **`longhorn-system`**, **`cnpg-system`**,
@@ -72,6 +72,7 @@ home-lab/
 ├── devices/        # manually applied config for appliances outside Kubernetes
 ├── proxmox/        # PVE operator docs and deliberately applied host baseline
 ├── synology/       # Compose workloads on the Synology NAS, deployed from Git by doco-cd
+├── sparks/         # DGX Spark workloads (SparkRun inference, doco-cd monitoring), hosts outside Flux and Talos automation
 ├── scripts/        # helper scripts (CI checks, bootstrap, operator helpers)
 ├── tools/          # benchmarks, smoke tests, migrations, manual re-import assets
 └── docs/           # architecture, runbooks, plans, decision records
