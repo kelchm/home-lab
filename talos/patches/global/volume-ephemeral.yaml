@@ -1,6 +1,7 @@
 # Cap EPHEMERAL (/var) at 100 GiB to leave room on the system disk for the
-# Longhorn user volume. Real EPHEMERAL usage is ~10–30 GiB on this stack
-# (containerd images, kubelet state, pod logs, etcd), so 100 GiB is ~3× cushion.
+# Longhorn user volume. Containerd's compressed content and unpacked snapshots
+# dominate usage; kubelet image GC provides headroom within this fixed budget.
+# See docs/runbooks/talos-ephemeral-storage.md for thresholds and verification.
 #
 # Note: VolumeConfig for system volumes only accepts STATE, EPHEMERAL, or
 # IMAGE-CACHE. Changing maxSize on an existing install does not shrink the

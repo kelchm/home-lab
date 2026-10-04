@@ -81,3 +81,105 @@ tests:
       - expr: count(ALERTS{alertname="VictoriaLogsIngestionSilent",alertstate="firing"})
         eval_time: 20m
         exp_samples: [{labels: '{}', value: 1}]
+  - name: Talos var warning holds for 15 minutes and resolves after recovery
+    interval: 1m
+    input_series:
+      - series: node_filesystem_avail_bytes{cluster="k8s-prod",job="node-exporter",mountpoint="/var",fstype="xfs",device="/dev/nvme0n1p4",instance="k8s-prod-1",platform="k8s"}
+        values: 19+0x15 25+0x14
+      - series: node_filesystem_size_bytes{cluster="k8s-prod",job="node-exporter",mountpoint="/var",fstype="xfs",device="/dev/nvme0n1p4",instance="k8s-prod-1",platform="k8s"}
+        values: 100+0x30
+      - series: node_filesystem_readonly{cluster="k8s-prod",job="node-exporter",mountpoint="/var",fstype="xfs",device="/dev/nvme0n1p4",instance="k8s-prod-1",platform="k8s"}
+        values: 0+0x30
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: KubeNodeEphemeralStorageHigh
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: KubeNodeEphemeralStorageHigh
+        exp_alerts:
+          - exp_labels:
+              cluster: k8s-prod
+              job: node-exporter
+              mountpoint: /var
+              fstype: xfs
+              device: /dev/nvme0n1p4
+              instance: k8s-prod-1
+              platform: k8s
+              severity: warning
+            exp_annotations:
+              summary: /var on k8s-prod-1 is over 80% full
+              description: k8s-prod-1 has 19% of /var free. Verify the live image-GC settings and inspect GC failures, container images, logs and emptyDir usage before the shared filesystem crosses its 15% free hard-eviction threshold.
+              runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/talos-ephemeral-storage.md
+      - eval_time: 16m
+        alertname: KubeNodeEphemeralStorageHigh
+        exp_alerts: []
+  - name: Talos var warning accepts hostname and legacy IP instance labels
+    interval: 1m
+    input_series:
+      - series: node_filesystem_avail_bytes{cluster="k8s-prod",job="node-exporter",mountpoint="/var",fstype="xfs",device="/dev/nvme0n1p4",instance="k8s-prod-1",platform="k8s"}
+        values: 19+0x30
+      - series: node_filesystem_size_bytes{cluster="k8s-prod",job="node-exporter",mountpoint="/var",fstype="xfs",device="/dev/nvme0n1p4",instance="k8s-prod-1",platform="k8s"}
+        values: 100+0x30
+      - series: node_filesystem_readonly{cluster="k8s-prod",job="node-exporter",mountpoint="/var",fstype="xfs",device="/dev/nvme0n1p4",instance="k8s-prod-1",platform="k8s"}
+        values: 0+0x30
+      - series: node_filesystem_avail_bytes{cluster="k8s-prod",job="node-exporter",mountpoint="/var",fstype="xfs",device="/dev/nvme0n1p4",instance="10.32.30.12:9100"}
+        values: 19+0x30
+      - series: node_filesystem_size_bytes{cluster="k8s-prod",job="node-exporter",mountpoint="/var",fstype="xfs",device="/dev/nvme0n1p4",instance="10.32.30.12:9100"}
+        values: 100+0x30
+      - series: node_filesystem_readonly{cluster="k8s-prod",job="node-exporter",mountpoint="/var",fstype="xfs",device="/dev/nvme0n1p4",instance="10.32.30.12:9100"}
+        values: 0+0x30
+    promql_expr_test:
+      - expr: count(ALERTS{alertname="KubeNodeEphemeralStorageHigh",alertstate="firing"})
+        eval_time: 15m
+        exp_samples:
+          - labels: '{}'
+            value: 2
+  - name: Talos var warning excludes threshold boundary other mounts hosts clusters and read-only filesystems
+    interval: 1m
+    input_series:
+      - series: node_filesystem_avail_bytes{cluster="k8s-prod",job="node-exporter",mountpoint="/var",fstype="xfs",device="/dev/nvme0n1p4",instance="k8s-prod-1"}
+        values: 20+0x30
+      - series: node_filesystem_size_bytes{cluster="k8s-prod",job="node-exporter",mountpoint="/var",fstype="xfs",device="/dev/nvme0n1p4",instance="k8s-prod-1"}
+        values: 100+0x30
+      - series: node_filesystem_readonly{cluster="k8s-prod",job="node-exporter",mountpoint="/var",fstype="xfs",device="/dev/nvme0n1p4",instance="k8s-prod-1"}
+        values: 0+0x30
+      - series: node_filesystem_avail_bytes{cluster="k8s-prod",job="node-exporter",mountpoint="/var",fstype="xfs",device="/dev/nvme0n1p4",instance="k8s-prod-2"}
+        values: 25+0x30
+      - series: node_filesystem_size_bytes{cluster="k8s-prod",job="node-exporter",mountpoint="/var",fstype="xfs",device="/dev/nvme0n1p4",instance="k8s-prod-2"}
+        values: 100+0x30
+      - series: node_filesystem_readonly{cluster="k8s-prod",job="node-exporter",mountpoint="/var",fstype="xfs",device="/dev/nvme0n1p4",instance="k8s-prod-2"}
+        values: 0+0x30
+      - series: node_filesystem_avail_bytes{cluster="k8s-prod",job="node-exporter",mountpoint="/var/mnt/longhorn",fstype="xfs",device="/dev/nvme0n1p5",instance="k8s-prod-1"}
+        values: 19+0x30
+      - series: node_filesystem_size_bytes{cluster="k8s-prod",job="node-exporter",mountpoint="/var/mnt/longhorn",fstype="xfs",device="/dev/nvme0n1p5",instance="k8s-prod-1"}
+        values: 100+0x30
+      - series: node_filesystem_readonly{cluster="k8s-prod",job="node-exporter",mountpoint="/var/mnt/longhorn",fstype="xfs",device="/dev/nvme0n1p5",instance="k8s-prod-1"}
+        values: 0+0x30
+      - series: node_filesystem_avail_bytes{cluster="k8s-prod",job="pve",mountpoint="/var",fstype="xfs",device="/dev/nvme0n1p4",instance="pve-sbx-1"}
+        values: 19+0x30
+      - series: node_filesystem_size_bytes{cluster="k8s-prod",job="pve",mountpoint="/var",fstype="xfs",device="/dev/nvme0n1p4",instance="pve-sbx-1"}
+        values: 100+0x30
+      - series: node_filesystem_readonly{cluster="k8s-prod",job="pve",mountpoint="/var",fstype="xfs",device="/dev/nvme0n1p4",instance="pve-sbx-1"}
+        values: 0+0x30
+      - series: node_filesystem_avail_bytes{cluster="k8s-prod",job="spark",mountpoint="/var",fstype="xfs",device="/dev/nvme0n1p4",instance="spark-1"}
+        values: 19+0x30
+      - series: node_filesystem_size_bytes{cluster="k8s-prod",job="spark",mountpoint="/var",fstype="xfs",device="/dev/nvme0n1p4",instance="spark-1"}
+        values: 100+0x30
+      - series: node_filesystem_readonly{cluster="k8s-prod",job="spark",mountpoint="/var",fstype="xfs",device="/dev/nvme0n1p4",instance="spark-1"}
+        values: 0+0x30
+      - series: node_filesystem_avail_bytes{cluster="other-cluster",job="node-exporter",mountpoint="/var",fstype="xfs",device="/dev/nvme0n1p4",instance="other-node"}
+        values: 19+0x30
+      - series: node_filesystem_size_bytes{cluster="other-cluster",job="node-exporter",mountpoint="/var",fstype="xfs",device="/dev/nvme0n1p4",instance="other-node"}
+        values: 100+0x30
+      - series: node_filesystem_readonly{cluster="other-cluster",job="node-exporter",mountpoint="/var",fstype="xfs",device="/dev/nvme0n1p4",instance="other-node"}
+        values: 0+0x30
+      - series: node_filesystem_avail_bytes{cluster="k8s-prod",job="node-exporter",mountpoint="/var",fstype="xfs",device="/dev/nvme0n1p4",instance="k8s-prod-3"}
+        values: 19+0x30
+      - series: node_filesystem_size_bytes{cluster="k8s-prod",job="node-exporter",mountpoint="/var",fstype="xfs",device="/dev/nvme0n1p4",instance="k8s-prod-3"}
+        values: 100+0x30
+      - series: node_filesystem_readonly{cluster="k8s-prod",job="node-exporter",mountpoint="/var",fstype="xfs",device="/dev/nvme0n1p4",instance="k8s-prod-3"}
+        values: 1+0x30
+    promql_expr_test:
+      - expr: ALERTS{alertname="KubeNodeEphemeralStorageHigh",alertstate="firing"}
+        eval_time: 20m
+        exp_samples: []

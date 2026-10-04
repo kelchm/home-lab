@@ -481,6 +481,8 @@ nvme0n1p5   ~829 GiB  u-longhorn  (/var/mnt/longhorn, xfs, Longhorn defaultDataP
 
 Capping EPHEMERAL prevents container-image churn and pod logs from competing with Longhorn for space; the dedicated `u-longhorn` partition makes capacity planning explicit. Patches live in `talos/patches/global/volume-ephemeral.yaml` and `user-volume-longhorn.yaml`.
 
+The [Talos ephemeral storage runbook](runbooks/talos-ephemeral-storage.md) records the image-GC headroom policy, measured usage and the separately approved manual rollout. Flux deploys its filesystem warning, but does not apply the Talos kubelet settings.
+
 ## GitOps / Tooling Stack
 
 - **talhelper** — Talos machine config generation
