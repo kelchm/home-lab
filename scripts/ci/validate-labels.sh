@@ -29,7 +29,7 @@ echo "Label catalog and labeler keys OK"
 if [[ -n "${LIVE_LABELS}" ]]; then
     jq --exit-status --argjson catalog "${catalog}" '
       def require($ok; $message): if $ok then . else error($message) end;
-      require(type == "array" and all(.[]; .name | type == "string"); "live labels must be a JSON array") |
+      require(type == "array" and length > 0 and all(.[]; .name | type == "string"); "live labels must be a nonempty JSON array") |
       [.[].name | ascii_downcase] as $live |
       ([$catalog[] | .name, (.aliases // [])[]]) as $retained |
       ($live - $retained) as $deleted |

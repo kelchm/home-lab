@@ -50,6 +50,10 @@ echo '[{"name":"platform/example"},{"name":"area/docs"},{"name":"area/new"}]' > 
 echo "ok: post-migration catalog is safe to reapply"
 
 reset_fixture
+echo '[]' > "${FIXTURE}/live.json"
+expect_failure 'live labels must be a nonempty JSON array'
+
+reset_fixture
 yq -i '.[0].aliases = ["area/legacy"]' "${FIXTURE}/.github/labels.yaml"
 expect_failure 'labels would be deleted'
 

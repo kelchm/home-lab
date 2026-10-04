@@ -612,6 +612,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
+          set -euo pipefail
           gh api --paginate "repos/${GH_REPO}/labels" --jq '.[]' | jq -s . > /tmp/live-labels.json
           scripts/ci/validate-labels.sh . /tmp/live-labels.json
 
