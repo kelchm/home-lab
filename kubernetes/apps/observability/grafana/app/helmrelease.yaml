@@ -115,6 +115,8 @@ spec:
           foldersFromFilesStructure: true
 
     grafana.ini:
+      dashboards:
+        default_home_dashboard_path: /tmp/dashboards/Overview/home.json
       server:
         root_url: https://grafana.home.kelch.io
       analytics:
