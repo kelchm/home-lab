@@ -61,6 +61,14 @@ feedback using affected paths, then validate the complete trunk state. For a
 public example, PostHog's backend workflow skips its path filter on pushes with
 the explicit policy “Run all tests on master push.”
 
+## Talos machine configs
+
+The Talos job runs `scripts/ci/test-validate-talos.sh`, which validates the current tree and exercises rejection cases with the tools pinned in `.mise.toml`. `scripts/ci/validate-talos.sh` checks the talhelper input, generates fresh fixture secrets with `talhelper gensecret`, and renders `talconfig.yaml` plus its patches with `talhelper genconfig --offline-mode`. Each rendered node config is validated with `talosctl validate --mode metal`. The installer image tag must match `talosVersion` in `talos/talenv.yaml`; the kubelet and control-plane component image tags must match `kubernetesVersion`.
+
+Both PR and main runs use fixture secrets. Explicit `--env-file` and `--secret-file` arguments bypass talhelper's default SOPS inputs; no SOPS key is supplied. Fixture secrets, generated machine configs, and the client config live in a private temporary directory that is removed on exit. The job does not upload rendered configs or contact nodes or the image factory. Run the same validation locally with `mise exec -- scripts/ci/test-validate-talos.sh`.
+
+This checks renderability, machine-config validity, and version consistency. It does not assert that `.nodes[].networkInterfaces` is absent: talhelper's modern network documents coexist with legacy `machine.network.interfaces` patch entries, so the patches do not atomically replace those talconfig entries. The remaining primary-NIC duplication cleanup is tracked in [#662](https://github.com/kelchm/home-lab/issues/662).
+
 ## References
 
 - [GitHub Actions concurrency](https://docs.github.com/en/actions/concepts/workflows-and-actions/concurrency)

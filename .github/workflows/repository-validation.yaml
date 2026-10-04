@@ -108,6 +108,7 @@ jobs:
               - '.taskfiles/talos/**'
               - 'Taskfile.yaml'
               - 'talos/**'
+              - 'scripts/ci/*validate-talos.sh'
 
       - name: Validate complete main state
         if: github.event_name == 'push'
@@ -273,7 +274,7 @@ jobs:
         run: echo "Kubernetes static validation is not required."
 
   talos:
-    name: Talhelper Configuration Validation
+    name: Talos Render Validation
     needs: pre-job
     runs-on: ubuntu-latest
     steps:
@@ -283,20 +284,19 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install talhelper
+      - name: Install Talos validation tools
         if: needs.pre-job.outputs.talos_changed == 'true'
         uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5.0.1
         with:
-          install_args: "aqua:budimanjojo/talhelper"
+          install_args: "aqua:budimanjojo/talhelper aqua:siderolabs/talos aqua:mikefarah/yq"
 
-      - name: Validate talhelper configuration
+      - name: Render and validate Talos machine configs with fixture secrets
         if: needs.pre-job.outputs.talos_changed == 'true'
-        working-directory: talos
-        run: talhelper validate talconfig talconfig.yaml
+        run: scripts/ci/test-validate-talos.sh
 
       - name: No Talos changes
         if: needs.pre-job.outputs.talos_changed != 'true'
-        run: echo "Talhelper validation is not required."
+        run: echo "Talos render validation is not required."
 
   bootstrap:
     name: Bootstrap Render Validation
