@@ -20,7 +20,7 @@ talosconfig
 .DS_Store
 Thumbs.db
 
-# Host-local Spark stack config; .env.example is the committed template.
+# Host-local Spark stack config.
 sparks/inference/.env
 sparks/inference/deepseek/.env
 

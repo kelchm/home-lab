@@ -1,10 +1,7 @@
 ---
 version: '3'
 
-# SparkRun owns the inference lifecycle on the Sparks. This helper only
-# inspects the hosts; it never starts, stops or filters workload containers.
-# The former sparks:deepseek:down/logs helpers were retired (issue #666) so no
-# task can match containers by compose label.
+# SparkRun owns the inference lifecycle on the Sparks. This helper only inspects the hosts.
 vars:
   SPARK_HOSTS: '10.32.21.31 10.32.21.32'
 

@@ -37,7 +37,7 @@ Then, on the head only (it rsyncs and rebuilds on the worker):
 
 Serves `deepseek-v4-flash-dspark` on **:8888**. TP=2 claims both hosts, so stop other GPU workloads through their own lifecycle commands before launching it. The former Qwen Compose path is retired.
 
-The pinned guide runs under the Docker Compose labels `com.docker.compose.project=dspark-guide` and `com.docker.compose.service=vllm-dspark`, launched from `~/dspark-guide`. The former repository-side `sparks:deepseek:logs` and `sparks:deepseek:down` helpers that filtered on those labels were removed in the stale-artifact retirement ([#666](https://github.com/kelchm/home-lab/issues/666)) so no `task sparks:` command can match a future deployment that reuses them. Stop, start and inspect the guide's containers with the guide's own lifecycle scripts; stop and inspect SparkRun jobs with the recipe that launched them.
+The pinned guide runs under the Docker Compose labels `com.docker.compose.project=dspark-guide` and `com.docker.compose.service=vllm-dspark`, launched from `~/dspark-guide`. The repository-side `sparks:deepseek:logs` and `sparks:deepseek:down` helpers that filtered on those labels were removed in the stale-artifact retirement ([#666](https://github.com/kelchm/home-lab/issues/666)). From `~/dspark-guide` on the head, manage the guide's containers with its own lifecycle scripts (`./stop-deepseek-v4-flash-dspark.sh`, `./logs-deepseek-v4-flash-dspark.sh`, `./status-deepseek-v4-flash-dspark.sh`); stop or inspect SparkRun jobs with the recipe that launched them.
 
 ## 0731 needs Patch 4, or you silently lose half your throughput
 
