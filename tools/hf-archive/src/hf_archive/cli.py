@@ -52,9 +52,13 @@ def _summary(action: str, result) -> str:
         by_via[file["via"]] = by_via.get(file["via"], 0) + 1
     counts = ", ".join(f"{count} via {via}" for via, count in sorted(by_via.items()))
     refs = f", refs {', '.join(result.refs)}" if result.refs else ""
+    retained = "".join(
+        f"\n  {ref} left at {commit}; pass --move-refs to point it at this commit"
+        for ref, commit in result.refs_retained.items()
+    )
     return (
         f"{action} {result.repo_id}@{result.commit}: {len(result.files)} files ({counts}); "
-        f"revision now holds {result.acquired_total} of {result.tree_total} files{refs}"
+        f"revision now holds {result.acquired_total} of {result.tree_total} files{refs}{retained}"
     )
 
 
@@ -101,6 +105,8 @@ def cmd_import(args: argparse.Namespace) -> int:
             include=args.include,
             exclude=args.exclude,
             reserve_bytes=args.reserve_bytes,
+            # Metadata fetched for this import observed upstream's refs; a saved document is of unknown age.
+            move_refs=args.move_refs or not args.metadata,
         )
     _report(args, result.to_json(), _summary("imported", result))
     return 0
@@ -225,6 +231,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--source", required=True, help="plain directory, HF snapshot directory, or HF repo cache directory")
     p.add_argument("--metadata", help="metadata document to use instead of asking the Hub")
     p.add_argument("--map", action="append", default=[], metavar="REPO_PATH=SOURCE_PATH", help="renamed source file")
+    p.add_argument(
+        "--move-refs",
+        action="store_true",
+        help="with --metadata, also replace refs recorded at another commit (default: only create missing refs)",
+    )
     p.set_defaults(run=cmd_import)
 
     p = commands.add_parser("metadata", parents=[hub], help="print a revision's metadata document for offline import")

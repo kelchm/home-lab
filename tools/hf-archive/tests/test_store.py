@@ -173,7 +173,7 @@ def test_later_acquisition_merges_and_never_drops_earlier_files(store):
     publish(store, GOOD, meta.files["a.bin"])
     publish(store, EVIL, meta.files["b.bin"])
     store.record_revision(meta, {"a.bin": (sha256(GOOD), {"via": "pull"})}, {"n": 1})
-    manifest = store.record_revision(meta, {"b.bin": (sha256(EVIL), {"via": "import"})}, {"n": 2})
+    manifest, _ = store.record_revision(meta, {"b.bin": (sha256(EVIL), {"via": "import"})}, {"n": 2})
     assert {p: e.blob for p, e in manifest.files.items()} == {"a.bin": sha256(GOOD), "b.bin": sha256(EVIL)}
     assert [e["n"] for e in manifest.history] == [1, 2]
 
@@ -189,15 +189,36 @@ def test_conflicting_tree_for_an_archived_commit_is_refused(store):
     assert store.read_manifest("org/model", COMMIT_A).files["a.bin"].blob == sha256(GOOD)
 
 
-def test_ref_moves_only_forward_with_history_and_old_commit_stays_resolvable(store):
+def test_moved_ref_keeps_history_and_old_commit_stays_resolvable(store):
     for commit, data in ((COMMIT_A, GOOD), (COMMIT_B, EVIL)):
         meta = metadata("org/model", commit, {"model.bin": (data, True)})
         publish(store, data, meta.files["model.bin"])
-        store.record_revision(meta, {"model.bin": (sha256(data), {"via": "pull"})}, {})
+        _, retained = store.record_revision(meta, {"model.bin": (sha256(data), {"via": "pull"})}, {}, move_refs=True)
+        assert retained == {}
     ref = store.read_ref("org/model", "refs/heads/main")
     assert ref.commit == COMMIT_B
     assert [p["commit"] for p in ref.previous] == [COMMIT_A]
     assert store.resolve_revision("org/model", COMMIT_A) == COMMIT_A
+
+
+def test_recorded_ref_is_kept_unless_asked_to_move_while_missing_refs_are_created(store):
+    refs = ["refs/heads/main", "refs/tags/v1"]
+    first = metadata("org/model", COMMIT_A, {"model.bin": (GOOD, True)}, refs=refs[:1])
+    second = metadata("org/model", COMMIT_B, {"model.bin": (EVIL, True)}, refs=refs)
+    publish(store, GOOD, first.files["model.bin"])
+    publish(store, EVIL, second.files["model.bin"])
+    assert store.record_revision(first, {"model.bin": (sha256(GOOD), {"via": "pull"})}, {})[1] == {}
+
+    manifest, retained = store.record_revision(second, {"model.bin": (sha256(EVIL), {"via": "import"})}, {})
+    assert retained == {"refs/heads/main": COMMIT_A}
+    assert manifest.commit == COMMIT_B and store.resolve_revision("org/model", COMMIT_B) == COMMIT_B
+    main = store.read_ref("org/model", "refs/heads/main")
+    assert (main.commit, main.previous) == (COMMIT_A, [])
+    assert store.read_ref("org/model", "refs/tags/v1").commit == COMMIT_B
+
+    before = store._ref_path("org/model", "refs/tags/v1").read_bytes()
+    assert store.record_revision(second, {}, {})[1] == {"refs/heads/main": COMMIT_A}
+    assert store._ref_path("org/model", "refs/tags/v1").read_bytes() == before, "an unchanged ref is not rewritten"
 
 
 def test_reopened_store_sees_everything_published(store):

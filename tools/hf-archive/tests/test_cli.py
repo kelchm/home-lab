@@ -6,7 +6,7 @@ import json
 import os
 
 import pytest
-from conftest import COMMIT_A, metadata, sha256
+from conftest import COMMIT_A, COMMIT_B, metadata, sha256
 
 from hf_archive.cli import main
 from hf_archive.store import Store
@@ -41,6 +41,7 @@ def test_offline_import_with_mapping_then_list_and_verify(offline, capsys):
     assert code == 0
     result = json.loads(capsys.readouterr().out)
     assert result["commit"] == COMMIT_A and result["refs"] == ["refs/heads/main"]
+    assert result["refs_retained"] == {}
     assert result["files"] == {"model.safetensors": {"blob": sha256(WEIGHT), "size": len(WEIGHT), "via": "import"}}
     assert (result["acquired_total"], result["tree_total"]) == (1, 2)
 
@@ -123,3 +124,88 @@ def test_serve_drops_inherited_token(offline, monkeypatch):
     monkeypatch.setattr("hf_archive.server.ArchiveServer.serve_forever", lambda self: None)
     assert run("serve", "--root", root, "--host", "127.0.0.1", "--port", "0") == 0
     assert "HF_TOKEN" not in os.environ
+
+
+NEWER = b"newer weights" * 2000
+
+
+class LiveHub:
+    """Stands in for the SDK: metadata fetched now, naming `main` at whichever commit it currently holds."""
+
+    def __init__(self, meta):
+        self.meta = meta
+
+    def fetch_metadata(self, repo_id, revision):
+        return self.meta
+
+
+@pytest.fixture
+def archived_b(offline, capsys):
+    """An archive whose `main` was last observed at B, plus a saved metadata document for A naming `main`."""
+    root, meta, source = offline
+    current = source.parent / "current"
+    current.mkdir()
+    (current / "model.safetensors").write_bytes(NEWER)
+    current_meta = source.parent / "current.json"
+    newer = metadata("org/model", COMMIT_B, {"model.safetensors": (NEWER, True)})
+    current_meta.write_text(json.dumps(newer.to_hub_json()))
+    assert run("import", "org/model", "--root", root, "--source", current, "--metadata", current_meta) == 0
+    (source / "model.safetensors").write_bytes(WEIGHT)
+    capsys.readouterr()
+    return root, meta, source
+
+
+def refs_of(root) -> dict[str, str]:
+    return {ref.ref: ref.commit for ref in Store(root).list_refs("org/model")}
+
+
+def test_offline_import_creates_a_missing_ref(offline, capsys):
+    root, meta, source = offline
+    (source / "model.safetensors").write_bytes(WEIGHT)
+    assert run("import", "org/model", "--root", root, "--source", source, "--metadata", meta) == 0
+    out = capsys.readouterr().out
+    assert "refs refs/heads/main" in out and "left at" not in out
+    assert refs_of(root) == {"refs/heads/main": COMMIT_A}
+
+
+def test_offline_import_of_saved_metadata_does_not_roll_back_a_recorded_ref(archived_b, capsys):
+    root, meta, source = archived_b
+    assert run("import", "org/model", "--root", root, "--source", source, "--metadata", meta, "--json") == 0
+    result = json.loads(capsys.readouterr().out)
+    assert (result["commit"], result["refs"]) == (COMMIT_A, [])
+    assert result["refs_retained"] == {"refs/heads/main": COMMIT_B}
+    assert refs_of(root) == {"refs/heads/main": COMMIT_B}
+
+    # Both commits are published and intact; only the ref was left alone.
+    assert run("list", "--root", root, "--json") == 0
+    listing = json.loads(capsys.readouterr().out)["repos"][0]
+    assert sorted(r["commit"] for r in listing["revisions"]) == [COMMIT_A, COMMIT_B]
+    assert run("verify", "--root", root, "--json") == 0
+    assert json.loads(capsys.readouterr().out) == {"checked": 2, "problems": []}
+
+    assert run("import", "org/model", "--root", root, "--source", source, "--metadata", meta) == 0
+    text = capsys.readouterr().out
+    assert f"refs/heads/main left at {COMMIT_B}" in text and "--move-refs" in text
+    assert ", refs " not in text, "the summary must not claim a ref it did not move"
+
+
+def test_offline_import_with_move_refs_replaces_the_recorded_ref(archived_b, capsys):
+    root, meta, source = archived_b
+    args = ("import", "org/model", "--root", root, "--source", source, "--metadata", meta, "--move-refs")
+    assert run(*args, "--json") == 0
+    result = json.loads(capsys.readouterr().out)
+    assert (result["refs"], result["refs_retained"]) == (["refs/heads/main"], {})
+    assert refs_of(root) == {"refs/heads/main": COMMIT_A}
+    ref = Store(root).read_ref("org/model", "refs/heads/main")
+    assert [p["commit"] for p in ref.previous] == [COMMIT_B]
+    assert Store(root).resolve_revision("org/model", COMMIT_B) == COMMIT_B
+
+
+def test_import_with_metadata_fetched_live_moves_the_ref_it_observed(archived_b, monkeypatch, capsys):
+    root, _, source = archived_b
+    live = LiveHub(metadata("org/model", COMMIT_A, FILES))
+    monkeypatch.setattr("hf_archive.cli._hub", lambda *args: live)
+    assert run("import", "org/model", "--root", root, "--source", source, "--json") == 0
+    result = json.loads(capsys.readouterr().out)
+    assert (result["refs"], result["refs_retained"]) == (["refs/heads/main"], {})
+    assert refs_of(root) == {"refs/heads/main": COMMIT_A}

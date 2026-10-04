@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import http.client
 import json
 import os
@@ -15,7 +16,7 @@ from conftest import COMMIT_A, COMMIT_B, git_oid, sha256, tree_entry
 from hf_archive import server as server_module
 from hf_archive.acquire import pull
 from hf_archive.model import METADATA_SCHEMA, RevisionMetadata
-from hf_archive.server import make_server
+from hf_archive.server import HubError, make_server
 
 WEIGHT = bytes(range(256)) * 400
 UNACQUIRED = b"other quantization" * 100
@@ -237,6 +238,182 @@ def test_missing_blob_is_an_error_not_an_empty_success(served, store):
     os.unlink(store.blob_path(sha256(CONFIG)))
     status, headers, _ = request(served, "GET", "/org/model/resolve/main/config.json")
     assert (status, headers["x-error-code"]) == (500, "ArchiveInconsistent")
+
+
+def _fail_reads(monkeypatch, blob):
+    """Make hashing `blob` fail with EIO, as a failing disk does. Returns the files that hash was given."""
+    seen = []
+    real = server_module.hash_stream
+
+    def failing(f):
+        if f.name != str(blob):
+            return real(f)
+        seen.append(f)
+        raise OSError(errno.EIO, "Input/output error")
+
+    monkeypatch.setattr(server_module, "hash_stream", failing)
+    return seen
+
+
+def _replace(blob, data: bytes) -> None:
+    """Put `data` at `blob` as a new file, the way a repair or a republication does."""
+    fresh = blob.with_name("repaired")
+    fresh.write_bytes(data)
+    os.replace(fresh, blob)
+
+
+def test_unreadable_blob_is_hashed_once_then_refused_until_the_file_is_replaced(served, store, monkeypatch):
+    blob = store.blob_path(sha256(WEIGHT))
+    seen = _fail_reads(monkeypatch, blob)
+
+    for method in ("HEAD", "GET", "HEAD"):
+        status, headers, body = request(served, method, RESOLVE)
+        assert (status, headers["x-error-code"]) == (500, "ArchiveInconsistent"), "a finished failure is not pending"
+        assert "retry-after" not in headers and WEIGHT[:100] not in body
+    for _ in range(2):
+        served.archive.warm()
+        assert (served.archive.warm_state, served.archive.warm_failures) == ("ready", 1)
+    health = get_json(served, "/healthz")
+    assert (health["status"], health["warm"], health["warm_failures"]) == ("ok", "ready", 1)
+    # One hash attempt for three requests and two passes.
+    assert len(seen) == 1 and seen[0].closed
+    assert not served.archive._jobs
+
+    # The same bytes under a new inode are a different file: it is hashed again and served.
+    monkeypatch.undo()
+    _replace(blob, WEIGHT)
+    assert request(served, "GET", RESOLVE)[2] == WEIGHT
+    served.archive.warm()
+    assert served.archive.warm_failures == 0
+
+
+def test_blob_that_cannot_be_opened_is_refused_and_counted_without_reporting_warming(served, store, monkeypatch):
+    blob = store.blob_path(sha256(WEIGHT))
+    real_open = open
+    states = []
+
+    def denied(path, *args, **kwargs):
+        if os.fspath(path) == str(blob):
+            states.append(served.archive.warm_state)
+            raise PermissionError(errno.EACCES, "Permission denied", str(blob))
+        return real_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(server_module, "open", denied, raising=False)
+    monkeypatch.setattr(server_module.os, "access", lambda path, mode: os.fspath(path) != str(blob))
+
+    for _ in range(2):
+        status, headers, _ = request(served, "HEAD", RESOLVE)
+        assert (status, headers["x-error-code"]) == (500, "ArchiveInconsistent")
+        assert "retry-after" not in headers
+    served.archive.warm()
+    served.archive.warm()
+    assert (served.archive.warm_state, served.archive.warm_failures) == ("ready", 1)
+    assert states[-1] == "ready", "a pass that can hash nothing must not report warming"
+    assert not served.archive._jobs and sha256(WEIGHT) not in served.archive._digests
+
+    monkeypatch.undo()
+    assert request(served, "GET", RESOLVE)[2] == WEIGHT
+    served.archive.warm()
+    assert served.archive.warm_failures == 0
+
+
+def test_worker_open_failure_is_recorded_for_the_file_the_request_saw(served, store, monkeypatch):
+    """The request opens the blob, then the hashing thread cannot: no local fstat, but still an outcome."""
+    blob = store.blob_path(sha256(WEIGHT))
+    file = store.read_manifest("org/model", COMMIT_A).files["sub/model.safetensors"].file
+    archive = served.archive
+    real_open = open
+    hashes = []
+
+    def worker_denied(path, *args, **kwargs):
+        if os.fspath(path) == str(blob) and threading.current_thread().name == "verify":
+            hashes.append(path)
+            raise PermissionError(errno.EACCES, "Permission denied", str(blob))
+        return real_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(server_module, "open", worker_denied, raising=False)
+    descriptors = len(os.listdir("/dev/fd"))
+    for _ in range(3):
+        with pytest.raises(HubError) as refused:
+            archive.open_verified(sha256(WEIGHT), file, wait=None)
+        assert (refused.value.status, refused.value.code) == (500, "ArchiveInconsistent")
+    assert len(hashes) == 1, "an unchanged file is not hashed again"
+    assert len(os.listdir("/dev/fd")) == descriptors, "refused requests must not leak the blob descriptor"
+    assert archive._digests[sha256(WEIGHT)] == (archive._signature(os.stat(blob)), None)
+
+    # A replacement is a different file, so the recorded failure does not apply to it.
+    _replace(blob, WEIGHT)
+    with pytest.raises(HubError):
+        archive.open_verified(sha256(WEIGHT), file, wait=None)
+    assert len(hashes) == 2
+    monkeypatch.undo()
+    _replace(blob, WEIGHT)
+    with archive.open_verified(sha256(WEIGHT), file, wait=None) as f:
+        assert f.read() == WEIGHT
+
+
+def test_outcome_for_a_replaced_file_is_not_applied_to_the_file_a_request_opened(served, store, monkeypatch):
+    """A request holding the old file, whose hash ran against its replacement, retries instead of borrowing it."""
+    blob = store.blob_path(sha256(WEIGHT))
+    file = store.read_manifest("org/model", COMMIT_A).files["sub/model.safetensors"].file
+    archive = served.archive
+    real = server_module.hash_stream
+    fail = [True]
+
+    def swapped(f):
+        if fail[0]:
+            raise OSError(errno.EIO, "Input/output error")
+        return real(f)
+
+    real_open = open
+
+    def replace_before_worker(path, *args, **kwargs):
+        if os.fspath(path) == str(blob) and threading.current_thread().name == "verify" and fail[0]:
+            _replace(blob, WEIGHT)
+        return real_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(server_module, "hash_stream", swapped)
+    monkeypatch.setattr(server_module, "open", replace_before_worker, raising=False)
+    with pytest.raises(HubError) as stale:
+        archive.open_verified(sha256(WEIGHT), file, wait=None)
+    assert (stale.value.status, stale.value.code) == (503, "VerificationPending")
+    # The failure belongs to the replacement, which the next request sees and is refused for.
+    with pytest.raises(HubError) as refused:
+        archive.open_verified(sha256(WEIGHT), file, wait=None)
+    assert refused.value.status == 500
+
+    # Replaced again while the old failure is on record: that record is for another file.
+    fail[0] = False
+    _replace(blob, WEIGHT)
+    with archive.open_verified(sha256(WEIGHT), file, wait=None) as f:
+        assert f.read() == WEIGHT
+
+
+def test_blob_removed_while_its_hash_was_starting_is_refused_then_recovers(served, store, monkeypatch):
+    blob = store.blob_path(sha256(WEIGHT))
+    file = store.read_manifest("org/model", COMMIT_A).files["sub/model.safetensors"].file
+    archive = served.archive
+    real_open = open
+
+    def unlink_before_worker(path, *args, **kwargs):
+        if os.fspath(path) == str(blob) and threading.current_thread().name == "verify":
+            os.unlink(blob)
+        return real_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(server_module, "open", unlink_before_worker, raising=False)
+    for _ in range(2):
+        with pytest.raises(HubError) as refused:
+            archive.open_verified(sha256(WEIGHT), file, wait=None)
+        assert (refused.value.status, refused.value.code) == (500, "ArchiveInconsistent")
+    monkeypatch.undo()
+    archive.warm()
+    assert (archive.warm_state, archive.warm_failures) == ("ready", 1)
+
+    blob.write_bytes(WEIGHT)
+    with archive.open_verified(sha256(WEIGHT), file, wait=None) as f:
+        assert f.read() == WEIGHT
+    archive.warm()
+    assert archive.warm_failures == 0
 
 
 def test_slow_first_verification_answers_503_with_retry_after_then_serves(served, monkeypatch):

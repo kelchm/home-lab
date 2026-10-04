@@ -39,7 +39,10 @@ class Hub(Protocol):
 class Result:
     repo_id: str
     commit: str
+    # Refs that name this commit after the acquisition, and refs the metadata listed that were left at
+    # the other commit they already named.
     refs: list[str]
+    refs_retained: dict[str, str] = field(default_factory=dict)
     files: dict[str, dict[str, Any]] = field(default_factory=dict)
     acquired_total: int = 0
     tree_total: int = 0
@@ -49,6 +52,7 @@ class Result:
             "repo_id": self.repo_id,
             "commit": self.commit,
             "refs": self.refs,
+            "refs_retained": self.refs_retained,
             "files": self.files,
             "acquired_total": self.acquired_total,
             "tree_total": self.tree_total,
@@ -96,12 +100,19 @@ def _event(action: str, source: str, paths: Sequence[str], **extra: Any) -> dict
     } | extra
 
 
-def _result(store: Store, meta: RevisionMetadata, acquired: Mapping[str, tuple[str, dict[str, Any]]], event) -> Result:
-    manifest = store.record_revision(meta, dict(acquired), event)
+def _result(
+    store: Store,
+    meta: RevisionMetadata,
+    acquired: Mapping[str, tuple[str, dict[str, Any]]],
+    event: dict[str, Any],
+    move_refs: bool,
+) -> Result:
+    manifest, retained = store.record_revision(meta, dict(acquired), event, move_refs=move_refs)
     return Result(
         repo_id=meta.repo_id,
         commit=meta.commit,
-        refs=list(meta.refs),
+        refs=[ref for ref in meta.refs if ref not in retained],
+        refs_retained=retained,
         files={
             path: {"blob": sha256, "size": meta.files[path].size, "via": provenance["via"]}
             for path, (sha256, provenance) in acquired.items()
@@ -154,7 +165,9 @@ def pull(
                     sha256 = store.publish_blob(staged, file)
                     via = "pull"
             acquired[path] = (sha256, {"via": via, "at": now()})
-        return _result(store, meta, acquired, _event("pull", hub.source, selected, revision=revision))
+        # A live acquisition observed where upstream's refs point, so it may update them.
+        event = _event("pull", hub.source, selected, revision=revision)
+        return _result(store, meta, acquired, event, move_refs=True)
 
 
 def import_directory(
@@ -166,12 +179,17 @@ def import_directory(
     include: Sequence[str] = (),
     exclude: Sequence[str] = (),
     reserve_bytes: int = DEFAULT_RESERVE_BYTES,
+    move_refs: bool = False,
 ) -> Result:
     """Import files of `meta`'s revision from a directory, copying and verifying each one.
 
     `source` is a plain directory, a native HF snapshot directory, or a native HF repo cache directory
     holding `snapshots/<commit>`. Symlinks under it are followed. `mapping` names the source-relative
     path of repository files stored under a different name. Tree files with no source stay not acquired.
+
+    `meta` may be of any age, so its refs are created where missing but a ref already recorded at
+    another commit is left there and reported in `Result.refs_retained`. Pass `move_refs` when `meta`
+    was fetched from upstream for this import, or to replace recorded refs deliberately.
     """
     require_public(meta)
     mapping = dict(mapping or {})
@@ -225,4 +243,4 @@ def import_directory(
                     provenance = {"via": "import", "at": now(), "source": str(candidate), "resolved": str(resolved)}
             acquired[file.path] = (sha256, provenance)
         event = _event("import", str(source), [file.path for file, _, _ in plan])
-        return _result(store, meta, acquired, event)
+        return _result(store, meta, acquired, event, move_refs)

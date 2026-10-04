@@ -278,3 +278,59 @@ def test_source_modified_after_import_does_not_change_archive(store, tmp_path):
     import_directory(store, meta, source)
     (source / "q4.gguf").write_bytes(bytes(len(WEIGHT)))
     assert store.blob_path(sha256(WEIGHT)).read_bytes() == WEIGHT
+
+
+def _source(tmp_path, name: str, data: bytes):
+    source = tmp_path / name
+    source.mkdir()
+    (source / "q4.gguf").write_bytes(data)
+    return source
+
+
+def test_import_keeps_a_recorded_ref_and_reports_it_unless_told_to_move(store, hub, tmp_path):
+    old = metadata("org/model", COMMIT_A, {"q4.gguf": (WEIGHT, True)}, refs=["refs/heads/main", "refs/tags/v1"])
+    hub.add("org/model", COMMIT_B, {"q4.gguf": (OTHER_QUANT, True)})
+    assert pull(store, hub, "org/model", select_all=True).refs == ["refs/heads/main"]
+
+    # Saved metadata for A says main named A when it was saved. The archive has since seen main at B.
+    result = import_directory(store, old, _source(tmp_path, "old", WEIGHT))
+    assert result.commit == COMMIT_A
+    assert (result.refs, result.refs_retained) == (["refs/tags/v1"], {"refs/heads/main": COMMIT_B})
+    assert result.to_json()["refs_retained"] == {"refs/heads/main": COMMIT_B}
+    assert store.resolve_revision("org/model", "main") == COMMIT_B
+    assert store.read_ref("org/model", "refs/heads/main").previous == []
+    assert store.resolve_revision("org/model", "v1") == COMMIT_A
+    # The imported commit is published and served by commit like any other.
+    assert store.read_manifest("org/model", COMMIT_A).files["q4.gguf"].blob == sha256(WEIGHT)
+    assert store.resolve_revision("org/model", COMMIT_A) == COMMIT_A
+
+    moved = import_directory(store, old, _source(tmp_path, "again", WEIGHT), move_refs=True)
+    assert (moved.refs, moved.refs_retained) == (["refs/heads/main", "refs/tags/v1"], {})
+    ref = store.read_ref("org/model", "refs/heads/main")
+    assert ref.commit == COMMIT_A and [p["commit"] for p in ref.previous] == [COMMIT_B]
+    assert store.resolve_revision("org/model", COMMIT_B) == COMMIT_B
+
+
+def test_import_at_the_commit_a_ref_already_names_is_idempotent(store, tmp_path):
+    meta = metadata("org/model", COMMIT_A, {"q4.gguf": (WEIGHT, True)})
+    source = _source(tmp_path, "plain", WEIGHT)
+    assert import_directory(store, meta, source).refs == ["refs/heads/main"]
+    before = store._ref_path("org/model", "refs/heads/main").read_bytes()
+
+    again = import_directory(store, meta, source)
+    assert (again.refs, again.refs_retained) == (["refs/heads/main"], {})
+    assert store._ref_path("org/model", "refs/heads/main").read_bytes() == before
+
+
+def test_pull_moves_the_ref_it_just_observed_even_to_an_earlier_archived_commit(store, hub):
+    hub.add("org/model", COMMIT_A, {"q4.gguf": (WEIGHT, True)})
+    pull(store, hub, "org/model", select_all=True)
+    hub.add("org/model", COMMIT_B, {"q4.gguf": (OTHER_QUANT, True)})
+    assert pull(store, hub, "org/model", select_all=True).refs == ["refs/heads/main"]
+    assert store.resolve_revision("org/model", "main") == COMMIT_B
+
+    # Upstream reset main to A: a live observation, so the ref follows it.
+    hub.add("org/model", COMMIT_A, {"q4.gguf": (WEIGHT, True)})
+    result = pull(store, hub, "org/model", select_all=True)
+    assert (result.refs, result.refs_retained) == (["refs/heads/main"], {})
+    assert store.resolve_revision("org/model", "main") == COMMIT_A

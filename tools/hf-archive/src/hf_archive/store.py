@@ -434,13 +434,23 @@ class Store:
         return None
 
     def record_revision(
-        self, meta: RevisionMetadata, acquired: dict[str, tuple[str, dict[str, Any]]], event: dict[str, Any]
-    ) -> Manifest:
-        """Publish newly acquired contents of one commit, then move the refs that named it.
+        self,
+        meta: RevisionMetadata,
+        acquired: dict[str, tuple[str, dict[str, Any]]],
+        event: dict[str, Any],
+        *,
+        move_refs: bool = False,
+    ) -> tuple[Manifest, dict[str, str]]:
+        """Publish newly acquired contents of one commit, then point the refs that named it at it.
 
         `acquired` maps repository paths to `(blob sha256, provenance)`. The manifest is merged with any
         existing one for the commit, so earlier acquisitions are kept. Nothing is written unless every
         blob the resulting manifest references is present with its exact size.
+
+        A ref not yet recorded is always created. A ref recorded at another commit is replaced only with
+        `move_refs`, which is for metadata that says where the ref points now; metadata of unknown age
+        cannot say that, and nothing here infers which commit is newer. Returns the manifest and the refs
+        left alone, mapped to the commit each still names.
         """
         with self._publish_lock():
             manifest = self.read_manifest(meta.repo_id, meta.commit)
@@ -461,9 +471,14 @@ class Store:
             manifest.history.append(event)
             manifest.updated_at = now()
             write_json_atomic(self._manifest_path(meta.repo_id, meta.commit), manifest.to_json())
-            for ref in meta.refs:
-                self._move_ref(meta.repo_id, ref, meta.commit)
-            return manifest
+            retained = {}
+            for name in meta.refs:
+                current = self.read_ref(meta.repo_id, name)
+                if current is not None and current.commit != meta.commit and not move_refs:
+                    retained[name] = current.commit
+                else:
+                    self._move_ref(meta.repo_id, name, meta.commit)
+            return manifest, retained
 
     def _move_ref(self, repo_id: str, name: str, commit: str) -> None:
         ref = self.read_ref(repo_id, name) or Ref(repo_id, name, commit)

@@ -93,7 +93,8 @@ class Archive:
         self.store = store
         self._lock = threading.Lock()
         self._manifests: dict[Path, tuple[tuple[int, ...], Manifest]] = {}
-        self._digests: dict[str, tuple[tuple[int, ...], Digests]] = {}
+        # Outcome of the last hash of each blob, keyed to the file it was taken from. None: it could not be read.
+        self._digests: dict[str, tuple[tuple[int, ...], Digests | None]] = {}
         self._jobs: dict[str, threading.Event] = {}
         self._hash_slots = threading.Semaphore(2)
         # "off" until a warm-up is requested, then "warming", then "ready".
@@ -129,11 +130,18 @@ class Archive:
         was corrupted or swapped after publication is refused rather than served. Hashing runs in the
         background: a request waits at most `wait` seconds for it, then gets 503 with Retry-After instead
         of hanging past client timeouts. `wait=None` waits for the result.
+
+        A hash that fails is an outcome too: a blob that could not be read is refused with 500, without
+        another attempt, until the file on disk changes. 503 means no outcome is known yet for the file
+        this request opened: its hash is still running, or the file was replaced while it ran.
         """
         try:
             f = open(self.store.blob_path(sha256), "rb")  # noqa: SIM115
         except FileNotFoundError:
             raise HubError(500, "ArchiveInconsistent", f"blob for {file.path} is missing from the archive") from None
+        except OSError as e:
+            log.error("could not open blob %s: %s", sha256, e)
+            raise HubError(500, "ArchiveInconsistent", f"blob for {file.path} cannot be read") from None
         try:
             signature = self._signature(os.fstat(f.fileno()))
             with self._lock:
@@ -143,7 +151,9 @@ class Archive:
                     job = self._jobs.get(sha256)
                     if job is None:
                         job = self._jobs[sha256] = threading.Event()
-                        threading.Thread(target=self._hash, args=(sha256, job), name="verify", daemon=True).start()
+                        worker = threading.Thread(target=self._hash, args=(sha256, signature, job), name="verify")
+                        worker.daemon = True
+                        worker.start()
             if job is not None:
                 finished = job.wait(wait)
                 with self._lock:
@@ -152,42 +162,49 @@ class Archive:
                     raise HubError(
                         503, "VerificationPending", f"{file.path} is being verified before first use; retry shortly"
                     )
-            if matches(verified[1], file) != sha256:
+            if verified[1] is None or matches(verified[1], file) != sha256:
                 raise HubError(500, "ArchiveInconsistent", f"blob for {file.path} failed verification")
             return f
         except BaseException:
             f.close()
             raise
 
-    def _hash(self, sha256: str, job: threading.Event) -> None:
+    def _hash(self, sha256: str, requested: tuple[int, ...], job: threading.Event) -> None:
+        """Hash the blob and record the outcome against the file it was read from.
+
+        `requested` is the file the request that started this saw. A failure before this thread has its
+        own view of the file is recorded against that one, so the same request does not start over.
+        """
+        signature, digests = requested, None
         try:
             with self._hash_slots, open(self.store.blob_path(sha256), "rb") as f:
                 signature = self._signature(os.fstat(f.fileno()))
                 digests = hash_stream(f)
-            with self._lock:
-                self._digests[sha256] = (signature, digests)
         except Exception as e:
             log.error("could not verify blob %s: %s", sha256, e)
         finally:
             with self._lock:
+                self._digests[sha256] = (signature, digests)
                 del self._jobs[sha256]
             job.set()
 
-    def _is_verified(self, sha256: str) -> bool:
-        """Whether the blob on disk has been hashed by this process. Says nothing about the result."""
+    def _needs_hash(self, sha256: str) -> bool:
+        """Whether checking the blob means hashing it: it is readable and this process has no outcome for it."""
+        path = self.store.blob_path(sha256)
         try:
-            signature = self._signature(os.stat(self.store.blob_path(sha256)))
-        except FileNotFoundError:
+            signature = self._signature(os.stat(path))
+        except OSError:
             return False
         with self._lock:
             verified = self._digests.get(sha256)
-        return verified is not None and verified[0] == signature
+        return (verified is None or verified[0] != signature) and os.access(path, os.R_OK)
 
     def warm(self) -> None:
         """Check every referenced blob, hashing those not yet hashed, so requests do not wait for it.
 
         While a pass has work to do `/healthz` answers 503, and a request for a blob not yet reached
-        answers 503 with Retry-After until that blob's hash is known.
+        answers 503 with Retry-After until that blob's hash is known. `warm_failures` is the number of
+        references the finished pass found unservable; a pass with failures still ends "ready".
         """
         failures = 0
         for repo_id in self.store.list_repos():
@@ -201,10 +218,11 @@ class Archive:
                 for path, entry in manifest.files.items() if manifest else ():
                     if not entry.blob:
                         continue
-                    if not self._is_verified(entry.blob):
+                    if self._needs_hash(entry.blob):
                         self.warm_state = "warming"
                     try:
-                        # Cheap once hashed, and it still checks the identity, so failures persist across passes.
+                        # Cheap once an outcome is known, and it still checks the identity, so failures
+                        # persist across passes without hashing again.
                         self.open_verified(entry.blob, entry.file, wait=None).close()
                     except (HubError, OSError) as e:
                         failures += 1
