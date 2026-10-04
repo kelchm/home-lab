@@ -44,7 +44,7 @@ reset_fixture
 echo "ok: SOPS default inputs ignored"
 
 printf 'machine: [\n' > "${TEST_DIR}/talos/patches/global/machine-install.yaml"
-expect_failure 'malformed patch' 'yaml:'
+expect_failure 'malformed patch' 'yaml: line'
 
 reset_fixture
 yq -i '.filesystem.invalidField = true' "${TEST_DIR}/talos/patches/global/user-volume-longhorn.yaml"
