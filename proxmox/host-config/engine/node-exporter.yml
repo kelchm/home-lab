@@ -1,3 +1,5 @@
+- import_playbook: vmagent.yml
+
 - name: Own only the native monitoring exporter
   hosts: localhost
   gather_facts: false

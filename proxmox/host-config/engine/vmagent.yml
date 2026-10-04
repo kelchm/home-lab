@@ -1,0 +1,72 @@
+- name: Own only the native local push collector
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Validate credentials, pinned binary and candidate config before mutations (also on check)
+      ansible.builtin.command:
+        argv: ["{{ engine_dir }}/validate-vmagent"]
+        stdin: "{{ lookup('ansible.builtin.template', 'vmagent-scrape.yml.j2') }}"
+      changed_when: false
+      check_mode: false
+      when: vmagent_state == 'present'
+    - name: Create the persistent queue without changing existing contents
+      ansible.builtin.file:
+        path: /var/lib/pve-host-vmagent
+        state: directory
+        owner: '65534'
+        group: '65534'
+        mode: '0700'
+      when: vmagent_state == 'present'
+    - name: Atomically install the engine-owned scrape config
+      ansible.builtin.template:
+        src: vmagent-scrape.yml.j2
+        dest: /etc/pve-hostcfg/vmagent-scrape.yml
+        owner: root
+        group: root
+        mode: '0644'
+        validate: "{{ engine_dir }}/validate-vmagent %s"
+      register: vmagent_config
+      when: vmagent_state == 'present'
+    - name: Install the static hardened unit
+      ansible.builtin.copy:
+        src: pve-host-vmagent.service
+        dest: /etc/systemd/system/pve-host-vmagent.service
+        owner: root
+        group: root
+        mode: '0644'
+        validate: "{{ engine_dir }}/validate-vmagent --unit %s"
+      register: vmagent_unit
+      when: vmagent_state == 'present'
+    - name: Activate only the validated collector
+      ansible.builtin.systemd_service:
+        name: pve-host-vmagent.service
+        daemon_reload: "{{ not ansible_check_mode }}"
+        enabled: true
+        state: "{{ 'restarted' if (vmagent_config.changed or vmagent_unit.changed or force_restart | default(false)) and not ansible_check_mode else 'started' }}"
+      when: vmagent_state == 'present' and (not ansible_check_mode or not vmagent_unit.changed)
+    - name: Inspect exact loaded unit state even if its owned file drifted away
+      ansible.builtin.command:
+        argv: [systemctl, show, pve-host-vmagent.service, '--property=LoadState', '--property=ActiveState']
+      register: vmagent_runtime
+      changed_when: "'ActiveState=inactive' not in vmagent_runtime.stdout_lines"
+      check_mode: false
+      when: vmagent_state == 'absent'
+    - name: Stop the exact loaded collector before removing owned files
+      ansible.builtin.command:
+        argv: [systemctl, stop, pve-host-vmagent.service]
+      changed_when: "'ActiveState=inactive' not in vmagent_runtime.stdout_lines"
+      when: vmagent_state == 'absent' and not ansible_check_mode and ('LoadState=not-found' not in vmagent_runtime.stdout_lines or 'ActiveState=inactive' not in vmagent_runtime.stdout_lines)
+    - name: Remove only the owned unit and scrape config (retain queue and credentials)
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/systemd/system/pve-host-vmagent.service
+        - /etc/systemd/system/multi-user.target.wants/pve-host-vmagent.service
+        - /etc/pve-hostcfg/vmagent-scrape.yml
+      register: vmagent_removed
+      when: vmagent_state == 'absent'
+    - name: Reload after explicit removal
+      ansible.builtin.systemd_service:
+        daemon_reload: true
+      when: vmagent_state == 'absent' and not ansible_check_mode

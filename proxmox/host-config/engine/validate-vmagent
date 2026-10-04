@@ -1,0 +1,45 @@
+#!/usr/bin/python3
+"""Read-only preflight. Token values never enter Git, argv, vars or output."""
+import hashlib
+from pathlib import Path
+import re
+import stat
+import subprocess
+import sys
+import tempfile
+
+ENGINE = Path('/usr/local/lib/pve-hostcfg')
+BINARY = ENGINE / 'vmagent-prod'
+TOKEN = Path('/etc/pve-host-vmagent/token')
+
+
+def owned(path, uid, gid, mode):
+    s = path.lstat()
+    if (s.st_uid, s.st_gid, stat.S_IMODE(s.st_mode)) != (uid, gid, mode) or path.is_symlink():
+        raise ValueError(f'invalid ownership/mode: {path}')
+
+
+try:
+    owned(BINARY, 0, 0, 0o555)
+    if hashlib.sha256(BINARY.read_bytes()).hexdigest() != (ENGINE / 'vmagent.sha256').read_text().strip():
+        raise ValueError('vmagent differs from explicitly bootstrapped checksum; re-bootstrap')
+    if sys.argv[1:2] == ['--unit']:
+        with tempfile.TemporaryDirectory() as directory:
+            unit = Path(directory) / 'pve-host-vmagent.service'
+            unit.write_bytes(Path(sys.argv[2]).read_bytes())
+            subprocess.run(['systemd-analyze', 'verify', str(unit)], check=True, timeout=15)
+    else:
+        owned(TOKEN.parent, 0, 65534, 0o750)
+        owned(TOKEN, 0, 65534, 0o640)
+        if not TOKEN.is_file() or not re.fullmatch(rb'[0-9a-fA-F]{64}\n?', TOKEN.read_bytes()):
+            raise ValueError('token must contain exactly 64 hexadecimal characters')
+        with tempfile.TemporaryDirectory() as directory:
+            config = Path(directory) / 'scrape.yml'
+            config.write_bytes(Path(sys.argv[1]).read_bytes() if len(sys.argv) > 1 else sys.stdin.buffer.read(65537))
+            if config.stat().st_size > 65536:
+                raise ValueError('config exceeds bound')
+            subprocess.run([str(BINARY), '-promscrape.config=' + str(config),
+                            '-promscrape.config.dryRun', '-loggerLevel=ERROR'], check=True, timeout=15)
+except Exception as error:
+    print(f'vmagent validation failed: {error}', file=sys.stderr)
+    raise SystemExit(1)
