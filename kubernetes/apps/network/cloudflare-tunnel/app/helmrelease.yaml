@@ -11,7 +11,10 @@ spec:
   values:
     controllers:
       cloudflare-tunnel:
+        replicas: 2
         strategy: RollingUpdate
+        podDisruptionBudget:
+          maxUnavailable: 1
         annotations:
           reloader.stakater.com/auto: "true"
         containers:
@@ -55,6 +58,17 @@ spec:
         runAsNonRoot: true
         runAsUser: 65534
         runAsGroup: 65534
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          nodeTaintsPolicy: Honor
+          matchLabelKeys:
+            - pod-template-hash
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: cloudflare-tunnel
+              app.kubernetes.io/instance: cloudflare-tunnel
     service:
       app:
         ports:
