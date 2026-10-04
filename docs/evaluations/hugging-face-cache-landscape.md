@@ -4,7 +4,9 @@ Surveyed September 26 and 30, 2026. This is a map of what exists around the [NAS
 
 Three different things reduce repeat downloads: a mirror that clients reach through `HF_ENDPOINT`, a library of files kept on the NAS and used by path, and a system that distributes models between machines. Only the first matches the goal as stated.
 
-## Mirrors reached through HF_ENDPOINT
+## HTTP servers for Hugging Face repositories
+
+These projects either document `HF_ENDPOINT` support or expose HF-style file and metadata routes. Compatibility with stock clients and fetching on a cold request are separate questions to qualify.
 
 | Project | As read | Why it was not taken further |
 |---|---|---|
@@ -13,9 +15,9 @@ Three different things reduce repeat downloads: a mirror that clients reach thro
 | [hfd](https://github.com/matrixhub-ai/hfd) | `0c711cf`. MatrixHub's headless daemon, usable alone | Still scans repository refs and prefetches their large files in the background |
 | [guilt/xet-server](https://github.com/guilt/xet-server) | v1.1.0. Native Xet proxy and server | Its [mirroring guide](https://github.com/guilt/xet-server/blob/22c4aa1df566041b804aee2d4b1df1b97e2f04df/docs/MIRRORING.md#91-important-what-the-proxy-can-and-cannot-cache) says pull-through can relay uncached content straight from the CDN, so proxying does not guarantee retention |
 | [Pulp HF plugin](https://github.com/pulp/pulp_hugging_face) | `d267eca`. On-demand files inside Pulp | Metadata requests are forwarded upstream without caching. A whole platform to run |
-| [hftools](https://github.com/ziozzang/hftools) | Plain files, upstream-hash verification, cache import, hardlink deduplication across repositories | Indexes existing downloads, one revision per repository, and does not fetch on demand. Deduplicates after download |
+| [hftools](https://github.com/ziozzang/hftools/blob/c4a747feccb122460120beebaf8bbc60270efe3a/README.md#L457-L476) | Prefilled HF-style HTTP server preserving original repository IDs. Plain files, upstream-hash verification, cache import and hardlink deduplication | Documents its own CLI's `--endpoint`; stock HF SDK compatibility is unqualified. One revision per repository, no fetching on demand, deduplication after download |
 | [Artifact Keeper](https://github.com/artifact-keeper/artifact-keeper) | `86b567c`. Hosted and proxy repositories on a filesystem | Proxy stores content by repository and request path |
-| [Mini-HF](https://github.com/realtyz/mini-hf) | `3d8d33f`. LAN distribution with a management UI | Needs PostgreSQL, Redis and S3. Files are namespaced by repository |
+| [Mini-HF](https://github.com/realtyz/mini-hf/blob/3d8d33f/README.md) | `3d8d33f`. Documents an HF-compatible API through `HF_ENDPOINT`, with workers and a management UI | Needs PostgreSQL, Redis and S3. Files are namespaced by repository; client compatibility was not tested |
 | [AIMirror](https://github.com/livehl/aimirror) | `b2dcce1` | Cache key is a hash of the URL, and upstream is contacted before the cache |
 | [olah-go](https://github.com/zukadong/olah-go) | Source only | Stores by repository, commit and path. Its author calls it immature |
 | [ModelID](https://github.com/dongfangzhizhu/ModelID) | `eea57c5` | Proxy rejects `HEAD` and buffers whole files in memory |
