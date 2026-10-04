@@ -6,8 +6,10 @@
 #
 # The serviceSelectors gate these pools against accidental use: a
 # LoadBalancer Service only draws from them when it explicitly carries
-# `lb-pool: admin` / `lb-pool: services`. A rollback Service must set the
-# matching label (plus the L2 announcement policies re-added above).
+# `lb-pool: admin` / `lb-pool: services`. LBIPAM applies the selector to
+# `lbipam.cilium.io/ips` pin requests too, so a rollback Service must set
+# the matching label, drop or move any pin inherited from a `*-prod`
+# pool, and have the L2 announcement policies restored (see above).
 apiVersion: cilium.io/v2alpha1
 kind: CiliumLoadBalancerIPPool
 metadata:
