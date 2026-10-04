@@ -20,6 +20,7 @@ services:
       - /var/lib/doco-cd:/data
     cap_drop:
       - ALL
+    mem_limit: 256m
     healthcheck:
       test: ["CMD", "/doco-cd", "healthcheck"]
       interval: 30s
