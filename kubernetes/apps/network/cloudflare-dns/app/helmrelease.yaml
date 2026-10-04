@@ -32,8 +32,6 @@ spec:
       - --cloudflare-proxied
       - --crd-source-apiversion=externaldns.k8s.io/v1alpha1
       - --crd-source-kind=DNSEndpoint
-      # Log planned record changes without applying them.
-      - --dry-run
       - --gateway-name=gateway-public
     triggerLoopOnEvent: true
     policy: sync
