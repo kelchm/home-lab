@@ -58,9 +58,9 @@ deployment therefore remains byte-for-byte locked to the proven 7.6.5 image:
 docker.io/visionect/visionect-server-v3:7.6.5@sha256:1c8de943f4063d207483563896b1713b986a463e13d6a56730671813d6668415
 ```
 
-The HelmRelease and manual import helper use that immutable digest, and
-Renovate is disabled specifically for the Visionect image so it cannot open
-version or digest-update PRs. Any intentional upgrade must be a reviewed change
+The HelmRelease uses that immutable digest, and Renovate is disabled
+specifically for the Visionect image so it cannot open version or
+digest-update PRs. Any intentional upgrade must be a reviewed change
 that updates the pinned images and removes or changes the Renovate rule.
 
 ### Why VSS does not get privileged/FUSE access
@@ -162,6 +162,14 @@ ORDER BY 1;
 ```
 
 ## Phase 3: cold cutover
+
+Completed 2026-08-23; the Cutover record below is authoritative. These steps
+are retained as the record of the plan, not a runnable procedure. In
+particular, the `tools/visionect-migration/data-import-pod.yaml` helper was
+removed from the tree on 2026-10-04 ([#666](https://github.com/kelchm/home-lab/issues/666)):
+the Visionect Deployment now pins `replicas: 1`, so applying it today would
+run a root container against live VSS data. The manifest remains in Git
+history.
 
 Create a mode-0700 local staging directory with `mktemp -d` and record its exact
 path. Then:
