@@ -1,6 +1,7 @@
 ---
-# Inclusive path scopes, not a claim about the PR's primary purpose.
-# Add scopes by hand when content hides them; see docs/repository-labels.md.
+# Automatic scopes follow owned directories and recurring file conventions.
+# Component directories may add scopes beyond their parent (e.g. pve-exporter).
+# Add content-specific scope during review; see docs/repository-labels.md.
 platform/devices:
   - changed-files:
       - any-glob-to-any-file:
@@ -11,28 +12,20 @@ platform/kubernetes:
           - bootstrap/**
           - kubernetes/**
           - .taskfiles/bootstrap/**
-          - scripts/bootstrap-apps.sh
-          - scripts/deploy-broadsheet.sh
-          - scripts/verify-*.sh
-          - scripts/logging/**
+          # These tool components contain Kubernetes test workloads.
           - tools/iperf3/**
           - tools/longhorn-bench/**
           - tools/media-nfs-smoke/**
-          - network/unifi/bgp-test.yaml
 platform/proxmox:
   - changed-files:
       - any-glob-to-any-file:
           - proxmox/**
           - kubernetes/apps/observability/pve-exporter/**
-          - tools/sn770-zfs-qualification/**
-          - kubernetes/apps/homepage/homepage/app/config/proxmox.yaml
-          - synology/netbootxyz/menus/proxmox.ipxe
 platform/sparks:
   - changed-files:
       - any-glob-to-any-file:
           - sparks/**
           - .taskfiles/sparks/**
-          - kubernetes/apps/observability/grafana/app/spark-*-dashboard.json
 platform/synology:
   - changed-files:
       - any-glob-to-any-file:
@@ -54,7 +47,6 @@ area/ai:
           - sparks/inference/**
           - synology/modelkeep/**
           - proxmox/guests/hermes-1/**
-          - kubernetes/apps/observability/grafana/app/spark-tensorfold-dashboard.json
 area/docs:
   - changed-files:
       - any-glob-to-any-file:
@@ -66,14 +58,15 @@ area/identity:
   - changed-files:
       - any-glob-to-any-file:
           - kubernetes/apps/identity/**
+          # Shared SSO resource conventions across application namespaces.
           - kubernetes/**/oauth2-*.yaml
           - kubernetes/**/middleware-kanidm-oidc.yaml
-          - kubernetes/apps/network/traefik/app/secret-oidc-session-key.sops.yaml
 area/network:
   - changed-files:
       - any-glob-to-any-file:
           - network/**
           - kubernetes/apps/network/**
+          # Network components deployed in the shared kube-system namespace.
           - kubernetes/apps/kube-system/cilium/**
           - kubernetes/apps/kube-system/cilium-bgp/**
           - kubernetes/apps/kube-system/coredns/**
@@ -83,10 +76,8 @@ area/network:
           - proxmox/guests/tailscale-router/**
           - kubernetes/**/networkpolicy.yaml
           - kubernetes/**/networkattachmentdefinition.yaml
-          - talos/patches/global/machine-network.yaml
-          - talos/patches/*/network-extras.yaml
+          - kubernetes/**/httproute.yaml
           - tools/iperf3/**
-          - scripts/verify-qbittorrent-boundary.sh
 area/observability:
   - changed-files:
       - any-glob-to-any-file:
@@ -96,6 +87,7 @@ area/observability:
           - scripts/logging/**
           - kubernetes/**/alerts.yaml
           - kubernetes/**/scrape.yaml
+          - kubernetes/**/podmonitor.yaml
           - kubernetes/**/dashboards/**
 area/storage:
   - changed-files:
@@ -106,12 +98,11 @@ area/storage:
           - tools/media-nfs-smoke/**
           - tools/sn770-zfs-qualification/**
           - kubernetes/apps/*/storage/**
+          # Volume manifests use both bare and prefixed resource names.
+          - kubernetes/**/pv.yaml
+          - kubernetes/**/pvc.yaml
           - kubernetes/**/*-pv.yaml
           - kubernetes/**/*-pvc.yaml
-          - talos/patches/global/user-volume-longhorn.yaml
-          - talos/patches/global/volume-ephemeral.yaml
-          - scripts/synology/apply-media-acls.sh
-          - kubernetes/apps/observability/grafana/app/longhorn-dashboard.*
 area/tooling:
   - changed-files:
       - any-glob-to-any-file:

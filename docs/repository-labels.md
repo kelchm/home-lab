@@ -50,25 +50,39 @@ Boundary notes:
 ## Applying labels
 
 - Issues get at least one `platform/*` or `area/*` label describing the work — one of each is not required, and the Renovate Dashboard is the only exception.
-- Pull requests receive every label whose paths were touched, so a broad sweep legitimately accumulates labels. Add manual labels when paths understate the scope.
+- Pull requests receive every label whose path rules match, so a broad sweep legitimately accumulates labels. Path rules cover only what a path reliably says; add the rest by hand during review.
 
-Examples; automatic labels come from path rules, the rest are manual scope:
+### Automatic and manual scope
 
-| Change | Labels |
-| --- | --- |
-| PVE exporter deployed into the cluster | `platform/kubernetes`, `platform/proxmox`, `area/observability` |
-| Sparks monitoring | `platform/sparks`, `area/observability` |
-| UniFi README update | `platform/unifi`, `area/network`, `area/docs` |
-| Docs-only evaluation of a Synology service | `area/docs` (automatic) + `platform/synology` (manual), plus `area/ai` if a model cache is explicit |
-| Inline Kanidm comment in a HelmRelease | `platform/kubernetes`, `area/identity` — not `area/docs` |
-| Dedicated runtime `SOUL.md` | `platform/proxmox`, `area/ai` — not `area/docs` |
-| Repository agent instructions and skills | `area/tooling` |
+Automatic labels are a starting point, not a complete classification. A path gets a rule in only two cases:
+
+- **A directory owned by one platform or component.** `talos/**` is Talos and `kubernetes/**` is Kubernetes. A component directory can add scope beyond its parent when the whole component exists for it: everything in `kubernetes/apps/observability/pve-exporter/` monitors PVE, so it adds `platform/proxmox`; the Cilium and CoreDNS directories under `kube-system` add `area/network`.
+- **A conventional filename with a stable role.** Kubernetes resource conventions such as `networkpolicy.yaml`, `httproute.yaml`, `podmonitor.yaml`, `oauth2-*.yaml`, and bare or prefixed PV/PVC names add their area across application namespaces. READMEs identify documentation; repository entry points such as `AGENTS.md` and `Taskfile.yaml` identify tooling. Check the files' actual purpose when establishing a convention.
+
+Do not add subject-based rules for individual dashboards, scripts, patches, or secrets. Their filenames alone do not establish a convention. Add scope by hand when it depends on a file's contents; the rules do not enumerate every possible resource or integration.
+
+| Change | Automatic | Add by hand |
+| --- | --- | --- |
+| PVE exporter deployed into the cluster | `platform/kubernetes`, `platform/proxmox`, `area/observability` | — |
+| Homepage's empty `config/proxmox.yaml` placeholder | `platform/kubernetes` | Nothing; the name is not a PVE integration |
+| Any Grafana dashboard under `grafana/app/` | `platform/kubernetes`, `area/observability` | The subject: `platform/sparks` and `area/ai` for Spark TensorFold, `area/storage` for Longhorn, `platform/proxmox` and `platform/sparks` for the hosts dashboard |
+| Talos patch such as `machine-network.yaml` or `user-volume-longhorn.yaml` | `platform/talos` | `area/network` or `area/storage` |
+| `scripts/synology/apply-media-acls.sh` | `platform/synology` | `area/storage` |
+| Standalone script such as `scripts/verify-qbittorrent-boundary.sh` | None | `platform/kubernetes`, `area/network` |
+| Sparks monitoring | `platform/sparks`, `area/observability` | — |
+| UniFi README update | `platform/unifi`, `area/network`, `area/docs` | — |
+| Docs-only evaluation of a Synology service | `area/docs` | `platform/synology`, plus `area/ai` if a model cache is explicit |
+| Kanidm setting or inline comment in Bambuddy's HelmRelease | `platform/kubernetes` | `area/identity`; a comment never adds `area/docs` |
+| Runtime `SOUL.md` in `proxmox/guests/hermes-1/` | `platform/proxmox`, `area/ai` | Nothing; it is not `area/docs` |
+| Repository agent instructions and skills | `area/tooling` | — |
+
+A PR that touches only files without a rule, such as scripts directly under `scripts/`, receives no automatic scope and is labeled entirely by hand.
 
 ## Grafana relationship
 
 The Grafana tree (see [`architecture.md`](architecture.md#dashboards)) gives each dashboard one subject home: its service first, otherwise the platform whose machines, OS, or plumbing it shows, otherwise Overview. Label areas are intentionally broader than the Services folders.
 
-- Longhorn's dashboard lives under Platforms/Kubernetes; a change to it can still carry `area/storage`. Cilium maps to `area/network` the same way.
+- Longhorn's dashboard lives under Platforms/Kubernetes; a change to it carries `area/storage` as a manual addition, because dashboards in the Grafana directory are labeled only Kubernetes and observability. Cilium's dashboard gets `area/network` automatically because it lives in the Cilium component directory.
 - Dashboard and alert work carries `area/observability` even when the subject is Kubernetes; the Services/Observability folder is only for monitoring-system health.
 - Services domains align loosely with areas such as AI and Identity, but there is no forced one-to-one mapping.
 - Talos is folded into the Kubernetes dashboard folder, while `platform/kubernetes` and `platform/talos` stay separate labels for the two operating layers.
@@ -81,14 +95,14 @@ The Grafana tree (see [`architecture.md`](architecture.md#dashboards)) gives eac
 - PRs targeting `main` are labeled on open, reopen, and push; deleted files count as touched paths.
 - Existing open PRs are not re-labeled when rules change. Replay one with `gh workflow run labeler.yaml -f pr-number=123`.
 - `sync-labels: false` is explicit: manual supplements survive. The flip side is that a stale automatic label whose paths left the PR needs manual cleanup, and removing a still-matched label brings it back on the next push.
-- A subject change inside a generic HelmRelease needs a manual supplement; there is no AI classifier.
-- Review label rules when adding directories or new resource filename conventions. Most paths already inherit a platform; add the relevant areas or explicit cross-platform targets. The root `LICENSE` deliberately has no automatic scope.
+- Rules match paths only; nothing reads file contents, so a subject change inside a generic HelmRelease, patch, or script needs a manual addition.
+- Review label rules when adding an owned directory, a component whose whole purpose adds scope beyond its parent directory, or an established file convention; see [automatic and manual scope](#automatic-and-manual-scope). Scripts directly under `scripts/` and the root `LICENSE` deliberately have no automatic scope.
 
 ## Changing the catalog
 
 - Define labels only in `.github/labels.yaml`; label-sync deletes any live label absent from both the catalog names and their aliases, along with its associations.
 - Rename through `aliases` and keep old aliases. An alias is a safe rename only while its target does not exist; if the target already exists the alias becomes a merge, and merges have lost PR associations in this repository (cause unverified, so do not assume every merge loses them).
-- `scripts/ci/validate-labels.sh [ROOT_DIR] [LIVE_LABELS_JSON]` enforces exact unique names and aliases, descriptions of at most 100 characters, labeler keys that all exist in the catalog, and zero planned deletions or merges against the live-labels JSON. Regression tests live in `scripts/ci/test-validate-labels.sh`.
+- `scripts/ci/validate-labels.sh [ROOT_DIR] [LIVE_LABELS_JSON]` enforces exact unique names and aliases of at most 50 characters, descriptions of at most 100 characters, labeler keys that all exist in the catalog, and zero planned deletions or merges against the live-labels JSON. Regression tests live in `scripts/ci/test-validate-labels.sh`.
 - Repository Validation previews the EndBug label-sync dry-run and the safety gate on PRs; the live LabelSync workflow repeats the gate before writing. A push to `main` that changes the catalog triggers live label sync; complete the migration preparation before merging.
 
 ### Migration procedure
