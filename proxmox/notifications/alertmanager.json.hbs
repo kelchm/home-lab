@@ -1,0 +1,18 @@
+[
+  {
+    "labels": {
+      "alertname": "PVEBackupFailed",
+      "source": "pve",
+      "cluster": "pve-sbx",
+      "severity": "warning",
+      "node": "{{ escape fields.hostname }}",
+      "backup_job": "{{#if fields.job-id}}{{ escape fields.job-id }}{{else}}manual{{/if}}",
+      "event_id": "{{ timestamp }}"
+    },
+    "annotations": {
+      "summary": "Proxmox backup failed on {{ escape fields.hostname }}",
+      "description": "Backup job {{#if fields.job-id}}{{ escape fields.job-id }}{{else}}manual{{/if}} reported a failure. Open the node's task history for failed guests and the full backup log. This is a failure event; its expiry does not indicate recovery."
+    },
+    "generatorURL": "https://{{ escape fields.hostname }}.home.kelch.io:8006/"
+  }
+]

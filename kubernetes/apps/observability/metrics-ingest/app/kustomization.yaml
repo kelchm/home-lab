@@ -8,6 +8,7 @@ resources:
   - ./httproute.yaml
   - ./networkpolicy.yaml
   - ./alerts.yaml
+  - ./alert-ingest.yaml
 
 configMapGenerator:
   # grafana.com 21394 revision 13; datasource provisioning.

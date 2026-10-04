@@ -1,0 +1,44 @@
+---
+# Reuse the existing authentication proxy. The operator generates the password
+# into vmuser-pve-backup-notifications; no credential is stored in Git.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMUser
+metadata:
+  name: pve-backup-notifications
+  labels:
+    homelab.kelch.io/vmauth: metrics-ingest
+spec:
+  name: pve-backup-notifications
+  username: pve-backup-notifications
+  generatePassword: true
+  targetRefs:
+    - crd:
+        kind: VMAlertmanager
+        name: victoria-metrics-k8s-stack
+        namespace: observability
+      paths:
+        - /api/v2/alerts
+      # Match the whole host, with literal dots. This user cannot use the
+      # metrics-ingest hostname to bypass the POST-only HTTPRoute below.
+      hosts:
+        - 'alert-ingest\.home\.kelch\.io'
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: alert-ingest
+spec:
+  hostnames: ["alert-ingest.home.kelch.io"]
+  parentRefs:
+    - name: gateway-services
+      namespace: network
+      sectionName: https
+  rules:
+    - matches:
+        - method: POST
+          path:
+            type: Exact
+            value: /api/v2/alerts
+      backendRefs:
+        - name: vmauth-metrics-ingest
+          port: 8427
