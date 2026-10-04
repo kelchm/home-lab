@@ -193,13 +193,13 @@ The canonical dimensions are:
 | `domain` | Broad operating domain | `compute`, `storage`, `network`, `security` |
 | `platform` | Owning platform | `kubernetes`, `proxmox`, `dgx_spark`, `synology`, `unifi` |
 | `cluster` | A real clustered system only | `k8s-prod`, `pve-sbx` |
-| `host` | Stable host or managed-device name | `spark-1`, `pve-sbx-1`, `core-switch` |
+| `host` | Managed-device name where needed; machines that run node-exporter or push through an ingestion token use `instance` | `core-switch` |
 | `service` | Stable logical service | `vllm`, `nfs`, `traefik` |
-| `instance` | Canonical scrape endpoint after relabeling | `spark-1:9101`, `10.32.20.21:9100` |
+| `instance` | Machine name on node-exporter series and on every series an enrolled host pushes; scrape endpoint for other jobs | `k8s-prod-1`, `spark-1`, `pve-sbx-1` |
 
-`instance` is not a durable identity. Dashboards and alerts use `host`, `service`, and the relevant platform dimensions.
+The separate `host` identity is superseded for machines: `instance` names the machine. node-exporter on k8s-prod uses the Kubernetes node name, and enrolled PVE and Spark hosts use the name fixed by their ingestion token on every series they push. Other jobs keep their scrape endpoint as `instance`.
 
-Tunnelled Spark jobs relabel pod-loopback targets such as `127.0.0.1:19101` and `:19102` to canonical `spark-1:9101` and `spark-2:9101` instances while setting the durable `host` label explicitly. Loopback port numbers never escape into dashboards, alerts, or stored identity.
+The earlier tunnelled Spark endpoint design is superseded by host-side collection and token-enforced `instance` labels; see the [host monitoring runbook](../runbooks/host-monitoring.md).
 
 A global `cluster=k8s-prod` on vmagent and vmalert would have stamped every external target and estate alert, so #628 moved it to the sources: vmagent's default `kubernetes` scrape class labels Kubernetes scrapes, and every Kubernetes rule group carries `cluster: k8s-prod`. External targets name another scrape class, clustered ones set their real cluster, and standalone systems omit `cluster`. The [alerting runbook](../runbooks/alerting.md#cluster-labels) owns the operating rules. `site=home` is deferred until a second site exists: with one site it has no consumer, and adding it re-identifies every Kubernetes series. vlagent already stamps `cluster=k8s-prod` on log rows; fixed `site`, `environment` and `platform` log fields wait for the first non-Kubernetes log source.
 

@@ -65,6 +65,19 @@ spec:
 
     prometheus-node-exporter:
       enabled: true
+      # `instance` is the node name. This list replaces the chart's default
+      # endpoint, so its mountpoint drop rule is restated.
+      vmScrape:
+        spec:
+          endpoints:
+            - port: metrics
+              relabelConfigs:
+                - sourceLabels: [__meta_kubernetes_pod_node_name]
+                  targetLabel: instance
+              metricRelabelConfigs:
+                - action: drop
+                  sourceLabels: [mountpoint]
+                  regex: "/var/lib/kubelet/pods.+"
 
     # VM-native resources are the sole vmagent owners for Kubernetes API,
     # kubelet/cAdvisor/resource, and CoreDNS metrics. The matching KPS

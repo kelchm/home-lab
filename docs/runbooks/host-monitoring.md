@@ -25,7 +25,7 @@ Not yet verified: that Docker comes back with the same settings after a PVE node
 | `job` | Collector, such as `spark-node` or `pve-vmagent` | The scrape configuration |
 | `model`, `runtime`, `recipe` | What a Spark is serving | SparkRun's container labels |
 
-Each host has one `VMUser` in [metrics-ingest](../../kubernetes/apps/observability/metrics-ingest/app/vmusers.yaml). VMAuth adds that user's `instance` and `platform` to every sample and a host cannot override them, so the Compose and scrape files are identical on every host of a type. Host series carry no `cluster` label, and every Kubernetes rule group is restricted to `cluster="k8s-prod"`, so the two never mix. The **Hosts** dashboard and the stock **Node Exporter Full** dashboard filter by type and node; **Sparks / TensorFold performance** filters by model, recipe and node.
+Each host has one `VMUser` in [metrics-ingest](../../kubernetes/apps/observability/metrics-ingest/app/vmusers.yaml). VMAuth adds that user's `instance` and `platform` to every sample and a host cannot override them, so the Compose and scrape files are identical on every host of a type. Host series carry no `cluster` label, and every Kubernetes rule group is restricted to `cluster="k8s-prod"`, so the two never mix. The k8s-prod nodes follow the same convention on their node-exporter series, where `instance` is the Kubernetes node name. The **Hosts** dashboard and the stock **Node Exporter Full** dashboard filter by type and node; **Sparks / TensorFold performance** filters by model, recipe and node.
 
 ## Enroll a Spark
 
