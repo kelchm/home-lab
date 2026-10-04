@@ -1,0 +1,11 @@
+---
+# Write-only entry point for hosts that push their own metrics. Each VMUser
+# is one host; a request without a known token is rejected.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMAuth
+metadata:
+  name: metrics-ingest
+spec:
+  userSelector:
+    matchLabels:
+      homelab.kelch.io/vmauth: metrics-ingest

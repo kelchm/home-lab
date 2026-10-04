@@ -1,0 +1,9 @@
+name: monitoring
+working_dir: sparks/monitoring
+prune_images: false
+reconciliation: false
+---
+name: monitoring-gpu
+working_dir: sparks/monitoring/gpu
+prune_images: false
+reconciliation: false

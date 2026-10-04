@@ -26,6 +26,7 @@ jobs:
       bootstrap_changed: ${{ steps.changed-files.outputs.bootstrap_any_changed || 'true' }}
       docs_changed: ${{ steps.changed-files.outputs.docs_any_changed || 'true' }}
       hf_archive_changed: ${{ steps.changed-files.outputs.hf_archive_any_changed || 'true' }}
+      hosts_changed: ${{ steps.changed-files.outputs.hosts_any_changed || 'true' }}
       kubernetes_changed: ${{ steps.changed-files.outputs.kubernetes_any_changed || 'true' }}
       network_changed: ${{ steps.changed-files.outputs.network_any_changed || 'true' }}
       scripts_changed: ${{ steps.changed-files.outputs.scripts_any_changed || 'true' }}
@@ -91,6 +92,14 @@ jobs:
               - '**/*.sops.yaml'
               - '**/*.sops.yml'
               - 'scripts/ci/validate-sops.sh'
+            hosts:
+              - '.github/workflows/repository-validation.yaml'
+              - '.mise.toml'
+              - 'proxmox/monitoring/**'
+              - 'proxmox/platform/**'
+              - 'sparks/monitoring/**'
+              - 'sparks/platform/**'
+              - 'scripts/ci/validate-host-monitoring.sh'
             synology:
               - '.github/workflows/repository-validation.yaml'
               - '.mise.toml'
@@ -390,6 +399,33 @@ jobs:
         if: needs.pre-job.outputs.synology_changed != 'true'
         run: echo "Synology Compose validation is not required."
 
+  hosts:
+    name: Host Monitoring Validation
+    needs: pre-job
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        if: needs.pre-job.outputs.hosts_changed == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install yq
+        if: needs.pre-job.outputs.hosts_changed == 'true'
+        uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5.0.1
+        with:
+          install_args: "aqua:mikefarah/yq"
+
+      - name: Validate Compose projects and scrape configurations
+        if: needs.pre-job.outputs.hosts_changed == 'true'
+        run: |
+          docker compose version
+          scripts/ci/validate-host-monitoring.sh
+
+      - name: No host monitoring changes
+        if: needs.pre-job.outputs.hosts_changed != 'true'
+        run: echo "Host monitoring validation is not required."
+
   scripts:
     name: Shell Validation
     needs: pre-job
@@ -571,6 +607,7 @@ jobs:
       - bootstrap
       - sops
       - synology
+      - hosts
       - scripts
       - skills
       - network

@@ -121,6 +121,10 @@ As of 2026-08-27 14:48 EDT, commissioning had observed three correctable AER eve
 
 At 17:26 EDT, firmware-level **PCI Express Power Management** was disabled on all three nodes, one node and reboot at a time. Post-boot `lspci` showed the `00:1d.0` root port as `ASPM not supported` and `ASPM Disabled`, and the `02:00.0` SN770 endpoint as `ASPM Disabled`; Linux NVMe APST remained at its default `100000` µs latency threshold. Every node rejoined both cluster quorum and active NFS storage with zero failed units, zero SMART critical warnings, zero media or NVMe error-log entries, and no PCIe, NVMe, reset, timeout, or I/O error in the new boot. This is the applied mitigation baseline, not clearance of the zero-AER gate; the three-node idle and I/O acceptance window must still be repeated.
 
+## Monitoring
+
+Host metrics come from the [monitoring project](monitoring/README.md), which doco-cd deploys from `main` once a node is enrolled; cluster, guest, storage and backup-coverage state comes from the Proxmox API. Both are described in the [host monitoring runbook](../docs/runbooks/host-monitoring.md).
+
 ## Backup and isolated restore drill
 
 Create an on-demand snapshot backup:

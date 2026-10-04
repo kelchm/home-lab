@@ -1,0 +1,118 @@
+---
+# One user per host. The token decides `instance` (the node) and `platform`
+# (its type): VMAuth adds them to every sample and a host cannot override
+# them, so collector configs carry no identity.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMUser
+metadata:
+  name: spark-1
+  labels:
+    homelab.kelch.io/vmauth: metrics-ingest
+spec:
+  tokenRef:
+    name: metrics-ingest-tokens
+    key: SPARK_1_TOKEN
+  targetRefs:
+    - crd:
+        kind: VMSingle
+        name: victoria-metrics-k8s-stack
+        namespace: observability
+      paths:
+        - /api/v1/write
+      query_args:
+        - name: extra_label
+          values:
+            - instance=spark-1
+            - platform=spark
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMUser
+metadata:
+  name: spark-2
+  labels:
+    homelab.kelch.io/vmauth: metrics-ingest
+spec:
+  tokenRef:
+    name: metrics-ingest-tokens
+    key: SPARK_2_TOKEN
+  targetRefs:
+    - crd:
+        kind: VMSingle
+        name: victoria-metrics-k8s-stack
+        namespace: observability
+      paths:
+        - /api/v1/write
+      query_args:
+        - name: extra_label
+          values:
+            - instance=spark-2
+            - platform=spark
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMUser
+metadata:
+  name: pve-sbx-1
+  labels:
+    homelab.kelch.io/vmauth: metrics-ingest
+spec:
+  tokenRef:
+    name: metrics-ingest-tokens
+    key: PVE_SBX_1_TOKEN
+  targetRefs:
+    - crd:
+        kind: VMSingle
+        name: victoria-metrics-k8s-stack
+        namespace: observability
+      paths:
+        - /api/v1/write
+      query_args:
+        - name: extra_label
+          values:
+            - instance=pve-sbx-1
+            - platform=pve
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMUser
+metadata:
+  name: pve-sbx-2
+  labels:
+    homelab.kelch.io/vmauth: metrics-ingest
+spec:
+  tokenRef:
+    name: metrics-ingest-tokens
+    key: PVE_SBX_2_TOKEN
+  targetRefs:
+    - crd:
+        kind: VMSingle
+        name: victoria-metrics-k8s-stack
+        namespace: observability
+      paths:
+        - /api/v1/write
+      query_args:
+        - name: extra_label
+          values:
+            - instance=pve-sbx-2
+            - platform=pve
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMUser
+metadata:
+  name: pve-sbx-3
+  labels:
+    homelab.kelch.io/vmauth: metrics-ingest
+spec:
+  tokenRef:
+    name: metrics-ingest-tokens
+    key: PVE_SBX_3_TOKEN
+  targetRefs:
+    - crd:
+        kind: VMSingle
+        name: victoria-metrics-k8s-stack
+        namespace: observability
+      paths:
+        - /api/v1/write
+      query_args:
+        - name: extra_label
+          values:
+            - instance=pve-sbx-3
+            - platform=pve
