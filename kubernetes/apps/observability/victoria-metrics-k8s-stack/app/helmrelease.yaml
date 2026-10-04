@@ -235,8 +235,8 @@ spec:
             relabelConfigs:
               - targetLabel: cluster
                 replacement: k8s-prod
-          # Targets outside the cluster set their own `cluster`.
-          - name: external
+          # Targets in the lab's other systems set their own `cluster`.
+          - name: other-systems
         # null omits the field. Server-side apply of the chart's `{}`
         # default can yield null, which the VMAgent schema rejects.
         externalLabels: null
@@ -272,7 +272,7 @@ spec:
     defaultRules:
       create: true
       # Every bundled rule describes this cluster. `params` keeps series
-      # pushed by hosts outside it away from these rules.
+      # from the lab's other systems away from these rules.
       group:
         spec:
           labels:

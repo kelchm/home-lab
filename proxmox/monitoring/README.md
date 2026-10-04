@@ -1,6 +1,6 @@
 # PVE host monitoring
 
-Host metrics for the PVE nodes. Enrollment, verification and removal are in the [external hosts runbook](../../docs/runbooks/external-hosts.md).
+Host metrics for the PVE nodes. Enrollment, verification and removal are in the [host monitoring runbook](../../docs/runbooks/host-monitoring.md).
 
 | File | Purpose |
 |---|---|

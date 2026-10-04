@@ -8,7 +8,7 @@ metadata:
   name: pve-exporter
 spec:
   jobName: pve-api
-  scrapeClass: external
+  scrapeClass: other-systems
   targetEndpoints:
     - targets:
         - pve-sbx-1.home.kelch.io

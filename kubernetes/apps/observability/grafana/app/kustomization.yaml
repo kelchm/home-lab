@@ -10,9 +10,9 @@ resources:
   - ./httproute.yaml
 
 configMapGenerator:
-  - name: grafana-dashboard-external-hosts
+  - name: grafana-dashboard-hosts
     files:
-      - external-hosts.json=./external-hosts-dashboard.json
+      - hosts.json=./hosts-dashboard.json
     options:
       labels:
         grafana_dashboard: "1"

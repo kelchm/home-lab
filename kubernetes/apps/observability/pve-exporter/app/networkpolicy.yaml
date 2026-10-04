@@ -1,5 +1,5 @@
 ---
-# Cross-namespace and external flows only; the namespace baseline covers the rest.
+# Egress to the Proxmox API only; the namespace baseline covers the rest.
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:

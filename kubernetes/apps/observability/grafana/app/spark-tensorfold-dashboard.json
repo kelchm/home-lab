@@ -1628,7 +1628,7 @@
       },
       "options": {
         "mode": "markdown",
-        "content": "Use this view to correlate **throughput, latency, concurrency, prompt reuse and pool pressure** during normal TensorFold use. Rates account for counter resets; ongoing requests contribute only to the live-output counter.\n\n**Still unmeasured:** per-request decode speed / inter-token latency, client-visible TTFT, queue-wait duration, generation-stall detection, and reliable error/cancellation counts. Node and GPU health are on the [External Hosts](/d/external-hosts) dashboard. A successful scrape is not an inference health check. Latency percentiles describe a mixed workload and are approximate; inspect sample counts before comparing runs."
+        "content": "Use this view to correlate **throughput, latency, concurrency, prompt reuse and pool pressure** during normal TensorFold use. Rates account for counter resets; ongoing requests contribute only to the live-output counter.\n\n**Still unmeasured:** per-request decode speed / inter-token latency, client-visible TTFT, queue-wait duration, generation-stall detection, and reliable error/cancellation counts. Node and GPU health are on the [Hosts](/d/hosts) dashboard. A successful scrape is not an inference health check. Latency percentiles describe a mixed workload and are approximate; inspect sample counts before comparing runs."
       }
     }
   ],

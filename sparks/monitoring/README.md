@@ -1,6 +1,6 @@
 # Spark monitoring
 
-Host, GPU and inference metrics for the two DGX Sparks. Enrollment, verification and removal are in the [external hosts runbook](../../docs/runbooks/external-hosts.md).
+Host, GPU and inference metrics for the two DGX Sparks. Enrollment, verification and removal are in the [host monitoring runbook](../../docs/runbooks/host-monitoring.md).
 
 | File | Purpose |
 |---|---|

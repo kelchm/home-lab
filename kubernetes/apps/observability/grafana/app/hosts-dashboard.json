@@ -1,6 +1,6 @@
 {
-  "uid": "external-hosts",
-  "title": "External Hosts",
+  "uid": "hosts",
+  "title": "Hosts",
   "description": "PVE nodes and DGX Sparks. Type and Node come from each host's ingestion token.",
   "editable": false,
   "schemaVersion": 40,

@@ -123,7 +123,7 @@ At 17:26 EDT, firmware-level **PCI Express Power Management** was disabled on al
 
 ## Monitoring
 
-Host metrics come from the [monitoring project](monitoring/README.md), which doco-cd deploys from `main` once a node is enrolled; cluster, guest, storage and backup-coverage state comes from the Proxmox API. Both are described in the [external hosts runbook](../docs/runbooks/external-hosts.md).
+Host metrics come from the [monitoring project](monitoring/README.md), which doco-cd deploys from `main` once a node is enrolled; cluster, guest, storage and backup-coverage state comes from the Proxmox API. Both are described in the [host monitoring runbook](../docs/runbooks/host-monitoring.md).
 
 ## Backup and isolated restore drill
 

@@ -10,7 +10,7 @@
 # Scope the rule to those exact names so bridges, VLANs, veths, and Cilium
 # devices cannot generate false positives. node_uname_info adds the hostname;
 # node_network_speed_bytes itself only identifies the node-exporter instance.
-# Its cluster matcher keeps hosts outside the cluster out of these rules.
+# Its cluster matcher keeps the lab's other hosts out of these rules.
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
