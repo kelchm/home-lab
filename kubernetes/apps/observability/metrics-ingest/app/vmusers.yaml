@@ -1,7 +1,8 @@
 ---
 # One user per host. The token decides `instance` (the node) and `platform`
 # (its type): VMAuth adds them to every sample and a host cannot override
-# them, so collector configs carry no identity.
+# them, so collector configs carry no identity. `spec.name` labels VMAuth's own
+# per-user metrics with the host instead of a token hash.
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMUser
 metadata:
@@ -9,6 +10,7 @@ metadata:
   labels:
     homelab.kelch.io/vmauth: metrics-ingest
 spec:
+  name: spark-1
   tokenRef:
     name: metrics-ingest-tokens
     key: SPARK_1_TOKEN
@@ -32,6 +34,7 @@ metadata:
   labels:
     homelab.kelch.io/vmauth: metrics-ingest
 spec:
+  name: spark-2
   tokenRef:
     name: metrics-ingest-tokens
     key: SPARK_2_TOKEN
@@ -55,6 +58,7 @@ metadata:
   labels:
     homelab.kelch.io/vmauth: metrics-ingest
 spec:
+  name: pve-sbx-1
   tokenRef:
     name: metrics-ingest-tokens
     key: PVE_SBX_1_TOKEN
@@ -78,6 +82,7 @@ metadata:
   labels:
     homelab.kelch.io/vmauth: metrics-ingest
 spec:
+  name: pve-sbx-2
   tokenRef:
     name: metrics-ingest-tokens
     key: PVE_SBX_2_TOKEN
@@ -101,6 +106,7 @@ metadata:
   labels:
     homelab.kelch.io/vmauth: metrics-ingest
 spec:
+  name: pve-sbx-3
   tokenRef:
     name: metrics-ingest-tokens
     key: PVE_SBX_3_TOKEN
