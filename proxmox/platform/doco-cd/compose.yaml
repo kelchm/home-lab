@@ -20,6 +20,10 @@ services:
       - /var/lib/doco-cd:/data
     cap_drop:
       - ALL
+    # Docker's default AppArmor profile denies Unix sockets on PVE's kernel, so
+    # the deployer could not open the Docker socket it is mounted with.
+    security_opt:
+      - apparmor=unconfined
     mem_limit: 256m
     logging:
       driver: json-file
