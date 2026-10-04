@@ -4,9 +4,10 @@
 # credentials, so egress is pinned to exactly its flows. One policy selects
 # every pod carrying app.kubernetes.io/name: kaniop (app.kubernetes.io/component
 # separates them): the operator and webhook deployments, plus the ephemeral
-# crd-apply/crd-migration upgrade-hook Jobs, whose only flows (DNS and the API
-# server) are already in the list. Pods ignore rules for listeners they do
-# not have: the webhook never serves :8080, the operator never serves :8443.
+# crd-apply/crd-migration hook Jobs (apply, migrate, verify) whose only flows
+# (DNS and the API server) are already in the list. Pods ignore rules for
+# listeners they do not have: the webhook never serves :8080, the operator
+# never serves :8443.
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
@@ -55,6 +56,19 @@ spec:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: identity
             kanidm.kaniop.rs/cluster: kanidm
+      toPorts:
+        - ports:
+            - port: "8443"
+              protocol: TCP
+    # KanidmOAuth2Client icon downloads. Clients configured with image.url
+    # (arr-suite, ops-suite, grafana) are fetched by the operator from
+    # auth.home.kelch.io, whose DNS answer is the traefik-services
+    # LoadBalancer; its websecure container port is 8443.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: network
+            app.kubernetes.io/name: traefik
+            app.kubernetes.io/instance: traefik-services-network
       toPorts:
         - ports:
             - port: "8443"
