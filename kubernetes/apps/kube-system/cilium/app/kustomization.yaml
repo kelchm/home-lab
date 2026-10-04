@@ -6,3 +6,19 @@ resources:
   - ./ocirepository.yaml
   - ./networks.yaml
   - ./alerts.yaml
+
+# The one Hubble dashboard with metrics behind it, as the Cilium chart renders
+# it. The chart switches its Hubble dashboards on or off only as a set.
+configMapGenerator:
+  - name: grafana-dashboard-hubble-network-overview
+    files:
+      - lab-hubble-network-overview-namespace.json=./dashboards/hubble-network-overview-namespace.json
+    options:
+      annotations:
+        grafana_folder: Platforms/Kubernetes
+generatorOptions:
+  disableNameSuffixHash: true
+  labels:
+    grafana_dashboard: "1"
+  annotations:
+    kustomize.toolkit.fluxcd.io/substitute: disabled
