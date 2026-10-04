@@ -81,4 +81,21 @@ reset_fixture
 yq -i '.[0].description = "This description is deliberately longer than the maximum allowed by the GitHub labels API: one hundred characters."' "${FIXTURE}/.github/labels.yaml"
 expect_failure 'invalid label fields'
 
+readonly LABEL_NAME_50="$(jq --null-input --raw-output '"n" * 50')"
+readonly LABEL_ALIAS_50="$(jq --null-input --raw-output '"a" * 50')"
+
+reset_fixture
+LABEL_TEST_NAME="${LABEL_NAME_50}" LABEL_TEST_ALIAS="${LABEL_ALIAS_50}" \
+    yq -i '.[2].name = strenv(LABEL_TEST_NAME) | .[2].aliases = [strenv(LABEL_TEST_ALIAS)]' "${FIXTURE}/.github/labels.yaml"
+"${VALIDATOR}" "${FIXTURE}" "${FIXTURE}/live.json"
+echo "ok: accepts 50-character names and aliases"
+
+reset_fixture
+LABEL_TEST_NAME="${LABEL_NAME_50}n" yq -i '.[2].name = strenv(LABEL_TEST_NAME)' "${FIXTURE}/.github/labels.yaml"
+expect_failure 'invalid label fields'
+
+reset_fixture
+LABEL_TEST_ALIAS="${LABEL_ALIAS_50}a" yq -i '.[2].aliases = [strenv(LABEL_TEST_ALIAS)]' "${FIXTURE}/.github/labels.yaml"
+expect_failure 'invalid label fields'
+
 echo "Label validation regression cases OK"

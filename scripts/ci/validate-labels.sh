@@ -11,12 +11,12 @@ jq --exit-status --null-input --argjson catalog "${catalog}" --argjson rules "${
   def require($ok; $message): if $ok then . else error($message) end;
   require($catalog | type == "array" and length > 0; "catalog must be a nonempty array") |
   require($catalog | all(.[];
-    (.name | type == "string" and test("^[a-z0-9][a-z0-9/-]*$")) and
+    (.name | type == "string" and length <= 50 and test("^[a-z0-9][a-z0-9/-]*$")) and
     (.color | type == "string" and test("^[0-9a-fA-F]{6}$")) and
     ((.delete // false) == false) and
     ((.description // "") | type == "string" and length <= 100) and
-    ((.aliases // []) | type == "array" and all(.[]; type == "string" and test("^[a-z0-9][a-z0-9/-]*$")))
-  ); "invalid label fields or explicit deletion (use exact, unique names and aliases)") |
+    ((.aliases // []) | type == "array" and all(.[]; type == "string" and length <= 50 and test("^[a-z0-9][a-z0-9/-]*$")))
+  ); "invalid label fields or explicit deletion (use exact, unique names and aliases of at most 50 characters)") |
   ([$catalog[] | .name, (.aliases // [])[]]) as $names |
   require(($names | unique | length) == ($names | length); "duplicate label names or aliases") |
   require($rules | type == "object" and length > 0; "labeler must be a nonempty mapping") |
