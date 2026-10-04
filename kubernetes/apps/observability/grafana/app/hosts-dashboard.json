@@ -105,7 +105,8 @@
             "align": "auto",
             "cellOptions": {
               "type": "auto"
-            }
+            },
+            "minWidth": 80
           },
           "noValue": ""
         },
@@ -446,7 +447,8 @@
             "align": "auto",
             "cellOptions": {
               "type": "auto"
-            }
+            },
+            "minWidth": 80
           },
           "noValue": ""
         },
