@@ -1,0 +1,20 @@
+---
+# Cross-namespace and external flows only; the namespace baseline covers the rest.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: pve-exporter
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: pve-exporter
+  egress:
+    # Proxmox API on each node.
+    - toCIDR:
+        - 10.32.20.21/32
+        - 10.32.20.22/32
+        - 10.32.20.23/32
+      toPorts:
+        - ports:
+            - port: "8006"
+              protocol: TCP

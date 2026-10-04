@@ -235,6 +235,8 @@ spec:
             relabelConfigs:
               - targetLabel: cluster
                 replacement: k8s-prod
+          # Targets outside the cluster set their own `cluster`.
+          - name: external
         # null omits the field. Server-side apply of the chart's `{}`
         # default can yield null, which the VMAgent schema rejects.
         externalLabels: null
@@ -269,11 +271,15 @@ spec:
 
     defaultRules:
       create: true
-      # Every bundled rule describes this cluster.
+      # Every bundled rule describes this cluster. `params` keeps series
+      # pushed by hosts outside it away from these rules.
       group:
         spec:
           labels:
             cluster: k8s-prod
+          params:
+            extra_filters[]:
+              - '{cluster="k8s-prod"}'
       groups:
         kube-apiserver-availability.rules:
           rules:
