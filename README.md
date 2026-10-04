@@ -52,7 +52,7 @@ Workloads are organised one namespace per concern under [`kubernetes/apps/`](kub
   NAS identity and NFSv4 ACL isolation.
 - **`identity`** — Kanidm as the OIDC provider / user directory, run by the
   kaniop operator.
-- **`observability`** — Grafana defaults to VictoriaMetrics; vmalert and VMAlertmanager own Pushover delivery, and VictoriaLogs is the surviving log backend. OpenObserve, kube-prometheus-stack, and Loki are removed per the completed [bake-off decision](docs/observability-bakeoff.md) — the rollback is reverting the bake-off merge.
+- **`observability`** — Grafana defaults to VictoriaMetrics; vmalert and VMAlertmanager own Pushover delivery, and VictoriaLogs is the surviving log backend. kube-prometheus-stack, Loki, and OpenObserve are removed per the completed [bake-off decision](docs/observability-bakeoff.md); the retired configuration remains in Git history only, and restoring it is a deliberate, reviewed change rather than a revert — no rollback data is kept.
 - **`homepage`** — [Homepage](https://gethomepage.dev) at `home.kelch.io`, the operator start page. Apps declare their own tiles through annotations on their routes. See the [Homepage guide](kubernetes/apps/homepage/README.md).
 - **`ai`** — MCPHub as a file-backed MCP gateway with capability groups and workload-scoped bearer keys, fronting nine backend MCP servers. MetaMCP and MarkItDown are retired. See the [MCPHub guide](kubernetes/apps/ai/mcphub/README.md).
 - **`network`**, **`cert-manager`**, **`longhorn-system`**, **`cnpg-system`**,
@@ -66,7 +66,7 @@ home-lab/
 ├── kubernetes/
 │   ├── flux/       # Flux bootstrap / cluster entrypoint
 │   ├── apps/       # workloads + cluster infra, one dir per namespace
-│   └── components/ # shared Kustomize components (e.g. SOPS secrets)
+│   └── components/ # shared Kustomize components (e.g. pod quota)
 ├── bootstrap/      # Helmfile used to bring up Cilium/Flux before GitOps takes over
 ├── network/unifi/  # versioned UniFi-side artifacts (FRR/BGP, firewall intent)
 ├── devices/        # manually applied config for appliances outside Kubernetes
