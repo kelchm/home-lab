@@ -24,7 +24,7 @@
     {
       "asDropdown": false,
       "icon": "external link",
-      "includeVars": false,
+      "includeVars": true,
       "keepTime": true,
       "tags": [],
       "targetBlank": false,
@@ -100,9 +100,10 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "(node_hwmon_temp_celsius * on(instance, chip, sensor) group_left(label) node_hwmon_sensor_label{label=\"Tctl\"}) * on(instance) group_left(nodename) node_uname_info{nodename=~\"$node\"}",
+          "expr": "(node_hwmon_temp_celsius{cluster=\"k8s-prod\"} * on(instance, chip, sensor) group_left(label) node_hwmon_sensor_label{cluster=\"k8s-prod\", label=\"Tctl\"}) * on(instance) group_left(nodename) node_uname_info{cluster=\"k8s-prod\", nodename=~\"$node\"}",
           "legendFormat": "{{nodename}}",
-          "range": true,
+          "instant": true,
+          "range": false,
           "refId": "A"
         }
       ],
@@ -173,9 +174,10 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "(node_hwmon_temp_celsius * on(instance, chip, sensor) group_left(label) node_hwmon_sensor_label{label=\"edge\"}) * on(instance) group_left(nodename) node_uname_info{nodename=~\"$node\"}",
+          "expr": "(node_hwmon_temp_celsius{cluster=\"k8s-prod\"} * on(instance, chip, sensor) group_left(label) node_hwmon_sensor_label{cluster=\"k8s-prod\", label=\"edge\"}) * on(instance) group_left(nodename) node_uname_info{cluster=\"k8s-prod\", nodename=~\"$node\"}",
           "legendFormat": "{{nodename}}",
-          "range": true,
+          "instant": true,
+          "range": false,
           "refId": "A"
         }
       ],
@@ -246,9 +248,10 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "(node_hwmon_temp_celsius * on(instance, chip, sensor) group_left(label) node_hwmon_sensor_label{label=\"Composite\"}) * on(instance) group_left(nodename) node_uname_info{nodename=~\"$node\"}",
+          "expr": "(node_hwmon_temp_celsius{cluster=\"k8s-prod\"} * on(instance, chip, sensor) group_left(label) node_hwmon_sensor_label{cluster=\"k8s-prod\", label=\"Composite\"}) * on(instance) group_left(nodename) node_uname_info{cluster=\"k8s-prod\", nodename=~\"$node\"}",
           "legendFormat": "{{nodename}}",
-          "range": true,
+          "instant": true,
+          "range": false,
           "refId": "A"
         }
       ],
@@ -319,9 +322,10 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "max by(instance) (node_hwmon_temp_celsius{chip=~\"nvme.*\"}) * on(instance) group_left(nodename) node_uname_info{nodename=~\"$node\"}",
+          "expr": "max by(instance) (node_hwmon_temp_celsius{cluster=\"k8s-prod\", chip=~\"nvme.*\"}) * on(instance) group_left(nodename) node_uname_info{cluster=\"k8s-prod\", nodename=~\"$node\"}",
           "legendFormat": "{{nodename}}",
-          "range": true,
+          "instant": true,
+          "range": false,
           "refId": "A"
         }
       ],
@@ -361,13 +365,13 @@
               "type": "linear"
             },
             "showPoints": "never",
-            "spanNulls": true,
+            "spanNulls": false,
             "stacking": {
               "group": "A",
               "mode": "none"
             },
             "thresholdsStyle": {
-              "mode": "off"
+              "mode": "line"
             }
           },
           "decimals": 1,
@@ -378,6 +382,10 @@
               {
                 "color": "green",
                 "value": null
+              },
+              {
+                "color": "orange",
+                "value": 85
               },
               {
                 "color": "red",
@@ -415,7 +423,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "(node_hwmon_temp_celsius * on(instance, chip, sensor) group_left(label) node_hwmon_sensor_label{label=\"Tctl\"}) * on(instance) group_left(nodename) node_uname_info{nodename=~\"$node\"}",
+          "expr": "max by (nodename) ( (node_hwmon_temp_celsius{cluster=\"k8s-prod\"} * on(instance, chip, sensor) group_left(label) node_hwmon_sensor_label{cluster=\"k8s-prod\", label=\"Tctl\"}) * on(instance) group_left(nodename) node_uname_info{cluster=\"k8s-prod\", nodename=~\"$node\"} )",
           "legendFormat": "{{nodename}}",
           "range": true,
           "refId": "A"
@@ -457,13 +465,13 @@
               "type": "linear"
             },
             "showPoints": "never",
-            "spanNulls": true,
+            "spanNulls": false,
             "stacking": {
               "group": "A",
               "mode": "none"
             },
             "thresholdsStyle": {
-              "mode": "off"
+              "mode": "line"
             }
           },
           "decimals": 1,
@@ -474,6 +482,10 @@
               {
                 "color": "green",
                 "value": null
+              },
+              {
+                "color": "orange",
+                "value": 85
               },
               {
                 "color": "red",
@@ -511,7 +523,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "(node_hwmon_temp_celsius * on(instance, chip, sensor) group_left(label) node_hwmon_sensor_label{label=\"edge\"}) * on(instance) group_left(nodename) node_uname_info{nodename=~\"$node\"}",
+          "expr": "max by (nodename) ( (node_hwmon_temp_celsius{cluster=\"k8s-prod\"} * on(instance, chip, sensor) group_left(label) node_hwmon_sensor_label{cluster=\"k8s-prod\", label=\"edge\"}) * on(instance) group_left(nodename) node_uname_info{cluster=\"k8s-prod\", nodename=~\"$node\"} )",
           "legendFormat": "{{nodename}}",
           "range": true,
           "refId": "A"
@@ -553,13 +565,13 @@
               "type": "linear"
             },
             "showPoints": "never",
-            "spanNulls": true,
+            "spanNulls": false,
             "stacking": {
               "group": "A",
               "mode": "none"
             },
             "thresholdsStyle": {
-              "mode": "off"
+              "mode": "line"
             }
           },
           "decimals": 1,
@@ -570,6 +582,10 @@
               {
                 "color": "green",
                 "value": null
+              },
+              {
+                "color": "orange",
+                "value": 75
               },
               {
                 "color": "red",
@@ -607,7 +623,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "(node_hwmon_temp_celsius * on(instance, chip, sensor) group_left(label) node_hwmon_sensor_label{label=\"Composite\"}) * on(instance) group_left(nodename) node_uname_info{nodename=~\"$node\"}",
+          "expr": "max by (nodename) ( (node_hwmon_temp_celsius{cluster=\"k8s-prod\"} * on(instance, chip, sensor) group_left(label) node_hwmon_sensor_label{cluster=\"k8s-prod\", label=\"Composite\"}) * on(instance) group_left(nodename) node_uname_info{cluster=\"k8s-prod\", nodename=~\"$node\"} )",
           "legendFormat": "{{nodename}}",
           "range": true,
           "refId": "A"
@@ -649,13 +665,13 @@
               "type": "linear"
             },
             "showPoints": "never",
-            "spanNulls": true,
+            "spanNulls": false,
             "stacking": {
               "group": "A",
               "mode": "none"
             },
             "thresholdsStyle": {
-              "mode": "off"
+              "mode": "line"
             }
           },
           "decimals": 1,
@@ -666,6 +682,10 @@
               {
                 "color": "green",
                 "value": null
+              },
+              {
+                "color": "orange",
+                "value": 85
               },
               {
                 "color": "red",
@@ -703,7 +723,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "max by(instance) (node_hwmon_temp_celsius{chip=~\"nvme.*\"}) * on(instance) group_left(nodename) node_uname_info{nodename=~\"$node\"}",
+          "expr": "max by(instance) (node_hwmon_temp_celsius{cluster=\"k8s-prod\", chip=~\"nvme.*\"}) * on(instance) group_left(nodename) node_uname_info{cluster=\"k8s-prod\", nodename=~\"$node\"}",
           "legendFormat": "{{nodename}}",
           "range": true,
           "refId": "A"
@@ -745,7 +765,7 @@
               "type": "linear"
             },
             "showPoints": "never",
-            "spanNulls": true,
+            "spanNulls": false,
             "stacking": {
               "group": "A",
               "mode": "none"
@@ -801,7 +821,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "100 * (1 - avg by(instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[$__rate_interval]))) * on(instance) group_left(nodename) node_uname_info{nodename=~\"$node\"}",
+          "expr": "100 * (1 - avg by(instance) (rate(node_cpu_seconds_total{cluster=\"k8s-prod\", mode=\"idle\"}[$__rate_interval]))) * on(instance) group_left(nodename) node_uname_info{cluster=\"k8s-prod\", nodename=~\"$node\"}",
           "legendFormat": "{{nodename}}",
           "range": true,
           "refId": "A"
@@ -836,14 +856,14 @@
           "type": "prometheus",
           "uid": "${datasource}"
         },
-        "definition": "label_values(node_uname_info,nodename)",
+        "definition": "label_values(node_uname_info{cluster=\"k8s-prod\"},nodename)",
         "includeAll": true,
         "multi": true,
         "name": "node",
         "options": [],
         "query": {
           "qryType": 1,
-          "query": "label_values(node_uname_info,nodename)",
+          "query": "label_values(node_uname_info{cluster=\"k8s-prod\"},nodename)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 2,
