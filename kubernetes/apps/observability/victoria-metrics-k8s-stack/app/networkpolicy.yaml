@@ -140,6 +140,28 @@ spec:
             # traefik metrics entrypoint (dedicated metrics Service)
             - port: "9100"
               protocol: TCP
+    # k8s-gateway metrics.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: network
+            app.kubernetes.io/name: k8s-gateway
+            app.kubernetes.io/instance: k8s-gateway
+            io.cilium.k8s.policy.serviceaccount: k8s-gateway
+      toPorts:
+        - ports:
+            - port: "9153"
+              protocol: TCP
+    # bambuddy metrics.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: printing
+            app.kubernetes.io/name: bambuddy
+            app.kubernetes.io/instance: bambuddy
+            io.cilium.k8s.policy.serviceaccount: bambuddy
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
     # Node and control-plane metrics.
     - toEntities:
         - host

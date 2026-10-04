@@ -105,6 +105,15 @@ spec:
         ports:
           http:
             port: *port
+    serviceMonitor:
+      app:
+        endpoints:
+          - port: http
+            path: /api/v1/metrics
+            interval: 30s
+            relabelings:
+              - targetLabel: job
+                replacement: bambuddy
     persistence:
       data:
         type: persistentVolumeClaim
