@@ -24,7 +24,7 @@ spec:
             image:
               # No v-prefix and no ghcr mirror; Docker Hub is the only registry.
               repository: docker.io/grafana/mcp-grafana
-              tag: 1.6.3
+              tag: 2.0.0
             # Image ENTRYPOINT defaults to SSE on path /; override to
             # streamable-http and pin the endpoint path to the Service-DNS
             # convention (default is / which would 404).
@@ -43,6 +43,8 @@ spec:
             env:
               # Grafana Service in observability is port 80.
               GRAFANA_URL: http://grafana.observability.svc.cluster.local
+              # Anonymous usage reporting is on by default; keep it off.
+              GRAFANA_USAGE_STATS: disabled
             envFrom:
               - secretRef:
                   name: grafana-mcp-secrets
