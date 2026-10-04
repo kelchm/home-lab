@@ -100,8 +100,8 @@ Tooling is pinned with [mise](https://mise.jdx.dev/); common tasks run through
 
 ```sh
 task reconcile            # force Flux to pull the latest git state
-task talos:apply-node IP=10.32.30.11 MODE=auto   # push updated Talos config to a node
-task talos:upgrade-node IP=10.32.30.11           # upgrade Talos on a node
+task talos:apply-node IP=10.32.30.11 MODE=auto   # regenerate Talos config, diff it against a node, confirm, apply
+task talos:upgrade-node IP=10.32.30.11           # preflight the cluster, confirm, upgrade Talos on a node
 task talos:upgrade-k8s                           # upgrade Kubernetes
 ```
 
