@@ -1,0 +1,14 @@
+[
+  {
+    "range": "bytes=0-63",
+    "status": 206,
+    "content_range": "bytes 0-63/17756393",
+    "bytes": 64
+  },
+  {
+    "range": "bytes=-64",
+    "status": 206,
+    "content_range": "bytes 17756329-17756392/17756393",
+    "bytes": 64
+  }
+]

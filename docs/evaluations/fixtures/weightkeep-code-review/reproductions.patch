@@ -1,0 +1,401 @@
+diff --git a/internal/proxy/zz_review_test.go b/internal/proxy/zz_review_test.go
+new file mode 100644
+index 0000000..2b81b6f
+--- /dev/null
++++ b/internal/proxy/zz_review_test.go
+@@ -0,0 +1,103 @@
++package proxy
++
++import (
++	"context"
++	"github.com/afshinghezeli/weightkeep/internal/config"
++	"github.com/afshinghezeli/weightkeep/internal/hub"
++	"github.com/afshinghezeli/weightkeep/internal/keep"
++	"github.com/afshinghezeli/weightkeep/internal/testutil/fakehub"
++	"io"
++	"net/http"
++	"net/http/httptest"
++	"os"
++	"strings"
++	"testing"
++	"time"
++)
++
++func TestReviewUpstreamWriteDelegation(t *testing.T) {
++	h := newHarness(t, Options{})
++	var seenMethod, seenBody string
++	var serverAuth bool
++	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++		seenMethod = r.Method
++		b, _ := io.ReadAll(r.Body)
++		seenBody = string(b)
++		serverAuth = r.Header.Get("Authorization") == "Bearer hf_review_test"
++		w.Header().Set("Content-Type", "application/json")
++		io.WriteString(w, `{"ok":true}`)
++	}))
++	defer up.Close()
++	client, err := hub.New(up.URL, hub.Options{Token: config.NewToken("hf_review_test")})
++	if err != nil {
++		t.Fatal(err)
++	}
++	h.k.Hub = client
++	req, _ := http.NewRequestWithContext(context.Background(), "DELETE", h.proxy.URL+"/api/repos/delete", strings.NewReader(`{"name":"owner/model","type":"model"}`))
++	req.Header.Set("Content-Type", "application/json")
++	resp, err := http.DefaultClient.Do(req)
++	if err != nil {
++		t.Fatal(err)
++	}
++	defer resp.Body.Close()
++	if seenMethod != "DELETE" || !serverAuth || !strings.Contains(seenBody, "owner/model") {
++		t.Fatalf("delegation not reproduced: method=%s server_token=%v", seenMethod, serverAuth)
++	}
++	t.Logf("unauthenticated local DELETE forwarded with server token; status=%d", resp.StatusCode)
++}
++
++type reviewTransport func(*http.Request) (*http.Response, error)
++
++func (f reviewTransport) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
++func TestReviewCachedModelMetadataTimeout(t *testing.T) {
++	h := newHarness(t, Options{RefTTL: time.Nanosecond})
++	resp, body := h.do(t, http.MethodGet, "/acme/tiny/resolve/main/model.safetensors", nil)
++	if resp.StatusCode != 200 || len(body) != len(weights.Content) {
++		t.Fatal("warmup failed")
++	}
++	client, err := hub.New(h.up.URL, hub.Options{APITimeout: 20 * time.Millisecond, Transport: reviewTransport(func(r *http.Request) (*http.Response, error) {
++		<-r.Context().Done()
++		return nil, r.Context().Err()
++	})})
++	if err != nil {
++		t.Fatal(err)
++	}
++	h.k.Hub = client
++	h.k.Fetcher.Hub = client
++	resp, body = h.do(t, http.MethodGet, "/acme/tiny/resolve/main/model.safetensors", nil)
++	if resp.StatusCode != 504 || !h.st.Has(weights.SHA256()) {
++		t.Fatalf("not reproduced: status=%d", resp.StatusCode)
++	}
++	t.Logf("cached model exists, expired main + metadata timeout returns %d instead of cached bytes", resp.StatusCode)
++}
++
++func TestReviewOllamaGeneratedBlobGC(t *testing.T) {
++	h := newHarness(t, Options{})
++	h.k.Now = time.Now
++	h.up.Add(&fakehub.Repo{ID: "acme/gguf", License: "apache-2.0", Files: []fakehub.File{cfgFile, gguf}})
++	blobs := pullLikeOllama(t, h.proxy.URL, "acme/gguf", "Q4_K_M")
++	var generated string
++	for d := range blobs {
++		if d != "sha256:"+gguf.SHA256() {
++			generated = strings.TrimPrefix(d, "sha256:")
++		}
++	}
++	if generated == "" || !h.st.Has(generated) {
++		t.Fatal("generated blob not present")
++	}
++	age := time.Now().Add(-2 * time.Hour)
++	if err := os.Chtimes(h.st.Path(generated), age, age); err != nil {
++		t.Fatal(err)
++	}
++	_, err := h.k.GC(context.Background(), keep.GCOptions{Grace: keep.DefaultGrace})
++	if err != nil {
++		t.Fatal(err)
++	}
++	rec := httptest.NewRecorder()
++	req := httptest.NewRequest("HEAD", "/v2/acme/gguf/blobs/sha256:"+generated, nil)
++	New(h.k, Options{Offline: true}).ServeHTTP(rec, req)
++	if h.st.Has(generated) || rec.Code != 404 {
++		t.Fatalf("not reproduced: status=%d", rec.Code)
++	}
++	t.Log("GC deleted generated config referenced by cached Ollama manifest; offline blob HEAD now 404")
++}
+diff --git a/internal/keep/zz_review_test.go b/internal/keep/zz_review_test.go
+new file mode 100644
+index 0000000..c179476
+--- /dev/null
++++ b/internal/keep/zz_review_test.go
+@@ -0,0 +1,170 @@
++package keep
++
++import (
++	"bytes"
++	"context"
++	"encoding/json"
++	"github.com/afshinghezeli/weightkeep/internal/fetch"
++	"github.com/afshinghezeli/weightkeep/internal/hub"
++	"github.com/afshinghezeli/weightkeep/internal/manifest"
++	"github.com/afshinghezeli/weightkeep/internal/policy"
++	"github.com/afshinghezeli/weightkeep/internal/store"
++	"github.com/afshinghezeli/weightkeep/internal/testutil/fakehub"
++	"io"
++	"net/http"
++	"os"
++	"strings"
++	"testing"
++	"time"
++)
++
++type reviewTransport func(*http.Request) (*http.Response, error)
++
++func (f reviewTransport) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
++func TestReviewPrivateRepositorySeeded(t *testing.T) {
++	k, h := newKeeper(t)
++	text, _ := policy.Text("MIT")
++	h.Add(&fakehub.Repo{ID: "acme/private", License: "mit", Files: []fakehub.File{{Path: "LICENSE", Content: []byte(text)}, {Path: "model.bin", Content: []byte("secret weight"), LFS: true}}})
++	client, err := hub.New(h.URL, hub.Options{Transport: reviewTransport(func(r *http.Request) (*http.Response, error) {
++		resp, err := http.DefaultTransport.RoundTrip(r)
++		if err == nil && strings.Contains(r.URL.Path, "/api/models/") && !strings.Contains(r.URL.Path, "/tree/") {
++			b, e := io.ReadAll(resp.Body)
++			resp.Body.Close()
++			if e != nil {
++				return nil, e
++			}
++			var v map[string]any
++			if json.Unmarshal(b, &v) == nil {
++				v["private"] = true
++				b, _ = json.Marshal(v)
++			}
++			resp.Body = io.NopCloser(bytes.NewReader(b))
++			resp.ContentLength = int64(len(b))
++		}
++		return resp, err
++	})})
++	if err != nil {
++		t.Fatal(err)
++	}
++	k.Hub = client
++	k.Fetcher.Hub = client
++	res, err := k.Pull(context.Background(), PullRequest{Repo: hub.Repo{Type: hub.Model, ID: "acme/private"}})
++	if err != nil {
++		t.Fatal(err)
++	}
++	raw, err := manifest.LoadInfo(k.Store, res.Manifest.Repo, res.Manifest.Commit)
++	if err != nil || !bytes.Contains(raw, []byte(`"private":true`)) {
++		t.Fatal("private metadata not established")
++	}
++	plan, err := k.SeedPlan(context.Background(), Selector{Repo: res.Manifest.Repo}, SeedOptions{})
++	if err != nil {
++		t.Fatal(err)
++	}
++	if len(plan) != 1 || !plan[0].Seed || plan[0].Decision.Tier != policy.A {
++		t.Fatal("not reproduced")
++	}
++	t.Log("private:true persists in raw metadata, but default seed plan allows tier A sharing")
++}
++func TestReviewManifestIndexFailureGC(t *testing.T) {
++	k, _ := newKeeper(t)
++	k.Now = time.Now
++	ctx := context.Background()
++	b, err := k.Store.Put(ctx, bytes.NewReader([]byte("GOOD")), store.Expect{})
++	if err != nil {
++		t.Fatal(err)
++	}
++	m := &manifest.Manifest{Version: 1, Repo: manifest.Repo{Type: "model", ID: "acme/canceled"}, Commit: strings.Repeat("a", 40), FetchedAt: time.Now(), Files: []manifest.File{{Path: "model.bin", Size: 4, SHA256: b.SHA256, GitSHA1: b.GitSHA1, LFS: true}}}
++	canceled, cancel := context.WithCancel(ctx)
++	cancel()
++	if err := manifest.Save(canceled, k.Store, m); err == nil {
++		t.Fatal("expected index cancellation")
++	}
++	if _, err := manifest.Load(ctx, k.Store, m.Repo, m.Commit); err != nil {
++		t.Fatalf("manifest not readable: %v", err)
++	}
++	age := time.Now().Add(-2 * time.Hour)
++	if err := os.Chtimes(k.Store.Path(b.SHA256), age, age); err != nil {
++		t.Fatal(err)
++	}
++	res, err := k.GC(ctx, GCOptions{Grace: DefaultGrace})
++	if err != nil {
++		t.Fatal(err)
++	}
++	if k.Store.Has(b.SHA256) || len(res.Blobs) != 1 {
++		t.Fatal("not reproduced")
++	}
++	t.Log("readable durable manifest survives indexing failure, but GC deletes its recorded content")
++}
++
++type reviewGateReader struct {
++	io.ReadCloser
++	gate <-chan struct{}
++}
++
++func (r *reviewGateReader) Read(b []byte) (int, error) { <-r.gate; return r.ReadCloser.Read(b) }
++func TestReviewGCActiveLongPull(t *testing.T) {
++	k, h := newKeeper(t)
++	k.Now = time.Now
++	k.Fetcher.Parallel = 2
++	config := fakehub.File{Path: "config.json", Content: []byte(`{"long_pull":true}`)}
++	weight := fakehub.File{Path: "weight.bin", Content: []byte("large weight represented by stalled fixture"), LFS: true}
++	h.Add(&fakehub.Repo{ID: "acme/long", License: "mit", Files: []fakehub.File{config, weight}})
++	gate := make(chan struct{})
++	defer func() {
++		select {
++		case <-gate:
++		default:
++			close(gate)
++		}
++	}()
++	client, err := hub.New(h.URL, hub.Options{Transport: reviewTransport(func(r *http.Request) (*http.Response, error) {
++		resp, err := http.DefaultTransport.RoundTrip(r)
++		if err == nil && strings.HasPrefix(r.URL.String(), h.CDN) {
++			resp.Body = &reviewGateReader{ReadCloser: resp.Body, gate: gate}
++		}
++		return resp, err
++	})})
++	if err != nil {
++		t.Fatal(err)
++	}
++	k.Hub = client
++	k.Fetcher.Hub = client
++	early := make(chan struct{})
++	k.Fetcher.Events = func(e fetch.Event) {
++		if e.State == fetch.Done && e.Path == config.Path {
++			age := time.Now().Add(-2 * time.Hour)
++			if err := os.Chtimes(k.Store.Path(config.SHA256()), age, age); err != nil {
++				t.Error(err)
++			}
++			close(early)
++		}
++	}
++	ctx, cancel := context.WithCancel(context.Background())
++	defer cancel()
++	done := make(chan error, 1)
++	go func() {
++		_, err := k.Pull(ctx, PullRequest{Repo: hub.Repo{Type: hub.Model, ID: "acme/long"}})
++		done <- err
++	}()
++	select {
++	case <-early:
++	case <-time.After(3 * time.Second):
++		t.Fatal("no early blob")
++	}
++	gc, err := k.GC(context.Background(), GCOptions{Grace: DefaultGrace})
++	if err != nil {
++		t.Fatal(err)
++	}
++	if k.Store.Has(config.SHA256()) || len(gc.Blobs) != 1 {
++		t.Fatal("not reproduced")
++	}
++	t.Log("GC deleted the active pull's early blob once its age exceeded the one-hour grace")
++	cancel()
++	// Release body before waiting for worker shutdown; all mutation stays in scratch.
++	close(gate)
++	select {
++	case <-done:
++	case <-time.After(3 * time.Second):
++		t.Fatal("pull failed to stop")
++	}
++}
+diff --git a/internal/hfcache/zz_review_test.go b/internal/hfcache/zz_review_test.go
+new file mode 100644
+index 0000000..395e083
+--- /dev/null
++++ b/internal/hfcache/zz_review_test.go
+@@ -0,0 +1,62 @@
++package hfcache
++
++import (
++	"bytes"
++	"context"
++	"github.com/afshinghezeli/weightkeep/internal/manifest"
++	"github.com/afshinghezeli/weightkeep/internal/store"
++	"os"
++	"path/filepath"
++	"strings"
++	"testing"
++)
++
++func reviewFixture(t *testing.T) (*store.Store, *manifest.Manifest) {
++	t.Helper()
++	st, err := store.Open(context.Background(), t.TempDir())
++	if err != nil {
++		t.Fatal(err)
++	}
++	t.Cleanup(func() { st.Close() })
++	b, err := st.Put(context.Background(), bytes.NewReader([]byte("GOOD")), store.Expect{})
++	if err != nil {
++		t.Fatal(err)
++	}
++	m := &manifest.Manifest{Version: 1, Repo: manifest.Repo{Type: "model", ID: "acme/model"}, Commit: strings.Repeat("a", 40), Files: []manifest.File{{Path: "model.bin", Size: 4, SHA256: b.SHA256, GitSHA1: b.GitSHA1, LFS: true}}}
++	return st, m
++}
++func TestReviewSameSizeCorruptExport(t *testing.T) {
++	st, m := reviewFixture(t)
++	dir := t.TempDir()
++	p := filepath.Join(dir, "model.bin")
++	if err := os.WriteFile(p, []byte("EVIL"), 0644); err != nil {
++		t.Fatal(err)
++	}
++	res, err := ToDir(context.Background(), st, m, dir, Copy)
++	if err != nil {
++		t.Fatal(err)
++	}
++	got, _ := os.ReadFile(p)
++	if string(got) != "EVIL" || res.Existing != 1 {
++		t.Fatal("not reproduced")
++	}
++	t.Log("export reports existing success despite wrong SHA-256")
++}
++func TestReviewSymlinkExportEscape(t *testing.T) {
++	st, m := reviewFixture(t)
++	m.Files[0].Path = "sub/model.bin"
++	dir := t.TempDir()
++	outside := t.TempDir()
++	if err := os.Symlink(outside, filepath.Join(dir, "sub")); err != nil {
++		t.Fatal(err)
++	}
++	_, err := ToDir(context.Background(), st, m, dir, Copy)
++	if err != nil {
++		t.Fatal(err)
++	}
++	got, err := os.ReadFile(filepath.Join(outside, "model.bin"))
++	if err != nil || string(got) != "GOOD" {
++		t.Fatal("not reproduced")
++	}
++	t.Log("export wrote outside requested directory through existing parent symlink")
++}
+diff --git a/internal/torrent/zz_review_test.go b/internal/torrent/zz_review_test.go
+new file mode 100644
+index 0000000..4b0f708
+--- /dev/null
++++ b/internal/torrent/zz_review_test.go
+@@ -0,0 +1,42 @@
++package torrent
++
++import (
++	"context"
++	"github.com/anacrolix/torrent/bencode"
++	"os"
++	"path/filepath"
++	"strings"
++	"testing"
++	"time"
++)
++
++func TestReviewTorrentStorageBeforeValidation(t *testing.T) {
++	st, _ := keptRevision(t, map[string][]byte{"safe.bin": []byte("safe")})
++	c, err := NewClient(st, ClientConfig{DataDir: t.TempDir(), NoDHT: true, NoWebSeeds: true})
++	if err != nil {
++		t.Fatal(err)
++	}
++	defer c.Close()
++	base := t.TempDir()
++	sentinel := filepath.Join(base, "sentinel")
++	if err := os.WriteFile(sentinel, []byte("KEEP"), 0644); err != nil {
++		t.Fatal(err)
++	}
++	info := map[string]any{"name": strings.Repeat("a", 40), "piece length": int64(16384), "pieces": "", "files": []any{map[string]any{"length": int64(0), "path": []string{"..", "..", "sentinel"}}}}
++	ib, err := bencode.Marshal(info)
++	if err != nil {
++		t.Fatal(err)
++	}
++	meta, err := bencode.Marshal(map[string]any{"info": bencode.Bytes(ib)})
++	if err != nil {
++		t.Fatal(err)
++	}
++	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
++	defer cancel()
++	_, err = c.Fetch(ctx, Source{MetaInfo: meta}, filepath.Join(base, "ingest"), nil, func(string) bool { return false })
++	got, readErr := os.ReadFile(sentinel)
++	if readErr != nil || len(got) != 0 {
++		t.Fatalf("not reproduced: content=%q readErr=%v fetchErr=%v", got, readErr, err)
++	}
++	t.Logf("malformed torrent rejected (%v), after truncating file outside ingest directory", err)
++}

@@ -1,16 +1,76 @@
 # Hugging Face downloads retained on Athena
 
-Evaluated September 26–28, 2026: source review and isolated macOS probes, then disposable pull-through instances on Athena. **ModelKeep v0.4.12 was selected as a public-models pull-through mirror;** deployment is tracked in [#634](https://github.com/kelchm/home-lab/issues/634). [Investigation #608](https://github.com/kelchm/home-lab/issues/608) recorded the decision. [Shpiel evidence](hugging-face-nas-cache-evidence.json), [MatrixHub behavior](matrixhub-local-evidence.json), [MatrixHub small import](matrixhub-import-evidence.json), [actual Mac imports](matrixhub-mac-import-evidence.json) and [MatrixHub acceptance gates](matrixhub-gate-evidence.json) record versions, hashes and observed upstream requests; the [Athena pull-through evaluation](#athena-pull-through-evaluation) records the NAS measurements.
+Evaluated September 26–28, 2026, and reassessed September 30–October 4. The September work compared mirror servers with source review, isolated macOS probes and disposable pull-through instances on Athena, and selected ModelKeep v0.4.12 as a public-models pull-through mirror. **That selection no longer stands as the answer:** ModelKeep keeps running, but it does not reuse content across commits or repositories, which the September tests never checked. Nothing replaces it, and no further evaluation or build is planned.
 
-## Recommendation
+Related records:
 
-**Run ModelKeep v0.4.12 on Athena as a pull-through mirror for public repositories.** The requirement is a transparent proxy: any LAN client sets `HF_ENDPOINT`, requests original repository IDs, and each file crosses the internet once. In the [Athena evaluation](#athena-pull-through-evaluation), ModelKeep fetched only requested files, served everything archived with Hugging Face unreachable and after a restart, shared one upstream transfer among concurrent clients, and matched Hugging Face's hashes throughout. It stores ordinary files that stay readable without the service, which keeps the retained-library principle below.
+- [Broader landscape](hugging-face-cache-landscape.md): other mirror servers, download managers and distribution systems, and the candidates found later.
+- [Followup evaluation](hugging-face-cache-followup.md), September 30: WeightKeep, Muninn, Pulsys and ModelID against the fuller contract.
+- [WeightKeep code review](weightkeep-code-review.md), September 30.
+- [hf-archive experiment](hugging-face-sdk-archive-experiment.md), October 3–4: an SDK-based prototype, retired, and what it showed about stock client behavior.
+- Structured evidence for the September probes: [Shpiel](hugging-face-nas-cache-evidence.json), [MatrixHub behavior](matrixhub-local-evidence.json), [MatrixHub small import](matrixhub-import-evidence.json), [actual Mac imports](matrixhub-mac-import-evidence.json) and [MatrixHub acceptance gates](matrixhub-gate-evidence.json). The [Athena pull-through evaluation](#athena-pull-through-evaluation) records the NAS measurements.
+
+[Investigation #608](https://github.com/kelchm/home-lab/issues/608) recorded the September 28 decision and [#634](https://github.com/kelchm/home-lab/issues/634) tracks the running ModelKeep service.
+
+## Current position
+
+As of October 4, 2026:
+
+- **No evaluated option meets the whole [archive contract](#the-archive-contract-and-what-september-did-not-test), and none is selected as the answer to it.** Each candidate was measured at a pinned version and passed some gates and failed or skipped others. That is not a finding that these projects cannot meet the contract: later releases were not re-tested, and several candidates were only read, not run.
+- **ModelKeep v0.4.12 keeps running unchanged on Athena as a pull-through mirror for public repositories.** Its September 28 results stand for what they tested: selected-file fetching, offline serving after a restart, one shared upstream transfer for concurrent clients of the same ref, and hashes matching Hugging Face. It is not a complete answer because it stores every revision as its own set of files: when a client requests files at a new commit, it downloads those files again even when identical content is already held under another commit or repository. It still fetches only the files requested.
+- **Nothing is being built or qualified in its place.** The WeightKeep and Muninn followup was not pursued past September 30. The hf-archive prototype was retired on October 4 as a learning exercise: [PR #711](https://github.com/kelchm/home-lab/pull/711) is not merged and [#710](https://github.com/kelchm/home-lab/issues/710) is closed as not planned.
+- **Earlier next steps are retired.** The MatrixHub hosted-library qualification ([#614](https://github.com/kelchm/home-lab/issues/614), closed as not planned), the WeightKeep large-model qualification and the hf-archive whole-library qualification will not run. Where a section below still describes one as upcoming, it is recording what was planned on its date.
+
+| Candidate | Version examined | How | Disposition |
+|---|---|---|---|
+| ModelKeep | v0.4.12 | Run on Athena; code review | Running as a public pull-through mirror. No reuse across commits or repositories, so not the archive |
+| HugRS | v0.7.1 | Run on Athena; code review | Rejected: fails offline and corrupted files for clients joining a download |
+| MatrixHub | v0.2.0 | Run on macOS | Not used. Hosted mode serves its own names instead of original repository IDs; proxy mode prefetched unrequested files, failed offline after metadata expiry and kept injected corruption. It does store large files once by hash |
+| Shpiel | v0.3.1 | Run on macOS | Baseline only: `/refs` returned 404 and cold files are buffered whole. Not checked for cross-repository reuse |
+| WeightKeep | `933b3c9` | Fixtures and code review on a workstation | Not pursued. Reused content across repositories and commits, but the review confirmed nine areas of defects, including stock serving that delivered corrupt bytes to a resuming client |
+| Muninn | `d11db64` | Two targeted scripts | Not pursued. Moving it to SDK 2.0.0 made its verifier reject a valid weight; cached metadata answered 502 with upstream unreachable |
+| Pulsys | `3699fc0` | Two synthetic proxy-route tests | Not pursued. Fetched identical content twice under two paths and served a body that did not match its advertised hash |
+| hf-archive | `9c119dc` | Prototype run on Athena and a workstation | Retired, not merged. Never qualified beyond one 4.1 GB shard and a 17 MB model |
+| Olah, Nexus CE, Pulp, xet-server, others | Various | Documentation and source only | Not run. See the [comparison](#candidate-comparison) and the [landscape](hugging-face-cache-landscape.md) |
+
+A retained filesystem library on Athena remains the foundation: public retention and private training-output preservation must not depend on an OCI registry, S3 service or paid product. Preserve existing Spark and Vonk cache contents; nothing evaluated here is qualified as their sole copy.
+
+## The archive contract and what September did not test
+
+The goal throughout was to download each file from the internet once and keep it. The September acceptance tests were narrower than that goal. They defined "download once" as a second empty client obtaining an already archived revision with no internet transfer. They never requested a second commit of a repository the mirror already held, and never requested the same file under two repository names.
+
+On September 30 that gap surfaced while existing caches were being imported:
+
+- **ModelKeep does not share content between revisions, by design.** It materializes each revision as ordinary files under its commit, and its ADR-0001 states that the archive "may duplicate identical blobs across revisions" and that deduplication was intentionally left out. This is a reading of its design and source, at `docs/adr/0001-ordinary-files-as-durable-archive.md` in v0.4.12 (`535dbbeab9acbfcecb93f5be4fea092c3b29d7db`). No second-commit download was run to measure it. Source availability, October 4: GitHub answered 404 for the `kaznak/modelkeep` repository and for that pinned file, and why, or whether the project moved, was not established. The quotation, the path and pin, and the probe fragment below therefore rest on the reviewer's log preserved from September, and the ModelKeep source links in these documents are historical references.
+- **The cost is large for the models held here.** The two commits of `Mia-AiLab/GLM-5.3-Flash-EXL3-TR3-4bpw` in use, `25a44fd` pinned by SparkRun and `9eaebb7` at `main`, share 123 of 144 files, 175.7 GB, byte for byte. That figure comes from the inventory taken during the import and was reported in the working session; no inventory file was kept.
+- **Filesystem deduplication recovers the disk, not the transfer.** Btrfs block sharing on Athena can collapse identical files after they arrive. It cannot avoid downloading them again.
+- **One file addressed two ways is also fetched twice.** In a unit probe against ModelKeep v0.4.12 (`535dbbeab9acbfcecb93f5be4fea092c3b29d7db`) with a synthetic upstream fetcher, concurrent requests for one file by `main` and by its commit SHA were reported on September 29 to start two upstream transfers. The [probe fragment](fixtures/modelkeep-review/mixed-alias-probe-recovered.rs) was recovered from the reviewer's log: it prints the transfer count without asserting it, is not a standalone test, and was not re-run. The live concurrency test on Athena used `main` for every client and passed within that scope; the mixed case was not run live.
+
+That made ModelKeep unacceptable as the archive. The contract the later work was judged against:
+
+1. Clients use original repository IDs, revisions and paths through `HF_ENDPOINT`, over the network, with no per-model registration.
+2. Only requested files are acquired. No background fetching of other quantizations, formats or versions.
+3. Each unique file is stored once and never downloaded again when it is already held, across commits, repositories and filenames, including for concurrent requests.
+4. Bytes are verified against upstream identity before any of them reach a client.
+5. Held files and the metadata clients need are served to an empty client after a restart with upstream unreachable.
+6. Existing files can be imported without downloading them again, keeping their original repository and commit identity. That covers both Hugging Face cache layouts and snapshots that are partial on purpose, such as one quantization.
+7. Public repositories only, until there is a separate authorization boundary.
+
+The inventory behind item 6, as reported on September 30 and not kept as a file: 676 GB on the Vonk share matched Hugging Face files across six repositories; the Mac's Hugging Face cache held 197 GB across 13 revisions, three of them complete and the rest partial by design; the Sparks hold pinned commits that overlap the Vonk content. ModelKeep's importer rejected the Mac cache's newer shared-blob layout, so those files were copied to Athena with links resolved but never imported. LM Studio was an example consumer during this work, not an acceptance client, and its folders record no commit.
+
+### State of the ModelKeep service
+
+ModelKeep was deployed from [PR #635](https://github.com/kelchm/home-lab/pull/635) on September 29. By September 30 it held six imported revisions, about 630 GiB, checked against Hugging Face's hashes during import; an import of the Sparks' pinned commits was stopped before it published anything. Those figures are from the working session on that date and were not re-measured. On October 4 the container was observed healthy with its start time unchanged since September 29. The deployment is a working mirror for what it holds, not an accepted archive, and holding those revisions does not mean any application was tested end to end against them.
+
+## September 28 recommendation
+
+Kept as the record of what was decided on that date; see [Current position](#current-position) for what holds now.
+
+**Run ModelKeep v0.4.12 on Athena as a pull-through mirror for public repositories.** The requirement is a transparent proxy: any LAN client sets `HF_ENDPOINT`, requests original repository IDs, and each file crosses the internet once. In the [Athena evaluation](#athena-pull-through-evaluation), ModelKeep fetched only requested files, served everything archived with Hugging Face unreachable and after a restart, shared one upstream transfer among concurrent clients, and matched Hugging Face's hashes throughout. It stores ordinary files that stay readable without the service, which keeps the retained-library principle.
 
 Its known limits are operational: a large file that is not archived yet returns `503` after 8 seconds, so archive large models ahead of use; it compares nothing with Hugging Face's published digests, so an external hash check runs against its records; and a code review found bounded defects to report upstream. The deployment serves public repositories only, without a management listener or Hugging Face token.
 
 **HugRS v0.7.1 is rejected.** It streamed cold files well, but every cached model failed with Hugging Face unreachable, and clients joining an in-progress download received the file shifted by one 4 MiB chunk; one client finished with exit 0 and wrong content. Both causes are architectural. **MatrixHub v0.2.0 is not used for this role.** Its hosted-library mode serves MatrixHub names rather than original repository IDs, and its proxy mode retains the fetching, offline and verification failures recorded below. That supersedes the September 27 recommendation to continue MatrixHub as a curated hosted library. Shpiel remains the first measured baseline; its `/refs` 404 breaks llama.cpp and it buffers whole cold files before serving.
-
-A retained filesystem library on Athena remains the foundation: public retention and private training-output preservation must not depend on an OCI registry, S3 service or paid product.
 
 Preserve existing Spark and Vonk cache contents until a hash-verified LAN import succeeds. If an endpoint cannot reuse them, stage those models by local path rather than downloading the collection again for a new storage format.
 
@@ -32,14 +92,14 @@ This establishes capacity for a trial, not throughput or a service memory budget
 
 ## Candidate comparison
 
-This is the initial comparison. The [expanded landscape](hugging-face-cache-landscape.md) adds direct mirror servers, NAS download managers and model-distribution systems, with project history and concrete reasons to pursue or deprioritize them. Project age, transparent mirroring and durable retention are separate properties.
+This is the initial comparison, from September 26, with dispositions corrected on October 4 where later work changed them. The [expanded landscape](hugging-face-cache-landscape.md) adds direct mirror servers, NAS download managers and model-distribution systems, with project history and concrete reasons to pursue or deprioritize them. Project age, transparent mirroring and durable retention are separate properties.
 
 | Candidate | Evidence and fit | Disposition |
 |---|---|---|
-| **[Shpiel](https://github.com/loewenthal-corp/shpiel)** | Apache-2.0; one Go process, filesystem backend, no database required. Repository created July 2026. | Measured public-only baseline; reuse and gaps below. |
-| **[MatrixHub](https://github.com/matrixhub-ai/matrixhub/releases/tag/v0.2.0)** | Apache-2.0; September 18 release added SQLite for single-node Compose. Proxy projects and hosted models with permissions. | Continue verified hosted-library qualification: real 8.1 GB imports/reuse/offline restart passed. Transparent proxy still has refresh, selection and verification gaps. |
+| **[Shpiel](https://github.com/loewenthal-corp/shpiel)** | Apache-2.0; one Go process, filesystem backend, no database required. Repository created July 2026. | Measured public-only baseline; reuse and gaps below. Not checked for reuse across repositories or commits. |
+| **[MatrixHub](https://github.com/matrixhub-ai/matrixhub/releases/tag/v0.2.0)** | Apache-2.0; September 18 release added SQLite for single-node Compose. Proxy projects and hosted models with permissions. | Not used. Real 8.1 GB hosted imports, reuse and offline restart passed, but hosted mode does not serve original repository IDs, and the transparent proxy has refresh, selection and verification failures. [#614](https://github.com/kelchm/home-lab/issues/614) is closed as not planned. |
 | **[Nexus CE](https://help.sonatype.com/en/hugging-face-repositories.html)** | Documented models/datasets proxy with local permissions and upstream bearer credentials. Broader repository manager. | Conventional fallback; HTTP-only, buffering, quotas and import cost matter. |
-| **[Olah](https://github.com/vtuber-plan/olah)** | MIT; block cache and offline mode. README instructs deleting incompatible caches across upgrades; [issue #85](https://github.com/vtuber-plan/olah/issues/85) reports a missing llama.cpp refs endpoint. | Poor default for permanent retention. That client report was not reproduced locally. |
+| **[Olah](https://github.com/vtuber-plan/olah)** | MIT; block cache and offline mode. README instructs deleting incompatible caches across upgrades; [issue #85](https://github.com/vtuber-plan/olah/issues/85) reports a missing llama.cpp refs endpoint. | Not run. The upgrade instruction is a retention concern. The refs report is from 2025 and was not reproduced; source at [`c70b2f8`](https://github.com/vtuber-plan/olah/tree/c70b2f846dd205c9a23e805cda593ec69cefe4f6) (0.5.2), read on October 3, has refs routes and offline tests, so it is not a known current defect. |
 | **[guilt/xet-server](https://github.com/guilt/xet-server)** | MIT; native Xet proxy/server. Created September 11; inspected release v1.1.0. Its [mirroring guide](https://github.com/guilt/xet-server/blob/22c4aa1df566041b804aee2d4b1df1b97e2f04df/docs/MIRRORING.md#91-important-what-the-proxy-can-and-cannot-cache) says real-Hub pull-through can relay uncached content directly from the CDN. | Transparent proxy does not guarantee retention. Complete offline seeding requires download then upload. |
 | **[Pulp HF plugin](https://github.com/pulp/pulp_hugging_face)** | GPL-2.0-or-later; on-demand files within Pulp. Metadata API requests are forwarded live upstream. | Additional platform and unresolved offline behavior here. |
 | **[HuggingHack](https://github.com/tyedalwaves/HuggingHack)** | MIT; NAS file library, download UI, existing-folder indexing and private uploads. | Relevant path-based UI; not documented as an HF_ENDPOINT proxy. |
@@ -116,7 +176,7 @@ MatrixHub main at `05d158d5eb079b263b45215984d111d525cf81a0` still [pins the sam
 
 The initial gate run stopped before larger imports. The follow-up below tests actual Mac downloads with hash verification and an upstream weight-download block; no fault result is erased or reported as repaired. Four-client cold concurrency, full collection inventory, interrupted/resumable imports, staging cleanup, export/backup restoration, quota exhaustion, truncated transfers, native llama.cpp, actual inference and broader private access checks remain **untested**, not passed. The read-only head-Spark inventory only counted two model repos and three snapshot directories with no broken links; file counts alone do not prove completeness. No worker/NAS inventory or migration was performed.
 
-Retain original Spark/NAS files; MatrixHub's internal store is not yet qualified as the sole archive. The two fault-injection services were stopped and their isolated evidence retained. On September 27, all local evaluation services and gateways were stopped, and their model stores, imported copies, disposable client caches, binaries, build trees and virtual environments were removed at the user’s request. Original model downloads and lightweight research records were preserved; future runtime tests require recreating the isolated trial. The next bounded check is service-independent export/restore and retained-byte lifecycle for hosted models. Repair expired-metadata offline proxy reads if retaining original upstream identities becomes the chosen client contract. The broader choice and NAS acceptance remain in #608.
+Retain original Spark/NAS files; MatrixHub's internal store was never qualified as the sole archive. The two fault-injection services were stopped and their isolated evidence retained. On September 27, all local evaluation services and gateways were stopped, and their model stores, imported copies, disposable client caches, binaries, build trees and virtual environments were removed at the user’s request. Original model downloads and lightweight research records were preserved; future runtime tests require recreating the isolated trial. The next check planned on September 27 was service-independent export/restore and retained-byte lifecycle for hosted models. It was not run: original upstream identities became the client contract the next day, which hosted mode does not provide, and #614 was closed as not planned.
 
 ### Loading existing local files
 
@@ -154,7 +214,7 @@ The importer used supported `HfApi.upload_folder` calls directly against both so
 
 The useful operating mode is explicit selection → independent verification → hosted repository → client download/staging. It gives selected GGUFs and complete sharded-model bundles a browseable, offline-capable home. Mapping the same objects back to original HF names is possible, but reintroduces proxy refresh and unwanted acquisition. The proxy UI listed Orpheus's full 57.1 GB repository size even though only the selected 2.1 GB object was retained; a catalog listing is not proof of local completeness.
 
-This is an import and byte-serving result, not an inference benchmark: no model was loaded, the selected GGUF is not a complete TTS application bundle, and loopback timings do not establish NAS performance. Full inventory, resumable import, hosted-seed deletion/garbage collection, service-independent export/restore and actual consumer integration remain in [#614](https://github.com/kelchm/home-lab/issues/614). Keep originals until that lifecycle is qualified. Private or locally modified artifacts need their own hosted identity and tested access boundary rather than being represented as unchanged public upstream content.
+This is an import and byte-serving result, not an inference benchmark: no model was loaded, the selected GGUF is not a complete TTS application bundle, and loopback timings do not establish NAS performance. Full inventory, resumable import, hosted-seed deletion/garbage collection, service-independent export/restore and actual consumer integration were left to [#614](https://github.com/kelchm/home-lab/issues/614), which closed as not planned without running them. Keep originals. Private or locally modified artifacts need their own hosted identity and tested access boundary rather than being represented as unchanged public upstream content.
 
 ## Athena pull-through evaluation
 
@@ -172,9 +232,11 @@ On September 28, ModelKeep v0.4.12 and HugRS v0.7.1 ran on Athena (DSM 7.3.2, Do
 | llama.cpp `-hf`, cold quantization | Failed on the first `503` while the acquisition continued; the third run succeeded; 427 MB in total for a 415 MB file |
 | Upstream detached: by commit, by `main`, GGUF, full model, llama.cpp, then a container restart | Everything archived was served |
 | Uncached repository while upstream was detached | `503` until the client gave up after about 113 seconds |
-| Three concurrent cold clients for a 3.95 GB shard of `Qwen/Qwen2.5-7B-Instruct` | One upstream transfer (3.59 GB); both HF 1.8 clients exhausted their retries; HF 2.0 succeeded with the correct hash |
+| Three concurrent cold clients for a 3.95 GB shard of `Qwen/Qwen2.5-7B-Instruct`, all requesting `main` | One upstream transfer (3.59 GB); both HF 1.8 clients exhausted their retries; HF 2.0 succeeded with the correct hash |
 | Upstream detached for 2 minutes during a 3.86 GB transfer | The helper resumed when upstream returned; 4.04 GB in total; hash correct |
 | `modelkeep audit`; manifest digests against recorded upstream LFS SHA-256 | Clean; all 20 LFS files match |
+
+Not tested in this run: a second commit of a repository already archived, the same file under another repository, and concurrent requests that mix `main` with its commit SHA. See [what September did not test](#the-archive-contract-and-what-september-did-not-test).
 
 It used about one CPU core while downloading at 150–245 Mbit/s. Docker reported up to 3.5 GiB of memory, which on DSM's cgroup v1 likely includes page cache. A HEAD-driven warm-up that pins the commit and requests each selected file until it is archived worked without the management API.
 
@@ -193,7 +255,7 @@ A code review reproduced the causes with deterministic tests. Completed chunks a
 
 ### Code review
 
-Both projects were reviewed against the same rubric: an Opus 5.5 code audit of ModelKeep, then gpt-6-astra architecture reviews of both. ModelKeep's architecture suits a durable mirror. Commit-keyed immutable revisions are stored as ordinary files, responses are built locally, the official client performs acquisition, and one acquisition is shared per request selection. Its confirmed defects, reproduced by tests where marked:
+Both projects were reviewed against the same rubric: an Opus 5.5 code audit of ModelKeep, then gpt-6-astra architecture reviews of both. ModelKeep's architecture suits a durable mirror. Commit-keyed immutable revisions are stored as ordinary files, responses are built locally, the official client performs acquisition, and one acquisition is shared per request selection. Its confirmed defects follow. "Reproduced" means a unit test against a synthetic upstream; the unmarked ones are source readings. None was observed in the live Athena run, and the two-minute outage there did not exercise the partial-download discard.
 
 - Published bytes are not compared with Hugging Face's recorded LFS SHA-256 or Git blob ID.
 - Payload files are not fsynced before a revision is first published; extension and import do fsync.
@@ -201,9 +263,11 @@ Both projects were reviewed against the same rubric: an Opus 5.5 code audit of M
 - Partial downloads are discarded when the helper reports its own failure, a regression from its commit 0722668 (reproduced).
 - Wildcards in a resolve path are passed to the client as file patterns, so one request can acquire a whole repository (reproduced).
 - A refresh always downloads the whole snapshot and discards files the archived revision does not list.
+- Concurrent requests for one file by `main` and by its commit SHA start two upstream transfers (reproduced; [recovered probe fragment](fixtures/modelkeep-review/mixed-alias-probe-recovered.rs)).
+- Revisions are stored separately with no shared content, as its ADR-0001 states. The review noted this in passing and it was not raised as a gap until September 30.
 - The download port has no authentication; when trust of the Tailscale capability header is enabled, the management API accepts that header from any client that can reach it.
 
-Each is a bounded patch. Replacing the cold-miss `503` with streaming would be a multi-week change. HugRS would need a redesigned download session, revision-keyed storage and cached metadata, estimated at several person-weeks, and it has had no commits since July.
+Each was judged a bounded patch at the time, apart from shared content, which was not assessed. Replacing the cold-miss `503` with streaming would be a multi-week change. HugRS would need a redesigned download session, revision-keyed storage and cached metadata, estimated at several person-weeks, and it has had no commits since July.
 
 ## Nexus tradeoffs
 
@@ -215,6 +279,8 @@ Opus also surfaced [issue #1071](https://github.com/sonatype/nexus-public/issues
 
 ## Storage and client contract
 
+This section is the September contract. Its definition of "download once" is the narrow one that the [later contract](#the-archive-contract-and-what-september-did-not-test) widened.
+
 “Download once” means a completed retained revision can reach another empty LAN client with zero WAN payload transfer. It does not promise zero metadata requests, zero client copies or coverage of hardcoded external URLs. Retain weights, tokenizer, configuration and indexes; pin commits and verify hashes. Keep retained revisions outside automatic eviction and alert before capacity runs out.
 
 Use a service-owned public cache/library and a separate private archive. [HF_HOME includes token storage](https://huggingface.co/docs/huggingface_hub/en/package_reference/environment_variables); use `HF_HUB_CACHE` for shared model storage instead. Preserve whole cache trees and symlink targets, including newer shared blob directories. Current clients write `CACHEDIR.TAG`: backup tools configured to honor cache exclusions can skip it. Explicitly include any retained library needing backup, and keep irreplaceable artifacts outside disposable-cache policy.
@@ -222,8 +288,9 @@ Use a service-owned public cache/library and a separate private archive. [HF_HOM
 | Consumer | Initial integration |
 |---|---|
 | SparkRun / vLLM | Configure the actual host download stage before HF imports; preserve local runtime caches and worker sync. Verify a real pinned recipe after library tests. |
-| llama.cpp | Stage a verified GGUF by local path initially. Test its native HF downloader separately from Python clients. |
-| ComfyUI / other tools | Use verified paths or the endpoint where supported; plugins with hardcoded HF/CDN URLs need individual coverage. |
+| llama.cpp | Stage a verified GGUF by local path with `-m`, or use `-hf` against the endpoint. `-hf` was tested against ModelKeep on Athena, where a cold file failed on the first `503`. |
+| ComfyUI / other tools | Use verified paths or the endpoint where supported; plugins with hardcoded HF/CDN URLs need individual coverage. None was tested. |
+| LM Studio | No supported endpoint setting was found, and it was not tested. Not an acceptance client. |
 | WAN-unavailable runtime | Stage complete files first, then use paths or `HF_HUB_OFFLINE=1`. That variable disables HTTP to the LAN mirror too. |
 
 ## Gated repositories and private fine-tunes
@@ -237,3 +304,5 @@ Local training outputs should be immutable private bundles on Athena: weights/ad
 A separate Claude Opus 5.5 research run received the requirements without the initial candidate shortlist or recommendation. Execution metadata confirmed `claude-opus-5-5`. It independently recommended a standard NAS-owned HF library and separate backed-up private artifacts, with Olah as an optional disposable frontend. The durable-layer conclusion is supported here; the Olah preference is not adopted because its cache lifecycle conflicts with the retention priority and Shpiel now has local reuse evidence. The independent report did not evaluate Shpiel. Its source-based suggestions do not replace live acceptance.
 
 Shpiel and MatrixHub ran on the Mac with isolated service/client state. MatrixHub additionally imported actual public Mac downloads read only and verified the originals unchanged. No serving workload, real private model, real HF credential store or existing user cache changed; the later [Athena evaluation](#athena-pull-through-evaluation) used disposable NAS instances. Nexus and the other candidates were not executed. MatrixHub passed complete tiny snapshots and selected real large-shard/GGUF imports; actual application integration, disk-full behavior, interruption/power-loss recovery, upgrades and sustained NAS load remain unqualified.
+
+The September 30 followup and code review ran WeightKeep, Muninn and Pulsys fixtures on a workstation only. The October hf-archive runs used an isolated container on Athena and loopback harnesses. None of the later work changed the ModelKeep service or the model library, and none of it tested inference applications, a whole multi-file model through a new server, or native LAN throughput.

@@ -1,0 +1,9 @@
+{
+  "sdk": "2.1.1",
+  "test_expectation": "legacy incomplete file consumed",
+  "passed": false,
+  "complete_download_sha256": "dab2c2bddcfb48ea430ef63fd76d46d67d704487844d967256a50dd7d7fd0a66",
+  "complete_download_bytes": 17756393,
+  "legacy_seed_remaining_bytes": 1048576,
+  "source_explanation": "process-unique UUID temporary file opened wb; legacy seed not reused; active-download retries may resume within that new file"
+}

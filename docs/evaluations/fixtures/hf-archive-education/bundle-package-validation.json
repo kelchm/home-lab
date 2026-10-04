@@ -1,0 +1,27 @@
+{
+  "archive_extracted_into_fresh_directory": true,
+  "prototype_dependency_install": "uv sync --locked, exact bundled pyproject.toml/uv.lock, workstation CPython 3.12.13",
+  "original_worktree_needed_for_runtime": false,
+  "coordinator_smoke": {
+    "scenario": "cold_delay_0",
+    "passed": 11,
+    "failed": 0,
+    "stray_processes": [],
+    "work_removed": true,
+    "sdk": "2.1.1"
+  },
+  "sdk_smoke": {
+    "sdk": "2.1.1",
+    "ok": true,
+    "hash_matches": true,
+    "request_counts": {
+      "HEAD": 1,
+      "GET": 1
+    },
+    "default_timeouts": {
+      "etag_timeout": 10,
+      "download_timeout": 10
+    }
+  },
+  "validation_scope": "One detached coordinator scenario and one SDK zero-delay path check; original 42 SDK cases and 120 coordinator checks were not rerun for packaging."
+}

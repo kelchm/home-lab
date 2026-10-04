@@ -1,0 +1,6 @@
+{
+  "command": "sudo -n /usr/local/bin/docker exec hf-archive-education-20261004 python -m hf_archive.cli verify --root /archive --json",
+  "returncode": 0,
+  "stdout": "{\n  \"checked\": 2,\n  \"problems\": []\n}\n",
+  "stderr": ""
+}

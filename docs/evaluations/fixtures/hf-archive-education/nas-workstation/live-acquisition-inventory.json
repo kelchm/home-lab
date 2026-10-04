@@ -1,0 +1,19 @@
+{
+  "repos": [
+    {
+      "repo_id": "prajjwal1/bert-tiny",
+      "refs": {
+        "refs/heads/main": "6f75de8b60a9f8a2fdf7b69cbd86d9e64bcb3837"
+      },
+      "revisions": [
+        {
+          "commit": "6f75de8b60a9f8a2fdf7b69cbd86d9e64bcb3837",
+          "files_acquired": 2,
+          "files_total": 5,
+          "bytes_acquired": 17756678,
+          "updated_at": "2026-10-04T04:30:16Z"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,73 @@
+{
+  "completed_utc": "2026-10-04T04:43:56.778689+00:00",
+  "task_container_removed": true,
+  "task_network_removed": true,
+  "task_pulled_image_removed": true,
+  "task_directory_removed": true,
+  "modelkeep_started_at": "2026-09-29T11:44:07.602580471Z",
+  "modelkeep_healthy": true,
+  "modelkeep_restart_unchanged": true,
+  "local_relay_stopped": true,
+  "steps": [
+    {
+      "command": "sudo -n /usr/local/bin/docker inspect modelkeep-modelkeep-1 --format \"{{json .State}}\"",
+      "returncode": 0,
+      "stdout": "{\"Status\":\"running\",\"Running\":true,\"Paused\":false,\"Restarting\":false,\"OOMKilled\":false,\"Dead\":false,\"Pid\":17463,\"ExitCode\":0,\"Error\":\"\",\"StartedAt\":\"2026-09-29T11:44:07.602580471Z\",\"FinishedAt\":\"0001-01-01T00:00:00Z\",\"Health\":{\"Status\":\"healthy\",\"FailingStreak\":0,\"Log\":[{\"Start\":\"2026-10-04T00:41:37.728786771-04:00\",\"End\":\"2026-10-04T00:41:37.885087521-04:00\",\"ExitCode\":0,\"Output\":\"\"},{\"Start\":\"2026-10-04T00:42:08.300731853-04:00\",\"End\":\"2026-10-04T00:42:08.5261079-04:00\",\"ExitCode\":0,\"Output\":\"\"},{\"Start\":\"2026-10-04T00:42:38.728473938-04:00\",\"End\":\"2026-10-04T00:42:39.100367794-04:00\",\"ExitCode\":0,\"Output\":\"\"},{\"Start\":\"2026-10-04T00:43:09.303337583-04:00\",\"End\":\"2026-10-04T00:43:09.505845431-04:00\",\"ExitCode\":0,\"Output\":\"\"},{\"Start\":\"2026-10-04T00:43:40.315853023-04:00\",\"End\":\"2026-10-04T00:43:40.535354517-04:00\",\"ExitCode\":0,\"Output\":\"\"}]}}\n",
+      "stderr": ""
+    },
+    {
+      "command": "sudo -n /usr/local/bin/docker rm -f hf-archive-education-20261004",
+      "returncode": 0,
+      "stdout": "hf-archive-education-20261004\n",
+      "stderr": ""
+    },
+    {
+      "command": "sudo -n /usr/local/bin/docker network rm hf-archive-education-20261004",
+      "returncode": 0,
+      "stdout": "hf-archive-education-20261004\n",
+      "stderr": ""
+    },
+    {
+      "command": "sudo -n /usr/local/bin/docker image rm python:3.12.13-slim-bookworm",
+      "returncode": 0,
+      "stdout": "Untagged: python:3.12.13-slim-bookworm\nUntagged: python@sha256:4766d8b510c428e595d74b9cc5bbb2fae8e26316fffb4adc89908d79aacd58a2\nDeleted: sha256:64d91f7b885eed272bba87909446b12ff408d4aaa5f1a0e9ca787bbea1a020b9\nDeleted: sha256:678b2035d3955a2d27e4a54291f67c9cea817ac80aa52076c42a28da465011ba\nDeleted: sha256:3b5be33aa18a591a438df99b358af570c0540669f03b0a2da1e4b2fb72e981aa\nDeleted: sha256:f7195566821c45169ec4df8842cd20fd3e62903faa69e1a52449e49ff90c8d24\nDeleted: sha256:66462cc862fe2053b9863fefa3866e07bb5dfb06f6b3ce3177cc096e4021aabe\n",
+      "stderr": ""
+    },
+    {
+      "command": "rm -rf /volume1/models/hf-archive-education-20261004",
+      "returncode": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "command": "test ! -e /volume1/models/hf-archive-education-20261004",
+      "returncode": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "command": "sudo -n /usr/local/bin/docker ps -a --format \"{{.Names}}\"",
+      "returncode": 0,
+      "stdout": "doco-cd\nmodelkeep-import-pinned\nmodelkeep-modelkeep-1\nnetbootxyz-nas-menus-1\nnetbootxyz-nas-netbootxyz-1\ndoco-cd-canary-publish-1\ndoco-cd-canary-canary-1\n",
+      "stderr": ""
+    },
+    {
+      "command": "sudo -n /usr/local/bin/docker network ls --format \"{{.Name}}\"",
+      "returncode": 0,
+      "stdout": "bridge\ndoco-cd-canary_default\ndoco-cd_default\nhost\nmodelkeep_default\nnetbootxyz-nas_default\nnone\n",
+      "stderr": ""
+    },
+    {
+      "command": "sudo -n /usr/local/bin/docker images --format \"{{.Repository}}:{{.Tag}}\"",
+      "returncode": 0,
+      "stdout": "ghcr.io/kimdre/doco-cd:<none>\nghcr.io/kimdre/doco-cd:<none>\nghcr.io/netbootxyz/netbootxyz:<none>\nbusybox:<none>\nalpine:3.20\nbusybox:<none>\nghcr.io/kaznak/modelkeep:v0.4.12\n",
+      "stderr": ""
+    },
+    {
+      "command": "sudo -n /usr/local/bin/docker inspect modelkeep-modelkeep-1 --format \"{{json .State}}\"",
+      "returncode": 0,
+      "stdout": "{\"Status\":\"running\",\"Running\":true,\"Paused\":false,\"Restarting\":false,\"OOMKilled\":false,\"Dead\":false,\"Pid\":17463,\"ExitCode\":0,\"Error\":\"\",\"StartedAt\":\"2026-09-29T11:44:07.602580471Z\",\"FinishedAt\":\"0001-01-01T00:00:00Z\",\"Health\":{\"Status\":\"healthy\",\"FailingStreak\":0,\"Log\":[{\"Start\":\"2026-10-04T00:41:37.728786771-04:00\",\"End\":\"2026-10-04T00:41:37.885087521-04:00\",\"ExitCode\":0,\"Output\":\"\"},{\"Start\":\"2026-10-04T00:42:08.300731853-04:00\",\"End\":\"2026-10-04T00:42:08.5261079-04:00\",\"ExitCode\":0,\"Output\":\"\"},{\"Start\":\"2026-10-04T00:42:38.728473938-04:00\",\"End\":\"2026-10-04T00:42:39.100367794-04:00\",\"ExitCode\":0,\"Output\":\"\"},{\"Start\":\"2026-10-04T00:43:09.303337583-04:00\",\"End\":\"2026-10-04T00:43:09.505845431-04:00\",\"ExitCode\":0,\"Output\":\"\"},{\"Start\":\"2026-10-04T00:43:40.315853023-04:00\",\"End\":\"2026-10-04T00:43:40.535354517-04:00\",\"ExitCode\":0,\"Output\":\"\"}]}}\n",
+      "stderr": ""
+    }
+  ]
+}
