@@ -1,0 +1,6 @@
+# Cluster-wide terminated pod history; rationale and rollout in
+# docs/runbooks/terminated-pod-gc.md.
+cluster:
+  controllerManager:
+    extraArgs:
+      terminated-pod-gc-threshold: "500"
