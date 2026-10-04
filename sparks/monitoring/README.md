@@ -10,7 +10,7 @@ Host, GPU and inference metrics for the two DGX Sparks. Enrollment, verification
 | [.doco-cd.yml](.doco-cd.yml) | The two deployments every Spark's doco-cd applies. |
 | [../platform/doco-cd](../platform/doco-cd/compose.yaml) | The deployer, applied by hand once per node. |
 
-Every file is identical on both Sparks. SparkRun owns inference; this project never starts, stops or restarts an inference container.
+Every file is identical on both Sparks. node-exporter runs its default collectors except `cpufreq`: on a Spark that collector never returns, which stalls every scrape. Without it a full scrape takes about 0.2 seconds. SparkRun owns inference; this project never starts, stops or restarts an inference container.
 
 ## Inference
 
