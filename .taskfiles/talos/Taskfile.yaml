@@ -14,9 +14,18 @@ tasks:
       - which talhelper
 
   apply-node:
-    desc: Apply Talos config to a node [IP=required]
+    desc: Regenerate Talos config, show the dry-run diff, then apply to a node after confirmation [IP=required]
     dir: '{{.TALOS_DIR}}'
-    cmd: talhelper gencommand apply --node {{.IP}} --extra-flags '--mode={{.MODE}}' | bash
+    # clusterconfig/ is gitignored and outlives the sources it was rendered
+    # from, so it is regenerated on every run instead of trusted.
+    cmds:
+      - task: generate-config
+      - yq '"Requested Talos " + .talosVersion + " and Kubernetes " + .kubernetesVersion' talenv.yaml
+      - talhelper gencommand apply --node {{.IP}} --extra-flags '--mode={{.MODE}} --dry-run' | bash
+      - task: apply-node-confirmed
+        vars:
+          IP: '{{.IP}}'
+          MODE: '{{.MODE}}'
     vars:
       MODE: '{{.MODE | default "auto"}}'
     requires:
@@ -27,19 +36,40 @@ tasks:
       - test -f {{.TALOSCONFIG}}
       - which talhelper talosctl yq
 
-  upgrade-node:
-    desc: Upgrade Talos on a single node with a full power cycle [IP=required]
+  apply-node-confirmed:
+    internal: true
     dir: '{{.TALOS_DIR}}'
-    # The default reboot mode uses kexec and has hung these nodes during the
-    # shutdown handoff. powercycle bypasses kexec and must remain explicit.
-    cmd: talhelper gencommand upgrade --node {{.IP}} --extra-flags "--drain-timeout=15m --timeout=20m --reboot-mode=powercycle" | bash
+    prompt: Apply the configuration shown above to {{.IP}} with --mode={{.MODE}}?
+    cmd: talhelper gencommand apply --node {{.IP}} --extra-flags '--mode={{.MODE}}' | bash
+    requires:
+      vars: [IP, MODE]
+
+  upgrade-node:
+    desc: Upgrade Talos on a single node with a full power cycle, if preflight passes [IP=required]
+    dir: '{{.TALOS_DIR}}'
+    cmds:
+      # Refuses the upgrade unless the cluster can lose this node.
+      - '{{.ROOT_DIR}}/.agents/skills/talos-rollout/scripts/preflight.sh {{.IP}}'
+      - task: upgrade-node-confirmed
+        vars:
+          IP: '{{.IP}}'
     requires:
       vars: [IP]
     preconditions:
       - talosctl --nodes {{.IP}} get machineconfig
       - talosctl config info
       - test -f {{.TALOSCONFIG}}
-      - which kubectl talhelper talosctl
+      - which jq kubectl talhelper talosctl
+
+  upgrade-node-confirmed:
+    internal: true
+    dir: '{{.TALOS_DIR}}'
+    prompt: Preflight passed. Upgrade and power-cycle {{.IP}} now, with the decisions it listed above settled?
+    # The default reboot mode uses kexec and has hung these nodes during the
+    # shutdown handoff. powercycle bypasses kexec and must remain explicit.
+    cmd: talhelper gencommand upgrade --node {{.IP}} --extra-flags "--drain-timeout=15m --timeout=20m --reboot-mode=powercycle" | bash
+    requires:
+      vars: [IP]
 
   upgrade-k8s:
     desc: Upgrade Kubernetes

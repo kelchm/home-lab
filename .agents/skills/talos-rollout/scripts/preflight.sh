@@ -137,6 +137,56 @@ else
     fail 'etcd member query failed' "$etcd_out"
 fi
 
+# A member that is down stays registered, so membership alone proves nothing.
+# Each member must answer for itself, report no errors, and name the same leader.
+section "etcd member health"
+etcd_leaders=''
+etcd_healthy=0
+for index in "${!NODES[@]}"; do
+    if ! status_out="$(talosctl -n "${IPS[$index]}" etcd status 2>&1)"; then
+        fail "etcd status failed on ${NODES[$index]} (${IPS[$index]})" "$status_out"
+        continue
+    fi
+    detail "$status_out"
+    # member and leader are the row's two 16-digit hex IDs; a row with an empty
+    # ERRORS column ends in the protocol and storage versions
+    read -r member leader learner clean < <(awk -v ip="${IPS[$index]}" '
+      $1 == ip {
+        n = 0; learner = "unparsed"
+        for (i = 2; i <= NF; i++) {
+          if (length($i) == 16 && $i ~ /^[0-9a-f]+$/) id[++n] = $i
+          if ($i == "true" || $i == "false") learner = $i
+        }
+        clean = ($NF ~ /^[0-9]+\.[0-9]+\.[0-9]+$/ && $(NF - 1) ~ /^[0-9]+\.[0-9]+\.[0-9]+$/) ? "clean" : "errors"
+        print (n >= 2 ? id[1] " " id[2] : "unparsed unparsed"), learner, clean
+        exit
+      }' <<<"$status_out") || true
+    if [[ "${member:-unparsed}" == 'unparsed' || "${learner:-unparsed}" == 'unparsed' ]]; then
+        fail "etcd status unparsed on ${NODES[$index]} (${IPS[$index]})" "$status_out"
+    elif [[ "$clean" != 'clean' ]]; then
+        fail "etcd member on ${NODES[$index]} reports errors" "$status_out"
+    elif [[ "$learner" != 'false' ]]; then
+        fail "etcd member on ${NODES[$index]} is a learner" "$status_out"
+    elif [[ "$leader" == '0000000000000000' ]]; then
+        fail "etcd member on ${NODES[$index]} has no leader" "$status_out"
+    else
+        etcd_healthy=$(( etcd_healthy + 1 ))
+        etcd_leaders+="${leader}"$'\n'
+    fi
+done
+leader_count="$(sort -u <<<"${etcd_leaders%$'\n'}" | grep -c . || true)"
+line "members answering without errors: ${etcd_healthy}/${#NODES[@]}; leader: $(sort -u <<<"${etcd_leaders%$'\n'}" | paste -sd' ' -)"
+if (( leader_count > 1 )); then
+    fail 'etcd members disagree on the leader' "$etcd_leaders"
+fi
+if alarm_out="$(talosctl -n "${IPS[0]}" etcd alarm list 2>&1)"; then
+    if [[ -n "$alarm_out" ]]; then
+        fail 'etcd has active alarms' "$alarm_out"
+    fi
+else
+    fail 'etcd alarm query failed' "$alarm_out"
+fi
+
 # --- Kubernetes nodes ---------------------------------------------------------
 section "Kubernetes nodes"
 node_json="$(kubectl get nodes -o json)"
@@ -311,6 +361,6 @@ if (( ${#FAILURES[@]} > 0 )); then
     exit 1
 fi
 
-printf 'PREFLIGHT CHECKS PASSED: etcd membership responded, all %s nodes are Ready and uncordoned, networking safeguards are Ready, %s of %s Longhorn volumes are in use and healthy (%s idle), and %s instance-managers are Ready with lhnet1.\n' \
-    "$node_total" "$(( volume_count - idle_count ))" "$volume_count" "$idle_count" "$instance_count"
+printf 'PREFLIGHT CHECKS PASSED: all %s etcd members answer without errors and agree on a leader, all %s nodes are Ready and uncordoned, networking safeguards are Ready, %s of %s Longhorn volumes are in use and healthy (%s idle), and %s instance-managers are Ready with lhnet1.\n' \
+    "$etcd_healthy" "$node_total" "$(( volume_count - idle_count ))" "$volume_count" "$idle_count" "$instance_count"
 printf 'Still owed before go/no-go: talosctl health on a healthy control-plane node, an etcd snapshot verified at its path, and an explicit decision for any CloudNativePG primary on the candidate.\n'
