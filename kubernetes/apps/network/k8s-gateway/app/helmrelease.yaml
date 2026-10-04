@@ -15,9 +15,18 @@ spec:
     service:
       type: LoadBalancer
       port: 53
+      useTcp: true
       labels:
         lb-pool: admin-prod
       annotations:
         lbipam.cilium.io/ips: "10.32.130.2"
       externalTrafficPolicy: Cluster
     watchedResources: ["HTTPRoute", "Service"]
+    replicaCount: 2
+    topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: DoNotSchedule
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: k8s-gateway
