@@ -22,7 +22,8 @@
         "type": "datasource",
         "query": "prometheus",
         "current": {},
-        "refresh": 1
+        "refresh": 1,
+        "hide": 2
       }
     ]
   },
@@ -85,324 +86,6 @@
   ],
   "panels": [
     {
-      "id": 1,
-      "type": "table",
-      "title": "Firing alerts",
-      "description": "Alerts firing now, apart from the always-on Watchdog. The duration counts from when the condition first held.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 0,
-        "w": 18,
-        "h": 7
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "noValue": "No alerts firing",
-          "custom": {
-            "align": "auto",
-            "cellOptions": {
-              "type": "auto"
-            },
-            "minWidth": 80
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Severity"
-            },
-            "properties": [
-              {
-                "id": "mappings",
-                "value": [
-                  {
-                    "type": "value",
-                    "options": {
-                      "critical": {
-                        "text": "critical",
-                        "color": "red",
-                        "index": 0
-                      },
-                      "warning": {
-                        "text": "warning",
-                        "color": "orange",
-                        "index": 1
-                      }
-                    }
-                  }
-                ]
-              },
-              {
-                "id": "custom.cellOptions",
-                "value": {
-                  "type": "color-text"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Firing for"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "dtdurations"
-              },
-              {
-                "id": "decimals",
-                "value": 0
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Namespace"
-            },
-            "properties": [
-              {
-                "id": "noValue",
-                "value": ""
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Instance"
-            },
-            "properties": [
-              {
-                "id": "noValue",
-                "value": ""
-              }
-            ]
-          }
-        ]
-      },
-      "options": {
-        "showHeader": true,
-        "cellHeight": "sm",
-        "footer": {
-          "show": false
-        },
-        "sortBy": [
-          {
-            "displayName": "Firing for",
-            "desc": true
-          }
-        ]
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "expr": "(time() - ALERTS_FOR_STATE{alertname!~\"Watchdog|InfoInhibitor\"}) and ignoring (alertstate) ALERTS{alertstate=\"firing\"}",
-          "legendFormat": "",
-          "refId": "A",
-          "instant": true,
-          "range": false,
-          "format": "table"
-        }
-      ],
-      "transformations": [
-        {
-          "id": "filterFieldsByName",
-          "options": {
-            "include": {
-              "names": [
-                "alertname",
-                "severity",
-                "namespace",
-                "instance",
-                "Value"
-              ]
-            }
-          }
-        },
-        {
-          "id": "organize",
-          "options": {
-            "indexByName": {
-              "alertname": 0,
-              "severity": 1,
-              "namespace": 2,
-              "instance": 3,
-              "Value": 4
-            },
-            "renameByName": {
-              "alertname": "Alert",
-              "severity": "Severity",
-              "namespace": "Namespace",
-              "instance": "Instance",
-              "Value": "Firing for"
-            }
-          }
-        }
-      ]
-    },
-    {
-      "id": 2,
-      "type": "stat",
-      "title": "Alerts by severity",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "gridPos": {
-        "x": 18,
-        "y": 0,
-        "w": 6,
-        "h": 7
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "unit": "short",
-          "decimals": 0,
-          "noValue": "Unavailable",
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 1
-              }
-            ]
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Critical"
-            },
-            "properties": [
-              {
-                "id": "thresholds",
-                "value": {
-                  "mode": "absolute",
-                  "steps": [
-                    {
-                      "color": "green",
-                      "value": null
-                    },
-                    {
-                      "color": "red",
-                      "value": 1
-                    }
-                  ]
-                }
-              },
-              {
-                "id": "unit",
-                "value": "short"
-              },
-              {
-                "id": "decimals",
-                "value": 0
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Warning"
-            },
-            "properties": [
-              {
-                "id": "thresholds",
-                "value": {
-                  "mode": "absolute",
-                  "steps": [
-                    {
-                      "color": "green",
-                      "value": null
-                    },
-                    {
-                      "color": "orange",
-                      "value": 1
-                    }
-                  ]
-                }
-              },
-              {
-                "id": "unit",
-                "value": "short"
-              },
-              {
-                "id": "decimals",
-                "value": 0
-              }
-            ]
-          }
-        ]
-      },
-      "options": {
-        "reduceOptions": {
-          "values": false,
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": ""
-        },
-        "orientation": "horizontal",
-        "textMode": "value_and_name",
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "wideLayout": true,
-        "text": {
-          "titleSize": 15,
-          "valueSize": 22
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "expr": "count(ALERTS{alertstate=\"firing\",severity=\"critical\",alertname!~\"Watchdog|InfoInhibitor\"}) or vector(0)",
-          "legendFormat": "Critical",
-          "refId": "A",
-          "instant": true,
-          "range": false
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "expr": "count(ALERTS{alertstate=\"firing\",severity=\"warning\",alertname!~\"Watchdog|InfoInhibitor\"}) or vector(0)",
-          "legendFormat": "Warning",
-          "refId": "B",
-          "instant": true,
-          "range": false
-        }
-      ]
-    },
-    {
       "id": 3,
       "type": "stat",
       "title": "Kubernetes",
@@ -412,7 +95,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 7,
+        "y": 0,
         "w": 8,
         "h": 6
       },
@@ -580,7 +263,7 @@
         },
         "orientation": "horizontal",
         "textMode": "value_and_name",
-        "colorMode": "value",
+        "colorMode": "background",
         "graphMode": "none",
         "justifyMode": "auto",
         "wideLayout": true,
@@ -659,7 +342,7 @@
       },
       "gridPos": {
         "x": 8,
-        "y": 7,
+        "y": 0,
         "w": 8,
         "h": 6
       },
@@ -813,7 +496,7 @@
         },
         "orientation": "horizontal",
         "textMode": "value_and_name",
-        "colorMode": "value",
+        "colorMode": "background",
         "graphMode": "none",
         "justifyMode": "auto",
         "wideLayout": true,
@@ -880,7 +563,7 @@
       },
       "gridPos": {
         "x": 16,
-        "y": 7,
+        "y": 0,
         "w": 8,
         "h": 6
       },
@@ -988,7 +671,7 @@
         },
         "orientation": "horizontal",
         "textMode": "value_and_name",
-        "colorMode": "value",
+        "colorMode": "background",
         "graphMode": "none",
         "justifyMode": "auto",
         "wideLayout": true,
@@ -1043,7 +726,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 13,
+        "y": 6,
         "w": 8,
         "h": 6
       },
@@ -1197,7 +880,7 @@
         },
         "orientation": "horizontal",
         "textMode": "value_and_name",
-        "colorMode": "value",
+        "colorMode": "background",
         "graphMode": "none",
         "justifyMode": "auto",
         "wideLayout": true,
@@ -1264,7 +947,7 @@
       },
       "gridPos": {
         "x": 8,
-        "y": 13,
+        "y": 6,
         "w": 8,
         "h": 6
       },
@@ -1368,7 +1051,7 @@
         },
         "orientation": "horizontal",
         "textMode": "value_and_name",
-        "colorMode": "value",
+        "colorMode": "background",
         "graphMode": "none",
         "justifyMode": "auto",
         "wideLayout": true,
@@ -1423,7 +1106,7 @@
       },
       "gridPos": {
         "x": 16,
-        "y": 13,
+        "y": 6,
         "w": 8,
         "h": 6
       },
@@ -1527,7 +1210,7 @@
         },
         "orientation": "horizontal",
         "textMode": "value_and_name",
-        "colorMode": "value",
+        "colorMode": "background",
         "graphMode": "none",
         "justifyMode": "auto",
         "wideLayout": true,
@@ -1573,6 +1256,584 @@
       "description": "Healthy: inference is reachable and the Grafana MCP probe passed within the last ten minutes."
     },
     {
+      "id": 2,
+      "type": "stat",
+      "title": "Alerts by severity",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 12,
+        "w": 6,
+        "h": 6
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "unit": "short",
+          "decimals": 0,
+          "noValue": "Unavailable",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Critical"
+            },
+            "properties": [
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "red",
+                      "value": 1
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Warning"
+            },
+            "properties": [
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 1
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "orientation": "horizontal",
+        "textMode": "value_and_name",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "wideLayout": true,
+        "text": {
+          "titleSize": 15,
+          "valueSize": 22
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "count(ALERTS{alertstate=\"firing\",severity=\"critical\",alertname!~\"Watchdog|InfoInhibitor\"}) or vector(0)",
+          "legendFormat": "Critical",
+          "refId": "A",
+          "instant": true,
+          "range": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "count(ALERTS{alertstate=\"firing\",severity=\"warning\",alertname!~\"Watchdog|InfoInhibitor\"}) or vector(0)",
+          "legendFormat": "Warning",
+          "refId": "B",
+          "instant": true,
+          "range": false
+        }
+      ]
+    },
+    {
+      "id": 1,
+      "type": "table",
+      "title": "Firing alerts",
+      "description": "Alerts firing now, apart from the always-on Watchdog. The duration counts from when the condition first held.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 12,
+        "w": 18,
+        "h": 6
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "No alerts firing",
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "minWidth": 80
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Severity"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "critical": {
+                        "text": "critical",
+                        "color": "red",
+                        "index": 0
+                      },
+                      "warning": {
+                        "text": "warning",
+                        "color": "orange",
+                        "index": 1
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Firing for"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dtdurations"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Namespace"
+            },
+            "properties": [
+              {
+                "id": "noValue",
+                "value": ""
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Instance"
+            },
+            "properties": [
+              {
+                "id": "noValue",
+                "value": ""
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "sortBy": [
+          {
+            "displayName": "Firing for",
+            "desc": true
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "(time() - ALERTS_FOR_STATE{alertname!~\"Watchdog|InfoInhibitor\"}) and ignoring (alertstate) ALERTS{alertstate=\"firing\"}",
+          "legendFormat": "",
+          "refId": "A",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "alertname",
+                "severity",
+                "namespace",
+                "instance",
+                "Value"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "alertname": 0,
+              "severity": 1,
+              "namespace": 2,
+              "instance": 3,
+              "Value": 4
+            },
+            "renameByName": {
+              "alertname": "Alert",
+              "severity": "Severity",
+              "namespace": "Namespace",
+              "instance": "Instance",
+              "Value": "Firing for"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "type": "stat",
+      "title": "Cluster CPU",
+      "description": "CPU in use across the three cluster nodes.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 18,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "unit": "percent",
+          "decimals": 1,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "100 * (1 - avg(rate(node_cpu_seconds_total{cluster=\"k8s-prod\",mode=\"idle\"}[5m])))",
+          "legendFormat": "Cluster CPU",
+          "range": true,
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "type": "stat",
+      "title": "Cluster memory",
+      "description": "Memory in use across the three cluster nodes.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 18,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "unit": "percent",
+          "decimals": 1,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "100 * (1 - sum(node_memory_MemAvailable_bytes{cluster=\"k8s-prod\"}) / sum(node_memory_MemTotal_bytes{cluster=\"k8s-prod\"}))",
+          "legendFormat": "Cluster memory",
+          "range": true,
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "type": "stat",
+      "title": "Log lines per second",
+      "description": "Log lines VictoriaLogs is ingesting.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 18,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "unit": "none",
+          "decimals": 1,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(vl_rows_ingested_total{cluster=\"k8s-prod\",job=\"victoria-logs-single-server\",type=\"nativeinsert\"}[5m]))",
+          "legendFormat": "Log lines per second",
+          "range": true,
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "type": "stat",
+      "title": "Sparks GPU power",
+      "description": "Combined GPU power draw of the Sparks; it rises when a model is working.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 18,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "unit": "watt",
+          "decimals": 1,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum(nvidia_smi_power_draw_watts{job=\"spark-gpu\",platform=\"spark\"})",
+          "legendFormat": "Sparks GPU power",
+          "range": true,
+          "refId": "A"
+        }
+      ]
+    },
+    {
       "id": 9,
       "type": "table",
       "title": "Machines",
@@ -1583,7 +1844,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 19,
+        "y": 22,
         "w": 24,
         "h": 11
       },
@@ -1599,38 +1860,6 @@
           "noValue": ""
         },
         "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "CPU"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "percent"
-              },
-              {
-                "id": "decimals",
-                "value": 1
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Memory"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "percent"
-              },
-              {
-                "id": "decimals",
-                "value": 1
-              }
-            ]
-          },
           {
             "matcher": {
               "id": "byName",
@@ -1657,44 +1886,6 @@
                     {
                       "color": "orange",
                       "value": 10
-                    }
-                  ]
-                }
-              },
-              {
-                "id": "custom.cellOptions",
-                "value": {
-                  "type": "color-text"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Fullest filesystem"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "percent"
-              },
-              {
-                "id": "decimals",
-                "value": 1
-              },
-              {
-                "id": "thresholds",
-                "value": {
-                  "mode": "absolute",
-                  "steps": [
-                    {
-                      "color": "green",
-                      "value": null
-                    },
-                    {
-                      "color": "orange",
-                      "value": 90
                     }
                   ]
                 }
@@ -1784,6 +1975,177 @@
                 "value": {
                   "type": "color-text"
                 }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "CPU"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              },
+              {
+                "id": "min",
+                "value": 0
+              },
+              {
+                "id": "max",
+                "value": 100
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "gauge",
+                  "mode": "gradient",
+                  "valueDisplayMode": "text"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "blue"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Memory"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              },
+              {
+                "id": "min",
+                "value": 0
+              },
+              {
+                "id": "max",
+                "value": 100
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "gauge",
+                  "mode": "gradient",
+                  "valueDisplayMode": "text"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "purple"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Fullest filesystem"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              },
+              {
+                "id": "min",
+                "value": 0
+              },
+              {
+                "id": "max",
+                "value": 100
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "gauge",
+                  "mode": "gradient",
+                  "valueDisplayMode": "text"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 90
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Platform"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "k8s": {
+                        "text": "Kubernetes",
+                        "color": "blue",
+                        "index": 0
+                      },
+                      "pve": {
+                        "text": "Proxmox",
+                        "color": "orange",
+                        "index": 1
+                      },
+                      "spark": {
+                        "text": "Spark",
+                        "color": "purple",
+                        "index": 2
+                      }
+                    }
+                  }
+                ]
               }
             ]
           }
@@ -1928,7 +2290,7 @@
       "title": "Starred",
       "gridPos": {
         "x": 0,
-        "y": 30,
+        "y": 33,
         "w": 12,
         "h": 7
       },
@@ -1948,7 +2310,7 @@
       "title": "Recently viewed",
       "gridPos": {
         "x": 12,
-        "y": 30,
+        "y": 33,
         "w": 12,
         "h": 7
       },
