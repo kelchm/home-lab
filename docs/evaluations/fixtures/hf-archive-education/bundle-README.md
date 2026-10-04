@@ -1,5 +1,7 @@
 # hf-archive educational evidence bundle, October 4, 2026
 
+> **Reference copy, noted October 4, 2026.** This is a copy of the README inside `hf-archive-education-20261004.tar.gz`, a bundle delivered outside this repository; everything below the note is that README unchanged. The paths it lists are paths inside the tarball, not files in this checkout. The repository holds only this copy and the compact recorded results beside it, not the tarball or its harness scripts, and no public download location is provided. The operator's copy is on the workstation at `/Users/kelchm/Downloads/hf-archive-education-20261004.tar.gz` (188,797 bytes, SHA-256 `a654feec5f490b41dfb622c2171e4b892d0318e2855dc77d334fcc16cbdec157`). The extraction and re-run commands below apply only to someone holding a copy of that tarball with a matching checksum. The recorded results can be read without it; probes rebuilt from the write-up would be new tests, not a re-run of the recorded harness.
+
 Scripts, dependency pins and recorded results from one day of workstation-only testing of the `hf-archive` prototype, kept so the lessons can be checked or repeated without the original machine. The write-up is `evidence/EDUCATIONAL-QUALIFICATION.md`, under "Educational follow-up, October 4, 2026". This bundle supports that write-up; it is not a deployment artifact and makes no case for adopting the prototype.
 
 ## What is inside

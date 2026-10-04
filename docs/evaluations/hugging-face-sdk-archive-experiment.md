@@ -116,11 +116,14 @@ The `bert-tiny` archive and the source at `9c119dc` were copied to an isolated d
 
 The JSON under [`fixtures/hf-archive-education/`](fixtures/hf-archive-education/) is the recorded output, unmodified, and still names the original temporary paths. The NAS cleanup record lists the Docker commands run on Athena.
 
-The harness scripts, dependency pins, the gateway's exact answer policy and the source at `9c119dc` are in a bundle kept outside the repository: `hf-archive-education-20261004.tar.gz`, 188,797 bytes, SHA-256 `a654feec5f490b41dfb622c2171e4b892d0318e2855dc77d334fcc16cbdec157`, delivered to `/Users/kelchm/Downloads/` on the workstation. It holds no model payloads, caches or credentials. Its [README](fixtures/hf-archive-education/bundle-README.md) is kept here and lists the contents and what was adapted so the scripts run from an extracted copy; the bundle's `manifest.json` records the size and SHA-256 of every file.
+The harness scripts, dependency pins, the gateway's exact answer policy and the source at `9c119dc` are not included in this checkout. They are in an external bundle: `hf-archive-education-20261004.tar.gz`, 188,797 bytes, SHA-256 `a654feec5f490b41dfb622c2171e4b892d0318e2855dc77d334fcc16cbdec157`. The operator's copy is at `/Users/kelchm/Downloads/` on the workstation; no public download location is provided. It holds no model payloads, caches or credentials. A reference copy of its [README](fixtures/hf-archive-education/bundle-README.md) is kept here and lists the contents of the tarball, not of this checkout, and what was adapted so the scripts run from an extracted copy; the bundle's `manifest.json` records the size and SHA-256 of every file.
 
-To re-run the two loopback harnesses from the bundle, with `uv` installed and network access for the pinned Python and dependencies:
+Re-running the two loopback harnesses requires a copy of that tarball, which for the operator means taking it from the workstation location above; the repository alone is not enough. With a copy in the current directory, `uv` installed and network access for the pinned Python and dependencies:
 
 ```sh
+# Confirm the copy matches the recorded SHA-256 before extracting.
+shasum -a 256 hf-archive-education-20261004.tar.gz
+
 tar -xzf hf-archive-education-20261004.tar.gz
 cd hf-archive-education-20261004
 
@@ -134,4 +137,4 @@ tools/hf-archive/.venv/bin/python cold-coordinator/harness.py
 
 A re-run is a new run to compare with the recorded results, not a replay. [Packaging validation](fixtures/hf-archive-education/bundle-package-validation.json) re-ran one coordinator scenario and one SDK case from a fresh extraction, not all 42 cases and 120 checks. The Athena run is not reproduced by the bundle: its scripts name the original host and ports, and repeating it means recreating the isolated container and pulling the public `prajjwal1/bert-tiny` files again.
 
-Without the bundle, the descriptions above are meant to be enough to build equivalent probes.
+Without the bundle, the committed results can still be inspected, and the descriptions above are meant to be enough to build equivalent probes. Those would be new tests, not a reproduction of the recorded harness.
