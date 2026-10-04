@@ -986,7 +986,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "node_hwmon_temp_celsius{job=\"spark-node\",platform=\"spark\",instance=~\"$node\"} * on(job,instance,platform,chip,sensor) group_left(label) node_hwmon_sensor_label{job=\"spark-node\",platform=\"spark\",instance=~\"$node\",label=\"Composite\"}",
+          "expr": "node_hwmon_temp_celsius{job=\"spark-node\",platform=\"spark\",instance=~\"$node\",chip=~\"nvme.*\"} * on(job,instance,platform,chip,sensor) group_left(label) node_hwmon_sensor_label{job=\"spark-node\",platform=\"spark\",instance=~\"$node\",chip=~\"nvme.*\",label=\"Composite\"}",
           "legendFormat": "{{instance}} · {{chip}}",
           "refId": "A",
           "range": true,

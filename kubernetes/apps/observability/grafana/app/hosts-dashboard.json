@@ -555,7 +555,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "min by (instance) (label_replace(up{job=\"pve-api\",cluster=\"pve-sbx\",platform=~\"$platform\"}, \"instance\", \"$1\", \"instance\", \"([^.]+)[.].*\"))",
+          "expr": "min by (instance) (label_replace(up{job=\"pve-api\",cluster=\"pve-sbx\",platform=~\"$platform\",instance=~\"($node)[.].*\"}, \"instance\", \"$1\", \"instance\", \"([^.]+)[.].*\"))",
           "refId": "E",
           "format": "table",
           "instant": true,

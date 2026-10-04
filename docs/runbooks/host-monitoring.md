@@ -21,7 +21,7 @@ Not yet verified: that Docker comes back with the same settings after a PVE node
 | Label | Meaning | Set by |
 |---|---|---|
 | `instance` | Physical node, such as `spark-1` | The host's ingestion token |
-| `platform` | Node type: `pve` or `spark` | The host's ingestion token |
+| `platform` | Machine type: `k8s`, `pve` or `spark` | The host's ingestion token; the node-exporter scrape for the cluster nodes |
 | `job` | Collector, such as `spark-node` or `pve-vmagent` | The scrape configuration |
 | `model`, `runtime`, `recipe` | What a Spark is serving | SparkRun's container labels |
 

@@ -109,7 +109,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "60 * label_replace(sum(rate(hubble_drop_total{cluster=\"k8s-prod\", source_namespace=~\"$source_namespace\", destination_namespace=~\"$destination_namespace\"}[$__rate_interval])) by (source, reason) > 0, \"source\", \"unknown\", \"source\", \"\")",
+          "expr": "60 * label_replace(sum(rate(hubble_drop_total{cluster=\"k8s-prod\", source_namespace=~\"$source_namespace\", destination_namespace=~\"$destination_namespace\"}[$__rate_interval])) by (source, reason) > 0, \"source\", \"unknown\", \"source\", \"^$\")",
           "legendFormat": "{{source}}: {{reason}}",
           "range": true,
           "refId": "A"
@@ -207,7 +207,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "60 * label_replace(sum(rate(hubble_drop_total{cluster=\"k8s-prod\", source_namespace=~\"$source_namespace\", destination_namespace=~\"$destination_namespace\"}[$__rate_interval])) by (destination, reason) > 0, \"destination\", \"unknown\", \"destination\", \"\")",
+          "expr": "60 * label_replace(sum(rate(hubble_drop_total{cluster=\"k8s-prod\", source_namespace=~\"$source_namespace\", destination_namespace=~\"$destination_namespace\"}[$__rate_interval])) by (destination, reason) > 0, \"destination\", \"unknown\", \"destination\", \"^$\")",
           "legendFormat": "{{destination}}: {{reason}}",
           "range": true,
           "refId": "A"
