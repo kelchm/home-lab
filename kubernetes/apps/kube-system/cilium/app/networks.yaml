@@ -3,6 +3,11 @@
 # migration. The corresponding CiliumL2AnnouncementPolicy resources were
 # removed in step 12; re-add them to roll back. Pools and VLAN 40 are
 # removed in step 14 once a stable maintenance window has passed.
+#
+# The serviceSelectors gate these pools against accidental use: a
+# LoadBalancer Service only draws from them when it explicitly carries
+# `lb-pool: admin` / `lb-pool: services`. A rollback Service must set the
+# matching label (plus the L2 announcement policies re-added above).
 apiVersion: cilium.io/v2alpha1
 kind: CiliumLoadBalancerIPPool
 metadata:
@@ -12,6 +17,9 @@ spec:
   blocks:
     - start: "10.32.30.30"
       stop: "10.32.30.99"
+  serviceSelector:
+    matchLabels:
+      lb-pool: admin
 ---
 apiVersion: cilium.io/v2alpha1
 kind: CiliumLoadBalancerIPPool
@@ -22,3 +30,6 @@ spec:
   blocks:
     - start: "10.32.40.30"
       stop: "10.32.40.99"
+  serviceSelector:
+    matchLabels:
+      lb-pool: services
