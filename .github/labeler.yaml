@@ -1,7 +1,6 @@
 ---
-# Automatic scopes follow owned directories and recurring file conventions.
-# Component directories may add scopes beyond their parent (e.g. pve-exporter).
-# Add content-specific scope during review; see docs/repository-labels.md.
+# Labels follow the repository's platform and domain directories.
+# Keep this coarse: do not classify individual apps, resources, or dependencies.
 platform/devices:
   - changed-files:
       - any-glob-to-any-file:
@@ -11,31 +10,22 @@ platform/kubernetes:
       - any-glob-to-any-file:
           - bootstrap/**
           - kubernetes/**
-          - .taskfiles/bootstrap/**
-          # These tool components contain Kubernetes test workloads.
-          - tools/iperf3/**
-          - tools/longhorn-bench/**
-          - tools/media-nfs-smoke/**
 platform/proxmox:
   - changed-files:
       - any-glob-to-any-file:
           - proxmox/**
-          - kubernetes/apps/observability/pve-exporter/**
 platform/sparks:
   - changed-files:
       - any-glob-to-any-file:
           - sparks/**
-          - .taskfiles/sparks/**
 platform/synology:
   - changed-files:
       - any-glob-to-any-file:
           - synology/**
-          - scripts/synology/**
 platform/talos:
   - changed-files:
       - any-glob-to-any-file:
           - talos/**
-          - .taskfiles/talos/**
 platform/unifi:
   - changed-files:
       - any-glob-to-any-file:
@@ -45,12 +35,9 @@ area/ai:
       - any-glob-to-any-file:
           - kubernetes/apps/ai/**
           - sparks/inference/**
-          - synology/modelkeep/**
-          - proxmox/guests/hermes-1/**
 area/docs:
   - changed-files:
       - any-glob-to-any-file:
-          - README.md
           - assets/**
           - docs/**
           - '**/README.md'
@@ -58,61 +45,29 @@ area/identity:
   - changed-files:
       - any-glob-to-any-file:
           - kubernetes/apps/identity/**
-          # Shared SSO resource conventions across application namespaces.
-          - kubernetes/**/oauth2-*.yaml
-          - kubernetes/**/middleware-kanidm-oidc.yaml
 area/network:
   - changed-files:
       - any-glob-to-any-file:
           - network/**
           - kubernetes/apps/network/**
-          # Network components deployed in the shared kube-system namespace.
-          - kubernetes/apps/kube-system/cilium/**
-          - kubernetes/apps/kube-system/cilium-bgp/**
-          - kubernetes/apps/kube-system/coredns/**
-          - kubernetes/apps/kube-system/multus/**
-          - kubernetes/apps/kube-system/whereabouts/**
-          - kubernetes/apps/tailscale/**
-          - proxmox/guests/tailscale-router/**
-          - kubernetes/**/networkpolicy.yaml
-          - kubernetes/**/networkattachmentdefinition.yaml
-          - kubernetes/**/httproute.yaml
-          - tools/iperf3/**
 area/observability:
   - changed-files:
       - any-glob-to-any-file:
           - kubernetes/apps/observability/**
           - proxmox/monitoring/**
           - sparks/monitoring/**
-          - scripts/logging/**
-          - kubernetes/**/alerts.yaml
-          - kubernetes/**/scrape.yaml
-          - kubernetes/**/podmonitor.yaml
-          - kubernetes/**/dashboards/**
 area/storage:
   - changed-files:
       - any-glob-to-any-file:
           - kubernetes/apps/longhorn-system/**
-          - kubernetes/apps/kube-system/csi-driver-nfs/**
-          - tools/longhorn-bench/**
-          - tools/media-nfs-smoke/**
-          - tools/sn770-zfs-qualification/**
           - kubernetes/apps/*/storage/**
-          # Volume manifests use both bare and prefixed resource names.
-          - kubernetes/**/pv.yaml
-          - kubernetes/**/pvc.yaml
-          - kubernetes/**/*-pv.yaml
-          - kubernetes/**/*-pvc.yaml
 area/tooling:
   - changed-files:
       - any-glob-to-any-file:
           - ".*"
-          - .github/**
-          - .agents/**
-          - .claude/**
-          - .vscode/**
+          - ".*/**"
           - AGENTS.md
           - CLAUDE.md
           - Taskfile.yaml
-          - scripts/ci/**
-          - scripts/lib/**
+          - scripts/**
+          - tools/**

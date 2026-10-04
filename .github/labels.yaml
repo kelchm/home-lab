@@ -1,6 +1,6 @@
 ---
-# Scope labels are additive. Definitions and migration procedure: docs/repository-labels.md.
-# Platforms: managed environments and operating layers directly involved in the work.
+# Scope labels are coarse filters that follow the repository layout: docs/repository-labels.md.
+# Platforms: managed environments with their own trees.
 - name: platform/devices
   color: "c5def5"
   description: "Standalone appliances not covered by another platform, such as the GLKVM"
@@ -11,15 +11,15 @@
   aliases: ["area/kubernetes", "area/bootstrap"]
 - name: platform/proxmox
   color: "c5def5"
-  description: "Proxmox VE hosts, guests, and integrations targeting Proxmox"
+  description: "Proxmox VE hosts, guests, and host-side services"
   aliases: ["area/proxmox"]
 - name: platform/sparks
   color: "c5def5"
-  description: "DGX Spark hosts, direct fabric, inference runtimes, and targeted integrations"
+  description: "DGX Spark hosts, direct fabric, and inference runtimes"
   aliases: ["area/sparks"]
 - name: platform/synology
   color: "c5def5"
-  description: "Synology NAS: DSM, storage configuration, Compose services, and targeted integrations"
+  description: "Synology NAS: DSM, storage configuration, and Compose services"
   aliases: ["area/synology"]
 - name: platform/talos
   color: "c5def5"
@@ -27,8 +27,8 @@
   aliases: ["area/talos"]
 - name: platform/unifi
   color: "c5def5"
-  description: "UniFi controller, gateway, switching, wireless, and targeted integrations"
-# Areas: domains directly involved, including operations on their components.
+  description: "UniFi controller, gateway, switching, and wireless"
+# Areas: domains with their own directories.
 - name: area/ai
   color: "bfd4f2"
   description: "Model acquisition and serving, inference qualification, agent services, and MCP"
@@ -49,7 +49,7 @@
   description: "Persistence, filesystems, volumes, shares, backups, restore, and data integrity"
 - name: area/tooling
   color: "bfd4f2"
-  description: "CI, dependency automation, repo validation, agent instructions, and shared operator tooling"
+  description: "Scripts, tools, tasks, CI, dependency automation, agent instructions, and repository configuration"
   aliases: ["area/mise", "area/github", "area/renovate", "area/scripts", "area/taskfile"]
 # Kinds: optional, at most one per issue
 - name: kind/bug

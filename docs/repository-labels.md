@@ -1,102 +1,57 @@
 # Repository labels
 
-Issues and pull requests here use a small fixed label taxonomy to make work discoverable and scoped. Labels are organizational only; they do not determine rollout risk or drive deployment. [`.github/labels.yaml`](../.github/labels.yaml) is the source of truth for the catalog, and [`.github/labeler.yaml`](../.github/labeler.yaml) maps touched paths to labels.
+Issues and pull requests use a small fixed set of labels as coarse filters. Labels are organizational only; they do not determine rollout risk or drive deployment. [`.github/labels.yaml`](../.github/labels.yaml) is the catalog, and [`.github/labeler.yaml`](../.github/labeler.yaml) maps directories to labels.
 
-## Catalog
+## Scope labels
 
-### Platforms
+Scope labels follow the repository layout. A platform is a managed environment with its own tree; an area is a domain with its own directories.
 
-A platform label names a managed environment or operating layer directly involved in the work, including platform-specific integrations, investigations, and runbooks. Label the layer being operated on, not every hosting ancestor or dependency.
-
-| Label | Covers |
+| Label | Directories |
 | --- | --- |
-| `platform/kubernetes` | Cluster resources, workloads, Flux, bootstrap |
-| `platform/talos` | Machine configuration, OS, node hardware |
-| `platform/proxmox` | PVE hosts, guests, and their integrations |
-| `platform/sparks` | Sparks hosts, direct fabric, inference |
-| `platform/synology` | DSM, NAS configuration, Compose workloads |
-| `platform/unifi` | UniFi controller, gateways, switching, wireless |
-| `platform/devices` | Standalone appliance configuration and operations not covered by another platform (currently GLKVM) |
+| `platform/kubernetes` | `kubernetes/`, `bootstrap/` |
+| `platform/talos` | `talos/` |
+| `platform/proxmox` | `proxmox/` |
+| `platform/sparks` | `sparks/` |
+| `platform/synology` | `synology/` |
+| `platform/unifi` | `network/unifi/` |
+| `platform/devices` | `devices/` |
+| `area/ai` | `kubernetes/apps/ai/`, `sparks/inference/` |
+| `area/identity` | `kubernetes/apps/identity/` |
+| `area/network` | `network/`, `kubernetes/apps/network/` |
+| `area/observability` | `kubernetes/apps/observability/`, `proxmox/monitoring/`, `sparks/monitoring/` |
+| `area/storage` | `kubernetes/apps/longhorn-system/`, any `kubernetes/apps/<namespace>/storage/` |
+| `area/docs` | `docs/`, `assets/`, every `README.md` |
+| `area/tooling` | `scripts/`, `tools/`, `Taskfile.yaml`, agent instructions, root dotfiles and dot-directories such as `.github/` and `.taskfiles/` |
 
-Today Kubernetes and Talos manage the same three physical machines at different layers; pick the layer the work operates on. `platform/devices` is for administering an appliance itself, not for an app that merely talks to one (for example, printing).
+The label says where the change lives, not everything it is about:
 
-### Areas
+- The PVE exporter and the Grafana dashboards in `kubernetes/apps/observability/` are `platform/kubernetes` and `area/observability`, whatever they monitor.
+- Cilium lives in `kubernetes/apps/kube-system/`, so its network policy is `platform/kubernetes` only.
+- Anything under `scripts/`, `tools/`, or `.taskfiles/` is `area/tooling`, whichever platform it operates on.
 
-An area label names a directly involved domain, including operations on its components. It describes what the work touches, not a promise of its primary purpose.
+Issues have no paths; use the same table and pick the labels for where the work lands. Every issue except the Renovate Dashboard gets at least one `platform/*` or `area/*` label.
 
-| Label | Covers |
-| --- | --- |
-| `area/network` | Connectivity, routing, DNS, ingress, firewall, remote access |
-| `area/observability` | Metrics, logs, dashboards, alerts, probes |
-| `area/storage` | Persistence, filesystems, volumes, shares, backups, restores, integrity |
-| `area/ai` | Models, inference, agents, MCP |
-| `area/identity` | Shared sign-in, account policy, SSO integrations, identity service operation |
-| `area/docs` | Documentation files: `docs/**`, `assets/**`, the root `README.md`, any `**/README.md` |
-| `area/tooling` | Repository automation, CI, dependencies, validation, shared operator tooling, agent instructions and skills |
+Extra scope labels are optional. Add one by hand when it helps someone find the work; there is no obligation to name every domain a change involves.
 
-Boundary notes:
+Map platforms and domains by directory; keep the common README and repository-configuration rules for docs and tooling. If a directory mixes concerns, reconsider its layout instead of adding component or resource exceptions.
 
-- A routine per-workload token or secret does not make work `area/identity`.
-- Not every script or tool is `area/tooling`; platform-specific tasks stay with their platform.
-- Not every Markdown file is `area/docs`: `SOUL.md` is runtime prompt configuration (`area/ai`), agent instructions and skills are `area/tooling`, and comments inside configuration files never add `area/docs`. Mixed changes that do touch documentation files carry `area/docs`.
-
-### Priority, kind, and status
+## Priority, kind, and status
 
 - Every issue gets exactly one `priority/*` label; the Renovate Dashboard is exempt.
 - An issue carries at most one `kind/*` label, and only for a bug, an investigation, or a new deployment.
 - `hold` marks a blocker or a revisit trigger; the issue or PR body names which.
-- Renovate owns `type/*` and `renovate/*`; they are managed by its configuration and unchanged by this taxonomy.
-
-## Applying labels
-
-- Issues get at least one `platform/*` or `area/*` label describing the work — one of each is not required, and the Renovate Dashboard is the only exception.
-- Pull requests receive every label whose path rules match, so a broad sweep legitimately accumulates labels. Path rules cover only what a path reliably says; add the rest by hand during review.
-
-### Automatic and manual scope
-
-Automatic labels are a starting point, not a complete classification. A path gets a rule in only two cases:
-
-- **A directory owned by one platform or component.** `talos/**` is Talos and `kubernetes/**` is Kubernetes. A component directory can add scope beyond its parent when the whole component exists for it: everything in `kubernetes/apps/observability/pve-exporter/` monitors PVE, so it adds `platform/proxmox`; the Cilium and CoreDNS directories under `kube-system` add `area/network`.
-- **A conventional filename with a stable role.** Kubernetes resource conventions such as `networkpolicy.yaml`, `httproute.yaml`, `podmonitor.yaml`, `oauth2-*.yaml`, and bare or prefixed PV/PVC names add their area across application namespaces. READMEs identify documentation; repository entry points such as `AGENTS.md` and `Taskfile.yaml` identify tooling. Check the files' actual purpose when establishing a convention.
-
-Do not add subject-based rules for individual dashboards, scripts, patches, or secrets. Their filenames alone do not establish a convention. Add scope by hand when it depends on a file's contents; the rules do not enumerate every possible resource or integration.
-
-| Change | Automatic | Add by hand |
-| --- | --- | --- |
-| PVE exporter deployed into the cluster | `platform/kubernetes`, `platform/proxmox`, `area/observability` | — |
-| Homepage's empty `config/proxmox.yaml` placeholder | `platform/kubernetes` | Nothing; the name is not a PVE integration |
-| Any Grafana dashboard under `grafana/app/` | `platform/kubernetes`, `area/observability` | The subject: `platform/sparks` and `area/ai` for Spark TensorFold, `area/storage` for Longhorn, `platform/proxmox` and `platform/sparks` for the hosts dashboard |
-| Talos patch such as `machine-network.yaml` or `user-volume-longhorn.yaml` | `platform/talos` | `area/network` or `area/storage` |
-| `scripts/synology/apply-media-acls.sh` | `platform/synology` | `area/storage` |
-| Standalone script such as `scripts/verify-qbittorrent-boundary.sh` | None | `platform/kubernetes`, `area/network` |
-| Sparks monitoring | `platform/sparks`, `area/observability` | — |
-| UniFi README update | `platform/unifi`, `area/network`, `area/docs` | — |
-| Docs-only evaluation of a Synology service | `area/docs` | `platform/synology`, plus `area/ai` if a model cache is explicit |
-| Kanidm setting or inline comment in Bambuddy's HelmRelease | `platform/kubernetes` | `area/identity`; a comment never adds `area/docs` |
-| Runtime `SOUL.md` in `proxmox/guests/hermes-1/` | `platform/proxmox`, `area/ai` | Nothing; it is not `area/docs` |
-| Repository agent instructions and skills | `area/tooling` | — |
-
-A PR that touches only files without a rule, such as scripts directly under `scripts/`, receives no automatic scope and is labeled entirely by hand.
+- Renovate owns `type/*` and `renovate/*`; they are managed by its configuration.
 
 ## Grafana relationship
 
-The Grafana tree (see [`architecture.md`](architecture.md#dashboards)) gives each dashboard one subject home: its service first, otherwise the platform whose machines, OS, or plumbing it shows, otherwise Overview. Label areas are intentionally broader than the Services folders.
-
-- Longhorn's dashboard lives under Platforms/Kubernetes; a change to it carries `area/storage` as a manual addition, because dashboards in the Grafana directory are labeled only Kubernetes and observability. Cilium's dashboard gets `area/network` automatically because it lives in the Cilium component directory.
-- Dashboard and alert work carries `area/observability` even when the subject is Kubernetes; the Services/Observability folder is only for monitoring-system health.
-- Services domains align loosely with areas such as AI and Identity, but there is no forced one-to-one mapping.
-- Talos is folded into the Kubernetes dashboard folder, while `platform/kubernetes` and `platform/talos` stay separate labels for the two operating layers.
-- `area/docs` and `area/tooling` have no Grafana equivalent, and Overview needs no label; use overlapping scopes on the issue instead.
-- Repository files stay with their owning configuration. Labels do not imply a directory reorganization or metric-label migration: the existing `platform=pve` and `platform=spark` series keep those values. The name Sparks remains provisional.
+Grafana folders (see [`architecture.md`](architecture.md#dashboards)) organize dashboards by subject: the service, otherwise the platform, otherwise Overview. Labels organize repository work by directory, so the two overlap without mapping one-to-one, and a dashboard change needs no label for its subject. Labels imply no metric-label change: the existing `platform=pve` and `platform=spark` series keep those values.
 
 ## Automation
 
-- The labeler evaluates rules from base/`main`, so a PR that edits the rules does not exercise its own new rules.
-- PRs targeting `main` are labeled on open, reopen, and push; deleted files count as touched paths.
+- PRs targeting `main` are labeled on open, reopen, and push with every label whose directories they touch; deleted files count.
+- The labeler reads its rules from `main`, so a PR that edits the rules is not labeled by its own changes.
 - Existing open PRs are not re-labeled when rules change. Replay one with `gh workflow run labeler.yaml -f pr-number=123`.
-- `sync-labels: false` is explicit: manual supplements survive. The flip side is that a stale automatic label whose paths left the PR needs manual cleanup, and removing a still-matched label brings it back on the next push.
-- Rules match paths only; nothing reads file contents, so a subject change inside a generic HelmRelease, patch, or script needs a manual addition.
-- Review label rules when adding an owned directory, a component whose whole purpose adds scope beyond its parent directory, or an established file convention; see [automatic and manual scope](#automatic-and-manual-scope). Scripts directly under `scripts/` and the root `LICENSE` deliberately have no automatic scope.
+- Labeling is add-only (`sync-labels: false`): manual labels survive, a label whose paths left the PR stays until removed by hand, and removing a label that still matches brings it back on the next push.
 
 ## Changing the catalog
 
