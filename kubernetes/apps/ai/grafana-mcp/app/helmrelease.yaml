@@ -43,6 +43,8 @@ spec:
             env:
               # Grafana Service in observability is port 80.
               GRAFANA_URL: http://grafana.observability.svc.cluster.local
+              # Anonymous usage reporting is on by default; keep it off.
+              GRAFANA_USAGE_STATS: disabled
             envFrom:
               - secretRef:
                   name: grafana-mcp-secrets
