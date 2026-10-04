@@ -1,0 +1,13 @@
+---
+# k8s-gateway chart 3.7.2 has no PDB template. Keep at least one replica
+# up during voluntary disruptions (drains), matching coredns.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: k8s-gateway
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: k8s-gateway
+      app.kubernetes.io/instance: k8s-gateway
