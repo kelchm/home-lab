@@ -1,0 +1,139 @@
+---
+# Enrollment is deliberately zero until each host passes its live canary.
+# Change that host to vector(1) in the reviewed activation change.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: vm-external-hosts
+spec:
+  groups:
+  - name: external-host-inventory
+    interval: 30s
+    rules:
+    - record: external_host:expected
+      expr: vector(0)
+      labels:
+        host: spark-1
+        platform: dgx_spark
+    - record: external_host:expected
+      expr: vector(0)
+      labels:
+        host: spark-2
+        platform: dgx_spark
+    - record: external_host:expected
+      expr: vector(0)
+      labels:
+        host: pve-sbx-1
+        platform: proxmox
+    - record: external_host:expected
+      expr: vector(0)
+      labels:
+        host: pve-sbx-2
+        platform: proxmox
+    - record: external_host:expected
+      expr: vector(0)
+      labels:
+        host: pve-sbx-3
+        platform: proxmox
+  - name: external-host-freshness
+    interval: 30s
+    rules:
+    - record: external_host:node_fresh
+      expr: max by(host, platform) ((up{job=~"spark-node|pve-node"} == 1) and (time() - timestamp(up{job=~"spark-node|pve-node"}) < 90))
+    - record: external_host:collector_fresh
+      expr: max by(host, platform) ((up{job=~"spark-collector|pve-vmagent"} == 1) and (time() - timestamp(up{job=~"spark-collector|pve-vmagent"}) < 90))
+    - record: external_host:gpu_fresh
+      expr: max by(host, platform) ((nvidia_smi_last_collect_success{job="spark-gpu"} == 1) and (time() - timestamp(nvidia_smi_last_collect_success{job="spark-gpu"}) < 90) and (time() - nvidia_smi_last_collect_success_timestamp_seconds{job="spark-gpu"} < 20) and (up{job="spark-gpu"} == 1) and (time() - timestamp(up{job="spark-gpu"}) < 90))
+  - name: external-host-health
+    interval: 30s
+    rules:
+    - alert: ExternalHostMetricsMissing
+      expr: (external_host:expected == 1) unless on(host, platform) (external_host:node_fresh == 1)
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: Fresh host metrics are missing for {{ $labels.host }}
+        description: The enrolled host has no successful node scrape less than 90 seconds old. Check host power, local collector, token, DNS/TLS, queue and central ingestion. Replayed history does not count as current health.
+        runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/external-hosts.md
+    - alert: ExternalHostCollectorMissing
+      expr: ((external_host:expected == 1) and on(host, platform) (external_host:node_fresh == 1)) unless on(host, platform) (external_host:collector_fresh == 1)
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: Collector self metrics are missing for {{ $labels.host }}
+        description: Node metrics are arriving but the local vmagent self scrape is absent, failed or older than 90 seconds. Inspect its local scrape target and applied configuration.
+        runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/external-hosts.md
+    - alert: SparkGpuCollectionFailed
+      expr: ((external_host:expected{platform="dgx_spark"} == 1) and on(host, platform) (external_host:node_fresh == 1)) unless on(host, platform) (external_host:gpu_fresh == 1)
+      for: 2m
+      labels:
+        severity: warning
+      annotations:
+        summary: GPU collection is failing on {{ $labels.host }}
+        description: The GPU scrape is absent/down, the command failed, or the last successful GPU command is older than 20 seconds while host metrics remain fresh. Check CDI utility access and bounded nvidia-smi execution.
+        runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/external-hosts.md
+    - alert: SparkGpuThermalThrottling
+      expr: (max by(host, platform) ({__name__=~"nvidia_smi_clocks_event_reasons_(hw|sw)_thermal_slowdown",job="spark-gpu"}) == 1) and on(host, platform) (external_host:expected == 1) and on(host, platform) (external_host:node_fresh == 1) and on(host, platform) (external_host:gpu_fresh == 1)
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: GPU thermal throttling on {{ $labels.host }}
+        description: The hardware or software thermal slowdown flag remained active for five minutes. Inspect temperature, cooling and workload. Ordinary power-cap behavior is shown in the dashboard and is not this alert.
+        runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/external-hosts.md
+    - alert: ExternalHostQueueBacklog
+      expr: (max by(host, platform) (vmagent_remotewrite_pending_data_bytes{job=~"spark-collector|pve-vmagent"}) > 0) and on(host, platform) (external_host:expected == 1) and on(host, platform) (external_host:node_fresh == 1) and on(host, platform) (external_host:collector_fresh == 1)
+      for: 15m
+      labels:
+        severity: warning
+      annotations:
+        summary: Remote-write backlog persists on {{ $labels.host }}
+        description: The local vmagent has queued bytes continuously for 15 minutes. Check receiver availability, auth errors and egress. Queue storage is capped at 1 GiB per host, not a guaranteed retention interval.
+        runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/external-hosts.md
+    - alert: ExternalHostQueueDataDropped
+      expr: (sum by(host, platform) (increase(vm_persistentqueue_bytes_dropped_total{job=~"spark-collector|pve-vmagent"}[15m])) > 0) and on(host, platform) (external_host:expected == 1) and on(host, platform) (external_host:node_fresh == 1) and on(host, platform) (external_host:collector_fresh == 1)
+      for: 0m
+      labels:
+        severity: warning
+      annotations:
+        summary: Queued data was dropped on {{ $labels.host }}
+        description: The persistent queue discarded bytes in the last 15 minutes, usually after its cap was reached. Recover delivery and record the lost monitoring interval.
+        runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/external-hosts.md
+    - alert: ExternalHostScrapeConfigRejected
+      expr: (max by(host, platform) ((vm_promscrape_config_last_reload_successful{job=~"spark-collector|pve-vmagent"} == 0) or (spark_monitoring_config_success{job="spark-node"} == 0)) == 0) and on(host, platform) (external_host:expected == 1) and on(host, platform) (external_host:node_fresh == 1)
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: A scrape configuration was rejected on {{ $labels.host }}
+        description: The candidate or runtime reload failed. Inspect desired/applied hashes and publisher/controller logs; the last valid configuration may still be collecting.
+        runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/external-hosts.md
+    - alert: PveHostConfigurationUnhealthy
+      expr: (count by(host, platform) ((pve_hostcfg_dirty{job="pve-node"} == 1) or (pve_hostcfg_fetch_success{job="pve-node"} == 0) or (pve_hostcfg_attempt_success{job="pve-node"} == 0) or (pve_hostcfg_drift{job="pve-node"} != 0)) > 0) and on(host, platform) (external_host:expected == 1) and on(host, platform) (external_host:node_fresh == 1)
+      for: 15m
+      labels:
+        severity: warning
+      annotations:
+        summary: Host configuration needs attention on {{ $labels.host }}
+        description: The local engine reports a failed fetch/apply, interrupted apply, detected drift or an unknown drift check. Inspect pve-hostcfg status and logs before retrying; collection may still run on the applied revision.
+        runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/external-hosts.md
+    - alert: PveHostConfigurationStatusStale
+      expr: ((external_host:expected{platform="proxmox"} == 1) and on(host, platform) (external_host:node_fresh == 1)) unless on(host, platform) (max by(host, platform) (pve_hostcfg_status_timestamp_seconds{job="pve-node"}) > time() - 900)
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: Host configuration status is stale on {{ $labels.host }}
+        description: The engine has not refreshed status for more than 15 minutes while node collection is fresh. Inspect its pinned package versions, timer and local service logs.
+        runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/external-hosts.md
+    - alert: SparkMonitoringPollStalled
+      expr: ((external_host:expected{platform="dgx_spark"} == 1) and on(host, platform) (external_host:node_fresh == 1)) unless on(host, platform) (max by(host, platform) ((up{job="spark-deployer"} == 1) and (time() - timestamp(up{job="spark-deployer"}) < 90) ) and on(host, platform) (sum by(host, platform) (increase(doco_cd_polls_total{job="spark-deployer"}[15m])) > 0))
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: Monitoring Git polling is stalled on {{ $labels.host }}
+        description: The host-local deployer has made no polls in 15 minutes. Check its service, Git reachability and project state. A deliberate pause requires an explicit alert silence; collection continues independently.
+        runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/external-hosts.md
