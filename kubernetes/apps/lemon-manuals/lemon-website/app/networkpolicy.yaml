@@ -1,0 +1,42 @@
+---
+# Default-deny policy for lemon-website. Inbound is gateway-admin (Traefik
+# admin instance, where the lemon.home.kelch.io Route attaches) and
+# lemon-manuals-mcp, which proxies manual lookups. Egress is DNS only: the
+# manual data arrives on the node-side NFS CSI mount, so no pod traffic
+# reaches the NAS.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: lemon-website
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: lemon-website
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: network
+            app.kubernetes.io/instance: traefik-admin-network
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: ai
+            app.kubernetes.io/name: lemon-manuals-mcp
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP

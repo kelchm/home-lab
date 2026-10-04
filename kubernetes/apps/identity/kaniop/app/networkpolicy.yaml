@@ -1,0 +1,75 @@
+---
+# Default-deny policy for kaniop. The operator reconciles Kanidm (persons,
+# groups, OAuth2 clients) across all namespaces and holds the IdM admin
+# credentials, so egress is pinned to exactly its flows. One policy selects
+# every pod carrying app.kubernetes.io/name: kaniop (app.kubernetes.io/component
+# separates them): the operator and webhook deployments, plus the ephemeral
+# crd-apply/crd-migration hook Jobs (apply, migrate, verify) whose only flows
+# (DNS and the API server) are already in the list. Pods ignore rules for
+# listeners they do not have: the webhook never serves :8080, the operator
+# never serves :8443.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: kaniop
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: kaniop
+  ingress:
+    # kube-apiserver -> webhook deployment (kaniop-webhook Service, port 8443,
+    # used by the ValidatingWebhookConfiguration). The kube-apiserver entity is
+    # IP-based, so it covers the hostNetwork control-plane pods on Talos.
+    - fromEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "8443"
+              protocol: TCP
+    # vmagent scrapes the operator metrics Service (ServiceMonitor, port 8080).
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: vmagent
+            app.kubernetes.io/instance: victoria-metrics-k8s-stack
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    # Watches Kanidm CRDs cluster-wide and holds the leader-election lease.
+    - toEntities:
+        - kube-apiserver
+    # IDM reconcile over the Kanidm HTTPS API (groups, persons, OAuth2
+    # clients). Matches the kanidm pod labels, not its Service.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: identity
+            kanidm.kaniop.rs/cluster: kanidm
+      toPorts:
+        - ports:
+            - port: "8443"
+              protocol: TCP
+    # KanidmOAuth2Client icon downloads. Clients configured with image.url
+    # (arr-suite, ops-suite, grafana) are fetched by the operator from
+    # auth.home.kelch.io, whose DNS answer is the traefik-services
+    # LoadBalancer; its websecure container port is 8443.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: network
+            app.kubernetes.io/name: traefik
+            app.kubernetes.io/instance: traefik-services-network
+      toPorts:
+        - ports:
+            - port: "8443"
+              protocol: TCP
