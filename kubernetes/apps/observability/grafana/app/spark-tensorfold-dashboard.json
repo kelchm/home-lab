@@ -22,8 +22,8 @@
   "schemaVersion": 40,
   "timezone": "browser",
   "uid": "spark-tensorfold-performance",
-  "title": "Sparks / TensorFold performance",
-  "description": "Native TensorFold application performance for whatever SparkRun is serving, scraped at the head node every second.",
+  "title": "AI / Inference serving",
+  "description": "Serving throughput, latency, queueing and loaded identity. Opens on the last 30 minutes and refreshes every second for live inference tuning (#653).",
   "editable": false,
   "version": 3,
   "refresh": "1s",
@@ -32,32 +32,96 @@
     "to": "now"
   },
   "tags": [
-    "sparks",
-    "inference",
-    "tensorfold"
+    "ai",
+    "inference"
   ],
-  "links": [],
+  "links": [
+    {
+      "title": "Sparks / GPU and host health",
+      "type": "link",
+      "url": "/d/sparks-health",
+      "keepTime": true,
+      "includeVars": false,
+      "targetBlank": false
+    }
+  ],
   "panels": [
     {
       "id": 1,
-      "type": "text",
-      "title": "Serving deployment",
+      "type": "stat",
+      "title": "Serving identity",
+      "description": "Labels identify the model, recipe, runtime and host on each successful scrape younger than ten seconds.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "gridPos": {
         "x": 0,
         "y": 0,
         "w": 24,
-        "h": 5
+        "h": 3
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "unit": "short",
+          "decimals": 0,
+          "noValue": "Unavailable",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
       },
       "options": {
-        "mode": "markdown",
-        "content": "**TensorFold on the Sparks**\n\nOne serving deployment, scraped at the head node every second. Model, recipe and runtime come from the labels SparkRun puts on its containers, so a swap appears here without any configuration change. The head node's own agent collects it and buffers on disk while the cluster is unreachable. Runtime/model revisions remain unverified. See the [monitoring runbook](https://github.com/kelchm/home-lab/blob/main/sparks/monitoring/README.md) for semantics and limitations."
-      }
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "text": {
+          "titleSize": 24,
+          "valueSize": 24
+        },
+        "textMode": "name",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1) and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10)",
+          "legendFormat": "{{model}} · {{recipe}} · {{runtime}} · {{instance}}",
+          "refId": "A",
+          "range": false,
+          "instant": true,
+          "interval": "1s"
+        }
+      ]
     },
     {
       "id": 2,
       "type": "stat",
       "title": "Metrics reachable",
-      "description": "Fresh successful /metrics scrape; this does not prove the model can serve a request. Unavailable includes a stopped collector, stale ingestion, or failed target. Requires a sample younger than 10s.",
+      "description": "Successful inference metrics scrape younger than ten seconds, shown per serving host. This does not prove a request can complete.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -125,8 +189,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "min(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} and (time() - timestamp(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) < 10)) or vector(0)",
-          "legendFormat": "",
+          "expr": "(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} * (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < bool 10))",
+          "legendFormat": "{{instance}} · {{recipe}}",
           "refId": "A",
           "range": false,
           "instant": true,
@@ -138,7 +202,7 @@
       "id": 3,
       "type": "stat",
       "title": "Live output · tokens/s",
-      "description": "Aggregate generated output across all streams, including replies in progress, over the latest 1-second scrape interval. Includes idle time; neither per-request decode speed nor SSE chunk rate. Supplied natively by this TensorFold build.",
+      "description": "Output across all streams, including active replies, over the latest scrape interval. Includes idle time and is not per-request decode speed.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -192,8 +256,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(irate(tensorfold_health:completion_tokens_total{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[10s])) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) < 10))",
-          "legendFormat": "",
+          "expr": "(irate(tensorfold_health:completion_tokens_total{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[10s])) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
+          "legendFormat": "{{instance}} · {{recipe}}",
           "refId": "A",
           "range": false,
           "instant": true,
@@ -259,8 +323,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(tensorfold:requests_running{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) < 10))",
-          "legendFormat": "",
+          "expr": "(tensorfold:requests_running{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
+          "legendFormat": "{{instance}} · {{recipe}}",
           "refId": "A",
           "range": false,
           "instant": true,
@@ -326,8 +390,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(tensorfold:requests_waiting{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) < 10))",
-          "legendFormat": "",
+          "expr": "(tensorfold:requests_waiting{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
+          "legendFormat": "{{instance}} · {{recipe}}",
           "refId": "A",
           "range": false,
           "instant": true,
@@ -339,7 +403,7 @@
       "id": 6,
       "type": "stat",
       "title": "Shared cache pool used",
-      "description": "Allocated shared pool rows minus free rows, divided by pool capacity. Includes retained prompt states. This is not GPU/host-memory usage or per-stream context occupancy.",
+      "description": "Occupied shared cache rows divided by pool capacity, including retained prompt states. This is separate from host memory usage.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -393,8 +457,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(1 - tensorfold_health:pool_free_tokens{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} / (tensorfold_health:pool_tokens{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} > 0)) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) < 10))",
-          "legendFormat": "",
+          "expr": "(1 - tensorfold_health:pool_free_tokens{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} / (tensorfold_health:pool_tokens{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} > 0)) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
+          "legendFormat": "{{instance}} · {{recipe}}",
           "refId": "A",
           "range": false,
           "instant": true,
@@ -406,7 +470,7 @@
       "id": 7,
       "type": "timeseries",
       "title": "Output throughput",
-      "description": "Live output includes active replies. The fast trace uses the latest one-second scrape interval; the two one-minute averages show the broader trend and finished-request accounting. Finished output books the entire reply at completion and can spike after a long request. Zoom to 30 minutes or less for one-second query steps.",
+      "description": "Live output includes active replies; finished-request output books the whole reply at completion. The latest-interval trace shows bursts, while one-minute averages show the trend.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -486,8 +550,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(irate(tensorfold_health:completion_tokens_total{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[10s])) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) < 10))",
-          "legendFormat": "Live output (latest scrape interval)",
+          "expr": "(irate(tensorfold_health:completion_tokens_total{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[10s])) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
+          "legendFormat": "{{instance}} · {{recipe}} · Live output (latest scrape interval)",
           "refId": "C",
           "range": true,
           "instant": false,
@@ -499,8 +563,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(rate(tensorfold_health:completion_tokens_total{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[1m])) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) < 10))",
-          "legendFormat": "Live output (1m average)",
+          "expr": "(rate(tensorfold_health:completion_tokens_total{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[1m])) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
+          "legendFormat": "{{instance}} · {{recipe}} · Live output (1m average)",
           "refId": "A",
           "range": true,
           "instant": false,
@@ -512,8 +576,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(rate(tensorfold:generation_tokens_total{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[1m])) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) < 10))",
-          "legendFormat": "Finished-request output (1m average)",
+          "expr": "(rate(tensorfold:generation_tokens_total{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[1m])) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
+          "legendFormat": "{{instance}} · {{recipe}} · Finished-request output (1m average)",
           "refId": "B",
           "range": true,
           "instant": false,
@@ -527,7 +591,7 @@
       "id": 8,
       "type": "timeseries",
       "title": "Time to first token · completed requests",
-      "description": "Server arrival to first generated token, recorded after the request finishes. Not client-visible TTFT. 5-minute window; quantiles require 20 samples and no >300s observations. Histogram buckets are coarse.",
+      "description": "Server arrival to first generated token, recorded at completion over five minutes. Coarse-bucket quantiles require 20 observations and none above 300 seconds.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -607,8 +671,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(rate(tensorfold:time_to_first_token_seconds_sum{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[5m]) / (rate(tensorfold:time_to_first_token_seconds_count{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[5m]) > 0)) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) < 10))",
-          "legendFormat": "Mean",
+          "expr": "(rate(tensorfold:time_to_first_token_seconds_sum{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[5m]) / (rate(tensorfold:time_to_first_token_seconds_count{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[5m]) > 0)) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
+          "legendFormat": "{{instance}} · {{recipe}} · Mean",
           "refId": "A",
           "range": true,
           "instant": false,
@@ -620,8 +684,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(histogram_quantile(0.5, rate(tensorfold:time_to_first_token_seconds_bucket{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[5m])) and on(job,instance,deployment,collector) (increase(tensorfold:time_to_first_token_seconds_count{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[5m]) >= 20) and on(job,instance,deployment,collector) (increase(tensorfold:time_to_first_token_seconds_bucket{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\",le=\"300\"}[5m]) >= ignoring(le) increase(tensorfold:time_to_first_token_seconds_count{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[5m]))) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) < 10))",
-          "legendFormat": "p50 (20+ samples)",
+          "expr": "(histogram_quantile(0.5, rate(tensorfold:time_to_first_token_seconds_bucket{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[5m])) and on(job,instance,model,recipe,runtime) (increase(tensorfold:time_to_first_token_seconds_count{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[5m]) >= 20) and on(job,instance,model,recipe,runtime) (increase(tensorfold:time_to_first_token_seconds_bucket{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\",le=\"300\"}[5m]) >= ignoring(le) increase(tensorfold:time_to_first_token_seconds_count{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[5m]))) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
+          "legendFormat": "{{instance}} · {{recipe}} · p50 (20+ samples)",
           "refId": "B",
           "range": true,
           "instant": false,
@@ -633,8 +697,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(histogram_quantile(0.95, rate(tensorfold:time_to_first_token_seconds_bucket{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[5m])) and on(job,instance,deployment,collector) (increase(tensorfold:time_to_first_token_seconds_count{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[5m]) >= 20) and on(job,instance,deployment,collector) (increase(tensorfold:time_to_first_token_seconds_bucket{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\",le=\"300\"}[5m]) >= ignoring(le) increase(tensorfold:time_to_first_token_seconds_count{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[5m]))) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) < 10))",
-          "legendFormat": "p95 (20+ samples)",
+          "expr": "(histogram_quantile(0.95, rate(tensorfold:time_to_first_token_seconds_bucket{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[5m])) and on(job,instance,model,recipe,runtime) (increase(tensorfold:time_to_first_token_seconds_count{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[5m]) >= 20) and on(job,instance,model,recipe,runtime) (increase(tensorfold:time_to_first_token_seconds_bucket{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\",le=\"300\"}[5m]) >= ignoring(le) increase(tensorfold:time_to_first_token_seconds_count{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[5m]))) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
+          "legendFormat": "{{instance}} · {{recipe}} · p95 (20+ samples)",
           "refId": "C",
           "range": true,
           "instant": false,
@@ -648,7 +712,7 @@
       "id": 9,
       "type": "timeseries",
       "title": "Request latency · completed requests",
-      "description": "Server arrival to reply completion, recorded on completion. 5-minute window. Quantiles are hidden with fewer than 20 samples or observations above the largest finite bucket (300s); mean still includes those observations.",
+      "description": "Server arrival to reply completion over five minutes. Quantiles require 20 observations and none above 300 seconds; the mean includes all observations.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -728,8 +792,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(rate(tensorfold:request_latency_seconds_sum{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[5m]) / (rate(tensorfold:request_latency_seconds_count{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[5m]) > 0)) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) < 10))",
-          "legendFormat": "Mean",
+          "expr": "(rate(tensorfold:request_latency_seconds_sum{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[5m]) / (rate(tensorfold:request_latency_seconds_count{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[5m]) > 0)) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
+          "legendFormat": "{{instance}} · {{recipe}} · Mean",
           "refId": "A",
           "range": true,
           "instant": false,
@@ -741,8 +805,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(histogram_quantile(0.5, rate(tensorfold:request_latency_seconds_bucket{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[5m])) and on(job,instance,deployment,collector) (increase(tensorfold:request_latency_seconds_count{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[5m]) >= 20) and on(job,instance,deployment,collector) (increase(tensorfold:request_latency_seconds_bucket{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\",le=\"300\"}[5m]) >= ignoring(le) increase(tensorfold:request_latency_seconds_count{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[5m]))) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) < 10))",
-          "legendFormat": "p50 (20+ samples)",
+          "expr": "(histogram_quantile(0.5, rate(tensorfold:request_latency_seconds_bucket{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[5m])) and on(job,instance,model,recipe,runtime) (increase(tensorfold:request_latency_seconds_count{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[5m]) >= 20) and on(job,instance,model,recipe,runtime) (increase(tensorfold:request_latency_seconds_bucket{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\",le=\"300\"}[5m]) >= ignoring(le) increase(tensorfold:request_latency_seconds_count{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[5m]))) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
+          "legendFormat": "{{instance}} · {{recipe}} · p50 (20+ samples)",
           "refId": "B",
           "range": true,
           "instant": false,
@@ -754,8 +818,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(histogram_quantile(0.95, rate(tensorfold:request_latency_seconds_bucket{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[5m])) and on(job,instance,deployment,collector) (increase(tensorfold:request_latency_seconds_count{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[5m]) >= 20) and on(job,instance,deployment,collector) (increase(tensorfold:request_latency_seconds_bucket{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\",le=\"300\"}[5m]) >= ignoring(le) increase(tensorfold:request_latency_seconds_count{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[5m]))) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) < 10))",
-          "legendFormat": "p95 (20+ samples)",
+          "expr": "(histogram_quantile(0.95, rate(tensorfold:request_latency_seconds_bucket{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[5m])) and on(job,instance,model,recipe,runtime) (increase(tensorfold:request_latency_seconds_count{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[5m]) >= 20) and on(job,instance,model,recipe,runtime) (increase(tensorfold:request_latency_seconds_bucket{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\",le=\"300\"}[5m]) >= ignoring(le) increase(tensorfold:request_latency_seconds_count{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[5m]))) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
+          "legendFormat": "{{instance}} · {{recipe}} · p95 (20+ samples)",
           "refId": "C",
           "range": true,
           "instant": false,
@@ -769,7 +833,7 @@
       "id": 10,
       "type": "timeseries",
       "title": "Completed requests · last 5 minutes",
-      "description": "Counts finished latency observations in the window. Zero means no finished observations while the scrape is healthy; missing means unavailable. Fractional values can occur through counter extrapolation.",
+      "description": "Finished latency observations over five minutes; extrapolation can produce fractional counts. Missing data means the scrape is unavailable.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -849,8 +913,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(increase(tensorfold:request_latency_seconds_count{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[5m])) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) < 10))",
-          "legendFormat": "Completed requests",
+          "expr": "(increase(tensorfold:request_latency_seconds_count{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[5m])) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
+          "legendFormat": "{{instance}} · {{recipe}} · Completed requests",
           "refId": "A",
           "range": true,
           "instant": false,
@@ -864,7 +928,7 @@
       "id": 11,
       "type": "timeseries",
       "title": "Concurrency and stream states",
-      "description": "Native stream states supplied by the concurrent engine. Filling is multi-prefill activity; it is not a count of HTTP requests. Limit is the current stream ceiling.",
+      "description": "Concurrent stream states and the current stream ceiling. Filling counts prefill activity, not HTTP requests.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -944,8 +1008,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(tensorfold_health:streams{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) < 10))",
-          "legendFormat": "{{state}}",
+          "expr": "(tensorfold_health:streams{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
+          "legendFormat": "{{instance}} · {{recipe}} · {{state}}",
           "refId": "A",
           "range": true,
           "instant": false,
@@ -957,8 +1021,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(tensorfold_health:streams_max{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) < 10))",
-          "legendFormat": "Stream limit",
+          "expr": "(tensorfold_health:streams_max{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
+          "legendFormat": "{{instance}} · {{recipe}} · Stream limit",
           "refId": "B",
           "range": true,
           "instant": false,
@@ -972,7 +1036,7 @@
       "id": 12,
       "type": "timeseries",
       "title": "Prompt reuse · completed work",
-      "description": "Cached prompt tokens / prompt tokens across finished requests in a 5-minute window. Full prompt throughput includes cached input; uncached input estimates newly processed tokens. No data without finished prompt accounting.",
+      "description": "Cached prompt tokens divided by all prompt tokens across finished requests over five minutes. No value without finished prompt accounting.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -1052,8 +1116,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(rate(tensorfold_health:cached_tokens_total{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[5m]) / (rate(tensorfold:prompt_tokens_total{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[5m]) > 0)) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) < 10))",
-          "legendFormat": "Prompt cache hit fraction",
+          "expr": "(rate(tensorfold_health:cached_tokens_total{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[5m]) / (rate(tensorfold:prompt_tokens_total{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[5m]) > 0)) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
+          "legendFormat": "{{instance}} · {{recipe}} · Prompt cache hit fraction",
           "refId": "A",
           "range": true,
           "instant": false,
@@ -1147,8 +1211,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(rate(tensorfold:prompt_tokens_total{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[5m])) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) < 10))",
-          "legendFormat": "All prompt input",
+          "expr": "(rate(tensorfold:prompt_tokens_total{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[5m])) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
+          "legendFormat": "{{instance}} · {{recipe}} · All prompt input",
           "refId": "A",
           "range": true,
           "instant": false,
@@ -1160,8 +1224,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(rate(tensorfold:prompt_tokens_total{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[5m]) - rate(tensorfold_health:cached_tokens_total{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[5m])) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) < 10))",
-          "legendFormat": "Uncached input",
+          "expr": "(rate(tensorfold:prompt_tokens_total{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[5m]) - rate(tensorfold_health:cached_tokens_total{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[5m])) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
+          "legendFormat": "{{instance}} · {{recipe}} · Uncached input",
           "refId": "B",
           "range": true,
           "instant": false,
@@ -1175,7 +1239,7 @@
       "id": 14,
       "type": "timeseries",
       "title": "Speculative acceptance · completed work",
-      "description": "Accepted / drafted tokens over finished requests in 5 minutes. No value when no drafts were verified. The mtp metric prefix does not establish which speculative drafter or MTP policy is active.",
+      "description": "Accepted divided by drafted tokens across finished requests over five minutes. No value when no drafts were verified.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -1255,8 +1319,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(rate(tensorfold:mtp_accepted_total{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[5m]) / (rate(tensorfold:mtp_drafted_total{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}[5m]) > 0)) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) < 10))",
-          "legendFormat": "Accepted draft fraction",
+          "expr": "(rate(tensorfold:mtp_accepted_total{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[5m]) / (rate(tensorfold:mtp_drafted_total{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[5m]) > 0)) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
+          "legendFormat": "{{instance}} · {{recipe}} · Accepted draft fraction",
           "refId": "A",
           "range": true,
           "instant": false,
@@ -1270,7 +1334,7 @@
       "id": 15,
       "type": "timeseries",
       "title": "Shared cache pool · tokens",
-      "description": "Pool capacity, occupied rows and free rows; includes kept prompt states. Distinct from tensorfold:kv_cache_usage_ratio, which uses a stream context window as its denominator.",
+      "description": "Cache pool capacity, occupied rows and free rows, including retained prompt states. This is separate from per-stream context occupancy.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -1350,8 +1414,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(tensorfold_health:pool_tokens{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) < 10))",
-          "legendFormat": "Pool capacity",
+          "expr": "(tensorfold_health:pool_tokens{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
+          "legendFormat": "{{instance}} · {{recipe}} · Pool capacity",
           "refId": "A",
           "range": true,
           "instant": false,
@@ -1363,8 +1427,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(tensorfold_health:pool_tokens{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} - tensorfold_health:pool_free_tokens{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) < 10))",
-          "legendFormat": "Occupied",
+          "expr": "(tensorfold_health:pool_tokens{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} - tensorfold_health:pool_free_tokens{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
+          "legendFormat": "{{instance}} · {{recipe}} · Occupied",
           "refId": "B",
           "range": true,
           "instant": false,
@@ -1376,8 +1440,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(tensorfold_health:pool_free_tokens{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) < 10))",
-          "legendFormat": "Free",
+          "expr": "(tensorfold_health:pool_free_tokens{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
+          "legendFormat": "{{instance}} · {{recipe}} · Free",
           "refId": "C",
           "range": true,
           "instant": false,
@@ -1390,8 +1454,8 @@
     {
       "id": 16,
       "type": "timeseries",
-      "title": "Retained prompts and context ceiling",
-      "description": "Kept prompt states may occupy the pool while idle. The effective context ceiling is per request, not currently used tokens.",
+      "title": "Retained prompts",
+      "description": "Retained prompt states can occupy the cache pool while idle.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -1471,8 +1535,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(tensorfold_health:kept_prompts{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) < 10))",
-          "legendFormat": "Retained prompts",
+          "expr": "(tensorfold_health:kept_prompts{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
+          "legendFormat": "{{instance}} · {{recipe}} · Retained prompts",
           "refId": "A",
           "range": true,
           "instant": false,
@@ -1540,8 +1604,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(tensorfold_health:context_length{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) < 10))",
-          "legendFormat": "",
+          "expr": "(tensorfold_health:context_length{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
+          "legendFormat": "{{instance}} · {{recipe}}",
           "refId": "A",
           "range": false,
           "instant": true,
@@ -1553,7 +1617,7 @@
       "id": 18,
       "type": "stat",
       "title": "Scrape duration",
-      "description": "Target scrape wall time. Timeout is 800ms; interval 1s. No inference request is made by this collector.",
+      "description": "Inference metrics scrape duration, with an 800 ms timeout and one-second interval. The scrape makes no inference request.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -1607,8 +1671,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(scrape_duration_seconds{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) and on(job,instance,deployment,collector) (up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$node\"}) < 10))",
-          "legendFormat": "",
+          "expr": "(scrape_duration_seconds{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
+          "legendFormat": "{{instance}} · {{recipe}}",
           "refId": "A",
           "range": false,
           "instant": true,
@@ -1619,7 +1683,7 @@
     {
       "id": 19,
       "type": "text",
-      "title": "What this first pass can tell us",
+      "title": "Measurement limits",
       "gridPos": {
         "x": 0,
         "y": 41,
@@ -1628,7 +1692,7 @@
       },
       "options": {
         "mode": "markdown",
-        "content": "Use this view to correlate **throughput, latency, concurrency, prompt reuse and pool pressure** during normal TensorFold use. Rates account for counter resets; ongoing requests contribute only to the live-output counter.\n\n**Still unmeasured:** per-request decode speed / inter-token latency, client-visible TTFT, queue-wait duration, generation-stall detection, and reliable error/cancellation counts. Node and GPU health are on the [Hosts](/d/hosts) dashboard. A successful scrape is not an inference health check. Latency percentiles describe a mixed workload and are approximate; inspect sample counts before comparing runs."
+        "content": "A successful scrape does not prove a request can complete; client-visible latency, per-request decode speed, queue-wait duration and error/cancellation counts remain unmeasured. See the [monitoring runbook](https://github.com/kelchm/home-lab/blob/main/sparks/monitoring/README.md) for token accounting and histogram limits."
       }
     }
   ],
@@ -1655,9 +1719,9 @@
           "type": "prometheus",
           "uid": "${datasource}"
         },
-        "definition": "label_values({__name__=\"tensorfold:requests_running\",job=\"spark-inference\"}, model)",
+        "definition": "label_values(up{job=\"spark-inference\",platform=\"spark\"}, model)",
         "query": {
-          "query": "label_values({__name__=\"tensorfold:requests_running\",job=\"spark-inference\"}, model)",
+          "query": "label_values(up{job=\"spark-inference\",platform=\"spark\"}, model)",
           "refId": "model"
         },
         "includeAll": true,
@@ -1678,9 +1742,9 @@
           "type": "prometheus",
           "uid": "${datasource}"
         },
-        "definition": "label_values({__name__=\"tensorfold:requests_running\",job=\"spark-inference\",model=~\"$model\"}, recipe)",
+        "definition": "label_values(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\"}, recipe)",
         "query": {
-          "query": "label_values({__name__=\"tensorfold:requests_running\",job=\"spark-inference\",model=~\"$model\"}, recipe)",
+          "query": "label_values(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\"}, recipe)",
           "refId": "recipe"
         },
         "includeAll": true,
@@ -1694,17 +1758,17 @@
         }
       },
       {
-        "name": "node",
-        "label": "Node",
+        "name": "serving_host",
+        "label": "Serving host",
         "type": "query",
         "datasource": {
           "type": "prometheus",
           "uid": "${datasource}"
         },
-        "definition": "label_values({__name__=\"tensorfold:requests_running\",job=\"spark-inference\",model=~\"$model\"}, instance)",
+        "definition": "label_values(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\"}, instance)",
         "query": {
-          "query": "label_values({__name__=\"tensorfold:requests_running\",job=\"spark-inference\",model=~\"$model\"}, instance)",
-          "refId": "node"
+          "query": "label_values(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\"}, instance)",
+          "refId": "serving_host"
         },
         "includeAll": true,
         "allValue": ".*",
