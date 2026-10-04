@@ -60,6 +60,8 @@ spec:
           memory: 90Mi
         limits:
           memory: 2Gi
+      # One replica per node. While a node is down its replica stays Pending
+      # rather than doubling up on a survivor.
       topologySpreadConstraints:
         - labelSelector:
             matchLabels:
