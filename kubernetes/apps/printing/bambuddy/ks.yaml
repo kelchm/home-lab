@@ -5,6 +5,8 @@ metadata:
   name: bambuddy
 spec:
   dependsOn:
+    - name: longhorn
+      namespace: longhorn-system
     - name: cnpg-operator
       namespace: cnpg-system
     - name: kaniop

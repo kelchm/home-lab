@@ -10,7 +10,8 @@ spec:
   instances: 1
   storage:
     size: 5Gi
-    storageClass: longhorn
+    # New PVCs use this tier; existing volumes require a separate replica-count patch.
+    storageClass: longhorn-3replica
   resources:
     requests:
       cpu: 100m

@@ -14,7 +14,8 @@ spec:
     # headroom; Longhorn volumes can be expanded later if retention is kept
     # indefinite.
     size: 30Gi
-    storageClass: longhorn
+    # New PVCs use this tier; existing volumes require a separate replica-count patch.
+    storageClass: longhorn-3replica
   resources:
     requests:
       cpu: 250m
