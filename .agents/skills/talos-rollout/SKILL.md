@@ -42,7 +42,7 @@ talosctl health --nodes <healthy-control-plane-ip>
 
 Preflight prints a one-line summary per check and expands raw output only for checks that fail. Set `VERBOSE=1` to see every table. It exits non-zero listing every failure it found, so read the whole list rather than fixing the first line and re-running.
 
-It gates on: routes to every rollout destination, Talos reachable at each node, every etcd member answering for itself with no errors, no alarms, and the same leader, all Kubernetes nodes Ready **and uncordoned**, Multus safeguards Ready, every in-use Longhorn volume attached and healthy, and all instance-managers Ready with `lhnet1`. It reports without judging: which interface carries your API and Talos paths, any idle Longhorn volume, every CloudNativePG cluster with its instance count and primary placement, every suspended Flux Kustomization, and every PodDisruptionBudget at zero allowed disruptions.
+It gates on: routes to every rollout destination, Talos reachable at each node, exactly three registered etcd members, each answering for itself with no errors and naming the same leader, no etcd alarms, all three Kubernetes nodes registered, Ready **and uncordoned**, Multus safeguards Ready, every in-use Longhorn volume attached and healthy, and all instance-managers Ready with `lhnet1`. It also fails when it cannot query CloudNativePG clusters or Flux Kustomizations, so a failed lookup is never shown as an empty result. It reports without judging: which interface carries your API and Talos paths, any idle Longhorn volume, every CloudNativePG cluster with its instance count and primary placement, every suspended Flux Kustomization, and every PodDisruptionBudget at zero allowed disruptions.
 
 Then, in order:
 

@@ -31,9 +31,6 @@ tasks:
     requires:
       vars: [IP]
     preconditions:
-      - talosctl --nodes {{.IP}} get machineconfig
-      - talosctl config info
-      - test -f {{.TALOSCONFIG}}
       - which talhelper talosctl yq
 
   apply-node-confirmed:
