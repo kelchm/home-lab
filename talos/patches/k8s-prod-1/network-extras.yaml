@@ -1,6 +1,7 @@
-# Strategic merge replaces the interfaces list atomically, so we must
-# restate the primary interface here (mirrors talconfig.yaml.j2 output)
-# alongside the secondary interfaces we want to add.
+# talhelper renders the primary NIC from talconfig.yaml as multi-document
+# network config. This legacy interfaces entry describes the same NIC a
+# second time, in the older format, to attach the VLAN 40 sub-interface; the
+# two descriptions coexist in the rendered config and are not merged.
 #
 # `physical: true` on the selector is critical: VLAN sub-interfaces inherit
 # the parent's MAC. Without it, the selector matches the physical NIC AND any
