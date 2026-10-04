@@ -54,7 +54,7 @@ count by (job) (up{instance="spark-1"} == 1)
 
 The first is a few seconds on a healthy host. The second lists `spark-node`, `spark-gpu`, `spark-vmagent` and `spark-deployer`, plus `spark-inference` on the node serving the head rank. On the host, `curl -s 127.0.0.1:8429/targets` shows each scrape target and `docker logs doco-cd` shows deployments.
 
-Check memory with `docker stats --no-stream`, which matters on a Spark where a loaded model leaves little free. Every container has a limit: 256 MiB each for doco-cd and vmagent, 128 MiB each for node-exporter and the GPU exporter, so 768 MiB at most on a Spark and 640 MiB on a PVE node. In an ARM64 fixture on 2026-10-03 they used about 50 MiB (doco-cd, 65 MiB peak), 20 MiB (vmagent, while queueing with the endpoint unreachable), 8 MiB (node-exporter) and 8 MiB (GPU exporter without its `nvidia-smi` child process). These have not been measured on a Spark; record the real figures at the first enrollment.
+Check memory with `docker stats --no-stream`, which matters on a Spark where a loaded model leaves little free. Every container keeps at most 30 MB of logs and has a memory limit: 256 MiB each for doco-cd and vmagent, 128 MiB each for node-exporter and the GPU exporter, so 768 MiB at most on a Spark and 640 MiB on a PVE node. In an ARM64 fixture on 2026-10-03 they used about 50 MiB (doco-cd, 65 MiB peak), 20 MiB (vmagent, while queueing with the endpoint unreachable), 8 MiB (node-exporter) and 8 MiB (GPU exporter without its `nvidia-smi` child process). These have not been measured on a Spark; record the real figures at the first enrollment.
 
 ## Change, pause, rotate, remove
 

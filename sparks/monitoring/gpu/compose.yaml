@@ -22,4 +22,9 @@ services:
       - --web.max-requests=2
       - --query-field-names=uuid,driver_version,index,pci.bus_id,compute_cap,gpu_recovery_action,pstate,temperature.gpu,temperature.gpu.tlimit,utilization.gpu,power.draw,clocks.current.sm,clocks.max.sm,clocks_event_reasons.hw_thermal_slowdown,clocks_event_reasons.hw_slowdown,clocks_event_reasons.sw_thermal_slowdown,clocks_event_reasons.sw_power_cap,clocks_event_reasons.gpu_idle,clocks_event_reasons_counters.hw_thermal_slowdown,clocks_event_reasons_counters.sw_power_cap
     mem_limit: 128m
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
     restart: unless-stopped

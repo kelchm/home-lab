@@ -21,6 +21,11 @@ services:
     cap_drop:
       - ALL
     mem_limit: 256m
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
     healthcheck:
       test: ["CMD", "/doco-cd", "healthcheck"]
       interval: 30s
