@@ -25,7 +25,15 @@ preserved when outputs are added or refactored.
 
 ## Repository configuration checks
 
-The Repository Configuration Validation job runs on every pull request and push to `main`, independently of changed-file filtering. It uses actionlint and ShellCheck pinned in `.mise.toml` to check all GitHub workflows, then invokes `renovate-config-validator --no-global .renovaterc.json5` from a digest-pinned Renovate image to validate repository configuration. Either failure fails the job and the aggregate `Validation Success` check. Label dry-run and deletion checks remain deferred under [#657](https://github.com/kelchm/home-lab/issues/657) until [#742](https://github.com/kelchm/home-lab/pull/742) merges.
+The Repository Configuration Validation job runs on every pull request and push to `main`, independently of changed-file filtering. It uses actionlint and ShellCheck pinned in `.mise.toml` to check all GitHub workflows, then invokes `renovate-config-validator --no-global .renovaterc.json5` from a digest-pinned Renovate image to validate repository configuration. Either failure fails the job and the aggregate `Validation Success` check.
+
+## Label checks
+
+Label Catalog Validation checks the catalog and labeler keys, previews label-sync changes in PR job logs with read-only permissions, and rejects live-label deletions or merges. It runs when label configuration, its workflows, its validators, or `.mise.toml` change, and on every push to `main`. The job gates `Validation Success`; the separate Label Sync workflow repeats the live check before applying the catalog from `main`.
+
+Labels are coarse filters. Existing labels and mappings stay in place; the added AI, identity, observability, storage, and UniFi areas follow broad directory paths. Additional scope labels are optional when useful. Do not add individual-file exceptions to classify everything a change touches.
+
+Run `mise exec -- scripts/ci/test-validate-labels.sh` for regression cases. To check a catalog against live labels, fetch all pages with `gh api --paginate repos/kelchm/home-lab/labels --jq '.[]' | jq -s . > /tmp/live-labels.json`, then run `mise exec -- scripts/ci/validate-labels.sh . /tmp/live-labels.json`. Review the read-only PR dry run before merging a catalog change. The guard permits additions, updates, and single-label renames through aliases, but rejects deletions and merges that could lose associations. Label Sync applies catalog changes after merge; inspect its run and verify the intended live labels afterward.
 
 ## Relationship to Flux
 

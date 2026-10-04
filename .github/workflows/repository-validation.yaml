@@ -27,6 +27,7 @@ jobs:
       docs_changed: ${{ steps.changed-files.outputs.docs_any_changed || 'true' }}
       hosts_changed: ${{ steps.changed-files.outputs.hosts_any_changed || 'true' }}
       kubernetes_changed: ${{ steps.changed-files.outputs.kubernetes_any_changed || 'true' }}
+      labels_changed: ${{ steps.changed-files.outputs.labels_any_changed || 'true' }}
       network_changed: ${{ steps.changed-files.outputs.network_any_changed || 'true' }}
       scripts_changed: ${{ steps.changed-files.outputs.scripts_any_changed || 'true' }}
       skills_changed: ${{ steps.changed-files.outputs.skills_any_changed || 'true' }}
@@ -68,6 +69,15 @@ jobs:
               - 'scripts/ci/test-validate-unsafe-sysctls.sh'
               - 'scripts/ci/validate-unsafe-sysctls.sh'
               - 'talos/patches/global/machine-kubelet.yaml'
+            labels:
+              - '.github/workflows/repository-validation.yaml'
+              - '.github/workflows/label-sync.yaml'
+              - '.github/workflows/labeler.yaml'
+              - '.github/labels.yaml'
+              - '.github/labeler.yaml'
+              - '.mise.toml'
+              - 'scripts/ci/validate-labels.sh'
+              - 'scripts/ci/test-validate-labels.sh'
             network:
               - '.github/workflows/repository-validation.yaml'
               - '.mise.toml'
@@ -585,11 +595,60 @@ jobs:
           entrypoint: renovate-config-validator
           args: --no-global .renovaterc.json5
 
+  labels:
+    name: Label Catalog Validation
+    needs: pre-job
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: read
+    steps:
+      - name: Checkout
+        if: needs.pre-job.outputs.labels_changed == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install label validation tools
+        if: needs.pre-job.outputs.labels_changed == 'true'
+        uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5.0.1
+        with:
+          install_args: "aqua:mikefarah/yq aqua:cli/cli"
+
+      - name: Validate catalog and guard regression cases
+        if: needs.pre-job.outputs.labels_changed == 'true'
+        run: |
+          scripts/ci/validate-labels.sh
+          scripts/ci/test-validate-labels.sh
+
+      - name: Preview label changes
+        if: github.event_name == 'pull_request' && needs.pre-job.outputs.labels_changed == 'true'
+        uses: EndBug/label-sync@52074158190acb45f3077f9099fea818aa43f97a # v2.3.3
+        with:
+          config-file: .github/labels.yaml
+          delete-other-labels: true
+          dry-run: true
+
+      - name: Reject label deletions and merges
+        if: needs.pre-job.outputs.labels_changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh api --paginate "repos/${GH_REPO}/labels" --jq '.[]' | jq -s . > /tmp/live-labels.json
+          scripts/ci/validate-labels.sh . /tmp/live-labels.json
+
+      - name: No label configuration changes
+        if: needs.pre-job.outputs.labels_changed != 'true'
+        run: echo "Label catalog validation is not required."
+
   validation-status:
     name: Validation Success
     needs:
       - pre-job
       - repository-config
+      - labels
       - flate-test
       - flate-diff
       - kubernetes
