@@ -58,7 +58,7 @@ deployment therefore remains byte-for-byte locked to the proven 7.6.5 image:
 docker.io/visionect/visionect-server-v3:7.6.5@sha256:1c8de943f4063d207483563896b1713b986a463e13d6a56730671813d6668415
 ```
 
-The HelmRelease and manual import helper use that immutable digest, and
+The HelmRelease uses that immutable digest, and
 Renovate is disabled specifically for the Visionect image so it cannot open
 version or digest-update PRs. Any intentional upgrade must be a reviewed change
 that updates the pinned images and removes or changes the Renovate rule.
@@ -163,6 +163,8 @@ ORDER BY 1;
 
 ## Phase 3: cold cutover
 
+Completed 2026-08-23; the Cutover record below is authoritative. These steps are retained as the record of the plan, not a runnable procedure: the `tools/visionect-migration/data-import-pod.yaml` helper was removed from the tree on 2026-10-04 ([#666](https://github.com/kelchm/home-lab/issues/666)) because the Visionect Deployment now pins `replicas: 1`, so applying it today would run a root container against live VSS data. The full procedure as originally written, including the helper manifest, is preserved at [55c3989](https://github.com/kelchm/home-lab/commit/55c3989c010724f7a31488c22290c615daebaf04).
+
 Create a mode-0700 local staging directory with `mktemp -d` and record its exact
 path. Then:
 
@@ -220,16 +222,7 @@ printf '%s\n' "$visionect_cutover_dir"
      < "$visionect_cutover_dir/koala-final.dump"
    ```
 
-4. Mount the target data PVC using the manual helper:
-
-   ```sh
-   kubectl apply -f tools/visionect-migration/data-import-pod.yaml
-   kubectl -n iot wait --for=condition=Ready pod/visionect-data-import \
-     --timeout=5m
-   kubectl -n iot exec visionect-data-import -- \
-     mkdir -p /data/ac_apps /data/certs /data/config /data/devices \
-       /data/customfonts /logs
-   ```
+4. Mounted the target data PVC with the helper pod `visionect-data-import`, applied from the since-removed `tools/visionect-migration/data-import-pod.yaml` (see the note at the top of this phase), and created `/data/ac_apps`, `/data/certs`, `/data/config`, `/data/devices`, `/data/customfonts` and `/logs` on it once the pod was Ready.
 
 5. Extract each copied volume into its matching `/data` directory. For example:
 
@@ -287,11 +280,7 @@ printf '%s\n' "$visionect_cutover_dir"
      < "$visionect_cutover_dir/config.target.json"
    unset db_host db_port db_user db_password db_name
    ```
-7. Remove the helper pod so the RWO claim is free:
-
-   ```sh
-   kubectl delete -f tools/visionect-migration/data-import-pod.yaml
-   ```
+7. Removed the helper pod so the RWO claim was free (`kubectl delete -f tools/visionect-migration/data-import-pod.yaml`, since removed from the tree).
 
 8. Run the fingerprint query against `visionect-db-1`; all five counts must
    match the stopped source. Also confirm the source and target contain the same

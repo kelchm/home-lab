@@ -1,33 +1,11 @@
 ---
 version: '3'
 
-# SparkRun owns the preferred inference lifecycle. These helpers inspect the
-# hosts or operate only the separately retained upstream DeepSeek guide.
+# SparkRun owns the inference lifecycle on the Sparks. This helper only inspects the hosts.
 vars:
   SPARK_HOSTS: '10.32.21.31 10.32.21.32'
-  DSPARK_PROJECT: 'dspark-guide'
-  DSPARK_SERVICE: 'vllm-dspark'
 
 tasks:
-  deepseek:down:
-    desc: Stop and remove legacy DSpark guide containers on BOTH Sparks
-    cmds:
-      - for: {var: SPARK_HOSTS}
-        cmd: |
-          ssh {{.ITEM}} 'ids=$(docker ps -aq --filter "label=com.docker.compose.project={{.DSPARK_PROJECT}}" --filter "label=com.docker.compose.service={{.DSPARK_SERVICE}}") || exit 1
-            if [ -n "$ids" ]; then docker rm -f $ids; else echo "no dspark containers"; fi'
-
-  deepseek:logs:
-    desc: Tail legacy DSpark guide logs [HOST=required]
-    cmd: |
-      ssh {{.HOST}} 'c=$(docker ps -q --filter "label=com.docker.compose.project={{.DSPARK_PROJECT}}" --filter "label=com.docker.compose.service={{.DSPARK_SERVICE}}") || exit 1
-        [ -n "$c" ] || { echo "no dspark container running on this host" >&2; exit 1; }
-        docker logs -f --tail 100 "$c"'
-    requires:
-      vars:
-        - name: HOST
-          enum: ['10.32.21.31', '10.32.21.32']
-
   status:
     desc: Inspect GPU, host memory and running containers on both Sparks
     cmds:
