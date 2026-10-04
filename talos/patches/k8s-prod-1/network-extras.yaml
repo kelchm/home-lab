@@ -1,7 +1,7 @@
 # talhelper renders the primary NIC from talconfig.yaml as multi-document
-# network config. This legacy interfaces entry restates it to attach the
-# VLAN 40 sub-interface; Talos merges legacy entries per device, matching on
-# an identical deviceSelector.
+# network config. This legacy interfaces entry describes the same NIC a
+# second time, in the older format, to attach the VLAN 40 sub-interface; the
+# two descriptions coexist in the rendered config and are not merged.
 #
 # `physical: true` on the selector is critical: VLAN sub-interfaces inherit
 # the parent's MAC. Without it, the selector matches the physical NIC AND any
