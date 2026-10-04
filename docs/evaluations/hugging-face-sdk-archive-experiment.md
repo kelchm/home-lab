@@ -37,7 +37,7 @@ The public API returned 401 for the GLM repository at the time, so its metadata 
 
 ## October 4: what stock clients do when a server is not ready
 
-A loopback fixture served one 139,264-byte file to unmodified `huggingface_hub` 1.8.0 and 2.1.1 on Python 3.12.13, over plain HTTP with no SDK patching and no timeout overrides. 42 cases ran, each with a new empty cache unless noted. [Result matrix](fixtures/hf-archive-education/sdk-probe-summary.json). "Available at N s" means the fixture started answering normally N seconds after the first request.
+A loopback fixture served one 139,264-byte file to unmodified `huggingface_hub` 1.8.0 and 2.1.1 on Python 3.12.13, over plain HTTP with no SDK patching and no timeout overrides. 42 cases ran, each with a new empty cache unless noted. [Result matrix](fixtures/hf-archive-education/sdk-probe-summary.json). The matrix records `probe_count` 42 and holds 46 rows, and both are right: for each SDK version, 20 cases are one row each and the cached-fallback case is one run reported as three rows (a failed `HEAD` for `main`, the pin already held, and a new pin on an empty cache). The download that seeds that case's cache is not a row. "Available at N s" means the fixture started answering normally N seconds after the first request.
 
 | Server behavior | SDK 1.8.0 | SDK 2.1.1 |
 |---|---|---|

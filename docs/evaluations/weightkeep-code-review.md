@@ -1,6 +1,8 @@
 # WeightKeep code review
 
 > **Status, October 4, 2026.** This is the September 30 review, kept as written below the line. "Current implementation" and "current release" mean the reviewed commit, not the project today; later upstream changes were not examined. The path forward it describes is the set of gates that would apply if WeightKeep were revisited. That hardening was not started and is not planned. The current position is in the [main evaluation](hugging-face-nas-cache.md#current-position).
+>
+> **Scope of the torrent reproduction (finding 2).** The test asserts that the file outside the ingest directory was truncated. It logs the error `Fetch` returned but does not assert that there was one, so a passing test establishes the truncation, not the rejection. The rejection reported in finding 2 was read from that log line. On October 4 the same unmodified test was run again on the workstation against the pinned commit with no production changes; it passed and logged the missing-manifest error ([recorded output](fixtures/weightkeep-code-review/torrent-confirmation-20261004.txt)). That is a second observation of both outcomes, added alongside the September record. The test would still pass if `Fetch` returned no error.
 
 ---
 
