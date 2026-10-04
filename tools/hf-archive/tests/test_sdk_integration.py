@@ -750,3 +750,100 @@ assert hashlib.sha256(Path(path).read_bytes()).hexdigest() == sys.argv[3]
         )
         result = run_python(code, endpoint, tmp_path / "default-timeout-cache", sha256(WEIGHT.data), COMMIT, env=env)
         assert '"cold_first_call": "success"' in result.stdout or '"warming_status":' in result.stdout
+
+
+def test_saved_metadata_import_preserves_current_main_until_explicit_move(tmp_path):
+    root = tmp_path / "archive"
+    env = clean_env(tmp_path)
+    saved_metadata = tmp_path / "saved-main-a.json"
+    current_weight = HubFile(WEIGHT.path, b"current-main-Q4-weights\0" * 32768, True)
+    source = tmp_path / "older-model"
+    local_weight = source / WEIGHT.path
+    local_weight.parent.mkdir(parents=True)
+    local_weight.write_bytes(WEIGHT.data)
+    with FakeHub() as hub:
+        captured = subprocess.run(
+            [sys.executable, "-m", "hf_archive.cli", "metadata", "acme/tiny", "--endpoint", hub.endpoint],
+            env=env,
+            text=True,
+            capture_output=True,
+            timeout=60,
+        )
+        assert captured.returncode == 0, captured.stderr
+        saved_metadata.write_text(captured.stdout)
+        document = json.loads(captured.stdout)
+        assert document["info"]["sha"] == COMMIT
+        assert document["refs"] == ["refs/heads/main"]
+        assert hub.payload_gets[("acme/tiny", WEIGHT.path)] == 0, "metadata command fetched payload bytes"
+        hub.repos[("acme/tiny", NEXT_COMMIT)] = [CONFIG, current_weight, UNSELECTED]
+        hub.refs[("acme/tiny", "main")] = NEXT_COMMIT
+        pull(root, hub, env, patterns=[WEIGHT.path])
+        assert hub.payload_gets[("acme/tiny", WEIGHT.path)] == 1
+        assert hub.payload_gets[("acme/tiny", UNSELECTED.path)] == 0
+
+    (ref_path,) = root.glob("repos/*/refs/*.json")
+    current_ref_bytes = ref_path.read_bytes()
+    args = [*import_args(source, saved_metadata), "--include", WEIGHT.path, "--json"]
+    imported = run_python(OFFLINE_CLI_GUARD, *cli_args(root, "import", *args), env=env)
+    result = json.loads(imported.stdout)
+    assert result["commit"] == COMMIT
+    assert result["refs"] == [], "saved metadata import claimed it moved the current main ref"
+    assert ref_path.read_bytes() == current_ref_bytes, "saved metadata silently rolled main back"
+    assert ordinary_objects(root, sha256(WEIGHT.data))[0].read_bytes() == WEIGHT.data
+
+    check_downloads = (
+        CLIENT_GUARD
+        + """
+import hashlib, json
+from pathlib import Path
+from huggingface_hub import HfApi, hf_hub_download
+endpoint, cache, main_commit, main_sha, other_commit, other_sha, pin_b = sys.argv[1:]
+assert HfApi(endpoint=endpoint, token=False).model_info("acme/tiny", revision="main").sha == main_commit
+def download(revision):
+    return hf_hub_download("acme/tiny", "weights/model-Q4_K_M.gguf", revision=revision,
+                           endpoint=endpoint, token=False, cache_dir=cache)
+main_path = download("main")
+assert hashlib.sha256(Path(main_path).read_bytes()).hexdigest() == main_sha
+other_path = download(other_commit)
+assert hashlib.sha256(Path(other_path).read_bytes()).hexdigest() == other_sha
+cached_b = download(pin_b)
+print(json.dumps({"cached_b": cached_b}))
+"""
+    )
+    before_move = tmp_path / "before-move"
+    before_move.mkdir()
+    with served(root, before_move) as endpoint:
+        downloaded = run_python(
+            check_downloads,
+            endpoint,
+            before_move / "fresh-client-cache",
+            NEXT_COMMIT,
+            sha256(current_weight.data),
+            COMMIT,
+            sha256(WEIGHT.data),
+            NEXT_COMMIT,
+            env=clean_env(before_move),
+        )
+    cached_b = Path(json.loads(downloaded.stdout)["cached_b"])
+    assert cached_b.read_bytes() == current_weight.data
+
+    moved = run_python(OFFLINE_CLI_GUARD, *cli_args(root, "import", *args, "--move-refs"), env=env)
+    assert json.loads(moved.stdout)["refs"] == ["refs/heads/main"]
+    assert json.loads(ref_path.read_text())["commit"] == COMMIT
+    after_move = tmp_path / "after-move"
+    after_move.mkdir()
+    with served(root, after_move) as endpoint:
+        run_python(
+            check_downloads,
+            endpoint,
+            after_move / "fresh-client-cache",
+            COMMIT,
+            sha256(WEIGHT.data),
+            NEXT_COMMIT,
+            sha256(current_weight.data),
+            NEXT_COMMIT,
+            env=clean_env(after_move),
+        )
+    assert cached_b.read_bytes() == current_weight.data, "moving main changed the existing pinned client artifact"
+    assert ordinary_objects(root, sha256(current_weight.data))[0].read_bytes() == current_weight.data
+    assert local_weight.read_bytes() == WEIGHT.data
