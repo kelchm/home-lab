@@ -6,3 +6,17 @@ resources:
   - ./datasource.yaml
   - ./httproute.yaml
   - ./networkpolicy.yaml
+
+configMapGenerator:
+  # grafana.com 25747 revision 1; datasource provisioning with victorialogs; LogsQL unchanged.
+  - name: grafana-dashboard-stock-victorialogs-kubernetes
+    files:
+      - stock-victorialogs-kubernetes.json=./dashboards/stock-victorialogs-kubernetes.json
+    options:
+      annotations:
+        grafana_folder: Platforms/Kubernetes
+        kustomize.toolkit.fluxcd.io/substitute: disabled
+      labels:
+        grafana_dashboard: "1"
+generatorOptions:
+  disableNameSuffixHash: true

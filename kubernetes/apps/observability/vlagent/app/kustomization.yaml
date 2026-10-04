@@ -6,3 +6,17 @@ resources:
   - rbac.yaml
   - monitoring.yaml
   - networkpolicy.yaml
+
+configMapGenerator:
+  # grafana.com 24513 revision 2; datasource provisioning; version variable -> exported version label.
+  - name: grafana-dashboard-stock-vlagent
+    files:
+      - stock-vlagent.json=./dashboards/stock-vlagent.json
+    options:
+      annotations:
+        grafana_folder: Services/Observability
+        kustomize.toolkit.fluxcd.io/substitute: disabled
+      labels:
+        grafana_dashboard: "1"
+generatorOptions:
+  disableNameSuffixHash: true

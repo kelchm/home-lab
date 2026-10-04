@@ -4,3 +4,17 @@ kind: Kustomization
 resources:
   - ./ocirepository.yaml
   - ./helmrelease.yaml
+
+configMapGenerator:
+  # cloudnative-pg chart 0.29.1 (cluster 0.0.5) dashboard; datasource provisioning, exported_cluster, operator pod name.
+  - name: grafana-dashboard-stock-cloudnative-pg
+    files:
+      - stock-cloudnative-pg.json=./dashboards/stock-cloudnative-pg.json
+    options:
+      annotations:
+        grafana_folder: Platforms/Kubernetes
+        kustomize.toolkit.fluxcd.io/substitute: disabled
+      labels:
+        grafana_dashboard: "1"
+generatorOptions:
+  disableNameSuffixHash: true

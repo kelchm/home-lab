@@ -8,3 +8,17 @@ resources:
   - ./httproute.yaml
   - ./networkpolicy.yaml
   - ./alerts.yaml
+
+configMapGenerator:
+  # grafana.com 21394 revision 13; datasource provisioning.
+  - name: grafana-dashboard-stock-vmauth
+    files:
+      - stock-vmauth.json=./dashboards/stock-vmauth.json
+    options:
+      annotations:
+        grafana_folder: Services/Observability
+        kustomize.toolkit.fluxcd.io/substitute: disabled
+      labels:
+        grafana_dashboard: "1"
+generatorOptions:
+  disableNameSuffixHash: true

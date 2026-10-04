@@ -7,3 +7,17 @@ resources:
   - ./helmrelease.yaml
   - ./ocirepository.yaml
   - ./networkpolicy.yaml
+
+configMapGenerator:
+  # grafana.com 24874 revision 4; datasource provisioning; clear the unavailable saved job.
+  - name: grafana-dashboard-stock-cloudflared
+    files:
+      - stock-cloudflared.json=./dashboards/stock-cloudflared.json
+    options:
+      annotations:
+        grafana_folder: Platforms/Kubernetes
+        kustomize.toolkit.fluxcd.io/substitute: disabled
+      labels:
+        grafana_dashboard: "1"
+generatorOptions:
+  disableNameSuffixHash: true
