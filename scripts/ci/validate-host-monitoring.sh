@@ -59,11 +59,23 @@ function validate_deployment() {
     echo "ok: ${label}"
 }
 
+configs="$(find "${ROOT_DIR}/sparks/monitoring" "${ROOT_DIR}/proxmox/monitoring" -name '.doco-cd.yml' | sort)"
+if [[ -z "${configs}" ]]; then
+    violation "no .doco-cd.yml found under sparks/monitoring or proxmox/monitoring"
+fi
+
 while IFS= read -r config; do
+    if [[ -z "${config}" ]]; then
+        continue
+    fi
+    if ! deployments="$(yq -o=json -I=0 '.' "${config}")" || [[ -z "${deployments}" ]]; then
+        violation "${config#"${ROOT_DIR}/"}: not valid YAML or empty"
+        continue
+    fi
     while IFS= read -r deployment; do
         validate_deployment "${config}" "${deployment}"
-    done < <(yq -o=json -I=0 '.' "${config}")
-done < <(find "${ROOT_DIR}/sparks/monitoring" "${ROOT_DIR}/proxmox/monitoring" -name '.doco-cd.yml' | sort)
+    done <<<"${deployments}"
+done <<<"${configs}"
 
 for deployer in sparks proxmox; do
     if ! HOST=validate docker compose -f "${ROOT_DIR}/${deployer}/platform/doco-cd/compose.yaml" config --quiet; then

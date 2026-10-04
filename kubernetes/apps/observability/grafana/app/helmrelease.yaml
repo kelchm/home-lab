@@ -49,6 +49,11 @@ spec:
     deploymentAnnotations:
       secret.reloader.stakater.com/reload: grafana-kanidm-oauth2-credentials
 
+    env:
+      # Permit the Spark performance view to refresh at its scrape cadence.
+      # Other dashboards retain their individually configured refresh rates.
+      GF_DASHBOARDS_MIN_REFRESH_INTERVAL: 1s
+
     envValueFrom:
       GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET:
         secretKeyRef:

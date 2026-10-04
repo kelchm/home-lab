@@ -1,6 +1,6 @@
 # External host monitoring
 
-Metrics from hosts outside the Kubernetes cluster: the three PVE nodes and the two DGX Sparks. Each host runs ordinary exporters and a `vmagent` in Docker Compose, deployed from `main` by a host-local doco-cd as on the [NAS](../../synology/README.md). `vmagent` scrapes the exporters over loopback and pushes to `https://metrics-ingest.home.kelch.io`, queueing up to 1 GiB on disk while the endpoint is unreachable. Nothing on a host listens beyond loopback except doco-cd on PVE (see [PVE](#pve-node)). The Proxmox API is read separately by an in-cluster exporter.
+Metrics from hosts outside the Kubernetes cluster: the three PVE nodes and the two DGX Sparks. Each host runs ordinary exporters and a `vmagent` in Docker Compose, deployed from `main` by a host-local doco-cd as on the [NAS](../../synology/README.md). `vmagent` scrapes the exporters over loopback and pushes to `https://metrics-ingest.home.kelch.io`, queueing up to 1 GiB on disk while the endpoint is unreachable. Nothing on a host listens beyond loopback except doco-cd on PVE (see [PVE](#pve-node)). The Proxmox API is read separately by an in-cluster exporter. As on the NAS, doco-cd holds the host's Docker socket, so whoever can merge to `main` controls every enrolled host.
 
 ## State
 
@@ -58,7 +58,7 @@ The first is a few seconds on a healthy host. The second lists `spark-node`, `sp
 - **Change:** merge to `main`. Each host applies it on its next poll; only the service whose files changed is recreated, and the queue survives. A commit whose images cannot be pulled leaves the running containers in place. A service that starts and then keeps failing makes doco-cd recreate its whole project on every poll until it is fixed. Either case raises `ExternalHostDeployFailing`. `scripts/ci/validate-host-monitoring.sh` renders every deployment and has the pinned vmagent parse its scrape files; run it before merging a change.
 - **Pause:** `docker stop doco-cd` on the host. Collection continues.
 - **Rotate a token:** replace the value with `sops`, merge, then rewrite `/etc/monitoring/token` as above. `vmagent` rereads the file; samples queue in between.
-- **Remove a host:** `docker compose -p doco-cd down`, then `docker compose -p monitoring down -v` (and `-p monitoring-gpu` on a Spark) on the host, then delete its `VMUser`. `ExternalHostMetricsMissing` fires for a host that stops reporting until it has been silent for seven days; silence it for a planned removal.
+- **Remove a host:** on the host run `docker compose -p doco-cd down` and `docker compose -p monitoring down -v`, plus `docker compose -p monitoring-gpu down` on a Spark, then delete its `VMUser`. `-p` selects the project by name, so the commands work from any directory. `ExternalHostMetricsMissing` fires for a host that stops reporting until it has been silent for seven days; silence it for a planned removal.
 - **Add a host:** add a key to the token Secret and a `VMUser`, then enroll it.
 
 ## Proxmox API
