@@ -6,7 +6,7 @@ The NAS and Spark results were produced by the source in this directory mounted 
 
 ## Test suite
 
-`uv run pytest` passes 101 tests on Python 3.12 with `huggingface_hub` 2.1.1, and `uv run ruff check` is clean. Core tests use synthetic content of at most 29 MB and no network. The integration tests start the real server on a loopback socket and drive it with the unmodified SDK using fresh client caches, with outbound connections other than loopback blocked. They cover:
+`uv run pytest` passes 115 tests on Python 3.12 with `huggingface_hub` 2.1.1, and `uv run ruff check` is clean. Core tests use synthetic content of at most 29 MB and no network. The integration tests start the real server on a loopback socket and drive it with the unmodified SDK using fresh client caches, with outbound connections other than loopback blocked. They cover:
 
 - A fresh SDK client after a server restart on a read-only archive: pinned commit and last known `main`, model info, refs, tree, paths-info, `hf_hub_download` and a selected `snapshot_download`.
 - Ranges and resume served only from verified blobs; a retained blob corrupted on disk is refused before any range bytes are sent.
@@ -16,8 +16,14 @@ The NAS and Spark results were produced by the source in this directory mounted 
 - Offline imports from a native HF snapshot and from a plain directory with a renamed file reuse existing objects.
 - A publication failure keeps the old ref and leaves only valid manifests.
 - A 12-second first-use verification with the SDK's default 10-second timeouts ends in success or an honest retryable error, never unverified bytes.
+- An offline import of saved metadata for an older commit, after a pull recorded `main` at a newer one, leaves `main` unchanged and reports it; `--move-refs` moves it, and both commits stay served by hash.
 
 Regression tests exist for the defects an independent review found while the slice was being written: same-size wrong bytes under a correct blob name being reused, a tampered Git alias substituting other valid content, quarantine racing between two acquisitions of the same bytes, undurable directory creation, response header injection through a request path, and malformed `Content-Length` values.
+
+Two defects found in review of the pull request were fixed after the runs recorded below, and are covered by tests only. Neither was re-run on the NAS, and the NAS and client results below predate both changes.
+
+- A blob whose hash failed with an I/O or permission error left no result, so every request hashed it again and answered 503 `VerificationPending`. The failure is now remembered for the file as it is on disk and answered with 500 `ArchiveInconsistent`. The tests cover a read error (one hash attempt across repeated requests and two verification passes, `warm_failures` steady at 1, recovery when the file is replaced), a blob that cannot be opened by the request or by the hashing thread, a blob removed or replaced while its hash was starting, and that refused requests leave no file descriptor open.
+- An `import --metadata` from a saved document moved every ref the document listed, so importing an older commit rolled `main` back. It now creates missing refs and keeps recorded ones unless `--move-refs` is given. The tests cover the default, the flag, creation of a missing ref, an import at the commit a ref already names, a pull and a live-metadata import still moving the ref, and the reported `refs` and `refs_retained`.
 
 ## Live acquisition from the Hub
 
