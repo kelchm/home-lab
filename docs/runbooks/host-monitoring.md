@@ -4,9 +4,17 @@ Metrics from the three PVE nodes and the two DGX Sparks. The lab's metrics backe
 
 ## State
 
-No host is enrolled and the Proxmox API exporter is suspended. Merging this configuration creates the ingestion endpoint, the dashboards and the rules, and changes nothing on any host.
+All five hosts are enrolled and the Proxmox API exporter is running, since 2026-10-04.
 
-Verified in disposable fixtures on 2026-10-03, not on the production hosts: identity labels bound to tokens through the operator's VMAuth, buffering and replay across an endpoint outage, both Compose projects under doco-cd 0.123.0, the PVE enrollment steps below on Debian 13 with bridged guests, and the dashboards and rules against the resulting series. Not yet verified: any production host, the GPU exporter under sustained inference load, and the Proxmox API rules against live exporter output.
+Verified on the hosts that day:
+
+- **Ingest:** from both Sparks and a PVE node, the endpoint resolves, presents a valid certificate, and refuses requests with no token, a wrong token, or a query path. Each host's series arrive with its own `instance` and `platform`.
+- **Sparks:** the head rank's inference series arrive at exact one-second spacing, labelled from SparkRun's container labels; the worker has no inference target. Neither inference container was restarted. A short inference probe measured 93.0 tokens/s before enrollment and 92.8 after.
+- **Replay:** with `spark-2`'s token made invalid for three minutes, vmagent queued 533 KB and dropped nothing; after the token was restored the backend held every sample from that window with its original timestamp.
+- **PVE:** on each node, `ip_forward`, `br_netfilter`, the forward policy and the firewall rulesets were identical before and after installing Docker, and a guest on that node kept reaching its gateway.
+- **Proxmox API:** quorum, node and guest state, start-on-boot flags, storage use and the two guests outside the backup job match what the PVE API reports directly.
+
+Not yet verified: that Docker comes back with the same settings after a PVE node reboot, and the GPU exporter under sustained inference load.
 
 ## Identity
 
@@ -54,7 +62,7 @@ count by (job) (up{instance="spark-1"} == 1)
 
 The first is a few seconds on a healthy host. The second lists `spark-node`, `spark-gpu`, `spark-vmagent` and `spark-deployer`, plus `spark-inference` on the node serving the head rank. On the host, `curl -s 127.0.0.1:8429/targets` shows each scrape target and `docker logs doco-cd` shows deployments.
 
-Check memory with `docker stats --no-stream`, which matters on a Spark where a loaded model leaves little free. Every container keeps at most 30 MB of logs and has a memory limit: 256 MiB each for doco-cd and vmagent, 128 MiB each for node-exporter and the GPU exporter, so 768 MiB at most on a Spark and 640 MiB on a PVE node. In an ARM64 fixture on 2026-10-03 they used about 50 MiB (doco-cd, 65 MiB peak), 20 MiB (vmagent, while queueing with the endpoint unreachable), 8 MiB (node-exporter) and 8 MiB (GPU exporter without its `nvidia-smi` child process). These have not been measured on a Spark; record the real figures at the first enrollment.
+Check memory with `docker stats --no-stream`, which matters on a Spark where a loaded model leaves little free. Every container keeps at most 30 MB of logs and has a memory limit: 256 MiB each for doco-cd and vmagent, 128 MiB each for node-exporter and the GPU exporter, so 768 MiB at most on a Spark and 640 MiB on a PVE node. Measured on 2026-10-04: a Spark used 90 to 110 MiB in total (doco-cd 35 to 44, vmagent 23 to 46, GPU exporter 10 to 17, node-exporter 10), leaving its available memory within 0.1 GiB of where it started; a PVE node used about 55 MiB.
 
 ## Change, pause, rotate, remove
 
