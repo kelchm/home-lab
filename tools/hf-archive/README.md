@@ -132,11 +132,11 @@ Publication is atomic per document, not one transaction across them. Each blob, 
 - Existing content is reused only after it is re-read and proven to match the identity upstream declares for the wanted file. The blob's name and the alias files are hints, not evidence. A stored blob whose bytes do not hash to its name is moved to `quarantine/` and acquired again.
 - Acquisitions of the same expected content are serialised by a content-keyed lock, across processes and repositories, so concurrent pulls of one weight download it once. Checking, quarantining and replacing a stored blob is serialised per blob. Manifest and ref updates are serialised by one publish lock, and the decision to keep or move a recorded ref is made under it. Readers take no locks.
 - Staging directories of a process that died are removed by the next acquisition.
-- The SDK's own caches (`HF_HOME`, hub cache, Xet cache) are redirected into a staging directory that is deleted when the command ends, with the Xet chunk cache disabled unless `HF_XET_CHUNK_CACHE_SIZE_BYTES` is set. The archive is the only retained copy.
+- The SDK's own caches (`HF_HOME`, hub cache, Xet cache) are redirected into a staging directory that is deleted when the command ends. The archive is the only retained copy.
 
 Imports copy and never link, so the source stays intact and later edits to it cannot reach the archive. `--source` may be a plain directory, a native HF snapshot directory, or a native HF repo cache directory containing `snapshots/<commit>`; symlinks under it are followed. Tree files with no source file stay not acquired, so a directory holding only one weight publishes a revision with that one file. `--map` names the source path of a file stored under a different name; a mapped source that is missing is an error. A source file whose size or hash differs from upstream fails the whole import. Repository paths from metadata and manifests are validated before use, and writes are confined to the archive root.
 
-The server ignores and removes `HF_TOKEN` from its own environment at startup. Results of running this slice against real models and the NAS are in [QUALIFICATION.md](QUALIFICATION.md).
+The server ignores and removes `HF_TOKEN` from its own environment at startup. Results of running this slice against real models and the NAS are in [QUALIFICATION.md](QUALIFICATION.md). Its [educational follow-up](QUALIFICATION.md#educational-follow-up-october-4-2026) records how stock SDK 1.8.0 and 2.1.1 clients behave when a file is not ready, and what an experimental fetch on a cold request showed; the package itself still acquires only by explicit `pull` or `import`.
 
 ## Development
 
