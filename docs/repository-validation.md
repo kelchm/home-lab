@@ -33,7 +33,7 @@ Label Catalog Validation checks the catalog and labeler keys, previews label-syn
 
 Labels are coarse filters. Existing labels and mappings stay in place; the added AI, identity, observability, storage, and UniFi areas follow broad directory paths. Additional scope labels are optional when useful. Do not add individual-file exceptions to classify everything a change touches.
 
-Run `mise exec -- scripts/ci/test-validate-labels.sh` for regression cases. To check a catalog against live labels, fetch all pages with `gh api --paginate repos/kelchm/home-lab/labels --jq '.[]' | jq -s . > /tmp/live-labels.json`, then run `mise exec -- scripts/ci/validate-labels.sh . /tmp/live-labels.json`. Review the read-only PR dry run before merging a catalog change. The guard permits additions, updates, and single-label renames through aliases, but rejects deletions and merges that could lose associations. Label Sync applies catalog changes after merge; inspect its run and verify the intended live labels afterward.
+Run `mise exec -- scripts/ci/test-validate-labels.sh` for regression cases. To check a catalog against live labels, fetch all pages with `NO_COLOR=1 gh api --paginate repos/kelchm/home-lab/labels --jq '.[]' | jq -s . > /tmp/live-labels.json`, then run `mise exec -- scripts/ci/validate-labels.sh . /tmp/live-labels.json`. Review the read-only PR dry run before merging a catalog change. The guard permits additions, updates, and single-label renames through aliases, but rejects deletions and merges that could lose associations. Label Sync applies catalog changes after merge; inspect its run and verify the intended live labels afterward.
 
 ## Relationship to Flux
 
