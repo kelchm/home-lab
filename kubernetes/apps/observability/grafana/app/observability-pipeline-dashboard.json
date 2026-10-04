@@ -741,7 +741,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "Bytes vmagent has scraped but not yet delivered to VMSingle. Expect 0; a growing queue means VMSingle is not accepting writes.",
+      "description": "Bytes the cluster vmagent has scraped but not yet delivered to VMSingle. Expect 0; a growing queue means VMSingle is not accepting writes.",
       "id": 10,
       "title": "vmagent send queue",
       "type": "timeseries",
@@ -758,7 +758,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(vmagent_remotewrite_pending_data_bytes)",
+          "expr": "sum(vmagent_remotewrite_pending_data_bytes{cluster=\"k8s-prod\"})",
           "legendFormat": "pending",
           "refId": "A",
           "range": true
