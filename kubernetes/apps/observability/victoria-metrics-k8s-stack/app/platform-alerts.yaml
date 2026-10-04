@@ -1,8 +1,9 @@
 ---
 # Shared cluster rules are owned with the surviving VictoriaMetrics stack.
 # Signals that are specific to this cluster's delivery, GitOps, certificate,
-# and pod-object failure modes. Generic node/filesystem/PVC capacity and
-# CrashLoopBackOff alerts remain owned by the VM chart's bundled
+# and pod-object failure modes, plus the Talos EPHEMERAL headroom policy.
+# Generic node/filesystem/PVC capacity and CrashLoopBackOff alerts remain
+# owned by the VM chart's bundled
 # kubernetes-mixin rules; Longhorn capacity and backup rules live with the
 # Longhorn deployment.
 apiVersion: monitoring.coreos.com/v1
@@ -12,6 +13,29 @@ metadata:
   name: vm-platform-operations
 spec:
   groups:
+    - name: talos-ephemeral-storage
+      labels:
+        cluster: k8s-prod
+      rules:
+        # Independent of growth prediction: image GC and hard eviction share
+        # /var, so a stable but nearly full image cache still needs attention.
+        - alert: KubeNodeEphemeralStorageHigh
+          expr: |
+            (
+              node_filesystem_avail_bytes{cluster="k8s-prod",job="node-exporter",mountpoint="/var",fstype="xfs"}
+              / node_filesystem_size_bytes{cluster="k8s-prod",job="node-exporter",mountpoint="/var",fstype="xfs"}
+              < 0.20
+            )
+            and
+            (node_filesystem_readonly{cluster="k8s-prod",job="node-exporter",mountpoint="/var",fstype="xfs"} == 0)
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: /var on {{ $labels.instance }} is over 80% full
+            description: '{{ $labels.instance }} has {{ $value | humanizePercentage }} of /var free. Verify the live image-GC settings and inspect GC failures, container images, logs and emptyDir usage before the shared filesystem crosses its 15% free hard-eviction threshold.'
+            runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/talos-ephemeral-storage.md
+
     - name: flux-reconciliation
       labels:
         cluster: k8s-prod

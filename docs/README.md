@@ -47,6 +47,7 @@ or fixing.
 | [dgx-spark-bringup](runbooks/dgx-spark-bringup.md) | Configuring, validating, troubleshooting, and recovering the two-node DGX Spark LAN/storage/RDMA setup. |
 | [pve-node-bootstrap](runbooks/pve-node-bootstrap.md) | Using GLKVM and Athena netboot.xyz to inventory, PXE-boot, install, and recover a PVE node. |
 | [talos-pod-security-rollout](runbooks/talos-pod-security-rollout.md) | Applying and validating Talos Pod Security Admission namespace exceptions after Flux reconciles the labels. |
+| [talos-ephemeral-storage](runbooks/talos-ephemeral-storage.md) | Diagnosing /var usage and applying the image-GC headroom policy one node at a time. |
 | [traefik-oidc-plugin-startup](runbooks/traefik-oidc-plugin-startup.md) | Recovering OIDC-protected routes when traefik-admin started without the OIDC plugin. |
 
 ## Planning and work tracking

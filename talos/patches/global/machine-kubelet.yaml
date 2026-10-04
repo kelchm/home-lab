@@ -2,6 +2,12 @@ machine:
   kubelet:
     extraConfig:
       serializeImagePulls: false
+      # EPHEMERAL backs both imagefs and nodefs. Start image GC before the
+      # imagefs.available=15% hard-eviction threshold on this 100 GiB volume.
+      # containerd reports compressed image sizes, so verify actual free space
+      # after collection; the low threshold is not a physical usage floor.
+      imageGCHighThresholdPercent: 75
+      imageGCLowThresholdPercent: 70
       # Register every node with NoSchedule taints that hold workload pods
       # off until both CNIs are actually ready. Without this, there's a
       # boot race: Cilium drops 05-cilium.conflist and kubelet goes Ready
