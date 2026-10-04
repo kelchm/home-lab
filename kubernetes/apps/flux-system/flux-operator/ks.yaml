@@ -4,6 +4,10 @@ kind: Kustomization
 metadata:
   name: flux-operator
 spec:
+  # Renders a ServiceMonitor CR, so the CRDs must land first.
+  dependsOn:
+    - name: prometheus-operator-crds
+      namespace: observability
   interval: 1h
   path: ./kubernetes/apps/flux-system/flux-operator/app
   prune: true
