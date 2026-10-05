@@ -42,7 +42,7 @@ function expect_failure() {
         echo "FAIL: ${name} unexpectedly passed" >&2
         exit 1
     fi
-    if ! rg -Fq "${diagnostic}" "${TEST_DIR}/output.log"; then
+    if ! grep -Fq "${diagnostic}" "${TEST_DIR}/output.log"; then
         echo "FAIL: ${name} failed for an unexpected reason" >&2
         cat "${TEST_DIR}/output.log" >&2
         exit 1
@@ -67,5 +67,9 @@ expect_failure 'unknown metadata prefix' 'unsupported dotenv SOPS metadata'
 cp "${TEST_DIR}/valid.env" "${FIXTURE}"
 printf 'TOKEN=oops\n' >> "${FIXTURE}"
 expect_failure 'duplicate assignment' 'invalid or duplicate dotenv assignment'
+
+cp "${TEST_DIR}/valid.env" "${FIXTURE}"
+printf 'MALFORMED=ENC[AES256_GCM,data:YQ==,iv:YQ==,tag:YQ==,type:str]\n' >> "${FIXTURE}"
+expect_failure 'malformed ciphertext' 'dotenv value is not encrypted'
 
 echo 'SOPS validator regression tests passed.'

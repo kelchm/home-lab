@@ -14,6 +14,8 @@ function validate_dotenv() {
     local rules
     rules="$(yq -o=json '.creation_rules' "${ROOT_DIR}/.sops.yaml")"
     python3 - "${ROOT_DIR}/${file}" "${file}" "${rules}" <<'PYTHON'
+import base64
+import binascii
 import json
 import re
 import sys
@@ -42,12 +44,23 @@ with open(path, encoding="utf-8") as stream:
         fields[key] = value.replace("\\n", "\n")
 
 ciphertext = re.compile(
-    r"ENC\[AES256_GCM,data:[A-Za-z0-9+/=]*,iv:[A-Za-z0-9+/=]+,"
-    r"tag:[A-Za-z0-9+/=]+,type:str\]")
+    r"ENC\[AES256_GCM,data:([A-Za-z0-9+/=]+),iv:([A-Za-z0-9+/=]+),"
+    r"tag:([A-Za-z0-9+/=]+),type:str\]")
+
+def encrypted(value):
+    match = ciphertext.fullmatch(value)
+    if not match:
+        return False
+    try:
+        data, iv, tag = (base64.b64decode(v, validate=True) for v in match.groups())
+        return bool(data) and len(iv) == 32 and len(tag) == 16
+    except binascii.Error:
+        return False
+
 recipients = []
 for key, value in fields.items():
     if not key.startswith("sops_"):
-        if not ciphertext.fullmatch(value):
+        if not encrypted(value):
             fail("dotenv value is not encrypted")
         continue
     match = re.fullmatch(r"sops_age__list_(\d+)__map_(recipient|enc)", key)
@@ -63,7 +76,7 @@ for key, value in fields.items():
         continue
     if key not in {"sops_lastmodified", "sops_mac", "sops_unencrypted_suffix", "sops_version"}:
         fail("unsupported dotenv SOPS metadata")
-if not ciphertext.fullmatch(fields.get("sops_mac", "")):
+if not encrypted(fields.get("sops_mac", "")):
     fail("missing encrypted SOPS MAC")
 if sorted(recipients) != expected:
     fail("age recipients do not match the creation rule")
