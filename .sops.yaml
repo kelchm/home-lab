@@ -7,6 +7,8 @@ creation_rules:
     encrypted_regex: "^(data|stringData)$"
     mac_only_encrypted: true
     age: "age14wcg0t6njf76c4ctrndypvvmxk9p7jkumnumlvxdmsn543tc3yusgk5jwy"
+  - path_regex: synology/.*\.sops\.env
+    age: "age1f9zywn455sfvefz0p3gqfhwnfscdqf04gjj8s477q0ex39servjsjv93gf"
 stores:
   yaml:
     indent: 2

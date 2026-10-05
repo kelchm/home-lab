@@ -16,3 +16,8 @@ name: modelkeep
 working_dir: synology/modelkeep
 prune_images: false
 reconciliation: false
+---
+name: offsite-backup
+working_dir: synology/offsite-backup
+prune_images: false
+reconciliation: false
