@@ -1,0 +1,1 @@
+pve_backup_completed_timestamp_seconds{backup_job="{{#if fields.[job-id]}}{{escape fields.[job-id]}}{{else}}manual{{/if}}",outcome="{{escape severity}}"} {{timestamp}}

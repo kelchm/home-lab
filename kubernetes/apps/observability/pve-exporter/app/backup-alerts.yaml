@@ -1,6 +1,8 @@
 ---
-# These observations come from the host textfile collector, not the API exporter.
-# Host ingestion supplies instance/platform; only backup metrics carry cluster.
+# One sample per vzdump completion, pushed by PVE's stock notification webhook
+# through the node's vmagent: the value is the completion time, `backup_job`
+# the scheduled job ID or `manual`, `outcome` PVE's severity (info or error).
+# Samples are sparse, so every rule reads them over a 48-hour window.
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMRule
 metadata:
@@ -9,32 +11,50 @@ spec:
   groups:
     - name: pve-backups
       rules:
-        - alert: PVEBackupMetricsUnavailable
-          expr: |
-            (pve_backup_collector_success{job="pve-node", platform="pve", cluster="pve-sbx"} == 0)
-            or (time() - pve_backup_collector_attempt_timestamp_seconds{job="pve-node", platform="pve", cluster="pve-sbx"} > 600)
-            or (up{job="pve-node", platform="pve"} == 1
-                unless on (instance) pve_backup_collector_success{job="pve-node", platform="pve", cluster="pve-sbx"})
-          for: 2m
-          labels:
-            severity: warning
-          annotations:
-            summary: Backup observations are unavailable on {{ $labels.instance }}
-            description: Check the pve-backup-metrics timer, service journal, textfile and backup storage. Missing or invalid observations are not evidence of successful backups.
+        # A failure alerts for at least an hour, then until the same job
+        # succeeds on the same node or the failure leaves the window.
         - alert: PVEBackupFailed
-          expr: pve_backup_task_success{job="pve-node", platform="pve", cluster="pve-sbx"} == 0
-          for: 1m
+          expr: |
+            max by (cluster, instance, backup_job) (max_over_time(pve_backup_completed_timestamp_seconds{job="pve-backup", platform="pve", cluster="pve-sbx", outcome="error"}[48h]))
+            unless (
+              max by (cluster, instance, backup_job) (max_over_time(pve_backup_completed_timestamp_seconds{job="pve-backup", platform="pve", cluster="pve-sbx", outcome="info"}[48h]))
+              > max by (cluster, instance, backup_job) (max_over_time(pve_backup_completed_timestamp_seconds{job="pve-backup", platform="pve", cluster="pve-sbx", outcome="error"}[48h]))
+              and time() - max by (cluster, instance, backup_job) (max_over_time(pve_backup_completed_timestamp_seconds{job="pve-backup", platform="pve", cluster="pve-sbx", outcome="error"}[48h])) >= 3600
+            )
           labels:
             severity: warning
           annotations:
-            summary: Backup scope {{ $labels.scope }} failed on {{ $labels.instance }}
-            description: The latest completed vzdump task for this scope failed. Scope batch means a multi-guest task; a numeric scope is its VMID. Check PVE task history. A later successful task for the same scope clears this condition.
+            summary: Backup job {{ $labels.backup_job }} failed on {{ $labels.instance }}
+            description: >-
+              A vzdump run finished with errors at {{ $value | humanizeTimestamp }};
+              the task log on the node names the guests. This resolves an hour
+              after the failure once the same job has succeeded on this node,
+              or when the failure is 48 hours old, so a resolution alone does
+              not show the guests were backed up. A manual retry does not
+              resolve a scheduled job's failure.
+
+        # Every node listed here must complete `daily-backups` successfully.
+        # The list is the expectation: a node that has never reported, or
+        # whose samples have expired, alerts the same as a stale one.
         - alert: PVEBackupStale
           expr: |
-            time() - pve_backup_archive_timestamp_seconds{job="pve-node", platform="pve", cluster="pve-sbx"} > 108000
+            (
+              label_replace(vector(1), "instance", "pve-sbx-1", "", "")
+              or label_replace(vector(1), "instance", "pve-sbx-2", "", "")
+              or label_replace(vector(1), "instance", "pve-sbx-3", "", "")
+            )
+            unless on (instance) (
+              time() - max by (instance) (max_over_time(pve_backup_completed_timestamp_seconds{job="pve-backup", platform="pve", cluster="pve-sbx", backup_job="daily-backups", outcome="info"}[48h])) < 108000
+            )
           for: 10m
           labels:
             severity: critical
+            cluster: pve-sbx
+            backup_job: daily-backups
           annotations:
-            summary: No recent backup for {{ $labels.id }} on {{ $labels.instance }}
-            description: This persistent guest has no archive in the expected backup storage newer than 30 hours. Zero means no archive was found. Check the backup schedule, coverage and storage. Archive freshness does not prove restorability.
+            summary: No successful daily-backups run on {{ $labels.instance }} in 30 hours
+            description: >-
+              The scheduled job has not reported a clean completion from this
+              node within 30 hours: it failed, did not run, or its notification
+              did not arrive. Check the job, the node's task history and its
+              vmagent. A manual backup does not clear this.

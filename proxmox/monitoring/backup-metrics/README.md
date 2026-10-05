@@ -1,60 +1,164 @@
-# PVE backup metrics alternative
+# PVE backup completion metrics
 
-Prepared for comparison with [the webhook PR #760](https://github.com/kelchm/home-lab/pull/760), for [#720](https://github.com/kelchm/home-lab/issues/720). This is intended behavior, not a deployed or receipt-tested configuration. The owner chooses the approach and merges the selected PR; installing anything on PVE requires explicit go-ahead.
+Alerts the operator when a PVE backup fails or the daily job stops completing, for [#720](https://github.com/kelchm/home-lab/issues/720). **State: prepared.** The rules, the webhook body and these procedures are in Git; nothing is installed on PVE and no alert has been received. Installing the webhook and running the acceptance test each need the owner's explicit go-ahead.
 
-## Data and delivery
+| File | Purpose |
+|---|---|
+| [body.hbs](body.hbs) | Body of the PVE webhook: one Prometheus sample per completed backup run. |
+| [alerts.test.yaml](alerts.test.yaml) | Fixtures for the [rules](../../../kubernetes/apps/observability/pve-exporter/app/backup-alerts.yaml), run by `scripts/ci/validate-pve-backups.sh`. |
 
-A root-owned systemd timer runs the standard-library Python collector once a minute on each PVE node. It only calls local `pvesh get`: cluster identity, guest inventory, archived `vzdump` tasks from the last seven days (at most 1,000), and the backup storage's archive inventory. It writes an atomic node-exporter textfile. The existing vmagent → VMAuth → VictoriaMetrics → vmalert → VMAlertmanager → Pushover path carries the observations and alerts. Existing Pushover credentials, central silences, delivery metrics and the healthchecks.io dead-man check are reused.
+## How it works
 
-Read-only checks against PVE 9.2.11 on 2026-10-04 confirmed the stock task API exposes completed task status and time, and the storage-content API exposes archive VMID and creation time. Exporter 3.10.1 provides backup-job coverage but no result or archive-age metric. Its existing PVEAuditor token can read task history but receives an empty archive list; archive access requires write-capable privileges. Local root collection avoids expanding that account or adding a credential. The new root service and its manual installation are the cost of this approach. See the [PVE API viewer](https://pve.proxmox.com/pve-docs/api-viewer/index.html) and [node-exporter textfile collector](https://github.com/prometheus/node_exporter#textfile-collector).
+For runs using `notification-mode=notification-system`, PVE sends every finished `vzdump` run, success or failure, through a stock webhook target to the vmagent already running on the same node. The production `daily-backups` job already uses that mode. Manual runs must use it too; `auto` with an email recipient or `legacy-sendmail` bypasses this target:
 
-| Signal | Scope | Alert |
+```text
+POST http://127.0.0.1:8429/api/v1/import/prometheus?extra_label=job%3Dpve-backup&extra_label=cluster%3Dpve-sbx
+Content-Type: text/plain
+```
+
+The body is one sample of `pve_backup_completed_timestamp_seconds`. Its value is PVE's notification timestamp, which is when the run finished. `backup_job` is the scheduled job's ID, or `manual` for a run started from the UI, the CLI or the job's Run now button, none of which carry a job ID. `outcome` is PVE's severity: `info` for a clean run, `error` when any guest in it failed. The URL adds `job` and `cluster`; the node's ingestion token adds `instance` and `platform` as for every other [host series](../../../docs/runbooks/host-monitoring.md#identity). vmagent queues the sample on disk while the ingestion endpoint is unreachable and delivers it with its original time.
+
+Nothing new runs on the nodes: no script, service, credential, ingestion user, Alertmanager route or Pushover application. The alerts route like every other vmalert alert, described in the [alerting runbook](../../../docs/runbooks/alerting.md). The existing `mail-to-root` target and `default-matcher` are left as they are.
+
+## Alerts
+
+| Alert | Severity | Fires when |
 |---|---|---|
-| Latest completed task status and completion time | Local guest VMID, or `batch` for a multi-guest task | `PVEBackupFailed`, warning after one minute of failed status |
-| Newest archive creation time in `backups-pve-sbx` | Local, non-template guest tagged `persistent`; zero means a successful inventory found no archive | `PVEBackupStale`, critical after age exceeds 30 hours for ten minutes |
-| Collection success and attempt time | Each node | `PVEBackupMetricsUnavailable`, warning after two minutes of failed/missing collection, or an attempt older than ten minutes |
+| `PVEBackupFailed` | warning | A run of a job finished with errors on a node. Labelled with `instance` and `backup_job`. |
+| `PVEBackupStale` | critical | A node in the expected list has no clean `daily-backups` completion within 30 hours, held for ten minutes. |
 
-Thirty hours allows six hours beyond the daily schedule; it detects an absent run as well as persistent failures. Archive age is evidence of an artifact, not proof of a restorable backup. The existing coverage rule continues to detect persistent guests omitted from all jobs.
+Thirty hours is the daily schedule plus six hours, so one missed or failed 05:00 run pages by about 11:00.
 
-This is a condition model, not an event ledger. A later success for the same task scope clears the failure; a failed task followed by a successful retry between polls may never alert. A VMID-specific retry does not clear a failed `batch` scope. Task conditions also disappear when they leave the seven-day window or their guest is removed/migrated; resolution alone does not prove a successful retry. Freshness follows guests to their current node using the shared archive inventory.
+**Expected nodes.** `PVEBackupStale` names `pve-sbx-1`, `pve-sbx-2` and `pve-sbx-3` in its expression. The list is deliberate: a node that has never reported, whose webhook was removed, or whose samples have aged out alerts exactly like one whose last success is old, and no other exporter has to be up for that to hold. Edit the list when a node joins or leaves the cluster, and keep the fixtures in step. Every listed node needs at least one guest in `daily-backups`; whether PVE sends a notification from a node with nothing to back up has not been checked.
 
-Collection failures preserve previous observations and publish health=0, so they cannot manufacture a zero archive time or falsely clear an existing failure/staleness condition. A timer that stops leaves an old attempt timestamp; a missing textfile is detected against each healthy PVE node-exporter target. Existing host-down and ingestion alerts cover loss of the whole host stream. Hard NFS storage can stall inventory; the command and service timeouts bound normal hangs, while stale-attempt monitoring catches a collector that stops making progress.
+**What a failure alert means.** The rules read the latest failure and the latest success for each node and job over 48 hours. A failure alerts for at least one hour, so one that is retried successfully before vmalert next evaluates still notifies. After that hour it resolves once the same job has succeeded on the same node, or when the failure is 48 hours old. A resolved notification therefore does not prove the guests were backed up; check the job. A failed `daily-backups` run stays firing until the next scheduled run succeeds, even after a successful manual retry, because a manual run cannot stand in for the schedule: silence it once the retry is confirmed. All manual runs on a node share `backup_job="manual"`, so a manual success for one guest clears a manual failure for another.
 
-Host ingestion retains `job=pve-node`, `platform=pve` and its authoritative node `instance`. Only these backup observations carry the locally verified `cluster=pve-sbx` label. Their rules explicitly select the host job and platform; general Kubernetes rules remain restricted to `cluster=k8s-prod`. No group-level cluster label is applied to host series.
+## Limits
 
-## Installation after the owner's decision
+- This is per-node job completion, not per-guest archive age or integrity. A clean run says PVE reported no error for the guests that job selected on that node; it does not show which guests those were, that an archive is retained, or that it restores. `PVEPersistentGuestNotBackedUp` still covers guests left out of every job, and restore drills remain the only evidence of restorability.
+- PVE makes one delivery attempt to the local vmagent, with a ten-second timeout, when the run finishes. If vmagent is down at that moment the sample is lost. A lost `daily-backups` result, success or failure, surfaces as `PVEBackupStale` about six hours later. A lost manual failure is not reported.
+- It reports conditions, not a ledger of events. Consecutive failures of one job continue one alert. If the ingestion path is down for over an hour and a failure and its successful retry both replay afterwards, the failure never alerts.
+- A node missing from the expected list still alerts on failures but never on absence.
+- vmagent's loopback port takes samples from any local process, as it always has. The token fixes `instance` and `platform`; `job` and `cluster` are only what the URL says.
 
-Install and verify the collector on **all three nodes before merging the selected metrics PR**, after explicit permission to make PVE changes. The textfiles can exist before node-exporter's textfile flag is deployed; merging activates that flag and the rules through the existing doco-cd and Flux flows. Merging first would intentionally produce missing-collector warnings until the manual installation finishes. Preserve any previous installed files before replacement.
+## Install
 
-From the repository root, repeat for each node, substituting its address for NODE:
-
-```sh
-scp proxmox/monitoring/backup-metrics/collect.py proxmox/monitoring/backup-metrics/pve-backup-metrics.service proxmox/monitoring/backup-metrics/pve-backup-metrics.timer kelchm@NODE:/tmp/
-ssh kelchm@NODE 'sudo install -d -o root -g root -m 0755 /var/lib/node_exporter/textfile_collector && sudo install -o root -g root -m 0755 /tmp/collect.py /usr/local/sbin/pve-backup-metrics && sudo install -o root -g root -m 0644 /tmp/pve-backup-metrics.service /tmp/pve-backup-metrics.timer /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now pve-backup-metrics.timer && sudo systemctl start pve-backup-metrics.service'
-ssh kelchm@NODE 'systemctl list-timers pve-backup-metrics.timer --no-pager; sudo journalctl -u pve-backup-metrics.service -n 20 --no-pager; cat /var/lib/node_exporter/textfile_collector/pve-backups.prom'
-```
-
-Check health=1, the correct cluster, expected local persistent guests and archive timestamps on every node. After owner merge and both reconcilers settle, query these metrics centrally with `job="pve-node", platform="pve", cluster="pve-sbx"`; verify one healthy collector per node, recent attempts, all three persistent guest archive timestamps, and no `node_textfile_scrape_error`. Verify the existing dead-man and notification-delivery checks in the [alerting runbook](../../../docs/runbooks/alerting.md). Keep rollout and receipt evidence in #720, then update the PVE README to describe verified delivery.
-
-## Acceptance after deployment
-
-The owner has authorized creation and cleanup of an isolated disposable guest. Use a free VMID, no NIC, no boot, a small disk and the disposable tag. Run the test outside the scheduled backup window and remove the guest before that window; do not alter the production job, storage or an existing guest to cause a failure.
-
-Create a temporary root-owned executable hook that exits nonzero only for `backup-start`, and run a manual `vzdump TEST_VMID --storage backups-pve-sbx --mode snapshot --compress zstd --script HOOK_PATH` on that guest. Check the archived task has a non-OK status and that the next collection emits `pve_backup_task_success{scope="TEST_VMID"} 0`. A command-line validation failure before a task is recorded is not a valid test.
-
-Allow several minutes for the timer, scrape, one-minute rule hold and Alertmanager's grouping delay. Record the UPID, VMID/node, failed task status, central metric, firing alert and the owner's confirmation of Pushover receipt. Check central silencing using `alertname=PVEBackupFailed`, `cluster=pve-sbx`, `instance=NODE_NAME` and `scope=TEST_VMID`. Remove the hook, delete the verified disposable guest and any test archive, then confirm its VMID-specific metric disappears on the next collection. Guest cleanup may resolve that condition; it is not evidence of backup recovery. Do not claim end-to-end delivery until the operator confirms receipt.
-
-Freshness and missing-collector behavior are exercised by rule fixtures without deleting real archives or stopping production telemetry. A real failed-backup receipt remains the acceptance gate.
-
-## Removal and verification
-
-Git revert removes the rules and textfile flag through Flux/doco-cd. It does **not** uninstall the root collector. After the owner's approval, disable the timer and remove only its installed service, timer, script and `pve-backups.prom` file, then reload systemd. Do not remove a shared textfile directory or other exporters' files.
+Notification configuration lives in `/etc/pve` and is cluster-wide, so create it once from any node. Each node then posts to its own vmagent. **Git does not manage or revert it.** Do this before the rules merge, and only after the owner's go-ahead.
 
 ```sh
-sudo systemctl disable --now pve-backup-metrics.timer
-sudo systemctl stop pve-backup-metrics.service
-sudo rm /etc/systemd/system/pve-backup-metrics.service /etc/systemd/system/pve-backup-metrics.timer /usr/local/sbin/pve-backup-metrics /var/lib/node_exporter/textfile_collector/pve-backups.prom
-sudo systemctl daemon-reload
+scp proxmox/monitoring/backup-metrics/body.hbs kelchm@pve-sbx-1:/tmp/pve-backup-metrics.hbs
+ssh kelchm@pve-sbx-1
 ```
 
-Local regression checks: `scripts/ci/validate-pve-backups.sh` runs collector tests and Prometheus rule fixtures. No PVE configuration or notification target is changed by those checks.
+Record the starting state, then create the target and its matcher. Do not print `/etc/pve/priv/notifications.cfg`.
+
+```sh
+sudo pvesh get /cluster/notifications/targets
+sudo pvesh get /cluster/notifications/matchers
+sudo cat /etc/pve/notifications.cfg
+
+sudo pvesh create /cluster/notifications/endpoints/webhook --name pve-backup-metrics --method post \
+  --url 'http://127.0.0.1:8429/api/v1/import/prometheus?extra_label=job%3Dpve-backup&extra_label=cluster%3Dpve-sbx' \
+  --header "name=Content-Type,value=$(printf 'text/plain' | base64 -w0)" \
+  --body "$(base64 -w0 /tmp/pve-backup-metrics.hbs)" \
+  --comment 'Backup completion samples to the local vmagent'
+
+sudo pvesh create /cluster/notifications/matchers --name pve-backup-metrics --mode all \
+  --match-field exact:type=vzdump --match-severity info,error \
+  --target pve-backup-metrics \
+  --comment 'Every finished vzdump run'
+```
+
+Check the result: the new target and matcher exist, `mail-to-root` and `default-matcher` are unchanged, and the stored body decodes to the file in Git.
+
+```sh
+sudo pvesh get /cluster/notifications/endpoints/webhook/pve-backup-metrics
+sudo pvesh get /cluster/notifications/matchers/pve-backup-metrics
+sudo pvesh get /cluster/notifications/matchers/default-matcher
+sudo awk '/^webhook: / {selected = ($2 == "pve-backup-metrics")} /^[^[:space:]]/ && !/^webhook: / {selected = 0} selected && $1 == "body" {print $2}' /etc/pve/notifications.cfg | base64 -d | diff - /tmp/pve-backup-metrics.hbs
+```
+
+Then send PVE's target test from **each** node. It bypasses the matcher and carries no job ID, so it is expected to write one `backup_job="manual"`, `outcome="info"` sample from that node. That proves the URL, header, body, local vmagent and ingestion path, not the matcher or the scheduled label. Do not run it while a manual failure is firing on that node: its synthetic success would clear that condition once the failure's one-hour visibility window ends.
+
+```sh
+sudo pvesh create /cluster/notifications/targets/pve-backup-metrics/test
+```
+
+```promql
+max_over_time(pve_backup_completed_timestamp_seconds{job="pve-backup", platform="pve", cluster="pve-sbx"}[48h])
+```
+
+Expect one series per node, each with that node's `instance`. If a sample is missing, inspect the task log, node journal and local vmagent before proceeding.
+
+### Merge after the first scheduled run
+
+Leave the rules unmerged until the next 05:00 run has written a `backup_job="daily-backups"`, `outcome="info"` sample from all three nodes. That run is the first real check of the matcher and the job ID, and it means `PVEBackupStale` starts out satisfied. Merged any earlier, the rule correctly reports three nodes with no success and pages critical ten minutes later. If the owner wants to merge sooner, first add a silence for `alertname=PVEBackupStale`, `cluster=pve-sbx` that expires an hour after the next scheduled run, with #720 in its comment.
+
+If a node's run fails that morning, it has no success sample: fix the backup, and expect that node to page until its next clean scheduled run.
+
+## Acceptance test
+
+Run after the install and the merge, with the owner's go-ahead for these steps. The owner has authorized creating and removing one isolated disposable guest for it. Never use an existing guest, and do not edit `daily-backups`, its storage or its exclusions.
+
+The test uses its own **scheduled** job so the sample carries a job ID; Run now would report `manual`. Its `backup_job` differs from `daily-backups`, so it cannot satisfy or disturb daily freshness. `daily-backups` selects every guest, so the test guest must be gone well before 05:00: run this at midday and finish the cleanup the same day.
+
+1. Pick a node, confirm a free VMID with `sudo pvesh get /cluster/nextid`, and create a guest with no NIC that is never started:
+
+   ```sh
+   sudo qm create TEST_VMID --name backup-alert-test --memory 512 --scsi0 local-lvm:1 --tags disposable --onboot 0
+   ```
+
+2. On that node, install a hook that fails only the `backup-start` phase:
+
+   ```sh
+   printf '%s\n' '#!/bin/sh' '[ "$1" != backup-start ]' | sudo tee /usr/local/sbin/backup-alert-test-hook >/dev/null
+   sudo chmod 0755 /usr/local/sbin/backup-alert-test-hook
+   ```
+
+3. Create the temporary job for a minute at least three minutes ahead, in the node's local time (`date`):
+
+   ```sh
+   sudo pvesh create /cluster/backup --id backup-alert-test --node NODE --vmid TEST_VMID \
+     --storage backups-pve-sbx --mode snapshot --compress zstd --notification-mode notification-system \
+     --schedule HH:MM --script /usr/local/sbin/backup-alert-test-hook --enabled 1 \
+     --comment 'Temporary: backup alert acceptance for #720'
+   ```
+
+   If no `vzdump` task appears within three minutes of that time, do not use Run now. Move the schedule forward with `sudo pvesh set /cluster/backup/backup-alert-test --schedule HH:MM`.
+
+4. Confirm the failure end to end: the task in `sudo pvesh get /nodes/NODE/tasks --typefilter vzdump --limit 3` has a non-OK status; the query above shows `backup_job="backup-alert-test"`, `outcome="error"` from that node; `PVEBackupFailed` is firing in Alertmanager with `severity=warning` and `evaluator=vmalert`; and the owner confirms the Pushover notification arrived.
+
+5. Confirm the success path. Remove the hook from the job and schedule another run:
+
+   ```sh
+   sudo pvesh set /cluster/backup/backup-alert-test --delete script --schedule HH:MM
+   ```
+
+   Expect an `outcome="info"` sample, and the alert to resolve one hour after the failed run finished, not immediately.
+
+6. Clean up, job first so it cannot run again. Recheck the VMID and name before destroying the guest, and free only archives that name it.
+
+   ```sh
+   sudo pvesh delete /cluster/backup/backup-alert-test
+   sudo rm /usr/local/sbin/backup-alert-test-hook
+   sudo pvesm list backups-pve-sbx --vmid TEST_VMID
+   sudo pvesm free VOLID
+   sudo qm config TEST_VMID
+   sudo qm destroy TEST_VMID --purge
+   ```
+
+   Confirm with `sudo pvesh get /cluster/backup` that only the production job remains. The test samples stay in the store and age out of the rules on their own. If the success run could not be completed, silence `alertname=PVEBackupFailed`, `backup_job=backup-alert-test` for 48 hours instead of leaving it to repeat.
+
+7. Record in #720 both task UPIDs, the node, the job ID, the two samples, the alert and the owner's confirmation of receipt. Then change the state at the top of this file and in the [PVE README](../../README.md) to verified.
+
+Staleness and a node that never reports are exercised by the rule fixtures and by the first scheduled run after install, not by stopping production backups.
+
+## Remove
+
+Reverting the rules in Git does not touch PVE, and removing the webhook while the rules are live makes `PVEBackupStale` page 30 hours after the last success. Revert the rules first, then remove the matcher before the target it references:
+
+```sh
+sudo pvesh delete /cluster/notifications/matchers/pve-backup-metrics
+sudo pvesh delete /cluster/notifications/endpoints/webhook/pve-backup-metrics
+sudo pvesh get /cluster/notifications/matchers
+```

@@ -61,6 +61,8 @@ jobs:
               - '.github/workflows/repository-validation.yaml'
               - '.mise.toml'
               - 'kubernetes/**'
+              - 'proxmox/monitoring/backup-metrics/**'
+              - 'scripts/ci/validate-pve-backups.sh'
               - 'scripts/ci/validate-vlagent.sh'
               - 'scripts/logging/**'
               - 'scripts/ci/test-validate-cilium-policies.sh'
@@ -234,7 +236,7 @@ jobs:
         with:
           install_args: "aqua:fluxcd/flux2 aqua:yannh/kubeconform aqua:mikefarah/yq aqua:prometheus/prometheus"
 
-      - name: Validate PVE backup collector and alerts
+      - name: Validate PVE backup alerts
         if: needs.pre-job.outputs.kubernetes_changed == 'true'
         run: scripts/ci/validate-pve-backups.sh
 

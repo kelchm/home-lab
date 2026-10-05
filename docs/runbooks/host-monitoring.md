@@ -87,3 +87,5 @@ The exporter reports quorum, node and guest state, storage use and which guests 
 ## Alerts
 
 Host rules are in [metrics-ingest](../../kubernetes/apps/observability/metrics-ingest/app/alerts.yaml) and Proxmox API rules beside the [exporter](../../kubernetes/apps/observability/pve-exporter/app/alerts.yaml). A host is covered from its first sample; there is no enrollment list to maintain. They route like every other alert, described in the [alerting runbook](alerting.md).
+
+Backup failure and staleness rules for PVE are prepared but their source is not installed: PVE's notification webhook will push one `pve_backup_completed_timestamp_seconds` sample per finished backup run through the node's vmagent, as `job="pve-backup"` with `cluster="pve-sbx"`, the one host-pushed series that carries a cluster label. Unlike the host rules, `PVEBackupStale` lists the nodes it expects, so adding or removing a PVE node means editing it. See [backup completion metrics](../../proxmox/monitoring/backup-metrics/README.md).
