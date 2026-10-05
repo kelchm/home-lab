@@ -18,6 +18,18 @@ releases:
     version: 1.48.2
     values: ['./templates/values.yaml.gotmpl']
     needs: ['kube-system/cilium']
+    # CoreDNS is the first release that needs a pod network. Nodes stay
+    # NotReady and tainted node.multus.io/not-ready until Multus publishes
+    # 00-multus.conf, so apply the kustomization Flux owns afterwards.
+    hooks:
+      - events: ['presync']
+        showlogs: true
+        command: kubectl
+        args: ['apply', '--server-side', '--force-conflicts', '--kustomize', '../../kubernetes/apps/kube-system/multus/app']
+      - events: ['presync']
+        showlogs: true
+        command: kubectl
+        args: ['wait', 'nodes', '--all', '--for=condition=Ready', '--timeout=10m']
 
   - name: spegel
     namespace: kube-system

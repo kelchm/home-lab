@@ -208,7 +208,7 @@ Do not read this section as a tested procedure. Each step below is tagged with o
 
 - The cluster was created on 2026-04-24. No rebuild from `task bootstrap:talos` and `task bootstrap:apps` is recorded since, and `scripts/bootstrap-apps.sh` has changed since then. Steps 1–5 are **undrilled**.
 - One thing was **drilled**, on 2026-09-30 ([Visionect restore drill](visionect-migration.md#restore-drill-2026-09-30)): restoring the `visionect-db-1` and `visionect` backups into new single-replica volumes in a disposable namespace, and starting PostgreSQL on the restored database volume. Everything else, including the same restore for any other application, is **undrilled**.
-- `task bootstrap:apps` is expected to stall on a clean cluster ([#758](https://github.com/kelchm/home-lab/issues/758)). Step 4 carries an undrilled workaround.
+- `task bootstrap:apps` was traced, not observed, to deadlock on a clean cluster behind the `node.multus.io/not-ready` taint ([#758](https://github.com/kelchm/home-lab/issues/758)). The bootstrap now installs Multus itself; that fix is **undrilled**, and step 4 says what to check if it still stalls.
 - Recovery time is unmeasured. Backups run daily at 07:00 UTC, so data loss is one day when the schedule was healthy and longer if backups were failing before the outage; record the timestamp of each backup you restore. The drill and its measurements are tracked in [#224](https://github.com/kelchm/home-lab/issues/224).
 
 ### Prerequisites
@@ -232,13 +232,16 @@ Run every command from the repository root.
 1. **Check the key.** `sops -d talos/talsecret.sops.yaml > /dev/null` must exit 0. *Undrilled.*
 2. **Boot all three nodes from the USB installer** and leave them in maintenance mode. `talosctl -n 10.32.30.11 get disks --insecure` must answer for each node address. Installing wipes the whole system disk, including the Longhorn data partition, so do not continue on a node whose replicas you still need. *Undrilled.*
 3. **`task bootstrap:talos`.** It generates the node configs from the committed `talsecret.sops.yaml`, applies them to the nodes in maintenance mode, bootstraps etcd, and writes `kubeconfig` to the repository root. The etcd and kubeconfig steps retry every 10 seconds without a limit; nodes need several minutes to install and reboot. Done when `kubectl get nodes` lists three nodes. They stay `NotReady` until step 4 installs the CNI. *Undrilled.*
-4. **`task bootstrap:apps`.** Do not run `flux bootstrap`: Flux here is installed and owned by Flux Operator through the bootstrap Helmfile. The task waits up to 10 minutes for three nodes to register, creates the namespaces, applies the `sops-age` Secret to `flux-system`, applies the bootstrap CRDs, then installs Cilium, CoreDNS, Spegel, cert-manager, Flux Operator and the FluxInstance in that order. It is safe to rerun after a failure. Done when it logs `The cluster is bootstrapped and Flux is syncing the Git repository`. *Undrilled.*
+4. **`task bootstrap:apps`.** Do not run `flux bootstrap`: Flux here is installed and owned by Flux Operator through the bootstrap Helmfile. The task waits up to 10 minutes for three nodes to register, creates the namespaces, applies the `sops-age` Secret to `flux-system`, applies the bootstrap CRDs, then installs Cilium, Multus with its `cni-ready-untaint` DaemonSet, CoreDNS, Spegel, cert-manager, Flux Operator and the FluxInstance in that order. It is safe to rerun after a failure. Done when it logs `The cluster is bootstrapped and Flux is syncing the Git repository`. *Undrilled.*
 
-   **Expected stall ([#758](https://github.com/kelchm/home-lab/issues/758), traced, not observed):** nodes register with the `node.multus.io/not-ready` taint, and only Multus, which Flux installs later, clears it. CoreDNS therefore stays `Pending` and the task never reaches Flux. When `kubectl -n kube-system get pods` shows the `cilium` pods Running and `coredns` Pending, apply Multus by hand from a second terminal, then let the task continue or rerun it. *Undrilled.*
+   **Multus step ([#758](https://github.com/kelchm/home-lab/issues/758), traced, not observed):** nodes register with the `node.multus.io/not-ready` taint and stay `NotReady` until Multus writes `/etc/cni/net.d/00-multus.conf`, so nothing that needs a pod network can start before Multus does. Two things in the repository cover that: `cilium-operator` tolerates the taint, so the Cilium release can finish, and the Helmfile applies `kubernetes/apps/kube-system/multus/app`, the same kustomization Flux owns afterwards, before CoreDNS and waits up to 10 minutes for every node to be `Ready`. *Undrilled.*
+
+   If the task still stalls, find what is `Pending` and which taints remain. `cilium-operator` Pending means the toleration did not take effect. Nodes `NotReady` with the `cilium` pods Running means Multus has not published its config: check the `kube-multus-ds` and `cni-ready-untaint` pods, apply the kustomization by hand if they are missing, then rerun the task. *Undrilled.*
 
    ```sh
-   kustomize build kubernetes/apps/kube-system/multus/app | kubectl apply --server-side -f -
-   kubectl get nodes -o custom-columns='NAME:.metadata.name,TAINTS:.spec.taints[*].key'   # until the multus taint is gone
+   kubectl -n kube-system get pods -o wide
+   kubectl get nodes -o custom-columns='NAME:.metadata.name,READY:.status.conditions[?(@.type=="Ready")].status,TAINTS:.spec.taints[*].key'
+   kubectl apply --server-side --force-conflicts -k kubernetes/apps/kube-system/multus/app
    ```
 5. **Wait for Flux and Longhorn.** *Undrilled.*
 
