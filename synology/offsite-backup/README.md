@@ -25,6 +25,8 @@ Sources:
 
 To add a source, mount another share read-only under `/sources/`. It is picked up on the next run.
 
+Every source shares this one repository, and with it one lock period, one password and one key. Data that needs a different lock period or its own password gets a second repository under its own prefix; repositories do not deduplicate against each other. The lock period for new uploads can be changed with `kopia repository set-parameters --retention-period`, but a lock already applied to an object can only be extended.
+
 ## Credentials
 
 | Secret | On Athena | In 1Password (Private) |
