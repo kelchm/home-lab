@@ -1,6 +1,6 @@
-# v1.5-4bpw-tensorfold-upstream: pinned Mia server/weights profile; SparkRun owns both ranks and lifecycle operations.
+# mia-tensorfold-v1.5-glm53-exl3-mia-1m: pinned Mia server/weights profile; SparkRun owns both ranks and lifecycle operations.
 recipe_version: '2'
-name: glm53-mia-v1.5-4bpw-tensorfold-upstream
+name: mia-tensorfold-v1.5-glm53-exl3-mia-1m
 model: Mia-AiLab/GLM-5.3-Flash-EXL3-4bpw-TensorFold
 model_revision: 078455ffe6472f9a52fbc1139f58b9db2881b25c
 runtime: tensorfold
@@ -8,7 +8,7 @@ container: ghcr.io/miaai-lab/glm-5.3-flash-exl3-2x-dgx-sparks-tensorfold@sha256:
 min_nodes: 2
 max_nodes: 2
 metadata:
-  profile: v1.5-4bpw-tensorfold-upstream
+  profile: mia-tensorfold-v1.5-glm53-exl3-mia-1m
   upstream_release: v1.5
   weights: 4bpw-tensorfold
   serving_profile: upstream

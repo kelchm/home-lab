@@ -1,6 +1,6 @@
-# v1.2-tr3-4bpw-site: pinned Mia server/weights profile; SparkRun owns both ranks and lifecycle operations.
+# mia-tensorfold-v1.2-glm53-exl3-tr3-850k: pinned Mia server/weights profile; SparkRun owns both ranks and lifecycle operations.
 recipe_version: '2'
-name: glm53-mia-v1.2-tr3-4bpw-site
+name: mia-tensorfold-v1.2-glm53-exl3-tr3-850k
 model: Mia-AiLab/GLM-5.3-Flash-EXL3-TR3-4bpw
 model_revision: 25a44fdbf16862a46b7cc9921142c6c81350af2f
 runtime: tensorfold
@@ -8,7 +8,7 @@ container: ghcr.io/miaai-lab/glm-5.3-flash-exl3-2x-dgx-sparks-tensorfold@sha256:
 min_nodes: 2
 max_nodes: 2
 metadata:
-  profile: v1.2-tr3-4bpw-site
+  profile: mia-tensorfold-v1.2-glm53-exl3-tr3-850k
   upstream_release: v1.2
   weights: tr3-4bpw
   serving_profile: site
