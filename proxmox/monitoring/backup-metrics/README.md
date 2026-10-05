@@ -50,7 +50,7 @@ scp proxmox/monitoring/backup-metrics/body.hbs kelchm@pve-sbx-1:/tmp/pve-backup-
 ssh kelchm@pve-sbx-1
 ```
 
-Record the starting state, then create the target and its matcher. Do not print `/etc/pve/priv/notifications.cfg`.
+Record the starting state, then create the target and its matcher. Their names must differ because PVE uses one notification namespace. Do not print `/etc/pve/priv/notifications.cfg`.
 
 ```sh
 sudo pvesh get /cluster/notifications/targets
@@ -63,7 +63,7 @@ sudo pvesh create /cluster/notifications/endpoints/webhook --name pve-backup-met
   --body "$(base64 -w0 /tmp/pve-backup-metrics.hbs)" \
   --comment 'Backup completion samples to the local vmagent'
 
-sudo pvesh create /cluster/notifications/matchers --name pve-backup-metrics --mode all \
+sudo pvesh create /cluster/notifications/matchers --name pve-backup-results --mode all \
   --match-field exact:type=vzdump --match-severity info,error \
   --target pve-backup-metrics \
   --comment 'Every finished vzdump run'
@@ -73,7 +73,7 @@ Check the result: the new target and matcher exist, `mail-to-root` and `default-
 
 ```sh
 sudo pvesh get /cluster/notifications/endpoints/webhook/pve-backup-metrics
-sudo pvesh get /cluster/notifications/matchers/pve-backup-metrics
+sudo pvesh get /cluster/notifications/matchers/pve-backup-results
 sudo pvesh get /cluster/notifications/matchers/default-matcher
 sudo awk '/^webhook: / {selected = ($2 == "pve-backup-metrics")} /^[^[:space:]]/ && !/^webhook: / {selected = 0} selected && $1 == "body" {print $2}' /etc/pve/notifications.cfg | base64 -d | diff - /tmp/pve-backup-metrics.hbs
 ```
@@ -158,7 +158,7 @@ Staleness and a node that never reports are exercised by the rule fixtures and b
 Reverting the rules in Git does not touch PVE, and removing the webhook while the rules are live makes `PVEBackupStale` page 30 hours after the last success. Revert the rules first, then remove the matcher before the target it references:
 
 ```sh
-sudo pvesh delete /cluster/notifications/matchers/pve-backup-metrics
+sudo pvesh delete /cluster/notifications/matchers/pve-backup-results
 sudo pvesh delete /cluster/notifications/endpoints/webhook/pve-backup-metrics
 sudo pvesh get /cluster/notifications/matchers
 ```
