@@ -182,6 +182,9 @@ line "registered members answering without errors: ${etcd_healthy}/${#NODES[@]};
 if (( leader_count > 1 )); then
     fail 'etcd members disagree on the leader' "$etcd_leaders"
 fi
+if (( etcd_healthy != ${#NODES[@]} )); then
+    fail "only ${etcd_healthy} distinct etcd member(s) answered across ${#NODES[@]} nodes"
+fi
 if alarm_out="$(talosctl -n "${IPS[0]}" etcd alarm list 2>&1)"; then
     if [[ -n "$alarm_out" ]]; then
         fail 'etcd has active alarms' "$alarm_out"
@@ -299,10 +302,15 @@ operator_image="$(kubectl -n cnpg-system get deploy -l app.kubernetes.io/name=cl
     -o jsonpath='{.items[0].spec.template.spec.containers[0].image}' 2>/dev/null || echo 'unknown')"
 line "operator image: ${operator_image}"
 line "match the kubectl-cnpg client to that tag before any promotion"
-cnpg_count=0
-if ! cnpg_json="$(kubectl get clusters.postgresql.cnpg.io -A -o json 2>&1)"; then
-    fail 'CloudNativePG cluster query failed, so primary placement is unknown' "$cnpg_json"
-elif cnpg_count="$(jq '.items | length' <<<"$cnpg_json")" && (( cnpg_count == 0 )); then
+cnpg_rows=''
+if ! cnpg_json="$(kubectl get clusters.postgresql.cnpg.io -A -o json)" \
+    || ! cnpg_rows="$(jq -er '.items | arrays | if length == 0 then "none" else .[] | [
+        .metadata.namespace, .metadata.name,
+        (.spec.instances | tostring), ((.status.readyInstances // 0) | tostring),
+        (.status.currentPrimary // "none"), (.status.phase // "unknown")
+    ] | @tsv end' <<<"$cnpg_json")"; then
+    fail 'CloudNativePG cluster query failed, so primary placement is unknown'
+elif [[ "$cnpg_rows" == 'none' ]]; then
     line 'no CloudNativePG clusters found'
 else
     while IFS=$'\t' read -r ns name instances ready primary phase; do
@@ -316,11 +324,7 @@ else
         [[ -n "$marker" && "$instances" == '1' ]] && marker='  <-- SINGLETON primary on candidate'
         line "$(printf '%-14s %-16s instances=%s ready=%s primary=%s on %s (%s)%s' \
             "$ns" "$name" "$instances" "$ready" "$primary" "$primary_node" "$phase" "$marker")"
-    done < <(jq -r '.items[] | [
-        .metadata.namespace, .metadata.name,
-        (.spec.instances | tostring), ((.status.readyInstances // 0) | tostring),
-        (.status.currentPrimary // "none"), (.status.phase // "unknown")
-    ] | @tsv' <<<"$cnpg_json")
+    done <<<"$cnpg_rows"
     if [[ -n "$candidate" ]]; then
         note 'a singleton primary on the candidate needs an explicit availability decision — see references/cnpg-failover.md'
     fi
@@ -331,9 +335,11 @@ fi
 # a stop condition; a suspension you created on purpose must be recorded.
 section "Flux Kustomizations"
 suspended=''
-if ! ks_json="$(kubectl get kustomizations.kustomize.toolkit.fluxcd.io -A -o json 2>&1)"; then
-    fail 'Flux Kustomization query failed, so suspensions are unknown' "$ks_json"
-elif suspended="$(jq -r '.items[] | select(.spec.suspend == true) | "\(.metadata.namespace)/\(.metadata.name)"' <<<"$ks_json")" && [[ -z "$suspended" ]]; then
+if ! ks_json="$(kubectl get kustomizations.kustomize.toolkit.fluxcd.io -A -o json)" \
+    || ! suspended="$(jq -r '.items | arrays | .[] | select(.spec.suspend == true) | "\(.metadata.namespace)/\(.metadata.name)"' <<<"$ks_json")" \
+    || ! jq -e '.items | type == "array" and length > 0' <<<"$ks_json" >/dev/null; then
+    fail 'Flux Kustomization query failed, so suspensions are unknown'
+elif [[ -z "$suspended" ]]; then
     line 'none suspended'
 else
     printf '%s\n' "$suspended" | sed 's/^/  suspended: /'

@@ -16,7 +16,7 @@ This is an operator-led procedure. The scripts collect facts and enforce mechani
 - Use `task talos:upgrade-node IP=<node-ip>` for upgrades. It runs preflight for that node and stops if any gate fails, asks for confirmation, and pins `--reboot-mode=powercycle`; never use Talos's default kexec reboot path on these nodes.
 - Never force a drain. `--force` and `--disable-eviction` bypass Longhorn's drain policy for every workload on the node, not only the one blocking you.
 - Check etcd and Talos health after every node.
-- Require all Longhorn volumes healthy and every instance-manager Running and Ready with `longhorn-system/storage-network`, interface `lhnet1`, and a `10.32.25.x` address before moving to the next node.
+- Require every in-use Longhorn volume attached and healthy, no volume degraded or faulted, and every instance-manager Running and Ready with `longhorn-system/storage-network`, interface `lhnet1`, and a `10.32.25.x` address before moving to the next node.
 - Stop after any failed check. Never continue merely because Kubernetes marks the rebooted node Ready.
 - Keep an out-of-band power path available, especially for `k8s-prod-1`.
 

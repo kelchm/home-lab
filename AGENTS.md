@@ -33,4 +33,4 @@ Before any Talos upgrade or node reboot, load and follow the repository's `talos
 
 Apply configuration with `task talos:apply-node IP=<node-ip>`. It regenerates `talos/clusterconfig/` from the current sources, shows the dry-run diff against the node, and asks before applying. It does not check cluster health: when the dry-run reports that the change needs a reboot, run preflight first.
 
-Operate on one node at a time. Do not continue until etcd has quorum, every Kubernetes node is Ready, every Longhorn volume is healthy, and every Longhorn instance-manager is Running and Ready with its `longhorn-system/storage-network` attachment on `lhnet1`.
+Operate on one node at a time. Do not continue until etcd has quorum, every Kubernetes node is Ready, every in-use Longhorn volume is attached and healthy with none degraded or faulted, and every Longhorn instance-manager is Running and Ready with its `longhorn-system/storage-network` attachment on `lhnet1`.
