@@ -51,9 +51,9 @@ TARGET_REV = "25a44fdbf16862a46b7cc9921142c6c81350af2f"
 DRAFT = "incoai/GLM-5.3-Flash-DFlash2"
 DRAFT_REV = "dc77ff1c99eeb2df044ee3d4f0094eb033fee410"
 MIA_PROFILES = [
-    ("mia-tensorfold-v1.2-glm53-exl3-tr3-850k", TARGET, TARGET_REV, "850000"),
-    ("mia-tensorfold-v1.5-glm53-exl3-tr3-850k", TARGET, TARGET_REV, "850000"),
-    ("mia-tensorfold-v1.5-glm53-exl3-tensorfold-1m", "Mia-AiLab/GLM-5.3-Flash-EXL3-4bpw-TensorFold",
+    ("mia-tensorfold-v1.2-glm53-exl3-weights-brandon-ctx-850k", TARGET, TARGET_REV, "850000"),
+    ("mia-tensorfold-v1.5-glm53-exl3-weights-brandon-ctx-850k", TARGET, TARGET_REV, "850000"),
+    ("mia-tensorfold-v1.5-glm53-exl3-weights-mia-ctx-1m", "Mia-AiLab/GLM-5.3-Flash-EXL3-4bpw-TensorFold",
      "078455ffe6472f9a52fbc1139f58b9db2881b25c", "1048576"),
 ]
 FABRIC_HEAD = "172.16.21.31"
