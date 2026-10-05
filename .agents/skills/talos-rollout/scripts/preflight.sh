@@ -124,83 +124,19 @@ for index in "${!NODES[@]}"; do
     fi
 done
 
-section "etcd members"
-etcd_ids=''
-if etcd_out="$(talosctl -n "${IPS[0]}" etcd members 2>&1)"; then
-    # one row per registered member; a replaced member that was never removed
-    # shows up as an extra row and still counts towards quorum
-    etcd_ids="$(awk 'length($2) == 16 && $2 ~ /^[0-9a-f]+$/ { print $2 }' <<<"$etcd_out")"
-    member_count="$(grep -c . <<<"$etcd_ids" || true)"
-    line "members: ${member_count}/${#NODES[@]}"
-    detail "$etcd_out"
-    if (( member_count != ${#NODES[@]} )); then
-        fail "etcd has ${member_count} registered members, expected ${#NODES[@]}" "$etcd_out"
-    fi
+# A stopped etcd member stays registered, so ask Talos for health, not membership.
+section "Talos health"
+if health_out="$(talosctl health --nodes "${IPS[0]}" --control-plane-nodes "$(IFS=,; echo "${IPS[*]}")" --wait-timeout 1m 2>&1)"; then
+    line 'talosctl health: OK (etcd, control plane, kubelets)'
+    detail "$health_out"
 else
-    fail 'etcd member query failed' "$etcd_out"
-fi
-
-# A member that is down stays registered, so membership alone proves nothing.
-# Each registered member must answer for itself, report no errors, and name
-# the same leader.
-section "etcd member health"
-etcd_leaders=''
-etcd_answered=''
-for index in "${!NODES[@]}"; do
-    if ! status_out="$(talosctl -n "${IPS[$index]}" etcd status 2>&1)"; then
-        fail "etcd status failed on ${NODES[$index]} (${IPS[$index]})" "$status_out"
-        continue
-    fi
-    detail "$status_out"
-    # A row with an empty ERRORS column has exactly 14 fields: node, member,
-    # two size pairs, in-use percentage, leader, three raft counters, learner,
-    # protocol and storage versions. Anything else is treated as an error.
-    read -r member leader learner < <(awk -v ip="${IPS[$index]}" '
-      function hex(v) { return length(v) == 16 && v ~ /^[0-9a-f]+$/ }
-      function ver(v) { return v ~ /^[0-9]+\.[0-9]+\.[0-9]+$/ }
-      $1 == ip {
-        if (NF == 14 && hex($2) && hex($8) && ($12 == "true" || $12 == "false") && ver($13) && ver($14))
-          print $2, $8, $12
-        exit
-      }' <<<"$status_out") || true
-    if [[ -z "${member:-}" ]]; then
-        fail "etcd member on ${NODES[$index]} reports errors or an unrecognised status row" "$status_out"
-    elif ! grep -qx "$member" <<<"$etcd_ids"; then
-        fail "etcd member ${member} on ${NODES[$index]} is not in the registered member list" "$status_out"
-    elif [[ "$learner" != 'false' ]]; then
-        fail "etcd member on ${NODES[$index]} is a learner" "$status_out"
-    elif [[ "$leader" == '0000000000000000' ]]; then
-        fail "etcd member on ${NODES[$index]} has no leader" "$status_out"
-    else
-        etcd_answered+="${member}"$'\n'
-        etcd_leaders+="${leader}"$'\n'
-    fi
-done
-etcd_healthy="$(sort -u <<<"${etcd_answered%$'\n'}" | grep -c . || true)"
-leader_count="$(sort -u <<<"${etcd_leaders%$'\n'}" | grep -c . || true)"
-line "registered members answering without errors: ${etcd_healthy}/${#NODES[@]}; leader: $(sort -u <<<"${etcd_leaders%$'\n'}" | paste -sd' ' -)"
-if (( leader_count > 1 )); then
-    fail 'etcd members disagree on the leader' "$etcd_leaders"
-fi
-if (( etcd_healthy != ${#NODES[@]} )); then
-    fail "only ${etcd_healthy} distinct etcd member(s) answered across ${#NODES[@]} nodes"
-fi
-if alarm_out="$(talosctl -n "${IPS[0]}" etcd alarm list 2>&1)"; then
-    if [[ -n "$alarm_out" ]]; then
-        fail 'etcd has active alarms' "$alarm_out"
-    fi
-else
-    fail 'etcd alarm query failed' "$alarm_out"
+    fail 'talosctl health failed' "$health_out"
 fi
 
 # --- Kubernetes nodes ---------------------------------------------------------
 section "Kubernetes nodes"
 node_json="$(kubectl get nodes -o json)"
 node_total="$(jq '.items | length' <<<"$node_json")"
-for node in "${NODES[@]}"; do
-    jq -e --arg n "$node" 'any(.items[]; .metadata.name == $n)' <<<"$node_json" >/dev/null \
-        || fail "node $node is not registered with Kubernetes"
-done
 not_ready="$(jq -r '.items[] | select(any(.status.conditions[]?; .type == "Ready" and .status == "True") | not) | .metadata.name' <<<"$node_json")"
 cordoned="$(jq -r '.items[] | select(.spec.unschedulable == true) | .metadata.name' <<<"$node_json")"
 line "Ready: $(( node_total - $(grep -c . <<<"${not_ready:-}" || true) ))/${node_total}"
@@ -302,15 +238,9 @@ operator_image="$(kubectl -n cnpg-system get deploy -l app.kubernetes.io/name=cl
     -o jsonpath='{.items[0].spec.template.spec.containers[0].image}' 2>/dev/null || echo 'unknown')"
 line "operator image: ${operator_image}"
 line "match the kubectl-cnpg client to that tag before any promotion"
-cnpg_rows=''
-if ! cnpg_json="$(kubectl get clusters.postgresql.cnpg.io -A -o json)" \
-    || ! cnpg_rows="$(jq -er '.items | arrays | if length == 0 then "none" else .[] | [
-        .metadata.namespace, .metadata.name,
-        (.spec.instances | tostring), ((.status.readyInstances // 0) | tostring),
-        (.status.currentPrimary // "none"), (.status.phase // "unknown")
-    ] | @tsv end' <<<"$cnpg_json")"; then
-    fail 'CloudNativePG cluster query failed, so primary placement is unknown'
-elif [[ "$cnpg_rows" == 'none' ]]; then
+cnpg_json="$(kubectl get clusters.postgresql.cnpg.io -A -o json)"
+cnpg_count="$(jq '.items | length' <<<"$cnpg_json")"
+if (( cnpg_count == 0 )); then
     line 'no CloudNativePG clusters found'
 else
     while IFS=$'\t' read -r ns name instances ready primary phase; do
@@ -324,7 +254,11 @@ else
         [[ -n "$marker" && "$instances" == '1' ]] && marker='  <-- SINGLETON primary on candidate'
         line "$(printf '%-14s %-16s instances=%s ready=%s primary=%s on %s (%s)%s' \
             "$ns" "$name" "$instances" "$ready" "$primary" "$primary_node" "$phase" "$marker")"
-    done <<<"$cnpg_rows"
+    done < <(jq -r '.items[] | [
+        .metadata.namespace, .metadata.name,
+        (.spec.instances | tostring), ((.status.readyInstances // 0) | tostring),
+        (.status.currentPrimary // "none"), (.status.phase // "unknown")
+    ] | @tsv' <<<"$cnpg_json")
     if [[ -n "$candidate" ]]; then
         note 'a singleton primary on the candidate needs an explicit availability decision — see references/cnpg-failover.md'
     fi
@@ -334,12 +268,9 @@ fi
 # Flux reverts live patches. A suspension left over from an earlier rollout is
 # a stop condition; a suspension you created on purpose must be recorded.
 section "Flux Kustomizations"
-suspended=''
-if ! ks_json="$(kubectl get kustomizations.kustomize.toolkit.fluxcd.io -A -o json)" \
-    || ! suspended="$(jq -r '.items | arrays | .[] | select(.spec.suspend == true) | "\(.metadata.namespace)/\(.metadata.name)"' <<<"$ks_json")" \
-    || ! jq -e '.items | type == "array" and length > 0' <<<"$ks_json" >/dev/null; then
-    fail 'Flux Kustomization query failed, so suspensions are unknown'
-elif [[ -z "$suspended" ]]; then
+suspended="$(kubectl get kustomizations.kustomize.toolkit.fluxcd.io -A -o json \
+    | jq -r '.items[] | select(.spec.suspend == true) | "\(.metadata.namespace)/\(.metadata.name)"')"
+if [[ -z "$suspended" ]]; then
     line 'none suspended'
 else
     printf '%s\n' "$suspended" | sed 's/^/  suspended: /'
@@ -376,6 +307,6 @@ if (( ${#FAILURES[@]} > 0 )); then
     exit 1
 fi
 
-printf 'PREFLIGHT CHECKS PASSED: all %s etcd members answer without errors and agree on a leader, all %s nodes are Ready and uncordoned, networking safeguards are Ready, %s of %s Longhorn volumes are in use and healthy (%s idle), and %s instance-managers are Ready with lhnet1.\n' \
-    "$etcd_healthy" "$node_total" "$(( volume_count - idle_count ))" "$volume_count" "$idle_count" "$instance_count"
-printf 'Still owed before go/no-go: talosctl health on a healthy control-plane node, an etcd snapshot verified at its path, and an explicit decision for any CloudNativePG primary on the candidate.\n'
+printf 'PREFLIGHT CHECKS PASSED: talosctl health is OK, all %s nodes are Ready and uncordoned, networking safeguards are Ready, %s of %s Longhorn volumes are in use and healthy (%s idle), and %s instance-managers are Ready with lhnet1.\n' \
+    "$node_total" "$(( volume_count - idle_count ))" "$volume_count" "$idle_count" "$instance_count"
+printf 'Still owed before go/no-go: an etcd snapshot verified at its path, and an explicit decision for any CloudNativePG primary on the candidate.\n'

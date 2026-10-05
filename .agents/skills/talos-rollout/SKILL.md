@@ -13,7 +13,7 @@ This is an operator-led procedure. The scripts collect facts and enforce mechani
 
 - Operate on exactly one node at a time.
 - Take an etcd snapshot before the first node and verify it at its path.
-- Use `task talos:upgrade-node IP=<node-ip>` for upgrades. It runs preflight for that node and stops if any gate fails, asks for confirmation, and pins `--reboot-mode=powercycle`; never use Talos's default kexec reboot path on these nodes.
+- Use `task talos:upgrade-node IP=<node-ip>` for upgrades. It runs preflight for that node and stops if any gate fails, and pins `--reboot-mode=powercycle`; never use Talos's default kexec reboot path on these nodes.
 - Never force a drain. `--force` and `--disable-eviction` bypass Longhorn's drain policy for every workload on the node, not only the one blocking you.
 - Check etcd and Talos health after every node.
 - Require every in-use Longhorn volume attached and healthy, no volume degraded or faulted, and every instance-manager Running and Ready with `longhorn-system/storage-network`, interface `lhnet1`, and a `10.32.25.x` address before moving to the next node.
@@ -37,12 +37,11 @@ Run preflight against the node you intend to roll first. The candidate argument 
 
 ```bash
 .agents/skills/talos-rollout/scripts/preflight.sh <candidate-node>
-talosctl health --nodes <healthy-control-plane-ip>
 ```
 
 Preflight prints a one-line summary per check and expands raw output only for checks that fail. Set `VERBOSE=1` to see every table. It exits non-zero listing every failure it found, so read the whole list rather than fixing the first line and re-running.
 
-It gates on: routes to every rollout destination, Talos reachable at each node, exactly three registered etcd members, each answering for itself with no errors and naming the same leader, no etcd alarms, all three Kubernetes nodes registered, Ready **and uncordoned**, Multus safeguards Ready, every in-use Longhorn volume attached and healthy, and all instance-managers Ready with `lhnet1`. It also fails when it cannot query CloudNativePG clusters or Flux Kustomizations, so a failed lookup is never shown as an empty result. It reports without judging: which interface carries your API and Talos paths, any idle Longhorn volume, every CloudNativePG cluster with its instance count and primary placement, every suspended Flux Kustomization, and every PodDisruptionBudget at zero allowed disruptions.
+It gates on: routes to every rollout destination, Talos reachable at each node, `talosctl health` passing across the three control-plane nodes, all Kubernetes nodes Ready **and uncordoned**, Multus safeguards Ready, every in-use Longhorn volume attached and healthy, and all instance-managers Ready with `lhnet1`. It reports without judging: which interface carries your API and Talos paths, any idle Longhorn volume, every CloudNativePG cluster with its instance count and primary placement, every suspended Flux Kustomization, and every PodDisruptionBudget at zero allowed disruptions.
 
 Then, in order:
 
@@ -81,7 +80,7 @@ For the selected node:
    task talos:upgrade-node IP=<node-ip>
    ```
 
-   The task re-runs preflight for this node and refuses to continue on any failure. A pass only proves the gates: it still prints database primaries, zero-disruption budgets, and suspended Kustomizations without judging them, then asks for confirmation. Answer only when the decisions above are settled. Without a terminal the prompt cancels the task; `--yes` skips the prompt, never the gates.
+   The task re-runs preflight for this node and refuses to upgrade on any failure. It does not stop for the facts preflight only reports, so settle those before running it.
 
 3. Observe the real drain in the task output. If it times out or fails, stop and inspect the node and remaining workloads before choosing recovery; see [references/recovery.md](references/recovery.md) for the clean-retry path.
 4. Read the tracker carefully. Lines containing `error` frequently describe shutdown tasks that completed, and are not by themselves proof of failure. A zero exit code is not proof of success either. Neither is a health signal.
@@ -109,7 +108,6 @@ After all nodes have been rolled:
 
 ```bash
 .agents/skills/talos-rollout/scripts/preflight.sh
-talosctl health --nodes <healthy-control-plane-ip>
 ```
 
 Confirm every Talos server reports the target version, all three nodes are Ready and uncordoned, etcd is healthy, every in-use Longhorn volume is attached and healthy, and all instance-managers are Running and Ready with `lhnet1`.

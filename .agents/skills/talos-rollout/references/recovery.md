@@ -42,7 +42,7 @@ A failed drain leaves state behind. Retrying on top of it stacks a second attemp
 1. Confirm the node and its workloads are safe to resume scheduling.
 2. `kubectl uncordon <node-name>`, deliberately and explicitly. `preflight.sh` fails on any cordoned node precisely so a forgotten cordon cannot be carried into the next attempt.
 3. Let the workloads that were evicted reschedule, and let Longhorn return to fully healthy. Rebuilds triggered by the partial drain are still in flight.
-4. Re-run the **full** preflight, not a spot check: `preflight.sh <candidate>` plus `talosctl health`. Then make a fresh go/no-go decision.
+4. Re-run the **full** preflight, not a spot check: `preflight.sh <candidate>`. Then make a fresh go/no-go decision.
 
 ## The access path moves
 
