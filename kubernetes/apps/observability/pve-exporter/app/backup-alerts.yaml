@@ -1,0 +1,40 @@
+---
+# These observations come from the host textfile collector, not the API exporter.
+# Host ingestion supplies instance/platform; only backup metrics carry cluster.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: pve-backups
+spec:
+  groups:
+    - name: pve-backups
+      rules:
+        - alert: PVEBackupMetricsUnavailable
+          expr: |
+            (pve_backup_collector_success{job="pve-node", platform="pve", cluster="pve-sbx"} == 0)
+            or (time() - pve_backup_collector_attempt_timestamp_seconds{job="pve-node", platform="pve", cluster="pve-sbx"} > 600)
+            or (up{job="pve-node", platform="pve"} == 1
+                unless on (instance) pve_backup_collector_success{job="pve-node", platform="pve", cluster="pve-sbx"})
+          for: 2m
+          labels:
+            severity: warning
+          annotations:
+            summary: Backup observations are unavailable on {{ $labels.instance }}
+            description: Check the pve-backup-metrics timer, service journal, textfile and backup storage. Missing or invalid observations are not evidence of successful backups.
+        - alert: PVEBackupFailed
+          expr: pve_backup_task_success{job="pve-node", platform="pve", cluster="pve-sbx"} == 0
+          for: 1m
+          labels:
+            severity: warning
+          annotations:
+            summary: Backup scope {{ $labels.scope }} failed on {{ $labels.instance }}
+            description: The latest completed vzdump task for this scope failed. Scope batch means a multi-guest task; a numeric scope is its VMID. Check PVE task history. A later successful task for the same scope clears this condition.
+        - alert: PVEBackupStale
+          expr: |
+            time() - pve_backup_archive_timestamp_seconds{job="pve-node", platform="pve", cluster="pve-sbx"} > 108000
+          for: 10m
+          labels:
+            severity: critical
+          annotations:
+            summary: No recent backup for {{ $labels.id }} on {{ $labels.instance }}
+            description: This persistent guest has no archive in the expected backup storage newer than 30 hours. Zero means no archive was found. Check the backup schedule, coverage and storage. Archive freshness does not prove restorability.

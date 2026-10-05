@@ -1,0 +1,83 @@
+rule_files: [rules.yaml]
+evaluation_interval: 1m
+tests:
+  - name: failure alerts and clears after same-scope success
+    interval: 1m
+    input_series:
+      - series: 'pve_backup_task_success{job="pve-node",platform="pve",cluster="pve-sbx",instance="pve-sbx-1",scope="batch"}'
+        values: '0 0 0 1 1'
+    promql_expr_test:
+      - expr: 'count(ALERTS{alertname="PVEBackupFailed",alertstate="firing"})'
+        eval_time: 2m
+        exp_samples: [{labels: '{}', value: 1}]
+      - expr: 'ALERTS{alertname="PVEBackupFailed",alertstate="firing"}'
+        eval_time: 4m
+        exp_samples: []
+  - name: old archive and no archive both page but fresh archive does not
+    interval: 1m
+    input_series:
+      - series: 'pve_backup_archive_timestamp_seconds{job="pve-node",platform="pve",cluster="pve-sbx",instance="pve-sbx-1",id="qemu/200",storage="backups-pve-sbx"}'
+        values: '0+0x1900'
+      - series: 'pve_backup_archive_timestamp_seconds{job="pve-node",platform="pve",cluster="pve-sbx",instance="pve-sbx-2",id="qemu/101",storage="backups-pve-sbx"}'
+        values: '60+0x1900'
+      - series: 'pve_backup_archive_timestamp_seconds{job="pve-node",platform="pve",cluster="pve-sbx",instance="pve-sbx-3",id="qemu/102",storage="backups-pve-sbx"}'
+        values: '0+60x1900'
+    promql_expr_test:
+      - expr: 'count(ALERTS{alertname="PVEBackupStale",alertstate="firing"})'
+        eval_time: 1812m
+        exp_samples: [{labels: '{}', value: 2}]
+  - name: collector failure preserves stale backup alert
+    interval: 1m
+    input_series:
+      - series: 'pve_backup_collector_success{job="pve-node",platform="pve",cluster="pve-sbx",instance="pve-sbx-1"}'
+        values: '0+0x1900'
+      - series: 'pve_backup_archive_timestamp_seconds{job="pve-node",platform="pve",cluster="pve-sbx",instance="pve-sbx-1",id="qemu/200",storage="backups-pve-sbx"}'
+        values: '0+0x1900'
+    promql_expr_test:
+      - expr: 'count(ALERTS{alertname="PVEBackupMetricsUnavailable",alertstate="firing"})'
+        eval_time: 3m
+        exp_samples: [{labels: '{}', value: 1}]
+      - expr: 'count(ALERTS{alertname="PVEBackupStale",alertstate="firing"})'
+        eval_time: 1812m
+        exp_samples: [{labels: '{}', value: 1}]
+  - name: missing collector and stopped timer are detected on healthy PVE hosts
+    interval: 1m
+    input_series:
+      - series: 'up{job="pve-node",platform="pve",instance="pve-sbx-1"}'
+        values: '1+0x20'
+      - series: 'up{job="pve-node",platform="pve",instance="pve-sbx-2"}'
+        values: '1+0x20'
+      - series: 'pve_backup_collector_success{job="pve-node",platform="pve",cluster="pve-sbx",instance="pve-sbx-2"}'
+        values: '1+0x20'
+      - series: 'pve_backup_collector_attempt_timestamp_seconds{job="pve-node",platform="pve",cluster="pve-sbx",instance="pve-sbx-2"}'
+        values: '0+0x20'
+    promql_expr_test:
+      - expr: 'count(ALERTS{alertname="PVEBackupMetricsUnavailable",alertstate="firing"})'
+        eval_time: 3m
+        exp_samples: [{labels: '{}', value: 1}]
+      - expr: 'count(ALERTS{alertname="PVEBackupMetricsUnavailable",alertstate="firing"})'
+        eval_time: 13m
+        exp_samples: [{labels: '{}', value: 2}]
+  - name: healthy collectors and unrelated host or Kubernetes series do not alert
+    interval: 1m
+    input_series:
+      - series: 'up{job="pve-node",platform="pve",instance="pve-sbx-1"}'
+        values: '1+0x1900'
+      - series: 'pve_backup_collector_success{job="pve-node",platform="pve",cluster="pve-sbx",instance="pve-sbx-1"}'
+        values: '1+0x1900'
+      - series: 'pve_backup_collector_attempt_timestamp_seconds{job="pve-node",platform="pve",cluster="pve-sbx",instance="pve-sbx-1"}'
+        values: '0+60x1900'
+      - series: 'pve_backup_task_success{job="pve-node",platform="pve",cluster="pve-sbx",instance="pve-sbx-1",scope="batch"}'
+        values: '1+0x1900'
+      - series: 'pve_backup_archive_timestamp_seconds{job="pve-node",platform="pve",cluster="pve-sbx",instance="pve-sbx-1",id="qemu/200"}'
+        values: '0+60x1900'
+      - series: 'up{job="spark-node",platform="spark",instance="spark-1"}'
+        values: '1+0x1900'
+      - series: 'pve_backup_task_success{job="pve-node",platform="pve",cluster="k8s-prod",instance="other",scope="batch"}'
+        values: '0+0x1900'
+      - series: 'pve_backup_archive_timestamp_seconds{job="node-exporter",platform="pve",cluster="pve-sbx",instance="other",id="qemu/1"}'
+        values: '0+0x1900'
+    promql_expr_test:
+      - expr: 'ALERTS{alertstate="firing"}'
+        eval_time: 1812m
+        exp_samples: []

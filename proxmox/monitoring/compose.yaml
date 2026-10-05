@@ -23,6 +23,7 @@ services:
     command:
       - --web.listen-address=127.0.0.1:9100
       - --path.rootfs=/host
+      - --collector.textfile.directory=/host/var/lib/node_exporter/textfile_collector
     volumes:
       - /:/host:ro,rslave
     mem_limit: 128m

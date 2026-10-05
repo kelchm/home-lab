@@ -96,6 +96,7 @@ jobs:
               - 'sparks/monitoring/**'
               - 'sparks/platform/**'
               - 'scripts/ci/validate-host-monitoring.sh'
+              - 'scripts/ci/validate-pve-backups.sh'
             synology:
               - '.github/workflows/repository-validation.yaml'
               - '.mise.toml'
@@ -232,6 +233,10 @@ jobs:
         uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5.0.1
         with:
           install_args: "aqua:fluxcd/flux2 aqua:yannh/kubeconform aqua:mikefarah/yq aqua:prometheus/prometheus"
+
+      - name: Validate PVE backup collector and alerts
+        if: needs.pre-job.outputs.kubernetes_changed == 'true'
+        run: scripts/ci/validate-pve-backups.sh
 
       - name: Validate vlagent configuration and pipeline alerts
         if: needs.pre-job.outputs.kubernetes_changed == 'true'
@@ -406,17 +411,18 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install yq
+      - name: Install host monitoring validation tools
         if: needs.pre-job.outputs.hosts_changed == 'true'
         uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5.0.1
         with:
-          install_args: "aqua:mikefarah/yq"
+          install_args: "aqua:mikefarah/yq aqua:prometheus/prometheus"
 
       - name: Validate Compose projects and scrape configurations
         if: needs.pre-job.outputs.hosts_changed == 'true'
         run: |
           docker compose version
           scripts/ci/validate-host-monitoring.sh
+          scripts/ci/validate-pve-backups.sh
 
       - name: No host monitoring changes
         if: needs.pre-job.outputs.hosts_changed != 'true'

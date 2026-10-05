@@ -1,0 +1,10 @@
+[Unit]
+Description=Read-only PVE backup metrics for node-exporter
+After=pve-cluster.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/pve-backup-metrics
+TimeoutStartSec=120
+UMask=0022
+Nice=10

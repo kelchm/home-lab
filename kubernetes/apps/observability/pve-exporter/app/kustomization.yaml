@@ -7,3 +7,4 @@ resources:
   - ./networkpolicy.yaml
   - ./scrape.yaml
   - ./alerts.yaml
+  - ./backup-alerts.yaml
