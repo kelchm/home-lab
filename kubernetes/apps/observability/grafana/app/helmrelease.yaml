@@ -111,6 +111,16 @@ spec:
         # Chart auto-grants the sidecar a ClusterRole when set to ALL.
         searchNamespace: ALL
         folderAnnotation: grafana_folder
+        # Native sidecar: Grafana deletes provisioned dashboards whose files are
+        # missing, so the files must be written before it starts.
+        initDashboards: true
+        restartPolicy: Always
+        startupProbe:
+          httpGet:
+            path: /healthz
+            port: 8083
+          periodSeconds: 2
+          failureThreshold: 150
         provider:
           # Renaming the provider deletes and recreates every provisioned dashboard.
           name: dashboards
