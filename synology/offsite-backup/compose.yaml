@@ -1,0 +1,60 @@
+# Daily Kopia snapshot of Athena's backup shares to an Object Lock bucket.
+# README.md covers the repository, credentials, bootstrap and restore.
+name: offsite-backup
+
+services:
+  kopia:
+    image: docker.io/kopia/kopia:0.23.1@sha256:89fd95ee2942880ca00eae964266958a394421ddbdf69bca62e38afc55f5900e
+    # Root with one capability: the shares are root-only, and the mounts are read-only.
+    user: "0:0"
+    read_only: true
+    entrypoint: ["/bin/bash", "-c"]
+    # Compose interpolates single-dollar variables, so shell variables are written with two.
+    command:
+      - |
+        set -o errexit -o nounset -o pipefail
+        kopia repository connect s3 \
+          --bucket "$$B2_BUCKET" --endpoint "$$B2_ENDPOINT" --prefix kopia/ \
+          --override-hostname athena --override-username offsite
+        while true; do
+          now="$$(date -u +%s)"
+          next="$$(date -u -d "today $$RUN_AT_UTC" +%s)"
+          if (( next <= now )); then next="$$(date -u -d "tomorrow $$RUN_AT_UTC" +%s)"; fi
+          sleep "$$(( next - now ))"
+          status=0
+          kopia snapshot create /sources/* || status=$$?
+          kopia maintenance run --full || status=$$?
+          curl --fail --silent --show-error --max-time 10 --retry 5 --output /dev/null \
+            "$$HC_PING_URL/$$status" || true
+        done
+    # AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, KOPIA_PASSWORD, HC_PING_URL
+    env_file:
+      - secrets.sops.env
+    environment:
+      TZ: UTC
+      B2_BUCKET: athena-home-kelch-io
+      B2_ENDPOINT: s3.us-west-000.backblazeb2.com
+      # Longhorn's 07:00 and 08:00 UTC jobs finish within minutes.
+      RUN_AT_UTC: "10:00"
+    volumes:
+      - /volume1/backups-k8s-prod/longhorn:/sources/longhorn:ro
+      - /volume1/docker/offsite-backup/cache:/app/cache
+      - /volume1/docker/offsite-backup/logs:/app/logs
+    tmpfs:
+      # The repository connection holds the bucket key, so it is rebuilt at start and never written to disk.
+      - /app/config:mode=0700
+      - /tmp
+    cap_drop:
+      - ALL
+    cap_add:
+      - DAC_READ_SEARCH
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "/bin/kopia", "repository", "status"]
+      interval: 5m
+      timeout: 30s
+      retries: 3
+      start_period: 1m
+    stop_grace_period: 2m
+    restart: unless-stopped

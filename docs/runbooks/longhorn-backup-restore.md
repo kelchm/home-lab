@@ -9,7 +9,7 @@ Runbook for the Longhorn-native backup MVP: scheduled backups to Synology NFS, r
 ## What this does NOT protect
 
 - **Kubernetes manifests, Secrets, CRDs, HelmReleases.** Recovery rebuilds them from this repository with `task bootstrap:talos` and `task bootstrap:apps`; see [Disaster recovery](#disaster-recovery-rebuild-the-cluster-and-restore-data).
-- **The sops `age.key`.** Without it, sops-encrypted Secrets in this repo cannot be decrypted. Stored in 1Password (`sops age key — home-lab`); a copy on a separate device is the recovery path. **If the 1Password entry and your laptop both burn, the cluster's secret state is lost.**
+- **The sops `age.key`.** Without it, sops-encrypted Secrets in this repo cannot be decrypted. Stored in 1Password (`k8s-prod-sops-age-key`); a copy on a separate device is the recovery path. **If the 1Password entry and your laptop both burn, the cluster's secret state is lost.**
 - **Anything not in git and not Longhorn-resident.** Manually-applied resources, drift in cluster-scoped Longhorn settings, cert-manager Order/Challenge state, etc.
 - **NFS-backed PVs (csi-driver-nfs).** Bulk media on the Synology is the Synology's backup problem, not Longhorn's.
 
@@ -217,7 +217,7 @@ Confirm all of these before touching a node.
 
 | Need | Where it comes from |
 |---|---|
-| `age.key` | 1Password item `sops age key — home-lab`. Save it as `age.key` in the repository root. It decrypts `talos/talsecret.sops.yaml` and every Secret in the repository. Without it nothing below works and every secret must be reissued. |
+| `age.key` | 1Password item `k8s-prod-sops-age-key`. Save it as `age.key` in the repository root. It decrypts `talos/talsecret.sops.yaml` and every Secret in the repository. Without it nothing below works and every secret must be reissued. |
 | This repository | `https://github.com/kelchm/home-lab`. Flux syncs `main` over anonymous HTTPS, so GitHub must be reachable and the repository public. |
 | Tools and environment | `mise trust && mise install` installs the versions pinned in `.mise.toml`. Work in a shell with mise activated, or prefix each command with `mise exec --`: `.mise.toml` is what points `sops`, `kubectl`, `flux` and `talosctl` at `age.key`, `kubeconfig` and `talos/clusterconfig/talosconfig` in this repository. On macOS also `brew install bash`; `task bootstrap:apps` refuses to run without it. |
 | Network | VLAN 30 on the node 1GbE ports, VLAN 25 on the 2.5GbE ports, and UniFi BGP, as in [architecture.md](../architecture.md#bootstrap-sequence) step 1. Node addresses and the API VIP `10.32.30.8` are static in `talos/talconfig.yaml`. |

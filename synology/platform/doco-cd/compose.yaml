@@ -9,6 +9,8 @@ services:
       # Athena's 4.4 kernel predates ip_unprivileged_port_start, so cap_drop ALL cannot bind :80.
       HTTP_PORT: "8080"
       DEPLOY_CONFIG_BASE_DIR: synology
+      # NAS-scoped age key for synology/**/*.sops.env; the cluster key never comes here.
+      SOPS_AGE_KEY_FILE: /run/secrets/sops_age_key
       POLL_CONFIG: |
         - url: https://github.com/kelchm/home-lab.git
           reference: main
@@ -16,6 +18,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /volume1/docker/doco-cd/data:/data
+      - /volume1/docker/doco-cd/sops_age_key:/run/secrets/sops_age_key:ro
     cap_drop:
       - ALL
     healthcheck:

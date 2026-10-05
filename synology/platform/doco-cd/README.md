@@ -13,10 +13,24 @@ State as of 2026-09-26: running on Athena, and acceptance checks 1–6 below hav
 | Inbound endpoints | None published. The health endpoint listens on container port 8080; the webhook listener and REST API stay disabled because no secret is set. |
 | State | `/volume1/docker/doco-cd/data`: a bare mirror of the repository and a read-only export per deployed commit |
 | Docker access | `/var/run/docker.sock` |
+| Secrets | `SOPS_AGE_KEY_FILE` points at the NAS-scoped age key, mounted read-only from `/volume1/docker/doco-cd/sops_age_key` |
 
 Docker socket access is root-equivalent on Athena. Anyone who can merge to `main` can run arbitrary containers on the NAS, which is the same trust boundary Flux has for the cluster.
 
 No workload data lives under the state directory. Only one-shot `publish` services mount files from its commit exports, and doco-cd's garbage collector keeps every export that a deployed container references.
+
+## NAS age key
+
+doco-cd decrypts `synology/**/*.sops.env` with an age key that exists only for Athena. The private key is in 1Password as `athena-doco-cd-sops-age-key`; its recipient is the `synology/` rule in [`.sops.yaml`](../../../.sops.yaml). Install it before applying a definition that mounts it, because DSM's Docker refuses to start a container whose bind-mount source is missing:
+
+```sh
+op read 'op://Private/athena-doco-cd-sops-age-key/password' | ssh kelchm@10.32.20.5 '
+  sudo install -m 0400 -o root -g root /dev/stdin /volume1/docker/doco-cd/sops_age_key
+  sudo ls -l /volume1/docker/doco-cd/sops_age_key
+'
+```
+
+Then run the apply below.
 
 ## Bootstrap or upgrade
 

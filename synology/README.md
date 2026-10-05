@@ -8,6 +8,7 @@ Compose projects that run directly on the Synology NAS (`Athena`), outside Kuber
 | [`doco-cd-canary`](doco-cd-canary/) | Disposable canary for the deployer's acceptance checks | doco-cd |
 | [`netbootxyz`](netbootxyz/) | PXE menus and local boot assets for lab hosts | doco-cd |
 | [`modelkeep`](modelkeep/) | Hugging Face pull-through mirror for LAN clients | doco-cd |
+| [`offsite-backup`](offsite-backup/) | Daily Kopia snapshot of the backup shares to an Object Lock bucket | doco-cd |
 
 doco-cd has run on Athena since 2026-09-26; the remaining acceptance checks are tracked in [home-lab#379](https://github.com/kelchm/home-lab/issues/379). A project that doco-cd does not deploy must still have its running Compose definition match its directory, and any out-of-band DSM edit must be brought back to Git.
 
@@ -36,7 +37,7 @@ The last rule exists because doco-cd deploys from a read-only export of each com
 - Runtime data uses absolute host paths: `/volume1/docker/<project>/` for small state, or a dedicated shared folder for bulk data.
 - Git-owned files such as configuration or menus reach a long-running service through a one-shot `publish` service that copies them into the runtime path after the service is healthy. No service depends on the publisher, so doco-cd needs the one-shot label to accept its exit instead of failing the deployment. The [canary](doco-cd-canary/compose.yaml) is the reference.
 
-Also check in review: bind published ports to a specific Athena address, as `netbootxyz` does. No project has secrets yet; the first one that needs them adds a NAS-scoped age recipient to `.sops.yaml` and gives only that key to doco-cd, as described in the [NAS workloads plan](../docs/plans/20260620-nas-out-of-cluster-workloads.md#secrets--nas-scoped-age-recipient-the-one-deliberate-divergence). The cluster key never goes to the NAS.
+Also check in review: bind published ports to a specific Athena address, as `netbootxyz` does. Secrets are dotenv files named `*.sops.env`, encrypted to the NAS-scoped age recipient in [`.sops.yaml`](../.sops.yaml) and referenced with `env_file`; doco-cd decrypts them at deploy time with the [key it holds](platform/doco-cd/README.md#nas-age-key). The cluster key never goes to the NAS, and the NAS key cannot read cluster or Talos secrets.
 
 ## Add a project
 
