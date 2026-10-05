@@ -19,6 +19,7 @@ area/network:
   - changed-files:
       - any-glob-to-any-file:
           - network/**
+          - kubernetes/apps/network/**
 area/proxmox:
   - changed-files:
       - any-glob-to-any-file:
@@ -49,3 +50,27 @@ area/tooling:
           - Taskfile.yaml
           - scripts/**
           - tools/**
+area/ai:
+  - changed-files:
+      - any-glob-to-any-file:
+          - kubernetes/apps/ai/**
+          - sparks/inference/**
+area/identity:
+  - changed-files:
+      - any-glob-to-any-file:
+          - kubernetes/apps/identity/**
+area/observability:
+  - changed-files:
+      - any-glob-to-any-file:
+          - kubernetes/apps/observability/**
+          - proxmox/monitoring/**
+          - sparks/monitoring/**
+area/storage:
+  - changed-files:
+      - any-glob-to-any-file:
+          - kubernetes/apps/longhorn-system/**
+          - kubernetes/apps/*/storage/**
+area/unifi:
+  - changed-files:
+      - any-glob-to-any-file:
+          - network/unifi/**

@@ -99,4 +99,4 @@ Complete snapshots were run only at small scale: MatrixHub with a nine-file tiny
 - Fetching on a cold request at a realistic file size in a custom gateway or replacement. Earlier trials included multi-gigabyte cold requests from the SDK and smaller GGUF requests from llama.cpp, with the mixed results above; the `hf-archive` gateway saw only a 720,896-byte file on loopback.
 - Real gated or private workflows, with qualified access control on cached reads. An earlier synthetic private-authorization fault probe did run, but no genuine gated or private model or full read boundary was qualified.
 
-Existing Spark and Vonk cache contents stay as they are. Nothing evaluated here is qualified as their sole copy.
+Existing Spark cache contents stay as they are. Nothing evaluated here is qualified as their sole copy.

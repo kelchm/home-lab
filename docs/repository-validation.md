@@ -25,7 +25,13 @@ preserved when outputs are added or refactored.
 
 ## Repository configuration checks
 
-The Repository Configuration Validation job runs on every pull request and push to `main`, independently of changed-file filtering. It uses actionlint and ShellCheck pinned in `.mise.toml` to check all GitHub workflows, then invokes `renovate-config-validator --no-global .renovaterc.json5` from a digest-pinned Renovate image to validate repository configuration. Either failure fails the job and the aggregate `Validation Success` check. Label dry-run and deletion checks remain deferred under [#657](https://github.com/kelchm/home-lab/issues/657) until [#742](https://github.com/kelchm/home-lab/pull/742) merges.
+The Repository Configuration Validation job runs on every pull request and push to `main`, independently of changed-file filtering. It uses actionlint and ShellCheck pinned in `.mise.toml` to check all GitHub workflows, then invokes `renovate-config-validator --no-global .renovaterc.json5` from a digest-pinned Renovate image to validate repository configuration. Either failure fails the job and the aggregate `Validation Success` check.
+
+## Label checks
+
+Label Catalog Validation runs the pinned label-sync action in read-only dry-run mode when label configuration or its workflows change on a PR, and on every push to `main`. It parses the catalog and prints planned label changes in the job log. Errors reported by the action fail `Validation Success`; planned deletions or merges are visible but do not themselves fail the dry run. The separate Label Sync workflow applies catalog changes after merge.
+
+Labels are coarse filters. Existing labels and mappings stay in place; the added AI, identity, observability, storage, and UniFi areas follow broad directory paths. Additional scope labels are optional when useful. Do not add individual-file exceptions to classify everything a change touches.
 
 ## Relationship to Flux
 
