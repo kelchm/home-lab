@@ -72,4 +72,62 @@ cp "${TEST_DIR}/valid.env" "${FIXTURE}"
 printf 'MALFORMED=ENC[AES256_GCM,data:YQ==,iv:YQ==,tag:YQ==,type:str]\n' >> "${FIXTURE}"
 expect_failure 'malformed ciphertext' 'dotenv value is not encrypted'
 
+cp "${TEST_DIR}/valid.env" "${FIXTURE}"
+printf '#OLD_PASSWORD=throwaway-plaintext\n' >> "${FIXTURE}"
+expect_failure 'plaintext comment' 'dotenv comment is not encrypted'
+
+cp "${TEST_DIR}/valid.env" "${FIXTURE}"
+printf '#ENC[AES256_GCM,data:YQ==,iv:YQ==,tag:YQ==,type:comment]\n' >> "${FIXTURE}"
+expect_failure 'malformed encrypted comment' 'dotenv comment is not encrypted'
+
+printf 'TOKEN=throwaway\nEMPTY=\n' > "${TEST_DIR}/empty.env"
+sops encrypt --filename-override "${FIXTURE}" --output "${FIXTURE}" "${TEST_DIR}/empty.env"
+expect_failure 'SOPS empty value' 'empty dotenv values are not supported'
+
+# A real age file with a second recipient must not fit one metadata entry.
+printf '%032d' 0 | age --encrypt --armor --recipient "${recipient}" --recipient "${wrong_recipient}" > "${TEST_DIR}/extra-recipient.age"
+
+function edit_envelope() {
+    python3 - "${TEST_DIR}" "$1" <<'PYTHON'
+import base64
+from pathlib import Path
+import sys
+
+root, mode = Path(sys.argv[1]), sys.argv[2]
+lines = (root / "valid.env").read_text().split("\n")
+for index, line in enumerate(lines):
+    if not line.startswith("sops_age__list_0__map_enc="):
+        continue
+    envelope = line.partition("=")[2].replace("\\n", "\n")
+    armor = envelope.split("\n")[1:-2]
+    raw = base64.b64decode("".join(armor))
+    if mode == "plaintext":
+        body = "throwaway plaintext"
+    elif mode == "empty":
+        body = ""
+    else:
+        if mode == "base64-plaintext":
+            raw = b"throwaway plaintext"
+        elif mode == "wrong-stanza":
+            raw = raw.replace(b"-> X25519 ", b"-> ssh-ed25519 ", 1)
+        elif mode == "truncated-payload":
+            raw = raw[:-1]
+        elif mode == "extra-recipient":
+            envelope = (root / "extra-recipient.age").read_text()
+            lines[index] = "sops_age__list_0__map_enc=" + envelope.replace("\n", "\\n")
+            break
+        encoded = base64.b64encode(raw).decode()
+        body = "\n".join(encoded[i:i+64] for i in range(0, len(encoded), 64))
+    envelope = "-----BEGIN AGE ENCRYPTED FILE-----\n" + body + "\n-----END AGE ENCRYPTED FILE-----\n"
+    lines[index] = "sops_age__list_0__map_enc=" + envelope.replace("\n", "\\n")
+    break
+(root / "synology/app/secrets.sops.env").write_text("\n".join(lines))
+PYTHON
+}
+
+for mode in plaintext empty base64-plaintext wrong-stanza truncated-payload extra-recipient; do
+    edit_envelope "${mode}"
+    expect_failure "age envelope ${mode}" 'invalid age encrypted-key envelope'
+done
+
 echo 'SOPS validator regression tests passed.'

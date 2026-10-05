@@ -33,33 +33,72 @@ if rule is None or not rule.get("age"):
 if set(rule) - {"path_regex", "age"}:
     fail("unsupported dotenv creation rule; expected an age-only rule")
 expected = sorted(r.strip() for r in rule["age"].split(",") if r.strip())
+ciphertext = re.compile(
+    r"ENC\[AES256_GCM,data:([A-Za-z0-9+/=]+),iv:([A-Za-z0-9+/=]+),"
+    r"tag:([A-Za-z0-9+/=]+),type:(str|comment)\]")
+
+def encrypted(value, datatype="str"):
+    match = ciphertext.fullmatch(value)
+    if not match or match[4] != datatype:
+        return False
+    try:
+        data, iv, tag = (base64.b64decode(v, validate=True) for v in match.groups()[:3])
+        return bool(data) and len(iv) == 32 and len(tag) == 16
+    except binascii.Error:
+        return False
+
+# Every age metadata entry wraps one SOPS data key for one X25519 recipient.
+# Validate the public framing only: no private key or decryption is involved.
+def age_envelope(value):
+    lines = value.split("\n")
+    if (len(lines) < 4 or lines[0] != "-----BEGIN AGE ENCRYPTED FILE-----"
+            or lines[-2:] != ["-----END AGE ENCRYPTED FILE-----", ""]):
+        return False
+    armor = lines[1:-2]
+    if (not armor or any(len(line) != 64 for line in armor[:-1])
+            or not 1 <= len(armor[-1]) <= 64):
+        return False
+    try:
+        encoded = "".join(armor).encode("ascii")
+        decoded = base64.b64decode(encoded, validate=True)
+        if base64.b64encode(decoded) != encoded:
+            return False
+        intro, stanza, body, mac, payload = decoded.split(b"\n", 4)
+        if intro != b"age-encryption.org/v1" or len(payload) != 64:
+            return False
+        if not stanza.startswith(b"-> X25519 ") or not mac.startswith(b"--- "):
+            return False
+        # Ephemeral public key, wrapped file key, and header MAC are each 32 bytes.
+        for token in (stanza[len(b"-> X25519 "):], body, mac[len(b"--- "):]):
+            if not re.fullmatch(rb"[A-Za-z0-9+/]{43}", token):
+                return False
+            raw = base64.b64decode(token + b"=", validate=True)
+            if len(raw) != 32 or base64.b64encode(raw).rstrip(b"=") != token:
+                return False
+        return True
+    except (ValueError, UnicodeError):
+        return False
+
 fields = {}
-with open(path, encoding="utf-8") as stream:
+with open(path, encoding="utf-8", newline="") as stream:
     for line in stream.read().split("\n"):
-        if not line or line.startswith("#"):
+        if not line:
+            continue
+        if line.startswith("#"):
+            comment = line[1:].replace("\\n", "\n")
+            if comment and not encrypted(comment, "comment"):
+                fail("dotenv comment is not encrypted")
             continue
         key, separator, value = line.partition("=")
         if not separator or not key or key in fields:
             fail("invalid or duplicate dotenv assignment")
         fields[key] = value.replace("\\n", "\n")
 
-ciphertext = re.compile(
-    r"ENC\[AES256_GCM,data:([A-Za-z0-9+/=]+),iv:([A-Za-z0-9+/=]+),"
-    r"tag:([A-Za-z0-9+/=]+),type:str\]")
-
-def encrypted(value):
-    match = ciphertext.fullmatch(value)
-    if not match:
-        return False
-    try:
-        data, iv, tag = (base64.b64decode(v, validate=True) for v in match.groups())
-        return bool(data) and len(iv) == 32 and len(tag) == 16
-    except binascii.Error:
-        return False
-
 recipients = []
 for key, value in fields.items():
     if not key.startswith("sops_"):
+        if not value:
+            fail("empty dotenv values are not supported; SOPS leaves them unencrypted")
         if not encrypted(value):
             fail("dotenv value is not encrypted")
         continue
@@ -68,9 +107,8 @@ for key, value in fields.items():
         if match[2] == "recipient":
             recipients.append(value)
             envelope = fields.get(f"sops_age__list_{match[1]}__map_enc", "")
-            if not (envelope.startswith("-----BEGIN AGE ENCRYPTED FILE-----\n")
-                    and envelope.endswith("\n-----END AGE ENCRYPTED FILE-----\n")):
-                fail("missing age encrypted-key envelope")
+            if not age_envelope(envelope):
+                fail("invalid age encrypted-key envelope")
         elif f"sops_age__list_{match[1]}__map_recipient" not in fields:
             fail("age encrypted-key envelope has no recipient")
         continue
