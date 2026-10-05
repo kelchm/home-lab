@@ -195,7 +195,7 @@ If the data looks right: either swap the workload's PVC reference to the restore
 
 Use this when all three nodes are lost or wiped and the NAS backup share is intact. It rebuilds Talos and Flux from this repository, then restores volume data from the Longhorn backups.
 
-**If the NAS is also lost, stop at step 5.** No copy of the Longhorn backups exists outside the NAS ([#297](https://github.com/kelchm/home-lab/issues/297)). The cluster comes back with empty volumes, and the media and manuals shares are gone with the NAS.
+**If the NAS is also lost,** the Longhorn backup store has an off-site copy in Backblaze B2, taken daily at 10:00 UTC and up to about 27 hours old. Restore it first by following [Off-site backup from Athena](../../synology/offsite-backup/README.md#restore), serve the restored store over NFS, and use that as the backup target in the steps below. One volume has been restored this way; a full restore has not. The media and manuals shares are not in the off-site copy and are gone with the NAS.
 
 ### What has been exercised
 
