@@ -17,7 +17,7 @@ State as of 2026-09-26: running on Athena, and acceptance checks 1–6 below hav
 
 Docker socket access is root-equivalent on Athena. Anyone who can merge to `main` can run arbitrary containers on the NAS, which is the same trust boundary Flux has for the cluster.
 
-No workload data lives under the state directory. Only one-shot `publish` services mount files from its commit exports, and doco-cd's garbage collector keeps every export that a deployed container references.
+The state directory is root-only (`0700`): doco-cd decrypts each project's `*.sops.env` in place inside the commit export, and leaves it world-readable. No workload data lives under the state directory. Only one-shot `publish` services mount files from its commit exports, and doco-cd's garbage collector keeps every export that a deployed container references.
 
 ## NAS age key
 
@@ -37,7 +37,7 @@ Then run the apply below.
 Apply from a checkout of `main`, so the running definition matches Git:
 
 ```sh
-ssh kelchm@10.32.20.5 'sudo mkdir -p /volume1/docker/doco-cd/data'
+ssh kelchm@10.32.20.5 'sudo install -d -m 0700 -o root -g root /volume1/docker/doco-cd/data'
 rsync -av synology/platform/doco-cd/compose.yaml \
   kelchm@10.32.20.5:/volume1/docker/doco-cd/compose.yaml
 ssh kelchm@10.32.20.5 '

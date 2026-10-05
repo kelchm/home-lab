@@ -13,7 +13,7 @@ State as of 2026-10-05: the bucket, key and repository exist and are empty. The 
 | Lock | Compliance mode, 30 days, renewed by daily full maintenance while data is still referenced |
 | Bucket lifecycle | Hidden and superseded versions are removed 30 days later, once unlocked |
 | Snapshots kept | 14 daily, 4 weekly, 3 latest (repository global policy) |
-| Schedule | 10:00 UTC daily: snapshot every directory under `/sources`, full maintenance, then ping |
+| Schedule | 10:00 UTC daily: start ping, snapshot every directory under `/sources`, full maintenance, then a ping with the exit status |
 | Dead-man check | healthchecks.io `athena-offsite-backup`, cron `0 10 * * *` UTC, 3 hours grace, Pushover and email |
 | Runtime state | `/volume1/docker/offsite-backup/{cache,logs}`; disposable |
 
