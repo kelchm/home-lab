@@ -111,7 +111,7 @@ A first attempt through a second Longhorn backup target on `k8s-prod` restored f
 
 | | |
 |---|---|
-| Data age (RPO) | Up to about 27 hours: Longhorn backs up at 07:00 UTC and this job uploads at 10:00 UTC |
+| Data age (RPO) | About 27 hours when the daily run succeeds: Longhorn backs up at 07:00 UTC and this job starts at 10:00 UTC, so just before a run completes the newest off-site backup is the previous day's. Each failed or unfinished run adds a day; the dead-man check reports those |
 | Time to restore (RTO) | Not measured for the full store. One 70 MB volume directory took 17 seconds; 90 GB depends on the downlink |
 | History | 14 daily and 4 weekly snapshots of the store, each holding Longhorn's own 7 daily and 4 weekly backups |
 | Drill cadence | None fixed. Repeat the drill above after changing the Kopia version, the repository layout or the provider |
