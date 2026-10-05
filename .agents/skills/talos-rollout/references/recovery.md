@@ -4,7 +4,7 @@
 
 `talosctl upgrade` streams task events while it stops the node. **Lines containing `error` routinely describe shutdown tasks that completed.** Services being torn down report their teardown as an error condition, and the tracker prints it verbatim. The word `error` in that stream is not by itself evidence that the upgrade failed, and treating it as one leads to power-cycling a node that was shutting down normally.
 
-The inverse is also true: the command exiting 0 does not mean the node came back. It means the upgrade was accepted and the node began the sequence.
+The inverse is also true: the command exiting 0 does not prove the node came back with storage and the cluster healthy.
 
 Neither the tracker output nor the exit code is a health signal. `verify-node.sh` is.
 
@@ -29,7 +29,7 @@ Only when ports are unreachable, the Talos API does not answer, Kubernetes sees 
 
 ## Drain is blocked
 
-Talos cordons the node before draining it. If the drain fails, the node stays cordoned even though no reboot occurred — the cluster is now running with one node unschedulable and no upgrade to show for it.
+`talosctl upgrade` installs the new image, then cordons and drains the node, then reboots it. If the drain fails, no reboot occurs but the node stays cordoned and the new image stays installed: the node will boot it at its next reboot, whatever causes that.
 
 1. Inspect `.spec.unschedulable` and what is still on the node. Identify whether the blocker is an operator-managed singleton, a database primary, or an access-path pod.
 2. Do not turn a PodDisruptionBudget failure into a forced drain. `--force` and `--disable-eviction` bypass Longhorn's drain policy for every workload on the node, not only the one blocking you.
@@ -42,7 +42,7 @@ A failed drain leaves state behind. Retrying on top of it stacks a second attemp
 1. Confirm the node and its workloads are safe to resume scheduling.
 2. `kubectl uncordon <node-name>`, deliberately and explicitly. `preflight.sh` fails on any cordoned node precisely so a forgotten cordon cannot be carried into the next attempt.
 3. Let the workloads that were evicted reschedule, and let Longhorn return to fully healthy. Rebuilds triggered by the partial drain are still in flight.
-4. Re-run the **full** preflight, not a spot check: `preflight.sh <candidate>` plus `talosctl health`. Then make a fresh go/no-go decision.
+4. Re-run the **full** preflight, not a spot check: `preflight.sh <candidate>`. Then make a fresh go/no-go decision.
 
 ## The access path moves
 

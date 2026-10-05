@@ -47,26 +47,13 @@ tasks:
     cmds:
       # Refuses the upgrade unless the cluster can lose this node.
       - '{{.ROOT_DIR}}/.agents/skills/talos-rollout/scripts/preflight.sh {{.IP}}'
-      - task: upgrade-node-confirmed
-        vars:
-          IP: '{{.IP}}'
+      # The default reboot mode uses kexec and has hung these nodes during the
+      # shutdown handoff. powercycle bypasses kexec and must remain explicit.
+      - talhelper gencommand upgrade --node {{.IP}} --extra-flags "--drain-timeout=15m --timeout=20m --reboot-mode=powercycle" | bash
     requires:
       vars: [IP]
     preconditions:
-      - talosctl --nodes {{.IP}} get machineconfig
-      - talosctl config info
-      - test -f {{.TALOSCONFIG}}
       - which jq kubectl talhelper talosctl
-
-  upgrade-node-confirmed:
-    internal: true
-    dir: '{{.TALOS_DIR}}'
-    prompt: Preflight passed. Upgrade and power-cycle {{.IP}} now, with the decisions it listed above settled?
-    # The default reboot mode uses kexec and has hung these nodes during the
-    # shutdown handoff. powercycle bypasses kexec and must remain explicit.
-    cmd: talhelper gencommand upgrade --node {{.IP}} --extra-flags "--drain-timeout=15m --timeout=20m --reboot-mode=powercycle" | bash
-    requires:
-      vars: [IP]
 
   upgrade-k8s:
     desc: Upgrade Kubernetes
