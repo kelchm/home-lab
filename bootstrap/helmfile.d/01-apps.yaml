@@ -29,6 +29,10 @@ releases:
       - events: ['presync']
         showlogs: true
         command: kubectl
+        args: ['--namespace', 'kube-system', 'rollout', 'status', 'daemonset/cni-ready-untaint', '--timeout=10m']
+      - events: ['presync']
+        showlogs: true
+        command: kubectl
         args: ['wait', 'nodes', '--all', '--for=condition=Ready', '--timeout=10m']
 
   - name: spegel
