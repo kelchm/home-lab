@@ -29,6 +29,26 @@ spec:
       labels:
         cluster: k8s-prod
       rules:
+        # Presence, not state value: volume_state has six 0/1 state series
+        # even when detached or restoring; backup_state is numeric per Backup
+        # CR and can be 0. Count all states and collapse backup/scrape labels.
+        # Per-volume identity gives each orphan its own three-week grace period;
+        # Alertmanager groups these into normal-priority warning notifications.
+        # This is a review prompt only: rebuilding a cluster makes needed
+        # restore backups look orphaned too. Never clean them up automatically.
+        - alert: LonghornBackupVolumeOrphaned
+          expr: |
+            count by (volume) (longhorn_backup_state{cluster="k8s-prod"})
+            unless on (volume)
+            count by (volume) (longhorn_volume_state{cluster="k8s-prod"})
+          for: 21d
+          labels:
+            severity: warning
+          annotations:
+            summary: Longhorn backup volume {{ $labels.volume }} has no source volume
+            description: Backups for volume {{ $labels.volume }} have had no matching live Longhorn volume for 21 days. Confirm the live volume inventory is complete and no rebuild or restore needs these backups before reviewing them for manual deletion.
+            runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/longhorn-backup-restore.md#review-orphaned-backup-volumes
+
         # kube-state-metrics exports status.available from BackupTarget/default
         # because Longhorn's native collector exposes only a backup-volume
         # count. This catches the disconnected NFS target directly instead of

@@ -110,6 +110,58 @@ Use these checks to investigate a notification or audit the automation:
 - Longhorn manager logs containing `backup failed` or `BackupTarget unavailable` — use when the CR status and timestamp alerts fire.
 - Free space on the NAS share — DSM → Storage Manager → Volume 1 utilization.
 
+## Review orphaned backup volumes
+
+`LonghornBackupVolumeOrphaned` reports each backup volume whose source name has been absent from the observed live volume inventory continuously for 21 days. Each volume has its own timer; Alertmanager groups these by alert name and cluster into normal-priority `warning` notifications (12-hour repeats, no critical page). A source recreated with the same name resets its timer; a restore under a new name leaves the original backup volume a candidate. This is a review prompt, never permission to delete. Missing scrapes can also make a live volume look absent, and evaluator interruptions can affect the observed wait; it is not an authoritative deletion timestamp.
+
+**Stop cleanup during a cluster rebuild, incomplete recovery, a restore drill, or a Talos rollout.** After a rebuild, every old backup volume can look orphaned: those backups are exactly what recovery needs. Coordinate with the owner of any off-site restore work (including #297) before touching the backup target. Keep backups needed for recovery even if the alert has fired; use a bounded, volume-specific silence with a reason and revisit date when appropriate.
+
+1. **Confirm that the live volume list is complete before deleting anything.** Check the intended kube context, all nodes Ready, all Longhorn manager pods Ready, and full Longhorn scrape coverage in the Operations dashboard. Resolve `LonghornMetricsMissing`, failed scrapes, API/list errors, or controller errors first. Compare the complete Longhorn volume list with PV CSI handles, expected application PVCs, and the Longhorn UI → Volume list. Bound PVCs alone do not prove completeness after a rebuild: confirm that every expected application and recovery claim is present and restored, and that the owner has declared recovery complete.
+
+   ```sh
+   kubectl config current-context
+   kubectl get nodes
+   kubectl -n longhorn-system get pods -l app=longhorn-manager
+   kubectl -n longhorn-system get volumes.longhorn.io \
+     -o custom-columns='VOLUME:.metadata.name,STATE:.status.state,NAMESPACE:.status.kubernetesStatus.namespace,PVC:.status.kubernetesStatus.pvcName,RESTORE_REQUIRED:.status.restoreRequired'
+   kubectl get pv -o json | jq -r '.items[] | select(.spec.csi.driver == "driver.longhorn.io") | [.metadata.name, .spec.csi.volumeHandle, .status.phase, .spec.claimRef.namespace, .spec.claimRef.name] | @tsv'
+   kubectl get pvc -A
+   kubectl -n longhorn-system get backuptargets.longhorn.io
+   ```
+
+2. **Find candidates, then inspect the backup metadata.** In Grafana Explore, use the same presence query as the rule; an empty result means no candidates, not a scalar zero. The metrics count Backup CRs, so a backup volume with no Backup CRs is outside this alert's coverage. State values must not be filtered: detached/restoring volumes still exist, `longhorn_volume_state` includes zero-valued states, and `longhorn_backup_state` can itself be zero.
+
+   ```promql
+   count by (volume) (longhorn_backup_state{cluster="k8s-prod"})
+   unless on (volume)
+   count by (volume) (longhorn_volume_state{cluster="k8s-prod"})
+   ```
+
+   Cross-check each candidate against the complete API inventory and BackupTarget availability/sync status. The BackupVolume CR's name can differ from its source volume name; select it by `.spec.volumeName` and the intended target, not by a guessed CR name. Inspect its recorded namespace/PVC, backup dates, size, and messages:
+
+   ```sh
+   source_volume='<volume label from the alert>'
+   kubectl -n longhorn-system get volumes.longhorn.io "$source_volume"
+   kubectl -n longhorn-system get backupvolumes.longhorn.io -o json | jq --arg volume "$source_volume" '
+     .items[] | select(.spec.volumeName == $volume) |
+     {name: .metadata.name, target: .spec.backupTargetName, source: .spec.volumeName, status: .status}'
+   kubectl -n longhorn-system get backups.longhorn.io -l "backup-volume=$source_volume" \
+     --sort-by=.status.backupCreatedAt -o custom-columns='BACKUP:.metadata.name,CREATED:.status.backupCreatedAt,STATE:.status.state,URL:.status.url'
+   ```
+
+   Only an explicit `NotFound` for the source, after the completeness checks, supports absence; a timeout, forbidden response, or other API failure does not. Confirm why the original volume was deleted, whether a replacement now owns the same application's data, and whether any rollback, restore, retention, or off-site recovery plan still needs its backups. Age alone is insufficient. Record the decision and exact source, target, and BackupVolume CR name in the operational issue before proceeding.
+
+3. **Delete one reviewed backup volume by hand.** Recheck source absence and that no rebuild/restore/rollout has begun immediately before deletion. In Longhorn UI → Backup, select the exact target and backup volume and choose Delete, or use the reviewed CR name:
+
+   ```sh
+   backup_volume_cr='<reviewed BackupVolume metadata.name>'
+   kubectl -n longhorn-system delete backupvolumes.longhorn.io "$backup_volume_cr"
+   ```
+
+   This removes the backup volume and its backups from the target; it is destructive. Do not bulk-delete query output, delete the BackupTarget, or remove target files directly. Let Longhorn reconcile, then verify that the BackupVolume and its Backup CRs disappear, the target remains available with unrelated backups intact, and the candidate disappears from the query and alert after scrapes/evaluation catch up. Investigate controller errors or a stuck deletion instead of stripping finalizers. Off-site retention may preserve older copies; this operation does not remove them.
+
+Rule logic and the full 21-day wait are tested offline by `scripts/ci/validate-longhorn-alerts.sh`, using the committed production expression and delay. Fixtures cover pending before the boundary, firing at the boundary, same-name restoration resetting the timer, detached/restoring/never-backed-up volumes, duplicate backups/scrapes, zero-valued states, and isolation from other clusters. This proves Prometheus rule semantics on synthetic samples; it does not prove production vmalert loading, a real orphan remaining for weeks, or Pushover delivery. After the owner merges, verify the rule and `21d` delay in vmalert's rule view. A live short-delay copy or scratch volume/backup test needs the owner's agreement on exact resources, notifications, cleanup, and timing outside restore and Talos work; no such live test is part of the offline check.
+
 ## Drill: restore a single PV
 
 Use case: an app's data is corrupted/wiped and you want the previous night's copy back.

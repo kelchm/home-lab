@@ -65,6 +65,8 @@ jobs:
               - 'proxmox/monitoring/backup-metrics/**'
               - 'scripts/ci/validate-pve-backups.sh'
               - 'scripts/ci/validate-vlagent.sh'
+              - 'scripts/ci/validate-longhorn-alerts.sh'
+              - 'scripts/monitoring/longhorn-alerts.test.yaml'
               - 'scripts/logging/**'
               - 'scripts/ci/test-validate-cilium-policies.sh'
               - 'scripts/ci/validate-cilium-policies.sh'
@@ -250,6 +252,10 @@ jobs:
       - name: Validate vlagent configuration and pipeline alerts
         if: needs.pre-job.outputs.kubernetes_changed == 'true'
         run: scripts/ci/validate-vlagent.sh
+
+      - name: Validate Longhorn backup alerts
+        if: needs.pre-job.outputs.kubernetes_changed == 'true'
+        run: scripts/ci/validate-longhorn-alerts.sh
 
       - name: Render Flux Kustomizations recursively
         if: needs.pre-job.outputs.kubernetes_changed == 'true'
