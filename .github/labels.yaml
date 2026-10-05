@@ -29,6 +29,22 @@
   color: "bfd4f2"
   description: "Repo automation: CI, Renovate, mise, Taskfile, scripts, tools, agent skills"
   aliases: ["area/mise", "area/github", "area/renovate", "area/scripts", "area/taskfile"]
+# Additional areas follow broad domain directories; labels are coarse filters.
+- name: area/ai
+  color: "bfd4f2"
+  description: "AI services and Spark inference"
+- name: area/identity
+  color: "bfd4f2"
+  description: "Shared identity and sign-in services"
+- name: area/observability
+  color: "bfd4f2"
+  description: "Metrics, logs, dashboards, alerts, and host monitoring"
+- name: area/storage
+  color: "bfd4f2"
+  description: "Kubernetes storage services and workload storage configuration"
+- name: area/unifi
+  color: "bfd4f2"
+  description: "UniFi controller, gateway, switching, and wireless"
 # Kinds: optional, at most one per issue
 - name: kind/bug
   color: "5319e7"
