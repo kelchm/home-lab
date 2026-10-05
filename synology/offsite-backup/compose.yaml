@@ -21,6 +21,8 @@ services:
           next="$$(date -u -d "today $$RUN_AT_UTC" +%s)"
           if (( next <= now )); then next="$$(date -u -d "tomorrow $$RUN_AT_UTC" +%s)"; fi
           sleep "$$(( next - now ))"
+          curl --fail --silent --show-error --max-time 10 --retry 5 --output /dev/null \
+            "$$HC_PING_URL/start" || true
           status=0
           kopia snapshot create /sources/* || status=$$?
           kopia maintenance run --full || status=$$?
@@ -50,11 +52,13 @@ services:
       - DAC_READ_SEARCH
     security_opt:
       - no-new-privileges:true
+    # Docker 24 runs the first probe one interval after start, and doco-cd waits 180 seconds for it.
     healthcheck:
-      test: ["CMD", "/bin/kopia", "repository", "status"]
-      interval: 5m
-      timeout: 30s
+      test: ["CMD", "test", "-s", "/app/config/repository.config"]
+      interval: 15s
+      timeout: 5s
       retries: 3
-      start_period: 1m
-    stop_grace_period: 2m
+      start_period: 30s
+    # Bash as PID 1 ignores SIGTERM; Kopia resumes an interrupted upload from what already landed.
+    stop_signal: SIGKILL
     restart: unless-stopped
