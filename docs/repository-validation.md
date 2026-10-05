@@ -29,11 +29,9 @@ The Repository Configuration Validation job runs on every pull request and push 
 
 ## Label checks
 
-Label Catalog Validation checks the catalog and labeler keys, previews label-sync changes in PR job logs with read-only permissions, and rejects live-label deletions or merges. It runs when label configuration, its workflows, its validators, or `.mise.toml` change, and on every push to `main`. The job gates `Validation Success`; the separate Label Sync workflow repeats the live check before applying the catalog from `main`.
+Label Catalog Validation runs the pinned label-sync action in read-only dry-run mode when label configuration or its workflows change on a PR, and on every push to `main`. It parses the catalog and prints planned label changes in the job log. Errors reported by the action fail `Validation Success`; planned deletions or merges are visible but do not themselves fail the dry run. The separate Label Sync workflow applies catalog changes after merge.
 
 Labels are coarse filters. Existing labels and mappings stay in place; the added AI, identity, observability, storage, and UniFi areas follow broad directory paths. Additional scope labels are optional when useful. Do not add individual-file exceptions to classify everything a change touches.
-
-Run `mise exec -- scripts/ci/test-validate-labels.sh` for regression cases. To check a catalog against live labels, fetch all pages with `NO_COLOR=1 gh api --paginate repos/kelchm/home-lab/labels --jq '.[]' | jq -s . > /tmp/live-labels.json`, then run `mise exec -- scripts/ci/validate-labels.sh . /tmp/live-labels.json`. Review the read-only PR dry run before merging a catalog change. The guard permits additions, updates, and single-label renames through aliases, but rejects deletions and merges that could lose associations. Label Sync applies catalog changes after merge; inspect its run and verify the intended live labels afterward.
 
 ## Relationship to Flux
 
