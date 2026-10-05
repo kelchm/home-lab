@@ -149,6 +149,14 @@ Use these checks to investigate a notification or audit the automation:
      --sort-by=.status.backupCreatedAt -o custom-columns='BACKUP:.metadata.name,CREATED:.status.backupCreatedAt,STATE:.status.state,URL:.status.url'
    ```
 
+   Also list restore/standby references across all live volumes, including volumes with different names from the source. Compare `FROM_BACKUP` URLs with the candidate's backup URLs and source volume parameter/target; a matching standby volume or unfinished restore still depends on those backups. An empty list does not prove a rebuild is complete or remove the need to review recovery plans.
+
+   ```sh
+   kubectl -n longhorn-system get volumes.longhorn.io -o json | jq -r '
+     .items[] | select((.spec.fromBackup // "") != "" or .spec.standby == true or .status.restoreRequired == true or .status.restoreInitiated == true) |
+     [.metadata.name, .spec.fromBackup, .spec.standby, .status.restoreRequired, .status.restoreInitiated] | @tsv'
+   ```
+
    Only an explicit `NotFound` for the source, after the completeness checks, supports absence; a timeout, forbidden response, or other API failure does not. Confirm why the original volume was deleted, whether a replacement now owns the same application's data, and whether any rollback, restore, retention, or off-site recovery plan still needs its backups. Age alone is insufficient. Record the decision and exact source, target, and BackupVolume CR name in the operational issue before proceeding.
 
 3. **Delete one reviewed backup volume by hand.** Recheck source absence and that no rebuild/restore/rollout has begun immediately before deletion. In Longhorn UI → Backup, select the exact target and backup volume and choose Delete, or use the reviewed CR name:
@@ -160,7 +168,7 @@ Use these checks to investigate a notification or audit the automation:
 
    This removes the backup volume and its backups from the target; it is destructive. Do not bulk-delete query output, delete the BackupTarget, or remove target files directly. Let Longhorn reconcile, then verify that the BackupVolume and its Backup CRs disappear, the target remains available with unrelated backups intact, and the candidate disappears from the query and alert after scrapes/evaluation catch up. Investigate controller errors or a stuck deletion instead of stripping finalizers. Off-site retention may preserve older copies; this operation does not remove them.
 
-Rule logic and the full 21-day wait are tested offline by `scripts/ci/validate-longhorn-alerts.sh`, using the committed production expression and delay. Fixtures cover pending before the boundary, firing at the boundary, same-name restoration resetting the timer, detached/restoring/never-backed-up volumes, duplicate backups/scrapes, zero-valued states, and isolation from other clusters. This proves Prometheus rule semantics on synthetic samples; it does not prove production vmalert loading, a real orphan remaining for weeks, or Pushover delivery. After the owner merges, verify the rule and `21d` delay in vmalert's rule view. A live short-delay copy or scratch volume/backup test needs the owner's agreement on exact resources, notifications, cleanup, and timing outside restore and Talos work; no such live test is part of the offline check.
+Rule logic and the full 21-day wait are tested offline by `scripts/ci/validate-longhorn-alerts.sh`, using the committed production expression and delay. Fixtures cover pending before the boundary, firing at the boundary, same-name restoration resetting the timer, detached/restoring/never-backed-up volumes, duplicate backups/scrapes, zero-valued states, and isolation from other clusters. This proves Prometheus rule semantics on synthetic samples; it does not prove production vmalert loading, a real orphan remaining for weeks, or Pushover delivery.
 
 ## Drill: restore a single PV
 
