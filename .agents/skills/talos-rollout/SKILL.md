@@ -39,9 +39,9 @@ Run preflight against the node you intend to roll first. The candidate argument 
 .agents/skills/talos-rollout/scripts/preflight.sh <candidate-node>
 ```
 
-Preflight prints a one-line summary per check and expands raw output only for checks that fail. Set `VERBOSE=1` to see every table. It exits non-zero listing every failure it found, so read the whole list rather than fixing the first line and re-running.
+Preflight prints a one-line summary per check and expands raw output only for checks that fail. Set `VERBOSE=1` to see every table. It exits non-zero listing every failed check, so read the whole list rather than fixing the first line and re-running. A query it cannot run at all stops it on the spot with that command's error.
 
-It gates on: routes to every rollout destination, Talos reachable at each node, `talosctl health` passing across the three control-plane nodes, all Kubernetes nodes Ready **and uncordoned**, Multus safeguards Ready, every in-use Longhorn volume attached and healthy, and all instance-managers Ready with `lhnet1`. It reports without judging: which interface carries your API and Talos paths, any idle Longhorn volume, every CloudNativePG cluster with its instance count and primary placement, every suspended Flux Kustomization, and every PodDisruptionBudget at zero allowed disruptions.
+It gates on: routes to every rollout destination, Talos reachable at each node, `talosctl health` passing across the three control-plane nodes, every node answering an etcd member query, all Kubernetes nodes Ready **and uncordoned**, Multus safeguards Ready, every in-use Longhorn volume attached and healthy, and all instance-managers Ready with `lhnet1`. It reports without judging: which interface carries your API and Talos paths, any idle Longhorn volume, every CloudNativePG cluster with its instance count and primary placement, every suspended Flux Kustomization, and every PodDisruptionBudget at zero allowed disruptions.
 
 Then, in order:
 

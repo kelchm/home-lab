@@ -132,6 +132,10 @@ if health_out="$(talosctl health --nodes "${IPS[0]}" --control-plane-nodes "$(IF
 else
     fail 'talosctl health failed' "$health_out"
 fi
+# health reads a cached etcd status; this makes every member answer now.
+if ! members_out="$(talosctl -n "$(IFS=,; echo "${IPS[*]}")" etcd members 2>&1)"; then
+    fail 'an etcd member did not answer' "$members_out"
+fi
 
 # --- Kubernetes nodes ---------------------------------------------------------
 section "Kubernetes nodes"
@@ -247,7 +251,7 @@ else
         [[ -z "$name" ]] && continue
         primary_node='unscheduled'
         if [[ "$primary" != 'none' ]]; then
-            primary_node="$(kubectl -n "$ns" get pod "$primary" -o jsonpath='{.spec.nodeName}' 2>/dev/null || echo 'unknown')"
+            primary_node="$(kubectl -n "$ns" get pod "$primary" -o jsonpath='{.spec.nodeName}')"
         fi
         marker=''
         [[ -n "$candidate" && "$primary_node" == "$candidate" ]] && marker='  <-- primary on candidate'
