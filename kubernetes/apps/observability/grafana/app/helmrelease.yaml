@@ -112,6 +112,8 @@ spec:
         searchNamespace: ALL
         folderAnnotation: grafana_folder
         provider:
+          # Renaming the provider deletes and recreates every provisioned dashboard.
+          name: dashboards
           foldersFromFilesStructure: true
 
     grafana.ini:
