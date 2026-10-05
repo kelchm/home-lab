@@ -32,7 +32,7 @@ To add a source, mount another share read-only under `/sources/`. It is picked u
 | B2 key `athena-kopia` | Yes, in `secrets.sops.env` | No; create a replacement with the master key |
 | Repository password | Yes, in `secrets.sops.env` | `athena-kopia-repository` |
 | healthchecks.io ping URL | Yes, in `secrets.sops.env` | No; read it back with the project API key |
-| NAS age private key | `/volume1/docker/doco-cd/sops_age_key` | `sops age key - athena` |
+| NAS age private key | `/volume1/docker/doco-cd/sops_age_key` | `athena-doco-cd-sops-age-key` |
 | B2 master key | No | `blackblaze-master-key` |
 
 The `athena-kopia` key is limited to this bucket and can list, read, write and extend locks. It has no `deleteFiles`, so Kopia's deletions only hide files and Backblaze's lifecycle rule does the removal. `secrets.sops.env` is encrypted to the NAS-scoped age recipient in [`.sops.yaml`](../../.sops.yaml); the cluster's age key cannot read it.
@@ -40,7 +40,7 @@ The `athena-kopia` key is limited to this bucket and can list, read, write and e
 Edit the secrets with the NAS key:
 
 ```sh
-SOPS_AGE_KEY="$(op read 'op://Private/sops age key - athena/password')" sops synology/offsite-backup/secrets.sops.env
+SOPS_AGE_KEY="$(op read 'op://Private/athena-doco-cd-sops-age-key/password')" sops synology/offsite-backup/secrets.sops.env
 ```
 
 ## First deployment

@@ -21,10 +21,10 @@ No workload data lives under the state directory. Only one-shot `publish` servic
 
 ## NAS age key
 
-doco-cd decrypts `synology/**/*.sops.env` with an age key that exists only for Athena. The private key is in 1Password as `sops age key - athena`; its recipient is the `synology/` rule in [`.sops.yaml`](../../../.sops.yaml). Install it before applying a definition that mounts it, because DSM's Docker refuses to start a container whose bind-mount source is missing:
+doco-cd decrypts `synology/**/*.sops.env` with an age key that exists only for Athena. The private key is in 1Password as `athena-doco-cd-sops-age-key`; its recipient is the `synology/` rule in [`.sops.yaml`](../../../.sops.yaml). Install it before applying a definition that mounts it, because DSM's Docker refuses to start a container whose bind-mount source is missing:
 
 ```sh
-op read 'op://Private/sops age key - athena/password' | ssh kelchm@10.32.20.5 '
+op read 'op://Private/athena-doco-cd-sops-age-key/password' | ssh kelchm@10.32.20.5 '
   sudo install -m 0400 -o root -g root /dev/stdin /volume1/docker/doco-cd/sops_age_key
   sudo ls -l /volume1/docker/doco-cd/sops_age_key
 '
