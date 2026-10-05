@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import importlib.util
 import shlex
+import shutil
+import subprocess
 import sys
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -32,6 +34,7 @@ from tensorfold import (  # noqa: E402
 from sparkrun.core.bootstrap import get_runtime, init_sparkrun  # noqa: E402
 from sparkrun.core.external_plugins import load_external_plugins  # noqa: E402
 from sparkrun.core.log_source import MODE_FILE, SCOPE_ALL  # noqa: E402
+from sparkrun.core.mods import resolve_and_inject_mods  # noqa: E402
 from sparkrun.core.recipe import Recipe  # noqa: E402
 from sparkrun.core.runtime_cache import (  # noqa: E402
     RUNTIME_CACHE_CONTAINER_PATH,
@@ -39,6 +42,7 @@ from sparkrun.core.runtime_cache import (  # noqa: E402
     resolve_runtime_cache_settings,
 )
 from sparkrun.core.validation import ERROR  # noqa: E402
+from sparkrun.orchestration.job_metadata import derive_recipe_fingerprint  # noqa: E402
 from sparkrun.runtimes import _cluster_ops  # noqa: E402
 from sparkrun.runtimes._cluster_ops import ClusterContext  # noqa: E402
 
@@ -46,6 +50,13 @@ TARGET = "Mia-AiLab/GLM-5.3-Flash-EXL3-TR3-4bpw"
 TARGET_REV = "25a44fdbf16862a46b7cc9921142c6c81350af2f"
 DRAFT = "incoai/GLM-5.3-Flash-DFlash2"
 DRAFT_REV = "dc77ff1c99eeb2df044ee3d4f0094eb033fee410"
+MIA_RECIPE_DIR = "mia-tensorfold-glm53-exl3-tp2"
+MIA_PROFILES = [
+    ("glm53-exl3-tp2-mia-tf-v1.2-bmm-850k", TARGET, TARGET_REV, "850000"),
+    ("glm53-exl3-tp2-mia-tf-v1.5-bmm-850k", TARGET, TARGET_REV, "850000"),
+    ("glm53-exl3-tp2-mia-tf-v1.5-mia-1m", "Mia-AiLab/GLM-5.3-Flash-EXL3-4bpw-TensorFold",
+     "078455ffe6472f9a52fbc1139f58b9db2881b25c", "1048576"),
+]
 FABRIC_HEAD = "172.16.21.31"
 FABRIC_WORKER = "172.16.21.32"
 
@@ -220,27 +231,93 @@ def test_prepare_distributes_declared_drafter(runtime):
     assert DRAFT not in before
 
 
-def test_mia_recipe_reuses_native_rank_wiring(runtime):
-    root = Path(__file__).resolve().parents[1]
-    recipe = Recipe.from_dict(yaml.safe_load((root / "mia-tensorfold-glm53-exl3.yaml").read_text()))
+@pytest.mark.parametrize("profile,target,revision,context", MIA_PROFILES)
+def test_mia_recipe_reuses_native_rank_wiring(runtime, profile, target, revision, context):
+    root = Path(__file__).resolve().parents[1] / MIA_RECIPE_DIR
+    path = root / f"{profile}.yaml"
+    recipe = Recipe(yaml.safe_load(path.read_text()), source_path=str(path))
+    assert recipe.name == recipe.metadata["profile"] == profile
     assert not [issue for issue in runtime.validate_recipe(recipe) if getattr(issue, "severity", None) == ERROR]
-    spec = importlib.util.spec_from_file_location("mia_serve", root / "mods/mia-tensorfold/serve.py")
+    spec = importlib.util.spec_from_file_location("mia_serve", root / recipe.mods[0] / "serve.py")
     serve = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(serve)
     for rank in (0, 1):
         env, argv = _parse_env_command(_node_command(runtime, recipe, rank, init_port=29511))
         assert argv == ["/usr/local/bin/glm53-mia-tf-entrypoint"]
-        assert env["MODEL_PATH"] == hf_snapshot_path(TARGET, TARGET_REV)
+        assert env["MODEL_PATH"] == hf_snapshot_path(target, revision)
         assert env["DRAFTER"] == hf_snapshot_path(DRAFT, "bf582e4eacc1810f76656d1811693ff6c6737d2a")
         args = serve.command(env)
         assert args[:3] == ["tensorfold", "serve", env["MODEL_PATH"]]
         for flag, expected in (("--tp", "2"), ("--rank", str(rank)), ("--master", FABRIC_HEAD),
-                               ("--master-port", "29511"), ("--context", "850000"),
+                               ("--master-port", "29511"), ("--context", context),
                                ("--parallel", "4"), ("--max-tokens", "32768")):
             assert args[args.index(flag) + 1] == expected
         assert ("--name" in args) is (rank == 0)
         assert "--vision" in args and "--thinking" in args
     assert recipe.runtime_cache["key_by_image"] is True
+
+
+def test_mia_profiles_have_separate_native_cache_namespaces(runtime):
+    root = Path(__file__).resolve().parents[1] / MIA_RECIPE_DIR
+    leaves = []
+    for profile, _, _, _ in MIA_PROFILES:
+        recipe = Recipe.from_dict(yaml.safe_load((root / f"{profile}.yaml").read_text()))
+        mounts = build_runtime_cache_mounts(
+            runtime=runtime, recipe=recipe,
+            settings=resolve_runtime_cache_settings(runtime=runtime, recipe=recipe),
+            root="/opt/spark-cache/huggingface/runtime-cache", image=recipe.container,
+        )
+        leaves.append(mounts.leaf)
+    assert len(set(leaves)) == len(MIA_PROFILES)
+
+
+@pytest.mark.parametrize("profile,target,revision,context", MIA_PROFILES)
+def test_mia_native_mod_transfer_is_self_contained(tmp_path, profile, target, revision, context):
+    root = Path(__file__).resolve().parents[1] / MIA_RECIPE_DIR
+    path = root / f"{profile}.yaml"
+    recipe = Recipe(yaml.safe_load(path.read_text()), source_path=str(path))
+    fingerprint = derive_recipe_fingerprint(recipe)
+    registry = mock.Mock()
+    resolve_and_inject_mods(recipe, registry)
+    registry.get_registry.assert_not_called()
+    copy, command = recipe.pre_exec
+    assert copy["dest"] == "/workspace/mods/" + Path(recipe.mods[0]).name
+    assert copy["dest"] in command
+    assert derive_recipe_fingerprint(recipe) == fingerprint
+    bundle = tmp_path / Path(copy["copy"]).name
+    shutil.copytree(copy["copy"], bundle, ignore=shutil.ignore_patterns("__pycache__"))
+    lock = json.loads((bundle / "upstream.lock.json").read_text())
+    assert lock["image"] == recipe.container
+    subprocess.run([sys.executable, str(bundle / "prepare.py"), "--check"], cwd=tmp_path, check=True)
+
+    spec = importlib.util.spec_from_file_location("mia_readiness", bundle / "readiness.py")
+    ready = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(ready)
+    hook = shlex.split(recipe.post_exec[0])
+    expected_context = int(hook[hook.index("--context") + 1])
+    body = {"ok": True, "mode": "strict", "streams": {"max": 4},
+            "context_length": int(context), "pool_tokens": 1200000}
+    ready.check_health(body, 4, expected_context, 1200000)
+    with pytest.raises(RuntimeError, match="context"):
+        ready.check_health({**body, "context_length": int(context) - 1}, 4, expected_context, 1200000)
+
+
+@pytest.mark.parametrize("version", ("v1.2", "v1.5"))
+@pytest.mark.parametrize("change", ("content", "symlink"))
+def test_mia_frozen_bundle_rejects_changed_helpers(tmp_path, version, change):
+    source = Path(__file__).resolve().parents[1] / f"mods/mia-tensorfold-{version}"
+    bundle = tmp_path / source.name
+    shutil.copytree(source, bundle, ignore=shutil.ignore_patterns("__pycache__"))
+    helper = bundle / "readiness.py"
+    if change == "content":
+        helper.write_text(helper.read_text() + "\n# Unreviewed change\n")
+    else:
+        outside = tmp_path / "shared-readiness.py"
+        helper.rename(outside)
+        helper.symlink_to(outside)
+    result = subprocess.run([sys.executable, str(bundle / "prepare.py")], capture_output=True, text=True)
+    assert result.returncode != 0
+    assert "Missing or changed frozen mod file: readiness.py" in result.stderr
 
 
 def test_readiness_requires_reported_pool_capacity():
