@@ -1,6 +1,6 @@
 # PVE backup completion metrics
 
-Alerts the operator when a PVE backup fails or the daily job stops completing, for [#720](https://github.com/kelchm/home-lab/issues/720). **State: prepared.** The rules, the webhook body and these procedures are in Git; nothing is installed on PVE and no alert has been received. Installing the webhook and running the acceptance test each need the owner's explicit go-ahead.
+Alerts on failed PVE backups and missing daily completions, for [#720](https://github.com/kelchm/home-lab/issues/720). **State: installed on 2026-10-04.** The cluster-wide `pve-backup-metrics` target and `pve-backup-results` matcher send through all three nodes' existing vmagents, and Flux has deployed the rules from #763. A failed scheduled backup of an isolated guest reached the central metric and an unsilenced `PVEBackupFailed` warning; Alertmanager recorded one Pushover delivery attempt with zero failures. Operator receipt confirmation and the first production scheduled samples remain pending in #720. The scheduled retry succeeded and all temporary test artifacts were removed. A bounded startup silence covers only `PVEBackupStale` for `daily-backups` until the first production completion checks. Changes to PVE still need explicit owner approval.
 
 | File | Purpose |
 |---|---|
