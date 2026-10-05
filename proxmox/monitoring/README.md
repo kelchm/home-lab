@@ -5,6 +5,7 @@ Host metrics for the PVE nodes. Enrollment, verification and removal are in the 
 | File | Purpose |
 |---|---|
 | [compose.yaml](compose.yaml) | node-exporter and vmagent. Identical on every node. |
+| [backup-metrics/](backup-metrics/) | Backup completion samples from PVE's notification webhook, their alerts and the manual install. Prepared, not yet installed. |
 | [scrape.yaml](scrape.yaml) | Host, vmagent and deployer scrape jobs. |
 | [.doco-cd.yml](.doco-cd.yml) | The deployment every node's doco-cd applies. |
 | [../platform/doco-cd](../platform/doco-cd/) | The deployer and the Docker daemon settings, applied by hand once per node. |

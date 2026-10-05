@@ -1,0 +1,189 @@
+# Samples are ten minutes apart, so `_x6 3600` is one completion at 01:00
+# whose value is its own time. A series has one sample per completion.
+rule_files: [rules.yaml]
+evaluation_interval: 10m
+tests:
+  - name: one success per node stays healthy for 30 hours and then goes stale
+    interval: 10m
+    input_series:
+      - series: 'pve_backup_completed_timestamp_seconds{job="pve-backup",platform="pve",cluster="pve-sbx",instance="pve-sbx-1",backup_job="daily-backups",outcome="info"}'
+        values: '_x6 3600'
+      - series: 'pve_backup_completed_timestamp_seconds{job="pve-backup",platform="pve",cluster="pve-sbx",instance="pve-sbx-2",backup_job="daily-backups",outcome="info"}'
+        values: '_x6 3600'
+      - series: 'pve_backup_completed_timestamp_seconds{job="pve-backup",platform="pve",cluster="pve-sbx",instance="pve-sbx-3",backup_job="daily-backups",outcome="info"}'
+        values: '_x6 3600'
+    promql_expr_test:
+      - expr: 'count(pve_backup_completed_timestamp_seconds == 3600)'
+        eval_time: 1h
+        exp_samples: [{labels: '{}', value: 3}]
+      - expr: 'pve_backup_completed_timestamp_seconds'
+        eval_time: 2h
+        exp_samples: []
+      - expr: 'ALERTS'
+        eval_time: 2h
+        exp_samples: []
+      - expr: 'ALERTS'
+        eval_time: 30h50m
+        exp_samples: []
+      - expr: 'ALERTS{alertstate="firing"}'
+        eval_time: 31h
+        exp_samples: []
+      - expr: 'ALERTS{alertstate="firing"}'
+        eval_time: 31h10m
+        exp_samples:
+          - labels: 'ALERTS{alertname="PVEBackupStale",alertstate="firing",severity="critical",cluster="pve-sbx",backup_job="daily-backups",instance="pve-sbx-1"}'
+            value: 1
+          - labels: 'ALERTS{alertname="PVEBackupStale",alertstate="firing",severity="critical",cluster="pve-sbx",backup_job="daily-backups",instance="pve-sbx-2"}'
+            value: 1
+          - labels: 'ALERTS{alertname="PVEBackupStale",alertstate="firing",severity="critical",cluster="pve-sbx",backup_job="daily-backups",instance="pve-sbx-3"}'
+            value: 1
+
+  - name: nodes that never reported are stale, and other hosts, jobs and clusters neither satisfy nor trigger the rules
+    interval: 10m
+    input_series:
+      - series: 'pve_backup_completed_timestamp_seconds{job="pve-node",platform="pve",cluster="pve-sbx",instance="pve-sbx-1",backup_job="daily-backups",outcome="info"}'
+        values: '_x6 3600'
+      - series: 'pve_backup_completed_timestamp_seconds{job="pve-backup",platform="pve",cluster="k8s-prod",instance="pve-sbx-2",backup_job="daily-backups",outcome="info"}'
+        values: '_x6 3600'
+      - series: 'pve_backup_completed_timestamp_seconds{job="pve-backup",platform="k8s",cluster="pve-sbx",instance="pve-sbx-3",backup_job="daily-backups",outcome="info"}'
+        values: '_x6 3600'
+      - series: 'pve_backup_completed_timestamp_seconds{job="pve-backup",platform="pve",cluster="pve-sbx",instance="pve-sbx-4",backup_job="daily-backups",outcome="info"}'
+        values: '_x6 3600'
+      - series: 'pve_backup_completed_timestamp_seconds{job="pve-node",platform="pve",cluster="pve-sbx",instance="pve-sbx-1",backup_job="daily-backups",outcome="error"}'
+        values: '_x6 3600'
+      - series: 'pve_backup_completed_timestamp_seconds{job="pve-backup",platform="pve",cluster="k8s-prod",instance="pve-sbx-2",backup_job="daily-backups",outcome="error"}'
+        values: '_x6 3600'
+      - series: 'pve_backup_completed_timestamp_seconds{job="pve-backup",platform="k8s",cluster="pve-sbx",instance="pve-sbx-3",backup_job="daily-backups",outcome="error"}'
+        values: '_x6 3600'
+      - series: 'pve_backup_completed_timestamp_seconds{job="pve-backup",platform="pve",instance="pve-sbx-3",backup_job="daily-backups",outcome="error"}'
+        values: '_x6 3600'
+    promql_expr_test:
+      - expr: 'count by (alertname, instance) (ALERTS{alertstate="firing"})'
+        eval_time: 10m
+        exp_samples:
+          - labels: '{alertname="PVEBackupStale",instance="pve-sbx-1"}'
+            value: 1
+          - labels: '{alertname="PVEBackupStale",instance="pve-sbx-2"}'
+            value: 1
+          - labels: '{alertname="PVEBackupStale",instance="pve-sbx-3"}'
+            value: 1
+      - expr: 'count by (alertname, instance) (ALERTS{alertstate="firing"})'
+        eval_time: 2h
+        exp_samples:
+          - labels: '{alertname="PVEBackupStale",instance="pve-sbx-1"}'
+            value: 1
+          - labels: '{alertname="PVEBackupStale",instance="pve-sbx-2"}'
+            value: 1
+          - labels: '{alertname="PVEBackupStale",instance="pve-sbx-3"}'
+            value: 1
+
+  - name: a failure alerts with or without an earlier success, outlasts staleness, and expires after 48 hours
+    interval: 10m
+    input_series:
+      - series: 'pve_backup_completed_timestamp_seconds{job="pve-backup",platform="pve",cluster="pve-sbx",instance="pve-sbx-1",backup_job="daily-backups",outcome="info"}'
+        values: '_x6 3600'
+      - series: 'pve_backup_completed_timestamp_seconds{job="pve-backup",platform="pve",cluster="pve-sbx",instance="pve-sbx-1",backup_job="daily-backups",outcome="error"}'
+        values: '_x150 90000'
+      - series: 'pve_backup_completed_timestamp_seconds{job="pve-backup",platform="pve",cluster="pve-sbx",instance="pve-sbx-2",backup_job="daily-backups",outcome="error"}'
+        values: '_x150 90000'
+    promql_expr_test:
+      - expr: 'ALERTS{alertname="PVEBackupFailed"}'
+        eval_time: 24h50m
+        exp_samples: []
+      - expr: 'ALERTS{alertname="PVEBackupFailed"}'
+        eval_time: 25h
+        exp_samples:
+          - labels: 'ALERTS{alertname="PVEBackupFailed",alertstate="firing",severity="warning",cluster="pve-sbx",backup_job="daily-backups",instance="pve-sbx-1"}'
+            value: 1
+          - labels: 'ALERTS{alertname="PVEBackupFailed",alertstate="firing",severity="warning",cluster="pve-sbx",backup_job="daily-backups",instance="pve-sbx-2"}'
+            value: 1
+      - expr: 'count by (alertname) (ALERTS{alertstate="firing",instance="pve-sbx-1"})'
+        eval_time: 31h10m
+        exp_samples:
+          - labels: '{alertname="PVEBackupFailed"}'
+            value: 1
+          - labels: '{alertname="PVEBackupStale"}'
+            value: 1
+      - expr: 'count(ALERTS{alertname="PVEBackupFailed",alertstate="firing"})'
+        eval_time: 72h50m
+        exp_samples: [{labels: '{}', value: 2}]
+      - expr: 'ALERTS{alertname="PVEBackupFailed"}'
+        eval_time: 73h10m
+        exp_samples: []
+      - expr: 'count(ALERTS{alertname="PVEBackupStale",alertstate="firing"})'
+        eval_time: 73h10m
+        exp_samples: [{labels: '{}', value: 3}]
+
+  - name: a failure retried successfully before the next evaluation still alerts for an hour
+    interval: 10m
+    input_series:
+      - series: 'pve_backup_completed_timestamp_seconds{job="pve-backup",platform="pve",cluster="pve-sbx",instance="pve-sbx-1",backup_job="daily-backups",outcome="error"}'
+        values: '_x60 35970'
+      - series: 'pve_backup_completed_timestamp_seconds{job="pve-backup",platform="pve",cluster="pve-sbx",instance="pve-sbx-1",backup_job="daily-backups",outcome="info"}'
+        values: '_x60 36000'
+    promql_expr_test:
+      - expr: 'count(ALERTS{alertname="PVEBackupFailed",alertstate="firing",instance="pve-sbx-1"})'
+        eval_time: 10h
+        exp_samples: [{labels: '{}', value: 1}]
+      - expr: 'count(ALERTS{alertname="PVEBackupFailed",alertstate="firing",instance="pve-sbx-1"})'
+        eval_time: 10h50m
+        exp_samples: [{labels: '{}', value: 1}]
+      - expr: 'ALERTS{alertname="PVEBackupFailed"}'
+        eval_time: 11h
+        exp_samples: []
+      - expr: 'ALERTS{alertname="PVEBackupStale",instance="pve-sbx-1"}'
+        eval_time: 11h
+        exp_samples: []
+
+  - name: a failure clears when the same job later succeeds on the same node
+    interval: 10m
+    input_series:
+      - series: 'pve_backup_completed_timestamp_seconds{job="pve-backup",platform="pve",cluster="pve-sbx",instance="pve-sbx-1",backup_job="daily-backups",outcome="error"}'
+        values: '_x30 18000'
+      - series: 'pve_backup_completed_timestamp_seconds{job="pve-backup",platform="pve",cluster="pve-sbx",instance="pve-sbx-1",backup_job="daily-backups",outcome="info"}'
+        values: '_x174 104400'
+      - series: 'pve_backup_completed_timestamp_seconds{job="pve-backup",platform="pve",cluster="pve-sbx",instance="pve-sbx-2",backup_job="daily-backups",outcome="info"}'
+        values: '_x174 104400'
+    promql_expr_test:
+      - expr: 'count(ALERTS{alertname="PVEBackupFailed",alertstate="firing",instance="pve-sbx-1"})'
+        eval_time: 28h50m
+        exp_samples: [{labels: '{}', value: 1}]
+      - expr: 'ALERTS{alertname="PVEBackupFailed"}'
+        eval_time: 29h
+        exp_samples: []
+      - expr: 'ALERTS{alertname="PVEBackupStale",instance=~"pve-sbx-[12]"}'
+        eval_time: 29h
+        exp_samples: []
+
+  - name: manual runs alert on failure but neither satisfy the daily job nor clear its failure
+    interval: 10m
+    input_series:
+      - series: 'pve_backup_completed_timestamp_seconds{job="pve-backup",platform="pve",cluster="pve-sbx",instance="pve-sbx-1",backup_job="daily-backups",outcome="info"}'
+        values: '_x6 3600'
+      - series: 'pve_backup_completed_timestamp_seconds{job="pve-backup",platform="pve",cluster="pve-sbx",instance="pve-sbx-1",backup_job="manual",outcome="info"}'
+        values: '_x180 108000'
+      - series: 'pve_backup_completed_timestamp_seconds{job="pve-backup",platform="pve",cluster="pve-sbx",instance="pve-sbx-2",backup_job="manual",outcome="error"}'
+        values: '_x12 7200'
+      - series: 'pve_backup_completed_timestamp_seconds{job="pve-backup",platform="pve",cluster="pve-sbx",instance="pve-sbx-2",backup_job="manual",outcome="info"}'
+        values: '_x24 14400'
+      - series: 'pve_backup_completed_timestamp_seconds{job="pve-backup",platform="pve",cluster="pve-sbx",instance="pve-sbx-3",backup_job="daily-backups",outcome="error"}'
+        values: '_x150 90000'
+      - series: 'pve_backup_completed_timestamp_seconds{job="pve-backup",platform="pve",cluster="pve-sbx",instance="pve-sbx-3",backup_job="manual",outcome="info"}'
+        values: '_x156 93600'
+    promql_expr_test:
+      - expr: 'ALERTS{alertname="PVEBackupFailed"}'
+        eval_time: 2h
+        exp_samples:
+          - labels: 'ALERTS{alertname="PVEBackupFailed",alertstate="firing",severity="warning",cluster="pve-sbx",backup_job="manual",instance="pve-sbx-2"}'
+            value: 1
+      - expr: 'ALERTS{alertname="PVEBackupFailed"}'
+        eval_time: 4h
+        exp_samples: []
+      - expr: 'ALERTS{alertname="PVEBackupFailed"}'
+        eval_time: 27h30m
+        exp_samples:
+          - labels: 'ALERTS{alertname="PVEBackupFailed",alertstate="firing",severity="warning",cluster="pve-sbx",backup_job="daily-backups",instance="pve-sbx-3"}'
+            value: 1
+      - expr: 'count(ALERTS{alertname="PVEBackupStale",alertstate="firing",instance="pve-sbx-1"})'
+        eval_time: 31h10m
+        exp_samples: [{labels: '{}', value: 1}]
