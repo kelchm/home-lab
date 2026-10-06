@@ -14,6 +14,9 @@ releases:
     # Multus goes first: the kubelet cannot create Cilium's conf dir under
     # /etc/cni, which Talos mounts read-only into it, but containerd creates
     # it for the Multus pods. This is the kustomization Flux owns afterwards.
+    # The agents' mount retries back off for up to two minutes while that
+    # happens, hence the longer wait.
+    timeout: 600
     hooks:
       - events: ['presync']
         showlogs: true
