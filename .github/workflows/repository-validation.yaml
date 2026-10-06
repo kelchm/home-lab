@@ -87,6 +87,10 @@ jobs:
               - '.renovaterc.json5'
               - '.shellcheckrc'
               - '**/*.sh'
+              - 'scripts/healthchecks.py'
+              - 'scripts/ci/test-healthchecks.py'
+              - 'healthchecks/**'
+              - '.taskfiles/healthchecks/**'
             skills:
               - '.github/workflows/repository-validation.yaml'
               - '.agents/skills/**'
@@ -469,6 +473,10 @@ jobs:
       - name: Test bootstrap scripts
         if: needs.pre-job.outputs.scripts_changed == 'true'
         run: scripts/ci/test-bootstrap-scripts.sh
+
+      - name: Test healthchecks apply safety without credentials or network access
+        if: needs.pre-job.outputs.scripts_changed == 'true'
+        run: python3 scripts/ci/test-healthchecks.py
 
       - name: No shell changes
         if: needs.pre-job.outputs.scripts_changed != 'true'

@@ -1,0 +1,21 @@
+[
+  {
+    "name": "k8s-prod Watchdog",
+    "slug": "k8s-prod-watchdog",
+    "tags": "",
+    "desc": "",
+    "timeout": 300,
+    "grace": 300,
+    "channels": "*"
+  },
+  {
+    "name": "Athena off-site backup",
+    "slug": "athena-offsite-backup",
+    "tags": "athena backup",
+    "desc": "Daily Kopia snapshot of Athena backup shares to Backblaze B2 (home-lab#297). Pinged with the job exit status after snapshot and maintenance.",
+    "schedule": "0 10 * * *",
+    "tz": "UTC",
+    "grace": 10800,
+    "channels": "*"
+  }
+]
