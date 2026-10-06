@@ -32,6 +32,10 @@ def check_admission():
         scheduler = namespace["GlmScheduler"](decoder, max_streams=4)
         assert scheduler.max_in_system is None
         scheduler._check_admission(False)  # An unset cap permits a fifth request to queue.
+        os.environ["TF_GLM_MAX_QUEUED"] = ""
+        scheduler = namespace["GlmScheduler"](decoder, max_streams=4)
+        assert scheduler.max_in_system is None
+        scheduler._check_admission(False)  # Upstream exports an empty cap by default.
         os.environ["TF_GLM_MAX_QUEUED"] = "0"
         scheduler = namespace["GlmScheduler"](decoder, max_streams=4)
         assert scheduler.max_in_system == 4
