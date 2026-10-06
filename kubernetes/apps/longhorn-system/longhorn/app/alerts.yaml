@@ -32,13 +32,16 @@ spec:
         # Presence, not state value: volume_state has six 0/1 state series
         # even when detached or restoring; backup_state is numeric per Backup
         # CR and can be 0. Count all states and collapse backup/scrape labels.
+        # Keep backup presence for 1h across scrape failures/owner handoffs so
+        # a stale marker cannot erase weeks of pending time. Source presence
+        # stays instant: recreating the volume resets its timer immediately.
         # Per-volume identity gives each orphan its own three-week grace period;
         # Alertmanager groups these into normal-priority warning notifications.
         # This is a review prompt only: rebuilding a cluster makes needed
         # restore backups look orphaned too. Never clean them up automatically.
         - alert: LonghornBackupVolumeOrphaned
           expr: |
-            count by (volume) (longhorn_backup_state{cluster="k8s-prod"})
+            count by (volume) (last_over_time(longhorn_backup_state{cluster="k8s-prod"}[1h]))
             unless on (volume)
             count by (volume) (longhorn_volume_state{cluster="k8s-prod"})
           for: 21d

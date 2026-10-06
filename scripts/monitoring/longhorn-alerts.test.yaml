@@ -118,3 +118,43 @@ tests:
       - expr: ALERTS{alertname="LonghornBackupVolumeOrphaned"}
         eval_time: 505h
         exp_samples: []
+
+  - name: A stale backup sample preserves pending age and deletion expires after one hour
+    # Five-minute inputs put a stale marker exactly on the hourly evaluation
+    # at 300h. Instant backup presence resets there; the 1h range must not.
+    interval: 5m
+    input_series:
+      - series: longhorn_backup_state{cluster="k8s-prod",volume="orphan",backup="a",pod="manager-a"}
+        values: 0+0x3599 stale
+      - series: longhorn_backup_state{cluster="k8s-prod",volume="orphan",backup="a",pod="manager-b"}
+        # Ownership resumes at 300h5m, then backup deletion at 504h5m.
+        values: _x3601 0+0x2447 stale
+    promql_expr_test:
+      - expr: ALERTS{alertname="LonghornBackupVolumeOrphaned",alertstate="pending"}
+        eval_time: 300h
+        exp_samples:
+          - labels: 'ALERTS{alertname="LonghornBackupVolumeOrphaned",alertstate="pending",cluster="k8s-prod",severity="warning",volume="orphan"}'
+            value: 1
+      - expr: ALERTS{alertname="LonghornBackupVolumeOrphaned",alertstate="pending"}
+        eval_time: 503h
+        exp_samples:
+          - labels: 'ALERTS{alertname="LonghornBackupVolumeOrphaned",alertstate="pending",cluster="k8s-prod",severity="warning",volume="orphan"}'
+            value: 1
+    alert_rule_test:
+      - eval_time: 503h
+        alertname: LonghornBackupVolumeOrphaned
+        exp_alerts: []
+      - eval_time: 504h
+        alertname: LonghornBackupVolumeOrphaned
+        exp_alerts:
+          - exp_labels:
+              cluster: k8s-prod
+              severity: warning
+              volume: orphan
+            exp_annotations:
+              summary: Longhorn backup volume orphan has no source volume
+              description: Backups for volume orphan have had no matching live Longhorn volume for 21 days. Confirm the live volume inventory is complete and no rebuild or restore needs these backups before reviewing them for manual deletion.
+              runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/longhorn-backup-restore.md#review-orphaned-backup-volumes
+      - eval_time: 505h
+        alertname: LonghornBackupVolumeOrphaned
+        exp_alerts: []

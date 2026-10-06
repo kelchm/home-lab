@@ -112,7 +112,7 @@ Use these checks to investigate a notification or audit the automation:
 
 ## Review orphaned backup volumes
 
-`LonghornBackupVolumeOrphaned` reports each backup volume whose source name has been absent from the observed live volume inventory continuously for 21 days. Each volume has its own timer; Alertmanager groups these by alert name and cluster into normal-priority `warning` notifications (12-hour repeats, no critical page). A source recreated with the same name resets its timer; a restore under a new name leaves the original backup volume a candidate. This is a review prompt, never permission to delete. Missing scrapes can also make a live volume look absent, and evaluator interruptions can affect the observed wait; it is not an authoritative deletion timestamp.
+`LonghornBackupVolumeOrphaned` reports each backup volume whose source name has been absent from the observed live volume inventory continuously for 21 days. Each volume has its own timer; Alertmanager groups these by alert name and cluster into normal-priority `warning` notifications (12-hour repeats, no critical page). Backup presence uses a one-hour lookback to bridge brief scrape failures and collector ownership handoffs; a stale backup sample must not erase weeks of pending time. Live source presence stays instant, so a source recreated with the same name resets its timer immediately; a restore under a new name leaves the original backup volume a candidate. This is a review prompt, never permission to delete. Missing source-volume scrapes can make a live volume look absent. Backup-metric gaps of an hour or more and evaluator interruptions can reset the observed wait; it is not an authoritative deletion timestamp.
 
 **Stop cleanup during a cluster rebuild, incomplete recovery, a restore drill, or a Talos rollout.** After a rebuild, every old backup volume can look orphaned: those backups are exactly what recovery needs. Coordinate with the owner of any off-site restore work (including #297) before touching the backup target. Keep backups needed for recovery even if the alert has fired; use a bounded, volume-specific silence with a reason and revisit date when appropriate.
 
@@ -132,7 +132,7 @@ Use these checks to investigate a notification or audit the automation:
 2. **Find candidates, then inspect the backup metadata.** In Grafana Explore, use the same presence query as the rule; an empty result means no candidates, not a scalar zero. The metrics count Backup CRs, so a backup volume with no Backup CRs is outside this alert's coverage. State values must not be filtered: detached/restoring volumes still exist, `longhorn_volume_state` includes zero-valued states, and `longhorn_backup_state` can itself be zero.
 
    ```promql
-   count by (volume) (longhorn_backup_state{cluster="k8s-prod"})
+   count by (volume) (last_over_time(longhorn_backup_state{cluster="k8s-prod"}[1h]))
    unless on (volume)
    count by (volume) (longhorn_volume_state{cluster="k8s-prod"})
    ```
@@ -166,9 +166,9 @@ Use these checks to investigate a notification or audit the automation:
    kubectl -n longhorn-system delete backupvolumes.longhorn.io "$backup_volume_cr"
    ```
 
-   This removes the backup volume and its backups from the target; it is destructive. Do not bulk-delete query output, delete the BackupTarget, or remove target files directly. Let Longhorn reconcile, then verify that the BackupVolume and its Backup CRs disappear, the target remains available with unrelated backups intact, and the candidate disappears from the query and alert after scrapes/evaluation catch up. Investigate controller errors or a stuck deletion instead of stripping finalizers. Off-site retention may preserve older copies; this operation does not remove them.
+   This removes the backup volume and its backups from the target; it is destructive. Do not bulk-delete query output, delete the BackupTarget, or remove target files directly. Let Longhorn reconcile, then verify that the BackupVolume and its Backup CRs disappear, the target remains available with unrelated backups intact, and the candidate disappears from the query and alert once the one-hour backup-presence lookback expires and evaluation catches up. Investigate controller errors or a stuck deletion instead of stripping finalizers. Off-site retention may preserve older copies; this operation does not remove them.
 
-Rule logic and the full 21-day wait are tested offline by `scripts/ci/validate-longhorn-alerts.sh`, using the committed production expression and delay. Fixtures cover pending before the boundary, firing at the boundary, same-name restoration resetting the timer, detached/restoring/never-backed-up volumes, duplicate backups/scrapes, zero-valued states, and isolation from other clusters. This proves Prometheus rule semantics on synthetic samples; it does not prove production vmalert loading, a real orphan remaining for weeks, or Pushover delivery.
+Rule logic and the full 21-day wait are tested offline by `scripts/ci/validate-longhorn-alerts.sh`, using the committed production expression and delay. Fixtures cover pending before the boundary, firing at the boundary despite a stale backup sample midway through the wait, resolution after the backup-presence lookback expires, same-name restoration resetting the timer, detached/restoring/never-backed-up volumes, duplicate backups/scrapes, zero-valued states, and isolation from other clusters. This proves Prometheus rule semantics on synthetic samples; it does not prove production vmalert loading, a real orphan remaining for weeks, or Pushover delivery.
 
 ## Drill: restore a single PV
 
