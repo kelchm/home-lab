@@ -1,17 +1,19 @@
 ---
-# Dedicated PostgreSQL backing store for Bambuddy. One instance is sufficient
-# for the initial single-printer deployment; Longhorn's recurring backups and
-# Bambuddy's portable exports provide DR without adding synchronous replicas.
+# Dedicated PostgreSQL backing store for Bambuddy. Two instances on separate
+# nodes: CloudNativePG switches the primary over ahead of a node drain, so each
+# instance needs only the default two replicas. Longhorn's recurring backups
+# and Bambuddy's portable exports provide DR.
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
   name: bambuddy-db
 spec:
-  instances: 1
+  instances: 2
+  affinity:
+    podAntiAffinityType: required
   storage:
     size: 5Gi
-    # New PVCs use this tier; existing volumes require a separate replica-count patch.
-    storageClass: longhorn-3replica
+    storageClass: longhorn
   resources:
     requests:
       cpu: 100m

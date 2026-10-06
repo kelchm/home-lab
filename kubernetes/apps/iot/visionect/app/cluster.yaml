@@ -2,20 +2,23 @@
 # VSS stores device inventory, settings, sessions, and event/status history in
 # PostgreSQL. Keep PostgreSQL 17 for the initial migration from the source 17.2
 # server; upgrading the database or VSS is deliberately a later change.
+# Two instances on separate nodes: CloudNativePG switches the primary over
+# ahead of a node drain, so each instance needs only the default two replicas.
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
   name: visionect-db
 spec:
-  instances: 1
+  instances: 2
+  affinity:
+    podAntiAffinityType: required
   imageName: ghcr.io/cloudnative-pg/postgresql:17.11-system-trixie
   storage:
     # The source is 2 GiB with ~6.4M history rows. Leave useful growth
     # headroom; Longhorn volumes can be expanded later if retention is kept
     # indefinite.
     size: 30Gi
-    # New PVCs use this tier; existing volumes require a separate replica-count patch.
-    storageClass: longhorn-3replica
+    storageClass: longhorn
   resources:
     requests:
       cpu: 250m
