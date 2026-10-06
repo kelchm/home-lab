@@ -59,7 +59,7 @@ Keep these properties when extending `.github/workflows/repository-validation.ya
    equal `success`. Failure, cancellation, and unexpected skipping must fail the
    aggregate result.
 4. PR jobs must never receive the SOPS age private key. Encryption structure is
-   checked on PRs; decryption is required only on trusted `main` pushes.
+   checked on PRs; YAML decryption is required only on trusted `main` pushes.
 5. Flux diffs are review artifacts and therefore remain PR-only. Flux build,
    Kubernetes schema, and policy validation run for both event types.
 6. Every new validation surface must be added to the aggregate job's `needs` list. If it uses PR filtering, add scope outputs and a filter that includes this workflow and its toolchain inputs. The repository configuration job always runs and needs no scope output or filter.
@@ -68,6 +68,14 @@ This model follows the same broad pattern used by large monorepos: optimize PR
 feedback using affected paths, then validate the complete trunk state. For a
 public example, PostHog's backend workflow skips its path filter on pushes with
 the explicit policy “Run all tests on master push.”
+
+## SOPS files
+
+The SOPS job covers every tracked `*.sops.yaml`, `*.sops.yml`, and `*.sops.env` file. PR path filtering includes all three formats, the validator and its regression tests, `.sops.yaml`, and toolchain/workflow changes. `scripts/ci/test-validate-sops.sh` checks the current tree and tests plaintext, partially encrypted, wrong-recipient, plaintext-comment, empty-value, and malformed/extra-recipient age-envelope dotenv files using freshly generated throwaway age recipients; no private keys are supplied to SOPS.
+
+All formats must pass `sops filestatus`, which checks SOPS metadata presence rather than authenticating ciphertext. Dotenv files additionally require every non-metadata assignment to have the SOPS AES256-GCM string ciphertext structure, an encrypted MAC, age encrypted-key envelopes containing exactly one X25519 stanza and a complete SOPS data-key payload per metadata recipient, and exactly the recipients in the first matching `.sops.yaml` creation rule. Duplicate assignments and unknown metadata fields are rejected. Dotenv rules currently support age-only, full-value encryption; a rule introducing other options fails explicitly until the validator supports them. Nonempty dotenv comments must also have SOPS ciphertext structure with `type:comment`; SOPS metadata is exempt from value encryption. Empty assignment values are rejected explicitly because SOPS leaves them unencrypted; remove an unused assignment rather than leaving it empty. Dotenv has no nested YAML `data`/`stringData` selection.
+
+Keyless checks cannot authenticate ciphertext, verify the MAC, or prove that an age envelope can actually be opened by its declared recipient. YAML files retain the existing metadata-only PR check and required decryption on trusted `main` pushes. Dotenv files receive structure and recipient checks on both events and are never decrypted by this validator: the Synology file uses a separate NAS recipient, whose private key is not provided to GitHub Actions. `--require-decrypt` requires decryption of YAML files only. Run the keyless checks locally with `mise exec -- scripts/ci/test-validate-sops.sh`.
 
 ## Talos machine configs
 
