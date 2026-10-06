@@ -255,7 +255,7 @@ If the data looks right: either swap the workload's PVC reference to the restore
 
 Use this when all three nodes are lost or wiped and the NAS backup share is intact. It rebuilds Talos and Flux from this repository, then restores volume data from the Longhorn backups.
 
-**If the NAS is also lost, stop at step 5.** No copy of the Longhorn backups exists outside the NAS ([#297](https://github.com/kelchm/home-lab/issues/297)). The cluster comes back with empty volumes, and the media and manuals shares are gone with the NAS.
+**If the NAS is also lost,** the Longhorn backup store has an off-site copy in Backblaze B2, taken daily at 10:00 UTC. Restore it first by following [Off-site backup from Athena](../../synology/offsite-backup/README.md#restore), and serve the directory that contains `backupstore/` over NFS. Before step 5, change `backupTargetURL` in `kubernetes/apps/longhorn-system/longhorn/app/backuptarget.yaml` on `main` to that NFS URL, so the Flux-managed `default` target points at the restored store. Do not add it as a second target. Serving the restored store over NFS and restoring through a repointed `default` target are both **undrilled**. What was **drilled**, on 2026-10-05 ([restore drill](../../synology/offsite-backup/README.md#restore-drill-2026-10-05)): restoring one Kanidm volume's backups from B2 with Kopia, serving them over S3 from a throwaway versitygw pod, and rebuilding the volume as a disk image with the engine's `restore-to-file` command, outside Longhorn's control plane. A full restore of the store is **undrilled**. The media and manuals shares are not in the off-site copy and are gone with the NAS.
 
 ### What has been exercised
 
