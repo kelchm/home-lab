@@ -87,10 +87,10 @@ To restore one Longhorn volume's backups instead of the whole store, restore its
 
 Add `--point-in-time=2026-10-01T00:00:00Z` to `connect` to see the repository as it was at that moment, which is how to recover after files were hidden or overwritten by a stolen key. Raise the Backblaze download cap first if the restore is larger than the free allowance.
 
-Longhorn cannot read the bucket directly: it writes lock files into a backup store even when restoring. Serve the restored `backupstore/` directory from somewhere writable, over NFS or through an S3 gateway, and then either:
+Longhorn cannot read the bucket directly: it writes lock files into a backup store even when restoring. Serve the directory that contains `backupstore/`, not `backupstore/` itself, from somewhere writable, over NFS or through an S3 gateway. Longhorn appends `backupstore/volumes/...` to the target it is given: the live target, `nfs://10.32.25.5:/volume1/backups-k8s-prod/longhorn`, is the directory holding `backupstore/`, and `/path/to/restored/longhorn` above is its restored equivalent. The target URL is the URL of that directory, for example `nfs://<host>:/path/to/restored/longhorn`, or `s3://<bucket>@<region>/` when `backupstore/` sits at the bucket root. Then either:
 
-- **Without a Longhorn system:** run the engine binary against it. `longhorn backup restore-to-file '<target-url>?backup=<backup>&volume=<volume>' --output-file vol.raw --output-format raw` from the `longhornio/longhorn-engine` image produces the volume as a disk image.
-- **With Longhorn:** add it as a backup target and continue with the [Longhorn restore runbook](../../docs/runbooks/longhorn-backup-restore.md). Do this only on a cluster that does not also have the original target. Backup names are the same in both stores, and Longhorn resolves a restore by backup name, so it silently restores from the original target.
+- **Without a Longhorn system:** run the engine binary against it. `longhorn backup restore-to-file '<target-url>?backup=<backup>&volume=<volume>' --output-file vol.raw --output-format raw` from the `longhornio/longhorn-engine` image produces the volume as a disk image. This is the path the drill below exercised, through an S3 gateway.
+- **With Longhorn:** make it the cluster's backup target and continue with the [Longhorn restore runbook](../../docs/runbooks/longhorn-backup-restore.md). Not drilled. Do this only on a cluster that does not also have the original target. Backup names are the same in both stores, and Longhorn resolves a restore by backup name, so it silently restores from the original target.
 
 When copying a restored tree from macOS, remove the `._*` files that `tar` adds.
 
@@ -102,16 +102,16 @@ One volume, `identity/kanidm-data-kanidm-default-0`, with the NAS used only as a
 |---|---|
 | Restore the volume's directory from B2 to a workstation with a temporary read key | 539 files, 70 MB, 17 seconds |
 | Compare with the NAS copy | All 539 files identical by SHA-256 |
-| Serve the copy from a throwaway versitygw pod and run `longhorn backup restore-to-file` (engine v1.12.1) on backup `backup-1ca3d4fa57d34be5` | 2 GiB raw image; the gateway logged 75 block reads and the lock file being written and removed |
+| Serve the copy over S3 from a throwaway versitygw pod, as a bucket `drill` with `backupstore/` at its root, and run `longhorn backup restore-to-file 's3://drill@us-east-1/?backup=backup-1ca3d4fa57d34be5&volume=pvc-d0a45a01-b999-4109-9edd-34f2a635e343'` (engine v1.12.1) | 2 GiB raw image; the gateway logged 75 block reads and the lock file being written and removed |
 | Check the image | ext4, `e2fsck -fn` clean; `kanidm.db` passes `PRAGMA integrity_check`, 122 tables, 323 entries |
 
-A first attempt through a second Longhorn backup target on `k8s-prod` restored from the NAS instead, for the reason given above; it is not counted. Not exercised: a full 90 GB restore, and starting Kanidm on the restored volume.
+A first attempt through a second Longhorn backup target on `k8s-prod` restored from the NAS instead, for the reason given above; it is not counted. Not exercised: serving the restored store over NFS, a restore through Longhorn itself, a full 90 GB restore, and starting Kanidm on the restored volume.
 
 ## Recovery objectives
 
 | | |
 |---|---|
-| Data age (RPO) | About 27 hours when the daily run succeeds: Longhorn backs up at 07:00 UTC and this job starts at 10:00 UTC, so just before a run completes the newest off-site backup is the previous day's. Each failed or unfinished run adds a day; the dead-man check reports those |
+| Data age (RPO) | At worst, 27 hours plus the duration of the run in progress, when runs succeed. Longhorn backs up at 07:00 UTC and this job starts at 10:00 UTC, so when a run starts the newest off-site backup is already 27 hours old, and it stays the newest until that run completes. The first run took 7h25m; an ordinary daily run uploads only what changed and has not been timed yet. Each failed or unfinished run adds a day; the dead-man check reports those |
 | Time to restore (RTO) | Not measured for the full store. One 70 MB volume directory took 17 seconds; 90 GB depends on the downlink |
 | History | 14 daily and 4 weekly snapshots of the store, each holding Longhorn's own 7 daily and 4 weekly backups |
 | Drill cadence | None fixed. Repeat the drill above after changing the Kopia version, the repository layout or the provider |
