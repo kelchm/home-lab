@@ -141,13 +141,7 @@ vmalert's always-firing `Watchdog` routes to the `healthchecks-watchdog` webhook
 
 The heartbeat stops if the cluster, vmalert evaluation (Watchdog's `vector(1)` is evaluated against VMSingle), VMAlertmanager, DNS, the `vmalertmanager` egress policy, or the WAN fails. It does not exercise the `k8s-prod Alerts` Pushover credentials; the delivery tests above do.
 
-Healthchecks.io check settings:
-
-| Setting | Value |
-|---|---|
-| Schedule | Simple: period 5 minutes, grace 5 minutes |
-| Pushover integration | Down: high priority; up: low priority |
-| Email integration | Account email, enabled |
+The check's settings are declared in [`healthchecks/checks.json`](../../healthchecks/checks.json) and applied as described in [healthchecks.io checks](#healthchecksio-checks).
 
 To test, silence the heartbeat for longer than the detection window:
 
@@ -163,7 +157,33 @@ Verified 2026-09-27 in #218: a 20-minute silence produced the "down" Pushover an
 
 For planned whole-cluster downtime, pause the check after the heartbeat stops, not before: any ping resumes a paused check. Shut the cluster down, confirm healthchecks.io shows no ping since, and pause within ten minutes of the last ping. The first ping after the cluster returns resumes monitoring; confirm the check shows up.
 
-The ping URL is a credential: anyone who holds it can mask an outage by pinging. To rotate it, create a replacement check with the same schedule and integrations, replace the URL in `vmalertmanager-config.sops.yaml`, confirm pings arrive on the new check, and then delete the old check.
+The ping URL is a credential: anyone who holds it can mask an outage by pinging. To rotate it, declare a replacement check with a temporary slug and the same name, settings and integrations, apply it, replace the URL in `vmalertmanager-config.sops.yaml`, and confirm the replacement is up. Then explicitly delete the retired check in the web UI, rename the replacement's slug to `k8s-prod-watchdog`, and remove its temporary entry from the file while retaining the original declaration. Run preview and apply again to verify that the replacement matches the declaration and has the Watchdog safeguards. Renaming the slug preserves the UUID-based ping URL handed to the cluster.
+
+## healthchecks.io checks
+
+[`healthchecks/checks.json`](../../healthchecks/checks.json) declares every check in the `home-lab` project: name, slug, tags, description, timing (`timeout`, or `schedule` with `tz`), `grace` and `channels`. `timeout` and `grace` are in seconds; `schedule` is a cron expression and `tz` is its timezone. [`scripts/healthchecks.py`](../../scripts/healthchecks.py) applies the file from a workstation by upserting each check on its slug with the [Management API v3](https://healthchecks.io/docs/api/#create-check), which keeps an existing check's ping URL. It never deletes: a check that exists in the project but not in the file is listed and left alone, and removing one is a deliberate step in the web UI.
+
+Integrations are configured per project in the web UI and are not in the file. Pushover sends "down" at high priority and "up" at low priority, and email goes to the account address. `channels` is always `"*"`, which assigns every project integration to the check.
+
+The script needs the project's read-write API key, 1Password item `healthchecksio-home-lab-rw`. Export `HC_API_KEY_REF` with that item's secret reference and the script reads the key through `op read`; `HC_API_KEY_FILE` can name a local file holding the key instead. The key can delete checks and reveals every ping URL, so it stays on the workstation and never goes to the cluster or Athena.
+
+```sh
+export HC_API_KEY_REF="op://Private/healthchecksio-home-lab-rw/credential"
+task healthchecks:inspect   # live settings of every check, in the file's shape
+task healthchecks:preview   # live settings, differences, and the requests an apply would send
+task healthchecks:apply     # the same plan, then the requests after typing "apply"
+```
+
+Preview and inspect only read. Apply refuses before sending anything when a declared slug matches more than one live check, or when `k8s-prod-watchdog` is missing, is not up, or would get different timing: the script updates that check by its existing UUID so a concurrent removal fails instead of creating a replacement, and it never changes its schedule. After sending, apply reads the project back and fails unless every declared check matches the file, has every project integration, and kept the ping URL and status it had before; `k8s-prod-watchdog` must also still be up. Changing a check's timing makes healthchecks.io recompute its status from the last ping, so apply a schedule change while the check is up and expect the status comparison to flag any flip.
+
+Initial adoption verified 2026-10-05 for #770: both existing checks matched the file after apply and retained their ping URLs and `up` status; Watchdog had no status flips during the acceptance test. A throwaway check was created from the file, remained untouched after removal from the file and another apply, and was then explicitly deleted by slug.
+
+To add a check for a new job:
+
+1. Add it to `healthchecks/checks.json` with a unique slug and run `task healthchecks:preview`. The new check shows as `CREATE`.
+2. Merge the change, then run `task healthchecks:apply`.
+3. Copy the new check's ping URL from the healthchecks.io web UI into the job's own SOPS-encrypted secret. A ping URL is a credential: the script never prints one, and it stays out of the file, the terminal and issue comments.
+4. Run the job, or wait for its first run, and confirm the check goes up.
 
 ## Cluster labels
 
