@@ -22,7 +22,7 @@ Not yet verified: that Docker comes back with the same settings after a PVE node
 |---|---|---|
 | `instance` | Physical node, such as `spark-1` | The host's ingestion token |
 | `platform` | Machine type: `k8s`, `pve` or `spark` | The host's ingestion token; the node-exporter scrape for the cluster nodes |
-| `job` | Collector, such as `spark-node` or `pve-vmagent` | The scrape configuration |
+| `job` | Collector or source, such as `spark-node`, `pve-vmagent` or `pve-backup` | Scrape configuration for scraped series; the webhook URL for PVE backup metrics |
 | `model`, `runtime`, `recipe` | What a Spark is serving | SparkRun's container labels |
 
 Each host has one `VMUser` in [metrics-ingest](../../kubernetes/apps/observability/metrics-ingest/app/vmusers.yaml). VMAuth adds that user's `instance` and `platform` to every sample and a host cannot override them, so the Compose and scrape files are identical on every host of a type. Host series carry no `cluster` label except for PVE backup completion metrics, which carry `cluster=pve-sbx`, and every Kubernetes rule group is restricted to `cluster="k8s-prod"`, so the two never mix. The k8s-prod nodes follow the same convention on their node-exporter series, where `instance` is the Kubernetes node name and `platform` is `k8s`. The **Hosts** dashboard lists every machine and filters by platform and node, and the stock **Node Exporter Full** dashboard gives the detail for one. **Proxmox via Prometheus** covers the PVE cluster and its guests, **Sparks / GPU and host health** the Sparks themselves, and **AI / Inference serving** filters by model, recipe and serving host.
