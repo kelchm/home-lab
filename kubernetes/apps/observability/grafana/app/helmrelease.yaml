@@ -13,7 +13,7 @@ spec:
   chart:
     spec:
       chart: grafana
-      version: 10.5.15
+      version: 13.2.7
       sourceRef:
         kind: HelmRepository
         name: grafana
@@ -91,7 +91,7 @@ spec:
       - victoriametrics-metrics-datasource
       # Pin the reviewed release instead of silently taking a new plugin on a
       # future Grafana restart.
-      - https://grafana.com/api/plugins/victoriametrics-logs-datasource/versions/0.31.0/download;victoriametrics-logs-datasource
+      - victoriametrics-logs-datasource@0.31.0@https://grafana.com/api/plugins/victoriametrics-logs-datasource/versions/0.31.0/download
 
     # Sidecars discover datasources/dashboards by ConfigMap label. Each
     # subsequent bake-off commit lands labeled ConfigMaps; Grafana picks
@@ -111,7 +111,19 @@ spec:
         # Chart auto-grants the sidecar a ClusterRole when set to ALL.
         searchNamespace: ALL
         folderAnnotation: grafana_folder
+        # Native sidecar: Grafana deletes provisioned dashboards whose files are
+        # missing, so the files must be written before it starts.
+        initDashboards: true
+        restartPolicy: Always
+        startupProbe:
+          httpGet:
+            path: /healthz
+            port: 8083
+          periodSeconds: 2
+          failureThreshold: 150
         provider:
+          # Renaming the provider deletes and recreates every provisioned dashboard.
+          name: dashboards
           foldersFromFilesStructure: true
 
     grafana.ini:
@@ -152,5 +164,6 @@ spec:
       requests:
         cpu: 50m
         memory: 256Mi
+      # Startup with plugin loading and provisioning peaks near 850Mi.
       limits:
-        memory: 512Mi
+        memory: 1Gi

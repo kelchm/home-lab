@@ -1,0 +1,16 @@
+version: '3'
+
+# The script reads the API key through `op read "$HC_API_KEY_REF"`; nothing here stores it.
+tasks:
+
+  preview:
+    desc: Show live healthchecks.io settings and the requests an apply would send
+    cmd: python3 "{{.SCRIPTS_DIR}}/healthchecks.py" preview
+
+  inspect:
+    desc: Print every live check's managed settings in the shape of healthchecks/checks.json
+    cmd: python3 "{{.SCRIPTS_DIR}}/healthchecks.py" inspect
+
+  apply:
+    desc: Upsert the checks in healthchecks/checks.json after confirmation; never deletes
+    cmd: python3 "{{.SCRIPTS_DIR}}/healthchecks.py" apply

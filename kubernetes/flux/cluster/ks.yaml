@@ -52,6 +52,21 @@ spec:
               target:
                 group: helm.toolkit.fluxcd.io
                 kind: HelmRelease
+            - # Grafana's database migrations are forward-only: retry a failed upgrade, never roll back
+              patch: |-
+                apiVersion: helm.toolkit.fluxcd.io/v2
+                kind: HelmRelease
+                metadata:
+                  name: grafana
+                spec:
+                  upgrade:
+                    strategy:
+                      name: RetryOnFailure
+                    remediation: null
+              target:
+                group: helm.toolkit.fluxcd.io
+                kind: HelmRelease
+                name: grafana
       target:
         group: kustomize.toolkit.fluxcd.io
         kind: Kustomization

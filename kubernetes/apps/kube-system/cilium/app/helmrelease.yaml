@@ -86,6 +86,20 @@ spec:
           enabled: true
       replicas: 1
       rollOutPods: true
+      # Chart defaults plus node.multus.io/not-ready: the operator is
+      # hostNetwork and has to run before Multus can clear that taint. The
+      # chart appends node.cilium.io/agent-not-ready itself.
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+        - key: node-role.kubernetes.io/master
+          operator: Exists
+        - key: node.kubernetes.io/not-ready
+          operator: Exists
+        - key: node.cloudprovider.kubernetes.io/uninitialized
+          operator: Exists
+        - key: node.multus.io/not-ready
+          operator: Exists
     prometheus:
       enabled: true
       serviceMonitor:

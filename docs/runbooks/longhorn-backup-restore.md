@@ -110,6 +110,66 @@ Use these checks to investigate a notification or audit the automation:
 - Longhorn manager logs containing `backup failed` or `BackupTarget unavailable` — use when the CR status and timestamp alerts fire.
 - Free space on the NAS share — DSM → Storage Manager → Volume 1 utilization.
 
+## Review orphaned backup volumes
+
+`LonghornBackupVolumeOrphaned` reports each backup volume whose source name has been absent from the observed live volume inventory continuously for 21 days. Each volume has its own timer; Alertmanager groups these by alert name and cluster into normal-priority `warning` notifications (12-hour repeats, no critical page). Backup presence uses a one-hour lookback to bridge brief scrape failures and collector ownership handoffs; a stale backup sample must not erase weeks of pending time. Live source presence stays instant, so a source recreated with the same name resets its timer immediately; a restore under a new name leaves the original backup volume a candidate. This is a review prompt, never permission to delete. Missing source-volume scrapes can make a live volume look absent. Backup-metric gaps of an hour or more and evaluator interruptions can reset the observed wait; it is not an authoritative deletion timestamp.
+
+**Stop cleanup during a cluster rebuild, incomplete recovery, a restore drill, or a Talos rollout.** After a rebuild, every old backup volume can look orphaned: those backups are exactly what recovery needs. Coordinate with the owner of any off-site restore work (including #297) before touching the backup target. Keep backups needed for recovery even if the alert has fired; use a bounded, volume-specific silence with a reason and revisit date when appropriate.
+
+1. **Confirm that the live volume list is complete before deleting anything.** Check the intended kube context, all nodes Ready, all Longhorn manager pods Ready, and full Longhorn scrape coverage in the Operations dashboard. Resolve `LonghornMetricsMissing`, failed scrapes, API/list errors, or controller errors first. Compare the complete Longhorn volume list with PV CSI handles, expected application PVCs, and the Longhorn UI → Volume list. Bound PVCs alone do not prove completeness after a rebuild: confirm that every expected application and recovery claim is present and restored, and that the owner has declared recovery complete.
+
+   ```sh
+   kubectl config current-context
+   kubectl get nodes
+   kubectl -n longhorn-system get pods -l app=longhorn-manager
+   kubectl -n longhorn-system get volumes.longhorn.io \
+     -o custom-columns='VOLUME:.metadata.name,STATE:.status.state,NAMESPACE:.status.kubernetesStatus.namespace,PVC:.status.kubernetesStatus.pvcName,RESTORE_REQUIRED:.status.restoreRequired'
+   kubectl get pv -o json | jq -r '.items[] | select(.spec.csi.driver == "driver.longhorn.io") | [.metadata.name, .spec.csi.volumeHandle, .status.phase, .spec.claimRef.namespace, .spec.claimRef.name] | @tsv'
+   kubectl get pvc -A
+   kubectl -n longhorn-system get backuptargets.longhorn.io
+   ```
+
+2. **Find candidates, then inspect the backup metadata.** In Grafana Explore, use the same presence query as the rule; an empty result means no candidates, not a scalar zero. The metrics count Backup CRs, so a backup volume with no Backup CRs is outside this alert's coverage. State values must not be filtered: detached/restoring volumes still exist, `longhorn_volume_state` includes zero-valued states, and `longhorn_backup_state` can itself be zero.
+
+   ```promql
+   count by (volume) (last_over_time(longhorn_backup_state{cluster="k8s-prod"}[1h]))
+   unless on (volume)
+   count by (volume) (longhorn_volume_state{cluster="k8s-prod"})
+   ```
+
+   Cross-check each candidate against the complete API inventory and BackupTarget availability/sync status. The BackupVolume CR's name can differ from its source volume name; select it by `.spec.volumeName` and the intended target, not by a guessed CR name. Inspect its recorded namespace/PVC, backup dates, size, and messages:
+
+   ```sh
+   source_volume='<volume label from the alert>'
+   kubectl -n longhorn-system get volumes.longhorn.io "$source_volume"
+   kubectl -n longhorn-system get backupvolumes.longhorn.io -o json | jq --arg volume "$source_volume" '
+     .items[] | select(.spec.volumeName == $volume) |
+     {name: .metadata.name, target: .spec.backupTargetName, source: .spec.volumeName, status: .status}'
+   kubectl -n longhorn-system get backups.longhorn.io -l "backup-volume=$source_volume" \
+     --sort-by=.status.backupCreatedAt -o custom-columns='BACKUP:.metadata.name,CREATED:.status.backupCreatedAt,STATE:.status.state,URL:.status.url'
+   ```
+
+   Also list restore/standby references across all live volumes, including volumes with different names from the source. Compare `FROM_BACKUP` URLs with the candidate's backup URLs and source volume parameter/target; a matching standby volume or unfinished restore still depends on those backups. An empty list does not prove a rebuild is complete or remove the need to review recovery plans.
+
+   ```sh
+   kubectl -n longhorn-system get volumes.longhorn.io -o json | jq -r '
+     .items[] | select((.spec.fromBackup // "") != "" or .spec.standby == true or .status.restoreRequired == true or .status.restoreInitiated == true) |
+     [.metadata.name, .spec.fromBackup, .spec.standby, .status.restoreRequired, .status.restoreInitiated] | @tsv'
+   ```
+
+   Only an explicit `NotFound` for the source, after the completeness checks, supports absence; a timeout, forbidden response, or other API failure does not. Confirm why the original volume was deleted, whether a replacement now owns the same application's data, and whether any rollback, restore, retention, or off-site recovery plan still needs its backups. Age alone is insufficient. Record the decision and exact source, target, and BackupVolume CR name in the operational issue before proceeding.
+
+3. **Delete one reviewed backup volume by hand.** Recheck source absence and that no rebuild/restore/rollout has begun immediately before deletion. In Longhorn UI → Backup, select the exact target and backup volume and choose Delete, or use the reviewed CR name:
+
+   ```sh
+   backup_volume_cr='<reviewed BackupVolume metadata.name>'
+   kubectl -n longhorn-system delete backupvolumes.longhorn.io "$backup_volume_cr"
+   ```
+
+   This removes the backup volume and its backups from the target; it is destructive. Do not bulk-delete query output, delete the BackupTarget, or remove target files directly. Let Longhorn reconcile, then verify that the BackupVolume and its Backup CRs disappear, the target remains available with unrelated backups intact, and the candidate disappears from the query and alert once the one-hour backup-presence lookback expires and evaluation catches up. Investigate controller errors or a stuck deletion instead of stripping finalizers. Off-site retention may preserve older copies; this operation does not remove them.
+
+Rule logic and the full 21-day wait are tested offline by `scripts/ci/validate-longhorn-alerts.sh`, using the committed production expression and delay. Fixtures cover pending before the boundary, firing at the boundary despite a stale backup sample midway through the wait, resolution after the backup-presence lookback expires, same-name restoration resetting the timer, detached/restoring/never-backed-up volumes, duplicate backups/scrapes, zero-valued states, and isolation from other clusters. This proves Prometheus rule semantics on synthetic samples; it does not prove production vmalert loading, a real orphan remaining for weeks, or Pushover delivery.
+
 ## Drill: restore a single PV
 
 Use case: an app's data is corrupted/wiped and you want the previous night's copy back.
@@ -208,7 +268,7 @@ Do not read this section as a tested procedure. Each step below is tagged with o
 
 - The cluster was created on 2026-04-24. No rebuild from `task bootstrap:talos` and `task bootstrap:apps` is recorded since, and `scripts/bootstrap-apps.sh` has changed since then. Steps 1–5 are **undrilled**.
 - One thing was **drilled**, on 2026-09-30 ([Visionect restore drill](visionect-migration.md#restore-drill-2026-09-30)): restoring the `visionect-db-1` and `visionect` backups into new single-replica volumes in a disposable namespace, and starting PostgreSQL on the restored database volume. Everything else, including the same restore for any other application, is **undrilled**.
-- `task bootstrap:apps` is expected to stall on a clean cluster ([#758](https://github.com/kelchm/home-lab/issues/758)). Step 4 carries an undrilled workaround.
+- `task bootstrap:apps` was traced, not observed, to deadlock on a clean cluster behind the `node.multus.io/not-ready` taint ([#758](https://github.com/kelchm/home-lab/issues/758)). The bootstrap now installs Multus itself; that fix is **undrilled**, and step 4 says what to check if it still stalls.
 - Recovery time is unmeasured. Backups run daily at 07:00 UTC, so data loss is one day when the schedule was healthy and longer if backups were failing before the outage; record the timestamp of each backup you restore. The drill and its measurements are tracked in [#224](https://github.com/kelchm/home-lab/issues/224).
 
 ### Prerequisites
@@ -232,13 +292,17 @@ Run every command from the repository root.
 1. **Check the key.** `sops -d talos/talsecret.sops.yaml > /dev/null` must exit 0. *Undrilled.*
 2. **Boot all three nodes from the USB installer** and leave them in maintenance mode. `talosctl -n 10.32.30.11 get disks --insecure` must answer for each node address. Installing wipes the whole system disk, including the Longhorn data partition, so do not continue on a node whose replicas you still need. *Undrilled.*
 3. **`task bootstrap:talos`.** It generates the node configs from the committed `talsecret.sops.yaml`, applies them to the nodes in maintenance mode, bootstraps etcd, and writes `kubeconfig` to the repository root. The etcd and kubeconfig steps retry every 10 seconds without a limit; nodes need several minutes to install and reboot. Done when `kubectl get nodes` lists three nodes. They stay `NotReady` until step 4 installs the CNI. *Undrilled.*
-4. **`task bootstrap:apps`.** Do not run `flux bootstrap`: Flux here is installed and owned by Flux Operator through the bootstrap Helmfile. The task waits up to 10 minutes for three nodes to register, creates the namespaces, applies the `sops-age` Secret to `flux-system`, applies the bootstrap CRDs, then installs Cilium, CoreDNS, Spegel, cert-manager, Flux Operator and the FluxInstance in that order. It is safe to rerun after a failure. Done when it logs `The cluster is bootstrapped and Flux is syncing the Git repository`. *Undrilled.*
+4. **`task bootstrap:apps`.** Do not run `flux bootstrap`: Flux here is installed and owned by Flux Operator through the bootstrap Helmfile. The task waits up to 10 minutes for three nodes to register, creates the namespaces, applies the `sops-age` Secret to `flux-system`, applies the bootstrap CRDs, then installs Cilium, Multus with its `cni-ready-untaint` DaemonSet, CoreDNS, Spegel, cert-manager, Flux Operator and the FluxInstance in that order. It is safe to rerun after a failure. Done when it logs `The cluster is bootstrapped and Flux is syncing the Git repository`. *Undrilled.*
 
-   **Expected stall ([#758](https://github.com/kelchm/home-lab/issues/758), traced, not observed):** nodes register with the `node.multus.io/not-ready` taint, and only Multus, which Flux installs later, clears it. CoreDNS therefore stays `Pending` and the task never reaches Flux. When `kubectl -n kube-system get pods` shows the `cilium` pods Running and `coredns` Pending, apply Multus by hand from a second terminal, then let the task continue or rerun it. *Undrilled.*
+   **Multus step ([#758](https://github.com/kelchm/home-lab/issues/758), traced, not observed):** nodes register with the `node.multus.io/not-ready` taint and stay `NotReady` until Multus writes `/etc/cni/net.d/00-multus.conf`, so nothing that needs a pod network can start before Multus does. Two things in the repository cover that: `cilium-operator` tolerates the taint, so the Cilium release can finish, and the Helmfile applies `kubernetes/apps/kube-system/multus/app`, the same kustomization Flux owns afterwards, before CoreDNS, then waits up to 10 minutes each for the `cni-ready-untaint` pods to start and for every node to be `Ready`. *Undrilled.*
+
+   If the task still stalls, find what is `Pending` and which taints remain, then read the pod's events and the node's `Ready` message for the cause. The cases this change is meant to cover: `cilium-operator` Pending on the Multus taint (the toleration is not in effect); nodes `NotReady` for a missing CNI config with no `kube-multus-ds` pods (the hook did not apply the kustomization; apply it by hand); nodes `Ready` but still tainted `node.multus.io/not-ready` with `coredns` Pending (`cni-ready-untaint` has not started or cannot patch the node; check its pods and logs). Rerun the task afterwards. *Undrilled.*
 
    ```sh
-   kustomize build kubernetes/apps/kube-system/multus/app | kubectl apply --server-side -f -
-   kubectl get nodes -o custom-columns='NAME:.metadata.name,TAINTS:.spec.taints[*].key'   # until the multus taint is gone
+   kubectl -n kube-system get pods -o wide
+   kubectl get nodes -o custom-columns='NAME:.metadata.name,READY:.status.conditions[?(@.type=="Ready")].status,TAINTS:.spec.taints[*].key'
+   kubectl describe node <node> | grep -A8 Conditions
+   kubectl apply --server-side --force-conflicts -k kubernetes/apps/kube-system/multus/app
    ```
 5. **Wait for Flux and Longhorn.** *Undrilled.*
 

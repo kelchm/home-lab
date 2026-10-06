@@ -65,6 +65,8 @@ jobs:
               - 'proxmox/monitoring/backup-metrics/**'
               - 'scripts/ci/validate-pve-backups.sh'
               - 'scripts/ci/validate-vlagent.sh'
+              - 'scripts/ci/validate-longhorn-alerts.sh'
+              - 'scripts/monitoring/longhorn-alerts.test.yaml'
               - 'scripts/logging/**'
               - 'scripts/ci/test-validate-cilium-policies.sh'
               - 'scripts/ci/validate-cilium-policies.sh'
@@ -87,6 +89,10 @@ jobs:
               - '.renovaterc.json5'
               - '.shellcheckrc'
               - '**/*.sh'
+              - 'scripts/healthchecks.py'
+              - 'scripts/ci/test-healthchecks.py'
+              - 'healthchecks/**'
+              - '.taskfiles/healthchecks/**'
             skills:
               - '.github/workflows/repository-validation.yaml'
               - '.agents/skills/**'
@@ -96,7 +102,9 @@ jobs:
               - '.sops.yaml'
               - '**/*.sops.yaml'
               - '**/*.sops.yml'
+              - '**/*.sops.env'
               - 'scripts/ci/validate-sops.sh'
+              - 'scripts/ci/test-validate-sops.sh'
             hosts:
               - '.github/workflows/repository-validation.yaml'
               - '.mise.toml'
@@ -251,6 +259,10 @@ jobs:
         if: needs.pre-job.outputs.kubernetes_changed == 'true'
         run: scripts/ci/validate-vlagent.sh
 
+      - name: Validate Longhorn backup alerts
+        if: needs.pre-job.outputs.kubernetes_changed == 'true'
+        run: scripts/ci/validate-longhorn-alerts.sh
+
       - name: Render Flux Kustomizations recursively
         if: needs.pre-job.outputs.kubernetes_changed == 'true'
         run: |
@@ -361,11 +373,15 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install SOPS
+      - name: Install SOPS validation tools
         if: needs.pre-job.outputs.sops_changed == 'true'
         uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5.0.1
         with:
-          install_args: "aqua:getsops/sops"
+          install_args: "aqua:getsops/sops aqua:mikefarah/yq aqua:FiloSottile/age"
+
+      - name: Test SOPS validation
+        if: needs.pre-job.outputs.sops_changed == 'true'
+        run: scripts/ci/test-validate-sops.sh
 
       - name: Validate SOPS encryption
         if: github.event_name == 'pull_request' && needs.pre-job.outputs.sops_changed == 'true'
@@ -469,6 +485,10 @@ jobs:
       - name: Test bootstrap scripts
         if: needs.pre-job.outputs.scripts_changed == 'true'
         run: scripts/ci/test-bootstrap-scripts.sh
+
+      - name: Test healthchecks apply safety without credentials or network access
+        if: needs.pre-job.outputs.scripts_changed == 'true'
+        run: python3 scripts/ci/test-healthchecks.py
 
       - name: No shell changes
         if: needs.pre-job.outputs.scripts_changed != 'true'
