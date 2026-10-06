@@ -17,5 +17,15 @@
     "tz": "UTC",
     "grace": 10800,
     "channels": "*"
+  },
+  {
+    "name": "Athena Google Photos Takeout",
+    "slug": "athena-google-photos-takeout",
+    "tags": "athena collection",
+    "desc": "Daily pull of Google Takeout archives from Drive to Athena (home-lab#781). Pinged at the start of each run and with its status; a run fails when a pull or extraction fails or no archive has arrived for 40 days.",
+    "schedule": "0 4 * * *",
+    "tz": "UTC",
+    "grace": 10800,
+    "channels": "*"
   }
 ]

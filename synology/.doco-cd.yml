@@ -21,3 +21,8 @@ name: offsite-backup
 working_dir: synology/offsite-backup
 prune_images: false
 reconciliation: false
+---
+name: google-photos-takeout
+working_dir: synology/google-photos-takeout
+prune_images: false
+reconciliation: false

@@ -1,0 +1,86 @@
+# Daily pull of Google Takeout archives from Drive, extracted one directory per export.
+# README.md covers the Takeout schedule, credentials, first deployment and upkeep.
+name: google-photos-takeout
+
+services:
+  collector:
+    image: docker.io/rclone/rclone:1.75.1@sha256:45401ad7410db1d67ffdb58e19059ad20b0d8e0285a60e38bbec55cc1019c7a5
+    # Root without capabilities: the export share is root-only, like the backup shares.
+    user: "0:0"
+    read_only: true
+    entrypoint: ["/bin/sh", "-c"]
+    # Compose interpolates single-dollar variables, so shell variables are written with two.
+    command:
+      - |
+        set -o errexit -o nounset
+        umask 077
+        mkdir -p /work/archives /work/state
+        touch /work/state/extracted.txt
+        printf '[gdrive]\ntype = drive\nscope = drive.readonly\nclient_id = %s\nclient_secret = %s\ntoken = %s\n' \
+          "$$GDRIVE_CLIENT_ID" "$$GDRIVE_CLIENT_SECRET" "$$GDRIVE_TOKEN" > /config/rclone/rclone.conf
+
+        ping() {
+          wget -q -T 10 -O /dev/null "$$HC_PING_URL/$$1" || true
+        }
+
+        collect() {
+          # Archives already extracted are skipped, so they can be deleted here and later from Drive.
+          { sed 's|^|- /|' /work/state/extracted.txt; echo '+ /takeout-*.zip'; echo '- *'; } > /tmp/filters
+          rclone copy "$$SOURCE" /work/archives --filter-from /tmp/filters --drive-acknowledge-abuse || return 1
+          for archive in /work/archives/takeout-*.zip; do
+            [ -e "$$archive" ] || continue
+            name="$${archive##*/}"
+            export_id="$${name#takeout-}"
+            export_id="$${export_id%%-*}"
+            # Extraction checks every file's CRC; a failed archive stays for the next run.
+            rclone archive extract "$$archive" "/exports/$$export_id" || return 1
+            echo "$$name" >> /work/state/extracted.txt
+            touch /work/state/last-arrival
+            rm "$$archive"
+          done
+          # Fails once no archive has arrived within MAX_AGE_DAYS.
+          [ -n "$$(find /work/state/last-arrival -mtime "-$$MAX_AGE_DAYS" 2>/dev/null)" ]
+        }
+
+        while true; do
+          now="$$(date -u +%s)"
+          next="$$(date -u -d "$$RUN_AT_UTC" +%s)"
+          if [ "$$next" -le "$$now" ]; then next="$$(( next + 86400 ))"; fi
+          sleep "$$(( next - now ))"
+          ping start
+          status=0
+          collect || status=1
+          ping "$$status"
+        done
+    # GDRIVE_CLIENT_ID, GDRIVE_CLIENT_SECRET, GDRIVE_TOKEN, HC_PING_URL
+    env_file:
+      - secrets.sops.env
+    environment:
+      TZ: UTC
+      SOURCE: "gdrive:Takeout"
+      # Before the off-site job's 10:00 UTC run.
+      RUN_AT_UTC: "04:00"
+      # Exports are monthly.
+      MAX_AGE_DAYS: "40"
+      RCLONE_CACHE_DIR: /tmp/rclone-cache
+    volumes:
+      - /volume1/personal-data/google-photos:/exports
+      - /volume1/docker/google-photos-takeout:/work
+    tmpfs:
+      # The Drive token is rebuilt from the environment at start and refreshed in memory only.
+      - /config/rclone:mode=0700
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    # Docker 24 runs the first probe one interval after start, and doco-cd waits 180 seconds for it.
+    healthcheck:
+      test: ["CMD", "test", "-s", "/config/rclone/rclone.conf"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    # The shell as PID 1 ignores SIGTERM; an interrupted pull or extraction is repeated on the next run.
+    stop_signal: SIGKILL
+    restart: unless-stopped
