@@ -11,6 +11,17 @@ releases:
     chart: oci://quay.io/cilium/charts/cilium
     version: 1.20.2
     values: ['./templates/values.yaml.gotmpl']
+    # Multus goes first: the kubelet cannot create Cilium's conf dir under
+    # /etc/cni, which Talos mounts read-only into it, but containerd creates
+    # it for the Multus pods. This is the kustomization Flux owns afterwards.
+    # The agents' mount retries back off for up to two minutes while that
+    # happens, hence the longer wait.
+    timeout: 600
+    hooks:
+      - events: ['presync']
+        showlogs: true
+        command: kubectl
+        args: ['apply', '--server-side', '--force-conflicts', '--kustomize', '../../kubernetes/apps/kube-system/multus/app']
 
   - name: coredns
     namespace: kube-system
@@ -20,12 +31,8 @@ releases:
     needs: ['kube-system/cilium']
     # CoreDNS is the first release that needs a pod network. Nodes stay
     # NotReady and tainted node.multus.io/not-ready until Multus publishes
-    # 00-multus.conf, so apply the kustomization Flux owns afterwards.
+    # 00-multus.conf.
     hooks:
-      - events: ['presync']
-        showlogs: true
-        command: kubectl
-        args: ['apply', '--server-side', '--force-conflicts', '--kustomize', '../../kubernetes/apps/kube-system/multus/app']
       - events: ['presync']
         showlogs: true
         command: kubectl
