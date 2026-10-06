@@ -9,8 +9,13 @@ metadata:
   name: bambuddy-db
 spec:
   instances: 2
+  primaryUpdateMethod: switchover
   affinity:
     podAntiAffinityType: required
+  postgresql:
+    parameters:
+      # Bounds the WAL a stopped or lagging standby's slot can pin on the primary.
+      max_slot_wal_keep_size: 2GB
   storage:
     size: 5Gi
     storageClass: longhorn

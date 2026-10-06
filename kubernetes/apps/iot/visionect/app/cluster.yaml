@@ -10,8 +10,13 @@ metadata:
   name: visionect-db
 spec:
   instances: 2
+  primaryUpdateMethod: switchover
   affinity:
     podAntiAffinityType: required
+  postgresql:
+    parameters:
+      # Bounds the WAL a stopped or lagging standby's slot can pin on the primary.
+      max_slot_wal_keep_size: 10GB
   imageName: ghcr.io/cloudnative-pg/postgresql:17.11-system-trixie
   storage:
     # The source is 2 GiB with ~6.4M history rows. Leave useful growth
