@@ -19,19 +19,20 @@ machine:
             mtu: 1500
             addresses:
               - "10.32.40.13/24"
-      # 2.5GbE storage NIC — bridge slave (no IP).
+      # 2.5GbE storage NIC — enslaved to br-storage by MAC via bridgePort (no IP).
       - deviceSelector:
           hardwareAddr: "00:e0:4c:68:05:04"
           physical: true
         dhcp: false
         mtu: 1500
-      # Linux bridge owning the storage VLAN IP.
+        bridgePort:
+          master: br-storage
+      # Linux bridge owning the storage VLAN IP; its only port is the storage
+      # NIC above, bound by MAC.
       - interface: br-storage
         bridge:
           stp:
             enabled: false
-          interfaces:
-            - enp6s0
         addresses:
           - "10.32.25.13/24"
         mtu: 1500
