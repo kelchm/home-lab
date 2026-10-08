@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail-closed tensorfold-native health/lane gate and all-lane smoke test for SparkRun."""
+"""Fail-closed tensorfold-native health/lane gate and concurrent smoke test for SparkRun."""
 import argparse
 from concurrent.futures import ThreadPoolExecutor
 import json
@@ -60,7 +60,7 @@ def main():
         results = list(pool.map(smoke, range(args.lanes)))
     print("TensorFold smoke:", json.dumps(results), flush=True)
     check_health(fetch(url + "/health"), args.model, args.lanes)
-    print("TensorFold readiness and all-lane smoke test passed", flush=True)
+    print("TensorFold readiness and concurrent smoke test passed", flush=True)
 
 
 if __name__ == "__main__":
