@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check v1.8 capacity responses and queue defaults without GPU weights."""
+"""Check v1.8+ capacity responses and queue defaults without GPU weights."""
 import ast
 from http.server import ThreadingHTTPServer
 import json
@@ -25,7 +25,7 @@ def check_admission():
     nodes += [n for n in ast.parse(source.read_text()).body
               if isinstance(n, ast.ClassDef) and n.name == "GlmScheduler"]
     assert len(nodes) == 2
-    namespace = {"Scheduler": Scheduler, "os": os}
+    namespace = {"Scheduler": Scheduler, "os": os, "threading": threading, "CapacityError": CapacityError}
     exec(compile(ast.fix_missing_locations(ast.Module(body=nodes, type_ignores=[])), str(source), "exec"), namespace)
     decoder = SimpleNamespace(group=False, live=lambda: 4)
     with patch.dict(os.environ, {}, clear=True), patch.object(threading.Thread, "start"):
