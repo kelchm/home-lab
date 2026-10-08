@@ -475,9 +475,9 @@ cd ~/sparkrun/recipes/glm53
 python3 mods/mia-tensorfold-v1.10/prepare.py --check
 glm_recipe="$PWD/mia-tensorfold-glm53-exl3-tp2/glm53-exl3-tp2-mia-tf-v1.10-mia-1m.yaml"
 sparkrun run "$glm_recipe" --cluster sparks --no-auto-detect --no-sync-tuning --no-follow --dry-run
-# Stop the current workload with its own recipe before launching on these GPUs.
-sparkrun run "$glm_recipe" --cluster sparks --no-auto-detect --no-sync-tuning --no-follow
 ```
+
+This block ends at the dry run and starts nothing. Launching v1.10 is step 4 of the guarded [rollout procedure](#rollout-procedure), after its baseline and stop steps and under its boot guard; do not run `sparkrun run` without `--dry-run` directly.
 
 Mia TensorFold uses published image digests. Build the local vLLM and W20 candidate images on the head before their dry runs; instructions follow below. SparkRun downloads the pinned target and draft snapshots into its standard HF cache and synchronizes them to the worker. Existing snapshots are reused; initial provisioning can transfer about 164 GiB. With the head as its own control host and `transfer_mode: auto`, that download step first fills the SSH user's `~/.cache/huggingface`, not the cluster cache, so a snapshot staged only under `/opt/spark-cache/huggingface` is fetched again at launch, after the previous workload has stopped. When staging weights ahead of a switch, make the snapshot visible in the home cache as well and confirm that SparkRun's download step reports it cached before stopping anything. On October 7 the two caches were on one filesystem, so the model directory was hardlinked across with `cp -al`; the pinned download then returned 97 cached files in 0.4 s without a second transfer. No global cache setting was changed. The worker needs no upstream checkout or manually staged models. SparkRun clears page cache after distribution; if its sudo operation is unavailable, use `sparkrun setup clear-cache --cluster sparks --save-sudo`.
 
@@ -506,12 +506,12 @@ python3 mods/mia-tensorfold-v1.10/prepare.py --check
 glm_profile=glm53-exl3-tp2-mia-tf-v1.10-mia-1m  # Running since October 8. Or glm53-exl3-tp2-mia-tf-v1.8-mia-1m (immediate rollback), glm53-exl3-tp2-mia-tf-v1.8-bmm-850k, glm53-exl3-tp2-mia-tf-v1.5-bmm-850k, glm53-exl3-tp2-mia-tf-v1.5-mia-1m or glm53-exl3-tp2-mia-tf-v1.2-bmm-850k.
 glm_recipe="$PWD/mia-tensorfold-glm53-exl3-tp2/${glm_profile}.yaml"
 sparkrun run "$glm_recipe" --cluster sparks --no-auto-detect --no-sync-tuning --no-follow --dry-run
-# Provisional evaluation: require both-host idle/healthy-link checks and the finite campaign monitor.
-sparkrun run "$glm_recipe" --cluster sparks --no-auto-detect --no-sync-tuning --no-follow
 sparkrun logs "$glm_recipe" --cluster sparks
 # Stop this profile before changing glm_profile and launching another; run does not check for a different profile's instance.
 sparkrun stop "$glm_recipe" --cluster sparks
 ```
+
+The `run` line is a dry run only. Launch v1.10 through the guarded [rollout procedure](#rollout-procedure), not with a direct `sparkrun run`; the `logs` and `stop` lines act on an instance that procedure started.
 
 The four mods cover all six profiles: v1.2, both v1.5, both v1.8 and v1.10. The example selects the v1.10 Mia-weights profile, the one currently running; all six profiles can reuse the weight snapshots now on both hosts. The v1.5, v1.8 and v1.10 image verifications are recorded in the candidate sections above. For v1.2, registry manifest `6ee3c6e0…` resolves to ARM64 image config `3306d339…`, labelled with patch hash `cb7c56f7f921`. All 53 patches applied to the pinned engine in a source-only check; all 71 runtime files found in the published OCI patch layer match that reconstructed source byte for byte, including CUDA/C++ and the three guarded Python files. The mod verifies the guarded files' upstream or already-patched hashes before changing them. It narrows reasoning restoration to original server call IDs and maps a broken concurrent decoder or dead scheduler thread to HTTP 503. This health guard does not add W20's stall detector. SparkRun handles fabric discovery, rank rendezvous, downloads, kernel caches and stop; the upstream `start.sh`/`stop.sh`, window fallback and clock controls are not used.
 
