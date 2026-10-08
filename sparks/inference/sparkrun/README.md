@@ -62,6 +62,50 @@ At 00:18:46 EDT on October 8 both rank containers were the ones started at 23:24
 
 Raw receipts are outside git on the head under `/home/kelchm/sparkrun/experiments/glm53-v18-mia-20261007/receipts/`, including `sections.json`, `agent.json`, `cut-calls.json`, `rank-0.json`, `rank-1.json`, `final-host-state.json` with the worker's link journal, and the two guards' `mia-tf-v18-mia-20261007-{boot,qualify}.{log,result.json,guard.memory.jsonl}`. The guard originals also remain under `~/sparkrun/experiments/glm53-20260930/receipts/`.
 
+#### October 8 run-in of the v1.8 Mia-weights profile
+
+A private finite client ran against the already-running `glm53-exl3-tp2-mia-tf-v1.8-mia-1m` instance from 01:35:28 EDT on October 8, with eight hours requested. Its guard ended the load at 02:47:45 EDT, after 72 minutes, when the worker's management SSH had been unreachable for 30 s during a burst of three carrier drops ([#649](https://github.com/kelchm/home-lab/issues/649)). The server was not stopped and nothing about it was changed. This is 72 minutes of load evidence, not an eight-hour stability result.
+
+Every request that finished before the abort passed:
+
+- Tool calls: the pinned `tool-eval-bench` v1.8.0 short run scored 30 of 30 points across all 15 scenarios, with fixture date `2026-03-20`, thinking off, temperature 0 and seed `20260930`.
+- Agent acceptance: both passes that ran, at the start and one hour in, completed all 20 rows and passed all 20, including cancel-and-continue. Later periodic passes did not run.
+- Latency load: 232 requests in 47 complete cold-and-replay batches passed, each returning exactly 256 completion tokens with `finish_reason: length` and beginning with its case ID. The server reported no paused stream and no health failure in 866 five-second samples.
+
+Each batch sent unique prompts cold and then the same bodies again. Prompts are a repeated synthetic sentence under a unique first system message, with thinking off, temperature 0 and a 256-token limit. The nominal sizes are user-text token counts before the tokenizer round trip; the server counted fewer, shown below. Times are client wall clock to the first content delta and to the end of the batch, so they include queueing and prefill.
+
+| API prompt tokens | Streams | Clean batches | Cold: batch wall / slowest first content | Exact replay: batch wall / slowest first content | Cached tokens, cold / replay |
+| --- | --- | --- | --- | --- | --- |
+| 2,032–2,042 | 1 | 8 | 6.30 / 1.31 s | 5.20 / 0.23 s | 0 / 1,984 |
+| 2,034–2,040 | 4 | 8 | 16.10 / 6.57 s | 10.15 / 0.44 s | 0 / 1,984 |
+| 30,834–30,846 | 1 | 8 | 20.18 / 15.31 s | 5.05 / 0.27 s | 0 / 30,784 |
+| 30,836–30,844 | 4 | 8 | 82.63 / 77.39 s | 10.37 / 0.64 s | 0 / 30,784 |
+| 122,994–123,002 | 1 | 8 | 69.91 / 64.79 s | 5.49 / 0.42 s | 0 / 122,944 |
+| 122,992–123,002 | 4 | 7 | 285.42 / 280.62 s | 12.47 / 1.24 s | 0 / 122,944 |
+
+Values are medians across the clean batches; the spread was narrow, with the four-stream 123k cold wall between 279.52 and 287.93 s. Every cold request reported zero cached tokens and every replay reported the count shown, per request. In the four-stream cold batches the streams reached first content one after another, about 70 s apart at 123k, consistent with sequential queueing or prefill service; timing alone does not resolve the scheduler’s internal overlap. All 116 replay replies were byte-identical to their cold reply; a replay can return a kept reply, so the replay times measure prefix reuse and are not decode rates. No batch overlapped a link event or a telemetry gap, and each batch's server request count rose by exactly its stream count. The eighth four-stream 123k batch was in flight when the guard ended the load and is excluded whole; its fourth stream was killed without a receipt.
+
+Host observations over the 72 minutes:
+
+- Memory: minimum MemAvailable was 5.39 GiB on the head and 7.80 GiB on the worker, with no sample under 2 GiB. Maximum swap in use was 0.22 and 0.11 GiB.
+- Pool: the lowest sampled `pool_free_tokens` was 301,056 of 2,555,904, with 32 kept prompts throughout.
+- GPUs: peak temperature was 81 °C on the head and 78 °C on the worker, peak draw 86 and 80 W, and the reported SM clock stayed between 2,392 and 2,522 MHz. These were sampled once a minute and gate nothing; they are not a throttling result.
+- Fabric: both 200 Gb/s RoCE rails on each host stayed up with unchanged carrier counters.
+- Kernel: the full-interval journal on both hosts holds no Xid, OOM, `mlx5_core` or segfault line. The only entries are the worker's three management-link pairs.
+- Ranks: both containers were still the ones started at 23:24:55 EDT on October 7, running with zero restarts on the same image and boot IDs, and `/health` was strict, `ok: true` and idle once the load ended.
+
+The management link ended the run. The worker's `enP7s7` dropped at 02:47:14.33, 02:47:22.00 and 02:47:36.44 EDT and came back 3.76, 4.01 and 3.70 s later, taking its counter from 667 to 670. Each drop recovered, but together they kept SSH to the worker timing out from 02:47:14 until the guard's 30 s limit. Those were the only drops in the 72 minutes. The head's counter stayed at 6. The model API on the head answered every health sample through the burst, while the last stream of the in-flight batch was still prefilling. This is a management-network abort; it shows no model, GPU or fabric fault. A fresh 02:56 EDT check found the same original ranks and an idle, healthy API; a further management drop at 02:52:38.67–02:52:42.73 EDT, after the load had ended, took the worker counter to 671.
+
+Limits of this run:
+
+- There is no matched baseline. The prompts, sizes and client differ from the October 1 sweeps, so none of these times is a speed-up or a slow-down against v1.2 or vLLM.
+- It does not cover long-session growth, the 262k boundary, a near-1M request, replies longer than 256 tokens, a fifth request or 429, or long-context coding quality. The tool and agent results are small protocol gates.
+- The server wrote nothing to its rank log or container log during the run, so the guard's log scan had no text to match. Faults were watched through `/health`, container state, memory and the kernel journal.
+- The client is one-off and is not in the repository. It bounds each batch itself and does not fix the long-session client's cancellation defect ([#651](https://github.com/kelchm/home-lab/issues/651)).
+- An earlier native SparkRun throughput diagnostic at 00:54 EDT lost worker telemetry and is excluded in full. Its llama-benchy prompt-rate figure is also invalid for this server: it times the first SSE event, and TensorFold sends a role chunk before prefill.
+
+Raw receipts are outside git on the head under `/home/kelchm/sparkrun/experiments/glm53-v18-mia-bench-20261008/`: `overnight-1/` holds `result.json`, `requests.jsonl`, `commands.jsonl`, `quality.jsonl`, `telemetry.jsonl`, the per-batch payload and batch files, `tools-core.json` and the two `agents-*.json` files; `receipts/overnight-1-post-abort-hosts.json` holds the full-interval kernel journals and final rank state; `receipts/overnight-1-report.md` and `overnight-1-analysis.json` hold the summary; `overnight.py` is the client, SHA-256 `74c25b01…`.
+
 #### Profile contents and comparisons
 
 `glm53-exl3-tp2-mia-tf-v1.2-bmm-850k` preserves the original v1.2 recipe’s serving, distribution and cache settings, recovered from that retained recipe. Its original configuration passed the October 1 live gates; the newly named file and packaged mod have only local validation. `glm53-exl3-tp2-mia-tf-v1.5-bmm-850k` is the incremental server update: stock TR3 `25a44fdb`, DFlash2 `bf582e4e`, TP2/PP1, C4, an 850k request ceiling, 32,768 default reply budget, 18.5 GiB reserve, 12.5 GiB extra-cache cap and the same vision/input bounds. `glm53-exl3-tp2-mia-tf-v1.5-mia-1m` selects Mia’s new checkpoint and published TP2/C4 serving defaults, including the 1,048,576 window and 14.5 GiB reserve. `glm53-exl3-tp2-mia-tf-v1.8-bmm-850k` is the v1.5 TR3 recipe on the v1.8 image: the same weights, drafter, capacity limits and launcher values, plus one setting, described with the v1.8 provenance below. `glm53-exl3-tp2-mia-tf-v1.8-mia-1m` is the v1.8 kit’s published two-Spark recipe adapted to SparkRun: the same standard Mia checkpoint, drafter and limits as the v1.5 Mia-weights recipe, on the v1.8 image, with every engine setting the v1.8 launcher exports stated in the recipe. SparkRun’s lifecycle, fabric detection, exact-call-ID/strict-health site guards and 1.2M pool readiness floor remain in the v1.5 and v1.8 profiles; these adapt the upstream serving recipe rather than invoking its launcher, clock controls or window fallback, and the differences that leaves are listed with the v1.8 provenance. C8, steering/abliteration, the Ablit weights and upstream work not yet merged are outside these profiles.
