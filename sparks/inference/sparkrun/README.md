@@ -30,7 +30,7 @@ The `mia-tensorfold-glm53-exl3-tp2/` directory groups the shared Mia TensorFold 
 | `glm53-exl3-tp2-mia-tf-v1.5-bmm-850k` | v1.5 | Brandon TR3 `25a44fdb` | 850,000 | 18.5 GiB | Source-verified; not run on the Sparks |
 | `glm53-exl3-tp2-mia-tf-v1.5-mia-1m` | v1.5 | Mia TensorFold 4bpw `078455ff` | 1,048,576 | 14.5 GiB | Source-verified; not run on the Sparks. Its weights are now on both hosts; memory fit and quality on this image are unmeasured |
 | `glm53-exl3-tp2-mia-tf-v1.8-bmm-850k` | v1.8 | Brandon TR3 `25a44fdb` | 850,000 | 18.5 GiB | Source-verified; not run on the Sparks |
-| `glm53-exl3-tp2-mia-tf-v1.8-mia-1m` | v1.8 | Mia TensorFold 4bpw `078455ff` | 1,048,576 | 14.5 GiB | Running since October 7 EDT for operator evaluation: native boot, readiness and the short protocol/coding gate passed; long sessions and quality unmeasured, and the worker link dropped during the rollout |
+| `glm53-exl3-tp2-mia-tf-v1.8-mia-1m` | v1.8 | Mia TensorFold 4bpw `078455ff` | 1,048,576 | 14.5 GiB | Running since October 7 EDT for operator evaluation: native boot, readiness and the short protocol/coding gate passed; a separate [6 h 27 min run-in](#continuation-from-0308-to-0935-edt) completed October 8. Long-session growth and coding quality remain unqualified, and the worker management-link fault is unresolved |
 
 #### October 7 live boot of the v1.8 Mia-weights profile
 
@@ -64,7 +64,7 @@ Raw receipts are outside git on the head under `/home/kelchm/sparkrun/experiment
 
 #### October 8 run-in of the v1.8 Mia-weights profile
 
-A private finite client ran against the already-running `glm53-exl3-tp2-mia-tf-v1.8-mia-1m` instance from 01:35:28 EDT on October 8, with eight hours requested. Its guard ended the load at 02:47:45 EDT, after 72 minutes, when the worker's management SSH had been unreachable for 30 s during a burst of three carrier drops ([#649](https://github.com/kelchm/home-lab/issues/649)). The server was not stopped and nothing about it was changed. This is 72 minutes of load evidence, not an eight-hour stability result.
+A private finite client ran against the already-running `glm53-exl3-tp2-mia-tf-v1.8-mia-1m` instance from 01:35:28 EDT on October 8, with eight hours requested. Its guard ended the load at 02:47:45 EDT, after 72 minutes, when the worker's management SSH had been unreachable for 30 s during a burst of three carrier drops ([#649](https://github.com/kelchm/home-lab/issues/649)). The server was not stopped and nothing about it was changed. This is 72 minutes of load evidence, not an eight-hour stability result. A separate continuation then ran the rest of the night to its deadline and is recorded [below](#continuation-from-0308-to-0935-edt); the two runs are not pooled.
 
 Every request that finished before the abort passed:
 
@@ -105,6 +105,54 @@ Limits of this run:
 - An earlier native SparkRun throughput diagnostic at 00:54 EDT lost worker telemetry and is excluded in full. Its llama-benchy prompt-rate figure is also invalid for this server: it times the first SSE event, and TensorFold sends a role chunk before prefill.
 
 Raw receipts are outside git on the head under `/home/kelchm/sparkrun/experiments/glm53-v18-mia-bench-20261008/`: `overnight-1/` holds `result.json`, `requests.jsonl`, `commands.jsonl`, `quality.jsonl`, `telemetry.jsonl`, the per-batch payload and batch files, `tools-core.json` and the two `agents-*.json` files; `receipts/overnight-1-post-abort-hosts.json` holds the full-interval kernel journals and final rank state; `receipts/overnight-1-report.md` and `overnight-1-analysis.json` hold the summary; `overnight.py` is the client, SHA-256 `74c25b01…`.
+
+##### Continuation from 03:08 to 09:35 EDT
+
+A second finite client ran against the same instance from 03:08:11.505 to 09:35:23.104 EDT on October 8 and completed at its deadline: 23,231 s requested, 6 h 27 min 12 s elapsed, load exit 0, API idle afterwards, no failure, warning or telemetry interruption recorded, and no stop issued to the server. The deadline was set about 5 s inside the first run's original eight-hour end. With the first run this is 72 minutes plus 6 h 27 min of load separated by a 20-minute gap and a client change, so it is not an uninterrupted eight-hour result and the two sets of timings are kept apart.
+
+The workload was the first run's: the same six prompt-size and stream combinations cold and then replayed, 256-token replies, thinking off, temperature 0, the tool benchmark once and the agent acceptance pass repeated. The client differed in how it watched the hosts. It read the worker over the direct 200 Gb/s link instead of the management network, so a management drop could no longer blind it, and its probes shared the inference rail with the model. Its stop path was reviewed and exercised against mocks before launch and never ran.
+
+- Tool calls: the pinned `tool-eval-bench` v1.8.0 short run scored 30 of 30 points across all 15 scenarios with no safety warning, same fixture date, temperature and seed as before.
+- Agent acceptance: seven passes ran, the first at 03:09 and the last at 09:23 EDT, and each passed all 20 rows including cancel-and-continue. A pass is due 3,600 s after the previous one ends and starts at the next cycle boundary, so they fall about 62 minutes apart.
+- Latency load: 1,310 requests in 262 complete cold-and-replay batches all returned exactly 256 completion tokens with `finish_reason: length`. No batch was excluded, cut off or left incomplete; the last one ended 13 s before the deadline and the client does not start another with under 15 s left.
+- Marker check: 1,306 of the 1,310 replies began with their case ID. The other four are two replies and their replays in one batch, the four-stream 2k batch of cycle 24 at 06:43 EDT, where streams 1 and 2 wrote `p2044` where the ID has `p2048` and reproduced the rest of the ID and its 32-character nonce correctly; streams 0 and 3 of the same batch were right. That is two copy errors in 655 cold replies, at temperature 0, on a short prompt. Their timings are kept in the table because the requests completed normally. The cause is not known and this says nothing either way about coding quality or quantization.
+- Accounting: the server's request, prompt-token, completion-token and cached-token counters rose by exactly the client's totals for every one of the 524 rounds, and its request counter ran unbroken from 530 to 2,037 across all 270 commands (36 tool-benchmark, 161 agent and 1,310 latency requests), so no other client used the API during the run.
+
+Method and units are as in the table above: medians across the batches, client wall clock, with the range of the batch wall in brackets.
+
+| API prompt tokens | Streams | Batches | Cold: batch wall / slowest first content | Exact replay: batch wall / slowest first content | Cached tokens, cold / replay |
+| --- | --- | --- | --- | --- | --- |
+| 2,030–2,044 | 1 | 44 | 6.25 (5.61–6.76) / 1.32 s | 5.20 (4.52–5.69) / 0.24 s | 0 / 1,984 |
+| 2,028–2,044 | 4 | 44 | 16.15 (15.71–16.78) / 6.57 s | 10.11 (9.35–10.81) / 0.44 s | 0 / 1,984 |
+| 30,832–30,846 | 1 | 44 | 20.30 (19.83–21.28) / 15.33 s | 5.21 (4.90–5.70) / 0.27 s | 0 / 30,784 |
+| 30,832–30,846 | 4 | 44 | 83.32 (82.46–85.08) / 77.98 s | 10.38 (9.27–11.11) / 0.62 s | 0 / 30,784 |
+| 122,994–123,006 | 1 | 43 | 69.69 (68.92–71.63) / 64.45 s | 5.61 (5.07–5.95) / 0.42 s | 0 / 122,944 |
+| 122,994–123,006 | 4 | 43 | 281.60 (279.40–289.80) / 276.41 s | 12.24 (10.78–12.61) / 1.24 s | 0 / 122,944 |
+
+Every cold request reported zero cached tokens and every replay the count shown. All 655 replays were byte-identical to their cold reply, so as before the replay times measure prefix reuse and are not decode rates. In the four-stream 123k cold batches the streams reached first content at median 67, 137, 208 and 276 s. The batch-wall medians sit within about 3% of the first run's on every row, which is a consistency check between two short samples of one instance and not a comparison of anything.
+
+Timings held over the six and a half hours without being flat. Comparing the earlier half of each row's batches with the later half, the median batch wall moved between −1.43% and +0.81% across the twelve rows. The two 123k cold rows moved up: +0.81% at one stream and +0.71% at four. Those rows have two groupings. At four streams 29 batches took 279.4–283.1 s and 14 took 285.0–289.8 s, and the slower group held 5 of the first 21 batches and 9 of the last 22; at one stream the slower group, above 70.4 s, held 3 and then 9. The extra time is in the server's reported prefill. Eight cycles were slow at both stream counts. What separates the groups was not investigated, so the run shows a small upward shift in long cold prefill late in the night and cannot say whether it would continue.
+
+One background job overlapped a batch. `apt-daily-upgrade.service` ran on the head from 06:22:35.95 to 06:23:06.68 EDT, inside the four-stream 123k cold batch of cycle 21 (06:20:04–06:24:51 EDT, 287.60 s). That batch is kept: it is the 7th slowest of 43 and inside the slower group, 13 other batches fell in that group with no such job recorded, and the one-stream 123k batch of the same cycle was already in its slower group and had finished before the service started. Leaving it out changes that row's median from 281.60 to 281.53 s and its later-half shift from +0.71% to +0.65%. The service logged a network wait timeout and a normal finish; that does not show whether any package changed, and neither host rebooted.
+
+Host observations over the run, from 4,646 samples five seconds apart with none missing or failed, and 358 detailed samples per host about 65 s apart:
+
+- Memory: minimum MemAvailable was 5.63 GiB on the head and 7.64 GiB on the worker, with medians of 5.97 and 7.79 GiB. Median for the first and second halves was 5.97 then 5.98 GiB on the head and 7.81 then 7.78 GiB on the worker, and swap in use did not change (0.22 and 0.11 GiB). No sample was under 2 GiB and every sample on both hosts was under the 8 GiB goal, so this is a steady margin under this load, not full-capacity headroom.
+- Pool and streams: `/health` was strict and `ok: true` in every sample, with no paused stream, at most four requests running, 32 kept prompts and a lowest sampled `pool_free_tokens` of 301,056 of 2,555,904.
+- GPUs: peak temperature was 81 °C on the head and 80 °C on the worker (medians 77 and 72 °C, the same in both halves), peak draw 88 and 81 W, and the reported SM clock ranged 2,405–2,522 MHz on the head and 2,372–2,411 MHz on the worker. These gate nothing and are not a throttling result.
+- Links: the management link stayed up at 10,000 Mb/s on both hosts in every sample with the carrier counters fixed at 6 and 672, and both 200 Gb/s rails on each host stayed up with unchanged counters. A quiet six and a half hours does not change [#649](https://github.com/kelchm/home-lab/issues/649): the counter had gone from 671 to 672 between the 02:56 check and the 03:08 start, and the worker dropped again at 09:44:14.57–09:44:18.23 EDT, nine minutes after the run, taking it to 673.
+- Kernel: the full-interval journal on both hosts holds no management-link, Xid, NVRM, OOM, `mlx5_core` or segfault line.
+- Ranks: both containers were the ones started at 23:24:55 EDT on October 7 in every detailed sample, running with zero restarts and no OOM kill on image config `ead01740…` and the same boot IDs. Neither rank log grew during the run.
+
+Afterwards, at 10:46 EDT, the API was strict, healthy and idle with its counters where the run left them, both original ranks were running with zero restarts, both management links were up at 10,000 Mb/s, and no client process remained. The worker's rank log had gained two PyTorch `c10d` warnings at 10:35:09 EDT reporting that a socket wait to the head timed out after 3,600,000 ms, one hour after the last request of the run; they carry no stack trace and their significance is not established. One 20-token request at 10:50:32 EDT returned the expected answer in 0.23 s, which shows the instance still answered after an hour idle and nothing more.
+
+The limits listed for the first run all still apply. In addition:
+
+- The load is a fixed, repeating synthetic set with at most four streams and about 123k prompt tokens each. No pool pauses were observed; long-session growth, retention after eviction and the 850k ceiling were not tested.
+- The rank logs were silent, so the log scan again had no text to match.
+- The marker check compares one leading string. Apart from it, reply content was not graded.
+
+Raw receipts are on the head under the same experiment directory: `overnight-2/` holds `result.json`, `requests.jsonl`, `commands.jsonl`, `quality.jsonl`, `telemetry.jsonl`, `host-preflight.jsonl`, the 262 per-batch payload and batch files, `tools-core.json` and the seven `agents-*.json` files, 810 files and 218,335,359 bytes in all. `overnight-direct.py` is the client, SHA-256 `e4499d389468cfe92109189a0fed4a51c4b77b91bddb58a7373d6a4deb776e3b`, and it recorded the recipe's SHA-256 as `f987770a997e72d06639ed30cd02d5a246f88d1a72a03e3b9ff49f4402798d85`. `receipts/` holds `analyze-overnight-2.py` with its output `overnight-2-analysis.json`, `overnight-2-report.md`, `overnight-2-fresh-final-check.json` with the 09:44 link lines and the apt journal, and `overnight-2-post-idle-probe.json`. The rank container IDs were `ecc323b4ee18…` on the head and `4360b5610265…` on the worker.
 
 #### Profile contents and comparisons
 
