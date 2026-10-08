@@ -166,12 +166,6 @@ class TensorFoldRuntime(RuntimePlugin):
     def get_common_env(self):
         return default_env_hf_offline()
 
-    def get_cluster_env(self, head_ip: str, num_nodes: int) -> dict[str, str]:
-        return {
-            **RuntimePlugin.get_cluster_env(self, head_ip, num_nodes),
-            "NCCL_CUMEM_ENABLE": "0",
-        }
-
     def get_extra_env(self) -> dict[str, str]:
         env = super().get_extra_env()
         env["GLM53_TF_PREPARED_WRITE"] = "1"

@@ -1,0 +1,114 @@
+# glm53-exl3-tp2-mia-tf-v1.8-mia-1m: pinned Mia server/weights profile; SparkRun owns both ranks and lifecycle operations.
+recipe_version: '2'
+model: Mia-AiLab/GLM-5.3-Flash-EXL3-4bpw-TensorFold
+model_revision: 078455ffe6472f9a52fbc1139f58b9db2881b25c
+runtime: tensorfold
+container: ghcr.io/miaai-lab/glm-5.3-flash-exl3-2x-dgx-sparks-tensorfold@sha256:cbb4b3c66273e2965dd40a7227e7a5243db333fe250113fb3987462ad4f12588
+min_nodes: 2
+max_nodes: 2
+metadata:
+  profile: glm53-exl3-tp2-mia-tf-v1.8-mia-1m
+  upstream_release: v1.8
+  weights: mia
+  weights_variant: 4bpw-tensorfold
+  serving_profile: upstream
+  description: Mia v1.8 server with standard Mia weights and published TP2 limits, with SparkRun site guards
+  kit_revision: 33b50fde06fd7ea604cbc6a663880068ab1e2ee4
+  engine_revision: c4646171139ee8a3c38103eaa1699dad226ec12b
+  upstream_patch_count: 82
+  upstream_patch_hash: 31557ed1cef6
+  site_backports: exact-tool-turn-reasoning, strict-concurrent-health
+  target_model_revision: 078455ffe6472f9a52fbc1139f58b9db2881b25c
+  draft_model_revision: bf582e4eacc1810f76656d1811693ff6c6737d2a
+defaults:
+  tensor_parallel: 2
+  pipeline_parallel: 1
+  host: 0.0.0.0
+  port: 8888
+  served_model_name: GLM-5.3-Flash-EXL3
+  context: 1048576
+  max_tokens: 32768
+  drafter: incoai/GLM-5.3-Flash-DFlash2
+  drafter_revision: bf582e4eacc1810f76656d1811693ff6c6737d2a
+  entrypoint: /usr/local/bin/glm53-mia-tf-entrypoint
+env:
+  NCCL_PASSTHROUGH: '1'
+  NCCL_MIN_NCHANNELS: '4'
+  NCCL_MAX_NCHANNELS: '4'
+  TENSORFOLD_NO_UPDATE_CHECK: '1'
+  # Published v1.8 TP2/C4 reserve; this profile trades site headroom for pool capacity.
+  TENSORFOLD_MEMORY_RESERVE_GIB: '14.5'
+  TF_GLM_CACHE_GIB: '12.5'
+  TF_GLM_KV: fp8
+  # Explicit upstream defaults: no display pool and no admission cap.
+  TF_GLM_DISPLAY_KV_MIB: '0'
+  TF_GLM_MAX_QUEUED: ''
+  TF_GLM_MTP: auto
+  TF_GLM_DENSE: q4
+  TF_GLM_COMM: roce
+  TF_ROCE_MAX_KB: '512'
+  # v1.6+ launcher default: allow a late peer five minutes before failing the round.
+  TF_ROCE_WAIT_S: '300'
+  TF_GLM_COPY_DRAFTS: '1'
+  TF_GLM_COPY_MAX: '15'
+  TF_GLM_DFLASH_POLICY: fnc7:0.3
+  TF_GLM_HC_SPLIT: '1'
+  TF_GLM_PREFILL_OVERLAP: '2'
+  TF_GLM_KDA_CHUNKED: '1'
+  TF_GLM_WIDE_GRAPHS: '16'
+  TF_GLM_COPY_REPLY_MATCH: '16'
+  # Retain idle prefixes instead of relocating the last active stream to row zero.
+  TF_GLM_MULTI_LONE: '0'
+  TF_GLM_MULTI_WINDOW: '32'
+  TF_GLM_MULTI_PREFILL: '1'
+  TF_GLM_L2PF: '1'
+  TF_GLM_EXL3_LOADS: nc
+  TF_GLM_SHARED_PREFIX: '1'
+  TF_GLM_CACHE_ENTRIES: '32'
+  # Launcher defaults set explicitly; SparkRun does not invoke start.sh.
+  # An empty TF_GLM_MAX_QUEUED queues requests past four streams, as upstream.
+  TF_GLM_CLEAR_THINKING: '0'
+  TF_GLM_FILL_BUDGET_MS: '200'
+  TF_GLM_FILL_DRAFTS: '1'
+  TF_GLM_STREAM_SMOOTH: '1'
+  TF_GLM_STREAM_SMOOTH_MS: '400'
+  TF_GLM_KEEP_REASONING: '1024'
+  TF_GLM_KEEP_REASONING_MB: '32'
+  TENSORFOLD_GLM_IMAGE_TOKENS: '2048'
+  TENSORFOLD_GLM_VIDEO_TOKENS: '16384'
+  TENSORFOLD_GLM_VIDEO_FRAMES: '128'
+  TENSORFOLD_GLM_MAX_IMAGES: '50'
+  TENSORFOLD_GLM_MAX_VIDEOS: '4'
+  TENSORFOLD_GLM_REQUEST_IMAGE_TOKENS: '16384'
+  TENSORFOLD_GLM_REQUEST_VIDEO_TOKENS: '32768'
+executor_config:
+  entrypoint: ''
+  user: root
+  ipc: host
+  shm_size: 16g
+  devices:
+  - /dev/infiniband
+  cap_add:
+  - IPC_LOCK
+  ulimit:
+  - memlock=-1:-1
+  - stack=67108864
+  - nofile=65535:65535
+  auto_remove: false
+runtime_cache:
+  key_by_image: true
+mods:
+- ../mods/mia-tensorfold-v1.8
+post_exec:
+- python3 /opt/glm53-mia-tensorfold/readiness.py --context 1048576 --min-pool-tokens 1200000
+distribution_config:
+  models:
+    entries:
+    - name: Mia-AiLab/GLM-5.3-Flash-EXL3-4bpw-TensorFold
+      revision: 078455ffe6472f9a52fbc1139f58b9db2881b25c
+      target:
+      - -1
+    - name: incoai/GLM-5.3-Flash-DFlash2
+      revision: bf582e4eacc1810f76656d1811693ff6c6737d2a
+      target:
+      - -1

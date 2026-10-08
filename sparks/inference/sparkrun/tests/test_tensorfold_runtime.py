@@ -43,6 +43,7 @@ from sparkrun.core.runtime_cache import (  # noqa: E402
 )
 from sparkrun.core.validation import ERROR  # noqa: E402
 from sparkrun.orchestration.job_metadata import derive_recipe_fingerprint  # noqa: E402
+from sparkrun.orchestration.executors.docker import DockerExecutor  # noqa: E402
 from sparkrun.runtimes import _cluster_ops  # noqa: E402
 from sparkrun.runtimes._cluster_ops import ClusterContext  # noqa: E402
 
@@ -55,6 +56,9 @@ MIA_PROFILES = [
     ("glm53-exl3-tp2-mia-tf-v1.2-bmm-850k", TARGET, TARGET_REV, "850000"),
     ("glm53-exl3-tp2-mia-tf-v1.5-bmm-850k", TARGET, TARGET_REV, "850000"),
     ("glm53-exl3-tp2-mia-tf-v1.5-mia-1m", "Mia-AiLab/GLM-5.3-Flash-EXL3-4bpw-TensorFold",
+     "078455ffe6472f9a52fbc1139f58b9db2881b25c", "1048576"),
+    ("glm53-exl3-tp2-mia-tf-v1.8-bmm-850k", TARGET, TARGET_REV, "850000"),
+    ("glm53-exl3-tp2-mia-tf-v1.8-mia-1m", "Mia-AiLab/GLM-5.3-Flash-EXL3-4bpw-TensorFold",
      "078455ffe6472f9a52fbc1139f58b9db2881b25c", "1048576"),
 ]
 FABRIC_HEAD = "172.16.21.31"
@@ -238,6 +242,26 @@ def test_mia_recipe_reuses_native_rank_wiring(runtime, profile, target, revision
     recipe = Recipe(yaml.safe_load(path.read_text()), source_path=str(path))
     assert recipe.name == recipe.metadata["profile"] == profile
     assert not [issue for issue in runtime.validate_recipe(recipe) if getattr(issue, "severity", None) == ERROR]
+    # The rank command inherits these settings from its container.
+    ctx = ClusterContext.build(
+        runtime, [FABRIC_HEAD, FABRIC_WORKER], recipe.container, "tf-profile-test",
+        recipe.env, None, None, dry_run=True, recipe=recipe,
+    )
+    script = DockerExecutor().generate_launch_script(
+        image=recipe.container, container_name="tf-profile-test", command="sleep infinity",
+        env=ctx.all_env, volumes=ctx.volumes,
+    )
+    if profile == "glm53-exl3-tp2-mia-tf-v1.8-mia-1m":
+        assert "NCCL_CUMEM_ENABLE" not in script
+    else:
+        assert "NCCL_CUMEM_ENABLE=0" in shlex.split(script)
+    if recipe.metadata["upstream_release"] == "v1.8":
+        assert "TF_ROCE_WAIT_S=300" in shlex.split(script)
+        if recipe.metadata["weights"] == "mia":
+            assert "TF_GLM_MAX_QUEUED=" in shlex.split(script)
+            assert "TF_GLM_DISPLAY_KV_MIB=0" in shlex.split(script)
+        else:
+            assert "TF_GLM_MAX_QUEUED" not in script
     spec = importlib.util.spec_from_file_location("mia_serve", root / recipe.mods[0] / "serve.py")
     serve = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(serve)
@@ -302,7 +326,7 @@ def test_mia_native_mod_transfer_is_self_contained(tmp_path, profile, target, re
         ready.check_health({**body, "context_length": int(context) - 1}, 4, expected_context, 1200000)
 
 
-@pytest.mark.parametrize("version", ("v1.2", "v1.5"))
+@pytest.mark.parametrize("version", ("v1.2", "v1.5", "v1.8"))
 @pytest.mark.parametrize("change", ("content", "symlink"))
 def test_mia_frozen_bundle_rejects_changed_helpers(tmp_path, version, change):
     source = Path(__file__).resolve().parents[1] / f"mods/mia-tensorfold-{version}"
