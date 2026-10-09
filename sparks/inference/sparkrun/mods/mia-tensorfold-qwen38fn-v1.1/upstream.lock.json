@@ -1,0 +1,17 @@
+{
+  "kit_repository": "MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold",
+  "kit_revision": "be3ed857ab1055ca47b36134d22691f00f2bb94a",
+  "engine_repository": "ashhart/TensorFold",
+  "engine_revision": "db281878ddb836fd0df510d8771ecb7e0fe47d26",
+  "engine_branch": "zig-flashnext",
+  "upstream_patch_count": 9,
+  "upstream_patch_hash": "f3e1300f4f62",
+  "image": "ghcr.io/miaai-lab/qwen3.8-flash-dual-dgx-sparks-tensorfold@sha256:e188128ddabdc67ac02c05781f5c0c6b348db5f050cac297861d82b7f086e18c",
+  "image_id": "sha256:5eb5d4d384773543109baa26783fc6ea38ad619dff330f01672e05c01721cfb0",
+  "mod_files": {
+    "prepare.py": "3fc9ad8becff85c9f72cc60b2663197c1c28ca6b9f5d2109569ce4515625e7ae",
+    "run.sh": "4702b21b8df90cf9c0c3f009137c5a95e6911a1db621914962495da8c608bff2",
+    "serve.py": "4b2bc4223157ba53f7aa0142f99b9f81e542d3ee293712eff3d44fadc8388f0e",
+    "readiness.py": "79846762bfde38b91a8062c71e5a01f84494e05412b56461a4949fa73f79b9c0"
+  }
+}

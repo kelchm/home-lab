@@ -64,6 +64,13 @@ MIA_PROFILES = [
     ("glm53-exl3-tp2-mia-tf-v1.10-mia-1m", "Mia-AiLab/GLM-5.3-Flash-EXL3-4bpw-TensorFold",
      "078455ffe6472f9a52fbc1139f58b9db2881b25c", "1048576"),
 ]
+QWEN_RECIPE_DIR = "mia-tensorfold-qwen38fn-tp2"
+QWEN_PROFILES = [
+    ("qwen38fn-nvfp4-tp2-mia-tf-v1.1-nvidia-1m", "nvidia/Qwen3.8-Flash-Next-NVFP4",
+     "fc694b54fb0174e0913e6adf86691ef85a4ead47", "Qwen3.8-Flash-Next"),
+    ("qwen38fn-int4ar-tp2-mia-tf-v1.1-azampatti-1m", "azampatti/Qwen3.8-Flash-Next-125B-A5B-INT4-AutoRound",
+     "1464274120d36a4d8fcaa934552334a7d83ce0fd", "Qwen3.8-Flash-Next-INT4-AR"),
+]
 MIA_MODS = Path(__file__).resolve().parents[1] / "mods"
 FABRIC_HEAD = "172.16.21.31"
 FABRIC_WORKER = "172.16.21.32"
@@ -289,17 +296,19 @@ def test_mia_recipe_reuses_native_rank_wiring(runtime, profile, target, revision
 
 
 def test_mia_profiles_have_separate_native_cache_namespaces(runtime):
-    root = Path(__file__).resolve().parents[1] / MIA_RECIPE_DIR
+    base = Path(__file__).resolve().parents[1]
+    paths = [base / MIA_RECIPE_DIR / f"{row[0]}.yaml" for row in MIA_PROFILES]
+    paths += [base / QWEN_RECIPE_DIR / f"{row[0]}.yaml" for row in QWEN_PROFILES]
     leaves = []
-    for profile, _, _, _ in MIA_PROFILES:
-        recipe = Recipe.from_dict(yaml.safe_load((root / f"{profile}.yaml").read_text()))
+    for path in paths:
+        recipe = Recipe.from_dict(yaml.safe_load(path.read_text()))
         mounts = build_runtime_cache_mounts(
             runtime=runtime, recipe=recipe,
             settings=resolve_runtime_cache_settings(runtime=runtime, recipe=recipe),
             root="/opt/spark-cache/huggingface/runtime-cache", image=recipe.container,
         )
         leaves.append(mounts.leaf)
-    assert len(set(leaves)) == len(MIA_PROFILES)
+    assert len(set(leaves)) == len(paths)
 
 
 @pytest.mark.parametrize("profile,target,revision,context", MIA_PROFILES)
@@ -349,6 +358,72 @@ def test_mia_frozen_bundle_rejects_changed_helpers(tmp_path, version, change):
     result = subprocess.run([sys.executable, str(bundle / "prepare.py")], capture_output=True, text=True)
     assert result.returncode != 0
     assert "Missing or changed frozen mod file: readiness.py" in result.stderr
+
+
+@pytest.mark.parametrize("profile,target,revision,served", QWEN_PROFILES)
+def test_qwen_recipe_maps_native_rank_wiring_to_zig_cli(runtime, tmp_path, profile, target, revision, served):
+    root = Path(__file__).resolve().parents[1] / QWEN_RECIPE_DIR
+    path = root / f"{profile}.yaml"
+    recipe = Recipe(yaml.safe_load(path.read_text()), source_path=str(path))
+    assert recipe.name == recipe.metadata["profile"] == profile
+    assert not [issue for issue in runtime.validate_recipe(recipe) if getattr(issue, "severity", None) == ERROR]
+    ctx = ClusterContext.build(
+        runtime, [FABRIC_HEAD, FABRIC_WORKER], recipe.container, "tf-profile-test",
+        recipe.env, None, None, dry_run=True, recipe=recipe,
+    )
+    script = shlex.split(DockerExecutor().generate_launch_script(
+        image=recipe.container, container_name="tf-profile-test", command="sleep infinity",
+        env=ctx.all_env, volumes=ctx.volumes,
+    ))
+    for setting in ("TF_FLASHNEXT_YARN=4", "TF_FLASHNEXT_ROCE=1", "TENSORFOLD_MEMORY_RESERVE_GIB=10",
+                    "NCCL_MIN_NCHANNELS=4", "NCCL_MAX_NCHANNELS=4"):
+        assert setting in script
+    mod = root / recipe.mods[0]
+    lock = json.loads((mod / "upstream.lock.json").read_text())
+    assert lock["image"] == recipe.container
+    assert lock["kit_revision"] == recipe.metadata["kit_revision"]
+    bundle = tmp_path / mod.name
+    shutil.copytree(mod, bundle, ignore=shutil.ignore_patterns("__pycache__"))
+    subprocess.run([sys.executable, str(bundle / "prepare.py"), "--check"], cwd=tmp_path, check=True)
+    spec = importlib.util.spec_from_file_location("qwen_serve", bundle / "serve.py")
+    serve = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(serve)
+    for rank in (0, 1):
+        env, argv = _parse_env_command(_node_command(runtime, recipe, rank, init_port=29511))
+        assert argv == ["/usr/local/bin/qwen38fn-mia-tf-entrypoint"]
+        assert "DRAFTER" not in env
+        # The rank command inherits the recipe env from its container.
+        args = serve.command({**recipe.env, **env})
+        assert args[:3] == ["tensorfold-native", "serve", hf_snapshot_path(target, revision)]
+        for flag, expected in (("--name", served), ("--port", "8888"), ("--context", "1048576"),
+                               ("--parallel", "16"), ("--max-tokens", "32768"), ("--kv-dtype", "fp8"),
+                               ("--vision-max-images", "50"), ("--vision-max-videos", "4"),
+                               ("--vision-image-tokens", "16384"), ("--tp", "2"), ("--rank", str(rank)),
+                               ("--master", FABRIC_HEAD), ("--master-port", "29511")):
+            assert args[args.index(flag) + 1] == expected
+        assert "--vision" in args and "--thinking" in args and "--no-drafts" not in args
+
+    spec = importlib.util.spec_from_file_location("qwen_readiness", bundle / "readiness.py")
+    ready = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(ready)
+    hook = shlex.split(recipe.post_exec[0])
+    assert hook[hook.index("--model") + 1] == served
+    body = {"status": "ok", "warming": False, "model": served, "max_batch_size": 16}
+    ready.check_health(body, served, 16)
+    for change in ({"status": "error"}, {"warming": True}, {"model": "other"}, {"max_batch_size": 8}):
+        with pytest.raises(RuntimeError):
+            ready.check_health({**body, **change}, served, 16)
+
+
+def test_qwen_frozen_bundle_rejects_changed_helpers(tmp_path):
+    source = Path(__file__).resolve().parents[1] / "mods/mia-tensorfold-qwen38fn-v1.1"
+    bundle = tmp_path / source.name
+    shutil.copytree(source, bundle, ignore=shutil.ignore_patterns("__pycache__"))
+    helper = bundle / "serve.py"
+    helper.write_text(helper.read_text() + "\n# Unreviewed change\n")
+    result = subprocess.run([sys.executable, str(bundle / "prepare.py")], capture_output=True, text=True)
+    assert result.returncode != 0
+    assert "Missing or changed frozen mod file: serve.py" in result.stderr
 
 
 def test_mia_v110_recipe_states_the_pinned_launcher_defaults():
