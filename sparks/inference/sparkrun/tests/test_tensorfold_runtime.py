@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import importlib.util
 import shlex
@@ -60,6 +61,8 @@ MIA_PROFILES = [
     ("glm53-exl3-tp2-mia-tf-v1.8-bmm-850k", TARGET, TARGET_REV, "850000"),
     ("glm53-exl3-tp2-mia-tf-v1.8-mia-1m", "Mia-AiLab/GLM-5.3-Flash-EXL3-4bpw-TensorFold",
      "078455ffe6472f9a52fbc1139f58b9db2881b25c", "1048576"),
+    ("glm53-exl3-tp2-mia-tf-v1.10-mia-1m", "Mia-AiLab/GLM-5.3-Flash-EXL3-4bpw-TensorFold",
+     "078455ffe6472f9a52fbc1139f58b9db2881b25c", "1048576"),
 ]
 QWEN_RECIPE_DIR = "mia-tensorfold-qwen38fn-tp2"
 QWEN_PROFILES = [
@@ -68,6 +71,7 @@ QWEN_PROFILES = [
     ("qwen38fn-int4ar-tp2-mia-tf-v1.1-azampatti-1m", "azampatti/Qwen3.8-Flash-Next-125B-A5B-INT4-AutoRound",
      "1464274120d36a4d8fcaa934552334a7d83ce0fd", "Qwen3.8-Flash-Next-INT4-AR"),
 ]
+MIA_MODS = Path(__file__).resolve().parents[1] / "mods"
 FABRIC_HEAD = "172.16.21.31"
 FABRIC_WORKER = "172.16.21.32"
 
@@ -258,11 +262,13 @@ def test_mia_recipe_reuses_native_rank_wiring(runtime, profile, target, revision
         image=recipe.container, container_name="tf-profile-test", command="sleep infinity",
         env=ctx.all_env, volumes=ctx.volumes,
     )
-    if profile == "glm53-exl3-tp2-mia-tf-v1.8-mia-1m":
+    release = recipe.metadata["upstream_release"]
+    if release in ("v1.8", "v1.10") and recipe.metadata["weights"] == "mia":
         assert "NCCL_CUMEM_ENABLE" not in script
     else:
         assert "NCCL_CUMEM_ENABLE=0" in shlex.split(script)
-    if recipe.metadata["upstream_release"] == "v1.8":
+    assert ("TENSORFOLD_NUCLEUS_UNION=1" in shlex.split(script)) is (release == "v1.10")
+    if release in ("v1.8", "v1.10"):
         assert "TF_ROCE_WAIT_S=300" in shlex.split(script)
         if recipe.metadata["weights"] == "mia":
             assert "TF_GLM_MAX_QUEUED=" in shlex.split(script)
@@ -285,6 +291,7 @@ def test_mia_recipe_reuses_native_rank_wiring(runtime, profile, target, revision
             assert args[args.index(flag) + 1] == expected
         assert ("--name" in args) is (rank == 0)
         assert "--vision" in args and "--thinking" in args
+        assert not [arg for arg in args if arg.startswith(("--spill", "--snapshot-dir", "--mtp", "--no-drafts"))]
     assert recipe.runtime_cache["key_by_image"] is True
 
 
@@ -335,7 +342,7 @@ def test_mia_native_mod_transfer_is_self_contained(tmp_path, profile, target, re
         ready.check_health({**body, "context_length": int(context) - 1}, 4, expected_context, 1200000)
 
 
-@pytest.mark.parametrize("version", ("v1.2", "v1.5", "v1.8"))
+@pytest.mark.parametrize("version", ("v1.2", "v1.5", "v1.8", "v1.10"))
 @pytest.mark.parametrize("change", ("content", "symlink"))
 def test_mia_frozen_bundle_rejects_changed_helpers(tmp_path, version, change):
     source = Path(__file__).resolve().parents[1] / f"mods/mia-tensorfold-{version}"
@@ -417,6 +424,127 @@ def test_qwen_frozen_bundle_rejects_changed_helpers(tmp_path):
     result = subprocess.run([sys.executable, str(bundle / "prepare.py")], capture_output=True, text=True)
     assert result.returncode != 0
     assert "Missing or changed frozen mod file: serve.py" in result.stderr
+
+
+def test_mia_v110_recipe_states_the_pinned_launcher_defaults():
+    path = Path(__file__).resolve().parents[1] / MIA_RECIPE_DIR / "glm53-exl3-tp2-mia-tf-v1.10-mia-1m.yaml"
+    recipe = Recipe(yaml.safe_load(path.read_text()), source_path=str(path))
+    lock = json.loads((MIA_MODS / "mia-tensorfold-v1.10/upstream.lock.json").read_text())
+    # The lock records what the pinned scripts/config.sh exports with no local.sh or .env.
+    launcher = lock["launcher_env"]
+    assert len(launcher) == 38
+    assert {key: recipe.env.get(key) for key in launcher} == launcher
+    engine_only = {key for key in set(recipe.env) - set(launcher) if key.startswith(("TENSORFOLD_", "TF_"))}
+    assert engine_only == {
+        "TF_GLM_LOOP_GUARD", "TF_GLM_KEEP_REASONING", "TF_GLM_KEEP_REASONING_MB", "TENSORFOLD_GLM_IMAGE_TOKENS",
+        "TENSORFOLD_GLM_VIDEO_TOKENS", "TENSORFOLD_GLM_VIDEO_FRAMES", "TENSORFOLD_GLM_MAX_IMAGES",
+        "TENSORFOLD_GLM_MAX_VIDEOS", "TENSORFOLD_GLM_REQUEST_IMAGE_TOKENS", "TENSORFOLD_GLM_REQUEST_VIDEO_TOKENS"}
+    # Stated independently of the lock: the sampled-decode default is on and every optional v1.9/v1.10 switch is off.
+    assert recipe.env["TENSORFOLD_NUCLEUS_UNION"] == "1"
+    for key, off in (("TF_GLM_EFFORT_TAIL", "0"), ("TF_GLM_CACHE_SHARE_PCT", "0"), ("TF_GLM_LOOP_GUARD", "0"),
+                     ("TF_GLM_KEPT_BYTES_GIB", "0"), ("TF_GLM_KEEP_PER_CHAT", "0"), ("TF_GLM_EXL3_DEC_ORDER", "0"),
+                     ("TF_GLM_DISPLAY_KV_MIB", "0"), ("TF_GLM_DISPLAY_KV_BACKEND", "drm"), ("TF_GLM_MAX_QUEUED", ""),
+                     ("TF_GLM_MTP", "auto")):
+        assert recipe.env[key] == off, key
+    assert not [key for key in recipe.env if "SPILL" in key]
+    assert (recipe.env["TENSORFOLD_MEMORY_RESERVE_GIB"], recipe.env["TF_GLM_CACHE_GIB"]) == ("14.5", "12.5")
+    for field in ("kit_revision", "engine_revision", "upstream_patch_count", "upstream_patch_hash"):
+        assert recipe.metadata[field] == lock[field], field
+    assert recipe.metadata["site_backports"] == "exact-tool-turn-reasoning, strict-concurrent-health"
+    hook = shlex.split(recipe.post_exec[0])
+    assert hook[hook.index("--min-pool-tokens") + 1] == "1200000"
+
+
+def test_mia_v110_bundle_has_no_sibling_or_linked_fallback(tmp_path):
+    for version in ("v1.8", "v1.10"):
+        shutil.copytree(MIA_MODS / f"mia-tensorfold-{version}", tmp_path / f"mia-tensorfold-{version}",
+                        ignore=shutil.ignore_patterns("__pycache__"))
+    bundle = tmp_path / "mia-tensorfold-v1.10"
+    check = [sys.executable, str(bundle / "prepare.py"), "--check"]
+    subprocess.run(check, check=True, capture_output=True)
+    # v1.8's launcher and readiness gate are byte-identical, and still must not stand in for a missing helper.
+    for name in ("serve.py", "readiness.py"):
+        assert (bundle / name).read_bytes() == (tmp_path / "mia-tensorfold-v1.8" / name).read_bytes()
+        (bundle / name).rename(bundle / (name + ".moved"))
+        result = subprocess.run(check, capture_output=True, text=True)
+        assert result.returncode != 0 and f"Missing or changed frozen mod file: {name}" in result.stderr
+        (bundle / (name + ".moved")).rename(bundle / name)
+    manifest = bundle / "upstream.lock.json"
+    manifest.rename(tmp_path / "shared.lock.json")
+    manifest.symlink_to(tmp_path / "shared.lock.json")
+    result = subprocess.run(check, capture_output=True, text=True)
+    assert result.returncode != 0 and "Missing or linked Mia TensorFold mod manifest" in result.stderr
+
+
+def _synthetic_guard_tree(tmp_path):
+    """A mod copy whose pins describe small stand-in sources; the real pins accept only the pinned image's files."""
+    bundle = tmp_path / "mia-tensorfold-v1.10"
+    shutil.copytree(MIA_MODS / "mia-tensorfold-v1.10", bundle, ignore=shutil.ignore_patterns("__pycache__"))
+    spec = importlib.util.spec_from_file_location("mia_site_fixes", bundle / "site_fixes.py")
+    fixes = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(fixes)
+    sources = {
+        "families/glm5_next/cuda/kept_reasoning.py": (fixes.reasoning, '"""Stand-in.\n\n'
+            'ids). Here the signature covers the whole conversation before the calls, not only the last user message, '
+            'so a reply\nis only ever put back into the conversation it was written for.\n"""\n'
+            'def _keys(history, calls):\n    ids = []\n'
+            '    return [i for i in ids if isinstance(i, str) and _OUR_ID.match(i)] + [signature(history, calls)]\n'),
+        "cuda/health.py": (fixes.health, "def snapshot(app, scheduler=None, decoder=None):\n    if app:\n"
+                                         "        body = {}\n        return body\n"),
+        "cuda/http.py": (fixes.http, "def get(self, app, health):\n    if app:\n        if health:\n"
+                                     "            if self:\n                self._json(200, health.of(app).snapshot(app))\n"),
+    }
+    root = tmp_path / "tensorfold"
+    lock = json.loads((bundle / "upstream.lock.json").read_text())
+    for name, (transform, text) in sources.items():
+        (root / name).parent.mkdir(parents=True, exist_ok=True)
+        (root / name).write_text(text)
+        lock["installed_files"][name] = {
+            "upstream_sha256": hashlib.sha256(text.encode()).hexdigest(),
+            "site_sha256": hashlib.sha256(transform(text).encode()).hexdigest()}
+    (bundle / "upstream.lock.json").write_text(json.dumps(lock))
+    return fixes, root, {name: text for name, (_, text) in sources.items()}
+
+
+def test_mia_v110_site_guards_check_every_source_before_writing(tmp_path):
+    fixes, root, upstream = _synthetic_guard_tree(tmp_path)
+    read = lambda: {name: (root / name).read_text() for name in upstream}
+    # The real lock refuses anything but the pinned image's source.
+    result = subprocess.run([sys.executable, str(MIA_MODS / "mia-tensorfold-v1.10/site_fixes.py"), "--root", str(root)],
+                            capture_output=True, text=True)
+    assert result.returncode != 0 and "installed source drifted" in result.stderr
+    assert read() == upstream
+
+    last = "cuda/http.py"  # Checked last: a refusal here must leave the first two untouched.
+    (root / last).write_text(upstream[last] + "# Unreviewed change\n")
+    with pytest.raises(ValueError, match="installed source drifted: cuda/http.py"):
+        fixes.apply(root)
+    assert {name: text for name, text in read().items() if name != last} == \
+        {name: text for name, text in upstream.items() if name != last}
+
+    outside = tmp_path / "shared-http.py"
+    outside.write_text(upstream[last])
+    (root / last).unlink()
+    (root / last).symlink_to(outside)
+    with pytest.raises(ValueError, match="Missing or linked installed source: cuda/http.py"):
+        fixes.apply(root)
+    (root / last).unlink()
+    with pytest.raises(ValueError, match="Missing or linked installed source: cuda/http.py"):
+        fixes.apply(root)
+    assert outside.read_text() == upstream[last]
+    assert {name: (root / name).read_text() for name in upstream if name != last} == \
+        {name: text for name, text in upstream.items() if name != last}
+
+    (root / last).write_text(upstream[last])
+    fixes.apply(root)
+    guarded = read()
+    assert all(guarded[name] != upstream[name] for name in upstream)
+    compile(guarded["cuda/health.py"], "health.py", "exec")
+    fixes.apply(root)  # A second pass, and a pass after a partial write, change nothing further.
+    assert read() == guarded
+    (root / last).write_text(upstream[last])
+    fixes.apply(root)
+    assert read() == guarded
 
 
 def test_readiness_requires_reported_pool_capacity():
