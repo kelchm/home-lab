@@ -63,9 +63,9 @@ MIA_PROFILES = [
 ]
 QWEN_RECIPE_DIR = "mia-tensorfold-qwen38fn-tp2"
 QWEN_PROFILES = [
-    ("qwen38fn-nvfp4-tp2-mia-tf-v1.0-nvidia-1m", "nvidia/Qwen3.8-Flash-Next-NVFP4",
+    ("qwen38fn-nvfp4-tp2-mia-tf-v1.1-nvidia-1m", "nvidia/Qwen3.8-Flash-Next-NVFP4",
      "fc694b54fb0174e0913e6adf86691ef85a4ead47", "Qwen3.8-Flash-Next"),
-    ("qwen38fn-int4ar-tp2-mia-tf-v1.0-azampatti-1m", "azampatti/Qwen3.8-Flash-Next-125B-A5B-INT4-AutoRound",
+    ("qwen38fn-int4ar-tp2-mia-tf-v1.1-azampatti-1m", "azampatti/Qwen3.8-Flash-Next-125B-A5B-INT4-AutoRound",
      "1464274120d36a4d8fcaa934552334a7d83ce0fd", "Qwen3.8-Flash-Next-INT4-AR"),
 ]
 FABRIC_HEAD = "172.16.21.31"
@@ -409,7 +409,7 @@ def test_qwen_recipe_maps_native_rank_wiring_to_zig_cli(runtime, tmp_path, profi
 
 
 def test_qwen_frozen_bundle_rejects_changed_helpers(tmp_path):
-    source = Path(__file__).resolve().parents[1] / "mods/mia-tensorfold-qwen38fn-v1.0"
+    source = Path(__file__).resolve().parents[1] / "mods/mia-tensorfold-qwen38fn-v1.1"
     bundle = tmp_path / source.name
     shutil.copytree(source, bundle, ignore=shutil.ignore_patterns("__pycache__"))
     helper = bundle / "serve.py"

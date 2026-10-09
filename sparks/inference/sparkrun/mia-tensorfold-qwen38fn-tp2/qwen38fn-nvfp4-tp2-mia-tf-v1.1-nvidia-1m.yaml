@@ -1,22 +1,22 @@
-# qwen38fn-nvfp4-tp2-mia-tf-v1.0-nvidia-1m: pinned Mia Zig-engine server/weights profile; SparkRun owns both ranks and lifecycle operations.
+# qwen38fn-nvfp4-tp2-mia-tf-v1.1-nvidia-1m: pinned Mia Zig-engine server/weights profile; SparkRun owns both ranks and lifecycle operations.
 recipe_version: '2'
 model: nvidia/Qwen3.8-Flash-Next-NVFP4
 model_revision: fc694b54fb0174e0913e6adf86691ef85a4ead47
 runtime: tensorfold
-container: ghcr.io/miaai-lab/qwen3.8-flash-dual-dgx-sparks-tensorfold@sha256:ab25d95979709261a2ac1cd50d9d14e8e29f775c784a4629230358ad94ffefab
+container: ghcr.io/miaai-lab/qwen3.8-flash-dual-dgx-sparks-tensorfold@sha256:e188128ddabdc67ac02c05781f5c0c6b348db5f050cac297861d82b7f086e18c
 min_nodes: 2
 max_nodes: 2
 metadata:
-  profile: qwen38fn-nvfp4-tp2-mia-tf-v1.0-nvidia-1m
-  upstream_release: v1.0
+  profile: qwen38fn-nvfp4-tp2-mia-tf-v1.1-nvidia-1m
+  upstream_release: v1.1
   weights: nvidia
   weights_variant: nvfp4
   serving_profile: upstream
-  description: Mia v1.0 Zig-engine server with NVIDIA NVFP4 weights and published TP2 limits
-  kit_revision: cbfc4293e4f2e351614f24ab1acb4a091756e7ec
+  description: Mia v1.1 Zig-engine server with NVIDIA NVFP4 weights and published TP2 limits
+  kit_revision: be3ed857ab1055ca47b36134d22691f00f2bb94a
   engine_revision: db281878ddb836fd0df510d8771ecb7e0fe47d26
   upstream_patch_count: 9
-  upstream_patch_hash: 57a020c8d666
+  upstream_patch_hash: f3e1300f4f62
   target_model_revision: fc694b54fb0174e0913e6adf86691ef85a4ead47
 defaults:
   tensor_parallel: 2
@@ -31,7 +31,7 @@ env:
   NCCL_MIN_NCHANNELS: '4'
   NCCL_MAX_NCHANNELS: '4'
   TENSORFOLD_NO_UPDATE_CHECK: '1'
-  # Published v1.0 reserve and vision workspace; the engine sizes the KV pool from what remains.
+  # Published v1.1 reserve and vision workspace; the engine sizes the KV pool from what remains.
   TENSORFOLD_MEMORY_RESERVE_GIB: '10'
   TENSORFOLD_VISION_WORKSPACE_MIB: '2048'
   # Qwen's YaRN factor, required past the native 262,144-token window.
@@ -57,7 +57,7 @@ executor_config:
 runtime_cache:
   key_by_image: true
 mods:
-- ../mods/mia-tensorfold-qwen38fn-v1.0
+- ../mods/mia-tensorfold-qwen38fn-v1.1
 post_exec:
 - python3 /opt/qwen38fn-mia-tensorfold/readiness.py --model Qwen3.8-Flash-Next
 distribution_config:
