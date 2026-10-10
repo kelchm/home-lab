@@ -9,6 +9,7 @@ Compose projects that run directly on the Synology NAS (`Athena`), outside Kuber
 | [`netbootxyz`](netbootxyz/) | PXE menus and local boot assets for lab hosts | doco-cd |
 | [`modelkeep`](modelkeep/) | Hugging Face pull-through mirror for LAN clients | doco-cd |
 | [`offsite-backup`](offsite-backup/) | Daily Kopia snapshot of the backup shares to an Object Lock bucket | doco-cd |
+| [`google-photos-takeout`](google-photos-takeout/) | Daily pull of Google Takeout archives from Drive, extracted per export | doco-cd |
 
 doco-cd has run on Athena since 2026-09-26; the remaining acceptance checks are tracked in [home-lab#379](https://github.com/kelchm/home-lab/issues/379). A project that doco-cd does not deploy must still have its running Compose definition match its directory, and any out-of-band DSM edit must be brought back to Git.
 
