@@ -27,7 +27,7 @@ spec:
             image:
               # renovate: datasource=docker depName=ghcr.io/recyclarr/recyclarr
               repository: ghcr.io/recyclarr/recyclarr
-              tag: 8.7.2
+              tag: 8.7.3
             args: ["sync"]
             env:
               TZ: America/New_York
