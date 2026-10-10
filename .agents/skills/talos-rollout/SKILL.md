@@ -43,6 +43,8 @@ Preflight prints a one-line summary per check and expands raw output only for ch
 
 It gates on: routes to every rollout destination, Talos reachable at each node, `talosctl health` passing across the three control-plane nodes, every node answering an etcd member query, all Kubernetes nodes Ready **and uncordoned**, Multus safeguards Ready, every in-use Longhorn volume attached and healthy, and all instance-managers Ready with `lhnet1`. It reports without judging: which interface carries your API and Talos paths, any idle Longhorn volume, every CloudNativePG cluster with its instance count and primary placement, every suspended Flux Kustomization, and every PodDisruptionBudget at zero allowed disruptions.
 
+It also prints the `talosctl` client pin (`.mise.toml`), the desired target (`talos/talenv.yaml`), and each node's live version side by side, and warns when any pair is more than one minor apart. Talos upgrades only between adjacent minors, so a wider skew is an unsupported combination: settle it before go/no-go, but a warning does not by itself block the rollout.
+
 Then, in order:
 
 1. Save an etcd snapshot before the first node, to an operator-chosen local path outside the repository:

@@ -43,7 +43,7 @@ reset_fixture
 "${SCRIPT_DIR}/validate-talos.sh" "${TEST_DIR}/talos" > "${TEST_DIR}/output.log" 2>&1
 echo "ok: SOPS default inputs ignored"
 
-printf 'machine: [\n' > "${TEST_DIR}/talos/patches/global/machine-install.yaml"
+printf 'machine: [\n' > "${TEST_DIR}/talos/patches/global/machine-files.yaml"
 expect_failure 'malformed patch' 'yaml: line'
 
 reset_fixture
@@ -51,7 +51,7 @@ yq -i '.filesystem.invalidField = true' "${TEST_DIR}/talos/patches/global/user-v
 expect_failure 'unknown UserVolumeConfig field' 'invalidField'
 
 reset_fixture
-yq -i '.machine.install.image = "factory.talos.dev/installer:v1.13.1"' "${TEST_DIR}/talos/patches/global/machine-install.yaml"
+yq -i '.machine.install.image = "factory.talos.dev/installer:v1.13.1"' "${TEST_DIR}/talos/patches/global/machine-network.yaml"
 expect_failure 'Talos version drift' '.machine.install.image version v1.13.1 does not match talenv.yaml'
 
 reset_fixture
