@@ -10,6 +10,17 @@ spec:
       app.kubernetes.io/name: k8s-gateway
       app.kubernetes.io/instance: k8s-gateway
   ingress:
+    # Scraper metrics (same identity as the Traefik metrics allowance).
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: vmagent
+            app.kubernetes.io/instance: victoria-metrics-k8s-stack
+            io.cilium.k8s.policy.serviceaccount: vmagent-victoria-metrics-k8s-stack
+      toPorts:
+        - ports:
+            - port: "9153"
+              protocol: TCP
     # LAN DNS via the LoadBalancer IP
     - fromEntities:
         - world

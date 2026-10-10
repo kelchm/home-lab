@@ -2,5 +2,21 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
+  - ./podmonitor.yaml
   - ./helmrelease.yaml
   - ./ocirepository.yaml
+
+configMapGenerator:
+  # controlplaneio-fluxcd/flux-operator 4746bb3266ae4fd398079e71dcdbdbc563213196; clear database id and fixed datasource selection.
+  - name: grafana-dashboard-flux-performance
+    files:
+      - flux-performance.json=./dashboards/flux-performance.json
+      - flux-k8s-api-performance.json=./dashboards/flux-k8s-api-performance.json
+    options:
+      annotations:
+        grafana_folder: Platforms/Kubernetes
+        kustomize.toolkit.fluxcd.io/substitute: disabled
+      labels:
+        grafana_dashboard: "1"
+generatorOptions:
+  disableNameSuffixHash: true
