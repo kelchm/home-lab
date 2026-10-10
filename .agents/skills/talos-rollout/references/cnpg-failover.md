@@ -1,6 +1,6 @@
 # Moving a CloudNativePG primary off a rollout candidate
 
-Every CloudNativePG cluster in this repository runs a single instance, so its primary is also its only copy. Draining the node that hosts one is blocked by the PodDisruptionBudget CloudNativePG maintains for it, and forcing past that budget takes the database down with no standby to serve reads.
+The CloudNativePG clusters in this repository run two instances on separate nodes, and CloudNativePG switches the primary over ahead of a drain. This procedure is for a cluster running a single instance, whose primary is also its only copy. Draining the node that hosts one is blocked by the PodDisruptionBudget CloudNativePG maintains for it, and forcing past that budget takes the database down with no standby to serve reads.
 
 This procedure moves a primary deliberately. **It does not decide anything.** Whether a given database is worth a temporary replica, or whether its downtime is acceptable, is the operator's judgment and stays outside any script.
 

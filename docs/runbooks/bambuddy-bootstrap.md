@@ -1,6 +1,6 @@
 # Bambuddy bootstrap and recovery
 
-Bambuddy runs in `printing` with a single-instance CloudNativePG database on a
+Bambuddy runs in `printing` with a two-instance CloudNativePG database, each instance on a
 5 GiB Longhorn PVC. Live archives use a separate 100 GiB Longhorn PVC. It is
 reachable only through `gateway-admin` at
 `https://bambuddy.home.kelch.io`. Automatic discovery, host networking,
