@@ -22,7 +22,7 @@ spec:
               repository: ghcr.io/cyanheads/hn-mcp-server
               # v0.5.14 release; tag is unprefixed in GHCR. Pin the
               # multi-architecture OCI index for reproducibility.
-              tag: 0.5.20@sha256:0f681f2bfa39b23bba32a3f4884e7cdbc6ffafe8c485471e96bb89f62faa9cd2
+              tag: 0.5.21@sha256:b1d42eef7b1069e83e8ce1617d740615e684c9f14e188d42e3b5d5c8ca7d3d1e
             env:
               NODE_ENV: production
               MCP_TRANSPORT_TYPE: http
