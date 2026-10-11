@@ -16,7 +16,7 @@ This reports GPU utilization, host memory and running containers. Use SparkRun's
 
 ## Monitoring
 
-Host, GPU and inference metrics are collected by the [monitoring project](monitoring/README.md), which doco-cd deploys from `main` once a node is enrolled. It is the one part of this directory that a merge can change on a Spark.
+Host, GPU and inference metrics are collected by the [monitoring project](monitoring/README.md), which doco-cd deploys from `main` once a node is enrolled. It is the one part of this directory that a merge can change on a Spark. The same project deploys the [sparkDash](monitoring/README.md#sparkdash) dashboard on `spark-1`.
 
 ## Retired Qwen Compose path
 

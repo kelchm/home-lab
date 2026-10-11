@@ -8,9 +8,11 @@ Host, GPU and inference metrics for the two DGX Sparks. Enrollment, verification
 | [gpu/compose.yaml](gpu/compose.yaml) | The NVIDIA GPU exporter, as its own project. |
 | [scrape.yaml](scrape.yaml) | Host, GPU, vmagent, deployer and inference scrape jobs. |
 | [.doco-cd.yml](.doco-cd.yml) | The two deployments every Spark's doco-cd applies. |
-| [../platform/doco-cd](../platform/doco-cd/compose.yaml) | The deployer, applied by hand once per node. |
+| [sparkdash/compose.yaml](sparkdash/compose.yaml) | The sparkDash dashboard, on `spark-1` only. |
+| [.doco-cd.spark-1.yml](.doco-cd.spark-1.yml) | The deployment only `spark-1`'s doco-cd applies. |
+| [../platform/doco-cd](../platform/doco-cd/compose.yaml) | The deployer, applied by hand once per node. `compose.spark-1.yaml` adds the `spark-1` poll. |
 
-Every file is identical on both Sparks. node-exporter runs its default collectors except `cpufreq`: on a Spark that collector never returns, which stalls every scrape. Without it a full scrape takes about 0.2 seconds. SparkRun owns inference; this project never starts, stops or restarts an inference container.
+The collector files are identical on both Sparks; [sparkDash](#sparkdash) is the one project that runs on a single node. node-exporter runs its default collectors except `cpufreq`: on a Spark that collector never returns, which stalls every scrape. Without it a full scrape takes about 0.2 seconds. SparkRun owns inference; this project never starts, stops or restarts an inference container.
 
 ## Inference
 
@@ -21,6 +23,25 @@ Two things are still fixed. Port 8888 is the serving port every recipe uses; a r
 All metrics the endpoint exposes are kept, whatever the runtime. The TensorFold dashboard reads the `tensorfold:*` families; another runtime's metrics are collected the same way but need their own dashboard.
 
 doco-cd recreates every container of a project on each poll while one of its services cannot start. The GPU exporter depends on the driver and CDI, so it is a separate project: if it cannot start after a driver or OS update, host and inference collection keep running. It runs `nvidia-smi` through NVIDIA CDI; its NVML build is AMD64-only. GB10 has no dedicated framebuffer, so GPU memory is not reported: read host memory and memory pressure instead. A power-cap flag is ordinary operation; thermal slowdown is not.
+
+## sparkDash
+
+[sparkDash](https://github.com/MiaAI-Lab/sparkDash) is a live dashboard for both Sparks at `http://10.32.21.31:5555`. It asks for an access token on first use; read it with `ssh kelchm@spark-1 sudo cat /etc/sparkdash/token`. It has no agent mode: one instance reads its own host directly and every other unit over SSH, so it runs on `spark-1` and logs in to `spark-2`. Its series are not scraped into the metrics store.
+
+The container is privileged, shares the host's PID namespace and network, and mounts `/` read-only, which is what its local collectors need. On `spark-2` it logs in as `sparkdash`, an account with no sudo rights and no Docker access, so it can read metrics there but cannot power the node off or start or stop a container. No model launcher is configured: SparkRun owns inference.
+
+The image is built from an upstream release by the [kelchm/sparkDash](https://github.com/kelchm/sparkDash) fork, because upstream publishes none; [MiaAI-Lab/sparkDash#197](https://github.com/MiaAI-Lab/sparkDash/pull/197) proposes the same build upstream. To build a newer release, cherry-pick the fork's publish commit onto the upstream release commit and push a `v<version>-<n>` tag to the fork.
+
+State outside Git, all on `spark-1` unless noted:
+
+| Path | Content |
+|---|---|
+| `/etc/sparkdash/token` | The access token. Any value works; replace it and restart the container to rotate. |
+| `/etc/sparkdash/id_ed25519` | The SSH key for `spark-2`, authorized for `sparkdash` in `/home/sparkdash/.ssh/authorized_keys` there. |
+| `/var/lib/sparkdash` | Fleet, settings and history. The two units are registered in `sparks.json`. |
+| `/opt/doco-cd/compose.override.yaml` | A copy of [compose.spark-1.yaml](../platform/doco-cd/compose.spark-1.yaml). |
+
+To rebuild that state: create the key with `ssh-keygen`, the account with `useradd --system --create-home --shell /bin/bash sparkdash`, and the token with `openssl rand -hex 24`; install the override and run `docker compose up -d` in `/opt/doco-cd`; then add `spark-1` as this host and `spark-2` as a remote unit with user `sparkdash` and key authentication in the dashboard.
 
 ## Reading the TensorFold dashboard
 

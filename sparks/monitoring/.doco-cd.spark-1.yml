@@ -1,0 +1,4 @@
+name: sparkdash
+working_dir: sparks/monitoring/sparkdash
+prune_images: false
+reconciliation: false

@@ -1,0 +1,13 @@
+# Installed beside compose.yaml on spark-1 as compose.override.yaml. Adds the
+# poll that applies .doco-cd.spark-1.yml.
+services:
+  doco-cd:
+    environment:
+      POLL_CONFIG: |
+        - url: https://github.com/kelchm/home-lab.git
+          reference: main
+          interval: 3m
+        - url: https://github.com/kelchm/home-lab.git
+          reference: main
+          interval: 3m
+          target: spark-1
