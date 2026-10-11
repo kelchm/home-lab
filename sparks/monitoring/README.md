@@ -41,7 +41,21 @@ State outside Git, all on `spark-1` unless noted:
 | `/var/lib/sparkdash` | Fleet, settings and history. The two units are registered in `sparks.json`. |
 | `/opt/doco-cd/compose.override.yaml` | A copy of [compose.spark-1.yaml](../platform/doco-cd/compose.spark-1.yaml). |
 
-To rebuild that state: create the key with `ssh-keygen`, the account with `useradd --system --create-home --shell /bin/bash sparkdash`, and the token with `openssl rand -hex 24`; install the override and run `docker compose up -d` in `/opt/doco-cd`; then add `spark-1` as this host and `spark-2` as a remote unit with user `sparkdash` and key authentication in the dashboard.
+To rebuild that state, run from a workstation:
+
+```sh
+ssh kelchm@spark-1 'sudo install -d -m 0700 /etc/sparkdash /var/lib/sparkdash \
+  && sudo ssh-keygen -q -t ed25519 -N "" -C sparkdash@spark-1 -f /etc/sparkdash/id_ed25519 \
+  && openssl rand -hex 24 | tr -d "\n" | sudo install -m 0600 /dev/stdin /etc/sparkdash/token'
+ssh kelchm@spark-1 sudo cat /etc/sparkdash/id_ed25519.pub \
+  | ssh kelchm@spark-2 'sudo useradd --system --create-home --shell /bin/bash sparkdash \
+  && sudo install -d -m 0700 -o sparkdash -g sparkdash /home/sparkdash/.ssh \
+  && sudo install -m 0600 -o sparkdash -g sparkdash /dev/stdin /home/sparkdash/.ssh/authorized_keys'
+scp sparks/platform/doco-cd/compose.spark-1.yaml kelchm@spark-1:/tmp/doco-cd.override.yaml
+ssh kelchm@spark-1 'sudo install -m 0644 /tmp/doco-cd.override.yaml /opt/doco-cd/compose.override.yaml && cd /opt/doco-cd && sudo docker compose up -d'
+```
+
+doco-cd starts the container within three minutes. Then, in the dashboard, add `spark-1` as this host and `spark-2` as a remote unit with user `sparkdash` and key authentication.
 
 ## Reading the TensorFold dashboard
 
