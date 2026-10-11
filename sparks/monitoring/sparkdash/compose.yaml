@@ -1,0 +1,41 @@
+# sparkDash on spark-1. It reads this host directly and spark-2 over SSH, so it
+# runs on one Spark only. The host access below is what its collectors need.
+name: sparkdash
+
+services:
+  sparkdash:
+    # Built from upstream 2.40.0 by kelchm/sparkDash; upstream publishes no image.
+    image: ghcr.io/kelchm/sparkdash:2.40.0-1@sha256:805a8dd7a23edbe228d754762ebcffb3f7a754a57fa756e057328c8bedf0a7fd
+    container_name: sparkdash
+    # The server takes its access token from the environment only.
+    command:
+      - sh
+      - -c
+      - SPARKDASH_TOKEN="$$(cat /etc/sparkdash/token)" exec node server/index.js
+    network_mode: host
+    privileged: true
+    pid: host
+    environment:
+      BIND_HOST: 10.32.21.31
+      SPARKDASH_ALLOW_OPEN_REMOTE: "0"
+      SSH_IDENTITY_FILE: /etc/sparkdash/id_ed25519
+      HOST_PROC_PATH: /host/proc
+      HOST_SYS_PATH: /host/sys
+      HOST_ROOT_PATH: /host/root
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/host/root:ro
+      - /usr/bin/nvidia-smi:/usr/bin/nvidia-smi:ro
+      - /usr/lib/aarch64-linux-gnu/libnvidia-ml.so.1:/usr/lib/aarch64-linux-gnu/libnvidia-ml.so.1:ro
+      # Access token and the SSH key for spark-2.
+      - /etc/sparkdash:/etc/sparkdash:ro
+      # Fleet, settings and history.
+      - /var/lib/sparkdash:/app/config
+    mem_limit: 512m
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    restart: unless-stopped

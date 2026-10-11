@@ -59,7 +59,7 @@ function validate_deployment() {
     echo "ok: ${label}"
 }
 
-configs="$(find "${ROOT_DIR}/sparks/monitoring" "${ROOT_DIR}/proxmox/monitoring" -name '.doco-cd.yml' | sort)"
+configs="$(find "${ROOT_DIR}/sparks/monitoring" "${ROOT_DIR}/proxmox/monitoring" -name '.doco-cd.yml' -o -name '.doco-cd.*.yml' | sort)"
 if [[ -z "${configs}" ]]; then
     violation "no .doco-cd.yml found under sparks/monitoring or proxmox/monitoring"
 fi
@@ -82,6 +82,10 @@ for deployer in sparks proxmox; do
         violation "${deployer}/platform/doco-cd/compose.yaml: Compose render failed"
     fi
 done
+
+if ! docker compose -f "${ROOT_DIR}/sparks/platform/doco-cd/compose.yaml" -f "${ROOT_DIR}/sparks/platform/doco-cd/compose.spark-1.yaml" config --quiet; then
+    violation "sparks/platform/doco-cd/compose.spark-1.yaml: Compose render failed"
+fi
 
 if ((violations > 0)); then
     echo "host monitoring validation failed with ${violations} violation(s)" >&2

@@ -1,6 +1,6 @@
 # Host monitoring
 
-Metrics from the three PVE nodes and the two DGX Sparks. The lab's metrics backend runs in `k8s-prod`; these hosts push to it. Each host runs ordinary exporters and a `vmagent` in Docker Compose, deployed from `main` by a host-local doco-cd as on the [NAS](../../synology/README.md). `vmagent` scrapes the exporters over loopback and pushes to `https://metrics-ingest.home.kelch.io`, queueing up to 1 GiB on disk while the endpoint is unreachable. Nothing on a host listens beyond loopback except doco-cd on PVE (see [PVE](#pve-node)). The Proxmox API is read separately by an in-cluster exporter. As on the NAS, doco-cd holds the host's Docker socket, so whoever can merge to `main` controls every enrolled host.
+Metrics from the three PVE nodes and the two DGX Sparks. The lab's metrics backend runs in `k8s-prod`; these hosts push to it. Each host runs ordinary exporters and a `vmagent` in Docker Compose, deployed from `main` by a host-local doco-cd as on the [NAS](../../synology/README.md). `vmagent` scrapes the exporters over loopback and pushes to `https://metrics-ingest.home.kelch.io`, queueing up to 1 GiB on disk while the endpoint is unreachable. Nothing on a host listens beyond loopback except doco-cd on PVE (see [PVE](#pve-node)) and the sparkDash dashboard on `spark-1`, at `10.32.21.31:5555` behind an access token. The Proxmox API is read separately by an in-cluster exporter. As on the NAS, doco-cd holds the host's Docker socket, so whoever can merge to `main` controls every enrolled host.
 
 ## State
 
@@ -40,6 +40,8 @@ ssh kelchm@spark-1 'sudo install -D -m 0644 /tmp/doco-cd.yaml /opt/doco-cd/compo
 
 doco-cd deploys the `monitoring` and `monitoring-gpu` projects within three minutes. The GPU exporter needs NVIDIA CDI devices in Docker (`nvidia-ctk cdi list` shows `nvidia.com/gpu=all`); if it cannot start, the other collectors are unaffected and `HostCollectorDown` names it. The inference container is not touched. Whichever Spark runs SparkRun's head rank scrapes the serving endpoint every second and labels the series with the model, runtime and recipe SparkRun reports; see [Spark monitoring](../../sparks/monitoring/README.md#inference). Stop the workstation pilot once those samples arrive so the two do not overlap.
 
+`spark-1` also runs the sparkDash dashboard as a third project, from a second poll that only its deployer has; its host state is listed under [sparkDash](../../sparks/monitoring/README.md#sparkdash).
+
 ## PVE node
 
 Docker's default networking drops traffic between bridged guests the moment the daemon starts. Write the daemon configuration **before** installing the package, and enroll one node first.
@@ -62,14 +64,14 @@ count by (job) (up{instance="spark-1"} == 1)
 
 The first is a few seconds on a healthy host. The second lists `spark-node`, `spark-gpu`, `spark-vmagent` and `spark-deployer`, plus `spark-inference` on the node serving the head rank. On the host, `curl -s 127.0.0.1:8429/targets` shows each scrape target and `docker logs doco-cd` shows deployments.
 
-Check memory with `docker stats --no-stream`, which matters on a Spark where a loaded model leaves little free. Every container keeps at most 30 MB of logs and has a memory limit: 256 MiB each for doco-cd and vmagent, 128 MiB each for node-exporter and the GPU exporter, so 768 MiB at most on a Spark and 640 MiB on a PVE node. Measured on 2026-10-04: a Spark used 90 to 110 MiB in total (doco-cd 35 to 44, vmagent 23 to 46, GPU exporter 10 to 17, node-exporter 10), leaving its available memory within 0.1 GiB of where it started; a PVE node used about 55 MiB.
+Check memory with `docker stats --no-stream`, which matters on a Spark where a loaded model leaves little free. Every container keeps at most 30 MB of logs and has a memory limit: 256 MiB each for doco-cd and vmagent, 128 MiB each for node-exporter and the GPU exporter, so 768 MiB at most on a Spark and 640 MiB on a PVE node. sparkDash adds a 512 MiB limit on `spark-1`. Measured on 2026-10-04: a Spark used 90 to 110 MiB in total (doco-cd 35 to 44, vmagent 23 to 46, GPU exporter 10 to 17, node-exporter 10), leaving its available memory within 0.1 GiB of where it started; a PVE node used about 55 MiB.
 
 ## Change, pause, rotate, remove
 
 - **Change:** merge to `main`. Each host applies it on its next poll; only the service whose files changed is recreated, and the queue survives. A commit whose images cannot be pulled leaves the running containers in place. A service that starts and then keeps failing makes doco-cd recreate its whole project on every poll until it is fixed. Either case raises `HostDeployFailing`. `scripts/ci/validate-host-monitoring.sh` renders every deployment and has the pinned vmagent parse its scrape files; run it before merging a change.
 - **Pause:** `docker stop doco-cd` on the host. Collection continues.
 - **Rotate a token:** replace the value with `sops`, merge, then rewrite `/etc/monitoring/token` as above. `vmagent` rereads the file; samples queue in between.
-- **Remove a host:** on the host run `docker compose -p doco-cd down` and `docker compose -p monitoring down -v`, plus `docker compose -p monitoring-gpu down` on a Spark, then delete its `VMUser`. `-p` selects the project by name, so the commands work from any directory. `HostMetricsMissing` fires for a host that stops reporting until it has been silent for seven days; silence it for a planned removal.
+- **Remove a host:** on the host run `docker compose -p doco-cd down` and `docker compose -p monitoring down -v`, plus `docker compose -p monitoring-gpu down` on a Spark and `docker compose -p sparkdash down` on `spark-1`, then delete its `VMUser`. `-p` selects the project by name, so the commands work from any directory. `HostMetricsMissing` fires for a host that stops reporting until it has been silent for seven days; silence it for a planned removal.
 - **Add a host:** add a key to the token Secret and a `VMUser`, then enroll it.
 
 ## Proxmox API
