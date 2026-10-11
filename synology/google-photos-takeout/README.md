@@ -10,12 +10,12 @@ State as of 2026-10-06: the Takeout schedule is armed. The collector has not run
 |---|---|
 | Takeout schedule | Google Photos only, Add to Drive, every month for 1 year, only new and updated items after the first export, `.zip`, 10 GB parts; armed 2026-10-06 |
 | Source | The `Takeout` folder in the owner's Drive, read with the `drive.readonly` scope |
-| Exports | `/volume1/personal-data/google-photos/<export time>/Takeout/Google Photos/...`, one directory per export |
+| Exports | `/volume1/homes/kelchm/cloud-backups/google-photos/<export time>/Takeout/Google Photos/...`, one directory per export, owned by `kelchm` |
 | Working state | `/volume1/docker/google-photos-takeout/archives` (archives in flight) and `state/` (`extracted.txt`, `last-arrival`) |
 | Schedule | 04:00 UTC daily: start ping, copy new archives, extract, then a ping with the run status |
 | Dead-man check | healthchecks.io `athena-google-photos-takeout`, cron `0 4 * * *` UTC, 3 hours grace, declared in [`healthchecks/checks.json`](../../healthchecks/checks.json) |
 
-Each run copies every `takeout-*.zip` not yet listed in `state/extracted.txt`, checked against Drive's checksum. An archive is then extracted, which verifies each file's CRC, recorded in `extracted.txt` and deleted locally. The collector never deletes or changes anything in Drive, and never deletes an export.
+Each run copies every `takeout-*.zip` not yet listed in `state/extracted.txt`, checked against Drive's checksum. An archive is then extracted, which verifies each file's CRC, recorded in `extracted.txt` and deleted locally. The collector never deletes or changes anything in Drive, and never deletes an export. The exports sit in the `homes` share, which DSM snapshots every four hours, so one changed or removed by hand can be brought back from a snapshot.
 
 Exports are kept apart on purpose. Google reuses file names between exports, so merging two exports into one tree can overwrite a different photo that has the same name. The first export of a schedule is the whole library and later ones hold only new and updated items; within an export, a photo in an album appears both in its year folder and in the album folder. The off-site job deduplicates identical files, so neither repetition costs storage there.
 
@@ -56,10 +56,10 @@ Afterwards remove the workstation copy with `rclone config delete gdrive`.
 
 ## First deployment
 
-1. Create the shared folder `personal-data` in DSM, with no access for users or guests, then the directories:
+1. Create the directories. The container runs as `kelchm` (1026:100), so both belong to that account:
 
    ```sh
-   ssh kelchm@10.32.20.5 'sudo mkdir -p /volume1/personal-data/google-photos /volume1/docker/google-photos-takeout && sudo chmod 700 /volume1/personal-data/google-photos /volume1/docker/google-photos-takeout'
+   ssh kelchm@10.32.20.5 'mkdir -p /volume1/homes/kelchm/cloud-backups/google-photos && sudo mkdir -p /volume1/docker/google-photos-takeout && sudo chown kelchm:users /volume1/docker/google-photos-takeout && chmod 700 /volume1/homes/kelchm/cloud-backups /volume1/docker/google-photos-takeout'
    ```
 
 2. Run `task healthchecks:apply` to create the check, read its ping URL, and set `HC_PING_URL` together with the Google values in `secrets.sops.env`.
@@ -70,7 +70,7 @@ Afterwards remove the workstation copy with `rclone config delete gdrive`.
 
 ```sh
 ssh kelchm@10.32.20.5 'sudo /usr/local/bin/docker logs --since 26h google-photos-takeout-collector-1'
-ssh kelchm@10.32.20.5 'sudo ls -la /volume1/personal-data/google-photos; sudo cat /volume1/docker/google-photos-takeout/state/extracted.txt'
+ssh kelchm@10.32.20.5 'ls -la /volume1/homes/kelchm/cloud-backups/google-photos; cat /volume1/docker/google-photos-takeout/state/extracted.txt'
 ```
 
 ## Upkeep

@@ -5,8 +5,8 @@ name: google-photos-takeout
 services:
   collector:
     image: docker.io/rclone/rclone:1.75.1@sha256:45401ad7410db1d67ffdb58e19059ad20b0d8e0285a60e38bbec55cc1019c7a5
-    # Root without capabilities: the export share is root-only, like the backup shares.
-    user: "0:0"
+    # kelchm:users on Athena, the owner of the home directory the exports are written to.
+    user: "1026:100"
     read_only: true
     entrypoint: ["/bin/sh", "-c"]
     # Compose interpolates single-dollar variables, so shell variables are written with two.
@@ -64,11 +64,11 @@ services:
       MAX_AGE_DAYS: "40"
       RCLONE_CACHE_DIR: /tmp/rclone-cache
     volumes:
-      - /volume1/personal-data/google-photos:/exports
+      - /volume1/homes/kelchm/cloud-backups/google-photos:/exports
       - /volume1/docker/google-photos-takeout:/work
     tmpfs:
       # The Drive token is rebuilt from the environment at start and refreshed in memory only.
-      - /config/rclone:mode=0700
+      - /config/rclone:mode=0700,uid=1026,gid=100
       - /tmp
     cap_drop:
       - ALL
