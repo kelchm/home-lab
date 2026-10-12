@@ -26,7 +26,7 @@ doco-cd recreates every container of a project on each poll while one of its ser
 
 ## sparkDash
 
-[sparkDash](https://github.com/MiaAI-Lab/sparkDash) is a live dashboard for both Sparks at `http://10.32.21.31:5555`. It asks for an access token on first use; read it with `ssh kelchm@spark-1 sudo cat /etc/sparkdash/token`. It has no agent mode: one instance reads its own host directly and every other unit over SSH, so it runs on `spark-1` and logs in to `spark-2`. Its series are not scraped into the metrics store.
+[sparkDash](https://github.com/MiaAI-Lab/sparkDash) is a live dashboard for both Sparks at `http://10.32.21.31:5555`. It asks for an access token on first use; read it with `ssh kelchm@spark-1 sudo cat /etc/sparkdash/token`. It has no agent mode: one instance reads its own host directly and every other unit over SSH, so it runs on `spark-1` and logs in to `spark-2`. Its series are not scraped into the metrics store: nearly all of them repeat, in less detail, what node-exporter, the GPU exporter and the inference scrape already send, and its RoCE and energy readings are not in its Prometheus export. Whether to extend that export is tracked in [#812](https://github.com/kelchm/home-lab/issues/812).
 
 The container is privileged, shares the host's PID namespace and network, and mounts `/` read-only, which is what its local collectors need. On `spark-2` it logs in as `sparkdash`, an account with no sudo rights and no Docker access, so it can read metrics there but cannot power the node off or start or stop a container. No model launcher is configured: SparkRun owns inference.
 
