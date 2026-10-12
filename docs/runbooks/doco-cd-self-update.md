@@ -29,7 +29,16 @@ Both Sparks poll the shared monitoring configuration. The base Compose definitio
 
 Merge the migration first and apply from a checkout of current `main`. Existing instances have self-update disabled and may report a refused self-deployment between merge and manual apply. That refusal leaves running containers in place. No token rotation, new age key, or Docker reinstall is needed.
 
-In 0.125.1, a failed first takeover can repeat: the manually started predecessor has no doco-cd deployment revision, rollback preserves that absence, and the failed-revision check is bypassed without a prior deployed commit. The restored deployer can immediately retry at startup and on later polls. To stop that loop, revert the host's self target on `main`; after native rollback, the restored deployer's next poll then has no self stack to replace. Keep its data/journal intact and wait for native recovery to finish before using the manual recovery procedure. This exception affects the deployer; other projects remain running.
+In 0.125.1, a failed first takeover can repeat: the manually started predecessor has no doco-cd deployment revision, rollback preserves that absence, and the failed-revision check is bypassed without a prior deployed commit. The restored deployer can immediately retry at startup and on later polls. To stop that loop, remove only the YAML document with `name: doco-cd` from the applicable target file on `main`, preserving all sibling workload documents and valid document separators. After native rollback, the restored deployer's next poll then has no self stack to replace. Keep its data/journal intact and wait for native recovery to finish before using the manual recovery procedure. This exception affects the deployer; other projects remain running.
+
+The edit has different scope on each platform:
+
+- PVE: remove the self document from `proxmox/monitoring/.doco-cd.yml`, retaining `monitoring`. This pauses self-updates on **all three PVE nodes**, including already-migrated nodes; their running deployers remain in place.
+- `spark-1`: remove the self document from `sparks/monitoring/.doco-cd.spark-1.yml`, retaining `sparkdash` and the existing poll configuration.
+- Athena: remove the self document from `synology/.doco-cd.yml`, retaining every workload document.
+- `spark-2`: its `sparks/monitoring/.doco-cd.spark-2.yml` contains only the self document, so remove that file temporarily. The dedicated `spark-2` poll will report a missing target until it is restored; the separate shared monitoring poll continues. Do not leave an empty target file, which 0.125.1 also rejects.
+
+Restore the removed self document or file after correcting the definition and completing recovery, then repeat takeover checks on affected instances. Do not remove the shared PVE, `spark-1`, or Athena target file, or drop their polls to stop a self-update loop.
 
 Repeated refusals can raise `HostDeployFailing` on PVE and the Sparks while migration or a recovery override is pending. Diagnose the refused self target rather than changing collector containers; finish the migration or fix the self definition. Athena is not covered by that host alert rule.
 
