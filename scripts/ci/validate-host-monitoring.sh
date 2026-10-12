@@ -16,7 +16,7 @@ function violation() {
 
 function validate_deployment() {
     local config="$1" deployment="$2"
-    local name working_dir label rendered image
+    local name working_dir label rendered image spark_target="" polls
     local -a compose_args=() mounts=()
 
     name="$(jq -r '.name // ""' <<<"${deployment}")"
@@ -51,6 +51,22 @@ function validate_deployment() {
         .compose_files == ["compose.yaml", "compose.spark-1.yaml"]
     ' <<<"${deployment}" >/dev/null; then
         violation "${label}: the spark-1 self target must apply [compose.yaml, compose.spark-1.yaml] in that order"
+    fi
+    if [[ "${name}" == doco-cd && "${working_dir}" == sparks/platform/doco-cd ]]; then
+        case "${config##*/}" in
+            .doco-cd.spark-1.yml) spark_target=spark-1 ;;
+            .doco-cd.spark-2.yml) spark_target=spark-2 ;;
+        esac
+        if [[ -n "${spark_target}" ]]; then
+            if ! polls="$(jq -r '.services["doco-cd"].environment.POLL_CONFIG // ""' <<<"${rendered}" | yq -o=json -I=0 '.')" || ! jq -e --arg target "${spark_target}" '
+                type == "array" and
+                any(.[]; (.target // "") == "") and
+                any(.[]; .target == $target) and
+                all(.[]; (.target // "") == "" or .target == $target)
+            ' <<<"${polls}" >/dev/null; then
+                violation "${label}: the deployer must retain the shared poll and its own ${spark_target} poll, without polling the other Spark target"
+            fi
+        fi
     fi
     if [[ "${name}" == doco-cd && "${working_dir}" == proxmox/platform/doco-cd ]] && ! jq -e '
         .services["doco-cd"].network_mode == "host" and

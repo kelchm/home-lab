@@ -11,6 +11,7 @@ trap 'rm -rf -- "${TEMP_DIR}"' EXIT
 
 # Self targets only: these tests render Compose without starting containers.
 function write_fixture() {
+    local platform
     rm -rf -- "${TEMP_DIR}/proxmox" "${TEMP_DIR}/sparks"
     for platform in proxmox sparks; do
         mkdir -p "${TEMP_DIR}/${platform}/monitoring" "${TEMP_DIR}/${platform}/platform/doco-cd"
@@ -56,6 +57,30 @@ for files in '[compose.spark-1.yaml, compose.yaml]' '[compose.yaml]'; do
     write_fixture
     sed -i.bak "s|compose_files: .*|compose_files: ${files}|" "${TEMP_DIR}/sparks/monitoring/.doco-cd.spark-1.yml"
     expect_failure "spark-1: ${files}" 'in that order'
+done
+
+write_fixture
+cp "${TEMP_DIR}/sparks/monitoring/.doco-cd.spark-2.yml" "${TEMP_DIR}/sparks/monitoring/.doco-cd.yml"
+expect_failure 'shared Spark self target' 'never the shared target'
+
+for mutation in host_network apparmor; do
+    write_fixture
+    compose="${TEMP_DIR}/proxmox/platform/doco-cd/compose.yaml"
+    case "${mutation}" in
+        host_network) yq -i '.services["doco-cd"].network_mode = "bridge"' "${compose}" ;;
+        apparmor) yq -i '.services["doco-cd"].security_opt = []' "${compose}" ;;
+    esac
+    expect_failure "PVE security: ${mutation}" 'host networking and apparmor=unconfined'
+done
+
+for mutation in spark_2_override spark_2_missing_poll spark_1_missing_poll; do
+    write_fixture
+    case "${mutation}" in
+        spark_2_override) printf 'compose_files: [compose.yaml, compose.spark-1.yaml]\n' >>"${TEMP_DIR}/sparks/monitoring/.doco-cd.spark-2.yml" ;;
+        spark_2_missing_poll) sed -i.bak '/target: spark-2/d' "${TEMP_DIR}/sparks/platform/doco-cd/compose.yaml" ;;
+        spark_1_missing_poll) sed -i.bak '/target: spark-1/d' "${TEMP_DIR}/sparks/platform/doco-cd/compose.spark-1.yaml" ;;
+    esac
+    expect_failure "Spark polls: ${mutation}" 'retain the shared poll and its own'
 done
 
 echo 'Host deployer regression tests passed.'

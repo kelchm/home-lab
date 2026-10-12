@@ -27,7 +27,7 @@ Both Sparks poll the shared monitoring configuration. The base Compose definitio
 
 ## One-time migration
 
-Merge the migration first and apply from a checkout of current `main`. Existing instances have self-update disabled and may report a refused self-deployment between merge and manual apply. That refusal leaves running containers in place. No token rotation, new age key, or Docker reinstall is needed.
+Merge at the start of the migration session, then apply from a checkout of current `main`. Existing instances have self-update disabled and may report a refused self-deployment between merge and manual apply. That refusal leaves running containers in place. No token rotation, new age key, or Docker reinstall is needed.
 
 In 0.125.1, a failed first takeover can repeat: the manually started predecessor has no doco-cd deployment revision, rollback preserves that absence, and the failed-revision check is bypassed without a prior deployed commit. The restored deployer can immediately retry at startup and on later polls. To stop that loop, remove only the YAML document with `name: doco-cd` from the applicable target file on `main`, preserving all sibling workload documents and valid document separators. After native rollback, the restored deployer's next poll then has no self stack to replace. Keep its data/journal intact and wait for native recovery to finish before using the manual recovery procedure. This exception affects the deployer; other projects remain running.
 
@@ -50,6 +50,15 @@ ssh kelchm@HOST 'sudo -n docker ps -aq | xargs sudo -n docker inspect --format "
 ```
 
 Use `/usr/local/bin/docker` on Athena. Do not include environment variables or secret contents in receipts.
+
+On the Sparks and Athena, also record the host Compose version and labels of the existing `doco-cd_default` network before applying:
+
+```sh
+ssh kelchm@SPARK_HOST 'sudo -n docker compose version; sudo -n docker network inspect --format "{{.Name}} {{json .Labels}}" doco-cd_default'
+ssh kelchm@10.32.20.5 'sudo -n /usr/local/bin/docker-compose version; sudo -n /usr/local/bin/docker network inspect --format "{{.Name}} {{json .Labels}}" doco-cd_default'
+```
+
+PVE uses host networking and has no deployer project network. The local rehearsals used host Compose 5.5.1, matching the version embedded in doco-cd 0.125.1. A different network name or a nonempty `com.docker.compose.config-hash` label that differs from the embedded Compose calculation selects a separate path that recreates the project network and moves the helper to Docker's default bridge. This path has not been rehearsed locally.
 
 For a PVE node:
 
@@ -75,7 +84,7 @@ ssh kelchm@10.32.21.31 'set -e; sudo -n install -D -m 0644 /tmp/doco-cd.yaml /op
 
 For Athena, use [Bootstrap or migrate](../../synology/platform/doco-cd/README.md#bootstrap-or-migrate). Confirm that the data directory, age-key file, and Docker socket already exist; DSM refuses missing bind sources. Preserve existing state and the key.
 
-The manual apply enables self-update. Allow the first repository poll to take over the stack from Git. The applier will recreate doco-cd even when its image is unchanged. Use `up -d` here: `up --wait` can fail with `No such container` when takeover replaces the container that host Compose is waiting on. Verify the final container after handover; the manual apply's first healthy result alone does not prove takeover.
+The manual apply enables self-update. Allow the first repository poll to take over the stack from Git. The applier will recreate doco-cd even when its image is unchanged. Use `up -d` here: `up --wait` can fail with `No such container` when takeover replaces the container that host Compose is waiting on. Capture the manually applied predecessor's logs during takeover, including `self-update: strategy selected` and its `reasons`, before it is removed; attach `docker logs --follow doco-cd` immediately after the apply and retain the output. Verify the final container after handover; the manual apply's first healthy result alone does not prove takeover.
 
 ## Acceptance and routine updates
 
@@ -83,6 +92,7 @@ On each migrated host, verify:
 
 - The final container runs the image pinned on `main`, `/healthcheck` exits 0, and Docker reports `healthy` with no failing streak.
 - Its labels include `cd.doco.deployment.name=doco-cd` and the migration revision in `cd.doco.deployment.target.sha`, proving takeover from Git.
+- Retain the takeover strategy and reasons from the predecessor log. `a project network must be recreated` identifies the unrehearsed network-recreation path; on Sparks/Athena, compare the final network labels with the baseline and confirm helper completion.
 - Logs show completed handover and a successful poll afterwards. Check the following scheduled poll too. Both the shared and `spark-1` polls must succeed on `spark-1`.
 - Workload IDs, images, start times, restart counts, and revision labels match the baseline when their Git definitions have not changed. Completed one-shot services retain their prior state.
 - The temporary helper has finished and one deployer remains running.
