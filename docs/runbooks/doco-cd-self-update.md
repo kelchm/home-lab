@@ -6,9 +6,11 @@ Verified on 2026-10-11: all six hosts run 0.125.1 with a healthy `/healthcheck`,
 
 A disposable ARM64 Docker rehearsal on the workstation on 2026-10-11, using the pinned 0.125.1 image and an absolute data bind, passed takeover, a successful configuration update, automatic rollback after a deliberately failing healthcheck, no retry of that failed revision across subsequent polls, and recovery on a corrected new revision. It also exposed the host Compose `up --wait` takeover race described below. This verifies the native path locally; it does not substitute for PVE/DSM migration checks or rehearse manual intervention during an unfinished handover.
 
+A separate disposable rehearsal on 2026-10-12 reproduced repeated failure and rollback during the first takeover, with no deployment revision on the restored predecessor. Removing the self target from the fixture repository stopped the loop after native recovery: the restored deployer remained healthy across later polls, no helper remained, and the canary workload container was unchanged. This covers the first-takeover retry exception below.
+
 ## Native behavior
 
-`SELF_UPDATE_ENABLED=true` and `SELF_UPDATE_STRATEGY=applier` select the [native applier](https://github.com/kimdre/doco-cd/blob/v0.125.1/wiki/docs/Advanced/Self-Updating.md). A temporary clone replaces doco-cd from outside, waits for Docker health, and restores the previous container if the replacement fails. The self-deployment timeout is 180 seconds. Handover and recovery are journaled under the existing `/data` bind mount; a failed revision and project hash are recorded to prevent repeated attempts against the same configuration at that commit. Any later commit, including an unrelated merge, can trigger another attempt, so revert or fix a broken self definition promptly.
+`SELF_UPDATE_ENABLED=true` and `SELF_UPDATE_STRATEGY=applier` select the [native applier](https://github.com/kimdre/doco-cd/blob/v0.125.1/wiki/docs/Advanced/Self-Updating.md). A temporary clone replaces doco-cd from outside, waits for Docker health, and restores the previous container if the replacement fails. The self-deployment timeout is 180 seconds. Handover and recovery are journaled under the existing `/data` bind mount. After successful takeover, a failed revision and project hash prevent repeated attempts against that same configuration at that commit. Any later commit, including an unrelated merge, can trigger another attempt, so revert or fix a broken self definition promptly. The first takeover has a retry exception described below.
 
 This strategy fits the fixed container name, published ports, and PVE host networking. The helper inherits the predecessor's bind mounts and security options, including PVE's `apparmor=unconfined`. Preserve the project and service names (`doco-cd`), absolute data paths, and NAS age-key mount. PVE must retain its existing `daemon.json`; a deployer update requires no Docker daemon restart or networking changes. Do not add project networks on PVE, where Docker's default bridge is disabled.
 
@@ -26,6 +28,8 @@ Both Sparks poll the shared monitoring configuration. The base Compose definitio
 ## One-time migration
 
 Merge the migration first and apply from a checkout of current `main`. Existing instances have self-update disabled and may report a refused self-deployment between merge and manual apply. That refusal leaves running containers in place. No token rotation, new age key, or Docker reinstall is needed.
+
+In 0.125.1, a failed first takeover can repeat: the manually started predecessor has no doco-cd deployment revision, rollback preserves that absence, and the failed-revision check is bypassed without a prior deployed commit. The restored deployer can immediately retry at startup and on later polls. To stop that loop, revert the host's self target on `main`; after native rollback, the restored deployer's next poll then has no self stack to replace. Keep its data/journal intact and wait for native recovery to finish before using the manual recovery procedure. This exception affects the deployer; other projects remain running.
 
 Repeated refusals can raise `HostDeployFailing` on PVE and the Sparks while migration or a recovery override is pending. Diagnose the refused self target rather than changing collector containers; finish the migration or fix the self definition. Athena is not covered by that host alert rule.
 
@@ -81,6 +85,8 @@ ssh kelchm@HOST 'sudo -n docker inspect --format "{{.Config.Image}} {{json .Stat
 Use `/usr/local/bin/docker` on Athena. Warnings about undecryptable secrets outside the host's scope are expected; check severity and the final job result. A newer-release notification does not change the pin.
 
 After migration, a normal Renovate image PR triggers self-update. Read its release notes and verify handover. The local Compose copies are for bootstrap/recovery and are not rewritten by doco-cd; refresh them from a known-good Git revision before a later manual apply. Git and the running container's labels are authoritative.
+
+The native health gate checks the HTTP health endpoint and Docker API access, not successful repository polling or deployment. A successor with a broken Git/deployment path can pass health and remain running; verify the post-handover polls and fix or recover that configuration explicitly.
 
 The disposable rehearsal above verifies health-failure rollback. Repeat it when changing strategy or recovery behavior; do not introduce a broken definition on the live hosts solely to test rollback. Live takeover and platform-specific behavior remain acceptance work.
 

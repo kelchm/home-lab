@@ -87,6 +87,7 @@ while IFS= read -r -d '' compose_file; do
         .name == "doco-cd" and
         .services["doco-cd"].environment.SELF_UPDATE_ENABLED == "true" and
         .services["doco-cd"].environment.SELF_UPDATE_STRATEGY == "applier" and
+        .services["doco-cd"].environment.SOPS_AGE_KEY_FILE == "/run/secrets/sops_age_key" and
         .services["doco-cd"].healthcheck.test == ["CMD", "/healthcheck"] and
         .services["doco-cd"].restart == "unless-stopped" and
         ([.services["doco-cd"].volumes[]? | select(
@@ -94,9 +95,12 @@ while IFS= read -r -d '' compose_file; do
         )] | length == 1) and
         ([.services["doco-cd"].volumes[]? | select(
             .type == "bind" and .source == "/volume1/docker/doco-cd/data" and .target == "/data" and .read_only != true
+        )] | length == 1) and
+        ([.services["doco-cd"].volumes[]? | select(
+            .type == "bind" and .source == "/volume1/docker/doco-cd/sops_age_key" and .target == "/run/secrets/sops_age_key" and .read_only == true
         )] | length == 1)
     ' <<<"${rendered}" >/dev/null; then
-        violation "${relative}: doco-cd must retain its project/service identity, native self-update, required binds, writable state, healthcheck and restart policy"
+        violation "${relative}: doco-cd must retain its project/service identity, native self-update, required binds, writable state, read-only NAS age key, healthcheck and restart policy"
     fi
 
     # doco-cd serves repository files from a per-revision checkout: data written

@@ -53,11 +53,13 @@ services:
     environment:
       SELF_UPDATE_ENABLED: "true"
       SELF_UPDATE_STRATEGY: applier
+      SOPS_AGE_KEY_FILE: /run/secrets/sops_age_key
     healthcheck:
       test: ["CMD", "/healthcheck"]
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /volume1/docker/doco-cd/data:/data
+      - /volume1/docker/doco-cd/sops_age_key:/run/secrets/sops_age_key:ro
     restart: unless-stopped
 EOF
     printf '\n---\nname: doco-cd\nworking_dir: synology/platform/doco-cd\n' >>"${TEMP_DIR}/synology/.doco-cd.yml"
@@ -147,6 +149,16 @@ for mutation in missing_socket missing_data wrong_source wrong_target read_only;
         read_only) edit 's|/volume1/docker/doco-cd/data:/data|/volume1/docker/doco-cd/data:/data:ro|' platform/doco-cd/compose.yaml ;;
     esac
     expect_failure "deployer bind: ${mutation}"
+done
+
+for mutation in missing_key writable_key wrong_key_path; do
+    write_self_fixture
+    case "${mutation}" in
+        missing_key) edit '\|/volume1/docker/doco-cd/sops_age_key:/run/secrets/sops_age_key:ro|d' platform/doco-cd/compose.yaml ;;
+        writable_key) edit 's|/run/secrets/sops_age_key:ro|/run/secrets/sops_age_key|' platform/doco-cd/compose.yaml ;;
+        wrong_key_path) edit 's|SOPS_AGE_KEY_FILE: /run/secrets/sops_age_key|SOPS_AGE_KEY_FILE: /run/secrets/other|' platform/doco-cd/compose.yaml ;;
+    esac
+    expect_failure "NAS age key: ${mutation}"
 done
 
 write_fixture
