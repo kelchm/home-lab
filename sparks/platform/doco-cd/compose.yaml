@@ -18,7 +18,7 @@ services:
         - url: https://github.com/kelchm/home-lab.git
           reference: main
           interval: 3m
-          target: spark-2
+          target: ${SPARK_HOST:?}
     ports:
       - 127.0.0.1:9120:9120
     volumes:

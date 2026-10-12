@@ -17,10 +17,9 @@ function write_fixture() {
         mkdir -p "${TEMP_DIR}/${platform}/monitoring" "${TEMP_DIR}/${platform}/platform/doco-cd"
         cp "${ROOT_DIR}/${platform}/platform/doco-cd/compose.yaml" "${TEMP_DIR}/${platform}/platform/doco-cd/"
     done
-    cp "${ROOT_DIR}/sparks/platform/doco-cd/compose.spark-1.yaml" "${TEMP_DIR}/sparks/platform/doco-cd/"
     printf 'name: doco-cd\nworking_dir: proxmox/platform/doco-cd\n' >"${TEMP_DIR}/proxmox/monitoring/.doco-cd.yml"
-    printf 'name: doco-cd\nworking_dir: sparks/platform/doco-cd\ncompose_files: [compose.yaml, compose.spark-1.yaml]\n' >"${TEMP_DIR}/sparks/monitoring/.doco-cd.spark-1.yml"
-    printf 'name: doco-cd\nworking_dir: sparks/platform/doco-cd\n' >"${TEMP_DIR}/sparks/monitoring/.doco-cd.spark-2.yml"
+    printf 'name: doco-cd\nworking_dir: sparks/platform/doco-cd\nenvironment:\n  SPARK_HOST: spark-1\n' >"${TEMP_DIR}/sparks/monitoring/.doco-cd.spark-1.yml"
+    printf 'name: doco-cd\nworking_dir: sparks/platform/doco-cd\nenvironment:\n  SPARK_HOST: spark-2\n' >"${TEMP_DIR}/sparks/monitoring/.doco-cd.spark-2.yml"
 }
 
 function expect_failure() {
@@ -53,12 +52,6 @@ for platform in proxmox sparks; do
     done
 done
 
-for files in '[compose.spark-1.yaml, compose.yaml]' '[compose.yaml]'; do
-    write_fixture
-    sed -i.bak "s|compose_files: .*|compose_files: ${files}|" "${TEMP_DIR}/sparks/monitoring/.doco-cd.spark-1.yml"
-    expect_failure "spark-1: ${files}" 'in that order'
-done
-
 write_fixture
 cp "${TEMP_DIR}/sparks/monitoring/.doco-cd.spark-2.yml" "${TEMP_DIR}/sparks/monitoring/.doco-cd.yml"
 expect_failure 'shared Spark self target' 'never the shared target'
@@ -73,12 +66,21 @@ for mutation in host_network apparmor; do
     expect_failure "PVE security: ${mutation}" 'host networking and apparmor=unconfined'
 done
 
-for mutation in spark_2_override spark_2_missing_poll spark_1_missing_poll; do
+for host in spark-1 spark-2; do
+    write_fixture
+    sed -i.bak '/SPARK_HOST:/d' "${TEMP_DIR}/sparks/monitoring/.doco-cd.${host}.yml"
+    SPARK_HOST="${host}" expect_failure "${host}: missing declared identity despite ambient environment" 'Compose render failed'
+
+    write_fixture
+    sed -i.bak "s|SPARK_HOST: ${host}|SPARK_HOST: wrong-host|" "${TEMP_DIR}/sparks/monitoring/.doco-cd.${host}.yml"
+    expect_failure "${host}: wrong identity" 'retain the shared poll and its own'
+done
+
+for mutation in missing_host_poll missing_shared_poll; do
     write_fixture
     case "${mutation}" in
-        spark_2_override) printf 'compose_files: [compose.yaml, compose.spark-1.yaml]\n' >>"${TEMP_DIR}/sparks/monitoring/.doco-cd.spark-2.yml" ;;
-        spark_2_missing_poll) sed -i.bak '/target: spark-2/d' "${TEMP_DIR}/sparks/platform/doco-cd/compose.yaml" ;;
-        spark_1_missing_poll) sed -i.bak '/target: spark-1/d' "${TEMP_DIR}/sparks/platform/doco-cd/compose.spark-1.yaml" ;;
+        missing_host_poll) sed -i.bak '/target: /d' "${TEMP_DIR}/sparks/platform/doco-cd/compose.yaml" ;;
+        missing_shared_poll) yq -i '.services["doco-cd"].environment.POLL_CONFIG |= (from_yaml | [.[1]] | to_yaml)' "${TEMP_DIR}/sparks/platform/doco-cd/compose.yaml" ;;
     esac
     expect_failure "Spark polls: ${mutation}" 'retain the shared poll and its own'
 done

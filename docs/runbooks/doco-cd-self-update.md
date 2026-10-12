@@ -2,15 +2,17 @@
 
 The definitions enable native self-update on the three PVE nodes, two Sparks, and Athena. After the one-time migration below, merging a doco-cd image or configuration change to `main` deploys it like another declared project. Images stay pinned by tag and digest.
 
-Verified on 2026-10-11: all six hosts run 0.125.1 with a healthy `/healthcheck`, successful repository polls, and unchanged workloads after a manual upgrade. Native self-update migration, handover, and rollback have not yet been exercised on these hosts. This runbook describes intended behavior and the acceptance checks still to perform. Live migration is tracked in [#815](https://github.com/kelchm/home-lab/issues/815).
+Verified:
 
-A disposable ARM64 Docker rehearsal on the workstation on 2026-10-11, using the pinned 0.125.1 image and an absolute data bind, passed takeover, a successful configuration update, automatic rollback after a deliberately failing healthcheck, no retry of that failed revision across subsequent polls, and recovery on a corrected new revision. It also exposed the host Compose `up --wait` takeover race described below. This verifies the native path locally; it does not substitute for PVE/DSM migration checks or rehearse manual intervention during an unfinished handover.
+- On 2026-10-11, all six live hosts passed the manual 0.125.1 rollout: healthy `/healthcheck`, successful repository polls, and unchanged workloads.
+- Disposable ARM64 rehearsals with pinned 0.125.1 passed takeover, configuration updates, failed-healthcheck rollback and suppression after successful takeover, corrected-revision recovery, and stopping the first-takeover retry loop by removing the self target.
+- On 2026-10-12, both Spark identities passed native interpolation through takeover and later updates without a host identity file or runtime `SPARK_HOST` variable. Both polls succeeded and the canary stayed unchanged. A local self-disable override then kept the deployer healthy and delivered a deliberate workload update while pausing self-replacement.
 
-A separate disposable rehearsal on 2026-10-12 reproduced repeated failure and rollback during the first takeover, with no deployment revision on the restored predecessor. Removing the self target from the fixture repository stopped the loop after native recovery: the restored deployer remained healthy across later polls, no helper remained, and the canary workload container was unchanged. This covers the first-takeover retry exception below.
+Live native migration is pending in [#815](https://github.com/kelchm/home-lab/issues/815). PVE/DSM helper behavior, the project-network recreation path, a cross-version handover, and manual interruption of an unfinished journal remain unverified. The procedures below describe intended behavior and live acceptance still to perform.
 
 ## Native behavior
 
-`SELF_UPDATE_ENABLED=true` and `SELF_UPDATE_STRATEGY=applier` select the [native applier](https://github.com/kimdre/doco-cd/blob/v0.125.1/wiki/docs/Advanced/Self-Updating.md). A temporary clone replaces doco-cd from outside, waits for Docker health, and restores the previous container if the replacement fails. The self-deployment timeout is 180 seconds. Handover and recovery are journaled under the existing `/data` bind mount. After successful takeover, a failed revision and project hash prevent repeated attempts against that same configuration at that commit. Any later commit, including an unrelated merge, can trigger another attempt, so revert or fix a broken self definition promptly. The first takeover has a retry exception described below.
+`SELF_UPDATE_ENABLED=true` and `SELF_UPDATE_STRATEGY=applier` select the [native applier](https://github.com/kimdre/doco-cd/blob/v0.125.1/wiki/docs/Advanced/Self-Updating.md). A temporary clone replaces doco-cd from outside, waits for Docker health, and restores the previous container if the replacement fails. Self deployments use the native three-minute timeout default in 0.125.1. Handover and recovery are journaled under the existing `/data` bind mount. After successful takeover, a failed revision and project hash prevent repeated attempts against that same configuration at that commit. Any later commit, including an unrelated merge, can trigger another attempt, so revert or fix a broken self definition promptly. The first takeover has a retry exception described below.
 
 This strategy fits the fixed container name, published ports, and PVE host networking. The helper inherits the predecessor's bind mounts and security options, including PVE's `apparmor=unconfined`. Preserve the project and service names (`doco-cd`), absolute data paths, and NAS age-key mount. PVE must retain its existing `daemon.json`; a deployer update requires no Docker daemon restart or networking changes. Do not add project networks on PVE, where Docker's default bridge is disabled.
 
@@ -23,7 +25,7 @@ This strategy fits the fixed container name, published ports, and PVE host netwo
 | spark-2 | `kelchm@10.32.21.32` | `sparks/monitoring/.doco-cd.spark-2.yml` | `/opt/doco-cd` |
 | Athena | `kelchm@10.32.20.5` | `synology/.doco-cd.yml` | `/volume1/docker/doco-cd` |
 
-Both Sparks poll the shared monitoring configuration. The base Compose definition adds a `spark-2` poll; `compose.spark-1.yaml` replaces the whole poll list with the shared poll and the `spark-1` poll. The `spark-1` target deploys both sparkDash and doco-cd, using `[compose.yaml, compose.spark-1.yaml]` for the deployer. This preserves its dashboard poll through self-update.
+Both Sparks use the same Compose file and poll the shared monitoring configuration plus their own host target. Each self target sets `environment.SPARK_HOST` to its host name; native interpolation supplies the host-specific poll during takeover and later updates. Manual applies supply the same value on the command line. The variable is required, with no default or host `.env` file. The `spark-1` target still deploys both sparkDash and doco-cd.
 
 ## Bootstrap or migrate
 
@@ -67,22 +69,14 @@ scp proxmox/platform/doco-cd/compose.yaml kelchm@HOST:/tmp/doco-cd.yaml
 ssh kelchm@HOST 'set -e; sudo -n install -D -m 0644 /tmp/doco-cd.yaml /opt/doco-cd/compose.yaml; cd /opt/doco-cd; sudo -n docker compose up -d'
 ```
 
-For `spark-2`:
+For either Spark, substitute its address for `HOST` and `spark-1` or `spark-2` for `SPARK_NAME`:
 
 ```sh
-scp sparks/platform/doco-cd/compose.yaml kelchm@10.32.21.32:/tmp/doco-cd.yaml
-ssh kelchm@10.32.21.32 'set -e; sudo -n install -D -m 0644 /tmp/doco-cd.yaml /opt/doco-cd/compose.yaml; cd /opt/doco-cd; sudo -n docker compose up -d'
+scp sparks/platform/doco-cd/compose.yaml kelchm@HOST:/tmp/doco-cd.yaml
+ssh kelchm@HOST 'set -e; sudo -n install -D -m 0644 /tmp/doco-cd.yaml /opt/doco-cd/compose.yaml; cd /opt/doco-cd; sudo -n env SPARK_HOST=SPARK_NAME docker compose -f compose.yaml up -d'
 ```
 
-For `spark-1`, stage both files before applying:
-
-```sh
-scp sparks/platform/doco-cd/compose.yaml kelchm@10.32.21.31:/tmp/doco-cd.yaml
-scp sparks/platform/doco-cd/compose.spark-1.yaml kelchm@10.32.21.31:/tmp/doco-cd.spark-1.yaml
-ssh kelchm@10.32.21.31 'set -e; sudo -n install -D -m 0644 /tmp/doco-cd.yaml /opt/doco-cd/compose.yaml; sudo -n install -m 0644 /tmp/doco-cd.spark-1.yaml /opt/doco-cd/compose.spark-1.yaml; cd /opt/doco-cd; sudo -n docker compose -f compose.yaml -f compose.spark-1.yaml up -d'
-```
-
-Always specify both files in that order for manual `spark-1` applies. A bare `docker compose up` can select the base `spark-2` poll or an older `compose.override.yaml` left by a previous bootstrap; the explicit commands above ignore that legacy copy.
+Always name `compose.yaml` explicitly on a Spark. This ignores older bootstrap override files still on the host. No host identity file is created; Git's self target supplies the identity for native updates.
 
 For Athena, use [Bootstrap or migrate](../../synology/platform/doco-cd/README.md#bootstrap-or-migrate). Confirm that the data directory, age-key file, and Docker socket already exist; DSM refuses missing bind sources. Preserve existing state and the key.
 
@@ -95,9 +89,9 @@ On each migrated host, verify:
 - The final container runs the image pinned on `main`, `/healthcheck` exits 0, and Docker reports `healthy` with no failing streak.
 - Its labels include `cd.doco.deployment.name=doco-cd` and the migration revision in `cd.doco.deployment.target.sha`, proving takeover from Git.
 - Retain the takeover strategy and reasons from the predecessor log. `a project network must be recreated` identifies the unrehearsed network-recreation path; on Sparks/Athena, compare the final network labels with the baseline and confirm helper completion.
-- Logs show completed handover and a successful poll afterwards. Check the following scheduled poll too. Both the shared and `spark-1` polls must succeed on `spark-1`.
+- Logs show `self-update finalised` and a successful poll afterwards. Check the following scheduled poll too. Both the shared and `spark-1` polls must succeed on `spark-1`.
 - Workload IDs, images, start times, restart counts, and revision labels match the baseline when their Git definitions have not changed. Completed one-shot services retain their prior state.
-- The temporary helper has finished and one deployer remains running.
+- The temporary helper has finished, one deployer remains running, and no open handover record remains (see [Recovery](#recovery)).
 
 ```sh
 ssh kelchm@HOST 'sudo -n docker inspect --format "{{.Config.Image}} {{json .State.Health}} {{index .Config.Labels \"cd.doco.deployment.name\"}} {{index .Config.Labels \"cd.doco.deployment.target.sha\"}}" doco-cd; sudo -n docker logs --since 10m doco-cd; sudo -n docker ps -a --filter name=doco-cd'
@@ -126,7 +120,7 @@ ssh kelchm@10.32.20.5 'sudo -n ls -A /volume1/docker/doco-cd/data/self-update'
 
 Any non-hidden `*.json` other than `poison.json` or `*.snapshot.json` is an open record, even if its state says `failed` or `rolled_back`. `*.json.corrupt` files are quarantined. An absent directory means no journal has been created; any other listing error needs investigation before proceeding.
 
-When there is no open handover, stage a known-good base as `compose.yaml` in the local bootstrap directory. On `spark-1`, also stage its matching Git `compose.spark-1.yaml` under the same name. Save this separate recovery override as `compose.recovery.yaml` while repairing `main`; never overwrite the Spark override with it:
+When there is no open handover, stage a known-good base as `compose.yaml` in the local bootstrap directory. On a Spark, supply its `SPARK_HOST` value when applying. Save this separate recovery override as `compose.recovery.yaml` while repairing `main`:
 
 ```yaml
 services:
@@ -138,10 +132,10 @@ services:
 With no active helper or open handover, stop doco-cd and apply the explicit files, keeping the same project, mounts, healthcheck, and PVE security settings. Do not use `down -v` or delete `/data`.
 
 ```sh
-# PVE or spark-2, after staging known-good files in /opt/doco-cd:
+# PVE, after staging known-good files in /opt/doco-cd:
 ssh kelchm@HOST 'set -e; if sudo -n docker inspect doco-cd >/dev/null 2>&1; then sudo -n docker stop doco-cd; fi; cd /opt/doco-cd; sudo -n docker compose -f compose.yaml -f compose.recovery.yaml up -d --wait --wait-timeout 180'
-# spark-1, retaining its dashboard override:
-ssh kelchm@10.32.21.31 'set -e; if sudo -n docker inspect doco-cd >/dev/null 2>&1; then sudo -n docker stop doco-cd; fi; cd /opt/doco-cd; sudo -n docker compose -f compose.yaml -f compose.spark-1.yaml -f compose.recovery.yaml up -d --wait --wait-timeout 180'
+# Either Spark, substituting its address and SPARK_NAME (spark-1 or spark-2):
+ssh kelchm@HOST 'set -e; if sudo -n docker inspect doco-cd >/dev/null 2>&1; then sudo -n docker stop doco-cd; fi; cd /opt/doco-cd; sudo -n env SPARK_HOST=SPARK_NAME docker compose -f compose.yaml -f compose.recovery.yaml up -d --wait --wait-timeout 180'
 # Athena, after staging known-good files in /volume1/docker/doco-cd:
 ssh kelchm@10.32.20.5 'set -e; if sudo -n /usr/local/bin/docker inspect doco-cd >/dev/null 2>&1; then sudo -n /usr/local/bin/docker stop doco-cd; fi; cd /volume1/docker/doco-cd; sudo -n /usr/local/bin/docker-compose -f compose.yaml -f compose.recovery.yaml up -d --wait'
 ```

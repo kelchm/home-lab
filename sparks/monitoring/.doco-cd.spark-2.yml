@@ -1,5 +1,6 @@
 name: doco-cd
 working_dir: sparks/platform/doco-cd
-timeout: 180
+environment:
+  SPARK_HOST: spark-2
 prune_images: false
 reconciliation: false

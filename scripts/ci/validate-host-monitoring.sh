@@ -16,8 +16,8 @@ function violation() {
 
 function validate_deployment() {
     local config="$1" deployment="$2"
-    local name working_dir label rendered image spark_target="" polls
-    local -a compose_args=() mounts=()
+    local name working_dir label rendered image spark_target="" polls entry
+    local -a compose_args=() compose_environment=() mounts=()
 
     name="$(jq -r '.name // ""' <<<"${deployment}")"
     working_dir="$(jq -r '.working_dir // ""' <<<"${deployment}")"
@@ -36,7 +36,11 @@ function validate_deployment() {
         compose_args+=(-f "${ROOT_DIR}/${working_dir}/${file}")
     done < <(jq -r '(.compose_files // ["compose.yaml"])[]' <<<"${deployment}")
 
-    if ! rendered="$(docker compose "${compose_args[@]}" config --format json)"; then
+    while IFS= read -r -d '' entry; do
+        compose_environment+=("${entry}")
+    done < <(jq -j '(.environment // {}) | to_entries[] | .key + "=" + (.value | tostring) + "\u0000"' <<<"${deployment}")
+
+    if ! rendered="$(env -u SPARK_HOST "${compose_environment[@]}" docker compose "${compose_args[@]}" config --format json)"; then
         violation "${label}: Compose render failed"
         return
     fi
@@ -46,11 +50,6 @@ function validate_deployment() {
 
     if [[ "${name}" == doco-cd && "${config}" == "${ROOT_DIR}/sparks/monitoring/.doco-cd.yml" ]]; then
         violation "${label}: declare the deployer only in the per-Spark targets, never the shared target"
-    fi
-    if [[ "${name}" == doco-cd && "${config}" == "${ROOT_DIR}/sparks/monitoring/.doco-cd.spark-1.yml" ]] && ! jq -e '
-        .compose_files == ["compose.yaml", "compose.spark-1.yaml"]
-    ' <<<"${deployment}" >/dev/null; then
-        violation "${label}: the spark-1 self target must apply [compose.yaml, compose.spark-1.yaml] in that order"
     fi
     if [[ "${name}" == doco-cd && "${working_dir}" == sparks/platform/doco-cd ]]; then
         case "${config##*/}" in
@@ -122,16 +121,6 @@ while IFS= read -r config; do
         validate_deployment "${config}" "${deployment}"
     done <<<"${deployments}"
 done <<<"${configs}"
-
-for deployer in sparks proxmox; do
-    if ! docker compose -f "${ROOT_DIR}/${deployer}/platform/doco-cd/compose.yaml" config --quiet; then
-        violation "${deployer}/platform/doco-cd/compose.yaml: Compose render failed"
-    fi
-done
-
-if ! docker compose -f "${ROOT_DIR}/sparks/platform/doco-cd/compose.yaml" -f "${ROOT_DIR}/sparks/platform/doco-cd/compose.spark-1.yaml" config --quiet; then
-    violation "sparks/platform/doco-cd/compose.spark-1.yaml: Compose render failed"
-fi
 
 if ((violations > 0)); then
     echo "host monitoring validation failed with ${violations} violation(s)" >&2
