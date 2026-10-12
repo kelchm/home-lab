@@ -48,9 +48,9 @@ function validate_deployment() {
         violation "${label}: declare the deployer only in the per-Spark targets, never the shared target"
     fi
     if [[ "${name}" == doco-cd && "${config}" == "${ROOT_DIR}/sparks/monitoring/.doco-cd.spark-1.yml" ]] && ! jq -e '
-        (.compose_files // []) | index("compose.spark-1.yaml") != null
+        .compose_files == ["compose.yaml", "compose.spark-1.yaml"]
     ' <<<"${deployment}" >/dev/null; then
-        violation "${label}: the spark-1 self target must include compose.spark-1.yaml"
+        violation "${label}: the spark-1 self target must apply [compose.yaml, compose.spark-1.yaml] in that order"
     fi
     if [[ "${name}" == doco-cd && "${working_dir}" == proxmox/platform/doco-cd ]] && ! jq -e '
         .services["doco-cd"].network_mode == "host" and

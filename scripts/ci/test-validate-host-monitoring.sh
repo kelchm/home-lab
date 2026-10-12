@@ -22,13 +22,13 @@ function write_fixture() {
     printf 'name: doco-cd\nworking_dir: sparks/platform/doco-cd\n' >"${TEMP_DIR}/sparks/monitoring/.doco-cd.spark-2.yml"
 }
 
-function expect_bind_failure() {
-    local description="$1" output
+function expect_failure() {
+    local description="$1" expected="$2" output
     if output="$("${ROOT_DIR}/scripts/ci/validate-host-monitoring.sh" "${TEMP_DIR}" 2>&1)"; then
         echo "Expected host validation to fail: ${description}" >&2
         exit 1
     fi
-    if [[ "${output}" != *"required binds, writable state"* ]]; then
+    if [[ "${output}" != *"${expected}"* ]]; then
         echo "Unexpected validation failure for ${description}: ${output}" >&2
         exit 1
     fi
@@ -48,8 +48,14 @@ for platform in proxmox sparks; do
             wrong_target) sed -i.bak 's|/var/lib/doco-cd:/data|/var/lib/doco-cd:/other|' "${compose}" ;;
             read_only) sed -i.bak 's|/var/lib/doco-cd:/data|/var/lib/doco-cd:/data:ro|' "${compose}" ;;
         esac
-        expect_bind_failure "${platform}: ${mutation}"
+        expect_failure "${platform}: ${mutation}" 'required binds, writable state'
     done
 done
 
-echo 'Host deployer bind regression tests passed.'
+for files in '[compose.spark-1.yaml, compose.yaml]' '[compose.yaml]'; do
+    write_fixture
+    sed -i.bak "s|compose_files: .*|compose_files: ${files}|" "${TEMP_DIR}/sparks/monitoring/.doco-cd.spark-1.yml"
+    expect_failure "spark-1: ${files}" 'in that order'
+done
+
+echo 'Host deployer regression tests passed.'

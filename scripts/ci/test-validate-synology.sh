@@ -55,6 +55,9 @@ services:
       SELF_UPDATE_STRATEGY: applier
     healthcheck:
       test: ["CMD", "/healthcheck"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /volume1/docker/doco-cd/data:/data
     restart: unless-stopped
 EOF
     printf '\n---\nname: doco-cd\nworking_dir: synology/platform/doco-cd\n' >>"${TEMP_DIR}/synology/.doco-cd.yml"
@@ -133,6 +136,18 @@ expect_failure 'deployer without crash recovery'
 write_self_fixture
 edit 's|"/healthcheck"|"/doco-cd", "healthcheck"|' platform/doco-cd/compose.yaml
 expect_failure 'obsolete deployer healthcheck'
+
+for mutation in missing_socket missing_data wrong_source wrong_target read_only; do
+    write_self_fixture
+    case "${mutation}" in
+        missing_socket) edit '\|/var/run/docker.sock:/var/run/docker.sock|d' platform/doco-cd/compose.yaml ;;
+        missing_data) edit '\|/volume1/docker/doco-cd/data:/data|d' platform/doco-cd/compose.yaml ;;
+        wrong_source) edit 's|/volume1/docker/doco-cd/data:/data|/volume1/docker/other:/data|' platform/doco-cd/compose.yaml ;;
+        wrong_target) edit 's|/volume1/docker/doco-cd/data:/data|/volume1/docker/doco-cd/data:/other|' platform/doco-cd/compose.yaml ;;
+        read_only) edit 's|/volume1/docker/doco-cd/data:/data|/volume1/docker/doco-cd/data:/data:ro|' platform/doco-cd/compose.yaml ;;
+    esac
+    expect_failure "deployer bind: ${mutation}"
+done
 
 write_fixture
 edit 's|^name: app|name: {value: app}|' .doco-cd.yml
