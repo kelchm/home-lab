@@ -2,3 +2,10 @@ name: sparkdash
 working_dir: sparks/monitoring/sparkdash
 prune_images: false
 reconciliation: false
+---
+name: doco-cd
+working_dir: sparks/platform/doco-cd
+compose_files: [compose.yaml, compose.spark-1.yaml]
+timeout: 180
+prune_images: false
+reconciliation: false

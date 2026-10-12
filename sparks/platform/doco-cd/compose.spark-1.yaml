@@ -1,5 +1,5 @@
-# Installed beside compose.yaml on spark-1 as compose.override.yaml. Adds the
-# poll that applies .doco-cd.spark-1.yml.
+# Bootstrap copy on spark-1: compose.override.yaml. Replaces the base spark-2
+# poll with spark-1; the self target applies this file under its Git name.
 services:
   doco-cd:
     environment:

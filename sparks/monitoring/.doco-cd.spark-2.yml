@@ -1,0 +1,5 @@
+name: doco-cd
+working_dir: sparks/platform/doco-cd
+timeout: 180
+prune_images: false
+reconciliation: false

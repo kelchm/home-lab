@@ -1,8 +1,8 @@
 # doco-cd on Athena
 
-[doco-cd](https://github.com/kimdre/doco-cd) deploys the Compose projects declared in [`synology/.doco-cd.yml`](../../.doco-cd.yml) from `main`; the [Synology README](../../README.md) covers the deployment model and project contract. This directory is the deployer itself. It is applied manually and is never one of its own targets.
+[doco-cd](https://github.com/kimdre/doco-cd) deploys the Compose projects declared in [`synology/.doco-cd.yml`](../../.doco-cd.yml) from `main`; the [Synology README](../../README.md) covers the deployment model and project contract. The definitions enable native self-update. Manual apply is needed for bootstrap, the one-time migration, and recovery.
 
-State as of 2026-09-26: running on Athena, and acceptance checks 1–6 below have passed. Checks 7 and 8 are tracked in [home-lab#379](https://github.com/kelchm/home-lab/issues/379).
+The deployer's verified version and migration status are maintained in the [migration and recovery runbook](../../../docs/runbooks/doco-cd-self-update.md). Workload acceptance checks 1–6 below passed previously; checks 7 and 8 are tracked in [home-lab#379](https://github.com/kelchm/home-lab/issues/379).
 
 ## Configuration
 
@@ -32,7 +32,7 @@ op read 'op://Private/athena-doco-cd-sops-age-key/password' | ssh kelchm@10.32.2
 
 Then run the apply below.
 
-## Bootstrap or upgrade
+## Bootstrap or migrate
 
 Apply from a checkout of `main`, so the running definition matches Git:
 
@@ -41,9 +41,10 @@ ssh kelchm@10.32.20.5 'sudo install -d -m 0700 -o root -g root /volume1/docker/d
 rsync -av synology/platform/doco-cd/compose.yaml \
   kelchm@10.32.20.5:/volume1/docker/doco-cd/compose.yaml
 ssh kelchm@10.32.20.5 '
+  set -e
   cd /volume1/docker/doco-cd
   sudo /usr/local/bin/docker-compose pull
-  sudo /usr/local/bin/docker-compose up -d --wait
+  sudo /usr/local/bin/docker-compose up -d
   sudo /usr/local/bin/docker-compose ps
   sudo /usr/local/bin/docker logs --tail 50 doco-cd
 '
@@ -51,7 +52,9 @@ ssh kelchm@10.32.20.5 '
 
 DSM's Docker refuses to start a container whose bind-mount source is missing, so `data/` must exist before the first start. doco-cd then clones the repository and deploys every declared project.
 
-Renovate proposes doco-cd image updates like any other image. Merging one changes only Git, so run the same apply immediately afterwards. doco-cd is pre-1.0 and releases often; read the release notes before merging, particularly for changes to the data layout or deploy configuration.
+This apply enables native self-update. Allow the next poll to take over `doco-cd` from Git, then verify the final container's labels, health, successful polls, and unchanged workloads using the [acceptance checks](../../../docs/runbooks/doco-cd-self-update.md#acceptance-and-routine-updates).
+
+After migration, merging a Renovate doco-cd image update triggers self-update; no routine SSH apply is needed. The applier restores the predecessor when a replacement fails health. Read the release notes before merging, particularly for state-layout or deploy-configuration changes. The local Compose copy may become stale; refresh it from a known-good Git revision before manual recovery.
 
 ## Observe deployments
 
@@ -91,6 +94,7 @@ Create the canary's state directory before the first bootstrap with `sudo mkdir 
 | Situation | Effect | Response |
 |---|---|---|
 | doco-cd stopped or unhealthy | Running projects are unaffected; merged changes wait. | Read `docker logs doco-cd`, fix the cause, and reapply as above. |
+| doco-cd self-update fails | The applier restores the predecessor and records the failed revision. | Preserve the journal, inspect helper and deployer logs, and follow [self-update recovery](../../../docs/runbooks/doco-cd-self-update.md#recovery). |
 | A deployment fails (render, pull, health gate) | doco-cd logs the error and retries on later polls. Services that Compose had not yet replaced keep running. | Fix forward or `git revert` on `main`. Use break-glass if the service is down and a merge cannot wait. |
 | GitHub unreachable | Polls fail; nothing changes on the NAS. | None. Deployments resume when polling succeeds. |
 | NAS reboot | Docker restarts `unless-stopped` containers, including doco-cd. One-shot `publish` services do not rerun; their output persists in the runtime path. | Verify with [Observe deployments](#observe-deployments). |
@@ -107,6 +111,6 @@ ssh kelchm@10.32.20.5 '
 '
 ```
 
-Then run the [bootstrap](#bootstrap-or-upgrade). doco-cd clones the repository again and redeploys each declared project from `main`.
+Then run the [bootstrap](#bootstrap-or-migrate). doco-cd clones the repository again and redeploys each declared project from `main`.
 
 On a rebuilt NAS, install Container Manager, restore each project's runtime directory where it matters (see each project's README), and bootstrap doco-cd. It deploys every declared project on its first poll.

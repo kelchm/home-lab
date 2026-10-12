@@ -1,4 +1,4 @@
-# Applied by hand on each PVE node: docker compose up -d
+# Bootstrap or migrate by hand; subsequent updates are deployed by doco-cd.
 name: doco-cd
 
 services:
@@ -10,6 +10,8 @@ services:
     environment:
       TZ: America/New_York
       HTTP_PORT: "8080"
+      SELF_UPDATE_ENABLED: "true"
+      SELF_UPDATE_STRATEGY: applier
       DEPLOY_CONFIG_BASE_DIR: proxmox/monitoring
       POLL_CONFIG: |
         - url: https://github.com/kelchm/home-lab.git

@@ -44,6 +44,30 @@ function validate_deployment() {
         violation "${label}: Compose project name differs from the deployment name"
     fi
 
+    if [[ "${name}" == doco-cd && "${config}" == "${ROOT_DIR}/sparks/monitoring/.doco-cd.yml" ]]; then
+        violation "${label}: declare the deployer only in the per-Spark targets, never the shared target"
+    fi
+    if [[ "${name}" == doco-cd && "${config}" == "${ROOT_DIR}/sparks/monitoring/.doco-cd.spark-1.yml" ]] && ! jq -e '
+        (.compose_files // []) | index("compose.spark-1.yaml") != null
+    ' <<<"${deployment}" >/dev/null; then
+        violation "${label}: the spark-1 self target must include compose.spark-1.yaml"
+    fi
+    if [[ "${name}" == doco-cd && "${working_dir}" == proxmox/platform/doco-cd ]] && ! jq -e '
+        .services["doco-cd"].network_mode == "host" and
+        ((.services["doco-cd"].security_opt // []) | index("apparmor=unconfined") != null)
+    ' <<<"${rendered}" >/dev/null; then
+        violation "${label}: PVE doco-cd must retain host networking and apparmor=unconfined"
+    fi
+
+    if [[ "${name}" == doco-cd ]] && ! jq -e '
+        .services["doco-cd"].environment.SELF_UPDATE_ENABLED == "true" and
+        .services["doco-cd"].environment.SELF_UPDATE_STRATEGY == "applier" and
+        .services["doco-cd"].healthcheck.test == ["CMD", "/healthcheck"] and
+        .services["doco-cd"].restart == "unless-stopped"
+    ' <<<"${rendered}" >/dev/null; then
+        violation "${label}: doco-cd must retain native self-update, healthcheck and restart policy"
+    fi
+
     image="$(jq -r '.services.vmagent.image // ""' <<<"${rendered}")"
     if [[ -n "${image}" ]]; then
         while IFS= read -r mount; do

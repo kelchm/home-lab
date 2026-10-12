@@ -42,6 +42,24 @@ function edit() {
     sed -i.bak "$1" "${TEMP_DIR}/synology/$2"
 }
 
+function write_self_fixture() {
+    write_fixture
+    mkdir -p "${TEMP_DIR}/synology/platform/doco-cd"
+    cat >"${TEMP_DIR}/synology/platform/doco-cd/compose.yaml" <<EOF
+name: doco-cd
+services:
+  doco-cd:
+    image: ${IMAGE}
+    environment:
+      SELF_UPDATE_ENABLED: "true"
+      SELF_UPDATE_STRATEGY: applier
+    healthcheck:
+      test: ["CMD", "/healthcheck"]
+    restart: unless-stopped
+EOF
+    printf '\n---\nname: doco-cd\nworking_dir: synology/platform/doco-cd\n' >>"${TEMP_DIR}/synology/.doco-cd.yml"
+}
+
 function expect_success() {
     "${ROOT_DIR}/scripts/ci/validate-synology.sh" "${TEMP_DIR}" >/dev/null
 }
@@ -92,6 +110,29 @@ for working_dir in synology/platform synology/platform/app synology/./platform/a
     edit "s|working_dir: synology/app|working_dir: ${working_dir}|" .doco-cd.yml
     expect_failure "non-canonical or platform working_dir ${working_dir}"
 done
+
+write_self_fixture
+expect_success
+
+write_self_fixture
+edit 's|name: doco-cd|name: other|' .doco-cd.yml
+expect_failure 'platform exception with the wrong project name'
+
+write_self_fixture
+edit 's|SELF_UPDATE_ENABLED: "true"|SELF_UPDATE_ENABLED: "false"|' platform/doco-cd/compose.yaml
+expect_failure 'self-update disabled on the managed deployer'
+
+write_self_fixture
+edit 's|SELF_UPDATE_STRATEGY: applier|SELF_UPDATE_STRATEGY: scale_out|' platform/doco-cd/compose.yaml
+expect_failure 'wrong self-update strategy'
+
+write_self_fixture
+edit 's|restart: unless-stopped|restart: "no"|' platform/doco-cd/compose.yaml
+expect_failure 'deployer without crash recovery'
+
+write_self_fixture
+edit 's|"/healthcheck"|"/doco-cd", "healthcheck"|' platform/doco-cd/compose.yaml
+expect_failure 'obsolete deployer healthcheck'
 
 write_fixture
 edit 's|^name: app|name: {value: app}|' .doco-cd.yml
