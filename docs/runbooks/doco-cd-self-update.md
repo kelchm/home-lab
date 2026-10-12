@@ -2,7 +2,7 @@
 
 The definitions enable native self-update on the three PVE nodes, two Sparks, and Athena. After the one-time migration below, merging a doco-cd image or configuration change to `main` deploys it like another declared project. Images stay pinned by tag and digest.
 
-Verified on 2026-10-11: all six hosts run 0.125.1 with a healthy `/healthcheck`, successful repository polls, and unchanged workloads after a manual upgrade. Native self-update migration, handover, and rollback have not yet been exercised on these hosts. This runbook describes intended behavior and the acceptance checks still to perform.
+Verified on 2026-10-11: all six hosts run 0.125.1 with a healthy `/healthcheck`, successful repository polls, and unchanged workloads after a manual upgrade. Native self-update migration, handover, and rollback have not yet been exercised on these hosts. This runbook describes intended behavior and the acceptance checks still to perform. Live migration is tracked in [#815](https://github.com/kelchm/home-lab/issues/815).
 
 A disposable ARM64 Docker rehearsal on the workstation on 2026-10-11, using the pinned 0.125.1 image and an absolute data bind, passed takeover, a successful configuration update, automatic rollback after a deliberately failing healthcheck, no retry of that failed revision across subsequent polls, and recovery on a corrected new revision. It also exposed the host Compose `up --wait` takeover race described below. This verifies the native path locally; it does not substitute for PVE/DSM migration checks or rehearse manual intervention during an unfinished handover.
 
