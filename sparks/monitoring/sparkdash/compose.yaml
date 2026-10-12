@@ -7,6 +7,9 @@ services:
     # Built from upstream 2.40.0 by kelchm/sparkDash; upstream publishes no image.
     image: ghcr.io/kelchm/sparkdash:2.40.0-1@sha256:805a8dd7a23edbe228d754762ebcffb3f7a754a57fa756e057328c8bedf0a7fd
     container_name: sparkdash
+    # Where this Spark's vmagent scrapes it.
+    labels:
+      homelab.kelch.io/metrics-address: 10.32.21.31:5555
     # The server takes its access token from the environment only.
     command:
       - sh

@@ -41,3 +41,25 @@ scrape_configs:
       - source_labels: [__meta_docker_container_label_sparkrun_recipe]
         regex: "(?:.*/)?([^/]+?)(?:\\.ya?ml)?"
         target_label: recipe
+
+  # sparkDash, on the Spark that runs it. The address comes from its container
+  # label, so a Spark without the container has no target. Only what no other
+  # collector reports is kept. `unit` names the Spark a sample describes;
+  # `instance` is the Spark that scraped it.
+  - job_name: spark-sparkdash
+    authorization:
+      credentials_file: /etc/sparkdash/token
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        filters:
+          - name: label
+            values: ["homelab.kelch.io/metrics-address"]
+    relabel_configs:
+      - source_labels: [__meta_docker_container_label_homelab_kelch_io_metrics_address]
+        target_label: __address__
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: sparkdash_(up|gpu_memory_used_bytes|collector_last_success_timestamp_seconds)
+        action: keep
+      - regex: unit_name|kind|role
+        action: labeldrop

@@ -42,6 +42,8 @@ services:
     volumes:
       - ./scrape.yaml:/etc/vmagent/scrape.yaml:ro
       - /etc/monitoring:/etc/monitoring:ro
+      # sparkDash's access token. Empty on a Spark that does not run it.
+      - /etc/sparkdash:/etc/sparkdash:ro
       # Read to find the serving container and its SparkRun labels.
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - queue:/queue

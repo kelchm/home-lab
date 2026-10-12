@@ -6,7 +6,7 @@ Host, GPU and inference metrics for the two DGX Sparks. Enrollment, verification
 |---|---|
 | [compose.yaml](compose.yaml) | node-exporter and vmagent. |
 | [gpu/compose.yaml](gpu/compose.yaml) | The NVIDIA GPU exporter, as its own project. |
-| [scrape.yaml](scrape.yaml) | Host, GPU, vmagent, deployer and inference scrape jobs. |
+| [scrape.yaml](scrape.yaml) | Host, GPU, vmagent, deployer, inference and sparkDash scrape jobs. |
 | [.doco-cd.yml](.doco-cd.yml) | The two deployments every Spark's doco-cd applies. |
 | [sparkdash/compose.yaml](sparkdash/compose.yaml) | The sparkDash dashboard, on `spark-1` only. |
 | [.doco-cd.spark-1.yml](.doco-cd.spark-1.yml) | The deployment only `spark-1`'s doco-cd applies. |
@@ -26,7 +26,7 @@ doco-cd recreates every container of a project on each poll while one of its ser
 
 ## sparkDash
 
-[sparkDash](https://github.com/MiaAI-Lab/sparkDash) is a live dashboard for both Sparks at `http://10.32.21.31:5555`. It asks for an access token on first use; read it with `ssh kelchm@spark-1 sudo cat /etc/sparkdash/token`. It has no agent mode: one instance reads its own host directly and every other unit over SSH, so it runs on `spark-1` and logs in to `spark-2`. Its series are not scraped into the metrics store.
+[sparkDash](https://github.com/MiaAI-Lab/sparkDash) is a live dashboard for both Sparks at `http://10.32.21.31:5555`. It asks for an access token on first use; read it with `ssh kelchm@spark-1 sudo cat /etc/sparkdash/token`. It has no agent mode: one instance reads its own host directly and every other unit over SSH, so it runs on `spark-1` and logs in to `spark-2`.
 
 The container is privileged, shares the host's PID namespace and network, and mounts `/` read-only, which is what its local collectors need. On `spark-2` it logs in as `sparkdash`, an account with no sudo rights and no Docker access, so it can read metrics there but cannot power the node off or start or stop a container. No model launcher is configured: SparkRun owns inference.
 
@@ -56,6 +56,27 @@ ssh kelchm@spark-1 'sudo install -m 0644 /tmp/doco-cd.override.yaml /opt/doco-cd
 ```
 
 doco-cd starts the container within three minutes. Then, in the dashboard, add `spark-1` as this host and `spark-2` as a remote unit with user `sparkdash` and key authentication.
+
+### sparkDash metrics
+
+`spark-1`'s vmagent scrapes sparkDash's `/metrics` endpoint every 15 seconds as `job="spark-sparkdash"`. A scrape reads the snapshot sparkDash already holds, so it adds no SSH or `nvidia-smi` calls. vmagent finds the container by its `homelab.kelch.io/metrics-address` label, which also gives the address, so the scrape job is the same on both Sparks and `spark-2` has no target. vmagent mounts `/etc/sparkdash` to read the access token; on `spark-2` Docker creates that directory empty.
+
+The endpoint serves about 90 series. Three families are kept, about 20 series:
+
+| Family | Why it is kept |
+|---|---|
+| `sparkdash_gpu_memory_used_bytes` | Memory held by GPU processes, summed from `nvidia-smi`'s per-process list. On a GB10 `nvidia-smi` reports no per-GPU memory, and the GPU exporter does not read the process list. |
+| `sparkdash_up` | Whether sparkDash reaches each Spark. |
+| `sparkdash_collector_last_success_timestamp_seconds` | When each sparkDash collector last returned data. A stuck collector keeps serving its last values; this is how to tell. |
+
+Everything else repeats what node-exporter, the GPU exporter and the inference scrape already collect, and is dropped. That includes sparkDash's LLM probe, which names the model from the serving endpoint rather than from SparkRun's labels. sparkDash's RoCE and energy readings are not part of its Prometheus export; RoCE link state, rate and error counters come from node-exporter as `node_infiniband_*`.
+
+These series carry `unit`, the Spark a sample describes. `instance` is `spark-1` on all of them, including the ones for `spark-2`, because the ingestion token sets it. Select and group by `unit`, never by `instance`:
+
+```promql
+sparkdash_gpu_memory_used_bytes{job="spark-sparkdash", unit="spark-2"}
+time() - sparkdash_collector_last_success_timestamp_seconds{job="spark-sparkdash"}
+```
 
 ## Reading the TensorFold dashboard
 
