@@ -34,7 +34,7 @@ Then run the apply below.
 
 ## Bootstrap or migrate
 
-Apply from a checkout of `main`, so the running definition matches Git:
+Apply from a checkout of `main`, so the running definition matches Git. For recovery, first satisfy the [helper and journal gates](../../../docs/runbooks/doco-cd-self-update.md#recovery).
 
 ```sh
 ssh kelchm@10.32.20.5 'sudo install -d -m 0700 -o root -g root /volume1/docker/doco-cd/data'
@@ -93,7 +93,7 @@ Create the canary's state directory before the first bootstrap with `sudo mkdir 
 
 | Situation | Effect | Response |
 |---|---|---|
-| doco-cd stopped or unhealthy | Running projects are unaffected; merged changes wait. | Read `docker logs doco-cd`, fix the cause, and reapply as above. |
+| doco-cd stopped or unhealthy | Running projects are unaffected; merged changes wait. | Read deployer and helper logs and follow [self-update recovery](../../../docs/runbooks/doco-cd-self-update.md#recovery); reapply only after native recovery has finished with no active helper or open handover journal. |
 | doco-cd self-update fails | The applier restores the predecessor and records the failed revision. | Preserve the journal, inspect helper and deployer logs, and follow [self-update recovery](../../../docs/runbooks/doco-cd-self-update.md#recovery). |
 | A deployment fails (render, pull, health gate) | doco-cd logs the error and retries on later polls. Services that Compose had not yet replaced keep running. | Fix forward or `git revert` on `main`. Use break-glass if the service is down and a merge cannot wait. |
 | GitHub unreachable | Polls fail; nothing changes on the NAS. | None. Deployments resume when polling succeeds. |
@@ -101,7 +101,7 @@ Create the canary's state directory before the first bootstrap with `sudo mkdir 
 
 ## Reconstruction
 
-If the state directory is lost or corrupt, recreate it. Workload data lives elsewhere.
+If the state directory is lost or corrupt, recreate it only after satisfying the [helper and journal gates](../../../docs/runbooks/doco-cd-self-update.md#recovery). Preserve any remaining state for diagnosis before removing it; these commands must not interrupt an unfinished handover. Workload data lives elsewhere.
 
 ```sh
 ssh kelchm@10.32.20.5 '

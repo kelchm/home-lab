@@ -42,7 +42,7 @@ State outside Git, all on `spark-1` unless noted:
 | `/etc/sparkdash/token` | The access token. Any value works; replace it and restart the container to rotate. |
 | `/etc/sparkdash/id_ed25519` | The SSH key for `spark-2`, authorized for `sparkdash` in `/home/sparkdash/.ssh/authorized_keys` there. |
 | `/var/lib/sparkdash` | Fleet, settings and history. The two units are registered in `sparks.json`. |
-| `/opt/doco-cd/compose.override.yaml` | A bootstrap/recovery copy of [compose.spark-1.yaml](../platform/doco-cd/compose.spark-1.yaml); Git is authoritative after migration. |
+| `/opt/doco-cd/compose.spark-1.yaml` | Bootstrap/recovery copy installed by the migration procedure; older installs used `compose.override.yaml`. Manual applies explicitly list the base and this file; Git is authoritative after migration. |
 
 To rebuild that state, run from a workstation:
 
@@ -56,7 +56,7 @@ ssh kelchm@spark-1 sudo cat /etc/sparkdash/id_ed25519.pub \
   && sudo install -m 0600 -o sparkdash -g sparkdash /dev/stdin /home/sparkdash/.ssh/authorized_keys'
 ```
 
-Bootstrap or migrate `spark-1` using [both deployer files](../../docs/runbooks/doco-cd-self-update.md#one-time-migration). doco-cd starts the dashboard within three minutes. Then add `spark-1` as this host and `spark-2` as a remote unit with user `sparkdash` and key authentication.
+Bootstrap or migrate `spark-1` using [both deployer files](../../docs/runbooks/doco-cd-self-update.md#bootstrap-or-migrate). doco-cd starts the dashboard within three minutes. Then add `spark-1` as this host and `spark-2` as a remote unit with user `sparkdash` and key authentication.
 
 ## Reading the TensorFold dashboard
 

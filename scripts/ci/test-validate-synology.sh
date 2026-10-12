@@ -45,23 +45,7 @@ function edit() {
 function write_self_fixture() {
     write_fixture
     mkdir -p "${TEMP_DIR}/synology/platform/doco-cd"
-    cat >"${TEMP_DIR}/synology/platform/doco-cd/compose.yaml" <<EOF
-name: doco-cd
-services:
-  doco-cd:
-    image: ${IMAGE}
-    environment:
-      SELF_UPDATE_ENABLED: "true"
-      SELF_UPDATE_STRATEGY: applier
-      SOPS_AGE_KEY_FILE: /run/secrets/sops_age_key
-    healthcheck:
-      test: ["CMD", "/healthcheck"]
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - /volume1/docker/doco-cd/data:/data
-      - /volume1/docker/doco-cd/sops_age_key:/run/secrets/sops_age_key:ro
-    restart: unless-stopped
-EOF
+    cp "${ROOT_DIR}/synology/platform/doco-cd/compose.yaml" "${TEMP_DIR}/synology/platform/doco-cd/"
     printf '\n---\nname: doco-cd\nworking_dir: synology/platform/doco-cd\n' >>"${TEMP_DIR}/synology/.doco-cd.yml"
 }
 
@@ -70,10 +54,14 @@ function expect_success() {
 }
 
 function expect_failure() {
-    local description="$1"
+    local description="$1" expected="${2:-}" output
 
-    if "${ROOT_DIR}/scripts/ci/validate-synology.sh" "${TEMP_DIR}" 2>/dev/null; then
+    if output="$("${ROOT_DIR}/scripts/ci/validate-synology.sh" "${TEMP_DIR}" 2>&1)"; then
         echo "Expected Synology validation to fail: ${description}" >&2
+        exit 1
+    fi
+    if [[ -n "${expected}" && "${output}" != *"${expected}"* ]]; then
+        echo "Unexpected validation failure for ${description}: ${output}" >&2
         exit 1
     fi
 }
@@ -121,23 +109,23 @@ expect_success
 
 write_self_fixture
 edit 's|name: doco-cd|name: other|' .doco-cd.yml
-expect_failure 'platform exception with the wrong project name'
+expect_failure 'platform exception with the wrong project name' 'with name doco-cd'
 
 write_self_fixture
 edit 's|SELF_UPDATE_ENABLED: "true"|SELF_UPDATE_ENABLED: "false"|' platform/doco-cd/compose.yaml
-expect_failure 'self-update disabled on the managed deployer'
+expect_failure 'self-update disabled on the managed deployer' 'native self-update'
 
 write_self_fixture
 edit 's|SELF_UPDATE_STRATEGY: applier|SELF_UPDATE_STRATEGY: scale_out|' platform/doco-cd/compose.yaml
-expect_failure 'wrong self-update strategy'
+expect_failure 'wrong self-update strategy' 'native self-update'
 
 write_self_fixture
 edit 's|restart: unless-stopped|restart: "no"|' platform/doco-cd/compose.yaml
-expect_failure 'deployer without crash recovery'
+expect_failure 'deployer without crash recovery' 'restart policy'
 
 write_self_fixture
 edit 's|"/healthcheck"|"/doco-cd", "healthcheck"|' platform/doco-cd/compose.yaml
-expect_failure 'obsolete deployer healthcheck'
+expect_failure 'obsolete deployer healthcheck' 'healthcheck'
 
 for mutation in missing_socket missing_data wrong_source wrong_target read_only; do
     write_self_fixture
@@ -148,7 +136,7 @@ for mutation in missing_socket missing_data wrong_source wrong_target read_only;
         wrong_target) edit 's|/volume1/docker/doco-cd/data:/data|/volume1/docker/doco-cd/data:/other|' platform/doco-cd/compose.yaml ;;
         read_only) edit 's|/volume1/docker/doco-cd/data:/data|/volume1/docker/doco-cd/data:/data:ro|' platform/doco-cd/compose.yaml ;;
     esac
-    expect_failure "deployer bind: ${mutation}"
+    expect_failure "deployer bind: ${mutation}" 'required binds, writable state'
 done
 
 for mutation in missing_key writable_key wrong_key_path; do
@@ -158,7 +146,7 @@ for mutation in missing_key writable_key wrong_key_path; do
         writable_key) edit 's|/run/secrets/sops_age_key:ro|/run/secrets/sops_age_key|' platform/doco-cd/compose.yaml ;;
         wrong_key_path) edit 's|SOPS_AGE_KEY_FILE: /run/secrets/sops_age_key|SOPS_AGE_KEY_FILE: /run/secrets/other|' platform/doco-cd/compose.yaml ;;
     esac
-    expect_failure "NAS age key: ${mutation}"
+    expect_failure "NAS age key: ${mutation}" 'read-only NAS age key'
 done
 
 write_fixture

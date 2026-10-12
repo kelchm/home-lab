@@ -38,7 +38,7 @@ sops decrypt --extract '["stringData"]["SPARK_1_TOKEN"]' kubernetes/apps/observa
   | ssh kelchm@10.32.21.31 'sudo install -d -m 0755 /etc/monitoring && sudo install -m 0600 /dev/stdin /etc/monitoring/token'
 ```
 
-Then use the matching [manual bootstrap/migration apply](doco-cd-self-update.md#one-time-migration). Install both the base and override on `spark-1` before starting it; the base alone polls the `spark-2` self target.
+Then use the matching [manual bootstrap/migration apply](doco-cd-self-update.md#bootstrap-or-migrate). Install both the base and override on `spark-1` before starting it; the base alone polls the `spark-2` self target.
 
 doco-cd deploys the `monitoring` and `monitoring-gpu` projects within three minutes. The GPU exporter needs NVIDIA CDI devices in Docker (`nvidia-ctk cdi list` shows `nvidia.com/gpu=all`); if it cannot start, the other collectors are unaffected and `HostCollectorDown` names it. The inference container is not touched. Whichever Spark runs SparkRun's head rank scrapes the serving endpoint every second and labels the series with the model, runtime and recipe SparkRun reports; see [Spark monitoring](../../sparks/monitoring/README.md#inference). Stop the workstation pilot once those samples arrive so the two do not overlap.
 
@@ -53,7 +53,7 @@ scp proxmox/platform/doco-cd/daemon.json kelchm@10.32.20.23:/tmp/
 ssh kelchm@10.32.20.23 'sudo install -D -m 0644 /tmp/daemon.json /etc/docker/daemon.json && sudo apt-get install --no-install-recommends -y docker.io docker-cli docker-compose'
 ```
 
-Before going further, confirm on the node that guests still pass traffic, `cat /proc/sys/net/ipv4/ip_forward`, `sudo iptables -S FORWARD` and `sudo nft list ruleset` are unchanged from before the install, `lsmod` shows no `br_netfilter`, and `sudo docker network ls` shows no `bridge` network. If any check fails, `sudo apt-get purge docker.io` and stop. Then install the token as for a Spark, using the node's `PVE_SBX_N_TOKEN` key and PVE address. Apply the PVE deployer with the [bootstrap/migration procedure](doco-cd-self-update.md#one-time-migration).
+Before going further, confirm on the node that guests still pass traffic, `cat /proc/sys/net/ipv4/ip_forward`, `sudo iptables -S FORWARD` and `sudo nft list ruleset` are unchanged from before the install, `lsmod` shows no `br_netfilter`, and `sudo docker network ls` shows no `bridge` network. If any check fails, `sudo apt-get purge docker.io` and stop. Then install the token as for a Spark, using the node's `PVE_SBX_N_TOKEN` key and PVE address. Apply the PVE deployer with the [bootstrap/migration procedure](doco-cd-self-update.md#bootstrap-or-migrate).
 
 The deployer runs without Docker's default AppArmor profile: on PVE's kernel that profile denies Unix sockets, including the Docker socket. Containers on a PVE node use host networking only. doco-cd has no bind-address setting, so its health and metrics ports (8080, 9120) listen on every interface of the node; its webhook and API stay disabled without a secret.
 

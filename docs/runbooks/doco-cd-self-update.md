@@ -25,7 +25,7 @@ This strategy fits the fixed container name, published ports, and PVE host netwo
 
 Both Sparks poll the shared monitoring configuration. The base Compose definition adds a `spark-2` poll; `compose.spark-1.yaml` replaces the whole poll list with the shared poll and the `spark-1` poll. The `spark-1` target deploys both sparkDash and doco-cd, using `[compose.yaml, compose.spark-1.yaml]` for the deployer. This preserves its dashboard poll through self-update.
 
-## One-time migration
+## Bootstrap or migrate
 
 Merge at the start of the migration session, then apply from a checkout of current `main`. Existing instances have self-update disabled and may report a refused self-deployment between merge and manual apply. That refusal leaves running containers in place. No token rotation, new age key, or Docker reinstall is needed.
 
@@ -78,9 +78,11 @@ For `spark-1`, stage both files before applying:
 
 ```sh
 scp sparks/platform/doco-cd/compose.yaml kelchm@10.32.21.31:/tmp/doco-cd.yaml
-scp sparks/platform/doco-cd/compose.spark-1.yaml kelchm@10.32.21.31:/tmp/doco-cd.override.yaml
-ssh kelchm@10.32.21.31 'set -e; sudo -n install -D -m 0644 /tmp/doco-cd.yaml /opt/doco-cd/compose.yaml; sudo -n install -m 0644 /tmp/doco-cd.override.yaml /opt/doco-cd/compose.override.yaml; cd /opt/doco-cd; sudo -n docker compose up -d'
+scp sparks/platform/doco-cd/compose.spark-1.yaml kelchm@10.32.21.31:/tmp/doco-cd.spark-1.yaml
+ssh kelchm@10.32.21.31 'set -e; sudo -n install -D -m 0644 /tmp/doco-cd.yaml /opt/doco-cd/compose.yaml; sudo -n install -m 0644 /tmp/doco-cd.spark-1.yaml /opt/doco-cd/compose.spark-1.yaml; cd /opt/doco-cd; sudo -n docker compose -f compose.yaml -f compose.spark-1.yaml up -d'
 ```
+
+Always specify both files in that order for manual `spark-1` applies. A bare `docker compose up` can select the base `spark-2` poll or an older `compose.override.yaml` left by a previous bootstrap; the explicit commands above ignore that legacy copy.
 
 For Athena, use [Bootstrap or migrate](../../synology/platform/doco-cd/README.md#bootstrap-or-migrate). Confirm that the data directory, age-key file, and Docker socket already exist; DSM refuses missing bind sources. Preserve existing state and the key.
 
@@ -124,7 +126,7 @@ ssh kelchm@10.32.20.5 'sudo -n ls -A /volume1/docker/doco-cd/data/self-update'
 
 Any non-hidden `*.json` other than `poison.json` or `*.snapshot.json` is an open record, even if its state says `failed` or `rolled_back`. `*.json.corrupt` files are quarantined. An absent directory means no journal has been created; any other listing error needs investigation before proceeding.
 
-When there is no open handover, stage a known-good base as `compose.yaml` in the local bootstrap directory. On `spark-1`, also stage its matching Git `compose.spark-1.yaml` as `compose.override.yaml`. Save this separate recovery override as `compose.recovery.yaml` while repairing `main`; never overwrite the Spark override with it:
+When there is no open handover, stage a known-good base as `compose.yaml` in the local bootstrap directory. On `spark-1`, also stage its matching Git `compose.spark-1.yaml` under the same name. Save this separate recovery override as `compose.recovery.yaml` while repairing `main`; never overwrite the Spark override with it:
 
 ```yaml
 services:
@@ -138,8 +140,8 @@ With no active helper or open handover, stop doco-cd and apply the explicit file
 ```sh
 # PVE or spark-2, after staging known-good files in /opt/doco-cd:
 ssh kelchm@HOST 'set -e; if sudo -n docker inspect doco-cd >/dev/null 2>&1; then sudo -n docker stop doco-cd; fi; cd /opt/doco-cd; sudo -n docker compose -f compose.yaml -f compose.recovery.yaml up -d --wait --wait-timeout 180'
-# spark-1, retaining its host-named dashboard override:
-ssh kelchm@10.32.21.31 'set -e; if sudo -n docker inspect doco-cd >/dev/null 2>&1; then sudo -n docker stop doco-cd; fi; cd /opt/doco-cd; sudo -n docker compose -f compose.yaml -f compose.override.yaml -f compose.recovery.yaml up -d --wait --wait-timeout 180'
+# spark-1, retaining its dashboard override:
+ssh kelchm@10.32.21.31 'set -e; if sudo -n docker inspect doco-cd >/dev/null 2>&1; then sudo -n docker stop doco-cd; fi; cd /opt/doco-cd; sudo -n docker compose -f compose.yaml -f compose.spark-1.yaml -f compose.recovery.yaml up -d --wait --wait-timeout 180'
 # Athena, after staging known-good files in /volume1/docker/doco-cd:
 ssh kelchm@10.32.20.5 'set -e; if sudo -n /usr/local/bin/docker inspect doco-cd >/dev/null 2>&1; then sudo -n /usr/local/bin/docker stop doco-cd; fi; cd /volume1/docker/doco-cd; sudo -n /usr/local/bin/docker-compose -f compose.yaml -f compose.recovery.yaml up -d --wait'
 ```
