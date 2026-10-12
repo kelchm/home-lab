@@ -6,7 +6,7 @@ Verified:
 
 - On 2026-10-11, all six live hosts passed the manual 0.125.1 rollout: healthy `/healthcheck`, successful repository polls, and unchanged workloads.
 - Disposable ARM64 rehearsals with pinned 0.125.1 passed takeover, configuration updates, failed-healthcheck rollback and suppression after successful takeover, corrected-revision recovery, and stopping the first-takeover retry loop by removing the self target.
-- On 2026-10-12, both Spark identities passed native interpolation through takeover and later updates without a host identity file or runtime `SPARK_HOST` variable. Both polls succeeded and the canary stayed unchanged. A local self-disable override then kept the deployer healthy and delivered a deliberate workload update while pausing self-replacement.
+- On 2026-10-12, both Spark identities passed native interpolation through takeover and later updates without a host identity file or runtime `SPARK_HOST` variable. Both polls succeeded and the canary stayed unchanged. A local self-disable override on the `spark-2` fixture then kept the deployer healthy and delivered a deliberate shared-poll workload update while pausing self-replacement.
 
 Live native migration is pending in [#815](https://github.com/kelchm/home-lab/issues/815). PVE/DSM helper behavior, the project-network recreation path, a cross-version handover, and manual interruption of an unfinished journal remain unverified. The procedures below describe intended behavior and live acceptance still to perform.
 
@@ -56,7 +56,7 @@ Use `/usr/local/bin/docker` on Athena. Do not include environment variables or s
 On the Sparks and Athena, also record the host Compose version and labels of the existing `doco-cd_default` network before applying:
 
 ```sh
-ssh kelchm@SPARK_HOST 'sudo -n docker compose version; sudo -n docker network inspect --format "{{.Name}} {{json .Labels}}" doco-cd_default'
+ssh kelchm@HOST 'sudo -n docker compose version; sudo -n docker network inspect --format "{{.Name}} {{json .Labels}}" doco-cd_default'
 ssh kelchm@10.32.20.5 'sudo -n /usr/local/bin/docker-compose version; sudo -n /usr/local/bin/docker network inspect --format "{{.Name}} {{json .Labels}}" doco-cd_default'
 ```
 

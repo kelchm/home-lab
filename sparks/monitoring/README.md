@@ -9,8 +9,8 @@ Host, GPU and inference metrics for the two DGX Sparks. Enrollment, verification
 | [scrape.yaml](scrape.yaml) | Host, GPU, vmagent, deployer and inference scrape jobs. |
 | [.doco-cd.yml](.doco-cd.yml) | The two deployments every Spark's doco-cd applies. |
 | [sparkdash/compose.yaml](sparkdash/compose.yaml) | The sparkDash dashboard, on `spark-1` only. |
-| [.doco-cd.spark-1.yml](.doco-cd.spark-1.yml) | sparkDash and doco-cd with its `spark-1` override. |
-| [.doco-cd.spark-2.yml](.doco-cd.spark-2.yml) | doco-cd on `spark-2`, using the base Compose definition. |
+| [.doco-cd.spark-1.yml](.doco-cd.spark-1.yml) | sparkDash and doco-cd with `SPARK_HOST` set to `spark-1`. |
+| [.doco-cd.spark-2.yml](.doco-cd.spark-2.yml) | doco-cd with `SPARK_HOST` set to `spark-2`. |
 | [../platform/doco-cd](../platform/doco-cd/compose.yaml) | The deployer, bootstrapped by hand and then self-updated. Each Git self target supplies `SPARK_HOST` to select its own poll from the shared definition. |
 
 The collector files are identical on both Sparks; [sparkDash](#sparkdash) is the one project that runs on a single node. node-exporter runs its default collectors except `cpufreq`: on a Spark that collector never returns, which stalls every scrape. Without it a full scrape takes about 0.2 seconds. SparkRun owns inference; this project never starts, stops or restarts an inference container.
