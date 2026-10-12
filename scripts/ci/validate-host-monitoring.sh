@@ -63,9 +63,15 @@ function validate_deployment() {
         .services["doco-cd"].environment.SELF_UPDATE_ENABLED == "true" and
         .services["doco-cd"].environment.SELF_UPDATE_STRATEGY == "applier" and
         .services["doco-cd"].healthcheck.test == ["CMD", "/healthcheck"] and
-        .services["doco-cd"].restart == "unless-stopped"
+        .services["doco-cd"].restart == "unless-stopped" and
+        ([.services["doco-cd"].volumes[]? | select(
+            .type == "bind" and .source == "/var/run/docker.sock" and .target == "/var/run/docker.sock"
+        )] | length == 1) and
+        ([.services["doco-cd"].volumes[]? | select(
+            .type == "bind" and .source == "/var/lib/doco-cd" and .target == "/data" and .read_only != true
+        )] | length == 1)
     ' <<<"${rendered}" >/dev/null; then
-        violation "${label}: doco-cd must retain native self-update, healthcheck and restart policy"
+        violation "${label}: doco-cd must retain native self-update, required binds, writable state, healthcheck and restart policy"
     fi
 
     image="$(jq -r '.services.vmagent.image // ""' <<<"${rendered}")"

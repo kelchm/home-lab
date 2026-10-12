@@ -113,6 +113,7 @@ jobs:
               - 'sparks/monitoring/**'
               - 'sparks/platform/**'
               - 'scripts/ci/validate-host-monitoring.sh'
+              - 'scripts/ci/test-validate-host-monitoring.sh'
               - 'scripts/ci/validate-pve-backups.sh'
             synology:
               - '.github/workflows/repository-validation.yaml'
@@ -446,6 +447,7 @@ jobs:
         if: needs.pre-job.outputs.hosts_changed == 'true'
         run: |
           docker compose version
+          scripts/ci/test-validate-host-monitoring.sh
           scripts/ci/validate-host-monitoring.sh
           scripts/ci/validate-pve-backups.sh
 
