@@ -12,8 +12,8 @@ State as of 2026-10-12: not deployed. Everything below is the intended configura
 |---|---|
 | Endpoint | `https://s3-storage.home.kelch.io:9000`, published on `10.32.25.5` only |
 | Certificate | Let's Encrypt, default profile, issued and renewed by Traefik through Cloudflare DNS-01 |
-| Objects | `/volume1/s3-storage/data/<bucket>/<key>`, one plain file per object |
-| Object metadata | `/volume1/s3-storage/meta/<bucket>/<key>/meta/`, small files holding each object's ETag and checksum |
+| Objects | `/volume1/backups-k8s-prod-s3/data/<bucket>/<key>`, one plain file per object |
+| Object metadata | `/volume1/backups-k8s-prod-s3/meta/<bucket>/<key>/meta/`, small files holding each object's ETag and checksum |
 | Accounts | `/volume1/docker/s3-storage/iam/users.json`, written by the gateway; holds secret keys in clear text and is outside the share that goes off-site |
 | Certificate state | `/volume1/docker/s3-storage/acme/acme.json` |
 | Published route | `/volume1/docker/s3-storage/dynamic/routes.yaml`, copied from [`traefik/routes.yaml`](traefik/routes.yaml) on every deployment |
@@ -49,11 +49,11 @@ The Cloudflare token needs `Zone:Zone:Read` and `Zone:DNS:Edit` on `kelch.io`; T
 
 ## First deployment
 
-1. Create the shared folder `s3-storage` in DSM, then the directories. Each bucket is a directory under `data/`:
+1. Create the shared folder `backups-k8s-prod-s3` in DSM, then the directories. Each bucket is a directory under `data/`:
 
    ```sh
    ssh kelchm@10.32.20.5 '
-     sudo mkdir -p /volume1/s3-storage/data/k8s-prod-visionect-db /volume1/s3-storage/data/k8s-prod-bambuddy-db /volume1/s3-storage/meta
+     sudo mkdir -p /volume1/backups-k8s-prod-s3/data/k8s-prod-visionect-db /volume1/backups-k8s-prod-s3/data/k8s-prod-bambuddy-db /volume1/backups-k8s-prod-s3/meta
      sudo mkdir -p /volume1/docker/s3-storage/iam /volume1/docker/s3-storage/acme /volume1/docker/s3-storage/dynamic
      sudo chmod 0700 /volume1/docker/s3-storage/iam /volume1/docker/s3-storage/acme
    '
@@ -84,7 +84,7 @@ To confirm on Athena, because the scratch test ran on a 6.18 kernel and ext4:
 ```sh
 ssh kelchm@10.32.20.5 'sudo /usr/local/bin/docker ps --filter label=com.docker.compose.project=s3-storage'
 ssh kelchm@10.32.20.5 'sudo /usr/local/bin/docker logs --since 1h s3-storage-traefik-1'
-ssh kelchm@10.32.20.5 'sudo du -sh /volume1/s3-storage/data/*'
+ssh kelchm@10.32.20.5 'sudo du -sh /volume1/backups-k8s-prod-s3/data/*'
 ```
 
 Nothing here alerts on its own. A stopped or unreachable endpoint shows up in the cluster as `CNPGWALArchivingStalled` within 15 minutes. A certificate that fails to renew has about 30 days before it expires, and then shows up the same way.
@@ -94,7 +94,7 @@ Nothing here alerts on its own. A stopped or unreachable endpoint shows up in th
 Any machine can serve a copy of the share, which is how a restore works when Athena is gone. Restore the share with Kopia as described in the [off-site README](../offsite-backup/README.md#restore), then:
 
 ```sh
-docker run --rm -p 7070:7070 -v /path/to/restored/s3-storage:/share:ro \
+docker run --rm -p 7070:7070 -v /path/to/restored/s3:/share:ro \
   ghcr.io/versity/versitygw:v1.8.0 --readonly --access restore --secret '<any secret>' posix --nometa /share/data
 ```
 

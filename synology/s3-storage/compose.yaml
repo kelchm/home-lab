@@ -22,7 +22,7 @@ services:
     env_file:
       - versitygw.sops.env
     volumes:
-      - /volume1/s3-storage:/share
+      - /volume1/backups-k8s-prod-s3:/share
       - /volume1/docker/s3-storage/iam:/iam
     cap_drop:
       - ALL
