@@ -99,6 +99,14 @@ ssh kelchm@HOST 'sudo -n docker inspect --format "{{.Config.Image}} {{json .Stat
 
 Use `/usr/local/bin/docker` on Athena. Warnings about undecryptable secrets outside the host's scope are expected; check severity and the final job result. A newer-release notification does not change the pin.
 
+After `spark-1` passes the takeover checks above, archive its legacy `/opt/doco-cd/compose.override.yaml` poll override so a later apply without `-f` cannot silently load it. Inspect the file first and confirm it is the old `spark-1` poll override; stop if it contains other local changes. Keep the archive for rollback; numbered backups preserve any earlier archive.
+
+```sh
+ssh kelchm@10.32.21.31 'set -e; cd /opt/doco-cd; if [ -f compose.override.yaml ]; then sudo -n mv --backup=numbered compose.override.yaml compose.override.yaml.pre-self-update; fi'
+```
+
+Continue to use the explicit Compose files and required `SPARK_HOST` when applying manually. Archiving the legacy override does not change the running container.
+
 After migration, a normal Renovate image PR triggers self-update. Read its release notes and verify handover. The local Compose copies are for bootstrap/recovery and are not rewritten by doco-cd; refresh them from a known-good Git revision before a later manual apply. Git and the running container's labels are authoritative.
 
 The native health gate checks the HTTP health endpoint and Docker API access, not successful repository polling or deployment. A successor with a broken Git/deployment path can pass health and remain running; verify the post-handover polls and fix or recover that configuration explicitly.
