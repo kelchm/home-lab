@@ -1,0 +1,48 @@
+{
+  "kit_repository": "MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold",
+  "kit_revision": "be3ed857ab1055ca47b36134d22691f00f2bb94a",
+  "engine_repository": "ashhart/TensorFold",
+  "engine_revision": "db281878ddb836fd0df510d8771ecb7e0fe47d26",
+  "engine_branch": "zig-flashnext",
+  "upstream_patch_count": 9,
+  "upstream_patch_hash": "f3e1300f4f62",
+  "image": "ghcr.io/miaai-lab/qwen3.8-flash-dual-dgx-sparks-tensorfold@sha256:e188128ddabdc67ac02c05781f5c0c6b348db5f050cac297861d82b7f086e18c",
+  "image_id": "sha256:5eb5d4d384773543109baa26783fc6ea38ad619dff330f01672e05c01721cfb0",
+  "server_patches": [
+    {
+      "file": "patches/0010-models-context-length.patch",
+      "repository": "ashhart/TensorFold",
+      "base": "041d14a94e951834470fd514ed33e65b8be1059a",
+      "commit": "51ad073feadd81d04809edf8f0822cc5380a832c",
+      "path": "zig/src/server/status_routes.zig"
+    },
+    {
+      "file": "patches/0011-models-reply-budget-efforts.patch",
+      "repository": "kelchm/TensorFold",
+      "base": "0efbd44755b07b1bffb7a51c010992fe11a6142f",
+      "commit": "0564977a31c77d0720a9c9622dd54f6e06c86baa",
+      "path": "zig/src/server/status_routes.zig"
+    }
+  ],
+  "build": {
+    "base_image": "ubuntu:24.04@sha256:534baea6a22c03a63003dbc8dbe78fe34bc0d7e595d9a9dc9834884ff530eb55",
+    "zig_version": "0.17.0",
+    "zig_sha256": "9e8d11661d4ae3bd57702a3832781e23ad151dde5798e16a5ccd503f65234ff8",
+    "zig_target": "aarch64-linux-gnu.2.39",
+    "zig_cpu": "cortex_x925+aes-mte-perfmon+sha2+sha3+sm4-spe",
+    "kit_patches_sha256": "9d1458d2ea3a14441d870e690657129fce4173bda12d85888df579fa5ab03243",
+    "fatbin_layer": "sha256:b75cd6a6d6c59b3020947b108872a1b071960200d135a39e8be8d210076ff1aa",
+    "published_binary_sha256": "24a7bda5d257a9ddc7af77d7a12baa6c274bce76abe493e19767292644f0b200"
+  },
+  "binary_sha256": "3dea815d68f23aa27db9a0f1bfb88b644821e5fe4c642d02e4616f4998b84d5a",
+  "mod_files": {
+    "prepare.py": "1ababff5bde13f9718e7959142303c0c3c075a5c90574ac21beab51a76bcd8ef",
+    "run.sh": "f5335e737511e4d1f3b75f22c1e83e56255d742a46ff512695c3b576881815df",
+    "serve.py": "4b2bc4223157ba53f7aa0142f99b9f81e542d3ee293712eff3d44fadc8388f0e",
+    "readiness.py": "506577b9c6ab7ca5747e485a9e6df85325b198437ba66ada9625ee24ffea44c5",
+    "build/Dockerfile": "289e4183c70bc6ff674424fa98eaa80b88d2f52b320e122dbc9e75690ae55211",
+    "build/build.sh": "98c97a9b5d5e92e555b2584cb950e84792d1b8481c1d85b1afd582a1edc3555a",
+    "patches/0010-models-context-length.patch": "18cf9c302d6bf50516b2cfed4da69527cfa9f16717e5bbbf366e8e330138e766",
+    "patches/0011-models-reply-budget-efforts.patch": "561f7f3af88b9f475744963b02ef20497e6f2aaf7fb15328728874e3f432e6bd"
+  }
+}

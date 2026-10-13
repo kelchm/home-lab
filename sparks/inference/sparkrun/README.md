@@ -463,7 +463,7 @@ The first v1.3 native launch passed both-host idle/10GbE checks, then aborted du
 
 ## Qwen3.8-Flash-Next on Mia's Zig-engine kit
 
-The `mia-tensorfold-qwen38fn-tp2/` directory holds two profiles for Mia's [Qwen3.8-Flash-Next two-Spark kit](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/blob/be3ed857ab1055ca47b36134d22691f00f2bb94a/README.md), v1.1 of October 8. They are a different model, engine and API name from the GLM profiles above, not an upgrade of them: the kit serves text through TensorFold's Zig engine, `tensorfold-native`; a Python helper on rank 0 decodes pictures and video and runs the checkpoint's vision tower on the GPU. Both were staged from source and registry evidence. The NVFP4 profile booted on October 8, replacing GLM v1.10, which was stopped idle with its own recipe. The [evaluation](#october-8-nvfp4-evaluation) run against it ended with a request stalled on the two-rank control link and both engine processes gone. It was left down until the operator requested recovery at 23:11 EDT; the same pinned recipe is now serving again after readiness and a short LAN reply passed. A [continuation](#october-9-thinking-and-agent-continuation) on October 9 ran a thinking soak, an OpenCode accounting session and the agent gate on that instance with short prompts only; the window near 1M remains unqualified. The INT4-AR profile has not booted and its weights are not on the Sparks.
+The `mia-tensorfold-qwen38fn-tp2/` directory holds two profiles for Mia's [Qwen3.8-Flash-Next two-Spark kit](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/blob/be3ed857ab1055ca47b36134d22691f00f2bb94a/README.md), v1.1 of October 8. They are a different model, engine and API name from the GLM profiles above, not an upgrade of them: the kit serves text through TensorFold's Zig engine, `tensorfold-native`; a Python helper on rank 0 decodes pictures and video and runs the checkpoint's vision tower on the GPU. Both were staged from source and registry evidence. The NVFP4 profile booted on October 8, replacing GLM v1.10, which was stopped idle with its own recipe. The [evaluation](#october-8-nvfp4-evaluation) run against it ended with a request stalled on the two-rank control link and both engine processes gone. It was left down until the operator requested recovery at 23:11 EDT; the same pinned recipe is now serving again after readiness and a short LAN reply passed. A [continuation](#october-9-thinking-and-agent-continuation) on October 9 ran a thinking soak, an OpenCode accounting session and the agent gate on that instance with short prompts only; the window near 1M remains unqualified. The INT4-AR profile has not booted and its weights are not on the Sparks. A third file, the [model discovery variant](#model-discovery-variant), is the NVFP4 profile with a locally patched server binary; it is staged and has not booted.
 
 First NVFP4 boot, October 8: with 117/116 GiB available on head/worker, the SparkRun dry run and launch passed. The weights downloaded in 28 minutes and synchronized to both caches. The vision helper was ready in 13.7 s, inside the 120 s rendezvous gate; the ranks agreed their settings, joined NCCL and opened the RoCE all-gather on two ports; the server reported loading in 91.0 s and answered HTTP 95 s after container start. It sized 30.99 GiB of sequence memory with 10 GiB kept free, above the 26.5 GiB upstream publishes for this quant. The readiness hook passed with 16 lanes reported and all 16 smoke replies correct. Afterwards 42/45 GiB was available and both management-link carrier counters were unchanged. Rank 0 listened for rank 1 on the management address, so the control link is not on the CX7 fabric. Through the workstation's OpenCode a plain reply and a file-read tool turn both completed, the second request reusing 10,530 of 10,610 prompt tokens. This paragraph is the boot and smoke result only; the measurements made on this instance afterwards are under [October 8 NVFP4 evaluation](#october-8-nvfp4-evaluation). Log: `~/sparkrun/results/qwen38fn-v1.1/first-boot-nvfp4.log` on the head.
 
@@ -514,6 +514,113 @@ sparkrun stop "$qwen_recipe" --cluster sparks
 ```
 
 A first boot is a memory-fit and fabric check under the same abort rules as the GLM trials before any timing counts. One transport defect is open upstream in v1.1: a long record on the two-rank control link can deadlock, found with a 262,143-token prompt ([upstream #3](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/3), fix unmerged in [PR #4](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/pull/4)), so treat a stalled long prompt as that until it is ruled out. The October 8 evaluation ended on a stall of this shape at 999,874 tokens, after 261,902 and 524,135 tokens had completed. Clients need a model entry for the profile's API name. The workstation's OpenCode `spark` provider lists both Qwen names with a 1,048,576 context and 32,000 output limit, the same endpoint and timeouts as the GLM entry below, and no reasoning variants; the configuration shown below names only GLM. The kit's own [checks](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/blob/be3ed857ab1055ca47b36134d22691f00f2bb94a/tools) (`exact.py`, `toolcheck.py`, `prompt_reuse.py`, `context_boundary.py`, `needle.py`, `long_context.py`) talk to the running server with the standard library and are the natural first gate. The first four passed against the NVFP4 instance on October 8, and the retrieval cases there reuse `long_context.py`'s needle builder and scorer. The gates in this directory default to the GLM API name and tokenizer: `acceptance.py` passed with `--model Qwen3.8-Flash-Next`, the agent gate passed its five applicable sections on [October 9](#october-9-thinking-and-agent-continuation) with the same flag and no tokenizer argument, and the long-session client has not been run against this server.
+
+### Model discovery variant
+
+`qwen38fn-nvfp4-tp2-mia-tf-v1.1-discovery-nvidia-1m` is the NVFP4 profile with one file replaced inside the same pinned image: `tensorfold-native`, rebuilt so `GET /v1/models` reports the request window, the default reply budget and the reasoning efforts. It exists so a client can configure itself from the server instead of a hand-written per-model table. It is a local patch awaiting an upstream decision, staged and not yet booted: half of it is upstream's own change and half is an unposted draft. The v1.1 profile and mod are unchanged and are the rollback.
+
+The [mod](mods/mia-tensorfold-qwen38fn-v1.1-discovery/) adds two patches to `zig/src/server/status_routes.zig`, on top of the kit's nine, and nothing else in the engine changes:
+
+| Patch | Source | Adds |
+| --- | --- | --- |
+| `0010-models-context-length.patch` | [`ashhart/TensorFold@51ad073f`](https://github.com/ashhart/TensorFold/commit/51ad073feadd81d04809edf8f0822cc5380a832c), upstream PR #483, released in 1.0.3 | `context_length`, `max_model_len` |
+| `0011-models-reply-budget-efforts.patch` | [`kelchm/TensorFold@0564977a`](https://github.com/kelchm/TensorFold/commit/0564977a31c77d0720a9c9622dd54f6e06c86baa), branch `models-reply-budget-efforts`, a draft not proposed upstream | `default_max_tokens`, `reasoning` |
+
+Each is that commit's change to the one source file; the upstream test fixtures and README text are left out. `upstream.lock.json` pins both commits and the checksum of every file in the mod. To move to another draft commit, change its `commit` in the lock, then run `prepare.py --refresh ~/Development/kelchm/TensorFold` to rewrite the patch and `build/build.sh --record` to rebuild and record the binary.
+
+Expected entry on this profile:
+
+```json
+{"id": "Qwen3.8-Flash-Next", "object": "model", "created": 0, "owned_by": "tensorfold",
+ "context_length": 1048576, "max_model_len": 1048576, "default_max_tokens": 32768,
+ "reasoning": {"default_enabled": true,
+               "supported_efforts": ["xhigh", "medium", "low", "none"],
+               "effort_map": {"none": "none", "minimal": "low", "low": "low", "medium": "medium", "high": "xhigh", "xhigh": "xhigh", "max": "xhigh"}}}
+```
+
+`created` is the time of the request. `reasoning.default_effort` appears only when the server is started with `--reasoning-effort`, which this profile does not do.
+
+What a client must not read into these fields:
+
+- `context_length` is the configured window, not a qualified one. The [October 8 evaluation](#october-8-nvfp4-evaluation) completed 524,135 prompt tokens and stalled both ranks at 999,874, and nothing between has been tried, so the ceiling a client can rely on is below 1,048,576 by an unmeasured amount. Admission itself allows the whole window on this release: v1.0 counted the draft window against `--context`, v1.1 fixed that, and `context_boundary.py` passed here. The patch has no setting to advertise less; a client that wants a margin applies its own.
+- `default_max_tokens` is what a request gets when it sends no `max_tokens`, clamped to the room left. Sent back as an explicit `max_tokens` on a nearly full window it is refused with HTTP 400, so a client should omit the field rather than echo this value.
+- The entry lists no input modalities. Vision and video on this server come from the kit's `0009-vision-python.patch`, which the discovery fields do not describe.
+- The reasoning defaults describe `/v1/chat/completions` and `/v1/responses`. Raw `/v1/completions` and Anthropic `/v1/messages` keep their own thinking defaults.
+
+#### Build
+
+The image is not rebuilt. [`build/build.sh`](mods/mia-tensorfold-qwen38fn-v1.1-discovery/build/build.sh) compiles `tensorfold-native` alone on any linux/arm64 Docker daemon, with no GPU, no `nvcc` and no NVIDIA base image, from pinned inputs: Ubuntu 24.04 by digest, Zig 0.17.0 by the kit's checksum, engine `db281878`, the kit's nine patches at `be3ed857` by checksum, the two patches above, and the CUDA fatbins taken from the published image's own layer by digest and embedded with the engine's `-Dfatbins` option. The result goes to the git-ignored `out/tensorfold-native`, and its sha256 is in the lock. At container start [`run.sh`](mods/mia-tensorfold-qwen38fn-v1.1-discovery/run.sh) verifies the mod, refuses any image binary that is not the published `24a7bda5…`, and replaces it; a failure there fails the launch.
+
+This route was chosen over the kit's own image build because the recipe keeps the published image digest. SparkRun addresses a workload and keys its runtime cache by image, so the variant reuses the v1.1 profile's image, kernel set and CUDA cache on both hosts, and nothing is pulled or loaded. Adding a patch to the kit's build instead changes its image hash: a new 11 GiB-class image built on the head from an NVIDIA base that is not on either Spark, a Triton kernel-set compile, a copy to the worker, a different SparkRun workload and an empty image-keyed cache, all for a change to one HTTP handler.
+
+Checked on October 12, on a workstation and never on a Spark:
+
+- Both patches apply to engine `db281878` with the kit's nine patches applied, and regenerate byte for byte from the pinned commits.
+- On that tree the server unit tests pass, 53 and 17, including the five model-discovery tests, and the engine-less test server started with this profile's flags returns the entry above. [`qwen_model_discovery.py`](tests/qwen_model_discovery.py) `--completions` passed against it: all eight echoes matched. The test server's template names the same levels as Qwen's; it is not the Qwen template.
+- The full CUDA `tensorfold-native`, two-rank Flash Next engine included, compiles and links for linux/arm64 in about two minutes. A second build from an empty Docker cache produced the same `3dea815d…`.
+- The rebuilt binary contains byte for byte the same 32 of the image's 34 fatbins as the published binary does, so the GPU code is the published image's.
+
+Not established:
+
+- The rebuilt binary has never run. It needs SVE, as the published one does, and both stop with an illegal instruction on the Apple-silicon build host, so its first execution will be on a Spark.
+- It is not the published binary plus a diff. The published one was built on a Spark with the compiler's detected CPU; this one names the target explicitly, `cortex_x925` with the feature set Zig 0.17.0 derives from the Sparks' `/proc/cpuinfo` flags, against glibc 2.39. An unpatched rebuild this way did not reproduce the published bytes, so every CPU-side function is recompiled, not only the changed handler. That is why the checks after launch repeat the correctness gates and a throughput point.
+- Nothing about the real Qwen template, the two ranks or the window has been measured with it.
+
+#### Launch and rollback
+
+Merging this directory changes nothing on the Sparks. Each step below is manual and none has been run. The stop in step 5 begins the outage; with the 107 s launch measured on October 8, expect about three to five minutes without the API if the launch passes first time.
+
+1. On the workstation, confirm the binary: `python3 sparks/inference/sparkrun/mods/mia-tensorfold-qwen38fn-v1.1-discovery/prepare.py --check --require-binary`. If `out/` is missing, `build/build.sh` rebuilds it in about two minutes and fails unless the result matches the lock.
+2. Check both hosts with `task sparks:status` and the gates used for every trial here: no request in flight (`live.connections` and `live.waiting` zero in `/health`), no other GPU workload, both management links at 10GbE with carrier counters unchanged from 12 and 1,432, and nobody relying on the endpoint for the next ten minutes.
+3. Copy only the new files to the head. This does not touch the running containers, which hold their own copy of the v1.1 mod:
+
+   ```sh
+   cd sparks/inference/sparkrun
+   rsync -a --exclude __pycache__ mods/mia-tensorfold-qwen38fn-v1.1-discovery kelchm@10.32.21.31:sparkrun/recipes/glm53/mods/
+   rsync -a mia-tensorfold-qwen38fn-tp2/qwen38fn-nvfp4-tp2-mia-tf-v1.1-discovery-nvidia-1m.yaml kelchm@10.32.21.31:sparkrun/recipes/glm53/mia-tensorfold-qwen38fn-tp2/
+   rsync -a tests/qwen_model_discovery.py kelchm@10.32.21.31:sparkrun/recipes/glm53/tests/
+   ```
+
+4. On the head, verify the copy, run the binary once on a Spark CPU without a GPU or network, and dry-run the recipe. The container is a throwaway from the image already on the head; it should print the `usage: tensorfold-native` line and not `Illegal instruction`:
+
+   ```sh
+   export PATH="$HOME/.local/share/sparkrun-glm53-0310/bin:$PATH"
+   cd ~/sparkrun/recipes/glm53
+   mod="$PWD/mods/mia-tensorfold-qwen38fn-v1.1-discovery"
+   python3 "$mod/prepare.py" --check --require-binary
+   image=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["image"])' "$mod/upstream.lock.json")
+   docker run --rm --pull never --network none -v "$mod/out:/site:ro" --entrypoint /site/tensorfold-native "$image"
+   current="$PWD/mia-tensorfold-qwen38fn-tp2/qwen38fn-nvfp4-tp2-mia-tf-v1.1-nvidia-1m.yaml"
+   variant="$PWD/mia-tensorfold-qwen38fn-tp2/qwen38fn-nvfp4-tp2-mia-tf-v1.1-discovery-nvidia-1m.yaml"
+   sparkrun run "$variant" --cluster sparks --no-auto-detect --no-sync-tuning --no-follow --dry-run
+   ```
+
+5. Stop the running instance with the recipe that launched it, then confirm on both hosts that no engine process remains and at least 102 GiB is available:
+
+   ```sh
+   sparkrun stop "$current" --cluster sparks
+   ```
+
+6. Launch the variant. Its readiness hook is the v1.1 hook plus one check, that `/v1/models` reports the 1,048,576 window, so a launch that somehow served the published binary fails here:
+
+   ```sh
+   sparkrun run "$variant" --cluster sparks --no-auto-detect --no-sync-tuning --no-follow
+   ```
+
+7. Read both rank logs for the load, the NCCL join, the RoCE all-gather and the sequence-memory line, as on a first boot, and confirm each rank runs the rebuilt binary: `docker exec <container> sha256sum /opt/tensorfold/native/bin/tensorfold-native` matches `binary_sha256` in the lock on both hosts.
+
+To roll back, stop with either recipe, confirm both GPUs are free, and launch `$current` with the same flags. That starts fresh containers from the same image, whose binary is the published one; nothing is left to undo on the hosts except the copied files. Both recipes are the same workload to SparkRun, so `stop`, `logs` and `status` with either file act on whichever is running and do not say which binary it is: tell them apart by `context_length` in `/v1/models` or by the binary's sha256.
+
+#### Checks after launch
+
+On the head, from `~/sparkrun/recipes/glm53`. The first is read-only; the rest send requests:
+
+1. The entry: `python3 tests/qwen_model_discovery.py` checks `context_length` and `max_model_len` against the window, `default_max_tokens` against the recipe's 32,768 and the reasoning object's consistency, and prints the entry. Compare it with the expected entry above, `supported_efforts` order included.
+2. The echoes: `python3 tests/qwen_model_discovery.py --completions` sends eight 8-token chat requests with no `chat_template_kwargs`. One names no effort: its `tensorfold.enable_thinking` must equal `default_enabled`, and its `tensorfold.reasoning_effort` must be null, since no `default_effort` is advertised. Seven name each accepted effort: each echo must equal that effort's `effort_map` entry.
+3. Nothing else moved: repeat the gates the [October 8](#october-8-nvfp4-evaluation) and [October 9](#october-9-thinking-and-agent-continuation) records used on v1.1, with the same commands and no long prompt. That is the kit's `exact.py`, `toolcheck.py`, `prompt_reuse.py 30000 4 --other` and `context_boundary.py --context 1048576`, then `acceptance.py --model Qwen3.8-Flash-Next` and `agent_acceptance.py --model Qwen3.8-Flash-Next --require-cache` for the tools, isolation, cache, coding and cancellation sections.
+4. One throughput point, because the CPU-side code was recompiled: the one-stream and 16-stream cases of the October 8 table, against 61–63 and 313–317 tok/s.
+
+Follow-ups, not part of this variant: the v1.1 readiness hook still cannot enforce a window, because that server reports none; once these fields ship upstream and the kit moves its pin, the check added here can become the profile's normal gate and this mod can be retired. The Pi extension that motivated this ([kelchm/dotfiles#33](https://github.com/kelchm/dotfiles/pull/33)) still carries its per-model table until a server with these fields is the one running.
 
 ### October 8 NVFP4 evaluation
 
