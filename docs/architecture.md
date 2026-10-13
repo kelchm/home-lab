@@ -204,7 +204,8 @@ The storage VLAN bends the skeleton because its primary inhabitants are storage 
 | `.100-.127` | Reserved |
 | `.128/28` | k8s-prod storage-pod IPs (16 IPs) |
 | `.144/28` | Second-cluster storage-pod IPs (reserved, 16 IPs) |
-| `.160/28`, `.176/28` | Next storage-pod pools |
+| `.160/28` | k8s-prod database-pod IPs, for backups to the NAS S3 endpoint (16 IPs) |
+| `.176/28` | Next storage-pod pool |
 | `.192-.254` | Reserved |
 
 **Reading rule:** the decade decode applies to host/member IPs only. Pod-level endpoints occupy `.128/26` (`.128-.191`), sub-allocated one /28 per pool in order of need — the /28 sequence is independent of system decades, and this table is the source of truth.
@@ -231,7 +232,7 @@ API VIP is managed by the Talos `vipController` (GARP-based at the machine-confi
 ```
 10.32.25.1         gateway-storage           Router interface
 10.32.25.5         nas-storage               Synology (SFP+ interface)
-10.32.25.6         (reserved; the NAS S3 endpoint is on 10.32.20.5, which pods can reach)
+10.32.25.6         (reserved; the NAS S3 endpoint is nas-storage port 9000)
 10.32.25.7         pbs-storage               (reserved) PBS data interface
 10.32.25.8-.10     (reserved for future storage providers)
 10.32.25.11-.13    k8s-prod-{1,2,3}-storage  System 1 node NICs (2.5GbE)
@@ -389,7 +390,7 @@ hermes.home.kelch.io                10.32.21.100
 # Shared infrastructure
 nas.home.kelch.io                   10.32.20.5
 nas-storage.home.kelch.io           10.32.25.5
-s3-storage.home.kelch.io            10.32.20.5    (S3 endpoint for database backups, port 9000)
+s3-storage.home.kelch.io            10.32.25.5    (S3 endpoint for database backups, port 9000)
 gateway.home.kelch.io               10.32.1.1
 
 # Wildcard for Traefik-fronted household services
@@ -427,8 +428,8 @@ Cluster-wide values are written as literals wherever they are used, so searching
 | Service domain | `home.kelch.io` | LAN admin and household routes and the `*.home.kelch.io` certificate; see [DNS Plan](#dns-plan) |
 | Public apex | `kelch.io` | ClusterIssuer and k8s-gateway zone, Cloudflare DNS and tunnel, and the `*.kelch.io` certificate (`kelch-io-production-tls`) |
 | Timezone | `America/New_York` | Container `TZ` and CronJob `timeZone`; Longhorn RecurringJobs run in UTC ([backup runbook](runbooks/longhorn-backup-restore.md)) |
-| NAS storage address | `10.32.25.5` (`nas-storage`) | NFS PVs and the Longhorn BackupTarget; see [Storage VLAN registry](#storage-vlan-registry) |
-| NAS management address | `10.32.20.5` (`nas`) | DSM and container UIs, and the S3 endpoint for database backups (`s3-storage`, port 9000) |
+| NAS storage address | `10.32.25.5` (`nas-storage`) | NFS PVs, the Longhorn BackupTarget and the S3 endpoint for database backups (`s3-storage`, port 9000); see [Storage VLAN registry](#storage-vlan-registry) |
+| NAS management address | `10.32.20.5` (`nas`) | DSM and container UIs |
 
 Flux post-build substitution is not used. Reserve it for values that differ between deployments sharing the same manifests, such as the `-sbx` hostname suffix a second cluster would need. When it returns:
 

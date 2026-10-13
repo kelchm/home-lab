@@ -58,7 +58,7 @@ services:
     env_file:
       - traefik.sops.env
     ports:
-      - "10.32.20.5:9000:9000"
+      - "10.32.25.5:9000:9000"
     volumes:
       - /volume1/docker/s3-storage/acme:/acme
       - /volume1/docker/s3-storage/dynamic:/dynamic:ro

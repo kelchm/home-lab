@@ -182,10 +182,3 @@ spec:
               protocol: TCP
     - toEntities:
         - kube-apiserver
-    # Backup store on Athena (synology/s3-storage).
-    - toCIDR:
-        - 10.32.20.5/32
-      toPorts:
-        - ports:
-            - port: "9000"
-              protocol: TCP

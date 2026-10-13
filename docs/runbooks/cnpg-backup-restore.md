@@ -8,7 +8,7 @@ State as of 2026-10-12: **not deployed.** This describes the intended configurat
 
 | Layer | What | Where | Recovery point |
 |---|---|---|---|
-| 1 | WAL archive and daily base backup, written by the [Barman Cloud plugin](https://cloudnative-pg.io/plugin-barman-cloud/) sidecar in each database pod | versitygw on Athena, [`synology/s3-storage`](../../synology/s3-storage/README.md) | 5 minutes or better while Athena is reachable |
+| 1 | WAL archive and daily base backup, written by the [Barman Cloud plugin](https://cloudnative-pg.io/plugin-barman-cloud/) sidecar in each database pod over its storage-VLAN interface | versitygw on Athena, [`synology/s3-storage`](../../synology/s3-storage/README.md) | 5 minutes or better while Athena is reachable |
 | 2 | Kopia snapshot of that share | Backblaze B2, under the [off-site job](../../synology/offsite-backup/README.md)'s 30-day lock | Up to about a day behind layer 1 |
 | Independent | Longhorn's daily and weekly volume backups | Athena over NFS, then B2 by the same job | A day; crash-consistent; see [longhorn-backup-restore](longhorn-backup-restore.md) |
 
@@ -39,12 +39,14 @@ Rules are in [`alerts.yaml`](../../kubernetes/apps/cnpg-system/plugin-barman-clo
 ```sh
 kubectl -n <ns> get cluster <name> -o jsonpath='{range .status.conditions[*]}{.type}={.status} {.message}{"\n"}{end}'
 kubectl -n <ns> logs <pod> -c plugin-barman-cloud --tail=50 | grep -E 'ERROR|error'
-curl -sS -o /dev/null -w '%{http_code}\n' https://s3-storage.home.kelch.io:9000/   # 403 means the endpoint and certificate are fine
+# From a host on the storage VLAN, such as a PVE node; 403 means the endpoint and certificate are fine.
+curl -sS -o /dev/null -w '%{http_code}\n' https://s3-storage.home.kelch.io:9000/
 ```
 
 | Seen | Cause |
 |---|---|
 | `curl` fails or times out | Athena, the `s3-storage` project or the network path. See its [README](../../synology/s3-storage/README.md#check-on-it). |
+| `curl` works but the pod times out | The pod's storage interface. `kubectl -n <ns> get pod <pod> -o jsonpath='{.metadata.annotations.k8s\.v1\.cni\.cncf\.io/network-status}'` must list a `net1` address in `10.32.25.160/28`. |
 | `curl` reports a certificate error | Traefik did not renew the certificate. Check its log on Athena. |
 | `exit status 4` in the sidecar log within seconds, endpoint fine | Credentials or bucket ownership. Compare `backup-secret.sops.yaml` with the account on Athena. |
 | `Expected empty archive` | The Cluster is missing the `cnpg.io/skipEmptyWalArchiveCheck` annotation. |
@@ -144,6 +146,9 @@ spec:
   imageName: ghcr.io/cloudnative-pg/postgresql:17.11-system-trixie   # the source's image
   storage:
     size: 30Gi
+  inheritedMetadata:
+    annotations:
+      k8s.v1.cni.cncf.io/networks: cnpg-system/storage-network
   bootstrap:
     recovery:
       source: origin
@@ -161,6 +166,7 @@ spec:
           serverName: visionect-db-pg17
 ```
 
+- Keep the `inheritedMetadata` annotation: the recovery job reaches the store through the storage interface it adds.
 - **Give it no `plugins` entry.** A second Cluster archiving into the same `serverName` would write its own timeline into the live database's archive.
 - It reuses the source's `ObjectStore` and credentials. For `bambuddy-db` use `database: bambuddy`, `owner: bambuddy`, the 18.4 image and `serverName: bambuddy-db-pg18`.
 - CloudNativePG generates a new `<name>-app` secret and sets the owner's password to match.
@@ -193,10 +199,10 @@ Only needed if `retentionPolicy` has been removed. Run Barman's own command from
 ```sh
 kubectl -n <ns> run barman-prune --rm -it --restart=Never \
   --image=ghcr.io/cloudnative-pg/plugin-barman-cloud-sidecar:v0.15.1 \
-  --overrides='{"spec":{"containers":[{"name":"barman-prune","image":"ghcr.io/cloudnative-pg/plugin-barman-cloud-sidecar:v0.15.1","envFrom":[{"secretRef":{"name":"<name>-backup"}}],"command":["python3","-c","import os;os.environ.update(AWS_ACCESS_KEY_ID=os.environ[\"ACCESS_KEY_ID\"],AWS_SECRET_ACCESS_KEY=os.environ[\"ACCESS_SECRET_KEY\"]);os.execvp(\"barman-cloud-backup-delete\",[\"barman-cloud-backup-delete\",\"--endpoint-url\",\"https://s3-storage.home.kelch.io:9000\",\"--retention-policy\",\"RECOVERY WINDOW OF 14 DAYS\",\"--dry-run\",\"s3://k8s-prod-<name>/\",\"<serverName>\"])"]}]}}'
+  --overrides='{"metadata":{"annotations":{"k8s.v1.cni.cncf.io/networks":"cnpg-system/storage-network"}},"spec":{"containers":[{"name":"barman-prune","image":"ghcr.io/cloudnative-pg/plugin-barman-cloud-sidecar:v0.15.1","envFrom":[{"secretRef":{"name":"<name>-backup"}}],"command":["python3","-c","import os;os.environ.update(AWS_ACCESS_KEY_ID=os.environ[\"ACCESS_KEY_ID\"],AWS_SECRET_ACCESS_KEY=os.environ[\"ACCESS_SECRET_KEY\"]);os.execvp(\"barman-cloud-backup-delete\",[\"barman-cloud-backup-delete\",\"--endpoint-url\",\"https://s3-storage.home.kelch.io:9000\",\"--retention-policy\",\"RECOVERY WINDOW OF 14 DAYS\",\"--dry-run\",\"s3://k8s-prod-<name>/\",\"<serverName>\"])"]}]}}'
 ```
 
-Remove `--dry-run` once the list is right. The pod needs a network policy that allows it to reach `10.32.20.5:9000`; the database pods' policies do not select it.
+Remove `--dry-run` once the list is right.
 
 ## PostgreSQL major upgrades
 
@@ -210,6 +216,7 @@ All on 2026-10-12, on scratch clusters of PostgreSQL 17.11 holding 270 to 400 MB
 |---|---|
 | WAL archiving and base backups to versitygw, with no checksum workaround | **Drilled** |
 | The same through Traefik over TLS, with a per-database account | **Drilled**, with a private CA; the Let's Encrypt certificate is **undrilled** |
+| Reaching Athena's storage address from a database pod | **Drilled**: an instance pod and a bootstrap job pod each got a `10.32.25.160/28` address and connected to `10.32.25.5`. A backup over that interface is **undrilled**: the backup tests used an in-cluster gateway |
 | Path 1 to the latest point | **Drilled**: 200,002 rows returned, matching every commit in an archived segment |
 | Path 1 to a point in time | **Drilled**: the marker row written before the target was present and the one after it absent |
 | Path 2, rebuild into the same archive | **Drilled** twice in a row: identical row count and checksum, then archiving and a backup on the new timeline. Without the annotation it failed with `Expected empty archive` |

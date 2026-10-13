@@ -26,6 +26,10 @@ spec:
       memory: 1Gi
   monitoring:
     enablePodMonitor: true
+  # Backups go out over the storage VLAN.
+  inheritedMetadata:
+    annotations:
+      k8s.v1.cni.cncf.io/networks: cnpg-system/storage-network
   # Read only when the Cluster is created: a rebuild restores the newest backup.
   bootstrap:
     recovery:

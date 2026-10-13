@@ -10,7 +10,7 @@ State as of 2026-10-12: not deployed. Everything below is the intended configura
 
 | Thing | Value |
 |---|---|
-| Endpoint | `https://s3-storage.home.kelch.io:9000`, published on `10.32.20.5` only |
+| Endpoint | `https://s3-storage.home.kelch.io:9000`, published on `10.32.25.5` only |
 | Certificate | Let's Encrypt, default profile, issued and renewed by Traefik through Cloudflare DNS-01 |
 | Objects | `/volume1/s3-storage/data/<bucket>/<key>`, one plain file per object |
 | Object metadata | `/volume1/s3-storage/meta/<bucket>/<key>/meta/`, small files holding each object's ETag and checksum |
@@ -27,7 +27,7 @@ Buckets:
 
 versitygw is not published. Only Traefik listens, and it forwards to the gateway over the project's private network. The gateway's admin API listens on the container's loopback, so it is reachable only with `docker exec`.
 
-The endpoint is on Athena's `10.32.20.5` address, not the storage address `10.32.25.5`: pods on `k8s-prod` cannot reach the storage VLAN. Cilium masquerades pod traffic only on the node's primary interface, so a pod's packets leave the storage bridge with a pod source address that Athena cannot answer. Measured on 2026-10-12 from a pod: `10.32.20.5:5001` and `10.32.10.5:8090` connect; `10.32.25.5:2049` and `10.32.25.5:8090` time out. Backup traffic is therefore routed through the gateway router at 1 GbE.
+The endpoint is on the storage VLAN only. Pods on `k8s-prod` cannot reach that VLAN through Cilium, which masquerades pod traffic only on the node's primary interface: measured on 2026-10-12, an ordinary pod timed out on `10.32.25.5:2049` and `:8090`. The database pods therefore carry a second interface on the storage bridge, from the [`cnpg-system/storage-network`](../../kubernetes/apps/cnpg-system/plugin-barman-cloud/app/networkattachmentdefinition.yaml) attachment, with addresses in `10.32.25.160/28`. A scratch database pod attached that way connected to both ports.
 
 ## Credentials
 
@@ -59,8 +59,8 @@ The Cloudflare token needs `Zone:DNS:Edit` on `kelch.io`. Cloudflare scopes toke
    '
    ```
 
-2. Confirm nothing on Athena already listens on `10.32.20.5:9000`.
-3. Add a static record `s3-storage.home.kelch.io` → `10.32.20.5` in UniFi. Without it the name resolves to the `*.home.kelch.io` wildcard.
+2. Confirm nothing on Athena already listens on `10.32.25.5:9000`.
+3. Add a static record `s3-storage.home.kelch.io` → `10.32.25.5` in UniFi. Without it the name resolves to the `*.home.kelch.io` wildcard.
 4. Replace the placeholder values in `versitygw.sops.env` and `traefik.sops.env`, and merge. doco-cd deploys the project; Traefik requests the certificate on its first start.
 5. Create one account per database and give it its bucket. Use a new random secret for each, and put the same pair in that database's `backup-secret.sops.yaml`:
 
@@ -72,7 +72,7 @@ The Cloudflare token needs `Zone:DNS:Edit` on `kelch.io`. Cloudflare scopes toke
    admin list-buckets
    ```
 
-6. Check the endpoint from a workstation: `curl -sS -o /dev/null -w '%{http_code} %{ssl_verify_result}\n' https://s3-storage.home.kelch.io:9000/` prints `403 0`, an unsigned request refused over a verified certificate.
+6. Check the endpoint from a host on the storage VLAN, such as a PVE node: `curl -sS -o /dev/null -w '%{http_code} %{ssl_verify_result}\n' https://s3-storage.home.kelch.io:9000/` prints `403 0`, an unsigned request refused over a verified certificate.
 
 To confirm on Athena, because the scratch test ran on a 6.18 kernel and ext4:
 
