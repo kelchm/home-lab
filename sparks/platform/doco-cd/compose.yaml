@@ -1,4 +1,4 @@
-# Applied by hand on each Spark: docker compose up -d
+# Bootstrap or migrate by hand; subsequent updates are deployed by doco-cd.
 name: doco-cd
 
 services:
@@ -8,11 +8,17 @@ services:
     environment:
       TZ: America/New_York
       HTTP_PORT: "8080"
+      SELF_UPDATE_ENABLED: "true"
+      SELF_UPDATE_STRATEGY: applier
       DEPLOY_CONFIG_BASE_DIR: sparks/monitoring
       POLL_CONFIG: |
         - url: https://github.com/kelchm/home-lab.git
           reference: main
           interval: 3m
+        - url: https://github.com/kelchm/home-lab.git
+          reference: main
+          interval: 3m
+          target: ${SPARK_HOST:?}
     ports:
       - 127.0.0.1:9120:9120
     volumes:

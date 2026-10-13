@@ -2,3 +2,8 @@ name: monitoring
 working_dir: proxmox/monitoring
 prune_images: false
 reconciliation: false
+---
+name: doco-cd
+working_dir: proxmox/platform/doco-cd
+prune_images: false
+reconciliation: false

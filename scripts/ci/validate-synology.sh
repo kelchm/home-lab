@@ -51,8 +51,10 @@ if [[ -f "${DEPLOY_CONFIG}" ]]; then
         if [[ "${has_destroy}" == "true" || "${has_discovery}" == "true" ]]; then
             violation "${label}: destroy and auto_discovery are not allowed"
         fi
-        if [[ ! "${working_dir}" =~ ^synology/[^/.][^/]*$ || "${working_dir}" == synology/platform ]]; then
-            violation "${label}: working_dir must be written as synology/<project>, and <project> must not be platform"
+        if [[ "${working_dir}" == synology/platform/doco-cd && "${name}" == doco-cd ]]; then
+            : # The deployer is the only managed platform project.
+        elif [[ ! "${working_dir}" =~ ^synology/[^/.][^/]*$ || "${working_dir}" == synology/platform ]]; then
+            violation "${label}: working_dir must be synology/<project>, or synology/platform/doco-cd with name doco-cd"
             continue
         fi
 
@@ -80,6 +82,26 @@ while IFS= read -r -d '' compose_file; do
     fi
 
     managed="$(jq --arg dir "${project_dir}" 'any(.[]; .working_dir == $dir)' <<<"${targets}")"
+
+    if [[ "${project_dir}" == synology/platform/doco-cd ]] && ! jq -e '
+        .name == "doco-cd" and
+        .services["doco-cd"].environment.SELF_UPDATE_ENABLED == "true" and
+        .services["doco-cd"].environment.SELF_UPDATE_STRATEGY == "applier" and
+        .services["doco-cd"].environment.SOPS_AGE_KEY_FILE == "/run/secrets/sops_age_key" and
+        .services["doco-cd"].healthcheck.test == ["CMD", "/healthcheck"] and
+        .services["doco-cd"].restart == "unless-stopped" and
+        ([.services["doco-cd"].volumes[]? | select(
+            .type == "bind" and .source == "/var/run/docker.sock" and .target == "/var/run/docker.sock"
+        )] | length == 1) and
+        ([.services["doco-cd"].volumes[]? | select(
+            .type == "bind" and .source == "/volume1/docker/doco-cd/data" and .target == "/data" and .read_only != true
+        )] | length == 1) and
+        ([.services["doco-cd"].volumes[]? | select(
+            .type == "bind" and .source == "/volume1/docker/doco-cd/sops_age_key" and .target == "/run/secrets/sops_age_key" and .read_only == true
+        )] | length == 1)
+    ' <<<"${rendered}" >/dev/null; then
+        violation "${relative}: doco-cd must retain its project/service identity, native self-update, required binds, writable state, read-only NAS age key, healthcheck and restart policy"
+    fi
 
     # doco-cd serves repository files from a per-revision checkout: data written
     # there is lost on the next revision, and every deployment recreates the

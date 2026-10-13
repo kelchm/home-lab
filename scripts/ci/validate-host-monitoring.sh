@@ -16,8 +16,8 @@ function violation() {
 
 function validate_deployment() {
     local config="$1" deployment="$2"
-    local name working_dir label rendered image
-    local -a compose_args=() mounts=()
+    local name working_dir label rendered image spark_target="" polls entry
+    local -a compose_args=() compose_environment=() mounts=()
 
     name="$(jq -r '.name // ""' <<<"${deployment}")"
     working_dir="$(jq -r '.working_dir // ""' <<<"${deployment}")"
@@ -36,12 +36,57 @@ function validate_deployment() {
         compose_args+=(-f "${ROOT_DIR}/${working_dir}/${file}")
     done < <(jq -r '(.compose_files // ["compose.yaml"])[]' <<<"${deployment}")
 
-    if ! rendered="$(docker compose "${compose_args[@]}" config --format json)"; then
+    while IFS= read -r -d '' entry; do
+        compose_environment+=("${entry}")
+    done < <(jq -j '(.environment // {}) | to_entries[] | .key + "=" + (.value | tostring) + "\u0000"' <<<"${deployment}")
+
+    if ! rendered="$(env -u SPARK_HOST "${compose_environment[@]}" docker compose "${compose_args[@]}" config --format json)"; then
         violation "${label}: Compose render failed"
         return
     fi
     if [[ "$(jq -r '.name' <<<"${rendered}")" != "${name}" ]]; then
         violation "${label}: Compose project name differs from the deployment name"
+    fi
+
+    if [[ "${name}" == doco-cd && "${config}" == "${ROOT_DIR}/sparks/monitoring/.doco-cd.yml" ]]; then
+        violation "${label}: declare the deployer only in the per-Spark targets, never the shared target"
+    fi
+    if [[ "${name}" == doco-cd && "${working_dir}" == sparks/platform/doco-cd ]]; then
+        case "${config##*/}" in
+            .doco-cd.spark-1.yml) spark_target=spark-1 ;;
+            .doco-cd.spark-2.yml) spark_target=spark-2 ;;
+        esac
+        if [[ -n "${spark_target}" ]]; then
+            if ! polls="$(jq -r '.services["doco-cd"].environment.POLL_CONFIG // ""' <<<"${rendered}" | yq -o=json -I=0 '.')" || ! jq -e --arg target "${spark_target}" '
+                type == "array" and
+                any(.[]; (.target // "") == "") and
+                any(.[]; .target == $target) and
+                all(.[]; (.target // "") == "" or .target == $target)
+            ' <<<"${polls}" >/dev/null; then
+                violation "${label}: the deployer must retain the shared poll and its own ${spark_target} poll, without polling the other Spark target"
+            fi
+        fi
+    fi
+    if [[ "${name}" == doco-cd && "${working_dir}" == proxmox/platform/doco-cd ]] && ! jq -e '
+        .services["doco-cd"].network_mode == "host" and
+        ((.services["doco-cd"].security_opt // []) | index("apparmor=unconfined") != null)
+    ' <<<"${rendered}" >/dev/null; then
+        violation "${label}: PVE doco-cd must retain host networking and apparmor=unconfined"
+    fi
+
+    if [[ "${name}" == doco-cd ]] && ! jq -e '
+        .services["doco-cd"].environment.SELF_UPDATE_ENABLED == "true" and
+        .services["doco-cd"].environment.SELF_UPDATE_STRATEGY == "applier" and
+        .services["doco-cd"].healthcheck.test == ["CMD", "/healthcheck"] and
+        .services["doco-cd"].restart == "unless-stopped" and
+        ([.services["doco-cd"].volumes[]? | select(
+            .type == "bind" and .source == "/var/run/docker.sock" and .target == "/var/run/docker.sock"
+        )] | length == 1) and
+        ([.services["doco-cd"].volumes[]? | select(
+            .type == "bind" and .source == "/var/lib/doco-cd" and .target == "/data" and .read_only != true
+        )] | length == 1)
+    ' <<<"${rendered}" >/dev/null; then
+        violation "${label}: doco-cd must retain native self-update, required binds, writable state, healthcheck and restart policy"
     fi
 
     image="$(jq -r '.services.vmagent.image // ""' <<<"${rendered}")"
@@ -76,16 +121,6 @@ while IFS= read -r config; do
         validate_deployment "${config}" "${deployment}"
     done <<<"${deployments}"
 done <<<"${configs}"
-
-for deployer in sparks proxmox; do
-    if ! docker compose -f "${ROOT_DIR}/${deployer}/platform/doco-cd/compose.yaml" config --quiet; then
-        violation "${deployer}/platform/doco-cd/compose.yaml: Compose render failed"
-    fi
-done
-
-if ! docker compose -f "${ROOT_DIR}/sparks/platform/doco-cd/compose.yaml" -f "${ROOT_DIR}/sparks/platform/doco-cd/compose.spark-1.yaml" config --quiet; then
-    violation "sparks/platform/doco-cd/compose.spark-1.yaml: Compose render failed"
-fi
 
 if ((violations > 0)); then
     echo "host monitoring validation failed with ${violations} violation(s)" >&2

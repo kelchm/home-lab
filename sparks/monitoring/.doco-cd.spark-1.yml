@@ -2,3 +2,10 @@ name: sparkdash
 working_dir: sparks/monitoring/sparkdash
 prune_images: false
 reconciliation: false
+---
+name: doco-cd
+working_dir: sparks/platform/doco-cd
+environment:
+  SPARK_HOST: spark-1
+prune_images: false
+reconciliation: false

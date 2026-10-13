@@ -4,13 +4,13 @@ Compose projects that run directly on the Synology NAS (`Athena`), outside Kuber
 
 | Project | Purpose | Deployment |
 |---|---|---|
-| [`platform/doco-cd`](platform/doco-cd/) | Git-driven deployer for the projects in `.doco-cd.yml` | Manual apply over SSH |
+| [`platform/doco-cd`](platform/doco-cd/) | Git-driven deployer for the projects in `.doco-cd.yml` | Manual bootstrap/migration, then native self-update |
 | [`doco-cd-canary`](doco-cd-canary/) | Disposable canary for the deployer's acceptance checks | doco-cd |
 | [`netbootxyz`](netbootxyz/) | PXE menus and local boot assets for lab hosts | doco-cd |
 | [`modelkeep`](modelkeep/) | Hugging Face pull-through mirror for LAN clients | doco-cd |
 | [`offsite-backup`](offsite-backup/) | Daily Kopia snapshot of the backup shares to an Object Lock bucket | doco-cd |
 
-doco-cd has run on Athena since 2026-09-26; the remaining acceptance checks are tracked in [home-lab#379](https://github.com/kelchm/home-lab/issues/379). A project that doco-cd does not deploy must still have its running Compose definition match its directory, and any out-of-band DSM edit must be brought back to Git.
+doco-cd has run on Athena since 2026-09-26; the remaining workload acceptance checks are tracked in [home-lab#379](https://github.com/kelchm/home-lab/issues/379). Its current version, native self-update migration status, and handover checks are maintained in the [self-update runbook](../docs/runbooks/doco-cd-self-update.md). A project that doco-cd does not deploy must still have its running Compose definition match its directory, and any out-of-band DSM edit must be brought back to Git.
 
 ## How deployment works
 
@@ -18,7 +18,7 @@ doco-cd has run on Athena since 2026-09-26; the remaining acceptance checks are 
 - Only declared projects are managed. Auto-discovery and `destroy` are disabled and CI rejects them, so removing a target from `.doco-cd.yml` or deleting its directory leaves its containers running; removing a project is a manual `docker compose -p <name> down`.
 - doco-cd acts only through deployments. Event-driven reconciliation is off, and Docker restart policies keep services running and bring them back after a NAS reboot. When doco-cd is down, workloads keep running and merged changes wait until it returns.
 - On each poll, doco-cd also redeploys a declared project whose long-running services are stopped or missing. Stop doco-cd before intervening by hand; see [break-glass](#break-glass-apply-over-ssh).
-- doco-cd never deploys itself. Its own project under `platform/` is applied manually.
+- After migration, doco-cd deploys its own `platform/doco-cd` project using a temporary applier that checks health and restores a failed replacement. Manual apply remains the bootstrap and recovery path; see [self-update](../docs/runbooks/doco-cd-self-update.md).
 - `prune_images: false` keeps previous images on the NAS, so a revert does not download image layers again.
 
 DSM Container Manager remains the inspection interface. It is not a second source of truth.
@@ -29,7 +29,7 @@ DSM Container Manager remains the inspection interface. It is not a second sourc
 
 - A `compose.yaml` with a top-level `name`. A target's `.doco-cd.yml` name must match it, so a break-glass apply from the same file addresses the same project.
 - Every image pinned by tag and digest, and no `build:`. Renovate proposes updates; merging one deploys it.
-- Targets are `synology/<project>` directories outside `platform/`, without `destroy` or `auto_discovery`.
+- Targets are `synology/<project>` directories outside `platform/`, with the sole platform exception `synology/platform/doco-cd` named `doco-cd`. `destroy` and `auto_discovery` remain forbidden.
 - In declared targets, repository paths are mounted only read-only, and only into one-shot services: `restart: "no"` plus the label `cd.doco.deployment.one_shot: "true"`.
 
 The last rule exists because doco-cd deploys from a read-only export of each commit. Data written under a relative path lands in that export and is lost with the next revision, and every deployment gives the export a new path, which recreates any container that mounts it ([kimdre/doco-cd#1911](https://github.com/kimdre/doco-cd/issues/1911)). Therefore:

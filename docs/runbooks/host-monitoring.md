@@ -6,6 +6,8 @@ Metrics from the three PVE nodes and the two DGX Sparks. The lab's metrics backe
 
 All five hosts are enrolled and the Proxmox API exporter is running, since 2026-10-04.
 
+The deployer definitions enable native self-update. Its verified version, migration status, manual apply, and handover checks are maintained in the [self-update runbook](doco-cd-self-update.md).
+
 Verified on the hosts that day:
 
 - **Ingest:** from both Sparks and a PVE node, the endpoint resolves, presents a valid certificate, and refuses requests with no token, a wrong token, or a query path. Each host's series arrive with its own `instance` and `platform`.
@@ -29,29 +31,29 @@ Each host has one `VMUser` in [metrics-ingest](../../kubernetes/apps/observabili
 
 ## Enroll a Spark
 
-Run from a workstation that holds the cluster age key. Do one node, verify it, then do the next. Substitute the node name and its key (`SPARK_1_TOKEN`, `SPARK_2_TOKEN`).
+Run from a checkout of `main` on a workstation that holds the cluster age key. Do one node, verify it, then do the next. Substitute its address (`10.32.21.31` or `10.32.21.32`) and token key (`SPARK_1_TOKEN`, `SPARK_2_TOKEN`). On `spark-1`, prepare the [sparkDash host state](../../sparks/monitoring/README.md#sparkdash) before starting the deployer.
 
 ```sh
 sops decrypt --extract '["stringData"]["SPARK_1_TOKEN"]' kubernetes/apps/observability/metrics-ingest/app/tokens.sops.yaml \
-  | ssh kelchm@spark-1 'sudo install -d -m 0755 /etc/monitoring && sudo install -m 0600 /dev/stdin /etc/monitoring/token'
-scp sparks/platform/doco-cd/compose.yaml kelchm@spark-1:/tmp/doco-cd.yaml
-ssh kelchm@spark-1 'sudo install -D -m 0644 /tmp/doco-cd.yaml /opt/doco-cd/compose.yaml && cd /opt/doco-cd && sudo docker compose up -d'
+  | ssh kelchm@10.32.21.31 'sudo install -d -m 0755 /etc/monitoring && sudo install -m 0600 /dev/stdin /etc/monitoring/token'
 ```
+
+Then use the matching [manual bootstrap/migration apply](doco-cd-self-update.md#bootstrap-or-migrate). Both Sparks use one deployer definition; supply the correct `SPARK_HOST` on a manual apply. Git self targets supply it for native updates, and a missing identity fails interpolation.
 
 doco-cd deploys the `monitoring` and `monitoring-gpu` projects within three minutes. The GPU exporter needs NVIDIA CDI devices in Docker (`nvidia-ctk cdi list` shows `nvidia.com/gpu=all`); if it cannot start, the other collectors are unaffected and `HostCollectorDown` names it. The inference container is not touched. Whichever Spark runs SparkRun's head rank scrapes the serving endpoint every second and labels the series with the model, runtime and recipe SparkRun reports; see [Spark monitoring](../../sparks/monitoring/README.md#inference). Stop the workstation pilot once those samples arrive so the two do not overlap.
 
-`spark-1` also runs the sparkDash dashboard as a third project, from a second poll that only its deployer has; its host state is listed under [sparkDash](../../sparks/monitoring/README.md#sparkdash).
+`spark-1`'s second poll deploys sparkDash and its own two-file doco-cd stack. `spark-2`'s second poll deploys its base doco-cd stack. Subsequent deployer updates use native self-update; verification and recovery are in the [self-update runbook](doco-cd-self-update.md).
 
 ## PVE node
 
 Docker's default networking drops traffic between bridged guests the moment the daemon starts. Write the daemon configuration **before** installing the package, and enroll one node first.
 
 ```sh
-scp proxmox/platform/doco-cd/daemon.json proxmox/platform/doco-cd/compose.yaml kelchm@pve-sbx-3:/tmp/
-ssh kelchm@pve-sbx-3 'sudo install -D -m 0644 /tmp/daemon.json /etc/docker/daemon.json && sudo apt-get install --no-install-recommends -y docker.io docker-cli docker-compose'
+scp proxmox/platform/doco-cd/daemon.json kelchm@10.32.20.23:/tmp/
+ssh kelchm@10.32.20.23 'sudo install -D -m 0644 /tmp/daemon.json /etc/docker/daemon.json && sudo apt-get install --no-install-recommends -y docker.io docker-cli docker-compose'
 ```
 
-Before going further, confirm on the node that guests still pass traffic, `cat /proc/sys/net/ipv4/ip_forward`, `sudo iptables -S FORWARD` and `sudo nft list ruleset` are unchanged from before the install, `lsmod` shows no `br_netfilter`, and `sudo docker network ls` shows no `bridge` network. If any check fails, `sudo apt-get purge docker.io` and stop. Then install the token and deployer as for a Spark, using the node's `PVE_SBX_N_TOKEN` key and `/tmp/compose.yaml`.
+Before going further, confirm on the node that guests still pass traffic, `cat /proc/sys/net/ipv4/ip_forward`, `sudo iptables -S FORWARD` and `sudo nft list ruleset` are unchanged from before the install, `lsmod` shows no `br_netfilter`, and `sudo docker network ls` shows no `bridge` network. If any check fails, `sudo apt-get purge docker.io` and stop. Then install the token as for a Spark, using the node's `PVE_SBX_N_TOKEN` key and PVE address. Apply the PVE deployer with the [bootstrap/migration procedure](doco-cd-self-update.md#bootstrap-or-migrate).
 
 The deployer runs without Docker's default AppArmor profile: on PVE's kernel that profile denies Unix sockets, including the Docker socket. Containers on a PVE node use host networking only. doco-cd has no bind-address setting, so its health and metrics ports (8080, 9120) listen on every interface of the node; its webhook and API stay disabled without a secret.
 
