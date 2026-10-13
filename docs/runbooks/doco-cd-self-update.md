@@ -7,8 +7,9 @@ Verified:
 - On 2026-10-11, all six live hosts passed the manual 0.125.1 rollout: healthy `/healthcheck`, successful repository polls, and unchanged workloads.
 - Disposable ARM64 rehearsals with pinned 0.125.1 passed takeover, configuration updates, failed-healthcheck rollback and suppression after successful takeover, corrected-revision recovery, and stopping the first-takeover retry loop by removing the self target.
 - On 2026-10-12, both Spark identities passed native interpolation through takeover and later updates without a host identity file or runtime `SPARK_HOST` variable. Both polls succeeded and the canary stayed unchanged. A local self-disable override on the `spark-2` fixture then kept the deployer healthy and delivered a deliberate shared-poll workload update while pausing self-replacement.
+- On 2026-10-12 EDT, all six live hosts completed native applier takeover from `c70c7b1f` on 0.125.1: healthy `/healthcheck` probes, at least two successful polls after handover finalization, no deployer errors, no active helper or open journal, and unchanged workload containers. Both Sparks retained their shared and host-specific polls; PVE retained host networking, AppArmor settings, and daemon configuration. Spark 1's legacy poll override was checked against Git and archived after acceptance.
 
-Live native migration is pending in [#815](https://github.com/kelchm/home-lab/issues/815). PVE/DSM helper behavior, the project-network recreation path, a cross-version handover, and manual interruption of an unfinished journal remain unverified. The procedures below describe intended behavior and live acceptance still to perform.
+Per-host live acceptance evidence is recorded in [#815](https://github.com/kelchm/home-lab/issues/815). PVE and DSM helper behavior is now verified. No host selected the project-network recreation path, and the existing Spark/NAS project networks retained their IDs. That path, a cross-version handover, and manual interruption of an unfinished journal remain unverified.
 
 ## Native behavior
 
@@ -80,7 +81,7 @@ Always name `compose.yaml` explicitly on a Spark. This ignores older bootstrap o
 
 For Athena, use [Bootstrap or migrate](../../synology/platform/doco-cd/README.md#bootstrap-or-migrate). Confirm that the data directory, age-key file, and Docker socket already exist; DSM refuses missing bind sources. Preserve existing state and the key.
 
-The manual apply enables self-update. Allow the first repository poll to take over the stack from Git. The applier will recreate doco-cd even when its image is unchanged. Use `up -d` here: `up --wait` can fail with `No such container` when takeover replaces the container that host Compose is waiting on. Capture the manually applied predecessor's logs during takeover, including `self-update: strategy selected` and its `reasons`, before it is removed; attach `docker logs --follow doco-cd` immediately after the apply and retain the output. Verify the final container after handover; the manual apply's first healthy result alone does not prove takeover.
+The manual apply enables self-update. Allow the first repository poll to take over the stack from Git. The applier will recreate doco-cd even when its image is unchanged. Use `up -d` here: `up --wait` can fail with `No such container` when takeover replaces the container that host Compose is waiting on. Capture the manually applied predecessor's logs during takeover, including `self-update: strategy selected` and its `reasons`, before it is removed; attach `sudo -n docker logs --follow --timestamps doco-cd` immediately after the apply and retain the output (on Athena, use `sudo -n /usr/local/bin/docker logs --follow --timestamps doco-cd`). Verify the final container after handover; the manual apply's first healthy result alone does not prove takeover.
 
 ## Acceptance and routine updates
 
@@ -89,7 +90,7 @@ On each migrated host, verify:
 - The final container runs the image pinned on `main`, `/healthcheck` exits 0, and Docker reports `healthy` with no failing streak.
 - Its labels include `cd.doco.deployment.name=doco-cd` and the migration revision in `cd.doco.deployment.target.sha`, proving takeover from Git.
 - Retain the takeover strategy and reasons from the predecessor log. `a project network must be recreated` identifies the unrehearsed network-recreation path; on Sparks/Athena, compare the final network labels with the baseline and confirm helper completion.
-- Logs show `self-update finalised` and a successful poll afterwards. Check the following scheduled poll too. Both the shared and `spark-1` polls must succeed on `spark-1`.
+- Logs show `self-update finalised` followed by at least two successful completed polls. An initial poll can finish before handover finalization, so count only later polls. On each Spark, both the shared and host-specific polls must pass twice after finalization.
 - Workload IDs, images, start times, restart counts, and revision labels match the baseline when their Git definitions have not changed. Completed one-shot services retain their prior state.
 - The temporary helper has finished, one deployer remains running, and no open handover record remains (see [Recovery](#recovery)).
 
