@@ -62,8 +62,9 @@ How long there is: `visionect-db` writes about 100 MB of WAL a day and `bambuddy
 `CNPGVolumeFillingUp`: less than half the volume is free. PostgreSQL stops accepting writes when it fills.
 
 1. If `CNPGWALArchivingStalled` is also firing, fix the store. The WAL clears itself once it is archived.
-2. If the store cannot be fixed in time, [switch the archiver off](#emergency-switch-the-archiver-off).
-3. If archiving is healthy, the data has grown. Raise `storage.size` in the Cluster; Longhorn expands the volume online and it cannot be shrunk.
+2. If the store will not be back within a day, raise `storage.size` in the Cluster. Longhorn expands the volume online with no restart, and it cannot be shrunk afterwards.
+3. If the volume cannot be grown, [switch the archiver off](#emergency-switch-the-archiver-off).
+4. If archiving is healthy, the data has grown. Raise `storage.size` as in step 2.
 
 ### No completed backup
 
@@ -105,7 +106,7 @@ Note the time of the change in UTC. A point-in-time restore to just before it ne
 
 ## Emergency: switch the archiver off
 
-Use this only when a database volume is about to fill and the store cannot be brought back in time.
+Use this only when `CNPGVolumeFillingUp` is firing, the store cannot be brought back, and the volume cannot be grown. Start while there is room: the restart in step 1 can take as long as CloudNativePG's `stopDelay`, 30 minutes, and WAL keeps collecting until it finishes. At the worst-case rate of 4.6 GB a day that is about 100 MB.
 
 1. Set `enabled: false` on the plugin entry in the Cluster and push to `main`:
 
@@ -116,7 +117,7 @@ Use this only when a database volume is about to fill and the store cannot be br
        isWALArchiver: true
    ```
 
-   CloudNativePG restarts the pod without the sidecar. Expect the restart to take from one to several minutes with the database down, for the reason given under [WAL archiving is stalled](#wal-archiving-is-stalled).
+   CloudNativePG restarts the pod without the sidecar, with the database down meanwhile. The restart took 80 seconds in the test; a plain restart in the same conditions took 8.5 minutes, for the reason given under [WAL archiving is stalled](#wal-archiving-is-stalled).
 2. Confirm the queue is gone: `cnpg_collector_pg_wal_archive_status{value="ready"}` reads 0, and PostgreSQL recycles the WAL at its next checkpoint.
 
 Setting only `isWALArchiver: false` does not work. In the test the sidecar kept attempting uploads, including after a pod restart.
@@ -172,16 +173,48 @@ spec:
 - CloudNativePG generates a new `<name>-app` secret and sets the owner's password to match.
 - The newest data it can return is the last archived segment: up to 5 minutes old, or older if archiving was stalled.
 
-Then either copy what is needed back with `pg_dump` and `psql` through the two `-rw` services, or, to replace the database outright, stop the application, delete the original Cluster and its claim, and follow path 2 with a `recoveryTarget` added for the first start. Delete the restore Cluster and its claim afterwards.
+Then copy what is needed back with `pg_dump` and `psql` through the two `-rw` services, and delete the restore Cluster and its claim. To replace the database outright with its state at that moment, use [Replace a database](#replace-a-database) instead.
 
 ### 2. After the Cluster or the whole Kubernetes cluster is rebuilt
 
 Nothing to do by hand. Both Cluster manifests carry a permanent `bootstrap.recovery` stanza, which CloudNativePG reads only when it creates a data directory. When Flux applies a Cluster that has no volume, it restores the newest base backup, replays the archived WAL, and carries on archiving into the same archive on a new timeline.
 
 - It needs the plugin, the `ObjectStore`, the backup secret and the store on Athena. Flux orders the first three; the Cluster's Kustomization depends on `plugin-barman-cloud`.
-- It only fires for a new volume. To force it for an existing Cluster, stop the application, then delete the Cluster **and** its claim, and run `flux reconcile kustomization <app> -n <ns>` to recreate it.
+- It only fires for a new volume. To force it for an existing Cluster, see [Replace a database](#replace-a-database).
 - With an empty archive the recovery job fails and is retried indefinitely; no empty database is created. To start a database from nothing, replace the stanza with `bootstrap.initdb` for the first start.
-- In the [full-cluster procedure](longhorn-backup-restore.md#restore-order) this replaces restoring the database claims from Longhorn.
+- In the [full-cluster procedure](longhorn-backup-restore.md#restore-order) this replaces restoring the database claims from Longhorn. The application starts with the database, so stop it as that procedure says until its own volumes are restored.
+- It restores the newest state in the archive, which is later than the application's nightly volume backup. Bambuddy's database refers to files in its archive volume, so restore that pair to one moment: add `recoveryTarget.targetTime`, set to the time of the Longhorn backup being restored for the `bambuddy` claim, before the Cluster is first created. **Undrilled.**
+
+### Replace a database
+
+**Undrilled.** This deletes the live database's volume; everything written after the restore point is lost. The Cluster and its application are in one Flux Kustomization, which would recreate the Cluster halfway through, so suspend it first.
+
+1. [Take a backup by hand](#take-a-backup-by-hand) if the database still runs, and prove the restore point with [path 1](#1-alongside-the-running-database) first.
+2. Suspend Flux and stop the application:
+
+   ```sh
+   flux suspend kustomization <app> -n <ns>
+   flux suspend helmrelease <app> -n <ns>
+   kubectl -n <ns> scale <deployment|statefulset>/<app> --replicas=0
+   ```
+
+3. For a point in time, add `recoveryTarget.targetTime` under `bootstrap.recovery` in the Cluster manifest and push to `main`. Omit this to restore the newest state.
+4. Delete the Cluster and its claim, and wait until both are gone:
+
+   ```sh
+   kubectl -n <ns> delete clusters.postgresql.cnpg.io <name>
+   kubectl -n <ns> delete pvc -l cnpg.io/cluster=<name>
+   ```
+
+5. Resume, which recreates the Cluster from the manifest and starts the application once the HelmRelease reconciles:
+
+   ```sh
+   flux resume kustomization <app> -n <ns>
+   flux resume helmrelease <app> -n <ns>
+   kubectl -n <ns> get clusters.postgresql.cnpg.io <name> -w   # until healthy
+   ```
+
+6. Check the data, then remove `recoveryTarget` from the manifest and push. It is read only at creation, so removing it changes nothing on the running Cluster.
 
 ### 3. Athena is gone
 
@@ -206,7 +239,7 @@ Remove `--dry-run` once the list is right.
 
 ## PostgreSQL major upgrades
 
-The archive name ends in the PostgreSQL major, and a major upgrade must change it in both places it appears in the Cluster: the `plugins` entry and the `externalClusters` entry. `pg_upgrade` restarts at timeline 1, and the plugin does not separate archives itself, so an upgraded database archiving under the old name would overwrite the old major's WAL. The old archive stays restorable, with the old image, until it is deleted by hand.
+The archive name ends in the PostgreSQL major, and a major upgrade must change it in both places it appears in the Cluster: the `plugins` entry and the `externalClusters` entry. `pg_upgrade` restarts at timeline 1, and the plugin does not separate archives itself, so an upgraded database archiving under the old name would overwrite the old major's WAL. The old archive stays restorable, with the old image, until it is deleted by hand. [Take a backup by hand](#take-a-backup-by-hand) as soon as the upgrade finishes: the new archive has no base backup until then, so a rebuild in that window would find nothing to restore.
 
 ## What has been exercised
 
@@ -220,7 +253,7 @@ All on 2026-10-12, on scratch clusters of PostgreSQL 17.11 holding 270 to 400 MB
 | Path 1 to the latest point | **Drilled**: 200,002 rows returned, matching every commit in an archived segment |
 | Path 1 to a point in time | **Drilled**: the marker row written before the target was present and the one after it absent |
 | Path 2, rebuild into the same archive | **Drilled** twice in a row: identical row count and checksum, then archiving and a backup on the new timeline. Without the annotation it failed with `Expected empty archive` |
-| Replacing a database with a point-in-time restore (path 1's last step) | **Undrilled** |
+| [Replace a database](#replace-a-database), and a `recoveryTarget` paired with a Longhorn backup for Bambuddy | **Undrilled** |
 | Path 2 against an empty archive | **Drilled**: the recovery job failed and was retried; no empty database appeared |
 | Path 3, from a plain copy of the store's files | **Drilled** with a file copy, with and without the metadata directory. The Kopia restore from B2 and a gateway outside the cluster are **undrilled** |
 | Built-in retention | **Drilled**: two consecutive runs deleted backdated backups and their WAL in about a second each, and metrics kept answering |

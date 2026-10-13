@@ -18,7 +18,8 @@
 #     is the dependable signal.
 #   - An instance's claim has the same name as its pod.
 #   - A stuck plugin call can hang an instance's whole metrics endpoint
-#     (plugin-barman-cloud#1045), which removes every series above.
+#     (plugin-barman-cloud#1045), which removes every series above, so the
+#     missing-metrics rule takes its list of pods from kube-state-metrics.
 #
 # Every Cluster that archives WAL is covered without being named here. The VM
 # operator converts PrometheusRule to VMRule.
@@ -65,21 +66,21 @@ spec:
 
         - alert: CNPGBackupMetricsMissing
           expr: |
-            up{cluster="k8s-prod", container="postgres", endpoint="metrics"} == 0
-            or (
-              cnpg_collector_up{cluster="k8s-prod"}
-              unless on (namespace, pod) barman_cloud_cloudnative_pg_io_last_available_backup_timestamp{cluster="k8s-prod"}
+            (
+              count by (namespace, pod) (kube_pod_container_info{cluster="k8s-prod", container="plugin-barman-cloud"})
+              or count by (namespace, pod) (cnpg_collector_up{cluster="k8s-prod"})
             )
+            unless on (namespace, pod) barman_cloud_cloudnative_pg_io_last_available_backup_timestamp{cluster="k8s-prod"}
           for: 30m
           labels:
             severity: warning
           annotations:
             summary: Backup state of {{ $labels.namespace }}/{{ $labels.pod }} is not being monitored
             description: >-
-              This instance's exporter is not answering, or it exports no
-              Barman Cloud metrics, so stalled archiving and stale backups
-              would go unnoticed. Check the pod's plugin-barman-cloud
-              container, and that the Cluster lists the plugin.
+              No Barman Cloud metrics are arriving for this database pod, so
+              stalled archiving and stale backups would go unnoticed. Its
+              exporter is not answering or not scraped, or the Cluster's
+              plugin is disabled.
             runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/cnpg-backup-restore.md#no-completed-backup
 
         - alert: CNPGVolumeFillingUp
@@ -87,10 +88,10 @@ spec:
             (
               kubelet_volume_stats_available_bytes{cluster="k8s-prod"}
               / kubelet_volume_stats_capacity_bytes{cluster="k8s-prod"}
+              < 0.5
             )
-            * on (namespace, persistentvolumeclaim) group_left ()
+            and on (namespace, persistentvolumeclaim)
               label_replace(cnpg_collector_up{cluster="k8s-prod"}, "persistentvolumeclaim", "$1", "pod", "(.+)")
-            < 0.5
           for: 15m
           labels:
             severity: critical

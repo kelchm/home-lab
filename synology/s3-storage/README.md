@@ -45,7 +45,7 @@ Both `*.sops.env` files are encrypted to the NAS-scoped age recipient in [`.sops
 SOPS_AGE_KEY="$(op read 'op://Private/athena-doco-cd-sops-age-key/password')" sops synology/s3-storage/versitygw.sops.env
 ```
 
-The Cloudflare token needs `Zone:DNS:Edit` on `kelch.io`. Cloudflare scopes tokens to a zone, not a record.
+The Cloudflare token needs `Zone:Zone:Read` and `Zone:DNS:Edit` on `kelch.io`; Traefik's ACME client reads the zone to find its ID. Cloudflare scopes tokens to a zone, not a record.
 
 ## First deployment
 
