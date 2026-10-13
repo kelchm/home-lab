@@ -14,6 +14,8 @@ State as of 2026-10-12: **not deployed.** This describes the intended configurat
 
 PostgreSQL closes a WAL segment at least every 5 minutes while the database is being written to, and the sidecar uploads it. A base backup runs daily. Restoring replays WAL over a base backup and can stop at any moment inside the retained window.
 
+The storage interface is outside Cilium's policy in both directions. A database pod can reach every host on the storage VLAN, and those hosts can reach the pod's `10.32.25.160/28` address. Both Clusters reject PostgreSQL logins from that VLAN in `pg_hba`; the exporter on port 9187 and the instance manager on port 8000 stay reachable from it. Verified on a scratch cluster: a login from the storage VLAN was refused by `pg_hba` while one through the pod address worked.
+
 B2 is the copy of last resort. The databases never write to it, the cluster holds no B2 credential, and every restore starts with the copy on Athena when Athena exists.
 
 | Thing | `visionect-db` | `bambuddy-db` |
@@ -150,6 +152,9 @@ spec:
   inheritedMetadata:
     annotations:
       k8s.v1.cni.cncf.io/networks: cnpg-system/storage-network
+  postgresql:
+    pg_hba:
+      - host all all 10.32.25.0/24 reject
   bootstrap:
     recovery:
       source: origin
@@ -195,7 +200,9 @@ Nothing to do by hand. Both Cluster manifests carry a permanent `bootstrap.recov
    ```sh
    flux suspend kustomization <app> -n <ns>
    flux suspend helmrelease <app> -n <ns>
+   kubectl -n <ns> get <deployment|statefulset>/<app> -o jsonpath='{.spec.replicas}{"\n"}'   # note the count
    kubectl -n <ns> scale <deployment|statefulset>/<app> --replicas=0
+   kubectl -n <ns> get pods   # until the application's pods are gone
    ```
 
 3. For a point in time, add `recoveryTarget.targetTime` under `bootstrap.recovery` in the Cluster manifest and push to `main`. Omit this to restore the newest state.
@@ -206,7 +213,7 @@ Nothing to do by hand. Both Cluster manifests carry a permanent `bootstrap.recov
    kubectl -n <ns> delete pvc -l cnpg.io/cluster=<name>
    ```
 
-5. Resume, which recreates the Cluster from the manifest and starts the application once the HelmRelease reconciles:
+5. Resume, which recreates the Cluster from the manifest:
 
    ```sh
    flux resume kustomization <app> -n <ns>
@@ -214,7 +221,13 @@ Nothing to do by hand. Both Cluster manifests carry a permanent `bootstrap.recov
    kubectl -n <ns> get clusters.postgresql.cnpg.io <name> -w   # until healthy
    ```
 
-6. Check the data, then remove `recoveryTarget` from the manifest and push. It is read only at creation, so removing it changes nothing on the running Cluster.
+6. Check the data, then start the application. Resuming does not undo the manual scale, because the Helm release itself has not changed:
+
+   ```sh
+   kubectl -n <ns> scale <deployment|statefulset>/<app> --replicas=<previous-count>
+   ```
+
+7. Remove `recoveryTarget` from the manifest and push. It is read only at creation, so removing it changes nothing on the running Cluster.
 
 ### 3. Athena is gone
 

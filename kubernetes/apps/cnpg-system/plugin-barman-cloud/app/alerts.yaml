@@ -19,7 +19,8 @@
 #   - An instance's claim has the same name as its pod.
 #   - A stuck plugin call can hang an instance's whole metrics endpoint
 #     (plugin-barman-cloud#1045), which removes every series above, so the
-#     missing-metrics rule takes its list of pods from kube-state-metrics.
+#     missing-metrics and volume rules also take their pods from
+#     kube-state-metrics. The plugin's sidecar is an init container.
 #
 # Every Cluster that archives WAL is covered without being named here. The VM
 # operator converts PrometheusRule to VMRule.
@@ -67,7 +68,7 @@ spec:
         - alert: CNPGBackupMetricsMissing
           expr: |
             (
-              count by (namespace, pod) (kube_pod_container_info{cluster="k8s-prod", container="plugin-barman-cloud"})
+              count by (namespace, pod) (kube_pod_init_container_info{cluster="k8s-prod", container="plugin-barman-cloud"})
               or count by (namespace, pod) (cnpg_collector_up{cluster="k8s-prod"})
             )
             unless on (namespace, pod) barman_cloud_cloudnative_pg_io_last_available_backup_timestamp{cluster="k8s-prod"}
@@ -91,7 +92,11 @@ spec:
               < 0.5
             )
             and on (namespace, persistentvolumeclaim)
-              label_replace(cnpg_collector_up{cluster="k8s-prod"}, "persistentvolumeclaim", "$1", "pod", "(.+)")
+              label_replace(
+                count by (namespace, pod) (kube_pod_init_container_info{cluster="k8s-prod", container="plugin-barman-cloud"})
+                or count by (namespace, pod) (cnpg_collector_up{cluster="k8s-prod"}),
+                "persistentvolumeclaim", "$1", "pod", "(.+)"
+              )
           for: 15m
           labels:
             severity: critical
