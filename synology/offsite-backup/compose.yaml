@@ -40,6 +40,7 @@ services:
       RUN_AT_UTC: "10:00"
     volumes:
       - /volume1/backups-k8s-prod/longhorn:/sources/longhorn:ro
+      - /volume1/s3-storage:/sources/s3-storage:ro
       - /volume1/docker/offsite-backup/cache:/app/cache
       - /volume1/docker/offsite-backup/logs:/app/logs
     tmpfs:

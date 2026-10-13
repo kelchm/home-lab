@@ -22,6 +22,7 @@ Sources:
 | Mounted at | Share | Contents |
 |---|---|---|
 | `/sources/longhorn` | `/volume1/backups-k8s-prod/longhorn` | Longhorn backup store for `k8s-prod` |
+| `/sources/s3-storage` | `/volume1/s3-storage` | CloudNativePG base backups and WAL, written through [`s3-storage`](../s3-storage/README.md) |
 
 To add a source, mount another share read-only under `/sources/`. It is picked up on the next run.
 
@@ -120,5 +121,6 @@ A first attempt through a second Longhorn backup target on `k8s-prod` restored f
 
 - Closing the Backblaze account deletes everything, locked or not. The account login and its two-factor device are the last line of defence.
 - A snapshot taken while Longhorn is writing can capture a backup half-written. The next day's snapshot has it complete.
+- The same holds for a database base backup being uploaded during a run; they are scheduled for 08:30 and 08:40 UTC to finish well before it. A WAL segment written during a run is in the next day's snapshot, so the off-site copy of a database restores to within about a day, not 5 minutes.
 - Verified on a scratch bucket on 2026-10-05: locked versions could not be deleted or have their lock shortened with the master key, and a point-in-time restore after a simulated attack matched the source. Not yet verified: removal of hidden data after 30 days.
 - The first upload took longer than the dead-man check's 3-hour grace. A large new source needs the grace raised for its first run.

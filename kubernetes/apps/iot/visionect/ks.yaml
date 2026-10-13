@@ -11,6 +11,8 @@ spec:
       namespace: cert-manager
     - name: cnpg-operator
       namespace: cnpg-system
+    - name: plugin-barman-cloud
+      namespace: cnpg-system
     - name: cilium-bgp
       namespace: kube-system
   healthChecks:

@@ -9,6 +9,8 @@ spec:
       namespace: longhorn-system
     - name: cnpg-operator
       namespace: cnpg-system
+    - name: plugin-barman-cloud
+      namespace: cnpg-system
     - name: kaniop
       namespace: identity
     - name: traefik

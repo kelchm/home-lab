@@ -6,6 +6,9 @@ apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
   name: visionect-db
+  annotations:
+    # A rebuilt cluster recovers from, then archives into, the same archive.
+    cnpg.io/skipEmptyWalArchiveCheck: enabled
 spec:
   instances: 1
   imageName: ghcr.io/cloudnative-pg/postgresql:17.11-system-trixie
@@ -22,7 +25,23 @@ spec:
       memory: 1Gi
     limits:
       memory: 3Gi
+  # Read only when the Cluster is created: a rebuild restores the newest backup.
   bootstrap:
-    initdb:
+    recovery:
+      source: visionect-db
       database: koala
       owner: visionect
+  externalClusters:
+    - name: visionect-db
+      plugin:
+        name: barman-cloud.cloudnative-pg.io
+        parameters:
+          barmanObjectName: visionect-db
+          serverName: visionect-db-pg17
+  plugins:
+    - name: barman-cloud.cloudnative-pg.io
+      isWALArchiver: true
+      parameters:
+        barmanObjectName: visionect-db
+        # One archive per PostgreSQL major: a major upgrade must change this suffix.
+        serverName: visionect-db-pg17

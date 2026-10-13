@@ -1,0 +1,12 @@
+http:
+  routers:
+    s3:
+      entryPoints:
+        - s3
+      rule: Host(`s3-storage.home.kelch.io`)
+      service: versitygw
+  services:
+    versitygw:
+      loadBalancer:
+        servers:
+          - url: http://versitygw:7070

@@ -1,15 +1,21 @@
 ---
 # Dedicated PostgreSQL backing store for Bambuddy. One instance is sufficient
-# for the initial single-printer deployment; Longhorn's recurring backups and
-# Bambuddy's portable exports provide DR without adding synchronous replicas.
+# for the initial single-printer deployment; WAL archiving, Longhorn's recurring
+# backups and Bambuddy's portable exports provide DR without adding synchronous
+# replicas.
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
   name: bambuddy-db
+  annotations:
+    # A rebuilt cluster recovers from, then archives into, the same archive.
+    cnpg.io/skipEmptyWalArchiveCheck: enabled
 spec:
   instances: 1
+  imageName: ghcr.io/cloudnative-pg/postgresql:18.4-system-trixie
   storage:
-    size: 5Gi
+    # Days of unarchived WAL fit while the backup store is unreachable.
+    size: 20Gi
     # New PVCs use this tier; existing volumes require a separate replica-count patch.
     storageClass: longhorn-3replica
   resources:
@@ -20,7 +26,23 @@ spec:
       memory: 1Gi
   monitoring:
     enablePodMonitor: true
+  # Read only when the Cluster is created: a rebuild restores the newest backup.
   bootstrap:
-    initdb:
+    recovery:
+      source: bambuddy-db
       database: bambuddy
       owner: bambuddy
+  externalClusters:
+    - name: bambuddy-db
+      plugin:
+        name: barman-cloud.cloudnative-pg.io
+        parameters:
+          barmanObjectName: bambuddy-db
+          serverName: bambuddy-db-pg18
+  plugins:
+    - name: barman-cloud.cloudnative-pg.io
+      isWALArchiver: true
+      parameters:
+        barmanObjectName: bambuddy-db
+        # One archive per PostgreSQL major: a major upgrade must change this suffix.
+        serverName: bambuddy-db-pg18

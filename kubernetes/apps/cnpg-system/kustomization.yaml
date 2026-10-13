@@ -9,3 +9,4 @@ components:
 resources:
   - ./namespace.yaml
   - ./cnpg-operator/ks.yaml
+  - ./plugin-barman-cloud/ks.yaml
