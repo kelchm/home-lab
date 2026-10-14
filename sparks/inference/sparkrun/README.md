@@ -517,14 +517,14 @@ A first boot is a memory-fit and fabric check under the same abort rules as the 
 
 ### Model discovery variant
 
-`qwen38fn-nvfp4-tp2-mia-tf-v1.1-discovery-nvidia-1m` is the NVFP4 profile with one file replaced inside the same pinned image: `tensorfold-native`, rebuilt so `GET /v1/models` reports the request window, the default reply budget and the reasoning efforts. It exists so a client can configure itself from the server instead of a hand-written per-model table. It is a local patch awaiting an upstream decision: half of it is upstream's own change and half is an unposted draft. A first build of it [served on October 13](#october-13-live-test) and passed every check except decode speed; the build in this directory now fixes that and has not booted. The v1.1 profile and mod are unchanged and are the rollback.
+`qwen38fn-nvfp4-tp2-mia-tf-v1.1-discovery-nvidia-1m` is the NVFP4 profile with one file replaced inside the same pinned image: `tensorfold-native`, rebuilt so `GET /v1/models` reports the request window and the reasoning efforts. It exists so a client can configure itself from the server instead of a hand-written per-model table. It is a local patch awaiting an upstream decision: half of it is upstream's own change and half is an unposted draft. A first build of it [served on October 13](#october-13-live-test) and passed every check except decode speed; the build in this directory fixes that, follows the draft's final shape, and has not booted. The v1.1 profile and mod are unchanged and are the rollback.
 
 The [mod](mods/mia-tensorfold-qwen38fn-v1.1-discovery/) adds two patches to `zig/src/server/status_routes.zig`, on top of the kit's nine, and nothing else in the engine changes:
 
 | Patch | Source | Adds |
 | --- | --- | --- |
 | `0010-models-context-length.patch` | [`ashhart/TensorFold@51ad073f`](https://github.com/ashhart/TensorFold/commit/51ad073feadd81d04809edf8f0822cc5380a832c), upstream PR #483, released in 1.0.3 | `context_length`, `max_model_len` |
-| `0011-models-reply-budget-efforts.patch` | [`kelchm/TensorFold@4612b958`](https://github.com/kelchm/TensorFold/commit/4612b9586d343ac0a71e194df1bb52d27617038e), branch `models-reply-budget-efforts`, a draft not proposed upstream | `default_max_tokens`, `reasoning` |
+| `0011-models-reasoning.patch` | [`kelchm/TensorFold@68911640`](https://github.com/kelchm/TensorFold/commit/68911640578615fa04800562718334f2ef217037), branch `models-reply-budget-efforts` against upstream `c126fe16`, a draft not proposed upstream | `reasoning` |
 
 Each is that commit's change to the one source file; the upstream test fixtures and README text are left out. `upstream.lock.json` pins both commits and the checksum of every file in the mod. To move to another draft commit, change its `commit` in the lock, then run `prepare.py --refresh ~/Development/kelchm/TensorFold` to rewrite the patch and `build/build.sh --record` to rebuild and record the binary.
 
@@ -532,7 +532,7 @@ Expected entry on this profile:
 
 ```json
 {"id": "Qwen3.8-Flash-Next", "object": "model", "created": 0, "owned_by": "tensorfold",
- "context_length": 1048576, "max_model_len": 1048576, "default_max_tokens": 32768,
+ "context_length": 1048576, "max_model_len": 1048576,
  "reasoning": {"default_enabled": true,
                "supported_efforts": ["xhigh", "medium", "low", "none"],
                "effort_map": {"none": "none", "minimal": "low", "low": "low", "medium": "medium", "high": "xhigh", "xhigh": "xhigh", "max": "xhigh"}}}
@@ -543,7 +543,6 @@ Expected entry on this profile:
 What a client must not read into these fields:
 
 - `context_length` is the configured window, not a qualified one. The [October 8 evaluation](#october-8-nvfp4-evaluation) completed 524,135 prompt tokens and stalled both ranks at 999,874, and nothing between has been tried, so the ceiling a client can rely on is below 1,048,576 by an unmeasured amount. Admission itself allows the whole window on this release: v1.0 counted the draft window against `--context`, v1.1 fixed that, and `context_boundary.py` passed here. The patch has no setting to advertise less; a client that wants a margin applies its own.
-- `default_max_tokens` is what a request gets when it sends no `max_tokens`, clamped to the room left. Sent back as an explicit `max_tokens` on a nearly full window it is refused with HTTP 400, so a client should omit the field rather than echo this value.
 - The entry lists no input modalities. Vision and video on this server come from the kit's `0009-vision-python.patch`, which the discovery fields do not describe.
 - The reasoning defaults describe `/v1/chat/completions` and `/v1/responses`. Raw `/v1/completions` and Anthropic `/v1/messages` keep their own thinking defaults.
 
@@ -558,15 +557,16 @@ Checked on a workstation:
 - Both patches apply to engine `db281878` with the kit's nine patches applied, and regenerate byte for byte from the pinned commits.
 - On that tree the server unit tests pass, 53 and 17, including the five model-discovery tests.
 - The unpatched rebuild matches the published binary in every loaded section; the two files differ only in compiler-numbered symbol names in the unloaded string table.
-- The patched build takes about four minutes with that reference build, and a second build from an empty Docker cache produced the same `5a8105da…`.
+- The patched build takes about four minutes with that reference build. From an empty Docker cache it produced `3f22bd80…`. An earlier pin built this way twice from an empty cache gave the same hash both times.
+- The binary carries the RoCE proxy as the published one does: the `dlopen libibverbs.so.1` path and the `ibv_*` entry-point names are in it, and the stub's `built without libibverbs headers` message is not.
 
-Not established for this build: it has not run. The October 13 result below is for the earlier `3dea815d…` build, whose server code is the same two patches. What changes is the RoCE all-gather, so the next launch should show both ranks opening it and the throughput point back at the October 8 figures.
+Not established for this build: it has not run. The October 13 result below is for the earlier `3dea815d…` build of `4612b958`. Since then the draft dropped `default_max_tokens`, leaving `reasoning` unchanged, and the build gained the RoCE all-gather. The next launch should show the entry without `default_max_tokens`, both ranks opening RoCE, and the throughput point back at the October 8 figures.
 
 #### October 13 live test
 
-The first build, `3dea815d…` from branch commit `c7643951`, replaced the v1.1 instance at 20:45 EDT on October 13 by the steps below. Both hosts were idle with carrier counters at 12 and 1,432, the binary printed its usage line in a throwaway container on the head, and the v1.1 instance stopped in 3 s with 116 GiB available on each host. The API was down for 118 s, from 20:45:16 to 20:47:14; the launch took 112.0 s and its readiness hook passed, including the new window check. Sequence memory was 31.67 GiB. Both ranks ran the rebuilt binary by sha256.
+The first build, `3dea815d…` of draft commit `4612b958`, built from this branch's commit `c7643951`, replaced the v1.1 instance at 20:45 EDT on October 13 by the steps below. Both hosts were idle with carrier counters at 12 and 1,432, the binary printed its usage line in a throwaway container on the head, and the v1.1 instance stopped in 3 s with 116 GiB available on each host. The API was down for 118 s, from 20:45:16 to 20:47:14; the launch took 112.0 s and its readiness hook passed, including the new window check. Sequence memory was 31.67 GiB. Both ranks ran the rebuilt binary by sha256.
 
-`GET /v1/models` returned the expected entry exactly, `supported_efforts` order included. The pinned checkpoint's `chat_template.jinja` accepts `('xhigh', 'medium', 'low')` and defaults to `xhigh`, which is that list with `none` for the switch. Chat requests of 8 tokens with no `chat_template_kwargs` echoed:
+`GET /v1/models` returned the entry expected for that draft: the one above plus `"default_max_tokens": 32768`, which the final draft dropped. `supported_efforts` matched in order. The pinned checkpoint's `chat_template.jinja` accepts `('xhigh', 'medium', 'low')` and defaults to `xhigh`, which is that list with `none` for the switch. Chat requests of 8 tokens with no `chat_template_kwargs` echoed:
 
 | `reasoning_effort` sent | Advertised | Echoed `reasoning_effort` | Echoed `enable_thinking` |
 | --- | --- | --- | --- |
@@ -591,11 +591,11 @@ Merging this directory changes nothing on the Sparks. Each step below is manual.
 
 1. On the workstation, confirm the binary: `python3 sparks/inference/sparkrun/mods/mia-tensorfold-qwen38fn-v1.1-discovery/prepare.py --check --require-binary`. If `out/` is missing, `build/build.sh` rebuilds it in about four minutes and fails unless the result matches the lock.
 2. Check both hosts with `task sparks:status` and the gates used for every trial here: no request in flight (`live.connections` and `live.waiting` zero in `/health`), no other GPU workload, both management links at 10GbE with carrier counters unchanged from 12 and 1,432, and nobody relying on the endpoint for the next ten minutes.
-3. Copy only the new files to the head. This does not touch the running containers, which hold their own copy of the v1.1 mod:
+3. Copy only the new files to the head. This does not touch the running containers, which hold their own copy of the mod they started with. `--delete` drops a patch an earlier copy carried, which `prepare.py` would otherwise refuse:
 
    ```sh
    cd sparks/inference/sparkrun
-   rsync -a --exclude __pycache__ mods/mia-tensorfold-qwen38fn-v1.1-discovery kelchm@10.32.21.31:sparkrun/recipes/glm53/mods/
+   rsync -a --delete --exclude __pycache__ mods/mia-tensorfold-qwen38fn-v1.1-discovery kelchm@10.32.21.31:sparkrun/recipes/glm53/mods/
    rsync -a mia-tensorfold-qwen38fn-tp2/qwen38fn-nvfp4-tp2-mia-tf-v1.1-discovery-nvidia-1m.yaml kelchm@10.32.21.31:sparkrun/recipes/glm53/mia-tensorfold-qwen38fn-tp2/
    rsync -a tests/qwen_model_discovery.py kelchm@10.32.21.31:sparkrun/recipes/glm53/tests/
    ```
@@ -634,10 +634,10 @@ To roll back, stop with either recipe, confirm both GPUs are free, and launch `$
 
 On the head, from `~/sparkrun/recipes/glm53`. The first is read-only; the rest send requests:
 
-1. The entry: `python3 tests/qwen_model_discovery.py` checks `context_length` and `max_model_len` against the window, `default_max_tokens` against the recipe's 32,768 and the reasoning object's consistency, and prints the entry. Compare it with the expected entry above, `supported_efforts` order included.
-2. The echoes: `python3 tests/qwen_model_discovery.py --completions` sends eight 8-token chat requests with no `chat_template_kwargs`. One names no effort: its `tensorfold.enable_thinking` must equal `default_enabled`, and its `tensorfold.reasoning_effort` must be null, since no `default_effort` is advertised. Seven name each accepted effort: each echo must equal that effort's `effort_map` entry.
+1. The entry: `python3 tests/qwen_model_discovery.py` checks `context_length` and `max_model_len` against the window, that `default_max_tokens` is absent, and the reasoning object's consistency, and prints the entry. Compare it with the expected entry above, `supported_efforts` order included.
+2. The echoes: `python3 tests/qwen_model_discovery.py --completions` sends eight 8-token chat requests with no `chat_template_kwargs`. One names no effort: its `tensorfold.enable_thinking` must equal `default_enabled`, and its `tensorfold.reasoning_effort` must be null, since no `default_effort` is advertised. Seven name each accepted effort: each echo must equal that effort's `effort_map` entry. Then one request with `reasoning_effort: "none"` and `chat_template_kwargs: {"enable_thinking": true}`, which on October 13 echoed thinking on with a null effort.
 3. Nothing else moved: repeat the gates the [October 8](#october-8-nvfp4-evaluation) and [October 9](#october-9-thinking-and-agent-continuation) records used on v1.1, with the same commands and no long prompt. That is the kit's `exact.py`, `toolcheck.py`, `prompt_reuse.py 30000 4 --other` and `context_boundary.py --context 1048576`, then `acceptance.py --model Qwen3.8-Flash-Next` and `agent_acceptance.py --model Qwen3.8-Flash-Next --require-cache` for the tools, isolation, cache, coding and cancellation sections.
-4. One throughput point, because the CPU-side code was recompiled: the one-stream and 16-stream cases of the October 8 table, against 61–63 and 313–317 tok/s.
+4. RoCE and one throughput point: both rank logs show the RoCE all-gather open and no `built without libibverbs headers` line, and the one-stream and 16-stream cases of the October 8 table come back near 61–63 and 313–317 tok/s, against 56 and 277–305 on October 13.
 
 Follow-ups, not part of this variant: the v1.1 readiness hook still cannot enforce a window, because that server reports none; once these fields ship upstream and the kit moves its pin, the check added here can become the profile's normal gate and this mod can be retired. The Pi extension that motivated this ([kelchm/dotfiles#33](https://github.com/kelchm/dotfiles/pull/33)) still carries its per-model table until a server with these fields is the one running.
 

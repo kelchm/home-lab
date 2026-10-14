@@ -1,5 +1,5 @@
 diff --git a/zig/src/server/status_routes.zig b/zig/src/server/status_routes.zig
-index 89ee5c84..e437431b 100644
+index 89ee5c84..65bb52ff 100644
 --- a/zig/src/server/status_routes.zig
 +++ b/zig/src/server/status_routes.zig
 @@ -1,6 +1,7 @@
@@ -10,51 +10,38 @@ index 89ee5c84..e437431b 100644
  const json = @import("json.zig");
  const live = @import("live.zig");
  const routes = @import("routes.zig");
-@@ -37,8 +38,15 @@ pub fn health(srv: *Server, conn: *Conn, a: Allocator) !void {
+@@ -37,8 +38,12 @@ pub fn health(srv: *Server, conn: *Conn, a: Allocator) !void {
  pub fn models(srv: *Server, conn: *Conn, a: Allocator) !void {
      const created = std.Io.Clock.real.now(srv.io).toSeconds();
      const data = try a.alloc(Value, srv.config.model_ids.len);
 +    const template = srv.text.templateSource();
 +    const switchable = std.mem.indexOf(u8, template, "enable_thinking") != null or std.mem.indexOf(u8, template, "thinking_mode") != null;
 +    const thinks = switchable or srv.effort_levels.len > 0 or srv.think_close.len > 0;
-+    const defaults: Defaults = .{
-+        .max_tokens = srv.config.default_max_tokens,
-+        .reasoning = if (thinks) try reasoningValue(a, srv.config.enable_thinking, switchable, srv.effortFor(null), srv.effort_levels) else null,
-+    };
++    const reasoning: ?Value = if (thinks) try reasoningValue(a, srv.config.enable_thinking, switchable, srv.effortFor(null), srv.effort_levels) else null;
      for (srv.config.model_ids, data) |id, *slot| {
 -        slot.* = try modelValue(a, id, srv.info, created);
-+        slot.* = try modelValue(a, id, srv.info, created, defaults);
++        slot.* = try modelValue(a, id, srv.info, created, reasoning);
      }
      const o = try json.newObject(a);
      try o.put(a, "object", .{ .string = "list" });
-@@ -47,7 +55,7 @@ pub fn models(srv: *Server, conn: *Conn, a: Allocator) !void {
+@@ -47,7 +52,7 @@ pub fn models(srv: *Server, conn: *Conn, a: Allocator) !void {
  }
  
  /// Discovery extensions report the loaded engine's prompt-plus-reply limit; zero leaves it unspecified.
 -fn modelValue(a: Allocator, id: []const u8, info: api.Info, created: i64) Allocator.Error!Value {
-+fn modelValue(a: Allocator, id: []const u8, info: api.Info, created: i64, defaults: Defaults) Allocator.Error!Value {
++fn modelValue(a: Allocator, id: []const u8, info: api.Info, created: i64, reasoning: ?Value) Allocator.Error!Value {
      const m = try json.newObject(a);
      try m.put(a, "id", .{ .string = id });
      try m.put(a, "object", .{ .string = "model" });
-@@ -57,9 +65,37 @@ fn modelValue(a: Allocator, id: []const u8, info: api.Info, created: i64) Alloca
+@@ -57,9 +62,27 @@ fn modelValue(a: Allocator, id: []const u8, info: api.Info, created: i64) Alloca
          try m.put(a, "context_length", try json.intValue(a, info.context_window));
          try m.put(a, "max_model_len", try json.intValue(a, info.context_window));
      }
-+    if (defaults.max_tokens) |limit| try m.put(a, "default_max_tokens", try json.intValue(a, defaultBudget(limit, info.context_window)));
-+    if (defaults.reasoning) |r| try m.put(a, "reasoning", r);
++    if (reasoning) |r| try m.put(a, "reasoning", r);
      return .{ .object = m };
  }
  
-+/// What a chat request naming no reply budget or effort starts from; a null leaves its field out.
-+const Defaults = struct { max_tokens: ?i64 = null, reasoning: ?Value = null };
-+
-+/// The budget ``chat.prepare`` gives a request naming none, before its prompt takes room from the window.
-+fn defaultBudget(limit: i64, window: u32) i64 {
-+    const most: i64 = if (window > 0) window else std.math.maxInt(u32);
-+    return @min(@max(1, limit), most);
-+}
-+
-+/// OpenRouter's reasoning fields from the template's own levels, and each accepted effort as the template hears it.
++/// /v1/models' ``reasoning``: the thinking default, the template's levels, and what each accepted effort becomes.
 +fn reasoningValue(a: Allocator, enable: bool, switchable: bool, default: ?[]const u8, levels: []const []const u8) Allocator.Error!Value {
 +    const r = try json.newObject(a);
 +    try r.put(a, "default_enabled", .{ .bool = enable });
@@ -74,47 +61,36 @@ index 89ee5c84..e437431b 100644
  /// Prometheus text, version 0.0.4.
  pub fn metrics(srv: *Server, conn: *Conn, a: Allocator) void {
      var out: std.Io.Writer.Allocating = .init(a);
-@@ -127,7 +163,7 @@ test "model discovery reports fitted engine context equally for its served name
+@@ -127,7 +150,7 @@ test "model discovery reports fitted engine context equally for its served name
      defer arena.deinit();
      const info: api.Info = .{ .context_window = 8192, .context_fitted = true };
      for ([_][]const u8{ "served-model", "model-alias" }) |id| {
 -        const value = try modelValue(arena.allocator(), id, info, 123);
-+        const value = try modelValue(arena.allocator(), id, info, 123, .{});
++        const value = try modelValue(arena.allocator(), id, info, 123, null);
          try std.testing.expectEqualStrings(id, value.get("id").?.string);
          try std.testing.expectEqual(@as(i64, 8192), value.get("context_length").?.int64().?);
          try std.testing.expectEqual(value.get("context_length").?.int64(), value.get("max_model_len").?.int64());
-@@ -138,13 +174,71 @@ test "model discovery reports fitted engine context equally for its served name
+@@ -138,13 +161,60 @@ test "model discovery reports fitted engine context equally for its served name
  test "model discovery omits an unspecified context and preserves the full u32 limit" {
      var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
      defer arena.deinit();
 -    const unlimited = try modelValue(arena.allocator(), "model", .{}, 0);
-+    const unlimited = try modelValue(arena.allocator(), "model", .{}, 0, .{});
++    const unlimited = try modelValue(arena.allocator(), "model", .{}, 0, null);
      try std.testing.expect(unlimited.get("context_length") == null);
      try std.testing.expect(unlimited.get("max_model_len") == null);
 -    const bounded = try modelValue(arena.allocator(), "model", .{ .context_window = std.math.maxInt(u32) }, 0);
-+    const bounded = try modelValue(arena.allocator(), "model", .{ .context_window = std.math.maxInt(u32) }, 0, .{});
++    const bounded = try modelValue(arena.allocator(), "model", .{ .context_window = std.math.maxInt(u32) }, 0, null);
      try std.testing.expectEqual(@as(i64, std.math.maxInt(u32)), bounded.get("max_model_len").?.int64().?);
  }
  
-+test "model discovery reports the budget an omitted max_tokens starts from, floored and held to the window" {
++test "model discovery adds reasoning to an entry only when the model has it" {
 +    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
 +    defer arena.deinit();
 +    const a = arena.allocator();
-+    const cases = [_]struct { limit: i64, window: u32, want: i64 }{
-+        .{ .limit = 4096, .window = 8192, .want = 4096 },
-+        .{ .limit = 4096, .window = 1024, .want = 1024 },
-+        .{ .limit = 4096, .window = 0, .want = 4096 },
-+        .{ .limit = 0, .window = 1024, .want = 1 },
-+        .{ .limit = -7, .window = 0, .want = 1 },
-+        .{ .limit = 1 << 40, .window = 0, .want = std.math.maxInt(u32) },
-+    };
-+    for (cases) |c| {
-+        const value = try modelValue(a, "model", .{ .context_window = c.window }, 0, .{ .max_tokens = c.limit });
-+        try std.testing.expectEqual(c.want, value.get("default_max_tokens").?.int64().?);
-+    }
-+    const unset = try modelValue(a, "model", .{}, 0, .{});
-+    try std.testing.expect(unset.get("default_max_tokens") == null);
-+    try std.testing.expect(unset.get("reasoning") == null);
++    const plain = try modelValue(a, "model", .{}, 0, null);
++    try std.testing.expect(plain.get("reasoning") == null);
++    const thinking = try modelValue(a, "model", .{}, 0, try reasoningValue(a, true, true, null, &.{"low"}));
++    try std.testing.expect(thinking.get("reasoning").?.get("default_enabled").?.bool);
 +}
 +
 +test "model discovery lists the template's levels and what each accepted effort is heard as" {
