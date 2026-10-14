@@ -42,7 +42,7 @@ Then use the matching [manual bootstrap/migration apply](doco-cd-self-update.md#
 
 doco-cd deploys the `monitoring` and `monitoring-gpu` projects within three minutes. The GPU exporter needs NVIDIA CDI devices in Docker (`nvidia-ctk cdi list` shows `nvidia.com/gpu=all`); if it cannot start, the other collectors are unaffected and `HostCollectorDown` names it. The inference container is not touched. Whichever Spark runs SparkRun's head rank scrapes the serving endpoint every second and labels the series with the model, runtime and recipe SparkRun reports; see [Spark monitoring](../../sparks/monitoring/README.md#inference). Stop the workstation pilot once those samples arrive so the two do not overlap.
 
-`spark-1`'s second poll deploys sparkDash and its own two-file doco-cd stack. `spark-2`'s second poll deploys its base doco-cd stack. Subsequent deployer updates use native self-update; verification and recovery are in the [self-update runbook](doco-cd-self-update.md).
+`spark-1`'s second poll deploys sparkDash and doco-cd; `spark-2`'s second poll deploys doco-cd. Subsequent deployer updates use native self-update; verification and recovery are in the [self-update runbook](doco-cd-self-update.md).
 
 ## PVE node
 
