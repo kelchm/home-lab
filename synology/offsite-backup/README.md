@@ -22,7 +22,7 @@ Sources:
 | Mounted at | Share | Contents |
 |---|---|---|
 | `/sources/longhorn` | `/volume1/backups-k8s-prod/longhorn` | Longhorn backup store for `k8s-prod` |
-| `/sources/s3` | `/volume1/backups-k8s-prod-s3` | CloudNativePG base backups and WAL, written through [`s3-storage`](../s3-storage/README.md) |
+| `/sources/objects` | `/volume1/objects` | Every bucket of the [`s3-storage`](../s3-storage/README.md) object store; today the CloudNativePG base backups and WAL |
 
 To add a source, mount another share read-only under `/sources/`. It is picked up on the next run.
 

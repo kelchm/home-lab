@@ -1,5 +1,5 @@
-# S3 endpoint for CloudNativePG backups: versitygw stores objects as plain
-# files on a dedicated share, and Traefik terminates HTTPS in front of it.
+# The lab's S3 object store: versitygw stores objects as plain files on the
+# `objects` share, and Traefik terminates HTTPS in front of it.
 # README.md covers buckets, credentials, first deployment and restore.
 name: s3-storage
 
@@ -22,7 +22,7 @@ services:
     env_file:
       - versitygw.sops.env
     volumes:
-      - /volume1/backups-k8s-prod-s3:/share
+      - /volume1/objects:/share
       - /volume1/docker/s3-storage/iam:/iam
     cap_drop:
       - ALL

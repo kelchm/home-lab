@@ -390,7 +390,7 @@ hermes.home.kelch.io                10.32.21.100
 # Shared infrastructure
 nas.home.kelch.io                   10.32.20.5
 nas-storage.home.kelch.io           10.32.25.5
-s3-storage.home.kelch.io            10.32.25.5    (S3 endpoint for database backups, port 9000)
+s3-storage.home.kelch.io            10.32.25.5    (S3 object store, port 9000)
 gateway.home.kelch.io               10.32.1.1
 
 # Wildcard for Traefik-fronted household services
@@ -428,7 +428,7 @@ Cluster-wide values are written as literals wherever they are used, so searching
 | Service domain | `home.kelch.io` | LAN admin and household routes and the `*.home.kelch.io` certificate; see [DNS Plan](#dns-plan) |
 | Public apex | `kelch.io` | ClusterIssuer and k8s-gateway zone, Cloudflare DNS and tunnel, and the `*.kelch.io` certificate (`kelch-io-production-tls`) |
 | Timezone | `America/New_York` | Container `TZ` and CronJob `timeZone`; Longhorn RecurringJobs run in UTC ([backup runbook](runbooks/longhorn-backup-restore.md)) |
-| NAS storage address | `10.32.25.5` (`nas-storage`) | NFS PVs, the Longhorn BackupTarget and the S3 endpoint for database backups (`s3-storage`, port 9000); see [Storage VLAN registry](#storage-vlan-registry) |
+| NAS storage address | `10.32.25.5` (`nas-storage`) | NFS PVs, the Longhorn BackupTarget and the S3 object store (`s3-storage`, port 9000); see [Storage VLAN registry](#storage-vlan-registry) |
 | NAS management address | `10.32.20.5` (`nas`) | DSM and container UIs |
 
 Flux post-build substitution is not used. Reserve it for values that differ between deployments sharing the same manifests, such as the `-sbx` hostname suffix a second cluster would need. When it returns:

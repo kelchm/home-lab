@@ -231,7 +231,7 @@ Nothing to do by hand. Both Cluster manifests carry a permanent `bootstrap.recov
 
 ### 3. Athena is gone
 
-1. Restore the `/sources/s3` source from B2 with Kopia onto any machine, following the [off-site README](../../synology/offsite-backup/README.md#restore).
+1. Restore the `/sources/objects` source from B2 with Kopia onto any machine, following the [off-site README](../../synology/offsite-backup/README.md#restore).
 2. Serve it with versitygw, read-only, as in [Serve a copy of the share](../../synology/s3-storage/README.md#serve-a-copy-of-the-share).
 3. Create a Secret with that gateway's root key and an `ObjectStore` whose `endpointURL` is the temporary gateway and whose `destinationPath` is the same bucket.
 4. Follow path 1 with `barmanObjectName` set to that `ObjectStore`. Check the rows, then decide how it becomes the database: usually by pointing the real `ObjectStore` at a rebuilt store that holds the restored files and following path 2.
