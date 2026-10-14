@@ -19,8 +19,8 @@
     {
       "file": "patches/0011-models-reply-budget-efforts.patch",
       "repository": "kelchm/TensorFold",
-      "base": "0efbd44755b07b1bffb7a51c010992fe11a6142f",
-      "commit": "0564977a31c77d0720a9c9622dd54f6e06c86baa",
+      "base": "c126fe16e3f8d9bef4a620af34ff35aec0966af1",
+      "commit": "4612b9586d343ac0a71e194df1bb52d27617038e",
       "path": "zig/src/server/status_routes.zig"
     }
   ],

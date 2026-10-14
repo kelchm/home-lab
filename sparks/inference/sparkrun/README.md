@@ -524,7 +524,7 @@ The [mod](mods/mia-tensorfold-qwen38fn-v1.1-discovery/) adds two patches to `zig
 | Patch | Source | Adds |
 | --- | --- | --- |
 | `0010-models-context-length.patch` | [`ashhart/TensorFold@51ad073f`](https://github.com/ashhart/TensorFold/commit/51ad073feadd81d04809edf8f0822cc5380a832c), upstream PR #483, released in 1.0.3 | `context_length`, `max_model_len` |
-| `0011-models-reply-budget-efforts.patch` | [`kelchm/TensorFold@0564977a`](https://github.com/kelchm/TensorFold/commit/0564977a31c77d0720a9c9622dd54f6e06c86baa), branch `models-reply-budget-efforts`, a draft not proposed upstream | `default_max_tokens`, `reasoning` |
+| `0011-models-reply-budget-efforts.patch` | [`kelchm/TensorFold@4612b958`](https://github.com/kelchm/TensorFold/commit/4612b9586d343ac0a71e194df1bb52d27617038e), branch `models-reply-budget-efforts`, a draft not proposed upstream | `default_max_tokens`, `reasoning` |
 
 Each is that commit's change to the one source file; the upstream test fixtures and README text are left out. `upstream.lock.json` pins both commits and the checksum of every file in the mod. To move to another draft commit, change its `commit` in the lock, then run `prepare.py --refresh ~/Development/kelchm/TensorFold` to rewrite the patch and `build/build.sh --record` to rebuild and record the binary.
 
