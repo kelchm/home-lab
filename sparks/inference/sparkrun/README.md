@@ -463,7 +463,7 @@ The first v1.3 native launch passed both-host idle/10GbE checks, then aborted du
 
 ## Qwen3.8-Flash-Next on Mia's Zig-engine kit
 
-The `mia-tensorfold-qwen38fn-tp2/` directory holds two profiles for Mia's [Qwen3.8-Flash-Next two-Spark kit](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/blob/be3ed857ab1055ca47b36134d22691f00f2bb94a/README.md), v1.1 of October 8. They are a different model, engine and API name from the GLM profiles above, not an upgrade of them: the kit serves text through TensorFold's Zig engine, `tensorfold-native`; a Python helper on rank 0 decodes pictures and video and runs the checkpoint's vision tower on the GPU. Both were staged from source and registry evidence. The NVFP4 profile booted on October 8, replacing GLM v1.10, which was stopped idle with its own recipe. The [evaluation](#october-8-nvfp4-evaluation) run against it ended with a request stalled on the two-rank control link and both engine processes gone. It was left down until the operator requested recovery at 23:11 EDT; the same pinned recipe is now serving again after readiness and a short LAN reply passed. A [continuation](#october-9-thinking-and-agent-continuation) on October 9 ran a thinking soak, an OpenCode accounting session and the agent gate on that instance with short prompts only; the window near 1M remains unqualified. The INT4-AR profile has not booted and its weights are not on the Sparks. A third file, the [model discovery variant](#model-discovery-variant), is the NVFP4 profile with a locally patched server binary; it is staged and has not booted.
+The `mia-tensorfold-qwen38fn-tp2/` directory holds two profiles for Mia's [Qwen3.8-Flash-Next two-Spark kit](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/blob/be3ed857ab1055ca47b36134d22691f00f2bb94a/README.md), v1.1 of October 8. They are a different model, engine and API name from the GLM profiles above, not an upgrade of them: the kit serves text through TensorFold's Zig engine, `tensorfold-native`; a Python helper on rank 0 decodes pictures and video and runs the checkpoint's vision tower on the GPU. Both were staged from source and registry evidence. The NVFP4 profile booted on October 8, replacing GLM v1.10, which was stopped idle with its own recipe. The [evaluation](#october-8-nvfp4-evaluation) run against it ended with a request stalled on the two-rank control link and both engine processes gone. It was left down until the operator requested recovery at 23:11 EDT; the same pinned recipe is now serving again after readiness and a short LAN reply passed. A [continuation](#october-9-thinking-and-agent-continuation) on October 9 ran a thinking soak, an OpenCode accounting session and the agent gate on that instance with short prompts only; the window near 1M remains unqualified. The INT4-AR profile has not booted and its weights are not on the Sparks. A third file, the [model discovery variant](#model-discovery-variant), is the NVFP4 profile with a locally patched server binary; its [first build ran on October 13](#october-13-live-test).
 
 First NVFP4 boot, October 8: with 117/116 GiB available on head/worker, the SparkRun dry run and launch passed. The weights downloaded in 28 minutes and synchronized to both caches. The vision helper was ready in 13.7 s, inside the 120 s rendezvous gate; the ranks agreed their settings, joined NCCL and opened the RoCE all-gather on two ports; the server reported loading in 91.0 s and answered HTTP 95 s after container start. It sized 30.99 GiB of sequence memory with 10 GiB kept free, above the 26.5 GiB upstream publishes for this quant. The readiness hook passed with 16 lanes reported and all 16 smoke replies correct. Afterwards 42/45 GiB was available and both management-link carrier counters were unchanged. Rank 0 listened for rank 1 on the management address, so the control link is not on the CX7 fabric. Through the workstation's OpenCode a plain reply and a file-read tool turn both completed, the second request reusing 10,530 of 10,610 prompt tokens. This paragraph is the boot and smoke result only; the measurements made on this instance afterwards are under [October 8 NVFP4 evaluation](#october-8-nvfp4-evaluation). Log: `~/sparkrun/results/qwen38fn-v1.1/first-boot-nvfp4.log` on the head.
 
@@ -517,7 +517,7 @@ A first boot is a memory-fit and fabric check under the same abort rules as the 
 
 ### Model discovery variant
 
-`qwen38fn-nvfp4-tp2-mia-tf-v1.1-discovery-nvidia-1m` is the NVFP4 profile with one file replaced inside the same pinned image: `tensorfold-native`, rebuilt so `GET /v1/models` reports the request window, the default reply budget and the reasoning efforts. It exists so a client can configure itself from the server instead of a hand-written per-model table. It is a local patch awaiting an upstream decision, staged and not yet booted: half of it is upstream's own change and half is an unposted draft. The v1.1 profile and mod are unchanged and are the rollback.
+`qwen38fn-nvfp4-tp2-mia-tf-v1.1-discovery-nvidia-1m` is the NVFP4 profile with one file replaced inside the same pinned image: `tensorfold-native`, rebuilt so `GET /v1/models` reports the request window, the default reply budget and the reasoning efforts. It exists so a client can configure itself from the server instead of a hand-written per-model table. It is a local patch awaiting an upstream decision: half of it is upstream's own change and half is an unposted draft. A first build of it [served on October 13](#october-13-live-test) and passed every check except decode speed; the build in this directory now fixes that and has not booted. The v1.1 profile and mod are unchanged and are the rollback.
 
 The [mod](mods/mia-tensorfold-qwen38fn-v1.1-discovery/) adds two patches to `zig/src/server/status_routes.zig`, on top of the kit's nine, and nothing else in the engine changes:
 
@@ -549,28 +549,47 @@ What a client must not read into these fields:
 
 #### Build
 
-The image is not rebuilt. [`build/build.sh`](mods/mia-tensorfold-qwen38fn-v1.1-discovery/build/build.sh) compiles `tensorfold-native` alone on any linux/arm64 Docker daemon, with no GPU, no `nvcc` and no NVIDIA base image, from pinned inputs: Ubuntu 24.04 by digest, Zig 0.17.0 by the kit's checksum, engine `db281878`, the kit's nine patches at `be3ed857` by checksum, the two patches above, and the CUDA fatbins taken from the published image's own layer by digest and embedded with the engine's `-Dfatbins` option. The result goes to the git-ignored `out/tensorfold-native`, and its sha256 is in the lock. At container start [`run.sh`](mods/mia-tensorfold-qwen38fn-v1.1-discovery/run.sh) verifies the mod, refuses any image binary that is not the published `24a7bda5…`, and replaces it; a failure there fails the launch.
+The image is not rebuilt. [`build/build.sh`](mods/mia-tensorfold-qwen38fn-v1.1-discovery/build/build.sh) compiles `tensorfold-native` alone on any linux/arm64 Docker daemon, with no GPU, no `nvcc` and no NVIDIA base image, from pinned inputs: Ubuntu 24.04 by digest with its `gcc`, `libc6-dev` and `libibverbs-dev` packages, Zig 0.17.0 by the kit's checksum, engine `db281878`, the kit's nine patches at `be3ed857` by checksum, the two patches above, and the CUDA fatbins taken from the published image's own layer by digest and embedded with the engine's `-Dfatbins` option. Before the two patches go on, the build compiles the kit's tree as it is and stops unless its `.text`, `.rodata`, `.data` and `.eh_frame` equal the published binary's byte for byte, so the patched binary is the published program plus the two patches and nothing else. That takes naming the CPU the published build detected, `cortex_a725` with the features Zig 0.17.0 reads from a Spark, and having `infiniband/verbs.h` present: without that header the engine compiles a stub in place of its RoCE all-gather. The result goes to the git-ignored `out/tensorfold-native`, and its sha256 is in the lock. At container start [`run.sh`](mods/mia-tensorfold-qwen38fn-v1.1-discovery/run.sh) verifies the mod, refuses any image binary that is not the published `24a7bda5…`, and replaces it; a failure there fails the launch.
 
 This route was chosen over the kit's own image build because the recipe keeps the published image digest. SparkRun addresses a workload and keys its runtime cache by image, so the variant reuses the v1.1 profile's image, kernel set and CUDA cache on both hosts, and nothing is pulled or loaded. Adding a patch to the kit's build instead changes its image hash: a new 11 GiB-class image built on the head from an NVIDIA base that is not on either Spark, a Triton kernel-set compile, a copy to the worker, a different SparkRun workload and an empty image-keyed cache, all for a change to one HTTP handler.
 
-Checked on October 12, on a workstation and never on a Spark:
+Checked on a workstation:
 
 - Both patches apply to engine `db281878` with the kit's nine patches applied, and regenerate byte for byte from the pinned commits.
-- On that tree the server unit tests pass, 53 and 17, including the five model-discovery tests, and the engine-less test server started with this profile's flags returns the entry above. [`qwen_model_discovery.py`](tests/qwen_model_discovery.py) `--completions` passed against it: all eight echoes matched. The test server's template names the same levels as Qwen's; it is not the Qwen template.
-- The full CUDA `tensorfold-native`, two-rank Flash Next engine included, compiles and links for linux/arm64 in about two minutes. A second build from an empty Docker cache produced the same `3dea815d…`.
-- The rebuilt binary contains byte for byte the same 32 of the image's 34 fatbins as the published binary does, so the GPU code is the published image's.
+- On that tree the server unit tests pass, 53 and 17, including the five model-discovery tests.
+- The unpatched rebuild matches the published binary in every loaded section; the two files differ only in compiler-numbered symbol names in the unloaded string table.
+- The patched build takes about four minutes with that reference build, and a second build from an empty Docker cache produced the same `5a8105da…`.
 
-Not established:
+Not established for this build: it has not run. The October 13 result below is for the earlier `3dea815d…` build, whose server code is the same two patches. What changes is the RoCE all-gather, so the next launch should show both ranks opening it and the throughput point back at the October 8 figures.
 
-- The rebuilt binary has never run. It needs SVE, as the published one does, and both stop with an illegal instruction on the Apple-silicon build host, so its first execution will be on a Spark.
-- It is not the published binary plus a diff. The published one was built on a Spark with the compiler's detected CPU; this one names the target explicitly, `cortex_x925` with the feature set Zig 0.17.0 derives from the Sparks' `/proc/cpuinfo` flags, against glibc 2.39. An unpatched rebuild this way did not reproduce the published bytes, so every CPU-side function is recompiled, not only the changed handler. That is why the checks after launch repeat the correctness gates and a throughput point.
-- Nothing about the real Qwen template, the two ranks or the window has been measured with it.
+#### October 13 live test
+
+The first build, `3dea815d…` from branch commit `c7643951`, replaced the v1.1 instance at 20:45 EDT on October 13 by the steps below. Both hosts were idle with carrier counters at 12 and 1,432, the binary printed its usage line in a throwaway container on the head, and the v1.1 instance stopped in 3 s with 116 GiB available on each host. The API was down for 118 s, from 20:45:16 to 20:47:14; the launch took 112.0 s and its readiness hook passed, including the new window check. Sequence memory was 31.67 GiB. Both ranks ran the rebuilt binary by sha256.
+
+`GET /v1/models` returned the expected entry exactly, `supported_efforts` order included. The pinned checkpoint's `chat_template.jinja` accepts `('xhigh', 'medium', 'low')` and defaults to `xhigh`, which is that list with `none` for the switch. Chat requests of 8 tokens with no `chat_template_kwargs` echoed:
+
+| `reasoning_effort` sent | Advertised | Echoed `reasoning_effort` | Echoed `enable_thinking` |
+| --- | --- | --- | --- |
+| omitted | `default_enabled: true`, no `default_effort` | `null` | `true` |
+| `none` | `none` | `none` | `false` |
+| `minimal` | `low` | `low` | `true` |
+| `low` | `low` | `low` | `true` |
+| `medium` | `medium` | `medium` | `true` |
+| `high` | `xhigh` | `xhigh` | `true` |
+| `xhigh` | `xhigh` | `xhigh` | `true` |
+| `max` | `xhigh` | `xhigh` | `true` |
+
+One case the fields do not describe: `reasoning_effort: "none"` with `chat_template_kwargs: {"enable_thinking": true}` echoed thinking on with a null effort and produced reasoning text, so the switch wins over the effort.
+
+The gates repeated from October 8 and 9 all passed: `exact.py`, with all 18 reply and token hashes equal to the October 8 run and 520 drafts accepted; `toolcheck.py` 3 of 3; `prompt_reuse.py 30000 4 --other` at 99.3% or better with a 9.82 s cold prefill of 31,557 tokens against 9.68 s; `context_boundary.py` 16 checks; `acceptance.py` with five images and a 0.140 s newcomer; and all 18 agent cases in the five applicable sections.
+
+Decode was slower. Replaying the October 8 request bodies gave 56.25 and 55.73 tok/s at one stream against 62.58 and 61.18, 129.05 at four against 137.45 and 149.82, and 276.52 and 305.15 at sixteen against 312.95 and 316.93. Both rank logs say why: `RoCE: built without libibverbs headers: no RoCE all-gather`, with NCCL carrying every gather. Replies are the same bits either way, which the equal hashes show; the cost is speed, about 10% at one stream. That build had no `infiniband/verbs.h`, and the build above now does. The instance was left serving after the checks, idle, with 39 and 42 GiB available and the carrier counters unchanged. Receipts are on the head under `~/sparkrun/results/qwen38fn-v1.1/discovery-20261013/`.
 
 #### Launch and rollback
 
-Merging this directory changes nothing on the Sparks. Each step below is manual and none has been run. The stop in step 5 begins the outage; with the 107 s launch measured on October 8, expect about three to five minutes without the API if the launch passes first time.
+Merging this directory changes nothing on the Sparks. Each step below is manual. The stop in step 5 begins the outage, which was 118 s on October 13.
 
-1. On the workstation, confirm the binary: `python3 sparks/inference/sparkrun/mods/mia-tensorfold-qwen38fn-v1.1-discovery/prepare.py --check --require-binary`. If `out/` is missing, `build/build.sh` rebuilds it in about two minutes and fails unless the result matches the lock.
+1. On the workstation, confirm the binary: `python3 sparks/inference/sparkrun/mods/mia-tensorfold-qwen38fn-v1.1-discovery/prepare.py --check --require-binary`. If `out/` is missing, `build/build.sh` rebuilds it in about four minutes and fails unless the result matches the lock.
 2. Check both hosts with `task sparks:status` and the gates used for every trial here: no request in flight (`live.connections` and `live.waiting` zero in `/health`), no other GPU workload, both management links at 10GbE with carrier counters unchanged from 12 and 1,432, and nobody relying on the endpoint for the next ten minutes.
 3. Copy only the new files to the head. This does not touch the running containers, which hold their own copy of the v1.1 mod:
 
@@ -601,13 +620,13 @@ Merging this directory changes nothing on the Sparks. Each step below is manual 
    sparkrun stop "$current" --cluster sparks
    ```
 
-6. Launch the variant. Its readiness hook is the v1.1 hook plus one check, that `/v1/models` reports the 1,048,576 window, so a launch that somehow served the published binary fails here:
+6. Launch the variant. Its readiness hook is the v1.1 hook plus one check, that `/v1/models` reports the 1,048,576 window, so a launch that somehow served the published binary fails here. When the running instance is an earlier build of this variant, steps 5 and 6 use the same recipe file:
 
    ```sh
    sparkrun run "$variant" --cluster sparks --no-auto-detect --no-sync-tuning --no-follow
    ```
 
-7. Read both rank logs for the load, the NCCL join, the RoCE all-gather and the sequence-memory line, as on a first boot, and confirm each rank runs the rebuilt binary: `docker exec <container> sha256sum /opt/tensorfold/native/bin/tensorfold-native` matches `binary_sha256` in the lock on both hosts.
+7. Read both rank logs for the load, the NCCL join, the RoCE all-gather opening on both ranks and the sequence-memory line, as on a first boot, and confirm each rank runs the rebuilt binary: `docker exec <container> sha256sum /opt/tensorfold/native/bin/tensorfold-native` matches `binary_sha256` in the lock on both hosts.
 
 To roll back, stop with either recipe, confirm both GPUs are free, and launch `$current` with the same flags. That starts fresh containers from the same image, whose binary is the published one; nothing is left to undo on the hosts except the copied files. Both recipes are the same workload to SparkRun, so `stop`, `logs` and `status` with either file act on whichever is running and do not say which binary it is: tell them apart by `context_length` in `/v1/models` or by the binary's sha256.
 
