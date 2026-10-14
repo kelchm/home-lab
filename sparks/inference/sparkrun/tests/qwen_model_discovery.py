@@ -14,13 +14,13 @@ def fetch(url, body=None, timeout=120):
         return json.load(response)
 
 
-def check_entry(entry, context, max_tokens):
+def check_entry(entry, context):
     """The fields a client configures itself from; returns the reasoning object."""
     for field in ("context_length", "max_model_len"):
         if entry.get(field) != context:
             raise RuntimeError(f"Expected {field} {context}, got {entry.get(field)!r}")
-    if entry.get("default_max_tokens") != max_tokens:
-        raise RuntimeError(f"Expected default_max_tokens {max_tokens}, got {entry.get('default_max_tokens')!r}")
+    if "default_max_tokens" in entry:
+        raise RuntimeError(f"Unexpected default_max_tokens: {entry['default_max_tokens']!r}")
     reasoning = entry.get("reasoning")
     if not isinstance(reasoning, dict) or not isinstance(reasoning.get("default_enabled"), bool):
         raise RuntimeError(f"Missing reasoning.default_enabled: {reasoning!r}")
@@ -53,7 +53,6 @@ def main():
     parser.add_argument("--url", default="http://127.0.0.1:8888")
     parser.add_argument("--model", default="Qwen3.8-Flash-Next")
     parser.add_argument("--context", type=int, default=1048576)
-    parser.add_argument("--max-tokens", type=int, default=32768)
     parser.add_argument("--completions", action="store_true",
                         help="Also send eight 8-token chat requests: one naming no effort, one per accepted effort")
     args = parser.parse_args()
@@ -61,7 +60,7 @@ def main():
     entries = [entry for entry in fetch(url + "/v1/models")["data"] if entry.get("id") == args.model]
     if len(entries) != 1:
         raise RuntimeError(f"Expected one {args.model} entry, got {entries!r}")
-    reasoning = check_entry(entries[0], args.context, args.max_tokens)
+    reasoning = check_entry(entries[0], args.context)
     print("Model entry:", json.dumps(entries[0], sort_keys=True), flush=True)
     if args.completions:
         for effort in (None, *EFFORTS):

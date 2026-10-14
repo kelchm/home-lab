@@ -75,7 +75,7 @@ QWEN_DISCOVERY_PROFILE = "qwen38fn-nvfp4-tp2-mia-tf-v1.1-discovery-nvidia-1m"
 QWEN_DISCOVERY_MOD = "mia-tensorfold-qwen38fn-v1.1-discovery"
 QWEN_DISCOVERY_ENTRY = {
     "id": "Qwen3.8-Flash-Next", "object": "model", "created": 0, "owned_by": "tensorfold",
-    "context_length": 1048576, "max_model_len": 1048576, "default_max_tokens": 32768,
+    "context_length": 1048576, "max_model_len": 1048576,
     "reasoning": {"default_enabled": True, "supported_efforts": ["xhigh", "medium", "low", "none"],
                   "effort_map": {"none": "none", "minimal": "low", "low": "low", "medium": "medium", "high": "xhigh",
                                  "xhigh": "xhigh", "max": "xhigh"}},
@@ -493,7 +493,7 @@ def test_qwen_discovery_bundle_installs_only_over_the_published_binary(tmp_path)
     assert result.returncode != 0 and "Rebuilt binary does not match the lock" in result.stderr
 
 
-@pytest.mark.parametrize("name", ("serve.py", "build/Dockerfile", "patches/0011-models-reply-budget-efforts.patch"))
+@pytest.mark.parametrize("name", ("serve.py", "build/Dockerfile", "patches/0011-models-reasoning.patch"))
 def test_qwen_discovery_bundle_rejects_changed_files_and_a_missing_binary(tmp_path, name):
     bundle = _qwen_discovery_bundle(tmp_path)
     prepare = [sys.executable, str(bundle / "prepare.py")]
@@ -524,15 +524,15 @@ def test_qwen_discovery_readiness_and_live_check_pin_the_model_entry():
         with pytest.raises(RuntimeError):
             ready.check_models(body, "Qwen3.8-Flash-Next", context)
 
-    reasoning = live.check_entry(QWEN_DISCOVERY_ENTRY, 1048576, 32768)
-    for change in ({"context_length": 524288}, {"default_max_tokens": 4096}, {"reasoning": None},
+    reasoning = live.check_entry(QWEN_DISCOVERY_ENTRY, 1048576)
+    for change in ({"context_length": 524288}, {"default_max_tokens": 32768}, {"reasoning": None},
                    {"reasoning": {**reasoning, "supported_efforts": ["xhigh", "low", "none"]}},
                    {"reasoning": {**reasoning, "effort_map": {"none": "none"}}},
                    {"reasoning": {**reasoning, "default_effort": "high"}}):
         with pytest.raises(RuntimeError):
-            live.check_entry({**QWEN_DISCOVERY_ENTRY, **change}, 1048576, 32768)
+            live.check_entry({**QWEN_DISCOVERY_ENTRY, **change}, 1048576)
     with pytest.raises(RuntimeError):
-        live.check_entry(QWEN_DISCOVERY_ENTRY, 1048576, 4096)
+        live.check_entry(QWEN_DISCOVERY_ENTRY, 524288)
     live.check_echo(reasoning, None, {"tensorfold": {"enable_thinking": True, "reasoning_effort": None}})
     live.check_echo({**reasoning, "default_effort": "low"}, None, {"tensorfold": {"enable_thinking": True, "reasoning_effort": "low"}})
     live.check_echo(reasoning, "high", {"tensorfold": {"enable_thinking": True, "reasoning_effort": "xhigh"}})
