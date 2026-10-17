@@ -1,6 +1,6 @@
 # Host monitoring
 
-Metrics from the three PVE nodes, the two DGX Sparks and the NAS. The lab's metrics backend runs in `k8s-prod`; these hosts push to it. Each host runs ordinary exporters and a `vmagent` in Docker Compose, deployed from `main` by a host-local doco-cd as on the [NAS](../../synology/README.md). `vmagent` scrapes the exporters over loopback and pushes to `https://metrics-ingest.home.kelch.io`, queueing up to 1 GiB on disk while the endpoint is unreachable. Nothing on a host listens beyond loopback except doco-cd on PVE (see [PVE](#pve-node)) and the sparkDash dashboard on `spark-1`, at `10.32.21.31:5555` behind an access token. The Proxmox API is read separately by an in-cluster exporter. As on the NAS, doco-cd holds the host's Docker socket, so whoever can merge to `main` controls every enrolled host.
+Metrics from the three PVE nodes, the two DGX Sparks, the NAS and the UniFi network devices. The lab's metrics backend runs in `k8s-prod`; these hosts push to it. Each host runs ordinary exporters and a `vmagent` in Docker Compose, deployed from `main` by a host-local doco-cd as on the [NAS](../../synology/README.md). `vmagent` scrapes the exporters over loopback and pushes to `https://metrics-ingest.home.kelch.io`, queueing up to 1 GiB on disk while the endpoint is unreachable. Nothing on a host listens beyond loopback except doco-cd on PVE (see [PVE](#pve-node)) and the sparkDash dashboard on `spark-1`, at `10.32.21.31:5555` behind an access token. The Proxmox API and the UniFi console are read separately by in-cluster exporters. As on the NAS, doco-cd holds the host's Docker socket, so whoever can merge to `main` controls every enrolled host.
 
 ## State
 
@@ -23,7 +23,7 @@ Not yet verified: that Docker comes back with the same settings after a PVE node
 | Label | Meaning | Set by |
 |---|---|---|
 | `instance` | Physical node, such as `spark-1` | The host's ingestion token |
-| `platform` | Machine type: `k8s`, `pve`, `spark` or `synology` | The host's ingestion token; the node-exporter scrape for the cluster nodes |
+| `platform` | Machine type: `k8s`, `pve`, `spark`, `synology` or `unifi` | The host's ingestion token; the node-exporter scrape for the cluster nodes; the [UniFi](#unifi) scrape |
 | `job` | Collector or source, such as `spark-node`, `pve-vmagent` or `pve-backup` | Scrape configuration for scraped series; the webhook URL for PVE backup metrics |
 | `model`, `runtime`, `recipe` | What a Spark is serving | SparkRun's container labels |
 
@@ -101,6 +101,22 @@ sudo pveum user token add metrics@pve exporter --privsep 0
 ```
 
 The exporter reports quorum, node and guest state, storage use and which guests no backup job covers. It has no metric for whether a backup ran or succeeded.
+
+## UniFi
+
+[Unpoller](../../kubernetes/apps/observability/unpoller/app/) reads the UniFi console at `unifi.home.kelch.io` with a local account and exports gateway, WAN, switch, port, PoE and access-point metrics. Its series carry `job="unifi-api"`, `instance="unifi"` and `platform="unifi"`; the device is in the `name` label. It refreshes from the console once a minute, and the scrape drops the per-client `unpoller_client_*` series. DPI, events, alarms, IDS and syslog collection stay off.
+
+In UniFi OS, under Admins & Users, create a local-access-only admin named `unpoller` with the Network role View Only and no access to other applications. Then write its password into the SOPS Secret from a checkout:
+
+```sh
+read -rs pw
+kubectl create secret generic unpoller-credentials --from-literal=password="$pw" --dry-run=client -o yaml \
+  | sops encrypt --filename-override kubernetes/apps/observability/unpoller/app/credentials.sops.yaml --input-type yaml --output-type yaml /dev/stdin \
+  > kubernetes/apps/observability/unpoller/app/credentials.sops.yaml
+unset pw
+```
+
+To rotate, change the password in UniFi OS, rerun the command and merge; Reloader restarts the pod. To remove, delete the Flux Kustomization from the observability `kustomization.yaml` and the account from UniFi OS.
 
 ## Alerts
 

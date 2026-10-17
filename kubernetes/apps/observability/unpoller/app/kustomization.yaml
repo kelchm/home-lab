@@ -1,0 +1,12 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ./credentials.sops.yaml
+  - ./deployment.yaml
+  - ./networkpolicy.yaml
+  - ./scrape.yaml
+configMapGenerator:
+  - name: unpoller-config
+    files:
+      - up.conf

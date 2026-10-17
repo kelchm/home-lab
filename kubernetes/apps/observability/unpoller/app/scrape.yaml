@@ -1,0 +1,22 @@
+---
+# Unpoller refreshes its cache from the console once a minute, so a faster
+# scrape would only repeat samples. Per-client series are dropped.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMStaticScrape
+metadata:
+  name: unpoller
+spec:
+  jobName: unifi-api
+  scrapeClass: other-systems
+  targetEndpoints:
+    - targets:
+        - unpoller.observability.svc.cluster.local:9130
+      labels:
+        instance: unifi
+        platform: unifi
+      interval: 60s
+      scrapeTimeout: 30s
+      metricRelabelConfigs:
+        - sourceLabels: [__name__]
+          regex: unpoller_client_.+
+          action: drop
