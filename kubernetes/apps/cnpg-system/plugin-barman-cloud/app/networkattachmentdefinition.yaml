@@ -1,0 +1,33 @@
+---
+# Storage-VLAN interface for database pods, so backups reach the S3 endpoint
+# on Athena's storage address directly. Pods cannot reach VLAN 25 through
+# Cilium: it masquerades only on the node's primary interface.
+#
+# A Cluster opts in with spec.inheritedMetadata.annotations
+# `k8s.v1.cni.cncf.io/networks: cnpg-system/storage-network`, which also
+# covers its bootstrap and recovery job pods.
+#
+# Same bridge as longhorn-system/storage-network, with its own /28
+# (.160-.175; see docs/architecture.md): Athena's NFS exports admit Longhorn's
+# pool, and database pods must not inherit that. Cilium policy does not apply
+# to this interface in either direction, so each Cluster that uses it also
+# rejects storage-VLAN logins in pg_hba.
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata:
+  name: storage-network
+spec:
+  config: |
+    {
+      "cniVersion": "0.3.1",
+      "type": "bridge",
+      "bridge": "br-storage",
+      "isGateway": false,
+      "ipMasq": false,
+      "ipam": {
+        "type": "whereabouts",
+        "range": "10.32.25.0/24",
+        "range_start": "10.32.25.160",
+        "range_end": "10.32.25.175"
+      }
+    }

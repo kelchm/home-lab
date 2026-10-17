@@ -1,0 +1,16 @@
+---
+# After Longhorn's 07:00 and 08:00 UTC jobs and before the 10:00 UTC off-site run.
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: bambuddy-db
+spec:
+  schedule: "0 40 8 * * *"
+  # The first base backup runs when this is created.
+  immediate: true
+  backupOwnerReference: self
+  cluster:
+    name: bambuddy-db
+  method: plugin
+  pluginConfiguration:
+    name: barman-cloud.cloudnative-pg.io

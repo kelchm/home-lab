@@ -31,6 +31,7 @@ or fixing.
 | [alerting](runbooks/alerting.md) | Receiving, silencing, testing, and troubleshooting Alertmanager notifications and control-plane coverage. |
 | [logging](runbooks/logging.md) | Querying Kubernetes logs and diagnosing the vlagent-to-VictoriaLogs ingestion path. |
 | [longhorn-backup-restore](runbooks/longhorn-backup-restore.md) | Restoring a PV from a Longhorn backup; DR drills. |
+| [cnpg-backup-restore](runbooks/cnpg-backup-restore.md) | CloudNativePG WAL archiving and base backups to the NAS S3 endpoint: alerts, the emergency archiver switch, and the three restore paths. |
 | [longhorn-storage-network-cutover](runbooks/longhorn-storage-network-cutover.md) | Moving Longhorn replica traffic onto the dedicated storage VLAN. |
 | [kanidm-restore](runbooks/kanidm-restore.md) | Recovering Kanidm from DB corruption or PVC loss. |
 | [kanidm-kaniop-cutover](runbooks/kanidm-kaniop-cutover.md) | Migrating Kanidm from the hand-rolled StatefulSet to the kaniop operator. |

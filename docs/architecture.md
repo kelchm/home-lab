@@ -204,7 +204,8 @@ The storage VLAN bends the skeleton because its primary inhabitants are storage 
 | `.100-.127` | Reserved |
 | `.128/28` | k8s-prod storage-pod IPs (16 IPs) |
 | `.144/28` | Second-cluster storage-pod IPs (reserved, 16 IPs) |
-| `.160/28`, `.176/28` | Next storage-pod pools |
+| `.160/28` | k8s-prod database-pod IPs, for backups to the NAS S3 endpoint (16 IPs) |
+| `.176/28` | Next storage-pod pool |
 | `.192-.254` | Reserved |
 
 **Reading rule:** the decade decode applies to host/member IPs only. Pod-level endpoints occupy `.128/26` (`.128-.191`), sub-allocated one /28 per pool in order of need — the /28 sequence is independent of system decades, and this table is the source of truth.
@@ -231,7 +232,7 @@ API VIP is managed by the Talos `vipController` (GARP-based at the machine-confi
 ```
 10.32.25.1         gateway-storage           Router interface
 10.32.25.5         nas-storage               Synology (SFP+ interface)
-10.32.25.6         s3-storage                (reserved) NAS S3 endpoint
+10.32.25.6         (reserved; the NAS S3 endpoint is nas-storage port 9000)
 10.32.25.7         pbs-storage               (reserved) PBS data interface
 10.32.25.8-.10     (reserved for future storage providers)
 10.32.25.11-.13    k8s-prod-{1,2,3}-storage  System 1 node NICs (2.5GbE)
@@ -389,6 +390,7 @@ hermes.home.kelch.io                10.32.21.100
 # Shared infrastructure
 nas.home.kelch.io                   10.32.20.5
 nas-storage.home.kelch.io           10.32.25.5
+s3-storage.home.kelch.io            10.32.25.5    (S3 object store, port 9000)
 gateway.home.kelch.io               10.32.1.1
 
 # Wildcard for Traefik-fronted household services
@@ -426,7 +428,7 @@ Cluster-wide values are written as literals wherever they are used, so searching
 | Service domain | `home.kelch.io` | LAN admin and household routes and the `*.home.kelch.io` certificate; see [DNS Plan](#dns-plan) |
 | Public apex | `kelch.io` | ClusterIssuer and k8s-gateway zone, Cloudflare DNS and tunnel, and the `*.kelch.io` certificate (`kelch-io-production-tls`) |
 | Timezone | `America/New_York` | Container `TZ` and CronJob `timeZone`; Longhorn RecurringJobs run in UTC ([backup runbook](runbooks/longhorn-backup-restore.md)) |
-| NAS storage address | `10.32.25.5` (`nas-storage`) | NFS PVs and the Longhorn BackupTarget; see [Storage VLAN registry](#storage-vlan-registry) |
+| NAS storage address | `10.32.25.5` (`nas-storage`) | NFS PVs, the Longhorn BackupTarget and the S3 object store (`s3-storage`, port 9000); see [Storage VLAN registry](#storage-vlan-registry) |
 | NAS management address | `10.32.20.5` (`nas`) | DSM and container UIs |
 
 Flux post-build substitution is not used. Reserve it for values that differ between deployments sharing the same manifests, such as the `-sbx` hostname suffix a second cluster would need. When it returns:
@@ -471,7 +473,7 @@ The owner selected 3 replicas for both current CNPG databases in [#474](https://
 
 The class selection applies to newly provisioned PVCs. Existing PVCs retain their immutable `storageClassName: longhorn`, and changing a Cluster’s storage class does not change an existing Longhorn volume’s replica count. Existing database volumes need a separately approved increase of `spec.numberOfReplicas` from 2 to 3, followed by verification of three healthy replicas on distinct nodes; see the migration steps and current verification state in [#474](https://github.com/kelchm/home-lab/issues/474). Do not recreate database PVCs to perform this change. StorageClass parameters are immutable, so the dedicated class is created separately from the default class.
 
-Replica count is independent of backup policy: both databases currently receive daily and weekly Longhorn backups to the NAS, but neither has a configured CNPG-native backup/PITR path. Bambuddy also has a manual portable export/restore procedure. CNPG backup and recovery work remains tracked in [#224](https://github.com/kelchm/home-lab/issues/224), with independent off-site backup in [#297](https://github.com/kelchm/home-lab/issues/297).
+Replica count is independent of backup policy. Both databases archive WAL continuously and take a daily base backup to an S3 endpoint on the NAS through the Barman Cloud plugin, which gives point-in-time recovery; the off-site job carries that store to B2 daily. Both also receive Longhorn's daily and weekly volume backups as an independent second copy, and Bambuddy has a manual portable export/restore procedure. Operation and restore are in the [CloudNativePG backup runbook](runbooks/cnpg-backup-restore.md); the full recovery drill remains tracked in [#224](https://github.com/kelchm/home-lab/issues/224).
 
 ### Disk layout (per node)
 
