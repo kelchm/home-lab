@@ -1,0 +1,71 @@
+---
+# UniFi network state read through Unpoller. Series carry job="unifi-api" and
+# no cluster label; devices are identified by their UniFi name.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: unifi
+spec:
+  groups:
+    - name: unifi
+      rules:
+        # Unpoller serves its last good poll from cache, so a console it can no
+        # longer read shows as a growing cache age rather than a failed scrape.
+        - alert: UniFiMetricsStale
+          expr: |
+            max(unpoller_prometheus_cache_age_seconds{job="unifi-api"}) > 300
+            or sum(up{job="unifi-api"}) == 0
+            or absent(up{job="unifi-api"})
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: UniFi metrics are stale or missing
+            description: >-
+              Unpoller has not read the console for over five minutes, or is
+              not being scraped. Check the unpoller pod's log, the unpoller-sa
+              account and reachability of unifi.home.kelch.io:443.
+
+        - alert: UniFiDeviceDisconnected
+          expr: max by (subsystem) (unpoller_site_disconnected{job="unifi-api"}) > 0
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $value }} UniFi {{ $labels.subsystem }} device(s) disconnected"
+            description: >-
+              The console counts adopted devices in the {{ $labels.subsystem }}
+              subsystem that are not connected. The UniFi Devices page names them.
+
+        # Both WANs are load-balanced, so each is ACTIVE when healthy; BACKUP or
+        # DISCONNECTED means traffic runs on the other one.
+        - alert: UniFiWANNotActive
+          expr: unpoller_wan_interface_state{job="unifi-api"} == 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.wan_interface }} is {{ $labels.state }}"
+            description: >-
+              The gateway is not using {{ $labels.wan_interface }}; all traffic
+              runs on the remaining WAN. Check the modem or dish and the UniFi
+              Internet page.
+
+        # The expected uplink speed of every device; any device not named here
+        # must reach 1 Gb/s. The two switch LAGs report their aggregate, so one
+        # member down reads as 10000. The gateway's uplink is a WAN, covered above.
+        - alert: UniFiUplinkSpeedDegraded
+          expr: |
+            label_replace(unpoller_device_uplink_speed_mbps{job="unifi-api", name=~"Core Switch|Lab Switch"} < 20000, "expected_mbps", "20000", "", "")
+            or label_replace(unpoller_device_uplink_speed_mbps{job="unifi-api", name="Core Aggregation"} < 10000, "expected_mbps", "10000", "", "")
+            or label_replace(unpoller_device_uplink_speed_mbps{job="unifi-api", name=~"Basement AP|USW Flex 2.5G 8 PoE"} < 2500, "expected_mbps", "2500", "", "")
+            or label_replace(unpoller_device_uplink_speed_mbps{job="unifi-api", name!~"Core Switch|Lab Switch|Core Aggregation|Basement AP|USW Flex 2.5G 8 PoE|Gateway DMP"} < 1000, "expected_mbps", "1000", "", "")
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.name }} uplink is at {{ $value }} Mb/s, expected {{ $labels.expected_mbps }}"
+            description: >-
+              A link negotiated below its expected speed, or a LAG member is
+              down. Check the cable or transceiver at both ends and the switch
+              port; the USW dashboard shows per-port speed and SFP readings.
