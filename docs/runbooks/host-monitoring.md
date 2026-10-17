@@ -4,7 +4,7 @@ Metrics from the three PVE nodes, the two DGX Sparks and the NAS. The lab's metr
 
 ## State
 
-The PVE nodes and Sparks are enrolled and the Proxmox API exporter is running, since 2026-10-04. NAS enrollment is tracked in [#839](https://github.com/kelchm/home-lab/issues/839).
+The PVE nodes and Sparks are enrolled and the Proxmox API exporter is running, since 2026-10-04. The NAS is enrolled since 2026-10-17 ([#839](https://github.com/kelchm/home-lab/issues/839)): its three jobs report, all eight bays and both the storage pool and volume report DSM status, and `diskID` arrives decoded as `Disk N`.
 
 The deployer definitions enable native self-update. Its verified version, migration status, manual apply, and handover checks are maintained in the [self-update runbook](doco-cd-self-update.md).
 
