@@ -70,10 +70,10 @@ A dashboard has one home, chosen by its subject: the thing whose state it shows.
 | Group | Homes in use | Not yet in use |
 |---|---|---|
 | Services | Observability (whether monitoring itself works), AI, Identity | Storage, Network, Media, Home automation, Printing |
-| Platforms | Kubernetes (the cluster, its nodes, Talos and cluster plumbing), Proxmox, Sparks, Synology | UniFi, Devices |
+| Platforms | Kubernetes (the cluster, its nodes, Talos and cluster plumbing), Proxmox, Sparks, Synology, UniFi | Devices |
 | Overview | Views across platforms, and the any-machine host detail | |
 
-The home is the `grafana_folder` annotation on the dashboard's ConfigMap. Charts that ship dashboards set it through their values. The victoria-metrics-k8s-stack chart gives its whole set one folder, so the dashboards that belong elsewhere are disabled in the chart and delivered from `kubernetes/apps/observability/victoria-metrics-k8s-stack/app/dashboards/` with the JSON the chart produces. A stock dashboard that no chart ships, or that a chart ships with import-only datasource placeholders, is kept next to the app it describes under `dashboards/`, with its source revision and patches named in that app's kustomization. Grafana files a dashboard under the full path, so the folders nest (`Overview`, `Platforms/Kubernetes`, `Platforms/Proxmox`, `Platforms/Sparks`, `Platforms/Synology`, `Services/Observability`, `Services/AI`, `Services/Identity`).
+The home is the `grafana_folder` annotation on the dashboard's ConfigMap. Charts that ship dashboards set it through their values. The victoria-metrics-k8s-stack chart gives its whole set one folder, so the dashboards that belong elsewhere are disabled in the chart and delivered from `kubernetes/apps/observability/victoria-metrics-k8s-stack/app/dashboards/` with the JSON the chart produces. A stock dashboard that no chart ships, or that a chart ships with import-only datasource placeholders, is kept next to the app it describes under `dashboards/`, with its source revision and patches named in that app's kustomization. Grafana files a dashboard under the full path, so the folders nest (`Overview`, `Platforms/Kubernetes`, `Platforms/Proxmox`, `Platforms/Sparks`, `Platforms/Synology`, `Platforms/UniFi`, `Services/Observability`, `Services/AI`, `Services/Identity`).
 
 #### Conventions
 
@@ -81,7 +81,7 @@ These apply to dashboards written in this repository. A stock dashboard kept as 
 
 - **Title:** `<Subject> / <View>` in sentence case. The subject is the platform, component or service shown, never the exporter or tool that collects the data. A subject with one view is just the subject (`Hosts`).
 - **uid:** an existing uid never changes; a new dashboard gets a readable slug.
-- **Tags:** lowercase. The first is the home (`kubernetes`, `proxmox`, `sparks`, `synology`, `observability`, `ai`, `identity`, `overview`); at most two more name the subject.
+- **Tags:** lowercase. The first is the home (`kubernetes`, `proxmox`, `sparks`, `synology`, `unifi`, `observability`, `ai`, `identity`, `overview`); at most two more name the subject.
 - **Scope:** a query on a metric that more than one platform exports states its scope: `cluster="k8s-prod"` for the cluster, `platform` for machines. A dashboard does not rely on a metric existing on only one platform today.
 - **Machines:** shown by name through `instance`, never by IP.
 - **Data source:** metrics panels use a `datasource` variable; log panels use the `victorialogs` uid.
