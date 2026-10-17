@@ -1,0 +1,28 @@
+global:
+  scrape_interval: 15s
+scrape_configs:
+  - job_name: synology-node
+    static_configs:
+      - targets: ["127.0.0.1:9100"]
+  - job_name: synology-snmp
+    scrape_interval: 30s
+    metrics_path: /snmp
+    params:
+      module: [synology]
+      auth: [dsm]
+      target: ["127.0.0.1"]
+    static_configs:
+      - targets: ["127.0.0.1:9116"]
+    metric_relabel_configs:
+      # snmp_exporter v0.30.1 hex-encodes diskID: 0x4469736B2031 is "Disk 1".
+      - source_labels: [diskID]
+        regex: 0x4469736B203([1-9])
+        target_label: diskID
+        replacement: Disk $1
+      # Row indexes, and per-disk names that duplicate diskID.
+      - source_labels: [__name__]
+        regex: .+Index|diskName|diskRole
+        action: drop
+  - job_name: synology-vmagent
+    static_configs:
+      - targets: ["127.0.0.1:8429"]

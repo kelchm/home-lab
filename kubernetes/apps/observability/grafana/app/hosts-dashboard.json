@@ -33,9 +33,9 @@
           "type": "prometheus",
           "uid": "${datasource}"
         },
-        "definition": "label_values(up{job=~\"node-exporter|(pve|spark)-node\",platform!=\"\"}, platform)",
+        "definition": "label_values(up{job=~\"node-exporter|(pve|spark|synology)-node\",platform!=\"\"}, platform)",
         "query": {
-          "query": "label_values(up{job=~\"node-exporter|(pve|spark)-node\",platform!=\"\"}, platform)",
+          "query": "label_values(up{job=~\"node-exporter|(pve|spark|synology)-node\",platform!=\"\"}, platform)",
           "refId": "platform"
         },
         "includeAll": true,
@@ -56,9 +56,9 @@
           "type": "prometheus",
           "uid": "${datasource}"
         },
-        "definition": "label_values(up{job=~\"node-exporter|(pve|spark)-node\",platform!=\"\",platform=~\"$platform\"}, instance)",
+        "definition": "label_values(up{job=~\"node-exporter|(pve|spark|synology)-node\",platform!=\"\",platform=~\"$platform\"}, instance)",
         "query": {
-          "query": "label_values(up{job=~\"node-exporter|(pve|spark)-node\",platform!=\"\",platform=~\"$platform\"}, instance)",
+          "query": "label_values(up{job=~\"node-exporter|(pve|spark|synology)-node\",platform!=\"\",platform=~\"$platform\"}, instance)",
           "refId": "node"
         },
         "includeAll": true,
@@ -321,7 +321,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "time() - max by (instance, platform) (tlast_over_time(up{job=~\"node-exporter|(pve|spark)-node\",platform!=\"\",platform=~\"$platform\",instance=~\"$node\"}[7d]))",
+          "expr": "time() - max by (instance, platform) (tlast_over_time(up{job=~\"node-exporter|(pve|spark|synology)-node\",platform!=\"\",platform=~\"$platform\",instance=~\"$node\"}[7d]))",
           "refId": "A",
           "format": "table",
           "instant": true,
@@ -333,7 +333,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "100 * sum by (instance) (avg by (instance, mode) (rate(node_cpu_seconds_total{job=~\"node-exporter|(pve|spark)-node\",platform!=\"\",platform=~\"$platform\",instance=~\"$node\",mode!~\"idle|iowait\"}[2m])))",
+          "expr": "100 * sum by (instance) (avg by (instance, mode) (rate(node_cpu_seconds_total{job=~\"node-exporter|(pve|spark|synology)-node\",platform!=\"\",platform=~\"$platform\",instance=~\"$node\",mode!~\"idle|iowait\"}[2m])))",
           "refId": "B",
           "format": "table",
           "instant": true,
@@ -345,7 +345,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "100 * (1 - max by (instance) (node_memory_MemAvailable_bytes{job=~\"node-exporter|(pve|spark)-node\",platform!=\"\",platform=~\"$platform\",instance=~\"$node\"} / node_memory_MemTotal_bytes{job=~\"node-exporter|(pve|spark)-node\",platform!=\"\",platform=~\"$platform\",instance=~\"$node\"}))",
+          "expr": "100 * (1 - max by (instance) (node_memory_MemAvailable_bytes{job=~\"node-exporter|(pve|spark|synology)-node\",platform!=\"\",platform=~\"$platform\",instance=~\"$node\"} / node_memory_MemTotal_bytes{job=~\"node-exporter|(pve|spark|synology)-node\",platform!=\"\",platform=~\"$platform\",instance=~\"$node\"}))",
           "refId": "C",
           "format": "table",
           "instant": true,
@@ -357,7 +357,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "100 * max by (instance) (rate(node_pressure_memory_stalled_seconds_total{job=~\"node-exporter|(pve|spark)-node\",platform!=\"\",platform=~\"$platform\",instance=~\"$node\"}[5m]))",
+          "expr": "100 * max by (instance) (rate(node_pressure_memory_stalled_seconds_total{job=~\"node-exporter|(pve|spark|synology)-node\",platform!=\"\",platform=~\"$platform\",instance=~\"$node\"}[5m]))",
           "refId": "D",
           "format": "table",
           "instant": true,
@@ -369,7 +369,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "100 * max by (instance) (1 - node_filesystem_avail_bytes{job=~\"node-exporter|(pve|spark)-node\",platform!=\"\",platform=~\"$platform\",instance=~\"$node\",fstype=~\"ext4|xfs|vfat\"} / (node_filesystem_size_bytes{job=~\"node-exporter|(pve|spark)-node\",platform!=\"\",platform=~\"$platform\",instance=~\"$node\",fstype=~\"ext4|xfs|vfat\"} > 0))",
+          "expr": "100 * max by (instance) (1 - node_filesystem_avail_bytes{job=~\"node-exporter|(pve|spark|synology)-node\",platform!=\"\",platform=~\"$platform\",instance=~\"$node\",fstype=~\"ext4|xfs|vfat|btrfs\"} / (node_filesystem_size_bytes{job=~\"node-exporter|(pve|spark|synology)-node\",platform!=\"\",platform=~\"$platform\",instance=~\"$node\",fstype=~\"ext4|xfs|vfat|btrfs\"} > 0))",
           "refId": "E",
           "format": "table",
           "instant": true,
@@ -381,7 +381,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "max by (instance) (node_hwmon_temp_celsius{job=~\"node-exporter|(pve|spark)-node\",platform!=\"\",platform=~\"$platform\",instance=~\"$node\",chip=~\"nvme.*\"} * on (instance, chip, sensor) group_left node_hwmon_sensor_label{job=~\"node-exporter|(pve|spark)-node\",platform!=\"\",platform=~\"$platform\",instance=~\"$node\",chip=~\"nvme.*\",label=\"Composite\"})",
+          "expr": "max by (instance) (node_hwmon_temp_celsius{job=~\"node-exporter|(pve|spark|synology)-node\",platform!=\"\",platform=~\"$platform\",instance=~\"$node\",chip=~\"nvme.*\"} * on (instance, chip, sensor) group_left node_hwmon_sensor_label{job=~\"node-exporter|(pve|spark|synology)-node\",platform!=\"\",platform=~\"$platform\",instance=~\"$node\",chip=~\"nvme.*\",label=\"Composite\"})",
           "refId": "F",
           "format": "table",
           "instant": true,
@@ -509,7 +509,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "max by (instance, platform) (tlast_over_time(up{job=~\"node-exporter|(pve|spark)-node\",platform!=\"\",platform=~\"$platform\",instance=~\"$node\"}[7d]))",
+          "expr": "max by (instance, platform) (tlast_over_time(up{job=~\"node-exporter|(pve|spark|synology)-node\",platform!=\"\",platform=~\"$platform\",instance=~\"$node\"}[7d]))",
           "refId": "A",
           "format": "table",
           "instant": true,
@@ -521,7 +521,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "min by (instance) (up{job=~\"node-exporter|(pve|spark)-node\",platform!=\"\",platform=~\"$platform\",instance=~\"$node\"})",
+          "expr": "min by (instance) (up{job=~\"node-exporter|(pve|spark|synology)-node\",platform!=\"\",platform=~\"$platform\",instance=~\"$node\"})",
           "refId": "B",
           "format": "table",
           "instant": true,
@@ -533,7 +533,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "min by (instance) (up{job=~\"(pve|spark)-vmagent\",platform=~\"$platform\",instance=~\"$node\"})",
+          "expr": "min by (instance) (up{job=~\"(pve|spark|synology)-vmagent\",platform=~\"$platform\",instance=~\"$node\"})",
           "refId": "C",
           "format": "table",
           "instant": true,
@@ -689,7 +689,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "100 * sum by (instance) (avg by (instance, mode) (rate(node_cpu_seconds_total{job=~\"node-exporter|(pve|spark)-node\",platform!=\"\",platform=~\"$platform\",instance=~\"$node\",mode!~\"idle|iowait\"}[2m])))",
+          "expr": "100 * sum by (instance) (avg by (instance, mode) (rate(node_cpu_seconds_total{job=~\"node-exporter|(pve|spark|synology)-node\",platform!=\"\",platform=~\"$platform\",instance=~\"$node\",mode!~\"idle|iowait\"}[2m])))",
           "refId": "A",
           "legendFormat": "{{instance}}",
           "range": true
@@ -745,7 +745,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "100 * (1 - max by (instance) (node_memory_MemAvailable_bytes{job=~\"node-exporter|(pve|spark)-node\",platform!=\"\",platform=~\"$platform\",instance=~\"$node\"} / node_memory_MemTotal_bytes{job=~\"node-exporter|(pve|spark)-node\",platform!=\"\",platform=~\"$platform\",instance=~\"$node\"}))",
+          "expr": "100 * (1 - max by (instance) (node_memory_MemAvailable_bytes{job=~\"node-exporter|(pve|spark|synology)-node\",platform!=\"\",platform=~\"$platform\",instance=~\"$node\"} / node_memory_MemTotal_bytes{job=~\"node-exporter|(pve|spark|synology)-node\",platform!=\"\",platform=~\"$platform\",instance=~\"$node\"}))",
           "refId": "A",
           "legendFormat": "{{instance}}",
           "range": true
@@ -801,7 +801,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "100 * max by (instance) (1 - node_filesystem_avail_bytes{job=~\"node-exporter|(pve|spark)-node\",platform!=\"\",platform=~\"$platform\",instance=~\"$node\",fstype=~\"ext4|xfs|vfat\"} / (node_filesystem_size_bytes{job=~\"node-exporter|(pve|spark)-node\",platform!=\"\",platform=~\"$platform\",instance=~\"$node\",fstype=~\"ext4|xfs|vfat\"} > 0))",
+          "expr": "100 * max by (instance) (1 - node_filesystem_avail_bytes{job=~\"node-exporter|(pve|spark|synology)-node\",platform!=\"\",platform=~\"$platform\",instance=~\"$node\",fstype=~\"ext4|xfs|vfat|btrfs\"} / (node_filesystem_size_bytes{job=~\"node-exporter|(pve|spark|synology)-node\",platform!=\"\",platform=~\"$platform\",instance=~\"$node\",fstype=~\"ext4|xfs|vfat|btrfs\"} > 0))",
           "refId": "A",
           "legendFormat": "{{instance}}",
           "range": true
@@ -856,7 +856,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "8 * sum by (instance) (rate(node_network_receive_bytes_total{job=~\"node-exporter|(pve|spark)-node\",platform!=\"\",platform=~\"$platform\",instance=~\"$node\",device=~\"(en|eth|nic|ib)[a-zA-Z0-9_]+\"}[5m]) + rate(node_network_transmit_bytes_total{job=~\"node-exporter|(pve|spark)-node\",platform!=\"\",platform=~\"$platform\",instance=~\"$node\",device=~\"(en|eth|nic|ib)[a-zA-Z0-9_]+\"}[5m]))",
+          "expr": "8 * sum by (instance) (rate(node_network_receive_bytes_total{job=~\"node-exporter|(pve|spark|synology)-node\",platform!=\"\",platform=~\"$platform\",instance=~\"$node\",device=~\"(en|eth|nic|ib)[a-zA-Z0-9_]+\"}[5m]) + rate(node_network_transmit_bytes_total{job=~\"node-exporter|(pve|spark|synology)-node\",platform!=\"\",platform=~\"$platform\",instance=~\"$node\",device=~\"(en|eth|nic|ib)[a-zA-Z0-9_]+\"}[5m]))",
           "refId": "A",
           "legendFormat": "{{instance}}",
           "range": true

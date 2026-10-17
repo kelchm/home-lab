@@ -1,5 +1,5 @@
 ---
-# PVE nodes and Sparks. Series keep the `instance` (node) and `platform`
+# PVE nodes, Sparks and the NAS. Series keep the `instance` (node) and `platform`
 # (type) their ingestion token gives them; this group adds no cluster label.
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMRule
@@ -12,7 +12,7 @@ spec:
         # A node is enrolled once it has reported; one that falls silent keeps
         # alerting for a week, after which it counts as retired.
         - alert: HostMetricsMissing
-          expr: time() - tlast_over_time(up{job=~"(pve|spark)-node"}[7d]) > 600
+          expr: time() - tlast_over_time(up{job=~"(pve|spark|synology)-node"}[7d]) > 600
           labels:
             severity: warning
           annotations:
@@ -23,7 +23,7 @@ spec:
               original timestamps once delivery resumes.
 
         - alert: HostCollectorDown
-          expr: up{job=~"(pve|spark)-(node|gpu|vmagent|deployer)"} == 0
+          expr: up{job=~"(pve|spark|synology)-(node|gpu|snmp|vmagent|deployer)"} == 0
           for: 10m
           labels:
             severity: warning
@@ -32,8 +32,8 @@ spec:
 
         - alert: HostFilesystemLow
           expr: |
-            node_filesystem_avail_bytes{job=~"(pve|spark)-node", fstype!~"tmpfs|overlay|squashfs|ramfs|efivarfs|nfs.*|cifs|fuse.*"}
-            / node_filesystem_size_bytes{job=~"(pve|spark)-node", fstype!~"tmpfs|overlay|squashfs|ramfs|efivarfs|nfs.*|cifs|fuse.*"}
+            node_filesystem_avail_bytes{job=~"(pve|spark|synology)-node", fstype!~"tmpfs|overlay|squashfs|ramfs|efivarfs|nfs.*|cifs|fuse.*"}
+            / node_filesystem_size_bytes{job=~"(pve|spark|synology)-node", fstype!~"tmpfs|overlay|squashfs|ramfs|efivarfs|nfs.*|cifs|fuse.*"}
             < 0.10
           for: 30m
           labels:
@@ -76,7 +76,7 @@ spec:
             summary: GPU on {{ $labels.instance }} is thermally throttled
 
         - alert: HostQueueDropping
-          expr: increase(vm_persistentqueue_bytes_dropped_total{job=~"(pve|spark)-vmagent"}[15m]) > 0
+          expr: increase(vm_persistentqueue_bytes_dropped_total{job=~"(pve|spark|synology)-vmagent"}[15m]) > 0
           labels:
             severity: warning
           annotations:
@@ -95,3 +95,48 @@ spec:
             description: >-
               The node keeps running its last deployed collectors. Check the
               doco-cd container log on the node.
+
+    # DSM's own assessment through SNMP. Status codes are from the Synology MIBs.
+    - name: nas
+      rules:
+        - alert: NasRaidDegraded
+          expr: raidStatus{job="synology-snmp"} == 11 or raidStatus{job="synology-snmp"} == 12
+          labels:
+            severity: critical
+          annotations:
+            summary: "{{ $labels.raidName }} on {{ $labels.instance }} is {{ if eq $value 12.0 }}crashed{{ else }}degraded{{ end }}"
+
+        # 4 is a failed system partition, 5 a crashed disk; 3 is an empty bay or a new disk.
+        - alert: NasDiskFailing
+          expr: diskStatus{job="synology-snmp"} >= 4 or diskHealthStatus{job="synology-snmp"} >= 3
+          labels:
+            severity: critical
+          annotations:
+            summary: "{{ $labels.diskID }} on {{ $labels.instance }} is failing"
+
+        - alert: NasDiskHealthWarning
+          expr: diskHealthStatus{job="synology-snmp"} == 2
+          labels:
+            severity: warning
+          annotations:
+            summary: DSM reports a health warning for {{ $labels.diskID }} on {{ $labels.instance }}
+
+        - alert: NasDiskHot
+          expr: diskTemperature{job="synology-snmp"} > 50
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.diskID }} on {{ $labels.instance }} is at {{ $value }} C"
+
+        - alert: NasHardwareFault
+          expr: |
+            label_replace(
+              {__name__=~"systemStatus|powerStatus|systemFanStatus|cpuFanStatus", job="synology-snmp"},
+              "component", "$1", "__name__", "(.+)Status"
+            ) == 2
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: DSM reports a {{ $labels.component }} failure on {{ $labels.instance }}
