@@ -135,14 +135,14 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "count(spegel_advertised_content_digests{instance=~\"$instance\"})",
+          "expr": "count(spegel_advertised_keys)",
           "hide": false,
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Registry",
+      "title": "Advertising pods",
       "transparent": true,
       "type": "stat"
     },
@@ -678,27 +678,12 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "spegel_advertised_image_digests{pod=~\"$pod\", registry=~\"$registry\"}",
+          "expr": "spegel_advertised_keys{pod=~\"$pod\"}",
           "format": "table",
           "instant": true,
           "legendFormat": "__auto",
           "range": false,
           "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "exemplar": false,
-          "expr": "spegel_advertised_content_digests{pod=~\"$pod\", registry=~\"$registry\"} ",
-          "format": "table",
-          "hide": false,
-          "instant": true,
-          "legendFormat": "__auto",
-          "range": false,
-          "refId": "B"
         }
       ],
       "transformations": [
@@ -707,30 +692,17 @@
           "options": {
             "include": {
               "names": [
-                "Value #A",
-                "Value #B",
-                "registry",
-                "pod"
+                "pod",
+                "Value"
               ]
             }
           }
         },
         {
-          "id": "merge",
-          "options": {}
-        },
-        {
           "id": "renameByRegex",
           "options": {
-            "regex": "Value #A",
-            "renamePattern": "Container cache"
-          }
-        },
-        {
-          "id": "renameByRegex",
-          "options": {
-            "regex": "Value #B",
-            "renamePattern": "Layers cache"
+            "regex": "Value",
+            "renamePattern": "Keys advertised"
           }
         }
       ],
@@ -830,15 +802,15 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "spegel_advertised_image_digests{pod=~\"$pod\", registry=~\"$registry\"}",
+          "expr": "spegel_advertised_keys{pod=~\"$pod\"}",
           "format": "time_series",
           "instant": false,
-          "legendFormat": "{{ pod }}: {{ registry }}",
+          "legendFormat": "{{ pod }}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Container Images Advertised ",
+      "title": "Keys advertised",
       "transparent": true,
       "type": "timeseries"
     },
@@ -965,7 +937,7 @@
       },
       "gridPos": {
         "h": 7,
-        "w": 12,
+        "w": 24,
         "x": 0,
         "y": 13
       },
@@ -1003,108 +975,6 @@
         }
       ],
       "title": "CPU Usage",
-      "transparent": true,
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "description": "",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "series",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "opacity",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "pointSize": 1,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 7,
-        "w": 12,
-        "x": 12,
-        "y": 13
-      },
-      "id": 7,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.1.0",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "exemplar": false,
-          "expr": "spegel_advertised_content_digests{pod=~\"$pod\", registry=~\"$registry\"} ",
-          "format": "time_series",
-          "instant": false,
-          "legendFormat": "{{ pod }}: {{ registry }}",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Images Layer Advertised ",
       "transparent": true,
       "type": "timeseries"
     },
@@ -1344,7 +1214,7 @@
           "type": "prometheus",
           "uid": "${datasource}"
         },
-        "definition": "label_values(spegel_advertised_content_digests,pod)",
+        "definition": "label_values(spegel_advertised_keys,pod)",
         "description": "",
         "includeAll": true,
         "label": "pod",
@@ -1353,29 +1223,7 @@
         "options": [],
         "query": {
           "qryType": 1,
-          "query": "label_values(spegel_advertised_content_digests,pod)",
-          "refId": "PrometheusVariableQueryEditor-VariableQuery"
-        },
-        "refresh": 2,
-        "regex": "",
-        "type": "query"
-      },
-      {
-        "allowCustomValue": false,
-        "current": {},
-        "datasource": {
-          "type": "prometheus",
-          "uid": "${datasource}"
-        },
-        "definition": "label_values(spegel_advertised_content_digests,registry)",
-        "includeAll": true,
-        "label": "registry",
-        "multi": true,
-        "name": "registry",
-        "options": [],
-        "query": {
-          "qryType": 1,
-          "query": "label_values(spegel_advertised_content_digests,registry)",
+          "query": "label_values(spegel_advertised_keys,pod)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 2,
