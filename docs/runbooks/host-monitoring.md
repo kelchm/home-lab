@@ -104,7 +104,7 @@ The exporter reports quorum, node and guest state, storage use and which guests 
 
 ## UniFi
 
-[Unpoller](../../kubernetes/apps/observability/unpoller/app/) reads the UniFi console at `unifi.home.kelch.io` with a local account and exports gateway, WAN, switch, port, PoE and access-point metrics. Its series carry `job="unifi-api"`, `instance="unifi"` and `platform="unifi"`; the device is in the `name` label. It refreshes from the console once a minute, and the scrape drops the per-client `unpoller_client_*` series. DPI, events, alarms, IDS and syslog collection stay off.
+[Unpoller](../../kubernetes/apps/observability/unpoller/app/) reads the UniFi console at `unifi.home.kelch.io` with a local account and exports gateway, WAN, switch, port, PoE and access-point metrics. Its series carry `job="unifi-api"`, `instance="unifi"` and `platform="unifi"`; the device is in the `name` label. It refreshes from the console once a minute, and the scrape drops the series keyed by client: `unpoller_client_*`, `unpoller_dhcp_*` and `unpoller_topology_link_*`. DPI, events, alarms, IDS and syslog collection stay off.
 
 The account is `unpoller-sa`, a local admin with the View Only role, which UniFi OS grants as read-only on Network, Protect and user management; a settings write returns `403 api.err.NoPermission`. Its password is in 1Password at `op://Project - home-lab/unpoller-sa/password`. Write it into the SOPS Secret from a checkout:
 
