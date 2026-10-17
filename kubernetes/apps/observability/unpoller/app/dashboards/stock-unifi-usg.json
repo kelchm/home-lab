@@ -455,7 +455,7 @@
     {
       "collapsed": false,
       "datasource": {
-        "uid": "${DS_UNIFI_POLLER}"
+        "uid": "${datasource}"
       },
       "gridPos": {
         "h": 1,
@@ -469,7 +469,7 @@
       "targets": [
         {
           "datasource": {
-            "uid": "${DS_UNIFI_POLLER}"
+            "uid": "${datasource}"
           },
           "refId": "A"
         }
@@ -2791,7 +2791,7 @@
     {
       "collapsed": true,
       "datasource": {
-        "uid": "${DS_UNIFI_POLLER}"
+        "uid": "${datasource}"
       },
       "gridPos": {
         "h": 1,
@@ -2804,7 +2804,7 @@
       "targets": [
         {
           "datasource": {
-            "uid": "${DS_UNIFI_POLLER}"
+            "uid": "${datasource}"
           },
           "refId": "A"
         }
