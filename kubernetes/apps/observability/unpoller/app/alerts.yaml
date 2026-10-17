@@ -51,6 +51,20 @@ spec:
               runs on the remaining WAN. Check the modem or dish and the UniFi
               Internet page.
 
+        # Escalation of the rule above. Losing both WANs cannot be delivered
+        # from here; the Watchdog heartbeat to healthchecks.io covers that.
+        - alert: UniFiWANOutageExtended
+          expr: unpoller_wan_interface_state{job="unifi-api"} == 0
+          for: 1h
+          labels:
+            severity: critical
+          annotations:
+            summary: "{{ $labels.wan_interface }} has been {{ $labels.state }} for over an hour"
+            description: >-
+              The lab has been on one WAN for an hour. Power-cycle the modem or
+              dish, check the provider's status, and check the UniFi Internet
+              page for the interface's last error.
+
         # The expected uplink speed of every device; any device not named here
         # must reach 1 Gb/s. The two switch LAGs report their aggregate, so one
         # member down reads as 10000. The gateway's uplink is a WAN, covered above.
