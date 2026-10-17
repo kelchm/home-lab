@@ -79,7 +79,7 @@ State on 2026-10-17: prepared, not yet applied. Both appliance changes were veri
 
 The appliance needs two changes. **Apply** installs the override with the rest of the console configuration; the export patch is installed separately, below, so a firmware change that invalidates it never blocks restoring the console.
 
-- [`override.yaml`](override.yaml) sets upstream kvmd's `prometheus.auth.enabled: false`, which exempts only the metrics path from login. kvmd has no read-only role: any account that could read the metrics could also type into every host's BIOS, toggle virtual media and upgrade firmware. Leaving the path unauthenticated keeps every console credential out of the cluster, at the cost of letting anyone who can reach port 443 read the appliance's temperature, CPU, memory and network counters. Every other path, including `/api/info`, still requires login.
+- [`override.yaml`](override.yaml) sets upstream kvmd's `prometheus.auth.enabled: false`, which exempts only the metrics path from login. kvmd has no read-only role: any account that could read the metrics could also type into every host's BIOS, toggle virtual media and upgrade firmware. Leaving the path unauthenticated keeps every console credential out of the cluster, at the cost of letting anyone who can reach port 443 read the appliance's temperature, CPU, memory and network counters, and the ATX and GPIO rows the scrape drops. Every other path, including `/api/info`, still requires login.
 - [`export.py`](export.py) fixes the export. The vendor module asks for a `fan` source that this firmware does not register, so every request fails with HTTP 500. The replacement shadows the vendor's sourceless `export.pyc` and reproduces its bytecode except for that request. It carries the SHA-256 of the `export.pyc` it was verified against and runs the vendor module unchanged when that file differs, so a firmware update cannot leave stale code in place. The install below refuses a different `export.pyc`.
 
 What the export provides on this firmware:
@@ -100,7 +100,7 @@ The appliance serves its vendor's self-signed certificate (`CN=localhost`, expir
 | `GLKVMMetricsUnavailable` | The scrape fails or is missing for 10 minutes. |
 | `GLKVMHot` | The SoC is above 95 °C for 15 minutes. |
 | `GLKVMMemoryLow` | Memory is over 90% used for 30 minutes. |
-| `GLKVMHealthMetricsMissing` | The export answers without temperature or memory for 30 minutes, so the two rules above cannot fire. |
+| `GLKVMHealthMetricsMissing` | The export answers without temperature or memory for 30 minutes, so the rule that reads the missing metric cannot fire. |
 
 When `GLKVMMetricsUnavailable` fires, the status of an unauthenticated request separates the causes:
 
@@ -134,7 +134,7 @@ ssh root@10.32.20.10 '
 '
 ```
 
-Restarting kvmd drops open console sessions for a few seconds; do it while no host needs the console. Then confirm the export and that everything else still requires login:
+Restarting kvmd drops open console sessions for a few seconds; do it while no host needs the console. The file lives in the root overlay, like `/etc/kvmd/override.yaml`, so it survives a reboot. Whether a firmware update keeps it is not verified; the hash check makes either outcome safe. Then confirm the export and that everything else still requires login:
 
 ```sh
 ssh root@10.32.20.10 '
@@ -252,7 +252,7 @@ the `scp -O` commands in **Apply** are intentional. Then run the complete
 **Apply** procedure from a repository checkout. It recreates the user
 directories, installs all three HID tools, restores the committed PiKVM override
 and nginx configuration, and restarts the affected services. Finish with the
-non-interactive checks and safe live-input test above.
+non-interactive checks and safe live-input test above, then install the [monitoring](#monitoring) export patch.
 
 Do not run `kvmd` itself over SSH, including `kvmd -M` to validate configuration. Unlike upstream PiKVM, firmware `V1.9.1 release1` started another daemon instead of performing a validation-only run.
 
