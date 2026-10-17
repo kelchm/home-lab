@@ -14,14 +14,19 @@
       "repository": "ashhart/TensorFold",
       "base": "041d14a94e951834470fd514ed33e65b8be1059a",
       "commit": "51ad073feadd81d04809edf8f0822cc5380a832c",
-      "path": "zig/src/server/status_routes.zig"
+      "paths": [
+        "zig/src/server/status_routes.zig"
+      ]
     },
     {
       "file": "patches/0011-models-reasoning.patch",
-      "repository": "kelchm/TensorFold",
+      "repository": "ashhart/TensorFold",
       "base": "c126fe16e3f8d9bef4a620af34ff35aec0966af1",
-      "commit": "68911640578615fa04800562718334f2ef217037",
-      "path": "zig/src/server/status_routes.zig"
+      "commit": "061b2d2ef435f2b0ef9cdf868ff8cec65681f203",
+      "paths": [
+        "zig/src/server/server.zig",
+        "zig/src/server/status_routes.zig"
+      ]
     }
   ],
   "build": {
@@ -33,15 +38,15 @@
     "fatbin_layer": "sha256:b75cd6a6d6c59b3020947b108872a1b071960200d135a39e8be8d210076ff1aa",
     "published_binary_sha256": "24a7bda5d257a9ddc7af77d7a12baa6c274bce76abe493e19767292644f0b200"
   },
-  "binary_sha256": "3f22bd8090955238da1205c14caaec4d10a374e2cf4c4c3cc48b0ad087a48d28",
+  "binary_sha256": "1713bf570749ddba3b6da88d3d0a6812d11175032d32b8868b51dee69ffe2379",
   "mod_files": {
-    "prepare.py": "1ababff5bde13f9718e7959142303c0c3c075a5c90574ac21beab51a76bcd8ef",
+    "prepare.py": "a9639e98d4a20a4aaf09d9c5cbce59ab53c6ae3b2ed6f73e9c08f56df2fbc894",
     "run.sh": "f5335e737511e4d1f3b75f22c1e83e56255d742a46ff512695c3b576881815df",
     "serve.py": "4b2bc4223157ba53f7aa0142f99b9f81e542d3ee293712eff3d44fadc8388f0e",
-    "readiness.py": "506577b9c6ab7ca5747e485a9e6df85325b198437ba66ada9625ee24ffea44c5",
+    "readiness.py": "7c80fe9b4398e50ca6ec586308f9cf5179405d4dba4e32b741d3674a73034fd6",
     "build/Dockerfile": "931aeec0a765759a12df6de11a28f2aa9af3e09cdb999f5dbedf67df2a8c057f",
     "build/build.sh": "6fa408076151ffc742cbaa72cdc6b1aac5bcfcd808593c1d5fa9ff5351d110b6",
     "patches/0010-models-context-length.patch": "18cf9c302d6bf50516b2cfed4da69527cfa9f16717e5bbbf366e8e330138e766",
-    "patches/0011-models-reasoning.patch": "09b9c1ec9f95225677fb2c87de5b496a72bc7c096327d9c28ccfd1e849cacfe8"
+    "patches/0011-models-reasoning.patch": "73171ca4137cc2b87c7ac581c8eea1b4bc743f8ef4fa17175cbcbb8c7f903d6b"
   }
 }
