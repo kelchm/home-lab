@@ -73,9 +73,9 @@ spec:
           annotations:
             summary: GLKVM memory is {{ printf "%.0f" $value }}% used
             description: >-
-              The appliance has about 1 GiB and no swap, so the kernel will start
-              killing kvmd or the video streamer. Restart kvmd or reboot the
-              appliance while no host needs the console.
+              It normally runs near 30%. Find what is using memory with `top`
+              on the appliance before restarting anything: restarting kvmd
+              drops every open console session.
 
         - alert: GLKVMHealthMetricsMissing
           expr: |

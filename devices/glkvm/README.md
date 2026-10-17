@@ -77,10 +77,10 @@ vmagent in `k8s-prod` scrapes kvmd's native export at `https://10.32.20.10/api/e
 
 State on 2026-10-17: prepared, not yet applied. Both appliance changes were verified against `V1.10.1 release2` on copies in `/tmp`: kvmd's own config loader accepts the override, and the patched export returns the metrics below while the vendor module raises the `fan` error.
 
-The appliance needs two changes for this, both in **Apply**:
+The appliance needs two changes. **Apply** installs the override with the rest of the console configuration; the export patch is installed separately, below, so a firmware change that invalidates it never blocks restoring the console.
 
 - [`override.yaml`](override.yaml) sets upstream kvmd's `prometheus.auth.enabled: false`, which exempts only the metrics path from login. kvmd has no read-only role: any account that could read the metrics could also type into every host's BIOS, toggle virtual media and upgrade firmware. Leaving the path unauthenticated keeps every console credential out of the cluster, at the cost of letting anyone who can reach port 443 read the appliance's temperature, CPU, memory and network counters. Every other path, including `/api/info`, still requires login.
-- [`export.py`](export.py) fixes the export. The vendor module asks for a `fan` source that this firmware does not register, so every request fails with HTTP 500. The replacement shadows the vendor's sourceless `export.pyc` and reproduces its bytecode except for that request. It carries the SHA-256 of the `export.pyc` it was verified against and runs the vendor module unchanged when that file differs, so a firmware update cannot leave stale code in place. Apply refuses to install it over a different `export.pyc`.
+- [`export.py`](export.py) fixes the export. The vendor module asks for a `fan` source that this firmware does not register, so every request fails with HTTP 500. The replacement shadows the vendor's sourceless `export.pyc` and reproduces its bytecode except for that request. It carries the SHA-256 of the `export.pyc` it was verified against and runs the vendor module unchanged when that file differs, so a firmware update cannot leave stale code in place. The install below refuses a different `export.pyc`.
 
 What the export provides on this firmware:
 
@@ -88,7 +88,7 @@ What the export provides on this firmware:
 |---|---|
 | `pikvm_hw_temp_cpu` | SoC temperature in °C. The SoC's only thermal trip is critical, at 115 °C, where the kernel shuts the appliance down. |
 | `pikvm_hw_cpu_percent` | CPU in use since kvmd's previous health reading. |
-| `pikvm_hw_mem_percent`, `_total`, `_available` | Memory. The appliance has about 1 GiB and no swap. |
+| `pikvm_hw_mem_percent`, `_total`, `_available` | Memory. The appliance has about 1 GiB, plus a compressed swap device in RAM (`/dev/zram0`, about 490 MiB) that this firmware adds. |
 | `pikvm_hw_net_bytes_sent`, `_recv` | Bytes on every interface except loopback since boot; use `rate()`. |
 
 The scrape drops `pikvm_atx_*` and `pikvm_gpio_*`. ATX is not wired, so its power state means nothing. The GPIO rows are the PiKVM host buttons, which only pulse a switch sequence; they do not read back the selected port, and the vendor code reports each button's state under both its `online` and `state` names. The export has no HDMI signal, USB enumeration, selected port, uptime or filesystem metrics, and nothing in it observes the host on the selected port. A blank screen or missing video is not an appliance failure. Load average stays between 8 and 10 because of the SoC's media threads and is not a useful signal.
@@ -110,11 +110,42 @@ curl -sk -o /dev/null -w '%{http_code}\n' https://10.32.20.10/api/export/prometh
 
 | Status | Cause |
 |---|---|
-| 200 | The appliance is fine; check vmagent and its network policy. |
+| 200 | The endpoint answers this client; check vmagent's target status and its network policy. It says nothing about video or keyboard. |
 | 401 | The `prometheus` override is missing, usually after a firmware update. |
 | 500 | The export patch is missing or stood aside for a different `export.pyc`. |
 | 502 | kvmd is down; nginx still answers. |
 | No connection | The appliance or its network. |
+
+Install the export patch after **Apply**. It stops before changing anything unless the appliance's `export.pyc` is the one the patch was verified against and `export.py` is absent or a previous copy of the patch:
+
+```sh
+scp -O devices/glkvm/export.py root@10.32.20.10:/tmp/export.py
+ssh root@10.32.20.10 '
+    set -eu
+    api=/usr/lib/python3.12/site-packages/kvmd/apps/kvmd/api
+    expected=$(sed -n "s/^_VENDOR_PYC_SHA256 = \"\([0-9a-f]*\)\"$/\1/p" /tmp/export.py)
+    actual=$(sha256sum "$api/export.pyc" | cut -d" " -f1)
+    test -n "$expected"
+    test "$actual" = "$expected"
+    test ! -e "$api/export.py" || grep -q "^_VENDOR_PYC_SHA256 = " "$api/export.py"
+    cp /tmp/export.py "$api/export.py"
+    rm -f /tmp/export.py
+    /etc/init.d/S98kvmd restart
+'
+```
+
+Restarting kvmd drops open console sessions for a few seconds; do it while no host needs the console. Then confirm the export and that everything else still requires login:
+
+```sh
+ssh root@10.32.20.10 '
+    set -eu
+    /etc/init.d/S98kvmd status
+    curl -ksS https://127.0.0.1/api/export/prometheus/metrics | grep -q "^pikvm_hw_temp_cpu "
+    test "$(curl -ksS -o /dev/null -w "%{http_code}" https://127.0.0.1/api/info)" = 401
+'
+```
+
+In VictoriaMetrics, `up{job="glkvm-kvmd"}` is 1 within a minute of the vmagent policy and scrape being live.
 
 To remove monitoring from the appliance, delete the `prometheus` block from `/etc/kvmd/override.yaml`, then `rm /usr/lib/python3.12/site-packages/kvmd/apps/kvmd/api/export.py` and `/etc/init.d/S98kvmd restart`. The metrics path then requires login again and returns HTTP 500 once logged in, as shipped.
 
@@ -129,12 +160,9 @@ scp -O devices/glkvm/hid-type.py root@10.32.20.10:/tmp/hid-type
 scp -O devices/glkvm/hid-hold-key.py root@10.32.20.10:/tmp/hid-hold-key
 scp -O devices/glkvm/override.yaml root@10.32.20.10:/tmp/override.yaml
 scp -O devices/glkvm/nginx-kvmd.conf root@10.32.20.10:/tmp/nginx-kvmd.conf
-scp -O devices/glkvm/export.py root@10.32.20.10:/tmp/export.py
 
 ssh root@10.32.20.10 '
     set -eu
-    api=/usr/lib/python3.12/site-packages/kvmd/apps/kvmd/api
-    grep -q "$(sha256sum "$api/export.pyc" | cut -d" " -f1)" /tmp/export.py
     mkdir -p /etc/kvmd/user/bin /etc/kvmd/user/backups
     if [ -e /etc/kvmd/override.yaml ]; then
         cp /etc/kvmd/override.yaml \
@@ -154,9 +182,8 @@ ssh root@10.32.20.10 '
     nginx -t -p /etc/kvmd/nginx -c /tmp/nginx-kvmd.conf \
         -g "pid /run/kvmd/nginx-test.pid; user root; error_log stderr;"
     cp /tmp/nginx-kvmd.conf /etc/kvmd/nginx-kvmd.conf
-    cp /tmp/export.py "$api/export.py"
     rm -f /tmp/kvm-switch /tmp/hid-type /tmp/hid-hold-key \
-        /tmp/override.yaml /tmp/nginx-kvmd.conf /tmp/export.py
+        /tmp/override.yaml /tmp/nginx-kvmd.conf
     /etc/init.d/S98kvmd restart
     if [ -f /run/kvmd/pikvm-nginx.pid ]; then
         kill "$(cat /run/kvmd/pikvm-nginx.pid)" 2>/dev/null || true
@@ -169,6 +196,7 @@ Confirm `kvmd` restarted and the PiKVM UI responds:
 
 ```sh
 ssh root@10.32.20.10 '
+    set -eu
     /etc/init.d/S98kvmd status
     curl -ksS https://127.0.0.1/login/ | grep -q "PiKVM"
     curl -ksS https://127.0.0.1:8888/ | grep -q "GLKVM"
@@ -176,8 +204,6 @@ ssh root@10.32.20.10 '
     test -S /run/kvmd/ustreamer.sock
     python3 -m py_compile /etc/kvmd/user/bin/kvm-switch \
         /etc/kvmd/user/bin/hid-type /etc/kvmd/user/bin/hid-hold-key
-    curl -ksS https://127.0.0.1/api/export/prometheus/metrics | grep -q "^pikvm_hw_temp_cpu "
-    test "$(curl -ksS -o /dev/null -w "%{http_code}" https://127.0.0.1/api/info)" = 401
 '
 devices/glkvm/capture-screen.sh /tmp/kvm-snap.jpg
 ```
@@ -211,7 +237,7 @@ After the update:
 4. Run the non-interactive checks above and capture a screen.
 5. With a host at a safe menu, verify one paced HID key and one downstream KVM
    channel switch.
-6. Recheck the [monitoring](#monitoring) patch against the new firmware before relying on it. Apply refuses to install `export.py` over a vendor module it was not verified against.
+6. Recheck the [monitoring](#monitoring) patch against the new firmware's `export.pyc` before reinstalling it. The installed copy steps aside on its own when that file changes, and its install refuses a module it was not verified against.
 
 The update to `V1.10.1 release2` kept `/etc/kvmd/user`, the mass-storage settings in `user/boot.yaml`, and `/etc/kvmd/override.yaml`, but replaced `/etc/kvmd/nginx-kvmd.conf` with the vendor's, which serves only the GLKVM UI on 443.
 

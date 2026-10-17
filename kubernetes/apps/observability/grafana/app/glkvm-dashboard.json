@@ -207,7 +207,7 @@
       "id": 3,
       "type": "stat",
       "title": "Memory used",
-      "description": "Share of the appliance's memory in use; it has about 1 GiB and no swap. GLKVMMemoryLow fires above 90% for 30 minutes.",
+      "description": "Share of the appliance's 1 GiB in use, excluding reclaimable cache. GLKVMMemoryLow fires above 90% for 30 minutes.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"

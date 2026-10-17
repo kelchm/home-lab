@@ -27,26 +27,8 @@
 # for registered submanagers; the rest reproduces the vendor bytecode. Any
 # other vendor export.pyc runs unchanged. See devices/glkvm/README.md#monitoring.
 
-import asyncio
 import hashlib
 import os
-
-from typing import Any
-
-import async_lru
-
-from aiohttp.web import Request
-from aiohttp.web import Response
-
-from .... import tools
-
-from ....htserver import exposed_http
-
-from ....plugins.atx import BaseAtx
-from ....plugins.ugpio import UserGpioModes
-
-from ..info import InfoManager
-from ..ugpio import UserGpio
 
 
 _VENDOR_PYC = os.path.join(os.path.dirname(__file__), "export.pyc")
@@ -66,6 +48,25 @@ if not _is_patched_vendor():
     exec(SourcelessFileLoader(__name__, _VENDOR_PYC).get_code(__name__), globals())  # pylint: disable=exec-used
 
 else:
+    import asyncio
+
+    from typing import Any
+
+    import async_lru
+
+    from aiohttp.web import Request
+    from aiohttp.web import Response
+
+    from .... import tools
+
+    from ....htserver import exposed_http
+
+    from ....plugins.atx import BaseAtx
+    from ....plugins.ugpio import UserGpioModes
+
+    from ..info import InfoManager
+    from ..ugpio import UserGpio
+
     # =====
     class ExportApi:
         def __init__(self, info_manager: InfoManager, atx: BaseAtx, user_gpio: UserGpio) -> None:
