@@ -106,17 +106,16 @@ The exporter reports quorum, node and guest state, storage use and which guests 
 
 [Unpoller](../../kubernetes/apps/observability/unpoller/app/) reads the UniFi console at `unifi.home.kelch.io` with a local account and exports gateway, WAN, switch, port, PoE and access-point metrics. Its series carry `job="unifi-api"`, `instance="unifi"` and `platform="unifi"`; the device is in the `name` label. It refreshes from the console once a minute, and the scrape drops the per-client `unpoller_client_*` series. DPI, events, alarms, IDS and syslog collection stay off.
 
-In UniFi OS, under Admins & Users, create a local-access-only admin named `unpoller` with the Network role View Only and no access to other applications. Then write its password into the SOPS Secret from a checkout:
+The account is `unpoller-sa`, a local admin with the View Only role, which UniFi OS grants as read-only on Network, Protect and user management; a settings write returns `403 api.err.NoPermission`. Its password is in 1Password at `op://Project - home-lab/unpoller-sa/password`. Write it into the SOPS Secret from a checkout:
 
 ```sh
-read -rs pw
-kubectl create secret generic unpoller-credentials --from-literal=password="$pw" --dry-run=client -o yaml \
+op read --no-newline "op://Project - home-lab/unpoller-sa/password" \
+  | kubectl create secret generic unpoller-credentials --from-file=password=/dev/stdin --dry-run=client -o yaml \
   | sops encrypt --filename-override kubernetes/apps/observability/unpoller/app/credentials.sops.yaml --input-type yaml --output-type yaml /dev/stdin \
   > kubernetes/apps/observability/unpoller/app/credentials.sops.yaml
-unset pw
 ```
 
-To rotate, change the password in UniFi OS, rerun the command and merge; Reloader restarts the pod. To remove, delete the Flux Kustomization from the observability `kustomization.yaml` and the account from UniFi OS.
+To rotate, change the password in UniFi OS and 1Password, rerun the command and merge; Reloader restarts the pod. To remove, delete the Flux Kustomization from the observability `kustomization.yaml` and the account from UniFi OS.
 
 ## Alerts
 
