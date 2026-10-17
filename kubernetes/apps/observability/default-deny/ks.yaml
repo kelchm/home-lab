@@ -16,6 +16,7 @@ spec:
     - name: grafana
     - name: prometheus-operator-crds
     - name: smartctl-exporter
+    - name: unpoller
     - name: victoria-logs-single
     - name: victoria-metrics-k8s-stack
   interval: 1h

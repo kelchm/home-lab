@@ -18,6 +18,13 @@ spec:
         app.kubernetes.io/name: unpoller
     spec:
       automountServiceAccountToken: false
+      # ndots:1 so the console name resolves as an absolute name — see the
+      # cloudflare-dns HelmRelease for the ndots/search-path interaction that
+      # breaks Cilium toFQDNs rules otherwise.
+      dnsConfig:
+        options:
+          - name: ndots
+            value: "1"
       securityContext:
         runAsNonRoot: true
         runAsUser: 65532
