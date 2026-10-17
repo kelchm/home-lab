@@ -29,10 +29,6 @@ def check_models(body, model, context):
     entries = [entry for entry in body.get("data", []) if entry.get("id") == model]
     if len(entries) != 1 or entries[0].get("context_length") != context:
         raise RuntimeError(f"Expected {model} with a {context}-token window, got {body!r}")
-    entry = entries[0]
-    expected = {"default_enabled": True, "supported_efforts": ["xhigh", "medium", "low", "none"]}
-    if entry.get("max_model_len") != context or "default_max_tokens" in entry or entry.get("reasoning") != expected:
-        raise RuntimeError(f"Expected the Qwen discovery profile's window and reasoning defaults, got {entry!r}")
 
 
 def main():

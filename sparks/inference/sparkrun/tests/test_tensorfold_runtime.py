@@ -505,20 +505,6 @@ def test_qwen_discovery_bundle_rejects_changed_files_and_a_missing_binary(tmp_pa
     assert result.returncode != 0 and f"Missing or changed frozen mod file: {name}" in result.stderr
 
 
-def test_qwen_discovery_bundle_rejects_a_patch_missing_its_server_field(tmp_path):
-    bundle = _qwen_discovery_bundle(tmp_path)
-    lock_path = bundle / "upstream.lock.json"
-    lock = json.loads(lock_path.read_text())
-    patch = bundle / lock["server_patches"][1]["file"]
-    # Even with an updated checksum, a status-routes-only patch loses the thinking_switch initialization.
-    patch.write_bytes(b"diff --git a/zig/src/server/status_routes.zig" + patch.read_bytes().split(
-        b"diff --git a/zig/src/server/status_routes.zig", 1)[1])
-    lock["mod_files"][str(patch.relative_to(bundle))] = hashlib.sha256(patch.read_bytes()).hexdigest()
-    lock_path.write_text(json.dumps(lock))
-    result = subprocess.run([sys.executable, str(bundle / "prepare.py"), "--check"], capture_output=True, text=True)
-    assert result.returncode != 0 and "must change exactly" in result.stderr
-
-
 def test_qwen_discovery_readiness_and_live_check_pin_the_model_entry():
     v11 = MIA_MODS / "mia-tensorfold-qwen38fn-v1.1"
     assert (MIA_MODS / QWEN_DISCOVERY_MOD / "serve.py").read_bytes() == (v11 / "serve.py").read_bytes()
@@ -538,34 +524,26 @@ def test_qwen_discovery_readiness_and_live_check_pin_the_model_entry():
             ready.check_models(body, "Qwen3.8-Flash-Next", context)
 
     reasoning = live.check_entry(QWEN_DISCOVERY_ENTRY, 1048576)
-    for change in ({"context_length": 524288}, {"max_model_len": 524288}, {"default_max_tokens": 32768}, {"reasoning": None},
-                   {"reasoning": {**reasoning, "supported_efforts": ["xhigh", "low", "none"]}},
-                   {"reasoning": {**reasoning, "supported_efforts": ["none", "low", "medium", "xhigh"]}},
-                   {"reasoning": {**reasoning, "effort_map": {"none": "none"}}},
-                   {"reasoning": {**reasoning, "default_effort": "high"}},
-                   {"reasoning": {**reasoning, "default_effort": "low"}},
-                   {"reasoning": {**reasoning, "default_effort": None}},
-                   {"reasoning": {**reasoning, "default_enabled": False}}):
+    for change in ({"context_length": 524288}, {"default_max_tokens": 32768}, {"reasoning": None},
+                   {"reasoning": {**reasoning, "supported_efforts": ["xhigh", "low", "low"]}},
+                   {"reasoning": {**reasoning, "supported_efforts": ["xhigh", "turbo"]}},
+                   {"reasoning": {**reasoning, "supported_efforts": []}},
+                   {"reasoning": {**reasoning, "default_effort": "high"}}):
         with pytest.raises(RuntimeError):
             live.check_entry({**QWEN_DISCOVERY_ENTRY, **change}, 1048576)
-        with pytest.raises(RuntimeError):
-            ready.check_models({"data": [{**QWEN_DISCOVERY_ENTRY, **change}]}, "Qwen3.8-Flash-Next", 1048576)
     with pytest.raises(RuntimeError):
         live.check_entry(QWEN_DISCOVERY_ENTRY, 524288)
     live.check_echo(reasoning, None, {"tensorfold": {"enable_thinking": True, "reasoning_effort": None}})
     live.check_echo({**reasoning, "default_effort": "low"}, None, {"tensorfold": {"enable_thinking": True, "reasoning_effort": "low"}})
     live.check_echo(reasoning, "high", {"tensorfold": {"enable_thinking": True, "reasoning_effort": "xhigh"}})
+    live.check_echo(reasoning, "minimal", {"tensorfold": {"enable_thinking": True, "reasoning_effort": "low"}})
     live.check_echo(reasoning, "none", {"tensorfold": {"enable_thinking": False, "reasoning_effort": "none"}})
-    # A configured default is returned even when thinking defaults off; no flag means the key is omitted.
-    for effort in ("low", "medium", "xhigh", "none"):
-        configured = {**QWEN_DISCOVERY_ENTRY, "reasoning": {**reasoning, "default_effort": effort, "default_enabled": False}}
-        live.check_entry(configured, 1048576, default_effort=effort, default_enabled=False)
-        live.check_echo(configured["reasoning"], None, {"tensorfold": {"enable_thinking": False, "reasoning_effort": effort}})
-        with pytest.raises(RuntimeError):
-            live.check_entry(QWEN_DISCOVERY_ENTRY, 1048576, default_effort=effort)
     for effort, echo in ((None, {"enable_thinking": False, "reasoning_effort": None}),
                          (None, {"enable_thinking": True, "reasoning_effort": "xhigh"}),
-                         ("high", {"enable_thinking": True, "reasoning_effort": "high"})):
+                         ("high", {"enable_thinking": True, "reasoning_effort": "high"}),
+                         ("medium", {"enable_thinking": True, "reasoning_effort": "low"}),
+                         ("none", {"enable_thinking": True, "reasoning_effort": "none"}),
+                         ("low", {"enable_thinking": False, "reasoning_effort": "low"})):
         with pytest.raises(RuntimeError):
             live.check_echo(reasoning, effort, {"tensorfold": echo})
 

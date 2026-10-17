@@ -21,8 +21,8 @@
     {
       "file": "patches/0011-models-reasoning.patch",
       "repository": "ashhart/TensorFold",
-      "base": "c126fe16e3f8d9bef4a620af34ff35aec0966af1",
-      "commit": "061b2d2ef435f2b0ef9cdf868ff8cec65681f203",
+      "base": "2962468f1af075c822e535ebb9d5767d076718f0",
+      "commit": "60f27da01cb86d076a078d3b4ae3e36c2f3b41c2",
       "paths": [
         "zig/src/server/server.zig",
         "zig/src/server/status_routes.zig"
@@ -40,10 +40,10 @@
   },
   "binary_sha256": "1713bf570749ddba3b6da88d3d0a6812d11175032d32b8868b51dee69ffe2379",
   "mod_files": {
-    "prepare.py": "a9639e98d4a20a4aaf09d9c5cbce59ab53c6ae3b2ed6f73e9c08f56df2fbc894",
+    "prepare.py": "1d118b0bc02c3b939fe87c47d37644a590e25645c6178d49f2bebad868f5a4ea",
     "run.sh": "f5335e737511e4d1f3b75f22c1e83e56255d742a46ff512695c3b576881815df",
     "serve.py": "4b2bc4223157ba53f7aa0142f99b9f81e542d3ee293712eff3d44fadc8388f0e",
-    "readiness.py": "7c80fe9b4398e50ca6ec586308f9cf5179405d4dba4e32b741d3674a73034fd6",
+    "readiness.py": "506577b9c6ab7ca5747e485a9e6df85325b198437ba66ada9625ee24ffea44c5",
     "build/Dockerfile": "931aeec0a765759a12df6de11a28f2aa9af3e09cdb999f5dbedf67df2a8c057f",
     "build/build.sh": "6fa408076151ffc742cbaa72cdc6b1aac5bcfcd808593c1d5fa9ff5351d110b6",
     "patches/0010-models-context-length.patch": "18cf9c302d6bf50516b2cfed4da69527cfa9f16717e5bbbf366e8e330138e766",

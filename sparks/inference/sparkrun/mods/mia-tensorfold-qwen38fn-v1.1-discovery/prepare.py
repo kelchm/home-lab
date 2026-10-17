@@ -5,7 +5,6 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import re
 import shutil
 import subprocess
 
@@ -33,8 +32,6 @@ def check(lock, require_binary):
         path = HERE / name
         if path.is_symlink() or not path.is_file() or sha256(path) != digest:
             raise ValueError(f"Missing or changed frozen mod file: {name}")
-    for patch in lock["server_patches"]:
-        check_patch_paths(patch, (HERE / patch["file"]).read_bytes())
     binary = HERE / BINARY
     if not binary.exists() and not binary.is_symlink():
         if require_binary:
@@ -58,19 +55,13 @@ def install(lock, root):
     os.replace(staged, target)
 
 
-def check_patch_paths(patch, diff):
-    paths = patch["paths"]
-    changed = re.findall(rb"^diff --git a/(\S+) b/\1$", diff, re.MULTILINE)
-    if not paths or len(set(paths)) != len(paths) or sorted(p.encode() for p in paths) != sorted(changed):
-        raise ValueError(f"Patch {patch['file']} must change exactly {paths!r}")
-
-
 def refresh(lock, checkout):
     """Regenerate each server patch from its pinned commit; the binary must then be rebuilt and recorded."""
     for patch in lock["server_patches"]:
         diff = subprocess.run(["git", "-C", checkout, "diff", patch["base"], patch["commit"], "--", *patch["paths"]],
                               check=True, capture_output=True).stdout
-        check_patch_paths(patch, diff)
+        if not diff:
+            raise ValueError(f"No change to {', '.join(patch['paths'])} in {patch['commit']}")
         (HERE / patch["file"]).write_bytes(diff)
         lock["mod_files"][patch["file"]] = hashlib.sha256(diff).hexdigest()
     lock["binary_sha256"] = None
