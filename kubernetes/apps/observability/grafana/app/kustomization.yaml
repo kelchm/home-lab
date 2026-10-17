@@ -47,6 +47,15 @@ configMapGenerator:
       annotations:
         grafana_folder: Platforms/Sparks
         kustomize.toolkit.fluxcd.io/substitute: disabled
+  - name: grafana-dashboard-synology
+    files:
+      - synology.json=./synology-dashboard.json
+    options:
+      labels:
+        grafana_dashboard: "1"
+      annotations:
+        grafana_folder: Platforms/Synology
+        kustomize.toolkit.fluxcd.io/substitute: disabled
   - name: grafana-dashboard-node-hardware
     files:
       - node-hardware.json=./node-hardware-dashboard.json
