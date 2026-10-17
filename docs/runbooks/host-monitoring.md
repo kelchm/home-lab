@@ -1,10 +1,10 @@
 # Host monitoring
 
-Metrics from the three PVE nodes and the two DGX Sparks. The lab's metrics backend runs in `k8s-prod`; these hosts push to it. Each host runs ordinary exporters and a `vmagent` in Docker Compose, deployed from `main` by a host-local doco-cd as on the [NAS](../../synology/README.md). `vmagent` scrapes the exporters over loopback and pushes to `https://metrics-ingest.home.kelch.io`, queueing up to 1 GiB on disk while the endpoint is unreachable. Nothing on a host listens beyond loopback except doco-cd on PVE (see [PVE](#pve-node)) and the sparkDash dashboard on `spark-1`, at `10.32.21.31:5555` behind an access token. The Proxmox API is read separately by an in-cluster exporter. As on the NAS, doco-cd holds the host's Docker socket, so whoever can merge to `main` controls every enrolled host.
+Metrics from the three PVE nodes, the two DGX Sparks and the NAS. The lab's metrics backend runs in `k8s-prod`; these hosts push to it. Each host runs ordinary exporters and a `vmagent` in Docker Compose, deployed from `main` by a host-local doco-cd as on the [NAS](../../synology/README.md). `vmagent` scrapes the exporters over loopback and pushes to `https://metrics-ingest.home.kelch.io`, queueing up to 1 GiB on disk while the endpoint is unreachable. Nothing on a host listens beyond loopback except doco-cd on PVE (see [PVE](#pve-node)) and the sparkDash dashboard on `spark-1`, at `10.32.21.31:5555` behind an access token. The Proxmox API is read separately by an in-cluster exporter. As on the NAS, doco-cd holds the host's Docker socket, so whoever can merge to `main` controls every enrolled host.
 
 ## State
 
-All five hosts are enrolled and the Proxmox API exporter is running, since 2026-10-04.
+The PVE nodes and Sparks are enrolled and the Proxmox API exporter is running, since 2026-10-04. NAS enrollment is tracked in [#839](https://github.com/kelchm/home-lab/issues/839).
 
 The deployer definitions enable native self-update. Its verified version, migration status, manual apply, and handover checks are maintained in the [self-update runbook](doco-cd-self-update.md).
 
@@ -23,7 +23,7 @@ Not yet verified: that Docker comes back with the same settings after a PVE node
 | Label | Meaning | Set by |
 |---|---|---|
 | `instance` | Physical node, such as `spark-1` | The host's ingestion token |
-| `platform` | Machine type: `k8s`, `pve` or `spark` | The host's ingestion token; the node-exporter scrape for the cluster nodes |
+| `platform` | Machine type: `k8s`, `pve`, `spark` or `synology` | The host's ingestion token; the node-exporter scrape for the cluster nodes |
 | `job` | Collector or source, such as `spark-node`, `pve-vmagent` or `pve-backup` | Scrape configuration for scraped series; the webhook URL for PVE backup metrics |
 | `model`, `runtime`, `recipe` | What a Spark is serving | SparkRun's container labels |
 
@@ -57,6 +57,20 @@ Before going further, confirm on the node that guests still pass traffic, `cat /
 
 The deployer runs without Docker's default AppArmor profile: on PVE's kernel that profile denies Unix sockets, including the Docker socket. Containers on a PVE node use host networking only. doco-cd has no bind-address setting, so its health and metrics ports (8080, 9120) listen on every interface of the node; its webhook and API stay disabled without a secret.
 
+## NAS
+
+Athena runs the [NAS monitoring](../../synology/monitoring/README.md) project from its existing doco-cd, so enrollment is the host state the project expects, then a merge. Its instance is `nas`, from the address registry, and its jobs are `synology-node`, `synology-snmp` and `synology-vmagent`.
+
+```sh
+ssh kelchm@10.32.20.5 'sudo install -d -m 0755 /volume1/docker/monitoring /volume1/docker/monitoring/config && sudo install -d -m 0700 /volume1/docker/monitoring/queue'
+sops decrypt --extract '["stringData"]["NAS_TOKEN"]' kubernetes/apps/observability/metrics-ingest/app/tokens.sops.yaml \
+  | ssh kelchm@10.32.20.5 'sudo install -m 0600 /dev/stdin /volume1/docker/monitoring/token'
+```
+
+Once the `NAS_TOKEN` `VMUser` is live, merge the project's entry in [`synology/.doco-cd.yml`](../../synology/.doco-cd.yml); doco-cd deploys it within three minutes. The `publish` service exits after copying the config, which is expected. DSM needs no setting: SNMP comes from the `snmpd` DSM already runs on loopback.
+
+Rotate the token as for any host, writing `/volume1/docker/monitoring/token`. To remove the NAS, delete its target from `synology/.doco-cd.yml`, run `docker compose -p monitoring down` on Athena, and delete its `VMUser`.
+
 ## Verify a host
 
 ```promql
@@ -64,7 +78,7 @@ time() - tlast_over_time(up{instance="spark-1"}[1h])
 count by (job) (up{instance="spark-1"} == 1)
 ```
 
-The first is a few seconds on a healthy host. The second lists `spark-node`, `spark-gpu`, `spark-vmagent` and `spark-deployer`, plus `spark-inference` on the node serving the head rank. On the host, `curl -s 127.0.0.1:8429/targets` shows each scrape target and `docker logs doco-cd` shows deployments.
+The first is a few seconds on a healthy host. The second lists `spark-node`, `spark-gpu`, `spark-vmagent` and `spark-deployer`, plus `spark-inference` on the node serving the head rank. On the NAS it lists `synology-node`, `synology-snmp` and `synology-vmagent`. On the host, `curl -s 127.0.0.1:8429/targets` shows each scrape target and `docker logs doco-cd` shows deployments.
 
 Check memory with `docker stats --no-stream`, which matters on a Spark where a loaded model leaves little free. Every container keeps at most 30 MB of logs and has a memory limit: 256 MiB each for doco-cd and vmagent, 128 MiB each for node-exporter and the GPU exporter, so 768 MiB at most on a Spark and 640 MiB on a PVE node. sparkDash adds a 512 MiB limit on `spark-1`. Measured on 2026-10-04: a Spark used 90 to 110 MiB in total (doco-cd 35 to 44, vmagent 23 to 46, GPU exporter 10 to 17, node-exporter 10), leaving its available memory within 0.1 GiB of where it started; a PVE node used about 55 MiB.
 
@@ -90,6 +104,6 @@ The exporter reports quorum, node and guest state, storage use and which guests 
 
 ## Alerts
 
-Host rules are in [metrics-ingest](../../kubernetes/apps/observability/metrics-ingest/app/alerts.yaml) and Proxmox API rules beside the [exporter](../../kubernetes/apps/observability/pve-exporter/app/alerts.yaml). A host is covered from its first sample; there is no enrollment list to maintain. They route like every other alert, described in the [alerting runbook](alerting.md).
+Host rules are in [metrics-ingest](../../kubernetes/apps/observability/metrics-ingest/app/alerts.yaml) and Proxmox API rules beside the [exporter](../../kubernetes/apps/observability/pve-exporter/app/alerts.yaml). A host is covered from its first sample; there is no enrollment list to maintain. The NAS also has disk, RAID and hardware rules that read DSM's own status through SNMP; a disk DSM reports as not initialized, such as a new disk before it joins a pool, does not alert. They route like every other alert, described in the [alerting runbook](alerting.md).
 
 Backup failure and staleness rules for PVE are installed: PVE's notification webhook pushes one `pve_backup_completed_timestamp_seconds` sample per finished backup run through the node's vmagent, as `job="pve-backup"` with `cluster="pve-sbx"`, the one host-pushed series that carries a cluster label. Unlike the host rules, `PVEBackupStale` lists the nodes it expects, so adding or removing a PVE node means editing it. See [backup completion metrics](../../proxmox/monitoring/backup-metrics/README.md).

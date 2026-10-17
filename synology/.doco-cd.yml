@@ -26,3 +26,8 @@ name: offsite-backup
 working_dir: synology/offsite-backup
 prune_images: false
 reconciliation: false
+---
+name: monitoring
+working_dir: synology/monitoring
+prune_images: false
+reconciliation: false

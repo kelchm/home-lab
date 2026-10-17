@@ -122,3 +122,27 @@ spec:
           values:
             - instance=pve-sbx-3
             - platform=pve
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMUser
+metadata:
+  name: nas
+  labels:
+    homelab.kelch.io/vmauth: metrics-ingest
+spec:
+  name: nas
+  tokenRef:
+    name: metrics-ingest-tokens
+    key: NAS_TOKEN
+  targetRefs:
+    - crd:
+        kind: VMSingle
+        name: victoria-metrics-k8s-stack
+        namespace: observability
+      paths:
+        - /api/v1/write
+      query_args:
+        - name: extra_label
+          values:
+            - instance=nas
+            - platform=synology

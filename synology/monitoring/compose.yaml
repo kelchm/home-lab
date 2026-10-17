@@ -1,0 +1,80 @@
+# Host, disk, RAID and UPS metrics for Athena. Identity comes from the ingestion
+# token, not from this file. Every listener binds 127.0.0.1; SNMP is DSM's own
+# snmpd, which DSM always runs on loopback with a built-in read-only community.
+name: monitoring
+
+x-service: &service
+  network_mode: host
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: "3"
+
+x-after-publish: &after-publish
+  depends_on:
+    publish:
+      condition: service_completed_successfully
+
+services:
+  node-exporter:
+    <<: *service
+    image: quay.io/prometheus/node-exporter:v1.12.1@sha256:1b4e4438faca4dd7e001dd445d161a4a2091b0fededa84093b3a8dfeae1f1be0
+    user: "65534:65534"
+    pid: host
+    command:
+      - --web.listen-address=127.0.0.1:9100
+      - --path.rootfs=/host
+      # Container Manager re-mounts every share under all_shares.
+      - --collector.filesystem.mount-points-exclude=^/(dev|proc|run|sys|tmp|volume1/@appdata/ContainerManager/all_shares|volume1/@docker|volume1/[^/]+/#snapshot)($|/)
+      - --collector.netdev.device-exclude=^(docker.*|sit0|ovs-system)$
+      - --collector.netclass.ignored-devices=^(docker.*|sit0|ovs-system)$
+    volumes:
+      # DSM's root is not a shared mount, so Docker refuses rslave.
+      - /:/host:ro
+    mem_limit: 128m
+
+  snmp-exporter:
+    <<: [*service, *after-publish]
+    image: quay.io/prometheus/snmp-exporter:v0.30.1@sha256:e5fd5e8b43ace6c088fe9bf0b37b7fff0e04380bee352be7ec41b853a4dd5859
+    user: "65534:65534"
+    command:
+      - --web.listen-address=127.0.0.1:9116
+      - --config.file=/etc/snmp_exporter/snmp.yml
+      - --config.file=/config/snmp.yml
+    volumes:
+      - /volume1/docker/monitoring/config:/config:ro
+    mem_limit: 64m
+
+  vmagent:
+    <<: [*service, *after-publish]
+    image: docker.io/victoriametrics/vmagent:v1.153.0@sha256:474135388ae700b842007d3e186a8ae60ccf7de3dfd776fb6ed27cf8522d8331
+    command:
+      - -httpListenAddr=127.0.0.1:8429
+      - -promscrape.config=/config/scrape.yaml
+      - -promscrape.configCheckInterval=1m
+      - -remoteWrite.url=https://metrics-ingest.home.kelch.io/api/v1/write
+      - -remoteWrite.bearerTokenFile=/token
+      - -remoteWrite.tmpDataPath=/queue
+      - -remoteWrite.maxDiskUsagePerURL=1GiB
+    volumes:
+      - /volume1/docker/monitoring/config:/config:ro
+      - /volume1/docker/monitoring/token:/token:ro
+      - /volume1/docker/monitoring/queue:/queue
+    mem_limit: 256m
+    stop_grace_period: 30s
+
+  publish:
+    image: docker.io/library/busybox:1.38.0@sha256:fd7dc98638c8e305f4dc34e979f1c0fdfdcaeb0fbf8fcff77ae834b6da3d7e6e
+    command: ["install", "-m", "0644", "/source/scrape.yaml", "/source/snmp.yml", "/config/"]
+    labels:
+      cd.doco.deployment.one_shot: "true"
+    volumes:
+      - ./scrape.yaml:/source/scrape.yaml:ro
+      - ./snmp.yml:/source/snmp.yml:ro
+      - /volume1/docker/monitoring/config:/config
+    restart: "no"

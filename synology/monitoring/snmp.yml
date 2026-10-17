@@ -1,0 +1,6 @@
+# DSM's built-in snmpd: loopback only, fixed read-only community. Modules come
+# from the image's stock snmp.yml.
+auths:
+  dsm:
+    community: syno
+    version: 2
