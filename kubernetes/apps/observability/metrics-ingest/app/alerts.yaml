@@ -140,3 +140,19 @@ spec:
             severity: critical
           annotations:
             summary: DSM reports a {{ $labels.component }} failure on {{ $labels.instance }}
+
+        # NUT status flags from the UPS DSM is attached to: OB on battery, LB low battery.
+        - alert: NasUpsOnBattery
+          expr: upsInfoStatus{job="synology-snmp", upsInfoStatus=~"(.* )?OB( .*)?"} == 1
+          for: 1m
+          labels:
+            severity: warning
+          annotations:
+            summary: The UPS on {{ $labels.instance }} is on battery
+
+        - alert: NasUpsBatteryLow
+          expr: upsInfoStatus{job="synology-snmp", upsInfoStatus=~"(.* )?LB( .*)?"} == 1
+          labels:
+            severity: critical
+          annotations:
+            summary: The UPS on {{ $labels.instance }} reports a low battery
