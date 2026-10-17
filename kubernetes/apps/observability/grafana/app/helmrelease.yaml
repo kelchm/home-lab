@@ -79,6 +79,9 @@ spec:
         maxSurge: 0
         maxUnavailable: 1
 
+    serviceMonitor:
+      enabled: true
+
     service:
       type: ClusterIP
 

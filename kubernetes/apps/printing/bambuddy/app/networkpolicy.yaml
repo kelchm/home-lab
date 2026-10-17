@@ -1,5 +1,5 @@
 ---
-# Default-deny policy for Bambuddy. The only inbound path is gateway-admin;
+# Default-deny policy for Bambuddy. Inbound paths are gateway-admin and vmagent;
 # outbound is DNS, PostgreSQL, Kanidm OIDC, public internet, and Bambu LAN
 # protocols within the IoT trust zone. Bambuddy's UI, not Kubernetes, owns
 # printer inventory.
@@ -12,6 +12,17 @@ spec:
     matchLabels:
       app.kubernetes.io/name: bambuddy
   ingress:
+    # Scraper metrics (same identity as the Traefik metrics allowance).
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: vmagent
+            app.kubernetes.io/instance: victoria-metrics-k8s-stack
+            io.cilium.k8s.policy.serviceaccount: vmagent-victoria-metrics-k8s-stack
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
     - fromEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: network

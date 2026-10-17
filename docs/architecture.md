@@ -69,7 +69,7 @@ A dashboard has one home, chosen by its subject: the thing whose state it shows.
 
 | Group | Homes in use | Not yet in use |
 |---|---|---|
-| Services | Observability (whether monitoring itself works), AI, Identity | Storage, Network, Media, Home automation, Printing |
+| Services | Observability (whether monitoring itself works), AI, Identity, Printing | Storage, Network, Media, Home automation |
 | Platforms | Kubernetes (the cluster, its nodes, Talos and cluster plumbing), Proxmox, Sparks | Synology, UniFi, Devices |
 | Overview | Views across platforms, and the any-machine host detail | |
 
