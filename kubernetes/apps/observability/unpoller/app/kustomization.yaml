@@ -6,6 +6,7 @@ resources:
   - ./deployment.yaml
   - ./networkpolicy.yaml
   - ./scrape.yaml
+  - ./alerts.yaml
 configMapGenerator:
   - name: unpoller-config
     files:
