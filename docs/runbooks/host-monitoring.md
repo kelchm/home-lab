@@ -23,7 +23,7 @@ Not yet verified: that Docker comes back with the same settings after a PVE node
 | Label | Meaning | Set by |
 |---|---|---|
 | `instance` | Physical node, such as `spark-1` | The host's ingestion token |
-| `platform` | Machine type: `k8s`, `pve`, `spark`, `synology` or `unifi` | The host's ingestion token; the node-exporter scrape for the cluster nodes; the [UniFi](#unifi) scrape |
+| `platform` | Machine type: `k8s`, `pve`, `spark`, `synology`, `unifi` or `glkvm` | The host's ingestion token; the node-exporter scrape for the cluster nodes; the [UniFi](#unifi) and [GLKVM](#glkvm) scrapes |
 | `job` | Collector or source, such as `spark-node`, `pve-vmagent` or `pve-backup` | Scrape configuration for scraped series; the webhook URL for PVE backup metrics |
 | `model`, `runtime`, `recipe` | What a Spark is serving | SparkRun's container labels |
 
@@ -70,6 +70,10 @@ sops decrypt --extract '["stringData"]["NAS_TOKEN"]' kubernetes/apps/observabili
 Once the `NAS_TOKEN` `VMUser` is live, merge the project's entry in [`synology/.doco-cd.yml`](../../synology/.doco-cd.yml); doco-cd deploys it within three minutes. The `publish` service exits after copying the config, which is expected. DSM needs no setting: SNMP comes from the `snmpd` DSM already runs on loopback.
 
 Rotate the token as for any host, writing `/volume1/docker/monitoring/token`. To remove the NAS, delete its target from `synology/.doco-cd.yml`, run `docker compose -p monitoring down` on Athena, and delete its `VMUser`.
+
+## GLKVM
+
+The recovery console runs no collector of its own. The cluster's vmagent scrapes kvmd's native export directly, as for the Proxmox API, with `instance="glkvm"` and `platform="glkvm"`. The appliance changes, metrics, alerts and acceptance checks are in the [GLKVM README](../../devices/glkvm/README.md#monitoring).
 
 ## Verify a host
 

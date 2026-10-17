@@ -2,6 +2,10 @@
 # Left Ctrl, Left Ctrl, DigitN, but needs more time between events than the
 # GL.iNet shortcut UI provides.
 kvmd:
+    # Serves /export/prometheus/metrics without login; every other path still requires it.
+    prometheus:
+        auth:
+            enabled: false
     gpio:
         drivers:
             kvm_channel_1:

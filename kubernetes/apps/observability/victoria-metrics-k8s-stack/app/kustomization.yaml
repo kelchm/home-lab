@@ -9,6 +9,7 @@ resources:
   - ./vmalertmanager-config.sops.yaml
   - ./alerts.yaml
   - ./platform-alerts.yaml
+  - ./glkvm.yaml
   - ./networkpolicy.yaml
 
 # Dashboards as this chart's sync Job produces them, delivered from here so

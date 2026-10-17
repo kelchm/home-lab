@@ -140,6 +140,13 @@ spec:
             # traefik metrics entrypoint (dedicated metrics Service)
             - port: "9100"
               protocol: TCP
+    # GLKVM kvmd metrics.
+    - toCIDR:
+        - 10.32.20.10/32
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
     # Node and control-plane metrics.
     - toEntities:
         - host
