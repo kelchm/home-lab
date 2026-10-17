@@ -43,7 +43,7 @@ from sparkrun.core.runtime_cache import (  # noqa: E402
     resolve_runtime_cache_settings,
 )
 from sparkrun.core.validation import ERROR  # noqa: E402
-from sparkrun.orchestration.job_metadata import derive_recipe_fingerprint  # noqa: E402
+from sparkrun.orchestration.job_metadata import derive_recipe_fingerprint, generate_intent_id  # noqa: E402
 from sparkrun.orchestration.executors.docker import DockerExecutor  # noqa: E402
 from sparkrun.runtimes import _cluster_ops  # noqa: E402
 from sparkrun.runtimes._cluster_ops import ClusterContext  # noqa: E402
@@ -71,6 +71,15 @@ QWEN_PROFILES = [
     ("qwen38fn-int4ar-tp2-mia-tf-v1.1-azampatti-1m", "azampatti/Qwen3.8-Flash-Next-125B-A5B-INT4-AutoRound",
      "1464274120d36a4d8fcaa934552334a7d83ce0fd", "Qwen3.8-Flash-Next-INT4-AR"),
 ]
+QWEN_DISCOVERY_PROFILE = "qwen38fn-nvfp4-tp2-mia-tf-v1.1-discovery-nvidia-1m"
+QWEN_DISCOVERY_MOD = "mia-tensorfold-qwen38fn-v1.1-discovery"
+QWEN_DISCOVERY_ENTRY = {
+    "id": "Qwen3.8-Flash-Next", "object": "model", "created": 0, "owned_by": "tensorfold",
+    "context_length": 1048576, "max_model_len": 1048576,
+    "reasoning": {"default_enabled": True, "supported_efforts": ["xhigh", "medium", "low", "none"],
+                  "effort_map": {"none": "none", "minimal": "low", "low": "low", "medium": "medium", "high": "xhigh",
+                                 "xhigh": "xhigh", "max": "xhigh"}},
+}
 MIA_MODS = Path(__file__).resolve().parents[1] / "mods"
 FABRIC_HEAD = "172.16.21.31"
 FABRIC_WORKER = "172.16.21.32"
@@ -424,6 +433,115 @@ def test_qwen_frozen_bundle_rejects_changed_helpers(tmp_path):
     result = subprocess.run([sys.executable, str(bundle / "prepare.py")], capture_output=True, text=True)
     assert result.returncode != 0
     assert "Missing or changed frozen mod file: serve.py" in result.stderr
+
+
+def test_qwen_discovery_profile_is_the_v11_workload_with_its_own_mod(runtime):
+    root = Path(__file__).resolve().parents[1] / QWEN_RECIPE_DIR
+    base = yaml.safe_load((root / f"{QWEN_PROFILES[0][0]}.yaml").read_text())
+    data = yaml.safe_load((root / f"{QWEN_DISCOVERY_PROFILE}.yaml").read_text())
+    recipe = Recipe(data, source_path=str(root / f"{QWEN_DISCOVERY_PROFILE}.yaml"))
+    assert recipe.name == recipe.metadata["profile"] == QWEN_DISCOVERY_PROFILE
+    lock = json.loads((MIA_MODS / QWEN_DISCOVERY_MOD / "upstream.lock.json").read_text())
+    assert data["metadata"].pop("server_patch_count") == len(lock["server_patches"]) == 2
+    assert data.pop("mods") == [f"../mods/{QWEN_DISCOVERY_MOD}"] and base.pop("mods")
+    hook = shlex.split(data.pop("post_exec")[0])
+    assert hook[:-2] == shlex.split(base.pop("post_exec")[0])
+    assert hook[-2:] == ["--context", str(data["defaults"]["context"])]
+    for key in ("profile", "description"):
+        assert data["metadata"].pop(key) != base["metadata"].pop(key)
+    # Everything SparkRun addresses a workload and keys its runtime cache by is the v1.1 recipe's.
+    assert data == base
+    original = Recipe(yaml.safe_load((root / f"{QWEN_PROFILES[0][0]}.yaml").read_text()))
+    assert generate_intent_id(recipe) == generate_intent_id(original)
+    leaves = {build_runtime_cache_mounts(
+        runtime=runtime, recipe=each, settings=resolve_runtime_cache_settings(runtime=runtime, recipe=each),
+        root="/opt/spark-cache/huggingface/runtime-cache", image=each.container).leaf for each in (recipe, original)}
+    assert len(leaves) == 1
+    for key in ("image", "image_id", "kit_revision", "engine_revision", "upstream_patch_hash"):
+        assert lock[key] == json.loads((MIA_MODS / "mia-tensorfold-qwen38fn-v1.1/upstream.lock.json").read_text())[key]
+    assert [patch["path"] for patch in lock["server_patches"]] == ["zig/src/server/status_routes.zig"] * 2
+
+
+def _qwen_discovery_bundle(tmp_path, binary=None):
+    bundle = tmp_path / QWEN_DISCOVERY_MOD
+    shutil.copytree(MIA_MODS / QWEN_DISCOVERY_MOD, bundle, ignore=shutil.ignore_patterns("__pycache__", "out"))
+    if binary is not None:
+        (bundle / "out").mkdir()
+        (bundle / "out/tensorfold-native").write_bytes(binary)
+        lock = json.loads((bundle / "upstream.lock.json").read_text())
+        lock["binary_sha256"] = hashlib.sha256(binary).hexdigest()
+        lock["build"]["published_binary_sha256"] = hashlib.sha256(b"published").hexdigest()
+        (bundle / "upstream.lock.json").write_text(json.dumps(lock))
+    return bundle
+
+
+def test_qwen_discovery_bundle_installs_only_over_the_published_binary(tmp_path):
+    bundle = _qwen_discovery_bundle(tmp_path, b"rebuilt")
+    prepare = [sys.executable, str(bundle / "prepare.py")]
+    image = tmp_path / "image/opt/tensorfold/native/bin/tensorfold-native"
+    image.parent.mkdir(parents=True)
+    image.write_bytes(b"something else")
+    result = subprocess.run([*prepare, "--install", str(tmp_path / "image")], capture_output=True, text=True)
+    assert result.returncode != 0 and "Unexpected tensorfold-native in the image" in result.stderr
+    assert image.read_bytes() == b"something else"
+    image.write_bytes(b"published")
+    for _ in range(2):
+        subprocess.run([*prepare, "--install", str(tmp_path / "image")], check=True, capture_output=True)
+        assert image.read_bytes() == b"rebuilt" and image.stat().st_mode & 0o111
+    (bundle / "out/tensorfold-native").write_bytes(b"tampered")
+    result = subprocess.run([*prepare, "--check"], capture_output=True, text=True)
+    assert result.returncode != 0 and "Rebuilt binary does not match the lock" in result.stderr
+
+
+@pytest.mark.parametrize("name", ("serve.py", "build/Dockerfile", "patches/0011-models-reasoning.patch"))
+def test_qwen_discovery_bundle_rejects_changed_files_and_a_missing_binary(tmp_path, name):
+    bundle = _qwen_discovery_bundle(tmp_path)
+    prepare = [sys.executable, str(bundle / "prepare.py")]
+    subprocess.run([*prepare, "--check"], check=True, capture_output=True)
+    for flag in (["--check", "--require-binary"], ["--install", str(tmp_path)]):
+        result = subprocess.run([*prepare, *flag], capture_output=True, text=True)
+        assert result.returncode != 0 and "Missing rebuilt binary" in result.stderr
+    (bundle / name).write_text((bundle / name).read_text() + "\n# Unreviewed change\n")
+    result = subprocess.run([*prepare, "--check"], capture_output=True, text=True)
+    assert result.returncode != 0 and f"Missing or changed frozen mod file: {name}" in result.stderr
+
+
+def test_qwen_discovery_readiness_and_live_check_pin_the_model_entry():
+    v11 = MIA_MODS / "mia-tensorfold-qwen38fn-v1.1"
+    assert (MIA_MODS / QWEN_DISCOVERY_MOD / "serve.py").read_bytes() == (v11 / "serve.py").read_bytes()
+    modules = {}
+    for label, path in (("ready", MIA_MODS / QWEN_DISCOVERY_MOD / "readiness.py"),
+                        ("live", Path(__file__).with_name("qwen_model_discovery.py"))):
+        spec = importlib.util.spec_from_file_location(f"qwen_discovery_{label}", path)
+        modules[label] = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(modules[label])
+    ready, live = modules["ready"], modules["live"]
+    served = {"object": "list", "data": [QWEN_DISCOVERY_ENTRY]}
+    ready.check_models(served, "Qwen3.8-Flash-Next", 1048576)
+    # The published v1.1 server lists the model with no window, which is what a failed overlay would serve.
+    published = {"object": "list", "data": [{key: QWEN_DISCOVERY_ENTRY[key] for key in ("id", "object", "created", "owned_by")}]}
+    for body, context in ((published, 1048576), (served, 524288), ({"object": "list", "data": []}, 1048576)):
+        with pytest.raises(RuntimeError):
+            ready.check_models(body, "Qwen3.8-Flash-Next", context)
+
+    reasoning = live.check_entry(QWEN_DISCOVERY_ENTRY, 1048576)
+    for change in ({"context_length": 524288}, {"default_max_tokens": 32768}, {"reasoning": None},
+                   {"reasoning": {**reasoning, "supported_efforts": ["xhigh", "low", "none"]}},
+                   {"reasoning": {**reasoning, "effort_map": {"none": "none"}}},
+                   {"reasoning": {**reasoning, "default_effort": "high"}}):
+        with pytest.raises(RuntimeError):
+            live.check_entry({**QWEN_DISCOVERY_ENTRY, **change}, 1048576)
+    with pytest.raises(RuntimeError):
+        live.check_entry(QWEN_DISCOVERY_ENTRY, 524288)
+    live.check_echo(reasoning, None, {"tensorfold": {"enable_thinking": True, "reasoning_effort": None}})
+    live.check_echo({**reasoning, "default_effort": "low"}, None, {"tensorfold": {"enable_thinking": True, "reasoning_effort": "low"}})
+    live.check_echo(reasoning, "high", {"tensorfold": {"enable_thinking": True, "reasoning_effort": "xhigh"}})
+    live.check_echo(reasoning, "none", {"tensorfold": {"enable_thinking": False, "reasoning_effort": "none"}})
+    for effort, echo in ((None, {"enable_thinking": False, "reasoning_effort": None}),
+                         (None, {"enable_thinking": True, "reasoning_effort": "xhigh"}),
+                         ("high", {"enable_thinking": True, "reasoning_effort": "high"})):
+        with pytest.raises(RuntimeError):
+            live.check_echo(reasoning, effort, {"tensorfold": echo})
 
 
 def test_mia_v110_recipe_states_the_pinned_launcher_defaults():
