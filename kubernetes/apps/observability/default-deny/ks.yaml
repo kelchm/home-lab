@@ -14,7 +14,9 @@ spec:
   dependsOn:
     - name: vlagent
     - name: grafana
+    - name: metrics-ingest
     - name: prometheus-operator-crds
+    - name: pve-exporter
     - name: smartctl-exporter
     - name: unpoller
     - name: victoria-logs-single
