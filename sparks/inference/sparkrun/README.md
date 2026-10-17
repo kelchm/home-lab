@@ -556,7 +556,7 @@ Checked on a workstation:
 - Both patches apply to engine `db281878` with the kit's nine patches applied, and regenerate byte for byte from the pinned commits.
 - On that tree the server unit tests pass, 53 and 17, including the five model-discovery tests. All 43 Python runtime tests pass against SparkRun 0.3.10, including merged JSON defaults and refusal of a patch missing `server.zig`; `prepare.py --check --require-binary` passes. Four local fake-engine HTTP checks confirm omitted and configured `default_effort`, `high` resolving to `xhigh`, and thinking off.
 - The kit-only rebuild matches the published binary's `.text`, `.rodata`, `.data` and `.eh_frame` byte for byte.
-- The patched build takes about four minutes with that reference build. The October 17 Colima rebuild produced `1713bf57…`, recorded with `build/build.sh --record`.
+- The patched build takes about four minutes with that reference build. The October 17 Colima rebuild produced `1713bf57…`, recorded with `build/build.sh --record`. A separate build from fresh Docker stages produced `9b813f2c…`: every allocated ELF section equals the recorded binary; only the unloaded `.symtab` and `.strtab` differ. Fresh builds can therefore differ in whole-file sha256; the lock pins the exact artifact including its symbol metadata.
 - The binary carries the RoCE proxy as the published one does: the `dlopen libibverbs.so.1` path and the `ibv_*` entry-point names are in it, and the stub's `built without libibverbs headers` message is not.
 
 The results below are for the earlier draft builds `3dea815d…` of `4612b958` and `3f22bd80…` of `68911640`, not the rebuilt upstream patch.
