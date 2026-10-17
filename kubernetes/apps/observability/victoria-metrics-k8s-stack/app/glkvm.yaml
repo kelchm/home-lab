@@ -1,0 +1,92 @@
+---
+# kvmd's own Prometheus export on the GLKVM recovery console, which leaves the
+# metrics path unauthenticated so no console credential is held here. It
+# describes the appliance only: nothing in it observes the host on the
+# selected KVM channel. Appliance setup is in devices/glkvm/README.md.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMStaticScrape
+metadata:
+  name: glkvm
+spec:
+  jobName: glkvm-kvmd
+  scrapeClass: other-systems
+  targetEndpoints:
+    - targets:
+        - 10.32.20.10
+      labels:
+        instance: glkvm
+        platform: glkvm
+      scheme: https
+      path: /api/export/prometheus/metrics
+      # The appliance serves its vendor certificate: CN=localhost, expired 1979.
+      tlsConfig:
+        insecureSkipVerify: true
+      metricRelabelConfigs:
+        # ATX is not wired, and GPIO rows are the switch buttons' state, not
+        # which KVM port is selected.
+        - sourceLabels: [__name__]
+          regex: pikvm_(atx|gpio)_.+
+          action: drop
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: glkvm
+spec:
+  groups:
+    - name: glkvm
+      rules:
+        - alert: GLKVMMetricsUnavailable
+          expr: up{job="glkvm-kvmd"} == 0 or absent(up{job="glkvm-kvmd"})
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: vmagent cannot read the GLKVM's kvmd metrics
+            description: >-
+              The console itself may still work: open https://10.32.20.10/.
+              `curl -sk -o /dev/null -w '%{http_code}'
+              https://10.32.20.10/api/export/prometheus/metrics` separates the
+              causes: 401 means the metrics override is gone and 500 the export
+              patch, both usually after a firmware update; 502 means kvmd is
+              down; no connection means the appliance or its network. See
+              devices/glkvm/README.md#monitoring.
+
+        # The only thermal trip on the SoC is critical, at 115 C, where the
+        # kernel powers the appliance off.
+        - alert: GLKVMHot
+          expr: pikvm_hw_temp_cpu{job="glkvm-kvmd"} > 95
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: GLKVM SoC is at {{ printf "%.0f" $value }} C
+            description: >-
+              The appliance shuts down at 115 C, taking the compute rack's
+              recovery console with it. Check its airflow.
+
+        - alert: GLKVMMemoryLow
+          expr: pikvm_hw_mem_percent{job="glkvm-kvmd"} > 90
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: GLKVM memory is {{ printf "%.0f" $value }}% used
+            description: >-
+              The appliance has about 1 GiB and no swap, so the kernel will start
+              killing kvmd or the video streamer. Restart kvmd or reboot the
+              appliance while no host needs the console.
+
+        - alert: GLKVMHealthMetricsMissing
+          expr: |
+            up{job="glkvm-kvmd"} == 1 unless on (instance) pikvm_hw_temp_cpu{job="glkvm-kvmd"}
+            or up{job="glkvm-kvmd"} == 1 unless on (instance) pikvm_hw_mem_percent{job="glkvm-kvmd"}
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: GLKVM metrics no longer include temperature or memory
+            description: >-
+              The export answers but GLKVMHot or GLKVMMemoryLow can no longer
+              fire. A firmware update can change what kvmd exports; see
+              devices/glkvm/README.md#monitoring.

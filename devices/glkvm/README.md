@@ -3,6 +3,8 @@
 Configuration for the GL-RM1PE at `10.32.20.10`. This is manually applied
 appliance state; Flux does not reconcile it.
 
+Firmware `V1.10.1 release2` (`/etc/version`), build `rm10-1.10.0beta2-30-g265a7f2656-dirty` (`/etc/os-release`), kvmd 4.82, verified 2026-10-17. GL.iNet builds RM1PE firmware from its RM10 tree, so the build string names the RM10 while `/etc/version` and `/proc/gl-hw-info/model` say RM1PE.
+
 ## Web interfaces
 
 [`nginx-kvmd.conf`](nginx-kvmd.conf) makes the bundled upstream PiKVM UI the
@@ -69,6 +71,53 @@ authoritative. Convenience copies in `/tmp` are not authoritative and disappear
 on reboot. All HID tools share `/run/kvmd-kvm-switch.lock`; do not run two input
 sequences concurrently.
 
+## Monitoring
+
+vmagent in `k8s-prod` scrapes kvmd's native export at `https://10.32.20.10/api/export/prometheus/metrics` every 30 seconds as `job="glkvm-kvmd"`, `instance="glkvm"`, `platform="glkvm"`. The scrape and alert rules are in [`glkvm.yaml`](../../kubernetes/apps/observability/victoria-metrics-k8s-stack/app/glkvm.yaml) and the **GLKVM / Recovery console** dashboard is in Grafana's `Platforms/GLKVM` folder. Alerts route like every other alert; see the [alerting runbook](../../docs/runbooks/alerting.md).
+
+State on 2026-10-17: prepared, not yet applied. Both appliance changes were verified against `V1.10.1 release2` on copies in `/tmp`: kvmd's own config loader accepts the override, and the patched export returns the metrics below while the vendor module raises the `fan` error.
+
+The appliance needs two changes for this, both in **Apply**:
+
+- [`override.yaml`](override.yaml) sets upstream kvmd's `prometheus.auth.enabled: false`, which exempts only the metrics path from login. kvmd has no read-only role: any account that could read the metrics could also type into every host's BIOS, toggle virtual media and upgrade firmware. Leaving the path unauthenticated keeps every console credential out of the cluster, at the cost of letting anyone who can reach port 443 read the appliance's temperature, CPU, memory and network counters. Every other path, including `/api/info`, still requires login.
+- [`export.py`](export.py) fixes the export. The vendor module asks for a `fan` source that this firmware does not register, so every request fails with HTTP 500. The replacement shadows the vendor's sourceless `export.pyc` and reproduces its bytecode except for that request. It carries the SHA-256 of the `export.pyc` it was verified against and runs the vendor module unchanged when that file differs, so a firmware update cannot leave stale code in place. Apply refuses to install it over a different `export.pyc`.
+
+What the export provides on this firmware:
+
+| Metric | Meaning |
+|---|---|
+| `pikvm_hw_temp_cpu` | SoC temperature in °C. The SoC's only thermal trip is critical, at 115 °C, where the kernel shuts the appliance down. |
+| `pikvm_hw_cpu_percent` | CPU in use since kvmd's previous health reading. |
+| `pikvm_hw_mem_percent`, `_total`, `_available` | Memory. The appliance has about 1 GiB and no swap. |
+| `pikvm_hw_net_bytes_sent`, `_recv` | Bytes on every interface except loopback since boot; use `rate()`. |
+
+The scrape drops `pikvm_atx_*` and `pikvm_gpio_*`. ATX is not wired, so its power state means nothing. The GPIO rows are the PiKVM host buttons, which only pulse a switch sequence; they do not read back the selected port, and the vendor code reports each button's state under both its `online` and `state` names. The export has no HDMI signal, USB enumeration, selected port, uptime or filesystem metrics, and nothing in it observes the host on the selected port. A blank screen or missing video is not an appliance failure. Load average stays between 8 and 10 because of the SoC's media threads and is not a useful signal.
+
+The appliance serves its vendor's self-signed certificate (`CN=localhost`, expired 1979), so the scrape skips verification and there is no certificate-expiry alert; [#419](https://github.com/kelchm/home-lab/issues/419) tracks a real certificate.
+
+| Alert | Fires when |
+|---|---|
+| `GLKVMMetricsUnavailable` | The scrape fails or is missing for 10 minutes. |
+| `GLKVMHot` | The SoC is above 95 °C for 15 minutes. |
+| `GLKVMMemoryLow` | Memory is over 90% used for 30 minutes. |
+| `GLKVMHealthMetricsMissing` | The export answers without temperature or memory for 30 minutes, so the two rules above cannot fire. |
+
+When `GLKVMMetricsUnavailable` fires, the status of an unauthenticated request separates the causes:
+
+```sh
+curl -sk -o /dev/null -w '%{http_code}\n' https://10.32.20.10/api/export/prometheus/metrics
+```
+
+| Status | Cause |
+|---|---|
+| 200 | The appliance is fine; check vmagent and its network policy. |
+| 401 | The `prometheus` override is missing, usually after a firmware update. |
+| 500 | The export patch is missing or stood aside for a different `export.pyc`. |
+| 502 | kvmd is down; nginx still answers. |
+| No connection | The appliance or its network. |
+
+To remove monitoring from the appliance, delete the `prometheus` block from `/etc/kvmd/override.yaml`, then `rm /usr/lib/python3.12/site-packages/kvmd/apps/kvmd/api/export.py` and `/etc/init.d/S98kvmd restart`. The metrics path then requires login again and returns HTTP 500 once logged in, as shipped.
+
 ## Apply
 
 The appliance's Dropbear server does not provide an SFTP subsystem, so force
@@ -80,9 +129,12 @@ scp -O devices/glkvm/hid-type.py root@10.32.20.10:/tmp/hid-type
 scp -O devices/glkvm/hid-hold-key.py root@10.32.20.10:/tmp/hid-hold-key
 scp -O devices/glkvm/override.yaml root@10.32.20.10:/tmp/override.yaml
 scp -O devices/glkvm/nginx-kvmd.conf root@10.32.20.10:/tmp/nginx-kvmd.conf
+scp -O devices/glkvm/export.py root@10.32.20.10:/tmp/export.py
 
 ssh root@10.32.20.10 '
     set -eu
+    api=/usr/lib/python3.12/site-packages/kvmd/apps/kvmd/api
+    grep -q "$(sha256sum "$api/export.pyc" | cut -d" " -f1)" /tmp/export.py
     mkdir -p /etc/kvmd/user/bin /etc/kvmd/user/backups
     if [ -e /etc/kvmd/override.yaml ]; then
         cp /etc/kvmd/override.yaml \
@@ -102,8 +154,9 @@ ssh root@10.32.20.10 '
     nginx -t -p /etc/kvmd/nginx -c /tmp/nginx-kvmd.conf \
         -g "pid /run/kvmd/nginx-test.pid; user root; error_log stderr;"
     cp /tmp/nginx-kvmd.conf /etc/kvmd/nginx-kvmd.conf
+    cp /tmp/export.py "$api/export.py"
     rm -f /tmp/kvm-switch /tmp/hid-type /tmp/hid-hold-key \
-        /tmp/override.yaml /tmp/nginx-kvmd.conf
+        /tmp/override.yaml /tmp/nginx-kvmd.conf /tmp/export.py
     /etc/init.d/S98kvmd restart
     if [ -f /run/kvmd/pikvm-nginx.pid ]; then
         kill "$(cat /run/kvmd/pikvm-nginx.pid)" 2>/dev/null || true
@@ -123,6 +176,8 @@ ssh root@10.32.20.10 '
     test -S /run/kvmd/ustreamer.sock
     python3 -m py_compile /etc/kvmd/user/bin/kvm-switch \
         /etc/kvmd/user/bin/hid-type /etc/kvmd/user/bin/hid-hold-key
+    curl -ksS https://127.0.0.1/api/export/prometheus/metrics | grep -q "^pikvm_hw_temp_cpu "
+    test "$(curl -ksS -o /dev/null -w "%{http_code}" https://127.0.0.1/api/info)" = 401
 '
 devices/glkvm/capture-screen.sh /tmp/kvm-snap.jpg
 ```
@@ -149,13 +204,16 @@ scp -O root@10.32.20.10:/etc/kvmd/nginx-kvmd.conf "$backup_dir/"
 
 After the update:
 
-1. Confirm SSH, `/dev/hidg0`, and `/run/kvmd/ustreamer.sock` exist.
+1. Confirm SSH, `/dev/hidg0`, and `/run/kvmd/ustreamer.sock` exist, and that `ls /sys/kernel/config/usb_gadget/rockchip/configs/*/` links no `mass_storage` function.
 2. Compare the vendor nginx configuration with the committed customization;
    do not blindly overwrite a changed vendor schema.
 3. Re-run **Apply** to restore the known files and modes.
 4. Run the non-interactive checks above and capture a screen.
 5. With a host at a safe menu, verify one paced HID key and one downstream KVM
    channel switch.
+6. Recheck the [monitoring](#monitoring) patch against the new firmware before relying on it. Apply refuses to install `export.py` over a vendor module it was not verified against.
+
+The update to `V1.10.1 release2` kept `/etc/kvmd/user`, the mass-storage settings in `user/boot.yaml`, and `/etc/kvmd/override.yaml`, but replaced `/etc/kvmd/nginx-kvmd.conf` with the vendor's, which serves only the GLKVM UI on 443.
 
 The repository is the recovery source even if a firmware update wipes both
 `/etc/kvmd/user` and `/etc/kvmd`.
@@ -170,9 +228,7 @@ directories, installs all three HID tools, restores the committed PiKVM override
 and nginx configuration, and restarts the affected services. Finish with the
 non-interactive checks and safe live-input test above.
 
-Do not use `kvmd -M` to validate configuration on this GL.iNet firmware. Unlike
-upstream PiKVM, firmware `V1.9.1 release1` starts another daemon instead of
-performing a validation-only run.
+Do not run `kvmd` itself over SSH, including `kvmd -M` to validate configuration. Unlike upstream PiKVM, firmware `V1.9.1 release1` started another daemon instead of performing a validation-only run.
 
 ## Recovery
 

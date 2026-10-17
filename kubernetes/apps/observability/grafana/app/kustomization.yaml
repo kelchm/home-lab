@@ -56,6 +56,15 @@ configMapGenerator:
       annotations:
         grafana_folder: Platforms/Synology
         kustomize.toolkit.fluxcd.io/substitute: disabled
+  - name: grafana-dashboard-glkvm
+    files:
+      - glkvm.json=./glkvm-dashboard.json
+    options:
+      labels:
+        grafana_dashboard: "1"
+      annotations:
+        grafana_folder: Platforms/GLKVM
+        kustomize.toolkit.fluxcd.io/substitute: disabled
   - name: grafana-dashboard-node-hardware
     files:
       - node-hardware.json=./node-hardware-dashboard.json
