@@ -1,0 +1,141 @@
+rule_files: [starlink.yaml, tmobile.yaml]
+evaluation_interval: 1m
+tests:
+  - name: Starlink metrics alert on a failed scrape, an unreadable dish, or no target
+    interval: 1m
+    input_series:
+      - series: up{job="starlink-api",instance="starlink-dish"}
+        values: 1x29 0x30
+      - series: starlink_dish_up{job="starlink-api",instance="starlink-dish"}
+        values: 1x9 0x20
+    promql_expr_test:
+      - expr: ALERTS{alertname="StarlinkMetricsUnavailable",alertstate="firing"}
+        eval_time: 9m
+        exp_samples: []
+      - expr: ALERTS{alertname="StarlinkMetricsUnavailable",alertstate="firing"}
+        eval_time: 20m
+        exp_samples:
+          - labels: 'ALERTS{alertname="StarlinkMetricsUnavailable",alertstate="firing",instance="starlink-dish",job="starlink-api",severity="warning"}'
+            value: 1
+      - expr: ALERTS{alertname="StarlinkMetricsUnavailable",alertstate="firing"}
+        eval_time: 45m
+        exp_samples:
+          - labels: 'ALERTS{alertname="StarlinkMetricsUnavailable",alertstate="firing",instance="starlink-dish",job="starlink-api",severity="warning"}'
+            value: 1
+
+  - name: Starlink metrics alert when the target is missing
+    interval: 1m
+    input_series:
+      - series: starlink_dish_pop_ping_drop_ratio{job="other"}
+        values: 0x20
+    promql_expr_test:
+      - expr: ALERTS{alertname="StarlinkMetricsUnavailable",alertstate="firing"}
+        eval_time: 15m
+        exp_samples:
+          - labels: 'ALERTS{alertname="StarlinkMetricsUnavailable",alertstate="firing",job="starlink-api",severity="warning"}'
+            value: 1
+
+  - name: A one-minute outage does not fire, a seven-minute outage does
+    interval: 1m
+    input_series:
+      - series: starlink_dish_pop_ping_drop_ratio{job="starlink-api",instance="starlink-dish"}
+        values: 0x29 1 0x29 1x6 0x60
+    promql_expr_test:
+      - expr: ALERTS{alertname="StarlinkPingDropSustained"}
+        eval_time: 55m
+        exp_samples: []
+    alert_rule_test:
+      - eval_time: 79m
+        alertname: StarlinkPingDropSustained
+        exp_alerts:
+          - exp_labels:
+              job: starlink-api
+              instance: starlink-dish
+              severity: warning
+            exp_annotations:
+              summary: Starlink is dropping 20% of pings
+              description: The dish has lost over 10% of its pings to the Starlink point of presence, averaged over 15 minutes, for 15 minutes. WAN2 stays up in UniFi, so its share of load-balanced flows is degraded. Check the Starlink app for an outage or obstruction, and the dish's alerts.
+      - eval_time: 120m
+        alertname: StarlinkPingDropSustained
+        exp_alerts: []
+
+  - name: Partial loss above 10% fires after 15 minutes
+    interval: 1m
+    input_series:
+      - series: starlink_dish_pop_ping_drop_ratio{job="starlink-api",instance="starlink-dish"}
+        values: 0.2x60
+    promql_expr_test:
+      - expr: ALERTS{alertname="StarlinkPingDropSustained",alertstate="firing"}
+        eval_time: 14m
+        exp_samples: []
+      - expr: ALERTS{alertname="StarlinkPingDropSustained",alertstate="firing"}
+        eval_time: 16m
+        exp_samples:
+          - labels: 'ALERTS{alertname="StarlinkPingDropSustained",alertstate="firing",instance="starlink-dish",job="starlink-api",severity="warning"}'
+            value: 1
+
+  - name: A two-minute obstruction does not fire, a ten-minute one does
+    interval: 1m
+    input_series:
+      - series: starlink_dish_currently_obstructed{job="starlink-api",instance="starlink-dish"}
+        values: 0x29 1x2 0x88 1x10 0x60
+    promql_expr_test:
+      - expr: ALERTS{alertname="StarlinkObstructed"}
+        eval_time: 110m
+        exp_samples: []
+      - expr: ALERTS{alertname="StarlinkObstructed",alertstate="firing"}
+        eval_time: 150m
+        exp_samples:
+          - labels: 'ALERTS{alertname="StarlinkObstructed",alertstate="firing",instance="starlink-dish",job="starlink-api",severity="warning"}'
+            value: 1
+
+  - name: T-Mobile metrics alert on a failed probe or a module that no longer matches
+    interval: 1m
+    input_series:
+      - series: up{job="tmobile-api",instance="tmobile-gateway"}
+        values: 1x59 0x30
+      - series: tmobile_registration_info{job="tmobile-api",instance="tmobile-gateway",registration="registered"}
+        values: 1x19
+    promql_expr_test:
+      - expr: ALERTS{alertname="TMobileMetricsUnavailable"}
+        eval_time: 19m
+        exp_samples: []
+      # Scrapes succeed but the registration series is gone.
+      - expr: ALERTS{alertname="TMobileMetricsUnavailable",alertstate="firing"}
+        eval_time: 40m
+        exp_samples:
+          - labels: 'ALERTS{alertname="TMobileMetricsUnavailable",alertstate="firing",instance="tmobile-gateway",job="tmobile-api",severity="warning"}'
+            value: 1
+      - expr: ALERTS{alertname="TMobileMetricsUnavailable",alertstate="firing"}
+        eval_time: 75m
+        exp_samples:
+          - labels: 'ALERTS{alertname="TMobileMetricsUnavailable",alertstate="firing",instance="tmobile-gateway",job="tmobile-api",severity="warning"}'
+            value: 1
+
+  - name: Lost registration fires after five minutes
+    interval: 1m
+    input_series:
+      - series: up{job="tmobile-api",instance="tmobile-gateway"}
+        values: 1x60
+      - series: tmobile_registration_info{job="tmobile-api",instance="tmobile-gateway",registration="registered"}
+        values: 1x19
+      - series: tmobile_registration_info{job="tmobile-api",instance="tmobile-gateway",registration="searching"}
+        values: _x20 1x40
+    alert_rule_test:
+      - eval_time: 19m
+        alertname: TMobileNotRegistered
+        exp_alerts: []
+      - eval_time: 26m
+        alertname: TMobileNotRegistered
+        exp_alerts:
+          - exp_labels:
+              job: tmobile-api
+              instance: tmobile-gateway
+              registration: searching
+              severity: warning
+            exp_annotations:
+              summary: T-Mobile gateway registration is searching
+              description: The gateway is not registered on the T-Mobile network, so WAN1 carries no traffic. Check T-Mobile for an outage in the area, then power-cycle the gateway.
+      - eval_time: 26m
+        alertname: TMobileMetricsUnavailable
+        exp_alerts: []

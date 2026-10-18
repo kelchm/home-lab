@@ -1,0 +1,101 @@
+---
+# Turns JSON status pages into metrics, one module per source. The T-Mobile
+# 5G gateway (WAN1, an Arcadyan KVD21) serves its status without a login.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: json-exporter
+spec:
+  chart:
+    spec:
+      chart: prometheus-json-exporter
+      version: 0.20.1
+      sourceRef:
+        kind: HelmRepository
+        name: prometheus-community-json-exporter
+  interval: 1h
+  values:
+    nameOverride: json-exporter
+    image:
+      repository: quay.io/prometheuscommunity/json-exporter
+      tag: v0.8.0@sha256:3aad20d41a0b31dfaaf7ab1a091440e92a82a61ef68b76750eac0ad50a983652
+    serviceAccount:
+      create: false
+    podSecurityContext:
+      runAsNonRoot: true
+      runAsUser: 65534
+      runAsGroup: 65534
+      seccompProfile:
+        type: RuntimeDefault
+    securityContext:
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop: [ALL]
+    resources:
+      requests:
+        cpu: 10m
+        memory: 16Mi
+      limits:
+        memory: 64Mi
+    configuration:
+      config: |
+        modules:
+          # GET /TMI/v1/gateway?get=all. Cell and gNB IDs are values because
+          # the exporter renders large numbers in labels as floats.
+          tmobile:
+            metrics:
+              - name: tmobile_5g
+                type: object
+                help: Serving 5G cell signal and identity
+                path: "{ .signal.5g }"
+                values:
+                  rsrp_dbm: "{ .rsrp }"
+                  rsrq_db: "{ .rsrq }"
+                  rssi_dbm: "{ .rssi }"
+                  sinr_db: "{ .sinr }"
+                  bars: "{ .bars }"
+                  cell_id: "{ .cid }"
+                  gnb_id: "{ .gNBID }"
+              - name: tmobile_5g_band
+                type: object
+                help: Serving 5G bands, space-separated
+                path: "{ .signal.5g }"
+                labels:
+                  bands: "{ .bands[*] }"
+                values:
+                  info: 1
+              - name: tmobile_registration
+                type: object
+                help: Network registration state
+                path: "{ .signal.generic }"
+                labels:
+                  registration: "{ .registration }"
+                values:
+                  info: 1
+              - name: tmobile_roaming
+                help: Whether the gateway is roaming
+                path: "{ .signal.generic.roaming }"
+              - name: tmobile_uptime_seconds
+                help: Gateway uptime
+                path: "{ .time.upTime }"
+              - name: tmobile_device
+                type: object
+                help: Gateway model and firmware
+                path: "{ .device }"
+                labels:
+                  model: "{ .model }"
+                  software_version: "{ .softwareVersion }"
+                values:
+                  info: 1
+  postRenderers:
+    # The chart has no switch for the pod's service-account token.
+    - kustomize:
+        patches:
+          - target:
+              kind: Deployment
+              name: json-exporter
+            patch: |
+              - op: add
+                path: /spec/template/spec/automountServiceAccountToken
+                value: false

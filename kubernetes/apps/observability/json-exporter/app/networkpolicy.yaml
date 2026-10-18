@@ -1,0 +1,18 @@
+---
+# Egress to the T-Mobile gateway's status API only; the namespace baseline
+# covers the rest.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: json-exporter
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: json-exporter
+  egress:
+    - toCIDR:
+        - 192.168.12.1/32
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP

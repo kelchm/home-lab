@@ -1,0 +1,60 @@
+---
+# Starlink (WAN2) quality read from the dish. Series carry job="starlink-api",
+# instance="starlink-dish" and no cluster label. Thresholds are set against the
+# dish's own history on 2026-10-18: 0.08% mean ping drop over 15 minutes, no
+# loss event longer than 45 seconds in 15 days, and no measurable obstruction.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: starlink
+spec:
+  groups:
+    - name: starlink
+      rules:
+        # The exporter keeps answering when the dish does not, so its own
+        # starlink_dish_up separates the two.
+        - alert: StarlinkMetricsUnavailable
+          expr: |
+            up{job="starlink-api"} == 0
+            or starlink_dish_up{job="starlink-api"} == 0
+            or absent(up{job="starlink-api"})
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: Starlink dish metrics are unavailable
+            description: >-
+              The exporter is not scraped, or cannot read the dish's gRPC API
+              at 192.168.100.1:9200. A dish that is off or rebooting also shows
+              as UniFiWANNotActive for WAN2. Otherwise check the exporter log:
+              a dish firmware update can change the API, and the gateway must
+              route 192.168.100.0/24 from K8s Prod out WAN2 (the Starlink
+              Management traffic route).
+
+        # One full outage longer than about three minutes, or loss that stays
+        # above 10%, holds the 15-minute average over the line for 15 minutes.
+        - alert: StarlinkPingDropSustained
+          expr: avg_over_time(starlink_dish_pop_ping_drop_ratio{job="starlink-api"}[15m]) > 0.1
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: Starlink is dropping {{ $value | humanizePercentage }} of pings
+            description: >-
+              The dish has lost over 10% of its pings to the Starlink point of
+              presence, averaged over 15 minutes, for 15 minutes. WAN2 stays
+              up in UniFi, so its share of load-balanced flows is degraded.
+              Check the Starlink app for an outage or obstruction, and the
+              dish's alerts.
+
+        - alert: StarlinkObstructed
+          expr: avg_over_time(starlink_dish_currently_obstructed{job="starlink-api"}[1h]) > 0.05
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: Starlink was obstructed {{ $value | humanizePercentage }} of the last hour
+            description: >-
+              Something blocks the dish's view of the sky: snow or ice, a new
+              structure or growing trees. The Starlink app's obstruction map
+              shows where.
