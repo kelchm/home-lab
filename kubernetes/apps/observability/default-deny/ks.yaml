@@ -21,6 +21,7 @@ spec:
     - name: smartctl-exporter
     - name: starlink-exporter
     - name: unpoller
+    - name: unifi-syslog
     - name: victoria-logs-single
     - name: victoria-metrics-k8s-stack
   interval: 1h

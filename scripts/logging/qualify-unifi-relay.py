@@ -244,12 +244,18 @@ def files_snapshot(path):
     return {str(p.relative_to(path)): p.stat().st_size for p in path.rglob('*') if p.is_file()}
 
 
+def check_version(version):
+    # Release binaries include their build timestamp and git-describe suffix.
+    # Accept the exact release tag with zero commits after it, never an RC.
+    assert re.fullmatch(r'(?:victoria-logs|vlagent)-\d{8}-\d{6}-tags-v1\.53\.0-0-g[0-9a-f]+', version), version
+
+
 def qualify(args, result):
     result['binaries'] = {}
     for name in ('victoria-logs-prod', 'vlagent-prod'):
         binary = args.bin_dir / name
         version = subprocess.check_output([str(binary), '-version'], stderr=subprocess.STDOUT, text=True).strip()
-        assert 'v1.53.0' in version, version
+        check_version(version)
         result['binaries'][name] = {'version': version, 'sha256': hashlib.sha256(binary.read_bytes()).hexdigest()}
     result['arguments'] = FIXTURE_ARGS
     deployed_args = manifest_args(args.manifest)
@@ -257,8 +263,9 @@ def qualify(args, result):
     if deployed_args is not None:
         deployed = option_map(deployed_args)
         for key, value in option_map(FIXTURE_ARGS).items():
+            assert key in deployed, f'Missing required manifest flag: {key}'
             expected = value.strip("'\"")
-            actual = deployed.get(key, '').strip("'\"")
+            actual = deployed[key].strip("'\"")
             if key == 'remoteWrite.maxDiskUsagePerURL':
                 expected = expected.replace('1GiB', '1073741824')
                 actual = actual.replace('1GiB', '1073741824')
@@ -473,12 +480,22 @@ def qualify(args, result):
                 'Binary hashes recorded; supplied binaries were checksum-verified by the parent task.',
             ]
         finally:
+            cleanup_errors = []
             for process in reversed(processes):
-                process.stop()
+                try:
+                    process.stop()
+                except Exception as exc:
+                    cleanup_errors.append(f'{process.log.name}: {exc}')
             if proxy:
-                proxy.close()
+                try:
+                    proxy.close()
+                except Exception as exc:
+                    cleanup_errors.append(f'proxy: {exc}')
             for log in scratch.glob('*.log'):
                 shutil.copyfile(log, args.output / log.name)
+            if cleanup_errors:
+                result['cleanup_errors'] = cleanup_errors
+                raise RuntimeError('Qualification cleanup failed: ' + '; '.join(cleanup_errors))
 
 
 def main():

@@ -4,6 +4,8 @@ kind: Kustomization
 metadata:
   name: unifi-syslog
 spec:
+  dependsOn:
+    - name: prometheus-operator-crds   # provides PodMonitor before first apply
   interval: 1h
   path: ./kubernetes/apps/observability/unifi-syslog/app
   prune: true

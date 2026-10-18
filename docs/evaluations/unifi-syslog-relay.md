@@ -19,7 +19,7 @@ python3 scripts/logging/qualify-unifi-relay.py \
   --output /tmp/unifi-relay-qualification
 ```
 
-The default binary/result paths point to the original local research artifacts; override them elsewhere. No Kubernetes writes, notifications, force-flush or force-merge requests are used. Raw synthetic rows, exact runtime args, per-rule results, binary hashes and queue counters remain in `/Users/kelchm/.t3/artifacts/cef-relay-qualification-final/results.json` on the qualification host; this file is a portable summary of those results.
+The default binary/result paths point to the original local research artifacts; override them elsewhere. No Kubernetes writes, notifications, force-flush or force-merge requests are used. Raw synthetic rows, exact runtime args, per-rule results, binary hashes and queue counters remain in `/Users/kelchm/.t3/artifacts/cef-relay-qualification-reviewed/results.json` on the qualification host; this file is a portable summary of those results.
 
 ## Results
 
@@ -27,11 +27,13 @@ The default binary/result paths point to the original local research artifacts; 
 | --- | --- |
 | Message/field fixtures | 21/21 passed: WAN down/restored/failover, IDS, client/device/admin, UniFi OS, unknown class, missing-message name fallback, malformed CEF, ordinary gateway RFC3164 dnsmasq/kernel and RFC5424 process ID. |
 | Timestamps/sender/streams | Receiver arrival `_time`, retained historic header `timestamp`, sender `remote_ip`, event fields and exact direct-baseline `_stream`, including `proc_id`, passed. |
-| Immediate query | All fixture rows queryable within 2.919 seconds using normal backend ingestion, without flush/merge. |
+| Immediate query | All fixture rows queryable within 1.862 seconds using normal backend ingestion, without flush/merge. |
 | Historical compatibility | Literal repository WAN, IDS and honeypot expressions returned equal direct/relay results; conditional `format` retained every new `_msg`. Old extension-only WAN expression correctly failed new schema. |
 | Backend outage and graceful restart | HTTP proxy returned 503; relay received 128 unique IDs, exited on SIGTERM with status 0, restarted against the same queue while still unavailable, then delivered all 128 after recovery. Missing 0, duplicates 0, unexpected 0. |
-| Persistence and health | 560,297 bytes on disk, 560,211 payload bytes reread; pending queue drained, drop counters 0; HTTP 503 retries observed. |
+| Persistence and health | 577,165 bytes on disk, 577,087 payload bytes reread; pending queue drained, drop counters 0; HTTP 503 retries observed. |
 
 The supplied binary hashes were `1d6a5896ad33da2066f2e9ea9f3260ab2de483847745758eb35455a9757de9fa` (VictoriaLogs) and `84e9881155de18acf0044a994d58e4d4c8e2de0408a4ff012f5d47fb32b0fef1` (vlagent). Both reported v1.53.0, commit `915d91904b`. Finite recovery and zero duplicates in this run do not establish exactly-once delivery.
 
 This is synthetic qualification on Darwin, not production validation of the Linux container, Service routing, Cilium source matching, Longhorn attachment or alert delivery. Abrupt termination/power loss, queue overflow, UDP saturation and node/storage failover were not tested. Disk buffering starts only after reception and may evict old blocks at capacity. Live acceptance must use the procedure and remain open in #856 until observed.
+
+Follow-up qualification also rejected a manifest omitting the required empty-default flag before opening receiver sockets. Exact release build strings were accepted; release candidates, near-version strings and post-tag builds were rejected. Rendered Flux dependencies were checked for cycles and the rollback variant was checked to remove the backend→relay edge while retaining the receiver/PVC for drain.
