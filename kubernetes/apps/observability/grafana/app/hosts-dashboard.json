@@ -456,7 +456,7 @@
           {
             "matcher": {
               "id": "byRegexp",
-              "options": "^(Node exporter|vmagent|Deployer|Proxmox API|GPU|Inference)$"
+              "options": "^(Node exporter|vmagent|Deployer|Proxmox API|GPU|Inference|NUT)$"
             },
             "properties": [
               {
@@ -586,6 +586,18 @@
           "format": "table",
           "instant": true,
           "range": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "min by (instance) (up{job=\"pi-nut\",platform=~\"$platform\",instance=~\"$node\"})",
+          "refId": "H",
+          "format": "table",
+          "instant": true,
+          "range": false
         }
       ],
       "transformations": [
@@ -611,7 +623,8 @@
               "Value #D": 4,
               "Value #E": 5,
               "Value #F": 6,
-              "Value #G": 7
+              "Value #G": 7,
+              "Value #H": 8
             },
             "renameByName": {
               "instance": "Machine",
@@ -621,7 +634,8 @@
               "Value #D": "Deployer",
               "Value #E": "Proxmox API",
               "Value #F": "GPU",
-              "Value #G": "Inference"
+              "Value #G": "Inference",
+              "Value #H": "NUT"
             }
           }
         }

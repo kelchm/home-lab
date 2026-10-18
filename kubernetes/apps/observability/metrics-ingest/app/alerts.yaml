@@ -156,3 +156,46 @@ spec:
             severity: critical
           annotations:
             summary: The UPS on {{ $labels.instance }} reports a low battery
+
+    # NUT status flags and runtime from the UPS a Pi monitors, through nut_exporter.
+    - name: pi-ups
+      rules:
+        - alert: PiUpsOnBattery
+          expr: network_ups_tools_ups_status{job="pi-nut", flag="OB"} == 1
+          for: 1m
+          labels:
+            severity: warning
+          annotations:
+            summary: The {{ $labels.ups }} UPS on {{ $labels.instance }} is on battery
+
+        - alert: PiUpsRuntimeLow
+          expr: |
+            network_ups_tools_battery_runtime{job="pi-nut"} < 300
+            and on (instance, platform, ups)
+            network_ups_tools_ups_status{job="pi-nut", flag="OB"} == 1
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: The {{ $labels.ups }} UPS on {{ $labels.instance }} has {{ $value | humanizeDuration }} of battery left
+
+        - alert: PiUpsBatteryLow
+          expr: network_ups_tools_ups_status{job="pi-nut", flag="LB"} == 1
+          labels:
+            severity: critical
+          annotations:
+            summary: The {{ $labels.ups }} UPS on {{ $labels.instance }} reports a low battery
+
+        # A UPS that has reported in the last week but sent no status for five
+        # minutes, which also covers its collector being down: NUT errors and
+        # stale driver data fail the whole scrape.
+        - alert: PiUpsDataStale
+          expr: |
+            max by (instance, platform, ups) (tlast_over_time(up{job="pi-nut"}[7d]))
+            unless on (instance, platform, ups)
+            max by (instance, platform, ups) (tlast_over_time(network_ups_tools_ups_status{job="pi-nut"}[5m]))
+          for: 1m
+          labels:
+            severity: warning
+          annotations:
+            summary: No status from the {{ $labels.ups }} UPS on {{ $labels.instance }} for over five minutes
