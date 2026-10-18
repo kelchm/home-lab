@@ -1,0 +1,79 @@
+rule_files: [host-network.yaml]
+evaluation_interval: 1m
+tests:
+  - name: Repeated flaps alert; a reseat, a reboot, a new host and virtual links do not
+    interval: 1m
+    input_series:
+      # Fifteen flaps between 90m and 120m.
+      - series: node_network_carrier_changes_total{job="spark-node",instance="spark-2",platform="spark",device="enP7s7"}
+        values: 0x90 1+1x29 30x60
+      - series: node_network_carrier_changes_total{job="spark-node",instance="spark-2",platform="spark",device="enP7s7.25"}
+        values: 0x90 1+1x29 30x60
+      - series: node_network_carrier_changes_total{job="spark-node",instance="spark-2",platform="spark",device="veth93c9c24"}
+        values: 0x90 1+1x29 30x60
+      - series: node_boot_time_seconds{job="spark-node",instance="spark-2",platform="spark"}
+        values: -86400x180
+      # One reseat.
+      - series: node_network_carrier_changes_total{job="spark-node",instance="spark-1",platform="spark",device="enP7s7"}
+        values: 4x100 6x80
+      - series: node_boot_time_seconds{job="spark-node",instance="spark-1",platform="spark"}
+        values: -86400x180
+      # Rebooted at 100m; the new boot's counter starts above the old one.
+      - series: node_network_carrier_changes_total{job="pve-node",instance="pve-sbx-1",platform="pve",device="nic0"}
+        values: 2x96 _x3 10x80
+      - series: node_boot_time_seconds{job="pve-node",instance="pve-sbx-1",platform="pve"}
+        values: -86400x96 _x3 6000x80
+      # First reports at 100m with its whole history.
+      - series: node_network_carrier_changes_total{job="synology-node",instance="nas",platform="synology",device="eth0"}
+        values: _x100 8x80
+      - series: node_boot_time_seconds{job="synology-node",instance="nas",platform="synology"}
+        values: _x100 -86400x80
+    alert_rule_test:
+      - eval_time: 120m
+        alertname: HostLinkFlapping
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: spark-node
+              instance: spark-2
+              platform: spark
+              device: enP7s7
+            exp_annotations:
+              summary: enP7s7 on spark-2 flapped 15 times in the last hour
+              description: The link went down and up repeatedly. Check the cable, keystone and transceiver at both ends and the switch port's error counters.
+      - eval_time: 180m
+        alertname: HostLinkFlapping
+        exp_alerts: []
+
+  - name: A link that was up and loses carrier alerts; links never up and short drops do not
+    interval: 1m
+    input_series:
+      - series: node_network_carrier{job="spark-node",instance="spark-1",platform="spark",device="enP2p1s0f0np0"}
+        values: 1x59 0x30
+      - series: node_network_carrier{job="spark-node",instance="spark-1",platform="spark",device="enP2p1s0f1np1"}
+        values: 0x90
+      - series: node_network_carrier{job="pve-node",instance="pve-sbx-1",platform="pve",device="nic1"}
+        values: 1x59 0x3 1x26
+      - series: node_network_carrier{job="pve-node",instance="pve-sbx-1",platform="pve",device="vmbr0"}
+        values: 1x59 0x30
+    alert_rule_test:
+      # nic1 is down here; its drop ends before the 5-minute hold.
+      - eval_time: 62m
+        alertname: HostLinkDown
+        exp_alerts: []
+      - eval_time: 64m
+        alertname: HostLinkDown
+        exp_alerts: []
+      - eval_time: 65m
+        alertname: HostLinkDown
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: spark-node
+              instance: spark-1
+              platform: spark
+              device: enP2p1s0f0np0
+            exp_annotations:
+              summary: enP2p1s0f0np0 on spark-1 has no link
+              description: The interface was up within the last week and has had no carrier for five minutes. Check the cable and the switch port.
+

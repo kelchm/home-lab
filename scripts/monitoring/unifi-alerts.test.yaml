@@ -1,0 +1,161 @@
+rule_files: [unifi.yaml]
+evaluation_interval: 1m
+tests:
+  - name: Port errors fire only above both the count and the share of frames
+    interval: 1m
+    input_series:
+      # 120 errors in 24M frames, split across directions so neither alone passes 60.
+      - series: unpoller_device_port_receive_errors_total{job="unifi-api",name="Core Aggregation",port_num="7",port_name="SFP+ 7"}
+        values: 0+1x120
+      - series: unpoller_device_port_transmit_errors_total{job="unifi-api",name="Core Aggregation",port_num="7",port_name="SFP+ 7"}
+        values: 0+1x120
+      - series: unpoller_device_port_receive_packets_total{job="unifi-api",name="Core Aggregation",port_num="7",port_name="SFP+ 7"}
+        values: 0+200000x120
+      - series: unpoller_device_port_transmit_packets_total{job="unifi-api",name="Core Aggregation",port_num="7",port_name="SFP+ 7"}
+        values: 0+200000x120
+      # Port 25's trickle: 16 errors an hour in 24M frames.
+      - series: unpoller_device_port_receive_errors_total{job="unifi-api",name="Core Aggregation",port_num="25",port_name="SFP+ 25"}
+        values: 0+0.27x120
+      - series: unpoller_device_port_receive_packets_total{job="unifi-api",name="Core Aggregation",port_num="25",port_name="SFP+ 25"}
+        values: 0+400000x120
+      - series: unpoller_device_port_transmit_errors_total{job="unifi-api",name="Core Aggregation",port_num="25",port_name="SFP+ 25"}
+        values: 0+0x120
+      - series: unpoller_device_port_transmit_packets_total{job="unifi-api",name="Core Aggregation",port_num="25",port_name="SFP+ 25"}
+        values: 0+0x120
+      # A saturated link: 120 errors in 600M frames.
+      - series: unpoller_device_port_receive_errors_total{job="unifi-api",name="Lab Switch",port_num="25",port_name="SFP+ 1"}
+        values: 0+2x120
+      - series: unpoller_device_port_receive_packets_total{job="unifi-api",name="Lab Switch",port_num="25",port_name="SFP+ 1"}
+        values: 0+10000000x120
+      - series: unpoller_device_port_transmit_errors_total{job="unifi-api",name="Lab Switch",port_num="25",port_name="SFP+ 1"}
+        values: 0+0x120
+      - series: unpoller_device_port_transmit_packets_total{job="unifi-api",name="Lab Switch",port_num="25",port_name="SFP+ 1"}
+        values: 0+0x120
+      # A quiet port: a high share of frames but only 30 errors.
+      - series: unpoller_device_port_receive_errors_total{job="unifi-api",name="Lab Switch",port_num="13",port_name="pve-sbx-1-trunk"}
+        values: 0+0.5x120
+      - series: unpoller_device_port_receive_packets_total{job="unifi-api",name="Lab Switch",port_num="13",port_name="pve-sbx-1-trunk"}
+        values: 0+200x120
+      - series: unpoller_device_port_transmit_errors_total{job="unifi-api",name="Lab Switch",port_num="13",port_name="pve-sbx-1-trunk"}
+        values: 0+0x120
+      - series: unpoller_device_port_transmit_packets_total{job="unifi-api",name="Lab Switch",port_num="13",port_name="pve-sbx-1-trunk"}
+        values: 0+0x120
+    alert_rule_test:
+      - eval_time: 90m
+        alertname: UniFiPortErrors
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: unifi-api
+              name: Core Aggregation
+              port_num: "7"
+              port_name: SFP+ 7
+            exp_annotations:
+              summary: Core Aggregation port 7 (SFP+ 7) had 120 errors in the last hour
+              description: More than two frames in a million failed on this port. Check the cable, DAC or transceiver at both ends and the far end's own error counters.
+
+  - name: Port anomalies name the device, falling back to its MAC
+    interval: 1m
+    input_series:
+      - series: unpoller_port_anomaly_count{job="unifi-api",device_mac="28:70:4e:25:1d:59",port_idx="25",anomaly_type="CRC_ERROR"}
+        values: 3x20
+      - series: unpoller_port_anomaly_count{job="unifi-api",device_mac="aa:bb:cc:dd:ee:ff",port_idx="4",anomaly_type="PORT_FLAPPING"}
+        values: 2x20
+      - series: unpoller_device_info{job="unifi-api",mac="28:70:4e:25:1d:59",name="Core Aggregation"}
+        values: 1x20
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: UniFiPortAnomaly
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: UniFiPortAnomaly
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: unifi-api
+              device_mac: 28:70:4e:25:1d:59
+              port_idx: "25"
+              anomaly_type: CRC_ERROR
+            exp_annotations:
+              summary: Core Aggregation port 25 reports CRC_ERROR
+              description: The console counts 3 CRC_ERROR events on this port. The port's page in UniFi Network shows when they occurred.
+          - exp_labels:
+              severity: warning
+              job: unifi-api
+              device_mac: aa:bb:cc:dd:ee:ff
+              port_idx: "4"
+              anomaly_type: PORT_FLAPPING
+            exp_annotations:
+              summary: aa:bb:cc:dd:ee:ff port 4 reports PORT_FLAPPING
+              description: The console counts 2 PORT_FLAPPING events on this port. The port's page in UniFi Network shows when they occurred.
+
+  - name: A DHCP pool above 80 percent alerts after 15 minutes
+    interval: 1m
+    input_series:
+      - series: unpoller_dhcp_utilization_percent{job="unifi-api",network="K8s Prod"}
+        values: 81.818181818181x20
+      - series: unpoller_dhcp_utilization_percent{job="unifi-api",network="IoT"}
+        values: 12.9x20
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: UniFiDHCPPoolFilling
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: UniFiDHCPPoolFilling
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: unifi-api
+              network: K8s Prod
+            exp_annotations:
+              summary: K8s Prod DHCP pool is 82% used
+              description: New clients on K8s Prod get no address once the pool is full. Find stale leases or enlarge the pool in the network's settings.
+
+  - name: Sustained device heat, CPU and memory alert; short peaks do not
+    interval: 1m
+    input_series:
+      - series: unpoller_device_temperature_celsius{job="unifi-api",name="Core Switch",tag="board"}
+        values: 71x20
+      # Ten minutes over the line, then back.
+      - series: unpoller_device_temperature_celsius{job="unifi-api",name="Lab Switch",tag="board"}
+        values: 75x9 52x10
+      - series: unpoller_device_temperature_celsius{job="unifi-api",name="Gateway DMP",temp_area="CPU"}
+        values: 52x20
+      - series: unpoller_device_cpu_utilization_ratio{job="unifi-api",name="Gateway DMP"}
+        values: 0.95x20
+      - series: unpoller_device_cpu_utilization_ratio{job="unifi-api",name="Lab Switch"}
+        values: 0.56 0.95x4 0.56x15
+      - series: unpoller_device_memory_utilization_ratio{job="unifi-api",name="Gateway DMP"}
+        values: 0.92x20
+      - series: unpoller_device_memory_utilization_ratio{job="unifi-api",name="USW Flex 2.5G 8 PoE"}
+        values: 0.84x20
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: UniFiDeviceHot
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: unifi-api
+              name: Core Switch
+              tag: board
+            exp_annotations:
+              summary: Core Switch board temperature is 71 C
+              description: Check the device's fan level, its airflow and the rack's temperature.
+      - eval_time: 15m
+        alertname: UniFiDeviceCPUHigh
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: unifi-api
+              name: Gateway DMP
+            exp_annotations:
+              summary: Gateway DMP CPU is at 95%
+      - eval_time: 15m
+        alertname: UniFiDeviceMemoryHigh
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: unifi-api
+              name: Gateway DMP
+            exp_annotations:
+              summary: Gateway DMP memory is at 92%

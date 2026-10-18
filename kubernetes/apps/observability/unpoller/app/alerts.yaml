@@ -83,3 +83,86 @@ spec:
               A link negotiated below its expected speed, or a LAG member is
               down. Check the cable or transceiver at both ends and the switch
               port; the USW dashboard shows per-port speed and SFP readings.
+
+        # Errors must pass both a count and a share of frames, so a busy link's
+        # background errors and a quiet port's single error both stay silent.
+        - alert: UniFiPortErrors
+          expr: |
+            (
+              increase(unpoller_device_port_receive_errors_total{job="unifi-api"}[1h])
+              + increase(unpoller_device_port_transmit_errors_total{job="unifi-api"}[1h])
+            ) > 60
+            and
+              (
+                increase(unpoller_device_port_receive_errors_total{job="unifi-api"}[1h])
+                + increase(unpoller_device_port_transmit_errors_total{job="unifi-api"}[1h])
+              )
+              / (
+                increase(unpoller_device_port_receive_packets_total{job="unifi-api"}[1h])
+                + increase(unpoller_device_port_transmit_packets_total{job="unifi-api"}[1h])
+              )
+              > 2e-6
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: '{{ $labels.name }} port {{ $labels.port_num }} ({{ $labels.port_name }}) had {{ printf "%.0f" $value }} errors in the last hour'
+            description: >-
+              More than two frames in a million failed on this port. Check the
+              cable, DAC or transceiver at both ends and the far end's own
+              error counters.
+
+        # The console's own port-anomaly detection; the series exists only
+        # while it reports one.
+        - alert: UniFiPortAnomaly
+          expr: unpoller_port_anomaly_count{job="unifi-api"} > 0
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: >-
+              {{ with printf "unpoller_device_info{job=\"unifi-api\", mac=%q}" $labels.device_mac | query }}{{ . | first | label "name" }}{{ else }}{{ $labels.device_mac }}{{ end }}
+              port {{ $labels.port_idx }} reports {{ $labels.anomaly_type }}
+            description: >-
+              The console counts {{ $value }} {{ $labels.anomaly_type }} events
+              on this port. The port's page in UniFi Network shows when they
+              occurred.
+
+        - alert: UniFiDHCPPoolFilling
+          expr: unpoller_dhcp_utilization_percent{job="unifi-api"} > 80
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: '{{ $labels.network }} DHCP pool is {{ printf "%.0f" $value }}% used'
+            description: >-
+              New clients on {{ $labels.network }} get no address once the
+              pool is full. Find stale leases or enlarge the pool in the
+              network's settings.
+
+        - alert: UniFiDeviceHot
+          expr: unpoller_device_temperature_celsius{job="unifi-api"} > 70
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: '{{ $labels.name }} {{ $labels.temp_area }}{{ $labels.tag }} temperature is {{ $value }} C'
+            description: >-
+              Check the device's fan level, its airflow and the rack's
+              temperature.
+
+        - alert: UniFiDeviceCPUHigh
+          expr: unpoller_device_cpu_utilization_ratio{job="unifi-api"} > 0.9
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.name }} CPU is at {{ $value | humanizePercentage }}"
+
+        - alert: UniFiDeviceMemoryHigh
+          expr: unpoller_device_memory_utilization_ratio{job="unifi-api"} > 0.9
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.name }} memory is at {{ $value | humanizePercentage }}"

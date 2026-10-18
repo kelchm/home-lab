@@ -9,6 +9,7 @@ resources:
   - ./networkpolicy.yaml
   - ./alerts.yaml
   - ./probe-alerts.yaml
+  - ./network-alerts.yaml
 
 configMapGenerator:
   # grafana.com 13659 revision 1; datasource, Pi HTTP scope and target identity.
