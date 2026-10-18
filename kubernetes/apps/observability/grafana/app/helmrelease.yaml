@@ -91,7 +91,7 @@ spec:
       - victoriametrics-metrics-datasource
       # Pin the reviewed release instead of silently taking a new plugin on a
       # future Grafana restart.
-      - victoriametrics-logs-datasource@0.31.0@https://grafana.com/api/plugins/victoriametrics-logs-datasource/versions/0.31.0/download
+      - victoriametrics-logs-datasource@0.33.1@https://grafana.com/api/plugins/victoriametrics-logs-datasource/versions/0.33.1/download
 
     # Sidecars discover datasources/dashboards by ConfigMap label. Each
     # subsequent bake-off commit lands labeled ConfigMaps; Grafana picks
