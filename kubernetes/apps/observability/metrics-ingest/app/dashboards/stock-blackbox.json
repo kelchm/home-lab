@@ -38,7 +38,7 @@
       }
     ]
   },
-  "description": "grafana.com 13659 revision 1. HTTP probes from ups-compute-rack; the destination is target and the ingestion host is instance. Homepage 401 and Grafana 302 are successful unauthenticated responses.",
+  "description": "Stock grafana.com dashboard 13659 (revision 1), showing the HTTP probes run from ups-compute-rack. Each row is one destination (target). Grafana's 302 and Homepage's 401 are the expected responses, so use Status, not Code, to judge health.",
   "editable": true,
   "gnetId": 13659,
   "graphTooltip": 0,
@@ -471,7 +471,7 @@
           "expr": "avg_over_time(probe_duration_seconds{job=~\"$job\", platform=\"pi\", module=~\"http_.*\", target=~\"$target\"}[1m])",
           "format": "table",
           "hide": false,
-          "instant": false,
+          "instant": true,
           "interval": "",
           "intervalFactor": 1,
           "legendFormat": "",
