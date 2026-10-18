@@ -1,0 +1,78 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: unifi-syslog
+spec:
+  replicas: 1
+  # A single writer owns the RWO queue; rolling surge cannot share it safely.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: unifi-syslog
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: unifi-syslog
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: vlagent
+          image: victoriametrics/vlagent:v1.53.0@sha256:a82f93ffecc153fb068606903e512368b070272739d823abe99fad0eff6e1849
+          args:
+            - -loggerFormat=json
+            - -syslog.listenAddr.udp=:5514
+            - -syslog.useLocalTimestamp.udp=true
+            - -syslog.useRemoteIP.udp=true
+            - -syslog.timezone=America/New_York
+            # Explicit empty CLI value avoids envflag/Helm empty-string ambiguity.
+            - -defaultMsgValue=
+            - -remoteWrite.url=http://victoria-logs-single-server.observability.svc.cluster.local:9428/insert/jsonline
+            - -remoteWrite.format=jsonline
+            # Array-string flags require literal quotes around embedded commas.
+            # Promotion renames the chosen field; native ignores these headers.
+            - "-remoteWrite.headers='VL-Msg-Field:cef.extension.msg,_msg,cef.name^^VL-Stream-Fields:hostname,app_name,proc_id,cef.device_vendor,cef.device_product,cef.device_event_class_id'"
+            - -remoteWrite.queues=2
+            - -tmpDataPath=/var/lib/vlagent
+            - -remoteWrite.tmpDataPath=/var/lib/vlagent/queue
+            - -remoteWrite.maxDiskUsagePerURL=1073741824
+          ports:
+            - name: syslog-udp
+              containerPort: 5514
+              protocol: UDP
+            - name: http
+              containerPort: 9429
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+          # Backend failure must not restart the receiver or discard its queue.
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: '1'
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: queue
+              mountPath: /var/lib/vlagent
+      volumes:
+        - name: queue
+          persistentVolumeClaim:
+            claimName: unifi-syslog

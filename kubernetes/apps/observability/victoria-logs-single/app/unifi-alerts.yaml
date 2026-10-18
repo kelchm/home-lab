@@ -22,7 +22,7 @@ spec:
         - alert: UniFiWANFlapping
           expr: >-
             _time:1h {cef.device_product="UniFi Network"}
-            (cef.device_event_class_id:=100 OR cef.extension.msg:"temporary disconnection" OR cef.name:i(failover))
+            (cef.device_event_class_id:=100 OR cef.extension.msg:"temporary disconnection" OR _msg:"temporary disconnection" OR cef.name:i(failover) OR (cef.name:="" _msg:i(failover)))
             | stats by (cef.extension.UNIFIwanName) count() as disconnects
             | filter disconnects:>=3
             | rename cef.extension.UNIFIwanName as wan
@@ -67,7 +67,8 @@ spec:
         # contact means a LAN device is probing.
         - alert: UniFiHoneypotTriggered
           expr: >-
-            _time:15m {cef.device_product="UniFi Network"} cef.name:i(honeypot)
+            _time:15m {cef.device_product="UniFi Network"}
+            (cef.name:i(honeypot) OR (cef.name:="" _msg:i(honeypot)))
             | stats by (cef.extension.src) count() as hits
             | filter hits:>0
             | rename cef.extension.src as src
@@ -79,9 +80,8 @@ spec:
               {{ $labels.src }} reached the gateway honeypot ({{ $value }} in
               15 minutes). Identify the device and what it was scanning.
 ---
-# MetricsQL rule on VictoriaLogs' own counter, so it does not depend on the
-# log store it diagnoses. The console has gone 29 hours without an event, so
-# the window is two days.
+# MetricsQL on the dedicated receiver, independent of log queries. The console
+# has gone 29 hours without an event, so source silence uses a two-day window.
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMRule
 metadata:
@@ -92,14 +92,71 @@ spec:
       rules:
         - alert: UniFiSyslogSilent
           expr: |
-            sum(increase(vl_rows_ingested_total{job="victoria-logs-single-server", type="syslog_udp"}[2d])) == 0
-            or absent_over_time(vl_rows_ingested_total{job="victoria-logs-single-server", type="syslog_udp"}[2d])
+            sum(increase(vl_rows_ingested_total{job="unifi-syslog", type="syslog_udp"}[2d])) == 0
+            or sum(absent_over_time(vl_rows_ingested_total{job="unifi-syslog", type="syslog_udp"}[2d])) > 0
           for: 1h
           labels:
             severity: warning
           annotations:
-            summary: VictoriaLogs has received no UniFi syslog for two days
+            summary: The UniFi relay has received no syslog for two days
             description: >-
               No rows arrived on the syslog listener (10.32.130.3 UDP/514).
               Check the console's SIEM export target, the victoria-logs-syslog
-              Service and CiliumPolicyDrops for the victoria-logs-single pod.
+              Service and CiliumPolicyDrops for the unifi-syslog pod. This
+              measures reception, not successful backend delivery.
+        - alert: UniFiSyslogReceiverUnavailable
+          expr: (sum(up{job="unifi-syslog"}) or vector(0)) == 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: The UniFi syslog receiver has no healthy scrape target
+            description: Check the Deployment, PVC, PodMonitor conversion and metrics path. UDP sent while the receiver is down cannot be recovered by its queue.
+        - alert: UniFiSyslogDeliveryStalled
+          expr: |
+            sum(increase(vl_rows_ingested_total{job="unifi-syslog", type="syslog_udp"}[15m])) > 0
+            and (sum(increase(vlagent_remotewrite_requests_total{job="unifi-syslog", status_code="2XX"}[15m])) or vector(0)) == 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: The UniFi relay receives rows but has no successful backend writes
+            description: Check backend health, HTTP responses and network policy. Quiet source periods alone do not fire this alert; persistent backlog is monitored separately.
+        - alert: UniFiSyslogBacklogSustained
+          expr: |
+            sum(vlagent_remotewrite_pending_data_bytes{job="unifi-syslog"}) > 0
+            or sum(vlagent_remotewrite_pending_inmemory_blocks{job="unifi-syslog"}) > 0
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: The UniFi relay has a sustained delivery backlog
+            description: Restore the backend and wait for disk and memory queues to drain. Preserve the unifi-syslog PVC; do not delete buffered events during rollback.
+        - alert: UniFiSyslogQueueNearCapacity
+          expr: sum(vlagent_remotewrite_pending_data_bytes{job="unifi-syslog"}) > 805306368
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: The UniFi relay has used 75% of its queue budget
+            description: The queue budget is 1 GiB on a 3 GiB PVC. Old blocks are evicted at capacity. Check backend health and PVC free space before more events are lost.
+        - alert: UniFiSyslogLoss
+          expr: |
+            sum(increase(vm_persistentqueue_blocks_dropped_total{job="unifi-syslog"}[10m])) > 0
+            or sum(increase(vm_persistentqueue_bytes_dropped_total{job="unifi-syslog"}[10m])) > 0
+            or sum(increase(vlagent_remotewrite_packets_dropped_total{job="unifi-syslog"}[10m])) > 0
+            or sum(increase(vl_rows_dropped_total{job="unifi-syslog"}[10m])) > 0
+          labels:
+            severity: critical
+          annotations:
+            summary: The UniFi relay dropped received data
+            description: Inspect queue eviction, rejected remote-write blocks and row-drop counters. Counts represent different units and cannot be read as a lost-event total. Preserve evidence and restore delivery.
+        - alert: UniFiSyslogReceiveErrors
+          expr: |
+            sum(increase(vl_udp_errors_total{job="unifi-syslog", type="syslog"}[10m])) > 0
+            or sum(increase(vl_errors_total{job="unifi-syslog", type="syslog"}[10m])) > 0
+          labels:
+            severity: warning
+          annotations:
+            summary: The UniFi relay reports syslog receive or parse errors
+            description: Inspect receiver logs and packet sizes. Malformed CEF may remain a plain message; zero parser errors does not prove that every sender event arrived.

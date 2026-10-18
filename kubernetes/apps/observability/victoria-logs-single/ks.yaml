@@ -6,6 +6,7 @@ metadata:
 spec:
   dependsOn:
     - name: victoria-metrics-k8s-stack   # reuses the victoriametrics HelmRepository
+    - name: unifi-syslog   # receiver ready before moving the existing LAN Service
   healthChecks:
     - apiVersion: helm.toolkit.fluxcd.io/v2
       kind: HelmRelease

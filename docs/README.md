@@ -90,6 +90,7 @@ Implemented or superseded plans preserve context. Use the maintained documentati
 
 - [Hugging Face cache on Athena](evaluations/hugging-face-nas-cache.md) — evaluation findings and replacement requirements.
 - [Kubernetes log collectors](evaluations/kubernetes-log-collectors.md) — delivery measurements, application query compatibility, and migration recommendation.
+- [UniFi CEF relay](evaluations/unifi-syslog-relay.md) — stock vlagent message/stream qualification, historical query compatibility, and finite outage recovery.
 - [storage-benchmarks](storage-benchmarks.md) — Longhorn fio results, pre/post storage-network cutover.
 - [**sn770-zfs-qualification.md**](sn770-zfs-qualification.md) — WD_BLACK SN770 reproduction matrix, evidence index, and the remaining qualification gates for the PVE storage decision.
 - [observability-bakeoff](observability-bakeoff.md) — VictoriaMetrics/Logs vs. Prometheus/Loki evaluation.

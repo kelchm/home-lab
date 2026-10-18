@@ -1,50 +1,290 @@
-rule_files: [rules.yaml]
-evaluation_interval: 5m
+rule_files:
+  - rules.yaml
+evaluation_interval: 1m
 tests:
-  - name: Steady syslog ingestion stays quiet
-    interval: 1h
+  - name: Steady receiver and delivery stay quiet
+    interval: 1m
     input_series:
-      - series: vl_rows_ingested_total{job="victoria-logs-single-server",type="syslog_udp"}
-        values: 0+10x72
+      - series: vl_rows_ingested_total{job="unifi-syslog",type="syslog_udp"}
+        values: 0+10x80
+      - series: vlagent_remotewrite_requests_total{job="unifi-syslog",status_code="2XX"}
+        values: 0+1x80
+      - series: up{job="unifi-syslog"}
+        values: 1+0x80
+      - series: vlagent_remotewrite_pending_data_bytes{job="unifi-syslog"}
+        values: 0+0x80
     alert_rule_test:
       - alertname: UniFiSyslogSilent
-        eval_time: 72h
+        eval_time: 60m
         exp_alerts: []
-  - name: Ingestion that stops for two days fires
-    interval: 1h
+      - alertname: UniFiSyslogReceiverUnavailable
+        eval_time: 60m
+        exp_alerts: []
+      - alertname: UniFiSyslogDeliveryStalled
+        eval_time: 60m
+        exp_alerts: []
+      - alertname: UniFiSyslogBacklogSustained
+        eval_time: 60m
+        exp_alerts: []
+      - alertname: UniFiSyslogQueueNearCapacity
+        eval_time: 60m
+        exp_alerts: []
+      - alertname: UniFiSyslogLoss
+        eval_time: 60m
+        exp_alerts: []
+      - alertname: UniFiSyslogReceiveErrors
+        eval_time: 60m
+        exp_alerts: []
+  - name: Source silent for two days
+    interval: 1m
     input_series:
-      - series: vl_rows_ingested_total{job="victoria-logs-single-server",type="syslog_udp"}
-        values: 0+10x24 240+0x60
+      - series: vl_rows_ingested_total{job="unifi-syslog",type="syslog_udp"}
+        values: 0+1x60 60+0x3000
     alert_rule_test:
       - alertname: UniFiSyslogSilent
-        eval_time: 60h
+        eval_time: 48h
         exp_alerts: []
       - alertname: UniFiSyslogSilent
-        eval_time: 84h
+        eval_time: 51h
         exp_alerts:
-          - exp_labels: {severity: warning}
+          - exp_labels:
+              severity: warning
             exp_annotations:
-              summary: VictoriaLogs has received no UniFi syslog for two days
-              description: >-
-                No rows arrived on the syslog listener (10.32.130.3 UDP/514).
-                Check the console's SIEM export target, the victoria-logs-syslog
-                Service and CiliumPolicyDrops for the victoria-logs-single pod.
-  - name: A listener that never received a row fires
-    interval: 1h
+              summary: The UniFi relay has received no syslog for two days
+              description: No rows arrived on the syslog listener (10.32.130.3 UDP/514). Check the console's SIEM export target, the victoria-logs-syslog Service and CiliumPolicyDrops for the unifi-syslog pod. This measures reception, not successful backend delivery.
+  - name: Never received; unrelated backend traffic cannot mask silence
+    interval: 1m
     input_series:
-      - series: vl_rows_ingested_total{job="victoria-logs-single-server",type="other"}
-        values: 0+10x3
+      - series: vl_rows_ingested_total{job="victoria-logs-single-server",type="syslog_udp"}
+        values: 0+100x80
     alert_rule_test:
       - alertname: UniFiSyslogSilent
         eval_time: 30m
         exp_alerts: []
       - alertname: UniFiSyslogSilent
-        eval_time: 2h
+        eval_time: 61m
         exp_alerts:
-          - exp_labels: {job: victoria-logs-single-server, severity: warning, type: syslog_udp}
+          - exp_labels:
+              severity: warning
             exp_annotations:
-              summary: VictoriaLogs has received no UniFi syslog for two days
-              description: >-
-                No rows arrived on the syslog listener (10.32.130.3 UDP/514).
-                Check the console's SIEM export target, the victoria-logs-syslog
-                Service and CiliumPolicyDrops for the victoria-logs-single pod.
+              summary: The UniFi relay has received no syslog for two days
+              description: No rows arrived on the syslog listener (10.32.130.3 UDP/514). Check the console's SIEM export target, the victoria-logs-syslog Service and CiliumPolicyDrops for the unifi-syslog pod. This measures reception, not successful backend delivery.
+  - name: Expected quiet source is healthy with empty queues
+    interval: 1m
+    input_series:
+      - series: vl_rows_ingested_total{job="unifi-syslog",type="syslog_udp"}
+        values: 20+0x120
+      - series: vlagent_remotewrite_requests_total{job="unifi-syslog",status_code="2XX"}
+        values: 10+0x120
+      - series: up{job="unifi-syslog"}
+        values: 1+0x120
+      - series: vlagent_remotewrite_pending_data_bytes{job="unifi-syslog"}
+        values: 0+0x120
+    alert_rule_test:
+      - alertname: UniFiSyslogDeliveryStalled
+        eval_time: 60m
+        exp_alerts: []
+      - alertname: UniFiSyslogBacklogSustained
+        eval_time: 60m
+        exp_alerts: []
+  - name: Receiver down
+    interval: 1m
+    input_series:
+      - series: up{job="unifi-syslog"}
+        values: 0+0x10
+    alert_rule_test:
+      - alertname: UniFiSyslogReceiverUnavailable
+        eval_time: 4m
+        exp_alerts: []
+      - alertname: UniFiSyslogReceiverUnavailable
+        eval_time: 6m
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+            exp_annotations:
+              summary: The UniFi syslog receiver has no healthy scrape target
+              description: Check the Deployment, PVC, PodMonitor conversion and metrics path. UDP sent while the receiver is down cannot be recovered by its queue.
+  - name: Scrape target absent
+    interval: 1m
+    input_series: []
+    alert_rule_test:
+      - alertname: UniFiSyslogReceiverUnavailable
+        eval_time: 6m
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+            exp_annotations:
+              summary: The UniFi syslog receiver has no healthy scrape target
+              description: Check the Deployment, PVC, PodMonitor conversion and metrics path. UDP sent while the receiver is down cannot be recovered by its queue.
+  - name: Rows arrive but no successful backend requests
+    interval: 1m
+    input_series:
+      - series: vl_rows_ingested_total{job="unifi-syslog",type="syslog_udp"}
+        values: 0+5x40
+      - series: vlagent_remotewrite_requests_total{job="unifi-syslog",status_code="2XX"}
+        values: 0+0x40
+    alert_rule_test:
+      - alertname: UniFiSyslogDeliveryStalled
+        eval_time: 4m
+        exp_alerts: []
+      - alertname: UniFiSyslogDeliveryStalled
+        eval_time: 21m
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: The UniFi relay receives rows but has no successful backend writes
+              description: Check backend health, HTTP responses and network policy. Quiet source periods alone do not fire this alert; persistent backlog is monitored separately.
+  - name: Queue persists after source goes quiet
+    interval: 1m
+    input_series:
+      - series: vlagent_remotewrite_pending_data_bytes{job="unifi-syslog"}
+        values: 200+0x20
+    alert_rule_test:
+      - alertname: UniFiSyslogBacklogSustained
+        eval_time: 9m
+        exp_alerts: []
+      - alertname: UniFiSyslogBacklogSustained
+        eval_time: 11m
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: The UniFi relay has a sustained delivery backlog
+              description: Restore the backend and wait for disk and memory queues to drain. Preserve the unifi-syslog PVC; do not delete buffered events during rollback.
+  - name: Memory backlog before disk spill
+    interval: 1m
+    input_series:
+      - series: vlagent_remotewrite_pending_inmemory_blocks{job="unifi-syslog"}
+        values: 2+0x20
+    alert_rule_test:
+      - alertname: UniFiSyslogBacklogSustained
+        eval_time: 11m
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: The UniFi relay has a sustained delivery backlog
+              description: Restore the backend and wait for disk and memory queues to drain. Preserve the unifi-syslog PVC; do not delete buffered events during rollback.
+  - name: Queue approaching budget
+    interval: 1m
+    input_series:
+      - series: vlagent_remotewrite_pending_data_bytes{job="unifi-syslog"}
+        values: 805306369+0x10
+    alert_rule_test:
+      - alertname: UniFiSyslogQueueNearCapacity
+        eval_time: 1m
+        exp_alerts: []
+      - alertname: UniFiSyslogQueueNearCapacity
+        eval_time: 3m
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+            exp_annotations:
+              summary: The UniFi relay has used 75% of its queue budget
+              description: The queue budget is 1 GiB on a 3 GiB PVC. Old blocks are evicted at capacity. Check backend health and PVC free space before more events are lost.
+  - name: Transient backend retry succeeds without loss
+    interval: 1m
+    input_series:
+      - series: vl_rows_ingested_total{job="unifi-syslog",type="syslog_udp"}
+        values: 0+1x25
+      - series: vlagent_remotewrite_requests_total{job="unifi-syslog",status_code="2XX"}
+        values: 0+0x4 1+1x20
+      - series: vlagent_remotewrite_pending_data_bytes{job="unifi-syslog"}
+        values: 10+0x4 0+0x20
+      - series: vlagent_remotewrite_requests_total{job="unifi-syslog",status_code="503"}
+        values: 0+1x4 4+0x20
+    alert_rule_test:
+      - alertname: UniFiSyslogDeliveryStalled
+        eval_time: 20m
+        exp_alerts: []
+      - alertname: UniFiSyslogBacklogSustained
+        eval_time: 20m
+        exp_alerts: []
+      - alertname: UniFiSyslogLoss
+        eval_time: 20m
+        exp_alerts: []
+  - name: 'Loss: vm_persistentqueue_blocks_dropped_total'
+    interval: 1m
+    input_series:
+      - series: vm_persistentqueue_blocks_dropped_total{job="unifi-syslog"}
+        values: 0+1x10
+    alert_rule_test:
+      - alertname: UniFiSyslogLoss
+        eval_time: 5m
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+            exp_annotations:
+              summary: The UniFi relay dropped received data
+              description: Inspect queue eviction, rejected remote-write blocks and row-drop counters. Counts represent different units and cannot be read as a lost-event total. Preserve evidence and restore delivery.
+  - name: 'Loss: vm_persistentqueue_bytes_dropped_total'
+    interval: 1m
+    input_series:
+      - series: vm_persistentqueue_bytes_dropped_total{job="unifi-syslog"}
+        values: 0+1x10
+    alert_rule_test:
+      - alertname: UniFiSyslogLoss
+        eval_time: 5m
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+            exp_annotations:
+              summary: The UniFi relay dropped received data
+              description: Inspect queue eviction, rejected remote-write blocks and row-drop counters. Counts represent different units and cannot be read as a lost-event total. Preserve evidence and restore delivery.
+  - name: 'Loss: vlagent_remotewrite_packets_dropped_total'
+    interval: 1m
+    input_series:
+      - series: vlagent_remotewrite_packets_dropped_total{job="unifi-syslog"}
+        values: 0+1x10
+    alert_rule_test:
+      - alertname: UniFiSyslogLoss
+        eval_time: 5m
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+            exp_annotations:
+              summary: The UniFi relay dropped received data
+              description: Inspect queue eviction, rejected remote-write blocks and row-drop counters. Counts represent different units and cannot be read as a lost-event total. Preserve evidence and restore delivery.
+  - name: 'Loss: vl_rows_dropped_total'
+    interval: 1m
+    input_series:
+      - series: vl_rows_dropped_total{job="unifi-syslog"}
+        values: 0+1x10
+    alert_rule_test:
+      - alertname: UniFiSyslogLoss
+        eval_time: 5m
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+            exp_annotations:
+              summary: The UniFi relay dropped received data
+              description: Inspect queue eviction, rejected remote-write blocks and row-drop counters. Counts represent different units and cannot be read as a lost-event total. Preserve evidence and restore delivery.
+  - name: 'Receive error: vl_udp_errors_total'
+    interval: 1m
+    input_series:
+      - series: vl_udp_errors_total{job="unifi-syslog",type="syslog"}
+        values: 0+1x10
+    alert_rule_test:
+      - alertname: UniFiSyslogReceiveErrors
+        eval_time: 5m
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: The UniFi relay reports syslog receive or parse errors
+              description: Inspect receiver logs and packet sizes. Malformed CEF may remain a plain message; zero parser errors does not prove that every sender event arrived.
+  - name: 'Receive error: vl_errors_total'
+    interval: 1m
+    input_series:
+      - series: vl_errors_total{job="unifi-syslog",type="syslog"}
+        values: 0+1x10
+    alert_rule_test:
+      - alertname: UniFiSyslogReceiveErrors
+        eval_time: 5m
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: The UniFi relay reports syslog receive or parse errors
+              description: Inspect receiver logs and packet sizes. Malformed CEF may remain a plain message; zero parser errors does not prove that every sender event arrived.

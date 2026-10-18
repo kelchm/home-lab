@@ -1,8 +1,8 @@
 ---
 # UniFi console syslog/CEF export. Only the syslog listener is published; the
-# chart's headless Service keeps 9428 cluster-internal. externalTrafficPolicy
+# relay's HTTP port and backend 9428 stay cluster-internal. externalTrafficPolicy
 # Local keeps the gateway's source address through Service translation, so the
-# CIDR rule in networkpolicy.yaml can match it; with Cluster, cross-node
+# CIDR rule in the relay networkpolicy.yaml can match it; with Cluster, cross-node
 # traffic is SNATed to a node address, which the namespace baseline admits.
 apiVersion: v1
 kind: Service
@@ -16,9 +16,7 @@ spec:
   type: LoadBalancer
   externalTrafficPolicy: Local
   selector:
-    app: server
-    app.kubernetes.io/instance: victoria-logs-single
-    app.kubernetes.io/name: victoria-logs-single
+    app.kubernetes.io/name: unifi-syslog
   ports:
     - name: syslog-udp
       port: 514
