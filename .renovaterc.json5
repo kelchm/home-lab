@@ -41,10 +41,11 @@
       dependencyDashboardApproval: true,
     },
     {
-      description: "VictoriaLogs Grafana plugin: require reviewed upgrades",
-      matchDatasources: ["github-releases"],
-      matchPackageNames: ["VictoriaMetrics/victorialogs-datasource"],
+      description: "Grafana catalog plugins: require reviewed upgrades",
+      matchDatasources: ["custom.grafana-plugins"],
       automerge: false,
+      semanticCommitScope: "grafana-plugin",
+      commitMessageTopic: "plugin {{depName}}",
     },
     {
       // VSS 7.7.0 introduced mandatory server licensing. Keep the proven
@@ -187,6 +188,15 @@
       addLabels: ["renovate/github-release"],
     },
   ],
+  customDatasources: {
+    "grafana-plugins": {
+      defaultRegistryUrlTemplate: "https://grafana.com/api/plugins/{{packageName}}/versions",
+      format: "json",
+      transformTemplates: [
+        '{"releases": [items[status = "active"].{"version": version, "releaseTimestamp": createdAt, "sourceUrl": url}], "homepage": "https://grafana.com/grafana/plugins/{{packageName}}/"}',
+      ],
+    },
+  },
   customManagers: [
     {
       description: "Process annotated dependencies",
@@ -211,22 +221,19 @@
       datasourceTemplate: "{{#if datasource}}{{{datasource}}}{{else}}github-releases{{/if}}",
     },
     {
-      description: "Track the URL-pinned VictoriaLogs Grafana plugin",
+      description: "Track URL-pinned Grafana catalog plugins",
       customType: "regex",
       managerFilePatterns: [
-        "/^kubernetes/apps/observability/grafana/app/helmrelease\\.yaml$/",
+        "/(^|/)kubernetes/.+\\.ya?ml$/",
       ],
       matchStrings: [
-        "victoriametrics-logs-datasource@(?<currentValue>[^@\\s]+)@https://grafana\\.com/api/plugins/victoriametrics-logs-datasource/versions/[^/\\s]+/download",
+        "(?<depName>[a-z0-9-]+)@(?<currentValue>[^@\\s]+)@https://grafana\\.com/api/plugins/(?<packageName>[a-z0-9-]+)/versions/[^/\\s]+/download",
       ],
-      depNameTemplate: "victoriametrics-logs-datasource",
-      packageNameTemplate: "VictoriaMetrics/victorialogs-datasource",
-      datasourceTemplate: "github-releases",
+      datasourceTemplate: "custom.grafana-plugins",
       versioningTemplate: "semver",
-      extractVersionTemplate: "^v(?<version>.+)$",
       // Rewrite both pins together; changing only one leaves the installer
       // version and the downloaded archive out of sync.
-      autoReplaceStringTemplate: "victoriametrics-logs-datasource@{{{newValue}}}@https://grafana.com/api/plugins/victoriametrics-logs-datasource/versions/{{{newValue}}}/download",
+      autoReplaceStringTemplate: "{{{depName}}}@{{{newValue}}}@https://grafana.com/api/plugins/{{{packageName}}}/versions/{{{newValue}}}/download",
     },
     {
       customType: "regex",
