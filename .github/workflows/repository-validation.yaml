@@ -643,7 +643,7 @@ jobs:
         run: actionlint
 
       - name: Validate Renovate repository configuration
-        uses: docker://ghcr.io/renovatebot/renovate@sha256:05c512c35c764ef6a179e69c3b30567eca254d67f13a0143479fe3c84852c67a # 44.133.0
+        uses: docker://ghcr.io/renovatebot/renovate@sha256:82f2a1375a48339c02f9a74b14f8468386c5c5e88ff10aa1674aae31df52969d # 44.133.0
         with:
           entrypoint: renovate-config-validator
           args: --no-global .renovaterc.json5
