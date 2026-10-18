@@ -57,6 +57,10 @@ tests:
       - series: node_network_carrier{job="pve-node",instance="pve-sbx-1",platform="pve",device="vmbr0"}
         values: 1x59 0x30
     alert_rule_test:
+      # nic1 is down here; its drop ends before the 5-minute hold.
+      - eval_time: 62m
+        alertname: HostLinkDown
+        exp_alerts: []
       - eval_time: 64m
         alertname: HostLinkDown
         exp_alerts: []
