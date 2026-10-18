@@ -97,7 +97,7 @@ time() - tlast_over_time(up{instance="spark-1"}[1h])
 count by (job) (up{instance="spark-1"} == 1)
 ```
 
-The first is a few seconds on a healthy host. The second lists `spark-node`, `spark-gpu`, `spark-vmagent` and `spark-deployer`, plus `spark-inference` on the node serving the head rank. On the NAS it lists `synology-node`, `synology-snmp` and `synology-vmagent`, and on a Pi `pi-node` and `pi-vmagent`. On the host, `curl -s 127.0.0.1:8429/targets` shows each scrape target and `docker logs doco-cd` shows deployments.
+The first is a few seconds on a healthy host. The second lists `spark-node`, `spark-gpu`, `spark-vmagent` and `spark-deployer`, plus `spark-inference` on the node serving the head rank. On the NAS it lists `synology-node`, `synology-snmp` and `synology-vmagent`, and on a Pi `pi-node` and `pi-vmagent`. On the host, `curl -s 127.0.0.1:8429/targets` shows each scrape target. `docker logs doco-cd` shows deployments on a Compose host, and `journalctl -u vmagent -u prometheus-node-exporter` shows the collectors' logs on a Pi.
 
 Check memory with `docker stats --no-stream`, which matters on a Spark where a loaded model leaves little free. Every container keeps at most 30 MB of logs and has a memory limit: 256 MiB each for doco-cd and vmagent, 128 MiB each for node-exporter and the GPU exporter, so 768 MiB at most on a Spark and 640 MiB on a PVE node. sparkDash adds a 512 MiB limit on `spark-1`. Measured on 2026-10-04: a Spark used 90 to 110 MiB in total (doco-cd 35 to 44, vmagent 23 to 46, GPU exporter 10 to 17, node-exporter 10), leaving its available memory within 0.1 GiB of where it started; a PVE node used about 55 MiB.
 
