@@ -153,7 +153,7 @@ The DGX allocation is recorded in the [bring-up runbook](runbooks/dgx-spark-brin
 
 ### WAN-side devices
 
-Each WAN's provider device keeps its vendor address, outside `10.32.0.0/16` and the system identity rule: the T-Mobile 5G gateway (WAN1) at `192.168.12.1`, on the subnet of WAN1's own address, and the Starlink dish (WAN2) at `192.168.100.1`, which the UniFi traffic route `Starlink Management` pins to WAN2 for the networks it lists. Their metrics carry `instance` `tmobile-gateway` and `starlink-dish`; the [host monitoring runbook](runbooks/host-monitoring.md#wan-devices) describes the collection.
+Each WAN's provider device keeps its vendor address, outside `10.32.0.0/16` and the system identity rule: the T-Mobile 5G gateway (WAN1) at `192.168.12.1`, on the subnet of WAN1's own address, and the Starlink dish (WAN2) at `192.168.100.1`, which the UniFi traffic route `Starlink Management` pins to WAN2 for all clients. Their metrics carry `instance` `tmobile-gateway` and `starlink-dish`; the [host monitoring runbook](runbooks/host-monitoring.md#wan-devices) describes the collection.
 
 ### /24 skeletons
 

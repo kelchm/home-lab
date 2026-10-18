@@ -10,7 +10,7 @@ spec:
       app.kubernetes.io/name: starlink-exporter
   egress:
     # Reached through the gateway's Starlink Management traffic route, which
-    # pins 192.168.100.0/24 to WAN2 for the K8s Prod network.
+    # pins 192.168.100.0/24 to WAN2 for all clients.
     - toCIDR:
         - 192.168.100.1/32
       toPorts:
