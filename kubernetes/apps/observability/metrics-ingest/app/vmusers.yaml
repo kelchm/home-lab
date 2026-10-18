@@ -146,3 +146,27 @@ spec:
           values:
             - instance=nas
             - platform=synology
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMUser
+metadata:
+  name: streamer-basement-workbench
+  labels:
+    homelab.kelch.io/vmauth: metrics-ingest
+spec:
+  name: streamer-basement-workbench
+  tokenRef:
+    name: metrics-ingest-tokens
+    key: STREAMER_BASEMENT_WORKBENCH_TOKEN
+  targetRefs:
+    - crd:
+        kind: VMSingle
+        name: victoria-metrics-k8s-stack
+        namespace: observability
+      paths:
+        - /api/v1/write
+      query_args:
+        - name: extra_label
+          values:
+            - instance=streamer-basement-workbench
+            - platform=pi
