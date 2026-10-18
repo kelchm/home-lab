@@ -1,6 +1,6 @@
-# Kubernetes logging
+# Logging
 
-Kubernetes application and control-plane container stdout/stderr is collected into VictoriaLogs, which is the only log backend. **vlagent runs on all three production nodes as of September 26, 2026.** Each node is labeled `logging.home.kelch.io/collector=vlagent`; add that label when provisioning another logging node. Alloy is retired from Flux. Its node-local `/var/lib/alloy` checkpoints are retained through October 3, 2026 as a short rollback precaution; [#583](https://github.com/kelchm/home-lab/issues/583) tracks their final removal.
+Kubernetes application and control-plane container stdout/stderr is collected into VictoriaLogs, which is the only log backend. The UniFi console's event export also lands there; see [UniFi console logs](#unifi-console-logs). **vlagent runs on all three production nodes as of September 26, 2026.** Each node is labeled `logging.home.kelch.io/collector=vlagent`; add that label when provisioning another logging node. Alloy is retired from Flux. Its node-local `/var/lib/alloy` checkpoints are retained through October 3, 2026 as a short rollback precaution; [#583](https://github.com/kelchm/home-lab/issues/583) tracks their final removal.
 
 The pinned collector discovers regular containers and init containers, including native sidecars and static control-plane pods. It does not enumerate ephemeral debug containers; none were present in the September 26 coverage audit. Collection covers kubelet-managed container logs, not Talos service/kernel journals or application files outside stdout/stderr. Quiet or empty containers do not establish a collection failure: compare Kubernetes inventory, node log files, read checkpoints and stored records before declaring a source missing.
 
@@ -20,6 +20,81 @@ For routine application browsing:
 The datasource plugin v0.31.0 serializes the VMUI handoff's absolute end time as UTC without a timezone suffix; VictoriaLogs v1.52.0 VMUI interprets it in its selected timezone. In an America/New_York browser, the September 26 check shifted a historical window by four hours. The plugin also omits seconds. For exact historical windows, set and verify the time range explicitly in VMUI. This limitation is accepted ([#485](https://github.com/kelchm/home-lab/issues/485)); upstream datasource v0.32.0 still uses the same serialization. Revisit when a datasource release sends a timezone-qualified end time.
 
 Grafana authenticates through its native `auth.generic_oauth` integration and dedicated Kanidm client; VictoriaLogs VMUI uses the OIDC middleware on its HTTPRoute. Useful LogsQL starting points are `namespace:observability`, `service_name:grafana`, `level:in("error", "critical")`, `stream:stderr`, and `namespace:observability | stats by (service_name) count()`. The time picker supplies the query window. These raw metadata filters select retained Alloy rows; use the dual-schema namespace selector and compatibility pipe described under [Query compatibility](#query-compatibility) to include current vlagent rows.
+
+## UniFi console logs
+
+The UniFi console (`Gateway DMP`, Network 10.6.106) exports its system log as CEF over syslog to the `victoria-logs-syslog` LoadBalancer at `10.32.130.3` UDP/514, which forwards to VictoriaLogs' UDP listener on container port 5514. The Service uses `externalTrafficPolicy: Local`, so the CiliumNetworkPolicy sees the sender's address; its syslog rule admits external traffic only from the gateway's VLAN 30 interface, `10.32.30.1`, alongside the namespace baseline's in-cluster allowances. The HTTP port 9428 stays cluster-internal. The export is UDP with no retry or buffer: records sent while VictoriaLogs restarts, or dropped on the path, are lost.
+
+Every record lands in the default tenant beside the Kubernetes logs. `_time` is the arrival time, because RFC3164 headers carry no timezone; the console's own header time, read as America/New_York, is kept in `timestamp`, and `remote_ip` records the sending address. Until the console export is enabled and the first records are checked, this section describes intended behaviour; [#856](https://github.com/kelchm/home-lab/issues/856) tracks that verification.
+
+### Console setup
+
+The console account the agents use is View Only, so the operator makes this change. The console currently keeps its activity log locally (`rsyslogd` site setting: this controller only, no remote target). The page names below come from third-party guides for Network 9.x and 10.x; correct them here if the console differs.
+
+1. Open **Settings → CyberSecure → Traffic Logging** and find **Activity Logging (Syslog)**.
+2. Select **SIEM Server**. Set **Server Address** to `10.32.130.3` and **Port** to `514`.
+3. Enable every content category except **Firewall Default Policy**, which users report multiplies volume about 200 times. Leave **Debug Logs** and **Netconsole** off; they are gateway diagnostics, not events.
+4. Apply, then leave the separate **Control Plane → Integrations** syslog export off. Exporting the same categories through both pages duplicates every event.
+
+Within a minute, `_time:5m remote_ip:=10.32.30.1 | stats count()` should be nonzero. If it stays at zero, check `hubble_drop_total{destination_namespace="observability", reason="POLICY_DENIED", protocol="UDP"}` for a rise; it also counts unrelated traffic, so confirm with `hubble observe --verdict DROPPED --since 10m` in the `cilium-agent` container on the node running `victoria-logs-single-server-0`. A dropped UDP packet to that pod's port 5514 shows the gateway's actual source address, which then replaces the CIDR in [networkpolicy.yaml](../../kubernetes/apps/observability/victoria-logs-single/app/networkpolicy.yaml).
+
+### Fields
+
+VictoriaLogs parses the syslog header and the CEF payload itself; no processor runs in between.
+
+| Field | Content |
+| --- | --- |
+| `hostname`, `app_name`, `proc_id` | Syslog header; stream fields. CEF lines have `app_name=CEF`; firewall rule logs have `app_name=kernel`. |
+| `cef.device_vendor`, `cef.device_product`, `cef.device_event_class_id` | CEF header; also stream fields. Product is `UniFi Network` for network events and `UniFi OS` for console events. |
+| `cef.name`, `cef.severity`, `cef.device_version` | Event name, 0–10 severity, and the application version. |
+| `cef.extension.<key>` | Every CEF extension, such as `UNIFIcategory`, `msg`, `src`, `dst`, `UNIFIwanName`, `UNIFIipsSignature`, `UNIFIclientAlias` and `UNIFIdeviceName`. Ubiquiti lists the keys in [UniFi System Logs & SIEM Integration](https://help.ui.com/hc/en-us/articles/33349041044119). |
+| `timestamp`, `remote_ip`, `format`, `facility_keyword`, `level` | Header time, sender address, `rfc3164` or `rfc5424`, and the syslog facility and severity. |
+
+CEF records have no `_msg`, so Grafana and VMUI show VictoriaLogs' missing-message placeholder; the readable text is in `cef.extension.msg`. Append `| copy cef.extension.msg as _msg` to show it in the message column. Firewall rule logs keep the kernel line, including `DESCR="<policy name>"`, in `_msg`.
+
+Expected event classes, from Ubiquiti's examples and published captures of Network 9.3–10.6. Confirm the WAN and honeypot entries against the first live records:
+
+| Class | Name | Notes |
+| --- | --- | --- |
+| 100 | Internet Down | `UNIFIwanName`, `UNIFIwanId`, `UNIFIwanIsp` |
+| 107 | Internet Restored | A short drop is reported as restored "after a temporary disconnection" in `msg`. |
+| 112, 113 | High Latency Detected, Packet Loss Detected | `UNIFIwanLatency` on 112 |
+| 200, 201 | Threat Detected, Threat Detected and Blocked | `src`, `dst`, `UNIFIipsSignature`, `UNIFIipsSignatureId`, `UNIFIrisk` |
+| 400–404 | Wi-Fi and wired client connected, disconnected and roamed | `UNIFIclientAlias`, `UNIFIclientIp`, `UNIFIclientMac` |
+| 512, 513 | Device Offline, Device Reconnected | `UNIFIdeviceName` |
+| 544–549 | Admin access and configuration changes | `UNIFIadmin`, `UNIFIaccessMethod` |
+
+### Example queries
+
+- Everything the console sent: `remote_ip:=10.32.30.1`
+- Events by class: `{cef.device_product="UniFi Network"} | stats by (cef.device_event_class_id, cef.name) count()`
+- WAN events: `{cef.device_product="UniFi Network"} cef.extension.UNIFIcategory:="Internet and WAN" | fields _time, cef.name, cef.extension.UNIFIwanName, cef.extension.msg`
+- IDS detections by pair: `{cef.device_product="UniFi Network", cef.device_event_class_id=~"200|201"} | stats by (cef.extension.src, cef.extension.dst, cef.extension.UNIFIipsSignature) count()`
+- One client's connections: `{cef.device_product="UniFi Network"} cef.extension.UNIFIclientAlias:="Hyperion" | fields _time, cef.name, cef.extension.msg`
+- Devices going offline: `{cef.device_product="UniFi Network", cef.device_event_class_id="512"}`
+- Admin activity: `cef.extension.UNIFIadmin:* OR cef.extension.UNIFIcategory:=Audit OR {cef.device_product="UniFi OS"}` (Network 10.x files admin events under `Audit`; 9.3 used `System` with `UNIFIsubCategory=Admin`)
+- Firewall rule hits: `{app_name="kernel"} DESCR`
+
+### Baseline
+
+The console's own system log for the 30 days to October 18, 2026 held 7,439 events, about 250 a day. Client connect, disconnect and roam events made up 89%. The longest gap between two events was 29 hours.
+
+- **IDS:** IPS runs in detect-only (`ids`) mode. All 525 detections had a LAN source, and 523 came from one operator Mac (`Hyperion`, `10.32.10.244`), mostly to the Sparks. Eleven had an external destination, outside multicast: ten from the Mac (nine to CloudFront addresses, one to `192.0.2.10`) and one from `k8s-prod-2`. `UniFiIntrusionDetectedOutbound` would have fired for each of those eleven.
+- **WAN:** one T-Mobile outage lasting 3 days 16 hours, three drops of 24 to 90 seconds (two T-Mobile, one Starlink), 26 high-latency and 11 packet-loss events. `UniFiWANFlapping` would not have fired.
+- **Other:** 177 admin logins, 16 configuration changes, 27 SFP receive faults, and 5 firewall-policy blocks: `spark-240a`'s storage address to `admin-prod` Traefik, and `k8s-prod-1` to `10.32.21.100`.
+
+### Alerts
+
+`vmalert-victoria-logs` evaluates the LogsQL rules in [unifi-alerts.yaml](../../kubernetes/apps/observability/victoria-logs-single/app/unifi-alerts.yaml) every minute and sends them through VMAlertmanager like any other `evaluator=vmalert` alert ([alerting runbook](alerting.md)). Each expression sets its own `_time` window, so one event keeps its alert firing for that long and then it resolves. The metrics vmalert never loads these rules, and a broken expression raises `AlertingRulesError` from the chart's vmalert rules.
+
+| Alert | Fires when | Severity |
+| --- | --- | --- |
+| `UniFiWANFlapping` | Three or more Internet Down, temporary-disconnection or failover events for one WAN within an hour. `UniFiWANNotActive` already pages a WAN down for 5 minutes; this catches shorter repeated drops. | warning |
+| `UniFiIntrusionDetectedOutbound` | An IDS detection, in the last 15 minutes, whose destination is outside private, CGNAT, link-local and multicast space. Lab-internal detections are queryable but do not page, because the baseline is dominated by operator traffic. | warning |
+| `UniFiHoneypotTriggered` | Any honeypot event in the last 15 minutes. | warning |
+| `UniFiSyslogSilent` | For an hour, VictoriaLogs' `vl_rows_ingested_total{type="syslog_udp"}` shows no syslog rows in the last two days, including when the listener has never received one. It is a MetricsQL rule on the backend's own counter, sized above the 29-hour baseline gap, so it also fires about an hour after rollout until the console export is enabled. | warning |
+
+The rules' field names and class IDs come from Ubiquiti's documentation and published captures, not from this console. A local VictoriaLogs v1.53.0 and vmalert v1.154.0 fired each rule on matching fixtures and ignored internal and multicast detections. Recheck the selectors against the first live records, especially the temporary-disconnection text, the honeypot event name and whether detections carry `dst`. To silence a benign signature, exclude its `cef.extension.UNIFIipsSignatureId` in the rule rather than adding an Alertmanager silence.
 
 ## Alloy field model (retained history)
 

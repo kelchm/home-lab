@@ -57,6 +57,8 @@ The same VMSingle is the metrics store for the rest of the lab. Enrolled PVE nod
 
 vlagent runs on each node labeled `logging.home.kelch.io/collector=vlagent`, follows Kubernetes container-log symlinks into `/var/log/pods`, reconstructs CRI records and sends them to VictoriaLogs through native ingestion. New streams use `cluster`, `kubernetes.pod_namespace`, `kubernetes.pod_name`, `kubernetes.container_name` and `kubernetes.pod_node_name`; application fields remain at their upstream top-level names. The Kubernetes logs dashboard is the primary browser, with Grafana Explore and the OIDC-protected VictoriaLogs VMUI available for direct queries. The [logging runbook](runbooks/logging.md) owns the capture boundaries, retained Alloy schema compatibility, failure handling and durability limits.
 
+VictoriaLogs also receives the UniFi console's syslog/CEF export on `10.32.130.3` UDP/514. A second vmalert evaluates LogsQL rules against VictoriaLogs and sends through the same VMAlertmanager routes; the [logging runbook](runbooks/logging.md#unifi-console-logs) describes the source, its fields and its alerts.
+
 The `monitoring.coreos.com` CRDs are owned independently by `prometheus-operator-crds`, and the VictoriaMetrics operator converts third-party ServiceMonitors and shared PrometheusRules with owner references. VictoriaMetrics and VictoriaLogs are the only metric and log backends; kube-prometheus-stack, Loki, and OpenObserve are removed.
 
 ### Dashboards
@@ -299,7 +301,9 @@ Sandbox-side pools (`admin-sandbox` 10.32.131.0/24, `services-sandbox` 10.32.141
                                 Traefik middleware adds auth where the app lacks native.
 .2     k8s-gateway              In-cluster authority for app/service records
                                 conditionally forwarded by the UniFi resolver.
-.3-.10 (reserved infra)
+.3     victoria-logs-syslog     UniFi console syslog/CEF into VictoriaLogs, UDP/514;
+                                its external ingress rule admits only the gateway (10.32.30.1).
+.4-.10 (reserved infra)
 .30-.99 (per-service admin IPs — rare; admin gateway is the default)
 ```
 

@@ -1,5 +1,5 @@
 ---
-# Victoria Logs policy declares cross-namespace flows only.
+# Victoria Logs policy declares cross-namespace and external flows only.
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
@@ -27,3 +27,11 @@ spec:
                 path: "/select/.*"
               - method: POST
                 path: "/select/.*"
+    # UniFi gateway syslog through the victoria-logs-syslog LoadBalancer. The
+    # gateway sources traffic to BGP-routed VIPs from its VLAN 30 interface.
+    - fromCIDR:
+        - 10.32.30.1/32
+      toPorts:
+        - ports:
+            - port: "5514"
+              protocol: UDP

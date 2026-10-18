@@ -301,6 +301,19 @@ spec:
         # null omits the field. Rule groups set `cluster` themselves, so rules
         # about systems outside the cluster don't inherit it.
         externalLabels: null
+        # LogsQL rules belong to the VictoriaLogs evaluator
+        # (victoria-logs-single/app/vmalert.yaml). Setting a rule selector
+        # limits selection to this namespace unless the namespace selector
+        # also matches, so it matches every namespace.
+        ruleSelector:
+          matchExpressions:
+            - key: alerting.home.kelch.io/datasource
+              operator: NotIn
+              values: [victorialogs]
+        ruleNamespaceSelector:
+          matchExpressions:
+            - key: kubernetes.io/metadata.name
+              operator: Exists
         resources:
           requests:
             cpu: 50m

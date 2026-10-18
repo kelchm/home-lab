@@ -1,0 +1,105 @@
+---
+# UniFi console events received as CEF over syslog (docs/runbooks/logging.md).
+# LogsQL rules: the datasource label routes them to vmalert-victoria-logs.
+# Each expression carries its own _time window, so an event keeps its alert
+# firing for that long. Series carry no cluster label.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: unifi-logs
+  labels:
+    alerting.home.kelch.io/datasource: victorialogs
+spec:
+  groups:
+    - name: unifi-logs
+      type: vlogs
+      interval: 1m
+      rules:
+        # A WAN that is down for 5 minutes pages through UniFiWANNotActive.
+        # This catches short repeated drops that recover before then. Class
+        # 100 is Internet Down; drops shorter than the console's outage
+        # threshold are reported as restored after a temporary disconnection.
+        - alert: UniFiWANFlapping
+          expr: >-
+            _time:1h {cef.device_product="UniFi Network"}
+            (cef.device_event_class_id:=100 OR cef.extension.msg:"temporary disconnection" OR cef.name:i(failover))
+            | stats by (cef.extension.UNIFIwanName) count() as disconnects
+            | filter disconnects:>=3
+            | rename cef.extension.UNIFIwanName as wan
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.wan }} dropped {{ $value }} times in the last hour"
+            description: >-
+              The console logged repeated disconnects on {{ $labels.wan }}
+              while the other WAN carried traffic. Check the modem or dish and
+              the WAN's latency and loss on the UniFi Internet page.
+
+        # The IDS runs in detect-only mode, and lab-internal detections are
+        # dominated by operator traffic to the Sparks, so only detections
+        # whose destination is outside private, CGNAT, link-local and
+        # multicast space page. Classes 200 and 201 are Threat Detected and
+        # Threat Detected and Blocked.
+        - alert: UniFiIntrusionDetectedOutbound
+          expr: >-
+            _time:15m {cef.device_product="UniFi Network", cef.device_event_class_id=~"200|201"}
+            cef.extension.dst:ipv4_range(0.0.0.0/0)
+            -cef.extension.dst:ipv4_range(10.0.0.0/8)
+            -cef.extension.dst:ipv4_range(172.16.0.0/12)
+            -cef.extension.dst:ipv4_range(192.168.0.0/16)
+            -cef.extension.dst:ipv4_range(100.64.0.0/10)
+            -cef.extension.dst:ipv4_range(169.254.0.0/16)
+            -cef.extension.dst:ipv4_range(224.0.0.0/4)
+            | stats by (cef.extension.src, cef.extension.dst, cef.extension.UNIFIipsSignature) count() as detections
+            | filter detections:>0
+            | rename cef.extension.src as src, cef.extension.dst as dst, cef.extension.UNIFIipsSignature as signature
+          labels:
+            severity: warning
+          annotations:
+            summary: "Intrusion detection: {{ $labels.src }} to {{ $labels.dst }}"
+            description: >-
+              The IDS matched "{{ $labels.signature }}" on traffic from
+              {{ $labels.src }} to the external address {{ $labels.dst }}
+              ({{ $value }} in 15 minutes). Identify the client and the
+              signature in VictoriaLogs before allowing it.
+
+        # The honeypot answers only on otherwise unused addresses, so any
+        # contact means a LAN device is probing.
+        - alert: UniFiHoneypotTriggered
+          expr: >-
+            _time:15m {cef.device_product="UniFi Network"} cef.name:i(honeypot)
+            | stats by (cef.extension.src) count() as hits
+            | filter hits:>0
+            | rename cef.extension.src as src
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.src }} contacted the UniFi honeypot"
+            description: >-
+              {{ $labels.src }} reached the gateway honeypot ({{ $value }} in
+              15 minutes). Identify the device and what it was scanning.
+---
+# MetricsQL rule on VictoriaLogs' own counter, so it does not depend on the
+# log store it diagnoses. The console has gone 29 hours without an event, so
+# the window is two days.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: unifi-syslog-ingestion
+spec:
+  groups:
+    - name: unifi-syslog-ingestion
+      rules:
+        - alert: UniFiSyslogSilent
+          expr: |
+            sum(increase(vl_rows_ingested_total{job="victoria-logs-single-server", type="syslog_udp"}[2d])) == 0
+            or absent_over_time(vl_rows_ingested_total{job="victoria-logs-single-server", type="syslog_udp"}[2d])
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: VictoriaLogs has received no UniFi syslog for two days
+            description: >-
+              No rows arrived on the syslog listener (10.32.130.3 UDP/514).
+              Check the console's SIEM export target, the victoria-logs-syslog
+              Service and CiliumPolicyDrops for the victoria-logs-single pod.

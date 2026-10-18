@@ -1,6 +1,7 @@
 ---
-# VictoriaLogs single-node receives native ingestion from vlagent. Operators
-# query it through Grafana or the OIDC-protected native VMUI.
+# VictoriaLogs single-node receives native ingestion from vlagent and syslog
+# from the UniFi console. Operators query it through Grafana or the
+# OIDC-protected native VMUI.
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
@@ -36,6 +37,18 @@ spec:
           memory: 4Gi
       serviceMonitor:
         enabled: true   # converted for vmagent; retained KPS also scrapes during the rollback soak
+      # UniFi console export, published by syslog-service.yaml. RFC3164
+      # timestamps carry no zone, so _time is the arrival time and the sender's
+      # stamp, read in the console's zone, stays in `timestamp`. remote_ip
+      # records the sending address.
+      extraArgs:
+        syslog.timezone: America/New_York
+      syslog:
+        udp:
+          - name: syslog-udp
+            value: :5514
+            useLocalTimestamp: true
+            useRemoteIP: true
 
     dashboards:
       enabled: true
