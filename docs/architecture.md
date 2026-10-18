@@ -298,7 +298,7 @@ Sandbox-side pools (`admin-sandbox` 10.32.131.0/24, `services-sandbox` 10.32.141
 .2     k8s-gateway              In-cluster authority for app/service records
                                 conditionally forwarded by the UniFi resolver.
 .3     victoria-logs-syslog     UniFi console syslog/CEF into VictoriaLogs, UDP/514;
-                                Cilium admits only the gateway (10.32.30.1).
+                                its external ingress rule admits only the gateway (10.32.30.1).
 .4-.10 (reserved infra)
 .30-.99 (per-service admin IPs — rare; admin gateway is the default)
 ```

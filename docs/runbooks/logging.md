@@ -23,7 +23,7 @@ Grafana authenticates through its native `auth.generic_oauth` integration and de
 
 ## UniFi console logs
 
-The UniFi console (`Gateway DMP`, Network 10.6.106) exports its system log as CEF over syslog to the `victoria-logs-syslog` LoadBalancer at `10.32.130.3` UDP/514, which forwards to VictoriaLogs' UDP listener on container port 5514. The Service uses `externalTrafficPolicy: Local`, so the CiliumNetworkPolicy sees the sender's address and admits only the gateway's VLAN 30 interface, `10.32.30.1`; the HTTP port 9428 stays cluster-internal. The export is UDP with no retry or buffer: records sent while VictoriaLogs restarts, or dropped on the path, are lost.
+The UniFi console (`Gateway DMP`, Network 10.6.106) exports its system log as CEF over syslog to the `victoria-logs-syslog` LoadBalancer at `10.32.130.3` UDP/514, which forwards to VictoriaLogs' UDP listener on container port 5514. The Service uses `externalTrafficPolicy: Local`, so the CiliumNetworkPolicy sees the sender's address; its syslog rule admits external traffic only from the gateway's VLAN 30 interface, `10.32.30.1`, alongside the namespace baseline's in-cluster allowances. The HTTP port 9428 stays cluster-internal. The export is UDP with no retry or buffer: records sent while VictoriaLogs restarts, or dropped on the path, are lost.
 
 Every record lands in the default tenant beside the Kubernetes logs. `_time` is the arrival time, because RFC3164 headers carry no timezone; the console's own header time, read as America/New_York, is kept in `timestamp`, and `remote_ip` records the sending address. Until the console export is enabled and the first records are checked, this section describes intended behaviour; [#856](https://github.com/kelchm/home-lab/issues/856) tracks that verification.
 
@@ -36,7 +36,7 @@ The console account the agents use is View Only, so the operator makes this chan
 3. Enable every content category except **Firewall Default Policy**, which users report multiplies volume about 200 times. Leave **Debug Logs** and **Netconsole** off; they are gateway diagnostics, not events.
 4. Apply, then leave the separate **Control Plane → Integrations** syslog export off. Exporting the same categories through both pages duplicates every event.
 
-Within a minute, `remote_ip:=10.32.30.1 | stats count()` over the last five minutes should be nonzero. If it stays at zero, check `hubble_drop_total{destination_namespace="observability", reason="POLICY_DENIED", protocol="UDP"}`. A drop there means the gateway uses a different source address: `hubble observe --verdict DROPPED --since 10m` in the `cilium-agent` container on the node running `victoria-logs-single-server-0` shows it, and the CIDR in [networkpolicy.yaml](../../kubernetes/apps/observability/victoria-logs-single/app/networkpolicy.yaml) needs that address instead.
+Within a minute, `_time:5m remote_ip:=10.32.30.1 | stats count()` should be nonzero. If it stays at zero, check `hubble_drop_total{destination_namespace="observability", reason="POLICY_DENIED", protocol="UDP"}` for a rise; it also counts unrelated traffic, so confirm with `hubble observe --verdict DROPPED --since 10m` in the `cilium-agent` container on the node running `victoria-logs-single-server-0`. A dropped UDP packet to that pod's port 5514 shows the gateway's actual source address, which then replaces the CIDR in [networkpolicy.yaml](../../kubernetes/apps/observability/victoria-logs-single/app/networkpolicy.yaml).
 
 ### Fields
 
@@ -72,7 +72,7 @@ Expected event classes, from Ubiquiti's examples and published captures of Netwo
 - IDS detections by pair: `{cef.device_product="UniFi Network", cef.device_event_class_id=~"200|201"} | stats by (cef.extension.src, cef.extension.dst, cef.extension.UNIFIipsSignature) count()`
 - One client's connections: `{cef.device_product="UniFi Network"} cef.extension.UNIFIclientAlias:="Hyperion" | fields _time, cef.name, cef.extension.msg`
 - Devices going offline: `{cef.device_product="UniFi Network", cef.device_event_class_id="512"}`
-- Admin activity: `cef.extension.UNIFIcategory:=Audit OR {cef.device_product="UniFi OS"}`
+- Admin activity: `cef.extension.UNIFIadmin:* OR cef.extension.UNIFIcategory:=Audit OR {cef.device_product="UniFi OS"}` (Network 10.x files admin events under `Audit`; 9.3 used `System` with `UNIFIsubCategory=Admin`)
 - Firewall rule hits: `{app_name="kernel"} DESCR`
 
 ### Baseline
@@ -89,7 +89,7 @@ The console's own system log for the 30 days to October 18, 2026 held 7,439 even
 
 | Alert | Fires when | Severity |
 | --- | --- | --- |
-| `UniFiWANFlapping` | Three or more Internet Down or temporary-disconnection events for one WAN within an hour. `UniFiWANNotActive` already pages a WAN down for 5 minutes; this catches shorter repeated drops. | warning |
+| `UniFiWANFlapping` | Three or more Internet Down, temporary-disconnection or failover events for one WAN within an hour. `UniFiWANNotActive` already pages a WAN down for 5 minutes; this catches shorter repeated drops. | warning |
 | `UniFiIntrusionDetectedOutbound` | An IDS detection, in the last 15 minutes, whose destination is outside private, CGNAT, link-local and multicast space. Lab-internal detections are queryable but do not page, because the baseline is dominated by operator traffic. | warning |
 | `UniFiHoneypotTriggered` | Any honeypot event in the last 15 minutes. | warning |
 | `UniFiSyslogSilent` | For an hour, VictoriaLogs' `vl_rows_ingested_total{type="syslog_udp"}` shows no syslog rows in the last two days, including when the listener has never received one. It is a MetricsQL rule on the backend's own counter, sized above the 29-hour baseline gap, so it also fires about an hour after rollout until the console export is enabled. | warning |
