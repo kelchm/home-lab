@@ -8,8 +8,19 @@ resources:
   - ./httproute.yaml
   - ./networkpolicy.yaml
   - ./alerts.yaml
+  - ./probe-alerts.yaml
 
 configMapGenerator:
+  # grafana.com 13659 revision 1; datasource, Pi HTTP scope and target identity.
+  - name: grafana-dashboard-stock-blackbox
+    files:
+      - stock-blackbox.json=./dashboards/stock-blackbox.json
+    options:
+      annotations:
+        grafana_folder: Services/Observability
+        kustomize.toolkit.fluxcd.io/substitute: disabled
+      labels:
+        grafana_dashboard: "1"
   # grafana.com 21394 revision 13; datasource provisioning.
   - name: grafana-dashboard-stock-vmauth
     files:

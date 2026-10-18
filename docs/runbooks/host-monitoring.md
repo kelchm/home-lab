@@ -141,3 +141,58 @@ To rotate, change the password in UniFi OS and 1Password, rerun the command and 
 Host rules are in [metrics-ingest](../../kubernetes/apps/observability/metrics-ingest/app/alerts.yaml) and Proxmox API rules beside the [exporter](../../kubernetes/apps/observability/pve-exporter/app/alerts.yaml). UniFi rules are beside [Unpoller](../../kubernetes/apps/observability/unpoller/app/alerts.yaml): stale UniFi data, a device the console counts as disconnected, a WAN that is not active (critical once it has been down for an hour; losing both WANs is caught by the Watchdog heartbeat instead), and a device uplink below its expected speed. That last rule lists each device's expected speed, with 1 Gb/s for any other device except the gateway, whose uplink is a WAN, so renaming a device or changing a link's speed means editing it. A host is covered from its first sample; there is no enrollment list to maintain. The NAS also has disk, RAID, hardware and UPS rules that read DSM's own status through SNMP; a disk DSM reports as not initialized, such as a new disk before it joins a pool, does not alert. They route like every other alert, described in the [alerting runbook](alerting.md).
 
 Backup failure and staleness rules for PVE are installed: PVE's notification webhook pushes one `pve_backup_completed_timestamp_seconds` sample per finished backup run through the node's vmagent, as `job="pve-backup"` with `cluster="pve-sbx"`, the one host-pushed series that carries a cluster label. Unlike the host rules, `PVEBackupStale` lists the nodes it expects, so adding or removing a PVE node means editing it. See [backup completion metrics](../../proxmox/monitoring/backup-metrics/README.md).
+
+## Service probes
+
+`ups-compute-rack` (`10.32.20.111`, VLAN 20) runs the stock nixpkgs blackbox exporter on `127.0.0.1:9115` through its host-level [rpi-nixos add-on](https://github.com/kelchm/rpi-nixos/blob/main/hosts/ups-compute-rack/probes.nix). Its vmagent scrapes nine destinations as `pi-blackbox` every 60 seconds, with a five-second probe timeout and ten-second scrape timeout. `pi-blackbox-exporter` scrapes the exporter's own metrics every 30 seconds. The other UPS Pi and the streamer run no probes. Modules use only blackbox's built-in HTTP, TCP, DNS and ICMP probers; HTTP status and DNS answer checks are ordinary exporter configuration, with no scripts or credentials.
+
+The targets come from the [address registry and LB pools](../architecture.md#lb-pool-allocation) and the live Traefik HTTPRoutes. Kanidm and Jellyfin use `gateway-services`; Grafana and Homepage use `gateway-admin`; Echo uses `gateway-public` behind the Cloudflare tunnel. Gateway TCP probes check the routed VIP listeners independently of DNS and application authentication.
+
+| Probe | Target | Module | Expected result | Interval |
+|---|---|---|---|---|
+| Admin gateway | `10.32.130.1:443` | `tcp_connect` | TCP connection accepted | 60s |
+| Services gateway | `10.32.140.1:443` | `tcp_connect` | TCP connection accepted | 60s |
+| Kanidm | `https://auth.home.kelch.io/ui/login` | `http_2xx` | Public login page, HTTP 200 with valid TLS | 60s |
+| Jellyfin | `https://jellyfin.home.kelch.io/web/` | `http_2xx` | Public web client, HTTP 200 with valid TLS | 60s |
+| Grafana | `https://grafana.home.kelch.io/` | `http_redirect` | HTTP 302 with `Location: /login`, valid TLS; do not follow | 60s |
+| Homepage | `https://home.kelch.io/` | `http_401` | HTTP 401 from the authentication middleware, valid TLS; do not follow | 60s |
+| Cloudflare tunnel | `https://echo.kelch.io/` | `http_2xx` | HTTP 200 through the public edge and tunnel, valid TLS | 60s |
+| k8s-gateway | `10.32.130.2:53` | `dns_k8s_gateway` | UDP lookup of `auth.home.kelch.io` A: `NOERROR` and `10.32.140.1` | 60s |
+| UniFi gateway | `10.32.1.1` | `icmp` | ICMP echo reply | 60s |
+
+`instance="ups-compute-rack"` and `platform="pi"` come from the ingestion token. `target` preserves the destination, `probe` names the check and `module` identifies its configuration. Do not relabel the destination into `instance`: VMAuth replaces that label. The stock [Blackbox Exporter (HTTP prober)](https://grafana.com/grafana/dashboards/13659-blackbox-exporter-http-prober/) dashboard is provisioned in **Services / Observability**, with VictoriaMetrics as its datasource and `target` as its destination key. It shows the five HTTP probes; use the queries below for all nine. HTTP 302 and 401 are expected for Grafana and Homepage; `probe_success`, not a blanket HTTP-200 check, determines health.
+
+These are unauthenticated reachability checks. Homepage verifies its authentication boundary, not the application behind it; the Grafana redirect does not verify a completed OAuth login. The public probe checks Cloudflare's edge certificate, while internal HTTPS probes check Traefik's certificate. VLAN 20 exercises the routed LB path, not VLAN 10's firewall policy. Firewall rules must allow this Pi to each target, including UDP 53 and ICMP, when restricting VLAN 20. The exporter has a 32 MiB Go soft limit, a 1 MB HTTP body limit, `MemoryHigh=48M` and `MemoryMax=64M`. Systemd enforces those ceilings only when `memory` appears in `/sys/fs/cgroup/cgroup.controllers`; the Pi host configuration enables that controller. Check `MemoryCurrent`, `MemoryMax` and the service cgroup’s `memory.events` after deployment rather than assuming the configured ceilings are active.
+
+### Verify and diagnose
+
+```sh
+ssh kelchm@10.32.20.111 'curl -fsSG http://127.0.0.1:9115/probe --data-urlencode module=http_401 --data-urlencode target=https://home.kelch.io/'
+ssh kelchm@10.32.20.111 'curl -fsS http://127.0.0.1:8429/targets'
+ssh kelchm@10.32.20.111 'sudo journalctl -u prometheus-blackbox-exporter -u vmagent --since "15 minutes ago"'
+```
+
+Add `--data-urlencode debug=true` to a manual `/probe` request for the probe log. Use the table's module and target to reproduce any check. Before and after switching this Pi's configuration, confirm `upsc compute-rack@localhost ups.status`, `systemctl show upsd upsmon -p MainPID -p ActiveState`, and the three existing `pi-node`, `pi-vmagent` and `pi-nut` scrape targets remain healthy.
+
+```promql
+probe_success{job="pi-blackbox",instance="ups-compute-rack"}
+up{job=~"pi-blackbox(-exporter)?",instance="ups-compute-rack"}
+time() - tlast_over_time(probe_success{job="pi-blackbox"}[1h])
+probe_duration_seconds{job="pi-blackbox"}
+(probe_ssl_earliest_cert_expiry{job="pi-blackbox"} - time()) / 86400
+```
+
+All nine success values and ten scrape `up` values should be 1, with probe samples roughly one minute apart. The [probe rules](../../kubernetes/apps/observability/metrics-ingest/app/probe-alerts.yaml) use the existing vmalert → VMAlertmanager → Pushover path:
+
+- `PiProbeFailed`: a failed probe or probe scrape for three minutes while the exporter scrape is up; critical priority.
+- `PiProbeSlow`: successful probes with a five-minute average duration above two seconds for ten minutes; warning priority.
+- `PiProbeCertificateExpiring`: a successful HTTPS probe sees less than 14 days of certificate validity for an hour; warning priority.
+- `HostCollectorDown`: the exporter scrape is down for ten minutes. `pi-blackbox` is excluded from this generic rule, and probe failures require a healthy exporter scrape, so an exporter outage does not also page for every destination. The NUT collector remains owned by its UPS rules.
+
+If the Pi stops sending metrics, `HostMetricsMissing` covers it. If the cluster or its alerting path fails, the [healthchecks.io Watchdog](alerting.md#independent-dead-man-heartbeat) covers that outage. There is no separate Pushover sender on the Pi.
+
+### Pushover drill
+
+Run after both probe PRs are merged and the rules are loaded. First confirm nine successful probes, a healthy exporter scrape and healthy NUT. In the rpi-nixos add-on, temporarily change only the `gateway-admin` target from `10.32.130.1:443` to `127.0.0.1:1` (confirm that port is closed), keeping its `probe` and `module` labels. Build and switch only `ups-compute-rack` using the repository's deployment command. This fails the check without disrupting the real gateway or another service.
+
+Wait for `probe_success{probe="gateway-admin"}` to become 0 and `PiProbeFailed{probe="gateway-admin"}` to fire after three minutes, plus one scrape/evaluation cycle and Alertmanager's grouping delay. Confirm one high-priority notification from **k8s-prod Alerts** reaches Pushover with the probe and Pi identified. Confirm `HostCollectorDown` does not fire and NUT stays healthy. Restore the original target and switch the Pi again; confirm nine successful probes, the alert resolves, and one quiet-priority resolved notification arrives. Check the [alert delivery counters](alerting.md) for Pushover errors and record the result in [#629](https://github.com/kelchm/home-lab/issues/629). Do not treat a successful rule evaluation alone as a completed drill.

@@ -23,7 +23,7 @@ spec:
               original timestamps once delivery resumes.
 
         - alert: HostCollectorDown
-          expr: up{job=~"(pve|spark|synology|pi)-(node|gpu|snmp|vmagent|deployer)"} == 0
+          expr: up{job=~"(pve|spark|synology|pi)-(node|gpu|snmp|vmagent|deployer|blackbox-exporter)"} == 0
           for: 10m
           labels:
             severity: warning

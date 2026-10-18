@@ -1,0 +1,215 @@
+{
+  "rule_files": [
+    "rules.yaml"
+  ],
+  "evaluation_interval": "1m",
+  "tests": [
+    {
+      "name": "Failed probe",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "up{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"grafana\",target=\"https://grafana.home.kelch.io/\",module=\"http_redirect\"}",
+          "values": "1+0x10"
+        },
+        {
+          "series": "up{job=\"pi-blackbox-exporter\",instance=\"ups-compute-rack\",platform=\"pi\"}",
+          "values": "1+0x10"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"grafana\",target=\"https://grafana.home.kelch.io/\",module=\"http_redirect\"}",
+          "values": "0+0x10"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "count(ALERTS{alertname=\"PiProbeFailed\",alertstate=\"firing\"})",
+          "eval_time": "2m",
+          "exp_samples": []
+        },
+        {
+          "expr": "count(ALERTS{alertname=\"PiProbeFailed\",alertstate=\"firing\"})",
+          "eval_time": "4m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Failed probe scrape",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "up{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"grafana\",target=\"https://grafana.home.kelch.io/\",module=\"http_redirect\"}",
+          "values": "0+0x10"
+        },
+        {
+          "series": "up{job=\"pi-blackbox-exporter\",instance=\"ups-compute-rack\",platform=\"pi\"}",
+          "values": "1+0x10"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "count(ALERTS{alertname=\"PiProbeFailed\",alertstate=\"firing\"})",
+          "eval_time": "2m",
+          "exp_samples": []
+        },
+        {
+          "expr": "count(ALERTS{alertname=\"PiProbeFailed\",alertstate=\"firing\"})",
+          "eval_time": "4m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Exporter down",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "up{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"grafana\",target=\"https://grafana.home.kelch.io/\",module=\"http_redirect\"}",
+          "values": "0+0x10"
+        },
+        {
+          "series": "up{job=\"pi-blackbox-exporter\",instance=\"ups-compute-rack\",platform=\"pi\"}",
+          "values": "0+0x10"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"grafana\",target=\"https://grafana.home.kelch.io/\",module=\"http_redirect\"}",
+          "values": "0+0x10"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "count(ALERTS{alertname=\"PiProbeFailed\",alertstate=\"firing\"})",
+          "eval_time": "2m",
+          "exp_samples": []
+        },
+        {
+          "expr": "count(ALERTS{alertname=\"PiProbeFailed\",alertstate=\"firing\"})",
+          "eval_time": "4m",
+          "exp_samples": []
+        }
+      ]
+    },
+    {
+      "name": "Successful slow HTTPS probe with expiring certificate",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "up{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"grafana\",target=\"https://grafana.home.kelch.io/\",module=\"http_redirect\"}",
+          "values": "1+0x70"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"grafana\",target=\"https://grafana.home.kelch.io/\",module=\"http_redirect\"}",
+          "values": "1+0x70"
+        },
+        {
+          "series": "probe_duration_seconds{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"grafana\",target=\"https://grafana.home.kelch.io/\",module=\"http_redirect\"}",
+          "values": "3+0x70"
+        },
+        {
+          "series": "probe_ssl_earliest_cert_expiry{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"grafana\",target=\"https://grafana.home.kelch.io/\",module=\"http_redirect\"}",
+          "values": "1123200+0x70"
+        },
+        {
+          "series": "up{job=\"pi-blackbox-exporter\",instance=\"ups-compute-rack\",platform=\"pi\"}",
+          "values": "1+0x70"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "count(ALERTS{alertname=\"PiProbeFailed\",alertstate=\"firing\"})",
+          "eval_time": "65m",
+          "exp_samples": []
+        },
+        {
+          "expr": "count(ALERTS{alertname=\"PiProbeSlow\",alertstate=\"firing\"})",
+          "eval_time": "9m",
+          "exp_samples": []
+        },
+        {
+          "expr": "count(ALERTS{alertname=\"PiProbeSlow\",alertstate=\"firing\"})",
+          "eval_time": "11m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "expr": "count(ALERTS{alertname=\"PiProbeCertificateExpiring\",alertstate=\"firing\"})",
+          "eval_time": "59m",
+          "exp_samples": []
+        },
+        {
+          "expr": "count(ALERTS{alertname=\"PiProbeCertificateExpiring\",alertstate=\"firing\"})",
+          "eval_time": "61m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Failed probes suppress slow and certificate warnings",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "up{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"grafana\",target=\"https://grafana.home.kelch.io/\",module=\"http_redirect\"}",
+          "values": "1+0x70"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"grafana\",target=\"https://grafana.home.kelch.io/\",module=\"http_redirect\"}",
+          "values": "0+0x70"
+        },
+        {
+          "series": "probe_duration_seconds{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"grafana\",target=\"https://grafana.home.kelch.io/\",module=\"http_redirect\"}",
+          "values": "5+0x70"
+        },
+        {
+          "series": "probe_ssl_earliest_cert_expiry{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"grafana\",target=\"https://grafana.home.kelch.io/\",module=\"http_redirect\"}",
+          "values": "1123200+0x70"
+        },
+        {
+          "series": "up{job=\"pi-blackbox-exporter\",instance=\"ups-compute-rack\",platform=\"pi\"}",
+          "values": "1+0x70"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "count(ALERTS{alertname=\"PiProbeFailed\",alertstate=\"firing\"})",
+          "eval_time": "65m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "expr": "count(ALERTS{alertname=\"PiProbeSlow\",alertstate=\"firing\"})",
+          "eval_time": "65m",
+          "exp_samples": []
+        },
+        {
+          "expr": "count(ALERTS{alertname=\"PiProbeCertificateExpiring\",alertstate=\"firing\"})",
+          "eval_time": "65m",
+          "exp_samples": []
+        }
+      ]
+    }
+  ]
+}
