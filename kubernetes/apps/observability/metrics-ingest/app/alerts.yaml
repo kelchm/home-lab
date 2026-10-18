@@ -23,7 +23,7 @@ spec:
               original timestamps once delivery resumes.
 
         - alert: HostCollectorDown
-          expr: up{job=~"(pve|spark|synology|pi)-(node|gpu|snmp|vmagent|deployer|blackbox-exporter)"} == 0
+          expr: up{job=~"(pve|spark|synology|pi)-(node|gpu|snmp|smartctl|vmagent|deployer|blackbox-exporter)"} == 0
           for: 10m
           labels:
             severity: warning
@@ -105,14 +105,6 @@ spec:
             severity: critical
           annotations:
             summary: "{{ $labels.raidName }} on {{ $labels.instance }} is {{ if eq $value 12.0 }}crashed{{ else }}degraded{{ end }}"
-
-        # 4 is a failed system partition, 5 a crashed disk; 3 is an empty bay or a new disk.
-        - alert: NasDiskFailing
-          expr: diskStatus{job="synology-snmp"} >= 4 or diskHealthStatus{job="synology-snmp"} >= 3
-          labels:
-            severity: critical
-          annotations:
-            summary: "{{ $labels.diskID }} on {{ $labels.instance }} is failing"
 
         - alert: NasDiskHealthWarning
           expr: diskHealthStatus{job="synology-snmp"} == 2

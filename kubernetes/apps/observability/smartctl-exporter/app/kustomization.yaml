@@ -4,6 +4,7 @@ kind: Kustomization
 resources:
   - ./helmrepository.yaml
   - ./helmrelease.yaml
+  - ./rules.yaml
 
 # Grafana dashboard 22381, published by prometheus-community for this exporter:
 # https://grafana.com/grafana/dashboards/22381-smartctl-exporter/
@@ -15,7 +16,7 @@ configMapGenerator:
       labels:
         grafana_dashboard: "1"
       annotations:
-        grafana_folder: Platforms/Kubernetes
+        grafana_folder: Platforms
 # Hash suffix disabled so dashboard edits update the ConfigMap in place; the
 # Grafana sidecar removes a dashboard file when a renamed predecessor is pruned.
 generatorOptions:

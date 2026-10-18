@@ -8,6 +8,11 @@ scrape_configs:
     scrape_interval: 5s
     static_configs:
       - targets: ["127.0.0.1:9835"]
+  - job_name: spark-smartctl
+    scrape_interval: 60s
+    scrape_timeout: 30s
+    static_configs:
+      - targets: ["127.0.0.1:9633"]
   - job_name: spark-vmagent
     static_configs:
       - targets: ["127.0.0.1:8429"]

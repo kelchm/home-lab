@@ -68,6 +68,8 @@ jobs:
               - 'scripts/ci/validate-longhorn-alerts.sh'
               - 'scripts/ci/validate-pi-probe-alerts.sh'
               - 'scripts/monitoring/pi-probe-alerts.test.yaml'
+              - 'scripts/ci/validate-drive-alerts.sh'
+              - 'scripts/monitoring/drive-alerts.test.yaml'
               - 'scripts/monitoring/longhorn-alerts.test.yaml'
               - 'scripts/ci/validate-wan-alerts.sh'
               - 'scripts/monitoring/wan-alerts.test.yaml'
@@ -271,6 +273,10 @@ jobs:
       - name: Validate Pi probe alerts
         if: needs.pre-job.outputs.kubernetes_changed == 'true'
         run: scripts/ci/validate-pi-probe-alerts.sh
+
+      - name: Validate shared drive health rules
+        if: needs.pre-job.outputs.kubernetes_changed == 'true'
+        run: scripts/ci/validate-drive-alerts.sh
 
       - name: Validate Longhorn backup alerts
         if: needs.pre-job.outputs.kubernetes_changed == 'true'

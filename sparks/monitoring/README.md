@@ -4,9 +4,9 @@ Host, GPU and inference metrics for the two DGX Sparks. Enrollment, verification
 
 | File | Purpose |
 |---|---|
-| [compose.yaml](compose.yaml) | node-exporter and vmagent. |
+| [compose.yaml](compose.yaml) | node-exporter, smartctl-exporter and vmagent. |
 | [gpu/compose.yaml](gpu/compose.yaml) | The NVIDIA GPU exporter, as its own project. |
-| [scrape.yaml](scrape.yaml) | Host, GPU, vmagent, deployer and inference scrape jobs. |
+| [scrape.yaml](scrape.yaml) | Host, SMART, GPU, vmagent, deployer and inference scrape jobs. |
 | [.doco-cd.yml](.doco-cd.yml) | The two deployments every Spark's doco-cd applies. |
 | [sparkdash/compose.yaml](sparkdash/compose.yaml) | The sparkDash dashboard, on `spark-1` only. |
 | [.doco-cd.spark-1.yml](.doco-cd.spark-1.yml) | sparkDash and doco-cd with `SPARK_HOST` set to `spark-1`. |
@@ -74,3 +74,9 @@ Bootstrap or migrate `spark-1` using the [shared definition with `SPARK_HOST=spa
 | Scrape status | Fresh successful metrics retrieval. It does not prove end-to-end inference readiness or detect a stalled generation. |
 
 Idle counters produce zero throughput while fresh. Missing families, failed scrapes and stale collection remain absent. Rates handle ordinary counter resets; do not compare raw totals across restarts. One-second sampling does not provide per-token timing.
+
+## Drive health
+
+Each host has one NVMe controller at `/dev/nvme0`: Samsung MZALC4T0HBL1-00B07 4 TB on the Sparks. The stock v0.15.0 smartctl-exporter is scraped on loopback every minute. It maps only that controller, runs as root with `CAP_SYS_ADMIN`, and retains Docker's default AppArmor profile, dropped remaining capabilities, read-only filesystem and a 128 MiB memory limit. It is not privileged, but NVMe admin authority can still modify or erase the mapped drive if compromised; the device `r` mapping does not restrict ioctls to harmless commands. Adding a drive requires updating the explicit device list.
+
+The existing **Hosts / Drive health** dashboard and shared rules use `instance`, `platform` and `device`. See the runbook for [permissions, the exporter cache limitation, and post-merge runtime verification](../../docs/runbooks/host-monitoring.md#drive-health). Runtime collection on these hosts remains to be verified after deployment.
