@@ -82,7 +82,7 @@ spec:
           annotations:
             summary: "{{ $labels.instance }} discarded queued metrics"
             description: >-
-              The on-disk queue reached its limit while the ingestion endpoint was
+              The 1 GiB on-disk queue filled while the ingestion endpoint was
               unreachable, so the oldest samples were dropped.
 
         - alert: HostDeployFailing

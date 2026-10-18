@@ -75,7 +75,7 @@ Rotate the token as for any host, writing `/volume1/docker/monitoring/token`. To
 
 ## Pi
 
-A NixOS Pi enrolls through the opt-in metrics profile in [rpi-nixos](https://github.com/kelchm/rpi-nixos), which runs the stock node-exporter and vmagent services on loopback with jobs `pi-node` and `pi-vmagent`. There is no deployer: a Pi changes when its NixOS configuration is switched. Its queue limit is 512 MiB, the smallest the pinned vmagent supports.
+A NixOS Pi enrolls through the opt-in metrics profile in [rpi-nixos](https://github.com/kelchm/rpi-nixos), which runs the stock node-exporter and vmagent services on loopback with jobs `pi-node` and `pi-vmagent`. There is no deployer: a Pi changes when its NixOS configuration is switched.
 
 The token lives in the host's rpi-nixos SOPS payload as `metrics-ingest-token`, and the same value sits here under the host's key, such as `STREAMER_BASEMENT_WORKBENCH_TOKEN`. Copy it from rpi-nixos rather than generating one here, and rotate both together:
 
