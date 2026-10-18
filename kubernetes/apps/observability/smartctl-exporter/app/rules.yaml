@@ -1,0 +1,117 @@
+---
+# Drive rules span cluster and host-pushed series; do not add a cluster filter.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: drive-health
+spec:
+  groups:
+    - name: drive-health
+      rules:
+        # 0 failed, 1 healthy, 2 DSM warning. diskStatus=3 means uninitialized.
+        - record: drive:health_status
+          expr: |
+            min by (instance, platform, device) (
+              smartctl_device_smart_status{platform=~"k8s|pve|spark"}
+              or label_replace(
+                ((diskHealthStatus{job="synology-snmp"} >= 3) * 0)
+                or ((diskStatus{job="synology-snmp"} >= 4) * 0)
+                or (diskHealthStatus{job="synology-snmp"} == 2)
+                or (diskHealthStatus{job="synology-snmp"} == 1)
+                * on (instance, platform, diskID) (diskStatus{job="synology-snmp"} < bool 4),
+                "device", "$1", "diskID", "(.+)"
+              )
+            )
+        - record: drive:temperature_celsius
+          expr: |
+            max by (instance, platform, device) (
+              smartctl_device_temperature{platform=~"k8s|pve|spark", temperature_type="current"}
+              or label_replace(diskTemperature{job="synology-snmp"}, "device", "$1", "diskID", "(.+)")
+            )
+        - record: drive:info
+          expr: |
+            smartctl_device{platform=~"k8s|pve|spark"}
+            or label_replace(
+              label_replace(diskModel{job="synology-snmp"}, "model_name", "$1", "diskModel", "(.+)"),
+              "device", "$1", "diskID", "(.+)"
+            )
+        - record: drive:ata_reallocated_sectors
+          expr: |
+            max by (instance, platform, device) (
+              label_replace(
+                (diskSMARTAttrRaw{job="synology-snmp"}
+                  and on (instance, platform, diskSMARTInfoIndex) (diskSMARTAttrId{job="synology-snmp"} == 5))
+                * on (instance, platform, diskSMARTInfoIndex) group_left (diskSMARTInfoDevName)
+                  diskSMARTInfoDevName{job="synology-snmp"},
+                "device", "Disk $1", "diskSMARTInfoDevName", "/dev/sata([0-9]+)"
+              )
+            )
+        - record: drive:ata_pending_sectors
+          expr: |
+            max by (instance, platform, device) (
+              label_replace(
+                (diskSMARTAttrRaw{job="synology-snmp"}
+                  and on (instance, platform, diskSMARTInfoIndex) (diskSMARTAttrId{job="synology-snmp"} == 197))
+                * on (instance, platform, diskSMARTInfoIndex) group_left (diskSMARTInfoDevName)
+                  diskSMARTInfoDevName{job="synology-snmp"},
+                "device", "Disk $1", "diskSMARTInfoDevName", "/dev/sata([0-9]+)"
+              )
+            )
+        - record: drive:ata_uncorrectable_sectors
+          expr: |
+            max by (instance, platform, device) (
+              label_replace(
+                (diskSMARTAttrRaw{job="synology-snmp"}
+                  and on (instance, platform, diskSMARTInfoIndex) (diskSMARTAttrId{job="synology-snmp"} == 198))
+                * on (instance, platform, diskSMARTInfoIndex) group_left (diskSMARTInfoDevName)
+                  diskSMARTInfoDevName{job="synology-snmp"},
+                "device", "Disk $1", "diskSMARTInfoDevName", "/dev/sata([0-9]+)"
+              )
+            )
+        - record: drive:health_missing
+          expr: |
+            max by (instance, platform, device) (
+              (node_nvme_info{platform=~"k8s|pve|spark"} unless on (instance, platform, device) drive:health_status)
+              or (max_over_time(drive:health_status[7d]) unless on (instance, platform, device) drive:health_status)
+              or (label_replace({__name__=~"diskStatus|diskHealthStatus|diskModel", job="synology-snmp"}, "device", "$1", "diskID", "(.+)")
+                unless on (instance, platform, device) drive:health_status)
+            ) * 0 + 1
+        - alert: DriveHealthMissing
+          expr: drive:health_missing == 1
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: Drive health is missing for {{ $labels.device }} on {{ $labels.instance }}
+            description: Check the collector and device access. Removed disks remain expected for seven days.
+        - alert: DriveNvmeControllerNotLive
+          expr: node_nvme_info{platform=~"k8s|pve|spark", state!="live"} == 1
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: NVMe {{ $labels.device }} on {{ $labels.instance }} is {{ $labels.state }}
+        - alert: DriveAtaReallocatedSectors
+          expr: drive:ata_reallocated_sectors > 0
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: Drive {{ $labels.device }} on {{ $labels.instance }} has reallocated sectors
+            description: "The drive reports {{ $value }} reallocated sectors. Check its trend and DSM extended test results."
+        - alert: DriveAtaPendingSectors
+          expr: drive:ata_pending_sectors > 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: Drive {{ $labels.device }} on {{ $labels.instance }} has pending sectors
+            description: "The drive reports {{ $value }} unstable sectors awaiting reallocation."
+        - alert: DriveAtaUncorrectableSectors
+          expr: drive:ata_uncorrectable_sectors > 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: Drive {{ $labels.device }} on {{ $labels.instance }} has uncorrectable sectors
+            description: "The drive reports {{ $value }} offline uncorrectable sectors."

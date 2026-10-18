@@ -66,7 +66,7 @@
       }
     ]
   },
-  "description": "Drive health for the Kubernetes nodes. The 30-day window shows slow changes in wear, errors and temperature.",
+  "description": "Drive health across Kubernetes, PVE, Sparks and Synology. SMART and DSM health/temperature share labels; protocol-specific panels show only supported metrics. A successful scrape does not guarantee fresh SMART reads: smartctl_exporter can retain cached readings after device errors.",
   "editable": false,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -82,7 +82,7 @@
       },
       "id": 7,
       "panels": [],
-      "title": "SMART General",
+      "title": "Drive health",
       "type": "row"
     },
     {
@@ -149,7 +149,8 @@
               }
             ]
           },
-          "unit": "celsius"
+          "unit": "celsius",
+          "noValue": "Unavailable"
         },
         "overrides": []
       },
@@ -181,11 +182,11 @@
           },
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "max by (node, device) (smartctl_device_temperature{node=~\"$node\",temperature_type=\"current\"})",
+          "expr": "drive:temperature_celsius{platform=~\"$platform\",instance=~\"$instance\"}",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": false,
-          "legendFormat": "{{node}} / {{device}}",
+          "legendFormat": "{{instance}} / {{device}}",
           "range": true,
           "refId": "A",
           "useBackend": false
@@ -225,7 +226,8 @@
                 "value": 80
               }
             ]
-          }
+          },
+          "noValue": "Unavailable"
         },
         "overrides": []
       },
@@ -258,9 +260,9 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "smartctl_device{node=~\"$node\"}",
+          "expr": "drive:info{platform=~\"$platform\",instance=~\"$instance\"}",
           "instant": true,
-          "legendFormat": "{{node}} / {{device}}",
+          "legendFormat": "{{instance}} / {{device}}",
           "range": false,
           "refId": "A"
         }
@@ -281,7 +283,8 @@
             "byVariable": false,
             "include": {
               "names": [
-                "node",
+                "platform",
+                "instance",
                 "device",
                 "firmware_version",
                 "model_name",
@@ -298,7 +301,7 @@
             "sort": [
               {
                 "desc": false,
-                "field": "node"
+                "field": "instance"
               }
             ]
           }
@@ -370,7 +373,8 @@
               }
             ]
           },
-          "unit": "celsius"
+          "unit": "celsius",
+          "noValue": "Unavailable"
         },
         "overrides": []
       },
@@ -402,17 +406,17 @@
           },
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "avg by (device_type) (\n    label_replace(smartctl_device_temperature{node=~\"$node\",temperature_type=\"current\",device=~\"nvme.+\"}, \"device_type\", \"nvme\", \"\", \"\")\n    or\n    label_replace(smartctl_device_temperature{node=~\"$node\",temperature_type=\"current\",device=~\"sd.+\"}, \"device_type\", \"sata\", \"\", \"\")\n)",
+          "expr": "avg by (platform) (drive:temperature_celsius{platform=~\"$platform\",instance=~\"$instance\"})",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": false,
-          "legendFormat": "{{device_type}}",
+          "legendFormat": "{{platform}}",
           "range": true,
           "refId": "A",
           "useBackend": false
         }
       ],
-      "title": "Average temperature by drive type",
+      "title": "Average temperature by platform",
       "type": "timeseries"
     },
     {
@@ -457,7 +461,8 @@
               }
             ]
           },
-          "unit": "s"
+          "unit": "s",
+          "noValue": "Unavailable"
         },
         "overrides": []
       },
@@ -499,13 +504,13 @@
           "disableTextWrap": false,
           "editorMode": "code",
           "exemplar": false,
-          "expr": "max by (node, device) (smartctl_device_power_on_seconds{node=~\"$node\"})",
+          "expr": "max by (platform, instance, device) (smartctl_device_power_on_seconds{platform=~\"$platform\",instance=~\"$instance\"})",
           "format": "time_series",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": true,
           "interval": "",
-          "legendFormat": "{{node}} / {{device}}",
+          "legendFormat": "{{instance}} / {{device}}",
           "range": false,
           "refId": "A",
           "useBackend": false
@@ -530,7 +535,8 @@
           }
         }
       ],
-      "type": "barchart"
+      "type": "barchart",
+      "description": "smartctl_exporter detail; unavailable for DSM/SNMP drives."
     },
     {
       "datasource": {
@@ -566,7 +572,8 @@
               }
             ]
           },
-          "unit": "none"
+          "unit": "none",
+          "noValue": "Unavailable"
         },
         "overrides": []
       },
@@ -605,18 +612,19 @@
           "disableTextWrap": false,
           "editorMode": "code",
           "exemplar": false,
-          "expr": "max by (node, device) (smartctl_device_media_errors{node=~\"$node\"})",
+          "expr": "max by (platform, instance, device) (smartctl_device_media_errors{platform=~\"$platform\",instance=~\"$instance\"})",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": true,
-          "legendFormat": "{{node}} / {{device}}",
+          "legendFormat": "{{instance}} / {{device}}",
           "range": false,
           "refId": "A",
           "useBackend": false
         }
       ],
       "title": "Device Media Error",
-      "type": "stat"
+      "type": "stat",
+      "description": "smartctl_exporter detail; unavailable for DSM/SNMP drives."
     },
     {
       "datasource": {
@@ -660,7 +668,8 @@
               }
             ]
           },
-          "unit": "short"
+          "unit": "short",
+          "noValue": "Unavailable"
         },
         "overrides": []
       },
@@ -702,11 +711,11 @@
           "disableTextWrap": false,
           "editorMode": "code",
           "exemplar": false,
-          "expr": "max by (node, device) (smartctl_device_power_cycle_count{node=~\"$node\"})",
+          "expr": "max by (platform, instance, device) (smartctl_device_power_cycle_count{platform=~\"$platform\",instance=~\"$instance\"})",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": true,
-          "legendFormat": "{{node}} / {{device}}",
+          "legendFormat": "{{instance}} / {{device}}",
           "range": false,
           "refId": "A",
           "useBackend": false
@@ -730,7 +739,8 @@
           }
         }
       ],
-      "type": "barchart"
+      "type": "barchart",
+      "description": "smartctl_exporter detail; unavailable for DSM/SNMP drives."
     },
     {
       "datasource": {
@@ -745,7 +755,7 @@
           "mappings": [],
           "max": 100,
           "min": 0,
-          "noValue": "No data",
+          "noValue": "Unavailable",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -799,18 +809,19 @@
           "disableTextWrap": false,
           "editorMode": "code",
           "exemplar": false,
-          "expr": "max by (node, device) (smartctl_device_num_err_log_entries{node=~\"$node\"})",
+          "expr": "max by (platform, instance, device) (smartctl_device_num_err_log_entries{platform=~\"$platform\",instance=~\"$instance\"})",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": true,
-          "legendFormat": "{{node}} / {{device}}",
+          "legendFormat": "{{instance}} / {{device}}",
           "range": false,
           "refId": "A",
           "useBackend": false
         }
       ],
       "title": "Error Log Count",
-      "type": "gauge"
+      "type": "gauge",
+      "description": "smartctl_exporter detail; unavailable for DSM/SNMP drives."
     },
     {
       "datasource": {
@@ -860,7 +871,8 @@
               }
             ]
           },
-          "unit": "none"
+          "unit": "none",
+          "noValue": "Unavailable"
         },
         "overrides": []
       },
@@ -899,7 +911,7 @@
           "disableTextWrap": false,
           "editorMode": "code",
           "exemplar": false,
-          "expr": "count(smartctl_device_smart_status{node=~\"$node\"} != 1) or (0 * count(smartctl_device_smart_status{node=~\"$node\"}))",
+          "expr": "count(drive:health_status{platform=~\"$platform\",instance=~\"$instance\"} != 1) or (0 * count(drive:health_status{platform=~\"$platform\",instance=~\"$instance\"}))",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": true,
@@ -908,7 +920,7 @@
           "useBackend": false
         }
       ],
-      "title": "Drives failing SMART",
+      "title": "Drives with unhealthy status",
       "type": "stat"
     },
     {
@@ -916,7 +928,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "Nodes with no smartctl-exporter data. Their drives are missing from every count on this dashboard.",
+      "description": "Drives without current SMART/DSM health data. Check the collector and device access; removed drives remain expected for seven days.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -949,7 +961,8 @@
               }
             ]
           },
-          "unit": "none"
+          "unit": "none",
+          "noValue": "Unavailable"
         },
         "overrides": []
       },
@@ -987,13 +1000,13 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "count(kube_node_info{node=~\"$node\"} unless on (node) smartctl_version) or vector(0)",
+          "expr": "count(drive:health_missing{platform=~\"$platform\",instance=~\"$instance\"}) or (0 * count(node_uname_info{platform=~\"$platform\",instance=~\"$instance\"}))",
           "instant": true,
           "range": false,
           "refId": "A"
         }
       ],
-      "title": "Nodes not reporting SMART",
+      "title": "Drives missing health",
       "type": "stat"
     },
     {
@@ -1020,19 +1033,24 @@
           "decimals": 0,
           "mappings": [
             {
+              "type": "value",
               "options": {
                 "0": {
-                  "color": "dark-red",
-                  "index": 1,
-                  "text": "Bad"
+                  "color": "red",
+                  "text": "Failed",
+                  "index": 0
                 },
                 "1": {
-                  "color": "dark-green",
-                  "index": 0,
-                  "text": "Good"
+                  "color": "green",
+                  "text": "Healthy",
+                  "index": 1
+                },
+                "2": {
+                  "color": "yellow",
+                  "text": "Warning",
+                  "index": 2
                 }
-              },
-              "type": "value"
+              }
             }
           ],
           "max": 1,
@@ -1050,7 +1068,8 @@
               }
             ]
           },
-          "unit": "bool"
+          "unit": "bool",
+          "noValue": "Unavailable"
         },
         "overrides": []
       },
@@ -1086,18 +1105,19 @@
           "disableTextWrap": false,
           "editorMode": "code",
           "exemplar": false,
-          "expr": "min by (node, device) (smartctl_device_smart_status{node=~\"$node\"})",
+          "expr": "min by (platform, instance, device) (drive:health_status{platform=~\"$platform\",instance=~\"$instance\"})",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": false,
-          "legendFormat": "{{node}} / {{device}}",
+          "legendFormat": "{{instance}} / {{device}}",
           "range": true,
           "refId": "A",
           "useBackend": false
         }
       ],
-      "title": "SMART Status",
-      "type": "state-timeline"
+      "title": "Drive health history",
+      "type": "state-timeline",
+      "description": "0 = failed SMART or DSM failure; 1 = healthy; 2 = DSM warning. Missing data is unknown. Exporter-cached values may outlive a failed device read."
     },
     {
       "datasource": {
@@ -1112,19 +1132,24 @@
           "decimals": 0,
           "mappings": [
             {
+              "type": "value",
               "options": {
                 "0": {
-                  "color": "dark-red",
-                  "index": 1,
-                  "text": "ERROR"
+                  "color": "red",
+                  "text": "Failed",
+                  "index": 0
                 },
                 "1": {
-                  "color": "dark-green",
-                  "index": 0,
-                  "text": "OK"
+                  "color": "green",
+                  "text": "Healthy",
+                  "index": 1
+                },
+                "2": {
+                  "color": "yellow",
+                  "text": "Warning",
+                  "index": 2
                 }
-              },
-              "type": "value"
+              }
             }
           ],
           "max": 1,
@@ -1142,7 +1167,8 @@
               }
             ]
           },
-          "unit": "bool"
+          "unit": "bool",
+          "noValue": "Unavailable"
         },
         "overrides": []
       },
@@ -1181,18 +1207,19 @@
           "disableTextWrap": false,
           "editorMode": "code",
           "exemplar": false,
-          "expr": "min by (node, device) (smartctl_device_smart_status{node=~\"$node\"})",
+          "expr": "min by (platform, instance, device) (drive:health_status{platform=~\"$platform\",instance=~\"$instance\"})",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": true,
-          "legendFormat": "{{node}} / {{device}}",
+          "legendFormat": "{{instance}} / {{device}}",
           "range": false,
           "refId": "A",
           "useBackend": false
         }
       ],
-      "title": "SMART Current Status",
-      "type": "stat"
+      "title": "Drive health status",
+      "type": "stat",
+      "description": "0 = failed SMART or DSM failure; 1 = healthy; 2 = DSM warning. Missing data is unknown. Exporter-cached values may outlive a failed device read."
     },
     {
       "datasource": {
@@ -1240,7 +1267,8 @@
                 "value": 1
               }
             ]
-          }
+          },
+          "noValue": "Unavailable"
         },
         "overrides": []
       },
@@ -1278,7 +1306,7 @@
           "disableTextWrap": false,
           "editorMode": "code",
           "exemplar": false,
-          "expr": "count(smartctl_device_critical_warning{node=~\"$node\"} != 0) or (0 * count(smartctl_device_critical_warning{node=~\"$node\"}))",
+          "expr": "count(smartctl_device_critical_warning{platform=~\"$platform\",instance=~\"$instance\"} != 0) or (0 * count(smartctl_device_critical_warning{platform=~\"$platform\",instance=~\"$instance\"}))",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": true,
@@ -1288,7 +1316,8 @@
         }
       ],
       "title": "Drives with a critical warning",
-      "type": "stat"
+      "type": "stat",
+      "description": "smartctl_exporter detail; unavailable for DSM/SNMP drives."
     },
     {
       "datasource": {
@@ -1347,7 +1376,8 @@
                 "value": 1
               }
             ]
-          }
+          },
+          "noValue": "Unavailable"
         },
         "overrides": []
       },
@@ -1383,18 +1413,19 @@
           "disableTextWrap": false,
           "editorMode": "code",
           "exemplar": false,
-          "expr": "max by (node, device) (smartctl_device_critical_warning{node=~\"$node\"})",
+          "expr": "max by (platform, instance, device) (smartctl_device_critical_warning{platform=~\"$platform\",instance=~\"$instance\"})",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": false,
-          "legendFormat": "{{node}} / {{device}}",
+          "legendFormat": "{{instance}} / {{device}}",
           "range": true,
           "refId": "A",
           "useBackend": false
         }
       ],
       "title": "Device Critical Warning",
-      "type": "state-timeline"
+      "type": "state-timeline",
+      "description": "smartctl_exporter detail; unavailable for DSM/SNMP drives."
     },
     {
       "datasource": {
@@ -1437,7 +1468,8 @@
                 "color": "green"
               }
             ]
-          }
+          },
+          "noValue": "Unavailable"
         },
         "overrides": []
       },
@@ -1475,18 +1507,19 @@
           "disableTextWrap": false,
           "editorMode": "code",
           "exemplar": false,
-          "expr": "max by (node, device) (smartctl_device_critical_warning{node=~\"$node\"})",
+          "expr": "max by (platform, instance, device) (smartctl_device_critical_warning{platform=~\"$platform\",instance=~\"$instance\"})",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": true,
-          "legendFormat": "{{node}} / {{device}}",
+          "legendFormat": "{{instance}} / {{device}}",
           "range": false,
           "refId": "A",
           "useBackend": false
         }
       ],
       "title": "Device Critical Warning",
-      "type": "stat"
+      "type": "stat",
+      "description": "smartctl_exporter detail; unavailable for DSM/SNMP drives."
     },
     {
       "collapsed": true,
@@ -1554,7 +1587,8 @@
                   }
                 ]
               },
-              "unit": "bytes"
+              "unit": "bytes",
+              "noValue": "Unavailable"
             },
             "overrides": [
               {
@@ -1611,11 +1645,11 @@
               },
               "disableTextWrap": false,
               "editorMode": "code",
-              "expr": "max by (node, device) (smartctl_device_bytes_read{node=~\"$node\",device=~\"nvme.*\"})",
+              "expr": "max by (platform, instance, device) (smartctl_device_bytes_read{platform=~\"$platform\",instance=~\"$instance\",device=~\"nvme.*\"})",
               "fullMetaSearch": false,
               "includeNullMetadata": true,
               "instant": false,
-              "legendFormat": "{{node}} / {{device}}",
+              "legendFormat": "{{instance}} / {{device}}",
               "range": true,
               "refId": "A",
               "useBackend": false
@@ -1680,7 +1714,8 @@
                   }
                 ]
               },
-              "unit": "bytes"
+              "unit": "bytes",
+              "noValue": "Unavailable"
             },
             "overrides": []
           },
@@ -1712,11 +1747,11 @@
               },
               "disableTextWrap": false,
               "editorMode": "code",
-              "expr": "max by (node, device) (smartctl_device_bytes_written{node=~\"$node\",device=~\"nvme.*\"})",
+              "expr": "max by (platform, instance, device) (smartctl_device_bytes_written{platform=~\"$platform\",instance=~\"$instance\",device=~\"nvme.*\"})",
               "fullMetaSearch": false,
               "includeNullMetadata": true,
               "instant": false,
-              "legendFormat": "{{node}} / {{device}}",
+              "legendFormat": "{{instance}} / {{device}}",
               "range": true,
               "refId": "A",
               "useBackend": false
@@ -1754,7 +1789,8 @@
                   }
                 ]
               },
-              "unit": "percent"
+              "unit": "percent",
+              "noValue": "Unavailable"
             },
             "overrides": []
           },
@@ -1790,11 +1826,11 @@
               "disableTextWrap": false,
               "editorMode": "code",
               "exemplar": false,
-              "expr": "min by (node, device) (smartctl_device_available_spare{node=~\"$node\",device=~\"nvme.+\"})",
+              "expr": "min by (platform, instance, device) (smartctl_device_available_spare{platform=~\"$platform\",instance=~\"$instance\",device=~\"nvme.+\"})",
               "fullMetaSearch": false,
               "includeNullMetadata": true,
               "instant": true,
-              "legendFormat": "{{node}} / {{device}}",
+              "legendFormat": "{{instance}} / {{device}}",
               "range": false,
               "refId": "A",
               "useBackend": false
@@ -1824,7 +1860,8 @@
                   }
                 ]
               },
-              "unit": "percent"
+              "unit": "percent",
+              "noValue": "Unavailable"
             },
             "overrides": []
           },
@@ -1860,98 +1897,99 @@
               "disableTextWrap": false,
               "editorMode": "code",
               "exemplar": false,
-              "expr": "min by (node, device) (smartctl_device_available_spare_threshold{node=~\"$node\",device=~\"nvme.+\"})",
+              "expr": "min by (platform, instance, device) (smartctl_device_available_spare_threshold{platform=~\"$platform\",instance=~\"$instance\",device=~\"nvme.+\"})",
               "fullMetaSearch": false,
               "includeNullMetadata": true,
               "instant": true,
-              "legendFormat": "{{node}} / {{device}}",
+              "legendFormat": "{{instance}} / {{device}}",
               "range": false,
               "refId": "A",
               "useBackend": false
             }
           ],
-      "title": "Available Spare Threshold",
-      "type": "gauge"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "max": 100,
-          "min": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "orange",
-                "value": 80
-              },
-              {
-                "color": "red",
-                "value": 100
-              }
-            ]
-          },
-          "unit": "percent"
+          "title": "Available Spare Threshold",
+          "type": "gauge"
         },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 58
-      },
-      "id": 30,
-      "options": {
-        "minVizHeight": 200,
-        "minVizWidth": 200,
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showThresholdLabels": false,
-        "showThresholdMarkers": true,
-        "sizing": "auto"
-      },
-      "pluginVersion": "11.3.0",
-      "targets": [
         {
           "datasource": {
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "disableTextWrap": false,
-          "editorMode": "code",
-          "exemplar": false,
-          "expr": "max by (node, device) (smartctl_device_percentage_used{node=~\"$node\",device=~\"nvme.+\"})",
-          "fullMetaSearch": false,
-          "includeNullMetadata": true,
-          "instant": true,
-          "legendFormat": "{{node}} / {{device}}",
-          "range": false,
-          "refId": "A",
-          "useBackend": false
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "max": 100,
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green"
+                  },
+                  {
+                    "color": "orange",
+                    "value": 80
+                  },
+                  {
+                    "color": "red",
+                    "value": 100
+                  }
+                ]
+              },
+              "unit": "percent",
+              "noValue": "Unavailable"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 24,
+            "x": 0,
+            "y": 58
+          },
+          "id": 30,
+          "options": {
+            "minVizHeight": 200,
+            "minVizWidth": 200,
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "showThresholdLabels": false,
+            "showThresholdMarkers": true,
+            "sizing": "auto"
+          },
+          "pluginVersion": "11.3.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "disableTextWrap": false,
+              "editorMode": "code",
+              "exemplar": false,
+              "expr": "max by (platform, instance, device) (smartctl_device_percentage_used{platform=~\"$platform\",instance=~\"$instance\",device=~\"nvme.+\"})",
+              "fullMetaSearch": false,
+              "includeNullMetadata": true,
+              "instant": true,
+              "legendFormat": "{{instance}} / {{device}}",
+              "range": false,
+              "refId": "A",
+              "useBackend": false
+            }
+          ],
+          "title": "NVMe Endurance Used",
+          "type": "gauge"
         }
       ],
-      "title": "NVMe Endurance Used",
-      "type": "gauge"
-    }
-  ],
       "title": "NVMe Info",
       "type": "row"
     },
@@ -2020,15 +2058,17 @@
                     "value": 80
                   }
                 ]
-              }
+              },
+              "unit": "short",
+              "noValue": "Unavailable"
             },
             "overrides": []
           },
           "gridPos": {
             "h": 8,
-            "w": 12,
+            "w": 8,
             "x": 0,
-            "y": 59
+            "y": 43
           },
           "id": 17,
           "options": {
@@ -2051,15 +2091,16 @@
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "sum by (node, device) (rate(smartctl_read_errors_corrected_by_eccdelayed{node=~\"$node\"}[$__rate_interval]))",
+              "expr": "drive:ata_reallocated_sectors{platform=~\"$platform\",instance=~\"$instance\"}",
               "instant": false,
-              "legendFormat": "{{node}} / {{device}}",
+              "legendFormat": "{{instance}} / {{device}}",
               "range": true,
               "refId": "A"
             }
           ],
-          "title": "Read Errors Corrected by ECC Delayed",
-          "type": "timeseries"
+          "title": "Reallocated sectors",
+          "type": "timeseries",
+          "description": "DSM SMART raw attribute, joined by attribute ID and disk. All installed disks are included, including uninitialized disks."
         },
         {
           "datasource": {
@@ -2116,15 +2157,17 @@
                     "value": 80
                   }
                 ]
-              }
+              },
+              "unit": "short",
+              "noValue": "Unavailable"
             },
             "overrides": []
           },
           "gridPos": {
             "h": 8,
-            "w": 12,
-            "x": 12,
-            "y": 59
+            "w": 8,
+            "x": 8,
+            "y": 43
           },
           "id": 23,
           "options": {
@@ -2147,15 +2190,16 @@
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "sum by (node, device) (rate(smartctl_write_errors_corrected_by_eccdelayed{node=~\"$node\"}[$__rate_interval]))",
+              "expr": "drive:ata_pending_sectors{platform=~\"$platform\",instance=~\"$instance\"}",
               "instant": false,
-              "legendFormat": "{{node}} / {{device}}",
+              "legendFormat": "{{instance}} / {{device}}",
               "range": true,
               "refId": "A"
             }
           ],
-          "title": "Write Errors Corrected by ECC Delayed",
-          "type": "timeseries"
+          "title": "Pending sectors",
+          "type": "timeseries",
+          "description": "DSM SMART raw attribute, joined by attribute ID and disk. All installed disks are included, including uninitialized disks."
         },
         {
           "datasource": {
@@ -2212,15 +2256,17 @@
                     "value": 80
                   }
                 ]
-              }
+              },
+              "unit": "short",
+              "noValue": "Unavailable"
             },
             "overrides": []
           },
           "gridPos": {
             "h": 8,
-            "w": 12,
-            "x": 0,
-            "y": 67
+            "w": 8,
+            "x": 16,
+            "y": 43
           },
           "id": 18,
           "options": {
@@ -2243,588 +2289,19 @@
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "sum by (node, device) (rate(smartctl_read_errors_corrected_by_eccfast{node=~\"$node\"}[$__rate_interval]))",
+              "expr": "drive:ata_uncorrectable_sectors{platform=~\"$platform\",instance=~\"$instance\"}",
               "instant": false,
-              "legendFormat": "{{node}} / {{device}}",
+              "legendFormat": "{{instance}} / {{device}}",
               "range": true,
               "refId": "A"
             }
           ],
-          "title": "Read Errors Corrected by ECC Fast",
-          "type": "timeseries"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "custom": {
-                "axisBorderShow": false,
-                "axisCenteredZero": false,
-                "axisColorMode": "text",
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "barWidthFactor": 0.6,
-                "drawStyle": "line",
-                "fillOpacity": 0,
-                "gradientMode": "none",
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                },
-                "insertNulls": false,
-                "lineInterpolation": "linear",
-                "lineWidth": 1,
-                "pointSize": 5,
-                "scaleDistribution": {
-                  "type": "linear"
-                },
-                "showPoints": "auto",
-                "spanNulls": false,
-                "stacking": {
-                  "group": "A",
-                  "mode": "none"
-                },
-                "thresholdsStyle": {
-                  "mode": "off"
-                }
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green"
-                  },
-                  {
-                    "color": "red",
-                    "value": 80
-                  }
-                ]
-              }
-            },
-            "overrides": []
-          },
-          "gridPos": {
-            "h": 8,
-            "w": 12,
-            "x": 12,
-            "y": 67
-          },
-          "id": 24,
-          "options": {
-            "legend": {
-              "calcs": [],
-              "displayMode": "list",
-              "placement": "bottom",
-              "showLegend": true
-            },
-            "tooltip": {
-              "mode": "single",
-              "sort": "none"
-            }
-          },
-          "pluginVersion": "11.3.0",
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
-              "expr": "sum by (node, device) (rate(smartctl_write_errors_corrected_by_eccfast{node=~\"$node\"}[$__rate_interval]))",
-              "instant": false,
-              "legendFormat": "{{node}} / {{device}}",
-              "range": true,
-              "refId": "A"
-            }
-          ],
-          "title": "Write Errors Corrected by ECC Fast",
-          "type": "timeseries"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "custom": {
-                "axisBorderShow": false,
-                "axisCenteredZero": false,
-                "axisColorMode": "text",
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "barWidthFactor": 0.6,
-                "drawStyle": "line",
-                "fillOpacity": 0,
-                "gradientMode": "none",
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                },
-                "insertNulls": false,
-                "lineInterpolation": "linear",
-                "lineWidth": 1,
-                "pointSize": 5,
-                "scaleDistribution": {
-                  "type": "linear"
-                },
-                "showPoints": "auto",
-                "spanNulls": false,
-                "stacking": {
-                  "group": "A",
-                  "mode": "none"
-                },
-                "thresholdsStyle": {
-                  "mode": "off"
-                }
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green"
-                  },
-                  {
-                    "color": "red",
-                    "value": 80
-                  }
-                ]
-              }
-            },
-            "overrides": []
-          },
-          "gridPos": {
-            "h": 8,
-            "w": 12,
-            "x": 0,
-            "y": 75
-          },
-          "id": 20,
-          "options": {
-            "legend": {
-              "calcs": [],
-              "displayMode": "list",
-              "placement": "bottom",
-              "showLegend": true
-            },
-            "tooltip": {
-              "mode": "single",
-              "sort": "none"
-            }
-          },
-          "pluginVersion": "11.3.0",
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
-              "expr": "sum by (node, device) (rate(smartctl_read_errors_corrected_by_rereads_rewrites{node=~\"$node\"}[$__rate_interval]))",
-              "instant": false,
-              "legendFormat": "{{node}} / {{device}}",
-              "range": true,
-              "refId": "A"
-            }
-          ],
-          "title": "Read Errors Corrected by Rereads/Rewrites",
-          "type": "timeseries"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "custom": {
-                "axisBorderShow": false,
-                "axisCenteredZero": false,
-                "axisColorMode": "text",
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "barWidthFactor": 0.6,
-                "drawStyle": "line",
-                "fillOpacity": 0,
-                "gradientMode": "none",
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                },
-                "insertNulls": false,
-                "lineInterpolation": "linear",
-                "lineWidth": 1,
-                "pointSize": 5,
-                "scaleDistribution": {
-                  "type": "linear"
-                },
-                "showPoints": "auto",
-                "spanNulls": false,
-                "stacking": {
-                  "group": "A",
-                  "mode": "none"
-                },
-                "thresholdsStyle": {
-                  "mode": "off"
-                }
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green"
-                  },
-                  {
-                    "color": "red",
-                    "value": 80
-                  }
-                ]
-              }
-            },
-            "overrides": []
-          },
-          "gridPos": {
-            "h": 8,
-            "w": 12,
-            "x": 12,
-            "y": 75
-          },
-          "id": 25,
-          "options": {
-            "legend": {
-              "calcs": [],
-              "displayMode": "list",
-              "placement": "bottom",
-              "showLegend": true
-            },
-            "tooltip": {
-              "mode": "single",
-              "sort": "none"
-            }
-          },
-          "pluginVersion": "11.3.0",
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
-              "expr": "sum by (node, device) (rate(smartctl_write_errors_corrected_by_rereads_rewrites{node=~\"$node\"}[$__rate_interval]))",
-              "instant": false,
-              "legendFormat": "{{node}} / {{device}}",
-              "range": true,
-              "refId": "A"
-            }
-          ],
-          "title": "Write Errors Corrected by Rereads/Rewrites",
-          "type": "timeseries"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "custom": {
-                "axisBorderShow": false,
-                "axisCenteredZero": false,
-                "axisColorMode": "text",
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 0,
-                "gradientMode": "none",
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                },
-                "insertNulls": false,
-                "lineInterpolation": "linear",
-                "lineWidth": 1,
-                "pointSize": 5,
-                "scaleDistribution": {
-                  "type": "linear"
-                },
-                "showPoints": "auto",
-                "spanNulls": false,
-                "stacking": {
-                  "group": "A",
-                  "mode": "none"
-                },
-                "thresholdsStyle": {
-                  "mode": "off"
-                }
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green"
-                  },
-                  {
-                    "color": "red",
-                    "value": 80
-                  }
-                ]
-              }
-            },
-            "overrides": []
-          },
-          "gridPos": {
-            "h": 8,
-            "w": 12,
-            "x": 0,
-            "y": 83
-          },
-          "id": 21,
-          "options": {
-            "legend": {
-              "calcs": [],
-              "displayMode": "list",
-              "placement": "bottom",
-              "showLegend": true
-            },
-            "tooltip": {
-              "mode": "single",
-              "sort": "none"
-            }
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
-              "expr": "sum by (node, device) (rate(smartctl_read_total_uncorrected_errors{node=~\"$node\"}[$__rate_interval]))",
-              "instant": false,
-              "legendFormat": "{{node}} / {{device}}",
-              "range": true,
-              "refId": "A"
-            }
-          ],
-          "title": "Read Total Uncorrected Errors",
-          "type": "timeseries"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "custom": {
-                "axisBorderShow": false,
-                "axisCenteredZero": false,
-                "axisColorMode": "text",
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 0,
-                "gradientMode": "none",
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                },
-                "insertNulls": false,
-                "lineInterpolation": "linear",
-                "lineWidth": 1,
-                "pointSize": 5,
-                "scaleDistribution": {
-                  "type": "linear"
-                },
-                "showPoints": "auto",
-                "spanNulls": false,
-                "stacking": {
-                  "group": "A",
-                  "mode": "none"
-                },
-                "thresholdsStyle": {
-                  "mode": "off"
-                }
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green"
-                  },
-                  {
-                    "color": "red",
-                    "value": 80
-                  }
-                ]
-              }
-            },
-            "overrides": []
-          },
-          "gridPos": {
-            "h": 8,
-            "w": 12,
-            "x": 12,
-            "y": 83
-          },
-          "id": 26,
-          "options": {
-            "legend": {
-              "calcs": [],
-              "displayMode": "list",
-              "placement": "bottom",
-              "showLegend": true
-            },
-            "tooltip": {
-              "mode": "single",
-              "sort": "none"
-            }
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
-              "expr": "sum by (node, device) (rate(smartctl_write_total_uncorrected_errors{node=~\"$node\"}[$__rate_interval]))",
-              "instant": false,
-              "legendFormat": "{{node}} / {{device}}",
-              "range": true,
-              "refId": "A"
-            }
-          ],
-          "title": "Write Total Uncorrected Errors",
-          "type": "timeseries"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "custom": {
-                "axisBorderShow": false,
-                "axisCenteredZero": false,
-                "axisColorMode": "text",
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 0,
-                "gradientMode": "none",
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                },
-                "insertNulls": false,
-                "lineInterpolation": "linear",
-                "lineWidth": 1,
-                "pointSize": 5,
-                "scaleDistribution": {
-                  "type": "linear"
-                },
-                "showPoints": "auto",
-                "spanNulls": false,
-                "stacking": {
-                  "group": "A",
-                  "mode": "none"
-                },
-                "thresholdsStyle": {
-                  "mode": "off"
-                }
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green"
-                  },
-                  {
-                    "color": "red",
-                    "value": 80
-                  }
-                ]
-              }
-            },
-            "overrides": []
-          },
-          "gridPos": {
-            "h": 8,
-            "w": 12,
-            "x": 0,
-            "y": 91
-          },
-          "id": 22,
-          "options": {
-            "legend": {
-              "calcs": [],
-              "displayMode": "list",
-              "placement": "bottom",
-              "showLegend": true
-            },
-            "tooltip": {
-              "mode": "single",
-              "sort": "none"
-            }
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
-              "expr": "sum by (node, device) (rate(smartctl_scsi_grown_defect_list{node=~\"$node\"}[$__rate_interval]))",
-              "instant": false,
-              "legendFormat": "{{node}} / {{device}}",
-              "range": true,
-              "refId": "A"
-            }
-          ],
-          "title": "SCSI Grown Defect List",
-          "type": "timeseries"
+          "title": "Offline uncorrectable sectors",
+          "type": "timeseries",
+          "description": "DSM SMART raw attribute, joined by attribute ID and disk. All installed disks are included, including uninitialized disks."
         }
       ],
-      "title": "HDD Info",
+      "title": "HDD sector health (DSM)",
       "type": "row"
     }
   ],
@@ -2848,6 +2325,32 @@
         "type": "datasource"
       },
       {
+        "allValue": "k8s|pve|spark|synology",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "definition": "label_values(node_uname_info{platform=~\"k8s|pve|spark|synology\"},platform)",
+        "includeAll": true,
+        "multi": true,
+        "name": "platform",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(node_uname_info{platform=~\"k8s|pve|spark|synology\"},platform)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 2,
+        "regex": "",
+        "sort": 1,
+        "type": "query",
+        "label": "Platform"
+      },
+      {
         "allValue": ".*",
         "current": {
           "text": "All",
@@ -2857,20 +2360,21 @@
           "type": "prometheus",
           "uid": "${datasource}"
         },
-        "definition": "label_values(smartctl_version,node)",
+        "definition": "label_values(node_uname_info{platform=~\"$platform\"},instance)",
         "includeAll": true,
         "multi": true,
-        "name": "node",
+        "name": "instance",
         "options": [],
         "query": {
           "qryType": 1,
-          "query": "label_values(smartctl_version,node)",
+          "query": "label_values(node_uname_info{platform=~\"$platform\"},instance)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 2,
         "regex": "",
         "sort": 1,
-        "type": "query"
+        "type": "query",
+        "label": "Instance"
       }
     ]
   },
@@ -2880,7 +2384,7 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "Kubernetes / Drive health",
+  "title": "Hosts / Drive health",
   "uid": "f8f249a0-be78-41b1-97fe-8d0a92a71b93",
   "version": 1,
   "weekStart": "",

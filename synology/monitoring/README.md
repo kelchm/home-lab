@@ -20,3 +20,9 @@ snmp_exporter v0.30.1 hex-encodes `diskID`; [scrape.yaml](scrape.yaml) decodes i
 vmagent rereads its scrape file every minute. snmp_exporter reads [snmp.yml](snmp.yml) only at start, so after changing it run `docker restart monitoring-snmp-exporter-1` on Athena.
 
 doco-cd on Athena publishes no metrics port, so deployment failures there are not alerted.
+
+## Drive health
+
+Athena keeps DSM SNMP as its disk collector. All eight Seagate ST14000NM001G-2KJ103 14 TB HDDs expose health, temperature and SMART attributes, including the two uninitialized disks. Shared recording rules provide `platform="synology"`, `instance="nas"`, `device="Disk N"` to the existing **Hosts / Drive health** dashboard. Rules alert on reallocated, pending and offline uncorrectable sectors by numeric attribute ID, as well as DSM failed health; the DSM dashboard, health-warning, temperature, RAID, hardware and UPS rules remain.
+
+This avoids a second container with direct disk authority. The live series are sufficient for these health signals but are not lossless raw SMART: remaining life is unsupported (`-1`), and a large packed command-timeout value was clamped. Native diagnostics require DSM's `smartctl -d sat`. Evidence, limitations and verification queries are in the [drive-health runbook](../../docs/runbooks/host-monitoring.md#drive-health).

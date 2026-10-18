@@ -90,3 +90,7 @@ This checks renderability, machine-config validity, and version consistency. It 
 - [GitHub Actions concurrency](https://docs.github.com/en/actions/concepts/workflows-and-actions/concurrency)
 - [Flux webhook receivers](https://fluxcd.io/flux/components/notification/receivers/)
 - [PostHog affected-on-PR, complete-on-master workflow](https://github.com/PostHog/posthog/blob/master/.github/workflows/ci-backend.yml)
+
+## Drive health rules
+
+`scripts/ci/validate-drive-alerts.sh` checks the shared drive recording rules and the enabled SMART chart overrides with promtool. Fixtures cover host series without a `cluster` label, healthy and failing NVMe disks, missing controllers and disappeared disks, DSM warning versus failed health, and sector errors on uninitialized NAS disks. This checks rule behavior and annotations; actual PVE/Spark device access and collector memory are post-deployment checks in the [host monitoring runbook](runbooks/host-monitoring.md#verify-drive-health).

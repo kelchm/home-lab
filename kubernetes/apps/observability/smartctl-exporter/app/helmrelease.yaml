@@ -13,6 +13,9 @@ spec:
         name: prometheus-community-smartctl-exporter
   interval: 1h
   values:
+    image:
+      tag: v0.15.0@sha256:a76e08dbf5db4781fefd1ed81c65ad46ae8d2849dae6b6d3acebcde2fc4e59d6
+
     # smartctl needs raw block-device access. The chart runs as root in a
     # privileged container and mounts the host's /dev at /hostdev.
     tolerations:
@@ -39,23 +42,25 @@ spec:
         - action: replace
           sourceLabels:
             - __meta_kubernetes_pod_node_name
-          targetLabel: node
+          targetLabel: instance
+        - action: replace
+          targetLabel: platform
+          replacement: k8s
 
+    # This chart group covers every platform and has no cluster filter.
     prometheusRules:
       enabled: true
       rules:
-        # The chart's default status rule uses smartctl_device_status, but
-        # exporter v0.14.0 emits smartctl_device_smart_status.
         smartCTLDeviceStatus:
           enabled: true
-          alert: SmartCTLDeviceStatusFailing
-          expr: smartctl_device_smart_status != 1
+          alert: DriveHealthFailing
+          expr: drive:health_status == 0
           for: 5m
           annotations:
-            summary: SMART reports a failing device
+            summary: Drive reports failing health
             description: >-
-              Device {{ $labels.device }} on node {{ $labels.node }} is failing
-              its SMART health check.
+              Device {{ $labels.device }} on {{ $labels.instance }} is failing
+              its SMART or DSM health check.
           labels:
             severity: critical
         smartCTLDeviceMediaErrors:
@@ -66,7 +71,7 @@ spec:
           annotations:
             summary: Device has uncorrectable media errors
             description: >-
-              Device {{ $labels.device }} on node {{ $labels.node }} reports
+              Device {{ $labels.device }} on {{ $labels.instance }} reports
               {{ $value }} uncorrectable media errors.
           labels:
             severity: critical
@@ -78,7 +83,7 @@ spec:
           annotations:
             summary: NVMe controller reports a critical warning
             description: >-
-              Device {{ $labels.device }} on node {{ $labels.node }} reports
+              Device {{ $labels.device }} on {{ $labels.instance }} reports
               critical-warning bitmask {{ $value }}.
           labels:
             severity: critical
@@ -90,7 +95,7 @@ spec:
           annotations:
             summary: NVMe available spare is below its threshold
             description: >-
-              Device {{ $labels.device }} on node {{ $labels.node }} has only
+              Device {{ $labels.device }} on {{ $labels.instance }} has only
               {{ $value }}% spare capacity available.
           labels:
             severity: warning
@@ -102,7 +107,7 @@ spec:
           annotations:
             summary: NVMe wear estimate is high
             description: >-
-              Device {{ $labels.device }} on node {{ $labels.node }} has used
+              Device {{ $labels.device }} on {{ $labels.instance }} has used
               {{ $value }}% of its estimated endurance.
           labels:
             severity: warning

@@ -1,0 +1,473 @@
+rule_files:
+  - rules.yaml
+  - chart.yaml
+evaluation_interval: 1m
+tests:
+  - name: Health failures, absent controllers, DSM warnings and uninitialized disks without cluster labels
+    interval: 1m
+    input_series:
+      - series: smartctl_device_smart_status{instance="k8s-prod-1",platform="k8s",device="nvme0",cluster="k8s-prod"}
+        values: 1+0x30
+      - series: smartctl_device_media_errors{instance="k8s-prod-1",platform="k8s",device="nvme0",cluster="k8s-prod"}
+        values: 0+0x30
+      - series: smartctl_device_critical_warning{instance="k8s-prod-1",platform="k8s",device="nvme0",cluster="k8s-prod"}
+        values: 0+0x30
+      - series: smartctl_device_available_spare{instance="k8s-prod-1",platform="k8s",device="nvme0",cluster="k8s-prod"}
+        values: 100+0x30
+      - series: smartctl_device_available_spare_threshold{instance="k8s-prod-1",platform="k8s",device="nvme0",cluster="k8s-prod"}
+        values: 10+0x30
+      - series: smartctl_device_percentage_used{instance="k8s-prod-1",platform="k8s",device="nvme0",cluster="k8s-prod"}
+        values: 2+0x30
+      - series: node_nvme_info{instance="k8s-prod-1",platform="k8s",device="nvme0",cluster="k8s-prod",state="live"}
+        values: 1+0x30
+      - series: smartctl_device_smart_status{instance="pve-sbx-1",platform="pve",device="nvme0"}
+        values: 1+0x30
+      - series: smartctl_device_media_errors{instance="pve-sbx-1",platform="pve",device="nvme0"}
+        values: 0+0x30
+      - series: smartctl_device_critical_warning{instance="pve-sbx-1",platform="pve",device="nvme0"}
+        values: 0+0x30
+      - series: smartctl_device_available_spare{instance="pve-sbx-1",platform="pve",device="nvme0"}
+        values: 100+0x30
+      - series: smartctl_device_available_spare_threshold{instance="pve-sbx-1",platform="pve",device="nvme0"}
+        values: 10+0x30
+      - series: smartctl_device_percentage_used{instance="pve-sbx-1",platform="pve",device="nvme0"}
+        values: 2+0x30
+      - series: node_nvme_info{instance="pve-sbx-1",platform="pve",device="nvme0",state="live"}
+        values: 1+0x30
+      - series: smartctl_device_smart_status{instance="spark-1",platform="spark",device="nvme0"}
+        values: 1+0x30
+      - series: smartctl_device_media_errors{instance="spark-1",platform="spark",device="nvme0"}
+        values: 0+0x30
+      - series: smartctl_device_critical_warning{instance="spark-1",platform="spark",device="nvme0"}
+        values: 0+0x30
+      - series: smartctl_device_available_spare{instance="spark-1",platform="spark",device="nvme0"}
+        values: 100+0x30
+      - series: smartctl_device_available_spare_threshold{instance="spark-1",platform="spark",device="nvme0"}
+        values: 10+0x30
+      - series: smartctl_device_percentage_used{instance="spark-1",platform="spark",device="nvme0"}
+        values: 2+0x30
+      - series: node_nvme_info{instance="spark-1",platform="spark",device="nvme0",state="live"}
+        values: 1+0x30
+      - series: smartctl_device_smart_status{instance="pve-sbx-2",platform="pve",device="nvme0"}
+        values: 0+0x30
+      - series: smartctl_device_media_errors{instance="pve-sbx-2",platform="pve",device="nvme0"}
+        values: 4+0x30
+      - series: smartctl_device_critical_warning{instance="pve-sbx-2",platform="pve",device="nvme0"}
+        values: 1+0x30
+      - series: smartctl_device_available_spare{instance="pve-sbx-2",platform="pve",device="nvme0"}
+        values: 9+0x30
+      - series: smartctl_device_available_spare_threshold{instance="pve-sbx-2",platform="pve",device="nvme0"}
+        values: 10+0x30
+      - series: smartctl_device_percentage_used{instance="pve-sbx-2",platform="pve",device="nvme0"}
+        values: 80+0x30
+      - series: node_nvme_info{instance="pve-sbx-2",platform="pve",device="nvme0",state="live"}
+        values: 1+0x30
+      - series: smartctl_device_smart_status{instance="spark-2",platform="spark",device="nvme0"}
+        values: 0+0x30
+      - series: smartctl_device_media_errors{instance="spark-2",platform="spark",device="nvme0"}
+        values: 4+0x30
+      - series: smartctl_device_critical_warning{instance="spark-2",platform="spark",device="nvme0"}
+        values: 1+0x30
+      - series: smartctl_device_available_spare{instance="spark-2",platform="spark",device="nvme0"}
+        values: 9+0x30
+      - series: smartctl_device_available_spare_threshold{instance="spark-2",platform="spark",device="nvme0"}
+        values: 10+0x30
+      - series: smartctl_device_percentage_used{instance="spark-2",platform="spark",device="nvme0"}
+        values: 80+0x30
+      - series: node_nvme_info{instance="spark-2",platform="spark",device="nvme0",state="live"}
+        values: 1+0x30
+      - series: node_nvme_info{instance="pve-sbx-3",platform="pve",device="nvme0",state="dead"}
+        values: 1+0x30
+      - series: node_nvme_info{instance="spark-1",platform="spark",device="nvme1",state="live"}
+        values: 1+0x30
+      - series: diskHealthStatus{instance="nas",platform="synology",job="synology-snmp",diskID="Disk 1"}
+        values: 1+0x30
+      - series: diskStatus{instance="nas",platform="synology",job="synology-snmp",diskID="Disk 1"}
+        values: 1+0x30
+      - series: diskSMARTAttrId{instance="nas",platform="synology",job="synology-snmp",diskSMARTInfoIndex="1005"}
+        values: 5+0x30
+      - series: diskSMARTAttrRaw{instance="nas",platform="synology",job="synology-snmp",diskSMARTInfoIndex="1005"}
+        values: 0+0x30
+      - series: diskSMARTInfoDevName{instance="nas",platform="synology",job="synology-snmp",diskSMARTInfoIndex="1005",diskSMARTInfoDevName="/dev/sata1"}
+        values: 1+0x30
+      - series: diskSMARTAttrId{instance="nas",platform="synology",job="synology-snmp",diskSMARTInfoIndex="1197"}
+        values: 197+0x30
+      - series: diskSMARTAttrRaw{instance="nas",platform="synology",job="synology-snmp",diskSMARTInfoIndex="1197"}
+        values: 0+0x30
+      - series: diskSMARTInfoDevName{instance="nas",platform="synology",job="synology-snmp",diskSMARTInfoIndex="1197",diskSMARTInfoDevName="/dev/sata1"}
+        values: 1+0x30
+      - series: diskSMARTAttrId{instance="nas",platform="synology",job="synology-snmp",diskSMARTInfoIndex="1198"}
+        values: 198+0x30
+      - series: diskSMARTAttrRaw{instance="nas",platform="synology",job="synology-snmp",diskSMARTInfoIndex="1198"}
+        values: 0+0x30
+      - series: diskSMARTInfoDevName{instance="nas",platform="synology",job="synology-snmp",diskSMARTInfoIndex="1198",diskSMARTInfoDevName="/dev/sata1"}
+        values: 1+0x30
+      - series: diskHealthStatus{instance="nas",platform="synology",job="synology-snmp",diskID="Disk 2"}
+        values: 2+0x30
+      - series: diskStatus{instance="nas",platform="synology",job="synology-snmp",diskID="Disk 2"}
+        values: 1+0x30
+      - series: diskSMARTAttrId{instance="nas",platform="synology",job="synology-snmp",diskSMARTInfoIndex="2005"}
+        values: 5+0x30
+      - series: diskSMARTAttrRaw{instance="nas",platform="synology",job="synology-snmp",diskSMARTInfoIndex="2005"}
+        values: 0+0x30
+      - series: diskSMARTInfoDevName{instance="nas",platform="synology",job="synology-snmp",diskSMARTInfoIndex="2005",diskSMARTInfoDevName="/dev/sata2"}
+        values: 1+0x30
+      - series: diskSMARTAttrId{instance="nas",platform="synology",job="synology-snmp",diskSMARTInfoIndex="2197"}
+        values: 197+0x30
+      - series: diskSMARTAttrRaw{instance="nas",platform="synology",job="synology-snmp",diskSMARTInfoIndex="2197"}
+        values: 0+0x30
+      - series: diskSMARTInfoDevName{instance="nas",platform="synology",job="synology-snmp",diskSMARTInfoIndex="2197",diskSMARTInfoDevName="/dev/sata2"}
+        values: 1+0x30
+      - series: diskSMARTAttrId{instance="nas",platform="synology",job="synology-snmp",diskSMARTInfoIndex="2198"}
+        values: 198+0x30
+      - series: diskSMARTAttrRaw{instance="nas",platform="synology",job="synology-snmp",diskSMARTInfoIndex="2198"}
+        values: 0+0x30
+      - series: diskSMARTInfoDevName{instance="nas",platform="synology",job="synology-snmp",diskSMARTInfoIndex="2198",diskSMARTInfoDevName="/dev/sata2"}
+        values: 1+0x30
+      - series: diskHealthStatus{instance="nas",platform="synology",job="synology-snmp",diskID="Disk 3"}
+        values: 3+0x30
+      - series: diskStatus{instance="nas",platform="synology",job="synology-snmp",diskID="Disk 3"}
+        values: 1+0x30
+      - series: diskSMARTAttrId{instance="nas",platform="synology",job="synology-snmp",diskSMARTInfoIndex="3005"}
+        values: 5+0x30
+      - series: diskSMARTAttrRaw{instance="nas",platform="synology",job="synology-snmp",diskSMARTInfoIndex="3005"}
+        values: 0+0x30
+      - series: diskSMARTInfoDevName{instance="nas",platform="synology",job="synology-snmp",diskSMARTInfoIndex="3005",diskSMARTInfoDevName="/dev/sata3"}
+        values: 1+0x30
+      - series: diskSMARTAttrId{instance="nas",platform="synology",job="synology-snmp",diskSMARTInfoIndex="3197"}
+        values: 197+0x30
+      - series: diskSMARTAttrRaw{instance="nas",platform="synology",job="synology-snmp",diskSMARTInfoIndex="3197"}
+        values: 0+0x30
+      - series: diskSMARTInfoDevName{instance="nas",platform="synology",job="synology-snmp",diskSMARTInfoIndex="3197",diskSMARTInfoDevName="/dev/sata3"}
+        values: 1+0x30
+      - series: diskSMARTAttrId{instance="nas",platform="synology",job="synology-snmp",diskSMARTInfoIndex="3198"}
+        values: 198+0x30
+      - series: diskSMARTAttrRaw{instance="nas",platform="synology",job="synology-snmp",diskSMARTInfoIndex="3198"}
+        values: 0+0x30
+      - series: diskSMARTInfoDevName{instance="nas",platform="synology",job="synology-snmp",diskSMARTInfoIndex="3198",diskSMARTInfoDevName="/dev/sata3"}
+        values: 1+0x30
+      - series: diskHealthStatus{instance="nas",platform="synology",job="synology-snmp",diskID="Disk 4"}
+        values: 1+0x30
+      - series: diskStatus{instance="nas",platform="synology",job="synology-snmp",diskID="Disk 4"}
+        values: 4+0x30
+      - series: diskSMARTAttrId{instance="nas",platform="synology",job="synology-snmp",diskSMARTInfoIndex="4005"}
+        values: 5+0x30
+      - series: diskSMARTAttrRaw{instance="nas",platform="synology",job="synology-snmp",diskSMARTInfoIndex="4005"}
+        values: 0+0x30
+      - series: diskSMARTInfoDevName{instance="nas",platform="synology",job="synology-snmp",diskSMARTInfoIndex="4005",diskSMARTInfoDevName="/dev/sata4"}
+        values: 1+0x30
+      - series: diskSMARTAttrId{instance="nas",platform="synology",job="synology-snmp",diskSMARTInfoIndex="4197"}
+        values: 197+0x30
+      - series: diskSMARTAttrRaw{instance="nas",platform="synology",job="synology-snmp",diskSMARTInfoIndex="4197"}
+        values: 0+0x30
+      - series: diskSMARTInfoDevName{instance="nas",platform="synology",job="synology-snmp",diskSMARTInfoIndex="4197",diskSMARTInfoDevName="/dev/sata4"}
+        values: 1+0x30
+      - series: diskSMARTAttrId{instance="nas",platform="synology",job="synology-snmp",diskSMARTInfoIndex="4198"}
+        values: 198+0x30
+      - series: diskSMARTAttrRaw{instance="nas",platform="synology",job="synology-snmp",diskSMARTInfoIndex="4198"}
+        values: 0+0x30
+      - series: diskSMARTInfoDevName{instance="nas",platform="synology",job="synology-snmp",diskSMARTInfoIndex="4198",diskSMARTInfoDevName="/dev/sata4"}
+        values: 1+0x30
+      - series: diskHealthStatus{instance="nas",platform="synology",job="synology-snmp",diskID="Disk 7"}
+        values: 1+0x30
+      - series: diskStatus{instance="nas",platform="synology",job="synology-snmp",diskID="Disk 7"}
+        values: 3+0x30
+      - series: diskSMARTAttrId{instance="nas",platform="synology",job="synology-snmp",diskSMARTInfoIndex="7005"}
+        values: 5+0x30
+      - series: diskSMARTAttrRaw{instance="nas",platform="synology",job="synology-snmp",diskSMARTInfoIndex="7005"}
+        values: 2+0x30
+      - series: diskSMARTInfoDevName{instance="nas",platform="synology",job="synology-snmp",diskSMARTInfoIndex="7005",diskSMARTInfoDevName="/dev/sata7"}
+        values: 1+0x30
+      - series: diskSMARTAttrId{instance="nas",platform="synology",job="synology-snmp",diskSMARTInfoIndex="7197"}
+        values: 197+0x30
+      - series: diskSMARTAttrRaw{instance="nas",platform="synology",job="synology-snmp",diskSMARTInfoIndex="7197"}
+        values: 0+0x30
+      - series: diskSMARTInfoDevName{instance="nas",platform="synology",job="synology-snmp",diskSMARTInfoIndex="7197",diskSMARTInfoDevName="/dev/sata7"}
+        values: 1+0x30
+      - series: diskSMARTAttrId{instance="nas",platform="synology",job="synology-snmp",diskSMARTInfoIndex="7198"}
+        values: 198+0x30
+      - series: diskSMARTAttrRaw{instance="nas",platform="synology",job="synology-snmp",diskSMARTInfoIndex="7198"}
+        values: 0+0x30
+      - series: diskSMARTInfoDevName{instance="nas",platform="synology",job="synology-snmp",diskSMARTInfoIndex="7198",diskSMARTInfoDevName="/dev/sata7"}
+        values: 1+0x30
+      - series: diskHealthStatus{instance="nas",platform="synology",job="synology-snmp",diskID="Disk 8"}
+        values: 1+0x30
+      - series: diskStatus{instance="nas",platform="synology",job="synology-snmp",diskID="Disk 8"}
+        values: 3+0x30
+      - series: diskSMARTAttrId{instance="nas",platform="synology",job="synology-snmp",diskSMARTInfoIndex="8005"}
+        values: 5+0x30
+      - series: diskSMARTAttrRaw{instance="nas",platform="synology",job="synology-snmp",diskSMARTInfoIndex="8005"}
+        values: 0+0x30
+      - series: diskSMARTInfoDevName{instance="nas",platform="synology",job="synology-snmp",diskSMARTInfoIndex="8005",diskSMARTInfoDevName="/dev/sata8"}
+        values: 1+0x30
+      - series: diskSMARTAttrId{instance="nas",platform="synology",job="synology-snmp",diskSMARTInfoIndex="8197"}
+        values: 197+0x30
+      - series: diskSMARTAttrRaw{instance="nas",platform="synology",job="synology-snmp",diskSMARTInfoIndex="8197"}
+        values: 3+0x30
+      - series: diskSMARTInfoDevName{instance="nas",platform="synology",job="synology-snmp",diskSMARTInfoIndex="8197",diskSMARTInfoDevName="/dev/sata8"}
+        values: 1+0x30
+      - series: diskSMARTAttrId{instance="nas",platform="synology",job="synology-snmp",diskSMARTInfoIndex="8198"}
+        values: 198+0x30
+      - series: diskSMARTAttrRaw{instance="nas",platform="synology",job="synology-snmp",diskSMARTInfoIndex="8198"}
+        values: 4+0x30
+      - series: diskSMARTInfoDevName{instance="nas",platform="synology",job="synology-snmp",diskSMARTInfoIndex="8198",diskSMARTInfoDevName="/dev/sata8"}
+        values: 1+0x30
+      - series: smartctl_device_smart_status{instance="retired",platform="pve",device="nvme0"}
+        values: 1 stale _x29
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: DriveHealthMissing
+        exp_alerts:
+          - exp_labels:
+              instance: pve-sbx-3
+              platform: pve
+              device: nvme0
+              severity: warning
+            exp_annotations:
+              summary: Drive health is missing for nvme0 on pve-sbx-3
+              description: Check the collector and device access. Removed disks remain expected for seven days.
+          - exp_labels:
+              instance: spark-1
+              platform: spark
+              device: nvme1
+              severity: warning
+            exp_annotations:
+              summary: Drive health is missing for nvme1 on spark-1
+              description: Check the collector and device access. Removed disks remain expected for seven days.
+          - exp_labels:
+              instance: retired
+              platform: pve
+              device: nvme0
+              severity: warning
+            exp_annotations:
+              summary: Drive health is missing for nvme0 on retired
+              description: Check the collector and device access. Removed disks remain expected for seven days.
+      - eval_time: 30m
+        alertname: DriveNvmeControllerNotLive
+        exp_alerts:
+          - exp_labels:
+              instance: pve-sbx-3
+              platform: pve
+              device: nvme0
+              state: dead
+              severity: critical
+            exp_annotations:
+              summary: NVMe nvme0 on pve-sbx-3 is dead
+      - eval_time: 30m
+        alertname: DriveAtaReallocatedSectors
+        exp_alerts:
+          - exp_labels:
+              instance: nas
+              platform: synology
+              device: Disk 7
+              severity: warning
+            exp_annotations:
+              summary: Drive Disk 7 on nas has reallocated sectors
+              description: The drive reports 2 reallocated sectors. Check its trend and DSM extended test results.
+      - eval_time: 30m
+        alertname: DriveAtaPendingSectors
+        exp_alerts:
+          - exp_labels:
+              instance: nas
+              platform: synology
+              device: Disk 8
+              severity: critical
+            exp_annotations:
+              summary: Drive Disk 8 on nas has pending sectors
+              description: The drive reports 3 unstable sectors awaiting reallocation.
+      - eval_time: 30m
+        alertname: DriveAtaUncorrectableSectors
+        exp_alerts:
+          - exp_labels:
+              instance: nas
+              platform: synology
+              device: Disk 8
+              severity: critical
+            exp_annotations:
+              summary: Drive Disk 8 on nas has uncorrectable sectors
+              description: The drive reports 4 offline uncorrectable sectors.
+      - eval_time: 30m
+        alertname: DriveHealthFailing
+        exp_alerts:
+          - exp_labels:
+              instance: pve-sbx-2
+              platform: pve
+              device: nvme0
+              severity: critical
+            exp_annotations:
+              summary: Drive reports failing health
+              description: Device nvme0 on pve-sbx-2 is failing its SMART or DSM health check.
+          - exp_labels:
+              instance: spark-2
+              platform: spark
+              device: nvme0
+              severity: critical
+            exp_annotations:
+              summary: Drive reports failing health
+              description: Device nvme0 on spark-2 is failing its SMART or DSM health check.
+          - exp_labels:
+              instance: nas
+              platform: synology
+              device: Disk 3
+              severity: critical
+            exp_annotations:
+              summary: Drive reports failing health
+              description: Device Disk 3 on nas is failing its SMART or DSM health check.
+          - exp_labels:
+              instance: nas
+              platform: synology
+              device: Disk 4
+              severity: critical
+            exp_annotations:
+              summary: Drive reports failing health
+              description: Device Disk 4 on nas is failing its SMART or DSM health check.
+      - eval_time: 30m
+        alertname: SmartCTLDeviceMediaErrors
+        exp_alerts:
+          - exp_labels:
+              instance: pve-sbx-2
+              platform: pve
+              device: nvme0
+              severity: critical
+            exp_annotations:
+              summary: Device has uncorrectable media errors
+              description: Device nvme0 on pve-sbx-2 reports 4 uncorrectable media errors.
+          - exp_labels:
+              instance: spark-2
+              platform: spark
+              device: nvme0
+              severity: critical
+            exp_annotations:
+              summary: Device has uncorrectable media errors
+              description: Device nvme0 on spark-2 reports 4 uncorrectable media errors.
+      - eval_time: 30m
+        alertname: SmartCTLDeviceCriticalWarning
+        exp_alerts:
+          - exp_labels:
+              instance: pve-sbx-2
+              platform: pve
+              device: nvme0
+              severity: critical
+            exp_annotations:
+              summary: NVMe controller reports a critical warning
+              description: Device nvme0 on pve-sbx-2 reports critical-warning bitmask 1.
+          - exp_labels:
+              instance: spark-2
+              platform: spark
+              device: nvme0
+              severity: critical
+            exp_annotations:
+              summary: NVMe controller reports a critical warning
+              description: Device nvme0 on spark-2 reports critical-warning bitmask 1.
+      - eval_time: 30m
+        alertname: SmartCTLDeviceAvailableSpareUnderThreshold
+        exp_alerts:
+          - exp_labels:
+              instance: pve-sbx-2
+              platform: pve
+              device: nvme0
+              severity: warning
+            exp_annotations:
+              summary: NVMe available spare is below its threshold
+              description: Device nvme0 on pve-sbx-2 has only 9% spare capacity available.
+          - exp_labels:
+              instance: spark-2
+              platform: spark
+              device: nvme0
+              severity: warning
+            exp_annotations:
+              summary: NVMe available spare is below its threshold
+              description: Device nvme0 on spark-2 has only 9% spare capacity available.
+      - eval_time: 30m
+        alertname: SmartCTLDeviceWearHigh
+        exp_alerts:
+          - exp_labels:
+              instance: pve-sbx-2
+              platform: pve
+              device: nvme0
+              severity: warning
+            exp_annotations:
+              summary: NVMe wear estimate is high
+              description: Device nvme0 on pve-sbx-2 has used 80% of its estimated endurance.
+          - exp_labels:
+              instance: spark-2
+              platform: spark
+              device: nvme0
+              severity: warning
+            exp_annotations:
+              summary: NVMe wear estimate is high
+              description: Device nvme0 on spark-2 has used 80% of its estimated endurance.
+    promql_expr_test:
+      - expr: drive:health_status{instance="nas",device="Disk 2"}
+        eval_time: 30m
+        exp_samples:
+          - labels: drive:health_status{instance="nas",platform="synology",device="Disk 2"}
+            value: 2
+      - expr: drive:health_status{instance="nas",device="Disk 7"}
+        eval_time: 30m
+        exp_samples:
+          - labels: drive:health_status{instance="nas",platform="synology",device="Disk 7"}
+            value: 1
+
+  - name: DSM failure remains critical if the other status metric is absent
+    interval: 1m
+    input_series:
+      - series: diskHealthStatus{instance="nas",platform="synology",job="synology-snmp",diskID="Disk 1"}
+        values: 3+0x10
+      - series: diskStatus{instance="nas",platform="synology",job="synology-snmp",diskID="Disk 2"}
+        values: 5+0x10
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: DriveHealthFailing
+        exp_alerts:
+          - exp_labels: {instance: nas, platform: synology, device: Disk 1, severity: critical}
+            exp_annotations:
+              summary: Drive reports failing health
+              description: Device Disk 1 on nas is failing its SMART or DSM health check.
+          - exp_labels: {instance: nas, platform: synology, device: Disk 2, severity: critical}
+            exp_annotations:
+              summary: Drive reports failing health
+              description: Device Disk 2 on nas is failing its SMART or DSM health check.
+
+  - name: Partial DSM data preserves warnings and detects missing health without prior history
+    interval: 1m
+    input_series:
+      - series: diskHealthStatus{instance="nas",platform="synology",job="synology-snmp",diskID="Disk 1"}
+        values: 1+0x20
+      - series: diskStatus{instance="nas",platform="synology",job="synology-snmp",diskID="Disk 2"}
+        values: 1+0x20
+      - series: diskModel{instance="nas",platform="synology",job="synology-snmp",diskID="Disk 3",diskModel="ST14000NM001G-2KJ103"}
+        values: 1+0x20
+      - series: diskHealthStatus{instance="nas",platform="synology",job="synology-snmp",diskID="Disk 4"}
+        values: 2+0x20
+      - series: diskHealthStatus{instance="nas",platform="synology",job="synology-snmp",diskID="Disk 5"}
+        values: 2+0x20
+      - series: diskStatus{instance="nas",platform="synology",job="synology-snmp",diskID="Disk 5"}
+        values: 5+0x20
+    promql_expr_test:
+      - expr: drive:health_status{instance="nas",device="Disk 4"}
+        eval_time: 20m
+        exp_samples:
+          - labels: drive:health_status{instance="nas",platform="synology",device="Disk 4"}
+            value: 2
+      - expr: drive:health_status{instance="nas",device="Disk 5"}
+        eval_time: 20m
+        exp_samples:
+          - labels: drive:health_status{instance="nas",platform="synology",device="Disk 5"}
+            value: 0
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: DriveHealthMissing
+        exp_alerts:
+          - exp_labels: {instance: nas, platform: synology, device: Disk 1, severity: warning}
+            exp_annotations:
+              summary: Drive health is missing for Disk 1 on nas
+              description: Check the collector and device access. Removed disks remain expected for seven days.
+          - exp_labels: {instance: nas, platform: synology, device: Disk 2, severity: warning}
+            exp_annotations:
+              summary: Drive health is missing for Disk 2 on nas
+              description: Check the collector and device access. Removed disks remain expected for seven days.
+          - exp_labels: {instance: nas, platform: synology, device: Disk 3, severity: warning}
+            exp_annotations:
+              summary: Drive health is missing for Disk 3 on nas
+              description: Check the collector and device access. Removed disks remain expected for seven days.

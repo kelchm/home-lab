@@ -10,6 +10,8 @@ The [WAN devices](#wan-devices) are collected since 2026-10-18 ([#857](https://g
 
 The first Pi, `streamer-basement-workbench`, is enrolled since 2026-10-18: `pi-node` and `pi-vmagent` report at 30-second spacing with `platform=pi`, `wlan0` reports traffic, and memory pressure arrives after the reboot that turns it on. The UPS monitors `ups-compute-rack` and `ups-office` are enrolled the same day: `pi-nut` reports each UPS with its `ups` label, its status flags, runtime, charge and load, upsd and upsmon kept running through the deploy and came back after the reboot, and LAN reads of port 3493 worked before and after. Both are Raspberry Pi 5s, whose Raspberry Pi device tree disables the memory cgroup by default; their configuration adds `cgroup_enable=memory` after it, so the profile's memory ceilings hold on every Pi, and vmagent's `vm_available_memory_bytes` reports its 96 MiB limit.
 
+SMART configuration covers the three cluster nodes, three PVE nodes and two Sparks with upstream smartctl_exporter v0.15.0. Athena retains DSM SNMP collection, including its SMART attribute table. Hardware inventory and existing source metrics were verified on 2026-10-18; the PVE/Spark exporter runtime, memory use and deployed relabeling still require the [drive verification](#verify-drive-health) after merge. No host deployment was performed during preparation.
+
 The deployer definitions enable native self-update. Its verified version, migration status, manual apply, and handover checks are maintained in the [self-update runbook](doco-cd-self-update.md).
 
 Verified on the hosts that day:
@@ -26,12 +28,12 @@ Not yet verified: that Docker comes back with the same settings after a PVE node
 
 | Label | Meaning | Set by |
 |---|---|---|
-| `instance` | Physical node, such as `spark-1` | The host's ingestion token |
-| `platform` | Machine type: `k8s`, `pve`, `spark`, `synology`, `pi`, `unifi`, `glkvm`, `starlink` or `tmobile` | The host's ingestion token; the node-exporter scrape for the cluster nodes; the [UniFi](#unifi), [GLKVM](#glkvm) and [WAN device](#wan-devices) scrapes |
+| `instance` | Physical node, such as `spark-1` | The host's ingestion token; node-name relabeling for cluster exporters |
+| `platform` | Machine type: `k8s`, `pve`, `spark`, `synology`, `pi`, `unifi`, `glkvm`, `starlink` or `tmobile` | The host's ingestion token; the node-exporter and smartctl-exporter scrapes for the cluster nodes; the [UniFi](#unifi), [GLKVM](#glkvm) and [WAN device](#wan-devices) scrapes |
 | `job` | Collector or source, such as `spark-node`, `pve-vmagent` or `pve-backup` | Scrape configuration for scraped series; the webhook URL for PVE backup metrics |
 | `model`, `runtime`, `recipe` | What a Spark is serving | SparkRun's container labels |
 
-Each host has one `VMUser` in [metrics-ingest](../../kubernetes/apps/observability/metrics-ingest/app/vmusers.yaml). VMAuth adds that user's `instance` and `platform` to every sample and a host cannot override them, so the Compose and scrape files are identical on every host of a type. Host series carry no `cluster` label except for PVE backup completion metrics, which carry `cluster=pve-sbx`, and every Kubernetes rule group is restricted to `cluster="k8s-prod"`, so the two never mix. The k8s-prod nodes follow the same convention on their node-exporter series, where `instance` is the Kubernetes node name and `platform` is `k8s`. The **Hosts** dashboard lists every machine and filters by platform and node, and the stock **Node Exporter Full** dashboard gives the detail for one. **Proxmox via Prometheus** covers the PVE cluster and its guests, **Sparks / GPU and host health** the Sparks themselves, **Synology / Storage and hardware health** the NAS's drives, pools and UPS, and **AI / Inference serving** filters by model, recipe and serving host.
+Each host has one `VMUser` in [metrics-ingest](../../kubernetes/apps/observability/metrics-ingest/app/vmusers.yaml). VMAuth adds that user's `instance` and `platform` to every sample and a host cannot override them, so the Compose and scrape files are identical on every host of a type. Host series carry no `cluster` label except for PVE backup completion metrics, which carry `cluster=pve-sbx`, and the Kubernetes stack's default rule groups are restricted to `cluster="k8s-prod"`. Shared host and drive rule groups deliberately have no cluster restriction so they also match host-pushed series. The k8s-prod nodes follow the same convention on their node-exporter and smartctl-exporter series, where `instance` is the Kubernetes node name and `platform` is `k8s`. The **Hosts** dashboard lists every machine and filters by platform and node, and the stock **Node Exporter Full** dashboard gives the detail for one. **Proxmox via Prometheus** covers the PVE cluster and its guests, **Sparks / GPU and host health** the Sparks themselves, **Hosts / Drive health** SMART and DSM disk health across platforms, **Synology / Storage and hardware health** the NAS's drives, pools and UPS, and **AI / Inference serving** filters by model, recipe and serving host.
 
 ## Enroll a Spark
 
@@ -99,9 +101,78 @@ time() - tlast_over_time(up{instance="spark-1"}[1h])
 count by (job) (up{instance="spark-1"} == 1)
 ```
 
-The first is a few seconds on a healthy host. The second lists `spark-node`, `spark-gpu`, `spark-vmagent` and `spark-deployer`, plus `spark-inference` on the node serving the head rank. On the NAS it lists `synology-node`, `synology-snmp` and `synology-vmagent`, and on a Pi `pi-node` and `pi-vmagent`, plus `pi-nut` on a UPS monitor. On the host, `curl -s 127.0.0.1:8429/targets` shows each scrape target. `docker logs doco-cd` shows deployments on a Compose host, and `journalctl -u vmagent -u prometheus-node-exporter -u prometheus-nut-exporter` shows the collectors' logs on a Pi.
+The first is a few seconds on a healthy host. The second lists `spark-node`, `spark-gpu`, `spark-smartctl`, `spark-vmagent` and `spark-deployer`, plus `spark-inference` on the node serving the head rank. On the NAS it lists `synology-node`, `synology-snmp` and `synology-vmagent`, and on a Pi `pi-node` and `pi-vmagent`, plus `pi-nut` on a UPS monitor. On the host, `curl -s 127.0.0.1:8429/targets` shows each scrape target. `docker logs doco-cd` shows deployments on a Compose host, and `journalctl -u vmagent -u prometheus-node-exporter -u prometheus-nut-exporter` shows the collectors' logs on a Pi.
 
-Check memory with `docker stats --no-stream`, which matters on a Spark where a loaded model leaves little free. Every container keeps at most 30 MB of logs and has a memory limit: 256 MiB each for doco-cd and vmagent, 128 MiB each for node-exporter and the GPU exporter, so 768 MiB at most on a Spark and 640 MiB on a PVE node. sparkDash adds a 512 MiB limit on `spark-1`. Measured on 2026-10-04: a Spark used 90 to 110 MiB in total (doco-cd 35 to 44, vmagent 23 to 46, GPU exporter 10 to 17, node-exporter 10), leaving its available memory within 0.1 GiB of where it started; a PVE node used about 55 MiB.
+Check memory with `docker stats --no-stream`, which matters on a Spark where a loaded model leaves little free. Every container keeps at most 30 MB of logs and has a memory limit: 256 MiB each for doco-cd and vmagent, 128 MiB each for node-exporter, smartctl-exporter and the GPU exporter, so 896 MiB at most on a Spark and 768 MiB on a PVE node. These are configured limits; measure actual SMART collector use after deployment. sparkDash adds a 512 MiB limit on `spark-1`. Measured on 2026-10-04: a Spark used 90 to 110 MiB in total (doco-cd 35 to 44, vmagent 23 to 46, GPU exporter 10 to 17, node-exporter 10), leaving its available memory within 0.1 GiB of where it started; a PVE node used about 55 MiB.
+
+## Drive health
+
+| Machines | Installed SMART-capable disks | Collection |
+|---|---|---|
+| `k8s-prod-1`–`k8s-prod-3` | One WD_BLACK SN770 1 TB NVMe each, controller `nvme0`, namespace `nvme0n1` | Chart DaemonSet, v0.15.0 |
+| `pve-sbx-1`–`pve-sbx-3` | One WD_BLACK SN770 1 TB NVMe each, controller `nvme0`, namespace `nvme0n1` | Compose, v0.15.0, `pve-smartctl` |
+| `spark-1`, `spark-2` | One Samsung MZALC4T0HBL1-00B07 4 TB NVMe each, controller `nvme0`, namespace `nvme0n1` | Compose, v0.15.0, `spark-smartctl` |
+| Athena (`instance="nas"`) | Eight Seagate ST14000NM001G-2KJ103 14 TB HDDs, `/dev/sata1`–`/dev/sata8` | DSM SNMP, `synology-snmp`, device `Disk 1`–`Disk 8` |
+
+The hardware inventory includes the three Pis (`streamer-basement-workbench`, `ups-compute-rack`, `ups-office`): all have only SD storage (`mmcblk0`), with no NVMe disk. SD cards expose no SMART, so the Pis are excluded. Adding a disk requires checking its actual device/controller name and extending the explicit Compose device list. A new NVMe controller reported by node-exporter without health data raises `DriveHealthMissing`.
+
+### Device permissions
+
+PVE and Spark exporters run as root with only `CAP_SYS_ADMIN` added after dropping all capabilities, and map only `/dev/nvme0` with device permission `r`. Linux's NVMe admin-log ioctl requires `CAP_SYS_ADMIN` even with a read-only open. This is narrower than `privileged`, but it is **not read-only authority over the drive**: the capability and controller permit admin ioctls, potentially including destructive commands if the container is compromised. The normal exporter invokes fixed read commands and exposes metrics over loopback only. The filesystem is read-only, `no-new-privileges` is set, and no host root, Docker socket, host PID namespace or other disk is mounted. Docker's default seccomp and AppArmor profiles remain enabled; `CAP_SYS_ADMIN` broadens Docker's default seccomp allowances, so these controls do not make the capability harmless. See [Linux's NVMe ioctl checks](https://github.com/gregkh/linux/blob/v7.0.14/drivers/nvme/host/ioctl.c) and [Docker seccomp](https://docs.docker.com/engine/security/seccomp/).
+
+On PVE, host networking is mandatory. Only doco-cd disables AppArmor for its Unix socket problem; that exception is not applied to smartctl-exporter. Runtime device access must be checked on both PVE and Spark kernels. If a read fails, inspect the exporter and AppArmor logs before changing permissions; do not automatically enable privileged mode or disable AppArmor.
+
+The stock Kubernetes chart hardcodes root, privileged mode and a host `/dev` mount; it exposes no values to narrow that security context. The DaemonSet retains those chart requirements and its 128 MiB memory limit. PVE/Spark Compose does not inherit them. All three platforms pin the same multi-architecture v0.15.0 image digest.
+
+### Athena evidence and limits
+
+The live SNMP series contain status, health, temperature, bad-sector counts and 18 SMART attributes per disk, including numeric IDs 5 (reallocated), 197 (pending) and 198 (offline uncorrectable). All eight disks reported healthy, those three raw attributes were zero, and temperatures were 32–37 °C during verification. Disks 7 and 8 were uninitialized but still reported SMART attributes. Remaining life is `-1` on these HDDs, so it is unavailable, not a useful endurance signal. The hour counter changed on all eight disks over 24 hours.
+
+This supports disk-failure monitoring without another container holding raw disk authority. Keep DSM's collector, its dashboard, RAID/hardware rules and health-warning rule. Shared recording rules map its health, temperature and device identity into the drive dashboard, and sector rules evaluate every installed disk regardless of pool membership. Attribute joins use numeric IDs rather than vendor-specific names.
+
+SNMP is not a lossless raw SMART archive. One packed command-timeout attribute was clamped to `2147483647` while native DSM `smartctl -A -d sat -n standby /dev/sata7` returned `4295032833`; that packed value is not a literal error count. Do not alert on arbitrary raw attributes or turn unsupported remaining life into zero. DSM extended-test results and detailed diagnostics remain in DSM or native `smartctl` with `-d sat`. Neither collector supplies a comprehensive self-test history to this dashboard.
+
+### Rules and freshness
+
+The [drive recording rules](../../kubernetes/apps/observability/smartctl-exporter/app/rules.yaml) expose `drive:health_status` (0 failed, 1 healthy, 2 DSM warning), `drive:temperature_celsius`, `drive:info`, HDD sector counts and missing-health indicators, keyed by `platform`, `instance`, `device`. DSM `diskHealthStatus=2` remains a warning, even if `diskStatus` is absent. `diskStatus=3` (uninitialized) alone is not failure; `diskHealthStatus>=3` or `diskStatus>=4` is failure. Healthy status requires both metrics; partial data without a warning or failure raises missing health. Protocol-specific panels show no data where a measurement is unsupported. The dashboard keeps its existing UID.
+
+The [chart rule overrides](../../kubernetes/apps/observability/smartctl-exporter/app/helmrelease.yaml) alert on shared failed health, NVMe media errors, critical warnings, spare below the device threshold and endurance used ≥80%. They name `instance` and `device`, with no pod, namespace or node-label assumptions. Chart temperature and link-speed rules are disabled: existing thermal rules remain, and link speed is not a reliable disk-health alarm. Error-log entry counts also do not alert because unsupported commands can increment them. Additional rules cover HDD sectors, missing health and non-live NVMe controllers; `HostCollectorDown` includes the host SMART scrape jobs. These groups must remain outside the Kubernetes stack's `cluster="k8s-prod"` filtering.
+
+Upstream v0.15.0 can keep serving the last successful disk sample after a subsequent smartctl read fails. A local stock-image fixture test reproduced HTTP 200 and cached healthy metrics after an open failure; an initial failure instead emitted no disk health. `up=1`, `smartctl_devices`, exit-status metrics and sample timestamps therefore do not prove a fresh disk read. Missing-health and controller-state alerts catch some failures but cannot detect every cached reading while a controller remains live. The exporter has no last-success timestamp or cache-expiry setting; retain this limitation until an upstream release provides one. See [upstream cache handling](https://github.com/prometheus-community/smartctl_exporter/blob/v0.15.0/readjson.go). Do not claim comprehensive prediction of disk failure.
+
+### Verify drive health
+
+After merge, check all five PVE/Spark hosts. Their exporters listen at `127.0.0.1:9633`; vmagent scrapes each every 60 seconds with a 30-second timeout. Read `docker logs monitoring-smartctl-exporter-1`, `curl -fsS 127.0.0.1:9633/metrics`, `docker stats --no-stream`, and the kernel's AppArmor denial logs. Confirm fresh successful smartctl reads, one NVMe controller, no OOM/restart loop, root with only SYS_ADMIN, a read-only controller mapping, default AppArmor and no privileged flag (`docker inspect monitoring-smartctl-exporter-1`). No host runtime assertion is established by Compose rendering alone.
+
+Check access independently of the exporter's cache by running its read command inside the container on each PVE/Spark host. Inspect `smartctl.exit_status` and `smartctl.messages` in the JSON: an open/command failure is a collection failure; health-related exit bits require disk investigation. Compare its device identity and health with the metrics endpoint. This performs no self-test or device configuration change.
+
+```sh
+sudo docker exec monitoring-smartctl-exporter-1 smartctl \
+  --json --info --health --attributes --capabilities --tolerance=verypermissive \
+  --nocheck=standby --format=brief --log=error --device=nvme /dev/nvme0
+```
+
+```promql
+# Five healthy host targets: three PVE, two Sparks.
+up{job=~"(pve|spark)-smartctl"}
+# Eight NVMe disks: k8s=3, pve=3, spark=2; health=1 on each.
+count by (platform) (smartctl_device_smart_status)
+smartctl_device_smart_status{platform=~"k8s|pve|spark"}
+# No missing canonical labels, no IP-valued instance, no missing controller health.
+smartctl_device_smart_status{platform=""} or smartctl_device_smart_status{instance=~".*:9633"}
+node_nvme_info{platform=~"k8s|pve|spark"} unless on (instance, platform, device) smartctl_device_smart_status
+# Sixteen total disks: eight NVMe plus eight NAS HDDs.
+count by (platform) (drive:health_status)
+drive:health_missing
+# Eight zero-valued series per HDD attribute; health must include Disk 7 and Disk 8.
+drive:ata_reallocated_sectors
+drive:ata_pending_sectors
+drive:ata_uncorrectable_sectors
+# Healthy health rules return no matches. Missing health may persist for 15m during rollout.
+ALERTS{alertname=~"Drive.*|SmartCTL.*", alertstate="firing"}
+```
+
+Before deployment, the live label-transformation query confirmed all three cluster SMART series can map to their node names with `platform="k8s"`. Healthy values matched none of the failure/media/critical/spare/wear or HDD sector alert predicates. The missing-health expression correctly identified the five PVE/Spark controllers without SMART data. Render and fixture tests cover host series without a `cluster` label; the post-merge queries above establish actual collection and reconciliation.
 
 ## Change, pause, rotate, remove
 
@@ -156,7 +227,7 @@ To check a source by hand: `grpcurl -plaintext -d '{"get_status":{}}' 192.168.10
 
 ## Alerts
 
-Host rules are in [metrics-ingest](../../kubernetes/apps/observability/metrics-ingest/app/alerts.yaml) and Proxmox API rules beside the [exporter](../../kubernetes/apps/observability/pve-exporter/app/alerts.yaml). UniFi rules are beside [Unpoller](../../kubernetes/apps/observability/unpoller/app/alerts.yaml): stale UniFi data, a device the console counts as disconnected, a WAN that is not active (critical once it has been down for an hour; losing both WANs is caught by the Watchdog heartbeat instead), a device uplink below its expected speed, port errors, a port anomaly the console reports, a DHCP pool over 80% used, and a device over 70 °C, 90% CPU or 90% memory for 15 minutes. The uplink rule lists each device's expected speed, with 1 Gb/s for any other device except the gateway, whose uplink is a WAN, so renaming a device or changing a link's speed means editing it. WAN device rules are beside each exporter: for Starlink, metrics unavailable, ping drop over 10% sustained for 15 minutes, and obstruction for over 5% of an hour; for T-Mobile, metrics unavailable (including a response the module no longer matches) and lost registration. Signal-strength thresholds wait for a week of baseline. A host is covered from its first sample; there is no enrollment list to maintain. The NAS also has disk, RAID, hardware and UPS rules that read DSM's own status through SNMP; a disk DSM reports as not initialized, such as a new disk before it joins a pool, does not alert. A UPS a Pi monitors alerts when it is on battery, when it is on battery with under five minutes of runtime left, when it reports a low battery, and when it has sent no status for five minutes; a failing NUT scrape counts as no status, so `HostCollectorDown` leaves `pi-nut` out. They route like every other alert, described in the [alerting runbook](alerting.md).
+Host rules are in [metrics-ingest](../../kubernetes/apps/observability/metrics-ingest/app/alerts.yaml) and Proxmox API rules beside the [exporter](../../kubernetes/apps/observability/pve-exporter/app/alerts.yaml). UniFi rules are beside [Unpoller](../../kubernetes/apps/observability/unpoller/app/alerts.yaml): stale UniFi data, a device the console counts as disconnected, a WAN that is not active (critical once it has been down for an hour; losing both WANs is caught by the Watchdog heartbeat instead), a device uplink below its expected speed, port errors, a port anomaly the console reports, a DHCP pool over 80% used, and a device over 70 °C, 90% CPU or 90% memory for 15 minutes. The uplink rule lists each device's expected speed, with 1 Gb/s for any other device except the gateway, whose uplink is a WAN, so renaming a device or changing a link's speed means editing it. WAN device rules are beside each exporter: for Starlink, metrics unavailable, ping drop over 10% sustained for 15 minutes, and obstruction for over 5% of an hour; for T-Mobile, metrics unavailable (including a response the module no longer matches) and lost registration. Signal-strength thresholds wait for a week of baseline. A host is covered from its first sample; there is no enrollment list to maintain. The NAS also has disk, RAID, hardware and UPS rules that read DSM's own status through SNMP; an uninitialized disk does not alert solely for that status, but its health and SMART sector attributes still alert. A UPS a Pi monitors alerts when it is on battery, when it is on battery with under five minutes of runtime left, when it reports a low battery, and when it has sent no status for five minutes; a failing NUT scrape counts as no status, so `HostCollectorDown` leaves `pi-nut` out. They route like every other alert, described in the [alerting runbook](alerting.md).
 
 Network path rules cover the links the lab depends on. [Host link rules](../../kubernetes/apps/observability/metrics-ingest/app/network-alerts.yaml) watch the wired physical NICs of the PVE nodes, Sparks, NAS and Pis: three or more flaps in an hour (a down/up pair is one flap; a host booted under two hours ago or first seen under an hour ago is skipped), or no carrier for five minutes on a link that was up in the last week, so a cable removed on purpose stops alerting after seven days. [Cilium's BGP rules](../../kubernetes/apps/kube-system/cilium/app/alerts.yaml) warn when a k8s-prod node's session to the gateway is down for five minutes and page as critical when none is up, because that takes every load-balancer IP off the LAN. A UniFi port alerts on errors only above 60 in an hour and above two per million frames; Core Aggregation port 25's receive-error trickle ([#853](https://github.com/kelchm/home-lab/issues/853)) peaks at 16 an hour and under one per million, and its diagnosis may let the threshold tighten. Unpoller exports no per-port link state: a down copper port reports a speed of 0, but an SFP cage reports its configured speed even when empty, and a DAC reports a receive power of 0 even with link up. Switch-to-switch links are covered by the uplink-speed and disconnected-device rules and host links by the host rules; other switch ports have no link-down alert. The rules' promtool fixtures run in CI through `scripts/ci/validate-network-alerts.sh`.
 
