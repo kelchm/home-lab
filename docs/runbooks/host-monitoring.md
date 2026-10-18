@@ -4,7 +4,7 @@ Metrics from the three PVE nodes, the two DGX Sparks, the NAS, the UniFi network
 
 ## State
 
-The PVE nodes and Sparks are enrolled and the Proxmox API exporter is running, since 2026-10-04. The NAS is enrolled since 2026-10-17 ([#839](https://github.com/kelchm/home-lab/issues/839)): its three jobs report, all eight bays and both the storage pool and volume report DSM status, and `diskID` arrives decoded as `Disk N`. UniFi devices are collected since 2026-10-17 ([#843](https://github.com/kelchm/home-lab/issues/843)): `up{job="unifi-api"}` is 1, the ten adopted devices (gateway, five switches, four access points) report with none disconnected, the job holds about 2,470 series after the client-keyed families are dropped (4,350 before), and the pod uses about 20 MiB and 10m CPU.
+The PVE nodes and Sparks are enrolled and the Proxmox API exporter is running, since 2026-10-04. The NAS is enrolled since 2026-10-17 ([#839](https://github.com/kelchm/home-lab/issues/839)): its three jobs report, all eight bays and both the storage pool and volume report DSM status, and `diskID` arrives decoded as `Disk N`. UniFi devices are collected since 2026-10-17 ([#843](https://github.com/kelchm/home-lab/issues/843)): `up{job="unifi-api"}` is 1, the ten adopted devices (gateway, five switches, four access points) report with none disconnected, and the pod uses about 20 MiB and 10m CPU.
 
 The first Pi, `streamer-basement-workbench`, is enrolled since 2026-10-18: `pi-node` and `pi-vmagent` report at 30-second spacing with `platform=pi`, `wlan0` reports traffic, and memory pressure arrives after the reboot that turns it on. The UPS Pis are not enrolled.
 
@@ -123,7 +123,7 @@ The exporter reports quorum, node and guest state, storage use and which guests 
 
 ## UniFi
 
-[Unpoller](../../kubernetes/apps/observability/unpoller/app/) reads the UniFi console at `unifi.home.kelch.io` with a local account and exports gateway, WAN, switch, port, PoE and access-point metrics. Its series carry `job="unifi-api"`, `instance="unifi"` and `platform="unifi"`; the device is in the `name` label. It refreshes from the console once a minute, and the scrape drops the series keyed by client: `unpoller_client_*`, `unpoller_dhcp_*` and `unpoller_topology_link_*`. DPI, events, alarms, IDS and syslog collection stay off.
+[Unpoller](../../kubernetes/apps/observability/unpoller/app/) reads the UniFi console at `unifi.home.kelch.io` with a local account and exports gateway, WAN, switch, port, PoE and access-point metrics. Its series carry `job="unifi-api"`, `instance="unifi"` and `platform="unifi"`; the device is in the `name` label. It refreshes from the console once a minute, and everything it exports is kept: client series (signal, retries, roaming and traffic per device), DHCP pools and leases, and the topology. Client series are labelled with the client's current access point, channel and IP, so a roam or a new lease starts new series. Ports that are down or disabled keep their series (`dead_ports`), and the neighbouring access points the console can see are exported as `unpoller_rogueap_*` (`save_rogue`). DPI, traffic per country, events, alarms, IDS and syslog collection stay off.
 
 The account is `unpoller-sa`, a local admin with the View Only role, which UniFi OS grants as read-only on Network, Protect and user management; a settings write returns `403 api.err.NoPermission`. Its password is in 1Password at `op://Project - home-lab/unpoller-sa/password`. Write it into the SOPS Secret from a checkout:
 

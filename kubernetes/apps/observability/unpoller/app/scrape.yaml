@@ -1,7 +1,6 @@
 ---
 # Unpoller refreshes its cache from the console once a minute, so a faster
-# scrape would only repeat samples. Series keyed by client (client stats,
-# DHCP leases, per-link topology) are dropped.
+# scrape would only repeat samples.
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMStaticScrape
 metadata:
@@ -17,7 +16,3 @@ spec:
         platform: unifi
       interval: 60s
       scrapeTimeout: 30s
-      metricRelabelConfigs:
-        - sourceLabels: [__name__]
-          regex: unpoller_(client|dhcp|topology_link)_.+
-          action: drop
