@@ -244,10 +244,10 @@ def files_snapshot(path):
     return {str(p.relative_to(path)): p.stat().st_size for p in path.rglob('*') if p.is_file()}
 
 
-def check_version(version):
+def check_version(version, product):
     # Release binaries include their build timestamp and git-describe suffix.
     # Accept the exact release tag with zero commits after it, never an RC.
-    assert re.fullmatch(r'(?:victoria-logs|vlagent)-\d{8}-\d{6}-tags-v1\.53\.0-0-g[0-9a-f]+', version), version
+    assert re.fullmatch(re.escape(product) + r'-\d{8}-\d{6}-tags-v1\.53\.0-0-g[0-9a-f]+', version), version
 
 
 def qualify(args, result):
@@ -255,7 +255,7 @@ def qualify(args, result):
     for name in ('victoria-logs-prod', 'vlagent-prod'):
         binary = args.bin_dir / name
         version = subprocess.check_output([str(binary), '-version'], stderr=subprocess.STDOUT, text=True).strip()
-        check_version(version)
+        check_version(version, name.removesuffix('-prod'))
         result['binaries'][name] = {'version': version, 'sha256': hashlib.sha256(binary.read_bytes()).hexdigest()}
     result['arguments'] = FIXTURE_ARGS
     deployed_args = manifest_args(args.manifest)
