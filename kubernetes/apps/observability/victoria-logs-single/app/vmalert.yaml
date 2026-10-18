@@ -1,0 +1,27 @@
+---
+# Evaluates LogsQL rules against VictoriaLogs. One vmalert reads one
+# datasource, so this instance selects only VMRules labelled
+# alerting.home.kelch.io/datasource=victorialogs, which the metrics vmalert
+# excludes. It reuses that vmalert's notifier config, so its alerts reach
+# VMAlertmanager with evaluator=vmalert and follow the same routes. The image
+# follows the operator default, which the victoria-metrics-k8s-stack chart sets.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMAlert
+metadata:
+  name: victoria-logs
+spec:
+  datasource:
+    url: http://victoria-logs-single-server.observability.svc.cluster.local.:9428
+  evaluationInterval: 1m
+  notifierConfigRef:
+    name: vmalert-victoria-metrics-k8s-stack-additional-notifier
+    key: notifier-configs.yaml
+  ruleSelector:
+    matchLabels:
+      alerting.home.kelch.io/datasource: victorialogs
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 128Mi

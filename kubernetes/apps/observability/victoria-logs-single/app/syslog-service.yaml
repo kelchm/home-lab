@@ -1,0 +1,26 @@
+---
+# UniFi console syslog/CEF export. Only the syslog listener is published; the
+# chart's headless Service keeps 9428 cluster-internal. externalTrafficPolicy
+# Local keeps the gateway's source address through Service translation, so the
+# CIDR rule in networkpolicy.yaml can match it; with Cluster, cross-node
+# traffic is SNATed to a node address, which the namespace baseline admits.
+apiVersion: v1
+kind: Service
+metadata:
+  name: victoria-logs-syslog
+  labels:
+    lb-pool: admin-prod
+  annotations:
+    lbipam.cilium.io/ips: "10.32.130.3"
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Local
+  selector:
+    app: server
+    app.kubernetes.io/instance: victoria-logs-single
+    app.kubernetes.io/name: victoria-logs-single
+  ports:
+    - name: syslog-udp
+      port: 514
+      targetPort: syslog-udp
+      protocol: UDP
