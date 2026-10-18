@@ -71,6 +71,10 @@ jobs:
               - 'scripts/monitoring/longhorn-alerts.test.yaml'
               - 'scripts/ci/validate-wan-alerts.sh'
               - 'scripts/monitoring/wan-alerts.test.yaml'
+              - 'scripts/ci/validate-network-alerts.sh'
+              - 'scripts/monitoring/unifi-alerts.test.yaml'
+              - 'scripts/monitoring/cilium-alerts.test.yaml'
+              - 'scripts/monitoring/host-network-alerts.test.yaml'
               - 'scripts/logging/**'
               - 'scripts/ci/test-validate-cilium-policies.sh'
               - 'scripts/ci/validate-cilium-policies.sh'
@@ -275,6 +279,10 @@ jobs:
       - name: Validate Starlink and T-Mobile alerts
         if: needs.pre-job.outputs.kubernetes_changed == 'true'
         run: scripts/ci/validate-wan-alerts.sh
+
+      - name: Validate network health alerts
+        if: needs.pre-job.outputs.kubernetes_changed == 'true'
+        run: scripts/ci/validate-network-alerts.sh
 
       - name: Render Flux Kustomizations recursively
         if: needs.pre-job.outputs.kubernetes_changed == 'true'

@@ -1,0 +1,44 @@
+---
+# Physical NICs on PVE nodes, Sparks and the NAS. VLAN subinterfaces, bridges,
+# bonds, veths and wireless are excluded. Kept apart from alerts.yaml, which
+# uses MetricsQL, so promtool can test these rules.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: host-network
+spec:
+  groups:
+    - name: host-network
+      rules:
+        # Down then up adds 2 to the counter. A reboot resets it and a new
+        # host's first sample carries its whole history, so the uptime guard
+        # and the hour-old sample keep both out.
+        - alert: HostLinkFlapping
+          expr: |
+            (
+              node_network_carrier_changes_total{job=~"(pve|spark|synology)-node", device=~"(en|eth|nic)[^.]*"}
+              - node_network_carrier_changes_total{job=~"(pve|spark|synology)-node", device=~"(en|eth|nic)[^.]*"} offset 1h
+            ) / 2 >= 3
+            and on (instance) time() - node_boot_time_seconds{job=~"(pve|spark|synology)-node"} > 7200
+          labels:
+            severity: warning
+          annotations:
+            summary: '{{ $labels.device }} on {{ $labels.instance }} flapped {{ printf "%.0f" $value }} times in the last hour'
+            description: >-
+              The link went down and up repeatedly. Check the cable, keystone
+              and transceiver at both ends and the switch port's error counters.
+
+        # A link counts as expected while it has been up in the last week, so
+        # a cable removed on purpose stops alerting after seven days.
+        - alert: HostLinkDown
+          expr: |
+            node_network_carrier{job=~"(pve|spark|synology)-node", device=~"(en|eth|nic)[^.]*"} == 0
+            and max_over_time(node_network_carrier{job=~"(pve|spark|synology)-node", device=~"(en|eth|nic)[^.]*"}[7d]) == 1
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.device }} on {{ $labels.instance }} has no link"
+            description: >-
+              The interface was up within the last week and has had no carrier
+              for five minutes. Check the cable and the switch port.

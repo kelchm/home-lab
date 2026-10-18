@@ -1,0 +1,55 @@
+rule_files: [cilium.yaml]
+evaluation_interval: 1m
+tests:
+  - name: One session down warns; another cluster's sessions are ignored
+    interval: 1m
+    input_series:
+      - series: cilium_bgp_control_plane_session_state{cluster="k8s-prod",node="k8s-prod-1",neighbor="10.32.30.1:179"}
+        values: 1x30
+      - series: cilium_bgp_control_plane_session_state{cluster="k8s-prod",node="k8s-prod-2",neighbor="10.32.30.1:179"}
+        values: 1x9 0x21
+      - series: cilium_bgp_control_plane_session_state{cluster="k8s-prod",node="k8s-prod-3",neighbor="10.32.30.1:179"}
+        values: 1x30
+      - series: cilium_bgp_control_plane_session_state{cluster="other",node="other-1",neighbor="10.0.0.1:179"}
+        values: 0x30
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: CiliumBGPSessionDown
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: CiliumBGPSessionDown
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              cluster: k8s-prod
+              node: k8s-prod-2
+              neighbor: 10.32.30.1:179
+            exp_annotations:
+              summary: BGP session from k8s-prod-2 to 10.32.30.1:179 is down
+              description: The gateway no longer routes load-balancer traffic through k8s-prod-2, so an IP only that node advertises, such as a service with externalTrafficPolicy Local whose pods all run there, is unreachable. Check `cilium-dbg shell -- bgp/peers` in the node's cilium-agent and the gateway's BGP status.
+      - eval_time: 20m
+        alertname: CiliumBGPAllSessionsDown
+        exp_alerts: []
+
+  - name: Every session down is critical
+    interval: 1m
+    input_series:
+      - series: cilium_bgp_control_plane_session_state{cluster="k8s-prod",node="k8s-prod-1",neighbor="10.32.30.1:179"}
+        values: 1x9 0x21
+      - series: cilium_bgp_control_plane_session_state{cluster="k8s-prod",node="k8s-prod-2",neighbor="10.32.30.1:179"}
+        values: 1x9 0x21
+      - series: cilium_bgp_control_plane_session_state{cluster="k8s-prod",node="k8s-prod-3",neighbor="10.32.30.1:179"}
+        values: 1x9 0x21
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: CiliumBGPAllSessionsDown
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: CiliumBGPAllSessionsDown
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              cluster: k8s-prod
+            exp_annotations:
+              summary: Every BGP session to the gateway is down
+              description: The gateway has no route to any load-balancer IP, so Traefik and every other load-balancer service are unreachable from the LAN. Check the gateway's BGP status and `cilium-dbg shell -- bgp/peers` on each node.
