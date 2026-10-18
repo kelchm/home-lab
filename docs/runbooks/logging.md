@@ -100,7 +100,7 @@ The console's own system log for the 30 days to October 18, 2026 held 7,439 even
 | `UniFiHoneypotTriggered` | Any honeypot event in the last 15 minutes. | warning |
 | `UniFiSyslogSilent` | For an hour, the dedicated relay's `vl_rows_ingested_total{job="unifi-syslog",type="syslog_udp"}` shows no source rows in two days, including never-received or missing series. The two-day window exceeds the 29-hour baseline gap; a new empty receiver can fire after an hour. Ordinary gateway messages also count as source activity. | warning |
 | `UniFiSyslogReceiverUnavailable` | No healthy relay scrape target for five minutes, including absent discovery. | critical |
-| `UniFiSyslogDeliveryStalled` | Source rows arrive in 15 minutes but there are no successful backend requests, for five minutes. Quiet source periods alone do not fire. | warning |
+| `UniFiSyslogDeliveryStalled` | Source rows arrive or delivery retries continue in 15 minutes, but there are no successful backend requests, for five minutes. This covers in-flight batches after source traffic stops; quiet periods without retries do not fire. | warning |
 | `UniFiSyslogBacklogSustained` | Disk bytes or memory blocks remain queued for ten minutes, including after the source becomes quiet. | warning |
 | `UniFiSyslogQueueNearCapacity` | Pending disk bytes exceed 75% of the 1 GiB budget for two minutes. | critical |
 | `UniFiSyslogLoss` | Queue eviction, remote-write rejection or receiver row-drop counters increase. These counters use different units, not a lost-event total. | critical |

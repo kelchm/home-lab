@@ -133,8 +133,8 @@ tests:
           - exp_labels:
               severity: warning
             exp_annotations:
-              summary: The UniFi relay receives rows but has no successful backend writes
-              description: Check backend health, HTTP responses and network policy. Quiet source periods alone do not fire this alert; persistent backlog is monitored separately.
+              summary: The UniFi relay cannot deliver received rows
+              description: Check backend health, HTTP responses and network policy. Source activity or continuing retries with no successful writes triggers this alert, including in-flight batches after the source goes quiet. Persistent queued backlog is monitored separately.
   - name: Queue persists after source goes quiet
     interval: 1m
     input_series:
@@ -288,3 +288,25 @@ tests:
             exp_annotations:
               summary: The UniFi relay reports syslog receive or parse errors
               description: Inspect receiver logs and packet sizes. Malformed CEF may remain a plain message; zero parser errors does not prove that every sender event arrived.
+  - name: Source quiet while an in-flight batch continues retrying
+    interval: 1m
+    input_series:
+      - series: vl_rows_ingested_total{job="unifi-syslog",type="syslog_udp"}
+        values: 0+5x2 10+0x60
+      - series: vlagent_remotewrite_requests_total{job="unifi-syslog",status_code="2XX"}
+        values: 0+0x62
+      - series: vlagent_remotewrite_retries_count_total{job="unifi-syslog"}
+        values: 0+1x62
+      - series: vlagent_remotewrite_pending_data_bytes{job="unifi-syslog"}
+        values: 0+0x62
+      - series: vlagent_remotewrite_pending_inmemory_blocks{job="unifi-syslog"}
+        values: 0+0x62
+    alert_rule_test:
+      - alertname: UniFiSyslogDeliveryStalled
+        eval_time: 40m
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: The UniFi relay cannot deliver received rows
+              description: Check backend health, HTTP responses and network policy. Source activity or continuing retries with no successful writes triggers this alert, including in-flight batches after the source goes quiet. Persistent queued backlog is monitored separately.
