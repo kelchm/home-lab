@@ -151,6 +151,10 @@ exist only as connected routes on participating endpoints and are never routed,
 advertised, published in DNS, or included in gateway firewall/address objects.
 The DGX allocation is recorded in the [bring-up runbook](runbooks/dgx-spark-bringup.md#fabric-address-allocation).
 
+### WAN-side devices
+
+Each WAN's provider device keeps its vendor address, outside `10.32.0.0/16` and the system identity rule: the T-Mobile 5G gateway (WAN1) at `192.168.12.1`, on the subnet of WAN1's own address, and the Starlink dish (WAN2) at `192.168.100.1`, which the UniFi traffic route `Starlink Management` pins to WAN2 for all clients. Their metrics carry `instance` `tmobile-gateway` and `starlink-dish`; the [host monitoring runbook](runbooks/host-monitoring.md#wan-devices) describes the collection.
+
 ### /24 skeletons
 
 Server VLANs (20, 21, 25, 30, 31) share one skeleton:

@@ -1,0 +1,19 @@
+---
+# Egress to the dish's gRPC API only; the namespace baseline covers the rest.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: starlink-exporter
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: starlink-exporter
+  egress:
+    # Reached through the gateway's Starlink Management traffic route, which
+    # pins 192.168.100.0/24 to WAN2 for all clients.
+    - toCIDR:
+        - 192.168.100.1/32
+      toPorts:
+        - ports:
+            - port: "9200"
+              protocol: TCP

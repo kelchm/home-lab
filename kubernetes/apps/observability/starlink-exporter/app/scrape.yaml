@@ -1,0 +1,23 @@
+---
+# The exporter reads the dish on every scrape. Ping drop is the dish's rate
+# for the current second, so rules average it over many samples. Location
+# and GPS series are dropped.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMStaticScrape
+metadata:
+  name: starlink-exporter
+spec:
+  jobName: starlink-api
+  scrapeClass: other-systems
+  targetEndpoints:
+    - targets:
+        - starlink-exporter.observability.svc.cluster.local:9451
+      labels:
+        instance: starlink-dish
+        platform: starlink
+      interval: 15s
+      scrapeTimeout: 10s
+      metricRelabelConfigs:
+        - sourceLabels: [__name__]
+          regex: starlink_dish_(location|gps)_.+
+          action: drop

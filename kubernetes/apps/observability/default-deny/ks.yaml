@@ -14,10 +14,12 @@ spec:
   dependsOn:
     - name: vlagent
     - name: grafana
+    - name: json-exporter
     - name: metrics-ingest
     - name: prometheus-operator-crds
     - name: pve-exporter
     - name: smartctl-exporter
+    - name: starlink-exporter
     - name: unpoller
     - name: victoria-logs-single
     - name: victoria-metrics-k8s-stack
