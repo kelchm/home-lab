@@ -41,6 +41,13 @@
       dependencyDashboardApproval: true,
     },
     {
+      description: "Grafana catalog plugins: require reviewed upgrades",
+      matchDatasources: ["custom.grafana-plugins"],
+      automerge: false,
+      semanticCommitScope: "grafana-plugin",
+      commitMessageTopic: "plugin {{depName}}",
+    },
+    {
       // VSS 7.7.0 introduced mandatory server licensing. Keep the proven
       // pre-license deployment byte-for-byte pinned unless this rule and the
       // image pins are deliberately changed together.
@@ -181,6 +188,15 @@
       addLabels: ["renovate/github-release"],
     },
   ],
+  customDatasources: {
+    "grafana-plugins": {
+      defaultRegistryUrlTemplate: "https://grafana.com/api/plugins/{{packageName}}/versions",
+      format: "json",
+      transformTemplates: [
+        '{"releases": [items[status = "active"].{"version": version, "releaseTimestamp": createdAt, "sourceUrl": url}], "homepage": "https://grafana.com/grafana/plugins/{{packageName}}/"}',
+      ],
+    },
+  },
   customManagers: [
     {
       description: "Process annotated dependencies",
@@ -203,6 +219,21 @@
         "datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\n.+/(?<currentValue>(v|\\d)[^/]+)",
       ],
       datasourceTemplate: "{{#if datasource}}{{{datasource}}}{{else}}github-releases{{/if}}",
+    },
+    {
+      description: "Track URL-pinned Grafana catalog plugins",
+      customType: "regex",
+      managerFilePatterns: [
+        "/(^|/)kubernetes/.+\\.ya?ml$/",
+      ],
+      matchStrings: [
+        "(?<depName>[a-z0-9-]+)@(?<currentValue>[^@\\s]+)@https://grafana\\.com/api/plugins/(?<packageName>[a-z0-9-]+)/versions/[^/\\s]+/download",
+      ],
+      datasourceTemplate: "custom.grafana-plugins",
+      versioningTemplate: "semver",
+      // Rewrite both pins together; changing only one leaves the installer
+      // version and the downloaded archive out of sync.
+      autoReplaceStringTemplate: "{{{depName}}}@{{{newValue}}}@https://grafana.com/api/plugins/{{{packageName}}}/versions/{{{newValue}}}/download",
     },
     {
       customType: "regex",
