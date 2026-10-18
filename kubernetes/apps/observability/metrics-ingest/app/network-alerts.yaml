@@ -1,5 +1,5 @@
 ---
-# Physical NICs on PVE nodes, Sparks and the NAS. VLAN subinterfaces, bridges,
+# Physical NICs on PVE nodes, Sparks, the NAS and Pis. VLAN subinterfaces, bridges,
 # bonds, veths and wireless are excluded. Kept apart from alerts.yaml, which
 # uses MetricsQL, so promtool can test these rules.
 apiVersion: operator.victoriametrics.com/v1beta1
@@ -16,10 +16,10 @@ spec:
         - alert: HostLinkFlapping
           expr: |
             (
-              node_network_carrier_changes_total{job=~"(pve|spark|synology)-node", device=~"(en|eth|nic)[^.]*"}
-              - node_network_carrier_changes_total{job=~"(pve|spark|synology)-node", device=~"(en|eth|nic)[^.]*"} offset 1h
+              node_network_carrier_changes_total{job=~"(pve|spark|synology|pi)-node", device=~"(en|eth|nic)[^.]*"}
+              - node_network_carrier_changes_total{job=~"(pve|spark|synology|pi)-node", device=~"(en|eth|nic)[^.]*"} offset 1h
             ) / 2 >= 3
-            and on (instance) time() - node_boot_time_seconds{job=~"(pve|spark|synology)-node"} > 7200
+            and on (instance) time() - node_boot_time_seconds{job=~"(pve|spark|synology|pi)-node"} > 7200
           labels:
             severity: warning
           annotations:
@@ -32,8 +32,8 @@ spec:
         # a cable removed on purpose stops alerting after seven days.
         - alert: HostLinkDown
           expr: |
-            node_network_carrier{job=~"(pve|spark|synology)-node", device=~"(en|eth|nic)[^.]*"} == 0
-            and max_over_time(node_network_carrier{job=~"(pve|spark|synology)-node", device=~"(en|eth|nic)[^.]*"}[7d]) == 1
+            node_network_carrier{job=~"(pve|spark|synology|pi)-node", device=~"(en|eth|nic)[^.]*"} == 0
+            and max_over_time(node_network_carrier{job=~"(pve|spark|synology|pi)-node", device=~"(en|eth|nic)[^.]*"}[7d]) == 1
           for: 5m
           labels:
             severity: warning
