@@ -56,6 +56,10 @@ tests:
         values: 1x59 0x3 1x26
       - series: node_network_carrier{job="pve-node",instance="pve-sbx-1",platform="pve",device="vmbr0"}
         values: 1x59 0x30
+      - series: node_network_carrier{job="pi-node",instance="ups-office",platform="pi",device="eth0"}
+        values: 1x59 0x30
+      - series: node_network_carrier{job="pi-node",instance="streamer-basement-workbench",platform="pi",device="wlan0"}
+        values: 1x59 0x30
     alert_rule_test:
       # nic1 is down here; its drop ends before the 5-minute hold.
       - eval_time: 62m
@@ -75,5 +79,14 @@ tests:
               device: enP2p1s0f0np0
             exp_annotations:
               summary: enP2p1s0f0np0 on spark-1 has no link
+              description: The interface was up within the last week and has had no carrier for five minutes. Check the cable and the switch port.
+          - exp_labels:
+              severity: warning
+              job: pi-node
+              instance: ups-office
+              platform: pi
+              device: eth0
+            exp_annotations:
+              summary: eth0 on ups-office has no link
               description: The interface was up within the last week and has had no carrier for five minutes. Check the cable and the switch port.
 
