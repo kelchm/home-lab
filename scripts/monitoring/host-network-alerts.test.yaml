@@ -13,6 +13,10 @@ tests:
         values: 0x90 1+1x29 30x60
       - series: node_boot_time_seconds{job="spark-node",instance="spark-2",platform="spark"}
         values: -86400x180
+      - series: node_network_carrier_changes_total{job="pi-node",instance="ups-office",platform="pi",device="eth0"}
+        values: 0x90 1+1x29 30x60
+      - series: node_boot_time_seconds{job="pi-node",instance="ups-office",platform="pi"}
+        values: -86400x180
       # One reseat.
       - series: node_network_carrier_changes_total{job="spark-node",instance="spark-1",platform="spark",device="enP7s7"}
         values: 4x100 6x80
@@ -40,6 +44,15 @@ tests:
               device: enP7s7
             exp_annotations:
               summary: enP7s7 on spark-2 flapped 15 times in the last hour
+              description: The link went down and up repeatedly. Check the cable, keystone and transceiver at both ends and the switch port's error counters.
+          - exp_labels:
+              severity: warning
+              job: pi-node
+              instance: ups-office
+              platform: pi
+              device: eth0
+            exp_annotations:
+              summary: eth0 on ups-office flapped 15 times in the last hour
               description: The link went down and up repeatedly. Check the cable, keystone and transceiver at both ends and the switch port's error counters.
       - eval_time: 180m
         alertname: HostLinkFlapping
