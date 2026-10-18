@@ -81,7 +81,7 @@ tests:
         values: 0x29 1x2 0x88 1x10 0x60
     promql_expr_test:
       - expr: ALERTS{alertname="StarlinkObstructed"}
-        eval_time: 110m
+        eval_time: 60m
         exp_samples: []
       - expr: ALERTS{alertname="StarlinkObstructed",alertstate="firing"}
         eval_time: 150m
