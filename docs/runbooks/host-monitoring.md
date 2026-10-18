@@ -6,6 +6,8 @@ Metrics from the three PVE nodes, the two DGX Sparks, the NAS, the UniFi network
 
 The PVE nodes and Sparks are enrolled and the Proxmox API exporter is running, since 2026-10-04. The NAS is enrolled since 2026-10-17 ([#839](https://github.com/kelchm/home-lab/issues/839)): its three jobs report, all eight bays and both the storage pool and volume report DSM status, and `diskID` arrives decoded as `Disk N`. UniFi devices are collected since 2026-10-17 ([#843](https://github.com/kelchm/home-lab/issues/843)): `up{job="unifi-api"}` is 1, the ten adopted devices (gateway, five switches, four access points) report with none disconnected, the job holds about 2,470 series after the client-keyed families are dropped (4,350 before), and the pod uses about 20 MiB and 10m CPU.
 
+The first Pi, `streamer-basement-workbench`, is enrolled since 2026-10-18: `pi-node` and `pi-vmagent` report at 30-second spacing with `platform=pi`, `wlan0` reports traffic, and memory pressure arrives after the reboot that turns it on. The UPS Pis are not enrolled.
+
 The deployer definitions enable native self-update. Its verified version, migration status, manual apply, and handover checks are maintained in the [self-update runbook](doco-cd-self-update.md).
 
 Verified on the hosts that day:
