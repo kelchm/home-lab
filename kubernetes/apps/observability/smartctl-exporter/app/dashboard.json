@@ -928,7 +928,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "Machines reporting node metrics without SMART health data. Check the exporter target and its disk permissions.",
+      "description": "Drives without current SMART/DSM health data. Check the collector and device access; removed drives remain expected for seven days.",
       "fieldConfig": {
         "defaults": {
           "color": {

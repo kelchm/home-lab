@@ -8,7 +8,7 @@ spec:
   groups:
     - name: drive-health
       rules:
-        # 0 failed, 1 healthy, 2 DSM warning. DSM status 3 means uninitialized.
+        # 0 failed, 1 healthy, 2 DSM warning. diskStatus=3 means uninitialized.
         - record: drive:health_status
           expr: |
             min by (instance, platform, device) (
@@ -16,9 +16,9 @@ spec:
               or label_replace(
                 ((diskHealthStatus{job="synology-snmp"} >= 3) * 0)
                 or ((diskStatus{job="synology-snmp"} >= 4) * 0)
-                or (diskHealthStatus{job="synology-snmp"} < bool 3)
-                * on (instance, platform, diskID) (diskStatus{job="synology-snmp"} < bool 4)
-                * on (instance, platform, diskID) (1 + (diskHealthStatus{job="synology-snmp"} == bool 2)),
+                or (diskHealthStatus{job="synology-snmp"} == 2)
+                or (diskHealthStatus{job="synology-snmp"} == 1)
+                * on (instance, platform, diskID) (diskStatus{job="synology-snmp"} < bool 4),
                 "device", "$1", "diskID", "(.+)"
               )
             )
@@ -73,7 +73,7 @@ spec:
             max by (instance, platform, device) (
               (node_nvme_info{platform=~"k8s|pve|spark"} unless on (instance, platform, device) drive:health_status)
               or (max_over_time(drive:health_status[7d]) unless on (instance, platform, device) drive:health_status)
-              or (label_replace(diskStatus{job="synology-snmp"}, "device", "$1", "diskID", "(.+)")
+              or (label_replace({__name__=~"diskStatus|diskHealthStatus|diskModel", job="synology-snmp"}, "device", "$1", "diskID", "(.+)")
                 unless on (instance, platform, device) drive:health_status)
             ) * 0 + 1
         - alert: DriveHealthMissing

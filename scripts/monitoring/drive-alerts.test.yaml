@@ -428,3 +428,46 @@ tests:
             exp_annotations:
               summary: Drive reports failing health
               description: Device Disk 2 on nas is failing its SMART or DSM health check.
+
+  - name: Partial DSM data preserves warnings and detects missing health without prior history
+    interval: 1m
+    input_series:
+      - series: diskHealthStatus{instance="nas",platform="synology",job="synology-snmp",diskID="Disk 1"}
+        values: 1+0x20
+      - series: diskStatus{instance="nas",platform="synology",job="synology-snmp",diskID="Disk 2"}
+        values: 1+0x20
+      - series: diskModel{instance="nas",platform="synology",job="synology-snmp",diskID="Disk 3",diskModel="ST14000NM001G-2KJ103"}
+        values: 1+0x20
+      - series: diskHealthStatus{instance="nas",platform="synology",job="synology-snmp",diskID="Disk 4"}
+        values: 2+0x20
+      - series: diskHealthStatus{instance="nas",platform="synology",job="synology-snmp",diskID="Disk 5"}
+        values: 2+0x20
+      - series: diskStatus{instance="nas",platform="synology",job="synology-snmp",diskID="Disk 5"}
+        values: 5+0x20
+    promql_expr_test:
+      - expr: drive:health_status{instance="nas",device="Disk 4"}
+        eval_time: 20m
+        exp_samples:
+          - labels: drive:health_status{instance="nas",platform="synology",device="Disk 4"}
+            value: 2
+      - expr: drive:health_status{instance="nas",device="Disk 5"}
+        eval_time: 20m
+        exp_samples:
+          - labels: drive:health_status{instance="nas",platform="synology",device="Disk 5"}
+            value: 0
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: DriveHealthMissing
+        exp_alerts:
+          - exp_labels: {instance: nas, platform: synology, device: Disk 1, severity: warning}
+            exp_annotations:
+              summary: Drive health is missing for Disk 1 on nas
+              description: Check the collector and device access. Removed disks remain expected for seven days.
+          - exp_labels: {instance: nas, platform: synology, device: Disk 2, severity: warning}
+            exp_annotations:
+              summary: Drive health is missing for Disk 2 on nas
+              description: Check the collector and device access. Removed disks remain expected for seven days.
+          - exp_labels: {instance: nas, platform: synology, device: Disk 3, severity: warning}
+            exp_annotations:
+              summary: Drive health is missing for Disk 3 on nas
+              description: Check the collector and device access. Removed disks remain expected for seven days.

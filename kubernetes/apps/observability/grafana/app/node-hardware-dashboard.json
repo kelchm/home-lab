@@ -28,8 +28,8 @@
       "keepTime": true,
       "tags": [],
       "targetBlank": false,
-      "title": "Kubernetes / Drive health",
-      "tooltip": "Open Kubernetes / Drive health",
+      "title": "Hosts / Drive health",
+      "tooltip": "Open Hosts / Drive health",
       "type": "link",
       "url": "/d/f8f249a0-be78-41b1-97fe-8d0a92a71b93"
     }
