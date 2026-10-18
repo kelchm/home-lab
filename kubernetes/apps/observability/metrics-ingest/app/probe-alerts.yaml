@@ -40,9 +40,10 @@ spec:
             description: "{{ $labels.target }} has averaged over two seconds for ten minutes. Check DNS, network latency and service response time."
             runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/host-monitoring.md#service-probes
 
+        # Internal certificates live 160 h and renew with 53 h left; 36 h left means renewal has failed for about 17 h.
         - alert: PiProbeCertificateExpiring
           expr: |
-            (probe_ssl_earliest_cert_expiry{job="pi-blackbox"} - time() < 14 * 86400)
+            (probe_ssl_earliest_cert_expiry{job="pi-blackbox"} - time() < 36 * 3600)
             and on (instance, platform, probe)
             (probe_success{job="pi-blackbox"} == 1)
             and on (instance, platform, probe)

@@ -169,7 +169,7 @@ These are unauthenticated reachability checks. Homepage verifies its authenticat
 ```sh
 ssh kelchm@10.32.20.111 'curl -fsSG http://127.0.0.1:9115/probe --data-urlencode module=http_401 --data-urlencode target=https://home.kelch.io/'
 ssh kelchm@10.32.20.111 'curl -fsS http://127.0.0.1:8429/targets'
-ssh kelchm@10.32.20.111 'sudo journalctl -u prometheus-blackbox-exporter -u vmagent --since "15 minutes ago"'
+ssh kelchm@10.32.20.111 'sudo journalctl -u prometheus-blackbox-exporter -u vmagent -u prometheus-node-exporter -u prometheus-nut-exporter --since "15 minutes ago"'
 ```
 
 Add `--data-urlencode debug=true` to a manual `/probe` request for the probe log. Use the table's module and target to reproduce any check. Before and after switching this Pi's configuration, confirm `upsc compute-rack@localhost ups.status`, `systemctl show upsd upsmon -p MainPID -p ActiveState`, and the three existing `pi-node`, `pi-vmagent` and `pi-nut` scrape targets remain healthy.
@@ -179,14 +179,14 @@ probe_success{job="pi-blackbox",instance="ups-compute-rack"}
 up{job=~"pi-blackbox(-exporter)?",instance="ups-compute-rack"}
 time() - tlast_over_time(probe_success{job="pi-blackbox"}[1h])
 probe_duration_seconds{job="pi-blackbox"}
-(probe_ssl_earliest_cert_expiry{job="pi-blackbox"} - time()) / 86400
+(probe_ssl_earliest_cert_expiry{job="pi-blackbox"} - time()) / 3600
 ```
 
 All nine success values and ten scrape `up` values should be 1, with probe samples roughly one minute apart. The [probe rules](../../kubernetes/apps/observability/metrics-ingest/app/probe-alerts.yaml) use the existing vmalert → VMAlertmanager → Pushover path:
 
 - `PiProbeFailed`: a failed probe or probe scrape for three minutes while the exporter scrape is up; critical priority.
 - `PiProbeSlow`: successful probes with a five-minute average duration above two seconds for ten minutes; warning priority.
-- `PiProbeCertificateExpiring`: a successful HTTPS probe sees less than 14 days of certificate validity for an hour; warning priority.
+- `PiProbeCertificateExpiring`: a successful HTTPS probe sees less than 36 hours of certificate validity for an hour; warning priority. The internal Let's Encrypt certificates use the short-lived profile: cert-manager issues them for 160 hours and renews them with about 53 hours left, so a healthy one never drops below that. At 36 hours renewal has been failing for about 17 hours, past cert-manager's retries one, three, seven and fifteen hours after a failure.
 - `HostCollectorDown`: the exporter scrape is down for ten minutes. `pi-blackbox` is excluded from this generic rule, and probe failures require a healthy exporter scrape, so an exporter outage does not also page for every destination. The NUT collector remains owned by its UPS rules.
 
 If the Pi stops sending metrics, `HostMetricsMissing` covers it. If the cluster or its alerting path fails, the [healthchecks.io Watchdog](alerting.md#independent-dead-man-heartbeat) covers that outage. There is no separate Pushover sender on the Pi.
