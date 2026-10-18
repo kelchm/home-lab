@@ -41,6 +41,12 @@
       dependencyDashboardApproval: true,
     },
     {
+      description: "VictoriaLogs Grafana plugin: require reviewed upgrades",
+      matchDatasources: ["github-releases"],
+      matchPackageNames: ["VictoriaMetrics/victorialogs-datasource"],
+      automerge: false,
+    },
+    {
       // VSS 7.7.0 introduced mandatory server licensing. Keep the proven
       // pre-license deployment byte-for-byte pinned unless this rule and the
       // image pins are deliberately changed together.
@@ -203,6 +209,24 @@
         "datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\n.+/(?<currentValue>(v|\\d)[^/]+)",
       ],
       datasourceTemplate: "{{#if datasource}}{{{datasource}}}{{else}}github-releases{{/if}}",
+    },
+    {
+      description: "Track the URL-pinned VictoriaLogs Grafana plugin",
+      customType: "regex",
+      managerFilePatterns: [
+        "/^kubernetes/apps/observability/grafana/app/helmrelease\\.yaml$/",
+      ],
+      matchStrings: [
+        "victoriametrics-logs-datasource@(?<currentValue>[^@\\s]+)@https://grafana\\.com/api/plugins/victoriametrics-logs-datasource/versions/[^/\\s]+/download",
+      ],
+      depNameTemplate: "victoriametrics-logs-datasource",
+      packageNameTemplate: "VictoriaMetrics/victorialogs-datasource",
+      datasourceTemplate: "github-releases",
+      versioningTemplate: "semver",
+      extractVersionTemplate: "^v(?<version>.+)$",
+      // Rewrite both pins together; changing only one leaves the installer
+      // version and the downloaded archive out of sync.
+      autoReplaceStringTemplate: "victoriametrics-logs-datasource@{{{newValue}}}@https://grafana.com/api/plugins/victoriametrics-logs-datasource/versions/{{{newValue}}}/download",
     },
     {
       customType: "regex",
