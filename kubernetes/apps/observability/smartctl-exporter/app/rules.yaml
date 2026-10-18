@@ -72,7 +72,9 @@ spec:
           expr: |
             max by (instance, platform, device) (
               (node_nvme_info{platform=~"k8s|pve|spark"} unless on (instance, platform, device) drive:health_status)
-              or (max_over_time(drive:health_status[7d]) unless on (instance, platform, device) drive:health_status)
+              or ((max_over_time(drive:health_status{platform!="k8s"}[7d])
+                or max_over_time(drive:health_status{platform="k8s", device=~"nvme[0-9]+"}[7d]))
+                unless on (instance, platform, device) drive:health_status)
               or (label_replace({__name__=~"diskStatus|diskHealthStatus|diskModel", job="synology-snmp"}, "device", "$1", "diskID", "(.+)")
                 unless on (instance, platform, device) drive:health_status)
             ) * 0 + 1

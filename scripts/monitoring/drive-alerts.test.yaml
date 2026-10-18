@@ -471,3 +471,19 @@ tests:
             exp_annotations:
               summary: Drive health is missing for Disk 3 on nas
               description: Check the collector and device access. Removed disks remain expected for seven days.
+
+  - name: Virtual cluster disk history is not physical drive inventory
+    interval: 1m
+    input_series:
+      - series: drive:health_status{instance="k8s-prod-1",platform="k8s",device="sdb"}
+        values: 1 stale _x19
+      - series: drive:health_status{instance="k8s-prod-1",platform="k8s",device="nvme0"}
+        values: 1 stale _x19
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: DriveHealthMissing
+        exp_alerts:
+          - exp_labels: {instance: k8s-prod-1, platform: k8s, device: nvme0, severity: warning}
+            exp_annotations:
+              summary: Drive health is missing for nvme0 on k8s-prod-1
+              description: Check the collector and device access. Removed disks remain expected for seven days.
