@@ -1,5 +1,5 @@
 ---
-# PVE nodes, Sparks and the NAS. Series keep the `instance` (node) and `platform`
+# PVE nodes, Sparks, the NAS and Pis. Series keep the `instance` (node) and `platform`
 # (type) their ingestion token gives them; this group adds no cluster label.
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMRule
@@ -12,7 +12,7 @@ spec:
         # A node is enrolled once it has reported; one that falls silent keeps
         # alerting for a week, after which it counts as retired.
         - alert: HostMetricsMissing
-          expr: time() - tlast_over_time(up{job=~"(pve|spark|synology)-node"}[7d]) > 600
+          expr: time() - tlast_over_time(up{job=~"(pve|spark|synology|pi)-node"}[7d]) > 600
           labels:
             severity: warning
           annotations:
@@ -23,7 +23,7 @@ spec:
               original timestamps once delivery resumes.
 
         - alert: HostCollectorDown
-          expr: up{job=~"(pve|spark|synology)-(node|gpu|snmp|vmagent|deployer)"} == 0
+          expr: up{job=~"(pve|spark|synology|pi)-(node|gpu|snmp|vmagent|deployer)"} == 0
           for: 10m
           labels:
             severity: warning
@@ -32,8 +32,8 @@ spec:
 
         - alert: HostFilesystemLow
           expr: |
-            node_filesystem_avail_bytes{job=~"(pve|spark|synology)-node", fstype!~"tmpfs|overlay|squashfs|ramfs|efivarfs|nfs.*|cifs|fuse.*"}
-            / node_filesystem_size_bytes{job=~"(pve|spark|synology)-node", fstype!~"tmpfs|overlay|squashfs|ramfs|efivarfs|nfs.*|cifs|fuse.*"}
+            node_filesystem_avail_bytes{job=~"(pve|spark|synology|pi)-node", fstype!~"tmpfs|overlay|squashfs|ramfs|efivarfs|nfs.*|cifs|fuse.*"}
+            / node_filesystem_size_bytes{job=~"(pve|spark|synology|pi)-node", fstype!~"tmpfs|overlay|squashfs|ramfs|efivarfs|nfs.*|cifs|fuse.*"}
             < 0.10
           for: 30m
           labels:
@@ -44,7 +44,7 @@ spec:
         # Available memory is low by design on a Spark with a model loaded, so
         # this uses stall time rather than a free-memory threshold.
         - alert: HostMemoryStalled
-          expr: rate(node_pressure_memory_stalled_seconds_total{job=~"(pve|spark)-node"}[5m]) > 0.10
+          expr: rate(node_pressure_memory_stalled_seconds_total{job=~"(pve|spark|pi)-node"}[5m]) > 0.10
           for: 15m
           labels:
             severity: warning
@@ -76,13 +76,13 @@ spec:
             summary: GPU on {{ $labels.instance }} is thermally throttled
 
         - alert: HostQueueDropping
-          expr: increase(vm_persistentqueue_bytes_dropped_total{job=~"(pve|spark|synology)-vmagent"}[15m]) > 0
+          expr: increase(vm_persistentqueue_bytes_dropped_total{job=~"(pve|spark|synology|pi)-vmagent"}[15m]) > 0
           labels:
             severity: warning
           annotations:
             summary: "{{ $labels.instance }} discarded queued metrics"
             description: >-
-              The 1 GiB on-disk queue filled while the ingestion endpoint was
+              The on-disk queue reached its limit while the ingestion endpoint was
               unreachable, so the oldest samples were dropped.
 
         - alert: HostDeployFailing

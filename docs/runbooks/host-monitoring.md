@@ -1,6 +1,6 @@
 # Host monitoring
 
-Metrics from the three PVE nodes, the two DGX Sparks, the NAS and the UniFi network devices. The lab's metrics backend runs in `k8s-prod`; these hosts push to it. Each host runs ordinary exporters and a `vmagent` in Docker Compose, deployed from `main` by a host-local doco-cd as on the [NAS](../../synology/README.md). `vmagent` scrapes the exporters over loopback and pushes to `https://metrics-ingest.home.kelch.io`, queueing up to 1 GiB on disk while the endpoint is unreachable. Nothing on a host listens beyond loopback except doco-cd on PVE (see [PVE](#pve-node)) and the sparkDash dashboard on `spark-1`, at `10.32.21.31:5555` behind an access token. The Proxmox API and the UniFi console are read separately by in-cluster exporters. As on the NAS, doco-cd holds the host's Docker socket, so whoever can merge to `main` controls every enrolled host.
+Metrics from the three PVE nodes, the two DGX Sparks, the NAS, the UniFi network devices and the NixOS Pis. The lab's metrics backend runs in `k8s-prod`; these hosts push to it. Each host runs ordinary exporters and a `vmagent` in Docker Compose, deployed from `main` by a host-local doco-cd as on the [NAS](../../synology/README.md); a [Pi](#pi) runs them as NixOS services instead. `vmagent` scrapes the exporters over loopback and pushes to `https://metrics-ingest.home.kelch.io`, queueing up to 1 GiB on disk while the endpoint is unreachable. Nothing on a host listens beyond loopback except doco-cd on PVE (see [PVE](#pve-node)) and the sparkDash dashboard on `spark-1`, at `10.32.21.31:5555` behind an access token. The Proxmox API and the UniFi console are read separately by in-cluster exporters. As on the NAS, doco-cd holds the host's Docker socket, so whoever can merge to `main` controls every enrolled host.
 
 ## State
 
@@ -23,7 +23,7 @@ Not yet verified: that Docker comes back with the same settings after a PVE node
 | Label | Meaning | Set by |
 |---|---|---|
 | `instance` | Physical node, such as `spark-1` | The host's ingestion token |
-| `platform` | Machine type: `k8s`, `pve`, `spark`, `synology`, `unifi` or `glkvm` | The host's ingestion token; the node-exporter scrape for the cluster nodes; the [UniFi](#unifi) and [GLKVM](#glkvm) scrapes |
+| `platform` | Machine type: `k8s`, `pve`, `spark`, `synology`, `pi`, `unifi` or `glkvm` | The host's ingestion token; the node-exporter scrape for the cluster nodes; the [UniFi](#unifi) and [GLKVM](#glkvm) scrapes |
 | `job` | Collector or source, such as `spark-node`, `pve-vmagent` or `pve-backup` | Scrape configuration for scraped series; the webhook URL for PVE backup metrics |
 | `model`, `runtime`, `recipe` | What a Spark is serving | SparkRun's container labels |
 
@@ -71,6 +71,19 @@ Once the `NAS_TOKEN` `VMUser` is live, merge the project's entry in [`synology/.
 
 Rotate the token as for any host, writing `/volume1/docker/monitoring/token`. To remove the NAS, delete its target from `synology/.doco-cd.yml`, run `docker compose -p monitoring down` on Athena, and delete its `VMUser`.
 
+## Pi
+
+A NixOS Pi enrolls through the opt-in metrics profile in [rpi-nixos](https://github.com/kelchm/rpi-nixos), which runs the stock node-exporter and vmagent services on loopback with jobs `pi-node` and `pi-vmagent`. There is no deployer: a Pi changes when its NixOS configuration is switched. Its queue limit is 512 MiB, the smallest the pinned vmagent supports.
+
+The token lives in the host's rpi-nixos SOPS payload as `metrics-ingest-token`, and the same value sits here under the host's key, such as `STREAMER_BASEMENT_WORKBENCH_TOKEN`. Copy it from rpi-nixos rather than generating one here, and rotate both together:
+
+```sh
+sops decrypt --extract '["metrics-ingest-token"]' <rpi-nixos>/secrets/<host>.yaml | tr -d '\n' | jq -R . \
+  | sops set --value-stdin kubernetes/apps/observability/metrics-ingest/app/tokens.sops.yaml '["stringData"]["<HOST>_TOKEN"]'
+```
+
+Then add the host's `VMUser` with `platform=pi`. The vendor kernel ships with pressure stall information off; the profile turns it on at boot, so `HostMemoryStalled` covers a Pi only after its first reboot with the profile. To remove a Pi, drop the profile from its configuration and delete its `VMUser`.
+
 ## GLKVM
 
 The recovery console runs no collector of its own. The cluster's vmagent scrapes kvmd's native export directly, as for the Proxmox API, with `instance="glkvm"` and `platform="glkvm"`. The appliance changes, metrics, alerts and acceptance checks are in the [GLKVM README](../../devices/glkvm/README.md#monitoring).
@@ -82,7 +95,7 @@ time() - tlast_over_time(up{instance="spark-1"}[1h])
 count by (job) (up{instance="spark-1"} == 1)
 ```
 
-The first is a few seconds on a healthy host. The second lists `spark-node`, `spark-gpu`, `spark-vmagent` and `spark-deployer`, plus `spark-inference` on the node serving the head rank. On the NAS it lists `synology-node`, `synology-snmp` and `synology-vmagent`. On the host, `curl -s 127.0.0.1:8429/targets` shows each scrape target and `docker logs doco-cd` shows deployments.
+The first is a few seconds on a healthy host. The second lists `spark-node`, `spark-gpu`, `spark-vmagent` and `spark-deployer`, plus `spark-inference` on the node serving the head rank. On the NAS it lists `synology-node`, `synology-snmp` and `synology-vmagent`, and on a Pi `pi-node` and `pi-vmagent`. On the host, `curl -s 127.0.0.1:8429/targets` shows each scrape target and `docker logs doco-cd` shows deployments.
 
 Check memory with `docker stats --no-stream`, which matters on a Spark where a loaded model leaves little free. Every container keeps at most 30 MB of logs and has a memory limit: 256 MiB each for doco-cd and vmagent, 128 MiB each for node-exporter and the GPU exporter, so 768 MiB at most on a Spark and 640 MiB on a PVE node. sparkDash adds a 512 MiB limit on `spark-1`. Measured on 2026-10-04: a Spark used 90 to 110 MiB in total (doco-cd 35 to 44, vmagent 23 to 46, GPU exporter 10 to 17, node-exporter 10), leaving its available memory within 0.1 GiB of where it started; a PVE node used about 55 MiB.
 
