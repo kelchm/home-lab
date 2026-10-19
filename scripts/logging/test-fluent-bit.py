@@ -83,12 +83,14 @@ def write_inputs(work):
 def run(work):
     net = f'fbtest-{uuid.uuid4().hex[:8]}'
     docker = ['docker']
+    # Run as the invoking user so the temporary directory stays removable.
+    user = ['--user', f'{os.getuid()}:{os.getgid()}']
     subprocess.run(docker + ['network', 'create', net], check=True, capture_output=True)
     try:
-        subprocess.run(docker + ['run', '-d', '--rm', '--name', f'{net}-capture', '--network', net, '--network-alias', 'capture',
+        subprocess.run(docker + ['run', '-d', '--rm', *user, '--name', f'{net}-capture', '--network', net, '--network-alias', 'capture',
                                  '-v', f'{ROOT}/scripts/logging/otlp-capture.py:/capture.py:ro', '-v', f'{work}:/work',
                                  PYTHON_IMAGE, 'python', '/capture.py', '/work/wire.jsonl'], check=True, capture_output=True)
-        subprocess.run(docker + ['run', '-d', '--rm', '--name', f'{net}-fb', '--network', net, '-e', 'TZ=UTC',
+        subprocess.run(docker + ['run', '-d', '--rm', *user, '--name', f'{net}-fb', '--network', net, '-e', 'TZ=UTC',
                                  '-v', f'{APP}/config:/fluent-bit/etc/conf:ro', '-v', f'{work}/test.conf:/test/fluent-bit.conf:ro',
                                  '-v', f'{work}/inject.lua:/test/inject.lua:ro', '-v', f'{work}/logs:/var/log/containers:ro',
                                  '-v', f'{work}/state:/state', fluent_bit_image(), '-c', '/test/fluent-bit.conf'],
