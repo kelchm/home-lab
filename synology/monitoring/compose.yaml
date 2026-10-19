@@ -61,6 +61,9 @@ services:
       - -remoteWrite.bearerTokenFile=/token
       - -remoteWrite.tmpDataPath=/queue
       - -remoteWrite.maxDiskUsagePerURL=1GiB
+      # One queue, one push about every 15s; queries and vmalert already lag the newest 30s.
+      - -remoteWrite.queues=1
+      - -remoteWrite.flushInterval=15s
     volumes:
       - /volume1/docker/monitoring/config:/config:ro
       - /volume1/docker/monitoring/token:/token:ro

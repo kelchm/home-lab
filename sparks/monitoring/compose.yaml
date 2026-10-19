@@ -53,6 +53,9 @@ services:
       - -remoteWrite.bearerTokenFile=/etc/monitoring/token
       - -remoteWrite.tmpDataPath=/queue
       - -remoteWrite.maxDiskUsagePerURL=1GiB
+      # One queue, one push about every 15s; queries and vmalert already lag the newest 30s.
+      - -remoteWrite.queues=1
+      - -remoteWrite.flushInterval=15s
     volumes:
       - ./scrape.yaml:/etc/vmagent/scrape.yaml:ro
       - /etc/monitoring:/etc/monitoring:ro
