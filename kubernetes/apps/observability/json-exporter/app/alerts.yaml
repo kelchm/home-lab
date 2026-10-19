@@ -26,7 +26,7 @@ spec:
               The json-exporter is not scraped, cannot fetch
               http://192.168.12.1/TMI/v1/gateway?get=all, or the response no
               longer has the fields its tmobile module reads. A gateway that
-              is off or rebooting also shows as UniFiWANNotActive for WAN1.
+              is off or rebooting also shows as UniFiWANOffline for WAN1.
               After a gateway firmware update, compare the endpoint's JSON with
               the module in the json-exporter HelmRelease.
 

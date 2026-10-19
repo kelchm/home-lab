@@ -159,3 +159,101 @@ tests:
               name: Gateway DMP
             exp_annotations:
               summary: Gateway DMP memory is at 92%
+
+  - name: An offline WAN alerts after 5 minutes although its interface stays ACTIVE
+    interval: 1m
+    input_series:
+      - series: unpoller_wan_interface_state{job="unifi-api",state="ACTIVE",wan_interface="T-Mobile (WAN1)",wan_networkgroup="WAN"}
+        values: 1x70
+      - series: unpoller_wan_interface_state{job="unifi-api",state="ACTIVE",wan_interface="Starlink (WAN2)",wan_networkgroup="WAN2"}
+        values: 1x70
+      - series: unpoller_device_wan_status{job="unifi-api",name="Gateway DMP",status="online",wan_networkgroup="WAN"}
+        values: 1x70
+      - series: unpoller_device_wan_status{job="unifi-api",name="Gateway DMP",status="online",wan_networkgroup="WAN2"}
+        values: 1x2
+      - series: unpoller_device_wan_status{job="unifi-api",name="Gateway DMP",status="offline",wan_networkgroup="WAN2"}
+        values: _x3 0x66
+    alert_rule_test:
+      - eval_time: 7m
+        alertname: UniFiWANOffline
+        exp_alerts: []
+      - eval_time: 8m
+        alertname: UniFiWANOffline
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: unifi-api
+              name: Gateway DMP
+              status: offline
+              wan_networkgroup: WAN2
+            exp_annotations:
+              summary: Starlink (WAN2) is offline
+              description: The gateway's health check reports this WAN offline; all traffic runs on the remaining WAN. Check the modem or dish, its own metrics, and the UniFi Internet page.
+      - eval_time: 62m
+        alertname: UniFiWANOutageExtended
+        exp_alerts: []
+      - eval_time: 63m
+        alertname: UniFiWANOutageExtended
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              job: unifi-api
+              name: Gateway DMP
+              status: offline
+              wan_networkgroup: WAN2
+            exp_annotations:
+              summary: Starlink (WAN2) has been offline for over an hour
+              description: The lab has been on one WAN for an hour. Power-cycle the modem or dish, check the provider's status, and check the UniFi Internet page for the interface's last error.
+
+  - name: Sustained packet loss alerts on an online WAN only
+    interval: 1m
+    input_series:
+      - series: unpoller_wan_interface_state{job="unifi-api",state="ACTIVE",wan_interface="T-Mobile (WAN1)",wan_networkgroup="WAN"}
+        values: 1x40
+      - series: unpoller_wan_interface_state{job="unifi-api",state="ACTIVE",wan_interface="Starlink (WAN2)",wan_networkgroup="WAN2"}
+        values: 1x40
+      # T-Mobile online but answering 80% of pings.
+      - series: unpoller_device_wan_status{job="unifi-api",name="Gateway DMP",status="online",wan_networkgroup="WAN"}
+        values: 1x40
+      - series: unpoller_device_wan_availability_percent{job="unifi-api",name="Gateway DMP",port="eth9"}
+        values: 80x40
+      # Starlink offline with its link up: no pings answered, left to UniFiWANOffline.
+      - series: unpoller_device_wan_status{job="unifi-api",name="Gateway DMP",status="offline",wan_networkgroup="WAN2"}
+        values: 0x40
+      - series: unpoller_device_wan_availability_percent{job="unifi-api",name="Gateway DMP",port="eth8"}
+        values: 0x40
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: UniFiWANPacketLoss
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: UniFiWANPacketLoss
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: unifi-api
+              name: Gateway DMP
+              port: eth9
+              wan_networkgroup: WAN
+            exp_annotations:
+              summary: T-Mobile (WAN1) answers 80% of pings
+              description: The gateway's pings to ping.ui.com over eth9 have averaged under 90% answered for 15 minutes, so this WAN's share of load-balanced flows is degraded while it still reads online. Compare the modem's or dish's own metrics.
+
+  - name: A WAN out of load balancing alerts on its interface state
+    interval: 1m
+    input_series:
+      - series: unpoller_wan_interface_state{job="unifi-api",state="BACKUP",wan_interface="Starlink (WAN2)",wan_networkgroup="WAN2"}
+        values: 0x10
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: UniFiWANNotActive
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: unifi-api
+              state: BACKUP
+              wan_interface: Starlink (WAN2)
+              wan_networkgroup: WAN2
+            exp_annotations:
+              summary: Starlink (WAN2) is BACKUP
+              description: The gateway is not balancing traffic onto Starlink (WAN2). Check the load-balancing mode and failover priorities on the UniFi Internet page.
