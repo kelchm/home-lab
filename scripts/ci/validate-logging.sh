@@ -3,6 +3,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 python3 scripts/logging/validate-config.py
+python3 scripts/logging/test-fluent-bit.py
 python3 scripts/logging/render-dashboard.py --check
 test_dir="$(mktemp -d)"
 trap 'rm -rf "$test_dir"' EXIT
@@ -17,4 +18,4 @@ yq 'select(.metadata.name == "unifi-syslog-ingestion") | .spec' kubernetes/apps/
 promtool check rules "$unifi_dir/rules.yaml"
 cp scripts/logging/unifi-syslog-alerts.test.yaml "$unifi_dir/tests.yaml"
 promtool test rules "$unifi_dir/tests.yaml"
-echo 'vlagent configuration, logging alert rules and UniFi syslog ingestion alert validated.'
+echo 'Log collector configuration and mapping, logging alert rules and UniFi syslog ingestion alert validated.'

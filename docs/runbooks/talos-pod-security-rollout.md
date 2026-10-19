@@ -9,7 +9,7 @@ workloads require baseline-prohibited host access:
 | --- | --- |
 | `longhorn-system` | Privileged CSI and storage-engine host access |
 | `media` | qBittorrent's Gluetun sidecar uses `NET_ADMIN` and `/dev/net/tun` |
-| `observability` | node-exporter uses host namespaces; vlagent reads host log paths and persists node-local queues |
+| `observability` | node-exporter uses host namespaces; Fluent Bit reads host log paths and persists node-local tail positions and buffers |
 
 The on-demand iperf3 tool in [`tools/iperf3/iperf3.yaml`](../../tools/iperf3/iperf3.yaml) creates `network-perf` with the same exception while a test runs, and removes it with the tool.
 

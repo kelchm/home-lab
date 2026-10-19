@@ -12,7 +12,7 @@ metadata:
   name: default-deny
 spec:
   dependsOn:
-    - name: vlagent
+    - name: fluent-bit
     - name: grafana
     - name: json-exporter
     - name: metrics-ingest

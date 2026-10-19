@@ -920,7 +920,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(vl_rows_ingested_total{cluster=\"k8s-prod\",job=\"victoria-logs-single-server\",type=\"nativeinsert\"}[5m]))",
+          "expr": "sum(rate(vl_rows_ingested_total{cluster=\"k8s-prod\",job=\"victoria-logs-single-server\",type=\"opentelemetry_protobuf\"}[5m]))",
           "legendFormat": "Log lines / second",
           "refId": "C",
           "instant": true,
@@ -1761,7 +1761,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(vl_rows_ingested_total{cluster=\"k8s-prod\",job=\"victoria-logs-single-server\",type=\"nativeinsert\"}[5m]))",
+          "expr": "sum(rate(vl_rows_ingested_total{cluster=\"k8s-prod\",job=\"victoria-logs-single-server\",type=\"opentelemetry_protobuf\"}[5m]))",
           "legendFormat": "Log lines per second",
           "range": true,
           "refId": "A"

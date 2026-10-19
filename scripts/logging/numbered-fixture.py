@@ -6,7 +6,7 @@ import os
 import sys
 import time
 
-run = os.environ.get('FIXTURE_RUN', 'vlagent-583')
+run = os.environ.get('FIXTURE_RUN', 'delivery')
 count = int(os.environ.get('FIXTURE_COUNT', '3600'))
 time.sleep(10)  # allow discovery before the first event
 for n in range(count):

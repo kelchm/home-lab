@@ -23,11 +23,14 @@ rows = []
 expected = {}
 
 
-def add(message, level='', *, payload=None, namespace='fixture', service='fixture', stream='stderr', legacy=False):
+def add(message, level='', *, payload=None, namespace='fixture', service='fixture', stream='stderr', legacy=False, otel=False):
     index = str(len(rows))
     row = {'_time': dt.datetime.now(dt.timezone.utc).isoformat(), '_msg': message,
            'fixture_run': run, 'fixture_id': index}
-    if legacy:
+    if otel:
+        row.update({'k8s.namespace.name': namespace, 'k8s.pod.name': 'fixture', 'k8s.container.name': 'app',
+                    'k8s.node.name': 'fixture-node', 'service.name': service, 'log.iostream': stream})
+    elif legacy:
         row.update(namespace=namespace, service_name=service, pod='fixture', container='app', node='fixture-node', stream=stream)
     else:
         row.update({'kubernetes.pod_namespace': namespace, 'kubernetes.pod_name': 'fixture',
@@ -37,7 +40,7 @@ def add(message, level='', *, payload=None, namespace='fixture', service='fixtur
     row.update(payload or {})
     rows.append(row)
     expected[index] = {'level': level, 'namespace': namespace, 'service_name': service, 'stream': stream,
-                       'app_instance': row.get('app_instance', '') if legacy else row.get('kubernetes.pod_labels.app.kubernetes.io/instance', '')}
+                       'app_instance': row.get('app_instance', '') if legacy or otel else row.get('kubernetes.pod_labels.app.kubernetes.io/instance', '')}
 
 
 aliases = {'TRC':'trace', 'verbose':'debug', 'Informational':'info', 'WaRn':'warning', 'ERR':'error', 'PANIC':'critical'}
@@ -73,6 +76,14 @@ add('retained instance', legacy=True, payload={'app_instance': 'release'})
 add('retained-only service', legacy=True, namespace='retained-only', service='archived.v1')
 add('native-only service', namespace='native-only', service='checkout-api')
 add('level=info msg="stdout event"', 'info', stream='stdout')
+# OpenTelemetry-shaped rows: severity_number wins over source text.
+for number, normalized in ((1, 'trace'), (4, 'trace'), (5, 'debug'), (8, 'debug'), (10, 'info'), (12, 'info'),
+                           (13, 'warning'), (16, 'warning'), (17, 'error'), (20, 'error'), (21, 'critical'), (24, 'critical')):
+    add('otel', normalized, otel=True, namespace='otel-only', service='traefik-services-network',
+        payload={'severity_number': number, 'severity_text': 'E'})
+add('otel unspecified', otel=True, namespace='otel-only', service='mcphub', payload={'severity_number': 0})
+add('otel prefixed payload', 'info', otel=True, namespace='otel-only', service='grafana',
+    payload={'severity_number': 9, 'grafana.level': 'error', 'grafana.namespace': 'application-namespace'})
 
 
 def request(path, body, content_type):
@@ -133,7 +144,7 @@ def field_values(name, selection):
 
 
 assert field_values('namespace', {}) == {row['namespace'] for row in expected.values()}
-suggestion_cases = (None, ['fixture'], ['retained-only'], ['native-only'], ['printing', 'ai'], ['application-namespace'])
+suggestion_cases = (None, ['fixture'], ['retained-only'], ['native-only'], ['otel-only'], ['printing', 'ai'], ['application-namespace'])
 for namespaces in suggestion_cases:
     wanted = {row['service_name'] for row in expected.values()
               if namespaces is None or row['namespace'] in namespaces}
@@ -143,6 +154,8 @@ selection_cases = [
     {},
     {'namespace': ['retained-only'], 'service': ['archived.v1']},
     {'namespace': ['native-only'], 'service': ['checkout-api']},
+    {'namespace': ['otel-only'], 'level': ['error', 'unknown']},
+    {'service': ['traefik-services-network'], 'level': ['critical']},
     {'namespace': ['printing', 'ai'], 'level': ['info', 'error']},
     {'namespace': ['fixture'], 'level': ['trace']},
     {'namespace': ['fixture'], 'level': ['unknown']},
