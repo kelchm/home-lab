@@ -174,7 +174,8 @@ def check(rows):
             continue
 
         def compare(label, want, got):
-            if want != got:
+            # An integer field sent as a double decodes as a float.
+            if want != got or type(want) is int and type(got) is float:
                 failures.append(f'{name}: {label} expected {want!r}, got {got!r}')
 
         if row.get('stream_fields') != (UNIFI_STREAM_FIELDS if unifi else TALOS_STREAM_FIELDS if talos else K8S_STREAM_FIELDS):
