@@ -15,6 +15,12 @@ spec:
   # which would exceed Flux's 5m default timeout and abort the upgrade mid-hook.
   timeout: 30m
   values:
+    # Timer for re-reconciling groups, people and OAuth2 clients, and the cap
+    # on error-retry backoff. CR and owned-Secret changes still reconcile at
+    # once through watches. Every timed reconcile is several kanidm API
+    # requests, each logged as INFO lines.
+    idmReconcileIntervalSeconds: 300
+
     resources:
       requests:
         cpu: 10m
