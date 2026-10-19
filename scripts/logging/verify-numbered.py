@@ -24,7 +24,7 @@ if a.expected <= 0:
     p.error('expected must be positive')
 if a.schema == 'otel' and not a.app:
     p.error('--app is required for the otel schema')
-prefix = {'alloy': 'msg.', 'vlagent': '', 'otel': a.app + '.'}[a.schema]
+prefix = a.app + '.' if a.schema == 'otel' else {'alloy': 'msg.', 'vlagent': ''}[a.schema]
 limit = a.expected * 2 + 100
 pipe = (Path(__file__).parent / 'compat.logsql').read_text()
 query = f'_time:[{start.isoformat()},{end.isoformat()}) ' + json.dumps(prefix + 'fixture_run') + ':=' + json.dumps(a.run) + '\n' + pipe
