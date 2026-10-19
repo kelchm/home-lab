@@ -31,6 +31,8 @@ local TEXT_LEVEL = {
   bambuddy = { '^(%a+):', '^%d%d%d%d%-%d%d%-%d%d %d%d:%d%d:%d%d,%d+ (%a+) %[' },
   broadsheet = { '^(%a+): ' },
   flaresolverr = { '^%d%d%d%d%-%d%d%-%d%d %S+%s+(%a+)%s' },
+  -- Level right-aligned in five columns: `[ warn]`, `[error]`.
+  ['fluent-bit'] = { '^%[%d%d%d%d/%d%d/%d%d %d%d:%d%d:%d%d%.%d+%] %[ *(%a+)%]' },
 }
 -- Fallbacks for other plain text, accepted only when the token is a known
 -- level: bracketed as the first token, directly after a leading ISO-8601
