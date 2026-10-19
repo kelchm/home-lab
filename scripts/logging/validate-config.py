@@ -8,7 +8,7 @@ import subprocess
 root = Path(__file__).resolve().parents[2]
 app = root / 'kubernetes/apps/observability/fluent-bit/app'
 values = json.loads(subprocess.check_output(['yq', '-o=json', '.spec.values', str(app / 'helmrelease.yaml')]))
-assert re.fullmatch(r'[^:@]+', values['image']['repository'])
+assert values['image']['repository'] == 'fluent/fluent-bit'
 assert re.fullmatch(r'[0-9.]+@sha256:[a-f0-9]{64}', values['image']['tag'])
 assert values['existingConfigMap'] == 'fluent-bit-config'
 security = values['securityContext']
@@ -28,5 +28,7 @@ assert setting('Read_from_Head').lower() == 'on'
 assert setting('storage.type') == 'filesystem' and setting('storage.sync') == 'full'
 assert setting('DB').startswith('/var/lib/fluent-bit/') and setting('storage.path').startswith('/var/lib/fluent-bit/')
 assert setting('Retry_Limit') == 'no_limits'
+# Off stops tailing the whole file at the first line over Buffer_Max_Size.
+assert setting('Skip_Long_Lines').lower() == 'on'
 assert setting('Logs_URI') == '/insert/opentelemetry/v1/logs'
 print('Fluent Bit image, hardening, mounts and pipeline guarantees validated.')

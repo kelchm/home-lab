@@ -39,17 +39,17 @@ vlagent's proposed transformation language ([VictoriaLogs #1508](https://github.
 
 ## Mapping verification
 
-Run through the production configuration and Lua with a replay of the export: 53,376 of 53,376 records arrived, all with `service.name` and a non-empty body, with no unmapped levels. Severity was unspecified for 6,665 rows: mcphub multi-line JSON fragments (5,789), echo probe access lines (842) and a handful of continuation lines. All 14,267 Traefik bodies matched Traefik's compiled formatter, and the 22 responses with 5xx status carried `error.type`. `scripts/logging/test-fluent-bit.py` runs 26 fixtures through the pinned image in CI, covering identity precedence including owner references and annotations, payload collisions, each level format, Traefik formatting and split CRI records.
+Run through the production configuration and Lua with a replay of the export: 53,376 of 53,376 records arrived, all with `service.name` and a non-empty body, with no unmapped levels. Severity was unspecified for 6,647 rows: mcphub multi-line JSON fragments (5,789), echo probe access lines (842) and 16 plain-text lines from the functional probe and Whereabouts that state no level. All 14,267 Traefik bodies matched Traefik's compiled formatter, and the 22 responses with 5xx status carried `error.type`. `scripts/logging/test-fluent-bit.py` runs 33 fixtures through the pinned image in CI, covering identity precedence including owner references and annotations, payload collisions, each level format, Traefik formatting, split CRI records, a 200 KB line and the fallback for records the mapping cannot handle.
 
 ## Delivery
 
-The September drill ([collector evaluation](kubernetes-log-collectors.md)) was repeated against Fluent Bit 5.1.4 with a numbered fixture, kubelet-style rotation and filesystem buffering:
+The September drills ([graceful outage](kubernetes-log-collectors.md); [SIGKILL during an outage](https://github.com/kelchm/home-lab/blob/26cb6da0d60e49733614246990ac1ae3567ca06d/docs/runbooks/logging.md)) were repeated against Fluent Bit 5.1.4 with a numbered fixture, kubelet-style rotation and filesystem buffering:
 
 | Scenario | Fluent Bit | vlagent (September) |
 | --- | --- | --- |
 | 11-minute backend outage, graceful restart | 13,200/13,200, 0 duplicates | 12,839/12,839, 0 duplicates |
-| SIGKILL under load | 2,400/2,400, 0 duplicates | 2,400/2,400, 529 duplicates |
-| SIGKILL during an outage, file rotated while stopped | 33 missing | not tested |
+| SIGKILL, backend up | 2,400/2,400, 0 duplicates | not tested |
+| SIGKILL during an outage | 33 missing, 0 duplicates; file rotated while stopped | 2,400/2,400, 529 duplicates |
 | Buffer exhausted (deliberately tiny limit) | 2,336 missing; drop counter reported 1,072 | not tested |
 
 The missing records in the third case were the unread end of a file that rotated while Fluent Bit was stopped. Including rotated files in the tail path recovers them but replays rotated files after every restart (2,700 duplicates after a graceful restart), and Fluent Bit's documentation says the path must not match rotated files. The configuration follows the documentation and accepts this compound case. Because the drop counter undercounts buffer-exhaustion loss, alerting fires on buffer capacity before exhaustion.

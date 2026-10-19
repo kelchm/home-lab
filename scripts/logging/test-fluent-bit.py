@@ -68,7 +68,7 @@ def write_inputs(work):
             parts = case['partial']
             lines = [f'{stamp} {stream} P {p}' for p in parts[:-1]] + [f'{stamp} {stream} F {parts[-1]}']
         else:
-            lines = [f"{stamp} {stream} F {case['line']}"]
+            lines = [f"{stamp} {stream} F {case['line']}{'a' * case.get('pad', 0)}"]
         (logs / name).write_text('\n'.join(lines) + '\n')
         metadata['kube.var.log.containers.' + name] = pod
         case['_uid'] = pod_id
@@ -136,6 +136,9 @@ def check(rows):
             compare(f'resource {key}', want, row['resource'].get(key))
         for key, want in exp.get('attributes', {}).items():
             compare(f'attribute {key}', want, row['attributes'].get(key))
+        for key in exp.get('present', []):
+            if key not in row['attributes']:
+                failures.append(f'{name}: attribute {key} should be present')
         for key in exp.get('absent', []):
             if key in row['attributes']:
                 failures.append(f'{name}: attribute {key} should be absent, got {row["attributes"][key]!r}')

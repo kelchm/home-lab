@@ -23,12 +23,14 @@ local NUMERIC_LEVELS = { ['10'] = 1, ['20'] = 5, ['30'] = 9, ['40'] = 13, ['50']
 
 -- Plain-text formats with the level at a fixed position, by application.
 local TEXT_LEVEL = {
-  kanidm = '^%x+%-%x+%-%x+%-%x+%-%x+%s+(%a+)%s',
-  mcphub = '^%[[^%]]+%]%s+%[(%a+)%]',
-  jellyfin = '^%[[^%]]+%]%s+%[(%a+)%]',
-  unpoller = '^%d%d%d%d/%d%d/%d%d %S+ %[(%a+)%]',
-  bambuddy = '^(%a+):',
-  flaresolverr = '^%d%d%d%d%-%d%d%-%d%d %S+%s+(%a+)%s',
+  kanidm = { '^%x+%-%x+%-%x+%-%x+%-%x+%s+(%a+)%s' },
+  mcphub = { '^%[[^%]]+%]%s+%[(%a+)%]' },
+  jellyfin = { '^%[[^%]]+%]%s+%[(%a+)%]' },
+  unpoller = { '^%d%d%d%d/%d%d/%d%d %S+ %[(%a+)%]' },
+  -- uvicorn access lines, then Python logging lines.
+  bambuddy = { '^(%a+):', '^%d%d%d%d%-%d%d%-%d%d %d%d:%d%d:%d%d,%d+ (%a+) %[' },
+  broadsheet = { '^(%a+): ' },
+  flaresolverr = { '^%d%d%d%d%-%d%d%-%d%d %S+%s+(%a+)%s' },
 }
 -- Fallbacks for other plain text, accepted only when the token is a known
 -- level: bracketed as the first token, or directly after a leading ISO-8601
@@ -74,33 +76,38 @@ local function flatten(t, prefix, out)
   return out
 end
 
--- logfmt with quoted values and backslash escapes.
+-- logfmt with quoted values and backslash escapes. Keys are matched only at
+-- the start of a run of key characters, which keeps long lines linear.
 local function logfmt(s)
   local out, pos = {}, 1
-  while pos <= #s do
-    local _, last, key = s:find('([%w_./%-]+)=', pos)
-    if not last then break end
-    local i, value = last + 1, {}
-    if s:sub(i, i) == '"' then
-      i = i + 1
-      while i <= #s do
-        local c = s:sub(i, i)
-        if c == '"' then i = i + 1 break end
-        if c == '\\' and i < #s then
-          i = i + 1
-          c = s:sub(i, i)
-          c = ({ n = '\n', r = '\r', t = '\t' })[c] or c
-        end
-        value[#value + 1] = c
-        i = i + 1
-      end
+  while pos and pos <= #s do
+    local _, last, key = s:find('^([%w_./%-]+)=', pos)
+    if not last then
+      local gap = s:find('[^%w_./%-]', pos)
+      pos = gap and s:find('[%w_./%-]', gap)
     else
-      local stop = s:find('%s', i) or (#s + 1)
-      value[1] = s:sub(i, stop - 1)
-      i = stop
+      local i, value = last + 1, {}
+      if s:sub(i, i) == '"' then
+        i = i + 1
+        while i <= #s do
+          local c = s:sub(i, i)
+          if c == '"' then i = i + 1 break end
+          if c == '\\' and i < #s then
+            i = i + 1
+            c = s:sub(i, i)
+            c = ({ n = '\n', r = '\r', t = '\t' })[c] or c
+          end
+          value[#value + 1] = c
+          i = i + 1
+        end
+      else
+        local stop = s:find('%s', i) or (#s + 1)
+        value[1] = s:sub(i, stop - 1)
+        i = stop
+      end
+      out[key] = table.concat(value)
+      pos = i
     end
-    out[key] = table.concat(value)
-    pos = i
   end
   return out
 end
@@ -182,8 +189,7 @@ function capture(tag, ts, group, metadata, record)
   return 1, ts, metadata, { log = record.log or '' }
 end
 
-function normalize(tag, ts, group, metadata, record)
-  local ingress = metadata.ingress
+local function build(ingress, record)
   local raw = ingress.raw
   local resource, app = identity(ingress.kubernetes)
   local attributes = { ['log.iostream'] = ingress.stream }
@@ -191,7 +197,7 @@ function normalize(tag, ts, group, metadata, record)
   -- Payload fields: JSON from the parser filter, else logfmt (optionally after
   -- a bracketed prefix, as Longhorn instance-manager writes).
   local payload = flatten(record, nil, {})
-  payload.log = nil
+  if payload.log == raw then payload.log = nil end
   local structured = next(payload) ~= nil
   if not structured then
     local kv = raw:match('^[%w_./%-]+=.*') or raw:match('^%[[^%]]+%]%s+([%w_./%-]+=.*)')
@@ -201,7 +207,7 @@ function normalize(tag, ts, group, metadata, record)
     end
   end
 
-  local body = first(payload['record.message'], payload.msg, payload.message, raw)
+  local body = first(payload['record.message'], payload.msg, payload.message) or raw
   payload['record.message'], payload.msg, payload.message = nil, nil, nil
 
   local level, fixed_position
@@ -234,8 +240,11 @@ function normalize(tag, ts, group, metadata, record)
 
   if not level and not structured then
     if TEXT_LEVEL[app] then
-      level = raw:match(TEXT_LEVEL[app])
       fixed_position = true
+      for _, pattern in ipairs(TEXT_LEVEL[app]) do
+        level = raw:match(pattern)
+        if level then break end
+      end
     else
       for _, pattern in ipairs(TEXT_LEVEL_FALLBACK) do
         local token = raw:match(pattern)
@@ -292,5 +301,19 @@ function normalize(tag, ts, group, metadata, record)
   for key, value in pairs(payload) do attributes[app .. '.' .. key] = value end
 
   attributes.otlp = { severity_number = severity or 0, severity_text = level and tostring(level) or nil }
+  return attributes, body, resource
+end
+
+-- A Lua error would leave the whole batch unnormalized, so a record the mapping
+-- cannot handle keeps its identity and raw line and is flagged instead.
+function normalize(tag, ts, group, metadata, record)
+  local ingress = metadata.ingress
+  local ok, attributes, body, resource = pcall(build, ingress, record)
+  if not ok then
+    local found, r = pcall(identity, ingress.kubernetes)
+    attributes = { ['log.iostream'] = ingress.stream, ['pipeline.normalize_error'] = tostring(attributes),
+      otlp = { severity_number = 0 } }
+    body, resource = ingress.raw, found and r or {}
+  end
   return 1, ts, attributes, { body = body, resource = { attributes = resource } }
 end

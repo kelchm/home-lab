@@ -45,7 +45,7 @@ end = collect()
 elapsed = time.monotonic() - begin
 result = {}
 for node in start:
-    assert start[node]['fluentbit_uptime'] <= end[node]['fluentbit_uptime'], 'Collector restarted; discard the interval'
+    assert start[node]['fluentbit_process_start_time_seconds'] == end[node]['fluentbit_process_start_time_seconds'], 'Collector restarted; discard the interval'
     read = end[node]['fluentbit_input_bytes_total'] - start[node]['fluentbit_input_bytes_total']
     sent = end[node]['fluentbit_output_proc_bytes_total'] - start[node]['fluentbit_output_proc_bytes_total']
     result[node] = {'input_bytes': read, 'output_bytes': sent, 'output_bytes_per_second': round(sent / elapsed, 2)}

@@ -145,7 +145,7 @@ spec:
             description: Check DaemonSet scheduling, PodMonitor conversion and the metrics network path.
 
         - alert: FluentBitDeliveryRetrying
-          expr: increase(fluentbit_output_retries_total{job="fluent-bit"}[10m]) > 0
+          expr: increase(fluentbit_output_retries_total{job="fluent-bit"}[2m]) > 0
           for: 10m
           labels:
             severity: warning
@@ -165,12 +165,12 @@ spec:
         - alert: FluentBitRecordsDropped
           expr: |
             increase(fluentbit_output_dropped_records_total{job="fluent-bit"}[10m]) > 0
-            or increase(fluentbit_output_retries_failed_total{job="fluent-bit"}[10m]) > 0
+            or increase(fluentbit_input_long_line_skipped_total{job="fluent-bit"}[10m]) > 0
           labels:
             severity: critical
           annotations:
             summary: Fluent Bit on {{ $labels.node }} dropped log records
-            description: Records were discarded or exhausted their retries. The counter is a lower bound on the loss. Preserve metrics and restore delivery.
+            description: The output discarded buffered records, or the input skipped a container log line longer than 1 MiB. The output counter is a lower bound on the loss. Preserve metrics and restore delivery.
 
         - alert: FluentBitNodeLogIngestionSilent
           expr: increase(fluentbit_input_records_total{job="fluent-bit",name="pods"}[10m]) == 0

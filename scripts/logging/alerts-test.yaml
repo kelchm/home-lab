@@ -37,6 +37,24 @@ tests:
       - expr: count(ALERTS{alertname="FluentBitNodeLogIngestionSilent",alertstate="firing"})
         eval_time: 21m
         exp_samples: [{labels: '{}', value: 1}]
+  - name: A short delivery outage that recovers raises nothing
+    interval: 1m
+    input_series:
+      - series: fluentbit_output_retries_total{job="fluent-bit",node="n1",name="victorialogs"}
+        values: 0 5 10 15+0x27
+    promql_expr_test:
+      - expr: ALERTS{alertname="FluentBitDeliveryRetrying",alertstate="firing"}
+        eval_time: 12m
+        exp_samples: []
+  - name: Skipped oversized lines count as dropped records
+    interval: 1m
+    input_series:
+      - series: fluentbit_input_long_line_skipped_total{job="fluent-bit",node="n1",name="pods"}
+        values: 0 1+0x29
+    promql_expr_test:
+      - expr: count(ALERTS{alertname="FluentBitRecordsDropped",alertstate="firing"})
+        eval_time: 2m
+        exp_samples: [{labels: '{}', value: 1}]
   - name: Healthy collectors raise nothing
     interval: 1m
     input_series:

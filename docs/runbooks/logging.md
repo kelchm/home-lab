@@ -23,7 +23,7 @@ Pattern counts marked `~` are estimates from a 1-in-10 sample and the list is ca
 
 The VMUI handoff still serializes the absolute end time as UTC `YYYY-MM-DD HH:mm` without a timezone suffix, including in v0.33.1. In an America/New_York browser, the September 26 check shifted a historical window by four hours; seconds are also omitted. The v0.33.1 generated link additionally omitted query-level filter chips in the scratch trial, retaining `query=*` after a namespace-chip selection. For exact or scoped investigations, copy an explicit LogsQL expression and set and verify the time range in VMUI. The timezone limitation remains accepted ([#485](https://github.com/kelchm/home-lab/issues/485)); revisit when a release preserves timezone, precision and all filters.
 
-Grafana authenticates through its native `auth.generic_oauth` integration and dedicated Kanidm client; VictoriaLogs VMUI uses the OIDC middleware on its HTTPRoute. Useful LogsQL starting points are `k8s.namespace.name:=observability`, `service.name:=grafana`, `severity_number:>=17` (errors and worse), `log.iostream:=stderr`, `error.type:*` (failed HTTP requests) and `k8s.namespace.name:=observability | stats by (service.name) count()`. Bare words search the message only; use `*:word` to search every field. The time picker supplies the query window. These filters select current records only; see [Retained history](#retained-history) for older rows.
+Grafana authenticates through its native `auth.generic_oauth` integration and dedicated Kanidm client; VictoriaLogs VMUI uses the OIDC middleware on its HTTPRoute. Useful LogsQL starting points are `k8s.namespace.name:=observability`, `service.name:=grafana`, `severity_number:>=17` (errors and worse), `log.iostream:=stderr`, `error.type:*` (HTTP 5xx responses) and `k8s.namespace.name:=observability | stats by (service.name) count()`. Bare words search the message only; use `*:word` to search every field. The time picker supplies the query window. These filters select current records only; see [Retained history](#retained-history) for older rows.
 
 ## Log schema
 
@@ -41,6 +41,7 @@ Records follow the [OpenTelemetry log data model](https://opentelemetry.io/docs/
 | `code.file.path`, `code.line.number`, `thread.id` | Source location from klog and Go slog. |
 | `<application>.<field>` | Every other application field, prefixed by the `app.kubernetes.io/name` label (else the legacy `app` label, owning workload or container), e.g. `traefik.RouterName`, `grafana.logger`, `kustomize-controller.name`. |
 | `pipeline.severity_unmapped` | The source stated a level the mapping does not recognize; extend `normalize.lua`. |
+| `pipeline.normalize_error` | The mapping raised an error on this record, which keeps its identity and raw line as the message; fix `normalize.lua`. |
 
 To give a workload a better service name than its labels produce, set `resource.opentelemetry.io/service.name` on its pod template.
 
@@ -154,7 +155,7 @@ Traefik access logs carry their request fields under HTTP semantic-convention na
 
 ## Pipeline failures
 
-Metrics-native rules in the `fluent-bit-pipeline` group page through VMAlertmanager when a node's collector target disappears (`FluentBitCollectorTargetMissing`), a node reads no container logs (`FluentBitNodeLogIngestionSilent`), delivery keeps retrying (`FluentBitDeliveryRetrying`), the output buffer passes 75% (`FluentBitBufferNearCapacity`) or records are dropped (`FluentBitRecordsDropped`). The `logging-pipeline` group covers VictoriaLogs itself, including `VictoriaLogsIngestionSilent` on `vl_rows_ingested_total{type="opentelemetry_protobuf"}`. These alerts depend on the metrics path rather than querying the log backend they diagnose. Follow the [alert-delivery runbook](alerting.md#end-to-end-delivery-test) when retesting delivery.
+Metrics-native rules in the `fluent-bit-pipeline` group page through VMAlertmanager when a node's collector target disappears (`FluentBitCollectorTargetMissing`), a node reads no container logs (`FluentBitNodeLogIngestionSilent`), delivery keeps retrying (`FluentBitDeliveryRetrying`), the output buffer passes 75% (`FluentBitBufferNearCapacity`) or records are dropped, including container log lines over 1 MiB that the collector skips (`FluentBitRecordsDropped`). The `logging-pipeline` group covers VictoriaLogs itself, including `VictoriaLogsIngestionSilent` on `vl_rows_ingested_total{type="opentelemetry_protobuf"}`. These alerts depend on the metrics path rather than querying the log backend they diagnose. Follow the [alert-delivery runbook](alerting.md#end-to-end-delivery-test) when retesting delivery.
 
 Fluent Bit's drop counter undercounts loss when its buffer is exhausted (a local drill dropped 2,336 records and counted 1,072), so treat `FluentBitBufferNearCapacity` as the actionable signal and the drop alert as a lower bound.
 
@@ -185,7 +186,7 @@ After the rollout, verify on each node: the Fluent Bit pod is Ready, `fluentbit_
 
 ## Collector maintenance and rollback
 
-The DaemonSet rolls one node at a time. Before a planned collector change, restore backend health and check `fluentbit_output_retries_total` is flat, so the buffer is empty. Never run two Fluent Bit processes against the same `/var/lib/fluent-bit`.
+The DaemonSet rolls one node at a time. Before a planned collector change, restore backend health and check `fluentbit_storage_fs_chunks` is back at its usual low level; a delivery backlog holds hundreds. Never run two Fluent Bit processes against the same `/var/lib/fluent-bit`.
 
 To roll back, revert the Fluent Bit change in a reviewed PR: Git history keeps the vlagent DaemonSet, alerts and dashboards. vlagent resumes from its own checkpoints in `/var/lib/vlagent` if they are still present, replaying what it had not yet read; records already sent by Fluent Bit stay in the new schema until retention removes them.
 

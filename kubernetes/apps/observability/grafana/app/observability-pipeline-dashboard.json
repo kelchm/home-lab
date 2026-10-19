@@ -1788,8 +1788,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(increase(fluentbit_output_retries_failed_total{job=\"fluent-bit\"}[$__interval]))",
-          "legendFormat": "Fluent Bit retries exhausted",
+          "expr": "sum(increase(fluentbit_input_long_line_skipped_total{job=\"fluent-bit\"}[$__interval]))",
+          "legendFormat": "Fluent Bit oversized lines skipped",
           "refId": "B",
           "range": true
         },
