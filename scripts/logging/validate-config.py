@@ -15,6 +15,7 @@ security = values['securityContext']
 assert security['readOnlyRootFilesystem'] and not security['allowPrivilegeEscalation']
 assert security['capabilities']['drop'] == ['ALL']
 assert security['seccompProfile']['type'] == 'RuntimeDefault'
+assert not values.get('hostNetwork') and not values.get('hostPID')
 assert sorted(v['hostPath']['path'] for v in values['daemonSetVolumes']) == ['/var/lib/fluent-bit', '/var/log/containers', '/var/log/pods']
 assert all(m.get('readOnly') for m in values['daemonSetVolumeMounts'] if m['name'] != 'state')
 assert values['updateStrategy']['rollingUpdate'] == {'maxUnavailable': 1, 'maxSurge': 0}

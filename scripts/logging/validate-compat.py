@@ -77,7 +77,8 @@ add('retained-only service', legacy=True, namespace='retained-only', service='ar
 add('native-only service', namespace='native-only', service='checkout-api')
 add('level=info msg="stdout event"', 'info', stream='stdout')
 # OpenTelemetry-shaped rows: severity_number wins over source text.
-for number, normalized in ((1, 'trace'), (5, 'debug'), (10, 'info'), (13, 'warning'), (17, 'error'), (21, 'critical')):
+for number, normalized in ((1, 'trace'), (4, 'trace'), (5, 'debug'), (8, 'debug'), (10, 'info'), (12, 'info'),
+                           (13, 'warning'), (16, 'warning'), (17, 'error'), (20, 'error'), (21, 'critical'), (24, 'critical')):
     add('otel', normalized, otel=True, namespace='otel-only', service='traefik-services-network',
         payload={'severity_number': number, 'severity_text': 'E'})
 add('otel unspecified', otel=True, namespace='otel-only', service='mcphub', payload={'severity_number': 0})

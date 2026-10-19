@@ -233,7 +233,7 @@ spec:
         # The prior seven-day peak was 819 streams/hour. Fluent Bit's stream
         # fields are one identity per service/namespace/pod/container/node, with
         # no per-event values. The collector cutover adds one new stream per
-        # running container.
+        # running container; rebaseline 1500/hour after it.
         - alert: VictoriaLogsStreamChurnHigh
           expr: increase(vl_streams_created_total[1h]) > 1500
           for: 15m
