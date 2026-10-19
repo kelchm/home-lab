@@ -24,6 +24,9 @@ spec:
       relabelings:
         - targetLabel: job
           replacement: fluent-bit
+        # Keeps this target's up and scrape series apart from the v2 target's.
+        - targetLabel: endpoint
+          replacement: http-v1
         - sourceLabels: [__meta_kubernetes_pod_node_name]
           targetLabel: node
       metricRelabelings:
