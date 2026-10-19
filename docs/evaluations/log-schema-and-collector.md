@@ -72,6 +72,24 @@ The September drills ([graceful outage](kubernetes-log-collectors.md); [SIGKILL 
 
 The missing records in the third case were the unread end of a file that rotated while Fluent Bit was stopped. Including rotated files in the tail path recovers them but replays rotated files after every restart (2,700 duplicates after a graceful restart), and Fluent Bit's documentation says the path must not match rotated files. The configuration follows the documentation and accepts this compound case. Because the drop counter undercounts buffer-exhaustion loss, alerting fires on buffer capacity before exhaustion.
 
+## Multi-line events
+
+Evaluated 2026-10-19: each container line stays one record, with no multi-line grouping at collection.
+
+**Volume.** From 12:00 to 21:50 UTC that day, 2,327 of 359,740 container records (0.65%) were continuation lines with unspecified severity: indented lines, JSON brackets, `Traceback`, chained-exception headers, `goroutine` or `panic:`. mcphub's pretty-printed tool-call arguments and results under an `[INFO]` header line made up 2,236; four pve-exporter tracebacks made up 91. In the 30 days to that date there was no Go panic in production; the only stored panic came from a scratch VictoriaLogs.
+
+**Stock parsers.** A local Fluent Bit 5.1.4 run with the production `cri` tail input fed one CRI file holding a Python traceback with an interleaved stdout line, three back-to-back tracebacks, a Go panic, an mcphub event and a traceback at the end of the file:
+
+| Configuration | Result |
+| --- | --- |
+| `multiline.parser cri, python, go, mcphub` on the tail input | No grouping: only `cri` applied. |
+| Multiline filter with `python, go` and a custom mcphub regex | The stdout line was joined into the stderr traceback, which was then split; one fragment lost its stream. The last traceback absorbed the following `panic:` line, which was also emitted again on its own. The Go panic was not grouped. The mcphub event and the end-of-file traceback were grouped correctly, the latter after the 2-second flush. |
+| Multiline filter with `go` alone | The panic was grouped correctly. |
+
+These failures come from the tested configurations. Fluent Bit combines parsers only as a comma-separated list in one filter: its documentation says several multiline filters matching the same tags loop forever. stdout and stderr share one CRI file and one tag, and the stock parsers set no `key_group`, so keeping the streams apart would need custom copies of each parser grouped by `stream`. The filter re-emits grouped records through an emitter input whose storage defaults to memory, outside the filesystem buffering the delivery drills verified, and holds pending lines in memory for its flush interval. The only source that groups cleanly, mcphub, would need a bespoke regex for a dump that is better reduced at source.
+
+**Decision.** Keep one record per line. A multi-line event is read with **Show context** in Grafana or by pod and time in VMUI. Revisit if a source starts logging multi-line events that need to be one record, for an alert or because they are frequent, such as a Java application's stack traces.
+
 ## Rejected
 
 - **Loki with Logs Drilldown:** the most complete Grafana browsing experience, rejected on efficiency. Its keyword severity heuristic also contradicts the no-inference rule.
