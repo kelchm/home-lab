@@ -57,7 +57,7 @@ The same VMSingle is the metrics store for the rest of the lab. Enrolled PVE nod
 
 Fluent Bit runs as a DaemonSet on every node, tails Kubernetes container logs, enriches them from the API and sends them to VictoriaLogs over OTLP, shaped by the OpenTelemetry log data model: `service.name` and `k8s.*` resource attributes, `severity_number`/`severity_text`, a readable body, HTTP semantic-convention attributes and application fields prefixed by application name. Streams use `service.name`, `k8s.namespace.name`, `k8s.pod.name`, `k8s.container.name` and `k8s.node.name`. The Kubernetes logs dashboard is the primary browser, with Grafana Explore and the OIDC-protected VictoriaLogs VMUI available for direct queries. The [logging runbook](runbooks/logging.md) owns the schema, capture boundaries, retained-history compatibility, failure handling and durability limits; the [schema and collector evaluation](evaluations/log-schema-and-collector.md) records why.
 
-VictoriaLogs also receives the UniFi console's syslog/CEF export, and the syslog of its adopted switches and access points, on `10.32.130.3` UDP/514. A second vmalert evaluates LogsQL rules against VictoriaLogs and sends through the same VMAlertmanager routes; the [logging runbook](runbooks/logging.md#unifi-console-logs) describes the source, its fields and its alerts.
+Fluent Bit also receives the UniFi console's syslog/CEF export, and the syslog of its adopted switches and access points, on `10.32.130.3` UDP/514, and stores it in the same schema with one `service.name` per device. A second vmalert evaluates LogsQL rules against VictoriaLogs and sends through the same VMAlertmanager routes; the [logging runbook](runbooks/logging.md#unifi-console-logs) describes the source, its fields and its alerts.
 
 The `monitoring.coreos.com` CRDs are owned independently by `prometheus-operator-crds`, and the VictoriaMetrics operator converts third-party ServiceMonitors and shared PrometheusRules with owner references. VictoriaMetrics and VictoriaLogs are the only metric and log backends; kube-prometheus-stack, Loki, and OpenObserve are removed.
 
@@ -301,8 +301,9 @@ Sandbox-side pools (`admin-sandbox` 10.32.131.0/24, `services-sandbox` 10.32.141
                                 Traefik middleware adds auth where the app lacks native.
 .2     k8s-gateway              In-cluster authority for app/service records
                                 conditionally forwarded by the UniFi resolver.
-.3     victoria-logs-syslog     UniFi console syslog/CEF into VictoriaLogs, UDP/514;
-                                its external ingress rule admits only the gateway (10.32.30.1).
+.3     victoria-logs-syslog     UniFi syslog/CEF into Fluent Bit on every node, UDP/514;
+                                its external ingress rule admits only the gateway (10.32.30.1)
+                                and adopted devices (10.32.1.0/24).
 .4-.10 (reserved infra)
 .30-.99 (per-service admin IPs — rare; admin gateway is the default)
 ```

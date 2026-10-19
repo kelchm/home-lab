@@ -1,5 +1,6 @@
 ---
-# UniFi console events received as CEF over syslog (docs/runbooks/logging.md).
+# UniFi console events received as CEF over syslog through Fluent Bit
+# (docs/runbooks/logging.md). UniFiSyslogSilent watches the collector's input.
 # LogsQL rules: the datasource label routes them to vmalert-victoria-logs.
 # Each expression carries its own _time window, so an event keeps its alert
 # firing for that long. Series carry no cluster label.
@@ -78,28 +79,3 @@ spec:
             description: >-
               {{ $labels.src }} reached the gateway honeypot ({{ $value }} in
               15 minutes). Identify the device and what it was scanning.
----
-# MetricsQL rule on VictoriaLogs' own counter, so it does not depend on the
-# log store it diagnoses. The console has gone 29 hours without an event, so
-# the window is two days.
-apiVersion: operator.victoriametrics.com/v1beta1
-kind: VMRule
-metadata:
-  name: unifi-syslog-ingestion
-spec:
-  groups:
-    - name: unifi-syslog-ingestion
-      rules:
-        - alert: UniFiSyslogSilent
-          expr: |
-            sum(increase(vl_rows_ingested_total{job="victoria-logs-single-server", type="syslog_udp"}[2d])) == 0
-            or absent_over_time(vl_rows_ingested_total{job="victoria-logs-single-server", type="syslog_udp"}[2d])
-          for: 1h
-          labels:
-            severity: warning
-          annotations:
-            summary: VictoriaLogs has received no UniFi syslog for two days
-            description: >-
-              No rows arrived on the syslog listener (10.32.130.3 UDP/514).
-              Check the console's SIEM export target, the victoria-logs-syslog
-              Service and CiliumPolicyDrops for the victoria-logs-single pod.

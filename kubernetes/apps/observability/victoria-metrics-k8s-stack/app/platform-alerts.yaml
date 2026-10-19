@@ -181,6 +181,20 @@ spec:
             summary: Fluent Bit on {{ $labels.node }} is reading no container logs
             description: Check the /var/log/containers mount, file permissions and the tail database. A healthy scrape target alone does not prove log collection.
 
+        # Summed over nodes: the gateway spreads senders across every node
+        # advertising the address. The console has gone 29 hours without an
+        # event, but gateway daemon and device syslog count too.
+        - alert: UniFiSyslogSilent
+          expr: |
+            sum(increase(fluentbit_input_records_total{job="fluent-bit",name="unifi"}[2d])) == 0
+            or absent(fluentbit_input_records_total{job="fluent-bit",name="unifi"})
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: Fluent Bit has received no UniFi syslog for two days
+            description: No datagrams reached the syslog listener (10.32.130.3 UDP/514) on any node. Check the console's SIEM export target, the victoria-logs-syslog Service and its BGP advertisement, and CiliumPolicyDrops for the fluent-bit pods.
+
     - name: logging-pipeline
       labels:
         cluster: k8s-prod
