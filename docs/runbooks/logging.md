@@ -96,17 +96,20 @@ The `unifi_syslog` parser in [parsers.conf](../../kubernetes/apps/observability/
 
 Plain syslog from the gateway and adopted devices carries no `cef.*` fields, so the CEF stream filters and alerts never match it. Its severity is what the firmware states: access points log routine Wi-Fi driver messages such as `kernel: … recv auth frame …` at `err`, and switches log DHCP snooping counters at `debug`.
 
-Expected event classes, from Ubiquiti's examples and published captures of Network 9.3–10.6. Confirm the WAN and honeypot entries against the first live records:
+Event classes. "Seen" means stored from this console between October 18 and 19, 2026; the others come from Ubiquiti's examples and published captures of Network 9.3–10.6.
 
-| Class | Name | Notes |
-| --- | --- | --- |
-| 100 | Internet Down | `UNIFIwanName`, `UNIFIwanId`, `UNIFIwanIsp` |
-| 107 | Internet Restored | A short drop is reported as restored "after a temporary disconnection" in `msg`. |
-| 112, 113 | High Latency Detected, Packet Loss Detected | `UNIFIwanLatency` on 112 |
-| 200, 201 | Threat Detected, Threat Detected and Blocked | `src`, `dst`, `UNIFIipsSignature`, `UNIFIipsSignatureId`, `UNIFIrisk` |
-| 400–404 | Wi-Fi and wired client connected, disconnected and roamed | `UNIFIclientAlias`, `UNIFIclientIp`, `UNIFIclientMac` |
-| 512, 513 | Device Offline, Device Reconnected | `UNIFIdeviceName` |
-| 544–549 | Admin access and configuration changes | `UNIFIadmin`, `UNIFIaccessMethod` |
+| Class | Name | Seen | Notes |
+| --- | --- | --- | --- |
+| 100 | Internet Down | yes | `UNIFIwanName`, `UNIFIwanId`, `UNIFIwanIsp` |
+| 101 | Multiple Internet Disconnections | yes | UniFi's own summary when a WAN has dropped more than once in 24 hours; each drop also arrives as 100. |
+| 107 | Internet Restored | yes | `UNIFIreportedDuration` gives the outage length. Published captures report short drops as restored "after a temporary disconnection" in `msg`; this console has not. |
+| 112, 113 | High Latency Detected, Packet Loss Detected | yes | `UNIFIwanLatency` on 112 |
+| 200 | Threat Detected | yes | `src`, `dst`, `UNIFIipsSignature`, `UNIFIipsSignatureId`, `UNIFIrisk`. IPS runs detect-only, so 201 (Threat Detected and Blocked) is not expected. |
+| 202 | Honeypot Triggered | yes | The client as `UNIFIclientAlias`, `UNIFIclientHostname` and `UNIFIclientMac`; no `src` address. |
+| 400–404 | Wi-Fi and wired client connected, disconnected and roamed | yes | `UNIFIclientAlias`, `UNIFIclientIp`, `UNIFIclientMac` |
+| 510 | Device Updated | yes | `UNIFIdeviceName`, `UNIFIdeviceVersion`, `UNIFIdevicePriorVersion` |
+| 512, 513 | Device Offline, Device Reconnected | no | `UNIFIdeviceName` |
+| 544–549 | Admin access and configuration changes | 544–546, 549 | `UNIFIadmin`, `UNIFIaccessMethod` |
 
 ### Example queries
 
@@ -139,14 +142,14 @@ The console's own system log for the 30 days to October 18, 2026 held 7,439 even
 | --- | --- | --- |
 | `UniFiWANFlapping` | Three or more Internet Down, temporary-disconnection or failover events for one WAN within an hour. `UniFiWANOffline` already pages a WAN down for 5 minutes; this catches shorter repeated drops. | warning |
 | `UniFiIntrusionDetectedOutbound` | An IDS detection, in the last 15 minutes, whose destination is outside private, CGNAT, link-local and multicast space. Lab-internal detections are queryable but do not page, because the baseline is dominated by operator traffic. | warning |
-| `UniFiHoneypotTriggered` | Any honeypot event in the last 15 minutes. | warning |
+| `UniFiHoneypotTriggered` | Any honeypot event (class 202) in the last 15 minutes, by client alias and MAC address. The honeypot listens at `10.32.1.2` on the Default network. | warning |
 | `UniFiSyslogSilent` | For an hour, Fluent Bit's `fluentbit_input_records_total{name="unifi"}`, summed over nodes, shows no datagrams in the last two days, or the input is missing. It is a MetricsQL rule in the `fluent-bit-pipeline` group, so it does not depend on the log store, and is sized above the 29-hour baseline gap. Gateway daemon and device syslog count too, so it catches a dead listener path or a disabled export rather than a quiet CEF stream. | warning |
 
-The rules' field names and class IDs come from Ubiquiti's documentation and published captures, not from this console. A local VictoriaLogs v1.53.0 and vmalert v1.154.0 fired each rule on matching fixtures and ignored internal and multicast detections. On October 19, 2026 the three LogsQL expressions, run through VictoriaLogs v1.53.0's stats query API, gave the same results for CEF fixtures sent through the production Fluent Bit configuration. Recheck the selectors against the first live records, especially the temporary-disconnection text, the honeypot event name and whether detections carry `dst`. To silence a benign signature, exclude its `cef.extension.UNIFIipsSignatureId` in the rule rather than adding an Alertmanager silence.
+A local VictoriaLogs v1.53.0 and vmalert v1.154.0 fired each rule on matching fixtures and ignored internal and multicast detections. Checked against this console's records on October 19, 2026: Internet Down (100) and Threat Detected (200) arrive with the class IDs the rules select, and every detection carried `dst`. The temporary-disconnection text that `UniFiWANFlapping` also matches has not appeared, in Internet Restored (107) or elsewhere; the rule still counts every drop through class 100. Honeypot contact from the operator Mac produced class 202 with the client but no `src`, and `UniFiHoneypotTriggered` reached Pushover. A synthetic event sent to the syslog input earlier that day (`service.name=delivery-test`, `src=192.0.2.250`) also reached Pushover and resolved, with no failed notifications. To silence a benign signature, exclude its `cef.extension.UNIFIipsSignatureId` in the rule rather than adding an Alertmanager silence.
 
 ### Cutover from direct ingestion
 
-Before Fluent Bit received UniFi syslog, VictoriaLogs' own listener stored it behind the same Service. Fluent Bit started listening first, and the Service's selector then moved to the Fluent Bit pods in place on October 19, 2026, so its backends switched in one update and each datagram reached one backend. The last row VictoriaLogs stored itself arrived at 20:42:41 UTC and the first through Fluent Bit at 20:42:48, a shorter gap than the source's ordinary quiet spells of up to 35 seconds; no CEF event was stored twice, and every new row had `service.name`, a severity and a readable `_msg`. Two rows with `service.name=rollout-test` are a deliberate smoke test from that rollout, not UniFi events.
+Before Fluent Bit received UniFi syslog, VictoriaLogs' own listener stored it behind the same Service. Fluent Bit started listening first, and the Service's selector then moved to the Fluent Bit pods in place on October 19, 2026, so its backends switched in one update and each datagram reached one backend. The last row VictoriaLogs stored itself arrived at 20:42:41 UTC and the first through Fluent Bit at 20:42:48, a shorter gap than the source's ordinary quiet spells of up to 35 seconds; no CEF event was stored twice, and every new row had `service.name`, a severity and a readable `_msg`. Rows with `service.name` `rollout-test` or `delivery-test` are deliberate tests from that rollout, not UniFi events.
 
 Rows from direct ingestion keep that schema until retention removes them, about 30 days after the cutover: `hostname`, `app_name`, `proc_id`, `remote_ip`, `facility_keyword`, `level` and the header time in `timestamp`, no `service.name` or `severity_number`, and VictoriaLogs' missing-message placeholder in `_msg` on CEF records (`| copy cef.extension.msg as _msg` shows the text). The `cef.*` field names are unchanged, and `cef.device_product` and `cef.device_event_class_id` are stream fields in both schemas, so the CEF alerts and the CEF example queries read both; for everything else, select both with `(service.namespace:=unifi OR remote_ip:*)`.
 

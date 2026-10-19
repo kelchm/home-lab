@@ -65,17 +65,19 @@ spec:
               signature in VictoriaLogs before allowing it.
 
         # The honeypot answers only on otherwise unused addresses, so any
-        # contact means a LAN device is probing.
+        # contact means a LAN device is probing. Class 202 names the client by
+        # alias and MAC; it carries no src address.
         - alert: UniFiHoneypotTriggered
           expr: >-
-            _time:15m {cef.device_product="UniFi Network"} cef.name:i(honeypot)
-            | stats by (cef.extension.src) count() as hits
+            _time:15m {cef.device_product="UniFi Network", cef.device_event_class_id="202"}
+            | stats by (cef.extension.UNIFIclientAlias, cef.extension.UNIFIclientMac) count() as hits
             | filter hits:>0
-            | rename cef.extension.src as src
+            | rename cef.extension.UNIFIclientAlias as client, cef.extension.UNIFIclientMac as mac
           labels:
             severity: warning
           annotations:
-            summary: "{{ $labels.src }} contacted the UniFi honeypot"
+            summary: "{{ $labels.client }} contacted the UniFi honeypot"
             description: >-
-              {{ $labels.src }} reached the gateway honeypot ({{ $value }} in
-              15 minutes). Identify the device and what it was scanning.
+              {{ $labels.client }} ({{ $labels.mac }}) reached the gateway
+              honeypot ({{ $value }} in 15 minutes). Identify the device and
+              what it was scanning.
