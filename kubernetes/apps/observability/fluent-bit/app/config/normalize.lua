@@ -44,9 +44,9 @@ local TEXT_LEVEL_FALLBACK = {
 -- ANSI SGR/CSI sequences (terminal colours) that some applications print.
 local ANSI = '\27%[[0-?]*[ -/]*[@-~]'
 
--- Traefik access-log fields with an HTTP semantic-convention name.
+-- Traefik access-log fields with an HTTP semantic-convention name. Client
+-- fields are mapped separately: ClientHost can be a forwarded address list.
 local TRAEFIK_FIELDS = {
-  ClientHost = 'client.address', ClientPort = 'client.port',
   RequestMethod = 'http.request.method', RequestHost = 'server.address',
   RequestPort = 'server.port', RequestScheme = 'url.scheme',
   DownstreamStatus = 'http.response.status_code',
@@ -56,7 +56,7 @@ local TRAEFIK_FIELDS = {
   ['request_User-Agent'] = 'user_agent.original',
 }
 local NUMERIC_ATTRIBUTES = {
-  'client.port', 'server.port', 'http.response.status_code',
+  'client.port', 'network.peer.port', 'server.port', 'http.response.status_code',
   'http.response.body.size', 'http.request.body.size', 'code.line.number',
 }
 
@@ -71,13 +71,90 @@ local function first(...)
   end
 end
 
-local function flatten(t, prefix, out)
+-- Attribute names are schema, never data (VictoriaLogs FAQ: dynamically keyed
+-- objects must not become fields). Arrays stay whole; an object whose keys are
+-- data is stored as one JSON value.
+-- Fluent Bit tags tables converted from msgpack: type 1 array, 2 map.
+local function is_array(t)
+  local mt = getmetatable(t)
+  return mt ~= nil and mt.type == 1
+end
+
+local IDENTIFIER = '^[%a_][%w_%-]*$'
+-- Data-keyed maps whose keys happen to look like identifiers.
+local DATA_MAPS = { ['victoria-metrics-operator.spec_diff'] = true }
+
+local function data_keyed(t, path)
+  if DATA_MAPS[path] then return true end
+  local keys = false
+  for k in pairs(t) do
+    if type(k) == 'string' and k:find(IDENTIFIER) then return false end
+    keys = true
+  end
+  return keys
+end
+
+local ESCAPES = { ['"'] = '\\"', ['\\'] = '\\\\', ['\n'] = '\\n', ['\r'] = '\\r', ['\t'] = '\\t' }
+
+-- Deterministic JSON: sorted keys, integers without a fraction, nulls kept.
+local function json(v)
+  local kind = type(v)
+  if kind == 'string' then
+    return '"' .. v:gsub('[%c"\\]', function(c) return ESCAPES[c] or string.format('\\u%04x', c:byte()) end) .. '"'
+  elseif kind == 'number' then
+    if v == math.floor(v) and math.abs(v) < 2^53 then return string.format('%d', v) end
+    return string.format('%.17g', v)
+  elseif kind == 'boolean' then
+    return tostring(v)
+  elseif kind == 'table' then
+    local parts = {}
+    if is_array(v) then
+      local n = 0
+      for k in pairs(v) do if type(k) == 'number' and k > n then n = k end end
+      for i = 1, n do parts[i] = json(v[i]) end
+      return '[' .. table.concat(parts, ',') .. ']'
+    end
+    local keys = {}
+    for k in pairs(v) do keys[#keys + 1] = tostring(k) end
+    table.sort(keys)
+    for i, k in ipairs(keys) do parts[i] = json(k) .. ':' .. json(v[k]) end
+    return '{' .. table.concat(parts, ',') .. '}'
+  end
+  return 'null'
+end
+
+-- `encoded` collects the keys whose values json() produced. A JSON null
+-- (flb_null, Enable_Flb_Null) is kept inside arrays and encoded objects and
+-- leaves a field absent.
+local function flatten(t, prefix, out, app, encoded)
   for k, v in pairs(t) do
     local key = prefix and (prefix .. '.' .. k) or k
-    if type(v) == 'table' then flatten(v, key, out) else out[key] = v end
+    if v == flb_null then
+      -- absent
+    elseif type(v) ~= 'table' or is_array(v) then
+      out[key] = v
+    elseif data_keyed(v, app .. '.' .. key) then
+      out[key] = json(v)
+      encoded[key] = true
+    else
+      flatten(v, key, out, app, encoded)
+    end
   end
   return out
 end
+
+-- `host:port` or `[ipv6]:port`.
+local function host_port(s)
+  if type(s) ~= 'string' then return end
+  local host, port = s:match('^%[(.*)%]:(%d+)$')
+  if not host then host, port = s:match('^([^:]+):(%d+)$') end
+  return host, tonumber(port)
+end
+
+-- Source locations: Go slog `source`, zap/logr `caller`, logrus `file`.
+local LOCATION_KEYS = { 'caller', 'file', 'source' }
+local SOURCE_EXTENSIONS = { go = true, py = true, rs = true, java = true, js = true, ts = true,
+  rb = true, c = true, cc = true, cpp = true, cs = true }
 
 -- logfmt with quoted values and backslash escapes. Keys are matched only at
 -- the start of a run of key characters, which keeps long lines linear.
@@ -201,8 +278,10 @@ local function build(ingress, record)
   local attributes = { ['log.iostream'] = ingress.stream }
 
   -- Payload fields: JSON from the parser filter, else logfmt (optionally after
-  -- a bracketed prefix, as Longhorn instance-manager writes).
-  local payload = flatten(record, nil, {})
+  -- a bracketed prefix, as Longhorn instance-manager writes). A record keyed
+  -- entirely by data stays whole in the message.
+  local encoded = {}
+  local payload = data_keyed(record, app) and {} or flatten(record, nil, {}, app, encoded)
   if payload.log == raw then payload.log = nil end
   local structured = next(payload) ~= nil
   if not structured then
@@ -213,8 +292,16 @@ local function build(ingress, record)
     end
   end
 
-  local body = first(payload['record.message'], payload.msg, payload.message) or raw
-  payload['record.message'], payload.msg, payload.message = nil, nil, nil
+  -- The first non-empty scalar message is the body; empty ones carry nothing.
+  local body
+  for _, key in ipairs({ 'record.message', 'msg', 'message' }) do
+    local v = payload[key]
+    if not encoded[key] and (type(v) == 'string' or type(v) == 'number') then
+      if not body and present(v) then body = v; payload[key] = nil
+      elseif not present(v) then payload[key] = nil end
+    end
+  end
+  body = body or raw
 
   local level, fixed_position
   for key, value in pairs(payload) do
@@ -268,7 +355,7 @@ local function build(ingress, record)
     end
   end
 
-  if payload.RequestMethod and payload.DownstreamStatus then
+  if app == 'traefik' and payload.RequestMethod and payload.DownstreamStatus then
     body = traefik_common(payload)
     for source, target in pairs(TRAEFIK_FIELDS) do
       if payload[source] ~= nil then
@@ -276,6 +363,25 @@ local function build(ingress, record)
         payload[source] = nil
       end
     end
+    -- ClientAddr is the connection peer. Traefik replaces ClientHost with the
+    -- raw X-Forwarded-For when present, so client.* takes one address only and
+    -- a port only when that address is the peer's.
+    local peer, peer_port = host_port(payload.ClientAddr)
+    if peer then
+      attributes['network.peer.address'], attributes['network.peer.port'] = peer, peer_port
+      payload.ClientAddr, payload.ClientPort = nil, nil
+    end
+    local client = type(payload.ClientHost) == 'string' and payload.ClientHost:match('^%s*([^,%s]+)%s*$')
+    if client then
+      attributes['client.address'] = client
+      if client == peer then attributes['client.port'] = peer_port end
+      payload.ClientHost = nil
+    end
+    -- Exact repeats: StartLocal of StartUTC, RequestAddr of server.*, and `time`
+    -- (the log write, to the second) of the record time.
+    if payload.StartUTC then payload.StartLocal = nil end
+    if attributes['server.address'] then payload.RequestAddr = nil end
+    payload.time = nil
     if payload.RequestPath then
       attributes['url.path'] = payload.RequestPath:match('^[^?]*')
       attributes['url.query'] = payload.RequestPath:match('%?(.*)$')
@@ -288,12 +394,16 @@ local function build(ingress, record)
     end
   end
 
-  -- Go slog `source=file:line`.
-  if type(payload.source) == 'string' then
-    local f, n = payload.source:match('^(.-):(%d+)$')
-    if f then
-      attributes['code.file.path'], attributes['code.line.number'] = f, n
-      payload.source = nil
+  -- Only `<file>.<source extension>:<line>`, so host:port and data stay; a
+  -- location already read from klog wins.
+  for _, key in ipairs(LOCATION_KEYS) do
+    local v = payload[key]
+    if not attributes['code.file.path'] and type(v) == 'string' then
+      local path, ext, n = v:match('^(.+%.(%a+)):(%d+)$')
+      if path and SOURCE_EXTENSIONS[ext] then
+        attributes['code.file.path'], attributes['code.line.number'] = path, n
+        payload[key] = nil
+      end
     end
   end
 
