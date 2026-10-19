@@ -269,6 +269,18 @@
       "expect": {"body": "[core] [Server #6] grpc: Server.processUnaryRPC failed to write status: connection error: desc = \"transport is closing\"", "severity_number": 13, "severity_text": "WARNING", "timestamp": 1792343966000000000}},
     {"name": "talos-cri-bare-json-info",
       "record": {"msg": "container event discarded once more", "talos-time": "2026-10-19T21:35:28.250426390Z", "talos-level": "info", "talos-service": "cri"},
-      "expect": {"body": "container event discarded once more", "severity_number": 9, "severity_text": "info"}}
+      "expect": {"body": "container event discarded once more", "severity_number": 9, "severity_text": "info"}},
+    {"name": "talos-cri-json-message-like-logfmt",
+      "record": {"msg": "key=value in a JSON message", "talos-time": "2026-10-19T21:10:00.000000000Z", "talos-level": "error", "talos-service": "cri"},
+      "expect": {"body": "key=value in a JSON message", "severity_number": 17, "severity_text": "error"}},
+    {"name": "talos-cri-json-message-quoted-msg",
+      "record": {"msg": "msg=\"quoted inside JSON\"", "talos-time": "2026-10-19T21:10:01.000000000Z", "talos-level": "info", "talos-service": "cri"},
+      "expect": {"body": "msg=\"quoted inside JSON\"", "severity_number": 9, "severity_text": "info"}},
+    {"name": "talos-cri-klog-with-json-tail",
+      "record": {"msg": "E1019 21:10:02.123456    2717 server.go:42] stream failed", "talos-time": "2026-10-19T21:10:02.200000000Z", "talos-level": "info", "talos-service": "cri", "detail": "connection reset"},
+      "expect": {"body": "stream failed", "severity_number": 17, "severity_text": "E", "attributes": {"cri.detail": "connection reset", "code.file.path": "server.go", "code.line.number": 42}}},
+    {"name": "talos-cri-logrus-offset",
+      "record": {"msg": "time=\"2026-10-19T17:10:03.5-04:00\" level=warning msg=\"offset timestamp\"", "talos-time": "2026-10-19T21:10:04.000000000Z", "talos-level": "info", "talos-service": "cri"},
+      "expect": {"body": "offset timestamp", "severity_number": 13, "severity_text": "warning", "timestamp": 1792444203500000000}}
   ]
 }

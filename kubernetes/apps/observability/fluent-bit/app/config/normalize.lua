@@ -461,11 +461,22 @@ local ZAP_PREFIX = '^(%d%d%d%d)%-(%d%d)%-(%d%d)T(%d%d):(%d%d):(%d%d)%.?(%d*)Z (%
 local GO_PREFIX = '^(%d%d%d%d)/(%d%d)/(%d%d) (%d%d):(%d%d):(%d%d)%.?(%d*) (.*)$'
 local BRACKET_PREFIX = '^(%d%d%d%d)%-(%d%d)%-(%d%d)T(%d%d):(%d%d):(%d%d)%.?(%d*)Z %[(%a+)%] (.*)$'
 local KLOG = '^([IWEF])%d%d%d%d %d%d:%d%d:%d%d%.%d+%s+(%d+) ([^:]+):(%d+)%]%s+(.*)$'
-local RFC3339 = '^(%d+)%-(%d+)%-(%d+)T(%d+):(%d+):(%d+)%.?(%d*)Z$'
+local RFC3339 = '^(%d+)%-(%d+)%-(%d+)T(%d+):(%d+):(%d+)%.?(%d*)([Z+-])(%d*):?(%d*)$'
+-- logrus text always opens with its timestamp.
+local LOGRUS = '^time="?%d%d%d%d%-%d%d%-%d%dT'
 
 local function stamp(y, mo, d, h, mi, se, frac)
   return { sec = os.time { year = tonumber(y), month = tonumber(mo), day = tonumber(d),
     hour = tonumber(h), min = tonumber(mi), sec = tonumber(se) }, nsec = tonumber((frac .. '000000000'):sub(1, 9)) }
+end
+
+-- `{sec, nsec}` for an RFC 3339 timestamp, applying its offset.
+local function rfc3339(v)
+  local y, mo, d, h, mi, se, frac, zone, oh, om = tostring(v):match(RFC3339)
+  if not y or (zone ~= 'Z' and (#oh ~= 2 or #om ~= 2)) then return nil end
+  local t = stamp(y, mo, d, h, mi, se, frac)
+  if zone ~= 'Z' then t.sec = t.sec - (zone == '+' and 1 or -1) * (tonumber(oh) * 3600 + tonumber(om) * 60) end
+  return t
 end
 
 local function talos_source(record)
@@ -492,8 +503,7 @@ local function talos_build(source, record, ts)
   -- resource per chunk, and VictoriaLogs stores both as the same fields.
   local attributes = { ['service.name'] = source }
   local body = (type(record.msg) == 'string' and record.msg or ''):gsub(ANSI, '')
-  local y, mo, d, h, mi, se, frac = tostring(record['talos-time']):match(RFC3339)
-  if y then ts = stamp(y, mo, d, h, mi, se, frac) end
+  ts = rfc3339(record['talos-time']) or ts
 
   local payload = {}
   for k, v in pairs(record) do payload[k] = v end
@@ -518,10 +528,10 @@ local function talos_build(source, record, ts)
       -- grpc-go: `WARNING: [core] …`.
       token, rest = body:match('^(%u+): (.*)$')
       if token and LEVELS[token] then level, body = token, rest end
-    elseif next(payload) == nil then
-      -- Plain text Talos did not parse as JSON, in the formats these services
-      -- write: CNI plugins' `<time> [level]`, klog and logrus text.
-      local text = true
+    else
+      -- Plain text in the formats these services write: CNI plugins'
+      -- `<time> [level]`, klog and logrus text. Talos keeps any JSON that
+      -- followed the text as fields.
       y, mo, d, h, mi, se, frac, token, rest = body:match(BRACKET_PREFIX)
       local kl, thread, file, line, message = body:match(KLOG)
       if y then
@@ -530,25 +540,23 @@ local function talos_build(source, record, ts)
         level, body = kl, message
         attributes['thread.id'], attributes['code.file.path'], attributes['code.line.number'] = tonumber(thread), file, tonumber(line)
         if message:sub(1, 1) == '"' then
-          payload = logfmt('msg=' .. message)
-          body, payload.msg = payload.msg or message, nil
+          local kv = logfmt('msg=' .. message)
+          body, kv.msg = kv.msg or message, nil
+          for k, v in pairs(kv) do payload[k] = v end
         end
-      elseif body:find('^[%w_.]+=') then
-        payload = logfmt(body)
-        local ly, lmo, ld, lh, lmi, lse, lfrac = tostring(payload.time):match(RFC3339)
-        if ly then ts = stamp(ly, lmo, ld, lh, lmi, lse, lfrac) end
-        level, body = payload.level, present(payload.msg) or body
-        payload.time, payload.level, payload.msg = nil, nil, nil
-      else
-        text = false
+      elseif body:find(LOGRUS) then
+        local kv = logfmt(body)
+        ts = rfc3339(kv.time) or ts
+        level, body = kv.level, present(kv.msg) or body
+        kv.time, kv.level, kv.msg = nil, nil, nil
+        for k, v in pairs(kv) do payload[k] = v end
+      elseif TALOS_LEVELED[source] then
+        level = record['talos-level']
+      elseif source == 'kubelet' and payload.caller then
+        -- Kubernetes JSON logs give info records a verbosity `v` and error
+        -- records none; Talos has moved `err` into the message.
+        severity = payload.v ~= nil and 9 or 17
       end
-      if not text and TALOS_LEVELED[source] then level = record['talos-level'] end
-    elseif TALOS_LEVELED[source] then
-      level = record['talos-level']
-    elseif source == 'kubelet' and payload.caller then
-      -- Kubernetes JSON logs give info records a verbosity `v` and error
-      -- records none; Talos has moved `err` into the message.
-      severity = payload.v ~= nil and 9 or 17
     end
     if payload.component == source then payload.component = nil end
     severity = severity or (level and LEVELS[tostring(level):upper()])
