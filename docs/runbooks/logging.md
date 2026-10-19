@@ -43,6 +43,8 @@ Records follow the [OpenTelemetry log data model](https://opentelemetry.io/docs/
 | `pipeline.severity_unmapped` | The source stated a level the mapping does not recognize; extend `normalize.lua`. |
 | `pipeline.normalize_error` | The mapping raised an error on this record, which keeps its identity and raw line as the message; fix `normalize.lua`. |
 
+kustomize-controller runs with `GroupChangeLog`, so its applied-object log lists objects in arrays under their action (`kustomize-controller.output.unchanged`) instead of one field per object.
+
 To give a workload a better service name than its labels produce, set `resource.opentelemetry.io/service.name` on its pod template.
 
 Levels come from structured fields (JSON, logfmt, PostgreSQL's `record.error_severity`), klog's leading letter, or a level token at a fixed position in known plain-text formats. Words elsewhere in a line never set severity; an unknown level is stored as unspecified rather than guessed. Terminal colour codes are removed before parsing, and blank lines are dropped. Continuation lines (Python tracebacks, mcphub's multi-line JSON) are the main unspecified source.
