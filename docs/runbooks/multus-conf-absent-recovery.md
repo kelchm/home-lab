@@ -19,7 +19,7 @@ Under the fail-closed arrangement a pod should never reach Running while missing
 - Something other than Cilium wrote a containerd-recognized config into `/etc/cni/net.d`
 - A stale `00-multus.conf` survived a crash — containerd sees a syntactically valid config, but `multus-shim` fails against the absent socket. Still fail-closed, though the node may report `Ready` inaccurately.
 
-Multus's `[error]` lines about a missing cached delegates file on CNI DEL are routine and do not indicate this failure; see [Accepted warnings](logging.md#accepted-warnings).
+Multus's `[error]` lines about a missing cached delegates file on CNI DEL do not indicate this failure when the same container ID already had a `DEL finished` with a non-empty `Netns`; see [Accepted warnings](logging.md#accepted-warnings).
 
 ### Why the taint alone was never sufficient
 
