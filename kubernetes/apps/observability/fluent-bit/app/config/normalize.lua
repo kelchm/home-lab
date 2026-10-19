@@ -123,15 +123,21 @@ local function json(v)
   return 'null'
 end
 
-local function flatten(t, prefix, out, app)
+-- `encoded` collects the keys whose values json() produced. A JSON null
+-- (flb_null, Enable_Flb_Null) is kept inside arrays and encoded objects and
+-- leaves a field absent.
+local function flatten(t, prefix, out, app, encoded)
   for k, v in pairs(t) do
     local key = prefix and (prefix .. '.' .. k) or k
-    if type(v) ~= 'table' or is_array(v) then
+    if v == flb_null then
+      -- absent
+    elseif type(v) ~= 'table' or is_array(v) then
       out[key] = v
     elseif data_keyed(v, app .. '.' .. key) then
       out[key] = json(v)
+      encoded[key] = true
     else
-      flatten(v, key, out, app)
+      flatten(v, key, out, app, encoded)
     end
   end
   return out
@@ -272,8 +278,10 @@ local function build(ingress, record)
   local attributes = { ['log.iostream'] = ingress.stream }
 
   -- Payload fields: JSON from the parser filter, else logfmt (optionally after
-  -- a bracketed prefix, as Longhorn instance-manager writes).
-  local payload = flatten(record, nil, {}, app)
+  -- a bracketed prefix, as Longhorn instance-manager writes). A record keyed
+  -- entirely by data stays whole in the message.
+  local encoded = {}
+  local payload = data_keyed(record, app) and {} or flatten(record, nil, {}, app, encoded)
   if payload.log == raw then payload.log = nil end
   local structured = next(payload) ~= nil
   if not structured then
@@ -284,12 +292,13 @@ local function build(ingress, record)
     end
   end
 
+  -- The first non-empty scalar message is the body; empty ones carry nothing.
   local body
   for _, key in ipairs({ 'record.message', 'msg', 'message' }) do
     local v = payload[key]
-    if type(v) == 'string' or type(v) == 'number' then
-      body = body or present(v)
-      payload[key] = nil
+    if not encoded[key] and (type(v) == 'string' or type(v) == 'number') then
+      if not body and present(v) then body = v; payload[key] = nil
+      elseif not present(v) then payload[key] = nil end
     end
   end
   body = body or raw
