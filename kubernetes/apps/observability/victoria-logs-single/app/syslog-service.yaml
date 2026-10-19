@@ -1,9 +1,11 @@
 ---
-# UniFi console syslog/CEF export. Only the syslog listener is published; the
-# chart's headless Service keeps 9428 cluster-internal. externalTrafficPolicy
-# Local keeps the gateway's source address through Service translation, so the
-# CIDR rule in networkpolicy.yaml can match it; with Cluster, cross-node
-# traffic is SNATed to a node address, which the namespace baseline admits.
+# UniFi syslog/CEF from the console, gateway and adopted devices into the
+# Fluent Bit DaemonSet. Every node's collector listens, so each node with a
+# Ready pod advertises the address and the gateway spreads senders across
+# them. externalTrafficPolicy Local keeps the sender's address through Service
+# translation, so the CIDR rule in fluent-bit's networkpolicy.yaml can match
+# it, and keeps each datagram on the node it reached. Renaming or moving this
+# Service would recreate it and leave the address without a listener.
 apiVersion: v1
 kind: Service
 metadata:
@@ -16,11 +18,10 @@ spec:
   type: LoadBalancer
   externalTrafficPolicy: Local
   selector:
-    app: server
-    app.kubernetes.io/instance: victoria-logs-single
-    app.kubernetes.io/name: victoria-logs-single
+    app.kubernetes.io/instance: fluent-bit
+    app.kubernetes.io/name: fluent-bit
   ports:
-    - name: syslog-udp
+    - name: syslog
       port: 514
-      targetPort: syslog-udp
+      targetPort: syslog
       protocol: UDP

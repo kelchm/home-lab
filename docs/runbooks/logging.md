@@ -1,6 +1,6 @@
 # Logging
 
-Kubernetes application and control-plane container stdout/stderr is collected into VictoriaLogs, which is the only log backend. Fluent Bit runs on every node, enriches each record from the Kubernetes API, maps it onto the OpenTelemetry log data model and sends it to VictoriaLogs over OTLP; see [Log schema](#log-schema). The UniFi console and its devices send syslog straight to VictoriaLogs; see [UniFi console logs](#unifi-console-logs). The [schema and collector evaluation](../evaluations/log-schema-and-collector.md) records why the schema and collector look the way they do.
+Kubernetes application and control-plane container stdout/stderr is collected into VictoriaLogs, which is the only log backend. Fluent Bit runs on every node, enriches each record from the Kubernetes API, maps it onto the OpenTelemetry log data model and sends it to VictoriaLogs over OTLP; see [Log schema](#log-schema). Fluent Bit also receives syslog from the UniFi console and its devices and stores it in the same schema; see [UniFi console logs](#unifi-console-logs). The [schema and collector evaluation](../evaluations/log-schema-and-collector.md) records why the schema and collector look the way they do.
 
 Collection covers kubelet-managed container logs, including init containers, native sidecars and static control-plane pods. It does not cover Talos service/kernel journals or application files outside stdout/stderr. Quiet or empty containers do not establish a collection failure: compare Kubernetes inventory, node log files and stored records before declaring a source missing.
 
@@ -57,38 +57,40 @@ Retention is nominally 30 days, but VictoriaLogs begins deleting the oldest part
 
 ## UniFi console logs
 
-The UniFi console (`Gateway DMP`, Network 10.6.106) exports its system log as CEF over syslog to the `victoria-logs-syslog` LoadBalancer at `10.32.130.3` UDP/514, which forwards to VictoriaLogs' UDP listener on container port 5514. The same setting makes the gateway send its own daemon syslog and makes adopted switches and access points send plain syslog from their management addresses on the Default network (`10.32.1.0/24`). The Service uses `externalTrafficPolicy: Local`, so the CiliumNetworkPolicy sees the sender's address; its syslog rule admits external traffic only from the gateway's VLAN 30 interface, `10.32.30.1`, and the Default network, alongside the namespace baseline's in-cluster allowances. The HTTP port 9428 stays cluster-internal. The export is UDP with no retry or buffer: records sent while VictoriaLogs restarts, or dropped on the path, are lost.
+The UniFi console (`Gateway DMP`, Network 10.6.106) exports its system log as CEF over syslog to the `victoria-logs-syslog` LoadBalancer at `10.32.130.3` UDP/514, which the VictoriaLogs app owns but which selects the Fluent Bit pods. The same setting makes the gateway send its own daemon syslog and makes adopted switches and access points send plain syslog from their management addresses on the Default network (`10.32.1.0/24`). Fluent Bit listens on container port 5140 on every node; Cilium advertises the address from each node with a Ready collector, and the gateway spreads senders across those nodes, so each datagram reaches exactly one collector. The Service uses `externalTrafficPolicy: Local`, so the fluent-bit CiliumNetworkPolicy sees the sender's address; its syslog rule admits external traffic only from the gateway's VLAN 30 interface, `10.32.30.1`, and the Default network, alongside the namespace baseline's in-cluster allowances.
 
-Fluent Bit also listens for UniFi syslog on UDP 5140 on every node, with the mapping in the [evaluation](../evaluations/log-schema-and-collector.md#unifi-syslog), but receives none until the `victoria-logs-syslog` Service selects it ([#883](https://github.com/kelchm/home-lab/pull/883)).
-
-Every record lands in the default tenant beside the Kubernetes logs. `_time` is the arrival time, because RFC3164 headers carry no timezone; the console's own header time, read as America/New_York, is kept in `timestamp`, and `remote_ip` records the sending address. Until the console export is enabled and the first records are checked, this section describes intended behaviour; [#856](https://github.com/kelchm/home-lab/issues/856) tracks that verification.
+Fluent Bit maps each datagram onto the same OpenTelemetry schema as container logs and buffers it on the receiving node's disk until VictoriaLogs accepts it, so a backend outage or restart does not drop received datagrams; [Backend crash durability](#backend-crash-durability) covers what VictoriaLogs can lose after accepting them. The export itself is UDP with no retry: datagrams sent while no collector is Ready, or dropped on the path, are lost. [#856](https://github.com/kelchm/home-lab/issues/856) tracks acceptance of this source.
 
 ### Console setup
 
-The console account the agents use is View Only, so the operator makes this change. The console currently keeps its activity log locally (`rsyslogd` site setting: this controller only, no remote target). The page names below come from third-party guides for Network 9.x and 10.x; correct them here if the console differs.
+The console account the agents use is View Only, so the operator makes this change. The page names below come from third-party guides for Network 9.x and 10.x; correct them here if the console differs.
 
 1. Open **Settings → CyberSecure → Traffic Logging** and find **Activity Logging (Syslog)**.
 2. Select **SIEM Server**. Set **Server Address** to `10.32.130.3` and **Port** to `514`.
 3. Enable every content category except **Firewall Default Policy**, which users report multiplies volume about 200 times. Leave **Debug Logs** and **Netconsole** off; they are gateway diagnostics, not events.
 4. Apply, then leave the separate **Control Plane → Integrations** syslog export off. Exporting the same categories through both pages duplicates every event.
 
-Within a minute, `_time:5m remote_ip:=10.32.30.1 | stats count()` should be nonzero. If it stays at zero, check `hubble_drop_total{destination_namespace="observability", reason="POLICY_DENIED", protocol="UDP"}` for a rise; it also counts unrelated traffic, so confirm with `hubble observe --verdict DROPPED --since 10m` in the `cilium-agent` container on the node running `victoria-logs-single-server-0`. A dropped UDP packet to that pod's port 5514 shows the sender's actual source address, which then belongs in the CIDRs in [networkpolicy.yaml](../../kubernetes/apps/observability/victoria-logs-single/app/networkpolicy.yaml).
+Within a minute, `_time:5m service.namespace:=unifi | stats by (service.name) count()` should list the gateway and the devices. If it stays empty, check `hubble_drop_total{destination_namespace="observability", reason="POLICY_DENIED", protocol="UDP"}` for a rise; it also counts unrelated traffic, so confirm with `hubble observe --verdict DROPPED --since 10m` in each node's `cilium-agent` container. A dropped UDP packet to a fluent-bit pod's port 5140 shows the sender's actual source address, which then belongs in the CIDRs in [networkpolicy.yaml](../../kubernetes/apps/observability/fluent-bit/app/networkpolicy.yaml).
 
 ### Fields
 
-VictoriaLogs parses the syslog header and the CEF payload itself; no processor runs in between.
+The `unifi_syslog` parser in [parsers.conf](../../kubernetes/apps/observability/fluent-bit/app/config/parsers.conf) splits off the priority and hostname, and [`unifi.lua`](../../kubernetes/apps/observability/fluent-bit/app/config/unifi.lua) maps the rest. The `pipeline.*` flags mean the same as for [container logs](#log-schema).
 
 | Field | Content |
 | --- | --- |
-| `hostname`, `app_name`, `proc_id` | Syslog header; stream fields. CEF lines have `app_name=CEF`; firewall rule logs have `app_name=kernel`. |
-| `cef.device_vendor`, `cef.device_product`, `cef.device_event_class_id` | CEF header; also stream fields. Product is `UniFi Network` for network events and `UniFi OS` for console events. |
-| `cef.name`, `cef.severity`, `cef.device_version` | Event name, 0–10 severity, and the application version. |
+| `service.name`, `host.name` | The device name from the syslog header, such as `Gateway-DMP`, `CoreSwitch` or `BasementAP`, or the sender's address for a datagram without a header. `service.name` is a stream field. |
+| `service.namespace` | `unifi` on every UniFi record. |
+| `host.id`, `host.type`, `os.version` | An adopted device's MAC address, model and firmware, from the `<mac>,<model>-<firmware>` tag it puts before each message. The gateway sends none. |
+| `severity_number`, `severity_text` | CEF events: the CEF severity (0–10) as text, mapped 0–3 to INFO (9), 4–6 to WARN (13), 7–8 to ERROR (17) and 9–10 to FATAL (21). Other lines: the syslog priority's severity (`emerg` … `debug`) as the OpenTelemetry Collector maps it, such as `err` 17, `notice` 10 and `debug` 5. CEF lines carry no syslog priority. |
+| `_msg` | CEF: `cef.extension.msg`, else `cef.name`. Other lines: the text after the header and device tag, which usually opens with the process, such as `switch: DHCP_SNP: …`, `hostapd[5197]: …` or `systemd[1]: …`. A switch message that spans lines stays one record. |
+| `_time` | CEF: `UNIFIutcTime`. Other lines: arrival time, because RFC 3164 headers carry no timezone. |
+| `cef.device_vendor`, `cef.device_product`, `cef.device_event_class_id` | CEF header. Product and class ID are stream fields. Product is `UniFi Network` for network events and `UniFi OS` for console events. |
+| `cef.name`, `cef.severity`, `cef.device_version`, `cef.version` | Event name, 0–10 severity, application version and CEF version. |
 | `cef.extension.<key>` | Every CEF extension, such as `UNIFIcategory`, `msg`, `src`, `dst`, `UNIFIwanName`, `UNIFIipsSignature`, `UNIFIclientAlias` and `UNIFIdeviceName`. Ubiquiti lists the keys in [UniFi System Logs & SIEM Integration](https://help.ui.com/hc/en-us/articles/33349041044119). |
-| `timestamp`, `remote_ip`, `format`, `facility_keyword`, `level` | Header time, sender address, `rfc3164` or `rfc5424`, and the syslog facility and severity. |
+| `syslog.facility` | The syslog facility name, such as `kern`, `user`, `daemon` or `authpriv`, on lines with a priority. |
+| `network.peer.address`, `network.peer.port` | The sender's address and source port. |
 
-CEF records have no `_msg`, so Grafana and VMUI show VictoriaLogs' missing-message placeholder; the readable text is in `cef.extension.msg`. Append `| copy cef.extension.msg as _msg` to show it in the message column. Firewall rule logs keep the kernel line, including `DESCR="<policy name>"`, in `_msg`.
-
-Plain syslog from the gateway and adopted devices carries no `cef.*` fields or `proc_id`, so the CEF stream filters and alerts never match it. The gateway repeats its hostname in the header, so its daemon lines have `app_name=Gateway-DMP` and the process name opens `_msg`. Devices tag each line with their MAC address, model and firmware: `hostname` is the device name in the console, such as `CoreSwitch`, `app_name` is a value such as `28704e64bf9d,USW-Enterprise-24-PoE-7.5.15+17146`, and `_msg` opens with the process, such as `switch: DHCP_SNP: …` or `hostapd[5197]: …`.
+Plain syslog from the gateway and adopted devices carries no `cef.*` fields, so the CEF stream filters and alerts never match it. Its severity is what the firmware states: access points log routine Wi-Fi driver messages such as `kernel: … recv auth frame …` at `err`, and switches log DHCP snooping counters at `debug`.
 
 Expected event classes, from Ubiquiti's examples and published captures of Network 9.3–10.6. Confirm the WAN and honeypot entries against the first live records:
 
@@ -104,16 +106,17 @@ Expected event classes, from Ubiquiti's examples and published captures of Netwo
 
 ### Example queries
 
-- Everything the console sent: `remote_ip:=10.32.30.1`
-- Adopted devices by volume: `remote_ip:ipv4_range(10.32.1.0/24) | stats by (hostname, level) count()`
-- One access point's client events: `hostname:=BasementAP _msg:~"stahtd|hostapd"`
+- Everything the console sent: `service.name:=Gateway-DMP`
+- Adopted devices by volume: `service.namespace:=unifi host.id:* | stats by (service.name, severity_text) count()`
+- Errors and worse by device: `service.namespace:=unifi severity_number:>=17 | stats by (service.name, severity_text) count()`
+- One access point's client events: `service.name:=BasementAP _msg:~"stahtd|hostapd"`
 - Events by class: `{cef.device_product="UniFi Network"} | stats by (cef.device_event_class_id, cef.name) count()`
-- WAN events: `{cef.device_product="UniFi Network"} cef.extension.UNIFIcategory:="Internet and WAN" | fields _time, cef.name, cef.extension.UNIFIwanName, cef.extension.msg`
+- WAN events: `{cef.device_product="UniFi Network"} cef.extension.UNIFIcategory:="Internet and WAN" | fields _time, cef.name, cef.extension.UNIFIwanName, _msg`
 - IDS detections by pair: `{cef.device_product="UniFi Network", cef.device_event_class_id=~"200|201"} | stats by (cef.extension.src, cef.extension.dst, cef.extension.UNIFIipsSignature) count()`
-- One client's connections: `{cef.device_product="UniFi Network"} cef.extension.UNIFIclientAlias:="Hyperion" | fields _time, cef.name, cef.extension.msg`
+- One client's connections: `{cef.device_product="UniFi Network"} cef.extension.UNIFIclientAlias:="Hyperion" | fields _time, cef.name, _msg`
 - Devices going offline: `{cef.device_product="UniFi Network", cef.device_event_class_id="512"}`
 - Admin activity: `cef.extension.UNIFIadmin:* OR cef.extension.UNIFIcategory:=Audit OR {cef.device_product="UniFi OS"}` (Network 10.x files admin events under `Audit`; 9.3 used `System` with `UNIFIsubCategory=Admin`)
-- Firewall rule hits: `{app_name="kernel"} DESCR`
+- Firewall rule hits: `service.name:=Gateway-DMP DESCR`
 
 ### Baseline
 
@@ -133,9 +136,15 @@ The console's own system log for the 30 days to October 18, 2026 held 7,439 even
 | `UniFiWANFlapping` | Three or more Internet Down, temporary-disconnection or failover events for one WAN within an hour. `UniFiWANOffline` already pages a WAN down for 5 minutes; this catches shorter repeated drops. | warning |
 | `UniFiIntrusionDetectedOutbound` | An IDS detection, in the last 15 minutes, whose destination is outside private, CGNAT, link-local and multicast space. Lab-internal detections are queryable but do not page, because the baseline is dominated by operator traffic. | warning |
 | `UniFiHoneypotTriggered` | Any honeypot event in the last 15 minutes. | warning |
-| `UniFiSyslogSilent` | For an hour, VictoriaLogs' `vl_rows_ingested_total{type="syslog_udp"}` shows no syslog rows in the last two days, including when the listener has never received one. It is a MetricsQL rule on the backend's own counter, sized above the 29-hour baseline gap, so it also fires about an hour after rollout until the console export is enabled. Gateway daemon and device syslog count too, so it catches a dead listener path or a disabled export rather than a quiet CEF stream. | warning |
+| `UniFiSyslogSilent` | For an hour, Fluent Bit's `fluentbit_input_records_total{name="unifi"}`, summed over nodes, shows no datagrams in the last two days, or the input is missing. It is a MetricsQL rule in the `fluent-bit-pipeline` group, so it does not depend on the log store, and is sized above the 29-hour baseline gap. Gateway daemon and device syslog count too, so it catches a dead listener path or a disabled export rather than a quiet CEF stream. | warning |
 
-The rules' field names and class IDs come from Ubiquiti's documentation and published captures, not from this console. A local VictoriaLogs v1.53.0 and vmalert v1.154.0 fired each rule on matching fixtures and ignored internal and multicast detections. Recheck the selectors against the first live records, especially the temporary-disconnection text, the honeypot event name and whether detections carry `dst`. To silence a benign signature, exclude its `cef.extension.UNIFIipsSignatureId` in the rule rather than adding an Alertmanager silence.
+The rules' field names and class IDs come from Ubiquiti's documentation and published captures, not from this console. A local VictoriaLogs v1.53.0 and vmalert v1.154.0 fired each rule on matching fixtures and ignored internal and multicast detections. On October 19, 2026 the three LogsQL expressions, run through VictoriaLogs v1.53.0's stats query API, gave the same results for CEF fixtures sent through the production Fluent Bit configuration. Recheck the selectors against the first live records, especially the temporary-disconnection text, the honeypot event name and whether detections carry `dst`. To silence a benign signature, exclude its `cef.extension.UNIFIipsSignatureId` in the rule rather than adding an Alertmanager silence.
+
+### Cutover from direct ingestion
+
+Before Fluent Bit received UniFi syslog, VictoriaLogs' own listener stored it behind the same Service. Fluent Bit started listening first, and the Service's selector then moved to the Fluent Bit pods in place, so its backends switched in one update with no gap; each datagram reached one backend. Until the cutover has been checked, this paragraph describes intended behaviour.
+
+Rows from direct ingestion keep that schema until retention removes them, about 30 days after the cutover: `hostname`, `app_name`, `proc_id`, `remote_ip`, `facility_keyword`, `level` and the header time in `timestamp`, no `service.name` or `severity_number`, and VictoriaLogs' missing-message placeholder in `_msg` on CEF records (`| copy cef.extension.msg as _msg` shows the text). The `cef.*` field names are unchanged, and `cef.device_product` and `cef.device_event_class_id` are stream fields in both schemas, so the CEF alerts and the CEF example queries read both; for everything else, select both with `(service.namespace:=unifi OR remote_ip:*)`.
 
 ## Source inventory
 
@@ -157,7 +166,7 @@ Traefik access logs carry their request fields under HTTP semantic-convention na
 
 ## Pipeline failures
 
-Metrics-native rules in the `fluent-bit-pipeline` group page through VMAlertmanager when a node's collector target disappears (`FluentBitCollectorTargetMissing`), a node reads no container logs (`FluentBitNodeLogIngestionSilent`), delivery keeps retrying (`FluentBitDeliveryRetrying`), the output buffer passes 75% (`FluentBitBufferNearCapacity`) or records are dropped, including container log lines over 1 MiB that the collector skips (`FluentBitRecordsDropped`). The `logging-pipeline` group covers VictoriaLogs itself, including `VictoriaLogsIngestionSilent` on `vl_rows_ingested_total{type="opentelemetry_protobuf"}`. These alerts depend on the metrics path rather than querying the log backend they diagnose. Follow the [alert-delivery runbook](alerting.md#end-to-end-delivery-test) when retesting delivery.
+Metrics-native rules in the `fluent-bit-pipeline` group page through VMAlertmanager when a node's collector target disappears (`FluentBitCollectorTargetMissing`), a node reads no container logs (`FluentBitNodeLogIngestionSilent`), delivery keeps retrying (`FluentBitDeliveryRetrying`), the output buffer passes 75% (`FluentBitBufferNearCapacity`) or records are dropped, including container log lines over 1 MiB that the collector skips (`FluentBitRecordsDropped`), and when no UniFi syslog arrives for two days (`UniFiSyslogSilent`). The `logging-pipeline` group covers VictoriaLogs itself, including `VictoriaLogsIngestionSilent` on `vl_rows_ingested_total{type="opentelemetry_protobuf"}`. These alerts depend on the metrics path rather than querying the log backend they diagnose. Follow the [alert-delivery runbook](alerting.md#end-to-end-delivery-test) when retesting delivery.
 
 Fluent Bit's drop counter undercounts loss when its buffer is exhausted (a local drill dropped 2,336 records and counted 1,072), so treat `FluentBitBufferNearCapacity` as the actionable signal and the drop alert as a lower bound.
 
@@ -188,7 +197,7 @@ After the rollout, verify on each node: the Fluent Bit pod is Ready, `fluentbit_
 
 ## Collector maintenance and rollback
 
-The DaemonSet rolls one node at a time. Before a planned collector change, restore backend health and check `fluentbit_storage_fs_chunks` is back at its usual low level; a delivery backlog holds hundreds. Never run two Fluent Bit processes against the same `/var/lib/fluent-bit`.
+The DaemonSet rolls one node at a time. Cilium advertises the UniFi syslog address only from nodes with a Ready collector, so the gateway sends to the other nodes while one restarts. Before a planned collector change, restore backend health and check `fluentbit_storage_fs_chunks` is back at its usual low level; a delivery backlog holds hundreds. Never run two Fluent Bit processes against the same `/var/lib/fluent-bit`.
 
 To roll back, revert the Fluent Bit change in a reviewed PR: Git history keeps the vlagent DaemonSet, alerts and dashboards. Its checkpoints were removed with `/var/lib/vlagent`, so a restored vlagent starts without read positions; records already sent by Fluent Bit stay in the new schema until retention removes them.
 

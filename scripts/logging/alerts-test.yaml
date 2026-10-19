@@ -102,25 +102,58 @@ tests:
       - expr: ALERTS{alertname="VictoriaLogsIngestionSilent",alertstate="firing"}
         eval_time: 20m
         exp_samples: []
-  - name: Syslog traffic cannot mask a stopped collector
+  - name: Stopped collector ingestion fires
     interval: 1m
     input_series:
-      - series: vl_rows_ingested_total{job="victoria-logs-single-server",type="syslog_udp"}
-        values: 0+100x30
       - series: vl_rows_ingested_total{job="victoria-logs-single-server",type="opentelemetry_protobuf"}
         values: 0+0x30
     promql_expr_test:
       - expr: count(ALERTS{alertname="VictoriaLogsIngestionSilent",alertstate="firing"})
         eval_time: 20m
         exp_samples: [{labels: '{}', value: 1}]
-  - name: Missing collector ingestion series fires despite syslog traffic
+  - name: Missing collector ingestion series fires
     interval: 1m
     input_series:
-      - series: vl_rows_ingested_total{job="victoria-logs-single-server",type="syslog_udp"}
+      - series: vl_rows_ingested_total{job="victoria-logs-single-server",type="other"}
         values: 0+100x30
     promql_expr_test:
       - expr: count(ALERTS{alertname="VictoriaLogsIngestionSilent",alertstate="firing"})
         eval_time: 20m
+        exp_samples: [{labels: '{}', value: 1}]
+  - name: UniFi syslog reaching one node keeps the silence alert quiet
+    interval: 1h
+    input_series:
+      - series: fluentbit_input_records_total{job="fluent-bit",node="n1",name="unifi"}
+        values: 0+10x72
+      - series: fluentbit_input_records_total{job="fluent-bit",node="n2",name="unifi"}
+        values: 0+0x72
+    promql_expr_test:
+      - expr: ALERTS{alertname="UniFiSyslogSilent",alertstate="firing"}
+        eval_time: 72h
+        exp_samples: []
+  - name: UniFi syslog that stops for two days fires
+    interval: 1h
+    input_series:
+      - series: fluentbit_input_records_total{job="fluent-bit",node="n1",name="unifi"}
+        values: 0+10x24 240+0x60
+    promql_expr_test:
+      - expr: ALERTS{alertname="UniFiSyslogSilent",alertstate="firing"}
+        eval_time: 60h
+        exp_samples: []
+      - expr: count(ALERTS{alertname="UniFiSyslogSilent",alertstate="firing"})
+        eval_time: 84h
+        exp_samples: [{labels: '{}', value: 1}]
+  - name: A missing UniFi syslog input fires
+    interval: 1h
+    input_series:
+      - series: fluentbit_input_records_total{job="fluent-bit",node="n1",name="pods"}
+        values: 0+10x3
+    promql_expr_test:
+      - expr: ALERTS{alertname="UniFiSyslogSilent",alertstate="firing"}
+        eval_time: 30m
+        exp_samples: []
+      - expr: count(ALERTS{alertname="UniFiSyslogSilent",alertstate="firing"})
+        eval_time: 2h
         exp_samples: [{labels: '{}', value: 1}]
   - name: Talos var warning holds for 15 minutes and resolves after recovery
     interval: 1m

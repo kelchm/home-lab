@@ -12,10 +12,4 @@ yq '.spec' kubernetes/apps/observability/victoria-metrics-k8s-stack/app/platform
 promtool check rules "$rules_file"
 cp scripts/logging/alerts-test.yaml "$test_dir/tests.yaml"
 promtool test rules "$test_dir/tests.yaml"
-unifi_dir="$test_dir/unifi"
-mkdir "$unifi_dir"
-yq 'select(.metadata.name == "unifi-syslog-ingestion") | .spec' kubernetes/apps/observability/victoria-logs-single/app/unifi-alerts.yaml > "$unifi_dir/rules.yaml"
-promtool check rules "$unifi_dir/rules.yaml"
-cp scripts/logging/unifi-syslog-alerts.test.yaml "$unifi_dir/tests.yaml"
-promtool test rules "$unifi_dir/tests.yaml"
-echo 'Log collector configuration and mapping, logging alert rules and UniFi syslog ingestion alert validated.'
+echo 'Log collector configuration and mapping and logging alert rules validated.'
