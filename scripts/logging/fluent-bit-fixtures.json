@@ -254,6 +254,21 @@
       "expect": {"body": "[talos] phase udevSetup (6/9): 1 tasks(s)", "severity_number": 13, "severity_text": "warning", "attributes": {"syslog.facility": "user"}}},
     {"name": "talos-unknown-shape",
       "record": {"msg": "unexpected record", "talos-time": "2026-10-19T21:50:00.000000000Z"},
-      "expect": {"body": "unexpected record", "severity_number": 0, "attributes": {"service.name": "unknown"}}}
+      "expect": {"body": "unexpected record", "severity_number": 0, "attributes": {"service.name": "unknown"}}},
+    {"name": "talos-cri-cni-verbose",
+      "record": {"msg": "2026-10-19T07:00:01Z [verbose] CmdAdd (shim): {1.1.0 [{Name:lxc04da31cff635 Mac:2e:df:f1:e9:f9:ad}]}", "talos-time": "2026-10-19T07:00:02.500000000Z", "talos-level": "info", "talos-service": "cri"},
+      "expect": {"body": "CmdAdd (shim): {1.1.0 [{Name:lxc04da31cff635 Mac:2e:df:f1:e9:f9:ad}]}", "severity_number": 5, "severity_text": "verbose", "timestamp": 1792393201000000000, "attributes": {"service.name": "cri"}}},
+    {"name": "talos-cri-logrus-text",
+      "record": {"msg": "time=\"2026-10-19T19:02:43.008279314Z\" level=error msg=\"failed sending message on channel\" error=\"write unix /run/containerd/s/f30a->@: write: broken pipe\"", "talos-time": "2026-10-19T19:02:44.000000000Z", "talos-level": "info", "talos-service": "cri"},
+      "expect": {"body": "failed sending message on channel", "severity_number": 17, "severity_text": "error", "timestamp": 1792436563008279314, "attributes": {"cri.error": "write unix /run/containerd/s/f30a->@: write: broken pipe"}, "absent": ["cri.level", "cri.msg", "cri.time"]}},
+    {"name": "talos-cri-klog",
+      "record": {"msg": "E1018 16:54:02.292543    2717 attach.go:69] \"Unhandled Error\" err=\"error attaching to container: container is in CONTAINER_EXITED state\" logger=\"UnhandledError\"", "talos-time": "2026-10-18T16:54:02.300000000Z", "talos-level": "info", "talos-service": "cri"},
+      "expect": {"body": "Unhandled Error", "severity_number": 17, "severity_text": "E", "attributes": {"code.file.path": "attach.go", "code.line.number": 69, "thread.id": 2717, "cri.err": "error attaching to container: container is in CONTAINER_EXITED state", "cri.logger": "UnhandledError"}}},
+    {"name": "talos-etcd-grpc-warning",
+      "record": {"msg": "2026/10/18 17:19:26 WARNING: [core] [Server #6] grpc: Server.processUnaryRPC failed to write status: connection error: desc = \"transport is closing\"", "talos-time": "2026-10-18T17:19:27.000000000Z", "talos-level": "info", "talos-service": "etcd"},
+      "expect": {"body": "[core] [Server #6] grpc: Server.processUnaryRPC failed to write status: connection error: desc = \"transport is closing\"", "severity_number": 13, "severity_text": "WARNING", "timestamp": 1792343966000000000}},
+    {"name": "talos-cri-bare-json-info",
+      "record": {"msg": "container event discarded once more", "talos-time": "2026-10-19T21:35:28.250426390Z", "talos-level": "info", "talos-service": "cri"},
+      "expect": {"body": "container event discarded once more", "severity_number": 9, "severity_text": "info"}}
   ]
 }

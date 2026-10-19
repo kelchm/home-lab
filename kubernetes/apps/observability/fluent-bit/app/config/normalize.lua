@@ -455,10 +455,13 @@ local TALOS_KEYS = { 'msg', 'talos-time', 'talos-level', 'talos-service' }
 local TALOS_RESOURCE = { ['service.namespace'] = 'talos', ['host.name'] = NODE, ['k8s.node.name'] = NODE,
   ['k8s.cluster.name'] = 'k8s-prod' }
 -- Leading write times: zap's console encoder (`2006-01-02T15:04:05.000Z LEVEL`,
--- machined's controllers) and Go's log package (`2006/01/02 15:04:05.000000`,
--- machined, apid, trustd).
+-- machined's controllers), Go's log package (`2006/01/02 15:04:05.000000`,
+-- machined, apid, trustd) and CNI plugins in cri (`2006-01-02T15:04:05Z [level]`).
 local ZAP_PREFIX = '^(%d%d%d%d)%-(%d%d)%-(%d%d)T(%d%d):(%d%d):(%d%d)%.?(%d*)Z (%u+) (.*)$'
 local GO_PREFIX = '^(%d%d%d%d)/(%d%d)/(%d%d) (%d%d):(%d%d):(%d%d)%.?(%d*) (.*)$'
+local BRACKET_PREFIX = '^(%d%d%d%d)%-(%d%d)%-(%d%d)T(%d%d):(%d%d):(%d%d)%.?(%d*)Z %[(%a+)%] (.*)$'
+local KLOG = '^([IWEF])%d%d%d%d %d%d:%d%d:%d%d%.%d+%s+(%d+) ([^:]+):(%d+)%]%s+(.*)$'
+local RFC3339 = '^(%d+)%-(%d+)%-(%d+)T(%d+):(%d+):(%d+)%.?(%d*)Z$'
 
 local function stamp(y, mo, d, h, mi, se, frac)
   return { sec = os.time { year = tonumber(y), month = tonumber(mo), day = tonumber(d),
@@ -489,7 +492,7 @@ local function talos_build(source, record, ts)
   -- resource per chunk, and VictoriaLogs stores both as the same fields.
   local attributes = { ['service.name'] = source }
   local body = (type(record.msg) == 'string' and record.msg or ''):gsub(ANSI, '')
-  local y, mo, d, h, mi, se, frac = tostring(record['talos-time']):match('^(%d+)%-(%d+)%-(%d+)T(%d+):(%d+):(%d+)%.?(%d*)Z$')
+  local y, mo, d, h, mi, se, frac = tostring(record['talos-time']):match(RFC3339)
   if y then ts = stamp(y, mo, d, h, mi, se, frac) end
 
   local payload = {}
@@ -503,14 +506,43 @@ local function talos_build(source, record, ts)
     attributes['syslog.facility'] = payload.facility
     payload.priority, payload.facility = nil, nil
   else
-    -- Talos records the time it read the line; these prefixes are when the
-    -- service wrote it, which matters for lines delivered from Talos's buffer.
-    local zy, zmo, zd, zh, zmi, zse, zfrac, token, zrest = body:match(ZAP_PREFIX)
+    -- Talos records the time it read the line; a writer's timestamp at the
+    -- start of the line is when it was written, which differs for lines
+    -- delivered from Talos's buffer.
+    local y, mo, d, h, mi, se, frac, token, rest = body:match(ZAP_PREFIX)
     local gy, gmo, gd, gh, gmi, gse, gfrac, grest = body:match(GO_PREFIX)
-    if zy and LEVELS[token] then
-      ts, level, body = stamp(zy, zmo, zd, zh, zmi, zse, zfrac), token, zrest
+    if y and LEVELS[token] then
+      ts, level, body = stamp(y, mo, d, h, mi, se, frac), token, rest
     elseif gy then
       ts, body = stamp(gy, gmo, gd, gh, gmi, gse, gfrac), grest
+      -- grpc-go: `WARNING: [core] …`.
+      token, rest = body:match('^(%u+): (.*)$')
+      if token and LEVELS[token] then level, body = token, rest end
+    elseif next(payload) == nil then
+      -- Plain text Talos did not parse as JSON, in the formats these services
+      -- write: CNI plugins' `<time> [level]`, klog and logrus text.
+      local text = true
+      y, mo, d, h, mi, se, frac, token, rest = body:match(BRACKET_PREFIX)
+      local kl, thread, file, line, message = body:match(KLOG)
+      if y then
+        ts, level, body = stamp(y, mo, d, h, mi, se, frac), token, rest
+      elseif kl then
+        level, body = kl, message
+        attributes['thread.id'], attributes['code.file.path'], attributes['code.line.number'] = tonumber(thread), file, tonumber(line)
+        if message:sub(1, 1) == '"' then
+          payload = logfmt('msg=' .. message)
+          body, payload.msg = payload.msg or message, nil
+        end
+      elseif body:find('^[%w_.]+=') then
+        payload = logfmt(body)
+        local ly, lmo, ld, lh, lmi, lse, lfrac = tostring(payload.time):match(RFC3339)
+        if ly then ts = stamp(ly, lmo, ld, lh, lmi, lse, lfrac) end
+        level, body = payload.level, present(payload.msg) or body
+        payload.time, payload.level, payload.msg = nil, nil, nil
+      else
+        text = false
+      end
+      if not text and TALOS_LEVELED[source] then level = record['talos-level'] end
     elseif TALOS_LEVELED[source] then
       level = record['talos-level']
     elseif source == 'kubelet' and payload.caller then
