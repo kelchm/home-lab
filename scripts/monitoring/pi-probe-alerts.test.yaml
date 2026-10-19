@@ -88,11 +88,11 @@
           "values": "_x11 1x10"
         },
         {
-          "series": "up{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"kanidm\",target=\"https://auth.home.kelch.io/ui/login\",module=\"http_2xx\"}",
+          "series": "up{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"kanidm\",target=\"https://auth.home.kelch.io/status\",module=\"http_kanidm_status\"}",
           "values": "0x11 1x10"
         },
         {
-          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"kanidm\",target=\"https://auth.home.kelch.io/ui/login\",module=\"http_2xx\"}",
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"kanidm\",target=\"https://auth.home.kelch.io/status\",module=\"http_kanidm_status\"}",
           "values": "_x11 1x10"
         },
         {
