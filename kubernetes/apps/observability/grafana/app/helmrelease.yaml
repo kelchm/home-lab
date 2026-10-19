@@ -25,10 +25,8 @@ spec:
     replicas: 1
 
     # ndots:1 so grafana.com resolves as an absolute name for the plugin
-    # download — see the cloudflare-dns HelmRelease for the
-    # ndots/search-path interaction that breaks Cilium toFQDNs rules
-    # otherwise. Datasources and OIDC use full .svc.cluster.local names
-    # and are unaffected.
+    # download — see the cloudflare-dns HelmRelease. Datasources and OIDC
+    # use full .svc.cluster.local names and are unaffected.
     dnsConfig:
       options:
         - name: ndots

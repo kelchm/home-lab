@@ -19,8 +19,7 @@ spec:
     spec:
       automountServiceAccountToken: false
       # ndots:1 so the console name resolves as an absolute name — see the
-      # cloudflare-dns HelmRelease for the ndots/search-path interaction that
-      # breaks Cilium toFQDNs rules otherwise.
+      # cloudflare-dns HelmRelease.
       dnsConfig:
         options:
           - name: ndots
