@@ -50,6 +50,9 @@ spec:
             # reloader (PodMonitor)
             - port: "9090"
               protocol: TCP
+            # snapshot-controller
+            - port: "8080"
+              protocol: TCP
     # cert-manager metrics.
     - toEndpoints:
         - matchLabels:
