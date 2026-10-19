@@ -54,6 +54,11 @@ spec:
       # resolver (Talos hostDNS) so generic external resolution follows the
       # node's configured nameservers. Internal household DNS is handled by
       # the explicit home.kelch.io server block above.
+      #
+      # No autopath: it walks a pod's search path inside this block, so a
+      # search-suffixed home.kelch.io name is forwarded to the host resolver
+      # instead of the home.kelch.io block, and answers keep the suffixed
+      # question name. Clients walk the search path themselves.
       - zones:
           - zone: .
             scheme: dns://
@@ -70,8 +75,6 @@ spec:
             configBlock: |-
               pods verified
               fallthrough in-addr.arpa ip6.arpa
-          - name: autopath
-            parameters: "@kubernetes"
           - name: forward
             parameters: . /etc/resolv.conf
           - name: cache
