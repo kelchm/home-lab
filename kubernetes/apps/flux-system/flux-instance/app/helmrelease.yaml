@@ -132,3 +132,11 @@ spec:
             target:
               kind: Deployment
               name: kustomize-controller
+          - # Log applied objects grouped by action, not one key per object
+            patch: |-
+              - op: add
+                path: /spec/template/spec/containers/0/args/-
+                value: --feature-gates=GroupChangeLog=true
+            target:
+              kind: Deployment
+              name: kustomize-controller
