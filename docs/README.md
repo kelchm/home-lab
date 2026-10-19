@@ -92,6 +92,7 @@ Implemented or superseded plans preserve context. Use the maintained documentati
 - [Kubernetes log collectors](evaluations/kubernetes-log-collectors.md) — delivery measurements, application query compatibility, and migration recommendation.
 - [Grafana VictoriaLogs Drilldown](evaluations/grafana-victorialogs-drilldown.md) — v0.33.1 candidate qualification, observed UX limits and operator acceptance.
 - [Log schema and collector](evaluations/log-schema-and-collector.md) — OpenTelemetry log schema decisions, collector measurements and Fluent Bit delivery drill.
+- [Log-content alerting](evaluations/log-alerting.md) — which application log conditions page, rejected candidates with evidence, and how LogsQL rules are tested.
 - [storage-benchmarks](storage-benchmarks.md) — Longhorn fio results, pre/post storage-network cutover.
 - [**sn770-zfs-qualification.md**](sn770-zfs-qualification.md) — WD_BLACK SN770 reproduction matrix, evidence index, and the remaining qualification gates for the PVE storage decision.
 - [observability-bakeoff](observability-bakeoff.md) — VictoriaMetrics/Logs vs. Prometheus/Loki evaluation.

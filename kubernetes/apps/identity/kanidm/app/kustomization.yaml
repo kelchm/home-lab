@@ -13,6 +13,7 @@ resources:
   - ./serverstransport.yaml
   - ./traefikservice.yaml
   - ./networkpolicy.yaml
+  - ./log-alerts.yaml
 
 # Theme assets, split by how they mount:
 #  - kanidm-theme: override.css + style.js, subPath-mounted onto individual

@@ -19,6 +19,12 @@ spec:
   ruleSelector:
     matchLabels:
       alerting.home.kelch.io/datasource: victorialogs
+  # Without a namespace selector the rule selector reads only this namespace;
+  # apps keep their own log rules.
+  ruleNamespaceSelector:
+    matchExpressions:
+      - key: kubernetes.io/metadata.name
+        operator: Exists
   resources:
     requests:
       cpu: 10m
