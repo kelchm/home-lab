@@ -40,7 +40,10 @@
       "labels": {"app.kubernetes.io/name": "grafana", "app.kubernetes.io/instance": "grafana", "pod-template-hash": "59689f9d64"},
       "ownerReferences": [{"kind": "ReplicaSet", "name": "grafana-59689f9d64"}]},
     "vm-operator": {"namespace_name": "observability", "pod_name": "victoria-metrics-operator-6f77d7894f-abcde", "container_name": "operator",
-      "labels": {"app.kubernetes.io/name": "victoria-metrics-operator", "app.kubernetes.io/instance": "victoria-metrics-k8s-stack"}}
+      "labels": {"app.kubernetes.io/name": "victoria-metrics-operator", "app.kubernetes.io/instance": "victoria-metrics-k8s-stack"}},
+    "fluent-bit": {"namespace_name": "observability", "pod_name": "fluent-bit-75dkg", "container_name": "fluent-bit",
+      "labels": {"app.kubernetes.io/name": "fluent-bit", "app.kubernetes.io/instance": "fluent-bit"},
+      "ownerReferences": [{"kind": "DaemonSet", "name": "fluent-bit"}]}
   },
   "cases": [
     {"name": "traefik-204", "pod": "traefik",
@@ -113,6 +116,9 @@
     {"name": "bambuddy-uvicorn", "pod": "bambuddy", "line": "INFO:     10.42.0.1:51234 - \"GET /api/health HTTP/1.1\" 200 OK", "expect": {"severity_number": 9, "severity_text": "INFO"}},
     {"name": "bambuddy-python-logging", "pod": "bambuddy", "stream": "stderr", "line": "2026-09-23 12:00:00,123 ERROR [backend.app.services] printer offline", "expect": {"severity_number": 17, "severity_text": "ERROR"}},
     {"name": "broadsheet-warning", "pod": "broadsheet", "stream": "stderr", "line": "warning: renderer diagnostic", "expect": {"severity_number": 13, "severity_text": "warning"}},
+    {"name": "fluent-bit-warn", "pod": "fluent-bit", "stream": "stderr", "line": "[2026/10/19 20:43:05.657] [ warn] [net] getaddrinfo(host='victoria-logs-single-server.observability.svc.cluster.local', err=4): Domain name not found", "expect": {"severity_number": 13, "severity_text": "warn", "body": "[2026/10/19 20:43:05.657] [ warn] [net] getaddrinfo(host='victoria-logs-single-server.observability.svc.cluster.local', err=4): Domain name not found"}},
+    {"name": "fluent-bit-error", "pod": "fluent-bit", "stream": "stderr", "line": "[2026/10/19 20:43:05.658] [error] [output:opentelemetry:victorialogs] no upstream connections available to victoria-logs-single-server.observability.svc.cluster.local:9428", "expect": {"severity_number": 17, "severity_text": "error"}},
+    {"name": "fluent-bit-banner", "pod": "fluent-bit", "stream": "stderr", "line": "Fluent Bit v5.1.4", "expect": {"severity_number": 0, "no_severity_text": true, "absent": ["pipeline.severity_unmapped"]}},
     {"name": "gunicorn-unknown-level", "pod": "bare", "line": "[2026-10-19 12:41:27 +0000] [7] [BOOTING] worker started", "expect": {"severity_number": 0, "no_severity_text": true, "absent": ["pipeline.severity_unmapped"]}},
     {"name": "traefik-forwarded-list", "pod": "traefik", "line": "{\"ClientAddr\": \"10.42.2.74:51234\", \"ClientHost\": \"203.0.113.9, 10.42.2.74\", \"ClientPort\": \"51234\", \"DownstreamStatus\": 200, \"RequestMethod\": \"GET\", \"RequestPath\": \"/\", \"RequestHost\": \"echo.kelch.io\", \"RequestAddr\": \"echo.kelch.io\", \"StartUTC\": \"2026-10-18T19:00:00.5Z\", \"StartLocal\": \"2026-10-18T19:00:00.5Z\", \"level\": \"info\"}", "expect": {"attributes": {"network.peer.address": "10.42.2.74", "network.peer.port": 51234, "traefik.ClientHost": "203.0.113.9, 10.42.2.74"}, "absent": ["client.address", "client.port", "traefik.StartLocal", "traefik.RequestAddr"]}},
     {"name": "traefik-forwarded-single", "pod": "traefik", "line": "{\"ClientAddr\": \"[fd00::1]:443\", \"ClientHost\": \"203.0.113.9\", \"DownstreamStatus\": 200, \"RequestMethod\": \"GET\", \"RequestPath\": \"/\", \"level\": \"info\"}", "expect": {"attributes": {"client.address": "203.0.113.9", "network.peer.address": "fd00::1", "network.peer.port": 443}, "absent": ["client.port"]}},
