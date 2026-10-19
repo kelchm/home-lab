@@ -182,16 +182,16 @@ A local delivery drill (numbered fixture, kubelet-style rotation) recovered ever
 
 Fluent Bit starts with no tail positions, so it reads every container's current log file from the beginning and VictoriaLogs stores those records a second time, with their original timestamps. Expect up to one file's worth of duplicates per container (kubelet rotates at 10 MiB) in the hours before the cutover; retention removes them. The same replay covers any gap between vlagent stopping and Fluent Bit starting, unless a file rotates in between.
 
-After the rollout, verify on each node: the Fluent Bit pod is Ready, `fluentbit_input_records_total{name="pods"}` increases, `fluentbit_output_retries_total` stays flat, and fresh records for that node's pods arrive with `service.name` set. `/var/lib/vlagent` remains on the nodes until it is removed with exact-path cleanup mounts.
+After the rollout, verify on each node: the Fluent Bit pod is Ready, `fluentbit_input_records_total{name="pods"}` increases, `fluentbit_output_retries_total` stays flat, and fresh records for that node's pods arrive with `service.name` set. `/var/lib/vlagent` was removed from every node on 2026-10-19.
 
 ## Collector maintenance and rollback
 
 The DaemonSet rolls one node at a time. Before a planned collector change, restore backend health and check `fluentbit_storage_fs_chunks` is back at its usual low level; a delivery backlog holds hundreds. Never run two Fluent Bit processes against the same `/var/lib/fluent-bit`.
 
-To roll back, revert the Fluent Bit change in a reviewed PR: Git history keeps the vlagent DaemonSet, alerts and dashboards. vlagent resumes from its own checkpoints in `/var/lib/vlagent` if they are still present, replaying what it had not yet read; records already sent by Fluent Bit stay in the new schema until retention removes them.
+To roll back, revert the Fluent Bit change in a reviewed PR: Git history keeps the vlagent DaemonSet, alerts and dashboards. Its checkpoints were removed with `/var/lib/vlagent`, so a restored vlagent starts without read positions; records already sent by Fluent Bit stay in the new schema until retention removes them.
 
 ## Backend crash durability
 
-The deployed VictoriaLogs v1.52.0 binary confirms the upstream [in-memory flush setting](https://docs.victoriametrics.com/victorialogs/#list-of-command-line-flags): `-inmemoryDataFlushInterval` defaults to five seconds, has a one-second minimum, and trades more frequent durable writes for additional disk I/O. Accepted data can remain in memory until that flush; an unclean shutdown can lose it without collector drop counters increasing. The interval concerns backend persistence, not application event timestamps, so old/replayed records can also be affected.
+The deployed VictoriaLogs v1.53.0 binary confirms the upstream [in-memory flush setting](https://docs.victoriametrics.com/victorialogs/#list-of-command-line-flags): `-inmemoryDataFlushInterval` defaults to five seconds, has a one-second minimum, and trades more frequent durable writes for additional disk I/O. Accepted data can remain in memory until that flush; an unclean shutdown can lose it without collector drop counters increasing. The interval concerns backend persistence, not application event timestamps, so old/replayed records can also be affected.
 
 Keep the five-second default for this CPU-constrained homelab and the 4 GiB backend memory limit. Reducing the interval would narrow the persistence window but would not provide synchronous acknowledgement or exactly-once recovery. Revisit if backend crashes recur or the loss tolerance changes. The observed cutover gap is consistent with unflushed data lost at the OOM, but the exact fate of every missing record was not traced through request acknowledgements.

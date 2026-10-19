@@ -135,14 +135,14 @@ spec:
       rules:
         - alert: FluentBitCollectorTargetMissing
           expr: |
-            (count(count by (node) (up{job="fluent-bit"} == 1)) or vector(0))
+            (count(count by (node) (up{job="fluent-bit"} == 1) == 2) or vector(0))
             < scalar(max(kube_daemonset_status_desired_number_scheduled{namespace="observability",daemonset="fluent-bit"}))
           for: 5m
           labels:
             severity: critical
           annotations:
-            summary: A node has no healthy Fluent Bit scrape target
-            description: Check DaemonSet scheduling, PodMonitor conversion and the metrics network path.
+            summary: A node lacks a healthy Fluent Bit scrape target
+            description: Each node needs both the v2 and v1 metrics targets up. Check DaemonSet scheduling, PodMonitor conversion and the metrics network path.
 
         - alert: FluentBitDeliveryRetrying
           expr: increase(fluentbit_output_retries_total{job="fluent-bit"}[2m]) > 0
