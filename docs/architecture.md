@@ -57,6 +57,8 @@ The same VMSingle is the metrics store for the rest of the lab. Enrolled PVE nod
 
 Fluent Bit runs as a DaemonSet on every node, tails Kubernetes container logs, enriches them from the API and sends them to VictoriaLogs over OTLP, shaped by the OpenTelemetry log data model: `service.name` and `k8s.*` resource attributes, `severity_number`/`severity_text`, a readable body, HTTP semantic-convention attributes and application fields prefixed by application name. Streams use `service.name`, `k8s.namespace.name`, `k8s.pod.name`, `k8s.container.name` and `k8s.node.name`. The Kubernetes logs dashboard is the primary browser, with Grafana Explore and the OIDC-protected VictoriaLogs VMUI available for direct queries. The [logging runbook](runbooks/logging.md) owns the schema, capture boundaries, retained history, failure handling and durability limits; the [schema and collector evaluation](evaluations/log-schema-and-collector.md) records why.
 
+Each Talos node's machined sends its service and kernel logs over TCP to the fixed ClusterIP `10.43.0.20:5170`, whose `internalTrafficPolicy: Local` delivers them to the same node's Fluent Bit; they are stored with `service.namespace=talos` and one `service.name` per Talos service, minus the auditd, machined dashboard and DNS-debug floods ([logging runbook](runbooks/logging.md#talos-node-logs)).
+
 Fluent Bit also receives the UniFi console's syslog/CEF export, and the syslog of its adopted switches and access points, on `10.32.130.3` UDP/514, and stores it in the same schema with one `service.name` per device. A second vmalert evaluates LogsQL rules against VictoriaLogs and sends through the same VMAlertmanager routes; the [logging runbook](runbooks/logging.md#unifi-console-logs) describes the source, its fields and its alerts.
 
 The `monitoring.coreos.com` CRDs are owned independently by `prometheus-operator-crds`, and the VictoriaMetrics operator converts third-party ServiceMonitors and shared PrometheusRules with owner references. VictoriaMetrics and VictoriaLogs are the only metric and log backends; kube-prometheus-stack, Loki, and OpenObserve are removed.
@@ -437,6 +439,7 @@ Cluster-wide values are written as literals wherever they are used, so searching
 | Timezone | `America/New_York` | Container `TZ` and CronJob `timeZone`; Longhorn RecurringJobs run in UTC ([backup runbook](runbooks/longhorn-backup-restore.md)) |
 | NAS storage address | `10.32.25.5` (`nas-storage`) | NFS PVs and the Longhorn BackupTarget; see [Storage VLAN registry](#storage-vlan-registry) |
 | NAS management address | `10.32.20.5` (`nas`) | DSM and container UIs |
+| Talos log receiver | `10.43.0.20:5170` (`fluent-bit-talos` ClusterIP) | Talos `machine.logging` and `KmsgLogConfig` destination; changing it needs a Talos config rollout on every node |
 
 Flux post-build substitution is not used. Reserve it for values that differ between deployments sharing the same manifests, such as the `-sbx` hostname suffix a second cluster would need. When it returns:
 

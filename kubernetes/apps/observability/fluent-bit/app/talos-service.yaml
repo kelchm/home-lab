@@ -1,0 +1,22 @@
+---
+# Talos service and kernel logs into this node's collector. machined sends from
+# the host to this fixed ClusterIP (talos/patches/global/machine-logging.yaml),
+# and internalTrafficPolicy Local keeps each node's records on its own
+# collector, which names the node. Changing the address needs a Talos config
+# rollout on every node.
+apiVersion: v1
+kind: Service
+metadata:
+  name: fluent-bit-talos
+spec:
+  type: ClusterIP
+  clusterIP: 10.43.0.20
+  internalTrafficPolicy: Local
+  selector:
+    app.kubernetes.io/instance: fluent-bit
+    app.kubernetes.io/name: fluent-bit
+  ports:
+    - name: talos
+      port: 5170
+      targetPort: talos
+      protocol: TCP
