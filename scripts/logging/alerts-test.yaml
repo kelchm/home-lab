@@ -6,9 +6,13 @@ tests:
     input_series:
       - series: kube_daemonset_status_desired_number_scheduled{namespace="observability",daemonset="fluent-bit"}
         values: 3+0x30
-      - series: up{job="fluent-bit",node="n1"}
+      - series: up{job="fluent-bit",node="n1",endpoint="http"}
         values: 1+0x30
-      - series: up{job="fluent-bit",node="n2"}
+      - series: up{job="fluent-bit",node="n1",endpoint="http-v1"}
+        values: 1+0x30
+      - series: up{job="fluent-bit",node="n2",endpoint="http"}
+        values: 1+0x30
+      - series: up{job="fluent-bit",node="n2",endpoint="http-v1"}
         values: 1+0x30
       - series: fluentbit_output_retries_total{job="fluent-bit",node="n1",name="victorialogs"}
         values: 0+5x30
@@ -37,6 +41,21 @@ tests:
       - expr: count(ALERTS{alertname="FluentBitNodeLogIngestionSilent",alertstate="firing"})
         eval_time: 21m
         exp_samples: [{labels: '{}', value: 1}]
+  - name: A node whose v2 target is gone is missing even if v1 still answers
+    interval: 1m
+    input_series:
+      - series: kube_daemonset_status_desired_number_scheduled{namespace="observability",daemonset="fluent-bit"}
+        values: 2+0x30
+      - series: up{job="fluent-bit",node="n1",endpoint="http"}
+        values: 1+0x30
+      - series: up{job="fluent-bit",node="n1",endpoint="http-v1"}
+        values: 1+0x30
+      - series: up{job="fluent-bit",node="n2",endpoint="http-v1"}
+        values: 1+0x30
+    promql_expr_test:
+      - expr: count(ALERTS{alertname="FluentBitCollectorTargetMissing",alertstate="firing"})
+        eval_time: 6m
+        exp_samples: [{labels: '{}', value: 1}]
   - name: A short delivery outage that recovers raises nothing
     interval: 1m
     input_series:
@@ -60,7 +79,9 @@ tests:
     input_series:
       - series: kube_daemonset_status_desired_number_scheduled{namespace="observability",daemonset="fluent-bit"}
         values: 1+0x30
-      - series: up{job="fluent-bit",node="n1"}
+      - series: up{job="fluent-bit",node="n1",endpoint="http"}
+        values: 1+0x30
+      - series: up{job="fluent-bit",node="n1",endpoint="http-v1"}
         values: 1+0x30
       - series: fluentbit_output_retries_total{job="fluent-bit",node="n1",name="victorialogs"}
         values: 0+0x30
