@@ -272,9 +272,6 @@ spec:
     vmagent:
       enabled: true
       spec:
-        podMetadata:
-          annotations:
-            resource.opentelemetry.io/service.name: vmagent
         # Scrape ServiceMonitor / PodMonitor / VMServiceScrape / VMPodScrape
         # cluster-wide. vm-operator auto-converts prometheus-operator CRDs
         # so KPS's ServiceMonitors flow through transparently.

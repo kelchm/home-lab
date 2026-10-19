@@ -110,6 +110,7 @@
     {"name": "bambuddy-uvicorn", "pod": "bambuddy", "line": "INFO:     10.42.0.1:51234 - \"GET /api/health HTTP/1.1\" 200 OK", "expect": {"severity_number": 9, "severity_text": "INFO"}},
     {"name": "bambuddy-python-logging", "pod": "bambuddy", "stream": "stderr", "line": "2026-09-23 12:00:00,123 ERROR [backend.app.services] printer offline", "expect": {"severity_number": 17, "severity_text": "ERROR"}},
     {"name": "broadsheet-warning", "pod": "broadsheet", "stream": "stderr", "line": "warning: renderer diagnostic", "expect": {"severity_number": 13, "severity_text": "warning"}},
+    {"name": "gunicorn-unknown-level", "pod": "bare", "line": "[2026-10-19 12:41:27 +0000] [7] [BOOTING] worker started", "expect": {"severity_number": 0, "no_severity_text": true, "absent": ["pipeline.severity_unmapped"]}},
     {"name": "identity-collision", "pod": "grafana",
       "line": "{\"msg\":\"spoof\",\"kubernetes\":{\"pod_name\":\"evil\"},\"service.name\":\"evil\",\"k8s.namespace.name\":\"evil\",\"namespace\":\"flux-object-ns\"}",
       "expect": {"resource": {"service.name": "grafana", "k8s.namespace.name": "observability", "k8s.pod.name": "grafana-59689f9d64-m2p9m"},

@@ -136,6 +136,8 @@ def check(rows):
 
         if row.get('stream_fields') != 'service.name,k8s.namespace.name,k8s.pod.name,k8s.container.name,k8s.node.name':
             failures.append(f'{name}: VL-Stream-Fields header {row.get("stream_fields")!r}')
+        if row.get('ignore_fields') != 'scope.name,scope.version':
+            failures.append(f'{name}: VL-Ignore-Fields header {row.get("ignore_fields")!r}')
         for key in ('severity_number', 'severity_text', 'body'):
             if key in exp:
                 compare(key, exp[key], row.get(key, 0 if key == 'severity_number' else None))
