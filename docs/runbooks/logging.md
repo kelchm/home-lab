@@ -37,13 +37,15 @@ Records follow the [OpenTelemetry log data model](https://opentelemetry.io/docs/
 | `severity_number`, `severity_text` | OpenTelemetry severity (1–4 trace, 5–8 debug, 9–12 info, 13–16 warn, 17–20 error, 21–24 fatal) and the source's level text unchanged. `0` means the source gave no level. |
 | `_msg` | The message: the application's `msg`/`message`/`record.message`, the klog message, Traefik's `common` access-log line, or the whole line for plain text. |
 | `log.iostream` | `stdout` or `stderr`. Never implies severity. |
-| `http.*`, `url.*`, `client.*`, `server.*`, `network.protocol.*`, `tls.*`, `user_agent.original` | HTTP semantic-convention names for Traefik access logs. `error.type` holds the status code for 5xx responses only. |
-| `code.file.path`, `code.line.number`, `thread.id` | Source location from klog and Go slog. |
-| `<application>.<field>` | Every other application field, prefixed by the `app.kubernetes.io/name` label (else the legacy `app` label, owning workload or container), e.g. `traefik.RouterName`, `grafana.logger`, `kustomize-controller.name`. |
+| `http.*`, `url.*`, `client.*`, `server.*`, `network.protocol.*`, `network.peer.*`, `tls.*`, `user_agent.original` | HTTP semantic-convention names for Traefik access logs. `network.peer.*` is the connection's peer; `client.*` is the original client only when Traefik reports a single address (it copies `X-Forwarded-For` whole). `error.type` holds the status code for 5xx responses only. |
+| `code.file.path`, `code.line.number`, `thread.id` | Source location from klog, or from a `source`, `caller` or `file` value shaped `<file>.<source extension>:<line>` (slog, zap, logrus). Other values of those keys stay application fields. |
+| `<application>.<field>` | Every other application field, prefixed by the `app.kubernetes.io/name` label (else the legacy `app` label, owning workload or container), e.g. `traefik.RouterName`, `grafana.logger`, `kustomize-controller.name`. Nested objects join keys with dots; arrays stay one JSON array value (`grafana.plugins`); an object whose keys are data rather than names (none of its keys could be a field name, or the declared `victoria-metrics-operator.spec_diff`) is one JSON string. Read inside either with `unpack_json from <field>` or `unroll`. |
 | `pipeline.severity_unmapped` | The source stated a level the mapping does not recognize; extend `normalize.lua`. |
 | `pipeline.normalize_error` | The mapping raised an error on this record, which keeps its identity and raw line as the message; fix `normalize.lua`. |
 
 To give a workload a better service name than its labels produce, set `resource.opentelemetry.io/service.name` on its pod template.
+
+Record time is the container runtime's timestamp for the line; application timestamp fields stay application fields.
 
 Levels come from structured fields (JSON, logfmt, PostgreSQL's `record.error_severity`), klog's leading letter, or a level token at a fixed position in known plain-text formats. Words elsewhere in a line never set severity; an unknown level is stored as unspecified rather than guessed. Terminal colour codes are removed before parsing, and blank lines are dropped. Continuation lines (Python tracebacks, mcphub's multi-line JSON) are the main unspecified source.
 
