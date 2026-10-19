@@ -355,7 +355,7 @@ local function build(ingress, record)
     end
   end
 
-  if payload.RequestMethod and payload.DownstreamStatus then
+  if app == 'traefik' and payload.RequestMethod and payload.DownstreamStatus then
     body = traefik_common(payload)
     for source, target in pairs(TRAEFIK_FIELDS) do
       if payload[source] ~= nil then
