@@ -98,7 +98,7 @@ The console's own system log for the 30 days to October 18, 2026 held 7,439 even
 
 | Alert | Fires when | Severity |
 | --- | --- | --- |
-| `UniFiWANFlapping` | Three or more Internet Down, temporary-disconnection or failover events for one WAN within an hour. `UniFiWANNotActive` already pages a WAN down for 5 minutes; this catches shorter repeated drops. | warning |
+| `UniFiWANFlapping` | Three or more Internet Down, temporary-disconnection or failover events for one WAN within an hour. `UniFiWANOffline` already pages a WAN down for 5 minutes; this catches shorter repeated drops. | warning |
 | `UniFiIntrusionDetectedOutbound` | An IDS detection, in the last 15 minutes, whose destination is outside private, CGNAT, link-local and multicast space. Lab-internal detections are queryable but do not page, because the baseline is dominated by operator traffic. | warning |
 | `UniFiHoneypotTriggered` | Any honeypot event in the last 15 minutes. | warning |
 | `UniFiSyslogSilent` | For an hour, VictoriaLogs' `vl_rows_ingested_total{type="syslog_udp"}` shows no syslog rows in the last two days, including when the listener has never received one. It is a MetricsQL rule on the backend's own counter, sized above the 29-hour baseline gap, so it also fires about an hour after rollout until the console export is enabled. Gateway daemon and device syslog count too, so it catches a dead listener path or a disabled export rather than a quiet CEF stream. | warning |

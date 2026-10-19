@@ -26,7 +26,7 @@ spec:
             description: >-
               The exporter is not scraped, or cannot read the dish's gRPC API
               at 192.168.100.1:9200. A dish that is off or rebooting also shows
-              as UniFiWANNotActive for WAN2. Otherwise check the exporter log:
+              as UniFiWANOffline for WAN2. Otherwise check the exporter log:
               a dish firmware update can change the API, and the gateway must
               route 192.168.100.0/24 out WAN2 (the Starlink Management
               traffic route).

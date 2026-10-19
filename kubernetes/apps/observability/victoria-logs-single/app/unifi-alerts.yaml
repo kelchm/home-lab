@@ -15,7 +15,7 @@ spec:
       type: vlogs
       interval: 1m
       rules:
-        # A WAN that is down for 5 minutes pages through UniFiWANNotActive.
+        # A WAN that is down for 5 minutes pages through UniFiWANOffline.
         # This catches short repeated drops that recover before then. Class
         # 100 is Internet Down; drops shorter than the console's outage
         # threshold are reported as restored after a temporary disconnection.

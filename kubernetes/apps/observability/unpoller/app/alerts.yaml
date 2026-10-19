@@ -37,8 +37,8 @@ spec:
               The console counts adopted devices in the {{ $labels.subsystem }}
               subsystem that are not connected. The UniFi Devices page names them.
 
-        # Both WANs are load-balanced, so each is ACTIVE when healthy; BACKUP or
-        # DISCONNECTED means traffic runs on the other one.
+        # Both WANs are load-balanced, so each is ACTIVE as configured; BACKUP
+        # or DISCONNECTED means the gateway has stopped balancing onto it.
         - alert: UniFiWANNotActive
           expr: unpoller_wan_interface_state{job="unifi-api"} == 0
           for: 5m
@@ -47,23 +47,63 @@ spec:
           annotations:
             summary: "{{ $labels.wan_interface }} is {{ $labels.state }}"
             description: >-
-              The gateway is not using {{ $labels.wan_interface }}; all traffic
-              runs on the remaining WAN. Check the modem or dish and the UniFi
-              Internet page.
+              The gateway is not balancing traffic onto {{ $labels.wan_interface }}.
+              Check the load-balancing mode and failover priorities on the
+              UniFi Internet page.
+
+        # The gateway's own health check (last_wan_status). The interface
+        # state below stays ACTIVE through an outage, link up or down.
+        - alert: UniFiWANOffline
+          expr: unpoller_device_wan_status{job="unifi-api"} == 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: >-
+              {{ with printf "unpoller_wan_interface_state{job=\"unifi-api\", wan_networkgroup=%q}" $labels.wan_networkgroup | query }}{{ . | first | label "wan_interface" }}{{ else }}{{ $labels.wan_networkgroup }}{{ end }}
+              is offline
+            description: >-
+              The gateway's health check reports this WAN {{ $labels.status }};
+              all traffic runs on the remaining WAN. Check the modem or dish,
+              its own metrics, and the UniFi Internet page.
 
         # Escalation of the rule above. Losing both WANs cannot be delivered
         # from here; the Watchdog heartbeat to healthchecks.io covers that.
         - alert: UniFiWANOutageExtended
-          expr: unpoller_wan_interface_state{job="unifi-api"} == 0
+          expr: unpoller_device_wan_status{job="unifi-api"} == 0
           for: 1h
           labels:
             severity: critical
           annotations:
-            summary: "{{ $labels.wan_interface }} has been {{ $labels.state }} for over an hour"
+            summary: >-
+              {{ with printf "unpoller_wan_interface_state{job=\"unifi-api\", wan_networkgroup=%q}" $labels.wan_networkgroup | query }}{{ . | first | label "wan_interface" }}{{ else }}{{ $labels.wan_networkgroup }}{{ end }}
+              has been offline for over an hour
             description: >-
               The lab has been on one WAN for an hour. Power-cycle the modem or
               dish, check the provider's status, and check the UniFi Internet
               page for the interface's last error.
+
+        # Share of the gateway's pings to ping.ui.com answered on each WAN port,
+        # at the 10% loss line of StarlinkPingDropSustained. eth9 is WAN and
+        # eth8 is WAN2; an offline WAN is left to UniFiWANOffline.
+        - alert: UniFiWANPacketLoss
+          expr: |
+            label_replace(label_replace(
+              avg_over_time(unpoller_device_wan_availability_percent{job="unifi-api"}[15m]) < 90,
+              "wan_networkgroup", "WAN", "port", "eth9"), "wan_networkgroup", "WAN2", "port", "eth8")
+            unless on (name, wan_networkgroup) unpoller_device_wan_status{job="unifi-api"} == 0
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: >-
+              {{ with printf "unpoller_wan_interface_state{job=\"unifi-api\", wan_networkgroup=%q}" $labels.wan_networkgroup | query }}{{ . | first | label "wan_interface" }}{{ else }}{{ $labels.port }}{{ end }}
+              answers {{ printf "%.0f" $value }}% of pings
+            description: >-
+              The gateway's pings to ping.ui.com over {{ $labels.port }} have
+              averaged under 90% answered for 15 minutes, so this WAN's share
+              of load-balanced flows is degraded while it still reads online.
+              Compare the modem's or dish's own metrics.
 
         # The expected uplink speed of every device; any device not named here
         # must reach 1 Gb/s. The two switch LAGs report their aggregate, so one
