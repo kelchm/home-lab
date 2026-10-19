@@ -13,5 +13,6 @@ configMapGenerator:
       - config/fluent-bit.conf
       - config/parsers.conf
       - config/normalize.lua
+      - config/unifi.lua
 generatorOptions:
   disableNameSuffixHash: true

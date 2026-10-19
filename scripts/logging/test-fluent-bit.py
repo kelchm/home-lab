@@ -2,9 +2,10 @@
 """Run the production Fluent Bit config and Lua mapping against fixture logs.
 
 The test changes only what cannot run outside the cluster: Kubernetes metadata
-comes from fixtures instead of the API, output goes to a local OTLP capture
-instead of VictoriaLogs, and state lives in a temporary directory. Requires
-Docker; the Fluent Bit image is the one pinned in the HelmRelease.
+comes from fixtures instead of the API, UniFi syslog arrives from a local
+sender, output goes to a local OTLP capture instead of VictoriaLogs, and state
+lives in a temporary directory. Requires Docker; the Fluent Bit image is the
+one pinned in the HelmRelease.
 """
 import json
 import os
@@ -17,6 +18,15 @@ import uuid
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+K8S_STREAM_FIELDS = 'service.name,k8s.namespace.name,k8s.pod.name,k8s.container.name,k8s.node.name'
+UNIFI_STREAM_FIELDS = 'service.name,cef.device_product,cef.device_event_class_id'
+SEND_SYSLOG = """
+import json, socket, sys, time
+s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+for host, datagram in json.load(open(sys.argv[1])):
+    s.sendto(datagram.encode(), (host, 5140))
+    time.sleep(0.05)
+"""
 APP = ROOT / 'kubernetes/apps/observability/fluent-bit/app'
 FIXTURES = json.loads((ROOT / 'scripts/logging/fluent-bit-fixtures.json').read_text())
 PYTHON_IMAGE = 'python:3.13-alpine@sha256:2d9aefe2fef018a7eb2c13064c89c71929800fd2e5dccdbf52ea5da5bb8d929a'
@@ -72,6 +82,8 @@ def write_inputs(work):
         (logs / name).write_text('\n'.join(lines) + '\n')
         metadata['kube.var.log.containers.' + name] = pod
         case['_uid'] = pod_id
+    # A second network gives the sender a second source address.
+    (work / 'syslog.json').write_text(json.dumps([[case.get('via', 'fb'), case['datagram']] for case in FIXTURES['syslog']]))
     (work / 'inject.lua').write_text(
         'local pods=' + lua_literal(metadata) + '\n'
         'function inject(tag, ts, record)\n'
@@ -85,17 +97,27 @@ def run(work):
     docker = ['docker']
     # Run as the invoking user so the temporary directory stays removable.
     user = ['--user', f'{os.getuid()}:{os.getgid()}']
-    subprocess.run(docker + ['network', 'create', net], check=True, capture_output=True)
+    for n in (net, f'{net}-2'):
+        subprocess.run(docker + ['network', 'create', n], check=True, capture_output=True)
     try:
         subprocess.run(docker + ['run', '-d', '--rm', *user, '--name', f'{net}-capture', '--network', net, '--network-alias', 'capture',
                                  '-v', f'{ROOT}/scripts/logging/otlp-capture.py:/capture.py:ro', '-v', f'{work}:/work',
                                  PYTHON_IMAGE, 'python', '/capture.py', '/work/wire.jsonl'], check=True, capture_output=True)
-        subprocess.run(docker + ['run', '-d', '--rm', *user, '--name', f'{net}-fb', '--network', net, '-e', 'TZ=UTC',
+        subprocess.run(docker + ['run', '-d', '--rm', *user, '--name', f'{net}-fb', '--network', net, '--network-alias', 'fb', '-e', 'TZ=UTC',
                                  '-v', f'{APP}/config:/fluent-bit/etc/conf:ro', '-v', f'{work}/test.conf:/test/fluent-bit.conf:ro',
                                  '-v', f'{work}/inject.lua:/test/inject.lua:ro', '-v', f'{work}/logs:/var/log/containers:ro',
                                  '-v', f'{work}/state:/state', fluent_bit_image(), '-c', '/test/fluent-bit.conf'],
                        check=True, capture_output=True)
+        subprocess.run(docker + ['network', 'connect', '--alias', 'fb2', f'{net}-2', f'{net}-fb'], check=True, capture_output=True)
         wire = work / 'wire.jsonl'
+        # Container records arriving show the syslog listener is bound too.
+        deadline = time.time() + 60
+        while time.time() < deadline and not (wire.exists() and wire.stat().st_size):
+            time.sleep(1)
+        subprocess.run(docker + ['create', *user, '--name', f'{net}-send', '--network', net, '-v', f'{work}/syslog.json:/syslog.json:ro',
+                                 PYTHON_IMAGE, 'python', '-c', SEND_SYSLOG, '/syslog.json'], check=True, capture_output=True)
+        subprocess.run(docker + ['network', 'connect', f'{net}-2', f'{net}-send'], check=True, capture_output=True)
+        subprocess.run(docker + ['start', '-a', f'{net}-send'], check=True)
         deadline = time.time() + 90
         while time.time() < deadline:
             if wire.exists() and sum(1 for _ in wire.open()) >= expected_records():
@@ -105,22 +127,26 @@ def run(work):
         logs = subprocess.run(docker + ['logs', f'{net}-fb'], capture_output=True, text=True)
         return [json.loads(line) for line in wire.open()] if wire.exists() else [], logs.stdout + logs.stderr
     finally:
-        for name in ('fb', 'capture'):
+        for name in ('fb', 'capture', 'send'):
             subprocess.run(docker + ['rm', '-f', f'{net}-{name}'], capture_output=True)
-        subprocess.run(docker + ['network', 'rm', net], capture_output=True)
+        for n in (net, f'{net}-2'):
+            subprocess.run(docker + ['network', 'rm', n], capture_output=True)
 
 
 def expected_records():
-    return sum(1 for case in FIXTURES['cases'] if not case.get('dropped'))
+    return sum(1 for case in FIXTURES['cases'] if not case.get('dropped')) + len(FIXTURES['syslog'])
 
 
 def check(rows):
-    by_uid = {r['resource'].get('k8s.pod.uid'): r for r in rows}
+    by_uid = {r['resource'].get('k8s.pod.uid'): r for r in rows if 'k8s.pod.uid' in r['resource']}
+    # UniFi fixtures are told apart by their expected body, so each must be unique.
+    by_body = {r.get('body'): r for r in rows if r['resource'].get('service.namespace') == 'unifi'}
     failures = []
     if len(rows) != expected_records():
         failures.append(f'expected {expected_records()} records, received {len(rows)}')
-    for case in FIXTURES['cases']:
-        row, name = by_uid.get(case['_uid']), case['name']
+    for case in FIXTURES['cases'] + FIXTURES['syslog']:
+        unifi = 'datagram' in case
+        row, name = (by_body.get(case['expect']['body']) if unifi else by_uid.get(case['_uid'])), case['name']
         if case.get('dropped'):
             if row is not None:
                 failures.append(f'{name}: should be dropped, got {row.get("body")!r}')
@@ -134,17 +160,19 @@ def check(rows):
             if want != got:
                 failures.append(f'{name}: {label} expected {want!r}, got {got!r}')
 
-        if row.get('stream_fields') != 'service.name,k8s.namespace.name,k8s.pod.name,k8s.container.name,k8s.node.name':
+        if row.get('stream_fields') != (UNIFI_STREAM_FIELDS if unifi else K8S_STREAM_FIELDS):
             failures.append(f'{name}: VL-Stream-Fields header {row.get("stream_fields")!r}')
         if row.get('ignore_fields') != 'scope.name,scope.version':
             failures.append(f'{name}: VL-Ignore-Fields header {row.get("ignore_fields")!r}')
-        for key in ('severity_number', 'severity_text', 'body'):
+        for key in ('severity_number', 'severity_text', 'body', 'timestamp'):
             if key in exp:
                 compare(key, exp[key], row.get(key, 0 if key == 'severity_number' else None))
         if exp.get('no_severity_text'):
             compare('severity_text', None, row.get('severity_text'))
         for key, want in exp.get('resource', {}).items():
             compare(f'resource {key}', want, row['resource'].get(key))
+        if exp.get('service_name_is_peer'):
+            compare('resource service.name', row['attributes'].get('network.peer.address'), row['resource'].get('service.name'))
         for key, want in exp.get('attributes', {}).items():
             compare(f'attribute {key}', want, row['attributes'].get(key))
         for key in exp.get('present', []):
@@ -174,7 +202,7 @@ def main():
             if os.environ.get('FLUENT_BIT_TEST_DUMP'):
                 print(json.dumps(rows, indent=1), file=sys.stderr)
             sys.exit(1)
-    print(f'Fluent Bit mapping: {len(FIXTURES["cases"])} fixtures passed.')
+    print(f'Fluent Bit mapping: {len(FIXTURES["cases"]) + len(FIXTURES["syslog"])} fixtures passed.')
 
 
 if __name__ == '__main__':

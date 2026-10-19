@@ -33,4 +33,9 @@ assert 'VL-Ignore-Fields scope.name,scope.version' in conf
 # Off stops tailing the whole file at the first line over Buffer_Max_Size.
 assert setting('Skip_Long_Lines').lower() == 'on'
 assert setting('Logs_URI') == '/insert/opentelemetry/v1/logs'
+# UniFi syslog: datagrams persist until delivered, on the declared UDP port.
+syslog = next(s for s in re.split(r'\n(?=\[)', conf) if re.search(r'^\s*Name\s+syslog\s*$', s, re.M))
+assert re.search(r'^\s*storage\.type\s+filesystem\s*$', syslog, re.M)
+port = int(re.search(r'^\s*Port\s+(\d+)', syslog, re.M).group(1))
+assert [(p['containerPort'], p['protocol']) for p in values['extraPorts'] if p['name'] == 'syslog'] == [(port, 'UDP')]
 print('Fluent Bit image, hardening, mounts and pipeline guarantees validated.')
