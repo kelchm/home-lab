@@ -45,7 +45,7 @@ Records follow the [OpenTelemetry log data model](https://opentelemetry.io/docs/
 
 To give a workload a better service name than its labels produce, set `resource.opentelemetry.io/service.name` on its pod template.
 
-Levels come from structured fields (JSON, logfmt, PostgreSQL's `record.error_severity`), klog's leading letter, or a level token at a fixed position in known plain-text formats. Words elsewhere in a line never set severity; an unknown level is stored as unspecified rather than guessed. mcphub's multi-line JSON fragments and echo's probe access lines are the main unspecified sources.
+Levels come from structured fields (JSON, logfmt, PostgreSQL's `record.error_severity`), klog's leading letter, or a level token at a fixed position in known plain-text formats. Words elsewhere in a line never set severity; an unknown level is stored as unspecified rather than guessed. Terminal colour codes are removed before parsing, and blank lines are dropped. Continuation lines (Python tracebacks, mcphub's multi-line JSON) and echo's probe access lines are the main unspecified sources.
 
 ### Retained history
 

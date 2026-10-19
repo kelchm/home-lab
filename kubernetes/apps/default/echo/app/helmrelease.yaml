@@ -21,6 +21,9 @@ spec:
               HTTP_PORT: &port 80
               LOG_WITHOUT_NEWLINE: true
               LOG_IGNORE_PATH: /healthz
+              # LOG_IGNORE_PATH covers only the JSON request log; this stops the
+              # separate access log, which records every kubelet probe.
+              DISABLE_REQUEST_LOGS: true
               PROMETHEUS_ENABLED: true
             probes:
               liveness: &probes

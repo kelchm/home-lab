@@ -98,7 +98,7 @@ def run(work):
         wire = work / 'wire.jsonl'
         deadline = time.time() + 90
         while time.time() < deadline:
-            if wire.exists() and sum(1 for _ in wire.open()) >= len(FIXTURES['cases']):
+            if wire.exists() and sum(1 for _ in wire.open()) >= expected_records():
                 break
             time.sleep(1)
         time.sleep(3)
@@ -110,13 +110,22 @@ def run(work):
         subprocess.run(docker + ['network', 'rm', net], capture_output=True)
 
 
+def expected_records():
+    return sum(1 for case in FIXTURES['cases'] if not case.get('dropped'))
+
+
 def check(rows):
     by_uid = {r['resource'].get('k8s.pod.uid'): r for r in rows}
     failures = []
-    if len(rows) != len(FIXTURES['cases']):
-        failures.append(f'expected {len(FIXTURES["cases"])} records, received {len(rows)}')
+    if len(rows) != expected_records():
+        failures.append(f'expected {expected_records()} records, received {len(rows)}')
     for case in FIXTURES['cases']:
-        row, exp, name = by_uid.get(case['_uid']), case['expect'], case['name']
+        row, name = by_uid.get(case['_uid']), case['name']
+        if case.get('dropped'):
+            if row is not None:
+                failures.append(f'{name}: should be dropped, got {row.get("body")!r}')
+            continue
+        exp = case['expect']
         if row is None:
             failures.append(f'{name}: no record')
             continue
