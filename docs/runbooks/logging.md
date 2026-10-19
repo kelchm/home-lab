@@ -181,7 +181,7 @@ Before restarting anything, inspect the affected pod's metrics (`/api/v2/metrics
 
 ## Accepted warnings
 
-These sources log warnings or errors in normal operation. Each was traced to its cause and judged harmless; do not suppress them in the pipeline. Measured over 8 hours ending 2026-10-19 21:40 UTC.
+These sources log warnings or errors in normal operation. Each was traced to its cause and judged harmless; do not suppress them in the pipeline. Counts cover 8 hours ending 2026-10-19 21:40 UTC unless a row states its own window.
 
 | Source | Message | Cause | Revisit |
 | --- | --- | --- | --- |
