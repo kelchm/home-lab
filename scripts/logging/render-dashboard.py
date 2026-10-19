@@ -1,19 +1,18 @@
 #!/usr/bin/env python3
-"""Keep provisioned logging queries identical to the tested compatibility pipe."""
+"""Render the Kubernetes / Logs dashboard from the stored OpenTelemetry fields."""
 import argparse
 import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-pipe = (ROOT / 'scripts/logging/compat.logsql').read_text().strip()
-# Suggestions need the same metadata aliases as the logs, without parsing severity.
-metadata_pipe = pipe.split('\n| unpack_logfmt ', 1)[0]
-namespace_scope = '(k8s.namespace.name:in(${namespace}) OR kubernetes.pod_namespace:in(${namespace}) OR namespace:in(${namespace}))'
-namespace_query = '*\n' + metadata_pipe + '\n| filter namespace:*'
-service_query = namespace_scope + '\n' + metadata_pipe + '\n| filter namespace:in(${namespace}) service_name:*'
-expr = (namespace_scope + '\n' + pipe
+# The Severity choices are the OpenTelemetry severity_number ranges.
+BANDS = (('trace', 1, 4), ('debug', 5, 8), ('info', 9, 12), ('warning', 13, 16), ('error', 17, 20), ('critical', 21, 24))
+namespace_query = 'k8s.namespace.name:*'
+service_query = 'k8s.namespace.name:in(${namespace})'
+expr = ('k8s.namespace.name:in(${namespace}) service.name:in(${service}) log.iostream:in(${stream})\n'
+        + '\n'.join(f'| format if (severity_number:range[{low}, {high}]) "{name}" as level' for name, low, high in BANDS)
         + '\n| format if (level:="") "unknown" as level'
-        + '\n| filter namespace:in(${namespace}) service_name:in(${service}) stream:in(${stream}) level:in(${level})')
+        + '\n| filter level:in(${level})')
 datasource = {'type': 'victoriametrics-logs-datasource', 'uid': 'victorialogs'}
 
 
@@ -37,10 +36,10 @@ def variable(name, label, *, query=None, field=None, values=()):
 
 
 variables = [
-    variable('namespace', 'Namespace', query=namespace_query, field='namespace'),
-    variable('service', 'Service', query=service_query, field='service_name'),
+    variable('namespace', 'Namespace', query=namespace_query, field='k8s.namespace.name'),
+    variable('service', 'Service', query=service_query, field='service.name'),
     variable('stream', 'Stream', values=('stdout', 'stderr')),
-    variable('level', 'Severity', values=('trace', 'debug', 'info', 'warning', 'error', 'critical', 'unknown')),
+    variable('level', 'Severity', values=tuple(name for name, _, _ in BANDS) + ('unknown',)),
 ]
 # Start with a bounded part of the cluster; users can choose any namespace or All.
 variables[0]['current'] = {'text': ['observability'], 'value': ['observability']}
