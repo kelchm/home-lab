@@ -29,6 +29,7 @@ assert setting('Read_from_Head').lower() == 'on'
 assert setting('storage.type') == 'filesystem' and setting('storage.sync') == 'full'
 assert setting('DB').startswith('/var/lib/fluent-bit/') and setting('storage.path').startswith('/var/lib/fluent-bit/')
 assert setting('Retry_Limit') == 'no_limits'
+assert 'VL-Ignore-Fields scope.name,scope.version' in conf
 # Off stops tailing the whole file at the first line over Buffer_Max_Size.
 assert setting('Skip_Long_Lines').lower() == 'on'
 assert setting('Logs_URI') == '/insert/opentelemetry/v1/logs'

@@ -115,6 +115,9 @@ spec:
         # missing, so the files must be written before it starts.
         initDashboards: true
         restartPolicy: Always
+        # Skip unchanged dashboards when the watch reconnects (every minute),
+        # which otherwise re-logs every folder placement.
+        ignoreAlreadyProcessed: true
         startupProbe:
           httpGet:
             path: /healthz

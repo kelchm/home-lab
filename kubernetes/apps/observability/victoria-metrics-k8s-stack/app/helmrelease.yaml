@@ -17,7 +17,11 @@ spec:
         name: victoriametrics
   interval: 1h
   values:
+    # Every pod shares app.kubernetes.io/instance, which would otherwise name
+    # them all `victoria-metrics-k8s-stack` in logs; each declares its own.
     victoria-metrics-operator:
+      annotations:
+        resource.opentelemetry.io/service.name: victoria-metrics-operator
       operator:
         # Make converted VMRule/VMServiceScrape/VMPodScrape resources follow
         # their Prometheus source objects during the KPS teardown. Without
@@ -30,6 +34,8 @@ spec:
 
     kube-state-metrics:
       enabled: true
+      podAnnotations:
+        resource.opentelemetry.io/service.name: kube-state-metrics
       # Preserve the Longhorn backup opt-out label used by the storage rules.
       metricLabelsAllowlist:
         - persistentvolumeclaims=[recurring-job-group.longhorn.io/no-backup]
@@ -65,6 +71,8 @@ spec:
 
     prometheus-node-exporter:
       enabled: true
+      podAnnotations:
+        resource.opentelemetry.io/service.name: prometheus-node-exporter
       # `instance` is the node name. This list replaces the chart's default
       # endpoint, so its mountpoint drop rule is restated.
       vmScrape:
@@ -105,6 +113,9 @@ spec:
       monzoTemplate:
         enabled: false
       spec:
+        podMetadata:
+          annotations:
+            resource.opentelemetry.io/service.name: vmalertmanager
         configSecret: vmalertmanager-config
         # ndots:1 so api.pushover.net resolves as an absolute name — see
         # the cloudflare-dns HelmRelease for the ndots/search-path
@@ -237,6 +248,9 @@ spec:
     vmsingle:
       enabled: true
       spec:
+        podMetadata:
+          annotations:
+            resource.opentelemetry.io/service.name: vmsingle
         retentionPeriod: "30d"
         storage:
           accessModes: ["ReadWriteOnce"]
@@ -296,6 +310,9 @@ spec:
           - target_label: evaluator
             replacement: vmalert
       spec:
+        podMetadata:
+          annotations:
+            resource.opentelemetry.io/service.name: vmalert
         selectAllByDefault: true
         evaluationInterval: 30s
         # null omits the field. Rule groups set `cluster` themselves, so rules

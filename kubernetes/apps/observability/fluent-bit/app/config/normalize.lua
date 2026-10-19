@@ -33,13 +33,16 @@ local TEXT_LEVEL = {
   flaresolverr = { '^%d%d%d%d%-%d%d%-%d%d %S+%s+(%a+)%s' },
 }
 -- Fallbacks for other plain text, accepted only when the token is a known
--- level: bracketed as the first token, or directly after a leading ISO-8601
--- timestamp, bracketed or bare.
+-- level: bracketed as the first token, directly after a leading ISO-8601
+-- timestamp (bracketed or bare), or gunicorn's `[time] [pid] [LEVEL]`.
 local TEXT_LEVEL_FALLBACK = {
   '^%[(%a+)%]',
   '^%d%d%d%d%-%d%d%-%d%dT%S+%s+%[(%a+)%]',
   '^%d%d%d%d%-%d%d%-%d%dT%S+%s+(%a+)%s',
+  '^%[[^%]]+%]%s+%[%d+%]%s+%[(%a+)%]',
 }
+-- ANSI SGR/CSI sequences (terminal colours) that some applications print.
+local ANSI = '\27%[[0-?]*[ -/]*[@-~]'
 
 -- Traefik access-log fields with an HTTP semantic-convention name.
 local TRAEFIK_FIELDS = {
@@ -185,8 +188,11 @@ local function identity(k)
 end
 
 function capture(tag, ts, group, metadata, record)
-  metadata.ingress = { kubernetes = record.kubernetes or {}, raw = record.log or '', stream = record.stream }
-  return 1, ts, metadata, { log = record.log or '' }
+  local raw = (record.log or ''):gsub(ANSI, '')
+  -- A blank line carries nothing; VictoriaLogs would store a placeholder message.
+  if not raw:find('%S') then return -1, ts, metadata, record end
+  metadata.ingress = { kubernetes = record.kubernetes or {}, raw = raw, stream = record.stream }
+  return 1, ts, metadata, { log = raw }
 end
 
 local function build(ingress, record)

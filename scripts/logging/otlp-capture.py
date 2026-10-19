@@ -102,9 +102,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
         body = self.rfile.read(int(self.headers['Content-Length']))
         rows = decode(body)
         header = self.headers.get('VL-Stream-Fields')
+        ignore = self.headers.get('VL-Ignore-Fields')
         with open(OUT, 'a') as f:
             for row in rows:
                 row['stream_fields'] = header
+                row['ignore_fields'] = ignore
                 f.write(json.dumps(row) + '\n')
         self.send_response(200)
         self.send_header('Content-Length', '0')
