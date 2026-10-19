@@ -1,7 +1,8 @@
 ---
-# Node log collector: Kubernetes container stdout/stderr, normalized onto the
-# OpenTelemetry log data model and delivered to VictoriaLogs over OTLP. The
-# pipeline lives in the fluent-bit-config ConfigMap (config/), not chart values.
+# Node log collector: Kubernetes container stdout/stderr and UniFi syslog,
+# normalized onto the OpenTelemetry log data model and delivered to
+# VictoriaLogs over OTLP. The pipeline lives in the fluent-bit-config ConfigMap
+# (config/), not chart values.
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
@@ -32,6 +33,13 @@ spec:
     env:
       - name: TZ
         value: UTC
+
+    # UniFi syslog, published by the victoria-logs-syslog Service.
+    extraPorts:
+      - name: syslog
+        port: 5140
+        containerPort: 5140
+        protocol: UDP
 
     tolerations:
       - operator: Exists

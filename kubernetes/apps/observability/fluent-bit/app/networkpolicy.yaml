@@ -18,6 +18,16 @@ spec:
         - ports:
             - port: '2020'
               protocol: TCP
+    # UniFi syslog through the victoria-logs-syslog LoadBalancer. The gateway
+    # sources traffic to BGP-routed VIPs from its VLAN 30 interface; adopted
+    # switches and APs send from their Default network management addresses.
+    - fromCIDR:
+        - 10.32.30.1/32
+        - 10.32.1.0/24
+      toPorts:
+        - ports:
+            - port: '5140'
+              protocol: UDP
   egress:
     - toEntities: [kube-apiserver]
     - toEndpoints:

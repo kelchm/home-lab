@@ -154,13 +154,13 @@ spec:
             description: Chunks are buffering on the node's filesystem. Restore the sink; do not restart the collector or remove /var/lib/fluent-bit.
 
         - alert: FluentBitBufferNearCapacity
-          expr: fluentbit_output_chunk_available_capacity_percent{job="fluent-bit",name="victorialogs"} < 25
+          expr: fluentbit_output_chunk_available_capacity_percent{job="fluent-bit"} < 25
           for: 2m
           labels:
             severity: critical
           annotations:
-            summary: Fluent Bit on {{ $labels.node }} has used 75% of its buffer
-            description: The output buffer limit is 4 GiB. At capacity Fluent Bit discards chunks and its drop counter undercounts the loss; inspect backend health and node disk space now.
+            summary: Fluent Bit on {{ $labels.node }} has used 75% of its {{ $labels.name }} buffer
+            description: The output buffer limits are 4 GiB for container logs (victorialogs) and 256 MiB for UniFi syslog (unifi). At capacity Fluent Bit discards chunks and its drop counter undercounts the loss; inspect backend health and node disk space now.
 
         - alert: FluentBitRecordsDropped
           expr: |
