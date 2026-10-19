@@ -497,7 +497,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "Rows VictoriaLogs received through native ingestion in the last 10 minutes, including any it then rejected (see Log loss). 0 means log collection or ingestion has stopped; VictoriaLogsIngestionSilent fires after 15 minutes.",
+      "description": "Rows VictoriaLogs received from the collector over OTLP in the last 10 minutes, including any it then rejected (see Log loss). 0 means log collection or ingestion has stopped; VictoriaLogsIngestionSilent fires after 15 minutes.",
       "id": 6,
       "title": "Log rows received (10 min)",
       "type": "stat",
@@ -514,7 +514,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(increase(vl_rows_ingested_total{job=\"victoria-logs-single-server\",type=\"nativeinsert\"}[10m]))",
+          "expr": "sum(increase(vl_rows_ingested_total{job=\"victoria-logs-single-server\",type=\"opentelemetry_protobuf\"}[10m]))",
           "legendFormat": "",
           "refId": "A",
           "instant": true,
@@ -1556,7 +1556,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "Rows vlagent read from container logs on each node, and rows VictoriaLogs received. Received should track the sum of collected.",
+      "description": "Rows Fluent Bit read from container logs on each node, and rows VictoriaLogs received. Received should track the sum of collected.",
       "id": 19,
       "title": "Log rows per second",
       "type": "timeseries",
@@ -1573,7 +1573,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum by (node) (rate(vl_rows_ingested_total{job=\"vlagent\",type=\"kubernetes_logs\"}[$__rate_interval]))",
+          "expr": "sum by (node) (rate(fluentbit_input_records_total{job=\"fluent-bit\",name=\"pods\"}[$__rate_interval]))",
           "legendFormat": "collected on {{node}}",
           "refId": "A",
           "range": true
@@ -1584,7 +1584,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(vl_rows_ingested_total{job=\"victoria-logs-single-server\",type=\"nativeinsert\"}[$__rate_interval]))",
+          "expr": "sum(rate(vl_rows_ingested_total{job=\"victoria-logs-single-server\",type=\"opentelemetry_protobuf\"}[$__rate_interval]))",
           "legendFormat": "received by VictoriaLogs",
           "refId": "B",
           "range": true
@@ -1661,9 +1661,9 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "Bytes waiting in each node's persistent queue for VictoriaLogs. The line marks VlagentBufferNearCapacity at 3 GiB of the 4 GiB budget.",
+      "description": "Share of each node's 4 GiB output buffer in use. The line marks FluentBitBufferNearCapacity at 75%.",
       "id": 20,
-      "title": "vlagent queue per node",
+      "title": "Fluent Bit buffer per node",
       "type": "timeseries",
       "gridPos": {
         "h": 8,
@@ -1678,7 +1678,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum by (node) (vlagent_remotewrite_pending_data_bytes{job=\"vlagent\"})",
+          "expr": "100 - max by (node) (fluentbit_output_chunk_available_capacity_percent{job=\"fluent-bit\",name=\"victorialogs\"})",
           "legendFormat": "{{node}}",
           "refId": "A",
           "range": true
@@ -1722,7 +1722,7 @@
             }
           },
           "mappings": [],
-          "unit": "bytes",
+          "unit": "percent",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1732,11 +1732,12 @@
               },
               {
                 "color": "red",
-                "value": 3221225472
+                "value": 75
               }
             ]
           },
-          "min": 0
+          "min": 0,
+          "max": 100
         },
         "overrides": []
       },
@@ -1776,8 +1777,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(increase(vm_persistentqueue_blocks_dropped_total{job=\"vlagent\"}[$__interval]))",
-          "legendFormat": "vlagent queue blocks evicted",
+          "expr": "sum(increase(fluentbit_output_dropped_records_total{job=\"fluent-bit\"}[$__interval]))",
+          "legendFormat": "Fluent Bit records dropped (lower bound)",
           "refId": "A",
           "range": true
         },
@@ -1787,20 +1788,9 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(increase(vlagent_remotewrite_packets_dropped_total{job=\"vlagent\"}[$__interval]))",
-          "legendFormat": "vlagent send packets dropped",
+          "expr": "sum(increase(fluentbit_output_retries_failed_total{job=\"fluent-bit\"}[$__interval]))",
+          "legendFormat": "Fluent Bit retries exhausted",
           "refId": "B",
-          "range": true
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "expr": "sum by (reason) (increase(vl_rows_dropped_total{job=\"vlagent\",reason!=\"debug\"}[$__interval]))",
-          "legendFormat": "vlagent rows dropped: {{reason}}",
-          "refId": "C",
           "range": true
         },
         {
@@ -1811,7 +1801,7 @@
           "editorMode": "code",
           "expr": "sum by (reason) (increase(vl_rows_dropped_total{job=\"victoria-logs-single-server\",reason!=\"debug\"}[$__interval]))",
           "legendFormat": "VictoriaLogs rows rejected: {{reason}}",
-          "refId": "D",
+          "refId": "C",
           "range": true
         }
       ],

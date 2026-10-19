@@ -4,11 +4,11 @@
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
-  name: vlagent
+  name: fluent-bit
 spec:
   endpointSelector:
     matchLabels:
-      app.kubernetes.io/name: vlagent
+      app.kubernetes.io/name: fluent-bit
   ingress:
     - fromEndpoints:
         - matchLabels:
@@ -16,7 +16,7 @@ spec:
             app.kubernetes.io/name: vmagent
       toPorts:
         - ports:
-            - port: '9429'
+            - port: '2020'
               protocol: TCP
   egress:
     - toEntities: [kube-apiserver]

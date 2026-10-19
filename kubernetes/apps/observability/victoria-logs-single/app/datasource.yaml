@@ -26,10 +26,41 @@ data:
           # handoff to the browser-reachable, OIDC-protected native VMUI.
           maxLines: 1000
           vmuiUrl: https://vlogs.home.kelch.io/select/vmui/
-          # The provisioned Kubernetes logs dashboard normalizes explicit JSON,
-          # guarded logfmt and the three measured source formats at query time.
-          # These rules also color raw JSON and retained msg.level rows.
+          # Collector records carry OpenTelemetry severity_number (ranges per the
+          # OTel log data model). The level and msg.level rules color retained
+          # vlagent and Alloy rows; the Kubernetes logs dashboard additionally
+          # normalizes their text formats at query time.
           logLevelRules:
+            - field: severity_number
+              value: '^([1-4])$'
+              level: trace
+              operator: regex
+              enabled: true
+            - field: severity_number
+              value: '^([5-8])$'
+              level: debug
+              operator: regex
+              enabled: true
+            - field: severity_number
+              value: '^(9|10|11|12)$'
+              level: info
+              operator: regex
+              enabled: true
+            - field: severity_number
+              value: '^(1[3-6])$'
+              level: warning
+              operator: regex
+              enabled: true
+            - field: severity_number
+              value: '^(1[7-9]|20)$'
+              level: error
+              operator: regex
+              enabled: true
+            - field: severity_number
+              value: '^(2[1-4])$'
+              level: critical
+              operator: regex
+              enabled: true
             - field: level
               value: ^([cC][rR][iI][tT][iI][cC][aA][lL]|[cC][rR][iI][tT]|[aA][lL][eE][rR][tT]|[eE][mM][eE][rR][gG][eE][nN][cC][yY]|[eE][mM][eE][rR][gG]|[fF][aA][tT][aA][lL]|[pP][aA][nN][iI][cC])$
               level: critical

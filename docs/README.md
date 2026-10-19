@@ -29,7 +29,7 @@ or fixing.
 | Runbook | Use when |
 |---|---|
 | [alerting](runbooks/alerting.md) | Receiving, silencing, testing, and troubleshooting Alertmanager notifications and control-plane coverage. |
-| [logging](runbooks/logging.md) | Querying Kubernetes and UniFi console logs, the UniFi log alerts, and diagnosing the vlagent-to-VictoriaLogs ingestion path. |
+| [logging](runbooks/logging.md) | Querying Kubernetes and UniFi console logs, the UniFi log alerts, and diagnosing the Fluent Bit-to-VictoriaLogs ingestion path. |
 | [longhorn-backup-restore](runbooks/longhorn-backup-restore.md) | Restoring a PV from a Longhorn backup; DR drills. |
 | [longhorn-storage-network-cutover](runbooks/longhorn-storage-network-cutover.md) | Moving Longhorn replica traffic onto the dedicated storage VLAN. |
 | [kanidm-restore](runbooks/kanidm-restore.md) | Recovering Kanidm from DB corruption or PVC loss. |
@@ -91,6 +91,7 @@ Implemented or superseded plans preserve context. Use the maintained documentati
 - [Hugging Face cache on Athena](evaluations/hugging-face-nas-cache.md) — evaluation findings and replacement requirements.
 - [Kubernetes log collectors](evaluations/kubernetes-log-collectors.md) — delivery measurements, application query compatibility, and migration recommendation.
 - [Grafana VictoriaLogs Drilldown](evaluations/grafana-victorialogs-drilldown.md) — v0.33.1 candidate qualification, observed UX limits and operator acceptance.
+- [Log schema and collector](evaluations/log-schema-and-collector.md) — OpenTelemetry log schema decisions, collector measurements and Fluent Bit delivery drill.
 - [storage-benchmarks](storage-benchmarks.md) — Longhorn fio results, pre/post storage-network cutover.
 - [**sn770-zfs-qualification.md**](sn770-zfs-qualification.md) — WD_BLACK SN770 reproduction matrix, evidence index, and the remaining qualification gates for the PVE storage decision.
 - [observability-bakeoff](observability-bakeoff.md) — VictoriaMetrics/Logs vs. Prometheus/Loki evaluation.

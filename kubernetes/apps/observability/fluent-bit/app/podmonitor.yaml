@@ -2,16 +2,17 @@
 apiVersion: monitoring.coreos.com/v1
 kind: PodMonitor
 metadata:
-  name: vlagent
+  name: fluent-bit
 spec:
   selector:
     matchLabels:
-      app.kubernetes.io/name: vlagent
+      app.kubernetes.io/name: fluent-bit
   podMetricsEndpoints:
     - port: http
+      path: /api/v2/metrics/prometheus
       interval: 30s
       relabelings:
         - targetLabel: job
-          replacement: vlagent
+          replacement: fluent-bit
         - sourceLabels: [__meta_kubernetes_pod_node_name]
           targetLabel: node

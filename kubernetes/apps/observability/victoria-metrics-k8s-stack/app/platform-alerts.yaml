@@ -129,65 +129,57 @@ spec:
             summary: Namespace {{ $labels.namespace }} is accumulating failed pods
             description: At least {{ printf "%.0f" $value }} failed pod objects have remained in {{ $labels.namespace }} for five minutes. Identify the owning controller before the namespace's count/pods quota blocks healthy replacements.
 
-    - name: vlagent-pipeline
+    - name: fluent-bit-pipeline
       labels:
         cluster: k8s-prod
       rules:
-        - alert: VlagentCollectorTargetMissing
+        - alert: FluentBitCollectorTargetMissing
           expr: |
-            (count(count by (node) (up{job="vlagent"} == 1)) or vector(0))
-            < scalar(max(kube_daemonset_status_desired_number_scheduled{namespace="observability",daemonset="vlagent"}))
+            (count(count by (node) (up{job="fluent-bit"} == 1)) or vector(0))
+            < scalar(max(kube_daemonset_status_desired_number_scheduled{namespace="observability",daemonset="fluent-bit"}))
           for: 5m
           labels:
             severity: critical
           annotations:
-            summary: A selected node has no healthy vlagent scrape target
-            description: Check DaemonSet scheduling, PodMonitor conversion, node labels and the metrics network path. Zero selected nodes during staged rollout is intentional.
+            summary: A node has no healthy Fluent Bit scrape target
+            description: Check DaemonSet scheduling, PodMonitor conversion and the metrics network path.
 
-        - alert: VlagentBacklogSustained
-          expr: vlagent_remotewrite_pending_data_bytes{job="vlagent"} > 0
+        - alert: FluentBitDeliveryRetrying
+          expr: increase(fluentbit_output_retries_total{job="fluent-bit"}[10m]) > 0
           for: 10m
           labels:
             severity: warning
           annotations:
-            summary: vlagent on {{ $labels.node }} has a sustained backlog
-            description: Pending compressed bytes have remained nonzero for ten minutes. Restore the sink; do not restart the collector or remove its hostPath buffer.
+            summary: Fluent Bit on {{ $labels.node }} keeps retrying delivery to VictoriaLogs
+            description: Chunks are buffering on the node's filesystem. Restore the sink; do not restart the collector or remove /var/lib/fluent-bit.
 
-        - alert: VlagentBufferNearCapacity
-          expr: vlagent_remotewrite_pending_data_bytes{job="vlagent"} > 3221225472
+        - alert: FluentBitBufferNearCapacity
+          expr: fluentbit_output_chunk_available_capacity_percent{job="fluent-bit",name="victorialogs"} < 25
           for: 2m
           labels:
             severity: critical
           annotations:
-            summary: vlagent on {{ $labels.node }} has used 75% of its queue budget
-            description: The per-URL queue budget is 4 GiB. Old blocks are evicted at capacity; inspect backend health and node disk space now.
+            summary: Fluent Bit on {{ $labels.node }} has used 75% of its buffer
+            description: The output buffer limit is 4 GiB. At capacity Fluent Bit discards chunks and its drop counter undercounts the loss; inspect backend health and node disk space now.
 
-        - alert: VlagentPersistentQueueLoss
+        - alert: FluentBitRecordsDropped
           expr: |
-            increase(vm_persistentqueue_blocks_dropped_total{job="vlagent"}[10m]) > 0
-            or increase(vm_persistentqueue_bytes_dropped_total{job="vlagent"}[10m]) > 0
+            increase(fluentbit_output_dropped_records_total{job="fluent-bit"}[10m]) > 0
+            or increase(fluentbit_output_retries_failed_total{job="fluent-bit"}[10m]) > 0
           labels:
             severity: critical
           annotations:
-            summary: vlagent on {{ $labels.node }} evicted persistent queue data
-            description: Irrecoverable queue overflow was observed. Counters measure blocks and compressed bytes, not lost log rows. Preserve metrics and restore delivery before the next eviction.
+            summary: Fluent Bit on {{ $labels.node }} dropped log records
+            description: Records were discarded or exhausted their retries. The counter is a lower bound on the loss. Preserve metrics and restore delivery.
 
-        - alert: VlagentRemoteWriteLoss
-          expr: increase(vlagent_remotewrite_packets_dropped_total{job="vlagent"}[10m]) > 0
-          labels:
-            severity: critical
-          annotations:
-            summary: vlagent on {{ $labels.node }} dropped remote-write packets
-            description: Inspect backend response codes and collector errors. This loss is separate from persistent-queue eviction.
-
-        - alert: VlagentNodeLogIngestionSilent
-          expr: increase(vl_rows_ingested_total{job="vlagent",type="kubernetes_logs"}[10m]) == 0
+        - alert: FluentBitNodeLogIngestionSilent
+          expr: increase(fluentbit_input_records_total{job="fluent-bit",name="pods"}[10m]) == 0
           for: 10m
           labels:
             severity: warning
           annotations:
-            summary: vlagent on {{ $labels.node }} is reading no Kubernetes logs
-            description: Check API discovery, symlinks, file permissions and checkpoints. A healthy scrape target alone does not prove log collection.
+            summary: Fluent Bit on {{ $labels.node }} is reading no container logs
+            description: Check the /var/log/containers mount, file permissions and the tail database. A healthy scrape target alone does not prove log collection.
 
     - name: logging-pipeline
       labels:
@@ -230,18 +222,18 @@ spec:
             description: Free space is below the emergency threshold despite the 80% retention ceiling. Inspect partition cleanup, daily ingest volume, and Longhorn capacity.
 
         - alert: VictoriaLogsIngestionSilent
-          expr: (sum(increase(vl_rows_ingested_total{job="victoria-logs-single-server",type="nativeinsert"}[10m])) == 0) or absent(vl_rows_ingested_total{job="victoria-logs-single-server",type="nativeinsert"})
+          expr: (sum(increase(vl_rows_ingested_total{job="victoria-logs-single-server",type="opentelemetry_protobuf"}[10m])) == 0) or absent(vl_rows_ingested_total{job="victoria-logs-single-server",type="opentelemetry_protobuf"})
           for: 15m
           labels:
             severity: critical
           annotations:
             summary: VictoriaLogs has no observable collector ingestion
-            description: No native-protocol rows from vlagent have reached the production VictoriaLogs backend for 15 minutes, or the ingestion metric is absent. Check collector queues, VictoriaLogs availability, and vmagent scraping.
+            description: No OTLP rows from Fluent Bit have reached the production VictoriaLogs backend for 15 minutes, or the ingestion metric is absent. Check collector buffers, VictoriaLogs availability, and vmagent scraping.
 
-        # The prior seven-day peak was 819 streams/hour. vlagent keeps one
-        # identity per pod/container/node, with no severity or output stream.
-        # Retain 1500/hour through the one-time schema adoption/replay, then
-        # rebaseline after the approved whole-cluster cutover.
+        # The prior seven-day peak was 819 streams/hour. Fluent Bit's stream
+        # fields are one identity per service/namespace/pod/container/node, with
+        # no per-event values. The collector cutover adds one new stream per
+        # running container.
         - alert: VictoriaLogsStreamChurnHigh
           expr: increase(vl_streams_created_total[1h]) > 1500
           for: 15m

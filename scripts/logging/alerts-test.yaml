@@ -1,81 +1,83 @@
 rule_files: [rules.yaml]
 evaluation_interval: 1m
 tests:
-  - name: No vlagent targets is expected before node selection
+  - name: Missing target, retries, capacity, drops and silence are detected
     interval: 1m
     input_series:
-      - series: kube_daemonset_status_desired_number_scheduled{namespace="observability",daemonset="vlagent"}
-        values: 0+0x20
-    promql_expr_test:
-      - expr: ALERTS{alertname="VlagentCollectorTargetMissing",alertstate="firing"}
-        eval_time: 20m
-        exp_samples: []
-  - name: Missing target, backlog, capacity and evictions are detected
-    interval: 1m
-    input_series:
-      - series: kube_daemonset_status_desired_number_scheduled{namespace="observability",daemonset="vlagent"}
+      - series: kube_daemonset_status_desired_number_scheduled{namespace="observability",daemonset="fluent-bit"}
         values: 3+0x30
-      - series: up{job="vlagent",node="n1"}
+      - series: up{job="fluent-bit",node="n1"}
         values: 1+0x30
-      - series: up{job="vlagent",node="n2"}
+      - series: up{job="fluent-bit",node="n2"}
         values: 1+0x30
-      - series: vlagent_remotewrite_pending_data_bytes{job="vlagent",node="n1"}
-        values: 3500000000+0x30
-      - series: vm_persistentqueue_blocks_dropped_total{job="vlagent",node="n1"}
-        values: 0 1+0x29
-      - series: vm_persistentqueue_bytes_dropped_total{job="vlagent",node="n1"}
-        values: 0 500+0x29
+      - series: fluentbit_output_retries_total{job="fluent-bit",node="n1",name="victorialogs"}
+        values: 0+5x30
+      - series: fluentbit_output_chunk_available_capacity_percent{job="fluent-bit",node="n1",name="victorialogs"}
+        values: 20+0x30
+      - series: fluentbit_output_dropped_records_total{job="fluent-bit",node="n1",name="victorialogs"}
+        values: 0 40+0x29
+      - series: fluentbit_input_records_total{job="fluent-bit",node="n2",name="pods"}
+        values: 500+0x30
     promql_expr_test:
-      - expr: count(ALERTS{alertname="VlagentCollectorTargetMissing",alertstate="firing"})
+      - expr: count(ALERTS{alertname="FluentBitCollectorTargetMissing",alertstate="firing"})
         eval_time: 6m
         exp_samples: [{labels: '{}', value: 1}]
-      - expr: count(ALERTS{alertname="VlagentBufferNearCapacity",alertstate="firing"})
+      - expr: count(ALERTS{alertname="FluentBitBufferNearCapacity",alertstate="firing"})
         eval_time: 3m
         exp_samples: [{labels: '{}', value: 1}]
-      - expr: count(ALERTS{alertname="VlagentBacklogSustained",alertstate="firing"})
-        eval_time: 11m
+      - expr: count(ALERTS{alertname="FluentBitDeliveryRetrying",alertstate="firing"})
+        eval_time: 21m
         exp_samples: [{labels: '{}', value: 1}]
-      - expr: count(ALERTS{alertname="VlagentPersistentQueueLoss",alertstate="firing"})
+      - expr: count(ALERTS{alertname="FluentBitRecordsDropped",alertstate="firing"})
         eval_time: 2m
         exp_samples: [{labels: '{}', value: 1}]
-      - expr: ALERTS{alertname="VlagentPersistentQueueLoss",alertstate="firing"}
+      - expr: ALERTS{alertname="FluentBitRecordsDropped",alertstate="firing"}
         eval_time: 20m
         exp_samples: []
-  - name: Scratch ingestion cannot mask production silence
-    interval: 1m
-    input_series:
-      - series: vl_rows_ingested_total{job="vlagent",type="kubernetes_logs"}
-        values: 0+100x30
-      - series: vl_rows_ingested_total{job="victoria-logs-single-server",type="nativeinsert"}
-        values: 0+0x30
-    promql_expr_test:
-      - expr: count(ALERTS{alertname="VictoriaLogsIngestionSilent",alertstate="firing"})
-        eval_time: 20m
+      - expr: count(ALERTS{alertname="FluentBitNodeLogIngestionSilent",alertstate="firing"})
+        eval_time: 21m
         exp_samples: [{labels: '{}', value: 1}]
-  - name: Native ingestion is healthy after the cutover
+  - name: Healthy collectors raise nothing
     interval: 1m
     input_series:
-      - series: vl_rows_ingested_total{job="victoria-logs-single-server",type="nativeinsert"}
+      - series: kube_daemonset_status_desired_number_scheduled{namespace="observability",daemonset="fluent-bit"}
+        values: 1+0x30
+      - series: up{job="fluent-bit",node="n1"}
+        values: 1+0x30
+      - series: fluentbit_output_retries_total{job="fluent-bit",node="n1",name="victorialogs"}
+        values: 0+0x30
+      - series: fluentbit_output_chunk_available_capacity_percent{job="fluent-bit",node="n1",name="victorialogs"}
+        values: 99+0x30
+      - series: fluentbit_input_records_total{job="fluent-bit",node="n1",name="pods"}
+        values: 0+100x30
+    promql_expr_test:
+      - expr: ALERTS{alertstate="firing",alertname=~"FluentBit.*"}
+        eval_time: 25m
+        exp_samples: []
+  - name: Collector ingestion keeps VictoriaLogs quiet
+    interval: 1m
+    input_series:
+      - series: vl_rows_ingested_total{job="victoria-logs-single-server",type="opentelemetry_protobuf"}
         values: 0+100x30
     promql_expr_test:
       - expr: ALERTS{alertname="VictoriaLogsIngestionSilent",alertstate="firing"}
         eval_time: 20m
         exp_samples: []
-  - name: Legacy Loki traffic cannot mask a stopped native collector
+  - name: Syslog traffic cannot mask a stopped collector
     interval: 1m
     input_series:
-      - series: vl_rows_ingested_total{job="victoria-logs-single-server",type="loki"}
+      - series: vl_rows_ingested_total{job="victoria-logs-single-server",type="syslog_udp"}
         values: 0+100x30
-      - series: vl_rows_ingested_total{job="victoria-logs-single-server",type="nativeinsert"}
+      - series: vl_rows_ingested_total{job="victoria-logs-single-server",type="opentelemetry_protobuf"}
         values: 0+0x30
     promql_expr_test:
       - expr: count(ALERTS{alertname="VictoriaLogsIngestionSilent",alertstate="firing"})
         eval_time: 20m
         exp_samples: [{labels: '{}', value: 1}]
-  - name: Missing native ingestion series fires despite legacy traffic
+  - name: Missing collector ingestion series fires despite syslog traffic
     interval: 1m
     input_series:
-      - series: vl_rows_ingested_total{job="victoria-logs-single-server",type="loki"}
+      - series: vl_rows_ingested_total{job="victoria-logs-single-server",type="syslog_udp"}
         values: 0+100x30
     promql_expr_test:
       - expr: count(ALERTS{alertname="VictoriaLogsIngestionSilent",alertstate="firing"})

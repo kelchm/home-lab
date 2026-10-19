@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[2]
 pipe = (ROOT / 'scripts/logging/compat.logsql').read_text().strip()
 # Suggestions need the same metadata aliases as the logs, without parsing severity.
 metadata_pipe = pipe.split('\n| unpack_logfmt ', 1)[0]
-namespace_scope = '(kubernetes.pod_namespace:in(${namespace}) OR namespace:in(${namespace}))'
+namespace_scope = '(k8s.namespace.name:in(${namespace}) OR kubernetes.pod_namespace:in(${namespace}) OR namespace:in(${namespace}))'
 namespace_query = '*\n' + metadata_pipe + '\n| filter namespace:*'
 service_query = namespace_scope + '\n' + metadata_pipe + '\n| filter namespace:in(${namespace}) service_name:*'
 expr = (namespace_scope + '\n' + pipe

@@ -3,7 +3,7 @@
 # requires-python = ">=3.12"
 # dependencies = ["prometheus-client==0.24.1"]
 # ///
-"""Measure compressed collector input per node, without exporting log contents."""
+"""Measure collector input and output volume per node, without exporting log contents."""
 import argparse
 import concurrent.futures
 import json
@@ -13,8 +13,8 @@ from prometheus_client.parser import text_string_to_metric_families
 
 p = argparse.ArgumentParser(description=__doc__)
 p.add_argument('--kubeconfig', required=True)
-p.add_argument('--namespace', default='log-drill')
-p.add_argument('--selector', default='app=log-drill-collector,arm=vlagent')
+p.add_argument('--namespace', default='observability')
+p.add_argument('--selector', default='app.kubernetes.io/name=fluent-bit')
 p.add_argument('--seconds', type=int, default=300)
 a = p.parse_args()
 base = ['kubectl', '--kubeconfig', a.kubeconfig, '--request-timeout=15s', '-n', a.namespace]
@@ -25,7 +25,7 @@ if not pods:
 
 def sample(pod):
     name = pod['metadata']['name']
-    raw = subprocess.check_output(base + ['get', '--raw', f'/api/v1/namespaces/{a.namespace}/pods/{name}:9429/proxy/metrics'], text=True, timeout=20)
+    raw = subprocess.check_output(base + ['get', '--raw', f'/api/v1/namespaces/{a.namespace}/pods/{name}:2020/proxy/api/v2/metrics/prometheus'], text=True, timeout=20)
     values = {}
     for family in text_string_to_metric_families(raw):
         for metric in family.samples:
@@ -45,10 +45,8 @@ end = collect()
 elapsed = time.monotonic() - begin
 result = {}
 for node in start:
-    assert start[node]['process_start_time_seconds'] == end[node]['process_start_time_seconds'], 'Collector restarted; discard the interval'
-    metric = 'vlagent_remotewrite_block_size_bytes_sum'
-    delta = end[node][metric] - start[node][metric]
-    assert delta >= 0, 'Collector restarted; discard the interval'
-    result[node] = {'compressed_bytes': delta, 'bytes_per_second': round(delta / elapsed, 2),
-                    'estimated_json_bytes': end[node]['vl_bytes_ingested_total'] - start[node]['vl_bytes_ingested_total']}
+    assert start[node]['fluentbit_uptime'] <= end[node]['fluentbit_uptime'], 'Collector restarted; discard the interval'
+    read = end[node]['fluentbit_input_bytes_total'] - start[node]['fluentbit_input_bytes_total']
+    sent = end[node]['fluentbit_output_proc_bytes_total'] - start[node]['fluentbit_output_proc_bytes_total']
+    result[node] = {'input_bytes': read, 'output_bytes': sent, 'output_bytes_per_second': round(sent / elapsed, 2)}
 print(json.dumps({'seconds': round(elapsed, 2), 'nodes': result}, indent=2))

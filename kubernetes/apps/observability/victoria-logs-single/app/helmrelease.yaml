@@ -1,5 +1,5 @@
 ---
-# VictoriaLogs single-node receives native ingestion from vlagent and syslog
+# VictoriaLogs single-node receives OTLP from the Fluent Bit collector and syslog
 # from the UniFi console. Operators query it through Grafana or the
 # OIDC-protected native VMUI.
 apiVersion: helm.toolkit.fluxcd.io/v2
@@ -16,7 +16,7 @@ spec:
         name: victoriametrics
   interval: 1h
   values:
-    # vlagent is managed separately; disable the bundled Vector collector.
+    # Fluent Bit is managed separately; disable the bundled Vector collector.
     vector:
       enabled: false
 

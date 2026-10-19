@@ -14,14 +14,15 @@ p.add_argument('--run', required=True)
 p.add_argument('--expected', type=int, required=True)
 p.add_argument('--start', required=True, help='Inclusive RFC3339 time')
 p.add_argument('--end', required=True, help='Exclusive RFC3339 time')
-p.add_argument('--schema', choices=['vlagent', 'alloy'], default='vlagent')
+p.add_argument('--schema', choices=['otel', 'vlagent', 'alloy'], default='otel')
+p.add_argument('--app', default='numbered-fixture', help='Fixture application name; prefixes its fields in the otel schema')
 a = p.parse_args()
 start, end = [dt.datetime.fromisoformat(t.replace('Z', '+00:00')) for t in (a.start, a.end)]
 if start.tzinfo is None or end.tzinfo is None or start >= end:
     p.error('start/end must be ordered, timezone-aware timestamps')
 if a.expected <= 0:
     p.error('expected must be positive')
-prefix = 'msg.' if a.schema == 'alloy' else ''
+prefix = {'alloy': 'msg.', 'vlagent': '', 'otel': a.app + '.'}[a.schema]
 limit = a.expected * 2 + 100
 pipe = (Path(__file__).parent / 'compat.logsql').read_text()
 query = f'_time:[{start.isoformat()},{end.isoformat()}) ' + prefix + 'fixture_run:=' + json.dumps(a.run) + '\n' + pipe

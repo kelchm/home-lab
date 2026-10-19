@@ -64,7 +64,7 @@ jobs:
               - 'kubernetes/**'
               - 'proxmox/monitoring/backup-metrics/**'
               - 'scripts/ci/validate-pve-backups.sh'
-              - 'scripts/ci/validate-vlagent.sh'
+              - 'scripts/ci/validate-logging.sh'
               - 'scripts/ci/validate-longhorn-alerts.sh'
               - 'scripts/ci/validate-pi-probe-alerts.sh'
               - 'scripts/monitoring/pi-probe-alerts.test.yaml'
@@ -266,9 +266,9 @@ jobs:
         if: needs.pre-job.outputs.kubernetes_changed == 'true'
         run: scripts/ci/validate-pve-backups.sh
 
-      - name: Validate vlagent configuration and pipeline alerts
+      - name: Validate log collector, mapping and pipeline alerts
         if: needs.pre-job.outputs.kubernetes_changed == 'true'
-        run: scripts/ci/validate-vlagent.sh
+        run: scripts/ci/validate-logging.sh
 
       - name: Validate Pi probe alerts
         if: needs.pre-job.outputs.kubernetes_changed == 'true'
