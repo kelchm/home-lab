@@ -19,6 +19,8 @@ Under the fail-closed arrangement a pod should never reach Running while missing
 - Something other than Cilium wrote a containerd-recognized config into `/etc/cni/net.d`
 - A stale `00-multus.conf` survived a crash — containerd sees a syntactically valid config, but `multus-shim` fails against the absent socket. Still fail-closed, though the node may report `Ready` inaccurately.
 
+Multus's `[error]` lines about a missing cached delegates file on CNI DEL are routine and do not indicate this failure; see [Accepted warnings](logging.md#accepted-warnings).
+
 ### Why the taint alone was never sufficient
 
 `node.multus.io/not-ready` is a `NoSchedule` taint, which is a *scheduler* constraint. Pods already bound to a node via `.spec.nodeName` are not rescheduled after a reboot — kubelet simply calls `RunPodSandbox` for them again, with the scheduler uninvolved. A `NoSchedule` taint neither evicts them nor prevents kubelet from starting them.
