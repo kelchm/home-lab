@@ -5,7 +5,7 @@ Each VMRule labelled alerting.home.kelch.io/datasource=victorialogs must have
 cases in logsql-rules-fixtures.json. The fixtures are stored-schema records;
 each case's records sit a day apart from every other case's, and the rule's
 expression is run through the stats query API that vmalert calls, at the
-case's evaluation time. vmalert parses the rule files in dry-run mode first.
+case's evaluation time less vmalert's evaluation delay. vmalert parses the rule files in dry-run mode first.
 `for` durations are not exercised. Requires Docker. Keep the images at the
 VictoriaLogs and vmalert versions the cluster runs.
 """
@@ -27,6 +27,8 @@ VMALERT_IMAGE = 'victoriametrics/vmalert:v1.154.0@sha256:f11d77f9ff68dfd63c871d0
 STREAM_FIELDS = 'service.name,k8s.namespace.name,k8s.pod.name,k8s.container.name,k8s.node.name,cef.device_product,cef.device_event_class_id'
 FIXTURES = json.loads((ROOT / 'scripts/logging/logsql-rules-fixtures.json').read_text())
 BASE = datetime(2026, 1, 1, tzinfo=timezone.utc)
+# vmalert's -rule.evalDelay default, which vmalert-victoria-logs keeps: it queries 30 s in the past.
+EVAL_DELAY = timedelta(seconds=30)
 
 
 def vlogs_rule_files():
@@ -100,7 +102,7 @@ def main():
             rule = rules.get(case['rule'])
             if rule is None:
                 continue
-            q = urllib.parse.urlencode({'query': rule['expr'], 'time': case['_time'].isoformat().replace('+00:00', 'Z')})
+            q = urllib.parse.urlencode({'query': rule['expr'], 'time': (case['_time'] - EVAL_DELAY).isoformat().replace('+00:00', 'Z')})
             try:
                 result = json.loads(http(f'{url}/select/logsql/stats_query?{q}'))['data']['result']
             except urllib.error.HTTPError as e:

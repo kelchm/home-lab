@@ -3,7 +3,8 @@
 # only in its log (docs/runbooks/logging.md#log-alerts). LogsQL rules: the
 # datasource label routes them to vmalert-victoria-logs. The matched text
 # comes from kanidm's source; routine errors such as "Invalid identity:
-# NotAuthenticated" never match.
+# NotAuthenticated" never match. They live here rather than with kanidm so
+# identity's reconciliation never waits on the monitoring stack's CRDs.
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMRule
 metadata:

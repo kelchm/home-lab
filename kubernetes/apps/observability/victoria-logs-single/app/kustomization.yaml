@@ -9,3 +9,4 @@ resources:
   - ./syslog-service.yaml
   - ./vmalert.yaml
   - ./unifi-alerts.yaml
+  - ./kanidm-alerts.yaml
