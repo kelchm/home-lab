@@ -194,7 +194,7 @@ The DaemonSet runs the official chart with the pinned upstream image. Its pipeli
 
 Tail positions (`tail.db`) and the filesystem buffer persist under the node-local hostPath `/var/lib/fluent-bit`, both with full sync. The output buffers are limited per node to 4 GiB for container logs, several days of the measured input rate, and 256 MiB for UniFi syslog, more than a week at the 48,419 datagrams stored in the 24 hours to October 19, 2026. A node replacement or disk loss loses this state.
 
-A local delivery drill (numbered fixture, kubelet-style rotation) recovered every record across an 11-minute backend outage with a graceful restart and across a SIGKILL under load, without duplicates. If the collector is killed during a backend outage and a container's file rotates before it restarts, the unread end of the rotated file is lost; the drill lost 33 records that way. The [evaluation](../evaluations/log-schema-and-collector.md#delivery) records the runs.
+A local delivery drill (numbered fixture, kubelet-style rotation) recovered every record across an 11-minute backend outage with a graceful restart and across a SIGKILL at 20 lines/s, without duplicates. At about 250 lines/s a SIGKILL loses the chunks being written, because the restarted collector rejects them on their checksum ([#912](https://github.com/kelchm/home-lab/issues/912)). If the collector is killed during a backend outage and a container's file rotates before it restarts, the unread end of the rotated file is lost; the drill lost 33 records that way. The [evaluation](../evaluations/log-schema-and-collector.md#delivery) records the runs.
 
 ### Cutover from vlagent
 

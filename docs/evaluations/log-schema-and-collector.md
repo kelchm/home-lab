@@ -74,21 +74,38 @@ The missing records in the third case were the unread end of a file that rotated
 
 ## Multi-line events
 
-Evaluated 2026-10-19: each container line stays one record, with no multi-line grouping at collection.
+Evaluated 2026-10-19 and 20: each container line stays one record, with no multi-line grouping at collection.
 
-**Volume.** From 12:00 to 21:50 UTC that day, 2,327 of 359,740 container records (0.65%) were continuation lines with unspecified severity: indented lines, JSON brackets, `Traceback`, chained-exception headers, `goroutine` or `panic:`. mcphub's pretty-printed tool-call arguments and results under an `[INFO]` header line made up 2,236; four pve-exporter tracebacks made up 91. In the 30 days to that date there was no Go panic in production; the only stored panic came from a scratch VictoriaLogs.
+**Volume.** From 12:00 to 21:50 UTC on October 19, 2,327 of 359,740 container records (0.65%) were continuation lines with unspecified severity: indented lines, JSON brackets, `Traceback`, chained-exception headers, `goroutine` or `panic:`. mcphub's pretty-printed tool-call results made up 2,236 and four pve-exporter tracebacks 91. In the 30 days to that date production logged no Go runtime panic and no recovered `http: panic serving`; the only stored panic came from a scratch VictoriaLogs. mcphub v1.0.41 pretty-prints every logged object with a fixed two-space indent and has no log-level setting, so its dumps cannot be reduced by configuration.
 
-**Stock parsers.** A local Fluent Bit 5.1.4 run with the production `cri` tail input fed one CRI file holding a Python traceback with an interleaved stdout line, three back-to-back tracebacks, a Go panic, an mcphub event and a traceback at the end of the file:
+**Test bed.** A local kind cluster (Kubernetes 1.37, containerd) ran Fluent Bit 5.1.4 from the production chart and values with the production configuration and Lua, sending to VictoriaLogs v1.53.0. Fake workloads produced real CRI files: a Python 3.13 app writing request lines to stdout every 5 ms while logging chained tracebacks to stderr with `logging.exception` and `traceback.print_exc`; a Go binary that panics and restarts, and one whose HTTP handler panics under `net/http`'s recovery; mcphub's colour-coded header and JSON format; and separate events that resemble continuations (indented status lines and lone `}` after a traceback, JSON lines, a 200 KB line). Each run lasted two minutes, and each event carried an ID for exact checks.
 
 | Configuration | Result |
 | --- | --- |
-| `multiline.parser cri, python, go, mcphub` on the tail input | No grouping: only `cri` applied. |
-| Multiline filter with `python, go` and a custom mcphub regex | The stdout line was joined into the stderr traceback, which was then split; one fragment lost its stream. The last traceback absorbed the following `panic:` line, which was also emitted again on its own. The Go panic was not grouped. The mcphub event and the end-of-file traceback were grouped correctly, the latter after the 2-second flush. |
-| Multiline filter with `go` alone | The panic was grouped correctly. |
+| Production | Baseline: every line its own record; nothing lost or duplicated. |
+| `multiline.parser cri, python, go, mcphub` on the tail input | No grouping beyond `cri` (checked locally before the kind runs). |
+| Multiline filter, stock `python, go` plus an mcphub rule | Unsafe. 14 stdout request lines were joined into stderr tracebacks and also stored again on their own; 323 records lost their stream; 32 lone `}` lines were joined into other events. The stock Python parser has no rule for Python 3.11+ caret lines (`~~~^^^`) or chained-exception headers. |
+| Multiline filter, one custom parser grouped by `stream` | Correct in steady state: no lost, duplicated or cross-stream lines, and the look-alike separate events stayed separate. Whole: every `logging.exception` chain (71 of 71), Go runtime panic (5 of 5), recovered HTTP panic (59 of 59) and mcphub dump (290 of 290). Split: 4 to 6 of about 68 `traceback.print_exc` events per run, which writes line by line; the split fell where the last lines arrived a millisecond later. Records fell 22%: mcphub 85%, the HTTP panic workload 90%. |
 
-These failures come from the tested configurations. Fluent Bit combines parsers only as a comma-separated list in one filter: its documentation says several multiline filters matching the same tags loop forever. stdout and stderr share one CRI file and one tag, and the stock parsers set no `key_group`, so keeping the streams apart would need custom copies of each parser grouped by `stream`. The filter re-emits grouped records through an emitter input whose storage defaults to memory, outside the filesystem buffering the delivery drills verified, and holds pending lines in memory for its flush interval. In the combined filter only the mcphub event grouped correctly, and it needs a bespoke regex for a dump that is better reduced at source; the `go` parser grouped the panic only when it ran alone.
+The custom parser was about 20 regex rules: Python rules extended for caret lines and chained exceptions, Fluent Bit's Go rules, and an mcphub rule that matches its ANSI colour codes, because the multiline filter must run before every other filter, including the colour stripping in `normalize.lua`. Fluent Bit's documentation says several multiline filters on the same tags loop, and its stock parsers set no `key_group`, so grouping by stream needs a custom parser.
 
-**Decision.** Keep one record per line. A multi-line event is read with **Show context** in Grafana or by pod and time in VMUI. Revisit if a source starts logging multi-line events that need to be one record, for an alert or because they are frequent, such as a Java application's stack traces.
+**What grouping would not change.** Grouped Python tracebacks and Go panics still store severity 0: Python's `logging` and gunicorn put the level on a header line before the traceback, which no generic rule can recognise, and the Go runtime states none. Grouped mcphub dumps keep the header's INFO.
+
+**Cost.** In buffered mode every container record, not only multi-line ones, passes through the filter's emitter input (298,696 read, 289,903 re-emitted after grouping), whose storage defaults to memory. At 2,000 lines/s the collector used 85 mCPU and at most 19.4 MiB, against 81 mCPU and 12.7 MiB for production. Grouped records wait up to the filter's flush interval, 1 second in the test.
+
+**Delivery.** Fluent Bit was killed with SIGKILL halfway through each run at about 250 lines/s, and the stored request lines were counted:
+
+| Configuration | Lines lost per kill |
+| --- | --- |
+| Production (`storage.checksum On`) | 60, 82, 129 |
+| Production with `storage.checksum Off` | 0, 0, 0, 0 |
+| Custom parser, memory emitter | 139, 10, 133 |
+| Custom parser, filesystem emitter | 19, 68, 14 |
+| Custom parser, filesystem emitter, `storage.checksum Off` | 1, 2, 2 |
+
+No run duplicated a line. With checksums on, Fluent Bit discards the chunks it was writing when killed (`[storage] format check failed`), whether or not grouping is enabled; [fluent-bit#10952](https://github.com/fluent/fluent-bit/issues/10952) reports the same and was closed as stale; [#912](https://github.com/kelchm/home-lab/issues/912) tracks the production setting. With checksums off, grouping still loses the lines it holds when the collector dies. The earlier drill's lossless SIGKILL ran at 20 lines/s.
+
+**Decision.** Keep one record per line. Grouping would make mcphub's dumps readable as one record, but it costs a bespoke parser that must track application formats, routes every record through an extra buffer, loses held lines when the collector dies, splits line-by-line writers, and does not give tracebacks or panics a severity. Read a multi-line event with **Show context** in Grafana, or by pod and time in VMUI. Revisit if a source's multi-line events must be one record, for an alert or because operators read them often; the stream-grouped custom parser is the configuration to start from, with a filesystem emitter.
 
 ## Rejected
 
