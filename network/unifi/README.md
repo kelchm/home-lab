@@ -30,17 +30,18 @@ The Tailscale router rollout created an isolated VLAN and replaced the PVE trunk
 
 The profile deliberately excludes Default, Cameras, Infra Mgmt, Guest, K8s Prod, K8s Sandbox, and Services. All three links remained up at 2.5 GbE after assignment. The matching PVE `vmbr0` allowlist is `10 19 21 25 90` on every node.
 
-Three custom policies cross the new boundary:
+Four custom policies cross the new boundary:
 
 | Policy | Source zone and match | Destination zone and match | Action |
 |---|---|---|---|
 | `Allow Main to Tailscale Routers` | `Internal`; network `Main` | `Remote Admin`; IPs `10.32.19.101`, `10.32.19.102` | Allow; IPv4; all protocols |
 | `Allow Tailscale Routers to Routed LAN` | `Remote Admin`; IPs `10.32.19.101`, `10.32.19.102` | `Internal`; IPs `10.32.1.0/24`, `10.32.10.0/24`, `10.32.20.0/24`, `10.32.30.0/24`, `10.32.130.0/24`, `10.32.140.0/24` | Allow; IPv4; all protocols |
 | `Allow NetBird Pilot Router to Services VIP` | `Remote Admin`; IP `10.32.19.103` | `Internal`; IP `10.32.140.1`, port 443 | Allow; IPv4; TCP |
+| `Allow NetBird Pilot Router to Admin HTTPS` | `Remote Admin`; IP `10.32.19.103` | `Internal`; IP `10.32.130.1`, port 443 | Allow; IPv4; TCP |
 
 The two Tailscale policies are inert: their router endpoints, VMs 101 and 102, were stopped on 2026-10-25 and destroyed on 2026-10-28. Deleting the policies needs an administrator session and is tracked in [#1069](https://github.com/kelchm/home-lab/issues/1069). UniFi generated an established/related return policy for each rule. No other Remote Admin → Internal initiation policy is live. Although the policy table describes the Cilium BGP pools as External for ordinary Internal sources, live probes from the custom Remote Admin zone timed out until `10.32.130.0/24` and `10.32.140.0/24` were included in the Internal destination rule; both returned HTTP 404 immediately afterward. Keep those routed prefixes in this exact rule and revalidate the behavior after UniFi upgrades.
 
-The NetBird pilot policy belongs to the evaluation in #625. VM 103 is now the only routed remote path, so do not remove it or this policy without a replacement. From `10.32.19.103`, `10.32.140.1:443` connects, while `10.32.140.1:80`, `10.32.130.1:443`, and `10.32.20.21:8006` time out. Its DNS resource `10.32.30.1` needs no policy because gateway interface addresses fall in the Gateway zone.
+The NetBird pilot policies belong to the evaluation in #625. VM 103 is now the only routed remote path, so do not remove it or these policies without a replacement. The admin HTTPS extension was applied on October 19, 2026. From `10.32.19.103`, Grafana's `/api/health` on `10.32.130.1:443` returns HTTP 200 with `database: ok`, and Jellyfin's `/health` on `10.32.140.1:443` returns HTTP 200. Connections to `10.32.130.1:80`, `10.32.140.1:80`, `10.32.20.21:8006`, and k8s-gateway at `10.32.130.2:53` still time out; the last endpoint answers TCP DNS from Main. These checks verify the router-to-LAN path; iPhone acceptance remains pending. Its DNS resource `10.32.30.1` needs no policy because gateway interface addresses fall in the Gateway zone. The [NetBird runbook](../../docs/runbooks/netbird-remote-access.md) records the resource policy, remote acceptance checks and rollback.
 
 While they ran, the Tailscale routers advertised `10.32.0.0/16`; that routing aggregate is deliberately broader than this authorization rule. A client could therefore install one stable lab route while UniFi continued to decide which destination networks traffic from `.101/.102` may actually enter. Positive tests through the aggregate reached every allowlisted class, while actual hosts in Workloads (`10.32.21.31`) and Storage (`10.32.25.5`) remained blocked. UniFi classifies traffic addressed to any of its own VLAN interface IPs in the Gateway zone, so those interface addresses remain reachable under the zone's gateway allow even when their attached networks are absent from the Internal allowlist.
 
