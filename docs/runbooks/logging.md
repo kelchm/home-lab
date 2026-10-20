@@ -181,7 +181,7 @@ Before restarting anything, inspect the affected pod's metrics (`/api/v2/metrics
 
 ## Log alerts
 
-Log content pages only where the log is the only evidence of a failure. Crash loops, readiness, Flux reconciliation, certificates, Longhorn and this pipeline already page from metrics, so their log lines do not; generic error-rate, new-pattern and fatal-level alerts were rejected because they fire on rollouts and transient upstream errors. The [log alerting evaluation](../evaluations/log-alerting.md) records the evidence. Besides the [UniFi alerts](#alerts), `vmalert-victoria-logs` evaluates [kanidm's log rules](../../kubernetes/apps/observability/victoria-logs-single/app/kanidm-alerts.yaml), because kanidm exports no metrics. Softlocked sign-in attempts are logged only at info, so setting kanidm's log level to `warn` or `error` hides them from `KanidmSignInsRejected`.
+Log content pages only where the log is the only evidence of a failure. Crash loops, readiness, Flux reconciliation, certificates, Longhorn and this pipeline already page from metrics, so their log lines do not; generic error-rate, new-pattern and fatal-level alerts were rejected because they fire on rollouts and transient upstream errors. The [log alerting evaluation](../evaluations/log-alerting.md) records the evidence. Besides the [UniFi alerts](#alerts), `vmalert-victoria-logs` evaluates [kanidm's log rules](../../kubernetes/apps/observability/victoria-logs-single/app/kanidm-alerts.yaml), because kanidm exports no metrics.
 
 | Alert | Fires when | Severity |
 | --- | --- | --- |
