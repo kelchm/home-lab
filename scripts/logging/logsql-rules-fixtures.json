@@ -1,0 +1,971 @@
+{
+ "cases": [
+  {
+   "rule": "KanidmReplicationFailing",
+   "name": "a supplier that refuses connections for 20 minutes fires",
+   "records": [
+    {
+     "fields": {
+      "service.name": "kanidm",
+      "service.namespace": "identity",
+      "k8s.cluster.name": "k8s-prod",
+      "k8s.namespace.name": "identity",
+      "k8s.pod.name": "kanidm-default-0",
+      "k8s.container.name": "kanidm",
+      "k8s.node.name": "k8s-prod-1",
+      "log.iostream": "stdout",
+      "severity_number": 17,
+      "severity_text": "ERROR",
+      "_msg": "d424b4f3-7e42-4505-83f5-2e795ba7e902 ERROR    ┕━ 🚨 [error]: Unable to connect to supplier, tried to connect to [10.42.0.118:8444]"
+     },
+     "offset": -1190,
+     "repeat": 80,
+     "every": 15
+    }
+   ],
+   "expect": [
+    {
+     "labels": {
+      "pod": "kanidm-default-0"
+     },
+     "value": 20
+    }
+   ]
+  },
+  {
+   "rule": "KanidmReplicationFailing",
+   "name": "an out-of-date consumer fires",
+   "records": [
+    {
+     "fields": {
+      "service.name": "kanidm",
+      "service.namespace": "identity",
+      "k8s.cluster.name": "k8s-prod",
+      "k8s.namespace.name": "identity",
+      "k8s.pod.name": "kanidm-default-2",
+      "k8s.container.name": "kanidm",
+      "k8s.node.name": "k8s-prod-1",
+      "log.iostream": "stdout",
+      "severity_number": 17,
+      "severity_text": "ERROR",
+      "_msg": "d424b4f3-7e42-4505-83f5-2e795ba7e902 ERROR    ┕━ 🚨 [error]: Consumer is out of date and must be refreshed. You must manually resolve this situation."
+     },
+     "offset": -1190,
+     "repeat": 60,
+     "every": 20
+    }
+   ],
+   "expect": [
+    {
+     "labels": {
+      "pod": "kanidm-default-2"
+     },
+     "value": 20
+    }
+   ]
+  },
+  {
+   "rule": "KanidmReplicationFailing",
+   "name": "14 minutes of failures stay quiet",
+   "records": [
+    {
+     "fields": {
+      "service.name": "kanidm",
+      "service.namespace": "identity",
+      "k8s.cluster.name": "k8s-prod",
+      "k8s.namespace.name": "identity",
+      "k8s.pod.name": "kanidm-default-0",
+      "k8s.container.name": "kanidm",
+      "k8s.node.name": "k8s-prod-1",
+      "log.iostream": "stdout",
+      "severity_number": 17,
+      "severity_text": "ERROR",
+      "_msg": "d424b4f3-7e42-4505-83f5-2e795ba7e902 ERROR    ┕━ 🚨 [error]: Unable to connect to supplier, tried to connect to [10.42.0.118:8444]"
+     },
+     "offset": -835,
+     "repeat": 56,
+     "every": 15
+    }
+   ],
+   "expect": []
+  },
+  {
+   "rule": "KanidmReplicationFailing",
+   "name": "a two-minute burst of 40 errors stays quiet",
+   "records": [
+    {
+     "fields": {
+      "service.name": "kanidm",
+      "service.namespace": "identity",
+      "k8s.cluster.name": "k8s-prod",
+      "k8s.namespace.name": "identity",
+      "k8s.pod.name": "kanidm-default-0",
+      "k8s.container.name": "kanidm",
+      "k8s.node.name": "k8s-prod-1",
+      "log.iostream": "stdout",
+      "severity_number": 17,
+      "severity_text": "ERROR",
+      "_msg": "d424b4f3-7e42-4505-83f5-2e795ba7e902 ERROR    ┕━ 🚨 [error]: Unable to connect to supplier, tried to connect to [10.42.0.118:8444]"
+     },
+     "offset": -300,
+     "repeat": 40,
+     "every": 3
+    }
+   ],
+   "expect": []
+  },
+  {
+   "rule": "KanidmReplicationFailing",
+   "name": "failures that stopped 7 minutes ago stay quiet",
+   "records": [
+    {
+     "fields": {
+      "service.name": "kanidm",
+      "service.namespace": "identity",
+      "k8s.cluster.name": "k8s-prod",
+      "k8s.namespace.name": "identity",
+      "k8s.pod.name": "kanidm-default-0",
+      "k8s.container.name": "kanidm",
+      "k8s.node.name": "k8s-prod-1",
+      "log.iostream": "stdout",
+      "severity_number": 17,
+      "severity_text": "ERROR",
+      "_msg": "d424b4f3-7e42-4505-83f5-2e795ba7e902 ERROR    ┕━ 🚨 [error]: Unable to connect to supplier, tried to connect to [10.42.0.118:8444]"
+     },
+     "offset": -1610,
+     "repeat": 80,
+     "every": 15
+    }
+   ],
+   "expect": []
+  },
+  {
+   "rule": "KanidmReplicationFailing",
+   "name": "the October 15 rolling-restart burst stays quiet",
+   "records": [
+    {
+     "fields": {
+      "service.name": "kanidm",
+      "service.namespace": "identity",
+      "k8s.cluster.name": "k8s-prod",
+      "k8s.namespace.name": "identity",
+      "k8s.pod.name": "kanidm-default-1",
+      "k8s.container.name": "kanidm",
+      "k8s.node.name": "k8s-prod-1",
+      "log.iostream": "stdout",
+      "severity_number": 17,
+      "severity_text": "ERROR",
+      "_msg": "d424b4f3-7e42-4505-83f5-2e795ba7e902 ERROR    ┕━ 🚨 [error]: Unable to connect to supplier, tried to connect to [10.42.0.118:8444]"
+     },
+     "offset": -300
+    },
+    {
+     "fields": {
+      "service.name": "kanidm",
+      "service.namespace": "identity",
+      "k8s.cluster.name": "k8s-prod",
+      "k8s.namespace.name": "identity",
+      "k8s.pod.name": "kanidm-default-0",
+      "k8s.container.name": "kanidm",
+      "k8s.node.name": "k8s-prod-1",
+      "log.iostream": "stdout",
+      "severity_number": 17,
+      "severity_text": "ERROR",
+      "_msg": "d424b4f3-7e42-4505-83f5-2e795ba7e902 ERROR    ┕━ 🚨 [error]: Unable to connect to supplier, tried to connect to [10.42.0.118:8444]"
+     },
+     "offset": -285
+    },
+    {
+     "fields": {
+      "service.name": "kanidm",
+      "service.namespace": "identity",
+      "k8s.cluster.name": "k8s-prod",
+      "k8s.namespace.name": "identity",
+      "k8s.pod.name": "kanidm-default-0",
+      "k8s.container.name": "kanidm",
+      "k8s.node.name": "k8s-prod-1",
+      "log.iostream": "stdout",
+      "severity_number": 17,
+      "severity_text": "ERROR",
+      "_msg": "d424b4f3-7e42-4505-83f5-2e795ba7e902 ERROR    ┝━ 🚨 [error]: Replication client TLS setup error, continuing -> Os { code: 104, kind: ConnectionReset, message: \"Connection reset by peer\" }"
+     },
+     "offset": -275
+    },
+    {
+     "fields": {
+      "service.name": "kanidm",
+      "service.namespace": "identity",
+      "k8s.cluster.name": "k8s-prod",
+      "k8s.namespace.name": "identity",
+      "k8s.pod.name": "kanidm-default-0",
+      "k8s.container.name": "kanidm",
+      "k8s.node.name": "k8s-prod-1",
+      "log.iostream": "stdout",
+      "severity_number": 17,
+      "severity_text": "ERROR",
+      "_msg": "d424b4f3-7e42-4505-83f5-2e795ba7e902 ERROR    ┕━ 🚨 [error]: Unable to connect to supplier, tried to connect to [10.42.1.193:8444]"
+     },
+     "offset": -275
+    },
+    {
+     "fields": {
+      "service.name": "kanidm",
+      "service.namespace": "identity",
+      "k8s.cluster.name": "k8s-prod",
+      "k8s.namespace.name": "identity",
+      "k8s.pod.name": "kanidm-default-2",
+      "k8s.container.name": "kanidm",
+      "k8s.node.name": "k8s-prod-1",
+      "log.iostream": "stdout",
+      "severity_number": 17,
+      "severity_text": "ERROR",
+      "_msg": "d424b4f3-7e42-4505-83f5-2e795ba7e902 ERROR    ┕━ 🚨 [error]: Unable to connect to supplier, tried to connect to [10.42.2.7:8444]"
+     },
+     "offset": -264
+    },
+    {
+     "fields": {
+      "service.name": "kanidm",
+      "service.namespace": "identity",
+      "k8s.cluster.name": "k8s-prod",
+      "k8s.namespace.name": "identity",
+      "k8s.pod.name": "kanidm-default-0",
+      "k8s.container.name": "kanidm",
+      "k8s.node.name": "k8s-prod-1",
+      "log.iostream": "stdout",
+      "severity_number": 17,
+      "severity_text": "ERROR",
+      "_msg": "d424b4f3-7e42-4505-83f5-2e795ba7e902 ERROR    ┝━ 🚨 [error]: RUV ranges were not rebuilt correctly. | err: ReplInvalidRUVState"
+     },
+     "offset": -251
+    },
+    {
+     "fields": {
+      "service.name": "kanidm",
+      "service.namespace": "identity",
+      "k8s.cluster.name": "k8s-prod",
+      "k8s.namespace.name": "identity",
+      "k8s.pod.name": "kanidm-default-0",
+      "k8s.container.name": "kanidm",
+      "k8s.node.name": "k8s-prod-1",
+      "log.iostream": "stdout",
+      "severity_number": 17,
+      "severity_text": "ERROR",
+      "_msg": "d424b4f3-7e42-4505-83f5-2e795ba7e902 ERROR    ┕━ 🚨 [error]: Consumer was not able to apply changes. | err: ReplInvalidRUVState"
+     },
+     "offset": -251
+    }
+   ],
+   "expect": []
+  },
+  {
+   "rule": "KanidmReplicationFailing",
+   "name": "routine errors and absent-peer warnings stay quiet",
+   "records": [
+    {
+     "fields": {
+      "service.name": "kanidm",
+      "service.namespace": "identity",
+      "k8s.cluster.name": "k8s-prod",
+      "k8s.namespace.name": "identity",
+      "k8s.pod.name": "kanidm-default-0",
+      "k8s.container.name": "kanidm",
+      "k8s.node.name": "k8s-prod-1",
+      "log.iostream": "stdout",
+      "severity_number": 17,
+      "severity_text": "ERROR",
+      "_msg": "d424b4f3-7e42-4505-83f5-2e795ba7e902 ERROR       ┕━ 🚨 [error]: Invalid identity: NotAuthenticated"
+     },
+     "offset": -1190,
+     "repeat": 300,
+     "every": 4
+    },
+    {
+     "fields": {
+      "service.name": "kanidm",
+      "service.namespace": "identity",
+      "k8s.cluster.name": "k8s-prod",
+      "k8s.namespace.name": "identity",
+      "k8s.pod.name": "kanidm-default-0",
+      "k8s.container.name": "kanidm",
+      "k8s.node.name": "k8s-prod-1",
+      "log.iostream": "stdout",
+      "severity_number": 17,
+      "severity_text": "ERROR",
+      "_msg": "d424b4f3-7e42-4505-83f5-2e795ba7e902 ERROR    🚨 [error]: connection timed out waiting for initial request data"
+     },
+     "offset": -1190,
+     "repeat": 150,
+     "every": 8
+    },
+    {
+     "fields": {
+      "service.name": "kanidm",
+      "service.namespace": "identity",
+      "k8s.cluster.name": "k8s-prod",
+      "k8s.namespace.name": "identity",
+      "k8s.pod.name": "kanidm-default-1",
+      "k8s.container.name": "kanidm",
+      "k8s.node.name": "k8s-prod-1",
+      "log.iostream": "stdout",
+      "severity_number": 13,
+      "severity_text": "WARN",
+      "_msg": "d424b4f3-7e42-4505-83f5-2e795ba7e902 WARN     🚧 [warn]: No replication addresses available, delaying replication operation for 'repl://kanidm-default-0.kanidm.identity.svc.cluster.local:8444'"
+     },
+     "offset": -1190,
+     "repeat": 80,
+     "every": 15
+    }
+   ],
+   "expect": []
+  },
+  {
+   "rule": "KanidmReplicationFailing",
+   "name": "another cluster's kanidm stays quiet",
+   "records": [
+    {
+     "fields": {
+      "service.name": "kanidm",
+      "service.namespace": "identity",
+      "k8s.cluster.name": "k8s-lab",
+      "k8s.namespace.name": "identity",
+      "k8s.pod.name": "kanidm-default-0",
+      "k8s.container.name": "kanidm",
+      "k8s.node.name": "k8s-prod-1",
+      "log.iostream": "stdout",
+      "severity_number": 17,
+      "severity_text": "ERROR",
+      "_msg": "d424b4f3-7e42-4505-83f5-2e795ba7e902 ERROR    ┕━ 🚨 [error]: Unable to connect to supplier, tried to connect to [10.42.0.118:8444]"
+     },
+     "offset": -1190,
+     "repeat": 80,
+     "every": 15
+    }
+   ],
+   "expect": []
+  },
+  {
+   "rule": "KanidmSignInsRejected",
+   "name": "five wrong passwords fire once each",
+   "records": [
+    {
+     "fields": {
+      "service.name": "kanidm",
+      "service.namespace": "identity",
+      "k8s.cluster.name": "k8s-prod",
+      "k8s.namespace.name": "identity",
+      "k8s.pod.name": "kanidm-default-1",
+      "k8s.container.name": "kanidm",
+      "k8s.node.name": "k8s-prod-1",
+      "log.iostream": "stdout",
+      "severity_number": 17,
+      "severity_text": "ERROR",
+      "_msg": "6babc2d8-18f1-4bdf-b839-{n} ERROR       ┝━ 🚨 [error]: Handler::Password -> Result::Denied - incorrect password | event_tag_id: 11"
+     },
+     "offset": -800,
+     "repeat": 5,
+     "every": 120
+    },
+    {
+     "fields": {
+      "service.name": "kanidm",
+      "service.namespace": "identity",
+      "k8s.cluster.name": "k8s-prod",
+      "k8s.namespace.name": "identity",
+      "k8s.pod.name": "kanidm-default-1",
+      "k8s.container.name": "kanidm",
+      "k8s.node.name": "k8s-prod-1",
+      "log.iostream": "stdout",
+      "severity_number": 9,
+      "severity_text": "INFO",
+      "_msg": "6babc2d8-18f1-4bdf-b839-{n} INFO        ┕━ ｉ [info]: Auth result: Denied: incorrect password | event_tag_id: 10"
+     },
+     "offset": -800,
+     "repeat": 5,
+     "every": 120
+    }
+   ],
+   "expect": [
+    {
+     "value": 5
+    }
+   ]
+  },
+  {
+   "rule": "KanidmSignInsRejected",
+   "name": "softlocked attempts fire",
+   "records": [
+    {
+     "fields": {
+      "service.name": "kanidm",
+      "service.namespace": "identity",
+      "k8s.cluster.name": "k8s-prod",
+      "k8s.namespace.name": "identity",
+      "k8s.pod.name": "kanidm-default-2",
+      "k8s.container.name": "kanidm",
+      "k8s.node.name": "k8s-prod-1",
+      "log.iostream": "stdout",
+      "severity_number": 9,
+      "severity_text": "INFO",
+      "_msg": "6babc2d8-18f1-4bdf-b839-{n} INFO        ┕━ ｉ [info]: Auth result: Denied: Account is temporarily locked | event_tag_id: 10"
+     },
+     "offset": -600,
+     "repeat": 5,
+     "every": 60
+    }
+   ],
+   "expect": [
+    {
+     "value": 5
+    }
+   ]
+  },
+  {
+   "rule": "KanidmSignInsRejected",
+   "name": "unknown accounts count with wrong passwords",
+   "records": [
+    {
+     "fields": {
+      "service.name": "kanidm",
+      "service.namespace": "identity",
+      "k8s.cluster.name": "k8s-prod",
+      "k8s.namespace.name": "identity",
+      "k8s.pod.name": "kanidm-default-0",
+      "k8s.container.name": "kanidm",
+      "k8s.node.name": "k8s-prod-1",
+      "log.iostream": "stdout",
+      "severity_number": 17,
+      "severity_text": "ERROR",
+      "_msg": "7c1d0e11-5a2b-4c3d-9e4f-{n} ERROR       ┕━ 🚨 [error]: Auth result: NoMatchingEntries | event_tag_id: 12"
+     },
+     "offset": -700,
+     "repeat": 3,
+     "every": 60
+    },
+    {
+     "fields": {
+      "service.name": "kanidm",
+      "service.namespace": "identity",
+      "k8s.cluster.name": "k8s-prod",
+      "k8s.namespace.name": "identity",
+      "k8s.pod.name": "kanidm-default-1",
+      "k8s.container.name": "kanidm",
+      "k8s.node.name": "k8s-prod-1",
+      "log.iostream": "stdout",
+      "severity_number": 17,
+      "severity_text": "ERROR",
+      "_msg": "6babc2d8-18f1-4bdf-b839-{n} ERROR       ┝━ 🚨 [error]: Handler::Password -> Result::Denied - incorrect password | event_tag_id: 11"
+     },
+     "offset": -400,
+     "repeat": 2,
+     "every": 60
+    },
+    {
+     "fields": {
+      "service.name": "kanidm",
+      "service.namespace": "identity",
+      "k8s.cluster.name": "k8s-prod",
+      "k8s.namespace.name": "identity",
+      "k8s.pod.name": "kanidm-default-1",
+      "k8s.container.name": "kanidm",
+      "k8s.node.name": "k8s-prod-1",
+      "log.iostream": "stdout",
+      "severity_number": 9,
+      "severity_text": "INFO",
+      "_msg": "6babc2d8-18f1-4bdf-b839-{n} INFO        ┕━ ｉ [info]: Auth result: Denied: incorrect password | event_tag_id: 10"
+     },
+     "offset": -400,
+     "repeat": 2,
+     "every": 60
+    }
+   ],
+   "expect": [
+    {
+     "value": 5
+    }
+   ]
+  },
+  {
+   "rule": "KanidmSignInsRejected",
+   "name": "four attempts and routine sign-ins stay quiet",
+   "records": [
+    {
+     "fields": {
+      "service.name": "kanidm",
+      "service.namespace": "identity",
+      "k8s.cluster.name": "k8s-prod",
+      "k8s.namespace.name": "identity",
+      "k8s.pod.name": "kanidm-default-1",
+      "k8s.container.name": "kanidm",
+      "k8s.node.name": "k8s-prod-1",
+      "log.iostream": "stdout",
+      "severity_number": 17,
+      "severity_text": "ERROR",
+      "_msg": "6babc2d8-18f1-4bdf-b839-{n} ERROR       ┝━ 🚨 [error]: Handler::Password -> Result::Denied - incorrect password | event_tag_id: 11"
+     },
+     "offset": -600,
+     "repeat": 4,
+     "every": 60
+    },
+    {
+     "fields": {
+      "service.name": "kanidm",
+      "service.namespace": "identity",
+      "k8s.cluster.name": "k8s-prod",
+      "k8s.namespace.name": "identity",
+      "k8s.pod.name": "kanidm-default-1",
+      "k8s.container.name": "kanidm",
+      "k8s.node.name": "k8s-prod-1",
+      "log.iostream": "stdout",
+      "severity_number": 9,
+      "severity_text": "INFO",
+      "_msg": "6babc2d8-18f1-4bdf-b839-{n} INFO        ┕━ ｉ [info]: Auth result: Denied: incorrect password | event_tag_id: 10"
+     },
+     "offset": -600,
+     "repeat": 4,
+     "every": 60
+    },
+    {
+     "fields": {
+      "service.name": "kanidm",
+      "service.namespace": "identity",
+      "k8s.cluster.name": "k8s-prod",
+      "k8s.namespace.name": "identity",
+      "k8s.pod.name": "kanidm-default-0",
+      "k8s.container.name": "kanidm",
+      "k8s.node.name": "k8s-prod-1",
+      "log.iostream": "stdout",
+      "severity_number": 9,
+      "severity_text": "INFO",
+      "_msg": "d424b4f3-7e42-4505-83f5-2e795ba7e902 INFO        ┝━ ｉ [info]: Handler::Password -> Result::Success | event_tag_id: 10"
+     },
+     "offset": -880,
+     "repeat": 50,
+     "every": 15
+    }
+   ],
+   "expect": []
+  },
+  {
+   "rule": "KanidmSignInsRejected",
+   "name": "attempts spread over 30 minutes stay quiet",
+   "records": [
+    {
+     "fields": {
+      "service.name": "kanidm",
+      "service.namespace": "identity",
+      "k8s.cluster.name": "k8s-prod",
+      "k8s.namespace.name": "identity",
+      "k8s.pod.name": "kanidm-default-1",
+      "k8s.container.name": "kanidm",
+      "k8s.node.name": "k8s-prod-1",
+      "log.iostream": "stdout",
+      "severity_number": 17,
+      "severity_text": "ERROR",
+      "_msg": "6babc2d8-18f1-4bdf-b839-{n} ERROR       ┝━ 🚨 [error]: Handler::Password -> Result::Denied - incorrect password | event_tag_id: 11"
+     },
+     "offset": -1790,
+     "repeat": 8,
+     "every": 240
+    },
+    {
+     "fields": {
+      "service.name": "kanidm",
+      "service.namespace": "identity",
+      "k8s.cluster.name": "k8s-prod",
+      "k8s.namespace.name": "identity",
+      "k8s.pod.name": "kanidm-default-1",
+      "k8s.container.name": "kanidm",
+      "k8s.node.name": "k8s-prod-1",
+      "log.iostream": "stdout",
+      "severity_number": 9,
+      "severity_text": "INFO",
+      "_msg": "6babc2d8-18f1-4bdf-b839-{n} INFO        ┕━ ｉ [info]: Auth result: Denied: incorrect password | event_tag_id: 10"
+     },
+     "offset": -1790,
+     "repeat": 8,
+     "every": 240
+    }
+   ],
+   "expect": []
+  },
+  {
+   "rule": "KanidmSignInsRejected",
+   "name": "another cluster's kanidm stays quiet",
+   "records": [
+    {
+     "fields": {
+      "service.name": "kanidm",
+      "service.namespace": "identity",
+      "k8s.cluster.name": "k8s-lab",
+      "k8s.namespace.name": "identity",
+      "k8s.pod.name": "kanidm-default-1",
+      "k8s.container.name": "kanidm",
+      "k8s.node.name": "k8s-prod-1",
+      "log.iostream": "stdout",
+      "severity_number": 17,
+      "severity_text": "ERROR",
+      "_msg": "6babc2d8-18f1-4bdf-b839-{n} ERROR       ┝━ 🚨 [error]: Handler::Password -> Result::Denied - incorrect password | event_tag_id: 11"
+     },
+     "offset": -600,
+     "repeat": 6,
+     "every": 60
+    },
+    {
+     "fields": {
+      "service.name": "kanidm",
+      "service.namespace": "identity",
+      "k8s.cluster.name": "k8s-lab",
+      "k8s.namespace.name": "identity",
+      "k8s.pod.name": "kanidm-default-1",
+      "k8s.container.name": "kanidm",
+      "k8s.node.name": "k8s-prod-1",
+      "log.iostream": "stdout",
+      "severity_number": 9,
+      "severity_text": "INFO",
+      "_msg": "6babc2d8-18f1-4bdf-b839-{n} INFO        ┕━ ｉ [info]: Auth result: Denied: incorrect password | event_tag_id: 10"
+     },
+     "offset": -600,
+     "repeat": 6,
+     "every": 60
+    }
+   ],
+   "expect": []
+  },
+  {
+   "rule": "UniFiWANFlapping",
+   "name": "three drops on one WAN within an hour fire",
+   "records": [
+    {
+     "fields": {
+      "service.name": "Gateway-DMP",
+      "service.namespace": "unifi",
+      "cef.device_vendor": "Ubiquiti",
+      "cef.device_product": "UniFi Network",
+      "cef.device_event_class_id": "100",
+      "cef.name": "Internet Down",
+      "cef.severity": "10",
+      "severity_number": 17,
+      "_msg": "Internet connection T-Mobile (WAN1) on port 10 is down.",
+      "cef.extension.UNIFIcategory": "Internet and WAN",
+      "cef.extension.UNIFIwanName": "T-Mobile (WAN1)",
+      "cef.extension.msg": "Internet connection T-Mobile (WAN1) on port 10 is down."
+     },
+     "offset": -3000
+    },
+    {
+     "fields": {
+      "service.name": "Gateway-DMP",
+      "service.namespace": "unifi",
+      "cef.device_vendor": "Ubiquiti",
+      "cef.device_product": "UniFi Network",
+      "cef.device_event_class_id": "100",
+      "cef.name": "Internet Down",
+      "cef.severity": "10",
+      "severity_number": 17,
+      "_msg": "Internet connection T-Mobile (WAN1) on port 10 is down.",
+      "cef.extension.UNIFIcategory": "Internet and WAN",
+      "cef.extension.UNIFIwanName": "T-Mobile (WAN1)",
+      "cef.extension.msg": "Internet connection T-Mobile (WAN1) on port 10 is down."
+     },
+     "offset": -1800
+    },
+    {
+     "fields": {
+      "service.name": "Gateway-DMP",
+      "service.namespace": "unifi",
+      "cef.device_vendor": "Ubiquiti",
+      "cef.device_product": "UniFi Network",
+      "cef.device_event_class_id": "100",
+      "cef.name": "Internet Down",
+      "cef.severity": "10",
+      "severity_number": 17,
+      "_msg": "Internet connection T-Mobile (WAN1) on port 10 is down.",
+      "cef.extension.UNIFIcategory": "Internet and WAN",
+      "cef.extension.UNIFIwanName": "T-Mobile (WAN1)",
+      "cef.extension.msg": "Internet connection T-Mobile (WAN1) on port 10 is down."
+     },
+     "offset": -60
+    },
+    {
+     "fields": {
+      "service.name": "Gateway-DMP",
+      "service.namespace": "unifi",
+      "cef.device_vendor": "Ubiquiti",
+      "cef.device_product": "UniFi Network",
+      "cef.device_event_class_id": "100",
+      "cef.name": "Internet Down",
+      "cef.severity": "10",
+      "severity_number": 17,
+      "_msg": "Internet connection Starlink (WAN2) on port 10 is down.",
+      "cef.extension.UNIFIcategory": "Internet and WAN",
+      "cef.extension.UNIFIwanName": "Starlink (WAN2)",
+      "cef.extension.msg": "Internet connection Starlink (WAN2) on port 10 is down."
+     },
+     "offset": -900
+    }
+   ],
+   "expect": [
+    {
+     "labels": {
+      "wan": "T-Mobile (WAN1)"
+     },
+     "value": 3
+    }
+   ]
+  },
+  {
+   "rule": "UniFiWANFlapping",
+   "name": "two drops stay quiet",
+   "records": [
+    {
+     "fields": {
+      "service.name": "Gateway-DMP",
+      "service.namespace": "unifi",
+      "cef.device_vendor": "Ubiquiti",
+      "cef.device_product": "UniFi Network",
+      "cef.device_event_class_id": "100",
+      "cef.name": "Internet Down",
+      "cef.severity": "10",
+      "severity_number": 17,
+      "_msg": "Internet connection Starlink (WAN2) on port 10 is down.",
+      "cef.extension.UNIFIcategory": "Internet and WAN",
+      "cef.extension.UNIFIwanName": "Starlink (WAN2)",
+      "cef.extension.msg": "Internet connection Starlink (WAN2) on port 10 is down."
+     },
+     "offset": -3000
+    },
+    {
+     "fields": {
+      "service.name": "Gateway-DMP",
+      "service.namespace": "unifi",
+      "cef.device_vendor": "Ubiquiti",
+      "cef.device_product": "UniFi Network",
+      "cef.device_event_class_id": "100",
+      "cef.name": "Internet Down",
+      "cef.severity": "10",
+      "severity_number": 17,
+      "_msg": "Internet connection Starlink (WAN2) on port 10 is down.",
+      "cef.extension.UNIFIcategory": "Internet and WAN",
+      "cef.extension.UNIFIwanName": "Starlink (WAN2)",
+      "cef.extension.msg": "Internet connection Starlink (WAN2) on port 10 is down."
+     },
+     "offset": -60
+    },
+    {
+     "fields": {
+      "service.name": "Gateway-DMP",
+      "service.namespace": "unifi",
+      "cef.device_vendor": "Ubiquiti",
+      "cef.device_product": "UniFi Network",
+      "cef.device_event_class_id": "100",
+      "cef.name": "Internet Down",
+      "cef.severity": "10",
+      "severity_number": 17,
+      "_msg": "Internet connection Starlink (WAN2) on port 10 is down.",
+      "cef.extension.UNIFIcategory": "Internet and WAN",
+      "cef.extension.UNIFIwanName": "Starlink (WAN2)",
+      "cef.extension.msg": "Internet connection Starlink (WAN2) on port 10 is down."
+     },
+     "offset": -3700
+    }
+   ],
+   "expect": []
+  },
+  {
+   "rule": "UniFiIntrusionDetectedOutbound",
+   "name": "a detection to an external address fires",
+   "records": [
+    {
+     "fields": {
+      "service.name": "Gateway-DMP",
+      "service.namespace": "unifi",
+      "cef.device_vendor": "Ubiquiti",
+      "cef.device_product": "UniFi Network",
+      "cef.device_event_class_id": "200",
+      "cef.name": "Threat Detected",
+      "cef.severity": "7",
+      "severity_number": 17,
+      "_msg": "A network intrusion attempt from 10.32.10.244 to 13.32.99.10 has been detected.",
+      "cef.extension.UNIFIcategory": "Security",
+      "cef.extension.UNIFIipsSignature": "ET SCAN Potential SSH Scan OUTBOUND",
+      "cef.extension.src": "10.32.10.244",
+      "cef.extension.dst": "13.32.99.10",
+      "cef.extension.msg": "A network intrusion attempt from 10.32.10.244 to 13.32.99.10 has been detected."
+     },
+     "offset": -300
+    },
+    {
+     "fields": {
+      "service.name": "Gateway-DMP",
+      "service.namespace": "unifi",
+      "cef.device_vendor": "Ubiquiti",
+      "cef.device_product": "UniFi Network",
+      "cef.device_event_class_id": "200",
+      "cef.name": "Threat Detected",
+      "cef.severity": "7",
+      "severity_number": 17,
+      "_msg": "A network intrusion attempt from 10.32.10.244 to 13.32.99.10 has been detected.",
+      "cef.extension.UNIFIcategory": "Security",
+      "cef.extension.UNIFIipsSignature": "ET SCAN Potential SSH Scan OUTBOUND",
+      "cef.extension.src": "10.32.10.244",
+      "cef.extension.dst": "13.32.99.10",
+      "cef.extension.msg": "A network intrusion attempt from 10.32.10.244 to 13.32.99.10 has been detected."
+     },
+     "offset": -200
+    }
+   ],
+   "expect": [
+    {
+     "labels": {
+      "src": "10.32.10.244",
+      "dst": "13.32.99.10",
+      "signature": "ET SCAN Potential SSH Scan OUTBOUND"
+     },
+     "value": 2
+    }
+   ]
+  },
+  {
+   "rule": "UniFiIntrusionDetectedOutbound",
+   "name": "internal, CGNAT and multicast destinations stay quiet",
+   "records": [
+    {
+     "fields": {
+      "service.name": "Gateway-DMP",
+      "service.namespace": "unifi",
+      "cef.device_vendor": "Ubiquiti",
+      "cef.device_product": "UniFi Network",
+      "cef.device_event_class_id": "200",
+      "cef.name": "Threat Detected",
+      "cef.severity": "7",
+      "severity_number": 17,
+      "_msg": "A network intrusion attempt from 10.32.10.244 to 10.32.21.31 has been detected.",
+      "cef.extension.UNIFIcategory": "Security",
+      "cef.extension.UNIFIipsSignature": "ET SCAN Potential SSH Scan OUTBOUND",
+      "cef.extension.src": "10.32.10.244",
+      "cef.extension.dst": "10.32.21.31",
+      "cef.extension.msg": "A network intrusion attempt from 10.32.10.244 to 10.32.21.31 has been detected."
+     },
+     "offset": -300
+    },
+    {
+     "fields": {
+      "service.name": "Gateway-DMP",
+      "service.namespace": "unifi",
+      "cef.device_vendor": "Ubiquiti",
+      "cef.device_product": "UniFi Network",
+      "cef.device_event_class_id": "200",
+      "cef.name": "Threat Detected",
+      "cef.severity": "7",
+      "severity_number": 17,
+      "_msg": "A network intrusion attempt from 10.32.10.244 to 100.100.1.1 has been detected.",
+      "cef.extension.UNIFIcategory": "Security",
+      "cef.extension.UNIFIipsSignature": "ET SCAN Potential SSH Scan OUTBOUND",
+      "cef.extension.src": "10.32.10.244",
+      "cef.extension.dst": "100.100.1.1",
+      "cef.extension.msg": "A network intrusion attempt from 10.32.10.244 to 100.100.1.1 has been detected."
+     },
+     "offset": -250
+    },
+    {
+     "fields": {
+      "service.name": "Gateway-DMP",
+      "service.namespace": "unifi",
+      "cef.device_vendor": "Ubiquiti",
+      "cef.device_product": "UniFi Network",
+      "cef.device_event_class_id": "200",
+      "cef.name": "Threat Detected",
+      "cef.severity": "7",
+      "severity_number": 17,
+      "_msg": "A network intrusion attempt from 10.32.10.244 to 239.255.255.250 has been detected.",
+      "cef.extension.UNIFIcategory": "Security",
+      "cef.extension.UNIFIipsSignature": "ET SCAN Potential SSH Scan OUTBOUND",
+      "cef.extension.src": "10.32.10.244",
+      "cef.extension.dst": "239.255.255.250",
+      "cef.extension.msg": "A network intrusion attempt from 10.32.10.244 to 239.255.255.250 has been detected."
+     },
+     "offset": -200
+    },
+    {
+     "fields": {
+      "service.name": "Gateway-DMP",
+      "service.namespace": "unifi",
+      "cef.device_vendor": "Ubiquiti",
+      "cef.device_product": "UniFi Network",
+      "cef.device_event_class_id": "200",
+      "cef.name": "Threat Detected",
+      "cef.severity": "7",
+      "severity_number": 17,
+      "_msg": "A network intrusion attempt from 10.32.10.244 to 192.168.1.1 has been detected.",
+      "cef.extension.UNIFIcategory": "Security",
+      "cef.extension.UNIFIipsSignature": "ET SCAN Potential SSH Scan OUTBOUND",
+      "cef.extension.src": "10.32.10.244",
+      "cef.extension.dst": "192.168.1.1",
+      "cef.extension.msg": "A network intrusion attempt from 10.32.10.244 to 192.168.1.1 has been detected."
+     },
+     "offset": -150
+    }
+   ],
+   "expect": []
+  },
+  {
+   "rule": "UniFiHoneypotTriggered",
+   "name": "a honeypot event names the client",
+   "records": [
+    {
+     "fields": {
+      "service.name": "Gateway-DMP",
+      "service.namespace": "unifi",
+      "cef.device_vendor": "Ubiquiti",
+      "cef.device_product": "UniFi Network",
+      "cef.device_event_class_id": "202",
+      "cef.name": "Honeypot Triggered",
+      "cef.severity": "6",
+      "severity_number": 13,
+      "_msg": "Honeypot triggered by Hyperion.",
+      "cef.extension.UNIFIcategory": "Security",
+      "cef.extension.UNIFIclientAlias": "Hyperion",
+      "cef.extension.UNIFIclientMac": "9a:4d:97:a9:0f:90",
+      "cef.extension.msg": "Honeypot triggered by Hyperion."
+     },
+     "offset": -120
+    }
+   ],
+   "expect": [
+    {
+     "labels": {
+      "client": "Hyperion",
+      "mac": "9a:4d:97:a9:0f:90"
+     },
+     "value": 1
+    }
+   ]
+  },
+  {
+   "rule": "UniFiHoneypotTriggered",
+   "name": "an event older than 15 minutes stays quiet",
+   "records": [
+    {
+     "fields": {
+      "service.name": "Gateway-DMP",
+      "service.namespace": "unifi",
+      "cef.device_vendor": "Ubiquiti",
+      "cef.device_product": "UniFi Network",
+      "cef.device_event_class_id": "202",
+      "cef.name": "Honeypot Triggered",
+      "cef.severity": "6",
+      "severity_number": 13,
+      "_msg": "Honeypot triggered by Hyperion.",
+      "cef.extension.UNIFIcategory": "Security",
+      "cef.extension.UNIFIclientAlias": "Hyperion",
+      "cef.extension.UNIFIclientMac": "9a:4d:97:a9:0f:90",
+      "cef.extension.msg": "Honeypot triggered by Hyperion."
+     },
+     "offset": -960
+    }
+   ],
+   "expect": []
+  }
+ ]
+}
