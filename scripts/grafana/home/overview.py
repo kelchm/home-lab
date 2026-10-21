@@ -88,7 +88,7 @@ RENEWAL = (f"((certmanager_certificate_expiration_timestamp_seconds{{{K}}} - tim
            f" and on (name, exported_namespace) ((certmanager_certificate_renewal_timestamp_seconds{{{K}}} - time()) < -3600)")
 R += [k8s(f'sum(kube_node_status_condition{{condition="Ready",status!="true",{K}}})', "$1 affected", "Nodes not ready", 3),
       k8s(NOT_READY, "$1 affected", "Pods not ready", 2),
-      k8s(f'count(flux_resource_info{{ready!="True",suspended!="True",{K}}})', "$1 affected", "Deploys failing", 2),
+      k8s(f'count(flux_resource_info{{ready!="True",suspended!="True",{K}}}) or vector(0)', "$1 affected", "Deploys failing", 2),
       k8s(f'sum(longhorn_volume_robustness{{state="faulted",{K}}})', "$1 affected", "Volumes faulted", 3),
       k8s(f'sum(longhorn_volume_robustness{{state="degraded",{K}}})', "$1 affected", "Volumes degraded", 2),
       rule(at(say(RENEWAL, "renewal overdue · expires in $1 h"), "k8s-prod"), "Certificate not renewing", 2, ("name",))]
