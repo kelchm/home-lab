@@ -78,6 +78,7 @@ jobs:
               - 'scripts/monitoring/cilium-alerts.test.yaml'
               - 'scripts/monitoring/host-network-alerts.test.yaml'
               - 'scripts/logging/**'
+              - 'scripts/grafana/**'
               - 'scripts/ci/test-validate-cilium-policies.sh'
               - 'scripts/ci/validate-cilium-policies.sh'
               - 'scripts/ci/test-validate-unsafe-sysctls.sh'
@@ -270,6 +271,10 @@ jobs:
       - name: Validate log collector, mapping and pipeline alerts
         if: needs.pre-job.outputs.kubernetes_changed == 'true'
         run: scripts/ci/validate-logging.sh
+
+      - name: Validate the Home dashboard against its generator
+        if: needs.pre-job.outputs.kubernetes_changed == 'true'
+        run: python3 scripts/grafana/render-home.py --check
 
       - name: Validate Pi probe alerts
         if: needs.pre-job.outputs.kubernetes_changed == 'true'
