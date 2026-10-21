@@ -40,11 +40,14 @@ R = [rule(match("alert", "severity", "critical"), None, 3), rule(match("alert", 
      rule(say("count by (system) (sys(up) == 0)", "$1 affected"), "Collectors silent", 2)]
 
 # ------------------------------------------------------------------ anything that fills up
-SECS = "(avail / (-deriv(avail[7d]) > 0))"
+SECS = "(avail / (-deriv(avail[7d:1h]) > 0))"
 USED = "100 * (1 - avail / (size > 0))"
+# A one-off jump reads as growth for a week, so the trend counts only on a disk already 70% full. The cluster's /var holds the
+# image cache, which the kubelet trims at 75%, so KubeNodeEphemeralStorageHigh watches it instead.
+GROWING = f'((({SECS}) and (({USED}) > 70)) unless on (instance, mountpoint) node_filesystem_avail_bytes{{platform="k8s",mountpoint="/var"}})'
 FULL_IN = "full in $1 days at the pace of the last week"
-R += [rule(f'sys({say(f"({SECS} < 604800) / 86400", FULL_IN)})', "Disk filling up", 2, ("instance", "mountpoint")),
-      rule(f'sys({say(f"(({SECS} >= 604800) < 2592000) / 86400", FULL_IN)})', "Disk filling up", 1, ("instance", "mountpoint")),
+R += [rule(f'sys({say(f"({GROWING} < 604800) / 86400", FULL_IN)})', "Disk filling up", 2, ("instance", "mountpoint")),
+      rule(f'sys({say(f"(({GROWING} >= 604800) < 2592000) / 86400", FULL_IN)})', "Disk filling up", 1, ("instance", "mountpoint")),
       rule(f'sys({say(f"({USED}) >= 85", "$1% used")})', "Disk nearly full", 2, ("instance", "mountpoint"))]
 
 
@@ -85,7 +88,7 @@ RENEWAL = (f"((certmanager_certificate_expiration_timestamp_seconds{{{K}}} - tim
            f" and on (name, exported_namespace) ((certmanager_certificate_renewal_timestamp_seconds{{{K}}} - time()) < -3600)")
 R += [k8s(f'sum(kube_node_status_condition{{condition="Ready",status!="true",{K}}})', "$1 affected", "Nodes not ready", 3),
       k8s(NOT_READY, "$1 affected", "Pods not ready", 2),
-      k8s(f'count(flux_resource_info{{ready!="True",suspended!="True",{K}}})', "$1 affected", "Deploys failing", 2),
+      k8s(f'count(flux_resource_info{{ready!="True",suspended!="True",{K}}}) or vector(0)', "$1 affected", "Deploys failing", 2),
       k8s(f'sum(longhorn_volume_robustness{{state="faulted",{K}}})', "$1 affected", "Volumes faulted", 3),
       k8s(f'sum(longhorn_volume_robustness{{state="degraded",{K}}})', "$1 affected", "Volumes degraded", 2),
       rule(at(say(RENEWAL, "renewal overdue · expires in $1 h"), "k8s-prod"), "Certificate not renewing", 2, ("name",))]
@@ -108,8 +111,10 @@ R += [rule(at(say(f"({w.U_RUNTIME} < 600) / 60", "$1 min of battery at this load
       rule(f'sys({say(f"1000 * max by (probe, job) (probe_duration_seconds{{{BB}}}) > 1000", "$1 ms to answer")})', "Slow from outside the cluster", 1, ("probe",))]
 
 FSEL = f"{HOSTS},{FS}"
+# One series per filesystem, so its history survives a restart of the collector pod that reports it.
+FS_BY = "max by (cluster, platform, job, instance, mountpoint)"
 TEMPLATES = (f'{SYS}, say(x, f) = label_replace(count_values without () ("n", round(x)), "detail", f, "n", "(.*)"), r(x) = max by ({KEYS}) (x), '
-             f"avail = node_filesystem_avail_bytes{{{FSEL}}}, size = node_filesystem_size_bytes{{{FSEL}}}, dur = sys({FIRE})")
+             f"avail = {FS_BY} (node_filesystem_avail_bytes{{{FSEL}}}), size = {FS_BY} (node_filesystem_size_bytes{{{FSEL}}}), dur = sys({FIRE})")
 
 
 def Q(body):
@@ -189,7 +194,7 @@ LOG_SILENT = th([{"value": None, "color": "red"}, {"value": 0.001, "color": NEUT
 E.tiles("watch", "The watch itself", [
     ("Sources reporting", "count(up == 1)", {}),
     ("Sources silent", zero("count(up == 0)"), dict(thresholds=PROBLEM)),
-    ("Log lines per second", zero(LOG_LINES), dict(decimals=1, thresholds=LOG_SILENT)),
+    ("Log lines per second", zero(LOG_LINES), dict(decimals=None, thresholds=LOG_SILENT)),
     ("Alert delivery", zero('count(ALERTS{alertname="Watchdog",alertstate="firing"})'), dict(mappings=yes("Alive", "Silent"), thresholds=th([{"value": None, "color": "red"}, {"value": 1, "color": NEUTRAL}]))),
     ("Alert rules loaded", "count(vmalert_alerting_rules_last_evaluation_samples)", {}),
     ("Alert rules failing", zero("count(increase(vmalert_alerting_rules_errors_total[1h]) > 0)"), dict(thresholds=BROKEN))],
