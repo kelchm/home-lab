@@ -27,6 +27,8 @@ A full 1.14 render cannot be dry-run successfully against the current 1.13 API: 
 
 The OS upgrade retains the live configuration. Do not run `task talos:apply-node` as part of this OS-only acceptance test. An eventual configuration migration needs its own explicit approval and review of the post-upgrade dry-run. Talos 1.14 also removes apply-config's `--mode=reboot`; configuration changes requiring a reboot must be handled with the guarded node procedure.
 
+A separate native dry-run using each node's exact persisted 1.13 config with only the installer tag changed succeeded on all three nodes and showed only that tag delta. This is an installer-only preview in the retained schema, not a successful preview of the full 1.14 render. Neither configuration was applied.
+
 ## Before the first node
 
 Follow [the rollout skill](../../.agents/skills/talos-rollout/SKILL.md). The user merges the PR and approves each node separately in the conversation. Update the checkout to merged main and compare `talenv.yaml`, `.mise.toml`, and `talconfig.yaml` before running a task.
