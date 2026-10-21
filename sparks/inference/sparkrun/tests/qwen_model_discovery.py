@@ -5,6 +5,8 @@ import json
 import urllib.request
 
 EFFORTS = ("none", "minimal", "low", "medium", "high", "xhigh", "max")
+# The pinned checkpoint's template levels, highest first, and the switch.
+PROFILE_EFFORTS = ["xhigh", "medium", "low", "none"]
 
 
 def fetch(url, body=None, timeout=120):
@@ -14,7 +16,7 @@ def fetch(url, body=None, timeout=120):
         return json.load(response)
 
 
-def check_entry(entry, context):
+def check_entry(entry, context, efforts=PROFILE_EFFORTS):
     """The fields a client configures itself from; returns the reasoning object."""
     for field in ("context_length", "max_model_len"):
         if entry.get(field) != context:
@@ -27,6 +29,8 @@ def check_entry(entry, context):
     supported = reasoning.get("supported_efforts")
     if not isinstance(supported, list) or not supported or len(set(supported)) != len(supported) or not set(supported) <= set(EFFORTS):
         raise RuntimeError(f"supported_efforts {supported!r} is not a list of distinct accepted efforts")
+    if supported != efforts:
+        raise RuntimeError(f"supported_efforts {supported!r}, expected {efforts!r}")
     if "default_effort" in reasoning and reasoning["default_effort"] not in supported:
         raise RuntimeError(f"default_effort {reasoning['default_effort']!r} is not a supported effort")
     return reasoning

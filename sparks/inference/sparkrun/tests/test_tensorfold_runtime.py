@@ -528,6 +528,8 @@ def test_qwen_discovery_readiness_and_live_check_pin_the_model_entry():
                    {"reasoning": {**reasoning, "supported_efforts": ["xhigh", "low", "low"]}},
                    {"reasoning": {**reasoning, "supported_efforts": ["xhigh", "turbo"]}},
                    {"reasoning": {**reasoning, "supported_efforts": []}},
+                   {"reasoning": {**reasoning, "supported_efforts": ["xhigh", "low", "none"]}},
+                   {"reasoning": {**reasoning, "supported_efforts": ["medium", "xhigh", "low", "none"]}},
                    {"reasoning": {**reasoning, "default_effort": "high"}}):
         with pytest.raises(RuntimeError):
             live.check_entry({**QWEN_DISCOVERY_ENTRY, **change}, 1048576)

@@ -76,6 +76,10 @@ def main():
     parser.add_argument("--refresh", metavar="CHECKOUT", help="Rewrite the server patches from a TensorFold checkout")
     parser.add_argument("--record-binary", action="store_true", help="Write the built binary's sha256 into the lock")
     args = parser.parse_args()
+    if args.refresh and args.record_binary:
+        parser.error("--record-binary records a built binary: rebuild with build/build.sh --record after --refresh")
+    if LOCK.is_symlink() or not LOCK.is_file():
+        raise ValueError("Missing or linked upstream.lock.json")
     lock = json.loads(LOCK.read_text())
     if args.refresh:
         refresh(lock, args.refresh)
