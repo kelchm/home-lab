@@ -205,6 +205,8 @@
       "record": {"msg": "2026/10/19 21:43:44.512001 machined OK [/machine.MachineService/Processes] 1.2ms unary Success (:authority=localhost;content-type=application/grpc;user-agent=grpc-go/1.83.2)", "talos-time": "2026-10-19T21:43:44.512100000Z", "talos-level": "info", "talos-service": "machined"}},
     {"name": "talos-auditd", "dropped": true,
       "record": {"msg": "type=AVC msg=audit(1792446198.661:6939296): avc:  denied  { unlink } for  pid=4242 comm=\"cilium-agent\" permissive=1", "talos-time": "2026-10-19T21:43:18.661000000Z", "talos-level": "info", "talos-service": "auditd"}},
+    {"name": "talos-kernel-service-log", "dropped": true,
+      "record": {"msg": "kern: warning: [2026-10-21T00:25:11.844810813Z]: audit: audit_lost=2502139 audit_rate_limit=4096 audit_backlog_limit=8192", "talos-time": "2026-10-21T00:25:33.697467440Z", "talos-level": "info", "talos-service": "kernel"}},
     {"name": "talos-dns-cache-debug", "dropped": true,
       "record": {"msg": "2026-10-19T21:40:01.100Z \u001b[35mDEBUG\u001b[0m making dns request", "talos-time": "2026-10-19T21:40:01.100200000Z", "talos-level": "info", "talos-service": "dns-resolve-cache", "component": "dns-resolve-cache", "data": ";; opcode: QUERY"}},
     {"name": "talos-machined-not-authorized",
