@@ -1,10 +1,7 @@
-# Retained command channels for the downstream eight-port KVM. The switch recognizes
-# Left Ctrl, Left Ctrl, DigitN, but needs more time between events than the
-# GL.iNet shortcut UI provides.
 otg:
     devices:
         # Camera support sets the whole gadget's class to EF/02/01 even when
-        # the camera is not connected. The Hotkey port stops consuming HID.
+        # no USB camera function is linked. The Hotkey port stops consuming HID.
         camera:
             enabled: false
 
@@ -13,6 +10,8 @@ kvmd:
     prometheus:
         auth:
             enabled: false
+    # Retained channels for the downstream eight-port KVM. The switch recognizes
+    # Left Ctrl, Left Ctrl, DigitN, with more delay than GL.iNet shortcuts provide.
     gpio:
         drivers:
             kvm_channel_1:

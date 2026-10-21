@@ -74,11 +74,11 @@ ssh root@10.32.20.10 '
 
 ### USB class compatibility
 
-On `V1.10.1 release2`, leaving `otg.devices.camera.enabled` true makes the entire USB gadget advertise class/subclass/protocol `EF/02/01` (an IAD composite device), even when the camera is not connected and only HID functions are linked. The downstream switch's Hotkey port configures this device but does not consume keyboard or mouse reports. Physical channel buttons and video still work. [`override.yaml`](override.yaml) disables this unused camera capability so a freshly created gadget uses `00/00/00` and its interfaces identify themselves as HID. Keyboard and both mice remain enabled; virtual media remains disabled through `user/boot.yaml`.
+On `V1.10.1 release2`, leaving `otg.devices.camera.enabled` true makes the entire USB gadget advertise class/subclass/protocol `EF/02/01` (an IAD composite device), even when no USB camera function is linked. The downstream switch's Hotkey port configures this device but does not consume keyboard or mouse reports. Physical channel buttons and HDMI video still work. [`override.yaml`](override.yaml) disables this unused USB camera capability so a freshly created gadget uses `00/00/00` and its interfaces identify themselves as HID. HDMI capture is separate and unaffected by this setting. Keyboard and both mice remain enabled; virtual media remains disabled through `user/boot.yaml`.
 
-Verified 2026-10-20: the original class accepted zero empty keyboard reports, changing only those three class bytes allowed 12 successive reports, restoring the original class reproduced the failure, and returning to `00/00/00` restored it again. The existing switch helper then selected port 2 (`pve-sbx-2`), its host enumerated all three HID interfaces, and paced typing appeared at its login prompt and was erased without submission. Rebuilding the gadget from the saved override also produced `00/00/00`; switching between ports 1 and 2 worked, and pve-sbx-2 recorded a Right-arrow press and release in its input events after the rebuild. The Logitech USB identity was unchanged. An appliance reboot was not part of this validation, and the exact time the incompatible setting first appeared is unknown.
+Verified 2026-10-20: the original class accepted zero empty keyboard reports, changing only those three class bytes allowed 12 successive reports, restoring the original class reproduced the failure, and returning to `00/00/00` restored it again. The existing switch helper then selected port 2 (`pve-sbx-2`), its host enumerated all three HID interfaces, and paced typing appeared at its login prompt and was erased without submission. Rebuilding the gadget from the saved override also produced `00/00/00`; switching between ports 1 and 2 worked, and pve-sbx-2 recorded a Right-arrow press and release in its input events after the rebuild. The Logitech USB identity was unchanged. An appliance reboot was not part of this validation; recheck the class bytes, linked functions, and actual input after the next appliance reboot. The exact time the incompatible setting first appeared is unknown.
 
-Changing the override requires rebuilding the USB gadget; restarting only kvmd does not change its USB descriptors. Run **Apply** below to install the override and rebuild the gadget. Stop kvmd and wait for its HID workers to exit before tearing down the gadget: rebuilding while they held open HID devices produced a kernel reference-count warning on this firmware. This briefly disconnects keyboard and mouse from the selected host and restarts open console sessions. No host reboot is needed. After applying, check the live class bytes and linked functions:
+Changing the override requires rebuilding the USB gadget; restarting only kvmd does not change its USB descriptors. Run **Apply** below to install the override and rebuild the gadget. Stop kvmd and wait for its HID workers to exit before tearing down the gadget: rebuilding while they held open HID devices produced a kernel reference-count warning on this firmware. This briefly disconnects keyboard and mouse from the selected host and drops open console sessions. No host reboot is needed. After applying, check the live class bytes and linked functions:
 
 ```sh
 ssh root@10.32.20.10 '
@@ -91,7 +91,7 @@ ssh root@10.32.20.10 '
 
 Expect `0x00` three times and only `hid.usb0`, `hid.usb1`, and `hid.usb2` linked. Then verify actual channel selection and one harmless key at a safe screen. USB state `configured`, an existing `/dev/hidg0`, and healthy Prometheus metrics do not prove that input works.
 
-If switch clicks hang, inspect `ps -ef` and each helper's `/proc/<pid>/wchan`. A helper blocked in `f_hidg_write` can hold `/run/kvmd-kvm-switch.lock` indefinitely while later clicks queue behind it. Stop those specific `kvm-switch` processes before reconnecting USB so old channel selections cannot fire after recovery. The helpers currently have no write or lock timeout. Power-cycling the switch, rebooting the GLKVM, changing USB identity, and unlinking the mice did not fix this class mismatch.
+If switch clicks hang, inspect `ps -ef` and each helper's `/proc/<pid>/wchan`. A helper blocked in `f_hidg_write` can hold `/run/kvmd-kvm-switch.lock` indefinitely while later clicks queue behind it. Stop those specific `kvm-switch` processes before reconnecting USB so old channel selections cannot fire after recovery. The helpers have no write or lock timeout ([#928](https://github.com/kelchm/home-lab/issues/928)). Power-cycling the switch, rebooting the GLKVM, changing USB identity, and unlinking the mice did not restore input while the class was `EF/02/01`.
 
 ## Remote console helpers
 
@@ -238,10 +238,10 @@ ssh root@10.32.20.10 '
     trap restore_kvmd EXIT
     # Discard queued input before USB returns. SIGKILL skips blocked cleanup writes.
     helpers="^[^ ]*python3 /etc/kvmd/user/bin/(kvm-switch|hid-type|hid-hold-key)( |$)"
-    pkill -KILL -f "$helpers" || true
     /etc/init.d/S98kvmd stop
     workers="[k]vmd/(main|hid-|streamer)|$helpers"
     for attempt in 1 2 3 4 5 6 7 8 9 10; do
+        pkill -KILL -f "$helpers" || true
         pgrep -f "$workers" >/dev/null || break
         sleep 1
     done
@@ -308,8 +308,7 @@ After the update:
 
 1. Confirm SSH, `/dev/hidg0`, and `/run/kvmd/ustreamer.sock` exist, and that `ls /sys/kernel/config/usb_gadget/rockchip/configs/*/` links no `mass_storage` function.
 2. Keep the firmware's stock nginx configuration; do not restore the old PiKVM web configuration from a backup.
-3. Re-run **Apply** to restore the known files and modes.
-   The USB gadget rebuild applies the camera-disable override; confirm the three device class bytes are `00/00/00` as described under **USB class compatibility**.
+3. Re-run **Apply** to restore the known files and modes. The USB gadget rebuild applies the camera-disable override; confirm the three device class bytes are `00/00/00` as described under **USB class compatibility**.
 4. Run the non-interactive checks above and capture a screen.
 5. With a host at a safe menu, verify one paced HID key and one downstream KVM
    channel switch.
@@ -328,7 +327,7 @@ Do not run `kvmd` itself over SSH, including `kvmd -M` to validate configuration
 
 ## Recovery
 
-For a missing keyboard or hung channel switches with USB class `EF/02/01`, use **Apply** to install the camera-disable override and rebuild the USB gadget. The kvmd-only restarts below recover the daemon's configuration; they do not change USB descriptors. If gadget teardown fails or times out, stop and inspect its log and remaining configfs state; the Apply exit trap restores the web daemon when it has stopped, but cannot repair a partially removed USB gadget.
+For a missing keyboard or hung channel switches with USB class `EF/02/01`, use **Apply** to install the camera-disable override and rebuild the USB gadget. The kvmd-only restarts below recover the daemon's configuration; they do not change USB descriptors. If gadget teardown fails or times out, stop and inspect its log and remaining configfs state; the Apply exit trap restarts kvmd if it is not running, but cannot repair a partially removed USB gadget.
 
 If `kvmd` does not start and the appliance backup survived, restore it:
 
@@ -339,6 +338,8 @@ ssh root@10.32.20.10 '
     /etc/init.d/S98kvmd restart
 '
 ```
+
+That backup may predate the camera-disable fix. Before another appliance reboot or USB rebuild, run **Apply** or ensure the restored override contains `otg.devices.camera.enabled: false`. A kvmd restart alone does not update the USB descriptors. Verify the live class bytes and actual input after the next reboot.
 
 If the appliance backup did not survive, upload the committed override instead:
 
