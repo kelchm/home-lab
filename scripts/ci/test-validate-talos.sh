@@ -58,6 +58,32 @@ reset_fixture
 yq -i '.machine.kubelet.image = "ghcr.io/siderolabs/kubelet:v1.36.1"' "${TEST_DIR}/talos/patches/global/machine-kubelet.yaml"
 expect_failure 'kubelet version drift' '.machine.kubelet.image version v1.36.1 does not match talenv.yaml'
 
+for component in KubeAPIServerConfig KubeControllerManagerConfig KubeSchedulerConfig; do
+    reset_fixture
+    COMPONENT="${component}" yq -i '(select(.kind == strenv(COMPONENT)) | .image) = "registry.k8s.io/component:v1.36.1"' "${TEST_DIR}/talos/patches/controller/cluster.yaml"
+    expect_failure "${component} version drift" "${component}.image version v1.36.1 does not match talenv.yaml"
+done
+
 reset_fixture
-yq -i '(select(.kind == "KubeAPIServerConfig") | .image) = "registry.k8s.io/kube-apiserver:v1.36.1"' "${TEST_DIR}/talos/patches/controller/cluster.yaml"
-expect_failure 'control-plane version drift' 'KubeAPIServerConfig.image version v1.36.1 does not match talenv.yaml'
+yq -i '(select(.kind == "KubeAPIServerConfig") | .certExtraSANs) -= ["k8s-prod.home.kelch.io"]' "${TEST_DIR}/talos/patches/controller/cluster.yaml"
+expect_failure 'API certificate SAN drift' 'missing API certificate SAN k8s-prod.home.kelch.io'
+
+reset_fixture
+yq -i '.patches -= ["@./patches/global/upgrade-compatibility.yaml"]' "${TEST_DIR}/talos/talconfig.yaml"
+expect_failure 'unintended filesystem trim' 'trim and workload isolation must remain disabled'
+
+reset_fixture
+cat >> "${TEST_DIR}/talos/patches/controller/cluster.yaml" <<'PATCH'
+---
+apiVersion: v1alpha1
+kind: KubeEtcdEncryptionConfig
+config:
+  resources:
+    - resources: [secrets]
+      providers:
+        - secretbox:
+            keys:
+              - name: future-key
+                secret: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+PATCH
+expect_failure 'unexpected encryption key layout' 'unexpected encryption providers; refusing to rewrite them'

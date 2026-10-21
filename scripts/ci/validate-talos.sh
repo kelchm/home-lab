@@ -6,6 +6,7 @@ set -o nounset
 set -o pipefail
 
 readonly TALOS_DIR="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../talos" && pwd)}"
+readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 umask 077
 readonly FIXTURE_DIR="$(mktemp -d)"
@@ -21,6 +22,7 @@ talhelper genconfig \
     --secret-file "${FIXTURE_DIR}/talsecret.yaml" \
     --out-dir "${FIXTURE_DIR}/clusterconfig" \
     --offline-mode
+"${SCRIPT_DIR}/../talos/preserve-encryption.sh" "${FIXTURE_DIR}"/clusterconfig/*.yaml
 
 readonly TALOS_VERSION="$(yq --exit-status '.talosVersion' talenv.yaml)"
 readonly KUBERNETES_VERSION="$(yq --exit-status '.kubernetesVersion' talenv.yaml)"
@@ -53,6 +55,31 @@ for config in "${node_configs[@]}"; do
         for component in KubeAPIServerConfig KubeControllerManagerConfig KubeSchedulerConfig; do
             check_image_version "${config}" "select(.kind == \"${component}\") | .image" "${KUBERNETES_VERSION}" "${component}.image"
         done
+        if ! yq -o=json 'select(.kind == "KubeEtcdEncryptionConfig")' "${config}" | jq --exit-status '.config.resources |
+            length == 1 and .[0].resources == ["secrets"] and
+            (.[0].providers | length == 2) and
+            (.[0].providers[0].secretbox.keys | length == 1) and
+            .[0].providers[0].secretbox.keys[0].name == "key2" and
+            .[0].providers[1] == {"identity": {}}' >/dev/null; then
+            echo "${config##*/}: encryption must preserve secretbox key2 and the identity fallback" >&2
+            exit 1
+        fi
+        if [[ "$(yq --exit-status '.secrets.secretboxencryptionsecret' "${FIXTURE_DIR}/talsecret.yaml")" != \
+            "$(yq --exit-status 'select(.kind == "KubeEtcdEncryptionConfig") | .config.resources[0].providers[0].secretbox.keys[0].secret' "${config}")" ]]; then
+            echo "${config##*/}: encryption key material changed during rendering" >&2
+            exit 1
+        fi
+        for san in 127.0.0.1 10.32.30.8 k8s-prod.home.kelch.io; do
+            if ! SAN="${san}" yq --exit-status 'select(.kind == "KubeAPIServerConfig") | .certExtraSANs[] | select(. == strenv(SAN))' "${config}" >/dev/null; then
+                echo "${config##*/}: missing API certificate SAN ${san}" >&2
+                exit 1
+            fi
+        done
+    fi
+    forbidden_kinds="$(yq 'select(.kind == "FilesystemTrimConfig" or .kind == "SecurityProfileConfig") | .kind' "${config}")"
+    if [[ -n "${forbidden_kinds}" ]]; then
+        echo "${config##*/}: trim and workload isolation must remain disabled for this rollout" >&2
+        exit 1
     fi
 done
 

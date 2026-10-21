@@ -1,5 +1,5 @@
 # Talos 1.14's generator enables weekly filesystem trim for new clusters.
-# Preserve the existing cluster's opt-in behavior during this OS upgrade.
+# Keep trim disabled, as it is on the existing cluster without this document.
 apiVersion: v1alpha1
 kind: FilesystemTrimConfig
 # Escape the dollar sign through talhelper's environment substitution.

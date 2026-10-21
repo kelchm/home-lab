@@ -6,12 +6,14 @@ tasks:
   generate-config:
     desc: Generate Talos configuration
     dir: '{{.TALOS_DIR}}'
-    cmd: talhelper genconfig
+    cmds:
+      - talhelper genconfig
+      - '{{.ROOT_DIR}}/scripts/talos/preserve-encryption.sh {{.TALOS_DIR}}/clusterconfig/*.yaml'
     preconditions:
       - test -f {{.TALOS_DIR}}/talconfig.yaml
       - test -f {{.ROOT_DIR}}/.sops.yaml
       - test -f {{.SOPS_AGE_KEY_FILE}}
-      - which talhelper
+      - which talhelper yq jq
 
   apply-node:
     desc: Regenerate Talos config, show the dry-run diff, then apply to a node after confirmation [IP=required]

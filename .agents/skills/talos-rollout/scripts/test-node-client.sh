@@ -32,10 +32,11 @@ chmod +x "$TEST_DIR/bin/"*
 export PATH="$TEST_DIR/bin:$PATH"
 
 "$SCRIPT_DIR/with-node-client.sh" 10.32.30.11 talosctl version
-grep -Fxq 'aqua:siderolabs/talos@1.13.11' "$CLIENT_TEST_LOG"
+printf '%s\n' exec aqua:siderolabs/talos@1.13.11 -- talosctl version > "$TEST_DIR/expected"
+cmp "$TEST_DIR/expected" "$CLIENT_TEST_LOG"
 "$SCRIPT_DIR/with-node-client.sh" k8s-prod-2 talosctl etcd members
-grep -Fxq 'aqua:siderolabs/talos@1.14.4' "$CLIENT_TEST_LOG"
-grep -Fxq 'members' "$CLIENT_TEST_LOG"
+printf '%s\n' exec aqua:siderolabs/talos@1.14.4 -- talosctl etcd members > "$TEST_DIR/expected"
+cmp "$TEST_DIR/expected" "$CLIENT_TEST_LOG"
 echo 'ok: mixed nodes select their respective clients and preserve arguments'
 
 expect_no_dispatch() {
