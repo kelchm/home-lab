@@ -791,6 +791,7 @@ SparkRun distributes the weights and the kit. Two inputs are staged once per hos
 The `deepseek-v41-tp2` Python engine in the image writes the rank inputs on its first start. With no workload on either GPU, run this on both hosts at once, the head with `RANK=0` first and then the worker with `RANK=1`, and stop both containers once each host has `tf-ds-rank/` and `dsv41_token_map.json`:
 
 ```sh
+RANK=0  # 1 on the worker
 hub=/opt/spark-cache/huggingface/hub
 weights=$hub/models--LibertAIDAI--DeepSeek-V4.1-Flash-1017-EXL3-2.9bpw/snapshots/0be63c3337efbb2a0061d5b8bb4006fa186d433f
 base=$hub/models--deepseek-ai--DeepSeek-V4.1-Flash-1017/snapshots/1bae0e1088993b9b82de08f59de5be5a34e42170
