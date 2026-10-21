@@ -14,15 +14,19 @@
   const startVideoEl = document.getElementById("start-video");
   const playbackEl = document.getElementById("playback-status");
   const playbackTextEl = document.getElementById("playback-text");
-  const VIDEO_EVENTS = ["play", "playing", "pause", "waiting", "emptied", "resize", "error"];
+  const VIDEO_EVENTS = ["loadeddata", "canplay", "play", "playing", "pause", "waiting", "emptied", "resize", "error"];
+  const MEDIA_CONTROL_EVENTS = ["pointerdown", "pointerup", "mousedown", "mouseup", "mousemove", "click", "dblclick", "contextmenu", "wheel", "touchstart", "touchmove", "touchend", "keydown", "keyup"];
 
   let isAuthenticated = false;
+  let consoleReady = false;
   let isSwitching = false;
   let isFailedClosed = false;
   let authCheckInFlight = false;
   let authPollTimer = null;
   let lastRequestedHost = null;
   let observedVideo = null;
+  let inputLayer = null;
+  let frameObserver = null;
   let playAttempt = 0;
 
   function setStatus(state, message) {
@@ -32,7 +36,25 @@
 
   function setButtonsDisabled(disabled) {
     for (const btn of buttons) {
-      btn.disabled = disabled || isFailedClosed;
+      btn.disabled = disabled || isFailedClosed || !consoleReady;
+    }
+  }
+
+  function reportAuthenticatedStatus() {
+    if (!consoleReady) {
+      setStatus("checking", "Loading console…");
+    } else if (lastRequestedHost) {
+      setStatus("success", `Requested ${lastRequestedHost} · Confirm host on screen`);
+    } else {
+      setStatus("ready", "Ready · Choose a host, then confirm it on screen");
+    }
+  }
+
+  function setConsoleReady(ready) {
+    consoleReady = ready;
+    setButtonsDisabled(!isAuthenticated || isSwitching);
+    if (isAuthenticated && !isSwitching && !isFailedClosed) {
+      reportAuthenticatedStatus();
     }
   }
 
@@ -140,11 +162,7 @@
       stopAuthPoll();
       setButtonsDisabled(false);
 
-      if (lastRequestedHost) {
-        setStatus("success", `Requested ${lastRequestedHost} · Confirm host on screen`);
-      } else {
-        setStatus("ready", "Ready · Choose a host, then confirm it on screen");
-      }
+      reportAuthenticatedStatus();
     } catch (_) {
       if (isFailedClosed || isSwitching) {
         return;
@@ -160,7 +178,7 @@
   }
 
   async function requestSwitch(button) {
-    if (isFailedClosed || isSwitching || !isAuthenticated) {
+    if (isFailedClosed || isSwitching || !isAuthenticated || !consoleReady) {
       return;
     }
 
@@ -252,11 +270,23 @@
     return !video.paused && video.readyState >= 2 && video.videoWidth > 0;
   }
 
+  function syncInputLayer(video) {
+    // WebKit's native Play button is inside the video. The stock HID layer covers it.
+    inputLayer?.toggleAttribute("data-hosts-playback-paused", !hasVideoFrame(video));
+  }
+
+  function isolateMediaControl(event) {
+    // Bubble phase: native controls must receive the event before we stop it from
+    // reaching the stock stream-box mouse/keyboard handlers. Keep default actions.
+    event.stopPropagation();
+  }
+
   function reportVideoState(video) {
+    syncInputLayer(video);
     if (video.error) {
       setPlayback("error", `Video error (code ${video.error.code}) · Try Start video`);
     } else if (video.paused) {
-      setPlayback("error", "Video paused · Try Start video");
+      setPlayback("checking", "Video paused · Click Play in the console or choose a host");
     } else if (hasVideoFrame(video)) {
       setPlayback("ready", `Playback started · ${video.videoWidth}×${video.videoHeight}`);
     } else {
@@ -266,6 +296,7 @@
 
   function onVideoEvent(event) {
     if (event.target === observedVideo) {
+      syncInputLayer(observedVideo);
       if (event.type === "waiting" || event.type === "emptied") {
         setPlayback("checking", "Waiting for video frames");
       } else {
@@ -282,13 +313,61 @@
       for (const name of VIDEO_EVENTS) {
         observedVideo.removeEventListener(name, onVideoEvent);
       }
+      for (const name of MEDIA_CONTROL_EVENTS) {
+        observedVideo.removeEventListener(name, isolateMediaControl);
+      }
     }
+    inputLayer?.removeAttribute("data-hosts-playback-paused");
     observedVideo = video;
+    inputLayer = video?.ownerDocument.getElementById("video-wrapper") || null;
     if (video) {
       for (const name of VIDEO_EVENTS) {
         video.addEventListener(name, onVideoEvent);
       }
+      for (const name of MEDIA_CONTROL_EVENTS) {
+        video.addEventListener(name, isolateMediaControl);
+      }
+      reportVideoState(video);
     }
+  }
+
+  function bindConsoleDocument() {
+    frameObserver?.disconnect();
+    frameObserver = null;
+    observeVideo(null);
+    setConsoleReady(false);
+    let doc;
+    try {
+      doc = frameEl.contentDocument;
+    } catch (_) {
+      return;
+    }
+    if (!doc?.documentElement) {
+      return;
+    }
+    if (!doc.getElementById("hosts-playback-style")) {
+      const style = doc.createElement("style");
+      style.id = "hosts-playback-style";
+      style.textContent = "#video-wrapper[data-hosts-playback-paused] { pointer-events: none !important; }";
+      (doc.head || doc.documentElement).append(style);
+    }
+    const discoverVideo = () => {
+      const video = doc.getElementById("stream-video");
+      if (video !== observedVideo) {
+        playAttempt += 1;
+        observeVideo(video);
+        if (!video) {
+          playbackEl.hidden = true;
+        }
+      }
+      const ready = !!(video || doc.getElementById("stream-canvas"));
+      if (ready !== consoleReady) {
+        setConsoleReady(ready);
+      }
+    };
+    frameObserver = new MutationObserver(discoverVideo);
+    frameObserver.observe(doc.documentElement, { childList: true, subtree: true });
+    discoverVideo();
   }
 
   function findConsoleVideo() {
@@ -355,6 +434,12 @@
 
   for (const btn of buttons) {
     btn.addEventListener("click", () => {
+      // The host choice is already a trusted gesture. Unlock playback before
+      // requestSwitch reaches its first await; switching itself still runs once.
+      const found = findConsoleVideo();
+      if (found.video?.paused) {
+        startVideo();
+      }
       void requestSwitch(btn);
     });
   }
@@ -364,10 +449,12 @@
       observeVideo(null);
       playAttempt += 1;
       playbackEl.hidden = true;
+      bindConsoleDocument();
       if (!isFailedClosed && !isSwitching) {
         void checkAuth();
       }
     });
+    bindConsoleDocument();
   }
 
   void checkAuth();
