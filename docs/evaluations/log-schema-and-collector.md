@@ -115,6 +115,10 @@ In every case the collector stayed up, delivered new records from another file a
 
 **Decision.** Turn checksums off. With them on, a kill, including an OOM kill, discards every chunk written since its last sync, about a flush interval of each busy file's records, although the data is on disk and consistent. With them off, the kills lost nothing, the simulated power losses lost the same as with them on, and a damaged chunk delivers the records before the damage instead of none. The cost is integrity checking: a damaged chunk can deliver a record with a zeroed or missing span, and drops the records after damage that breaks decoding without a log line, where the checksum would have rejected the whole chunk with an error. Damage takes a power loss or a kill during the copy of a new chunk's first append; loss to the checksum comes with any kill while files are being read.
 
+**Production check.** On 2026-10-21, with checksums off live, the runbook's kill drill ran on k8s-prod-3 (Talos 1.14.4, `/var/lib/fluent-bit` on the node's XFS `/var`). The numbered fixture wrote 20,000 records at 250 per second, and its kubelet files held all 20,000. The collector was killed twice with SIGKILL, 30 seconds apart and before the fixture's first rotation. VictoriaLogs stored all 20,000 records once each, every record passed the checks, and the restarted collector logged no warning or error.
+
+Revisit if a Fluent Bit release keeps a valid CRC in the chunk header between syncs: checksums on would then lose nothing to a kill, and would reject a damaged chunk instead of delivering its records with a zeroed span.
+
 ## Multi-line events
 
 Evaluated 2026-10-19 and 20: each container line stays one record, with no multi-line grouping at collection.
