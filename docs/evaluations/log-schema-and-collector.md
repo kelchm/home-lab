@@ -51,6 +51,8 @@ Added October 19, 2026 ([#891](https://github.com/kelchm/home-lab/issues/891)). 
 
 **Verification.** `scripts/logging/test-fluent-bit.py` sends 30 Talos records over TCP through the pinned image: each drop rule and its kept counterpart, zap, Go-log, CNI, klog, logrus-text, grpc-go and JSON service lines, JSON messages that look like text formats, klog with trailing JSON, a logrus timestamp with an offset, kubelet info, error and nested records, three kernel priorities and an unrecognized record. A replay of node 1's captured buffers, 35,790 records sent at once, delivered all 25,055 expected records with no mapping errors. Sent into VictoriaLogs v1.53.0 with 30-day retention, every kept fixture was stored with `{k8s.node.name, service.name}` as its stream.
 
+**Rollout.** Applied to the three nodes on October 21, 2026 ([#906](https://github.com/kelchm/home-lab/issues/906)). Each node's first delivery reached back to its October 5–6 boot with no output errors, retries, mapping errors or rows dropped by VictoriaLogs. k8s-prod-1 showed that `machine.logging.destinations` also sends Talos's `kernel` service log, a text copy of the `KmsgLogConfig` records, which the collector now drops. Restarting the collectors then left k8s-prod-1's kernel connection on the deleted pod for 16 minutes, losing 14 records.
+
 ## Collector comparison
 
 Measured locally on 2026-10-18 by replaying a one-hour production export (53,376 rows from 98 container files) at the production rate of about 12 lines/s, then a 2,000 lines/s burst. Memory is cgroup working set, the basis of the production vlagent figure. One collector processed all three nodes' files and no Kubernetes API was available, so per-node CPU in the cluster is lower.
