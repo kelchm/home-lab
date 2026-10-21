@@ -455,6 +455,19 @@ tests:
         exp_samples:
           - labels: drive:health_status{instance="nas",platform="synology",device="Disk 5"}
             value: 0
+      - expr: drive:health_missing{instance="nas"}
+        eval_time: 20m
+        exp_samples:
+          - labels: drive:health_missing{instance="nas",platform="synology",device="Disk 1"}
+            value: 1
+          - labels: drive:health_missing{instance="nas",platform="synology",device="Disk 2"}
+            value: 1
+          - labels: drive:health_missing{instance="nas",platform="synology",device="Disk 3"}
+            value: 1
+          - labels: drive:health_missing{instance="nas",platform="synology",device="Disk 4"}
+            value: 0
+          - labels: drive:health_missing{instance="nas",platform="synology",device="Disk 5"}
+            value: 0
     alert_rule_test:
       - eval_time: 20m
         alertname: DriveHealthMissing
@@ -487,3 +500,21 @@ tests:
             exp_annotations:
               summary: Drive health is missing for nvme0 on k8s-prod-1
               description: Check the collector and device access. Removed disks remain expected for seven days.
+
+  - name: Healthy drives record zero, so the missing-health rule is never empty
+    interval: 1m
+    input_series:
+      - series: smartctl_device_smart_status{instance="pve-sbx-1",platform="pve",device="nvme0"}
+        values: 1+0x20
+      - series: node_nvme_info{instance="pve-sbx-1",platform="pve",device="nvme0",state="live"}
+        values: 1+0x20
+    promql_expr_test:
+      - expr: drive:health_missing
+        eval_time: 20m
+        exp_samples:
+          - labels: drive:health_missing{instance="pve-sbx-1",platform="pve",device="nvme0"}
+            value: 0
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: DriveHealthMissing
+        exp_alerts: []
