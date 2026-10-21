@@ -593,7 +593,7 @@
               }
             ]
           },
-          "unit": "decbits"
+          "unit": "bytes"
         },
         "overrides": []
       },
@@ -1037,7 +1037,7 @@
           "expr": "sum((workqueue_depth{namespace=\"$namespace\",pod=~\".*controller.*\"})) by (name)",
           "hide": false,
           "interval": "",
-          "legendFormat": "{{pod}}",
+          "legendFormat": "{{name}}",
           "range": true,
           "refId": "A"
         }

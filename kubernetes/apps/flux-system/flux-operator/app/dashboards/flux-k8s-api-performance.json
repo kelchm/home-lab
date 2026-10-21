@@ -879,7 +879,7 @@
               }
             ]
           },
-          "unit": "decbits"
+          "unit": "bytes"
         },
         "overrides": []
       },

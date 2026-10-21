@@ -7,7 +7,7 @@ resources:
   - ./ocirepository.yaml
 
 configMapGenerator:
-  # controlplaneio-fluxcd/flux-operator 4746bb3266ae4fd398079e71dcdbdbc563213196; clear database id and fixed datasource selection.
+  # controlplaneio-fluxcd/flux-operator 4746bb3266ae4fd398079e71dcdbdbc563213196; clear database id and fixed datasource selection; byte units on the Memory stats; workqueue name in the Queued Reconciliations legend.
   - name: grafana-dashboard-flux-performance
     files:
       - flux-performance.json=./dashboards/flux-performance.json
