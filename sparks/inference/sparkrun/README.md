@@ -837,7 +837,7 @@ sparkrun logs "$dsv41" --cluster sparks
 sparkrun stop "$dsv41" --cluster sparks
 ```
 
-The rollback is the Qwen [discovery profile](#model-discovery-variant). The previous engine image and the hand-run copies were removed from both hosts on October 21; an older engine is rebuilt from this mod's history with `build/build.sh`.
+The rollback is the Qwen [discovery profile](#model-discovery-variant). No earlier DeepSeek engine is kept: its image and the hand-run copies were removed from both hosts on October 21, and this mod has never pinned another engine.
 
 ### October 21 launch
 
