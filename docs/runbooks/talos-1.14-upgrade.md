@@ -21,7 +21,7 @@ Talos stopped publishing `ghcr.io/siderolabs/installer` in 1.14, which explains 
 
 ## Regeneration and dry-run sequencing
 
-Generate production configuration into a private temporary output directory, keeping the credential symlink intact. Generated node files and talosconfig contain credentials and must remain gitignored/local. Publish only redacted configuration and diffs. The PR contains redacted regenerated files for all nodes, the offline rendering diff, and native dry-run output.
+Generate production configuration into a private temporary output directory, keeping the credential symlink intact. Generated node files and talosconfig contain credentials and must remain gitignored/local. Publish only redacted configuration and diffs. The [PR description](https://github.com/kelchm/home-lab/pull/922) contains expandable sections with redacted regenerated files for all nodes, the offline rendering diff, and native dry-run output.
 
 A full 1.14 render cannot be dry-run successfully against the current 1.13 API: all three nodes rejected `DiscoveryServiceConfig` as unregistered. This is a format-version boundary, not a successful apply preview. Repeat the full dry-run after each node runs 1.14, with a matching talosctl, before contemplating any configuration apply. Do not apply the new documents to a 1.13 node.
 
@@ -47,7 +47,7 @@ Before the first upgrade, save and verify an etcd snapshot outside the repositor
 
 ## Per-node procedure and AVC acceptance
 
-Run only the approved node through `task talos:upgrade-node IP=<ip>` with a node-matched talosctl in its execution environment. Preserve `--drain-timeout=15m`, `--timeout=20m`, and `--reboot-mode=powercycle`. During mixed versions, direct read-only Talos checks must also select the version matching each target node.
+Run only the approved node through `task talos:upgrade-node IP=<ip>`. Preflight selects a client independently for every node's version and etcd member query; its cluster health RPC uses the client matching the node serving that RPC. The task also runs the candidate's generated upgrade command inside `with-node-client.sh`. This helper reads that node's Kubernetes-reported OS with an explicit kubeconfig and selects the exact Talos version through mise. Missing credentials, a failed lookup or an unrecognized version aborts the command. It is intended for the healthy pre-upgrade state; after reboot use the expected 1.14.4 client and verify the server version before continuing. Preserve `--drain-timeout=15m`, `--timeout=20m`, and `--reboot-mode=powercycle`. Direct read-only Talos checks must also select the version matching each target node.
 
 After the node returns, use talosctl 1.14.4 for it. Verify the version and the skill's complete gates: etcd quorum, every Kubernetes node Ready and uncordoned, every in-use Longhorn volume attached and healthy with none degraded/faulted, and every instance-manager Running/Ready with `longhorn-system/storage-network` on `lhnet1` and a `10.32.25.x` address. Verify Cilium, Multus and the untaint safeguards recover. Stop on any failure.
 
@@ -55,9 +55,9 @@ After the node returns, use talosctl 1.14.4 for it. Verify the version and the s
 
 For each upgraded node:
 
-1. Capture `talosctl logs auditd` and `talosctl dmesg` before and after approximately ten minutes. Keep the raw logs private/local. Record the last audit serial, query timestamps, last printed `audit_lost`, node version and uptime; detect resets before computing deltas. Stream auditd during the interval if possible to strengthen the zero-Cilium-AVC check beyond the rotating buffer.
+1. Capture `talosctl logs auditd` and `talosctl dmesg` before and after approximately ten minutes, and continuously capture auditd with `talosctl logs auditd --follow` throughout the timed interval. Keep the raw logs private/local. Record the last audit serial, query timestamps, last printed `audit_lost`, node version and uptime; detect resets before computing deltas. Record the stream's start/end times and any disconnect, and filter records by audit timestamp to exclude the initial historical buffer. A snapshot-only or interrupted capture cannot establish zero AVCs over the interval; repeat the continuous capture before accepting that result.
 2. Compute audit serial growth per second and last-printed `audit_lost` growth per second independently. They count different units (events versus records); do not subtract them. A quiet loss counter means no additional loss was reported during the interval, not a complete kernel audit-status query.
-3. Count AVCs by `comm` and `tcontext`, distinguishing rotating-buffer samples from a continuous interval capture. Require no `cilium-agent` AVCs against `run_t` or `bpf_t` in the observed interval. Record other Cilium contexts if any appear.
+3. Count AVCs by `comm` and `tcontext`, decoding hex-encoded process names and distinguishing rotating-buffer samples from the continuous interval capture. Require no `cilium-agent` AVCs against `run_t` or `bpf_t` in the uninterrupted interval capture. Record other Cilium contexts if any appear. Increased `audit_lost` makes a zero count inconclusive because kernel-dropped records cannot reach the stream; record that limitation and corroborate with read-only label/policy evidence or repeat during a loss-free interval.
 4. If an existing container has suitable read-only tools, inspect the SELinux labels on the host-mounted `/run/cilium` and `/run/cilium/state` (for example `ls -Zd`). Do not create a debug pod, relabel paths or install tools solely for this check without approval. If unavailable, record that limitation separately from the AVC result.
 5. Record rates, sample/interval counts, label evidence, remaining sources and the health result in #911, then stop for the next node's approval.
 

@@ -506,6 +506,10 @@ jobs:
         if: needs.pre-job.outputs.scripts_changed == 'true'
         run: git ls-files -z -- '*.sh' | xargs -0 shellcheck
 
+      - name: Validate mixed-version Talos client selection
+        if: needs.pre-job.outputs.scripts_changed == 'true'
+        run: .agents/skills/talos-rollout/scripts/test-node-client.sh
+
       - name: Validate Kanidm ceiling sync
         if: needs.pre-job.outputs.scripts_changed == 'true'
         run: scripts/ci/test-sync-kanidm-version-ceiling.sh

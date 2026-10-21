@@ -49,11 +49,13 @@ tasks:
       - '{{.ROOT_DIR}}/.agents/skills/talos-rollout/scripts/preflight.sh {{.IP}}'
       # The default reboot mode uses kexec and has hung these nodes during the
       # shutdown handoff. powercycle bypasses kexec and must remain explicit.
-      - talhelper gencommand upgrade --node {{.IP}} --extra-flags "--drain-timeout=15m --timeout=20m --reboot-mode=powercycle" | bash
+      - >-
+        {{.ROOT_DIR}}/.agents/skills/talos-rollout/scripts/with-node-client.sh {{.IP}}
+        bash -euo pipefail -c 'talhelper gencommand upgrade --node {{.IP}} --extra-flags "--endpoints={{.IP}} --drain-timeout=15m --timeout=20m --reboot-mode=powercycle" | bash'
     requires:
       vars: [IP]
     preconditions:
-      - which jq kubectl talhelper talosctl
+      - which jq kubectl talhelper mise
 
   upgrade-k8s:
     desc: Upgrade Kubernetes

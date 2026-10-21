@@ -31,9 +31,19 @@ if command -v mise >/dev/null 2>&1 \
     eval "$(mise env -s bash)"
 fi
 
-for bin in jq kubectl talosctl; do
+for bin in jq kubectl mise; do
     command -v "$bin" >/dev/null 2>&1 || { echo "missing required tool: $bin" >&2; exit 1; }
 done
+
+# Every Talos query selects the client's version for its own target. A single
+# mise override cannot match all nodes while a minor-version rollout is mixed.
+kubectl() { command kubectl --kubeconfig "${KUBECONFIG:-$ROOT_DIR/kubeconfig}" "$@"; }
+talos_node() {
+    local ip="$1"
+    shift
+    "$ROOT_DIR/.agents/skills/talos-rollout/scripts/with-node-client.sh" "$ip" \
+        talosctl --talosconfig "${TALOSCONFIG:-$ROOT_DIR/talos/clusterconfig/talosconfig}" -e "$ip" -n "$ip" "$@"
+}
 
 readonly NODES=(k8s-prod-1 k8s-prod-2 k8s-prod-3)
 readonly IPS=(10.32.30.11 10.32.30.12 10.32.30.13)
@@ -115,7 +125,7 @@ fi
 # --- Talos + etcd -------------------------------------------------------------
 section "Talos versions"
 for index in "${!NODES[@]}"; do
-    if version_out="$(talosctl -n "${IPS[$index]}" version --short 2>&1)"; then
+    if version_out="$(talos_node "${IPS[$index]}" version --short 2>&1)"; then
         server="$(awk '/^Server:/ { s = 1; next } s && /Tag:/ { print $2; exit }' <<<"$version_out")"
         line "$(printf '%-11s %-13s %s' "${NODES[$index]}" "${IPS[$index]}" "${server:-unparsed}")"
         detail "$version_out"
@@ -126,16 +136,18 @@ done
 
 # A stopped etcd member stays registered, so ask Talos for health, not membership.
 section "Talos health"
-if health_out="$(talosctl health --nodes "${IPS[0]}" --control-plane-nodes "$(IFS=,; echo "${IPS[*]}")" --wait-timeout 1m 2>&1)"; then
+if health_out="$(talos_node "${IPS[0]}" health --control-plane-nodes "$(IFS=,; echo "${IPS[*]}")" --wait-timeout 1m 2>&1)"; then
     line 'talosctl health: OK (etcd, control plane, kubelets)'
     detail "$health_out"
 else
     fail 'talosctl health failed' "$health_out"
 fi
 # health reads a cached etcd status; this makes every member answer now.
-if ! members_out="$(talosctl -n "$(IFS=,; echo "${IPS[*]}")" etcd members 2>&1)"; then
-    fail 'an etcd member did not answer' "$members_out"
-fi
+for ip in "${IPS[@]}"; do
+    if ! members_out="$(talos_node "$ip" etcd members 2>&1)"; then
+        fail "etcd member query failed on $ip" "$members_out"
+    fi
+done
 
 # --- Kubernetes nodes ---------------------------------------------------------
 section "Kubernetes nodes"
