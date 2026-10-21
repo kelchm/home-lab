@@ -62,9 +62,20 @@ def views(lock, model_path):
     return model, kit, engram
 
 
-def rdma_devices(env):
+def rdma_devices(env, devices=Path("/sys/class/infiniband")):
+    """Exact device names from NCCL_IB_HCA (or TF_RDMA_DEVICES); the engine has no exclusions, prefixes or ports."""
     hca = env.get("TF_RDMA_DEVICES") or env.get("NCCL_IB_HCA", "")
-    return ",".join(dev.split(":")[0] for dev in hca.lstrip("=^").split(",") if dev)
+    if hca.startswith("^"):
+        raise SystemExit(f"NCCL_IB_HCA={hca}: an exclusion list has no RDMA equivalent; set TF_RDMA_DEVICES to the devices")
+    names = []
+    for item in hca.removeprefix("=").split(","):
+        name, _, port = item.partition(":")
+        if port not in ("", "1"):
+            raise SystemExit(f"RDMA device {item}: the engine uses port 1 only")
+        if name and devices.is_dir() and not (devices / name).exists():
+            raise SystemExit(f"RDMA device {name} is not in {devices}: name each device in full")
+        names += [name] if name else []
+    return ",".join(names)
 
 
 def command(env, model, kit, engram):

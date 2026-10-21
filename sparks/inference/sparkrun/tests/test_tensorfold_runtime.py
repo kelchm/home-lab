@@ -40,6 +40,7 @@ from sparkrun.core.recipe import Recipe  # noqa: E402
 from sparkrun.core.runtime_cache import (  # noqa: E402
     RUNTIME_CACHE_CONTAINER_PATH,
     build_runtime_cache_mounts,
+    resolve_runtime_cache_root,
     resolve_runtime_cache_settings,
 )
 from sparkrun.core.validation import ERROR  # noqa: E402
@@ -975,12 +976,30 @@ def test_dsv41_readiness_requires_lanes_window_and_reasoning(tmp_path):
             ready.check_models(body, DSV41_SERVED, 1048576)
 
 
-def test_dsv41_rank_inputs_follow_the_weights_not_the_image(runtime):
+def test_dsv41_rank_inputs_follow_the_weights_in_a_root_of_their_own(runtime):
     recipe = Recipe.from_dict(yaml.safe_load(DSV41_RECIPE.read_text()))
     settings = resolve_runtime_cache_settings(runtime=runtime, recipe=recipe)
-    assert settings.key_by_image is False and settings.prune_enabled is False
-    root = "/home/kelchm/.cache/sparkrun/runtime-cache"
+    assert settings.key_by_image is False
+    root = resolve_runtime_cache_root(settings, "/home/kelchm/.cache/sparkrun")
+    assert root == "/opt/spark-cache/runtime-inputs"
     mounts = build_runtime_cache_mounts(runtime=runtime, recipe=recipe, settings=settings, root=root, image=recipe.container)
     assert mounts.leaf == f"{root}/tensorfold/LibertAIDAI__DeepSeek-V4.1-Flash-1017-EXL3-2.9bp-55410efc"
+    # Another TensorFold recipe's sweep ages siblings under the shared root only.
+    other = Recipe.from_dict(yaml.safe_load((DSV41_RECIPE.parents[1] / "tensorfold-glm53-exl3.yaml").read_text()))
+    shared = resolve_runtime_cache_root(resolve_runtime_cache_settings(runtime=runtime, recipe=other), "/home/kelchm/.cache/sparkrun")
+    assert not mounts.leaf.startswith(shared + "/")
     assert recipe.env["TF_DS_RANK_CACHE"].startswith(RUNTIME_CACHE_CONTAINER_PATH + "/")
     assert recipe.env["TF_DS_TOKEN_MAP"].startswith(RUNTIME_CACHE_CONTAINER_PATH + "/")
+
+
+def test_dsv41_rdma_devices_take_exact_names_on_port_1(tmp_path):
+    _, _, serve, _ = _dsv41_bundle(tmp_path)
+    devices = tmp_path / "infiniband"
+    for name in ("rocep1s0f0", "roceP2p1s0f0"):
+        (devices / name).mkdir(parents=True)
+    hca = {"NCCL_IB_HCA": "=rocep1s0f0:1,roceP2p1s0f0"}
+    assert serve.rdma_devices(hca, devices) == "rocep1s0f0,roceP2p1s0f0"
+    assert serve.rdma_devices({**hca, "TF_RDMA_DEVICES": "rocep1s0f0"}, devices) == "rocep1s0f0"
+    for selector, message in (("^rocep1s0f1", "exclusion"), ("rocep1s0f0:2", "port 1"), ("rocep", "in full")):
+        with pytest.raises(SystemExit, match=message):
+            serve.rdma_devices({"NCCL_IB_HCA": selector}, devices)

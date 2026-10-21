@@ -785,10 +785,32 @@ At launch [`serve.py`](mods/bertholomus-tensorfold-dsv41-6366d2c/serve.py) links
 
 SparkRun distributes the weights and the kit. Two inputs are staged once per host:
 
-- **Engram tables:** shards 47 and 48 of the 1017 checkpoint (190 GiB) at revision `1bae0e10`, as a partial snapshot in each host's cluster cache. Listing the repository in the recipe would download all 475 GiB. On each host: `hf download deepseek-ai/DeepSeek-V4.1-Flash-1017 --revision 1bae0e1088993b9b82de08f59de5be5a34e42170 --include config.json "model-0004[78]-of-00048.safetensors" --cache-dir /opt/spark-cache/huggingface/hub`.
-- **Rank caches and token map:** each rank's weight file (99 GiB) and `dsv41_token_map.json`, in SparkRun's runtime cache for these weights, `~/.cache/sparkrun/runtime-cache/tensorfold/LibertAIDAI__DeepSeek-V4.1-Flash-1017-EXL3-2.9bp-55410efc/` on each host, mounted at `/cache/runtime`. The recipe keys this cache by model only and never prunes it, so an engine rebuild reuses it. The `deepseek-v41-tp2` Python engine in the image writes both on its first start: run `tensorfold serve` from the image on both hosts at once, rank 0 on the head first, with that directory mounted at `/root/.cache`, `TF_DS_RANK_CACHE=/root/.cache/tf-ds-rank`, `TF_DS_REPLAY=1`, the weights and the Engram view mounted, and `--tp 2 --rank N --master 198.19.240.11 --context 1048576 --parallel 4 --mtp-drafts 5`; stop it once both files exist.
+- **Engram tables:** shards 47 and 48 of the 1017 checkpoint (190 GiB) at revision `1bae0e10`, as a partial snapshot in each host's cluster cache. Listing the repository in the recipe would download all 475 GiB. On each host: `hf download deepseek-ai/DeepSeek-V4.1-Flash-1017 config.json model-00047-of-00048.safetensors model-00048-of-00048.safetensors --revision 1bae0e1088993b9b82de08f59de5be5a34e42170 --cache-dir /opt/spark-cache/huggingface/hub`.
+- **Rank caches and token map:** each rank's weight file (99 GiB) and `dsv41_token_map.json`, in the recipe's own runtime-cache root on each host, `/opt/spark-cache/runtime-inputs/tensorfold/LibertAIDAI__DeepSeek-V4.1-Flash-1017-EXL3-2.9bp-55410efc/`, mounted at `/cache/runtime`. They are keyed by the weights, so an engine rebuild reuses them, and no other model's launch ages them out of that root.
 
-On October 21 both were hard-linked from the hand-run copies, so neither was downloaded or rebuilt.
+The `deepseek-v41-tp2` Python engine in the image writes the rank inputs on its first start. With no workload on either GPU, run this on both hosts at once, the head with `RANK=0` first and then the worker with `RANK=1`, and stop both containers once each host has `tf-ds-rank/` and `dsv41_token_map.json`:
+
+```sh
+hub=/opt/spark-cache/huggingface/hub
+weights=$hub/models--LibertAIDAI--DeepSeek-V4.1-Flash-1017-EXL3-2.9bpw/snapshots/0be63c3337efbb2a0061d5b8bb4006fa186d433f
+base=$hub/models--deepseek-ai--DeepSeek-V4.1-Flash-1017/snapshots/1bae0e1088993b9b82de08f59de5be5a34e42170
+inputs=/opt/spark-cache/runtime-inputs/tensorfold/LibertAIDAI__DeepSeek-V4.1-Flash-1017-EXL3-2.9bp-55410efc
+engram=/opt/spark-cache/runtime-inputs/engram-1017  # the shards and the mod's embed-only index, by hard link
+mkdir -p "$inputs" "$engram"
+for f in config.json model-00047-of-00048.safetensors model-00048-of-00048.safetensors; do ln -f "$(readlink -f "$base/$f")" "$engram/$f"; done
+cp ~/sparkrun/recipes/glm53/mods/bertholomus-tensorfold-dsv41-6366d2c/engram.index.json "$engram/model.safetensors.index.json"
+docker run -d --name dsv41-inputs --gpus all --network host --ipc host --ulimit memlock=-1 --ulimit stack=67108864 \
+  --cap-add IPC_LOCK --device /dev/infiniband -v "$hub:$hub:ro" -v "$engram:/engram:ro" -v "$inputs:/inputs" \
+  -e TF_DS_REPLAY=1 -e TF_DS_PREFILL_CHUNK=2048 -e TF_DS_RANK_CACHE=/inputs/tf-ds-rank -e TF_DS_RANK_CACHE_READERS=32 \
+  -e TF_DS_ENGRAM=/engram -e TF_DS_TOKEN_MAP=/inputs/dsv41_token_map.json -e TF_RDMA_GID_INDEX=3 \
+  -e NCCL_IB_HCA=rocep1s0f0,roceP2p1s0f0 -e NCCL_IB_GID_INDEX=3 -e NCCL_SOCKET_IFNAME=enp1s0f0np0 \
+  dsv41-tf:6366d2c-4691715-b52bd191b6e4 /usr/local/bin/tensorfold serve "$weights" --tp 2 --rank "$RANK" \
+  --master 198.19.240.11 --host 127.0.0.1 --port 18891 --context 1048576 --vision --parallel 4 --mtp-drafts 5
+```
+
+These are the settings that wrote the current inputs on October 17, with this layout's paths.
+
+On October 21 both were hard-linked from the hand-run copies, so neither was downloaded or rebuilt; the rank inputs moved to their own root at the relaunch that afternoon.
 
 ### Build
 

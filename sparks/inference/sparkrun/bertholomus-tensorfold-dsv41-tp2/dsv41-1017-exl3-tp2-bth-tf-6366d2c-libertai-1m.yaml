@@ -47,10 +47,11 @@ executor_config:
   - nofile=65535:65535
   - stack=67108864:67108864
   auto_remove: false
-# The rank caches belong to the weights, not the image: they survive an engine rebuild and are never pruned.
+# The rank caches belong to the weights, not the image, and sit in a root of their own: an engine rebuild reuses them
+# and no other model's launch ages them out.
 runtime_cache:
+  dir: /opt/spark-cache/runtime-inputs
   key_by_image: false
-  prune: false
 mods:
 - ../mods/bertholomus-tensorfold-dsv41-6366d2c
 post_exec:

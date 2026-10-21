@@ -36,6 +36,6 @@
     "prepare.py": "557c49eb893f1d6350f021687e511fc24acd04c85761f9de5c8ec02baf53ad2b",
     "readiness.py": "59314472ab547b337b397fac27b12ddb012cf5149ccd7ed82b49c64c6bf82544",
     "run.sh": "13cadb4263230f16deeac086c579e29212c8c5853170b9512a7c9f084d114722",
-    "serve.py": "dea567ddbefdccbd85c84700cafa7f627b1e3ee327d61dd358fc7362c050c639"
+    "serve.py": "48fec44b14cbaff2f27459455a8f5f0fd430e1ce63e2714fa20c20f66e3fec60"
   }
 }
