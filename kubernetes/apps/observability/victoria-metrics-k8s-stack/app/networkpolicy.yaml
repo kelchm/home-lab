@@ -102,12 +102,15 @@ spec:
             # visionect-db postgres metrics
             - port: "9187"
               protocol: TCP
-    # Bambuddy database metrics.
+    # Bambuddy and its database metrics.
     - toEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: printing
       toPorts:
         - ports:
+            # bambuddy application metrics
+            - port: "8000"
+              protocol: TCP
             # bambuddy-db postgres metrics
             - port: "9187"
               protocol: TCP
