@@ -1,11 +1,5 @@
 machine:
   network:
-    disableSearchDomain: true
-    nameservers:
-      # Public DNS for node-level resolution. Cluster pods reach UniFi
-      # directly via CoreDNS (kube-system/coredns home.kelch.io block).
-      - 1.1.1.1
-      - 1.0.0.1
     interfaces:
       # Cilium's BPF host routing (enabled by bpf.masquerade=true in 1.16.5+)
       # can't reach 169.254.116.108 when it's only implicitly on lo, breaking
@@ -14,3 +8,13 @@ machine:
       - interface: lo
         addresses:
           - 169.254.116.108/32
+---
+apiVersion: v1alpha1
+kind: ResolverConfig
+# Public DNS for node-level resolution. Cluster pods reach UniFi
+# directly via CoreDNS (kube-system/coredns home.kelch.io block).
+nameservers:
+  - address: 1.1.1.1
+  - address: 1.0.0.1
+searchDomains:
+  disableDefault: true

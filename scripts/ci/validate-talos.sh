@@ -27,13 +27,13 @@ readonly KUBERNETES_VERSION="$(yq --exit-status '.kubernetesVersion' talenv.yaml
 readonly EXPECTED_NODES="$(yq --exit-status '.nodes | length' talconfig.yaml)"
 
 function check_image_version() {
-    local config="$1" field="$2" expected="$3" image tag
-    image="$(yq --exit-status "select(has(\"machine\")) | ${field}" "${config}")"
+    local config="$1" field="$2" expected="$3" label="${4:-$2}" image tag
+    image="$(yq --exit-status "${field}" "${config}")"
     # A digest can follow the tag; an image with only a digest has no matching version.
     tag="${image%@*}"
     tag="${tag##*:}"
     if [[ "${tag}" != "${expected}" ]]; then
-        echo "${config##*/}: ${field} version ${tag} does not match talenv.yaml (${expected})" >&2
+        echo "${config##*/}: ${label} version ${tag} does not match talenv.yaml (${expected})" >&2
         return 1
     fi
 }
@@ -47,11 +47,11 @@ fi
 
 for config in "${node_configs[@]}"; do
     talosctl validate --config "${config}" --mode metal
-    check_image_version "${config}" '.machine.install.image' "${TALOS_VERSION}"
-    check_image_version "${config}" '.machine.kubelet.image' "${KUBERNETES_VERSION}"
+    check_image_version "${config}" 'select(has("machine")) | .machine.install.image' "${TALOS_VERSION}" '.machine.install.image'
+    check_image_version "${config}" 'select(has("machine")) | .machine.kubelet.image' "${KUBERNETES_VERSION}" '.machine.kubelet.image'
     if [[ "$(yq --exit-status 'select(has("machine")) | .machine.type' "${config}")" == controlplane ]]; then
-        for component in apiServer controllerManager scheduler; do
-            check_image_version "${config}" ".cluster.${component}.image" "${KUBERNETES_VERSION}"
+        for component in KubeAPIServerConfig KubeControllerManagerConfig KubeSchedulerConfig; do
+            check_image_version "${config}" "select(.kind == \"${component}\") | .image" "${KUBERNETES_VERSION}" "${component}.image"
         done
     fi
 done

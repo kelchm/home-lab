@@ -59,5 +59,5 @@ yq -i '.machine.kubelet.image = "ghcr.io/siderolabs/kubelet:v1.36.1"' "${TEST_DI
 expect_failure 'kubelet version drift' '.machine.kubelet.image version v1.36.1 does not match talenv.yaml'
 
 reset_fixture
-yq -i '.cluster.apiServer.image = "registry.k8s.io/kube-apiserver:v1.36.1"' "${TEST_DIR}/talos/patches/controller/cluster.yaml"
-expect_failure 'control-plane version drift' '.cluster.apiServer.image version v1.36.1 does not match talenv.yaml'
+yq -i '(select(.kind == "KubeAPIServerConfig") | .image) = "registry.k8s.io/kube-apiserver:v1.36.1"' "${TEST_DIR}/talos/patches/controller/cluster.yaml"
+expect_failure 'control-plane version drift' 'KubeAPIServerConfig.image version v1.36.1 does not match talenv.yaml'
