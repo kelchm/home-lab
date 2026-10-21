@@ -27,6 +27,8 @@ assert setting('Path') == '/var/log/containers/*.log'
 assert setting('multiline.parser') == 'cri'
 assert setting('Read_from_Head').lower() == 'on'
 assert setting('storage.type') == 'filesystem' and setting('storage.sync') == 'full'
+# On discards every chunk being written when the collector is killed.
+assert setting('storage.checksum').lower() == 'off'
 assert setting('DB').startswith('/var/lib/fluent-bit/') and setting('storage.path').startswith('/var/lib/fluent-bit/')
 assert setting('Retry_Limit') == 'no_limits'
 assert 'VL-Ignore-Fields scope.name,scope.version' in conf
