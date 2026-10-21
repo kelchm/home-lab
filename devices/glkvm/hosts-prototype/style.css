@@ -286,6 +286,10 @@ body {
   animation: pulse-dot 1s ease-in-out infinite;
 }
 
+.status[data-state="unconfirmed"] .status-dot {
+  background: var(--dot-unauth);
+}
+
 .status[data-state="success"] .status-dot {
   background: var(--dot-success);
 }
