@@ -183,11 +183,13 @@ E.add("reach", "Services, from outside the cluster", "stat", [q(REACH, "{{probe}
       desc="How long each service takes to answer a Pi on the LAN that reaches it the way a person would. Yellow from one second, orange from two, where the alert fires; red when it does not answer.")
 
 # ------------------------------------------------------------------ the watch itself
-LOG_LINES = 'sum(rate(vl_rows_ingested_total{cluster="k8s-prod",job="victoria-logs-single-server",type="opentelemetry_protobuf"}[5m]))'
+LOG_LINES = 'sum(rate(vl_rows_ingested_total{cluster="k8s-prod",job="victoria-logs-single-server",type="opentelemetry_protobuf"}[10m]))'
+# Red only when nothing arrived in ten minutes, as VictoriaLogsIngestionSilent; one line in that time reads 0.0017.
+LOG_SILENT = th([{"value": None, "color": "red"}, {"value": 0.001, "color": NEUTRAL}])
 E.tiles("watch", "The watch itself", [
     ("Sources reporting", "count(up == 1)", {}),
     ("Sources silent", zero("count(up == 0)"), dict(thresholds=PROBLEM)),
-    ("Log lines per second", zero(LOG_LINES), dict(thresholds=th([{"value": None, "color": "red"}, {"value": 1, "color": NEUTRAL}]))),
+    ("Log lines per second", zero(LOG_LINES), dict(decimals=1, thresholds=LOG_SILENT)),
     ("Alert delivery", zero('count(ALERTS{alertname="Watchdog",alertstate="firing"})'), dict(mappings=yes("Alive", "Silent"), thresholds=th([{"value": None, "color": "red"}, {"value": 1, "color": NEUTRAL}]))),
     ("Alert rules loaded", "count(vmalert_alerting_rules_last_evaluation_samples)", {}),
     ("Alert rules failing", zero("count(increase(vmalert_alerting_rules_errors_total[1h]) > 0)"), dict(thresholds=BROKEN))],

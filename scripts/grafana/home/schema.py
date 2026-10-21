@@ -124,7 +124,7 @@ BG = {"reduceOptions": RED, "orientation": "horizontal", "showUnfilled": True, "
 
 
 def ts_custom(**kw):
-    c = {"drawStyle": "line", "lineInterpolation": "smooth", "lineWidth": 2, "fillOpacity": 18, "gradientMode": "opacity", "showPoints": "never", "spanNulls": True,
+    c = {"drawStyle": "line", "lineInterpolation": "smooth", "lineWidth": 2, "fillOpacity": 18, "gradientMode": "opacity", "showPoints": "never", "spanNulls": False,
          "stacking": {"mode": "none", "group": "A"}, "axisBorderShow": False, "axisPlacement": "auto", "thresholdsStyle": {"mode": "off"}}
     c.update(kw)
     return c
