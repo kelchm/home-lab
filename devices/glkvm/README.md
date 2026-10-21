@@ -7,17 +7,16 @@ Firmware `V1.10.1 release2` (`/etc/version`), build `rm10-1.10.0beta2-30-g265a7f
 
 ## Web interfaces
 
-[`nginx-kvmd.conf`](nginx-kvmd.conf) makes the bundled upstream PiKVM UI the
-primary interface while retaining GL.iNet's UI for firmware and appliance
-management:
+The stock GL.iNet UI serves the console, firmware updates, and appliance management at `https://10.32.20.10/`. The PiKVM frontend is disabled; no custom toolbar or wrapper is installed.
 
 | Port | Interface |
 |------|-----------|
-| 443 | PiKVM |
-| 8888 | GLKVM |
+| 443 | Stock GLKVM |
+| 8888 | Disabled |
 
-Port 80 redirects to the primary PiKVM interface. Both HTTPS listeners use the
-certificate configured in `/etc/kvmd/user/ssl`.
+Port 80 redirects to HTTPS. The active nginx configuration is copied unchanged from `/rom/etc/kvmd/nginx-kvmd.conf`, supplied by the installed firmware, and uses the certificate in `/etc/kvmd/user/ssl`. Do not restore an old custom nginx file after a firmware update.
+
+Restored 2026-10-20 by validating and copying the firmware's nginx configuration, then reloading nginx. The prior web configuration is backed up on the appliance at `/etc/kvmd/user/backups/nginx-kvmd.conf.before-stock-ui-20261020`. The USB compatibility fix, monitoring, and SSH helpers remain applied; switching web interfaces does not require rebuilding USB or restarting kvmd.
 
 ## Downstream KVM controls
 
@@ -26,8 +25,11 @@ then the port number. GL.iNet's shortcut UI sends those events too quickly for
 the switch. [`kvm-switch.py`](kvm-switch.py) writes standard eight-byte USB HID
 keyboard reports with a 75 ms key hold and a 250 ms inter-key delay.
 
-[`override.yaml`](override.yaml) exposes the known hosts as buttons in the
-bundled PiKVM UI:
+The downstream mapping is recorded below and in [`override.yaml`](override.yaml). The override retains the command channels previously used by the PiKVM Hosts menu, but the stock GL.iNet UI does not display them. Use the physical switch buttons or the paced SSH helper to select a host:
+
+```sh
+ssh root@10.32.20.10 '/etc/kvmd/user/bin/kvm-switch 2'
+```
 
 | KVM port | Host |
 |----------|------|
@@ -40,7 +42,7 @@ bundled PiKVM UI:
 | 7 | `spark-1` |
 | 8 | `spark-2` |
 
-All eight downstream ports are assigned and exposed in the UI. Update the table and the corresponding row under `view.table` together if the physical mapping changes.
+All eight downstream ports are assigned. Update this table and the matching command-channel label in the override together if the physical mapping changes. Always confirm the selected host on screen before sending further input.
 
 ### USB class compatibility
 
@@ -96,7 +98,7 @@ sequences concurrently.
 
 vmagent in `k8s-prod` scrapes kvmd's native export at `https://10.32.20.10/api/export/prometheus/metrics` every 30 seconds as `job="glkvm-kvmd"`, `instance="glkvm"`, `platform="glkvm"`. The scrape and alert rules are in [`glkvm.yaml`](../../kubernetes/apps/observability/victoria-metrics-k8s-stack/app/glkvm.yaml) and the **GLKVM / Recovery console** dashboard is in Grafana's `Platforms/GLKVM` folder. Alerts route like every other alert; see the [alerting runbook](../../docs/runbooks/alerting.md).
 
-Applied 2026-10-17 on `V1.10.1 release2`. Before the patch, the unauthenticated metrics path returned HTTP 500; after it, the path returns the metrics below while `/api/info` still returns 401, vmagent reports the target up, and `GLKVMMetricsUnavailable` cleared. The PiKVM UI answers on 443 and the vendor UI on 8888, and no mass-storage function is linked. `/etc/init.d/S98kvmd restart` prints `Stopping kvmd: FAIL` because it checks for the old process before it has exited; one kvmd daemon was running afterwards.
+Applied 2026-10-17 on `V1.10.1 release2`. Before the patch, the unauthenticated metrics path returned HTTP 500; after it, the path returns the metrics below while `/api/info` still returns 401, vmagent reports the target up, and `GLKVMMetricsUnavailable` cleared. After restoring the stock UI on 443 on 2026-10-20, those HTTP checks still pass and no mass-storage function is linked. `/etc/init.d/S98kvmd restart` prints `Stopping kvmd: FAIL` because it checks for the old process before it has exited; one kvmd daemon was running afterwards.
 
 The appliance needs two changes. **Apply** installs the override with the rest of the console configuration; the export patch is installed separately, below, so a firmware change that invalidates it never blocks restoring the console.
 
@@ -112,7 +114,7 @@ What the export provides on this firmware:
 | `pikvm_hw_mem_percent`, `_total`, `_available` | Memory. The appliance has about 1 GiB, plus a compressed swap device in RAM (`/dev/zram0`, about 490 MiB) that this firmware adds. |
 | `pikvm_hw_net_bytes_sent`, `_recv` | Bytes on every interface except loopback since boot; use `rate()`. |
 
-The scrape drops `pikvm_atx_*` and `pikvm_gpio_*`. ATX is not wired, so its power state means nothing. The GPIO rows are the PiKVM host buttons, which only pulse a switch sequence; they do not read back the selected port, and the vendor code reports each button's state under both its `online` and `state` names. The export has no HDMI signal, USB enumeration, selected port, uptime or filesystem metrics, and nothing in it observes the host on the selected port. A blank screen or missing video is not an appliance failure. Load average stays between 8 and 10 because of the SoC's media threads and is not a useful signal.
+The scrape drops `pikvm_atx_*` and `pikvm_gpio_*`. ATX is not wired, so its power state means nothing. The GPIO rows are the retained host-switch command channels, which only pulse a switch sequence; they do not read back the selected port, and the vendor code reports each channel's state under both its `online` and `state` names. The export has no HDMI signal, USB enumeration, selected port, uptime or filesystem metrics, and nothing in it observes the host on the selected port. A blank screen or missing video is not an appliance failure. Load average stays between 8 and 10 because of the SoC's media threads and is not a useful signal.
 
 The appliance serves its vendor's self-signed certificate (`CN=localhost`, expired 1979), so the scrape skips verification and there is no certificate-expiry alert; [#419](https://github.com/kelchm/home-lab/issues/419) tracks a real certificate.
 
@@ -180,7 +182,6 @@ scp -O devices/glkvm/kvm-switch.py root@10.32.20.10:/tmp/kvm-switch
 scp -O devices/glkvm/hid-type.py root@10.32.20.10:/tmp/hid-type
 scp -O devices/glkvm/hid-hold-key.py root@10.32.20.10:/tmp/hid-hold-key
 scp -O devices/glkvm/override.yaml root@10.32.20.10:/tmp/override.yaml
-scp -O devices/glkvm/nginx-kvmd.conf root@10.32.20.10:/tmp/nginx-kvmd.conf
 
 ssh root@10.32.20.10 '
     set -eu
@@ -196,15 +197,15 @@ ssh root@10.32.20.10 '
         /etc/kvmd/user/bin/hid-type /etc/kvmd/user/bin/hid-hold-key
     cp /tmp/override.yaml /etc/kvmd/override.yaml
     if [ -e /etc/kvmd/nginx-kvmd.conf ] && \
-        [ ! -e /etc/kvmd/user/backups/nginx-kvmd.conf.before-pikvm-primary ]; then
+        [ ! -e /etc/kvmd/user/backups/nginx-kvmd.conf.before-stock-ui ]; then
         cp /etc/kvmd/nginx-kvmd.conf \
-            /etc/kvmd/user/backups/nginx-kvmd.conf.before-pikvm-primary
+            /etc/kvmd/user/backups/nginx-kvmd.conf.before-stock-ui
     fi
-    nginx -t -p /etc/kvmd/nginx -c /tmp/nginx-kvmd.conf \
+    nginx -t -p /etc/kvmd/nginx -c /rom/etc/kvmd/nginx-kvmd.conf \
         -g "pid /run/kvmd/nginx-test.pid; user root; error_log stderr;"
-    cp /tmp/nginx-kvmd.conf /etc/kvmd/nginx-kvmd.conf
+    cp /rom/etc/kvmd/nginx-kvmd.conf /etc/kvmd/nginx-kvmd.conf
     rm -f /tmp/kvm-switch /tmp/hid-type /tmp/hid-hold-key \
-        /tmp/override.yaml /tmp/nginx-kvmd.conf
+        /tmp/override.yaml
     command -v timeout >/dev/null
     command -v pkill >/dev/null
     restore_kvmd() {
@@ -237,18 +238,22 @@ ssh root@10.32.20.10 '
 '
 ```
 
-Confirm `kvmd` restarted and the PiKVM UI responds:
+Confirm `kvmd` restarted, the stock UI responds, and only the expected HID functions are linked. Keep an authenticated stock-console viewer open for the screenshot check:
 
 ```sh
 ssh root@10.32.20.10 '
     set -eu
     /etc/init.d/S98kvmd status
-    curl -ksS https://127.0.0.1/login/ | grep -q "PiKVM"
-    curl -ksS https://127.0.0.1:8888/ | grep -q "GLKVM"
+    cmp /rom/etc/kvmd/nginx-kvmd.conf /etc/kvmd/nginx-kvmd.conf
+    curl -ksS https://127.0.0.1/ | grep -q "<title>GLKVM</title>"
+    if curl -ksS --connect-timeout 2 https://127.0.0.1:8888/ >/dev/null 2>&1; then
+        echo "Unexpected web listener on port 8888" >&2
+        exit 1
+    fi
     for field in bDeviceClass bDeviceSubClass bDeviceProtocol; do
         test "$(cat /sys/kernel/config/usb_gadget/rockchip/$field)" = 0x00
     done
-    ls -l /sys/kernel/config/usb_gadget/rockchip/configs/b.1/
+    python3 -c "from pathlib import Path; assert sorted(p.name for p in Path(\"/sys/kernel/config/usb_gadget/rockchip/configs/b.1\").iterdir() if p.is_symlink()) == [\"hid.usb0\", \"hid.usb1\", \"hid.usb2\"]"
     test -c /dev/hidg0
     test -S /run/kvmd/ustreamer.sock
     python3 -m py_compile /etc/kvmd/user/bin/kvm-switch \
@@ -280,8 +285,7 @@ scp -O root@10.32.20.10:/etc/kvmd/nginx-kvmd.conf "$backup_dir/"
 After the update:
 
 1. Confirm SSH, `/dev/hidg0`, and `/run/kvmd/ustreamer.sock` exist, and that `ls /sys/kernel/config/usb_gadget/rockchip/configs/*/` links no `mass_storage` function.
-2. Compare the vendor nginx configuration with the committed customization;
-   do not blindly overwrite a changed vendor schema.
+2. Keep the firmware's stock nginx configuration; do not restore the old PiKVM web configuration from a backup.
 3. Re-run **Apply** to restore the known files and modes.
    The USB gadget rebuild applies the camera-disable override; confirm the three device class bytes are `00/00/00` as described under **USB class compatibility**.
 4. Run the non-interactive checks above and capture a screen.
@@ -296,13 +300,7 @@ The repository is the recovery source even if a firmware update wipes both
 
 ### Bootstrap after a wipe
 
-Restore the appliance's network configuration and SSH access through the vendor
-UI first. Confirm `ssh root@10.32.20.10` works; this firmware uses Dropbear, so
-the `scp -O` commands in **Apply** are intentional. Then run the complete
-**Apply** procedure from a repository checkout. It recreates the user
-directories, installs all three HID tools, restores the committed PiKVM override
-and nginx configuration, and restarts the affected services. Finish with the
-non-interactive checks and safe live-input test above, then install the [monitoring](#monitoring) export patch.
+Restore the appliance's network configuration and SSH access through the vendor UI first. Confirm `ssh root@10.32.20.10` works; this firmware uses Dropbear, so the `scp -O` commands in **Apply** are intentional. Then run the complete **Apply** procedure from a repository checkout. It recreates the user directories, installs all three HID tools, restores the committed appliance override and the installed firmware's stock nginx configuration, and restarts the affected services. Finish with the non-interactive checks and safe live-input test above, then install the [monitoring](#monitoring) export patch.
 
 Do not run `kvmd` itself over SSH, including `kvmd -M` to validate configuration. Unlike upstream PiKVM, firmware `V1.9.1 release1` started another daemon instead of performing a validation-only run.
 
@@ -340,7 +338,4 @@ ssh root@10.32.20.10 '
 '
 ```
 
-The script lives on the persistent user partition. Firmware upgrades may still
-replace `/etc/kvmd/override.yaml` or change the vendor nginx configuration.
-After an upgrade, compare `/etc/kvmd/nginx-kvmd.conf` with
-`/rom/etc/kvmd/nginx-kvmd.conf`, then rebase and reapply these customizations.
+The helpers live on the persistent user partition. Firmware upgrades may still replace `/etc/kvmd/override.yaml` or change the vendor nginx configuration. After an upgrade, keep the new firmware's stock nginx file and recheck the USB compatibility and monitoring overrides before restoring them.

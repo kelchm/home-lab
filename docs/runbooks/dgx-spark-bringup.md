@@ -49,7 +49,7 @@ independent physical rails or failure domains.
 
 ### GLKVM console
 
-Both Sparks are connected to the GLKVM at `https://10.32.20.10/`: `spark-1` is downstream port 7 and `spark-2` is port 8. Select the named host from the PiKVM **Hosts** menu, or switch explicitly over SSH:
+Both Sparks are connected to the stock GLKVM console at `https://10.32.20.10/`: `spark-1` is downstream port 7 and `spark-2` is port 8. Select a port using the physical switch buttons or the paced SSH helper; the stock UI has no custom Hosts menu:
 
 ```sh
 ssh root@10.32.20.10 '/etc/kvmd/user/bin/kvm-switch 7' # spark-1
