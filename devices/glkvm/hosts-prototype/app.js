@@ -11,6 +11,10 @@
   const statusTextEl = document.getElementById("status-text");
   const frameEl = document.getElementById("console-frame");
   const buttons = Array.from(document.querySelectorAll(".host-btn"));
+  const startVideoEl = document.getElementById("start-video");
+  const playbackEl = document.getElementById("playback-status");
+  const playbackTextEl = document.getElementById("playback-text");
+  const VIDEO_EVENTS = ["play", "playing", "pause", "waiting", "emptied", "resize", "error"];
 
   let isAuthenticated = false;
   let isSwitching = false;
@@ -18,6 +22,8 @@
   let authCheckInFlight = false;
   let authPollTimer = null;
   let lastRequestedHost = null;
+  let observedVideo = null;
+  let playAttempt = 0;
 
   function setStatus(state, message) {
     statusEl.dataset.state = state;
@@ -235,6 +241,118 @@
     }
   }
 
+  // Playback status is separate from host-switch status and never touches switch state.
+  function setPlayback(state, message) {
+    playbackEl.hidden = false;
+    playbackEl.dataset.state = state;
+    playbackTextEl.textContent = message;
+  }
+
+  function hasVideoFrame(video) {
+    return !video.paused && video.readyState >= 2 && video.videoWidth > 0;
+  }
+
+  function reportVideoState(video) {
+    if (video.error) {
+      setPlayback("error", `Video error (code ${video.error.code}) · Try Start video`);
+    } else if (video.paused) {
+      setPlayback("error", "Video paused · Try Start video");
+    } else if (hasVideoFrame(video)) {
+      setPlayback("ready", `Playback started · ${video.videoWidth}×${video.videoHeight}`);
+    } else {
+      setPlayback("checking", "Waiting for video frames");
+    }
+  }
+
+  function onVideoEvent(event) {
+    if (event.target === observedVideo) {
+      if (event.type === "waiting" || event.type === "emptied") {
+        setPlayback("checking", "Waiting for video frames");
+      } else {
+        reportVideoState(observedVideo);
+      }
+    }
+  }
+
+  function observeVideo(video) {
+    if (observedVideo === video) {
+      return;
+    }
+    if (observedVideo) {
+      for (const name of VIDEO_EVENTS) {
+        observedVideo.removeEventListener(name, onVideoEvent);
+      }
+    }
+    observedVideo = video;
+    if (video) {
+      for (const name of VIDEO_EVENTS) {
+        video.addEventListener(name, onVideoEvent);
+      }
+    }
+  }
+
+  function findConsoleVideo() {
+    let doc = null;
+    try {
+      doc = frameEl.contentDocument;
+    } catch (_) {
+      return { error: "Console frame is not accessible from this page" };
+    }
+    if (!doc) {
+      return { error: "Console frame is not accessible from this page" };
+    }
+    const video = doc.getElementById("stream-video") || doc.querySelector("video");
+    if (!video) {
+      return { error: "No console video yet · Sign in or wait for the console to load" };
+    }
+    return { video };
+  }
+
+  // Preserve WebKit's click gesture when autoplay is blocked: no async work before play().
+  function startVideo() {
+    const attempt = ++playAttempt;
+    const found = findConsoleVideo();
+    if (!found.video) {
+      observeVideo(null);
+      setPlayback("error", found.error);
+      return;
+    }
+    const video = found.video;
+    let playPromise;
+    try {
+      playPromise = video.play();
+    } catch (err) {
+      observeVideo(null);
+      setPlayback("error", `Playback failed (${err?.name || "Error"})`);
+      return;
+    }
+    observeVideo(video);
+    if (!playPromise || typeof playPromise.then !== "function") {
+      reportVideoState(video);
+      return;
+    }
+    setPlayback("pending", "Starting playback…");
+    playPromise.then(
+      () => {
+        if (attempt === playAttempt && video === observedVideo) {
+          reportVideoState(video);
+        }
+      },
+      (err) => {
+        if (attempt !== playAttempt || video !== observedVideo) {
+          return;
+        }
+        const name = err?.name || "Error";
+        const hint = name === "NotAllowedError" ? "Browser blocked playback · Click Start video again" : "Try Start video again";
+        setPlayback("error", `Playback rejected (${name}) · ${hint}`);
+      }
+    );
+  }
+
+  if (startVideoEl) {
+    startVideoEl.addEventListener("click", startVideo);
+  }
+
   for (const btn of buttons) {
     btn.addEventListener("click", () => {
       void requestSwitch(btn);
@@ -243,6 +361,9 @@
 
   if (frameEl) {
     frameEl.addEventListener("load", () => {
+      observeVideo(null);
+      playAttempt += 1;
+      playbackEl.hidden = true;
       if (!isFailedClosed && !isSwitching) {
         void checkAuth();
       }

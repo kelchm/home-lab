@@ -182,6 +182,7 @@ body {
 }
 
 .host-btn:focus-visible,
+.tool-btn:focus-visible,
 .stock-link:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
@@ -314,6 +315,42 @@ body {
   }
 }
 
+.playback {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.playback-status[hidden] {
+  display: none;
+}
+
+.tool-btn {
+  appearance: none;
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  border-radius: 5px;
+  border: 1px solid var(--btn-border);
+  background: var(--btn-bg);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.tool-btn:hover {
+  background: var(--btn-bg-hover);
+  border-color: var(--btn-border-hover);
+}
+
+.tool-btn:active {
+  background: var(--btn-bg-active);
+}
+
 .stock-link {
   flex: 0 0 auto;
   display: inline-flex;
@@ -355,11 +392,18 @@ body {
 @media (max-width: 900px) {
   .toolbar-meta {
     width: 100%;
+    flex-wrap: wrap;
     justify-content: space-between;
   }
 
-  .status {
+  .status,
+  .playback {
     flex: 1 1 auto;
+  }
+
+  .playback {
+    order: 1;
+    width: 100%;
   }
 
   .status-text {

@@ -59,6 +59,13 @@
     </nav>
 
     <div class="toolbar-meta">
+      <div class="playback" role="group" aria-label="Console video playback">
+        <button type="button" id="start-video" class="tool-btn" title="Start the console video if the stock player shows a stuck Play button">Start video</button>
+        <div id="playback-status" class="status playback-status" role="status" aria-live="polite" aria-atomic="true" data-state="checking" hidden>
+          <span class="status-dot" aria-hidden="true"></span>
+          <span id="playback-text" class="status-text"></span>
+        </div>
+      </div>
       <div id="status" class="status" role="status" aria-live="polite" aria-atomic="true" data-state="checking">
         <span class="status-dot" aria-hidden="true"></span>
         <span id="status-text" class="status-text">Checking session…</span>
@@ -73,7 +80,7 @@
       class="console-frame"
       src="/"
       title="Stock GL.iNet KVM Console"
-      allow="fullscreen; clipboard-read; clipboard-write"
+      allow="autoplay; fullscreen; clipboard-read; clipboard-write"
       allowfullscreen
     ></iframe>
   </main>
