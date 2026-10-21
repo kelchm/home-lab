@@ -1,0 +1,68 @@
+# dsv41-1017-exl3-tp2-bth-tf-6366d2c-libertai-1m: DeepSeek-V4.1-Flash-1017 on bertholomus's deepseek-v41-zig TensorFold engine with LibertAI's EXL3 weights; SparkRun owns both ranks and lifecycle operations.
+recipe_version: '2'
+model: LibertAIDAI/DeepSeek-V4.1-Flash-1017-EXL3-2.9bpw
+model_revision: 0be63c3337efbb2a0061d5b8bb4006fa186d433f
+runtime: tensorfold
+container: sha256:66ce7619efe0743a59d9cdadaad9949268ea53d3ddceb2937fa044538e9b4ef6
+min_nodes: 2
+max_nodes: 2
+metadata:
+  profile: dsv41-1017-exl3-tp2-bth-tf-6366d2c-libertai-1m
+  description: bertholomus deepseek-v41-zig engine 6366d2c with three server and lane patches, LibertAI EXL3 2.9 bpw weights, four streams and a 1M window
+  engine_revision: 6366d2c585b4f05fe33bfe5cbdb33ea15264841a
+  image: dsv41-tf:6366d2c-4691715-b52bd191b6e4
+  weights: libertai
+  weights_variant: exl3-2.9bpw
+  target_model_revision: 0be63c3337efbb2a0061d5b8bb4006fa186d433f
+defaults:
+  tensor_parallel: 2
+  pipeline_parallel: 1
+  host: 0.0.0.0
+  port: 8888
+  served_model_name: DeepSeek-V4.1-Flash-1017
+  context: 1048576
+  max_tokens: 32768
+  entrypoint: /usr/local/bin/dsv41-tf-entrypoint
+env:
+  TENSORFOLD_NO_UPDATE_CHECK: '1'
+  # The ranks' link on rail 0 of the CX7 cable, not the management network SparkRun's rendezvous address uses.
+  DSV41_TP_MASTER: 198.19.240.11
+  TF_DS_RANK_CACHE: /cache/runtime/tf-ds-rank
+  TF_DS_TOKEN_MAP: /cache/runtime/dsv41_token_map.json
+  TF_DS_REPLAY_FLOOR: '1'
+  TF_DS_GRAPHS: '1'
+  TF_DS_HC_SIDE: '1'
+  TF_DS_L2_PREFETCH: '1'
+  TF_DS_ENGRAM_AIO: '1'
+executor_config:
+  entrypoint: ''
+  user: root
+  ipc: host
+  devices:
+  - /dev/infiniband
+  cap_add:
+  - IPC_LOCK
+  ulimit:
+  - memlock=-1:-1
+  - nofile=65535:65535
+  - stack=67108864:67108864
+  auto_remove: false
+# The rank caches belong to the weights, not the image: they survive an engine rebuild and are never pruned.
+runtime_cache:
+  key_by_image: false
+  prune: false
+mods:
+- ../mods/bertholomus-tensorfold-dsv41-6366d2c
+post_exec:
+- python3 /opt/dsv41-tensorfold/readiness.py --model DeepSeek-V4.1-Flash-1017 --context 1048576
+distribution_config:
+  models:
+    entries:
+    - name: LibertAIDAI/DeepSeek-V4.1-Flash-1017-EXL3-2.9bpw
+      revision: 0be63c3337efbb2a0061d5b8bb4006fa186d433f
+      target:
+      - -1
+    - name: bertholomus/DeepSeek-V4.1-Flash-TensorFold-TP2-2xGB10
+      revision: 4996441a82d95b9a7853b01a1255e1dafc926387
+      target:
+      - -1

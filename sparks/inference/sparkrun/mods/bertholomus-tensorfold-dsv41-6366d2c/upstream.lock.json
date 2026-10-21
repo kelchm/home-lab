@@ -1,0 +1,41 @@
+{
+  "engine_repository": "bertholomus/TensorFold",
+  "engine_branch": "deepseek-v41-zig",
+  "engine_revision": "6366d2c585b4f05fe33bfe5cbdb33ea15264841a",
+  "inputs_branch": "deepseek-v41-tp2",
+  "inputs_revision": "469171515cd3c0df14346d83d763b4e89d4bafcf",
+  "patches": {
+    "patches/0001-models-discovery-483-819.patch": "ashhart/TensorFold #483 and #819, reduced to zig/src/server",
+    "patches/0002-call-gate.patch": "MiaAI-Lab/DeepSeek-v4.1-Flash-1017-2x-DGX-Sparks@ef6a308b zig/patches/0004-call-gate.patch",
+    "patches/0003-rdma-idle-nap.patch": "MiaAI-Lab/DeepSeek-v4.1-Flash-1017-2x-DGX-Sparks#26@3e644a7c zig/patches/0010-rdma-idle-nap.patch"
+  },
+  "image": "dsv41-tf:6366d2c-4691715-b52bd191b6e4",
+  "image_id": "sha256:66ce7619efe0743a59d9cdadaad9949268ea53d3ddceb2937fa044538e9b4ef6",
+  "kit": {
+    "repository": "bertholomus/DeepSeek-V4.1-Flash-TensorFold-TP2-2xGB10",
+    "revision": "4996441a82d95b9a7853b01a1255e1dafc926387",
+    "bias_vl_sha256": "4745da4b5f24c67170ee24e2c95652e45ba13c0ca0abc2be3cc7a2a3545792d0"
+  },
+  "engram": {
+    "repository": "deepseek-ai/DeepSeek-V4.1-Flash-1017",
+    "revision": "1bae0e1088993b9b82de08f59de5be5a34e42170",
+    "files": {
+      "config.json": "09917a9139b22d5bf8be52132787f435147b1020",
+      "model-00047-of-00048.safetensors": "76a05106ece259be83d1bfea0dcb54f23377864ee60fd321690f35e6698a2af5",
+      "model-00048-of-00048.safetensors": "9dc51433e195bc78b5ad846b68643cc0351d3b174e5e4309222d3b7402c83afd"
+    }
+  },
+  "mod_files": {
+    "build/Dockerfile": "d384cf938d0d261be3fcedd3bbdc59a7411158f44e770c8f3649881b00862559",
+    "build/build.sh": "fe2b05fa74b754300dcd3088579238c716411c6ca4f6506947f617ae7aa7d148",
+    "chat_template.jinja": "eb755449a18007501da6dc4676a7da4677e442af8915eba64e6f051e4208bf18",
+    "engram.index.json": "bf54f3f6980213246daf176064446d91e1d3734eea95228ad459a01fff766ab5",
+    "patches/0001-models-discovery-483-819.patch": "11889105a3c71326065aec4a118805d7d1e75ab5af72eeb903edb1800ca725a7",
+    "patches/0002-call-gate.patch": "285a2b02e8018ecea32a4920b2e2186f4e382ab6340036cc6deaf492a1920fd6",
+    "patches/0003-rdma-idle-nap.patch": "83fdfbd76a60738e4f1c31e08cea40d1831f46fc802f14e0a844d19f0edd1c0c",
+    "prepare.py": "557c49eb893f1d6350f021687e511fc24acd04c85761f9de5c8ec02baf53ad2b",
+    "readiness.py": "59314472ab547b337b397fac27b12ddb012cf5149ccd7ed82b49c64c6bf82544",
+    "run.sh": "13cadb4263230f16deeac086c579e29212c8c5853170b9512a7c9f084d114722",
+    "serve.py": "dea567ddbefdccbd85c84700cafa7f627b1e3ee327d61dd358fc7362c050c639"
+  }
+}

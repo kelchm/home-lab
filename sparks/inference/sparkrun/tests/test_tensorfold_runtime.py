@@ -837,3 +837,150 @@ def test_native_lifecycle_gates_tcpstore_then_starts_rank1(runtime, monkeypatch)
     assert [source.rank for source in sources] == [0, 1]
     assert {source.mode for source in sources} == {MODE_FILE}
     assert [source.container for source in sources] == ["cid_node_0", "cid_node_1"]
+
+
+DSV41_RECIPE = Path(__file__).resolve().parents[1] / "bertholomus-tensorfold-dsv41-tp2/dsv41-1017-exl3-tp2-bth-tf-6366d2c-libertai-1m.yaml"
+DSV41_TARGET = "LibertAIDAI/DeepSeek-V4.1-Flash-1017-EXL3-2.9bpw"
+DSV41_SERVED = "DeepSeek-V4.1-Flash-1017"
+
+
+def _dsv41_bundle(tmp_path):
+    recipe = Recipe(yaml.safe_load(DSV41_RECIPE.read_text()), source_path=str(DSV41_RECIPE))
+    source = DSV41_RECIPE.parent / recipe.mods[0]
+    bundle = tmp_path / source.name
+    shutil.copytree(source, bundle, ignore=shutil.ignore_patterns("__pycache__"))
+    modules = {}
+    for name in ("serve", "readiness"):
+        spec = importlib.util.spec_from_file_location(f"dsv41_{name}", bundle / f"{name}.py")
+        modules[name] = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(modules[name])
+    return recipe, bundle, modules["serve"], modules["readiness"]
+
+
+def test_dsv41_recipe_maps_native_rank_wiring_to_both_engine_binaries(runtime, tmp_path):
+    recipe, bundle, serve, _ = _dsv41_bundle(tmp_path)
+    assert recipe.name == recipe.metadata["profile"] == DSV41_RECIPE.stem
+    assert not [issue for issue in runtime.validate_recipe(recipe) if getattr(issue, "severity", None) == ERROR]
+    lock = json.loads((bundle / "upstream.lock.json").read_text())
+    assert lock["image_id"] == recipe.container and lock["image"] == recipe.metadata["image"]
+    assert lock["engine_revision"] == recipe.metadata["engine_revision"]
+    assert recipe.model_revision == recipe.metadata["target_model_revision"]
+    distributed = {(e.name, e.revision) for e in recipe.distribution_config.models.entries}
+    assert (lock["kit"]["repository"], lock["kit"]["revision"]) in distributed
+    assert (DSV41_TARGET, recipe.model_revision) in distributed
+    subprocess.run([sys.executable, str(bundle / "prepare.py"), "--check"], cwd=tmp_path, check=True)
+
+    cache = tmp_path / "runtime"
+    (cache / "tf-ds-rank").mkdir(parents=True)
+    (cache / "dsv41_token_map.json").write_text("{}")
+    fabric = {"NCCL_IB_HCA": "=rocep1s0f0:1,roceP2p1s0f0:1", "NCCL_IB_GID_INDEX": "3",
+              "TF_DS_RANK_CACHE": str(cache / "tf-ds-rank"), "TF_DS_TOKEN_MAP": str(cache / "dsv41_token_map.json")}
+    model, kit, engram = Path("/v/model"), Path("/v/kit"), Path("/v/engram")
+    for rank in (0, 1):
+        env, argv = _parse_env_command(_node_command(runtime, recipe, rank, init_port=29511))
+        assert argv == ["/usr/local/bin/dsv41-tf-entrypoint"]
+        assert env["MODEL_PATH"] == hf_snapshot_path(DSV41_TARGET, recipe.model_revision)
+        args, child = serve.command({**recipe.env, **env, **fabric}, model, kit, engram)
+        assert child["TF_TP_MASTER"] == "198.19.240.11" and child["TF_TP_PORT"] == "29511"
+        assert child["TF_RDMA_DEVICES"] == "rocep1s0f0,roceP2p1s0f0" and child["TF_RDMA_GID_INDEX"] == "3"
+        assert child["TF_DS_REPLAY_FLOOR"] == "1"
+        if rank == 0:
+            assert args[:3] == ["tensorfold-native", "serve", str(model)]
+            for flag, expected in (("--name", DSV41_SERVED), ("--port", "8888"), ("--context", "1048576"),
+                                   ("--parallel", "4"), ("--max-tokens", "32768"), ("--temperature", "1.0"),
+                                   ("--top-p", "0.95"), ("--top-k", "20"), ("--backend", "cuda")):
+                assert args[args.index(flag) + 1] == expected
+            assert child["TF_DS_KIT"] == str(kit) and child["TENSORFOLD_CUDA_KERNELS"] == str(kit / "aot")
+            assert child["TF_DS_ENGRAM"] == str(engram) and "--thinking" in args
+        else:
+            assert args[:8] == ["tf-dsv41-lanes", str(model), fabric["TF_DS_RANK_CACHE"], "1", "2", "198.19.240.11",
+                                "29511", str(kit)]
+            for flag, expected in (("--engram", str(engram)), ("--token-map", fabric["TF_DS_TOKEN_MAP"]),
+                                   ("--pool", "1048576"), ("--rdma", "rocep1s0f0,roceP2p1s0f0"), ("--graphs", "1"),
+                                   ("--side", "1"), ("--prefetch", "1"), ("--aio", "1")):
+                assert args[args.index(flag) + 1] == expected
+    missing = {**recipe.env, **_parse_env_command(_node_command(runtime, recipe, 0))[0], **fabric,
+               "TF_DS_RANK_CACHE": str(tmp_path / "absent")}
+    with pytest.raises(SystemExit, match="rank inputs"):
+        serve.command(missing, model, kit, engram)
+
+
+def test_dsv41_views_link_read_only_snapshots_and_check_the_image_bias(tmp_path, monkeypatch):
+    recipe, bundle, serve, _ = _dsv41_bundle(tmp_path)
+    lock = json.loads((bundle / "upstream.lock.json").read_text())
+    hub, views = tmp_path / "hub", tmp_path / "views"
+    monkeypatch.setattr(serve, "HUB", hub)
+    monkeypatch.setattr(serve, "VIEWS", views)
+    monkeypatch.setattr(serve, "SITE", bundle)
+    weights = serve.snapshot(DSV41_TARGET, recipe.model_revision)
+    weights.mkdir(parents=True)
+    for name in ("config.json", "model-00001-of-00043.safetensors", "chat_template.jinja"):
+        (weights / name).write_text(name)
+    kit = serve.snapshot(lock["kit"]["repository"], lock["kit"]["revision"]) / "kit"
+    for name in ("aot/aot.json", "engram.json", "vision/torch_fmha_sm120.cubin", "vision/gate_bias_vl.safetensors"):
+        (kit / name).parent.mkdir(parents=True, exist_ok=True)
+        (kit / name).write_text(name)
+    (kit / "tools").mkdir()
+    bias = b"bias of the 1017 weights"
+    (kit / "tools/make_bias_vl.py").write_text(f"import sys\nopen(sys.argv[2], 'wb').write({bias!r})\n")
+    engram = serve.snapshot(lock["engram"]["repository"], lock["engram"]["revision"])
+    engram.mkdir(parents=True)
+    for name in lock["engram"]["files"]:
+        (engram / name).write_text(name)
+    lock["kit"]["bias_vl_sha256"] = hashlib.sha256(bias).hexdigest()
+
+    model_view, kit_view, engram_view = serve.views(lock, weights)
+    assert (model_view / "chat_template.jinja").resolve() == (bundle / "chat_template.jinja").resolve()
+    assert (model_view / "config.json").resolve() == (weights / "config.json").resolve()
+    assert (kit_view / "vision/gate_bias_vl.safetensors").read_bytes() == bias
+    assert (kit_view / "vision/torch_fmha_sm120.cubin").resolve() == (kit / "vision/torch_fmha_sm120.cubin").resolve()
+    assert (kit_view / "aot").resolve() == (kit / "aot").resolve()
+    assert sorted(p.name for p in engram_view.iterdir()) == sorted([*lock["engram"]["files"], "model.safetensors.index.json"])
+    assert (engram_view / "model.safetensors.index.json").resolve() == (bundle / "engram.index.json").resolve()
+    # A second start in the same container rebuilds the views.
+    serve.views(lock, weights)
+    lock["kit"]["bias_vl_sha256"] = "0" * 64
+    with pytest.raises(SystemExit, match="image routing bias"):
+        serve.views(lock, weights)
+    lock["kit"]["bias_vl_sha256"] = hashlib.sha256(bias).hexdigest()
+    (engram / "model-00048-of-00048.safetensors").unlink()
+    with pytest.raises(SystemExit, match="Engram"):
+        serve.views(lock, weights)
+
+
+@pytest.mark.parametrize("change", ["edit", "extra"])
+def test_dsv41_frozen_bundle_rejects_changed_or_added_files(tmp_path, change):
+    _, bundle, _, _ = _dsv41_bundle(tmp_path)
+    if change == "edit":
+        (bundle / "serve.py").write_text((bundle / "serve.py").read_text() + "\n# Unreviewed change\n")
+    else:
+        (bundle / "patches/0004-extra.patch").write_text("")
+    result = subprocess.run([sys.executable, str(bundle / "prepare.py"), "--check"], capture_output=True, text=True)
+    assert result.returncode != 0
+
+
+def test_dsv41_readiness_requires_lanes_window_and_reasoning(tmp_path):
+    recipe, _, _, ready = _dsv41_bundle(tmp_path)
+    hook = shlex.split(recipe.post_exec[0])
+    assert hook[hook.index("--model") + 1] == DSV41_SERVED and hook[hook.index("--context") + 1] == "1048576"
+    health = {"status": "ok", "warming": False, "model": DSV41_SERVED, "max_batch_size": 4}
+    ready.check_health(health, DSV41_SERVED, 4)
+    for change in ({"status": "error"}, {"warming": True}, {"model": "other"}, {"max_batch_size": 2}):
+        with pytest.raises(RuntimeError):
+            ready.check_health({**health, **change}, DSV41_SERVED, 4)
+    entry = {"id": DSV41_SERVED, "context_length": 1048576, "reasoning": {"supported_efforts": ["max", "high", "none"]}}
+    ready.check_models({"data": [entry]}, DSV41_SERVED, 1048576)
+    for body in ({"data": []}, {"data": [{**entry, "context_length": 262144}]}, {"data": [{**entry, "reasoning": {}}]}):
+        with pytest.raises(RuntimeError):
+            ready.check_models(body, DSV41_SERVED, 1048576)
+
+
+def test_dsv41_rank_inputs_follow_the_weights_not_the_image(runtime):
+    recipe = Recipe.from_dict(yaml.safe_load(DSV41_RECIPE.read_text()))
+    settings = resolve_runtime_cache_settings(runtime=runtime, recipe=recipe)
+    assert settings.key_by_image is False and settings.prune_enabled is False
+    root = "/home/kelchm/.cache/sparkrun/runtime-cache"
+    mounts = build_runtime_cache_mounts(runtime=runtime, recipe=recipe, settings=settings, root=root, image=recipe.container)
+    assert mounts.leaf == f"{root}/tensorfold/LibertAIDAI__DeepSeek-V4.1-Flash-1017-EXL3-2.9bp-55410efc"
+    assert recipe.env["TF_DS_RANK_CACHE"].startswith(RUNTIME_CACHE_CONTAINER_PATH + "/")
+    assert recipe.env["TF_DS_TOKEN_MAP"].startswith(RUNTIME_CACHE_CONTAINER_PATH + "/")

@@ -4,7 +4,7 @@ SparkRun is the preferred operating approach for inference on the two DGX Sparks
 
 ## SparkRun operation
 
-Use the [Mia GLM-5.3-Flash SparkRun runbook](inference/sparkrun/README.md) for the pinned recipe, launch, status, logs, stop, validation and rollback. Keep the exact working recipe and prepared mod bundle before an upgrade, and stop a workload with the recipe that launched it.
+Use the [SparkRun runbook](inference/sparkrun/README.md) for the pinned recipe, launch, status, logs, stop, validation and rollback. Keep the exact working recipe and prepared mod bundle before an upgrade, and stop a workload with the recipe that launched it.
 
 Inspect the hosts independently of any serving recipe:
 
