@@ -45,7 +45,7 @@ mise exec 'aqua:siderolabs/talos@1.13.11' -- talosctl \
   -e 10.32.30.12 -n 10.32.30.12 version
 ```
 
-Preparation preflight found direct `en0` routes to the API and all three nodes, healthy etcd, three Ready/uncordoned nodes, 24 attached/healthy Longhorn volumes, three Ready instance-managers with `lhnet1`, and no suspended Flux Kustomizations. Both singleton database primaries were on node 3 (`visionect-db` and `bambuddy-db`). These observations expire: rerun preflight immediately before every approved node. Node 2 is the proposed first canary because it has neither primary and its audit baseline is mostly Cilium.
+Preparation preflight found direct `en0` routes to the API and all three nodes, healthy etcd, three Ready/uncordoned nodes, 24 attached/healthy Longhorn volumes, three Ready instance-managers with `lhnet1`, and no suspended Flux Kustomizations. Both singleton database primaries were on node 3 (`visionect-db` and `bambuddy-db`). These observations expire: rerun preflight immediately before every approved node. Node 2 was selected as the first canary because it had neither primary and its audit baseline was mostly Cilium.
 
 Before the first upgrade, save and verify an etcd snapshot outside the repository. Keep out-of-band power control available. Before node 3, explicitly settle both singleton database availability decisions using the skill's CNPG procedure and fresh placement/backup facts. Resolve eviction blockers deliberately; never force a drain or bypass Longhorn's policy. Any temporary topology or Flux suspension requires separate authorization, recording and deliberate restoration.
 
@@ -55,7 +55,7 @@ Run only the approved node through `task talos:upgrade-node IP=<ip>`. Preflight 
 
 After the node returns, use talosctl 1.14.4 for it. Verify the version and the skill's complete gates: etcd quorum, every Kubernetes node Ready and uncordoned, every in-use Longhorn volume attached and healthy with none degraded/faulted, and every instance-manager Running/Ready with `longhorn-system/storage-network` on `lhnet1` and a `10.32.25.x` address. Verify Cilium, Multus and the untaint safeguards recover. Stop on any failure.
 
-[Upstream #14046](https://github.com/siderolabs/talos/pull/14046) grants pods rw on `bpf_t` and changes directories created by `pod_p` under `run_t` to `pod_containerd_run_t`. The expected outcome is that kubelet recreates `/run/cilium` with the new label after reboot, and `state` and endpoint directories inherit it. Live read-only checks after this rollout confirmed both directory labels on all three nodes. The original `run_t`/`bpf_t` acceptance target is narrower than every Cilium AVC: low-rate `prog_run` denials against `sys_containerd_t` and `pod_containerd_t` appeared in the node 1 and node 2 samples. These are BPF program operations, not filesystem `bpf_t` denials.
+[Upstream #14046](https://github.com/siderolabs/talos/pull/14046) grants pods rw on `bpf_t` and changes directories created by `pod_p` under `run_t` to `pod_containerd_run_t`. The expected outcome is that kubelet recreates `/run/cilium` with the new label after reboot, and `state` and endpoint directories inherit it. Live read-only checks after this rollout confirmed both directory labels on all three nodes. The original `run_t`/`bpf_t` acceptance target is narrower than every Cilium AVC: low-rate `prog_run` denials against `sys_containerd_t` and `pod_containerd_t` appeared in the post-upgrade samples. These are BPF program operations, not filesystem `bpf_t` denials.
 
 For each upgraded node:
 
@@ -77,3 +77,18 @@ Before node 3, both CloudNativePG singletons received temporary streaming standb
 The authorized rebalance placed VictoriaMetrics on node 3 and left VictoriaLogs on node 2. Longhorn has 24 attached, healthy volumes and 50 active replicas spread 16 / 17 / 17 across nodes 1 / 2 / 3. Replica moves ran one volume at a time, retaining at least two healthy RW copies throughout. Every temporary per-volume locality, replica-count and auto-balance setting was restored. The two database volumes have three replicas each; the other 22 volumes have two each. These are observed placements, not permanent scheduling constraints.
 
 Older unreferenced replica directories were found separately from the active volume inventory. Their retention and any irreversible cleanup are tracked in [#925](https://github.com/kelchm/home-lab/issues/925); healthy volume status alone does not establish that historical recovery data should be deleted.
+
+
+The simultaneous final audit captures ran for about 600.8 seconds on each node, from 04:04:10 to 04:14:11 UTC on October 21. The fresh pre-upgrade baseline ran for about 601.5 seconds per node. Workload movement matters: the final VictoriaLogs host is node 2 and the VictoriaMetrics host is node 3.
+
+| Node | Baseline audit events/s | Final audit events/s | Baseline lost records/s | Final lost records/s |
+| --- | --- | --- | --- | --- |
+| k8s-prod-1 | 35.6682 | 0.1648 | 18.9504 | 0 |
+| k8s-prod-2 | 5.9969 | 19.6494 | 0 | 4.1247 |
+| k8s-prod-3 | 6.3894 | 4.5343 | 0 | 0 |
+
+Nodes 1 and 3 had full final serial coverage (99/99 and 2,724/2,724 respectively), no unparsed AVCs, no reported loss growth and no Cilium `run_t`/`bpf_t` AVCs. Node 3 retained two Cilium `prog_run` denials, one each against `pod_containerd_t` and `sys_containerd_t`. Node 2's final received records also contained no Cilium AVCs, but its loss counter grew by 2,478 and 1,440 audit serials were absent, so that window cannot independently establish zero denials. Its original post-reboot acceptance capture at 02:22:46–02:32:47 UTC was loss-free with complete 153/153 serial coverage and no original Cilium target denials; the final read-only directory-label check corroborated the earlier result. All three continuous final streams remained connected.
+
+The remaining final AVCs were dominated by VictoriaLogs (`victoria-logs-p`, 10,375 received AVCs) on node 2 and VictoriaMetrics (`victoria-metric`, 2,798) on node 3, both targeting `unlabeled_t`. Other received sources included media/.NET processes, Grafana and PostgreSQL against `unlabeled_t`, Multus against `cni_state_t`, and a handful of NFS, Longhorn-manager and node-exporter denials. These counts describe received AVC records; they are incomplete on the lossy node. Zero reported loss growth uses the last printed dmesg `audit_lost` counter and is not a direct kernel audit-status query. [#911](https://github.com/kelchm/home-lab/issues/911) remains open on `hold` for Longhorn labeling acceptance and the auditd collection decision.
+
+The final health watch ran 04:04:08–04:19:08 UTC for 900.54 seconds, with 31 checks. Every check found 144 running pods Ready, 24 healthy volumes, stable replica placement, correct database RW endpoints, converged Flux Kustomizations/HelmReleases and desired controller readiness. No new container restarts or kernel OOM messages were found. Repeated HTTP checks passed for VictoriaMetrics, VictoriaLogs, Grafana, Broadsheet, Visionect, Bambuddy and Kanidm, and all 136 scrape targets were up. All 25 HTTP routes were accepted and all seven certificates were Ready. Periodic queries confirmed all three etcd members responding and Talos health passing; the final complete rollout preflight also passed.
