@@ -3,7 +3,12 @@
 (() => {
   const GPIO_STATE_URL = "/api/gpio";
   const GPIO_PULSE_URL = "/api/gpio/pulse";
+  const STREAM_STATE_URL = "/api/streamer";
   const SWITCH_TIMEOUT_MS = 10000;
+  const VIDEO_CHECK_MS = 12000;
+  const VIDEO_POLL_MS = 250;
+  const VIDEO_SETTLE_MS = 750;
+  const STREAM_READ_TIMEOUT_MS = 1200;
   const AUTH_POLL_INTERVAL_MS = 3000;
 
   const navEl = document.getElementById("host-nav");
@@ -24,6 +29,7 @@
   let authCheckInFlight = false;
   let authPollTimer = null;
   let lastRequestedHost = null;
+  let lastSwitchFeedback = null;
   let observedVideo = null;
   let inputLayer = null;
   let frameObserver = null;
@@ -31,6 +37,7 @@
 
   function setStatus(state, message) {
     statusEl.dataset.state = state;
+    statusEl.title = message;
     statusTextEl.textContent = message;
   }
 
@@ -44,7 +51,7 @@
     if (!consoleReady) {
       setStatus("checking", "Loading console…");
     } else if (lastRequestedHost) {
-      setStatus("success", `Requested ${lastRequestedHost} · Confirm host on screen`);
+      setStatus(lastSwitchFeedback?.state || "success", lastSwitchFeedback?.message || `Requested ${lastRequestedHost} · Confirm host on screen`);
     } else {
       setStatus("ready", "Ready · Choose a host, then confirm it on screen");
     }
@@ -78,12 +85,13 @@
     }, AUTH_POLL_INTERVAL_MS);
   }
 
-  function markLastRequested(targetButton) {
+  function markLastRequested(targetButton, label = "last requested") {
     for (const btn of buttons) {
       const badge = btn.querySelector(".host-badge");
       if (btn === targetButton) {
         btn.dataset.lastRequested = "true";
         if (badge) {
+          badge.textContent = label;
           badge.hidden = false;
         }
       } else {
@@ -93,6 +101,114 @@
         }
       }
     }
+  }
+
+  async function readStreamState(signal) {
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    signal?.addEventListener("abort", abort, { once: true });
+    if (signal?.aborted) {
+      controller.abort();
+    }
+    const timeout = window.setTimeout(abort, STREAM_READ_TIMEOUT_MS);
+    try {
+      const response = await fetch(STREAM_STATE_URL, {
+        credentials: "same-origin",
+        cache: "no-store",
+        signal: controller.signal,
+        headers: { Accept: "application/json" },
+      });
+      if (!response.ok) {
+        return null;
+      }
+      const parsed = await response.json();
+      const stream = parsed?.result?.streamer;
+      if (parsed?.ok !== true || typeof stream?.hdmi?.signal !== "boolean") {
+        return null;
+      }
+      const source = stream.source;
+      const width = Number(source?.resolution?.width);
+      const height = Number(source?.resolution?.height);
+      const hasSize = Number.isInteger(width) && width > 0 && Number.isInteger(height) && height > 0;
+      const rawMode = source?.real_resolution;
+      const parsedMode = typeof rawMode === "string" ? rawMode.match(/^(\d+)x(\d+)@(\d+(?:\.\d+)?)$/) : null;
+      const modeValid = rawMode == null || (parsedMode && Number(parsedMode[1]) === width && Number(parsedMode[2]) === height);
+      const frameRate = parsedMode ? Number(parsedMode[3]) : null;
+      const mode = `${width}x${height}${frameRate === null ? "" : `@${frameRate}`}`;
+      return { signal: stream.hdmi.signal, online: source?.online === true && hasSize && !!modeValid, width, height, frameRate, mode };
+    } catch (_) {
+      // A failed status read is never evidence that HDMI dropped.
+      return null;
+    } finally {
+      window.clearTimeout(timeout);
+      signal?.removeEventListener("abort", abort);
+    }
+  }
+
+  function watchVideoChange(baseline) {
+    const controller = new AbortController();
+    const deadline = performance.now() + VIDEO_CHECK_MS;
+    let lastSignal = baseline?.signal;
+    let sawLoss = false;
+    let candidate = null;
+    let stableSince = 0;
+    let validReads = 0;
+    let lastValidAt = 0;
+    let latest = null;
+    const promise = (async () => {
+      while (!controller.signal.aborted && performance.now() < deadline) {
+        const current = await readStreamState(controller.signal);
+        const now = performance.now();
+        if (controller.signal.aborted || now >= deadline) {
+          break;
+        }
+        let kind = null;
+        if (current) {
+          validReads += 1;
+          lastValidAt = now;
+          latest = current;
+          if (lastSignal === true && current.signal === false) {
+            sawLoss = true;
+          }
+          lastSignal = current.signal;
+          if (current.signal && current.online) {
+            if (sawLoss) {
+              kind = "returned";
+            } else if (baseline?.signal === false) {
+              kind = "appeared";
+            } else if (baseline?.signal && baseline.online && (current.width !== baseline.width || current.height !== baseline.height || (current.frameRate !== null && baseline.frameRate !== null && current.frameRate !== baseline.frameRate))) {
+              kind = "changed";
+            }
+          }
+        }
+        const key = kind ? `${kind}:${current.mode}` : null;
+        if (key !== candidate || key === null) {
+          candidate = key;
+          stableSince = now;
+        } else if (now - stableSince >= VIDEO_SETTLE_MS) {
+          return { kind, width: current.width, height: current.height, frameRate: current.frameRate };
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, VIDEO_POLL_MS));
+      }
+      const recent = validReads && performance.now() - lastValidAt < STREAM_READ_TIMEOUT_MS + VIDEO_POLL_MS * 2;
+      return { kind: !recent ? "unavailable" : !latest.signal ? "no-signal" : latest.online ? "unchanged" : "not-ready" };
+    })();
+    return { promise, cancel: () => controller.abort() };
+  }
+
+  function reportSwitchResult(button, hostName, observation) {
+    const labels = { returned: "Video returned", appeared: "Video detected", changed: "Video changed" };
+    const label = labels[observation.kind];
+    if (label) {
+      markLastRequested(button, label.toLowerCase());
+      const mode = `${observation.width}×${observation.height}${observation.frameRate === null ? "" : ` @ ${observation.frameRate} Hz`}`;
+      lastSwitchFeedback = { state: "success", message: `${label} after requesting ${hostName} · ${mode}` };
+    } else {
+      const details = { unchanged: "No video change seen; this input may already be selected", "no-signal": "No HDMI signal", "not-ready": "HDMI present; capture is not ready", unavailable: "Video change could not be verified" };
+      const detail = details[observation.kind];
+      lastSwitchFeedback = { state: "unconfirmed", message: `Requested ${hostName} · ${detail}` };
+    }
+    reportAuthenticatedStatus();
   }
 
   function failClosed(hostName, detail) {
@@ -196,6 +312,7 @@
     setStatus("pending", `Requesting ${hostName} (port ${port})…`);
 
     const controller = new AbortController();
+    let videoWatch = null;
     let timedOut = false;
     const timeoutId = window.setTimeout(() => {
       timedOut = true;
@@ -203,8 +320,9 @@
     }, SWITCH_TIMEOUT_MS);
 
     try {
+      const baseline = await readStreamState();
       const url = `${GPIO_PULSE_URL}?channel=${encodeURIComponent(channel)}&wait=true`;
-      const response = await fetch(url, {
+      const responsePromise = fetch(url, {
         method: "POST",
         credentials: "same-origin",
         cache: "no-store",
@@ -213,6 +331,8 @@
           Accept: "application/json",
         },
       });
+      videoWatch = watchVideoChange(baseline);
+      const response = await responsePromise;
 
       if (response.status === 401 || response.status === 403) {
         isSwitching = false;
@@ -241,13 +361,18 @@
         return;
       }
 
+      // The command finished. Observation has its own deadline and cannot resend it.
+      window.clearTimeout(timeoutId);
+      lastRequestedHost = hostName;
+      lastSwitchFeedback = null;
+      markLastRequested(button);
+      setStatus("pending", `Requested ${hostName} · Waiting for video…`);
+      const observation = await videoWatch.promise;
       isSwitching = false;
       delete button.dataset.pending;
       navEl.setAttribute("aria-busy", "false");
-      lastRequestedHost = hostName;
-      markLastRequested(button);
       setButtonsDisabled(false);
-      setStatus("success", `Requested ${hostName} · Confirm host on screen`);
+      reportSwitchResult(button, hostName, observation);
     } catch (err) {
       if (timedOut || (err && err.name === "AbortError")) {
         failClosed(hostName, "Switch timed out after 10s");
@@ -255,6 +380,7 @@
       }
       failClosed(hostName, "Switch request interrupted");
     } finally {
+      videoWatch?.cancel();
       window.clearTimeout(timeoutId);
     }
   }
