@@ -7,7 +7,7 @@ Firmware `V1.10.1 release2` (`/etc/version`), build `rm10-1.10.0beta2-30-g265a7f
 
 ## Web interfaces
 
-The stock GL.iNet UI serves the console, firmware updates, and appliance management at `https://10.32.20.10/`. The PiKVM frontend is disabled; no custom toolbar or wrapper is installed.
+The stock GL.iNet UI serves the console, firmware updates, and appliance management at `https://10.32.20.10/`. The PiKVM frontend is disabled. An optional [Hosts bar](#optional-hosts-bar) at `/hosts/` frames the stock console and adds downstream switching buttons; the normal root address remains the stock UI.
 
 | Port | Interface |
 |------|-----------|
@@ -25,7 +25,7 @@ then the port number. GL.iNet's shortcut UI sends those events too quickly for
 the switch. [`kvm-switch.py`](kvm-switch.py) writes standard eight-byte USB HID
 keyboard reports with a 75 ms key hold and a 250 ms inter-key delay.
 
-The downstream mapping is recorded below and in [`override.yaml`](override.yaml). The override retains the command channels previously used by the PiKVM Hosts menu, but the stock GL.iNet UI does not display them. Use the physical switch buttons or the paced SSH helper to select a host:
+The downstream mapping is recorded below and in [`override.yaml`](override.yaml). The override retains the command channels previously used by the PiKVM Hosts menu, but the stock GL.iNet UI does not display them. Use the optional Hosts bar, physical switch buttons, or the paced SSH helper to select a host:
 
 ```sh
 ssh root@10.32.20.10 '/etc/kvmd/user/bin/kvm-switch 2'
@@ -43,6 +43,34 @@ ssh root@10.32.20.10 '/etc/kvmd/user/bin/kvm-switch 2'
 | 8 | `spark-2` |
 
 All eight downstream ports are assigned. Update this table and the matching command-channel label in the override together if the physical mapping changes. Always confirm the selected host on screen before sending further input.
+
+### Optional Hosts bar
+
+[`hosts-prototype/`](hosts-prototype/) adds eight host buttons at `https://10.32.20.10/hosts/` above an iframe containing the unmodified stock console. Sign in inside that console to enable the buttons. The page reuses the existing same-origin session cookie and protected GPIO API; it does not store credentials or add a backend service. The **Stock UI** link opens the normal root address directly.
+
+Only one switch request can run at a time. The page waits for the existing paced helper to finish and labels the result **Requested**, because the physical switch provides no active-port readback. Confirm the hostname on screen before typing. An interrupted, failed, or ten-second timeout response disables switching until reload. Check the console and any blocked helper before reloading: canceling a browser request does not stop a helper blocked on USB, and repeated reloads can still queue commands. See [USB class compatibility](#usb-class-compatibility) for helper diagnosis.
+
+Install or update from the repository root after applying the normal appliance configuration:
+
+```sh
+devices/glkvm/hosts-prototype/install.sh
+```
+
+The installer requires the main nginx configuration to match the firmware copy, backs up any previous prototype, installs static assets under `/etc/kvmd/user/hosts-prototype/`, and adds `/usr/share/kvmd/extras/hosts-prototype/nginx.ctx-server.conf` through the firmware's existing include. It validates nginx before reloading it; no kvmd restart or USB rebuild is needed. The added route makes only these static files public, like the stock login page; `/api/gpio` and pulse requests still require authentication. Firmware updates may remove the extra include file, so reapply the installer after checking the updated stock configuration.
+
+Installed 2026-10-20. The operator confirmed that the embedded stock console and switching buttons work together. Live checks verified the three served assets, unchanged firmware main configuration, and unauthenticated GPIO reads and pulse requests returning 401. Local browser checks covered all eight channel mappings, concurrent-click suppression, expired-session recovery, malformed responses, and timeout lockout; desktop and phone layouts were inspected. This remains an optional prototype, with no port readback or cross-tab request lock.
+
+To disable the prototype, remove only its nginx include, validate, and reload; the stock console remains available:
+
+```sh
+ssh root@10.32.20.10 '
+    set -eu
+    rm -f /usr/share/kvmd/extras/hosts-prototype/nginx.ctx-server.conf
+    nginx -t -p /etc/kvmd/nginx -c /etc/kvmd/nginx-kvmd.conf \
+        -g "pid /run/kvmd/nginx-test.pid; user root; error_log stderr;"
+    kill -HUP "$(cat /run/kvmd/nginx.pid)"
+'
+```
 
 ### USB class compatibility
 
