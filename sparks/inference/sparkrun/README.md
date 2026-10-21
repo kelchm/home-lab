@@ -517,7 +517,7 @@ A first boot is a memory-fit and fabric check under the same abort rules as the 
 
 ### Model discovery variant
 
-`qwen38fn-nvfp4-tp2-mia-tf-v1.1-discovery-nvidia-1m` is the NVFP4 profile with one file replaced inside the same pinned image: `tensorfold-native`, rebuilt so `GET /v1/models` reports the request window and the reasoning efforts. It exists so a client can configure itself from the server instead of a hand-written per-model table. Both halves are upstream TensorFold changes, released in 1.0.3 and 1.0.12, but the kit pins an engine commit that has neither, so this is a local backport until the kit moves its pin. A first build [served on October 13](#october-13-live-test) and passed every check except decode speed. A second build fixed that and has served since October 14; it carries the upstream PR's draft, which also listed an `effort_map` that upstream dropped before merging. The build in this directory is the merged change and has not served yet. The v1.1 profile and mod are unchanged and are the rollback.
+`qwen38fn-nvfp4-tp2-mia-tf-v1.1-discovery-nvidia-1m` is the NVFP4 profile with one file replaced inside the same pinned image: `tensorfold-native`, rebuilt so `GET /v1/models` reports the request window and the reasoning efforts. It exists so a client can configure itself from the server instead of a hand-written per-model table. Both halves are upstream TensorFold changes, released in 1.0.3 and 1.0.12, but the kit pins an engine commit that has neither, so this is a local backport until the kit moves its pin. A first build [served on October 13](#october-13-live-test) and passed every check except decode speed. A second build fixed that and served from October 14 until DeepSeek-V4.1-Flash-1017 replaced Qwen on October 17; it carries the upstream PR's draft, which also listed an `effort_map` that upstream dropped before merging. The build in this directory is the merged change and has not served yet. The v1.1 profile and mod are unchanged and are the rollback.
 
 The [mod](mods/mia-tensorfold-qwen38fn-v1.1-discovery/) adds two patches to the server's `status_routes.zig` and `server.zig`, on top of the kit's nine, and nothing else in the engine changes:
 
@@ -588,11 +588,12 @@ The second build, `3f22bd80…` of draft `68911640` from branch commit `a4aefb8f
 
 #### Launch and rollback
 
-Merging this directory changes nothing on the Sparks. Each step below is manual. The stop in step 5 begins the outage, which was 118 s on October 13.
+Merging this directory changes nothing on the Sparks. Each step below is manual. The stop in step 6 begins the outage, which was 118 s on October 13.
 
 1. On the workstation, confirm the binary: `python3 sparks/inference/sparkrun/mods/mia-tensorfold-qwen38fn-v1.1-discovery/prepare.py --check --require-binary`. If `out/` is missing, `build/build.sh` rebuilds it in about four minutes and fails unless the result matches the lock.
-2. Check both hosts with `task sparks:status` and the gates used for every trial here: no request in flight (`live.connections` and `live.waiting` zero in `/health`), no other GPU workload, both management links at 10GbE with carrier counters unchanged from 12 and 1,432, and nobody relying on the endpoint for the next ten minutes.
-3. Copy only the new files to the head. This does not touch the running containers, which hold their own copy of the mod they started with. `--delete` drops a patch an earlier copy carried, which `prepare.py` would otherwise refuse:
+2. The published image has been on neither Spark since the October 17 switch. Pull it on the head first, `docker pull` with the `image` from the mod's lock; SparkRun copies it to the worker at launch.
+3. Check both hosts with `task sparks:status` and the gates used for every trial here: no request in flight (`live.connections` and `live.waiting` zero in `/health`), no other GPU workload, both management links at 10GbE with carrier counters unchanged from 12 and 1,432, and nobody relying on the endpoint for the next ten minutes.
+4. Copy only the new files to the head. This does not touch the running containers, which hold their own copy of the mod they started with. `--delete` drops a patch an earlier copy carried, which `prepare.py` would otherwise refuse:
 
    ```sh
    cd sparks/inference/sparkrun
@@ -601,7 +602,7 @@ Merging this directory changes nothing on the Sparks. Each step below is manual.
    rsync -a tests/qwen_model_discovery.py kelchm@10.32.21.31:sparkrun/recipes/glm53/tests/
    ```
 
-4. On the head, verify the copy, run the binary once on a Spark CPU without a GPU or network, and dry-run the recipe. The container is a throwaway from the image already on the head; it should print the `usage: tensorfold-native` line and not `Illegal instruction`:
+5. On the head, verify the copy, run the binary once on a Spark CPU without a GPU or network, and dry-run the recipe. The container is a throwaway from the image already on the head; it should print the `usage: tensorfold-native` line and not `Illegal instruction`:
 
    ```sh
    export PATH="$HOME/.local/share/sparkrun-glm53-0310/bin:$PATH"
@@ -615,19 +616,19 @@ Merging this directory changes nothing on the Sparks. Each step below is manual.
    sparkrun run "$variant" --cluster sparks --no-auto-detect --no-sync-tuning --no-follow --dry-run
    ```
 
-5. Stop the running instance with the recipe that launched it, then confirm on both hosts that no engine process remains and at least 102 GiB is available:
+6. Stop the running instance with the recipe that launched it, then confirm on both hosts that no engine process remains and at least 102 GiB is available:
 
    ```sh
    sparkrun stop "$current" --cluster sparks
    ```
 
-6. Launch the variant. Its readiness hook is the v1.1 hook plus one check, that `/v1/models` reports the 1,048,576 window, so a launch that somehow served the published binary fails here. When the running instance is an earlier build of this variant, steps 5 and 6 use the same recipe file:
+7. Launch the variant. Its readiness hook is the v1.1 hook plus one check, that `/v1/models` reports the 1,048,576 window, so a launch that somehow served the published binary fails here. When the running instance is an earlier build of this variant, steps 6 and 7 use the same recipe file:
 
    ```sh
    sparkrun run "$variant" --cluster sparks --no-auto-detect --no-sync-tuning --no-follow
    ```
 
-7. Read both rank logs for the load, the NCCL join, the RoCE all-gather opening on both ranks and the sequence-memory line, as on a first boot, and confirm each rank runs the rebuilt binary: `docker exec <container> sha256sum /opt/tensorfold/native/bin/tensorfold-native` matches `binary_sha256` in the lock on both hosts.
+8. Read both rank logs for the load, the NCCL join, the RoCE all-gather opening on both ranks and the sequence-memory line, as on a first boot, and confirm each rank runs the rebuilt binary: `docker exec <container> sha256sum /opt/tensorfold/native/bin/tensorfold-native` matches `binary_sha256` in the lock on both hosts.
 
 To roll back, stop with either recipe, confirm both GPUs are free, and launch `$current` with the same flags. That starts fresh containers from the same image, whose binary is the published one; nothing is left to undo on the hosts except the copied files. Both recipes are the same workload to SparkRun, so `stop`, `logs` and `status` with either file act on whichever is running and do not say which binary it is: tell them apart by `context_length` in `/v1/models` or by the binary's sha256.
 
