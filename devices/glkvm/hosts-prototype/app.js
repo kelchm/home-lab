@@ -30,6 +30,7 @@
   let authPollTimer = null;
   let lastRequestedHost = null;
   let lastSwitchFeedback = null;
+  let buttonFeedbackTimer = null;
   let observedVideo = null;
   let inputLayer = null;
   let frameObserver = null;
@@ -39,6 +40,10 @@
     statusEl.dataset.state = state;
     statusEl.title = message;
     statusTextEl.textContent = message;
+    const pending = navEl.querySelector('[data-pending="true"]');
+    if (pending) {
+      pending.title = message;
+    }
   }
 
   function setButtonsDisabled(disabled) {
@@ -85,20 +90,23 @@
     }, AUTH_POLL_INTERVAL_MS);
   }
 
-  function markLastRequested(targetButton, label = "last requested") {
+  function clearButtonFeedback() {
+    window.clearTimeout(buttonFeedbackTimer);
+    buttonFeedbackTimer = null;
     for (const btn of buttons) {
-      const badge = btn.querySelector(".host-badge");
+      delete btn.dataset.feedback;
+    }
+  }
+
+  function markLastRequested(targetButton) {
+    clearButtonFeedback();
+    for (const btn of buttons) {
       if (btn === targetButton) {
         btn.dataset.lastRequested = "true";
-        if (badge) {
-          badge.textContent = label;
-          badge.hidden = false;
-        }
+        btn.title = `Last requested: ${btn.dataset.host}`;
       } else {
         delete btn.dataset.lastRequested;
-        if (badge) {
-          badge.hidden = true;
-        }
+        btn.title = `${btn.dataset.host} (port ${btn.dataset.port})`;
       }
     }
   }
@@ -200,13 +208,21 @@
     const labels = { returned: "Video returned", appeared: "Video detected", changed: "Video changed" };
     const label = labels[observation.kind];
     if (label) {
-      markLastRequested(button, label.toLowerCase());
       const mode = `${observation.width}×${observation.height}${observation.frameRate === null ? "" : ` @ ${observation.frameRate} Hz`}`;
       lastSwitchFeedback = { state: "success", message: `${label} after requesting ${hostName} · ${mode}` };
     } else {
       const details = { unchanged: "No video change seen; this input may already be selected", "no-signal": "No HDMI signal", "not-ready": "HDMI present; capture is not ready", unavailable: "Video change could not be verified" };
       const detail = details[observation.kind];
       lastSwitchFeedback = { state: "unconfirmed", message: `Requested ${hostName} · ${detail}` };
+    }
+    markLastRequested(button);
+    button.title = lastSwitchFeedback.message;
+    if (label) {
+      button.dataset.feedback = "success";
+      buttonFeedbackTimer = window.setTimeout(() => {
+        delete button.dataset.feedback;
+        buttonFeedbackTimer = null;
+      }, 1800);
     }
     reportAuthenticatedStatus();
   }
@@ -306,6 +322,7 @@
     }
 
     isSwitching = true;
+    clearButtonFeedback();
     navEl.setAttribute("aria-busy", "true");
     button.dataset.pending = "true";
     setButtonsDisabled(true);
@@ -412,7 +429,7 @@
     if (video.error) {
       setPlayback("error", `Video error (code ${video.error.code}) · Try Start video`);
     } else if (video.paused) {
-      setPlayback("checking", "Video paused · Click Play in the console or choose a host");
+      setPlayback("paused", "Video paused · Click Play in the console or choose a host");
     } else if (hasVideoFrame(video)) {
       setPlayback("ready", `Playback started · ${video.videoWidth}×${video.videoHeight}`);
     } else {
@@ -559,6 +576,8 @@
   }
 
   for (const btn of buttons) {
+    btn.setAttribute("aria-label", `${btn.dataset.port} ${btn.dataset.host}`);
+    btn.title = `${btn.dataset.host} (port ${btn.dataset.port})`;
     btn.addEventListener("click", () => {
       // The host choice is already a trusted gesture. Unlock playback before
       // requestSwitch reaches its first await; switching itself still runs once.
