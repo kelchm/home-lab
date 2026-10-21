@@ -71,6 +71,7 @@
     isFailedClosed = true;
     isSwitching = false;
     stopAuthPoll();
+    markLastRequested(null);
     navEl.setAttribute("aria-busy", "false");
     for (const btn of buttons) {
       delete btn.dataset.pending;
