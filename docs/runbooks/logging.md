@@ -155,8 +155,6 @@ Rows from direct ingestion keep that schema until retention removes them, about 
 
 ## Talos node logs
 
-**Status:** staged. The receiver is live once its PR merges, but no node sends until the Talos configuration is applied to it; [#906](https://github.com/kelchm/home-lab/issues/906) tracks each node and the verification evidence.
-
 Each node's machined sends its service logs and kernel log to that node's Fluent Bit, which stores them in the same schema with `service.namespace=talos`. Talos sends `json_lines` over TCP to `10.43.0.20:5170`, the fixed ClusterIP of the [`fluent-bit-talos`](../../kubernetes/apps/observability/fluent-bit/app/talos-service.yaml) Service. Its `internalTrafficPolicy: Local` makes Cilium's socket load balancer connect machined to the collector on the same node, so the collector's own node name identifies every record; nothing in Talos's kernel-log format would. The destinations are set in [`machine-logging.yaml`](../../talos/patches/global/machine-logging.yaml): `machine.logging.destinations` for services and a `KmsgLogConfig` document for the kernel log, both applied by Talos without a reboot. The `talos.logging.kernel` kernel argument would do the same as `KmsgLogConfig`, but these nodes boot a UKI, so a kernel argument needs a new image schematic and an upgrade. [#891](https://github.com/kelchm/home-lab/issues/891) records the evaluation.
 
 Talos sends every service it keeps a log for: `machined` and its `controller-runtime` and `dns-resolve-cache` logs, `apid`, `trustd`, `containerd`, `cri`, `etcd`, `kubelet`, `udevd`, `syslogd`, `dashboard`, `auditd`, `kernel` and system extensions such as `ext-iscsid`. Talos cannot select services, so the collector drops four sources:
@@ -192,7 +190,7 @@ Talos keeps each service's last 1 MiB of output in memory and reads the kernel r
 
 - **Boot:** records wait in Talos's buffers until Cilium and the node's collector run, then arrive with their own timestamps. A boot that hangs before that sends nothing; the console and `talosctl logs`/`dmesg` are the evidence.
 - **Shutdown and reboot:** once Talos stops the node's pods, including the collector, its remaining shutdown records are lost with the reboot. Watch the console for the end of a shutdown.
-- **Collector restart:** Talos treats a write to the socket as delivered, so records in flight when the collector stops are lost. Talos keeps retrying and reconnects once the collector is back. Received records are buffered on the node's disk like container logs, in a 256 MiB `talos` output buffer.
+- **Collector restart:** Talos treats a write the node's TCP stack accepts as delivered. A sender whose connection outlives the old collector pod keeps writing into it until TCP gives up, then reconnects to the new pod; everything written in between is lost. On k8s-prod-1 on October 21, 2026, the kernel log's connection stayed on the deleted pod for 16 minutes and lost 14 records, a gap in `kernel.seq`, while the service logs kept arriving. Received records are buffered on the node's disk like container logs, in a 256 MiB `talos` output buffer.
 - **Long lines:** machined reads each service's buffer with a 64 KiB line limit. A longer line stops forwarding of that service until the node reboots. The longest sampled line was under 4,000 characters.
 - **Exposure:** port 5170 is reachable from the node hosts and the observability namespace, as the namespace baseline allows; senders are not authenticated.
 
@@ -210,7 +208,7 @@ The **Kubernetes / Logs** dashboard selects by Kubernetes namespace, so it does 
 
 ### Roll out the Talos configuration
 
-Merge the receiver first and let Flux roll the DaemonSet; Talos must not be pointed at an address without a listener. The first apply replays the kernel log and service buffers back to the node's boot, and VictoriaLogs rejects records older than its 30-day retention as `vl_rows_dropped_total{reason="too_small_timestamp"}`, which pages `VictoriaLogsRowsDropped`. Apply to a node within 30 days of its boot (`talosctl -n <node-ip> get machinestatus -o yaml` shows it as `created`); the nodes booted on October 5 and 6, 2026 (UTC), so the window closes on November 4. Then, one node at a time, starting with `k8s-prod-1`:
+Merge the receiver first and let Flux roll the DaemonSet; Talos must not be pointed at an address without a listener. The first apply replays the kernel log and service buffers back to the node's boot, and VictoriaLogs rejects records older than its 30-day retention as `vl_rows_dropped_total{reason="too_small_timestamp"}`, which pages `VictoriaLogsRowsDropped`. Apply to a node within 30 days of its boot (`talosctl -n <node-ip> get machinestatus -o yaml` shows it as `created`). Then, one node at a time:
 
 1. Confirm the collector is ready: the node's Fluent Bit pod is Ready, `kubectl -n kube-system exec <cilium-agent pod on the node> -c cilium-agent -- cilium-dbg service list` maps `10.43.0.20:5170` to that pod's address only, and `fluentbit_input_records_total{name="talos",node="<node>"}` exists at 0.
 2. Run `task talos:apply-node IP=<node-ip>`. The dry-run diff must add only the `machine.logging.destinations` entry and the `KmsgLogConfig` document, and its summary must say the configuration applies without a reboot. Stop if it differs; otherwise confirm.
