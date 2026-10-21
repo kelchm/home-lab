@@ -57,7 +57,7 @@ vlagent's proposed transformation language ([VictoriaLogs #1508](https://github.
 
 ## Mapping verification
 
-Run through the production configuration and Lua with a replay of the export: 53,376 of 53,376 records arrived, all with `service.name` and a non-empty body, with no unmapped levels. Severity was unspecified for 6,647 rows: mcphub multi-line JSON fragments (5,789), echo probe access lines (842) and 16 plain-text lines from the functional probe and Whereabouts that state no level. All 14,267 Traefik bodies matched Traefik's compiled formatter, and the 22 responses with 5xx status carried `error.type`. `scripts/logging/test-fluent-bit.py` runs 54 container-log fixtures through the pinned image in CI, covering identity precedence including owner references and annotations, payload collisions, each level format, Traefik formatting and peer addresses, split CRI records, a 200 KB line, arrays, data-keyed objects, source locations and the fallback for records the mapping cannot handle.
+Run through the production configuration and Lua with a replay of the export: 53,376 of 53,376 records arrived, all with `service.name` and a non-empty body, with no unmapped levels. Severity was unspecified for 6,647 rows: mcphub multi-line JSON fragments (5,789), echo probe access lines (842) and 16 plain-text lines from the functional probe and Whereabouts that state no level. All 14,267 Traefik bodies matched Traefik's compiled formatter, and the 22 responses with 5xx status carried `error.type`. `scripts/logging/test-fluent-bit.py` runs 57 container-log fixtures through the pinned image in CI, covering identity precedence including owner references and annotations, payload collisions, each level format, Traefik formatting and peer addresses, split CRI records, a 200 KB line, arrays, data-keyed objects, source locations and the fallback for records the mapping cannot handle.
 
 ## Delivery
 
@@ -71,6 +71,43 @@ The September drills ([graceful outage](kubernetes-log-collectors.md); [SIGKILL 
 | Buffer exhausted (deliberately tiny limit) | 2,336 missing; drop counter reported 1,072 | not tested |
 
 The missing records in the third case were the unread end of a file that rotated while Fluent Bit was stopped. Including rotated files in the tail path recovers them but replays rotated files after every restart (2,700 duplicates after a graceful restart), and Fluent Bit's documentation says the path must not match rotated files. The configuration follows the documentation and accepts this compound case. Because the drop counter undercounts buffer-exhaustion loss, alerting fires on buffer capacity before exhaustion.
+
+## Multi-line events
+
+Evaluated 2026-10-19 and 20: each container line stays one record, with no multi-line grouping at collection.
+
+**Volume.** From 12:00 to 21:50 UTC on October 19, 2,327 of 359,740 container records (0.65%) were continuation lines with unspecified severity: indented lines, JSON brackets, `Traceback`, chained-exception headers, `goroutine` or `panic:`. mcphub's pretty-printed tool-call results made up 2,236 and four pve-exporter tracebacks 91. In the 30 days to that date production logged no Go runtime panic and no recovered `http: panic serving`; the only stored panic came from a scratch VictoriaLogs. mcphub v1.0.41 pretty-prints every logged object with a fixed two-space indent and has no log-level setting, so its dumps cannot be reduced by configuration.
+
+**Test bed.** A local kind cluster (Kubernetes 1.37, containerd) ran Fluent Bit 5.1.4 from the production chart and values with the production configuration and Lua, sending to VictoriaLogs v1.53.0. Fake workloads produced real CRI files: a Python 3.13 app writing request lines to stdout every 5 ms while logging chained tracebacks to stderr with `logging.exception` and `traceback.print_exc`; a Go binary that panics and restarts, and one whose HTTP handler panics under `net/http`'s recovery; mcphub's colour-coded header and JSON format; and separate events that resemble continuations (indented status lines and lone `}` after a traceback, JSON lines, a 200 KB line). Each run lasted two minutes, and each event carried an ID for exact checks.
+
+| Configuration | Result |
+| --- | --- |
+| Production | Baseline: every line its own record; nothing lost or duplicated. |
+| `multiline.parser cri, python, go, mcphub` on the tail input | No grouping beyond `cri` (checked locally before the kind runs). |
+| Multiline filter, stock `python, go` plus an mcphub rule | Unsafe. 14 stdout request lines were joined into stderr tracebacks and also stored again on their own; 323 records lost their stream; 32 lone `}` lines were joined into other events. The stock Python parser has no rule for Python 3.11+ caret lines (`~~~^^^`) or chained-exception headers. |
+| Multiline filter, one custom parser grouped by `stream` | No lost, duplicated or cross-stream lines, and the look-alike separate events stayed separate. Whole in two runs (memory and filesystem emitter): every Go runtime panic (5 of 5), recovered HTTP panic (59 of 59) and mcphub dump (290 of 290, each valid JSON); 69 and 70 of 72 `logging.exception` chains; 59 and 58 of 73 `traceback.print_exc` events. A split event became two records. Each mcphub cycle (dump plus two single lines) fell from 20 records to 3, and each HTTP panic from 19 to 2. |
+
+The splits came 9 µs to 14 ms after the previous line, so arrival delay does not explain them. They are consistent with Fluent Bit 5.1.4's flush timer, which force-flushes every pending group once per flush interval regardless of when its last line arrived (`cb_ml_flush_timer` in [src/multiline/flb_ml.c](https://github.com/fluent/fluent-bit/blob/v5.1.4/src/multiline/flb_ml.c)), so an event in progress at that tick is cut; this was not traced per event. A longer interval would cut fewer events, not none.
+
+The custom parser was about 20 regex rules: Python rules extended for caret lines and chained exceptions, Fluent Bit's Go rules, and an mcphub rule that matches its ANSI colour codes, because the multiline filter must run before every other filter, including the colour stripping in `normalize.lua`. Fluent Bit's documentation says several multiline filters on the same tags loop, and its stock parsers set no `key_group`, so grouping by stream needs a custom parser.
+
+**What grouping would not change.** Grouped Python tracebacks and Go panics still store severity 0. Python's `logging` and gunicorn put the level on a header line before the traceback, and the tested parsers leave that line separate; including it would take a rule per header format. The Go runtime states no level. Grouped mcphub dumps keep the header's INFO.
+
+**Cost.** In buffered mode every container record, not only multi-line ones, passes through the filter's emitter input (298,696 read, 289,903 re-emitted after grouping), whose storage defaults to memory. In one measurement at 2,000 lines/s the collector used 85 mCPU and at most 19.4 MiB, against 81 mCPU and 12.7 MiB for production. Grouped records wait up to the filter's flush interval, 1 second in the test.
+
+**Delivery.** Fluent Bit was killed with SIGKILL halfway through each run at about 250 lines/s, and the stored request lines were counted:
+
+| Configuration | Lines lost per kill |
+| --- | --- |
+| Production (`storage.checksum On`) | 60, 82, 129 |
+| Production with `storage.checksum Off` | 0, 0, 0, 0 |
+| Custom parser, memory emitter | 139, 10, 133 |
+| Custom parser, filesystem emitter | 19, 68, 14 |
+| Custom parser, filesystem emitter, `storage.checksum Off` | 1, 2, 2 |
+
+Lost lines are gaps in the request IDs below the highest stored one; the count cannot see a lost tail or damaged payloads, and the state path was ext4 on a Docker volume rather than a node's XFS. No run duplicated a line. With checksums on, the restarted collector rejected the chunks it had been writing (`[storage] format check failed`, which covers several validation failures), whether or not grouping was enabled; [fluent-bit#10952](https://github.com/fluent/fluent-bit/issues/10952) reports the same and was closed as stale; [#912](https://github.com/kelchm/home-lab/issues/912) tracks the production setting. With checksums off the production configuration showed no gaps, and grouping still lost the lines it held when the collector died. The earlier drill's lossless SIGKILL ran at 20 lines/s.
+
+**Decision.** Keep one record per line. Grouping would make mcphub's dumps readable as one record, but it costs a bespoke parser that must track application formats, routes every record through an extra buffer, loses held lines when the collector dies, still cuts some events at its flush timer, and leaves tracebacks and panics without a severity. No Java workload runs in the lab, so the stock `java` parser was not tested. Read a multi-line event with **Show context** in Grafana, or by pod and time in VMUI. Revisit if a source's multi-line events must be one record, for an alert or because operators read them often; the stream-grouped custom parser is the configuration to start from, with a filesystem emitter.
 
 ## Rejected
 

@@ -1,0 +1,17 @@
+---
+# The CSI snapshot API (snapshot.storage.k8s.io CRDs) and its controller.
+# Longhorn and csi-driver-nfs ship a csi-snapshotter sidecar that watches
+# this API and errors continuously without it.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: snapshot-controller
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: snapshot-controller
+  interval: 1h
+  values:
+    controller:
+      serviceMonitor:
+        create: true

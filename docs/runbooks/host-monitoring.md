@@ -235,7 +235,7 @@ Backup failure and staleness rules for PVE are installed: PVE's notification web
 
 ## Service probes
 
-`ups-compute-rack` (`10.32.20.111`, VLAN 20) runs the stock nixpkgs blackbox exporter on `127.0.0.1:9115` through its host-level [rpi-nixos add-on](https://github.com/kelchm/rpi-nixos/blob/main/hosts/ups-compute-rack/probes.nix). Its vmagent scrapes nine destinations as `pi-blackbox` every 60 seconds, with a five-second probe timeout and ten-second scrape timeout. `pi-blackbox-exporter` scrapes the exporter's own metrics every 30 seconds. The other UPS Pi and the streamer run no probes. Modules use only blackbox's built-in HTTP, TCP, DNS and ICMP probers; HTTP status and DNS answer checks are ordinary exporter configuration, with no scripts or credentials.
+`ups-compute-rack` (`10.32.20.111`, VLAN 20) runs the stock nixpkgs blackbox exporter on `127.0.0.1:9115` through its host-level [rpi-nixos add-on](https://github.com/kelchm/rpi-nixos/blob/main/hosts/ups-compute-rack/probes.nix). Its vmagent scrapes nine destinations as `pi-blackbox` every 60 seconds, with a five-second probe timeout and ten-second scrape timeout. `pi-blackbox-exporter` scrapes the exporter's own metrics every 30 seconds. The other UPS Pi and the streamer run no probes. Modules use only blackbox's built-in HTTP, TCP, DNS and ICMP probers; HTTP status, response body and DNS answer checks are ordinary exporter configuration, with no scripts or credentials.
 
 The targets come from the [address registry and LB pools](../architecture.md#lb-pool-allocation) and the live Traefik HTTPRoutes. Kanidm and Jellyfin use `gateway-services`; Grafana and Homepage use `gateway-admin`; Echo uses `gateway-public` behind the Cloudflare tunnel. Gateway TCP probes check the routed VIP listeners independently of DNS and application authentication.
 
@@ -243,7 +243,7 @@ The targets come from the [address registry and LB pools](../architecture.md#lb-
 |---|---|---|---|---|
 | Admin gateway | `10.32.130.1:443` | `tcp_connect` | TCP connection accepted | 60s |
 | Services gateway | `10.32.140.1:443` | `tcp_connect` | TCP connection accepted | 60s |
-| Kanidm | `https://auth.home.kelch.io/ui/login` | `http_2xx` | Public login page, HTTP 200 with valid TLS | 60s |
+| Kanidm | `https://auth.home.kelch.io/status` | `http_kanidm_status` | Health endpoint, HTTP 200 with body `true` and valid TLS; Kanidm does not log it | 60s |
 | Jellyfin | `https://jellyfin.home.kelch.io/web/` | `http_2xx` | Public web client, HTTP 200 with valid TLS | 60s |
 | Grafana | `https://grafana.home.kelch.io/` | `http_redirect` | HTTP 302 with `Location: /login`, valid TLS; do not follow | 60s |
 | Homepage | `https://home.kelch.io/` | `http_401` | HTTP 401 from the authentication middleware, valid TLS; do not follow | 60s |
