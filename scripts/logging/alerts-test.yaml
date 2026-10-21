@@ -41,6 +41,36 @@ tests:
       - expr: count(ALERTS{alertname="FluentBitNodeLogIngestionSilent",alertstate="firing"})
         eval_time: 21m
         exp_samples: [{labels: '{}', value: 1}]
+  - name: Talos logs that stop on one node fire for that node only
+    interval: 1m
+    input_series:
+      - series: fluentbit_input_records_total{job="fluent-bit",node="n1",name="talos"}
+        values: 0+300x10 3000+0x30
+      - series: fluentbit_input_records_total{job="fluent-bit",node="n2",name="talos"}
+        values: 0+300x40
+    promql_expr_test:
+      - expr: ALERTS{alertname="TalosLogIngestionSilent",alertstate="firing"}
+        eval_time: 28m
+        exp_samples: []
+      - expr: ALERTS{alertname="TalosLogIngestionSilent",alertstate="firing"}
+        eval_time: 29m
+        exp_samples: [{labels: '{__name__="ALERTS",alertname="TalosLogIngestionSilent",alertstate="firing",job="fluent-bit",node="n1",name="talos",severity="warning",cluster="k8s-prod"}', value: 1}]
+  - name: A scraped collector without the talos input fires
+    interval: 1m
+    input_series:
+      - series: up{job="fluent-bit",node="n1",endpoint="http"}
+        values: 1+0x30
+      - series: up{job="fluent-bit",node="n2",endpoint="http"}
+        values: 1+0x30
+      - series: fluentbit_input_records_total{job="fluent-bit",node="n2",name="talos"}
+        values: 0+300x30
+    promql_expr_test:
+      - expr: ALERTS{alertname="TalosLogIngestionSilent",alertstate="firing"}
+        eval_time: 9m
+        exp_samples: []
+      - expr: ALERTS{alertname="TalosLogIngestionSilent",alertstate="firing"}
+        eval_time: 11m
+        exp_samples: [{labels: '{__name__="ALERTS",alertname="TalosLogIngestionSilent",alertstate="firing",node="n1",severity="warning",cluster="k8s-prod"}', value: 1}]
   - name: A node whose v2 target is gone is missing even if v1 still answers
     interval: 1m
     input_series:

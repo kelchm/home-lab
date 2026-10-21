@@ -160,7 +160,7 @@ spec:
             severity: critical
           annotations:
             summary: Fluent Bit on {{ $labels.node }} has used 75% of its {{ $labels.name }} buffer
-            description: The output buffer limits are 4 GiB for container logs (victorialogs) and 256 MiB for UniFi syslog (unifi). At capacity Fluent Bit discards chunks and its drop counter undercounts the loss; inspect backend health and node disk space now.
+            description: The output buffer limits are 4 GiB for container logs (victorialogs) and 256 MiB each for Talos logs (talos) and UniFi syslog (unifi). At capacity Fluent Bit discards chunks and its drop counter undercounts the loss; inspect backend health and node disk space now.
 
         - alert: FluentBitRecordsDropped
           expr: |
@@ -180,6 +180,22 @@ spec:
           annotations:
             summary: Fluent Bit on {{ $labels.node }} is reading no container logs
             description: Check the /var/log/containers mount, file permissions and the tail database. A healthy scrape target alone does not prove log collection.
+
+        # The input counts records before the collector drops any. On October 19,
+        # 2026 every node sent several a second (machined's console-dashboard
+        # lines) and controller-runtime logged every 20 seconds. The second
+        # branch covers a collector scraped without the talos input.
+        - alert: TalosLogIngestionSilent
+          expr: |
+            increase(fluentbit_input_records_total{job="fluent-bit",name="talos"}[10m]) == 0
+            or on (node) (max by (node) (up{job="fluent-bit",endpoint="http"} == 1)
+              unless on (node) fluentbit_input_records_total{job="fluent-bit",name="talos"})
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: Fluent Bit on {{ $labels.node }} receives no Talos logs
+            description: The node's talos input counted no records for 20 minutes, or the collector has no talos input. Check the node's machine.logging and KmsgLogConfig settings, the fluent-bit-talos Service endpoints, the node's Cilium service map and the collector's configuration. Talos keeps retrying and holds each service's last 1 MiB.
 
         # Summed over nodes: the gateway spreads senders across every node
         # advertising the address. The console has gone 29 hours without an
