@@ -7,3 +7,16 @@ resources:
   - ./helmrelease.yaml
   - ./networkpolicy.yaml
   - ./oauth2-client.yaml
+
+configMapGenerator:
+  - name: grafana-dashboard-3d-printing-printers
+    files:
+      - 3d-printing-printers.json=./dashboards/3d-printing-printers.json
+    options:
+      annotations:
+        grafana_folder: Services/3D Printing
+        kustomize.toolkit.fluxcd.io/substitute: disabled
+      labels:
+        grafana_dashboard: "1"
+generatorOptions:
+  disableNameSuffixHash: true
