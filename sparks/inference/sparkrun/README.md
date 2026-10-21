@@ -811,7 +811,7 @@ docker run -d --name dsv41-inputs --gpus all --network host --ipc host --ulimit 
 
 These are the settings that wrote the current inputs on October 17, with this layout's paths.
 
-On October 21 both were hard-linked from the hand-run copies, so neither was downloaded or rebuilt; the rank inputs moved to their own root at the relaunch that afternoon.
+On October 21 both were hard-linked from the hand-run copies, so neither was downloaded or rebuilt; the rank inputs moved to their own root at the relaunch that afternoon, and the hand-run copies were then deleted.
 
 ### Build
 
@@ -837,7 +837,7 @@ sparkrun logs "$dsv41" --cluster sparks
 sparkrun stop "$dsv41" --cluster sparks
 ```
 
-The rollback is the Qwen [discovery profile](#model-discovery-variant). The previous engine image, `dsv41-tf:3ff3b2a-4691715-819`, stays on both hosts.
+The rollback is the Qwen [discovery profile](#model-discovery-variant). No earlier DeepSeek engine is kept: its image and the hand-run copies were removed from both hosts on October 21, and this mod has never pinned another engine.
 
 ### October 21 launch
 
