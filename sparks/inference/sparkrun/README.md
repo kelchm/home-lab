@@ -832,6 +832,7 @@ dsv41="$PWD/bertholomus-tensorfold-dsv41-tp2/dsv41-1017-exl3-tp2-bth-tf-6366d2c-
 python3 mods/bertholomus-tensorfold-dsv41-6366d2c/prepare.py --check
 sparkrun run "$dsv41" --cluster sparks --no-auto-detect --no-sync-tuning --no-follow
 sparkrun logs "$dsv41" --cluster sparks
+# When stopping or replacing the workload:
 sparkrun stop "$dsv41" --cluster sparks
 ```
 
@@ -977,11 +978,11 @@ sparkrun stop ./tensorfold-glm53-exl3.yaml --cluster sparks
 From `~/sparkrun/recipes/glm53` on the head:
 
 ```sh
-glm_recipe="$PWD/mia-tensorfold-glm53-exl3-tp2/glm53-exl3-tp2-mia-tf-v1.10-mia-1m.yaml"  # The recipe that launched the running instance.
+recipe="$PWD/bertholomus-tensorfold-dsv41-tp2/dsv41-1017-exl3-tp2-bth-tf-6366d2c-libertai-1m.yaml"  # The recipe that launched the running instance.
 sparkrun status --cluster sparks
-sparkrun logs "$glm_recipe" --cluster sparks
+sparkrun logs "$recipe" --cluster sparks
 # When stopping or replacing the workload:
-sparkrun stop "$glm_recipe" --cluster sparks
+sparkrun stop "$recipe" --cluster sparks
 ```
 
 `run --no-follow` waits for readiness and upstream shape warmup because the recipe has `post_exec`. A failed hook makes the command fail but does not automatically stop the server; inspect logs and stop the failed candidate before rollback. Containers require an explicit SparkRun launch after a host reboot. Persistent runtime caches are managed by SparkRun.

@@ -54,9 +54,11 @@ def views(lock, model_path):
 
     engram_src = snapshot(lock["engram"]["repository"], lock["engram"]["revision"])
     engram.mkdir(parents=True)
-    for name in lock["engram"]["files"]:
+    for name, blob in lock["engram"]["files"].items():
         if not (engram_src / name).exists():
             raise SystemExit(f"{engram_src / name} is missing: stage the Engram shards (README, Engram tables)")
+        if (engram_src / name).resolve().name != blob:
+            raise SystemExit(f"{engram_src / name} is not the locked blob {blob}")
         (engram / name).symlink_to(engram_src / name)
     (engram / "model.safetensors.index.json").symlink_to(SITE / "engram.index.json")
     return model, kit, engram

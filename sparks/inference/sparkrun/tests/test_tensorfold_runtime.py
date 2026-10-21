@@ -926,8 +926,11 @@ def test_dsv41_views_link_read_only_snapshots_and_check_the_image_bias(tmp_path,
     (kit / "tools/make_bias_vl.py").write_text(f"import sys\nopen(sys.argv[2], 'wb').write({bias!r})\n")
     engram = serve.snapshot(lock["engram"]["repository"], lock["engram"]["revision"])
     engram.mkdir(parents=True)
-    for name in lock["engram"]["files"]:
-        (engram / name).write_text(name)
+    blobs = engram.parents[1] / "blobs"
+    blobs.mkdir()
+    for name, blob in lock["engram"]["files"].items():
+        (blobs / blob).write_text(name)
+        (engram / name).symlink_to(f"../../blobs/{blob}")
     lock["kit"]["bias_vl_sha256"] = hashlib.sha256(bias).hexdigest()
 
     model_view, kit_view, engram_view = serve.views(lock, weights)
@@ -944,7 +947,12 @@ def test_dsv41_views_link_read_only_snapshots_and_check_the_image_bias(tmp_path,
     with pytest.raises(SystemExit, match="image routing bias"):
         serve.views(lock, weights)
     lock["kit"]["bias_vl_sha256"] = hashlib.sha256(bias).hexdigest()
-    (engram / "model-00048-of-00048.safetensors").unlink()
+    shard = engram / "model-00048-of-00048.safetensors"
+    shard.unlink()
+    shard.symlink_to(f"../../blobs/{lock['engram']['files']['model-00047-of-00048.safetensors']}")
+    with pytest.raises(SystemExit, match="locked blob"):
+        serve.views(lock, weights)
+    shard.unlink()
     with pytest.raises(SystemExit, match="Engram"):
         serve.views(lock, weights)
 
