@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>GLKVM · Hosts</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="toolbar">
+    <div class="toolbar-brand">
+      <span class="brand-title">GLKVM</span>
+      <span class="brand-subtitle">Hosts</span>
+    </div>
+
+    <nav id="host-nav" class="host-nav" aria-label="Downstream KVM host switch" aria-busy="false">
+      <button type="button" class="host-btn" data-port="1" data-channel="kvm_channel_1" data-host="pve-sbx-1" disabled>
+        <span class="host-port">1</span>
+        <span class="host-name">pve-sbx-1</span>
+        <span class="host-badge" hidden>last requested</span>
+      </button>
+      <button type="button" class="host-btn" data-port="2" data-channel="kvm_channel_2" data-host="pve-sbx-2" disabled>
+        <span class="host-port">2</span>
+        <span class="host-name">pve-sbx-2</span>
+        <span class="host-badge" hidden>last requested</span>
+      </button>
+      <button type="button" class="host-btn" data-port="3" data-channel="kvm_channel_3" data-host="pve-sbx-3" disabled>
+        <span class="host-port">3</span>
+        <span class="host-name">pve-sbx-3</span>
+        <span class="host-badge" hidden>last requested</span>
+      </button>
+      <button type="button" class="host-btn" data-port="4" data-channel="kvm_channel_4" data-host="k8s-prod-1" disabled>
+        <span class="host-port">4</span>
+        <span class="host-name">k8s-prod-1</span>
+        <span class="host-badge" hidden>last requested</span>
+      </button>
+      <button type="button" class="host-btn" data-port="5" data-channel="kvm_channel_5" data-host="k8s-prod-2" disabled>
+        <span class="host-port">5</span>
+        <span class="host-name">k8s-prod-2</span>
+        <span class="host-badge" hidden>last requested</span>
+      </button>
+      <button type="button" class="host-btn" data-port="6" data-channel="kvm_channel_6" data-host="k8s-prod-3" disabled>
+        <span class="host-port">6</span>
+        <span class="host-name">k8s-prod-3</span>
+        <span class="host-badge" hidden>last requested</span>
+      </button>
+      <button type="button" class="host-btn" data-port="7" data-channel="kvm_channel_7" data-host="spark-1" disabled>
+        <span class="host-port">7</span>
+        <span class="host-name">spark-1</span>
+        <span class="host-badge" hidden>last requested</span>
+      </button>
+      <button type="button" class="host-btn" data-port="8" data-channel="kvm_channel_8" data-host="spark-2" disabled>
+        <span class="host-port">8</span>
+        <span class="host-name">spark-2</span>
+        <span class="host-badge" hidden>last requested</span>
+      </button>
+    </nav>
+
+    <div class="toolbar-meta">
+      <div id="status" class="status" role="status" aria-live="polite" aria-atomic="true" data-state="checking">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span id="status-text" class="status-text">Checking session…</span>
+      </div>
+      <a class="stock-link" href="/" target="_top" title="Open the stock GL.iNet console directly at /">Stock UI ↗</a>
+    </div>
+  </header>
+
+  <main class="console-stage">
+    <iframe
+      id="console-frame"
+      class="console-frame"
+      src="/"
+      title="Stock GL.iNet KVM Console"
+      allow="fullscreen; clipboard-read; clipboard-write"
+      allowfullscreen
+    ></iframe>
+  </main>
+</body>
+</html>
