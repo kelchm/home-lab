@@ -1,6 +1,7 @@
--- Maps Kubernetes container log records onto the OpenTelemetry log data model
--- for VictoriaLogs' OTLP endpoint: service.*/k8s.* resource, severity_number
--- and severity_text, a readable body, and semantic-convention attributes.
+-- Maps Kubernetes container log records, and Talos service and kernel logs,
+-- onto the OpenTelemetry log data model for VictoriaLogs' OTLP endpoint:
+-- service.*/k8s.* resource, severity_number and severity_text, a readable
+-- body, and semantic-convention attributes.
 -- docs/evaluations/log-schema-and-collector.md records each rule's source.
 --
 -- Two passes around the JSON parser filter: `capture` stores the collector's
@@ -16,7 +17,7 @@ local LEVELS = {
   NOTICE = 10,
   WARN = 13, WRN = 13, WARNING = 13, W = 13,
   ERROR = 17, ERR = 17, E = 17,
-  CRITICAL = 21, CRIT = 21, FATAL = 21, FTL = 21, PANIC = 21, F = 21,
+  CRITICAL = 21, CRIT = 21, FATAL = 21, FTL = 21, PANIC = 21, DPANIC = 21, F = 21,
 }
 -- pino numeric levels.
 local NUMERIC_LEVELS = { ['10'] = 1, ['20'] = 5, ['30'] = 9, ['40'] = 13, ['50'] = 17, ['60'] = 21 }
@@ -157,6 +158,21 @@ end
 local LOCATION_KEYS = { 'caller', 'file', 'source' }
 local SOURCE_EXTENSIONS = { go = true, py = true, rs = true, java = true, js = true, ts = true,
   rb = true, c = true, cc = true, cpp = true, cs = true }
+
+-- Only `<file>.<source extension>:<line>`, so host:port and data stay; a
+-- location already read from klog wins.
+local function location(payload, attributes)
+  for _, key in ipairs(LOCATION_KEYS) do
+    local v = payload[key]
+    if not attributes['code.file.path'] and type(v) == 'string' then
+      local path, ext, n = v:match('^(.+%.(%a+)):(%d+)$')
+      if path and SOURCE_EXTENSIONS[ext] then
+        attributes['code.file.path'], attributes['code.line.number'] = path, tonumber(n)
+        payload[key] = nil
+      end
+    end
+  end
+end
 
 -- logfmt with quoted values and backslash escapes. Keys are matched only at
 -- the start of a run of key characters, which keeps long lines linear.
@@ -396,18 +412,7 @@ local function build(ingress, record)
     end
   end
 
-  -- Only `<file>.<source extension>:<line>`, so host:port and data stay; a
-  -- location already read from klog wins.
-  for _, key in ipairs(LOCATION_KEYS) do
-    local v = payload[key]
-    if not attributes['code.file.path'] and type(v) == 'string' then
-      local path, ext, n = v:match('^(.+%.(%a+)):(%d+)$')
-      if path and SOURCE_EXTENSIONS[ext] then
-        attributes['code.file.path'], attributes['code.line.number'] = path, n
-        payload[key] = nil
-      end
-    end
-  end
+  location(payload, attributes)
 
   for _, key in ipairs(NUMERIC_ATTRIBUTES) do
     if attributes[key] ~= nil then attributes[key] = tonumber(attributes[key]) end
@@ -434,4 +439,146 @@ function normalize(tag, ts, group, metadata, record)
     body, resource = ingress.raw, found and r or {}
   end
   return 1, ts, attributes, { body = body, resource = { attributes = resource } }
+end
+
+-- Talos service and kernel logs: machined's json_lines (msg, talos-time,
+-- talos-level, talos-service, plus the fields Talos split from the line) and
+-- its kernel log (msg, talos-time, facility, priority, seq, clock).
+-- docs/runbooks/logging.md#talos-node-logs lists what each service writes.
+local NODE = os.getenv('NODE_NAME')
+-- Kernel priorities as the OpenTelemetry Collector's syslog parser maps them.
+local KERNEL_SEVERITY = { emerg = 21, alert = 19, crit = 18, err = 17, warning = 13, notice = 10, info = 9, debug = 5 }
+-- Services whose lines state a level, which Talos reports as talos-level. For
+-- every other line talos-level is Talos's default, not the source's.
+local TALOS_LEVELED = { containerd = true, cri = true, etcd = true }
+local TALOS_KEYS = { 'msg', 'talos-time', 'talos-level', 'talos-service' }
+local TALOS_RESOURCE = { ['service.namespace'] = 'talos', ['host.name'] = NODE, ['k8s.node.name'] = NODE,
+  ['k8s.cluster.name'] = 'k8s-prod' }
+-- Leading write times: zap's console encoder (`2006-01-02T15:04:05.000Z LEVEL`,
+-- machined's controllers), Go's log package (`2006/01/02 15:04:05.000000`,
+-- machined, apid, trustd) and CNI plugins in cri (`2006-01-02T15:04:05Z [level]`).
+local ZAP_PREFIX = '^(%d%d%d%d)%-(%d%d)%-(%d%d)T(%d%d):(%d%d):(%d%d)%.?(%d*)Z (%u+) (.*)$'
+local GO_PREFIX = '^(%d%d%d%d)/(%d%d)/(%d%d) (%d%d):(%d%d):(%d%d)%.?(%d*) (.*)$'
+local BRACKET_PREFIX = '^(%d%d%d%d)%-(%d%d)%-(%d%d)T(%d%d):(%d%d):(%d%d)%.?(%d*)Z %[(%a+)%] (.*)$'
+local KLOG = '^([IWEF])%d%d%d%d %d%d:%d%d:%d%d%.%d+%s+(%d+) ([^:]+):(%d+)%]%s+(.*)$'
+local RFC3339 = '^(%d+)%-(%d+)%-(%d+)T(%d+):(%d+):(%d+)%.?(%d*)([Z+-])(%d*):?(%d*)$'
+-- logrus text always opens with its timestamp.
+local LOGRUS = '^time="?%d%d%d%d%-%d%d%-%d%dT'
+
+local function stamp(y, mo, d, h, mi, se, frac)
+  return { sec = os.time { year = tonumber(y), month = tonumber(mo), day = tonumber(d),
+    hour = tonumber(h), min = tonumber(mi), sec = tonumber(se) }, nsec = tonumber((frac .. '000000000'):sub(1, 9)) }
+end
+
+-- `{sec, nsec}` for an RFC 3339 timestamp, applying its offset.
+local function rfc3339(v)
+  local y, mo, d, h, mi, se, frac, zone, oh, om = tostring(v):match(RFC3339)
+  if not y or (zone ~= 'Z' and (#oh ~= 2 or #om ~= 2)) then return nil end
+  local t = stamp(y, mo, d, h, mi, se, frac)
+  if zone ~= 'Z' then t.sec = t.sec - (zone == '+' and 1 or -1) * (tonumber(oh) * 3600 + tonumber(om) * 60) end
+  return t
+end
+
+local function talos_source(record)
+  if type(record['talos-service']) == 'string' then return record['talos-service'] end
+  if record.facility ~= nil and record.seq ~= nil then return 'kernel' end
+  return 'unknown'
+end
+
+-- auditd repeats the kernel's SELinux AVC records (gigabytes a day here);
+-- machined logs every successful local API call, nearly all from the console
+-- dashboard, which apid also logs when the call is remote; dns-resolve-cache
+-- debug lines dump every DNS query.
+local function talos_dropped(source, msg)
+  if source == 'auditd' then return true end
+  if source == 'machined' then
+    local rest = select(8, msg:match(GO_PREFIX)) or msg
+    return rest:find('^machined/authz/%S+ authorized ') or rest:find('^machined OK %[')
+  end
+  return source == 'dns-resolve-cache' and select(8, (msg:gsub(ANSI, '')):match(ZAP_PREFIX)) == 'DEBUG'
+end
+
+local function talos_build(source, record, ts)
+  -- service.name travels as a record attribute: the OTLP output sends one
+  -- resource per chunk, and VictoriaLogs stores both as the same fields.
+  local attributes = { ['service.name'] = source }
+  local body = (type(record.msg) == 'string' and record.msg or ''):gsub(ANSI, '')
+  ts = rfc3339(record['talos-time']) or ts
+
+  local payload = {}
+  for k, v in pairs(record) do payload[k] = v end
+  for _, k in ipairs(TALOS_KEYS) do payload[k] = nil end
+
+  local level, severity
+  if source == 'kernel' then
+    level = payload.priority
+    severity = KERNEL_SEVERITY[level]
+    attributes['syslog.facility'] = payload.facility
+    payload.priority, payload.facility = nil, nil
+  else
+    -- Talos records the time it read the line; a writer's timestamp at the
+    -- start of the line is when it was written, which differs for lines
+    -- delivered from Talos's buffer.
+    local y, mo, d, h, mi, se, frac, token, rest = body:match(ZAP_PREFIX)
+    local gy, gmo, gd, gh, gmi, gse, gfrac, grest = body:match(GO_PREFIX)
+    if y and LEVELS[token] then
+      ts, level, body = stamp(y, mo, d, h, mi, se, frac), token, rest
+    elseif gy then
+      ts, body = stamp(gy, gmo, gd, gh, gmi, gse, gfrac), grest
+      -- grpc-go: `WARNING: [core] …`.
+      token, rest = body:match('^(%u+): (.*)$')
+      if token and LEVELS[token] then level, body = token, rest end
+    else
+      -- Plain text in the formats these services write: CNI plugins'
+      -- `<time> [level]`, klog and logrus text. Talos keeps any JSON that
+      -- followed the text as fields.
+      y, mo, d, h, mi, se, frac, token, rest = body:match(BRACKET_PREFIX)
+      local kl, thread, file, line, message = body:match(KLOG)
+      if y then
+        ts, level, body = stamp(y, mo, d, h, mi, se, frac), token, rest
+      elseif kl then
+        level, body = kl, message
+        attributes['thread.id'], attributes['code.file.path'], attributes['code.line.number'] = tonumber(thread), file, tonumber(line)
+        if message:sub(1, 1) == '"' then
+          local kv = logfmt('msg=' .. message)
+          body, kv.msg = kv.msg or message, nil
+          for k, v in pairs(kv) do payload[k] = v end
+        end
+      elseif body:find(LOGRUS) then
+        local kv = logfmt(body)
+        ts = rfc3339(kv.time) or ts
+        level, body = kv.level, present(kv.msg) or body
+        kv.time, kv.level, kv.msg = nil, nil, nil
+        for k, v in pairs(kv) do payload[k] = v end
+      elseif TALOS_LEVELED[source] then
+        level = record['talos-level']
+      elseif source == 'kubelet' and payload.caller then
+        -- Kubernetes JSON logs give info records a verbosity `v` and error
+        -- records none; Talos has moved `err` into the message.
+        severity = payload.v ~= nil and 9 or 17
+      end
+    end
+    if payload.component == source then payload.component = nil end
+    severity = severity or (level and LEVELS[tostring(level):upper()])
+    if level and not severity then attributes['pipeline.severity_unmapped'] = true end
+  end
+
+  local encoded = {}
+  payload = flatten(payload, nil, {}, source, encoded)
+  location(payload, attributes)
+  for key, value in pairs(payload) do attributes[source .. '.' .. key] = value end
+
+  attributes.otlp = { severity_number = severity or 0, severity_text = level and tostring(level) or nil }
+  return ts, attributes, body
+end
+
+function talos_normalize(tag, ts, group, metadata, record)
+  local source = talos_source(record)
+  if talos_dropped(source, type(record.msg) == 'string' and record.msg or '') then return -1, ts, metadata, record end
+  local ok, new_ts, attributes, body = pcall(talos_build, source, record, ts)
+  if not ok then
+    attributes = { ['service.name'] = source, ['pipeline.normalize_error'] = tostring(new_ts), otlp = { severity_number = 0 } }
+    body, new_ts = record.msg, ts
+  end
+  return 1, new_ts, attributes, { body = body, resource = { attributes = TALOS_RESOURCE } }
 end

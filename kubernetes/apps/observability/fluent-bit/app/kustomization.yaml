@@ -6,6 +6,7 @@ resources:
   - helmrelease.yaml
   - podmonitor.yaml
   - networkpolicy.yaml
+  - talos-service.yaml
 
 configMapGenerator:
   - name: fluent-bit-config

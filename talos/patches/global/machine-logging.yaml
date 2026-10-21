@@ -1,0 +1,15 @@
+# Service and kernel logs to this node's Fluent Bit through the fluent-bit-talos
+# Service (kubernetes/apps/observability/fluent-bit/app/talos-service.yaml),
+# whose internalTrafficPolicy Local keeps each node's records on its own
+# collector. Talos applies both without a reboot. Behaviour, gaps and rollout:
+# docs/runbooks/logging.md#talos-node-logs.
+machine:
+  logging:
+    destinations:
+      - endpoint: tcp://10.43.0.20:5170
+        format: json_lines
+---
+apiVersion: v1alpha1
+kind: KmsgLogConfig
+name: fluent-bit
+url: tcp://10.43.0.20:5170

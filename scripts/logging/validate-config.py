@@ -41,4 +41,20 @@ assert [(p['containerPort'], p['protocol']) for p in values['extraPorts'] if p['
 service = json.loads(subprocess.check_output(['yq', '-o=json', '.spec', str(root / 'kubernetes/apps/observability/victoria-logs-single/app/syslog-service.yaml')]))
 assert service['selector'] == {'app.kubernetes.io/instance': 'fluent-bit', 'app.kubernetes.io/name': 'fluent-bit'}
 assert [(p['port'], p['targetPort'], p['protocol']) for p in service['ports']] == [(514, 'syslog', 'UDP')]
+# Talos logs: records persist until delivered; machined reaches the port through
+# a fixed ClusterIP that keeps each node's records on its own collector.
+talos = next(s for s in re.split(r'\n(?=\[)', conf) if re.search(r'^\s*Name\s+tcp\s*$', s, re.M))
+assert re.search(r'^\s*storage\.type\s+filesystem\s*$', talos, re.M)
+port = int(re.search(r'^\s*Port\s+(\d+)', talos, re.M).group(1))
+assert [(p['containerPort'], p['protocol']) for p in values['extraPorts'] if p['name'] == 'talos'] == [(port, 'TCP')]
+assert {'name': 'NODE_NAME', 'valueFrom': {'fieldRef': {'fieldPath': 'spec.nodeName'}}} in values['env']
+service = json.loads(subprocess.check_output(['yq', '-o=json', '.spec', str(app / 'talos-service.yaml')]))
+assert service['selector'] == {'app.kubernetes.io/instance': 'fluent-bit', 'app.kubernetes.io/name': 'fluent-bit'}
+assert service['internalTrafficPolicy'] == 'Local'
+assert [(p['port'], p['targetPort'], p['protocol']) for p in service['ports']] == [(port, 'talos', 'TCP')]
+endpoint = f"tcp://{service['clusterIP']}:{port}"
+logging = subprocess.check_output(['yq', '-o=json', '-I=0', '.', str(root / 'talos/patches/global/machine-logging.yaml')], text=True).splitlines()
+docs = [json.loads(d) for d in logging]
+assert [d['endpoint'] for d in docs[0]['machine']['logging']['destinations']] == [endpoint]
+assert docs[1]['kind'] == 'KmsgLogConfig' and docs[1]['url'] == endpoint
 print('Fluent Bit image, hardening, mounts and pipeline guarantees validated.')

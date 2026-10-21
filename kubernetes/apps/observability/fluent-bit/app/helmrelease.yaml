@@ -1,8 +1,8 @@
 ---
-# Node log collector: Kubernetes container stdout/stderr and UniFi syslog,
-# normalized onto the OpenTelemetry log data model and delivered to
-# VictoriaLogs over OTLP. The pipeline lives in the fluent-bit-config ConfigMap
-# (config/), not chart values.
+# Node log collector: Kubernetes container stdout/stderr, Talos service and
+# kernel logs, and UniFi syslog, normalized onto the OpenTelemetry log data
+# model and delivered to VictoriaLogs over OTLP. The pipeline lives in the
+# fluent-bit-config ConfigMap (config/), not chart values.
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
@@ -29,17 +29,27 @@ spec:
     testFramework:
       enabled: false
 
-    # The Lua mapping converts timestamps with os.time.
+    # The Lua mapping converts timestamps with os.time, and names the node on
+    # Talos records.
     env:
       - name: TZ
         value: UTC
+      - name: NODE_NAME
+        valueFrom:
+          fieldRef:
+            fieldPath: spec.nodeName
 
-    # UniFi syslog, published by the victoria-logs-syslog Service.
+    # UniFi syslog, published by the victoria-logs-syslog Service, and Talos
+    # logs, published by the fluent-bit-talos Service.
     extraPorts:
       - name: syslog
         port: 5140
         containerPort: 5140
         protocol: UDP
+      - name: talos
+        port: 5170
+        containerPort: 5170
+        protocol: TCP
 
     tolerations:
       - operator: Exists

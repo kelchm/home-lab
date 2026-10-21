@@ -2,8 +2,8 @@
 """Run the production Fluent Bit config and Lua mapping against fixture logs.
 
 The test changes only what cannot run outside the cluster: Kubernetes metadata
-comes from fixtures instead of the API, UniFi syslog arrives from a local
-sender, output goes to a local OTLP capture instead of VictoriaLogs, and state
+comes from fixtures instead of the API, UniFi syslog and Talos json_lines
+arrive from a local sender, output goes to a local OTLP capture instead of VictoriaLogs, and state
 lives in a temporary directory. Requires Docker; the Fluent Bit image is the
 one pinned in the HelmRelease.
 """
@@ -20,12 +20,21 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 K8S_STREAM_FIELDS = 'service.name,k8s.namespace.name,k8s.pod.name,k8s.container.name,k8s.node.name'
 UNIFI_STREAM_FIELDS = 'service.name,cef.device_product,cef.device_event_class_id'
-SEND_SYSLOG = """
+TALOS_STREAM_FIELDS = 'service.name,k8s.node.name'
+# Talos sends one JSON object per line over a single TCP connection.
+SEND = """
 import json, socket, sys, time
 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 for host, datagram in json.load(open(sys.argv[1])):
     s.sendto(datagram.encode(), (host, 5140))
     time.sleep(0.05)
+t = socket.create_connection(('fb', 5170))
+for record in json.load(open(sys.argv[2])):
+    t.sendall(json.dumps(record).encode() + b'\\n')
+    time.sleep(0.05)
+# Exiting with unsent data would discard it with the container's network.
+t.shutdown(socket.SHUT_WR)
+t.recv(1)
 """
 APP = ROOT / 'kubernetes/apps/observability/fluent-bit/app'
 FIXTURES = json.loads((ROOT / 'scripts/logging/fluent-bit-fixtures.json').read_text())
@@ -84,6 +93,7 @@ def write_inputs(work):
         case['_uid'] = pod_id
     # A second network gives the sender a second source address.
     (work / 'syslog.json').write_text(json.dumps([[case.get('via', 'fb'), case['datagram']] for case in FIXTURES['syslog']]))
+    (work / 'talos.json').write_text(json.dumps([case['record'] for case in FIXTURES['talos']]))
     (work / 'inject.lua').write_text(
         'local pods=' + lua_literal(metadata) + '\n'
         'function inject(tag, ts, record)\n'
@@ -103,7 +113,7 @@ def run(work):
         subprocess.run(docker + ['run', '-d', '--rm', *user, '--name', f'{net}-capture', '--network', net, '--network-alias', 'capture',
                                  '-v', f'{ROOT}/scripts/logging/otlp-capture.py:/capture.py:ro', '-v', f'{work}:/work',
                                  PYTHON_IMAGE, 'python', '/capture.py', '/work/wire.jsonl'], check=True, capture_output=True)
-        subprocess.run(docker + ['run', '-d', '--rm', *user, '--name', f'{net}-fb', '--network', net, '--network-alias', 'fb', '-e', 'TZ=UTC',
+        subprocess.run(docker + ['run', '-d', '--rm', *user, '--name', f'{net}-fb', '--network', net, '--network-alias', 'fb', '-e', 'TZ=UTC', '-e', 'NODE_NAME=k8s-prod-1',
                                  '-v', f'{APP}/config:/fluent-bit/etc/conf:ro', '-v', f'{work}/test.conf:/test/fluent-bit.conf:ro',
                                  '-v', f'{work}/inject.lua:/test/inject.lua:ro', '-v', f'{work}/logs:/var/log/containers:ro',
                                  '-v', f'{work}/state:/state', fluent_bit_image(), '-c', '/test/fluent-bit.conf'],
@@ -115,7 +125,7 @@ def run(work):
         while time.time() < deadline and not (wire.exists() and wire.stat().st_size):
             time.sleep(1)
         subprocess.run(docker + ['create', *user, '--name', f'{net}-send', '--network', net, '-v', f'{work}/syslog.json:/syslog.json:ro',
-                                 PYTHON_IMAGE, 'python', '-c', SEND_SYSLOG, '/syslog.json'], check=True, capture_output=True)
+                                 '-v', f'{work}/talos.json:/talos.json:ro', PYTHON_IMAGE, 'python', '-c', SEND, '/syslog.json', '/talos.json'], check=True, capture_output=True)
         subprocess.run(docker + ['network', 'connect', f'{net}-2', f'{net}-send'], check=True, capture_output=True)
         subprocess.run(docker + ['start', '-a', f'{net}-send'], check=True)
         deadline = time.time() + 90
@@ -134,19 +144,26 @@ def run(work):
 
 
 def expected_records():
-    return sum(1 for case in FIXTURES['cases'] if not case.get('dropped')) + len(FIXTURES['syslog'])
+    return sum(1 for case in FIXTURES['cases'] + FIXTURES['talos'] if not case.get('dropped')) + len(FIXTURES['syslog'])
 
 
 def check(rows):
     by_uid = {r['resource'].get('k8s.pod.uid'): r for r in rows if 'k8s.pod.uid' in r['resource']}
     # UniFi fixtures are told apart by their expected body, so each must be unique.
     by_body = {r.get('body'): r for r in rows if r['resource'].get('service.namespace') == 'unifi'}
+    talos_rows = {r.get('body'): r for r in rows if r['resource'].get('service.namespace') == 'talos'}
     failures = []
     if len(rows) != expected_records():
         failures.append(f'expected {expected_records()} records, received {len(rows)}')
-    for case in FIXTURES['cases'] + FIXTURES['syslog']:
-        unifi = 'datagram' in case
-        row, name = (by_body.get(case['expect']['body']) if unifi else by_uid.get(case['_uid'])), case['name']
+    for case in FIXTURES['cases'] + FIXTURES['syslog'] + FIXTURES['talos']:
+        unifi, talos = 'datagram' in case, 'record' in case
+        name = case['name']
+        if talos:
+            msg = case['record'].get('msg', '')
+            row = talos_rows.get(case['expect']['body']) if 'expect' in case else next(
+                (r for r in talos_rows.values() if r.get('body') and r['body'] in msg), None)
+        else:
+            row = by_body.get(case['expect']['body']) if unifi else by_uid.get(case['_uid'])
         if case.get('dropped'):
             if row is not None:
                 failures.append(f'{name}: should be dropped, got {row.get("body")!r}')
@@ -157,10 +174,11 @@ def check(rows):
             continue
 
         def compare(label, want, got):
-            if want != got:
+            # An integer field sent as a double decodes as a float.
+            if want != got or type(want) is int and type(got) is float:
                 failures.append(f'{name}: {label} expected {want!r}, got {got!r}')
 
-        if row.get('stream_fields') != (UNIFI_STREAM_FIELDS if unifi else K8S_STREAM_FIELDS):
+        if row.get('stream_fields') != (UNIFI_STREAM_FIELDS if unifi else TALOS_STREAM_FIELDS if talos else K8S_STREAM_FIELDS):
             failures.append(f'{name}: VL-Stream-Fields header {row.get("stream_fields")!r}')
         if row.get('ignore_fields') != 'scope.name,scope.version':
             failures.append(f'{name}: VL-Ignore-Fields header {row.get("ignore_fields")!r}')
@@ -202,7 +220,7 @@ def main():
             if os.environ.get('FLUENT_BIT_TEST_DUMP'):
                 print(json.dumps(rows, indent=1), file=sys.stderr)
             sys.exit(1)
-    print(f'Fluent Bit mapping: {len(FIXTURES["cases"]) + len(FIXTURES["syslog"])} fixtures passed.')
+    print(f'Fluent Bit mapping: {len(FIXTURES["cases"]) + len(FIXTURES["syslog"]) + len(FIXTURES["talos"])} fixtures passed.')
 
 
 if __name__ == '__main__':

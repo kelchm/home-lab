@@ -1,8 +1,8 @@
 # Logging
 
-Kubernetes application and control-plane container stdout/stderr is collected into VictoriaLogs, which is the only log backend. Fluent Bit runs on every node, enriches each record from the Kubernetes API, maps it onto the OpenTelemetry log data model and sends it to VictoriaLogs over OTLP; see [Log schema](#log-schema). Fluent Bit also receives syslog from the UniFi console and its devices and stores it in the same schema; see [UniFi console logs](#unifi-console-logs). The [schema and collector evaluation](../evaluations/log-schema-and-collector.md) records why the schema and collector look the way they do.
+Kubernetes application and control-plane container stdout/stderr is collected into VictoriaLogs, which is the only log backend. Fluent Bit runs on every node, enriches each record from the Kubernetes API, maps it onto the OpenTelemetry log data model and sends it to VictoriaLogs over OTLP; see [Log schema](#log-schema). Fluent Bit also receives each Talos node's service and kernel logs, and syslog from the UniFi console and its devices, and stores them in the same schema; see [Talos node logs](#talos-node-logs) and [UniFi console logs](#unifi-console-logs). The [schema and collector evaluation](../evaluations/log-schema-and-collector.md) records why the schema and collector look the way they do.
 
-Collection covers kubelet-managed container logs, including init containers, native sidecars and static control-plane pods. It does not cover Talos service/kernel journals or application files outside stdout/stderr. Quiet or empty containers do not establish a collection failure: compare Kubernetes inventory, node log files and stored records before declaring a source missing.
+Collection covers kubelet-managed container logs, including init containers, native sidecars and static control-plane pods. Talos service and kernel logs are a separate source with their own gaps; see [Delivery and gaps](#delivery-and-gaps). Application files outside stdout/stderr are not collected. Quiet or empty containers do not establish a collection failure: compare Kubernetes inventory, node log files and stored records before declaring a source missing.
 
 ## Query logs
 
@@ -153,6 +153,71 @@ Before Fluent Bit received UniFi syslog, VictoriaLogs' own listener stored it be
 
 Rows from direct ingestion keep that schema until retention removes them, about 30 days after the cutover: `hostname`, `app_name`, `proc_id`, `remote_ip`, `facility_keyword`, `level` and the header time in `timestamp`, no `service.name` or `severity_number`, and VictoriaLogs' missing-message placeholder in `_msg` on CEF records (`| copy cef.extension.msg as _msg` shows the text). The `cef.*` field names are unchanged, and `cef.device_product` and `cef.device_event_class_id` are stream fields in both schemas, so the CEF alerts and the CEF example queries read both; for everything else, select both with `(service.namespace:=unifi OR remote_ip:*)`.
 
+## Talos node logs
+
+**Status:** staged. The receiver is live once its PR merges, but no node sends until the Talos configuration is applied to it; [#906](https://github.com/kelchm/home-lab/issues/906) tracks each node and the verification evidence.
+
+Each node's machined sends its service logs and kernel log to that node's Fluent Bit, which stores them in the same schema with `service.namespace=talos`. Talos sends `json_lines` over TCP to `10.43.0.20:5170`, the fixed ClusterIP of the [`fluent-bit-talos`](../../kubernetes/apps/observability/fluent-bit/app/talos-service.yaml) Service. Its `internalTrafficPolicy: Local` makes Cilium's socket load balancer connect machined to the collector on the same node, so the collector's own node name identifies every record; nothing in Talos's kernel-log format would. The destinations are set in [`machine-logging.yaml`](../../talos/patches/global/machine-logging.yaml): `machine.logging.destinations` for services and a `KmsgLogConfig` document for the kernel log, both applied by Talos without a reboot. The `talos.logging.kernel` kernel argument would do the same as `KmsgLogConfig`, but these nodes boot a UKI, so a kernel argument needs a new image schematic and an upgrade. [#891](https://github.com/kelchm/home-lab/issues/891) records the evaluation.
+
+Talos sends every service it keeps a log for: `machined` and its `controller-runtime` and `dns-resolve-cache` logs, `apid`, `trustd`, `containerd`, `cri`, `etcd`, `kubelet`, `udevd`, `syslogd`, `dashboard`, `auditd` and system extensions such as `ext-iscsid`. Talos cannot select services, so the collector drops three sources:
+
+| Source | Dropped | Daily volume per node, October 19, 2026 |
+| --- | --- | --- |
+| `auditd` | Everything. It repeats the kernel's audit records, almost all SELinux AVC records (SELinux is permissive) for `cilium-agent`, VictoriaMetrics and VictoriaLogs; [#905](https://github.com/kelchm/home-lab/issues/905) investigates them, after which auditd may be worth collecting. | 0.4–3.8 GB, 2–18 million lines. The kernel also logs `audit: rate limit exceeded` and an `audit_lost` count. |
+| `machined` | Successful authorizations (`machined/authz/… authorized …`) and successful API calls (`machined OK […]`), nearly all from the console dashboard polling machined. Denials and failed calls are kept; apid logs every remote call. | About 87 MB, 470,000 lines; the 1 MiB buffer `talosctl logs machined` reads holds about 17 minutes. |
+| `dns-resolve-cache` | Debug lines, which dump every DNS query the node's DNS cache forwards. | Up to 34 MB. |
+
+What remains is about 46,000 rows and 9 MB a day for the three nodes, about 5% of the rows VictoriaLogs stores. Most of it is `controller-runtime`, `cri`, `etcd` and `kubelet`; the kernel log adds a few hundred lines a day after the few thousand of each boot. The dropped records still cross the node's loopback; `fluentbit_filter_drop_records_total{name="talos"}` counts them.
+
+### Talos fields
+
+The mapping is `talos_normalize` in [`normalize.lua`](../../kubernetes/apps/observability/fluent-bit/app/config/normalize.lua). The `pipeline.*` flags mean the same as for [container logs](#log-schema).
+
+| Field | Content |
+| --- | --- |
+| `service.name` | The Talos service, or `kernel`. Stream field. Fluent Bit sends it as a record attribute rather than a resource attribute, because its OTLP output gives a whole chunk one resource; VictoriaLogs stores both kinds as the same fields. |
+| `service.namespace`, `host.name`, `k8s.node.name`, `k8s.cluster.name` | `talos`, the node name twice and `k8s-prod`. `k8s.node.name` is a stream field. |
+| `severity_number`, `severity_text` | Kernel: its priority (`emerg` … `debug`), mapped as for [UniFi syslog](#fields). `controller-runtime`, `dns-resolve-cache`: the level token at the start of the line. Plain text: the level in its format, for the formats these services write (CNI plugins' `<time> [verbose]` in `cri`, klog's leading letter, logrus text's `level=`, grpc-go's `WARNING:` in `etcd`). Other `containerd`, `cri` and `etcd` lines: Talos's `talos-level`, which Talos takes from the line's own JSON level. `kubelet`: 9 for records with a verbosity `v` and 17 for records without one, which is how Kubernetes JSON logs mark errors. Everything else is 0: Talos reports `info` for any line without a level, so its value is not used. Where no level text is sent, VictoriaLogs stores the number's name (`Info`, `Error`, `Unspecified`) as `severity_text`. |
+| `_msg` | The message, without a leading timestamp or level. Talos appends a JSON `err` value to the message (`DeleteContainer returned error: …`). |
+| `_time` | The write time at the start of the line (machined, `controller-runtime`, `dns-resolve-cache`, apid, trustd, CNI plugins and logrus text in `cri`), else Talos's `talos-time`: the service's own JSON timestamp (etcd, kubelet, containerd, cri), the kernel's timestamp, or for other plain text the time Talos read the line. |
+| `syslog.facility` | Kernel records: `kern`, or `user` for Talos's own sequencer lines (`[talos] task … done`), which it writes to the kernel log at `warning` and to machined's log. |
+| `kernel.seq`, `kernel.clock` | The kernel's sequence number and microseconds since boot. A gap in `kernel.seq` marks missing kernel records, whether the ring buffer overran or a record was lost on the way. |
+| `code.file.path`, `code.line.number` | The `caller` of etcd and kubelet records. |
+| `<service>.<field>` | Every other field Talos split from the line, such as `etcd.compact-revision`, `kubelet.podUID` or `controller-runtime.controller`, shaped as for container logs. |
+
+### Delivery and gaps
+
+Talos keeps each service's last 1 MiB of output in memory and reads the kernel ring buffer. Per service, it sends one line at a time; while the collector is unreachable, each attempt waits up to five seconds and the next follows a second later, and when one succeeds Talos continues from its buffer, so a short outage delays records rather than losing them. Once the writer laps a waiting sender, the sender skips to the newest 64 KiB of the buffer and everything before is lost without a trace; machined's buffer laps in about 17 minutes and `controller-runtime`'s and `cri`'s in half a day to a day; kernel gaps show in `kernel.seq`. When a node first receives this configuration, each service's sender has been waiting since boot: a quiet service sends its whole history, a busy one its first few lines from boot and then its newest 64 KiB, and the kernel log what its ring buffer still holds. Expect thousands of records with older timestamps from that node.
+
+- **Boot:** records wait in Talos's buffers until Cilium and the node's collector run, then arrive with their own timestamps. A boot that hangs before that sends nothing; the console and `talosctl logs`/`dmesg` are the evidence.
+- **Shutdown and reboot:** once Talos stops the node's pods, including the collector, its remaining shutdown records are lost with the reboot. Watch the console for the end of a shutdown.
+- **Collector restart:** Talos treats a write to the socket as delivered, so records in flight when the collector stops are lost. Talos keeps retrying and reconnects once the collector is back. Received records are buffered on the node's disk like container logs, in a 256 MiB `talos` output buffer.
+- **Long lines:** machined reads each service's buffer with a 64 KiB line limit. A longer line stops forwarding of that service until the node reboots. The longest sampled line was under 4,000 characters.
+- **Exposure:** port 5170 is reachable from the node hosts and the observability namespace, as the namespace baseline allows; senders are not authenticated.
+
+### Query Talos logs
+
+The **Kubernetes / Logs** dashboard selects by Kubernetes namespace, so it does not show these records; query them in Explore or VMUI.
+
+- One node's services: `service.namespace:=talos k8s.node.name:=k8s-prod-1 | stats by (service.name) count()`
+- A node's boot sequence: `{service.name="kernel", k8s.node.name="k8s-prod-1"} "[talos]"`, or `service.name:=machined "[talos]"`
+- Kernel warnings and worse: `{service.name="kernel"} syslog.facility:=kern severity_number:>=13`
+- Controller errors: `{service.name="controller-runtime"} severity_number:>=17 | fields _time, k8s.node.name, controller-runtime.controller, _msg, controller-runtime.error`
+- kubelet errors: `{service.name="kubelet"} severity_number:>=17`
+- etcd warnings: `{service.name="etcd"} severity_number:>=13`
+- Remote API calls: `{service.name="apid"}`
+
+### Roll out the Talos configuration
+
+Merge the receiver first and let Flux roll the DaemonSet; Talos must not be pointed at an address without a listener. The first apply replays the kernel log and service buffers back to the node's boot, and VictoriaLogs rejects records older than its 30-day retention as `vl_rows_dropped_total{reason="too_small_timestamp"}`, which pages `VictoriaLogsRowsDropped`. Apply to a node within 30 days of its boot (`talosctl -n <node-ip> get machinestatus -o yaml` shows it as `created`); the nodes booted on October 5 and 6, 2026 (UTC), so the window closes on November 4. Then, one node at a time, starting with `k8s-prod-1`:
+
+1. Confirm the collector is ready: the node's Fluent Bit pod is Ready, `kubectl -n kube-system exec <cilium-agent pod on the node> -c cilium-agent -- cilium-dbg service list` maps `10.43.0.20:5170` to that pod's address only, and `fluentbit_input_records_total{name="talos",node="<node>"}` exists at 0.
+2. Run `task talos:apply-node IP=<node-ip>`. The dry-run diff must add only the `machine.logging.destinations` entry and the `KmsgLogConfig` document, and its summary must say the configuration applies without a reboot. Stop if it differs; otherwise confirm.
+3. Within a few minutes, check that `fluentbit_input_records_total{name="talos",node="<node>"}` rises, `fluentbit_output_retries_total{name="talos"}` stays flat, `service.namespace:=talos k8s.node.name:=<node> | stats by (service.name) count()` lists the kernel and the running services, and `service.namespace:=talos (pipeline.normalize_error:* OR pipeline.severity_unmapped:*)` is empty. `talosctl -n <node-ip> services` and the Kubernetes node stay healthy.
+4. Wait ten minutes, recheck the silence and retry counters, then continue with the next node.
+
+To roll back, revert the patch and apply it the same way; Talos stops sending without a reboot. A Talos node pointed at a missing collector only keeps retrying.
+
 ## Source inventory
 
 Measured 2026-09-18 over a 24-hour window with `stats by (service_name) count()` and its `NOT level:~".+"` variant. "No recognized severity" means the stored top-level `level` is absent or empty; it does not establish that a row is unstructured. This is a dated inventory of the former Alloy pipeline, not a complete list of sources or a current traffic baseline. The later [collector evaluation](../evaluations/kubernetes-log-collectors.md#stdoutstderr-and-severity) records additional source-level findings, including Broadsheet renderer warnings whose explicit prefix is not normalized by Alloy.
@@ -211,16 +276,16 @@ These sources log warnings or errors in normal operation. Each was traced to its
 
 The DaemonSet runs the official chart with the pinned upstream image. Its pipeline is plain files under [`kubernetes/apps/observability/fluent-bit/app/config/`](../../kubernetes/apps/observability/fluent-bit/app/config/), delivered as the `fluent-bit-config` ConfigMap; Reloader restarts the pods when it changes.
 
-- **Inputs:** `tail` on `/var/log/containers/*.log` with the `cri` multiline parser, which joins CRI partial records. The path deliberately excludes kubelet-rotated files: matching them replays rotated files as duplicates after every restart. `Read_from_Head` keeps the start of files discovered after startup, so new pods' first lines are collected. `syslog` on UDP 5140 receives [UniFi syslog](#unifi-console-logs); a `rewrite_tag` filter gives each device its own tag, by hostname or else sender address, because the OTLP output takes a chunk's resource from its first record.
+- **Inputs:** `tail` on `/var/log/containers/*.log` with the `cri` multiline parser, which joins CRI partial records. The path deliberately excludes kubelet-rotated files: matching them replays rotated files as duplicates after every restart. `Read_from_Head` keeps the start of files discovered after startup, so new pods' first lines are collected. `tcp` on 5170 receives [Talos logs](#talos-node-logs) as JSON. `syslog` on UDP 5140 receives [UniFi syslog](#unifi-console-logs); a `rewrite_tag` filter gives each device its own tag, by hostname or else sender address, because the OTLP output takes a chunk's resource from its first record.
 - **Enrichment:** the `kubernetes` filter adds labels, annotations and owner references from the API server (get/list/watch on pods and namespaces).
-- **Mapping:** [`normalize.lua`](../../kubernetes/apps/observability/fluent-bit/app/config/normalize.lua) runs in two passes around the JSON parser filter. The first saves identity and the raw line in record metadata, so application payload keys can never overwrite identity; the second builds the OpenTelemetry record described in [Log schema](#log-schema). Text-format level patterns are listed per application at the top of the file. [`unifi.lua`](../../kubernetes/apps/observability/fluent-bit/app/config/unifi.lua) maps UniFi syslog and CEF.
-- **Outputs:** OTLP/HTTP to `victoria-logs-single-server:9428/insert/opentelemetry/v1/logs` with the stream fields in the `VL-Stream-Fields` header and unlimited retries: `victorialogs` for container logs and `unifi` for UniFi syslog.
+- **Mapping:** [`normalize.lua`](../../kubernetes/apps/observability/fluent-bit/app/config/normalize.lua) runs in two passes around the JSON parser filter. The first saves identity and the raw line in record metadata, so application payload keys can never overwrite identity; the second builds the OpenTelemetry record described in [Log schema](#log-schema). Text-format level patterns are listed per application at the top of the file. `talos_normalize` in the same file maps Talos records in one pass. [`unifi.lua`](../../kubernetes/apps/observability/fluent-bit/app/config/unifi.lua) maps UniFi syslog and CEF.
+- **Outputs:** OTLP/HTTP to `victoria-logs-single-server:9428/insert/opentelemetry/v1/logs` with the stream fields in the `VL-Stream-Fields` header and unlimited retries: `victorialogs` for container logs, `talos` for Talos logs and `unifi` for UniFi syslog.
 
-`python3 scripts/logging/test-fluent-bit.py` runs the production configuration and Lua through the pinned image against [fixtures](../../scripts/logging/fluent-bit-fixtures.json), replacing only the Kubernetes filter, the output target and state paths, and sends the UniFi fixtures to the syslog input as UDP datagrams. CI runs it through `scripts/ci/validate-logging.sh`. Add a fixture with every mapping change.
+`python3 scripts/logging/test-fluent-bit.py` runs the production configuration and Lua through the pinned image against [fixtures](../../scripts/logging/fluent-bit-fixtures.json), replacing only the Kubernetes filter, the output target and state paths, and sends the UniFi fixtures to the syslog input as UDP datagrams and the Talos fixtures to the tcp input as `json_lines`. CI runs it through `scripts/ci/validate-logging.sh`. Add a fixture with every mapping change.
 
 ### State, buffering and delivery limits
 
-Tail positions (`tail.db`) and the filesystem buffer persist under the node-local hostPath `/var/lib/fluent-bit`, both with full sync. The output buffers are limited per node to 4 GiB for container logs, several days of the measured input rate, and 256 MiB for UniFi syslog, more than a week at the 48,419 datagrams stored in the 24 hours to October 19, 2026. A node replacement or disk loss loses this state.
+Tail positions (`tail.db`) and the filesystem buffer persist under the node-local hostPath `/var/lib/fluent-bit`, both with full sync. The output buffers are limited per node to 4 GiB for container logs, several days of the measured input rate, and 256 MiB each for Talos logs, months at the measured rate, and UniFi syslog, more than a week at the 48,419 datagrams stored in the 24 hours to October 19, 2026. A node replacement or disk loss loses this state.
 
 A local delivery drill (numbered fixture, kubelet-style rotation) recovered every record across an 11-minute backend outage with a graceful restart and across a SIGKILL at 20 lines/s, without duplicates. In local kind runs of the production configuration at about 250 lines/s, each SIGKILL lost 60 to 129 lines from the chunks being written, which the restarted collector rejected (`format check failed`); [#912](https://github.com/kelchm/home-lab/issues/912) tracks reproducing that on a node and the fix. If the collector is killed during a backend outage and a container's file rotates before it restarts, the unread end of the rotated file is lost; the drill lost 33 records that way. The [evaluation](../evaluations/log-schema-and-collector.md#delivery) records the runs.
 
