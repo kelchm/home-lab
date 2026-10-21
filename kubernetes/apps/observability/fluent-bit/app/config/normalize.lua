@@ -486,11 +486,13 @@ local function talos_source(record)
 end
 
 -- auditd repeats the kernel's SELinux AVC records (gigabytes a day here);
+-- Talos's `kernel` service log is a text copy of the kernel log, which the
+-- KmsgLogConfig stream sends with its facility, priority and sequence number;
 -- machined logs every successful local API call, nearly all from the console
 -- dashboard, which apid also logs when the call is remote; dns-resolve-cache
 -- debug lines dump every DNS query.
-local function talos_dropped(source, msg)
-  if source == 'auditd' then return true end
+local function talos_dropped(record, source, msg)
+  if source == 'auditd' or record['talos-service'] == 'kernel' then return true end
   if source == 'machined' then
     local rest = select(8, msg:match(GO_PREFIX)) or msg
     return rest:find('^machined/authz/%S+ authorized ') or rest:find('^machined OK %[')
@@ -574,7 +576,7 @@ end
 
 function talos_normalize(tag, ts, group, metadata, record)
   local source = talos_source(record)
-  if talos_dropped(source, type(record.msg) == 'string' and record.msg or '') then return -1, ts, metadata, record end
+  if talos_dropped(record, source, type(record.msg) == 'string' and record.msg or '') then return -1, ts, metadata, record end
   local ok, new_ts, attributes, body = pcall(talos_build, source, record, ts)
   if not ok then
     attributes = { ['service.name'] = source, ['pipeline.normalize_error'] = tostring(new_ts), otlp = { severity_number = 0 } }
