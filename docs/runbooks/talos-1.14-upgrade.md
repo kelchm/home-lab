@@ -1,6 +1,6 @@
 # Talos 1.14 upgrade
 
-This procedure covers the k8s-prod v1.13.11 → v1.14.4 OS upgrade and the live Cilium SELinux acceptance check tracked in [#921](https://github.com/kelchm/home-lab/issues/921) and [#911](https://github.com/kelchm/home-lab/issues/911). Preparation on October 20, 2026 confirmed all three nodes still ran v1.13.11 with Kubernetes v1.36.4. The upgrade and the expected AVC reduction have not yet been verified on a node.
+This procedure covers the k8s-prod v1.13.11 → v1.14.4 OS upgrade and the live Cilium SELinux acceptance check tracked in [#921](https://github.com/kelchm/home-lab/issues/921) and [#911](https://github.com/kelchm/home-lab/issues/911). The approved OS rollout ran on October 20, 2026 (October 21 UTC), in node order 2 → 1 → 3. All three nodes now run Talos v1.14.4 with Kubernetes v1.36.4. Read-only host-label checks confirmed `pod_containerd_run_t` on `/run/cilium` and `/run/cilium/state` on every node; timed audit evidence and the remaining sources are recorded in [#911](https://github.com/kelchm/home-lab/issues/911).
 
 ## Compatibility and configuration
 
@@ -27,7 +27,7 @@ Generate production configuration into a private temporary output directory, kee
 
 After any direct `talhelper genconfig` invocation, run `scripts/talos/preserve-encryption.sh <output-dir>/*.yaml` before validating or considering the output for use. `task talos:generate-config`, the bootstrap task (through that same generation task), and CI run this automatically. Talhelper's new-cluster output calls the secretbox key `key1` and omits the identity fallback; this existing cluster uses secretbox `key2` followed by identity. The helper preserves the generated key material, changes the provider metadata to match the existing cluster, and refuses unknown provider layouts or a missing control-plane encryption document. CI checks provider names/order, unchanged fixture key material, required API SANs and all component image pins. Never apply an uncorrected direct talhelper render.
 
-A full 1.14 render cannot be dry-run successfully against the current 1.13 API: all three nodes rejected `DiscoveryServiceConfig` as unregistered. This is a format-version boundary, not a successful apply preview. Repeat the full dry-run after each node runs 1.14, with a matching talosctl, before contemplating any configuration apply. Do not apply the new documents to a 1.13 node.
+During preparation, all three 1.13 nodes rejected a full 1.14 dry-run with `DiscoveryServiceConfig` unregistered. This is a format-version boundary, not a successful apply preview. Repeat the full dry-run after each node runs 1.14, with a matching talosctl, before contemplating any configuration apply. Do not apply the new documents to a 1.13 node.
 
 The OS upgrade retains the live configuration. Do not run `task talos:apply-node` as part of this OS-only acceptance test. An eventual configuration migration needs its own explicit approval and review of the post-upgrade dry-run. Talos 1.14 also removes apply-config's `--mode=reboot`; configuration changes requiring a reboot must be handled with the guarded node procedure.
 
@@ -55,7 +55,7 @@ Run only the approved node through `task talos:upgrade-node IP=<ip>`. Preflight 
 
 After the node returns, use talosctl 1.14.4 for it. Verify the version and the skill's complete gates: etcd quorum, every Kubernetes node Ready and uncordoned, every in-use Longhorn volume attached and healthy with none degraded/faulted, and every instance-manager Running/Ready with `longhorn-system/storage-network` on `lhnet1` and a `10.32.25.x` address. Verify Cilium, Multus and the untaint safeguards recover. Stop on any failure.
 
-[Upstream #14046](https://github.com/siderolabs/talos/pull/14046) grants pods rw on `bpf_t` and changes directories created by `pod_p` under `run_t` to `pod_containerd_run_t`. The expected outcome is that kubelet recreates `/run/cilium` with the new label after reboot, and `state` and endpoint directories inherit it. This remains a hypothesis until checked on a live upgraded node.
+[Upstream #14046](https://github.com/siderolabs/talos/pull/14046) grants pods rw on `bpf_t` and changes directories created by `pod_p` under `run_t` to `pod_containerd_run_t`. The expected outcome is that kubelet recreates `/run/cilium` with the new label after reboot, and `state` and endpoint directories inherit it. Live read-only checks after this rollout confirmed both directory labels on all three nodes. The original `run_t`/`bpf_t` acceptance target is narrower than every Cilium AVC: low-rate `prog_run` denials against `sys_containerd_t` and `pod_containerd_t` appeared in the node 1 and node 2 samples. These are BPF program operations, not filesystem `bpf_t` denials.
 
 For each upgraded node:
 
@@ -66,3 +66,14 @@ For each upgraded node:
 5. Record rates, sample/interval counts, label evidence, remaining sources and the health result in #911, then stop for the next node's approval.
 
 Expect Longhorn-backed workloads to retain `unlabeled_t` denials and Multus to retain some `cni_state_t` denials. Workload movement may move the high audit/loss rate between nodes, so record placement alongside rates. Keep #911 open on `hold` until its Longhorn acceptance check and auditd collection decision are complete. Do not change #905 or #907.
+
+
+## Verified rollout state
+
+The operator merged [#922](https://github.com/kelchm/home-lab/pull/922) and approved each node individually. All three guarded upgrades completed with powercycle reboots, without a forced drain or physical power intervention. Storage returned fully healthy after each node; the post-reboot watchers took 2m01s for node 2, 4m49s for node 1 and 5m35s for node 3. An etcd snapshot outside the repository was checksum-verified and passed a local-only, hash-validating `etcdutl` restore before the first upgrade. The checksum was rechecked after the rollout. No Talos machine configuration was applied.
+
+Before node 3, both CloudNativePG singletons received temporary streaming standbys and verified zero-lag switchovers using the client matched to CNPG 1.30.1. After the reboot, Bambuddy switched to its synchronized instance on node 2 to separate the primaries. The original complete Cluster specs are restored, each database has one Ready instance, and the RW services point to writable `visionect-db-2` on node 1 and `bambuddy-db-2` on node 2. CNPG reclaimed the surplus standby PVCs, PVs and Longhorn volumes; no replication slots remain. Both owning Kustomizations resumed and reconciled successfully.
+
+The authorized rebalance placed VictoriaMetrics on node 3 and left VictoriaLogs on node 2. Longhorn has 24 attached, healthy volumes and 50 active replicas spread 16 / 17 / 17 across nodes 1 / 2 / 3. Replica moves ran one volume at a time, retaining at least two healthy RW copies throughout. Every temporary per-volume locality, replica-count and auto-balance setting was restored. The two database volumes have three replicas each; the other 22 volumes have two each. These are observed placements, not permanent scheduling constraints.
+
+Older unreferenced replica directories were found separately from the active volume inventory. Their retention and any irreversible cleanup are tracked in [#925](https://github.com/kelchm/home-lab/issues/925); healthy volume status alone does not establish that historical recovery data should be deleted.
