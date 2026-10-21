@@ -49,7 +49,7 @@ To give a workload a better service name than its labels produce, set `resource.
 
 Record time is the container runtime's timestamp for the line. Application timestamp fields stay application fields, except on Traefik access lines: `time` (the record time, to the second) and `StartLocal` (a copy of `StartUTC`) are dropped. Integers above 2^53 lose precision in Fluent Bit's Lua filter, which converts every number to a double.
 
-Levels come from structured fields (JSON, logfmt, PostgreSQL's `record.error_severity`), klog's leading letter, or a level token at a fixed position in known plain-text formats. Words elsewhere in a line never set severity; an unknown level is stored as unspecified rather than guessed. Terminal colour codes are removed before parsing, and blank lines are dropped. Continuation lines (Python tracebacks, mcphub's multi-line JSON) are the main unspecified source.
+Levels come from structured fields (JSON, logfmt, PostgreSQL's `record.error_severity`), klog's leading letter, or a level token at a fixed position in known plain-text formats. Words elsewhere in a line never set severity; an unknown level is stored as unspecified rather than guessed. Terminal colour codes are removed before parsing, and blank lines are dropped. Each line is one record, so continuation lines (Python tracebacks, mcphub's multi-line JSON) are the main unspecified source; read a whole event with **Show context**. The [evaluation](../evaluations/log-schema-and-collector.md#multi-line-events) records why lines are not grouped at collection.
 
 ### Retained history
 
@@ -207,7 +207,7 @@ The DaemonSet runs the official chart with the pinned upstream image. Its pipeli
 
 Tail positions (`tail.db`) and the filesystem buffer persist under the node-local hostPath `/var/lib/fluent-bit`, both with full sync. The output buffers are limited per node to 4 GiB for container logs, several days of the measured input rate, and 256 MiB for UniFi syslog, more than a week at the 48,419 datagrams stored in the 24 hours to October 19, 2026. A node replacement or disk loss loses this state.
 
-A local delivery drill (numbered fixture, kubelet-style rotation) recovered every record across an 11-minute backend outage with a graceful restart and across a SIGKILL under load, without duplicates. If the collector is killed during a backend outage and a container's file rotates before it restarts, the unread end of the rotated file is lost; the drill lost 33 records that way. The [evaluation](../evaluations/log-schema-and-collector.md#delivery) records the runs.
+A local delivery drill (numbered fixture, kubelet-style rotation) recovered every record across an 11-minute backend outage with a graceful restart and across a SIGKILL at 20 lines/s, without duplicates. In local kind runs of the production configuration at about 250 lines/s, each SIGKILL lost 60 to 129 lines from the chunks being written, which the restarted collector rejected (`format check failed`); [#912](https://github.com/kelchm/home-lab/issues/912) tracks reproducing that on a node and the fix. If the collector is killed during a backend outage and a container's file rotates before it restarts, the unread end of the rotated file is lost; the drill lost 33 records that way. The [evaluation](../evaluations/log-schema-and-collector.md#delivery) records the runs.
 
 ### Cutover from vlagent
 
