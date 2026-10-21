@@ -62,7 +62,7 @@ Bootstrap or migrate `spark-1` using the [shared definition with `SPARK_HOST=spa
 
 | Signal | Interpretation |
 |---|---|
-| Live output tokens/s | The ten-second slope of finished plus in-flight generated tokens, `tensorfold:generation_tokens_total + tensorfold:generation_tokens_running`, clamped at zero. Aggregate across active streams, including idle time; not a per-request decode measurement. |
+| Live output tokens/s | The ten-second slope of finished plus in-flight generated tokens, `tensorfold:generation_tokens_total + tensorfold:generation_tokens_running`, clamped at zero. Aggregate across active streams, including idle time; not a per-request decode measurement. The slope does not correct counter resets, so after a server restart the one-minute trend reads low for up to a minute. |
 | Output throughput chart | The ten-second live trace shows bursts; one-minute traces compare live output with output booked only when a request finishes. A long reply can produce a completion-accounting spike without a real decode-speed increase. |
 | TTFT and request latency | Native server histograms are updated on request completion. TTFT ends at the first generated token, not necessarily the first client-visible text. Mean uses the last five minutes. |
 | Latency percentiles | Coarse histogram estimates, hidden with fewer than 20 completed samples in five minutes or any observations above the largest finite bucket (300 seconds). The mean still includes those observations. |
