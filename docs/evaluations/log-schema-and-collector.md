@@ -86,6 +86,35 @@ The September drills ([graceful outage](kubernetes-log-collectors.md); [SIGKILL 
 
 The missing records in the third case were the unread end of a file that rotated while Fluent Bit was stopped. Including rotated files in the tail path recovers them but replays rotated files after every restart (2,700 duplicates after a graceful restart), and Fluent Bit's documentation says the path must not match rotated files. The configuration follows the documentation and accepts this compound case. Because the drop counter undercounts buffer-exhaustion loss, alerting fires on buffer capacity before exhaustion.
 
+### Collector kills and power loss
+
+Tested 2026-10-20 after the [multi-line evaluation](#multi-line-events) lost lines to SIGKILL at a higher rate ([#912](https://github.com/kelchm/home-lab/issues/912)). A local kind cluster (Kubernetes 1.37, containerd) ran Fluent Bit 5.1.4 from the production chart, values and configuration into VictoriaLogs v1.53.0, with the node's `/var/lib/fluent-bit` on a loopback XFS filesystem with the mount options of a Talos node's `/var`. The numbered fixture wrote 20,000 records at 250 per second, and its kubelet files held all 20,000. Production nodes averaged 2 to 4 container records per second on October 20, with peak minutes of 28 per second; a start-up replay reads far faster. `verify-numbered.py` checked every stored record's stream, severity, timestamp and body against what the fixture wrote. Each run killed the collector twice, away from the kubelet's 10 MiB rotations.
+
+| Scenario | `storage.checksum On` | `storage.checksum Off` |
+| --- | --- | --- |
+| SIGKILL, six kills | 226, 43, 142, 182, 78, 119 lost | 0 lost |
+| Simulated power loss (XFS shutdown), two runs | 35, 209 lost | 128, 47 lost |
+
+No run duplicated a record or stored a damaged one. The tail input appends records to a chunk before it updates the file's position, so a kill between the two can still replay them as duplicates ([tail_file.c](https://github.com/fluent/fluent-bit/blob/v5.1.4/plugins/in_tail/tail_file.c)). With checksums on, the restarted collector rejected the chunks it had been writing as `invalid crc32` (logged at info level; `format check failed` at error). For the five kills whose rejected chunks were kept, two here and three in an earlier 36,000-line run, every lost record was in one of them, each chunk's content was intact, and its header held ChunkIO's running CRC: ChunkIO writes the unfinalized CRC into the header on every append and finalizes it only when it syncs the chunk, on lock, down or close ([cio_file.c](https://github.com/fluent/fluent-bit/blob/v5.1.4/lib/chunkio/src/cio_file.c)). So a kill between syncs always fails the check. The content length in the header is updated after each append is copied in, so without the check a killed chunk loads consistently, except during a new chunk's first copy, while the length is still 0: the loader then infers the length from the file size. Without `storage.delete_irrecoverable_chunks`, rejected chunks stay on disk and are checked again at every start. Fluent Bit's master branch has the same code, and [fluent-bit#10952](https://github.com/fluent/fluent-bit/issues/10952), with the same report, was closed as stale.
+
+The power loss was simulated by shutting XFS down without a log flush during the run, then unmounting, recovering the log and restarting on the surviving state; it does not model a drive losing its write cache. In all four trials the chunk being written survived as an all-zero file, both settings rejected it for its header, and the lost records were its content, so the checksum made no difference. Tail positions (`DB.sync full`) were already on disk, but chunk data is synced only when the output takes the chunk, about once per flush interval.
+
+Torn writes were tested by loading damaged copies of a real 174-record chunk with the production configuration:
+
+| Damage | `On` | `Off` |
+| --- | --- | --- |
+| Header holds the running CRC (state after a kill) | rejected | 174 delivered |
+| Content zeroed from the middle, one content page zeroed, or one page of random bytes | rejected | first 87 delivered, rest dropped without a log line |
+| One page zeroed inside a 40 KB record | rejected | 173 delivered, and that record with its body cut to 2,059 characters |
+| Length 0 and the first record cut off after 300 bytes (a kill during the first copy) | rejected | that record delivered without most of its resource attributes |
+| Content length 0 in the header (header page from the chunk's creation) | rejected | 174 delivered (length inferred from the file) |
+| File truncated inside the content, or header page zeroed | rejected | rejected |
+| Tag metadata garbled | rejected | kept on disk, no route |
+
+In every case the collector stayed up, delivered new records from another file and did not retry the damaged chunk. MessagePack decoding catches damage that breaks a record's structure, not zeros inside a string, so with checksums off a zeroed span can reach VictoriaLogs inside a record. ChunkIO only appends to a chunk's content, and unwritten XFS extents read as zeros, so torn chunks hold zeros rather than stale data.
+
+**Decision.** Turn checksums off. With them on, a kill, including an OOM kill, discards every chunk written since its last sync, about a flush interval of each busy file's records, although the data is on disk and consistent. With them off, the kills lost nothing, the simulated power losses lost the same as with them on, and a damaged chunk delivers the records before the damage instead of none. The cost is integrity checking: a damaged chunk can deliver a record with a zeroed or missing span, and drops the records after damage that breaks decoding without a log line, where the checksum would have rejected the whole chunk with an error. Damage takes a power loss or a kill during the copy of a new chunk's first append; loss to the checksum comes with any kill while files are being read.
+
 ## Multi-line events
 
 Evaluated 2026-10-19 and 20: each container line stays one record, with no multi-line grouping at collection.
@@ -119,7 +148,7 @@ The custom parser was about 20 regex rules: Python rules extended for caret line
 | Custom parser, filesystem emitter | 19, 68, 14 |
 | Custom parser, filesystem emitter, `storage.checksum Off` | 1, 2, 2 |
 
-Lost lines are gaps in the request IDs below the highest stored one; the count cannot see a lost tail or damaged payloads, and the state path was ext4 on a Docker volume rather than a node's XFS. No run duplicated a line. With checksums on, the restarted collector rejected the chunks it had been writing (`[storage] format check failed`, which covers several validation failures), whether or not grouping was enabled; [fluent-bit#10952](https://github.com/fluent/fluent-bit/issues/10952) reports the same and was closed as stale; [#912](https://github.com/kelchm/home-lab/issues/912) tracks the production setting. With checksums off the production configuration showed no gaps, and grouping still lost the lines it held when the collector died. The earlier drill's lossless SIGKILL ran at 20 lines/s.
+Lost lines are gaps in the request IDs below the highest stored one; the count cannot see a lost tail or damaged payloads, and the state path was ext4 on a Docker volume rather than a node's XFS. No run duplicated a line. With checksums on, the restarted collector rejected the chunks it had been writing (`[storage] format check failed`, which covers several validation failures), whether or not grouping was enabled; [fluent-bit#10952](https://github.com/fluent/fluent-bit/issues/10952) reports the same and was closed as stale; [Collector kills and power loss](#collector-kills-and-power-loss) traces the failing check and records the decision. With checksums off the production configuration showed no gaps, and grouping still lost the lines it held when the collector died. The earlier drill's lossless SIGKILL ran at 20 lines/s.
 
 **Decision.** Keep one record per line. Grouping would make mcphub's dumps readable as one record, but it costs a bespoke parser that must track application formats, routes every record through an extra buffer, loses held lines when the collector dies, still cuts some events at its flush timer, and leaves tracebacks and panics without a severity. No Java workload runs in the lab, so the stock `java` parser was not tested. Read a multi-line event with **Show context** in Grafana, or by pod and time in VMUI. Revisit if a source's multi-line events must be one record, for an alert or because operators read them often; the stream-grouped custom parser is the configuration to start from, with a filesystem emitter.
 

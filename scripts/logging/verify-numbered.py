@@ -45,7 +45,14 @@ for row in rows:
 missing = sorted(set(range(a.expected)) - counts.keys())
 unexpected = sorted(counts.keys() - set(range(a.expected)))
 duplicates = sum(c - 1 for c in counts.values())
+# One range per loss event, such as each collector kill.
+ranges = []
+for n in missing:
+    if ranges and ranges[-1][1] == n - 1:
+        ranges[-1][1] = n
+    else:
+        ranges.append([n, n])
 print(json.dumps({'expected':a.expected, 'rows':len(rows), 'unique':len(counts),
-                  'missing':len(missing), 'missing_ids':missing[:30], 'unexpected':unexpected,
+                  'missing':len(missing), 'missing_ranges':ranges, 'unexpected':unexpected,
                   'duplicates':duplicates, 'semantic_checks':'pass'}, indent=2))
 raise SystemExit(bool(missing or unexpected or duplicates))
