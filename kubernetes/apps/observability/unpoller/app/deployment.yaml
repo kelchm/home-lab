@@ -32,8 +32,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: unpoller
-          # Fork build with per-WAN health series: kelchm/unpoller feat/wan-latency-availability.
-          image: ghcr.io/kelchm/unpoller:sha-39dc2b6@sha256:d84cc629fb68a5b1a5d062489ae6d3d5d41470edc2cdf990a45cc63385b7b38a
+          image: ghcr.io/unpoller/unpoller:v5.7.0@sha256:5be0efc124aa58c37b3d66b0e5edf00478670f278b9206e5566c102b64c9c868
           args: ["--config", "/config/up.conf"]
           ports:
             - name: metrics
