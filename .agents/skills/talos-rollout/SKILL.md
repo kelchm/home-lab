@@ -31,6 +31,8 @@ Two more, learned from the v1.13.9 rollout:
 2. Update the checkout from `main` and compare the target in `talos/talenv.yaml`, the `talosctl` pin in `.mise.toml`, and the installer image in `talos/talconfig.yaml`.
 3. Work where `KUBECONFIG` and `TALOSCONFIG` point to usable credentials. The bundled scripts honor explicit environment paths.
 
+Preflight selects the exact talosctl version independently for each node from Kubernetes's reported OS image, using `scripts/with-node-client.sh`. The guarded upgrade task uses the same helper for its candidate. This supports mixed Talos versions without relying on one global client override. The helper checks credential files and uses an explicit kubeconfig; a failed version lookup aborts execution. It is for healthy pre-upgrade nodes; after reboot, select the expected target client and verify the server version before further checks.
+
 ## Preflight the cluster
 
 Run preflight against the node you intend to roll first. The candidate argument makes the access-path and CloudNativePG checks specific to it:

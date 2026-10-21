@@ -2,7 +2,7 @@
 
 ## Policy and measured state
 
-The cluster uses **500** at `cluster.controllerManager.extraArgs.terminated-pod-gc-threshold`, through [terminated-pod-gc.yaml](../../talos/patches/controller/terminated-pod-gc.yaml) under `controlPlane.patches` in [talconfig.yaml](../../talos/talconfig.yaml). The patch preserves the existing `bind-address` argument and does not alter kubelet or volume settings.
+The desired configuration uses **500** at `KubeControllerManagerConfig.extraArgs.terminated-pod-gc-threshold` (the live Talos 1.13 configuration uses `cluster.controllerManager.extraArgs.terminated-pod-gc-threshold`), through [terminated-pod-gc.yaml](../../talos/patches/controller/terminated-pod-gc.yaml) under `controlPlane.patches` in [talconfig.yaml](../../talos/talconfig.yaml). The patch preserves the existing `bind-address` argument and does not alter kubelet or volume settings.
 
 Pre-rollout baseline measured 2026-10-04 around 22:20–22:23 UTC using read-only Kubernetes and Talos queries: all three controller-manager static pods used `registry.k8s.io/kube-controller-manager:v1.36.4`, with no threshold flag or `--config` argument, and `--controllers=*,tokencleaner`. Thus the effective threshold was the [v1.36.4 default of 12,500](https://github.com/kubernetes/kubernetes/blob/v1.36.4/pkg/controller/podgc/config/v1alpha1/defaults.go). Talos's controllerManagerConfig on node 1 independently showed only `bind-address` under extraArgs. Nodes ran Talos 1.13.10; the repository requested 1.13.11 and Kubernetes 1.36.4.
 

@@ -58,6 +58,51 @@ reset_fixture
 yq -i '.machine.kubelet.image = "ghcr.io/siderolabs/kubelet:v1.36.1"' "${TEST_DIR}/talos/patches/global/machine-kubelet.yaml"
 expect_failure 'kubelet version drift' '.machine.kubelet.image version v1.36.1 does not match talenv.yaml'
 
+for component in KubeAPIServerConfig KubeControllerManagerConfig KubeSchedulerConfig; do
+    reset_fixture
+    COMPONENT="${component}" yq -i '(select(.kind == strenv(COMPONENT)) | .image) = "registry.k8s.io/component:v1.36.1"' "${TEST_DIR}/talos/patches/controller/cluster.yaml"
+    expect_failure "${component} version drift" "${component}.image version v1.36.1 does not match talenv.yaml"
+done
+
 reset_fixture
-yq -i '.cluster.apiServer.image = "registry.k8s.io/kube-apiserver:v1.36.1"' "${TEST_DIR}/talos/patches/controller/cluster.yaml"
-expect_failure 'control-plane version drift' '.cluster.apiServer.image version v1.36.1 does not match talenv.yaml'
+yq -i '(select(.kind == "KubeAPIServerConfig") | .certExtraSANs) -= ["k8s-prod.home.kelch.io"]' "${TEST_DIR}/talos/patches/controller/cluster.yaml"
+expect_failure 'API certificate SAN drift' 'missing API certificate SAN k8s-prod.home.kelch.io'
+
+reset_fixture
+yq -i '.patches -= ["@./patches/global/upgrade-compatibility.yaml"]' "${TEST_DIR}/talos/talconfig.yaml"
+expect_failure 'unintended filesystem trim' 'trim and workload isolation must remain disabled'
+
+reset_fixture
+cat >> "${TEST_DIR}/talos/patches/controller/cluster.yaml" <<'PATCH'
+---
+apiVersion: v1alpha1
+kind: KubeEtcdEncryptionConfig
+config:
+  resources:
+    - resources: [secrets]
+      providers:
+        - secretbox:
+            keys:
+              - name: future-key
+                secret: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+PATCH
+expect_failure 'unexpected encryption key layout' 'unexpected encryption providers; refusing to rewrite them'
+
+reset_fixture
+cat >> "${TEST_DIR}/talos/patches/controller/cluster.yaml" <<'PATCH'
+---
+apiVersion: v1alpha1
+kind: KubeEtcdEncryptionConfig
+$$patch: delete
+PATCH
+expect_failure 'missing encryption document in renderer' 'etcd encryption config is required for control plane machines'
+
+# The renderer already rejects a missing document. Also guard a direct helper
+# invocation on incomplete input, independently of talhelper's validation.
+printf 'machine:\n  type: controlplane\n' > "${TEST_DIR}/missing-encryption.yaml"
+if "${SCRIPT_DIR}/../talos/preserve-encryption.sh" "${TEST_DIR}/missing-encryption.yaml" > "${TEST_DIR}/output.log" 2>&1; then
+    echo 'FAIL: missing encryption document passed the preservation helper' >&2
+    exit 1
+fi
+grep -Fq 'missing encryption document in control-plane config' "${TEST_DIR}/output.log"
+echo 'ok: direct helper rejects a missing control-plane encryption document'

@@ -5,11 +5,10 @@ talosVersion: "${talosVersion}"
 kubernetesVersion: "${kubernetesVersion}"
 
 endpoint: https://10.32.30.8:6443
-additionalApiServerCertSans: &sans
+additionalMachineCertSans:
   - "127.0.0.1"
   - "10.32.30.8"
   - "k8s-prod.home.kelch.io"
-additionalMachineCertSans: *sans
 
 clusterPodNets: ["10.42.0.0/16"]
 clusterSvcNets: ["10.43.0.0/16"]
@@ -97,6 +96,7 @@ patches:
   - "@./patches/global/machine-time.yaml"
   - "@./patches/global/volume-ephemeral.yaml"
   - "@./patches/global/user-volume-longhorn.yaml"
+  - "@./patches/global/upgrade-compatibility.yaml"
 
 # Controller patches
 controlPlane:
