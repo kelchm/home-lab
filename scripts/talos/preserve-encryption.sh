@@ -7,7 +7,12 @@ set -Eeuo pipefail
 
 for config in "$@"; do
     encryption_kind="$(yq 'select(.kind == "KubeEtcdEncryptionConfig") | .kind' "$config")"
-    [[ -n "$encryption_kind" ]] || continue
+    if [[ -z "$encryption_kind" ]]; then
+        machine_type="$(yq 'select(has("machine")) | .machine.type' "$config")"
+        [[ "$machine_type" == worker ]] && continue
+        echo "${config##*/}: missing encryption document in control-plane config" >&2
+        exit 1
+    fi
     [[ "$encryption_kind" == KubeEtcdEncryptionConfig ]] || { echo 'expected exactly one encryption document' >&2; exit 1; }
     if ! yq -o=json 'select(.kind == "KubeEtcdEncryptionConfig")' "$config" | jq --exit-status '.config.resources |
         length == 1 and .[0].resources == ["secrets"] and

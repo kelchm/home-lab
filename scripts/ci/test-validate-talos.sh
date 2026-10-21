@@ -87,3 +87,22 @@ config:
                 secret: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
 PATCH
 expect_failure 'unexpected encryption key layout' 'unexpected encryption providers; refusing to rewrite them'
+
+reset_fixture
+cat >> "${TEST_DIR}/talos/patches/controller/cluster.yaml" <<'PATCH'
+---
+apiVersion: v1alpha1
+kind: KubeEtcdEncryptionConfig
+$$patch: delete
+PATCH
+expect_failure 'missing encryption document in renderer' 'etcd encryption config is required for control plane machines'
+
+# The renderer already rejects a missing document. Also guard a direct helper
+# invocation on incomplete input, independently of talhelper's validation.
+printf 'machine:\n  type: controlplane\n' > "${TEST_DIR}/missing-encryption.yaml"
+if "${SCRIPT_DIR}/../talos/preserve-encryption.sh" "${TEST_DIR}/missing-encryption.yaml" > "${TEST_DIR}/output.log" 2>&1; then
+    echo 'FAIL: missing encryption document passed the preservation helper' >&2
+    exit 1
+fi
+grep -Fq 'missing encryption document in control-plane config' "${TEST_DIR}/output.log"
+echo 'ok: direct helper rejects a missing control-plane encryption document'
