@@ -62,14 +62,13 @@ Bootstrap or migrate `spark-1` using the [shared definition with `SPARK_HOST=spa
 
 | Signal | Interpretation |
 |---|---|
-| Live output tokens/s | `irate(tensorfold_health:completion_tokens_total[10s])` uses the latest scrape interval and includes replies in progress. Aggregate across active streams, including idle time; not a per-request decode measurement. |
-| Output throughput chart | The fast live trace uses the latest one-second scrape interval; separate one-minute averages compare live output with output booked only when a request finishes. A long reply can produce a completion-accounting spike without a real decode-speed increase. |
+| Live output tokens/s | The ten-second slope of finished plus in-flight generated tokens, `tensorfold:generation_tokens_total + tensorfold:generation_tokens_running`, clamped at zero. Aggregate across active streams, including idle time; not a per-request decode measurement. |
+| Output throughput chart | The ten-second live trace shows bursts; one-minute traces compare live output with output booked only when a request finishes. A long reply can produce a completion-accounting spike without a real decode-speed increase. |
 | TTFT and request latency | Native server histograms are updated on request completion. TTFT ends at the first generated token, not necessarily the first client-visible text. Mean uses the last five minutes. |
 | Latency percentiles | Coarse histogram estimates, hidden with fewer than 20 completed samples in five minutes or any observations above the largest finite bucket (300 seconds). The mean still includes those observations. |
 | Running / waiting | Native current request gauges. TP ranks are not extra requests. Queue-wait duration is not measured. |
-| Shared pool used | `(pool_tokens - pool_free_tokens) / pool_tokens`; includes retained prompt states. It is not unified-memory utilization or the native per-stream context ratio. |
-| Prompt reuse | Cached prompt tokens divided by full prompt tokens over completed requests. No value without recent completed input accounting. |
-| Prompt throughput | Full and uncached prompt accounting booked on completion. Neither measures live prefill speed. |
+| Fullest stream | The fullest live stream's cache divided by its context window, `tensorfold:kv_cache_usage_ratio`; zero while idle. It is not unified-memory utilization. |
+| Prompt throughput | Full prompt accounting booked on completion, cached prompt tokens included. It does not measure live prefill speed. |
 | Speculative acceptance | Accepted / drafted tokens over completed requests. The `mtp` metric prefix does not identify the actual drafter or prove MTP is enabled. |
 | Scrape status | Fresh successful metrics retrieval. It does not prove end-to-end inference readiness or detect a stalled generation. |
 
