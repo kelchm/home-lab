@@ -1,4 +1,4 @@
-# PiKVM UI controls for the downstream eight-port KVM. The switch recognizes
+# Retained command channels for the downstream eight-port KVM. The switch recognizes
 # Left Ctrl, Left Ctrl, DigitN, but needs more time between events than the
 # GL.iNet shortcut UI provides.
 otg:
