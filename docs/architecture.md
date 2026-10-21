@@ -89,7 +89,7 @@ These apply to dashboards written in this repository. A stock dashboard kept as 
 
 - **Title:** `<Subject> / <View>` in sentence case. The subject is the platform, component or service shown, never the exporter or tool that collects the data. A subject with one view is just the subject (`Hosts`).
 - **uid:** an existing uid never changes; a new dashboard gets a readable slug.
-- **Tags:** lowercase. The first is the home (`kubernetes`, `proxmox`, `sparks`, `synology`, `unifi`, `observability`, `ai`, `identity`, `overview`); at most two more name the subject.
+- **Tags:** lowercase. The first is the home (`kubernetes`, `proxmox`, `sparks`, `synology`, `unifi`, `observability`, `ai`, `identity`, `3d-printing`, `overview`); at most two more name the subject.
 - **Scope:** a query on a metric that more than one platform exports states its scope: `cluster="k8s-prod"` for the cluster, `platform` for machines. A dashboard does not rely on a metric existing on only one platform today.
 - **Machines:** shown by name through `instance`, never by IP.
 - **Data source:** metrics panels use a `datasource` variable; log panels use the `victorialogs` uid.
