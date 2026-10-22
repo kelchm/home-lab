@@ -250,7 +250,7 @@ In Grafana, the **Events** panel of [Kubernetes / Logs](https://grafana.home.kel
 - `{service.name="kubernetes-events", k8s.namespace.name="media"}` lists one namespace's events.
 - `{service.name="kubernetes-events"} severity_number:>=13` lists warnings across the cluster.
 - `{service.name="kubernetes-events"} k8s.object.name:="jellyfin-0"` follows one object: scheduling, image pulls, mounts and probe failures.
-- `{service.name="kubernetes-events"} k8s.event.reason:=BackOff | stats by (k8s.namespace.name, k8s.object.name) max(k8s.event.count) restarts` ranks crash loops.
+- `{service.name="kubernetes-events"} k8s.event.reason:=BackOff | stats by (k8s.namespace.name, k8s.object.name) max(k8s.event.count) backoff_events` ranks crash loops by how often the kubelet reported back-off. The kubelet records `BackOff` each time it finds a container still waiting, so this counts waits, not restarts; `kube_pod_container_status_restarts_total` counts restarts.
 
 `python3 scripts/logging/test-fluent-bit-events.py` runs the production events configuration through the pinned image against [`events-api.py`](../../scripts/logging/events-api.py), which serves a list and a watch stream as the API server does, with [fixtures](../../scripts/logging/fluent-bit-events-fixtures.json) for each mapping rule, retention, repeated events and series, ignored watch types, and the list that follows a watch, including an event created while the watch was down. CI runs it through `scripts/ci/validate-logging.sh`.
 

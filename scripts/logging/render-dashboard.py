@@ -66,7 +66,7 @@ dashboard = {
                      'maxLines': 1000, 'adHocFiltersMode': 'off'}],
     }, {
         'id': 2, 'type': 'logs', 'title': 'Events',
-        'description': 'Kubernetes events in the chosen namespaces: scheduling, image pulls, mounts, probe failures and restarts. Severity applies; Service and Stream do not. Each line is the reason, the object, then the message; the count and reporter are in the row\'s details.',
+        'description': 'Kubernetes events in the chosen namespaces: scheduling, image pulls, mounts, probe failures and restarts. Severity applies; Service and Stream do not. Each line is the reason, the object, then the message; the count and reporter are in the row\'s details. Shows up to 1,000 matching event records, and each update of a repeated event is its own record, so this is not a count of occurrences; narrow the time range if needed.',
         'datasource': datasource,
         'gridPos': {'h': 12, 'w': 24, 'x': 0, 'y': 22},
         'options': {'showTime': True, 'showLabels': False, 'wrapLogMessage': True, 'sortOrder': 'Descending'},
