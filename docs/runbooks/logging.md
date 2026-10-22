@@ -6,18 +6,16 @@ Collection covers kubelet-managed container logs, including init containers, nat
 
 ## Query logs
 
-- **Kubernetes logs dashboard:** [Kubernetes / Logs](https://grafana.home.kelch.io/d/kubernetes-logs) — the production starting point for application logs. Its **Events** panel lists the chosen namespaces' [Kubernetes events](#kubernetes-events) below the container logs. Its namespace/service selectors and stream/severity filters read the stored OpenTelemetry fields, so it shows records from the Fluent Bit cutover on 2026-10-19; older records are in Explore and VMUI (see [Retained history](#retained-history)).
-- **Grafana Explore:** `https://grafana.home.kelch.io/explore` — select the `VictoriaLogs` datasource for the query editor, visual builder and live logs. The query editor's `Run in VMUI` action opens the query in the external VMUI. Open a row's log menu and select `Show log details` to inspect its structured fields alongside `_msg`.
+- **Grafana Explore:** `https://grafana.home.kelch.io/explore` — the starting point for logs and [Kubernetes events](#kubernetes-events). Select the `VictoriaLogs` datasource for the query editor, visual builder and live logs. Home's log links open it with a query and Home's time range, such as **Logs from** on a namespace in the k8s-prod **Namespaces** table. The query editor's `Run in VMUI` action opens the query in the external VMUI. Open a row's log menu and select `Show log details` to inspect its structured fields alongside `_msg`.
 - **VictoriaLogs VMUI:** `https://vlogs.home.kelch.io/select/vmui/` — use the native LogsQL explorer and live-stream view. The bare hostname redirects here.
 
 For routine application browsing:
 
-1. Open **Kubernetes / Logs** and set the time picker around the event. The initial view is the last 15 minutes in `observability`.
-2. Choose **Namespace**, then type the application name in **Service**. Suggestions come from logs in that time window; service choices follow the namespace selection. Multiple selections and **All** are supported. If an older application is absent, move the time window to when it was running.
-3. Start with **Stream** and **Severity** at **All**, then narrow them as needed. `stderr` is not synonymous with errors. **unknown** includes messages without a recognized severity. The panel shows up to 1,000 matching lines; narrow the application/time selection when that limit is reached.
-4. Open a row's log menu and choose **Show log details** to inspect its pod, container and application fields. Use **Show context** there for surrounding records from that pod/container; these can include both stdout/stderr, other severities and times outside the dashboard window. Use Explore for additional LogsQL filtering, following [Retained history](#retained-history) when the window reaches older schemas.
+1. Open a namespace from Home's k8s-prod **Namespaces** table: **Logs from** shows its container lines with its Warning events, such as crash loops, failed probes and mount errors, and **Events in** shows all of its Kubernetes events. Or open Explore, select `VictoriaLogs` and query `k8s.namespace.name:=media`, which returns both in full. Set the time picker around the event. Event lines start with the reason and object.
+2. Narrow the query: `service.name:=jellyfin` for one application, `severity_number:>=13` for warnings and worse, `log.iostream:=stderr` for one stream, or `log.iostream:*` for container lines without events. Filtering by application leaves out the namespace's events, which have their own `service.name`; open them beside it with Explore's **Split**. `stderr` is not synonymous with errors, and a severity filter leaves out lines without a recognized severity. Explore shows up to 1,000 matching lines; narrow the query or time range when that limit is reached.
+3. Open a row's log menu and choose **Show log details** to inspect its pod, container and application fields. Use **Show context** there for surrounding records from that pod/container; these can include both stdout/stderr, other severities and times outside the Explore window. Follow [Retained history](#retained-history) when the window reaches older schemas.
 
-The VictoriaLogs datasource v0.33.1, deployed October 18, 2026, adds **Drilldown** beside **Syntax** in Explore's **Code** editor. It provides field/stream breakdowns, message patterns, filter chips and log samples. Treat it as broad discovery: it starts from `*`, discarding the editor expression and stream filters, over the editor's time range. **Go to editor** replaces the original expression and filters; drawer time changes do not transfer. Start from **Raw Logs**, explicitly select the source/namespace again, and verify both the resulting scope and Explore time before continuing. Its first breakdown is `service.name`. The raw Fields list still includes infrastructure labels and application fields; application fields are grouped by their application prefix. Keep **Kubernetes / Logs** as the routine application starting point. See the [qualification record](../evaluations/grafana-victorialogs-drilldown.md) for evidence, acceptance and production verification; [#871](https://github.com/kelchm/home-lab/issues/871) tracks the field-discovery and scope-handoff investigation.
+The VictoriaLogs datasource v0.33.1, deployed October 18, 2026, adds **Drilldown** beside **Syntax** in Explore's **Code** editor. It provides field/stream breakdowns, message patterns, filter chips and log samples. Treat it as broad discovery: it starts from `*`, discarding the editor expression and stream filters, over the editor's time range. **Go to editor** replaces the original expression and filters; drawer time changes do not transfer. Start from **Raw Logs**, explicitly select the source/namespace again, and verify both the resulting scope and Explore time before continuing. Its first breakdown is `service.name`. The raw Fields list still includes infrastructure labels and application fields; application fields are grouped by their application prefix. See the [qualification record](../evaluations/grafana-victorialogs-drilldown.md) for evidence, acceptance and production verification; [#871](https://github.com/kelchm/home-lab/issues/871) tracks the field-discovery and scope-handoff investigation.
 
 Pattern counts marked `~` are estimates from a 1-in-10 sample and the list is capped at 100 patterns. The details Logs tab shows at most 100 rows, and expanded breakdown rows at most 50; these samples are separate from volume counts. Explore retains the configured 1,000-line limit. Histogram bucket alignment and visible edge buckets can differ from an exact-window count; use `| stats count()` with explicit time bounds for incident totals. Severity buttons and field filters operate on stored fields.
 
@@ -55,7 +53,7 @@ Levels come from structured fields (JSON, logfmt, PostgreSQL's `record.error_sev
 
 Records written before the Fluent Bit cutover keep vlagent's schema (`kubernetes.pod_namespace`, `kubernetes.pod_name`, `kubernetes.container_name`, `kubernetes.pod_node_name`, `kubernetes.pod_labels.*`, `output_stream`, application fields at top level, `level` only when the application emitted one) until retention removes them, roughly 30 days later. A few Alloy-era rows (`namespace`, `service_name`, `pod`, `container`, `node`, `stream`, `msg.*`) remain until about October 27, 2026.
 
-The **Kubernetes / Logs** dashboard does not read these schemas. Query them in Explore or VMUI by their own fields, e.g. `kubernetes.pod_namespace:=printing kubernetes.container_name:=app` for vlagent rows or `namespace:=printing` for Alloy rows; `level` holds the application's own level where it emitted one.
+Query them by their own fields, e.g. `kubernetes.pod_namespace:=printing kubernetes.container_name:=app` for vlagent rows or `namespace:=printing` for Alloy rows; `level` holds the application's own level where it emitted one.
 
 Retention is nominally 30 days, but VictoriaLogs begins deleting the oldest partitions at 80% disk use. The effective retention is whichever limit is reached first. Replayed records are stored as additional rows until retention removes them; queries and counts include them.
 
@@ -196,7 +194,7 @@ Talos keeps each service's last 1 MiB of output in memory and reads the kernel r
 
 ### Query Talos logs
 
-The **Kubernetes / Logs** dashboard selects by Kubernetes namespace, so it does not show these records; query them in Explore or VMUI.
+Talos records carry no Kubernetes namespace, so a namespace query leaves them out. Home's **Talos logs from** link on each k8s-prod node opens that node's records in Explore. Explore and VMUI take LogsQL such as:
 
 - One node's services: `service.namespace:=talos k8s.node.name:=k8s-prod-1 | stats by (service.name) count()`
 - A node's boot sequence: `{service.name="kernel", k8s.node.name="k8s-prod-1"} "[talos]"`, or `service.name:=machined "[talos]"`
@@ -245,7 +243,7 @@ The output buffer is 256 MiB on the pod's `emptyDir`, under the same retry and b
 
 ### Query events
 
-Each event's line names the reason and object, so a word such as `BackOff` or a quoted pod name, `"jellyfin-0"`, finds events in Explore and VMUI, not only words from the message. In Grafana, the **Events** panel of [Kubernetes / Logs](https://grafana.home.kelch.io/d/kubernetes-logs) lists the chosen namespaces' events, filtered by **Severity**. Explore and VMUI take LogsQL such as:
+Each event's line names the reason and object, so a word such as `BackOff` or a quoted pod name, `"jellyfin-0"`, finds events in Explore and VMUI, not only words from the message. A namespace query in Explore returns the namespace's events among its container lines; on Home, a namespace's **Logs from** link keeps only its Warning events and **Events in** lists them all. Explore and VMUI take LogsQL such as:
 
 - `{service.name="kubernetes-events", k8s.namespace.name="media"}` lists one namespace's events.
 - `{service.name="kubernetes-events"} severity_number:>=13` lists warnings across the cluster.
