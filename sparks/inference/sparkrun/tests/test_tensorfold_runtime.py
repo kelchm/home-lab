@@ -833,6 +833,8 @@ def test_native_lifecycle_gates_tcpstore_then_starts_rank1(runtime, monkeypatch)
 DSV41_RECIPES = sorted((Path(__file__).resolve().parents[1] / "bertholomus-tensorfold-dsv41-tp2").glob("*.yaml"))
 DSV41_TARGET = "LibertAIDAI/DeepSeek-V4.1-Flash-1017-EXL3-2.9bpw"
 DSV41_SERVED = "DeepSeek-V4.1-Flash-1017"
+# The rollback profile, from before the shared contract: its recipe names the fabric address and its mod keeps its own readiness.
+DSV41_LEGACY = "dsv41-1017-exl3-tp2-bth-tf-6366d2c-libertai-1m"
 
 
 @pytest.fixture(params=DSV41_RECIPES, ids=lambda path: path.stem)
@@ -904,7 +906,7 @@ def test_dsv41_recipe_maps_native_rank_wiring_to_both_engine_binaries(runtime, t
                "TF_DS_RANK_CACHE": str(tmp_path / "absent")}
     with pytest.raises(SystemExit, match="rank inputs"):
         serve.command(missing, model, kit, engram)
-    if "FABRIC_MASTER" in (bundle / "serve.py").read_text():
+    if recipe.name != DSV41_LEGACY:
         # The ranks link only over the fabric: no address in the recipe, and none at all fails closed.
         assert not any(key.endswith("TP_MASTER") for key in recipe.env)
         node = {**recipe.env, **_parse_env_command(_node_command(runtime, recipe, 0))[0], **fabric}
@@ -1000,8 +1002,9 @@ def test_dsv41_readiness_requires_lanes_window_and_reasoning(tmp_path, dsv41_rec
     context = recipe.defaults["context"]
     hook = shlex.split(recipe.post_exec[0])
     assert hook[hook.index("--model") + 1] == DSV41_SERVED and hook[hook.index("--context") + 1] == str(context)
-    if ready is None:
+    if recipe.name != DSV41_LEGACY:
         # The shared gate: listed before the engine mod, with the streams and DeepSeek's own levels, highest first.
+        assert ready is None
         assert hook[1] == "/opt/tensorfold-readiness/readiness.py"
         assert recipe.mods[0] == "../mods/tensorfold-readiness"
         assert hook[hook.index("--lanes") + 1] == "4"
