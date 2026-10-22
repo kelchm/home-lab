@@ -1,0 +1,517 @@
+From: TensorFold recipe <noreply@invalid>
+Subject: [PATCH] dsv41 lanes: enforce tool_choice required
+
+The CUDA host advertises call_gates. A required or named tool choice opens the answer with the template tool-call token and completes an offered name. Requests without tool_choice are unchanged. A lone drafted fast path still skips a request that must call a tool.
+
+diff --git a/zig/src/core/engine_api.zig b/zig/src/core/engine_api.zig
+index 0d8b53c..db84803 100644
+--- a/zig/src/core/engine_api.zig
++++ b/zig/src/core/engine_api.zig
+@@ -35,6 +35,16 @@ pub const CallGate = struct {
+     names: []const []const u8 = &.{},
+     think_open: ?u32 = null,
+     think_end: ?u32 = null,
++    /// Token text the decode loop uses to finish a named call.
++    lex: CallLex,
++};
++
++/// Same signatures as lanes/call_gate.zig Lex.
++pub const CallLex = struct {
++    ctx: *anyopaque,
++    blank: *const fn (ctx: *anyopaque, token: u32) bool,
++    text: *const fn (ctx: *anyopaque, a: Allocator, token: u32) anyerror![]const u8,
++    encode: *const fn (ctx: *anyopaque, a: Allocator, text: []const u8) anyerror![]const u32,
+ };
+ 
+ /// response_format and the guided_* fields: every token keeps the reply inside this grammar.
+diff --git a/zig/src/core/lane_host.zig b/zig/src/core/lane_host.zig
+index 522cff3..21b2edd 100644
+--- a/zig/src/core/lane_host.zig
++++ b/zig/src/core/lane_host.zig
+@@ -327,6 +327,15 @@ pub const LaneHost = struct {
+             .think_close = r.think_close,
+             .think_end = if (r.think_end) |t| t else -1,
+             .loop_guard = r.loop_guard,
++            .call = if (r.call) |c| .{
++                .opener = c.opener,
++                .think_open = if (c.think_open) |t| t else -1,
++                .think_end = if (c.think_end) |t| t else -1,
++                .lead = c.lead,
++                .names = c.names,
++                .tail = c.tail,
++                .lex = .{ .ctx = c.lex.ctx, .blank = c.lex.blank, .text = c.lex.text, .encode = c.lex.encode },
++            } else null,
+             .chunks = r.chunks,
+             .reuse = reuse,
+             .images = r.images,
+diff --git a/zig/src/core/lanes/call_gate.zig b/zig/src/core/lanes/call_gate.zig
+new file mode 100644
+index 0000000..07a2666
+--- /dev/null
++++ b/zig/src/core/lanes/call_gate.zig
+@@ -0,0 +1,220 @@
++//! tool_choice "required": outside a think block the answer opens a call (Python engine/call_gate.py).
++const std = @import("std");
++const Allocator = std.mem.Allocator;
++
++pub const Phase = enum { answer, lead, name, done };
++
++/// Tokenizer the gate asks while a round is decided. `text` and `encode` slices live until the next call.
++pub const Lex = struct {
++    ctx: *anyopaque,
++    blank: *const fn (ctx: *anyopaque, token: u32) bool,
++    text: *const fn (ctx: *anyopaque, a: Allocator, token: u32) anyerror![]const u8,
++    encode: *const fn (ctx: *anyopaque, a: Allocator, text: []const u8) anyerror![]const u32,
++};
++
++pub const Gate = struct {
++    opener: u32,
++    think_open: i64 = -1,
++    think_end: i64 = -1,
++    lead: []const u8 = "",
++    names: []const []const u8 = &.{},
++    tail: []const u8 = "",
++    lex: Lex,
++    armed: bool = true,
++    phase: Phase = .answer,
++    seen: std.ArrayList(u8) = .empty,
++
++    pub fn afterPrompt(prompt: []const u32, opener: u32, think_open: i64, think_end: i64, lex: Lex, lead: []const u8, names: []const []const u8, tail: []const u8) Gate {
++        var last_open: i64 = -1;
++        var last_end: i64 = -1;
++        for (prompt, 0..) |t, i| {
++            if (think_open >= 0 and t == @as(u32, @intCast(think_open))) last_open = @intCast(i);
++            if (think_end >= 0 and t == @as(u32, @intCast(think_end))) last_end = @intCast(i);
++        }
++        const held = think_open >= 0 and think_end >= 0 and last_open > last_end;
++        return .{
++            .opener = opener,
++            .think_open = think_open,
++            .think_end = think_end,
++            .lead = lead,
++            .names = names,
++            .tail = tail,
++            .lex = lex,
++            .armed = !held,
++        };
++    }
++
++    pub fn deinit(g: *Gate, a: Allocator) void {
++        g.seen.deinit(a);
++    }
++
++    pub fn done(g: *const Gate) bool {
++        return g.phase == .done;
++    }
++
++    const Snap = struct { armed: bool, phase: Phase, seen: []const u8 };
++
++    fn ends(g: *const Gate, char: u8) bool {
++        if (std.ascii.isWhitespace(char)) return true;
++        if (g.tail.len > 0) return char == g.tail[0];
++        return switch (char) {
++            '<', '>', '{', '}', '"', '\'', '(', ')', ',' => true,
++            else => false,
++        };
++    }
++
++    fn step(g: *const Gate, a: Allocator, snap: Snap, token: u32) !struct { snap: Snap, fix: ?[]const u32 } {
++        if (snap.phase == .answer) {
++            if (!snap.armed) {
++                const end = g.think_end >= 0 and token == @as(u32, @intCast(g.think_end));
++                return .{ .snap = .{ .armed = end, .phase = .answer, .seen = "" }, .fix = null };
++            }
++            if (g.think_open >= 0 and token == @as(u32, @intCast(g.think_open))) {
++                return .{ .snap = .{ .armed = false, .phase = .answer, .seen = "" }, .fix = null };
++            }
++            if (token == g.opener) return .{ .snap = .{ .armed = true, .phase = .lead, .seen = "" }, .fix = null };
++            if (g.lex.blank(g.lex.ctx, token)) return .{ .snap = snap, .fix = null };
++            var fix: std.ArrayList(u32) = .empty;
++            try fix.append(a, g.opener);
++            if (g.names.len > 0 and g.lead.len > 0) {
++                const ids = try g.lex.encode(g.lex.ctx, a, g.lead);
++                try fix.appendSlice(a, ids);
++            }
++            return .{ .snap = snap, .fix = fix.items };
++        }
++        if (snap.phase == .done or g.names.len == 0) {
++            return .{ .snap = .{ .armed = snap.armed, .phase = .done, .seen = "" }, .fix = null };
++        }
++        const piece = try g.lex.text(g.lex.ctx, a, token);
++        const written = try std.mem.concat(a, u8, &.{ snap.seen, piece });
++        var owed: []const u8 = "";
++        var seen = snap.seen;
++        var body = written;
++        if (snap.phase == .lead) {
++            if (std.mem.startsWith(u8, g.lead, written)) {
++                const full = written.len == g.lead.len;
++                return .{ .snap = .{ .armed = snap.armed, .phase = if (full) .name else .lead, .seen = if (full) "" else written }, .fix = null };
++            }
++            if (!std.mem.startsWith(u8, written, g.lead)) {
++                const rest = g.lead[seen.len..];
++                const ids = try g.lex.encode(g.lex.ctx, a, rest);
++                return .{ .snap = snap, .fix = ids };
++            }
++            owed = g.lead[seen.len..];
++            seen = "";
++            body = written[g.lead.len..];
++        }
++        var end: usize = body.len;
++        for (body, 0..) |c, i| if (g.ends(c)) {
++            end = i;
++            break;
++        };
++        if (end == body.len) {
++            for (g.names) |n| if (std.mem.startsWith(u8, n, body)) {
++                return .{ .snap = .{ .armed = snap.armed, .phase = .name, .seen = body }, .fix = null };
++            };
++        }
++        if (end < body.len) {
++            for (g.names) |n| if (std.mem.eql(u8, n, body[0..end])) {
++                return .{ .snap = .{ .armed = snap.armed, .phase = .done, .seen = "" }, .fix = null };
++            };
++        }
++        const name = for (g.names) |n| {
++            if (std.mem.startsWith(u8, n, seen)) break n;
++        } else null;
++        if (name == null) return .{ .snap = .{ .armed = snap.armed, .phase = .done, .seen = "" }, .fix = null };
++        const rest = try std.mem.concat(a, u8, &.{ owed, name.?[seen.len..], g.tail });
++        const ids = try g.lex.encode(g.lex.ctx, a, rest);
++        if (ids.len == 0) return .{ .snap = .{ .armed = snap.armed, .phase = .done, .seen = "" }, .fix = null };
++        return .{ .snap = snap, .fix = ids };
++    }
++
++    pub const Hit = struct { at: usize, fix: []const u32 };
++
++    pub fn cut(g: *const Gate, a: Allocator, tokens: []const u32) !?Hit {
++        if (g.phase == .done) return null;
++        var snap: Snap = .{ .armed = g.armed, .phase = g.phase, .seen = g.seen.items };
++        for (tokens, 0..) |token, i| {
++            if (snap.phase == .done) return null;
++            const next = try g.step(a, snap, token);
++            if (next.fix) |fix| return .{ .at = i, .fix = fix };
++            snap = next.snap;
++        }
++        return null;
++    }
++
++    pub fn observe(g: *Gate, a: Allocator, token: u32) !void {
++        if (g.done()) return;
++        var scratch: std.heap.ArenaAllocator = .init(a);
++        defer scratch.deinit();
++        const snap: Snap = .{ .armed = g.armed, .phase = g.phase, .seen = g.seen.items };
++        const next = try g.step(scratch.allocator(), snap, token);
++        if (next.fix != null) {
++            g.phase = .done;
++            g.seen.clearRetainingCapacity();
++            return;
++        }
++        g.armed = next.snap.armed;
++        g.phase = next.snap.phase;
++        const seen = next.snap.seen;
++        g.seen.clearRetainingCapacity();
++        try g.seen.appendSlice(a, seen);
++    }
++};
++
++const TestLex = struct {
++    fn blank(_: *anyopaque, token: u32) bool {
++        return token == 1;
++    }
++    fn text(_: *anyopaque, _: Allocator, token: u32) anyerror![]const u8 {
++        return switch (token) {
++            2 => "=",
++            3 => "ab",
++            4 => "ac>",
++            5 => "zz",
++            else => "?",
++        };
++    }
++    fn encode(_: *anyopaque, a: Allocator, s: []const u8) anyerror![]const u32 {
++        if (std.mem.eql(u8, s, "=")) return a.dupe(u32, &.{2});
++        if (std.mem.eql(u8, s, "ab>")) return a.dupe(u32, &.{ 3, 4 });
++        return a.dupe(u32, &.{});
++    }
++    fn lex() Lex {
++        return .{ .ctx = undefined, .blank = blank, .text = text, .encode = encode };
++    }
++};
++
++test "a required call replaces a plain answer with the opener and finishes the offered name" {
++    const gpa = std.testing.allocator;
++    var arena: std.heap.ArenaAllocator = .init(gpa);
++    defer arena.deinit();
++    const a = arena.allocator();
++    var g = Gate.afterPrompt(&.{}, 9, -1, -1, TestLex.lex(), "=", &.{ "ab", "ac" }, ">");
++    defer g.deinit(gpa);
++    const hit = (try g.cut(a, &.{ 7, 8 })).?;
++    try std.testing.expectEqual(@as(usize, 0), hit.at);
++    try std.testing.expectEqualSlices(u32, &.{ 9, 2 }, hit.fix);
++    try g.observe(gpa, 9);
++    try g.observe(gpa, 2);
++    try std.testing.expect(g.phase == .name);
++    try g.observe(gpa, 3);
++    try std.testing.expect(g.phase == .name);
++    try g.observe(gpa, 4);
++    try std.testing.expect(g.done());
++}
++
++test "whitespace before the call is kept and an open think block waits" {
++    const gpa = std.testing.allocator;
++    var arena: std.heap.ArenaAllocator = .init(gpa);
++    defer arena.deinit();
++    const a = arena.allocator();
++    var g = Gate.afterPrompt(&.{ 4, 8 }, 9, 8, 4, TestLex.lex(), "", &.{}, "");
++    defer g.deinit(gpa);
++    try std.testing.expect(!g.armed);
++    try std.testing.expect((try g.cut(a, &.{7})) == null);
++    try g.observe(gpa, 4);
++    try std.testing.expect(g.armed);
++    const blank = (try g.cut(a, &.{1}));
++    try std.testing.expect(blank == null);
++}
+diff --git a/zig/src/core/lanes/engine.zig b/zig/src/core/lanes/engine.zig
+index 1199e77..4c6929d 100644
+--- a/zig/src/core/lanes/engine.zig
++++ b/zig/src/core/lanes/engine.zig
+@@ -93,11 +93,14 @@ pub const Engine = struct {
+         const position: u64 = s.prompt_len;
+         const drawn = try e.backend.first(s, position);
+         var feed: Feed = .{ .handle = drawn };
+-        if (try e.forcedNext(s)) |t| feed = .{ .value = t };
++        const forced = try e.forcedNext(s);
++        if (forced) |t| feed = .{ .value = t };
++        // tool_choice required: a drawn first token passes the gate; a forced one is committed as it is
++        if (s.gate != null and forced == null) feed = .{ .value = try e.correctCall(s, try e.readFeed(feed)) };
+         var asked: ?u32 = null;
+         if (e.cfg.family_mtp and s.drafts) {
+             // the head reads the prompt's last row and the first token, and drafts the one after it
+-            const d: u32 = @intCast(try e.rule.depth(win.who(s)));
++            const d: u32 = if (s.gate != null and s.force.items.len > 0) 0 else @intCast(try e.rule.depth(win.who(s)));
+             asked = d;
+             try e.backend.draft(&.{.{ .stream = s, .follow = &.{}, .first = feed, .rows = null, .start = s.prompt_len, .position = position + 1, .depth = d }});
+             s.dropHeld(e.gpa);
+@@ -382,9 +385,20 @@ pub const Engine = struct {
+         }
+         const budget_cut = s.thinkCut(committed.items);
+         const loop_cut = sm.loopCut(s, committed.items);
+-        const loop_wins = if (loop_cut) |c| budget_cut == null or c < budget_cut.? else false;
++        const call_cut = if (s.gate) |*g| try g.cut(a, committed.items) else null;
++        const loop_at = if (loop_cut) |c| c else std.math.maxInt(usize);
++        const budget_at = if (budget_cut) |c| c else std.math.maxInt(usize);
++        const call_at = if (call_cut) |c| c.at else std.math.maxInt(usize);
+         var cut: ?usize = null;
+-        if (loop_wins) {
++        if (call_at <= loop_at and call_at < budget_at and call_cut != null) {
++            const hit = call_cut.?;
++            cut = hit.at;
++            path = path[0 .. hit.at + 1];
++            committed.shrinkRetainingCapacity(hit.at);
++            try committed.append(a, hit.fix[0]);
++            s.force.clearRetainingCapacity();
++            if (hit.fix.len > 1) try s.force.appendSlice(e.gpa, hit.fix[1..]);
++        } else if (loop_at < budget_at and loop_cut != null) {
+             cut = loop_cut;
+             path = path[0 .. loop_cut.? + 1];
+             committed.shrinkRetainingCapacity(loop_cut.? + 1);
+@@ -523,9 +537,14 @@ pub const Engine = struct {
+         }
+         var current: Feed = .{ .handle = s.inflight.? };
+         s.inflight = null;
+-        if (try e.forcedNext(s)) |t| current = .{ .value = t };
++        const forced = try e.forcedNext(s);
++        if (forced) |t| current = .{ .value = t };
+         var token: u32 = undefined;
+-        if (mode == .drain) {
++        if (s.gate != null) {
++            token = try e.readFeed(current);
++            if (forced == null) token = try e.correctCall(s, token);
++            if (mode == .drain) s.mode = .verify else try e.queueNext(s, .{ .value = token });
++        } else if (mode == .drain) {
+             token = try e.readFeed(current); // the last queued step: no new one
+             s.mode = .verify;
+         } else {
+@@ -546,8 +565,10 @@ pub const Engine = struct {
+     fn landInflight(e: *Engine, s: *Stream) !void {
+         var current: Feed = .{ .handle = s.inflight.? };
+         s.inflight = null;
+-        if (try e.forcedNext(s)) |t| current = .{ .value = t };
+-        const token = try e.readFeed(current);
++        const forced = try e.forcedNext(s);
++        if (forced) |t| current = .{ .value = t };
++        var token = try e.readFeed(current);
++        if (forced == null) token = try e.correctCall(s, token);
+         s.rounds += 1;
+         const landed = try s.commit(e.gpa, &.{token});
+         s.pending = token;
+@@ -566,6 +587,16 @@ pub const Engine = struct {
+         }
+     }
+ 
++    /// A sampled token that breaks a required tool call becomes the fix's first token; the rest are forced.
++    fn correctCall(e: *Engine, s: *Stream, token: u32) !u32 {
++        const g = &(s.gate orelse return token);
++        const hit = (try g.cut(e.arena.allocator(), &.{token})) orelse return token;
++        if (hit.at != 0 or hit.fix.len == 0) return token;
++        s.force.clearRetainingCapacity();
++        if (hit.fix.len > 1) try s.force.appendSlice(e.gpa, hit.fix[1..]);
++        return hit.fix[0];
++    }
++
+     /// The thinking budget's or a forced fix's token at the next position instead of the draw.
+     fn forcedNext(e: *Engine, s: *Stream) !?u32 {
+         if (s.popForce()) |t| return t;
+diff --git a/zig/src/core/lanes/stream.zig b/zig/src/core/lanes/stream.zig
+index 1d6ba84..b3adb39 100644
+--- a/zig/src/core/lanes/stream.zig
++++ b/zig/src/core/lanes/stream.zig
+@@ -1,6 +1,7 @@
+ //! One stream (Python LaneStream) and the round loop's state for it (Python's dicts keyed by stream id).
+ const std = @import("std");
+ const shape = @import("shape.zig");
++const call_gate = @import("call_gate.zig");
+ const plan_lanes = @import("plan_lanes.zig");
+ const Allocator = std.mem.Allocator;
+ const Proposer = @import("proposer.zig").Proposer;
+@@ -136,6 +137,16 @@ pub const Spec = struct {
+     chunks: []const u32 = &.{}, // where prefill chunks start after 0 (Python's PrefillPlan); empty: the backend's step
+     reuse: Reuse = .{},
+     images: []const Image = &.{}, // in prompt order; the caller's until the stream is released
++    /// tool_choice required: the answer must open a call (null: the model may answer in text).
++    call: ?struct {
++        opener: u32,
++        think_open: i64 = -1,
++        think_end: i64 = -1,
++        lead: []const u8 = "",
++        names: []const []const u8 = &.{},
++        tail: []const u8 = "",
++        lex: call_gate.Lex,
++    } = null,
+ };
+ 
+ pub const Stream = struct {
+@@ -190,6 +201,7 @@ pub const Stream = struct {
+     served: ?u64 = null,
+     granted: ?u32 = null,
+     copy_width: ?u32 = null,
++    gate: ?call_gate.Gate = null,
+ 
+     pub fn init(gpa: Allocator, spec: Spec) !Stream {
+         var s: Stream = .{
+@@ -211,11 +223,15 @@ pub const Stream = struct {
+             .reuse = spec.reuse,
+             .images = spec.images,
+         };
++        if (spec.call) |c| {
++            s.gate = call_gate.Gate.afterPrompt(spec.prompt, c.opener, c.think_open, c.think_end, c.lex, c.lead, c.names, c.tail);
++        }
+         try s.context.appendSlice(gpa, spec.prompt);
+         return s;
+     }
+ 
+     pub fn deinit(s: *Stream, gpa: Allocator) void {
++        if (s.gate) |*g| g.deinit(gpa);
+         s.context.deinit(gpa);
+         s.force.deinit(gpa);
+         s.dropRoundState(gpa);
+@@ -307,6 +323,7 @@ pub const Stream = struct {
+             if (s.finished) break;
+             try s.context.append(gpa, t);
+             landed += 1;
++            if (s.gate) |*g| g.observe(gpa, t) catch return error.OutOfMemory;
+             if (@as(i64, t) == s.think_end) s.think_open = false;
+             const fire = if (s.loop_guard and s.think_open and s.think_end >= 0 and s.loop_period == null) detectLoop(s.emitted()) else null;
+             if (s.isEos(t) or s.stopped()) {
+diff --git a/zig/src/native/cuda.zig b/zig/src/native/cuda.zig
+index c37f635..ba8f5ef 100644
+--- a/zig/src/native/cuda.zig
++++ b/zig/src/native/cuda.zig
+@@ -377,7 +377,7 @@ fn openWith(comptime F: type, a: Allocator, gpa: Allocator, io: std.Io, o: api.O
+     };
+     // the family cuts its own prompt grid from position 0, as `tensorfold run` does: prefill_step 0
+     const vision: ?api.Vision = if (@hasField(@TypeOf(loaded), "vision")) loaded.vision else null;
+-    try h.serve(io, loaded.facts, loaded.rows, .{ .lanes = streams, .context_window = @intCast(window), .startup = h.startup, .efforts = familyEfforts(F), .vision = vision }, .{ .ctx = loaded.ctx, .text = F.explain });
++    try h.serve(io, loaded.facts, loaded.rows, .{ .lanes = streams, .context_window = @intCast(window), .startup = h.startup, .efforts = familyEfforts(F), .vision = vision, .call_gates = true }, .{ .ctx = loaded.ctx, .text = F.explain });
+     opened = true;
+     return .{ .engine = h.host.engine(), .close = Host.close, .ctx = h };
+ }
+diff --git a/zig/src/server/server.zig b/zig/src/server/server.zig
+index 29a5382..0001a3e 100644
+--- a/zig/src/server/server.zig
++++ b/zig/src/server/server.zig
+@@ -159,7 +159,7 @@ pub const Server = struct {
+         const required = if (f.get("tool_call_required")) |r| r.truthy() else false;
+         if (has_tools and required) {
+             const form = try srv.callForm(cx);
+-            const opener = if (form) |fm| srv.text.tokenId(fm.opener) else null;
++            const opener = if (form) |fm| oneToken(srv, cx.a, fm.opener) else null;
+             if (opener == null) return cx.refuse("tool_choice \"required\" or a named function needs a chat template that marks tool calls (<tool_call> or <|tool_call>), and this one does not: send \"auto\"");
+             if (!srv.info.call_gates) return cx.refuse("tool_choice \"required\" or a named function is not supported by this engine yet: send \"auto\"");
+             var names: std.ArrayList([]const u8) = .empty;
+@@ -171,7 +171,15 @@ pub const Server = struct {
+                 };
+                 break :blk if (ids.len > 0) ids[0] else null;
+             } else srv.text.tokenId("<think>");
+-            request.call = .{ .opener = opener.?, .lead = form.?.lead orelse "", .tail = form.?.tail orelse "", .names = names.items, .think_open = think_open, .think_end = srv.text.tokenId(srv.markers.close) };
++            request.call = .{
++                .opener = opener.?,
++                .lead = form.?.lead orelse "",
++                .tail = form.?.tail orelse "",
++                .names = names.items,
++                .think_open = think_open,
++                .think_end = srv.text.tokenId(srv.markers.close),
++                .lex = .{ .ctx = srv, .blank = callBlank, .text = callText, .encode = callEncode },
++            };
+         }
+         if (try grammar.spec(cx, f)) |s| {
+             if (!srv.info.structures) return cx.refuse("structured output (response_format and the guided_* fields) is not supported by this engine yet");
+@@ -179,6 +187,32 @@ pub const Server = struct {
+         }
+     }
+ 
++    /// A special token, or any piece that encodes as exactly one id.
++    fn oneToken(srv: *Server, a: std.mem.Allocator, piece: []const u8) ?u32 {
++        if (srv.text.tokenId(piece)) |id| return id;
++        const ids = srv.text.encode(a, piece, false) catch return null;
++        return if (ids.len == 1) ids[0] else null;
++    }
++
++    fn callBlank(ctx: *anyopaque, token: u32) bool {
++        const srv: *Server = @ptrCast(@alignCast(ctx));
++        for (srv.text.eosIds()) |e| if (e == token) return false;
++        var buf: [256]u8 = undefined;
++        var fba = std.heap.FixedBufferAllocator.init(&buf);
++        const text = srv.text.decode(fba.allocator(), &.{token}) catch return false;
++        return std.mem.trim(u8, text, " \t\r\n").len == 0;
++    }
++
++    fn callText(ctx: *anyopaque, a: std.mem.Allocator, token: u32) anyerror![]const u8 {
++        const srv: *Server = @ptrCast(@alignCast(ctx));
++        return srv.text.decode(a, &.{token});
++    }
++
++    fn callEncode(ctx: *anyopaque, a: std.mem.Allocator, text: []const u8) anyerror![]const u32 {
++        const srv: *Server = @ptrCast(@alignCast(ctx));
++        return srv.text.encode(a, text, false);
++    }
++
+     const Form = struct { opener: []const u8, lead: ?[]const u8, tail: ?[]const u8 };
+ 
+     /// (opener, lead, tail) of this template's tool calls, read from a rendered probe call.
+@@ -196,8 +230,15 @@ pub const Server = struct {
+                 }
+             };
+             if (best) |s| {
++                // The markup opener is often several tokens (<, ｜DSML｜, " calls"). The gate's first token is the
++                // first of that span; the rest, up to the name, is the lead it forces.
++                const span = text[s..at];
++                const ids = srv.text.encode(cx.a, span, false) catch return null;
++                if (ids.len == 0) return null;
++                const piece = srv.text.decode(cx.a, ids[0..1]) catch return null;
++                if (piece.len == 0 or !std.mem.startsWith(u8, span, piece)) return null;
+                 const end = at + "tfprobe_fn".len;
+-                return .{ .opener = opener, .lead = text[s + opener.len .. at], .tail = if (end < text.len) text[end .. end + 1] else "" };
++                return .{ .opener = piece, .lead = span[piece.len..], .tail = if (end < text.len) text[end .. end + 1] else "" };
+             }
+         }
+         for (reply_text.calls) |c| if (srv.text.tokenId(c[0]) != null) return .{ .opener = c[0], .lead = null, .tail = null };

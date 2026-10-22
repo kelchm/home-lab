@@ -61,6 +61,8 @@ Each Talos node's machined sends its service and kernel logs over TCP to the fix
 
 Fluent Bit also receives the UniFi console's syslog/CEF export, and the syslog of its adopted switches and access points, on `10.32.130.3` UDP/514, and stores it in the same schema with one `service.name` per device. A second vmalert evaluates LogsQL rules against VictoriaLogs and sends through the same VMAlertmanager routes; the [logging runbook](runbooks/logging.md#unifi-console-logs) describes the source, its fields and its alerts.
 
+A single-replica Fluent Bit, `fluent-bit-events`, watches the API server's events and stores them in the same schema with `service.name=kubernetes-events`, so they outlive the API server's one-hour retention ([logging runbook](runbooks/logging.md#kubernetes-events)).
+
 The `monitoring.coreos.com` CRDs are owned independently by `prometheus-operator-crds`, and the VictoriaMetrics operator converts third-party ServiceMonitors and shared PrometheusRules with owner references. VictoriaMetrics and VictoriaLogs are the only metric and log backends; kube-prometheus-stack, Loki, and OpenObserve are removed.
 
 ### Dashboards
@@ -73,11 +75,11 @@ A dashboard has one home, chosen by its subject: the thing whose state it shows.
 
 | Group | Homes in use | Not yet in use |
 |---|---|---|
-| Services | Observability (whether monitoring itself works), AI, Identity, 3D Printing | Storage, Network, Media, Home automation |
+| Services | Observability (whether monitoring itself works), AI, Identity, 3D Printing, Media | Storage, Network, Home automation |
 | Platforms | Kubernetes (the cluster, its nodes, Talos and cluster plumbing), Proxmox, Sparks, Synology, UniFi | Devices |
 | Overview | Views across platforms, and the any-machine host detail | |
 
-The home is the `grafana_folder` annotation on the dashboard's ConfigMap. Charts that ship dashboards set it through their values. The victoria-metrics-k8s-stack chart gives its whole set one folder, so the dashboards that belong elsewhere are disabled in the chart and delivered from `kubernetes/apps/observability/victoria-metrics-k8s-stack/app/dashboards/` with the JSON the chart produces. A stock dashboard that no chart ships, or that a chart ships with import-only datasource placeholders, is kept next to the app it describes under `dashboards/`, with its source revision and patches named in that app's kustomization. Grafana files a dashboard under the full path, so the folders nest (`Overview`, `Platforms/Kubernetes`, `Platforms/Proxmox`, `Platforms/Sparks`, `Platforms/Synology`, `Platforms/UniFi`, `Services/Observability`, `Services/AI`, `Services/Identity`, `Services/3D Printing`).
+The home is the `grafana_folder` annotation on the dashboard's ConfigMap. Charts that ship dashboards set it through their values. The victoria-metrics-k8s-stack chart gives its whole set one folder, so the dashboards that belong elsewhere are disabled in the chart and delivered from `kubernetes/apps/observability/victoria-metrics-k8s-stack/app/dashboards/` with the JSON the chart produces. A stock dashboard that no chart ships, or that a chart ships with import-only datasource placeholders, is kept next to the app it describes under `dashboards/`, with its source revision and patches named in that app's kustomization. Grafana files a dashboard under the full path, so the folders nest (`Overview`, `Platforms/Kubernetes`, `Platforms/Proxmox`, `Platforms/Sparks`, `Platforms/Synology`, `Platforms/UniFi`, `Services/Observability`, `Services/AI`, `Services/Identity`, `Services/3D Printing`, `Services/Media`).
 
 Stock dashboards stay even where they overlap: Home and its Go deeper links choose which one to open, and the folders keep the rest findable. A chart's dashboard is disabled only when it covers software the lab does not run, or when it is broken or misleading. Any change to the victoria-metrics-k8s-stack values also re-runs that chart's sync Job, which re-fetches its dashboards and alert rules from unpinned upstream branches.
 
@@ -89,7 +91,7 @@ These apply to dashboards written in this repository. A stock dashboard kept as 
 
 - **Title:** `<Subject> / <View>` in sentence case. The subject is the platform, component or service shown, never the exporter or tool that collects the data. A subject with one view is just the subject (`Hosts`).
 - **uid:** an existing uid never changes; a new dashboard gets a readable slug.
-- **Tags:** lowercase. The first is the home (`kubernetes`, `proxmox`, `sparks`, `synology`, `unifi`, `observability`, `ai`, `identity`, `3d-printing`, `overview`); at most two more name the subject.
+- **Tags:** lowercase. The first is the home (`kubernetes`, `proxmox`, `sparks`, `synology`, `unifi`, `observability`, `ai`, `identity`, `3d-printing`, `media`, `overview`); at most two more name the subject.
 - **Scope:** a query on a metric that more than one platform exports states its scope: `cluster="k8s-prod"` for the cluster, `platform` for machines. A dashboard does not rely on a metric existing on only one platform today.
 - **Machines:** shown by name through `instance`, never by IP.
 - **Data source:** metrics panels use a `datasource` variable; log panels use the `victorialogs` uid.
