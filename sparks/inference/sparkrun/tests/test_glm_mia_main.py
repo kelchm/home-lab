@@ -98,12 +98,13 @@ def test_rank_commands_reach_mias_cli():
 
 def test_ranks_meet_on_the_fabric_address_when_sparkrun_supplies_it():
     serve = _load("glm_serve", MOD / "serve.py")
-    env = {"RANK": "1", "MASTER": HEAD, "MASTER_PORT": "29511", "MODEL_PATH": "/m", "DRAFTER": "/d",
-           "CONTEXT": "1048576", "MAX_TOKENS": "32768"}
-    for extra, master in (({}, HEAD), ({"FABRIC_MASTER": "172.16.240.11"}, "172.16.240.11")):
-        args = serve.command({**env, **extra})
-        assert args[args.index("--master") + 1] == master
-        assert args[args.index("--master-port") + 1] == "29511"
+    env = {"MASTER": HEAD, "MASTER_PORT": "29511", "MODEL_PATH": "/m", "DRAFTER": "/d", "CONTEXT": "1048576",
+           "MAX_TOKENS": "32768", "SERVED_NAME": "GLM-5.3-Flash", "HOST": "0.0.0.0", "PORT": "8888"}
+    for rank in ("0", "1"):
+        for extra, master in (({}, HEAD), ({"FABRIC_MASTER": "172.16.240.11"}, "172.16.240.11")):
+            args = serve.command({**env, "RANK": rank, **extra})
+            assert args[args.index("--master") + 1] == master
+            assert args[args.index("--master-port") + 1] == "29511"
 
 
 def test_mod_is_frozen_and_self_contained(tmp_path):
