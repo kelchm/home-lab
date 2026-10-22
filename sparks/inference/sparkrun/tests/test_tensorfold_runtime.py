@@ -1183,3 +1183,22 @@ def test_upstream_qwen_profiles_use_the_shared_gate_with_their_own_shape():
         lanes = shlex.split(recipe.defaults["extra_args"])
         assert options == {"--model": recipe.defaults["served_model_name"], "--context": str(recipe.defaults["context"]),
                            "--lanes": lanes[lanes.index("--parallel") + 1], "--efforts": "xhigh,medium,low,none"}
+
+
+@pytest.mark.parametrize("change", ["edit", "extra", "dangling", "linked lock"])
+def test_upstream_qwen_frozen_bundle_rejects_changed_added_and_linked_files(tmp_path, change):
+    _, bundle, _ = _upstream_qwen_bundle(tmp_path, UPSTREAM_QWEN_PROFILES[0])
+    subprocess.run([sys.executable, str(bundle / "prepare.py"), "--check"], check=True, capture_output=True)
+    if change == "edit":
+        (bundle / "serve.py").write_text((bundle / "serve.py").read_text() + "\n# Unreviewed change\n")
+    elif change == "extra":
+        (bundle / "extra.py").write_text("")
+    elif change == "dangling":
+        (bundle / "gone.py").symlink_to(tmp_path / "absent.py")
+    else:
+        outside = tmp_path / "outside.lock.json"
+        outside.write_text((bundle / "upstream.lock.json").read_text())
+        (bundle / "upstream.lock.json").unlink()
+        (bundle / "upstream.lock.json").symlink_to(outside)
+    result = subprocess.run([sys.executable, str(bundle / "prepare.py"), "--check"], capture_output=True, text=True)
+    assert result.returncode != 0
