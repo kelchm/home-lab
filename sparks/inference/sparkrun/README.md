@@ -771,8 +771,8 @@ Two profiles serve [`deepseek-ai/DeepSeek-V4.1-Flash-1017`](https://huggingface.
 
 | Profile | Engine | Window | State |
 | --- | --- | --- | --- |
-| `dsv41-1017-exl3-tp2-bth-tf-2970bcd-libertai-512k` | `2970bcd` with six patches | 524,288 | Built; not yet launched (#942) |
-| `dsv41-1017-exl3-tp2-bth-tf-6366d2c-libertai-1m` | `6366d2c` with three patches | 1,048,576 | Serving since October 21; the rollback until the refresh is qualified |
+| `dsv41-1017-exl3-tp2-bth-tf-2970bcd-libertai-512k` | `2970bcd` with six patches | 524,288 | Serving since October 22, qualified to 524,139 prompt tokens |
+| `dsv41-1017-exl3-tp2-bth-tf-6366d2c-libertai-1m` | `6366d2c` with three patches | 1,048,576 | Served October 21–22; the rollback, with its image kept on the head |
 
 Rank 0 runs `tensorfold-native serve` with the OpenAI and Anthropic routes; rank 1 runs `tf-dsv41-lanes`. Settings: four streams, a 32,768-token reply budget, thinking on, temperature 1.0, top-p 0.95, top-k 20, DSpark drafts, CUDA graphs and the Engram read-ahead. The ranks link over rail 0 of the CX7 cable (`DSV41_TP_MASTER`), not the management network SparkRun's rendezvous address uses, and gather over both rails with RDMA on the devices and GID index SparkRun detects. The rank-1 pool equals the window.
 
@@ -849,7 +849,7 @@ sparkrun logs "$dsv41" --cluster sparks
 sparkrun stop "$dsv41" --cluster sparks
 ```
 
-The `6366d2c` profile is the rollback until the refresh is qualified; its image stays on the head until then. After it, the Qwen [discovery profile](#model-discovery-variant) is the rollback.
+The `6366d2c` profile is the rollback; its image stays on the head until it is retired. After it, the Qwen [discovery profile](#model-discovery-variant) is the rollback.
 
 To switch from the `6366d2c` profile, stop it first and load the new image only then, so the 37 GB load never runs beside a serving engine on the head's unified memory:
 
@@ -862,6 +862,18 @@ docker image inspect --format '{{.Id}}' dsv41-tf:2970bcd-4691715-e1c6ebe02e2a  #
 ```
 
 Then launch the new profile as above. To roll back, stop it and `sparkrun run "$old"` with the same flags; the shared readiness gate does not apply to the `6366d2c` profile, which keeps its own hook.
+
+### October 22 launch
+
+This is the `2970bcd` profile, launched in a window granted from #938. The `6366d2c` profile was stopped idle at 01:20:20 UTC. The image then loaded on the head in 4 min 11 s, SparkRun copied it to the worker in 209 s, and the engine was HTTP-ready 55 s after its container started. The API was back at 01:29:25, about 9 minutes after the stop, and the shared readiness gate passed at 01:29:32.
+
+- Both ranks linked on `FABRIC_MASTER` `198.19.240.11:25000`, and RDMA came up on both rails at GID index 3.
+- `/v1/models` reported `max`, `high`, `low` and `none` and a 524,288 window. `/tokenize` rendered budgets 100, 75 and 50, and no effort line for `none`; `xhigh`, `medium` and `minimal` rendered as 100, 75 and 50.
+- One prime-count prompt answered 12 at every thinking level, with 337, 158 and 104 reasoning tokens at `max`, `high` and `low`, and none at `none`.
+- Quoted control tokens in a message, a tool result, a tool description, a schema property name and a tool-call argument name left the prompt's control-token counts equal to a clean request's.
+- `tool_choice` `auto`, `required` and a named function each returned a call, `required` also with thinking on.
+- A needle at 480,478 prompt tokens was found at 10%, 50% and 90% depth, in about 249 s each, and at 524,139 tokens at 50% depth in 275 s, with thinking off at temperature 0.
+- `MemAvailable` stayed at or above 5.96 GiB on the head, its low during the 524K prompt, and 8.63 GiB on the worker. The kernel logged no `NV_ERR`, OOM or Xid on either host.
 
 ### October 21 launch
 
@@ -880,7 +892,7 @@ This is the `6366d2c` profile. The hand-started containers were stopped idle at 
 - The prompt cache evicts kept conversations oldest first, so an agent's idle main conversation goes before finished subagents' ([#27](https://github.com/MiaAI-Lab/DeepSeek-v4.1-Flash-1017-2x-DGX-Sparks/issues/27) there).
 - A request with `tool_choice: "required"` or a named function reads every token synchronously, even after the call gate (`0002`) has forced the call's opening, so it loses decode overlap for the call's arguments. Other requests are unaffected, and `0002` stays verbatim from Mia's recipe.
 - The engine's piecewise prompt passes (`TF_FILL_CHUNKS`) stay off: Mia's comparable interleave starved several queued long prompts ([#18](https://github.com/MiaAI-Lab/DeepSeek-v4.1-Flash-1017-2x-DGX-Sparks/issues/18) there), and a long prompt pass holds other streams' tokens until it finishes. The `2970bcd` engine's opt-in `TF_DS_SOLO_OVERHEAD` and `TF_DS_NO_COPIES` also stay off until measured here.
-- The `6366d2c` profile's window is configured at 1,048,576 tokens and qualified here only to about 154K. The head keeps about 6 GiB available with the model loaded; Mia reports 512K as the practical limit for a head like this one and found a needle at 479,012 tokens in a 524,288 window, which the `2970bcd` profile configures; that window is qualified at its launch (#942). No memory watchdog runs.
+- The `6366d2c` profile's window is configured at 1,048,576 tokens and qualified here only to about 154K. The head keeps about 6 GiB available with the model loaded; Mia reports 512K as the practical limit for a head like this one and found a needle at 479,012 tokens in a 524,288 window, which the `2970bcd` profile configures and qualified on October 22 (below). No memory watchdog runs.
 - The endpoint has no API key.
 
 ## Deploy
