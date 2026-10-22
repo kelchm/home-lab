@@ -14,7 +14,7 @@ from pathlib import Path
 from tensorfold.cuda.chat_template import ChatTemplate
 from tensorfold.server.messages import _normalize_tool_call_arguments
 
-EFFORT = {"minimal": 25, "low": 50, "medium": 62, "high": 75, "xhigh": 88, "max": 100}
+EFFORT = {"low": 50, "high": 75, "max": 100}
 
 template, fixtures = Path(sys.argv[1]), Path(sys.argv[2])
 model = Path(tempfile.mkdtemp())

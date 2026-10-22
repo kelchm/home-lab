@@ -814,14 +814,19 @@ def test_native_lifecycle_gates_tcpstore_then_starts_rank1(runtime, monkeypatch)
     assert [source.container for source in sources] == ["cid_node_0", "cid_node_1"]
 
 
-DSV41_RECIPE = Path(__file__).resolve().parents[1] / "bertholomus-tensorfold-dsv41-tp2/dsv41-1017-exl3-tp2-bth-tf-6366d2c-libertai-1m.yaml"
+DSV41_RECIPES = sorted((Path(__file__).resolve().parents[1] / "bertholomus-tensorfold-dsv41-tp2").glob("*.yaml"))
 DSV41_TARGET = "LibertAIDAI/DeepSeek-V4.1-Flash-1017-EXL3-2.9bpw"
 DSV41_SERVED = "DeepSeek-V4.1-Flash-1017"
 
 
-def _dsv41_bundle(tmp_path):
-    recipe = Recipe(yaml.safe_load(DSV41_RECIPE.read_text()), source_path=str(DSV41_RECIPE))
-    source = DSV41_RECIPE.parent / recipe.mods[0]
+@pytest.fixture(params=DSV41_RECIPES, ids=lambda path: path.stem)
+def dsv41_recipe(request):
+    return request.param
+
+
+def _dsv41_bundle(tmp_path, path):
+    recipe = Recipe(yaml.safe_load(path.read_text()), source_path=str(path))
+    source = path.parent / recipe.mods[0]
     bundle = tmp_path / source.name
     shutil.copytree(source, bundle, ignore=shutil.ignore_patterns("__pycache__"))
     modules = {}
@@ -832,9 +837,10 @@ def _dsv41_bundle(tmp_path):
     return recipe, bundle, modules["serve"], modules["readiness"]
 
 
-def test_dsv41_recipe_maps_native_rank_wiring_to_both_engine_binaries(runtime, tmp_path):
-    recipe, bundle, serve, _ = _dsv41_bundle(tmp_path)
-    assert recipe.name == recipe.metadata["profile"] == DSV41_RECIPE.stem
+def test_dsv41_recipe_maps_native_rank_wiring_to_both_engine_binaries(runtime, tmp_path, dsv41_recipe):
+    recipe, bundle, serve, _ = _dsv41_bundle(tmp_path, dsv41_recipe)
+    context = str(recipe.defaults["context"])
+    assert recipe.name == recipe.metadata["profile"] == dsv41_recipe.stem
     assert not [issue for issue in runtime.validate_recipe(recipe) if getattr(issue, "severity", None) == ERROR]
     lock = json.loads((bundle / "upstream.lock.json").read_text())
     assert lock["image_id"] == recipe.container and lock["image"] == recipe.metadata["image"]
@@ -861,7 +867,7 @@ def test_dsv41_recipe_maps_native_rank_wiring_to_both_engine_binaries(runtime, t
         assert child["TF_DS_REPLAY_FLOOR"] == "1"
         if rank == 0:
             assert args[:3] == ["tensorfold-native", "serve", str(model)]
-            for flag, expected in (("--name", DSV41_SERVED), ("--port", "8888"), ("--context", "1048576"),
+            for flag, expected in (("--name", DSV41_SERVED), ("--port", "8888"), ("--context", context),
                                    ("--parallel", "4"), ("--max-tokens", "32768"), ("--temperature", "1.0"),
                                    ("--top-p", "0.95"), ("--top-k", "20"), ("--backend", "cuda")):
                 assert args[args.index(flag) + 1] == expected
@@ -871,7 +877,7 @@ def test_dsv41_recipe_maps_native_rank_wiring_to_both_engine_binaries(runtime, t
             assert args[:8] == ["tf-dsv41-lanes", str(model), fabric["TF_DS_RANK_CACHE"], "1", "2", "198.19.240.11",
                                 "29511", str(kit)]
             for flag, expected in (("--engram", str(engram)), ("--token-map", fabric["TF_DS_TOKEN_MAP"]),
-                                   ("--pool", "1048576"), ("--rdma", "rocep1s0f0,roceP2p1s0f0"), ("--graphs", "1"),
+                                   ("--pool", context), ("--rdma", "rocep1s0f0,roceP2p1s0f0"), ("--graphs", "1"),
                                    ("--side", "1"), ("--prefetch", "1"), ("--aio", "1")):
                 assert args[args.index(flag) + 1] == expected
     missing = {**recipe.env, **_parse_env_command(_node_command(runtime, recipe, 0))[0], **fabric,
@@ -880,8 +886,8 @@ def test_dsv41_recipe_maps_native_rank_wiring_to_both_engine_binaries(runtime, t
         serve.command(missing, model, kit, engram)
 
 
-def test_dsv41_views_link_read_only_snapshots_and_check_the_image_bias(tmp_path, monkeypatch):
-    recipe, bundle, serve, _ = _dsv41_bundle(tmp_path)
+def test_dsv41_views_link_read_only_snapshots_and_check_the_image_bias(tmp_path, monkeypatch, dsv41_recipe):
+    recipe, bundle, serve, _ = _dsv41_bundle(tmp_path, dsv41_recipe)
     lock = json.loads((bundle / "upstream.lock.json").read_text())
     hub, views = tmp_path / "hub", tmp_path / "views"
     monkeypatch.setattr(serve, "HUB", hub)
@@ -932,34 +938,35 @@ def test_dsv41_views_link_read_only_snapshots_and_check_the_image_bias(tmp_path,
 
 
 @pytest.mark.parametrize("change", ["edit", "extra"])
-def test_dsv41_frozen_bundle_rejects_changed_or_added_files(tmp_path, change):
-    _, bundle, _, _ = _dsv41_bundle(tmp_path)
+def test_dsv41_frozen_bundle_rejects_changed_or_added_files(tmp_path, change, dsv41_recipe):
+    _, bundle, _, _ = _dsv41_bundle(tmp_path, dsv41_recipe)
     if change == "edit":
         (bundle / "serve.py").write_text((bundle / "serve.py").read_text() + "\n# Unreviewed change\n")
     else:
-        (bundle / "patches/0004-extra.patch").write_text("")
+        (bundle / "patches/0099-extra.patch").write_text("")
     result = subprocess.run([sys.executable, str(bundle / "prepare.py"), "--check"], capture_output=True, text=True)
     assert result.returncode != 0
 
 
-def test_dsv41_readiness_requires_lanes_window_and_reasoning(tmp_path):
-    recipe, _, _, ready = _dsv41_bundle(tmp_path)
+def test_dsv41_readiness_requires_lanes_window_and_reasoning(tmp_path, dsv41_recipe):
+    recipe, _, _, ready = _dsv41_bundle(tmp_path, dsv41_recipe)
+    context = recipe.defaults["context"]
     hook = shlex.split(recipe.post_exec[0])
-    assert hook[hook.index("--model") + 1] == DSV41_SERVED and hook[hook.index("--context") + 1] == "1048576"
+    assert hook[hook.index("--model") + 1] == DSV41_SERVED and hook[hook.index("--context") + 1] == str(context)
     health = {"status": "ok", "warming": False, "model": DSV41_SERVED, "max_batch_size": 4}
     ready.check_health(health, DSV41_SERVED, 4)
     for change in ({"status": "error"}, {"warming": True}, {"model": "other"}, {"max_batch_size": 2}):
         with pytest.raises(RuntimeError):
             ready.check_health({**health, **change}, DSV41_SERVED, 4)
-    entry = {"id": DSV41_SERVED, "context_length": 1048576, "reasoning": {"supported_efforts": ["max", "high", "none"]}}
-    ready.check_models({"data": [entry]}, DSV41_SERVED, 1048576)
+    entry = {"id": DSV41_SERVED, "context_length": context, "reasoning": {"supported_efforts": ["max", "high", "none"]}}
+    ready.check_models({"data": [entry]}, DSV41_SERVED, context)
     for body in ({"data": []}, {"data": [{**entry, "context_length": 262144}]}, {"data": [{**entry, "reasoning": {}}]}):
         with pytest.raises(RuntimeError):
-            ready.check_models(body, DSV41_SERVED, 1048576)
+            ready.check_models(body, DSV41_SERVED, context)
 
 
-def test_dsv41_rank_inputs_follow_the_weights_in_a_root_of_their_own(runtime):
-    recipe = Recipe.from_dict(yaml.safe_load(DSV41_RECIPE.read_text()))
+def test_dsv41_rank_inputs_follow_the_weights_in_a_root_of_their_own(runtime, dsv41_recipe):
+    recipe = Recipe.from_dict(yaml.safe_load(dsv41_recipe.read_text()))
     settings = resolve_runtime_cache_settings(runtime=runtime, recipe=recipe)
     assert settings.key_by_image is False
     root = resolve_runtime_cache_root(settings, "/home/kelchm/.cache/sparkrun")
@@ -967,15 +974,15 @@ def test_dsv41_rank_inputs_follow_the_weights_in_a_root_of_their_own(runtime):
     mounts = build_runtime_cache_mounts(runtime=runtime, recipe=recipe, settings=settings, root=root, image=recipe.container)
     assert mounts.leaf == f"{root}/tensorfold/LibertAIDAI__DeepSeek-V4.1-Flash-1017-EXL3-2.9bp-55410efc"
     # Another TensorFold recipe's sweep ages siblings under the shared root only.
-    other = Recipe.from_dict(yaml.safe_load((DSV41_RECIPE.parents[1] / "tensorfold-glm53-exl3.yaml").read_text()))
+    other = Recipe.from_dict(yaml.safe_load((dsv41_recipe.parents[1] / "tensorfold-glm53-exl3.yaml").read_text()))
     shared = resolve_runtime_cache_root(resolve_runtime_cache_settings(runtime=runtime, recipe=other), "/home/kelchm/.cache/sparkrun")
     assert not mounts.leaf.startswith(shared + "/")
     assert recipe.env["TF_DS_RANK_CACHE"].startswith(RUNTIME_CACHE_CONTAINER_PATH + "/")
     assert recipe.env["TF_DS_TOKEN_MAP"].startswith(RUNTIME_CACHE_CONTAINER_PATH + "/")
 
 
-def test_dsv41_rdma_devices_take_exact_names_on_port_1(tmp_path):
-    _, _, serve, _ = _dsv41_bundle(tmp_path)
+def test_dsv41_rdma_devices_take_exact_names_on_port_1(tmp_path, dsv41_recipe):
+    _, _, serve, _ = _dsv41_bundle(tmp_path, dsv41_recipe)
     devices = tmp_path / "infiniband"
     for name in ("rocep1s0f0", "roceP2p1s0f0"):
         (devices / name).mkdir(parents=True)

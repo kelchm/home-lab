@@ -1,0 +1,126 @@
+diff --git a/zig/src/families/dsv41/native.zig b/zig/src/families/dsv41/native.zig
+index 27a4f90..e03fd05 100644
+--- a/zig/src/families/dsv41/native.zig
++++ b/zig/src/families/dsv41/native.zig
+@@ -43,7 +43,7 @@ pub const default_context: i64 = 262144;
+ pub const max_segments: u32 = 1;
+ /// The served build's prompt chunk (TF_DS_PREFILL_CHUNK).
+ pub const prompt_rows: u32 = 2048;
+-/// The served lane's reasoning effort numbers (text.zig): the server passes each name and the template hears its number.
++/// DeepSeek's reasoning effort numbers (text.zig): the server passes each name and the template hears its number.
+ pub const efforts = @import("text.zig").efforts;
+ 
+ pub const Options = struct { context: usize, drafts: bool, segments: usize = 1 };
+diff --git a/zig/src/families/dsv41/text.zig b/zig/src/families/dsv41/text.zig
+index 8fe1e86..2c80309 100644
+--- a/zig/src/families/dsv41/text.zig
++++ b/zig/src/families/dsv41/text.zig
+@@ -1,34 +1,25 @@
+ //! DeepSeek-V4.1's text side on the 1.0 server (M7): the reasoning efforts as the numbers its chat template takes.
+-//! The checkpoint's template turns "low", "high" and "max" into 50, 75 and 100 and takes any integer 1-100 as it is
+-//! (the "Reasoning Effort: N" line before the first turn when thinking). The served Python lane (families/deepseek_v41/
+-//! cuda/app.py, EFFORT_VALUES) gives every OpenAI effort name a number of its own between those; the engine reports
+-//! these as its Info.efforts, so the server passes each name as asked and the template hears its number. A request
+-//! without one hears the template's default ("high": 75), the number the lane sends; "none" turns thinking off.
++//! The checkpoint's encoder (encoding/encoding.py) names "low", "high" and "max" as 50, 75 and 100 and takes any
++//! integer 1-100 as it is (the "Reasoning Effort: N" line before the first turn when thinking). The engine reports
++//! exactly those three as its Info.efforts, so the server passes each name as asked, the template hears its number and
++//! any other effort name goes to the nearest of the three. A request without one hears the template's default
++//! ("high": 75); "none" turns thinking off.
+ //! Reasoning split ("</think>" closes the block the generation prompt opens) and DSML tool calls are the server's own.
+ 
+ /// A name and its number, as engine_api.Effort takes them.
+ pub const Effort = struct { name: []const u8, value: i64 };
+ 
+ pub const efforts = [_]Effort{
+-    .{ .name = "minimal", .value = 25 },
+     .{ .name = "low", .value = 50 },
+-    .{ .name = "medium", .value = 62 },
+     .{ .name = "high", .value = 75 },
+-    .{ .name = "xhigh", .value = 88 },
+     .{ .name = "max", .value = 100 },
+ };
+ 
+-test "the lane's effort numbers: rising, inside the template's 1-100, its own three where it names them" {
++test "the checkpoint's own three efforts and no others" {
+     const std = @import("std");
+-    var last: i64 = 0;
+-    for (efforts) |e| {
+-        try std.testing.expect(e.value > last and e.value <= 100);
+-        last = e.value;
+-    }
+-    for ([_]struct { []const u8, i64 }{ .{ "low", 50 }, .{ "high", 75 }, .{ "max", 100 } }) |t| {
+-        const hit = for (efforts) |e| {
+-            if (std.mem.eql(u8, e.name, t[0])) break e.value;
+-        } else 0;
+-        try std.testing.expectEqual(t[1], hit);
++    try std.testing.expectEqual(@as(usize, 3), efforts.len);
++    for ([_]struct { []const u8, i64 }{ .{ "low", 50 }, .{ "high", 75 }, .{ "max", 100 } }, efforts) |t, e| {
++        try std.testing.expectEqualStrings(t[0], e.name);
++        try std.testing.expectEqual(t[1], e.value);
+     }
+ }
+diff --git a/zig/src/server/effort_values_test.zig b/zig/src/server/effort_values_test.zig
+index f8b01f8..9d50d1e 100644
+--- a/zig/src/server/effort_values_test.zig
++++ b/zig/src/server/effort_values_test.zig
+@@ -157,6 +157,25 @@ test "an engine's effort numbers: every name passes as asked and the template he
+     try expectHeard(srv, &backend, "{\"model\":\"m\",\"max_tokens\":2,\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"reasoning_effort\":\"none\"}", "thinking=false effort=-\n");
+ }
+ 
++test "an unlisted effort name hears the nearest listed number, ties going higher" {
++    const three = [_]api.Effort{ .{ .name = "low", .value = 50 }, .{ .name = "high", .value = 75 }, .{ .name = "max", .value = 100 } };
++    var text: EffortText = .{};
++    var backend: Capture = .{ .efforts = &three };
++    defer std.testing.allocator.free(backend.prompt);
++    var srv = try server.Server.init(std.testing.allocator, std.testing.io, backend.engine(), text.text(), .{ .served_name = "m", .model_ids = &.{"m"}, .use_drafts = false }, null);
++    defer srv.deinit();
++    try std.testing.expectEqual(@as(usize, 3), srv.effort_levels.len);
++    const ask = "{{\"model\":\"m\",\"max_tokens\":2,\"messages\":[{{\"role\":\"user\",\"content\":\"hi\"}}],\"reasoning_effort\":\"{s}\"}}";
++    for ([_]struct { []const u8, i64 }{ .{ "minimal", 50 }, .{ "low", 50 }, .{ "medium", 75 }, .{ "high", 75 }, .{ "xhigh", 100 }, .{ "max", 100 } }) |c| {
++        const body = try std.fmt.allocPrint(std.testing.allocator, ask, .{c[0]});
++        defer std.testing.allocator.free(body);
++        const want = try std.fmt.allocPrint(std.testing.allocator, "thinking=true effort={d}\n", .{c[1]});
++        defer std.testing.allocator.free(want);
++        try expectHeard(srv, &backend, body, want);
++    }
++    try expectHeard(srv, &backend, "{\"model\":\"m\",\"max_tokens\":2,\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"reasoning_effort\":\"none\"}", "thinking=false effort=-\n");
++}
++
+ test "without effort numbers the template hears the nearest name it quotes, as before" {
+     var text: EffortText = .{};
+     var backend: Capture = .{};
+diff --git a/zig/src/server/fields.zig b/zig/src/server/fields.zig
+index 7d7e8fd..c5a5a10 100644
+--- a/zig/src/server/fields.zig
++++ b/zig/src/server/fields.zig
+@@ -232,7 +232,7 @@ fn order(name: []const u8) ?usize {
+     return null;
+ }
+ 
+-/// The nearest level the template names, ties going higher; xhigh and none stay.
++/// The nearest level the template names, ties going higher; none stays.
+ pub fn coerceEffort(effort: []const u8, levels: []const []const u8) []const u8 {
+     if (levels.len == 0) {
+         if (std.mem.eql(u8, effort, "high") or std.mem.eql(u8, effort, "max")) return "xhigh";
+@@ -240,7 +240,7 @@ pub fn coerceEffort(effort: []const u8, levels: []const []const u8) []const u8 {
+         return effort;
+     }
+     for (levels) |l| if (std.mem.eql(u8, l, effort)) return effort;
+-    if (std.mem.eql(u8, effort, "xhigh") or std.mem.eql(u8, effort, "none")) return effort;
++    if (std.mem.eql(u8, effort, "none")) return effort;
+     const want = order(effort) orelse return effort;
+     var best: []const u8 = effort;
+     var best_key: [2]usize = .{ std.math.maxInt(usize), std.math.maxInt(usize) };
+@@ -306,6 +306,11 @@ test "efforts and numbers" {
+     try std.testing.expectEqualStrings("xhigh", coerceEffort("high", &levels));
+     try std.testing.expectEqualStrings("low", coerceEffort("minimal", &levels));
+     try std.testing.expectEqualStrings("xhigh", coerceEffort("max", &.{}));
++    const deepseek = [_][]const u8{ "low", "high", "max" };
++    try std.testing.expectEqualStrings("low", coerceEffort("minimal", &deepseek));
++    try std.testing.expectEqualStrings("high", coerceEffort("medium", &deepseek));
++    try std.testing.expectEqualStrings("max", coerceEffort("xhigh", &deepseek));
++    try std.testing.expectEqualStrings("none", coerceEffort("none", &deepseek));
+     try std.testing.expectEqual(@as(?f64, 1000.5), pyFloat(" 1_000.5 "));
+     try std.testing.expect(pyFloat("1__0") == null and pyFloat(".") == null);
+     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
