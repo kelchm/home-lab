@@ -834,7 +834,7 @@ DOCKER_CONTEXT=colima-tf-build sparks/inference/sparkrun/mods/bertholomus-tensor
 DOCKER_CONTEXT=colima-tf-build docker save dsv41-tf:2970bcd-4691715-e1c6ebe02e2a | ssh kelchm@10.32.21.31 docker load
 ```
 
-The recipe's `container` and the lock's `image_id` are the image ID the head reports, which is the image's config digest; Colima's containerd store shows the index digest instead. To read it before loading, `colima ssh -p tf-build -- sudo ctr -n moby images ls` gives the index digest; `ctr -n moby content get` on that lists the arm64 manifest, and that manifest's `config.digest` is the ID. The `2970bcd` build of October 21 is `sha256:be8d19b2…`, and the `6366d2c` image is `sha256:66ce7619…`. A rebuild can produce another ID; record it in both before launching.
+The recipe's `container` and the lock's `image_id` are the image ID the head reports, which is the image's config digest; Colima's containerd store shows the index digest instead. To read it before loading, `colima ssh -p tf-build -- sudo ctr -n moby images ls` gives the index digest; `ctr -n moby content get` on that lists the arm64 manifest, and that manifest's `config.digest` is the ID. The `2970bcd` build of October 21 is `sha256:a7845d4e…`, and the `6366d2c` image is `sha256:66ce7619…`. A rebuild can produce another ID; record it in both before launching.
 
 ### Launch, stop and roll back
 

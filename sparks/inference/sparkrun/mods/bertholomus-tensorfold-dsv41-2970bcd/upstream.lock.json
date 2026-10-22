@@ -13,7 +13,7 @@
     "patches/0006-literal-object-keys.patch": "this lab: 0004 also keeps a quoted added token in a JSON object key as text"
   },
   "image": "dsv41-tf:2970bcd-4691715-e1c6ebe02e2a",
-  "image_id": "sha256:pending-build",
+  "image_id": "sha256:a7845d4e5e84c63c55bca2a382c878f7cd964ce8f14daeddab56dcaef2333178",
   "kit": {
     "repository": "bertholomus/DeepSeek-V4.1-Flash-TensorFold-TP2-2xGB10",
     "revision": "4996441a82d95b9a7853b01a1255e1dafc926387",

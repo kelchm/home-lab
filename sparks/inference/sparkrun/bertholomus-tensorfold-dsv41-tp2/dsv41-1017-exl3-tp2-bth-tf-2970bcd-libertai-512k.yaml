@@ -3,7 +3,7 @@ recipe_version: '2'
 model: LibertAIDAI/DeepSeek-V4.1-Flash-1017-EXL3-2.9bpw
 model_revision: 0be63c3337efbb2a0061d5b8bb4006fa186d433f
 runtime: tensorfold
-container: sha256:be8d19b23d755309321d5d028558807da050cb81fa6f723e6697cd7f43e70c35
+container: sha256:a7845d4e5e84c63c55bca2a382c878f7cd964ce8f14daeddab56dcaef2333178
 min_nodes: 2
 max_nodes: 2
 metadata:
