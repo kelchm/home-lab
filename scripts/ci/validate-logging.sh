@@ -6,7 +6,6 @@ python3 scripts/logging/validate-config.py
 python3 scripts/logging/test-fluent-bit.py
 python3 scripts/logging/test-fluent-bit-events.py
 python3 scripts/logging/test-logsql-rules.py
-python3 scripts/logging/render-dashboard.py --check
 test_dir="$(mktemp -d)"
 trap 'rm -rf "$test_dir"' EXIT
 rules_file="$test_dir/rules.yaml"

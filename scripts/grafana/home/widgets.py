@@ -107,7 +107,7 @@ def machines(p):
     return P.elements["machines"]
 
 
-# Where a machine's own detail is. The cluster nodes' Talos logs open in Explore, because Kubernetes / Logs shows container logs only.
+# Where a machine's own detail is.
 MACHINE_LINKS = {"k8s": [to("${__value.text} in Node Exporter Full", "/d/rYdddlPWk?var-job=node-exporter&var-nodename=${__value.raw}&var-node=${__value.raw}&${__url_time_range}"),
                          to("Talos logs from ${__value.text}", explore('service.namespace:=talos k8s.node.name:="${__value.raw}"'))]}
 
@@ -186,7 +186,7 @@ W.table("k8s-namespaces", "Namespaces · k8s-prod", "namespace", "Namespace", [
     ("Restarts", f'round(sum by (namespace) (increase(kube_pod_container_status_restarts_total{{{K}}}[24h])))', CTEXT((5, "orange")))],
     sort="CPU cores", desc="Where the cluster's CPU and memory are going. Restarts are counted over the last 24 hours.")
 add_links(W.elements["k8s-namespaces"], "Namespace", [to("Workloads in ${__value.text}", "/d/a87fb0d919ec0ea5f6543124e16c42a5?var-namespace=${__value.raw}&${__url_time_range}"),
-                                                      to("Logs from ${__value.text}", "/d/kubernetes-logs?var-namespace=${__value.raw}&${__url_time_range}")])
+                                                      to("Logs from ${__value.text}", explore('k8s.namespace.name:="${__value.raw}"'))])
 W.tiles("volumes", "Volumes · k8s-prod", [
     ("Healthy", zero(f'sum(longhorn_volume_robustness{{state="healthy",{K}}})'), {}),
     ("Degraded", zero(f'sum(longhorn_volume_robustness{{state="degraded",{K}}})'), dict(thresholds=PROBLEM)),
@@ -392,16 +392,15 @@ FEEDS = {
     "k8s-prod": (f"k8s.cluster.name:=k8s-prod severity_number:>=13 {LEVEL}"
                  ' | format if (service.namespace:=talos) "<k8s.node.name> <service.name>: <_msg>" as _msg'
                  ' | format if (service.namespace:!=talos) "<service.namespace>/<service.name>: <_msg>" as _msg',
-                 "Container and Talos node logs at warning level and above, newest first, each line led by its source. Known noisy sources, listed in the logging runbook, appear here too.",
-                 [to("Container logs in Kubernetes / Logs", "/d/kubernetes-logs?var-level=warning&var-level=error&var-level=critical&${__url_time_range}")]),
+                 "Container and Talos node logs at warning level and above, newest first, each line led by its source. Known noisy sources, listed in the logging runbook, appear here too."),
     "network": (f"service.namespace:=unifi severity_number:>=13 {LEVEL}" ' | format "<service.name>: <_msg>" as _msg',
-                "UniFi syslog at warning level and above, newest first, each line led by the device. Access points log routine Wi-Fi driver lines as errors.", [])}
+                "UniFi syslog at warning level and above, newest first, each line led by the device. Access points log routine Wi-Fi driver lines as errors.")}
 def feed(system):
-    query, desc, links = FEEDS[system]
+    query, desc = FEEDS[system]
     P = Panels()
     P.add("feed", "Recent warnings and errors", "logs", [lq(query, "instant", maxLines=200)],
           {"showTime": True, "showLabels": False, "showCommonLabels": False, "wrapLogMessage": False, "prettifyLogMessage": False, "enableLogDetails": True,
-           "dedupStrategy": "none", "sortOrder": "Descending"}, {}, desc=desc, links=links + [to("All of these in Explore", explore(query))])
+           "dedupStrategy": "none", "sortOrder": "Descending"}, {}, desc=desc, links=[to("All of these in Explore", explore(query))])
     return P.elements["feed"]
 
 

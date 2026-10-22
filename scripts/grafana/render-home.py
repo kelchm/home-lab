@@ -28,7 +28,7 @@ def d(uid):
 DRIVES = d("f8f249a0-be78-41b1-97fe-8d0a92a71b93")
 DEEPER = {
     "k8s-prod": [("Kubernetes / Views / Global", d("k8s_views_global")), ("Longhorn / Operations", d("longhorn-operations")), ("Drive health", DRIVES), ("cert-manager", d("cdhrcds8aosg0c")),
-                 ("Traefik", d("n5bu_kv4k")), ("CloudNativePG", d("cloudnative-pg")), ("Identity", d("pan9z68")), ("Probes", d("pi-blackbox")), ("Kubernetes / Logs", d("kubernetes-logs"))],
+                 ("Traefik", d("n5bu_kv4k")), ("CloudNativePG", d("cloudnative-pg")), ("Identity", d("pan9z68")), ("Probes", d("pi-blackbox")), ("Cluster logs", w.explore("k8s.cluster.name:=k8s-prod"))],
     "pve-sbx": [("Proxmox via Prometheus", d("Dp7Cd57Zza")), ("Hosts", d("hosts")), ("Drive health", DRIVES)],
     "spark": [("Sparks / GPU and host health", d("sparks-health")), ("AI / Inference serving", d("spark-tensorfold-performance")), ("Hosts", d("hosts")), ("Drive health", DRIVES)],
     "athena": [("Synology / Storage and hardware health", d("synology-health")), ("Drive health", DRIVES), ("Hosts", d("hosts"))],

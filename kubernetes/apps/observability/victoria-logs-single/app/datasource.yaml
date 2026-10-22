@@ -28,8 +28,7 @@ data:
           vmuiUrl: https://vlogs.home.kelch.io/select/vmui/
           # Collector records carry OpenTelemetry severity_number (ranges per the
           # OTel log data model). The level and msg.level rules color retained
-          # vlagent and Alloy rows; the Kubernetes logs dashboard additionally
-          # normalizes their text formats at query time.
+          # vlagent and Alloy rows.
           logLevelRules:
             - field: severity_number
               value: '^([1-4])$'
