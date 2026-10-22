@@ -1,0 +1,29 @@
+---
+# CloudNativePG cluster chart rule (charts/cluster/prometheus_rules/cluster-offline.yaml at f8b22d4e0041),
+# rendered for this cluster as the chart does, with the selector scoped to k8s-prod.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: visionect-db-alert-rules
+spec:
+  groups:
+    - name: cloudnative-pg/visionect-db
+      labels:
+        cluster: k8s-prod
+      rules:
+        - alert: CNPGClusterOffline
+          annotations:
+            summary: CNPG Cluster has no running instances!
+            description: |-
+              CloudNativePG Cluster "iot/visionect-db" has no ready instances.
+
+              Having an offline cluster means your applications will not be able to access the database, leading to
+              potential service disruption and/or data loss.
+            runbook_url: https://github.com/cloudnative-pg/charts/blob/main/charts/cluster/docs/runbooks/CNPGClusterOffline.md
+          expr: |
+            (count(cnpg_collector_up{cluster="k8s-prod",namespace="iot",pod=~"visionect-db-([1-9][0-9]*)$"}) OR on() vector(0)) == 0
+          for: 5m
+          labels:
+            severity: critical
+            namespace: iot
+            cnpg_cluster: visionect-db

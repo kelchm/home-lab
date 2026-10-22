@@ -1,0 +1,96 @@
+rule_files:
+  - rules.yaml
+evaluation_interval: 1m
+tests:
+  - name: A host out-of-memory kill on a Spark or a Pi alerts for 15 minutes; cluster nodes are left to Kubernetes
+    interval: 1m
+    input_series:
+      - series: node_vmstat_oom_kill{instance="spark-1",platform="spark",job="spark-node"}
+        values: 0x10 1x40
+      - series: node_vmstat_oom_kill{instance="pve-sbx-1",platform="pve",job="pve-node"}
+        values: 0x50
+      - series: node_vmstat_oom_kill{instance="streamer-basement-workbench",platform="pi",job="pi-node"}
+        values: 0x5 1x45
+      - series: node_vmstat_oom_kill{instance="k8s-prod-1",platform="k8s",job="node-exporter"}
+        values: 0x10 3x40
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: HostOomKill
+        exp_alerts:
+          - exp_labels:
+              instance: streamer-basement-workbench
+              platform: pi
+              job: pi-node
+              severity: warning
+            exp_annotations:
+              summary: The kernel killed a process for memory on streamer-basement-workbench
+              description: Find the process with `journalctl -k | grep -i "killed process"` on the host, and check that it came back.
+          - exp_labels:
+              instance: spark-1
+              platform: spark
+              job: spark-node
+              severity: warning
+            exp_annotations:
+              summary: The kernel killed a process for memory on spark-1
+              description: Find the process with `journalctl -k | grep -i "killed process"` on the host, and check that it came back.
+      - eval_time: 30m
+        alertname: HostOomKill
+        exp_alerts: []
+
+  - name: A CPU within 5 C of its own limit for 15 minutes alerts
+    interval: 1m
+    input_series:
+      # pve-sbx-1's package runs 4 C under its critical 100 C, pve-sbx-2's 10 C under.
+      - series: node_hwmon_temp_celsius{instance="pve-sbx-1",platform="pve",job="pve-node",chip="platform_coretemp_0",sensor="temp1"}
+        values: 96x30
+      - series: node_hwmon_temp_crit_celsius{instance="pve-sbx-1",platform="pve",job="pve-node",chip="platform_coretemp_0",sensor="temp1"}
+        values: 100x30
+      - series: node_hwmon_sensor_label{instance="pve-sbx-1",platform="pve",job="pve-node",chip="platform_coretemp_0",sensor="temp1",label="Package id 0"}
+        values: 1x30
+      - series: node_hwmon_temp_celsius{instance="pve-sbx-2",platform="pve",job="pve-node",chip="platform_coretemp_0",sensor="temp1"}
+        values: 90x30
+      - series: node_hwmon_temp_crit_celsius{instance="pve-sbx-2",platform="pve",job="pve-node",chip="platform_coretemp_0",sensor="temp1"}
+        values: 100x30
+      - series: node_hwmon_sensor_label{instance="pve-sbx-2",platform="pve",job="pve-node",chip="platform_coretemp_0",sensor="temp1",label="Package id 0"}
+        values: 1x30
+      # A single core near its limit is not the package reading.
+      - series: node_hwmon_temp_celsius{instance="pve-sbx-2",platform="pve",job="pve-node",chip="platform_coretemp_0",sensor="temp2"}
+        values: 99x30
+      - series: node_hwmon_temp_crit_celsius{instance="pve-sbx-2",platform="pve",job="pve-node",chip="platform_coretemp_0",sensor="temp2"}
+        values: 100x30
+      - series: node_hwmon_sensor_label{instance="pve-sbx-2",platform="pve",job="pve-node",chip="platform_coretemp_0",sensor="temp2",label="Core 0"}
+        values: 1x30
+      # A Pi 5 at 81 C is 4 C from 85 C; one at 79 C is not close.
+      - series: node_hwmon_temp_celsius{instance="ups-office",platform="pi",job="pi-node",chip="thermal_thermal_zone0",sensor="temp0"}
+        values: 81x30
+      - series: node_hwmon_chip_names{instance="ups-office",platform="pi",job="pi-node",chip="thermal_thermal_zone0",chip_name="cpu_thermal"}
+        values: 1x30
+      - series: node_hwmon_temp_celsius{instance="ups-compute-rack",platform="pi",job="pi-node",chip="thermal_thermal_zone0",sensor="temp0"}
+        values: 79x30
+      - series: node_hwmon_chip_names{instance="ups-compute-rack",platform="pi",job="pi-node",chip="thermal_thermal_zone0",chip_name="cpu_thermal"}
+        values: 1x30
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: HostCpuHot
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: HostCpuHot
+        exp_alerts:
+          - exp_labels:
+              instance: pve-sbx-1
+              platform: pve
+              job: pve-node
+              chip: platform_coretemp_0
+              sensor: temp1
+              severity: warning
+            exp_annotations:
+              summary: CPU on pve-sbx-1 is 4 C from its limit
+          - exp_labels:
+              instance: ups-office
+              platform: pi
+              job: pi-node
+              chip: thermal_thermal_zone0
+              sensor: temp0
+              severity: warning
+            exp_annotations:
+              summary: CPU on ups-office is 4 C from its limit
