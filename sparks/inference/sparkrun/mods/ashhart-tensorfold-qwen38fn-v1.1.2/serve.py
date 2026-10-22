@@ -13,10 +13,25 @@ from pathlib import Path
 
 
 def checkpoint_digest(snapshot):
-    """sha256 of the snapshot's sorted "path blob" lines; the HF cache names each blob by its content hash."""
+    """sha256 of the snapshot's sorted "path blob" lines, each blob the repository blob that file links to.
+
+    HF names a repository blob by its content hash (LFS SHA-256 or git SHA-1), whether it holds the bytes, as on a
+    worker SparkRun copied to, or links on to the cache-wide shared store, as on a head with huggingface_hub 1.32 or
+    later. Only that first link is read, so both layouts give the same digest.
+    """
     root = Path(snapshot)
-    lines = sorted(f"{p.relative_to(root).as_posix()} {p.resolve().name}\n" for p in root.rglob("*") if p.is_file())
-    return hashlib.sha256("".join(lines).encode()).hexdigest()
+    blobs = (root.parents[1] / "blobs").resolve()
+    lines = []
+    for path in root.rglob("*"):
+        if path.is_dir() and not path.is_symlink():
+            continue
+        if not path.is_symlink():
+            raise SystemExit(f"{path} is not a link into {blobs}: not an HF cache snapshot")
+        blob = path.parent / os.readlink(path)
+        if blob.parent.resolve() != blobs or not path.is_file():
+            raise SystemExit(f"{path} does not link to a present blob in {blobs}")
+        lines.append(f"{path.relative_to(root).as_posix()} {blob.name}\n")
+    return hashlib.sha256("".join(sorted(lines)).encode()).hexdigest()
 
 
 def command(env):

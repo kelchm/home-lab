@@ -802,8 +802,9 @@ No two-GB10 run of this path is published. What upstream's source fixes for two 
 - **Control link:** rank 0 listens on `FABRIC_MASTER`, the head's CX7 address, which the adapter passes when SparkRun reaches the head over the fabric. Otherwise it listens on SparkRun's `MASTER`, the management address, and the worker's management link drops for seconds at a time ([#649](https://github.com/kelchm/home-lab/issues/649)). The adapter gets that CX7 address only while spark-1 trusts the CX7 host keys ([Sparks README](../../README.md#sparkrun-operation)).
 - **NCCL:** tensors cross both CX7 rails, on the devices and GID index SparkRun detects. `serve.py` refuses to start unless `NCCL_IB_HCA` names two devices. The recipes also set `NCCL_RUNTIME_CONNECT=0`, `NCCL_CUMEM_ENABLE=0` and `NCCL_CUMEM_HOST_ENABLE=0`, which upstream sets for GLM's ranks on GB10 and not for Flash Next's.
 - **Checkpoint identity:** at two ranks the engine requires `TENSORFOLD_CHECKPOINT_SHA256`, 64 hex characters. It refuses a peer whose value, `config.json`, index, executable or settings differ, and it does not read the shards for the check.
-  - The recipes set the SHA-256 of the snapshot's sorted `path blob` lines. The HF cache names each blob by its content hash: SHA-256 for LFS files, git SHA-1 for the rest.
-  - `serve.py` computes the same digest from each rank's snapshot and refuses to start on a mismatch.
+  - The recipes set the SHA-256 of the snapshot's sorted `path blob` lines, where `blob` names the repository blob the file links to. The HF cache names those by content hash: SHA-256 for LFS files, git SHA-1 for the rest.
+  - That name is the same in both cache layouts. On a head with `huggingface_hub` 1.32 or later, the repository blob links on to the cache-wide shared store under a Xet hash. On a worker, SparkRun's copy holds the bytes.
+  - `serve.py` reads only that first link, so both ranks compute the same digest from identical content. It refuses to start on a mismatch, on a missing blob, or on a file that is not an HF cache link.
   - The value comes from the HF API's file list, before anything is downloaded:
 
     ```sh

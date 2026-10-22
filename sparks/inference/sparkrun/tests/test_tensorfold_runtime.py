@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import importlib.util
+import os
 import re
 import shlex
 import shutil
@@ -1006,12 +1007,21 @@ def _upstream_qwen_bundle(tmp_path, path):
     return recipe, bundle, serve
 
 
-def _hf_snapshot(root, files):
-    """An HF cache snapshot whose files link to blobs named by their hashes, and the digest the HF API's list gives."""
-    snapshot = root / "snapshots/rev"
+def _hf_snapshot(hub, files, shared):
+    """An HF cache snapshot and the digest the HF API's file list gives. Each file links to its repository blob, which
+    holds the bytes (SparkRun's copy on a worker) or, when `shared`, links on to the cache-wide store under its Xet
+    hash (a head with huggingface_hub 1.32 or later)."""
+    repo = hub / "models--nvidia--x"
+    snapshot = repo / "snapshots/rev"
     for name, blob in files.items():
-        (root / "blobs").mkdir(parents=True, exist_ok=True)
-        (root / "blobs" / blob).write_text(name)
+        (repo / "blobs").mkdir(parents=True, exist_ok=True)
+        if shared:
+            store = hub / "blobs" / "xet" / ("f" * 63 + str(len(name)))
+            store.parent.mkdir(parents=True, exist_ok=True)
+            store.write_text(name)
+            (repo / "blobs" / blob).symlink_to(Path("../../blobs/xet") / store.name)
+        else:
+            (repo / "blobs" / blob).write_text(name)
         (snapshot / name).parent.mkdir(parents=True, exist_ok=True)
         (snapshot / name).symlink_to(Path("../" * name.count("/")) / "../../blobs" / blob)
     listed = sorted(f"{name} {blob}\n" for name, blob in files.items())
@@ -1042,7 +1052,7 @@ def test_upstream_qwen_profiles_are_one_workload_on_the_locked_image(runtime):
     assert recipes[0].env == recipes[1].env
     # Fabric addresses come from SparkRun's detection or the cluster's env, so no lab value is in the tree.
     mod = UPSTREAM_QWEN_DIR / recipes[0].mods[-1]
-    for text in [p.read_text() for p in UPSTREAM_QWEN_PROFILES] + [p.read_text() for p in mod.rglob("*") if p.is_file()]:
+    for text in [p.read_text() for p in UPSTREAM_QWEN_PROFILES] + [p.read_text() for p in mod.rglob("*") if p.is_file() and "__pycache__" not in p.parts]:
         assert not re.search(r"\b(?!(127\.0\.0\.1|0\.0\.0\.0)\b)\d{1,3}(\.\d{1,3}){3}\b|/home/|/opt/spark|NCCL_IB_(HCA|GID_INDEX)\s*:", text)
 
 
@@ -1090,24 +1100,37 @@ def test_upstream_qwen_rank0_listens_on_the_port_sparkrun_gates(runtime, tmp_pat
 
 def test_upstream_qwen_ranks_check_the_snapshot_and_both_rails(tmp_path):
     recipe, _, serve = _upstream_qwen_bundle(tmp_path, UPSTREAM_QWEN_PROFILES[0])
-    snapshot, digest = _hf_snapshot(tmp_path / "models--nvidia--x", {
-        "config.json": "1efa9baa6f332ef821a9468eddd0414ee9bfefb0",
-        "tensors/model-00001-of-00002.safetensors": "ebf3648c" + "0" * 56,
-        "tensors/model-00002-of-00002.safetensors": "79a643fc" + "0" * 56,
-    })
-    assert serve.checkpoint_digest(snapshot) == digest
-    base = {"RANK": "0", "MASTER": FABRIC_HEAD, "MASTER_PORT": "25000", "MODEL_PATH": str(snapshot), "HOST": "0.0.0.0",
+    files = {"config.json": "1efa9baa6f332ef821a9468eddd0414ee9bfefb0",
+             "tensors/model-00001-of-00002.safetensors": "ebf3648c" + "0" * 56,
+             "tensors/model-00002-of-00002.safetensors": "79a643fc" + "0" * 56}
+    # The head's shared-store layout and the worker's copied one give the same digest as the API's list.
+    head, digest = _hf_snapshot(tmp_path / "head", files, shared=True)
+    worker, same = _hf_snapshot(tmp_path / "worker", files, shared=False)
+    assert serve.checkpoint_digest(head) == serve.checkpoint_digest(worker) == digest == same
+    base = {"RANK": "0", "MASTER": FABRIC_HEAD, "MASTER_PORT": "25000", "MODEL_PATH": str(head), "HOST": "0.0.0.0",
             "PORT": "8888", "SERVED_NAME": "Qwen3.8-Flash-Next", "CONTEXT": "262144", "MAX_TOKENS": "32768",
             "TENSORFOLD_CHECKPOINT_SHA256": digest, **UPSTREAM_QWEN_FABRIC}
     assert serve.command(base)[serve.command(base).index("--master") + 1] == FABRIC_HEAD
     with pytest.raises(SystemExit, match="TENSORFOLD_CHECKPOINT_SHA256"):
         serve.command({**base, "TENSORFOLD_CHECKPOINT_SHA256": "0" * 64})
-    blob = (snapshot / "config.json").resolve()
-    (snapshot / "config.json").unlink()
-    (snapshot / "config.json").symlink_to(blob.parent / "79a643fc")
-    (blob.parent / "79a643fc").write_text("another file")
+    config = worker / "config.json"
+    config.unlink()
+    config.symlink_to("../../blobs/79a643fc" + "0" * 56)
     with pytest.raises(SystemExit, match="hashes to"):
-        serve.command(base)
+        serve.command({**base, "MODEL_PATH": str(worker)})
+    # A missing blob, a plain file and a link out of the repository's blobs are not an HF cache snapshot.
+    shard = head / "tensors/model-00002-of-00002.safetensors"
+    (head.parents[1] / "blobs" / os.readlink(shard).rsplit("/", 1)[1]).unlink()
+    with pytest.raises(SystemExit, match="present blob"):
+        serve.checkpoint_digest(head)
+    shard.unlink()
+    shard.write_text("copied")
+    with pytest.raises(SystemExit, match="not an HF cache snapshot"):
+        serve.checkpoint_digest(head)
+    shard.unlink()
+    shard.symlink_to(tmp_path / "head/blobs/xet" / ("f" * 63 + "11"))
+    with pytest.raises(SystemExit, match="present blob"):
+        serve.checkpoint_digest(head)
     for hca in ("rocep1s0f0", "^rocep1s0f1,roceP2p1s0f1", ""):
         with pytest.raises(SystemExit, match="two CX7 rails"):
             serve.command({**base, "NCCL_IB_HCA": hca})
