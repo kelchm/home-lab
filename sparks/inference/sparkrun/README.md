@@ -375,10 +375,10 @@ running="$PWD/<family>/<profile>.yaml"  # The recipe that launched the running i
 python3 mods/tensorfold-readiness/prepare.py --check
 python3 mods/bertholomus-tensorfold-dsv41-2970bcd/prepare.py --check
 sparkrun stop "$running" --cluster sparks
-test -z "$(nvidia-smi --query-compute-apps=pid --format=csv,noheader; ssh kelchm@10.32.21.32 nvidia-smi --query-compute-apps=pid --format=csv,noheader)"  # No compute process on either GPU.
+apps=$(nvidia-smi --query-compute-apps=pid --format=csv,noheader && ssh kelchm@10.32.21.32 nvidia-smi --query-compute-apps=pid --format=csv,noheader) && test -z "$apps"  # No compute process on either GPU.
 # If the image isn't on the head, load it now, from the workstation:
 #   DOCKER_CONTEXT=colima-tf-build docker save dsv41-tf:2970bcd-4691715-e1c6ebe02e2a | ssh kelchm@10.32.21.31 docker load
-docker image inspect --format '{{.Id}}' dsv41-tf:2970bcd-4691715-e1c6ebe02e2a  # The recipe's container.
+docker image inspect --format '{{.Id}}' "$(awk '$1 == "container:" { print $2 }' "$dsv41")"  # Fails unless the recipe's pinned image is here.
 sparkrun run "$dsv41" --cluster sparks --no-auto-detect --no-sync-tuning --no-follow --dry-run
 sparkrun run "$dsv41" --cluster sparks --no-auto-detect --no-sync-tuning --no-follow
 sparkrun logs "$dsv41" --cluster sparks --all-sources
