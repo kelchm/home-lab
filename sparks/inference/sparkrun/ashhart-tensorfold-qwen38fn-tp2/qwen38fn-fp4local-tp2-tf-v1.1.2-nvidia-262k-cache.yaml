@@ -1,0 +1,63 @@
+# qwen38fn-fp4local-tp2-tf-v1.1.2-nvidia-262k-cache: Qwen3.8-Flash-Next across both Sparks on upstream TensorFold v1.1.2 with its --tp patch, a prompt cache and no MTP drafts; SparkRun owns both ranks and lifecycle operations.
+recipe_version: '2'
+model: nvidia/Qwen3.8-Flash-Next-FP4-Local
+model_revision: b9ce18a6887e18c089fdea8509a33e63429a3300
+runtime: tensorfold
+container: sha256:85a7dc7692e96474260c068c79c8939cf6b06c428ab4dc00058316811c4b8eb5
+min_nodes: 2
+max_nodes: 2
+metadata:
+  profile: qwen38fn-fp4local-tp2-tf-v1.1.2-nvidia-262k-cache
+  description: Upstream TensorFold v1.1.2 serving NVIDIA's FP4-Local weights on two ranks, a 262,144-token window and a 16 GiB prompt cache with no MTP drafts, four lanes
+  engine_revision: 4ff784410f70b95767684d337e59dfd6d94fec8b
+  image: tensorfold:1.1.2-4ff7844-f08f8e2506fd
+  weights: nvidia
+  weights_variant: fp4-local
+  serving_profile: cache
+  target_model_revision: b9ce18a6887e18c089fdea8509a33e63429a3300
+defaults:
+  tensor_parallel: 2
+  pipeline_parallel: 1
+  host: 0.0.0.0
+  port: 8888
+  served_model_name: Qwen3.8-Flash-Next
+  context: 262144
+  max_tokens: 32768
+  entrypoint: /usr/local/bin/tensorfold-entrypoint
+  extra_args: --parallel 4 --prompt-cache-gib 16
+  no_drafts: true
+env:
+  TENSORFOLD_NO_UPDATE_CHECK: '1'
+  # The digest of the snapshot's file list (README); each rank checks it against its own copy before asserting it.
+  TENSORFOLD_CHECKPOINT_SHA256: 4b283413cb710083be5c81fb42fde350a029b30f6f558ee20162403974b4eca6
+  # Upstream's GB10 settings for GLM's ranks, which Flash Next's do not set: connections registered while memory is
+  # free, and no cuMem buffers, which exhausted the driver's pool under load.
+  NCCL_RUNTIME_CONNECT: '0'
+  NCCL_CUMEM_ENABLE: '0'
+  NCCL_CUMEM_HOST_ENABLE: '0'
+executor_config:
+  entrypoint: ''
+  user: root
+  ipc: host
+  devices:
+  - /dev/infiniband
+  cap_add:
+  - IPC_LOCK
+  ulimit:
+  - memlock=-1:-1
+  - nofile=65535:65535
+  auto_remove: false
+runtime_cache:
+  key_by_image: true
+mods:
+- ../mods/tensorfold-readiness
+- ../mods/ashhart-tensorfold-qwen38fn-v1.1.2
+post_exec:
+- python3 /opt/tensorfold-readiness/readiness.py --model Qwen3.8-Flash-Next --context 262144 --lanes 4 --efforts xhigh,medium,low,none
+distribution_config:
+  models:
+    entries:
+    - name: nvidia/Qwen3.8-Flash-Next-FP4-Local
+      revision: b9ce18a6887e18c089fdea8509a33e63429a3300
+      target:
+      - -1
