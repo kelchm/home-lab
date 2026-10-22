@@ -61,6 +61,8 @@ Each Talos node's machined sends its service and kernel logs over TCP to the fix
 
 Fluent Bit also receives the UniFi console's syslog/CEF export, and the syslog of its adopted switches and access points, on `10.32.130.3` UDP/514, and stores it in the same schema with one `service.name` per device. A second vmalert evaluates LogsQL rules against VictoriaLogs and sends through the same VMAlertmanager routes; the [logging runbook](runbooks/logging.md#unifi-console-logs) describes the source, its fields and its alerts.
 
+A single-replica Fluent Bit, `fluent-bit-events`, watches the API server's events and stores them in the same schema with `service.name=kubernetes-events`, so they outlive the API server's one-hour retention ([logging runbook](runbooks/logging.md#kubernetes-events)).
+
 The `monitoring.coreos.com` CRDs are owned independently by `prometheus-operator-crds`, and the VictoriaMetrics operator converts third-party ServiceMonitors and shared PrometheusRules with owner references. VictoriaMetrics and VictoriaLogs are the only metric and log backends; kube-prometheus-stack, Loki, and OpenObserve are removed.
 
 ### Dashboards

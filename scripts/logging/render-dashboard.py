@@ -7,12 +7,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 # The Severity choices are the OpenTelemetry severity_number ranges.
 BANDS = (('trace', 1, 4), ('debug', 5, 8), ('info', 9, 12), ('warning', 13, 16), ('error', 17, 20), ('critical', 21, 24))
+LEVEL = ('\n'.join(f'| format if (severity_number:range[{low}, {high}]) "{name}" as level' for name, low, high in BANDS)
+         + '\n| format if (level:="") "unknown" as level'
+         + '\n| filter level:in(${level})')
 namespace_query = 'k8s.namespace.name:*'
-service_query = 'k8s.namespace.name:in(${namespace})'
-expr = ('k8s.namespace.name:in(${namespace}) service.name:in(${service}) log.iostream:in(${stream})\n'
-        + '\n'.join(f'| format if (severity_number:range[{low}, {high}]) "{name}" as level' for name, low, high in BANDS)
-        + '\n| format if (level:="") "unknown" as level'
-        + '\n| filter level:in(${level})')
+# Container records only: events carry a namespace too, but no stream.
+service_query = 'k8s.namespace.name:in(${namespace}) log.iostream:*'
+expr = 'k8s.namespace.name:in(${namespace}) service.name:in(${service}) log.iostream:in(${stream})\n' + LEVEL
+# Each event reads as kubectl lists it: reason, object, then the message.
+events_expr = ('{service.name="kubernetes-events"} k8s.namespace.name:in(${namespace})\n' + LEVEL
+               + '\n| format "<k8s.event.reason> <k8s.object.kind>/<k8s.object.name>: <_msg>" as _msg')
 datasource = {'type': 'victoriametrics-logs-datasource', 'uid': 'victorialogs'}
 
 
@@ -45,7 +49,7 @@ variables = [
 variables[0]['current'] = {'text': ['observability'], 'value': ['observability']}
 dashboard = {
     'uid': 'kubernetes-logs', 'title': 'Kubernetes / Logs', 'schemaVersion': 39,
-    'description': 'Container logs from the cluster. Opens on the last 15 minutes because log queries over long ranges are slow.',
+    'description': 'Container logs and Kubernetes events from the cluster. Opens on the last 15 minutes because log queries over long ranges are slow.',
     'tags': ['kubernetes', 'logs'], 'timezone': 'browser', 'refresh': '30s',
     'editable': False, 'graphTooltip': 1,
     'time': {'from': 'now-15m', 'to': 'now'},
@@ -59,6 +63,14 @@ dashboard = {
         'gridPos': {'h': 22, 'w': 24, 'x': 0, 'y': 0},
         'options': {'showTime': True, 'showLabels': False, 'wrapLogMessage': True, 'sortOrder': 'Descending'},
         'targets': [{'refId': 'A', 'expr': expr, 'editorMode': 'code', 'queryType': 'instant',
+                     'maxLines': 1000, 'adHocFiltersMode': 'off'}],
+    }, {
+        'id': 2, 'type': 'logs', 'title': 'Events',
+        'description': 'Kubernetes events in the chosen namespaces: scheduling, image pulls, mounts, probe failures and restarts. Severity applies; Service and Stream do not. Each line is the reason, the object, then the message; the count and reporter are in the row\'s details. Shows up to 1,000 matching event records, and each update of a repeated event is its own record, so this is not a count of occurrences; narrow the time range if needed.',
+        'datasource': datasource,
+        'gridPos': {'h': 12, 'w': 24, 'x': 0, 'y': 22},
+        'options': {'showTime': True, 'showLabels': False, 'wrapLogMessage': True, 'sortOrder': 'Descending'},
+        'targets': [{'refId': 'A', 'expr': events_expr, 'editorMode': 'code', 'queryType': 'instant',
                      'maxLines': 1000, 'adHocFiltersMode': 'off'}],
     }],
 }

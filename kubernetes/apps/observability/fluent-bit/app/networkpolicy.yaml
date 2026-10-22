@@ -8,6 +8,7 @@ metadata:
 spec:
   endpointSelector:
     matchLabels:
+      app.kubernetes.io/instance: fluent-bit
       app.kubernetes.io/name: fluent-bit
   ingress:
     - fromEndpoints:
