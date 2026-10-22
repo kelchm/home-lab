@@ -1088,7 +1088,7 @@ def test_upstream_qwen_rank0_listens_on_the_port_sparkrun_gates(runtime, tmp_pat
     drafts = "no_drafts" not in recipe.defaults
     for rank in (0, 1):
         env, argv = _parse_env_command(_node_command(runtime, recipe, rank, init_port=29511))
-        assert argv == ["/usr/local/bin/qwen38fn-tf-entrypoint"]
+        assert argv == ["/usr/local/bin/tensorfold-entrypoint"]
         assert env["MODEL_PATH"] == hf_snapshot_path(UPSTREAM_QWEN_TARGET, recipe.model_revision)
         child = {**recipe.env, **env, **UPSTREAM_QWEN_FABRIC}
         with mock.patch.object(serve, "checkpoint_digest", return_value=recipe.env["TENSORFOLD_CHECKPOINT_SHA256"]):
@@ -1098,14 +1098,19 @@ def test_upstream_qwen_rank0_listens_on_the_port_sparkrun_gates(runtime, tmp_pat
                                ("--context", "262144"), ("--max-tokens", "32768"), ("--tp", "2"),
                                ("--rank", str(rank)), ("--master", FABRIC_HEAD), ("--master-port", "29511")):
             assert args[args.index(flag) + 1] == expected
-        # With the head's CX7 address from SparkRun, the adapter passes it and the control link uses it.
-        runtime._fabric_master = "192.0.2.11"
-        try:
-            env, _ = _parse_env_command(_node_command(runtime, recipe, rank, init_port=29511))
-        finally:
-            runtime._fabric_master = None
+        # In a launch where SparkRun reached the head over CX7, the adapter passes that address and the control link
+        # uses it.
+        seen = {}
+
+        def native(**kwargs):
+            seen["env"], _ = _parse_env_command(_node_command(runtime, recipe, rank, init_port=29511))
+            return 0
+
+        with mock.patch.object(runtime, "_run_native_cluster", native):
+            runtime._run_cluster([FABRIC_HEAD, FABRIC_WORKER], recipe.container, recipe=recipe,
+                                 ib_ip_map={FABRIC_HEAD: "192.0.2.11", FABRIC_WORKER: "192.0.2.12"})
         with mock.patch.object(serve, "checkpoint_digest", return_value=recipe.env["TENSORFOLD_CHECKPOINT_SHA256"]):
-            fabric = serve.command({**recipe.env, **env, **UPSTREAM_QWEN_FABRIC})
+            fabric = serve.command({**recipe.env, **seen["env"], **UPSTREAM_QWEN_FABRIC})
         assert fabric[fabric.index("--master") + 1] == "192.0.2.11"
         assert fabric[fabric.index("--master-port") + 1] == "29511"
         assert "--thinking" in args and ("--no-drafts" in args) is not drafts

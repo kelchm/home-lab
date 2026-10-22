@@ -23,7 +23,7 @@ defaults:
   served_model_name: Qwen3.8-Flash-Next
   context: 262144
   max_tokens: 32768
-  entrypoint: /usr/local/bin/qwen38fn-tf-entrypoint
+  entrypoint: /usr/local/bin/tensorfold-entrypoint
   extra_args: --parallel 4 --prompt-cache-gib 16
   no_drafts: true
 env:

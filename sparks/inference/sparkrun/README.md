@@ -796,7 +796,7 @@ No two-GB10 run of this path is published. What upstream's source fixes for two 
 - **Window:** at most 262,144 tokens, with BF16 KV and no YaRN.
 - **Lanes:** every stream holds its whole window on each rank, because the sequence size does not depend on the rank count. Upstream's one-GB10 FP4-Local run measured about 7.8 GiB per stream at 262,144 tokens, so few lanes fit at this window. Both profiles load four, the shape used for the GLM trials, and the first boot's log shows whether more would fit.
 
-**Ranks and fabric.** The [mod](mods/ashhart-tensorfold-qwen38fn-v1.1.2/) installs `serve.py` as the rank command, and each rank runs the same command apart from `--rank`. No recipe or mod file holds a lab address.
+**Ranks and fabric.** The [mod](mods/ashhart-tensorfold-qwen38fn-v1.1.2/) installs `serve.py` as the rank command, `/usr/local/bin/tensorfold-entrypoint`, and each rank runs the same command apart from `--rank`. No recipe or mod file holds a lab address.
 
 - **Rendezvous:** rank 0 listens for rank 1 at SparkRun's `MASTER_PORT`, in place of upstream's default 29551. SparkRun starts rank 1 once that port appears in the head's socket table. Rank 0 opens the port before loading weights and gives rank 1 60 s to connect.
 - **Control link:** rank 0 listens on `FABRIC_MASTER`, the head's CX7 address, which the adapter passes when SparkRun reaches the head over the fabric. Otherwise it listens on SparkRun's `MASTER`, the management address, and the worker's management link drops for seconds at a time ([#649](https://github.com/kelchm/home-lab/issues/649)). The adapter gets that CX7 address only while spark-1 trusts the CX7 host keys ([Sparks README](../../README.md#sparkrun-operation)).
@@ -893,7 +893,7 @@ The rollback is the [DeepSeek profile](#deepseek-v41-flash-1017-on-bertholomuss-
 
 - **Window:** 262,144 tokens is upstream's cap and is not yet qualified here. The trial qualifies it or lowers it. The Mia profiles and DeepSeek configure 1,048,576.
 - **Vision:** off. Upstream's Flash Next tower is experimental at two ranks and unqualified with this checkpoint.
-- **No safeguards:** the endpoint has no API key, and no memory watchdog runs.
+- **Access and memory:** the endpoint has no API key, as #943 sets for every profile, and no memory watchdog runs.
 
 ## DeepSeek-V4.1-Flash-1017 on bertholomus's Zig engine
 
