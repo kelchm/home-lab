@@ -9,8 +9,6 @@ import shlex
 import shutil
 import subprocess
 import sys
-import threading
-from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from unittest import mock
 
@@ -21,16 +19,7 @@ PLUGINS = Path(__file__).resolve().parents[1] / "plugins"
 if str(PLUGINS) not in sys.path:
     sys.path.insert(0, str(PLUGINS))
 
-from tensorfold import (  # noqa: E402
-    DEFAULT_CONTEXT,
-    DEFAULT_SERVED_NAME,
-    ENTRYPOINT,
-    SPARKRUN_HEALTH_SEAM,
-    TensorFoldRuntime,
-    hf_snapshot_path,
-    interpret_health,
-    probe_health,
-)
+from tensorfold import REQUIRED_DEFAULTS, TensorFoldRuntime, hf_snapshot_path  # noqa: E402
 
 from sparkrun.core.bootstrap import get_runtime, init_sparkrun  # noqa: E402
 from sparkrun.core.external_plugins import load_external_plugins  # noqa: E402
@@ -82,6 +71,9 @@ QWEN_DISCOVERY_ENTRY = {
 MIA_MODS = Path(__file__).resolve().parents[1] / "mods"
 FABRIC_HEAD = "172.16.21.31"
 FABRIC_WORKER = "172.16.21.32"
+ENTRYPOINT = "/usr/local/bin/tf-test-entrypoint"
+SERVED = "test-model"
+CONTEXT = "850000"
 
 
 def _recipe(defaults=None, **extra):
@@ -98,11 +90,12 @@ def _recipe(defaults=None, **extra):
             "pipeline_parallel": 1,
             "port": 8888,
             "host": "0.0.0.0",
-            "served_model_name": DEFAULT_SERVED_NAME,
-            "context": 850000,
+            "served_model_name": SERVED,
+            "context": int(CONTEXT),
             "drafter": DRAFT,
             "drafter_revision": DRAFT_REV,
             "max_tokens": 65536,
+            "entrypoint": ENTRYPOINT,
         },
     }
     data.update(extra)
@@ -188,8 +181,9 @@ def test_rank_commands_propagate_fabric_rendezvous(runtime):
     assert "10.32.21.31" not in rank0_env["MASTER"]
     assert rank0_env["MODEL_PATH"] == hf_snapshot_path(TARGET, TARGET_REV)
     assert rank0_env["DRAFTER"] == hf_snapshot_path(DRAFT, DRAFT_REV)
-    assert rank0_env["CONTEXT"] == DEFAULT_CONTEXT
-    assert rank0_env["SERVED_NAME"] == DEFAULT_SERVED_NAME
+    assert rank0_env["CONTEXT"] == CONTEXT
+    assert rank0_env["SERVED_NAME"] == SERVED
+    assert "FABRIC_MASTER" not in rank0_env
     assert rank0_env["HOST"] == "0.0.0.0"
     assert rank0_env["PORT"] == "8888"
     assert rank0_env["MAX_TOKENS"] == "65536"
@@ -210,7 +204,7 @@ def test_overrides_and_recipe_command_template_skip_vllm_flags(runtime):
         command="{entrypoint}",
     )
     env, argv = _parse_env_command(
-        _node_command(runtime, recipe, 0, overrides={"port": 9999, "served_model_name": DEFAULT_SERVED_NAME})
+        _node_command(runtime, recipe, 0, overrides={"port": 9999, "served_model_name": SERVED})
     )
     assert argv == [ENTRYPOINT]
     assert env["MODEL_PATH"] == "/cache/huggingface/hub/custom-snap"
@@ -693,71 +687,51 @@ def test_runtime_cache_and_extra_env_stay_on_managed_namespace(runtime):
         recipe=recipe,
         settings=settings,
         root="/opt/spark-cache/huggingface/runtime-cache",
-        image="glm53-tensorfold:dev",
+        image="tensorfold:dev",
         fingerprint="abc",
     )
     assert mounts is not None
-    for key in (
-        "CUDA_CACHE_PATH",
-        "TRITON_CACHE_DIR",
-        "TORCH_EXTENSIONS_DIR",
-        "GLM53_TF_PREPARED",
-        "GLM53_TF_SESSION_DISK",
-    ):
+    assert set(runtime.runtime_cache_paths()) == {
+        "CUDA_CACHE_PATH", "TRITON_CACHE_DIR", "TORCH_EXTENSIONS_DIR", "TORCHINDUCTOR_CACHE_DIR"}
+    for key in runtime.runtime_cache_paths():
         assert mounts.env[key].startswith(RUNTIME_CACHE_CONTAINER_PATH + "/")
         assert "/cache/huggingface" not in mounts.env[key]
     extra = runtime.get_extra_env()
     assert extra["HF_HOME"] == "/cache/huggingface"
     assert extra["HF_HUB_CACHE"] == "/cache/huggingface/hub"
-    assert extra["GLM53_TF_PREPARED_WRITE"] == "1"
-    assert extra["GLM53_TF_HEALTH"] == "strict"
-    assert extra["HF_HOME"] != mounts.env["GLM53_TF_PREPARED"]
-    assert extra["HF_HUB_CACHE"] != mounts.env["GLM53_TF_SESSION_DISK"]
+    # The adapter sets no engine's own variables; recipes and mods do.
+    assert not [key for key in extra if key.startswith(("GLM", "TF_", "TENSORFOLD"))]
 
 
-def test_health_fails_closed_on_ok_false(runtime):
-    assert SPARKRUN_HEALTH_SEAM == "missing"
-    assert interpret_health(200, {"ok": True}) is True
-    assert runtime.interpret_health(200, {"ok": False, "fatal": "NCCL"}) is False
-    assert interpret_health(200, {"ok": "true"}) is False
-    assert interpret_health(200, {"status": "ok"}) is False
-    assert interpret_health(200, "not-json") is False
-    assert interpret_health(503, {"ok": False}) is False
-    assert interpret_health(200, b'{"ok": true}') is True
+@pytest.mark.parametrize("key", REQUIRED_DEFAULTS)
+def test_recipe_names_its_own_engine_model_and_window(runtime, key):
+    recipe = _recipe()
+    del recipe.defaults[key]
+    errors = [issue for issue in runtime.validate_recipe(recipe) if getattr(issue, "severity", None) == ERROR]
+    assert any("defaults.%s" % key in issue.message for issue in errors)
+    if key == "entrypoint":
+        with pytest.raises(ValueError, match="defaults.entrypoint"):
+            _node_command(runtime, recipe, 0)
 
-    class Handler(BaseHTTPRequestHandler):
-        payload = {"ok": True}
-        code = 200
 
-        def do_GET(self):
-            body = json.dumps(type(self).payload).encode()
-            self.send_response(type(self).code)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
+def test_fabric_master_is_the_heads_cx7_address_for_one_launch(runtime, monkeypatch):
+    recipe = _recipe()
+    seen = {}
 
-        def log_message(self, fmt, *args):
-            del fmt, args
+    def native(**kwargs):
+        for rank in (0, 1):
+            seen[rank], _ = _parse_env_command(_node_command(runtime, recipe, rank))
+        return 0
 
-    server = HTTPServer(("127.0.0.1", 0), Handler)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    try:
-        url = "http://127.0.0.1:%d/health" % server.server_address[1]
-        assert probe_health(url) is True
-        Handler.payload = {"ok": False, "fatal": "stalled"}
-        Handler.code = 200
-        assert probe_health(url) is False
-        Handler.payload = {"ok": False}
-        Handler.code = 503
-        assert probe_health(url) is False
-        Handler.payload = {"ok": True}
-        Handler.code = 200
-        assert probe_health(url) is True
-    finally:
-        server.shutdown()
-        server.server_close()
+    monkeypatch.setattr(runtime, "_run_native_cluster", native)
+    fabric = {"10.0.0.1": "198.18.0.1", "10.0.0.2": "198.18.0.2"}
+    assert runtime._run_cluster(["10.0.0.1", "10.0.0.2"], "img", recipe=recipe, ib_ip_map=fabric) == 0
+    assert seen[0]["FABRIC_MASTER"] == seen[1]["FABRIC_MASTER"] == "198.18.0.1"
+    # Cleared after the launch, and absent when SparkRun found no reachable CX7 address.
+    env, _ = _parse_env_command(_node_command(runtime, recipe, 0))
+    assert "FABRIC_MASTER" not in env
+    assert runtime._run_cluster(["10.0.0.1", "10.0.0.2"], "img", recipe=recipe, ib_ip_map={}) == 0
+    assert "FABRIC_MASTER" not in seen[0] and "FABRIC_MASTER" not in seen[1]
 
 
 def test_native_lifecycle_gates_tcpstore_then_starts_rank1(runtime, monkeypatch):

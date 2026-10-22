@@ -1,20 +1,18 @@
 """SparkRun 0.3.10 external TensorFold runtime (runtime_name=\"tensorfold\").
 
-Engine/rank adapter only. Cluster lifecycle, fabric detection, image/model
-distribution, caches, start/status/log/stop, and TCPStore init gating stay on
-SparkRun's native RuntimePlugin path. SparkRun 0.3.10 health probes treat HTTP
-200 as ready and have no JSON-body seam. Strict engine health maps failures
-to HTTP 503; the recipe must also check JSON health and the loaded slot count
-in its post-launch gate. The health helpers below are not lifecycle overrides.
+Engine/rank adapter for any TensorFold build served on two ranks. Cluster
+lifecycle, fabric detection, image/model distribution, caches,
+start/status/log/stop and the rendezvous gate stay on SparkRun's native
+RuntimePlugin path. The adapter names no model or engine: each recipe sets its
+entrypoint, served name and window, and its mod owns the rank launch. SparkRun
+0.3.10 treats HTTP 200 as ready, so each recipe's post_exec gate checks the
+engine's own health.
 """
 
 from __future__ import annotations
 
-import json
 import shlex
 from typing import Any, Mapping
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
 
 from sparkrun.core.parallelism import extract_parallelism
 from sparkrun.core.readiness import OPENAI_CHAT_STREAM
@@ -22,16 +20,12 @@ from sparkrun.core.runtime_cache import CachePath
 from sparkrun.runtimes._util import default_env_hf_offline
 from sparkrun.runtimes.base import RuntimePlugin
 
-ENTRYPOINT = "/usr/local/bin/glm53-tf-entrypoint"
 HF_HUB_ROOT = "/cache/huggingface/hub"
-DEFAULT_CONTEXT = "850000"
-DEFAULT_SERVED_NAME = "GLM-5.3-Flash-EXL3"
 REQUIRED_NODES = 2
 REQUIRED_TP = 2
 REQUIRED_PP = 1
-
-# SparkRun 0.3.10 wait_for_healthy / startup_probe accept HTTP 200 only.
-SPARKRUN_HEALTH_SEAM = "missing"
+# Set by every recipe; the adapter has no default engine or model.
+REQUIRED_DEFAULTS = ("entrypoint", "served_model_name", "context")
 
 _HF_MODELS_PREFIX = "models--"
 _SNAPSHOTS_SEGMENT = "/snapshots/"
@@ -49,42 +43,6 @@ _CONFIG_KEYS = frozenset(
         "entrypoint",
     }
 )
-
-
-def interpret_health(status_code: int, body: Any) -> bool:
-    """Return True only when TensorFold reports a healthy engine.
-
-    Fail closed: HTTP 200 plus JSON ``ok is True``. A 200 with ``ok: false``
-    (TensorFold GLM53_TF_HEALTH=basic after a fatal/stall) is not ready.
-    """
-    if status_code != 200:
-        return False
-    if isinstance(body, (bytes, bytearray)):
-        body = body.decode("utf-8", "replace")
-    if isinstance(body, str):
-        try:
-            body = json.loads(body)
-        except json.JSONDecodeError:
-            return False
-    if not isinstance(body, Mapping):
-        return False
-    return body.get("ok") is True
-
-
-def probe_health(url: str, timeout: float = 5.0) -> bool:
-    """GET *url* and apply :func:`interpret_health`. Network errors are not ready."""
-    try:
-        with urlopen(Request(url, method="GET"), timeout=timeout) as response:
-            payload = response.read()
-            return interpret_health(getattr(response, "status", 200), payload)
-    except HTTPError as error:
-        try:
-            payload = error.read()
-        except Exception:
-            payload = b""
-        return interpret_health(error.code, payload)
-    except (OSError, URLError, TimeoutError, ValueError):
-        return False
 
 
 def hf_snapshot_path(repo_id: str, revision: str) -> str:
@@ -132,6 +90,7 @@ class TensorFoldRuntime(RuntimePlugin):
     readiness_styles = (OPENAI_CHAT_STREAM,)
     readiness_health_path = "/health"
     supports_heterogeneous_images = False
+    _fabric_master: str | None = None
 
     def cluster_strategy(self) -> str:
         return "native"
@@ -166,13 +125,6 @@ class TensorFoldRuntime(RuntimePlugin):
     def get_common_env(self):
         return default_env_hf_offline()
 
-    def get_extra_env(self) -> dict[str, str]:
-        env = super().get_extra_env()
-        env["GLM53_TF_PREPARED_WRITE"] = "1"
-        env["GLM53_TF_CALIB"] = "cached"
-        env["GLM53_TF_HEALTH"] = "strict"
-        return env
-
     def runtime_cache_paths(self, *, fingerprint: str = "") -> dict[str, CachePath]:
         del fingerprint
         return {
@@ -180,8 +132,6 @@ class TensorFoldRuntime(RuntimePlugin):
             "TRITON_CACHE_DIR": CachePath("triton"),
             "TORCH_EXTENSIONS_DIR": CachePath("torch_extensions"),
             "TORCHINDUCTOR_CACHE_DIR": CachePath("inductor"),
-            "GLM53_TF_PREPARED": CachePath("prepared"),
-            "GLM53_TF_SESSION_DISK": CachePath("sessions"),
         }
 
     def native_rendezvous_port(
@@ -192,18 +142,17 @@ class TensorFoldRuntime(RuntimePlugin):
         num_nodes: int = 1,
         init_port: int = 25000,
     ) -> int | None:
-        # glm5_next NCCL unique-id travels through torch.distributed.TCPStore
-        # on rank 0's MASTER:MASTER_PORT (vendor/TensorFold .../glm5_next/cuda/comm.py).
+        # Rank 0 listens on MASTER:MASTER_PORT before rank 1 starts.
         del recipe, overrides, num_nodes
         return init_port
-
-    def interpret_health(self, status_code: int, body: Any) -> bool:
-        return interpret_health(status_code, body)
 
     def validate_recipe(self, recipe) -> list:
         issues = super().validate_recipe(recipe)
         issues.extend(self._topology_issues(recipe, {}))
         config = recipe.build_config_chain({})
+        for key in REQUIRED_DEFAULTS:
+            if _config_get(config, key) is None:
+                issues.append(self.recipe_error("TensorFold recipes set defaults.%s" % key))
         try:
             self._model_path(recipe, config)
         except ValueError as error:
@@ -264,10 +213,14 @@ class TensorFoldRuntime(RuntimePlugin):
         engine_env["RANK"] = str(node_rank)
         engine_env["MASTER"] = node_args["master_addr"]
         engine_env["MASTER_PORT"] = node_args["master_port"]
-        binary = str(_config_get(config, "entrypoint", ENTRYPOINT) or ENTRYPOINT)
+        if self._fabric_master:
+            engine_env["FABRIC_MASTER"] = self._fabric_master
+        binary = _config_get(config, "entrypoint")
+        if binary is None:
+            raise ValueError("TensorFold recipes set defaults.entrypoint")
         rendered = recipe.render_command(config)
-        command = rendered.strip() if rendered else binary
-        ordered = ("RANK", "MASTER", "MASTER_PORT", "MODEL_PATH", "DRAFTER", "CONTEXT", "SERVED_NAME", "MAX_TOKENS", "HOST", "PORT", "EXTRA_ARGS", "MTP_DRAFTS", "NO_DRAFTS")
+        command = rendered.strip() if rendered else str(binary)
+        ordered = ("RANK", "MASTER", "MASTER_PORT", "FABRIC_MASTER", "MODEL_PATH", "DRAFTER", "CONTEXT", "SERVED_NAME", "MAX_TOKENS", "HOST", "PORT", "EXTRA_ARGS", "MTP_DRAFTS", "NO_DRAFTS")
         assignments = [_env_assignment(key, engine_env[key]) for key in ordered if key in engine_env]
         for key, value in engine_env.items():
             if key not in ordered:
@@ -275,17 +228,22 @@ class TensorFoldRuntime(RuntimePlugin):
         return "env %s %s" % (" ".join(assignments), command)
 
     def _run_cluster(self, hosts, image, serve_command="", recipe=None, overrides=None, **kwargs):
-        return self._run_native_cluster(
-            hosts=hosts,
-            image=image,
-            serve_command=serve_command,
-            recipe=recipe,
-            overrides=overrides,
-            banner_title="TensorFold Cluster Launcher",
-            port_label="Master Port",
-            node_label="tensorfold rank",
-            **kwargs,
-        )
+        # The head's CX7 address, for engines whose ranks link over the fabric rather than the rendezvous network.
+        self._fabric_master = (kwargs.get("ib_ip_map") or {}).get(hosts[0]) if hosts else None
+        try:
+            return self._run_native_cluster(
+                hosts=hosts,
+                image=image,
+                serve_command=serve_command,
+                recipe=recipe,
+                overrides=overrides,
+                banner_title="TensorFold Cluster Launcher",
+                port_label="Master Port",
+                node_label="tensorfold rank",
+                **kwargs,
+            )
+        finally:
+            self._fabric_master = None
 
     def _stop_cluster(self, hosts, cluster_id, config=None, dry_run: bool = False):
         return self._stop_native_cluster(hosts, cluster_id, config=config, dry_run=dry_run)
@@ -330,8 +288,8 @@ class TensorFoldRuntime(RuntimePlugin):
     def _engine_env(self, recipe, config, skip_keys: set[str] | frozenset[str]) -> dict[str, str]:
         env: dict[str, str] = {
             "MODEL_PATH": self._model_path(recipe, config),
-            "CONTEXT": str(_config_get(config, "context", _config_get(config, "max_model_len", DEFAULT_CONTEXT))),
-            "SERVED_NAME": str(_config_get(config, "served_model_name", DEFAULT_SERVED_NAME)),
+            "CONTEXT": str(_config_get(config, "context")),
+            "SERVED_NAME": str(_config_get(config, "served_model_name")),
             "HOST": str(_config_get(config, "host", "0.0.0.0")),
             "PORT": str(_config_get(config, "port", "8888")),
         }

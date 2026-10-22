@@ -14,6 +14,8 @@ task sparks:status
 
 This reports GPU utilization, host memory and running containers. Use SparkRun's recipe-specific checks to determine serving readiness; a container listing is not an API health check. Check for other GPU workloads before launching: GB10 shares its 121 GiB memory pool between CPU and GPU, and an idle GPU can still have model weights resident. Host memory, rather than the container memory limit, is the relevant capacity gate. See the [measured thermal and memory limits](../docs/dgx-spark-thermal.md).
 
+spark-1 is SparkRun's control host, and its `~/.ssh/known_hosts` trusts both hosts' CX7 addresses (`198.19.240.11`/`.12` and `198.19.241.11`/`.12`), whose host keys are the hosts' own. SparkRun keeps a CX7 address only if it can reach it over SSH, so these entries are what give the TensorFold adapter the head's fabric address as `FABRIC_MASTER`. Without them that map stays empty. Re-add them with `ssh-keyscan -H` from spark-1 after a host key changes, checking each fingerprint against the host's management address first.
+
 ## Monitoring
 
 Host, GPU and inference metrics are collected by the [monitoring project](monitoring/README.md), which doco-cd deploys from `main` once a node is enrolled. It is the one part of this directory that a merge can change on a Spark. The same project deploys the [sparkDash](monitoring/README.md#sparkdash) dashboard on `spark-1`.
