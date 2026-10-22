@@ -1,0 +1,32 @@
+rule_files:
+  - visionect.yaml
+  - bambuddy.yaml
+evaluation_interval: 1m
+tests:
+  - name: A database cluster with no instance reporting for 5 minutes is offline
+    interval: 1m
+    input_series:
+      - series: cnpg_collector_up{cluster="k8s-prod",namespace="iot",pod="visionect-db-2",exported_cluster="visionect-db"}
+        values: 1x10 stale
+      - series: cnpg_collector_up{cluster="k8s-prod",namespace="printing",pod="bambuddy-db-2",exported_cluster="bambuddy-db"}
+        values: 1x30
+    alert_rule_test:
+      - eval_time: 13m
+        alertname: CNPGClusterOffline
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: CNPGClusterOffline
+        exp_alerts:
+          - exp_labels:
+              cluster: k8s-prod
+              severity: critical
+              namespace: iot
+              cnpg_cluster: visionect-db
+            exp_annotations:
+              summary: CNPG Cluster has no running instances!
+              description: |-
+                CloudNativePG Cluster "iot/visionect-db" has no ready instances.
+
+                Having an offline cluster means your applications will not be able to access the database, leading to
+                potential service disruption and/or data loss.
+              runbook_url: https://github.com/cloudnative-pg/charts/blob/main/charts/cluster/docs/runbooks/CNPGClusterOffline.md

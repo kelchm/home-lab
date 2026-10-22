@@ -4,6 +4,7 @@ kind: Kustomization
 resources:
   - ./certificate.yaml
   - ./cluster.yaml
+  - ./alerts.yaml
   - ./networkpolicy.yaml
   - ./ocirepository.yaml
   - ./helmrelease.yaml
