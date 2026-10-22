@@ -39,7 +39,7 @@
     "patches/0004-literal-added-tokens.patch": "69d2becbccee30bf1b0afe08aecfa70fc446dfdeb62e66ae7aa43dde0ee46da3",
     "patches/0005-deepseek-efforts.patch": "ad04c267ff67cadd705a8b4596a92b2f88af5e5a2fd6e978566d3221828ab2d2",
     "patches/0006-literal-object-keys.patch": "902838061c9b6ef41176d2c6c72cae005eee0202c83d37ba7aafc93856159360",
-    "prepare.py": "557c49eb893f1d6350f021687e511fc24acd04c85761f9de5c8ec02baf53ad2b",
+    "prepare.py": "476f5446f160498750460e9c4c43df4e27c1be326e6aa6b89b6677f4a8e2bab8",
     "run.sh": "e223322ce028bf007329a8484bcd73811aadcc400c9f1414521f7671ff5b1977",
     "serve.py": "6bc2ba8d8fc1d932d6d4b4e2b316a9019a3b2baa01ed649fb3eadabb9af592b6"
   }

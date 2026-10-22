@@ -976,6 +976,25 @@ def test_dsv41_frozen_bundle_rejects_changed_or_added_files(tmp_path, change, ds
     assert result.returncode != 0
 
 
+def test_dsv41_frozen_bundle_refuses_linked_and_dangling_files(tmp_path):
+    source = DSV41_RECIPES[0].parents[1] / "mods/bertholomus-tensorfold-dsv41-2970bcd"
+    bundle = tmp_path / source.name
+    shutil.copytree(source, bundle, ignore=shutil.ignore_patterns("__pycache__"))
+    check = [sys.executable, str(bundle / "prepare.py"), "--check"]
+    subprocess.run(check, check=True, capture_output=True)
+    (bundle / "patches/0099-dangling.patch").symlink_to(tmp_path / "absent")
+    assert subprocess.run(check, capture_output=True).returncode != 0
+    record = subprocess.run([sys.executable, str(bundle / "prepare.py"), "--record"], capture_output=True, text=True)
+    assert record.returncode != 0 and "linked files" in record.stderr
+    (bundle / "patches/0099-dangling.patch").unlink()
+    lock = bundle / "upstream.lock.json"
+    (tmp_path / "lock.json").write_text(lock.read_text())
+    lock.unlink()
+    lock.symlink_to(tmp_path / "lock.json")
+    result = subprocess.run(check, capture_output=True, text=True)
+    assert result.returncode != 0 and "linked dsv41 mod lock" in result.stderr
+
+
 def test_dsv41_readiness_requires_lanes_window_and_reasoning(tmp_path, dsv41_recipe):
     recipe, _, _, ready = _dsv41_bundle(tmp_path, dsv41_recipe)
     context = recipe.defaults["context"]
