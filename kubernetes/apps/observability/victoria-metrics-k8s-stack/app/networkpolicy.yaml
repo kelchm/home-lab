@@ -114,6 +114,15 @@ spec:
             # bambuddy-db postgres metrics
             - port: "9187"
               protocol: TCP
+    # Unpackerr metrics.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: media
+      toPorts:
+        - ports:
+            # unpackerr metrics
+            - port: "5656"
+              protocol: TCP
     # Longhorn manager metrics.
     - toEndpoints:
         - matchLabels:
