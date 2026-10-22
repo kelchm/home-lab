@@ -566,14 +566,15 @@ v1.1 (`be3ed857`) is pinned over the kit's `main` (`6730319`):
 
 - **What differs.** Besides the changelog, credits and README, `main` removes `tools/context_boundary.py` and reverts v1.1's admission change ([kit PR #2](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/pull/2)) in `patches/0007-serving.patch`.
   - On `main`, a request is refused when its prompt, `max_tokens` and the draft window together exceed `--context`. v1.1 counts only the prompt and `max_tokens`.
-  - Both size an admitted request's memory from all three, so `main` refuses more requests only within the draft window of the limit.
+  - Both size an admitted request's memory from all three. The draft window is 16 rows at the kit's depth of 15, the margin [kit issue #1](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/1) found.
+  - When a client sends no `max_tokens`, the server gives the reply 32,768 tokens or the room the prompt leaves, whichever is less. So a prompt longer than the window less 32,768 fills the window exactly, and `main` refuses it. At this window, `main` would refuse every such prompt from 458,737 to 491,519 tokens. v1.1 admits them, as `/v1/models` advertises.
   - The changelog gives no defect as the reason for the revert.
 - **Open defects**, as reported:
   - [#3](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/3), the control-link stall: on v1.1's candidate, on `main`, and on the v1.0 image ([comment on PR #4](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/pull/4)).
   - [#6](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/6) and [#9](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/9): on both revisions, with a patch posted for each.
   - [#8](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/8): on `main`.
-  - [#7](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/7): on v1.1. Its reporter suspects v1.1's admission change, but that change admits more only within the draft window of the limit.
-- **Evidence here.** v1.1's image is the one measured on [October 8](#october-8-nvfp4-evaluation), and it served from October 8 to 17. `main` has no published image. It would take the kit's full image build: an NVIDIA base, the Triton kernel set, a new image ID and an empty CUDA cache on both hosts.
+  - [#7](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/7): on v1.1, with long agentic prompts at the 1M window. Its reporter suspects v1.1's admission change. That change does admit the longest prompts, which `main` refuses, and so adds memory pressure. The exit is the engine's general path for a call that fails after the ranks agree, on both revisions.
+- **Evidence here.** v1.1's image is the one measured on [October 8](#october-8-nvfp4-evaluation), and it served from October 8 to 17. `main` has no published image, and the kit's own workflow builds a full one for it: an NVIDIA base, the Triton kernel set, a new image ID and an empty CUDA cache on both hosts. `main` changes only Zig source, so this mod's overlay could instead carry it on v1.1's image, with the reference check made against v1.1 before the revert goes on. The choice rests on admission and on the evidence above, not on that cost.
 
 #### Inputs outside SparkRun
 
