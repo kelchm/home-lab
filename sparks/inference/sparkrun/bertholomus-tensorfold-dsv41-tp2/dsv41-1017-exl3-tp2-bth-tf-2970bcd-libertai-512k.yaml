@@ -51,9 +51,10 @@ runtime_cache:
   dir: /opt/spark-cache/runtime-inputs
   key_by_image: false
 mods:
+- ../mods/tensorfold-readiness
 - ../mods/bertholomus-tensorfold-dsv41-2970bcd
 post_exec:
-- python3 /opt/dsv41-tensorfold/readiness.py --model DeepSeek-V4.1-Flash-1017 --context 524288 --efforts max,high,low,none --aliases minimal=low,medium=high,xhigh=max
+- python3 /opt/tensorfold-readiness/readiness.py --model DeepSeek-V4.1-Flash-1017 --context 524288 --lanes 4 --efforts max,high,low,none
 distribution_config:
   models:
     entries:

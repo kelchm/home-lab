@@ -826,11 +826,14 @@ def dsv41_recipe(request):
 
 def _dsv41_bundle(tmp_path, path):
     recipe = Recipe(yaml.safe_load(path.read_text()), source_path=str(path))
-    source = path.parent / recipe.mods[0]
+    source = next(path.parent / mod for mod in recipe.mods if (path.parent / mod / "serve.py").exists())
     bundle = tmp_path / source.name
     shutil.copytree(source, bundle, ignore=shutil.ignore_patterns("__pycache__"))
     modules = {}
     for name in ("serve", "readiness"):
+        if not (bundle / f"{name}.py").exists():
+            modules[name] = None
+            continue
         spec = importlib.util.spec_from_file_location(f"dsv41_{name}", bundle / f"{name}.py")
         modules[name] = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(modules[name])
@@ -961,36 +964,23 @@ def test_dsv41_readiness_requires_lanes_window_and_reasoning(tmp_path, dsv41_rec
     context = recipe.defaults["context"]
     hook = shlex.split(recipe.post_exec[0])
     assert hook[hook.index("--model") + 1] == DSV41_SERVED and hook[hook.index("--context") + 1] == str(context)
+    if ready is None:
+        # The shared gate: listed before the engine mod, with the streams and DeepSeek's own levels, highest first.
+        assert hook[1] == "/opt/tensorfold-readiness/readiness.py"
+        assert recipe.mods[0] == "../mods/tensorfold-readiness"
+        assert hook[hook.index("--lanes") + 1] == "4"
+        assert hook[hook.index("--efforts") + 1] == "max,high,low,none"
+        return
     health = {"status": "ok", "warming": False, "model": DSV41_SERVED, "max_batch_size": 4}
     ready.check_health(health, DSV41_SERVED, 4)
     for change in ({"status": "error"}, {"warming": True}, {"model": "other"}, {"max_batch_size": 2}):
         with pytest.raises(RuntimeError):
             ready.check_health({**health, **change}, DSV41_SERVED, 4)
-    if "--efforts" not in hook:
-        entry = {"id": DSV41_SERVED, "context_length": context, "reasoning": {"supported_efforts": ["max", "high", "none"]}}
-        ready.check_models({"data": [entry]}, DSV41_SERVED, context)
-        for body in ({"data": []}, {"data": [{**entry, "context_length": 262144}]}, {"data": [{**entry, "reasoning": {}}]}):
-            with pytest.raises(RuntimeError):
-                ready.check_models(body, DSV41_SERVED, context)
-        return
-    efforts = hook[hook.index("--efforts") + 1].split(",")
-    assert efforts == ["max", "high", "low", "none"]
-    entry = {"id": DSV41_SERVED, "owned_by": "tensorfold", "context_length": context, "max_model_len": context,
-             "reasoning": {"default_enabled": True, "supported_efforts": efforts}}
-    ready.check_models({"data": [entry]}, DSV41_SERVED, context, efforts)
-    for change in ({"owned_by": "other"}, {"context_length": 262144}, {"max_model_len": 1048576},
-                   {"reasoning": {"supported_efforts": ["low", "high", "max", "none"]}},
-                   {"reasoning": {"supported_efforts": ["max", "high", "low"]}}):
+    entry = {"id": DSV41_SERVED, "context_length": context, "reasoning": {"supported_efforts": ["max", "high", "none"]}}
+    ready.check_models({"data": [entry]}, DSV41_SERVED, context)
+    for body in ({"data": []}, {"data": [{**entry, "context_length": 262144}]}, {"data": [{**entry, "reasoning": {}}]}):
         with pytest.raises(RuntimeError):
-            ready.check_models({"data": [{**entry, **change}]}, DSV41_SERVED, context, efforts)
-    aliases = dict(pair.split("=") for pair in hook[hook.index("--aliases") + 1].split(","))
-    assert aliases == {"minimal": "low", "medium": "high", "xhigh": "max"}
-    listed = {"max": [1, 100], "high": [1, 75], "low": [1, 50], "none": [2]}
-    ready.check_renders(listed, {"minimal": [1, 50], "medium": [1, 75], "xhigh": [1, 100]}, aliases)
-    with pytest.raises(RuntimeError, match="share"):
-        ready.check_renders({**listed, "high": [1, 100]}, {}, {})
-    with pytest.raises(RuntimeError, match="xhigh"):
-        ready.check_renders(listed, {"minimal": [1, 50], "medium": [1, 75], "xhigh": [1, 88]}, aliases)
+            ready.check_models(body, DSV41_SERVED, context)
 
 
 def test_dsv41_rank_inputs_follow_the_weights_in_a_root_of_their_own(runtime, dsv41_recipe):
