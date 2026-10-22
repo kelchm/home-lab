@@ -23,9 +23,10 @@ def main():
     parser.add_argument("--check", action="store_true", help="verify only, the default")
     parser.add_argument("--record", action="store_true", help="record the checksums of the files present")
     args = parser.parse_args()
-    if LOCK.is_symlink():
+    # The lock also pins the engine and image, so --record rewrites checksums in it and never creates it.
+    if LOCK.is_symlink() or not LOCK.is_file():
         raise SystemExit("Missing or linked mod lock")
-    lock = json.loads(LOCK.read_text()) if LOCK.exists() else {}
+    lock = json.loads(LOCK.read_text())
     if args.record:
         lock["mod_files"] = {name: digest(name) for name in files() if not (HERE / name).is_symlink()}
         LOCK.write_text(json.dumps(lock, indent=2) + "\n")

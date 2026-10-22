@@ -1185,7 +1185,7 @@ def test_upstream_qwen_profiles_use_the_shared_gate_with_their_own_shape():
                            "--lanes": lanes[lanes.index("--parallel") + 1], "--efforts": "xhigh,medium,low,none"}
 
 
-@pytest.mark.parametrize("change", ["edit", "extra", "dangling", "linked lock"])
+@pytest.mark.parametrize("change", ["edit", "extra", "dangling", "linked lock", "missing lock"])
 def test_upstream_qwen_frozen_bundle_rejects_changed_added_and_linked_files(tmp_path, change):
     _, bundle, _ = _upstream_qwen_bundle(tmp_path, UPSTREAM_QWEN_PROFILES[0])
     subprocess.run([sys.executable, str(bundle / "prepare.py"), "--check"], check=True, capture_output=True)
@@ -1195,10 +1195,15 @@ def test_upstream_qwen_frozen_bundle_rejects_changed_added_and_linked_files(tmp_
         (bundle / "extra.py").write_text("")
     elif change == "dangling":
         (bundle / "gone.py").symlink_to(tmp_path / "absent.py")
-    else:
+    elif change == "linked lock":
         outside = tmp_path / "outside.lock.json"
         outside.write_text((bundle / "upstream.lock.json").read_text())
         (bundle / "upstream.lock.json").unlink()
         (bundle / "upstream.lock.json").symlink_to(outside)
-    result = subprocess.run([sys.executable, str(bundle / "prepare.py"), "--check"], capture_output=True, text=True)
-    assert result.returncode != 0
+    else:
+        (bundle / "upstream.lock.json").unlink()
+    # --record rewrites the checksums of the files present, but neither creates a lock nor writes through a link.
+    for mode in ("--check", "--record") if change.endswith("lock") else ("--check",):
+        result = subprocess.run([sys.executable, str(bundle / "prepare.py"), mode], capture_output=True, text=True)
+        assert result.returncode != 0 and "Traceback" not in result.stderr
+    assert (bundle / "upstream.lock.json").exists() is (change != "missing lock")
