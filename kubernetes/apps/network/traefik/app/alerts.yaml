@@ -1,0 +1,27 @@
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: traefik
+spec:
+  groups:
+    - name: traefik
+      labels:
+        cluster: k8s-prod
+      rules:
+        # An hour of at least a request a minute, so one failed request to a quiet service stays quiet.
+        - alert: TraefikServiceErrorsHigh
+          expr: |
+            (
+              sum by (exported_service) (rate(traefik_service_requests_total{cluster="k8s-prod", code=~"5.."}[1h]))
+              / sum by (exported_service) (rate(traefik_service_requests_total{cluster="k8s-prod"}[1h]))
+              > 0.05
+            )
+            and on (exported_service)
+            sum by (exported_service) (rate(traefik_service_requests_total{cluster="k8s-prod"}[1h])) >= 1 / 60
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.exported_service }} answered {{ $value | humanizePercentage }} of requests with server errors over the last hour"
+            description: The backend's own logs show why; Traefik's access logs list the failing requests.

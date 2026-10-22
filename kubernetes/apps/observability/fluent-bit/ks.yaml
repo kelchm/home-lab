@@ -11,6 +11,10 @@ spec:
       kind: HelmRelease
       name: fluent-bit
       namespace: observability
+    - apiVersion: helm.toolkit.fluxcd.io/v2
+      kind: HelmRelease
+      name: fluent-bit-events
+      namespace: observability
   interval: 1h
   path: ./kubernetes/apps/observability/fluent-bit/app
   prune: true
