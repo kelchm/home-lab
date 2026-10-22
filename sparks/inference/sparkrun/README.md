@@ -571,22 +571,27 @@ After stopping the old instance, both hosts should have about 116 GiB available.
 - **From the stop until the trial ends,** stop the candidate on an allocation, NVRM, Xid, RoCE or OOM line in either kernel log, a rank that exits or restarts, HTTP 503 from `/health`, or headroom below 2 GiB for three samples in a row. Stop it too if readiness has not passed within 15 minutes. A nonzero launch or a failed readiness hook leaves the server running, so stopping it is always a separate step.
 - **A management link or the samples down for 30 s:** during the boot, stop the candidate; once it is ready, end the load and leave the server running. A drop that recovers is recorded, and timings within 15 s of it are excluded.
 - **Stopping:** use the recipe that launched the candidate, then confirm both GPUs are idle. Record each rank's container ID when it starts. SparkRun has no stop by ID and its recipe also matches a replacement, so if a rank was replaced or a host rebooted, `docker stop` the recorded containers by ID instead; that is the one exception.
-- **Before a stop or launch,** require 60 s of both links up at 10GbE with unchanged carrier counters, and wait out another 60 s after any drop.
+- **Before a planned stop or launch,** require 60 s of both links up at 10GbE with unchanged carrier counters, and wait out another 60 s after any drop. A stop the rules above call for never waits for this.
 
-The rail check pairs each host's active RDMA devices by list position, as Mia's GLM engine pairs the ranks' devices, and sends unfragmentable full-size pings both ways between each pair's addresses. It changes nothing, and exits nonzero unless both rails pass and the two hosts list the same devices. A failure holds the launch. After a boot, compare each rank's `NCCL_IB_HCA` between the hosts, from each engine's environment, and read the rail count from rank 0's log, since rank 1 prints none; on October 8 both ranks had `NCCL_IB_HCA=roceP2p1s0f0,rocep1s0f0`, two ports at 200G on `198.19.241.0/24` and `198.19.240.0/24` with MTU 9000.
+The rail check pairs each host's active RDMA devices by list position, as Mia's GLM engine pairs the ranks' devices, and sends unfragmentable full-size pings both ways between each pair's addresses. It changes nothing. It fails if either host's inventory fails, if a host has other than two active devices or the two hosts list different devices at the same position, or if any pair's ping fails either way. A failure holds the launch. After a boot, compare each rank's `NCCL_IB_HCA` between the hosts, from each engine's environment, and read the rail count from rank 0's log, since rank 1 prints none; on October 8 both ranks had `NCCL_IB_HCA=roceP2p1s0f0,rocep1s0f0`, two ports at 200G on `198.19.241.0/24` and `198.19.240.0/24` with MTU 9000.
 
 ```bash
 rails() { for p in /sys/class/infiniband/*; do grep -q ACTIVE "$p/ports/1/state" 2>/dev/null || continue; n=$(ls "$p/device/net" | head -n 1); a=$(ip -o -4 addr show dev "$n" | awk '{print $4; exit}' | cut -d/ -f1); echo "${p##*/} $n ${a:--} $(cat "/sys/class/net/$n/mtu")"; done; }
-worker=kelchm@10.32.21.32
-paste <(rails) <(ssh "$worker" "$(declare -f rails); rails") | while read -r hh hn ha hm wh wn wa wm; do
-  mtu=$(( hm < ${wm:-0} ? hm : ${wm:-0} ))
-  if [[ "$ha" != - && -n "$wa" && "$wa" != - ]] && ping -c2 -W2 -I "$hn" -M do -s $((mtu - 28)) "$wa" >/dev/null 2>&1 &&
-     ssh -n "$worker" "ping -c2 -W2 -I $wn -M do -s $((mtu - 28)) $ha >/dev/null 2>&1"; then
-    echo "PASS rail $hh/$hn $ha <-> $wh/$wn $wa at MTU $mtu"
-  else
-    echo "FAIL rail $hh/$hn $ha <-> ${wh:--}/${wn:--} ${wa:--}"
-  fi
-done | tee /dev/stderr | awk '/^PASS/ { p++ } /^FAIL/ { f++ } END { exit !(p == 2 && f == 0) }'
+rail_check() {
+  local worker=kelchm@10.32.21.32 mine theirs
+  mine=$(rails) && theirs=$(ssh "$worker" "$(declare -f rails); rails") || { echo "FAIL rail inventory"; return 1; }
+  if [[ $(wc -l <<<"$mine") -ne 2 || $(wc -l <<<"$theirs") -ne 2 ]]; then echo "FAIL expected two active RDMA devices on each host"; return 1; fi
+  paste <(echo "$mine") <(echo "$theirs") | while read -r hh hn ha hm wh wn wa wm; do
+    mtu=$(( hm < wm ? hm : wm ))
+    if [[ "$hh" == "$wh" && "$ha" != - && "$wa" != - ]] && ping -c2 -W2 -I "$hn" -M do -s $((mtu - 28)) "$wa" >/dev/null 2>&1 &&
+       ssh -n "$worker" "ping -c2 -W2 -I $wn -M do -s $((mtu - 28)) $ha >/dev/null 2>&1"; then
+      echo "PASS rail $hh/$hn $ha <-> $wh/$wn $wa at MTU $mtu"
+    else
+      echo "FAIL rail $hh/$hn $ha <-> $wh/$wn $wa"
+    fi
+  done | tee /dev/stderr | awk '/^PASS/ { p++ } /^FAIL/ { f++ } END { exit !(p == 2 && f == 0) }'
+}
+rail_check
 ```
 
 ### Clients
