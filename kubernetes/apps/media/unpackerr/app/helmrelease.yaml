@@ -1,6 +1,7 @@
 ---
 # Unpackerr — polls *arr APIs for completed downloads, extracts RAR/7z
-# archives in-place inside the downloads tree. No Web UI, no HTTPRoute.
+# archives in-place inside the downloads tree. No Web UI or HTTPRoute; its
+# web server serves only metrics.
 # Watches the downloads dir; *arr does the library import after extract.
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
@@ -24,6 +25,8 @@ spec:
             env:
               TZ: America/New_York
               UN_LOG_LEVEL: info
+              UN_WEBSERVER_METRICS: "true"
+              UN_WEBSERVER_LISTEN_ADDR: 0.0.0.0:5656
               UN_SONARR_0_URL: http://sonarr.media.svc.cluster.local:8989
               UN_SONARR_0_PATHS_0: /data/.downloads
               UN_RADARR_0_URL: http://radarr.media.svc.cluster.local:7878
@@ -62,6 +65,18 @@ spec:
         supplementalGroups: [65537]
         seccompProfile:
           type: RuntimeDefault
+    service:
+      app:
+        controller: unpackerr
+        ports:
+          metrics:
+            port: 5656
+    serviceMonitor:
+      app:
+        endpoints:
+          - port: metrics
+            path: /metrics
+            interval: 30s
     persistence:
       media:
         type: persistentVolumeClaim
