@@ -2,12 +2,14 @@
 """Run the production Kubernetes events collector against a fixture API server.
 
 The test changes only what cannot run outside the cluster: events come from
-events-api.py, which serves a list and a watch stream as the API server does,
+events-api.py, which serves lists and a watch stream as the API server does,
 output goes to a local OTLP capture instead of VictoriaLogs, and state lives in
-a temporary directory. The real kubernetes_events input lists, watches, loses
-its watch and lists again, so the fixtures also cover retention, repeated
-events, ignored watch types and the absence of duplicates after a reconnect.
-Requires Docker; the Fluent Bit image is the one pinned in the HelmRelease.
+a temporary directory. The real kubernetes_events input lists, watches from the
+list's resource version, loses its watch and lists again, so the fixtures also
+cover retention, repeated events and series, ignored watch types, an event
+created while the watch was down, and the absence of duplicates after the
+second list. Requires Docker; the Fluent Bit image is the one pinned in the
+HelmRelease.
 """
 import datetime
 import json
@@ -19,6 +21,7 @@ import tempfile
 import time
 import uuid
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 
 ROOT = Path(__file__).resolve().parents[2]
 APP = ROOT / 'kubernetes/apps/observability/fluent-bit/app'
@@ -28,6 +31,7 @@ PYTHON_IMAGE = 'python:3.13-alpine@sha256:2d9aefe2fef018a7eb2c13064c89c71929800f
 STREAM_FIELDS = 'service.name,k8s.namespace.name'
 RESOURCE = {'service.name': 'kubernetes-events', 'k8s.cluster.name': 'k8s-prod'}
 TOKEN = 'fixture-token'
+MICRO = {'eventTime', 'series.lastObservedTime'}
 
 
 def fluent_bit_image():
@@ -45,33 +49,40 @@ def test_config(production):
     return re.sub(r'(^\s*Port\s+)9428', r'\g<1>4318', conf, flags=re.M)
 
 
-def rfc3339(t, micro=False):
-    return t.strftime('%Y-%m-%dT%H:%M:%S.%fZ' if micro else '%Y-%m-%dT%H:%M:%SZ')
-
-
 def build_plan(now):
-    """Fill each fixture's timestamps, `times` seconds before now."""
-    items, watch = [], []
+    """Fill each fixture's times, `times` seconds before now, and the second list,
+    which reflects the watch and adds events created while it was down."""
+    first, later, watch = {}, {}, []
     for case in FIXTURES['events']:
         event = json.loads(json.dumps(case['event']))
         event.setdefault('kind', 'Event')
         event.setdefault('apiVersion', 'v1')
         case['_times'] = {}
         for field, age in case['times'].items():
-            t = now - datetime.timedelta(seconds=age)
-            if field == 'eventTime':
-                event[field] = rfc3339(t.replace(microsecond=123456), micro=True)
-            elif field == 'creationTimestamp':
-                event['metadata'][field] = rfc3339(t)
-            else:
-                event[field] = rfc3339(t)
-            case['_times'][field] = (int(t.timestamp()), rfc3339(t))
+            micro = field in MICRO
+            t = (now - datetime.timedelta(seconds=age)).replace(microsecond=123456 if micro else 0)
+            value = t.strftime('%Y-%m-%dT%H:%M:%S.%fZ' if micro else '%Y-%m-%dT%H:%M:%SZ')
+            target, key = event, field
+            if field == 'creationTimestamp':
+                target = event['metadata']
+            elif field.startswith('series.'):
+                target, key = event['series'], field.split('.', 1)[1]
+            target[key] = value
+            case['_times'][field] = (int(t.timestamp()) * 10**9 + t.microsecond * 1000, value)
+        uid = event['metadata'].get('uid')
         if case['phase'] == 'list':
-            items.append(event)
+            first[uid] = later[uid] = event
+        elif case['phase'] == 'relist':
+            later[uid] = event
         else:
             watch.append({'type': case['watch_type'], 'object': event})
-    return {'list': {'kind': 'EventList', 'apiVersion': 'v1', 'metadata': {'resourceVersion': FIXTURES['list_resource_version']},
-                     'items': items}, 'watch': watch}
+            if case['watch_type'] == 'DELETED':
+                later.pop(uid, None)
+            elif case['watch_type'] in ('ADDED', 'MODIFIED') and not case.get('dropped'):
+                later[uid] = event
+    lists = [{'kind': 'EventList', 'apiVersion': 'v1', 'metadata': {'resourceVersion': version}, 'items': list(items.values())}
+             for version, items in zip(FIXTURES['list_resource_versions'], (first, later))]
+    return {'lists': lists, 'watch': watch}
 
 
 def expected():
@@ -82,20 +93,20 @@ def run(work):
     net = f'fbevents-{uuid.uuid4().hex[:8]}'
     docker = ['docker']
     user = ['--user', f'{os.getuid()}:{os.getgid()}']
-    subprocess.run(docker + ['network', 'create', net], check=True, capture_output=True)
+    subprocess.run(docker + ['network', 'create', net], check=True, stdout=subprocess.DEVNULL)
     try:
         subprocess.run(docker + ['run', '-d', '--rm', *user, '--name', f'{net}-capture', '--network', net, '--network-alias', 'capture',
                                  '-v', f'{ROOT}/scripts/logging/otlp-capture.py:/capture.py:ro', '-v', f'{work}:/work',
-                                 PYTHON_IMAGE, 'python', '/capture.py', '/work/wire.jsonl'], check=True, capture_output=True)
+                                 PYTHON_IMAGE, 'python', '/capture.py', '/work/wire.jsonl'], check=True, stdout=subprocess.DEVNULL)
         subprocess.run(docker + ['run', '-d', '--rm', *user, '--name', f'{net}-api', '--network', net, '--network-alias', 'api',
                                  '-v', f'{ROOT}/scripts/logging/events-api.py:/api.py:ro', '-v', f'{work}:/work',
-                                 PYTHON_IMAGE, 'python', '/api.py', '/work/plan.json', '/work/requests.jsonl'], check=True, capture_output=True)
+                                 PYTHON_IMAGE, 'python', '/api.py', '/work/plan.json', '/work/requests.jsonl'], check=True, stdout=subprocess.DEVNULL)
         time.sleep(2)
         subprocess.run(docker + ['run', '-d', '--rm', *user, '--name', f'{net}-fb', '--network', net,
                                  '-v', f'{CONFIG}:/fluent-bit/etc/conf:ro', '-v', f'{work}/test.conf:/test/fluent-bit.conf:ro',
                                  '-v', f'{work}/token:/var/run/secrets/kubernetes.io/serviceaccount/token:ro',
                                  '-v', f'{work}/state:/state', fluent_bit_image(), '-c', '/test/fluent-bit.conf'],
-                       check=True, capture_output=True)
+                       check=True, stdout=subprocess.DEVNULL)
         wire, requests = work / 'wire.jsonl', work / 'requests.jsonl'
         deadline = time.time() + 60
         while time.time() < deadline:
@@ -117,10 +128,12 @@ def run(work):
 
 def check(rows, seen):
     failures = []
-    lists = [r for r in seen if 'watch=1' not in r['path']]
-    watches = [r for r in seen if 'watch=1' in r['path']]
-    if len(lists) < 2 or len(watches) < 2:
-        failures.append(f'expected the input to list and watch twice, saw {len(lists)} lists and {len(watches)} watches')
+    lists = [r['path'] for r in seen if 'watch=1' not in r['path']]
+    watches = [parse_qs(urlsplit(r['path']).query) for r in seen if 'watch=1' in r['path']]
+    # Each watch starts at the resource version of the list before it.
+    want = [{'watch': ['1'], 'resourceVersion': [v], 'timeoutSeconds': ['600']} for v in FIXTURES['list_resource_versions']]
+    if lists[:2] != ['/api/v1/events'] * 2 or watches[:2] != want:
+        failures.append(f'expected two lists, each followed by a watch from its resource version; saw lists {lists} and watches {watches}')
     if any(r['authorization'] != f'Bearer {TOKEN}' for r in seen):
         failures.append('a request did not carry the service account token')
     if len(rows) != len(expected()):
@@ -133,7 +146,7 @@ def check(rows, seen):
         by_key[key] = row
     for case in FIXTURES['events']:
         name, event = case['name'], case['event']
-        key = (event['metadata'].get('uid'), event.get('count') or None)
+        key = (event['metadata'].get('uid'), (event.get('series') or {}).get('count') or event.get('count') or None)
         row = by_key.get(key)
         if case.get('dropped'):
             if row is not None:
@@ -154,7 +167,7 @@ def check(rows, seen):
         if row.get('ignore_fields') != 'scope.name,scope.version':
             failures.append(f'{name}: VL-Ignore-Fields header {row.get("ignore_fields")!r}')
         compare('resource', RESOURCE, row['resource'])
-        compare('timestamp', case['_times'][exp['timestamp']][0] * 10**9, row.get('timestamp'))
+        compare('timestamp', case['_times'][exp['timestamp']][0], row.get('timestamp'))
         for key in ('severity_number', 'severity_text', 'body'):
             if key in exp:
                 compare(key, exp[key], row.get(key, 0 if key == 'severity_number' else None))

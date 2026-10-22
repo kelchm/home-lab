@@ -182,16 +182,17 @@ spec:
             description: Check the /var/log/containers mount, file permissions and the tail database. A healthy scrape target alone does not prove log collection.
 
         # Flux alone records more than 200 events an hour (October 22, 2026).
+        # Summed over pods, so a replaced collector's last counter cannot fire it.
         - alert: KubernetesEventsIngestionSilent
           expr: |
-            increase(fluentbit_input_records_total{job="fluent-bit-events",name="events"}[30m]) == 0
-            or absent(up{job="fluent-bit-events"} == 1)
+            sum(increase(fluentbit_input_records_total{job="fluent-bit-events",name="events"}[30m])) == 0
+            or absent(fluentbit_input_records_total{job="fluent-bit-events",name="events"})
           for: 15m
           labels:
             severity: warning
           annotations:
             summary: The Kubernetes events collector is receiving no events
-            description: fluent-bit-events read no events for 45 minutes, or is not being scraped. Its log shows watch failures, such as http_status=403 if its ClusterRole lacks events. The API server keeps events for an hour; a collector that recovers within it lists them again.
+            description: fluent-bit-events read no events for 45 minutes, or reports no events input because it is down, unscraped or configured without one. Its log shows watch failures, such as http_status=403 if its ClusterRole lacks events. The API server keeps an event for an hour after its last update; a collector that recovers within it lists them again.
 
         # The input counts records before the collector drops any. On October 19,
         # 2026 every node sent several a second (machined's console-dashboard

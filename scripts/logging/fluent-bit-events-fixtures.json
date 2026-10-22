@@ -1,16 +1,39 @@
 {
-  "list_resource_version": "200",
+  "list_resource_versions": [
+    "200",
+    "206"
+  ],
   "events": [
     {
       "name": "kubelet event about a pod",
       "phase": "list",
-      "times": {"creationTimestamp": 900, "firstTimestamp": 900, "lastTimestamp": 900},
+      "times": {
+        "creationTimestamp": 900,
+        "firstTimestamp": 900,
+        "lastTimestamp": 900
+      },
       "event": {
-        "metadata": {"name": "sonarr-6d5f8b7c9-x2kqp.18a1f2c3d4e5f601", "namespace": "media", "uid": "e0000000-0000-4000-8000-000000000001", "resourceVersion": "101"},
-        "involvedObject": {"kind": "Pod", "namespace": "media", "name": "sonarr-6d5f8b7c9-x2kqp", "uid": "a0000000-0000-4000-8000-000000000001", "apiVersion": "v1", "resourceVersion": "5001", "fieldPath": "spec.containers{app}"},
+        "metadata": {
+          "name": "sonarr-6d5f8b7c9-x2kqp.18a1f2c3d4e5f601",
+          "namespace": "media",
+          "uid": "e0000000-0000-4000-8000-000000000001",
+          "resourceVersion": "101"
+        },
+        "involvedObject": {
+          "kind": "Pod",
+          "namespace": "media",
+          "name": "sonarr-6d5f8b7c9-x2kqp",
+          "uid": "a0000000-0000-4000-8000-000000000001",
+          "apiVersion": "v1",
+          "resourceVersion": "5001",
+          "fieldPath": "spec.containers{app}"
+        },
         "reason": "Pulled",
         "message": "Container image \"ghcr.io/home-operations/sonarr:4.0.15\" already present on machine",
-        "source": {"component": "kubelet", "host": "k8s-prod-2"},
+        "source": {
+          "component": "kubelet",
+          "host": "k8s-prod-2"
+        },
         "count": 1,
         "type": "Normal",
         "reportingComponent": "kubelet",
@@ -38,19 +61,42 @@
           "k8s.event.reporting_instance": "k8s-prod-2",
           "k8s.event.count": 1
         },
-        "absent": ["k8s.event.action", "pipeline.severity_unmapped"]
+        "absent": [
+          "k8s.event.action",
+          "pipeline.severity_unmapped"
+        ]
       }
     },
     {
       "name": "repeated warning, first seen in the list",
       "phase": "list",
-      "times": {"creationTimestamp": 3000, "firstTimestamp": 3000, "lastTimestamp": 240},
+      "times": {
+        "creationTimestamp": 3000,
+        "firstTimestamp": 3000,
+        "lastTimestamp": 240
+      },
       "event": {
-        "metadata": {"name": "radarr-7c9d8b6f5-m4pzt.18a1f2c3d4e5f602", "namespace": "media", "uid": "e0000000-0000-4000-8000-000000000002", "resourceVersion": "102"},
-        "involvedObject": {"kind": "Pod", "namespace": "media", "name": "radarr-7c9d8b6f5-m4pzt", "uid": "a0000000-0000-4000-8000-000000000002", "apiVersion": "v1", "resourceVersion": "5002", "fieldPath": "spec.containers{app}"},
+        "metadata": {
+          "name": "radarr-7c9d8b6f5-m4pzt.18a1f2c3d4e5f602",
+          "namespace": "media",
+          "uid": "e0000000-0000-4000-8000-000000000002",
+          "resourceVersion": "102"
+        },
+        "involvedObject": {
+          "kind": "Pod",
+          "namespace": "media",
+          "name": "radarr-7c9d8b6f5-m4pzt",
+          "uid": "a0000000-0000-4000-8000-000000000002",
+          "apiVersion": "v1",
+          "resourceVersion": "5002",
+          "fieldPath": "spec.containers{app}"
+        },
         "reason": "BackOff",
         "message": "Back-off restarting failed container app in pod radarr-7c9d8b6f5-m4pzt_media(a0000000-0000-4000-8000-000000000002)",
-        "source": {"component": "kubelet", "host": "k8s-prod-1"},
+        "source": {
+          "component": "kubelet",
+          "host": "k8s-prod-1"
+        },
         "count": 5,
         "type": "Warning",
         "reportingComponent": "kubelet",
@@ -61,16 +107,35 @@
         "severity_number": 13,
         "severity_text": "Warning",
         "body": "Back-off restarting failed container app in pod radarr-7c9d8b6f5-m4pzt_media(a0000000-0000-4000-8000-000000000002)",
-        "attributes": {"k8s.namespace.name": "media", "k8s.event.reason": "BackOff", "k8s.event.count": 5}
+        "attributes": {
+          "k8s.namespace.name": "media",
+          "k8s.event.reason": "BackOff",
+          "k8s.event.count": 5
+        }
       }
     },
     {
       "name": "scheduler event with only eventTime",
       "phase": "list",
-      "times": {"creationTimestamp": 120, "eventTime": 120},
+      "times": {
+        "creationTimestamp": 120,
+        "eventTime": 120
+      },
       "event": {
-        "metadata": {"name": "sonarr-6d5f8b7c9-x2kqp.18a1f2c3d4e5f603", "namespace": "media", "uid": "e0000000-0000-4000-8000-000000000003", "resourceVersion": "103"},
-        "involvedObject": {"kind": "Pod", "namespace": "media", "name": "sonarr-6d5f8b7c9-x2kqp", "uid": "a0000000-0000-4000-8000-000000000001", "apiVersion": "v1", "resourceVersion": "5000"},
+        "metadata": {
+          "name": "sonarr-6d5f8b7c9-x2kqp.18a1f2c3d4e5f603",
+          "namespace": "media",
+          "uid": "e0000000-0000-4000-8000-000000000003",
+          "resourceVersion": "103"
+        },
+        "involvedObject": {
+          "kind": "Pod",
+          "namespace": "media",
+          "name": "sonarr-6d5f8b7c9-x2kqp",
+          "uid": "a0000000-0000-4000-8000-000000000001",
+          "apiVersion": "v1",
+          "resourceVersion": "5000"
+        },
         "reason": "Scheduled",
         "message": "Successfully assigned media/sonarr-6d5f8b7c9-x2kqp to k8s-prod-2",
         "source": {},
@@ -83,40 +148,90 @@
         "timestamp": "creationTimestamp",
         "severity_number": 9,
         "severity_text": "Normal",
-        "attributes": {"k8s.event.action": "Binding", "k8s.event.reporting_controller": "default-scheduler", "k8s.event.reporting_instance": "default-scheduler-k8s-prod-1"},
-        "absent": ["k8s.node.name", "k8s.event.count", "k8s.object.fieldpath"]
+        "attributes": {
+          "k8s.event.action": "Binding",
+          "k8s.event.reporting_controller": "default-scheduler",
+          "k8s.event.reporting_instance": "default-scheduler-k8s-prod-1"
+        },
+        "absent": [
+          "k8s.node.name",
+          "k8s.event.count",
+          "k8s.object.fieldpath"
+        ]
       }
     },
     {
       "name": "reporter named only by source.component",
       "phase": "list",
-      "times": {"creationTimestamp": 600, "firstTimestamp": 600, "lastTimestamp": 600},
+      "times": {
+        "creationTimestamp": 600,
+        "firstTimestamp": 600,
+        "lastTimestamp": 600
+      },
       "event": {
-        "metadata": {"name": "recyclarr-29877240.18a1f2c3d4e5f604", "namespace": "media", "uid": "e0000000-0000-4000-8000-000000000004", "resourceVersion": "104"},
-        "involvedObject": {"kind": "CronJob", "namespace": "media", "name": "recyclarr", "uid": "a0000000-0000-4000-8000-000000000004", "apiVersion": "batch/v1", "resourceVersion": "5004"},
+        "metadata": {
+          "name": "recyclarr-29877240.18a1f2c3d4e5f604",
+          "namespace": "media",
+          "uid": "e0000000-0000-4000-8000-000000000004",
+          "resourceVersion": "104"
+        },
+        "involvedObject": {
+          "kind": "CronJob",
+          "namespace": "media",
+          "name": "recyclarr",
+          "uid": "a0000000-0000-4000-8000-000000000004",
+          "apiVersion": "batch/v1",
+          "resourceVersion": "5004"
+        },
         "reason": "SawCompletedJob",
         "message": "Saw completed job: recyclarr-29877240, condition: Complete",
-        "source": {"component": "cronjob-controller"},
+        "source": {
+          "component": "cronjob-controller"
+        },
         "count": 1,
         "type": "Normal",
         "reportingComponent": ""
       },
       "expect": {
         "timestamp": "lastTimestamp",
-        "attributes": {"k8s.event.reporting_controller": "cronjob-controller", "k8s.object.kind": "CronJob", "k8s.object.api_version": "batch/v1"},
-        "absent": ["k8s.event.reporting_instance", "k8s.node.name"]
+        "attributes": {
+          "k8s.event.reporting_controller": "cronjob-controller",
+          "k8s.object.kind": "CronJob",
+          "k8s.object.api_version": "batch/v1"
+        },
+        "absent": [
+          "k8s.event.reporting_instance",
+          "k8s.node.name"
+        ]
       }
     },
     {
       "name": "cluster-scoped object has no namespace",
       "phase": "list",
-      "times": {"creationTimestamp": 1800, "firstTimestamp": 1800, "lastTimestamp": 1800},
+      "times": {
+        "creationTimestamp": 1800,
+        "firstTimestamp": 1800,
+        "lastTimestamp": 1800
+      },
       "event": {
-        "metadata": {"name": "k8s-prod-1.18a1f2c3d4e5f605", "namespace": "default", "uid": "e0000000-0000-4000-8000-000000000005", "resourceVersion": "105"},
-        "involvedObject": {"kind": "Node", "name": "k8s-prod-1", "uid": "k8s-prod-1", "apiVersion": "v1"},
+        "metadata": {
+          "name": "k8s-prod-1.18a1f2c3d4e5f605",
+          "namespace": "default",
+          "uid": "e0000000-0000-4000-8000-000000000005",
+          "resourceVersion": "105"
+        },
+        "involvedObject": {
+          "kind": "Node",
+          "name": "k8s-prod-1",
+          "uid": "k8s-prod-1",
+          "apiVersion": "v1"
+        },
         "reason": "NodeReady",
         "message": "Node k8s-prod-1 status is now: NodeReady",
-        "source": {"component": "kubelet", "host": "k8s-prod-1"},
+        "source": {
+          "component": "kubelet",
+          "host": "k8s-prod-1"
+        },
         "count": 1,
         "type": "Normal",
         "reportingComponent": "kubelet",
@@ -124,20 +239,43 @@
       },
       "expect": {
         "timestamp": "lastTimestamp",
-        "attributes": {"k8s.object.kind": "Node", "k8s.object.name": "k8s-prod-1", "k8s.node.name": "k8s-prod-1"},
-        "absent": ["k8s.namespace.name"]
+        "attributes": {
+          "k8s.object.kind": "Node",
+          "k8s.object.name": "k8s-prod-1",
+          "k8s.node.name": "k8s-prod-1"
+        },
+        "absent": [
+          "k8s.namespace.name"
+        ]
       }
     },
     {
       "name": "type outside Normal and Warning",
       "phase": "list",
-      "times": {"creationTimestamp": 60, "firstTimestamp": 60, "lastTimestamp": 60},
+      "times": {
+        "creationTimestamp": 60,
+        "firstTimestamp": 60,
+        "lastTimestamp": 60
+      },
       "event": {
-        "metadata": {"name": "example.18a1f2c3d4e5f606", "namespace": "default", "uid": "e0000000-0000-4000-8000-000000000006", "resourceVersion": "106"},
-        "involvedObject": {"kind": "ConfigMap", "namespace": "default", "name": "example", "uid": "a0000000-0000-4000-8000-000000000006", "apiVersion": "v1"},
+        "metadata": {
+          "name": "example.18a1f2c3d4e5f606",
+          "namespace": "default",
+          "uid": "e0000000-0000-4000-8000-000000000006",
+          "resourceVersion": "106"
+        },
+        "involvedObject": {
+          "kind": "ConfigMap",
+          "namespace": "default",
+          "name": "example",
+          "uid": "a0000000-0000-4000-8000-000000000006",
+          "apiVersion": "v1"
+        },
         "reason": "Synced",
         "message": "A controller reporting its own event type",
-        "source": {"component": "example-controller"},
+        "source": {
+          "component": "example-controller"
+        },
         "count": 1,
         "type": "Info",
         "reportingComponent": "example-controller"
@@ -146,19 +284,125 @@
         "timestamp": "lastTimestamp",
         "severity_number": 0,
         "severity_text": "Info",
-        "attributes": {"pipeline.severity_unmapped": true}
+        "attributes": {
+          "pipeline.severity_unmapped": true
+        }
+      }
+    },
+    {
+      "name": "scheduler event series in the list",
+      "phase": "list",
+      "times": {
+        "creationTimestamp": 1200,
+        "eventTime": 1200,
+        "series.lastObservedTime": 90
+      },
+      "event": {
+        "metadata": {
+          "name": "lidarr-5f7d9c8b4-q8wzn.18a1f2c3d4e5f611",
+          "namespace": "media",
+          "uid": "e0000000-0000-4000-8000-000000000011",
+          "resourceVersion": "108"
+        },
+        "involvedObject": {
+          "kind": "Pod",
+          "namespace": "media",
+          "name": "lidarr-5f7d9c8b4-q8wzn",
+          "uid": "a0000000-0000-4000-8000-000000000011",
+          "apiVersion": "v1",
+          "resourceVersion": "5011"
+        },
+        "reason": "FailedScheduling",
+        "message": "0/3 nodes are available: 3 Insufficient memory. preemption: 0/3 nodes are available: 3 No preemption victims found for incoming pod.",
+        "source": {},
+        "type": "Warning",
+        "action": "Scheduling",
+        "series": {
+          "count": 3
+        },
+        "reportingComponent": "default-scheduler",
+        "reportingInstance": "default-scheduler-k8s-prod-1"
+      },
+      "expect": {
+        "timestamp": "series.lastObservedTime",
+        "severity_number": 13,
+        "severity_text": "Warning",
+        "attributes": {
+          "k8s.event.count": 3,
+          "k8s.event.action": "Scheduling",
+          "k8s.event.start_time": "@creationTimestamp"
+        }
+      }
+    },
+    {
+      "name": "series created over an hour ago, as listed",
+      "phase": "list",
+      "times": {
+        "creationTimestamp": 4200,
+        "eventTime": 4200,
+        "series.lastObservedTime": 1500
+      },
+      "event": {
+        "metadata": {
+          "name": "bazarr-6b8c7d9f5-h3jkl.18a1f2c3d4e5f612",
+          "namespace": "media",
+          "uid": "e0000000-0000-4000-8000-000000000012",
+          "resourceVersion": "109"
+        },
+        "involvedObject": {
+          "kind": "Pod",
+          "namespace": "media",
+          "name": "bazarr-6b8c7d9f5-h3jkl",
+          "uid": "a0000000-0000-4000-8000-000000000012",
+          "apiVersion": "v1",
+          "resourceVersion": "5012"
+        },
+        "reason": "FailedScheduling",
+        "message": "0/3 nodes are available: 3 node(s) didn't match pod anti-affinity rules.",
+        "source": {},
+        "type": "Warning",
+        "action": "Scheduling",
+        "series": {
+          "count": 8
+        },
+        "reportingComponent": "default-scheduler",
+        "reportingInstance": "default-scheduler-k8s-prod-1"
+      },
+      "expect": {
+        "timestamp": "series.lastObservedTime",
+        "attributes": {
+          "k8s.event.count": 8
+        }
       }
     },
     {
       "name": "older than the retention window",
       "phase": "list",
-      "times": {"creationTimestamp": 7300, "firstTimestamp": 7300, "lastTimestamp": 7200},
+      "times": {
+        "creationTimestamp": 2678500,
+        "firstTimestamp": 2678500,
+        "lastTimestamp": 2678400
+      },
       "event": {
-        "metadata": {"name": "old.18a1f2c3d4e5f607", "namespace": "media", "uid": "e0000000-0000-4000-8000-000000000007", "resourceVersion": "107"},
-        "involvedObject": {"kind": "Pod", "namespace": "media", "name": "old", "uid": "a0000000-0000-4000-8000-000000000007", "apiVersion": "v1"},
+        "metadata": {
+          "name": "old.18a1f2c3d4e5f607",
+          "namespace": "media",
+          "uid": "e0000000-0000-4000-8000-000000000007",
+          "resourceVersion": "107"
+        },
+        "involvedObject": {
+          "kind": "Pod",
+          "namespace": "media",
+          "name": "old",
+          "uid": "a0000000-0000-4000-8000-000000000007",
+          "apiVersion": "v1"
+        },
         "reason": "Killing",
         "message": "Stopping container app",
-        "source": {"component": "kubelet", "host": "k8s-prod-3"},
+        "source": {
+          "component": "kubelet",
+          "host": "k8s-prod-3"
+        },
         "count": 1,
         "type": "Normal",
         "reportingComponent": "kubelet"
@@ -169,13 +413,33 @@
       "name": "the repeated warning's next count arrives from the watch",
       "phase": "watch",
       "watch_type": "MODIFIED",
-      "times": {"creationTimestamp": 3000, "firstTimestamp": 3000, "lastTimestamp": 30},
+      "times": {
+        "creationTimestamp": 3000,
+        "firstTimestamp": 3000,
+        "lastTimestamp": 30
+      },
       "event": {
-        "metadata": {"name": "radarr-7c9d8b6f5-m4pzt.18a1f2c3d4e5f602", "namespace": "media", "uid": "e0000000-0000-4000-8000-000000000002", "resourceVersion": "201"},
-        "involvedObject": {"kind": "Pod", "namespace": "media", "name": "radarr-7c9d8b6f5-m4pzt", "uid": "a0000000-0000-4000-8000-000000000002", "apiVersion": "v1", "resourceVersion": "5002", "fieldPath": "spec.containers{app}"},
+        "metadata": {
+          "name": "radarr-7c9d8b6f5-m4pzt.18a1f2c3d4e5f602",
+          "namespace": "media",
+          "uid": "e0000000-0000-4000-8000-000000000002",
+          "resourceVersion": "201"
+        },
+        "involvedObject": {
+          "kind": "Pod",
+          "namespace": "media",
+          "name": "radarr-7c9d8b6f5-m4pzt",
+          "uid": "a0000000-0000-4000-8000-000000000002",
+          "apiVersion": "v1",
+          "resourceVersion": "5002",
+          "fieldPath": "spec.containers{app}"
+        },
         "reason": "BackOff",
         "message": "Back-off restarting failed container app in pod radarr-7c9d8b6f5-m4pzt_media(a0000000-0000-4000-8000-000000000002)",
-        "source": {"component": "kubelet", "host": "k8s-prod-1"},
+        "source": {
+          "component": "kubelet",
+          "host": "k8s-prod-1"
+        },
         "count": 6,
         "type": "Warning",
         "reportingComponent": "kubelet",
@@ -184,20 +448,41 @@
       "expect": {
         "timestamp": "lastTimestamp",
         "severity_number": 13,
-        "attributes": {"k8s.event.count": 6}
+        "attributes": {
+          "k8s.event.count": 6
+        }
       }
     },
     {
       "name": "new event from the watch",
       "phase": "watch",
       "watch_type": "ADDED",
-      "times": {"creationTimestamp": 20, "firstTimestamp": 20, "lastTimestamp": 20},
+      "times": {
+        "creationTimestamp": 20,
+        "firstTimestamp": 20,
+        "lastTimestamp": 20
+      },
       "event": {
-        "metadata": {"name": "jellyfin-0.18a1f2c3d4e5f608", "namespace": "media", "uid": "e0000000-0000-4000-8000-000000000008", "resourceVersion": "202"},
-        "involvedObject": {"kind": "Pod", "namespace": "media", "name": "jellyfin-0", "uid": "a0000000-0000-4000-8000-000000000008", "apiVersion": "v1", "resourceVersion": "5008"},
+        "metadata": {
+          "name": "jellyfin-0.18a1f2c3d4e5f608",
+          "namespace": "media",
+          "uid": "e0000000-0000-4000-8000-000000000008",
+          "resourceVersion": "202"
+        },
+        "involvedObject": {
+          "kind": "Pod",
+          "namespace": "media",
+          "name": "jellyfin-0",
+          "uid": "a0000000-0000-4000-8000-000000000008",
+          "apiVersion": "v1",
+          "resourceVersion": "5008"
+        },
         "reason": "FailedMount",
         "message": "MountVolume.SetUp failed for volume \"config\" : rpc error: code = Aborted desc = volume is not ready",
-        "source": {"component": "kubelet", "host": "k8s-prod-3"},
+        "source": {
+          "component": "kubelet",
+          "host": "k8s-prod-3"
+        },
         "count": 1,
         "type": "Warning",
         "reportingComponent": "kubelet",
@@ -208,20 +493,83 @@
         "severity_number": 13,
         "severity_text": "Warning",
         "body": "MountVolume.SetUp failed for volume \"config\" : rpc error: code = Aborted desc = volume is not ready",
-        "attributes": {"k8s.event.reason": "FailedMount", "k8s.node.name": "k8s-prod-3"}
+        "attributes": {
+          "k8s.event.reason": "FailedMount",
+          "k8s.node.name": "k8s-prod-3"
+        }
       }
+    },
+    {
+      "name": "the same series' next write arrives from the watch",
+      "phase": "watch",
+      "times": {
+        "creationTimestamp": 4200,
+        "eventTime": 4200,
+        "series.lastObservedTime": 30
+      },
+      "event": {
+        "metadata": {
+          "name": "bazarr-6b8c7d9f5-h3jkl.18a1f2c3d4e5f612",
+          "namespace": "media",
+          "uid": "e0000000-0000-4000-8000-000000000012",
+          "resourceVersion": "203"
+        },
+        "involvedObject": {
+          "kind": "Pod",
+          "namespace": "media",
+          "name": "bazarr-6b8c7d9f5-h3jkl",
+          "uid": "a0000000-0000-4000-8000-000000000012",
+          "apiVersion": "v1",
+          "resourceVersion": "5012"
+        },
+        "reason": "FailedScheduling",
+        "message": "0/3 nodes are available: 3 node(s) didn't match pod anti-affinity rules.",
+        "source": {},
+        "type": "Warning",
+        "action": "Scheduling",
+        "series": {
+          "count": 9
+        },
+        "reportingComponent": "default-scheduler",
+        "reportingInstance": "default-scheduler-k8s-prod-1"
+      },
+      "expect": {
+        "timestamp": "series.lastObservedTime",
+        "attributes": {
+          "k8s.event.count": 9
+        }
+      },
+      "watch_type": "MODIFIED"
     },
     {
       "name": "deletions are ignored",
       "phase": "watch",
       "watch_type": "DELETED",
-      "times": {"creationTimestamp": 900, "firstTimestamp": 900, "lastTimestamp": 900},
+      "times": {
+        "creationTimestamp": 900,
+        "firstTimestamp": 900,
+        "lastTimestamp": 900
+      },
       "event": {
-        "metadata": {"name": "sonarr-6d5f8b7c9-x2kqp.18a1f2c3d4e5f609", "namespace": "media", "uid": "e0000000-0000-4000-8000-000000000009", "resourceVersion": "203"},
-        "involvedObject": {"kind": "Pod", "namespace": "media", "name": "sonarr-6d5f8b7c9-x2kqp", "uid": "a0000000-0000-4000-8000-000000000001", "apiVersion": "v1"},
+        "metadata": {
+          "name": "sonarr-6d5f8b7c9-x2kqp.18a1f2c3d4e5f609",
+          "namespace": "media",
+          "uid": "e0000000-0000-4000-8000-000000000009",
+          "resourceVersion": "204"
+        },
+        "involvedObject": {
+          "kind": "Pod",
+          "namespace": "media",
+          "name": "sonarr-6d5f8b7c9-x2kqp",
+          "uid": "a0000000-0000-4000-8000-000000000001",
+          "apiVersion": "v1"
+        },
         "reason": "Created",
         "message": "Created container: app",
-        "source": {"component": "kubelet", "host": "k8s-prod-2"},
+        "source": {
+          "component": "kubelet",
+          "host": "k8s-prod-2"
+        },
         "count": 1,
         "type": "Normal",
         "reportingComponent": "kubelet"
@@ -233,25 +581,90 @@
       "phase": "watch",
       "watch_type": "BOOKMARK",
       "times": {},
-      "event": {"metadata": {"resourceVersion": "204"}},
+      "event": {
+        "metadata": {
+          "resourceVersion": "205"
+        }
+      },
       "dropped": true
     },
     {
       "name": "an object older than the last resource version is skipped",
       "phase": "watch",
       "watch_type": "ADDED",
-      "times": {"creationTimestamp": 50, "firstTimestamp": 50, "lastTimestamp": 50},
+      "times": {
+        "creationTimestamp": 50,
+        "firstTimestamp": 50,
+        "lastTimestamp": 50
+      },
       "event": {
-        "metadata": {"name": "stale.18a1f2c3d4e5f610", "namespace": "media", "uid": "e0000000-0000-4000-8000-000000000010", "resourceVersion": "150"},
-        "involvedObject": {"kind": "Pod", "namespace": "media", "name": "stale", "uid": "a0000000-0000-4000-8000-000000000010", "apiVersion": "v1"},
+        "metadata": {
+          "name": "stale.18a1f2c3d4e5f610",
+          "namespace": "media",
+          "uid": "e0000000-0000-4000-8000-000000000010",
+          "resourceVersion": "150"
+        },
+        "involvedObject": {
+          "kind": "Pod",
+          "namespace": "media",
+          "name": "stale",
+          "uid": "a0000000-0000-4000-8000-000000000010",
+          "apiVersion": "v1"
+        },
         "reason": "Started",
         "message": "Started container app",
-        "source": {"component": "kubelet", "host": "k8s-prod-2"},
+        "source": {
+          "component": "kubelet",
+          "host": "k8s-prod-2"
+        },
         "count": 1,
         "type": "Normal",
         "reportingComponent": "kubelet"
       },
       "dropped": true
+    },
+    {
+      "name": "event created while the watch was down",
+      "phase": "relist",
+      "times": {
+        "creationTimestamp": 10,
+        "firstTimestamp": 10,
+        "lastTimestamp": 10
+      },
+      "event": {
+        "metadata": {
+          "name": "prowlarr-7d6c5b4a3-z9xwv.18a1f2c3d4e5f613",
+          "namespace": "media",
+          "uid": "e0000000-0000-4000-8000-000000000013",
+          "resourceVersion": "206"
+        },
+        "involvedObject": {
+          "kind": "Pod",
+          "namespace": "media",
+          "name": "prowlarr-7d6c5b4a3-z9xwv",
+          "uid": "a0000000-0000-4000-8000-000000000013",
+          "apiVersion": "v1",
+          "resourceVersion": "5013",
+          "fieldPath": "spec.containers{app}"
+        },
+        "reason": "Unhealthy",
+        "message": "Readiness probe failed: Get \"http://10.42.1.77:9696/ping\": context deadline exceeded",
+        "source": {
+          "component": "kubelet",
+          "host": "k8s-prod-2"
+        },
+        "count": 1,
+        "type": "Warning",
+        "reportingComponent": "kubelet",
+        "reportingInstance": "k8s-prod-2"
+      },
+      "expect": {
+        "timestamp": "lastTimestamp",
+        "severity_number": 13,
+        "attributes": {
+          "k8s.event.reason": "Unhealthy"
+        }
+      }
     }
   ]
 }

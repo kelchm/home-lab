@@ -26,6 +26,8 @@ spec:
     replicaCount: 1
     updateStrategy:
       type: Recreate
+    # Above the pipeline's 30-second flush grace.
+    terminationGracePeriodSeconds: 60
 
     image:
       repository: fluent/fluent-bit

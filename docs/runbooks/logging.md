@@ -228,20 +228,20 @@ The `fluent-bit-events` collector, one replica of the node collectors' chart and
 | Field | Content |
 | --- | --- |
 | `_msg` | The event's message. |
-| `severity_number`, `severity_text` | `Normal` is 9 (info) and `Warning` 13 (warn), with the type as the text. Any other type is stored as unspecified with `pipeline.severity_unmapped`. |
+| `severity_number`, `severity_text` | `Normal` is 9 (info), `Warning` 13 (warn), `Error` 17 and `Critical` 21, with the type as the text. Any other type is stored as unspecified with `pipeline.severity_unmapped`. |
 | `k8s.namespace.name` | The involved object's namespace, absent for cluster-scoped objects such as nodes. Stream field. |
 | `k8s.object.kind`, `k8s.object.name`, `k8s.object.uid`, `k8s.object.fieldpath`, `k8s.object.api_version`, `k8s.object.resource_version` | The involved object. `fieldpath` names a container, as in `spec.containers{app}`. |
-| `k8s.event.reason`, `k8s.event.action`, `k8s.event.count` | The reason (`BackOff`, `FailedMount`, `Scheduled`), the action newer reporters set, and how many times the event has occurred. |
+| `k8s.event.reason`, `k8s.event.action`, `k8s.event.count` | The reason (`BackOff`, `FailedMount`, `Scheduled`), the action newer reporters set, and how many times the event has occurred (`series.count` for an event series). |
 | `k8s.event.reporting_controller`, `k8s.event.reporting_instance`, `k8s.node.name` | Who reported it: the controller (`reportingComponent`, else `source.component`), its instance, and the node for kubelet events. |
 | `k8s.event.name`, `k8s.event.uid`, `k8s.event.start_time` | The Event object and its creation time. |
 
-Record time is the event's `lastTimestamp`, else `firstTimestamp`, else its creation time, as Fluent Bit's input sets it. A repeated event, such as a crash loop's `BackOff`, is stored again at each new count, at the time of that occurrence.
+Record time is the latest occurrence the record reports: `series.lastObservedTime` for an event series, otherwise the event's `lastTimestamp`, else `firstTimestamp`, else its creation time, as Fluent Bit's input sets it. A repeated event is stored again at each update. Older reporters, such as the kubelet and Flux, update the event on every occurrence, so a crash loop's `BackOff` arrives at each new count. Reporters on the newer events API, such as the scheduler, keep a series: they write it at the second occurrence, every 30 minutes after that, and once more six minutes after the last occurrence, so a pod stuck in `FailedScheduling` arrives at those writes.
 
 ### Event delivery
 
-The API server keeps events for an hour. The collector lists them, then watches for changes; each watch ends after 10 minutes and the collector lists again, skipping what it has already sent. A new collector process has no such memory, so after a restart it stores the last hour of events a second time; the copies share `k8s.event.uid` and `k8s.event.count`. An outage longer than an hour loses the events that expired during it. Deletions are not recorded.
+The API server keeps an event for an hour after its last write. The collector lists them, then watches for changes; each watch ends after 10 minutes and the collector lists again, skipping what it has already sent. A new collector process has no such memory, so after a restart it stores every event the API server holds a second time, about the last hour; the copies share `k8s.event.uid` and `k8s.event.count`. An outage longer than an hour loses the events that expired during it. Deletions are not recorded. The input dates an event series by its creation and drops anything older than its retention before mapping, so the retention is 30 days rather than the API server's hour: a series that keeps being written can outlive it.
 
-The output buffer is 256 MiB on the pod's `emptyDir`, under the same retry and buffer alerts as the node collectors; see [Pipeline failures](#pipeline-failures). `KubernetesEventsIngestionSilent` fires when `fluentbit_input_records_total{job="fluent-bit-events",name="events"}` has not risen for 45 minutes or the collector is not scraped; Flux alone records more than 200 events an hour. A watch the API server refuses appears in the pod's log as `http_status=`, such as 403 if the ClusterRole lacks events.
+The output buffer is 256 MiB on the pod's `emptyDir`, under the same retry and buffer alerts as the node collectors; see [Pipeline failures](#pipeline-failures). `KubernetesEventsIngestionSilent` fires when `fluentbit_input_records_total{job="fluent-bit-events",name="events"}` has not risen for 45 minutes, summed over pods so a replaced collector's last counter does not count, or is absent because the collector is down, unscraped or has no events input; Flux alone records more than 200 events an hour. A watch the API server refuses appears in the pod's log as `http_status=`, such as 403 if the ClusterRole lacks events.
 
 ### Query events
 
@@ -250,7 +250,7 @@ The output buffer is 256 MiB on the pod's `emptyDir`, under the same retry and b
 - `{service.name="kubernetes-events"} k8s.object.name:="jellyfin-0"` follows one object: scheduling, image pulls, mounts and probe failures.
 - `{service.name="kubernetes-events"} k8s.event.reason:=BackOff | stats by (k8s.namespace.name, k8s.object.name) max(k8s.event.count) restarts` ranks crash loops.
 
-`python3 scripts/logging/test-fluent-bit-events.py` runs the production events configuration through the pinned image against [`events-api.py`](../../scripts/logging/events-api.py), which serves a list and a watch stream as the API server does, with [fixtures](../../scripts/logging/fluent-bit-events-fixtures.json) for each mapping rule, retention, repeated events, ignored watch types and the list that follows a watch. CI runs it through `scripts/ci/validate-logging.sh`.
+`python3 scripts/logging/test-fluent-bit-events.py` runs the production events configuration through the pinned image against [`events-api.py`](../../scripts/logging/events-api.py), which serves a list and a watch stream as the API server does, with [fixtures](../../scripts/logging/fluent-bit-events-fixtures.json) for each mapping rule, retention, repeated events and series, ignored watch types, and the list that follows a watch, including an event created while the watch was down. CI runs it through `scripts/ci/validate-logging.sh`.
 
 ## Source inventory
 

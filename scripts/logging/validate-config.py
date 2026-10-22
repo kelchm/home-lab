@@ -76,4 +76,7 @@ assert setting('Name').group(1) == 'kubernetes_events' and not setting('DB')
 assert setting('storage.checksum').group(1).lower() == 'off' and setting('Retry_Limit').group(1) == 'no_limits'
 assert setting('Logs_URI').group(1) == '/insert/opentelemetry/v1/logs'
 assert 'VL-Ignore-Fields scope.name,scope.version' in conf
+# A backlog stays on disk, within the limit FluentBitBufferNearCapacity names.
+assert setting('storage.type').group(1) == 'filesystem' and setting('storage.total_limit_size').group(1) == '256M'
+assert int(setting('storage.max_chunks_up').group(1)) <= 16
 print('Fluent Bit image, hardening, mounts and pipeline guarantees validated.')

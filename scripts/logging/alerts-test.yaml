@@ -149,18 +149,60 @@ tests:
       - expr: ALERTS{alertname="KubernetesEventsIngestionSilent",alertstate="firing"}
         eval_time: 14m
         exp_samples: []
-      - expr: count(ALERTS{alertname="KubernetesEventsIngestionSilent",alertstate="firing",job="fluent-bit-events",name="events"})
+      - expr: ALERTS{alertname="KubernetesEventsIngestionSilent",alertstate="firing"}
         eval_time: 17m
-        exp_samples: [{labels: '{}', value: 1}]
-  - name: An unscraped events collector is silent too
+        exp_samples: [{labels: '{__name__="ALERTS",alertname="KubernetesEventsIngestionSilent",alertstate="firing",severity="warning",cluster="k8s-prod"}', value: 1}]
+  - name: An events collector that is not scraped is silent
     interval: 1m
     input_series:
       - series: up{job="fluent-bit",node="n1",endpoint="http"}
         values: 1+0x30
     promql_expr_test:
-      - expr: count(ALERTS{alertname="KubernetesEventsIngestionSilent",alertstate="firing"})
+      - expr: ALERTS{alertname="KubernetesEventsIngestionSilent",alertstate="firing"}
         eval_time: 16m
+        exp_samples: [{labels: '{__name__="ALERTS",alertname="KubernetesEventsIngestionSilent",alertstate="firing",job="fluent-bit-events",name="events",severity="warning",cluster="k8s-prod"}', value: 1}]
+  - name: A scraped events collector without the events input is silent
+    interval: 1m
+    input_series:
+      - series: up{job="fluent-bit-events",node="n3",endpoint="http"}
+        values: 1+0x30
+      - series: fluentbit_input_records_total{job="fluent-bit-events",node="n3",name="other"}
+        values: 0+6x30
+    promql_expr_test:
+      - expr: ALERTS{alertname="KubernetesEventsIngestionSilent",alertstate="firing"}
+        eval_time: 16m
+        exp_samples: [{labels: '{__name__="ALERTS",alertname="KubernetesEventsIngestionSilent",alertstate="firing",job="fluent-bit-events",name="events",severity="warning",cluster="k8s-prod"}', value: 1}]
+  - name: An events collector whose scrapes fail is silent
+    interval: 1m
+    input_series:
+      - series: up{job="fluent-bit-events",node="n3",endpoint="http"}
+        values: 1x5 0x30
+      - series: fluentbit_input_records_total{job="fluent-bit-events",node="n3",name="events"}
+        values: 0+6x5 stale
+    promql_expr_test:
+      - expr: ALERTS{alertname="KubernetesEventsIngestionSilent",alertstate="firing"}
+        eval_time: 14m
+        exp_samples: []
+      - expr: ALERTS{alertname="KubernetesEventsIngestionSilent",alertstate="firing"}
+        eval_time: 22m
+        exp_samples: [{labels: '{__name__="ALERTS",alertname="KubernetesEventsIngestionSilent",alertstate="firing",job="fluent-bit-events",name="events",severity="warning",cluster="k8s-prod"}', value: 1}]
+  - name: A replacement collector that receives events clears the silence
+    interval: 1m
+    input_series:
+      - series: fluentbit_input_records_total{job="fluent-bit-events",node="n3",pod="old",name="events"}
+        values: 100+0x20 stale
+      - series: fluentbit_input_records_total{job="fluent-bit-events",node="n1",pod="new",name="events"}
+        values: _x21 0+6x40
+    promql_expr_test:
+      - expr: count(ALERTS{alertname="KubernetesEventsIngestionSilent",alertstate="firing"})
+        eval_time: 18m
         exp_samples: [{labels: '{}', value: 1}]
+      - expr: ALERTS{alertname="KubernetesEventsIngestionSilent",alertstate="firing"}
+        eval_time: 25m
+        exp_samples: []
+      - expr: ALERTS{alertname="KubernetesEventsIngestionSilent",alertstate="firing"}
+        eval_time: 47m
+        exp_samples: []
   - name: A collector receiving events raises nothing
     interval: 1m
     input_series:
