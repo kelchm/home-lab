@@ -1,0 +1,64 @@
+diff --git a/zig/src/server/literal_tokens.zig b/zig/src/server/literal_tokens.zig
+index 96d4444..d4ef4d1 100644
+--- a/zig/src/server/literal_tokens.zig
++++ b/zig/src/server/literal_tokens.zig
+@@ -77,7 +77,7 @@ pub const Table = struct {
+         return false;
+     }
+ 
+-    /// Whether ``hide`` would change any string in `v` (object keys are left alone, as Python's copy keeps them).
++    /// Whether ``hide`` would change any string in `v`, object keys included (a tool's parameter or an argument's name).
+     pub fn needs(t: *const Table, v: Value) bool {
+         if (t.lits.len == 0) return false;
+         return switch (v) {
+@@ -85,8 +85,8 @@ pub const Table = struct {
+             .array => |xs| for (xs) |x| {
+                 if (t.needs(x)) break true;
+             } else false,
+-            .object => |o| for (o.values()) |x| {
+-                if (t.needs(x)) break true;
++            .object => |o| for (o.keys(), o.values()) |k, x| {
++                if (t.touches(k) or t.needs(x)) break true;
+             } else false,
+             else => false,
+         };
+@@ -130,7 +130,10 @@ pub const Table = struct {
+             .object => |o| blk: {
+                 const n = try json.newObject(a);
+                 var it = o.iterator();
+-                while (it.next()) |e| try n.put(a, e.key_ptr.*, try t.hide(a, e.value_ptr.*));
++                while (it.next()) |e| {
++                    const key = if (t.touches(e.key_ptr.*)) try t.hideString(a, e.key_ptr.*) else e.key_ptr.*;
++                    try n.put(a, key, try t.hide(a, e.value_ptr.*));
++                }
+                 break :blk .{ .object = n };
+             },
+             else => v,
+diff --git a/zig/src/server/literal_tokens_test.zig b/zig/src/server/literal_tokens_test.zig
+index 47eb963..3e65cd9 100644
+--- a/zig/src/server/literal_tokens_test.zig
++++ b/zig/src/server/literal_tokens_test.zig
+@@ -192,3 +192,23 @@ test "hide copies only what changes and leaves the caller's value alone" {
+     try testing.expectEqualStrings("<think>", quoted.array[0].strField("content").?);
+     try testing.expectEqualStrings("\u{E005}", hidden.array[0].strField("content").?);
+ }
++
++test "a quoted think tag in an object key, a tool's parameter or an argument's name, stays text" {
++    var arena = std.heap.ArenaAllocator.init(testing.allocator);
++    defer arena.deinit();
++    const a = arena.allocator();
++    const t = try literal_tokens.Table.init(a, &added);
++    const properties = try json.newObject(a);
++    try properties.put(a, "</think>", .{ .string = "plain" });
++    try properties.put(a, "city", .{ .string = "Oslo" });
++    const schema = try json.newObject(a);
++    try schema.put(a, "properties", .{ .object = properties });
++    try testing.expect(t.needs(.{ .object = schema }));
++    const hidden = (try t.hide(a, .{ .object = schema })).object.get("properties").?.object;
++    try testing.expect(hidden.get("</think>") == null);
++    try testing.expectEqualStrings("plain", hidden.values()[0].string);
++    try testing.expect(std.mem.indexOf(u8, hidden.keys()[0], "think") == null);
++    try testing.expectEqualStrings("Oslo", hidden.get("city").?.string);
++    // the caller's value keeps its key
++    try testing.expect(properties.get("</think>") != null);
++}

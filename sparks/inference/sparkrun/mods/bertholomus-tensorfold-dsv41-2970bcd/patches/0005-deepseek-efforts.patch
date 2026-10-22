@@ -12,7 +12,7 @@ index 27a4f90..e03fd05 100644
  
  pub const Options = struct { context: usize, drafts: bool, segments: usize = 1 };
 diff --git a/zig/src/families/dsv41/text.zig b/zig/src/families/dsv41/text.zig
-index 8fe1e86..2c80309 100644
+index 8fe1e86..2b82ee2 100644
 --- a/zig/src/families/dsv41/text.zig
 +++ b/zig/src/families/dsv41/text.zig
 @@ -1,34 +1,25 @@
@@ -24,8 +24,8 @@ index 8fe1e86..2c80309 100644
 -//! without one hears the template's default ("high": 75), the number the lane sends; "none" turns thinking off.
 +//! The checkpoint's encoder (encoding/encoding.py) names "low", "high" and "max" as 50, 75 and 100 and takes any
 +//! integer 1-100 as it is (the "Reasoning Effort: N" line before the first turn when thinking). The engine reports
-+//! exactly those three as its Info.efforts, so the server passes each name as asked, the template hears its number and
-+//! any other effort name goes to the nearest of the three. A request without one hears the template's default
++//! exactly those three as its Info.efforts, highest first as /v1/models lists them, so the server passes each name as
++//! asked, the template hears its number and any other effort name goes to the nearest of the three. A request without one hears the template's default
 +//! ("high": 75); "none" turns thinking off.
  //! Reasoning split ("</think>" closes the block the generation prompt opens) and DSML tool calls are the server's own.
  
@@ -34,15 +34,17 @@ index 8fe1e86..2c80309 100644
  
  pub const efforts = [_]Effort{
 -    .{ .name = "minimal", .value = 25 },
-     .{ .name = "low", .value = 50 },
+-    .{ .name = "low", .value = 50 },
 -    .{ .name = "medium", .value = 62 },
-     .{ .name = "high", .value = 75 },
+-    .{ .name = "high", .value = 75 },
 -    .{ .name = "xhigh", .value = 88 },
      .{ .name = "max", .value = 100 },
++    .{ .name = "high", .value = 75 },
++    .{ .name = "low", .value = 50 },
  };
  
 -test "the lane's effort numbers: rising, inside the template's 1-100, its own three where it names them" {
-+test "the checkpoint's own three efforts and no others" {
++test "the checkpoint's own three efforts, highest first, and no others" {
      const std = @import("std");
 -    var last: i64 = 0;
 -    for (efforts) |e| {
@@ -55,13 +57,13 @@ index 8fe1e86..2c80309 100644
 -        } else 0;
 -        try std.testing.expectEqual(t[1], hit);
 +    try std.testing.expectEqual(@as(usize, 3), efforts.len);
-+    for ([_]struct { []const u8, i64 }{ .{ "low", 50 }, .{ "high", 75 }, .{ "max", 100 } }, efforts) |t, e| {
++    for ([_]struct { []const u8, i64 }{ .{ "max", 100 }, .{ "high", 75 }, .{ "low", 50 } }, efforts) |t, e| {
 +        try std.testing.expectEqualStrings(t[0], e.name);
 +        try std.testing.expectEqual(t[1], e.value);
      }
  }
 diff --git a/zig/src/server/effort_values_test.zig b/zig/src/server/effort_values_test.zig
-index f8b01f8..9d50d1e 100644
+index f8b01f8..6497c0a 100644
 --- a/zig/src/server/effort_values_test.zig
 +++ b/zig/src/server/effort_values_test.zig
 @@ -157,6 +157,25 @@ test "an engine's effort numbers: every name passes as asked and the template he
@@ -69,7 +71,7 @@ index f8b01f8..9d50d1e 100644
  }
  
 +test "an unlisted effort name hears the nearest listed number, ties going higher" {
-+    const three = [_]api.Effort{ .{ .name = "low", .value = 50 }, .{ .name = "high", .value = 75 }, .{ .name = "max", .value = 100 } };
++    const three = [_]api.Effort{ .{ .name = "max", .value = 100 }, .{ .name = "high", .value = 75 }, .{ .name = "low", .value = 50 } };
 +    var text: EffortText = .{};
 +    var backend: Capture = .{ .efforts = &three };
 +    defer std.testing.allocator.free(backend.prompt);

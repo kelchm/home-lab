@@ -958,11 +958,31 @@ def test_dsv41_readiness_requires_lanes_window_and_reasoning(tmp_path, dsv41_rec
     for change in ({"status": "error"}, {"warming": True}, {"model": "other"}, {"max_batch_size": 2}):
         with pytest.raises(RuntimeError):
             ready.check_health({**health, **change}, DSV41_SERVED, 4)
-    entry = {"id": DSV41_SERVED, "context_length": context, "reasoning": {"supported_efforts": ["max", "high", "none"]}}
-    ready.check_models({"data": [entry]}, DSV41_SERVED, context)
-    for body in ({"data": []}, {"data": [{**entry, "context_length": 262144}]}, {"data": [{**entry, "reasoning": {}}]}):
+    if "--efforts" not in hook:
+        entry = {"id": DSV41_SERVED, "context_length": context, "reasoning": {"supported_efforts": ["max", "high", "none"]}}
+        ready.check_models({"data": [entry]}, DSV41_SERVED, context)
+        for body in ({"data": []}, {"data": [{**entry, "context_length": 262144}]}, {"data": [{**entry, "reasoning": {}}]}):
+            with pytest.raises(RuntimeError):
+                ready.check_models(body, DSV41_SERVED, context)
+        return
+    efforts = hook[hook.index("--efforts") + 1].split(",")
+    assert efforts == ["max", "high", "low", "none"]
+    entry = {"id": DSV41_SERVED, "owned_by": "tensorfold", "context_length": context, "max_model_len": context,
+             "reasoning": {"default_enabled": True, "supported_efforts": efforts}}
+    ready.check_models({"data": [entry]}, DSV41_SERVED, context, efforts)
+    for change in ({"owned_by": "other"}, {"context_length": 262144}, {"max_model_len": 1048576},
+                   {"reasoning": {"supported_efforts": ["low", "high", "max", "none"]}},
+                   {"reasoning": {"supported_efforts": ["max", "high", "low"]}}):
         with pytest.raises(RuntimeError):
-            ready.check_models(body, DSV41_SERVED, context)
+            ready.check_models({"data": [{**entry, **change}]}, DSV41_SERVED, context, efforts)
+    aliases = dict(pair.split("=") for pair in hook[hook.index("--aliases") + 1].split(","))
+    assert aliases == {"minimal": "low", "medium": "high", "xhigh": "max"}
+    listed = {"max": [1, 100], "high": [1, 75], "low": [1, 50], "none": [2]}
+    ready.check_renders(listed, {"minimal": [1, 50], "medium": [1, 75], "xhigh": [1, 100]}, aliases)
+    with pytest.raises(RuntimeError, match="share"):
+        ready.check_renders({**listed, "high": [1, 100]}, {}, {})
+    with pytest.raises(RuntimeError, match="xhigh"):
+        ready.check_renders(listed, {"minimal": [1, 50], "medium": [1, 75], "xhigh": [1, 88]}, aliases)
 
 
 def test_dsv41_rank_inputs_follow_the_weights_in_a_root_of_their_own(runtime, dsv41_recipe):

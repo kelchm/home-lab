@@ -8,9 +8,9 @@ min_nodes: 2
 max_nodes: 2
 metadata:
   profile: dsv41-1017-exl3-tp2-bth-tf-2970bcd-libertai-512k
-  description: bertholomus deepseek-v41-zig engine 2970bcd with five server and lane patches, LibertAI EXL3 2.9 bpw weights, four streams and a 512K window
+  description: bertholomus deepseek-v41-zig engine 2970bcd with six server and lane patches, LibertAI EXL3 2.9 bpw weights, four streams and a 512K window
   engine_revision: 2970bcdbf8d078d1f29aa194e6285d8759fba4ec
-  image: dsv41-tf:2970bcd-4691715-c11206882da2
+  image: dsv41-tf:2970bcd-4691715-e1c6ebe02e2a
   weights: libertai
   weights_variant: exl3-2.9bpw
   target_model_revision: 0be63c3337efbb2a0061d5b8bb4006fa186d433f
@@ -55,7 +55,7 @@ runtime_cache:
 mods:
 - ../mods/bertholomus-tensorfold-dsv41-2970bcd
 post_exec:
-- python3 /opt/dsv41-tensorfold/readiness.py --model DeepSeek-V4.1-Flash-1017 --context 524288
+- python3 /opt/dsv41-tensorfold/readiness.py --model DeepSeek-V4.1-Flash-1017 --context 524288 --efforts max,high,low,none --aliases minimal=low,medium=high,xhigh=max
 distribution_config:
   models:
     entries:

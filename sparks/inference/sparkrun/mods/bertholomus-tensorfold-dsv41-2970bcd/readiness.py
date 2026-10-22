@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail-closed dsv41 TensorFold readiness gate for SparkRun: health, discovery window, concurrent smoke and a tool call."""
+"""Fail-closed dsv41 TensorFold readiness gate for SparkRun: health, discovery, effort renders, concurrent smoke and a tool call."""
 import argparse
 from concurrent.futures import ThreadPoolExecutor
 import json
@@ -25,14 +25,27 @@ def check_health(body, model, lanes):
         raise RuntimeError(f"Expected {lanes} loaded lanes, got {body.get('max_batch_size')!r}")
 
 
-def check_models(body, model, context):
+def check_models(body, model, context, efforts):
     entries = [m for m in body.get("data", []) if m.get("id") == model]
     if len(entries) != 1:
         raise RuntimeError(f"/v1/models does not list {model} once: {body!r}")
-    if entries[0].get("context_length") != context:
-        raise RuntimeError(f"/v1/models reports context_length {entries[0].get('context_length')!r}, not {context}")
-    if not entries[0].get("reasoning", {}).get("supported_efforts"):
-        raise RuntimeError(f"/v1/models reports no reasoning efforts: {entries[0]!r}")
+    entry = entries[0]
+    if entry.get("owned_by") != "tensorfold":
+        raise RuntimeError(f"/v1/models reports owned_by {entry.get('owned_by')!r}, not tensorfold")
+    for field in ("context_length", "max_model_len"):
+        if entry.get(field) != context:
+            raise RuntimeError(f"/v1/models reports {field} {entry.get(field)!r}, not {context}")
+    if entry.get("reasoning", {}).get("supported_efforts") != efforts:
+        raise RuntimeError(f"/v1/models reports efforts {entry.get('reasoning', {}).get('supported_efforts')!r}, not {efforts}")
+
+
+def check_renders(listed, others, aliases):
+    """Each listed effort renders its own prompt, and each other effort name renders as the level it maps to."""
+    if len({tuple(ids) for ids in listed.values()}) != len(listed):
+        raise RuntimeError(f"Listed efforts share a rendered prompt: {sorted(listed)}")
+    for alias, level in aliases.items():
+        if others[alias] != listed[level]:
+            raise RuntimeError(f"Effort {alias} does not render as {level}")
 
 
 def chat(url, body):
@@ -51,12 +64,24 @@ def main():
     parser.add_argument("--model", required=True)
     parser.add_argument("--lanes", type=int, default=4)
     parser.add_argument("--context", type=int, required=True)
+    parser.add_argument("--efforts", required=True, help="the listed efforts, comma-separated, in order")
+    parser.add_argument("--aliases", default="", help="other effort names and the level each maps to: name=level,...")
     args = parser.parse_args()
+    efforts = args.efforts.split(",")
+    aliases = dict(pair.split("=") for pair in args.aliases.split(",") if pair)
     url = args.url.rstrip("/").removesuffix("/v1")
     before = fetch(url + "/health")
     check_health(before, args.model, args.lanes)
-    check_models(fetch(url + "/v1/models"), args.model, args.context)
+    check_models(fetch(url + "/v1/models"), args.model, args.context, efforts)
     print("TensorFold loaded health:", json.dumps(before, sort_keys=True), flush=True)
+
+    def render(effort):
+        return fetch(url + "/tokenize", {"model": args.model, "messages": [{"role": "user", "content": "Hi"}],
+                                         "reasoning_effort": effort})["tokens"]
+
+    renders = {effort: render(effort) for effort in efforts}
+    check_renders(renders, {alias: render(alias) for alias in aliases}, aliases)
+    print("TensorFold effort renders:", json.dumps({effort: len(ids) for effort, ids in renders.items()}), flush=True)
 
     def smoke(lane):
         started = time.monotonic()

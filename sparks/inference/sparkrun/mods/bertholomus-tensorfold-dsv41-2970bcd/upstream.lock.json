@@ -9,10 +9,11 @@
     "patches/0002-call-gate.patch": "MiaAI-Lab/DeepSeek-v4.1-Flash-1017-2x-DGX-Sparks@ef6a308b zig/patches/0004-call-gate.patch",
     "patches/0003-rdma-idle-nap.patch": "MiaAI-Lab/DeepSeek-v4.1-Flash-1017-2x-DGX-Sparks@a22ca693 zig/patches/0010-rdma-idle-nap.patch",
     "patches/0004-literal-added-tokens.patch": "bertholomus/TensorFold#36@c2c05641",
-    "patches/0005-deepseek-efforts.patch": "this lab: DeepSeek's own efforts (low, high, max) and nearest-level coercion of other names"
+    "patches/0005-deepseek-efforts.patch": "this lab: DeepSeek's own efforts (low, high, max) and nearest-level coercion of other names",
+    "patches/0006-literal-object-keys.patch": "this lab: 0004 also keeps a quoted added token in a JSON object key as text"
   },
-  "image": "dsv41-tf:2970bcd-4691715-c11206882da2",
-  "image_id": "sha256:be8d19b23d755309321d5d028558807da050cb81fa6f723e6697cd7f43e70c35",
+  "image": "dsv41-tf:2970bcd-4691715-e1c6ebe02e2a",
+  "image_id": "sha256:pending-build",
   "kit": {
     "repository": "bertholomus/DeepSeek-V4.1-Flash-TensorFold-TP2-2xGB10",
     "revision": "4996441a82d95b9a7853b01a1255e1dafc926387",
@@ -38,7 +39,7 @@
     "patches/0004-literal-added-tokens.patch": "69d2becbccee30bf1b0afe08aecfa70fc446dfdeb62e66ae7aa43dde0ee46da3",
     "patches/0005-deepseek-efforts.patch": "9919fd90be8e460a0511e510272caf7f12e77ce0dc3889f85a5741f6183e3c75",
     "prepare.py": "557c49eb893f1d6350f021687e511fc24acd04c85761f9de5c8ec02baf53ad2b",
-    "readiness.py": "59314472ab547b337b397fac27b12ddb012cf5149ccd7ed82b49c64c6bf82544",
+    "readiness.py": "b4232a40a8265df4a7abe637520ede7f4780531a4a692cb67b8064fda2ca12b8",
     "run.sh": "13cadb4263230f16deeac086c579e29212c8c5853170b9512a7c9f084d114722",
     "serve.py": "cf0cdeac3dd628b91a24ef3ca8f53123055732a0ba110d49c95a46f4922adce7"
   }

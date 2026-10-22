@@ -771,7 +771,7 @@ Two profiles serve [`deepseek-ai/DeepSeek-V4.1-Flash-1017`](https://huggingface.
 
 | Profile | Engine | Window | State |
 | --- | --- | --- | --- |
-| `dsv41-1017-exl3-tp2-bth-tf-2970bcd-libertai-512k` | `2970bcd` with five patches | 524,288 | Built; not yet launched (#942) |
+| `dsv41-1017-exl3-tp2-bth-tf-2970bcd-libertai-512k` | `2970bcd` with six patches | 524,288 | Built; not yet launched (#942) |
 | `dsv41-1017-exl3-tp2-bth-tf-6366d2c-libertai-1m` | `6366d2c` with three patches | 1,048,576 | Serving since October 21; the rollback until the refresh is qualified |
 
 Rank 0 runs `tensorfold-native serve` with the OpenAI and Anthropic routes; rank 1 runs `tf-dsv41-lanes`. Settings: four streams, a 32,768-token reply budget, thinking on, temperature 1.0, top-p 0.95, top-k 20, DSpark drafts, CUDA graphs and the Engram read-ahead. The ranks link over rail 0 of the CX7 cable (`DSV41_TP_MASTER`), not the management network SparkRun's rendezvous address uses, and gather over both rails with RDMA on the devices and GID index SparkRun detects. The rank-1 pool equals the window.
@@ -784,13 +784,14 @@ Each profile's mod ([`2970bcd`](mods/bertholomus-tensorfold-dsv41-2970bcd/), [`6
 | `0002-call-gate.patch` | [Mia's 1017 recipe](https://github.com/MiaAI-Lab/DeepSeek-v4.1-Flash-1017-2x-DGX-Sparks), `zig/patches/0004-call-gate.patch` | `tool_choice` `"required"` and named functions force a call |
 | `0003-rdma-idle-nap.patch` | Mia's recipe at [`a22ca69`](https://github.com/MiaAI-Lab/DeepSeek-v4.1-Flash-1017-2x-DGX-Sparks/commit/a22ca693c965179923a8593ab34b72d7e065cc8b), `zig/patches/0010-rdma-idle-nap.patch` | The RDMA gather's proxy sleeps 100 µs between looks after 2 s idle instead of spinning a core on each rank; a nap of 0 or above 1,000,000 µs is refused |
 | `0004-literal-added-tokens.patch` | [bertholomus/TensorFold#36](https://github.com/bertholomus/TensorFold/pull/36) at `c2c05641` | An added token a client quotes in a chat request, a tool result or a tool description is encoded as text; tokens the template writes stay control tokens |
-| `0005-deepseek-efforts.patch` | This lab | The engine's efforts are DeepSeek's own `low` = 50, `high` = 75 and `max` = 100, and any other effort name goes to the nearest of them |
+| `0005-deepseek-efforts.patch` | This lab | The engine's efforts are DeepSeek's own `max` = 100, `high` = 75 and `low` = 50, and any other effort name goes to the nearest of them |
+| `0006-literal-object-keys.patch` | This lab | `0004` also covers JSON object keys, such as a tool's parameter names and a tool call's argument names |
 
 The `6366d2c` mod carries the first three, with the earlier RDMA nap from Mia's [PR #26](https://github.com/MiaAI-Lab/DeepSeek-v4.1-Flash-1017-2x-DGX-Sparks/pull/26), which takes a nap of 0 as 1 µs.
 
-**Reasoning efforts.** DeepSeek's encoder (`encoding/encoding.py` in the checkpoint) names `low`, `high` and `max` and renders the chosen one as `Reasoning Effort: N` before the first turn when thinking; non-thinking is a separate mode. With `0005`, `/v1/models` lists `low`, `high`, `max` and `none`, and a request's other names are taken to the nearest listed level with ties going higher: `minimal` to `low`, `medium` to `high` and `xhigh` to `max`. `none` turns thinking off, and a request without an effort hears the template's default, `high`. The `6366d2c` engine instead lists seven levels, three of them its own numbers between DeepSeek's (`minimal` = 25, `medium` = 62, `xhigh` = 88).
+**Reasoning efforts.** DeepSeek's encoder (`encoding/encoding.py` in the checkpoint) names `low`, `high` and `max` and renders the chosen one as `Reasoning Effort: N` before the first turn when thinking; non-thinking is a separate mode. With `0005`, `/v1/models` lists `max`, `high`, `low` and `none`, highest first, and a request's other names are taken to the nearest listed level with ties going higher: `minimal` to `low`, `medium` to `high` and `xhigh` to `max`. A request's `none` turns thinking off unless the same request switches thinking on explicitly, with `chat_template_kwargs.enable_thinking` or the Anthropic `thinking` field; a request without an effort hears the template's default, `high`. The readiness hook checks the list in that order and renders each level and each mapped name through `/tokenize`. The `6366d2c` engine instead lists seven levels, three of them its own numbers between DeepSeek's (`minimal` = 25, `medium` = 62, `xhigh` = 88).
 
-At launch `serve.py` links three views under `/tmp/dsv41` from the read-only snapshots: the weights with the mod's `chat_template.jinja` (a port of DeepSeek's `encoding.py`), the [kernel kit](https://huggingface.co/bertholomus/DeepSeek-V4.1-Flash-TensorFold-TP2-2xGB10/tree/4996441a82d95b9a7853b01a1255e1dafc926387) with the 1017 image routing bias made from the weights and checked against the lock, and the Engram shards with their embed-only index. It sets the engine's `oom_score_adj` to 1000 so the kernel ends the engine before anything else when host memory runs out. The readiness hook requires healthy status, four lanes and the window in `/v1/models`, then sends four concurrent replies and one tool call.
+At launch `serve.py` links three views under `/tmp/dsv41` from the read-only snapshots: the weights with the mod's `chat_template.jinja` (a port of DeepSeek's `encoding.py`), the [kernel kit](https://huggingface.co/bertholomus/DeepSeek-V4.1-Flash-TensorFold-TP2-2xGB10/tree/4996441a82d95b9a7853b01a1255e1dafc926387) with the 1017 image routing bias made from the weights and checked against the lock, and the Engram shards with their embed-only index. It sets the engine's `oom_score_adj` to 1000 so the kernel ends the engine before anything else when host memory runs out. The readiness hook requires healthy status, four lanes and the discovery fields in `/v1/models`, then sends four concurrent replies and one tool call.
 
 ### Inputs outside SparkRun's distribution
 
@@ -816,7 +817,7 @@ docker run -d --name dsv41-inputs --gpus all --network host --ipc host --ulimit 
   -e TF_DS_REPLAY=1 -e TF_DS_PREFILL_CHUNK=2048 -e TF_DS_RANK_CACHE=/inputs/tf-ds-rank -e TF_DS_RANK_CACHE_READERS=32 \
   -e TF_DS_ENGRAM=/engram -e TF_DS_TOKEN_MAP=/inputs/dsv41_token_map.json -e TF_RDMA_GID_INDEX=3 \
   -e NCCL_IB_HCA=rocep1s0f0,roceP2p1s0f0 -e NCCL_IB_GID_INDEX=3 -e NCCL_SOCKET_IFNAME=enp1s0f0np0 \
-  dsv41-tf:2970bcd-4691715-c11206882da2 /usr/local/bin/tensorfold serve "$weights" --tp 2 --rank "$RANK" \
+  dsv41-tf:2970bcd-4691715-e1c6ebe02e2a /usr/local/bin/tensorfold serve "$weights" --tp 2 --rank "$RANK" \
   --master 198.19.240.11 --host 127.0.0.1 --port 18891 --context 1048576 --vision --parallel 4 --mtp-drafts 5
 ```
 
@@ -830,7 +831,7 @@ The image is built on any linux/arm64 Docker daemon, never on a serving Spark, w
 
 ```sh
 DOCKER_CONTEXT=colima-tf-build sparks/inference/sparkrun/mods/bertholomus-tensorfold-dsv41-2970bcd/build/build.sh
-DOCKER_CONTEXT=colima-tf-build docker save dsv41-tf:2970bcd-4691715-c11206882da2 | ssh kelchm@10.32.21.31 docker load
+DOCKER_CONTEXT=colima-tf-build docker save dsv41-tf:2970bcd-4691715-e1c6ebe02e2a | ssh kelchm@10.32.21.31 docker load
 ```
 
 The recipe's `container` and the lock's `image_id` are the image ID the head reports, which is the image's config digest; Colima's containerd store shows the index digest instead. To read it before loading, `colima ssh -p tf-build -- sudo ctr -n moby images ls` gives the index digest; `ctr -n moby content get` on that lists the arm64 manifest, and that manifest's `config.digest` is the ID. The `2970bcd` build of October 21 is `sha256:be8d19b2…`, and the `6366d2c` image is `sha256:66ce7619…`. A rebuild can produce another ID; record it in both before launching.
@@ -863,7 +864,7 @@ This is the `6366d2c` profile. The hand-started containers were stopped idle at 
 
 ### Known limits
 
-- On the `6366d2c` profile, control-token spellings in request text, tool results included, become control tokens: the engine renders the template to text and encodes it with the added vocabulary ([MiaAI-Lab/DeepSeek-v4.1-Flash-1017-2x-DGX-Sparks#21](https://github.com/MiaAI-Lab/DeepSeek-v4.1-Flash-1017-2x-DGX-Sparks/issues/21)). The `2970bcd` profile's `0004` keeps them text on input; text the model writes is not covered.
+- On the `6366d2c` profile, control-token spellings in request text, tool results included, become control tokens: the engine renders the template to text and encodes it with the added vocabulary ([MiaAI-Lab/DeepSeek-v4.1-Flash-1017-2x-DGX-Sparks#21](https://github.com/MiaAI-Lab/DeepSeek-v4.1-Flash-1017-2x-DGX-Sparks/issues/21)). The `2970bcd` profile's `0004` and `0006` keep them text on input; text the model writes is not covered.
 - The prompt cache evicts kept conversations oldest first, so an agent's idle main conversation goes before finished subagents' ([#27](https://github.com/MiaAI-Lab/DeepSeek-v4.1-Flash-1017-2x-DGX-Sparks/issues/27) there).
 - The engine's piecewise prompt passes (`TF_FILL_CHUNKS`) stay off: Mia's comparable interleave starved several queued long prompts ([#18](https://github.com/MiaAI-Lab/DeepSeek-v4.1-Flash-1017-2x-DGX-Sparks/issues/18) there), and a long prompt pass holds other streams' tokens until it finishes. The `2970bcd` engine's opt-in `TF_DS_SOLO_OVERHEAD` and `TF_DS_NO_COPIES` also stay off until measured here.
 - The `6366d2c` profile's window is configured at 1,048,576 tokens and qualified here only to about 154K. The head keeps about 6 GiB available with the model loaded; Mia reports 512K as the practical limit for a head like this one and found a needle at 479,012 tokens in a 524,288 window, which the `2970bcd` profile configures; that window is qualified at its launch (#942). No memory watchdog runs.
