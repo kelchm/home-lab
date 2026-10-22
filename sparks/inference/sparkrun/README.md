@@ -851,6 +851,18 @@ sparkrun stop "$dsv41" --cluster sparks
 
 The `6366d2c` profile is the rollback until the refresh is qualified; its image stays on the head until then. After it, the Qwen [discovery profile](#model-discovery-variant) is the rollback.
 
+To switch from the `6366d2c` profile, stop it first and load the new image only then, so the 37 GB load never runs beside a serving engine on the head's unified memory:
+
+```sh
+old="$PWD/bertholomus-tensorfold-dsv41-tp2/dsv41-1017-exl3-tp2-bth-tf-6366d2c-libertai-1m.yaml"
+sparkrun stop "$old" --cluster sparks
+ssh 10.32.21.32 'nvidia-smi --query-compute-apps=pid --format=csv,noheader'; nvidia-smi --query-compute-apps=pid --format=csv,noheader  # both empty
+# On the workstation: DOCKER_CONTEXT=colima-tf-build docker save dsv41-tf:2970bcd-4691715-e1c6ebe02e2a | ssh kelchm@10.32.21.31 docker load
+docker image inspect --format '{{.Id}}' dsv41-tf:2970bcd-4691715-e1c6ebe02e2a  # the recipe's container
+```
+
+Then launch the new profile as above. To roll back, stop it and `sparkrun run "$old"` with the same flags; the shared readiness gate does not apply to the `6366d2c` profile, which keeps its own hook.
+
 ### October 21 launch
 
 This is the `6366d2c` profile. The hand-started containers were stopped idle at 17:05:11 UTC with nothing in flight, and SparkRun's launch returned 73 s later with the readiness hook passed; the API was down for about 85 s. Rank 0 read its 95.1 GiB of expert entries in 8.6 s and rank 1 loaded in 24.0 s; rank 0 logged RDMA to rank 1 on both rails at GID index 3, and the ranks' link ran between `198.19.240.11:25000` and `198.19.240.12`. `up{job="spark-inference"}` reported the model with SparkRun's labels within a minute.
