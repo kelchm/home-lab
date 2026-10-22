@@ -19,7 +19,7 @@ TOOLS = [{"type": "function", "function": {"name": "write_payload",
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--url", default="http://127.0.0.1:8888/v1")
-    parser.add_argument("--model", default="GLM-5.3-Flash-EXL3")
+    parser.add_argument("--model", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--tokenizer", type=Path, required=True)
     args = parser.parse_args()

@@ -5,61 +5,59 @@ These recipes serve one model at a time across the two DGX Sparks at `http://10.
 | Model | Engine | Profiles | Work |
 | --- | --- | --- | --- |
 | [GLM-5.3-Flash](#glm-53-flash-on-mias-tensorfold-kit) | Mia's TensorFold kit, on TensorFold 0.6.0's Python CUDA engine | `mia-tensorfold-glm53-exl3-tp2/` | [#941](https://github.com/kelchm/home-lab/issues/941) |
-| [Qwen3.8-Flash-Next](#qwen38-flash-next-on-mias-zig-engine-kit) | Mia's Zig-engine kit v1.1 | `mia-tensorfold-qwen38fn-tp2/` | [#940](https://github.com/kelchm/home-lab/issues/940) |
+| [Qwen3.8-Flash-Next](#qwen38-flash-next-on-mias-zig-engine-kit) | Mia's Zig-engine kit v1.1, with a rebuilt server | `mia-tensorfold-qwen38fn-tp2/` | [#940](https://github.com/kelchm/home-lab/issues/940) |
 | [DeepSeek-V4.1-Flash-1017](#deepseek-v41-flash-1017-on-bertholomuss-zig-engine) | bertholomus's fork of TensorFold's Zig engine | `bertholomus-tensorfold-dsv41-tp2/` | [#942](https://github.com/kelchm/home-lab/issues/942) |
 
-Every profile follows the contract in [#943](https://github.com/kelchm/home-lab/issues/943): the same endpoint and `/v1/models` fields, one shared readiness gate, one runtime adapter, and pinned mods. [Deploy](#deploy) covers the shared parts and [Operate and roll back](#operate-and-roll-back) the checks before any launch. Each model's section has the same parts: current profile, inputs outside SparkRun, build, launch, stop and roll back, and known limits. Trial records belong in each model's issue. The records of the retired GLM profiles (v1.2 to v1.8, the W20 engine and Mia's vLLM recipe), their September and October comparisons and the October 8 GLM v1.10 trial remain in [this runbook at `bc3fa9ad`](https://github.com/kelchm/home-lab/blob/bc3fa9ad32d1bf29fdba48f8abaf6429531f903b/sparks/inference/sparkrun/README.md).
+Every profile follows the contract in [#943](https://github.com/kelchm/home-lab/issues/943): the same endpoint and `/v1/models` fields, one shared readiness gate, one runtime adapter, and pinned mods. [Deploy](#deploy) covers the shared parts and [Operate and roll back](#operate-and-roll-back) the checks before any launch. Each model's section has the same parts: current profile, inputs outside SparkRun, build, launch, stop and roll back, and known limits. Trial records belong in each model's issue. Records of retired profiles stay in Git history:
+
+- [this runbook at `bc3fa9ad`](https://github.com/kelchm/home-lab/blob/bc3fa9ad32d1bf29fdba48f8abaf6429531f903b/sparks/inference/sparkrun/README.md) has GLM v1.2 to v1.8, the W20 engine and Mia's vLLM recipe, their September and October comparisons, and the October 8 GLM v1.10 trial;
+- [this runbook at `ed23c952`](https://github.com/kelchm/home-lab/blob/ed23c95284a51fb012cd298e330765f79b356d0c/sparks/inference/sparkrun/README.md) has GLM v1.10, Qwen's v1.1 and INT4-AR profiles and DeepSeek `6366d2c`, with Qwen's trials from October 8 to 22 and DeepSeek's launches of October 21 and 22.
 
 ## GLM-5.3-Flash on Mia's TensorFold kit
 
-`mia-tensorfold-glm53-exl3-tp2/` holds two profiles of [Mia's two-Spark GLM kit](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold): TensorFold 0.6.0's Python CUDA engine with Mia's patches, serving Mia's 4 bpw EXL3 checkpoint across both Sparks. v1.10 last served from 16:07 EDT on October 8 until the Qwen trial that evening. `3fd60dfc` is meant to replace it ([#941](https://github.com/kelchm/home-lab/issues/941)) and has not booted.
+`mia-tensorfold-glm53-exl3-tp2/` holds the profile for [Mia's two-Spark GLM kit](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold): TensorFold 0.6.0's Python CUDA engine with Mia's patches, serving Mia's 4 bpw EXL3 checkpoint across both Sparks. It replaced the kit's v1.10 release after [#941's comparison on October 22](https://github.com/kelchm/home-lab/issues/941#issuecomment-6334247435), in which the same 48 requests gave identical replies on both, at the same speed. GLM last served day to day on October 8, on v1.10.
 
 ### Current profile
 
-| Profile | Kit | Image | Served name | State |
-| --- | --- | --- | --- | --- |
-| `glm53-exl3-tp2-mia-tf-v1.10-mia-1m` | v1.10, [`549fdc56`](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold/blob/549fdc562c477d477244d2df0590d6c14bda4889/CHANGELOG.md), 96 patches | `bc34d7d6…`, config `a24e8b6f…` | `GLM-5.3-Flash-EXL3` | Served October 8; the GLM rollback |
-| `glm53-exl3-tp2-mia-tf-3fd60dfc-mia-1m` | `main` at [`3fd60dfc`](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold/commit/3fd60dfc836fab0f1ed0fd4f0afaf2a1d62b2aab), October 12, 107 patches | `14b5072e…`, config `9b007193…` | `GLM-5.3-Flash` | Not booted; replaces v1.10 once it passes #941's comparison |
+| Profile | Kit | Image | Served name |
+| --- | --- | --- | --- |
+| `glm53-exl3-tp2-mia-tf-3fd60dfc-mia-1m` | `main` at [`3fd60dfc`](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold/commit/3fd60dfc836fab0f1ed0fd4f0afaf2a1d62b2aab), October 12, 107 patches | `14b5072e…`, config `9b007193…` | `GLM-5.3-Flash` |
 
-Both kits patch the same engine commit, `c4646171`, and there is no numbered kit release after v1.10. The images are ARM64 and labelled with the kit's patch hash, `tf.patches=a1897d591f70` and `e66c657a433d`. The patched files in each image match a reconstruction of the engine plus the kit's patches byte for byte, for every file its mod guards or reads.
-
-Both profiles share:
+The kit patches engine commit `c4646171` and has no numbered release after v1.10. The image is ARM64 and labelled with the kit's patch hash, `tf.patches=e66c657a433d`. Its patched files match a reconstruction of the engine plus the kit's patches byte for byte, for every file the mod guards or reads.
 
 - **Weights:** [Mia's 4 bpw TensorFold checkpoint](https://huggingface.co/Mia-AiLab/GLM-5.3-Flash-EXL3-4bpw-TensorFold/tree/078455ffe6472f9a52fbc1139f58b9db2881b25c) at `078455ff`, 83 shards and 175,642,267,944 bytes, and the DFlash2 drafter `incoai/GLM-5.3-Flash-DFlash2` at `bf582e4e`, 2,342,169,800 bytes.
-- **Serving:** a 1,048,576-token window per request and a 32,768-token reply budget, four streams sharing one FP8 KV pool, and thinking and vision on. The engine sizes the pool from the memory free at startup, inside the kit's 14.5 GiB memory reserve and 12.5 GiB kept-prompt cap. v1.10's October 8 boot loaded 2,265,088 tokens; readiness requires at least 1.2M, room for four 262,144-token prompts plus their replies.
-- **Launcher settings:** SparkRun never runs the kit's `start.sh`, and the engine's built-in defaults differ from it, so each recipe states every variable the kit's [`scripts/config.sh`](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold/blob/3fd60dfc836fab0f1ed0fd4f0afaf2a1d62b2aab/scripts/config.sh) exports in a clean environment: 38 for v1.10 and 39 for `3fd60dfc`. Each mod's lock records them as `launcher_env`, and the tests compare recipe and lock.
-- **Site guards:** reasoning is restored only by the server's original call IDs, and a failed decoder or dead scheduler thread answers `/health` with HTTP 503 and `ok: false`. Each mod checks every guarded file's upstream hash before changing it, so it refuses guarded files that differ from the ones it was written for. That is not an image check: the guarded files are identical in both images, so the recipe's image pin is what pairs a recipe with its image. Clients that renumber or omit call IDs must keep their own reasoning.
+- **Serving:** a 1,048,576-token window per request and a 32,768-token reply budget, four streams sharing one FP8 KV pool, and thinking and vision on. The engine sizes the pool from the memory free at startup, inside the kit's 14.5 GiB memory reserve and 12.5 GiB kept-prompt cap; on October 22 it loaded 2,330,624 tokens. Readiness requires at least 1.2M, room for four 262,144-token prompts plus their replies. `TF_GLM_FILL_ROWS=2048` makes a fill's chunk the whole prompt chunk. Several of the kit's CUDA attention changes target three Sparks; the kit keeps the two-Spark 32-head path on Triton.
+- **Launcher settings:** SparkRun never runs the kit's `start.sh`, and the engine's built-in defaults differ from it, so the recipe states all 39 variables the kit's [`scripts/config.sh`](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold/blob/3fd60dfc836fab0f1ed0fd4f0afaf2a1d62b2aab/scripts/config.sh) exports in a clean environment. The mod's lock records them as `launcher_env`, and the tests compare recipe and lock.
+- **Site guards:** the mod patches three behaviours into the installed engine.
+  - Reasoning is restored only by the server's original call IDs. Clients that renumber or omit call IDs must keep their own reasoning.
+  - A failed decoder or dead scheduler thread answers `/health` with HTTP 503 and `ok: false`.
+  - `/v1/models` reports `owned_by: tensorfold`, the window as `context_length` and `max_model_len`, and `reasoning` with the thinking default and the levels `max`, `high`, `low` and `none`. The template defines `low` and `high` and renders anything else as `max`; the server maps `minimal` to `low`, `medium` to `high` and `xhigh` to `max`, and `none` turns thinking off.
 
-What `3fd60dfc` changes against v1.10:
+  The mod checks every guarded file's upstream hash before changing it, so it refuses files that differ from the ones it was written for. That is not an image check: the recipe's image pin pairs the recipe with its image.
+- **Mod:** the rank launcher installs as `/usr/local/bin/tensorfold-entrypoint` and gives the engine `oom_score_adj` 1000. Readiness is the [shared gate](#enable-tensorfold-in-sparkrun), with the 1.2M pool floor and a C4 shape warmup at 128, 4,096 and 16,384 words.
 
-- **Engine:** eleven patches, `0098` to `0108`, speed up prompt processing, and the launcher adds `TF_GLM_FILL_ROWS=2048`, so a fill's chunk is the whole prompt chunk. Several of the CUDA attention changes target three Sparks; the kit keeps the two-Spark 32-head path on Triton.
-- **Discovery:** a third site guard makes `/v1/models` report `owned_by: tensorfold`, the window as `context_length` and `max_model_len`, and `reasoning` with the thinking default and the levels `max`, `high`, `low` and `none`. The template defines `low` and `high` and renders anything else as `max`; the server maps `minimal` to `low`, `medium` to `high` and `xhigh` to `max`, and `none` turns thinking off.
-- **Served name:** `GLM-5.3-Flash`, without the `-EXL3` suffix, like the other models' names.
-- **Rendezvous:** the ranks meet on `FABRIC_MASTER`, the head's CX7 address, as the kit's launcher does, and fall back to SparkRun's management address only when the adapter has no fabric address.
-- **Mod:** the rank launcher installs as `/usr/local/bin/tensorfold-entrypoint` and gives the engine `oom_score_adj` 1000. Readiness is the [shared gate](#enable-tensorfold-in-sparkrun), with the 1.2M pool floor and the C4 shape warmup at 128, 4,096 and 16,384 words that v1.10's own hook runs.
-
-How both profiles differ from the kit's own launch:
+How the profile differs from the kit's own launch:
 
 - **No `start.sh`:** its preflight, memory warning and smoke test do not run, and neither do its recoveries: the retry with a smaller window when the requested one does not fit, and the `SPLIT=0` retry after a first NCCL connection failure ([upstream #36](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold/issues/36)). Either failure ends the launch here.
 - **No rail test:** `start.sh` pings each RoCE rail at full size in both directions and drops a rail that does not answer. SparkRun passes every RDMA device whose port is active to NCCL, and the engine pairs the two ranks' devices by list position, so the [rail check](#before-a-launch) runs by hand first and a failure holds the launch.
 - **Rank command:** the kit's serve flags plus `--backend cuda` and `--no-update-check`.
-- **Fabric:** the ranks meet on SparkRun's `MASTER_PORT`, where the kit uses port 29551; v1.10's meet on the head's management address. NCCL's collectives run over RoCE on both rails, with the devices and GID index SparkRun detects.
+- **Fabric:** the ranks meet on `FABRIC_MASTER`, the head's CX7 address, as the kit's launcher does, but on SparkRun's `MASTER_PORT` where the kit uses port 29551. They fall back to SparkRun's management address only when the adapter has no fabric address. NCCL's collectives run over RoCE on both rails, with the devices and GID index SparkRun detects.
 - **Container:** SparkRun clears the image entrypoint and adds `--user root`, `no-new-privileges` and an open-file limit. Both ranks use host IPC and networking, all GPUs, `/dev/infiniband`, `IPC_LOCK`, unlimited locked memory and a 64 MiB stack.
-- **Caches:** weights mount at `/cache/huggingface`, and compiled kernels go to SparkRun's image-keyed `/cache/runtime`, so each image's first boot compiles from empty.
+- **Caches:** weights mount at `/cache/huggingface`, and compiled kernels go to SparkRun's image-keyed `/cache/runtime`, so a new image's first boot compiles from empty. This image's first boot took 460 s on October 22.
 
 ### Inputs outside SparkRun
 
-None. Mia publishes each image by digest, and SparkRun fetches the image and both snapshots and copies them to the worker. On October 8 both snapshots and v1.10's image were on both hosts; `3fd60dfc`'s image has not been fetched. Stage weights in the head's home cache before a switch, as [Deploy](#deploy) describes.
+None. Mia publishes the image by digest, and SparkRun fetches the image and both snapshots and copies them to the worker. All three were on both hosts after the October 22 comparison. Stage weights in the head's home cache before a switch, as [Deploy](#deploy) describes.
 
 ### Build
 
-Nothing is built here. For a new kit revision, check the published image before pinning it, as both profiles were checked:
+Nothing is built here. For a new kit revision, check the published image before pinning it, as this one was checked:
 
 1. Evaluate the kit's `scripts/config.sh` in a clean environment, with no `scripts/local.sh` or `.env`, for the recipe's settings and the lock's `launcher_env`.
 2. Apply the kit's patches to the pinned engine commit with `patch -p0`, check that they hash with the kit's extras line to the image's `tf.patches` label, and compare the image's patched-files layer with the reconstruction, at least for every file the mod guards or reads.
 3. Add a new versioned recipe and mod with the new image, upstream hashes and guarded hashes, so the current profile stays as the rollback.
 
-Before any live check, run the source regressions against the installed code inside each rank's container: the [Mia regression](tests/mia_tensorfold_site.py) for call-ID reasoning and HTTP health, the [capacity regression](tests/mia_tensorfold_capacity.py) for the queue cap and HTTP 429, and on v1.10 the [v1.10 regression](tests/mia_tensorfold_v110.py) for its launcher switches, streamed admission and Anthropic route. Feed each one unchanged to the rank's own Python, from the head for rank 0 and the worker for rank 1: `docker exec -i -e PYTHONDONTWRITEBYTECODE=1 <rank container> python3 -B - < tests/mia_tensorfold_site.py`. They use mocked handlers and decoders, so they are source evidence, not live traffic.
+Before any live check, run the source regressions against the installed code inside each rank's container: the [Mia regression](tests/mia_tensorfold_site.py) for call-ID reasoning and HTTP health, and the [capacity regression](tests/mia_tensorfold_capacity.py) for the queue cap and HTTP 429. Feed each one unchanged to the rank's own Python, from the head for rank 0 and the worker for rank 1: `docker exec -i -e PYTHONDONTWRITEBYTECODE=1 <rank container> python3 -B - < tests/mia_tensorfold_site.py`. They use mocked handlers and decoders, so they are source evidence, not live traffic.
 
 ### Launch, stop and roll back
 
@@ -76,121 +74,55 @@ sparkrun logs "$glm" --cluster sparks --all-sources
 sparkrun stop "$glm" --cluster sparks
 ```
 
-v1.10 is `glm53-exl3-tp2-mia-tf-v1.10-mia-1m.yaml`, with `mods/mia-tensorfold-v1.10`. `run --no-follow` returns after the readiness hook passes: four streams, the window, at least 1.2M pool tokens and the C4 shape warmup, and for `3fd60dfc` also the discovery fields, the four levels and their renders, a reply on every stream and a tool call. v1.10's October 8 boot took 349 s with the weights in place.
+`run --no-follow` returns after the readiness hook passes: four streams, the window, at least 1.2M pool tokens, the C4 shape warmup, the discovery fields, the four levels and their renders, a reply on every stream and a tool call.
 
 After a boot, run the shared checks in [Validate](#validate) and three for GLM: the [cut-call probe](tests/mia_tensorfold_cut_calls.py), which cuts a real tool call at its output limit and needs `--model`, `--output` and the pinned `tokenizer.json` as `--tokenizer`. It imports `tokenizers`, which the head's Python lacks, so run it from the workstation with `--url http://10.32.21.31:8888/v1`; a `/v1/messages` tool turn; and a request with a chunked body. The repository has no script for the last two.
 
-The rollback from `3fd60dfc` is v1.10: stop `3fd60dfc` with its own recipe, then launch v1.10 the same way. The two differ in image and served name, so neither recipe's `stop` or `logs` finds the other's instance, and each image has its own kernel cache. A client with a fixed `GLM-5.3-Flash-EXL3` entry needs the new name; clients that read `/v1/models` follow it.
+To roll back, stop it with its own recipe and launch the profile that served before, as [Operate and roll back](#operate-and-roll-back) describes.
 
 ### Known limits
 
-- **Measured on v1.10 only, on October 8:** the boot's lowest `MemAvailable` was 8.80 GiB on the head and 7.50 GiB on the worker. A finite 44-minute study completed 124 of 124 latency requests, including a 562,572-token prompt, with minima of 7.30 and 9.41 GiB, below the 8 GiB goal on the head. One four-stream batch stalled for 29 s around a worker management-link drop, unexplained.
-- **Not established:** four long sessions growing together, a retrieval near 1M, full 32k replies, coding and quantization quality, stability beyond that study, and any speed comparison between v1.10 and `3fd60dfc`. #941's comparison measures what it can of these.
-- **Rank coordination over the management network:** v1.10's rendezvous, and on both profiles some of NCCL's socket traffic, use the head's management address, and the worker's management link drops for seconds at a time ([#649](https://github.com/kelchm/home-lab/issues/649)).
+- **Measured once, on October 22:** a 500K needle was found, four 128K sessions completed together, and the lowest `MemAvailable` was 6.61 GiB on the head and 8.42 GiB on the worker. That is below the 8 GiB goal on the head and well above the 2 GiB stop line.
+- **Not established:** four long sessions growing together past 128K, retrieval near 1M, full 32k replies, coding and quantization quality, and stability beyond that trial.
+- **NCCL sockets on the management network:** SparkRun sets NCCL's socket interface to the management network, so some of NCCL's socket traffic crosses the worker's management link, which has dropped for seconds at a time ([#649](https://github.com/kelchm/home-lab/issues/649)).
 - **Open kit reports** of memory growth and hangs under long multi-agent load: [#143](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold/issues/143), [#154](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold/issues/154), [#163](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold/issues/163) and [#197](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold/issues/197).
 - **Admission:** requests past the four streams queue without limit, because `TF_GLM_MAX_QUEUED` is empty.
 - **Access and memory:** the endpoint has no API key, and no memory watchdog runs ([#944](https://github.com/kelchm/home-lab/issues/944)).
 
 ## Qwen3.8-Flash-Next on Mia's Zig-engine kit
 
-The `mia-tensorfold-qwen38fn-tp2/` directory holds two profiles for Mia's [Qwen3.8-Flash-Next two-Spark kit](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/blob/be3ed857ab1055ca47b36134d22691f00f2bb94a/README.md), v1.1 of October 8. They are a different model, engine and API name from the GLM profiles above, not an upgrade of them: the kit serves text through TensorFold's Zig engine, `tensorfold-native`; a Python helper on rank 0 decodes pictures and video and runs the checkpoint's vision tower on the GPU. Both were staged from source and registry evidence. The NVFP4 profile booted on October 8, replacing GLM v1.10, which was stopped idle with its own recipe. The [evaluation](#october-8-nvfp4-evaluation) run against it ended with a request stalled on the two-rank control link and both engine processes gone. It was left down until the operator requested recovery at 23:11 EDT; the same pinned recipe served again after readiness and a short LAN reply passed. A [continuation](#october-9-thinking-and-agent-continuation) on October 9 ran a thinking soak, an OpenCode accounting session and the agent gate on that instance with short prompts only; the window near 1M remains unqualified. The INT4-AR profile has not booted and its weights are not on the Sparks. A third file, the [discovery profile](#discovery-profile-on-the-shared-contract), is the NVFP4 profile with a locally rebuilt server binary, on the shared contract and a 491,520-token window. It [qualified at 491,520 on October 22](#october-22-qualification) with binary `9f28a902…`. Earlier builds of its binary [served from October 13](#october-13-live-test) to October 17.
+`mia-tensorfold-qwen38fn-tp2/` holds the profile for Mia's [Qwen3.8-Flash-Next two-Spark kit](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/blob/be3ed857ab1055ca47b36134d22691f00f2bb94a/README.md), v1.1 of October 8. The kit serves text through TensorFold's Zig engine, `tensorfold-native`; a Python helper on rank 0 decodes pictures and video and runs the checkpoint's vision tower on the GPU. The profile keeps the kit's published image and replaces only `tensorfold-native`, rebuilt here with `/v1/models` discovery and community fixes for the kit's two-rank stalls and crashes. It [qualified at a 491,520-token window on October 22](https://github.com/kelchm/home-lab/issues/940#issuecomment-6343678459). Qwen last served from October 8 to 17, on the kit's own binary and then on earlier builds of this one.
 
-First NVFP4 boot, October 8: with 117/116 GiB available on head/worker, the SparkRun dry run and launch passed. The weights downloaded in 28 minutes and synchronized to both caches. The vision helper was ready in 13.7 s, inside the 120 s rendezvous gate; the ranks agreed their settings, joined NCCL and opened the RoCE all-gather on two ports; the server reported loading in 91.0 s and answered HTTP 95 s after container start. It sized 30.99 GiB of sequence memory with 10 GiB kept free, above the 26.5 GiB upstream publishes for this quant. The readiness hook passed with 16 lanes reported and all 16 smoke replies correct. Afterwards 42/45 GiB was available and both management-link carrier counters were unchanged. Rank 0 listened for rank 1 on the management address, so the control link is not on the CX7 fabric. Through the workstation's OpenCode a plain reply and a file-read tool turn both completed, the second request reusing 10,530 of 10,610 prompt tokens. This paragraph is the boot and smoke result only; the measurements made on this instance afterwards are under [October 8 NVFP4 evaluation](#october-8-nvfp4-evaluation). Log: `~/sparkrun/results/qwen38fn-v1.1/first-boot-nvfp4.log` on the head.
+### Current profile
 
-| `qwen_profile` | Weights | API model | Published single / 4 / 16-stream prose | Published KV pool |
+| Profile | Image | Server | Weights | Served name |
 | --- | --- | --- | --- | --- |
-| `qwen38fn-nvfp4-tp2-mia-tf-v1.1-nvidia-1m` | [`nvidia/Qwen3.8-Flash-Next-NVFP4`](https://huggingface.co/nvidia/Qwen3.8-Flash-Next-NVFP4/tree/fc694b54fb0174e0913e6adf86691ef85a4ead47) `fc694b54`, the full model | `Qwen3.8-Flash-Next` | 67.4 / 152.2 / 390.1 tok/s | 26.5 GiB, about 3.9M tokens |
-| `qwen38fn-int4ar-tp2-mia-tf-v1.1-azampatti-1m` | [`azampatti/Qwen3.8-Flash-Next-125B-A5B-INT4-AutoRound`](https://huggingface.co/azampatti/Qwen3.8-Flash-Next-125B-A5B-INT4-AutoRound/tree/1464274120d36a4d8fcaa934552334a7d83ce0fd) `14642741`, five routed experts a token instead of ten | `Qwen3.8-Flash-Next-INT4-AR` | 89.3 / 220.2 / 483.6 tok/s | 31.0 GiB, about 4.6M tokens |
+| `qwen38fn-nvfp4-tp2-mia-tf-v1.1-discovery-nvidia-480k` | The kit's, `e188128d…`, config `5eb5d4d3…` | `tensorfold-native` `6ae47f69…`, the kit's nine patches and six more | [`nvidia/Qwen3.8-Flash-Next-NVFP4`](https://huggingface.co/nvidia/Qwen3.8-Flash-Next-NVFP4/tree/fc694b54fb0174e0913e6adf86691ef85a4ead47) at `fc694b54` | `Qwen3.8-Flash-Next` |
 
-The rates and pools in this table are the maintainer's, measured with sparkDash on October 7; prefill is published at roughly 2,500–2,750 tok/s for NVFP4 and 2,700–3,300 for INT4-AR, measured on an earlier build with a bf16 cache at eight streams. None of it is our measurement; ours, for NVFP4 only and on unmatched prompts, are in the [evaluation](#october-8-nvfp4-evaluation). The INT4-AR card reports about 10% lower general capability than the original on its authors' harness, so the two profiles compare weights and speed together, and a choice between them needs our own quality check. Filenames follow the GLM pattern with the quantization format in place of `exl3`: model, format, topology, kit release, quantization creator and request ceiling. `metadata` records the same fields separately.
-
-Both recipes follow the pinned kit's defaults, read from [`scripts/config.sh`](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/blob/be3ed857ab1055ca47b36134d22691f00f2bb94a/scripts/config.sh) and [`start.sh`](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/blob/be3ed857ab1055ca47b36134d22691f00f2bb94a/start.sh) with no `scripts/local.sh` or `.env`: a 1,048,576-token request window through Qwen's YaRN factor 4 over the native 262,144, 16 streams, a 32,768 reply budget, thinking on, drafts from the checkpoint's own MTP head plus copy drafts, an FP8 KV cache, vision on with picture URLs off, a 10 GiB memory reserve and a 2 GiB vision workspace. The [launcher](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/blob/be3ed857ab1055ca47b36134d22691f00f2bb94a/start.sh) forwards every `TENSORFOLD_*` and `TF_FLASHNEXT_*` variable the config exports, and all ten appear in the recipe with the same values. No separate drafter model is downloaded. The FP8 cache is lossy: upstream reports 98.8% top-1 agreement with bf16 on teacher-forced replies, in exchange for a pool about 1.8–1.9 times larger.
-
-Provenance, checked without a GPU:
-
-- Kit commit `be3ed857` is the head of `main` and the merge that completes v1.1, whose changelog and `scripts/config.sh` pin this image. Upstream has published no tag or release. v1.0 of October 7 was staged here first and never booted; v1.1 replaces it because v1.0 could stop both ranks on a failed CUDA graph capture after about 15 minutes of many concurrent thinking requests, and refused a request whose prompt plus reply budget equalled the window. Between the two releases the launcher is unchanged and `scripts/config.sh` differs only in the image tag and digest.
-- The image is manifest `e188128d…` (config `5eb5d4d3…`, ARM64, labelled `tf.patches=f3e1300f4f62` and `tf.kernels=present`). The kit's tag `zig-db28187-f3e1300f4f62` resolves to that digest, and the kit's own image-hash function, run on the pinned checkout, gives the labelled `f3e1300f4f62`.
-- All nine patches apply to engine commit `db281878` on TensorFold's `zig-flashnext` branch with `git apply`. The image was not rebuilt or unpacked, so its contents are not compared with that source.
-- Both checkpoint revisions are public, ungated and currently the head of their repositories: 25 files and 132,734,506,847 bytes for NVFP4, 123 files and 130,836,896,655 bytes for INT4-AR. That is metadata; no tensors were read.
-- The [runtime adapter tests](tests/test_tensorfold_runtime.py) cover both profiles: recipe validation, the generated container environment, the rank command for each rank, the frozen mod and the readiness check, plus distinct runtime caches across every Mia profile, GLM and Qwen.
-
-They adapt the upstream recipe to SparkRun and do not run its launcher. What differs:
-
-- Launcher: `start.sh` and `scripts/prepare.sh` never run, so their preflight, argument check, free-memory stop, memory watch while loading, saved logs and smoke test are absent. The kit refuses to start a rank on a Spark with less than about 102 GiB `MemAvailable` at this window (about 4 GiB less for INT4-AR); here that is a manual check on both hosts before launch.
-- Rank command: [`serve.py`](mods/mia-tensorfold-qwen38fn-v1.1/serve.py) passes the kit's serve flags to `tensorfold-native`. Rank 0 listens for rank 1 on the rendezvous address, which matches SparkRun's head-first start order, on port 25000 instead of the kit's 29551. The timing is unqualified: rank 0 loads and warms the vision tower before it opens that listener and allows the helper 900 s, while SparkRun 0.3.10 waits a fixed 120 s for the port and then removes both containers. A first boot that ends with `Head node failed to become ready` while the helper is still loading is this gate, not an engine fault; upstream starts rank 1 first and has no such gate.
-- Fabric: SparkRun detects the NCCL interface, devices and GID index at launch; the kit's link detection does not run. The engine's one-shot RoCE all-gather takes its devices from `NCCL_IB_HCA` and, per upstream, leaves both ranks on NCCL when a rank cannot open RoCE. Read the rank logs on a first boot for which path is in use.
-- Container: SparkRun clears the image entrypoint, so NVIDIA's entrypoint script does not run, and adds `--user root`, `no-new-privileges` and an open-file limit. Both use host IPC and networking, all GPUs, `/dev/infiniband`, `IPC_LOCK` and unlimited locked memory.
-- Weights and caches: each host keeps its own copy in SparkRun's cache, mounted at `/cache/huggingface`; upstream's documented setup has the worker read the head's over NFS. The CUDA cache goes to SparkRun's image- and model-keyed `/cache/runtime`. The adapter's `GLM53_TF_*` variables are set, and nothing in the patched Zig source or the vision helper reads them.
-- Readiness: the [hook](mods/mia-tensorfold-qwen38fn-v1.1/readiness.py) requires `/health` to report `status: ok`, not warming, the profile's API name and 16 lanes, then sends 16 short requests at once and checks each answer. The lane count is the configured value and the server queues requests, so this shows 16 concurrent submissions complete correctly, not that 16 lanes decoded together. The Zig server's `/health` reports no context length or pool size, so the hook cannot enforce a window or a pool floor; read the pool from the rank log.
-
-What does not carry over from the GLM profiles:
-
-- The site guards. The exact-call-ID reasoning guard and the HTTP 503 health mapping patch the Python engine and have no counterpart here. This server's `/health` handler always answers `status: ok`, so SparkRun's probe and the hook see a listening server, not a healthy decoder.
-- Admission. A request is admitted when its prompt plus its whole reply budget fits beside the others and is refused otherwise, as with W20's reservations and unlike the Mia GLM kit's grow-on-decode extents. Upstream counts three full 1M conversations at once for NVFP4 and four for INT4-AR.
-- Structured outputs. A `response_format` of `json_object` or `json_schema` and the `guided_*` fields answer HTTP 400, as do `logprobs: true` and `n` other than 1, so the agent gate's structured-response case cannot pass on this server.
-- Prompt reuse for pictures. Image and video prompts are not kept, so each turn of a chat with pictures processes them again.
-- Capacity tuning. These use the published 16 streams and 10 GiB reserve, not the C4 shape and the 8 GiB headroom goal the GLM evaluation was built around.
-
-Each checkpoint is about 122–124 GiB on disk per host beside the retained GLM snapshots, and the first launch of a profile downloads and synchronizes it. Check free space under the cache on both hosts first. The image differs from every GLM profile's, so `stop` and `logs` with these files do not find a GLM instance and `run` does not check for one: stop the running profile with the recipe that launched it, confirm both GPUs are idle and both hosts have the memory above, then launch. From `~/sparkrun/recipes/glm53` on the head, with the external adapter enabled:
-
-```sh
-python3 mods/mia-tensorfold-qwen38fn-v1.1/prepare.py --check
-qwen_profile=qwen38fn-nvfp4-tp2-mia-tf-v1.1-nvidia-1m  # Or qwen38fn-int4ar-tp2-mia-tf-v1.1-azampatti-1m.
-qwen_recipe="$PWD/mia-tensorfold-qwen38fn-tp2/${qwen_profile}.yaml"
-sparkrun run "$qwen_recipe" --cluster sparks --no-auto-detect --no-sync-tuning --no-follow --dry-run
-sparkrun run "$qwen_recipe" --cluster sparks --no-auto-detect --no-sync-tuning --no-follow
-sparkrun logs "$qwen_recipe" --cluster sparks
-sparkrun stop "$qwen_recipe" --cluster sparks
-```
-
-A first boot is a memory-fit and fabric check under the same abort rules as the GLM trials before any timing counts. One transport defect is open upstream in v1.1: a long record on the two-rank control link can deadlock, found with a 262,143-token prompt ([upstream #3](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/3), fix unmerged in [PR #4](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/pull/4)), so treat a stalled long prompt as that until it is ruled out. The October 8 evaluation ended on a stall of this shape at 999,874 tokens, after 261,902 and 524,135 tokens had completed. Clients need a model entry for the profile's API name. The workstation's OpenCode `spark` provider lists both Qwen names with a 1,048,576 context and 32,000 output limit, the same endpoint and timeouts as the GLM entry below, and no reasoning variants; the configuration shown below names only GLM. The kit's own [checks](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/blob/be3ed857ab1055ca47b36134d22691f00f2bb94a/tools) (`exact.py`, `toolcheck.py`, `prompt_reuse.py`, `context_boundary.py`, `needle.py`, `long_context.py`) talk to the running server with the standard library and are the natural first gate. The first four passed against the NVFP4 instance on October 8, and the retrieval cases there reuse `long_context.py`'s needle builder and scorer. The gates in this directory default to the GLM API name and tokenizer: `acceptance.py` passed with `--model Qwen3.8-Flash-Next`, the agent gate passed its five applicable sections on [October 9](#october-9-thinking-and-agent-continuation) with the same flag and no tokenizer argument, and the long-session client has not been run against this server.
-
-### Discovery profile on the shared contract
-
-`qwen38fn-nvfp4-tp2-mia-tf-v1.1-discovery-nvidia-480k` is the profile meant to serve Qwen across both Sparks ([#940](https://github.com/kelchm/home-lab/issues/940)). It is the v1.1 NVFP4 profile with `tensorfold-native` rebuilt so `GET /v1/models` reports the window and the reasoning levels, moved onto the [#943](https://github.com/kelchm/home-lab/issues/943) contract, with a 491,520-token window. Its binary also carries the community fixes for the control-link stall, the admission exit and the prompt-cache crash, and a sampling preflight that keeps two ranks within the draws they can make ([patches](#discovery-and-fix-patches)).
-
-Two trials on October 22:
-- [Without the fixes](https://github.com/kelchm/home-lab/issues/940#issuecomment-6341022722), no window qualified: at 491,520, 393,216 and 262,144 tokens, the first long request after a boot stalled the ranks' control link, and both ranks exited.
-- [With them](#october-22-qualification), 491,520 qualified: on two fresh boots, two cold prompts of about 490K tokens each completed, the first as the first long request after the boot. The agent gate, the kit's checks and the decode replay passed too.
-
-The v1.1 profile and mod are unchanged.
-
-- **Kit and image:** v1.1 at `be3ed857` and its published image, manifest `e188128d…` and config `5eb5d4d3…`, as the v1.1 profile pins them. Only `tensorfold-native` is replaced, by the build below. [Kit revision](#kit-revision) has the case for v1.1 over `main`.
-- **Window:** 491,520 tokens, below the 503,359-token prompt that stalled the two ranks' control link on `main` in [kit issue #3](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/3). The kit's YaRN factor of 4 stays, so the engine could admit up to 1,048,576 and `--context` sets the limit. It qualified on October 22 with the fixes; the first trial, without them, found no window that passes, down to 262,144. A smaller window changes `context` and the gate's `--context` in the recipe.
-- **Rendezvous:** the ranks link on `FABRIC_MASTER`, the head's CX7 address from the adapter, and each rank logs it. `serve.py` refuses to start without it. The v1.1 profile links on the management address, where the October 8 stall happened.
+- **Serving:** the kit's defaults, read from [`scripts/config.sh`](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/blob/be3ed857ab1055ca47b36134d22691f00f2bb94a/scripts/config.sh) and [`start.sh`](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/blob/be3ed857ab1055ca47b36134d22691f00f2bb94a/start.sh) with no `scripts/local.sh` or `.env`, apart from the window. That is 16 streams, a 32,768-token reply budget, thinking on, drafts from the checkpoint's own MTP head plus copy drafts, an FP8 KV cache, vision on with picture URLs off, a 10 GiB memory reserve and a 2 GiB vision workspace. The launcher forwards every `TENSORFOLD_*` and `TF_FLASHNEXT_*` variable the config exports, and the recipe states all ten with the same values. The FP8 cache is lossy: upstream reports 98.8% top-1 agreement with bf16 on teacher-forced replies, for a pool about 1.8–1.9 times larger. No separate drafter model is downloaded.
+- **Window:** 491,520 tokens, below the 503,359-token prompt that stalled the two ranks' control link on the kit's `main` in [kit issue #3](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/3). The kit's YaRN factor of 4 stays, so the engine could admit up to 1,048,576 and `--context` sets the limit. On two fresh boots, two cold prompts of about 490K tokens each completed, the first as the first long request after the boot. Without the fixes below, [no window qualified](https://github.com/kelchm/home-lab/issues/940#issuecomment-6341022722), down to 262,144.
+- **Rendezvous:** the ranks link on `FABRIC_MASTER`, the head's CX7 address from the adapter, at SparkRun's `MASTER_PORT`, and each rank logs it. `serve.py` refuses to start without it.
 - **Mod:** `run.sh` verifies the mod and the rebuilt binary against the lock. It installs the binary as `/opt/tensorfold-mod/bin/tensorfold-native` and the rank launcher as `/usr/local/bin/tensorfold-entrypoint`, and leaves the image's own binary in place, unused. The launcher sets the engine's `oom_score_adj` to 1000 and runs the binary by its path. The engine finds its kernels and vision helper through the image's `TENSORFOLD_CUDA_KERNELS` and `TENSORFOLD_VISION_PYTHONPATH`. It links only `libc` and opens CUDA, NCCL and the verbs library by name, so moving the binary changes nothing else.
-- **Readiness:** the shared gate replaces the mod's own hook, with 16 lanes, the window and `xhigh,medium,low,none`. Its `/tokenize` check renders each level, and expects `minimal` to render as `low` and `high` and `max` as `xhigh`, as the October 13 echoes showed.
-- **Lock:** `upstream.lock.json` pins the kit, engine, image, weights (`nvidia/Qwen3.8-Flash-Next-NVFP4@fc694b54`), both patches' source commits, the build inputs and the binary.
-- **Workload:** SparkRun derives the same workload and runtime cache from this recipe as from the v1.1 one. So `stop`, `logs` and `status` with either file act on whichever is running, and the CUDA cache is shared. Tell them apart by `context_length` in `/v1/models`, or by the binary each rank runs.
-- **Tests:** [`tests/test_qwen_mia_contract.py`](tests/test_qwen_mia_contract.py) checks:
-  - the recipe against the lock and the v1.1 recipe;
-  - the gate's arguments;
-  - both rank commands, through SparkRun's fabric address;
-  - the install paths, and the frozen mod and binary;
-  - that no lab address or path is named;
-  - the expected entry, against the gate and the live check.
+- **Readiness:** the shared gate, with 16 lanes, the window and `xhigh,medium,low,none`. Its `/tokenize` check renders each level, and expects `minimal` to render as `low` and `high` and `max` as `xhigh`.
+- **Lock:** `upstream.lock.json` pins the kit, engine, image, weights, both discovery patches' source commits, the four fixes, the build inputs and the binary.
+- **Tests:** [`tests/test_qwen_mia_contract.py`](tests/test_qwen_mia_contract.py) checks the recipe against the lock, the gate's arguments, both rank commands through SparkRun's fabric address, the install paths, the frozen mod and binary, that no lab address or path is named, and the expected entry against the gate and the live check.
 
-#### Discovery and fix patches
+The server's six patches go on after the kit's nine, in file order:
 
-The [mod](mods/mia-tensorfold-qwen38fn-v1.1-discovery/) adds six patches to the kit's nine, applied in file order. The first two add discovery to the server's `status_routes.zig` and `server.zig`. Both halves are upstream TensorFold changes, released in 1.0.3 and 1.0.12, but the kit pins an engine commit that has neither, so this is a local backport until the kit moves its pin. Earlier builds of this binary [served from October 13](#october-13-live-test) until DeepSeek-V4.1-Flash-1017 replaced Qwen on October 17. They carried the upstream PR's draft, which also listed an `effort_map` that upstream dropped before merging. The build in this directory has the merged change. With the four fixes below it was `9f28a902…` when it [qualified on October 22](#october-22-qualification), and it is now `6ae47f69…`, which replaces `0015`'s whole-vocabulary refusal with a clamp, [checked on the Sparks](#october-22-clamp-check) the same day.
-
-| Patch | Source | Adds |
+| Patch | Source | Change |
 | --- | --- | --- |
-| `0010-models-context-length.patch` | [`ashhart/TensorFold@51ad073f`](https://github.com/ashhart/TensorFold/commit/51ad073feadd81d04809edf8f0822cc5380a832c), upstream PR #483, released in 1.0.3 | `context_length`, `max_model_len` |
-| `0011-models-reasoning.patch` | [`ashhart/TensorFold@60f27da0`](https://github.com/ashhart/TensorFold/commit/60f27da01cb86d076a078d3b4ae3e36c2f3b41c2), upstream PR #819, released in 1.0.12 | `reasoning` |
+| `0010-models-context-length.patch` | [`ashhart/TensorFold@51ad073f`](https://github.com/ashhart/TensorFold/commit/51ad073feadd81d04809edf8f0822cc5380a832c), upstream PR #483, released in 1.0.3 | `/v1/models` reports `context_length` and `max_model_len` |
+| `0011-models-reasoning.patch` | [`ashhart/TensorFold@60f27da0`](https://github.com/ashhart/TensorFold/commit/60f27da01cb86d076a078d3b4ae3e36c2f3b41c2), upstream PR #819, released in 1.0.12 | `/v1/models` reports `reasoning` |
+| `0012-record-notification-first.patch` | Zebro (`321sssrt-bit`), [kit PR #4](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/pull/4) at `36356337`; the same bytes in their [maintained fork](https://github.com/321sssrt-bit/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold) at `4e96a866` | Fixes [#3](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/3), the control-link stall. Rank 0 sends a record before its long payload, so rank 1 knows to drain the link. Before, rank 0 blocked writing the payload into a full link and never sent the record rank 1 was waiting for |
+| `0013-admission-agreed-before-sequence.patch` | xinlu8439, [the version for `be3ed857`](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/6#issuecomment-6166228691) | Fixes [#6](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/6), a one-rank `NoRoom` that exits both ranks. The ranks agree on admission before either makes a sequence, so a refusal fails only that request (`OtherRankFailed`) |
+| `0014-prompt-cache-evicted-kept-state.patch` | xinlu8439, [the issue's own patch](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/9) | Fixes [#9](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/9), a segfault in `endPass`. A state the store evicts in the pass that kept it is left out of rank 1's note and freed on both ranks |
+| `0015-two-ranks-sample-within-248.patch` | This lab | Fixes [#8](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/8), sampling that exits both ranks. With more than one rank, a sampled request with `top_k` off (−1 or 0) is drawn with `top_k` 248, and its `top_p` and `min_p` still cut within those candidates. A `top_k` above 248 gets HTTP 400 naming the fix: it needs more than the sampler's 256 candidates (`top_k` plus 8), and otherwise fails after admission with `TopKPastScratch` |
 
-Each is that commit's change to the source files its lock entry lists; upstream's test files, fixtures and README text are left out. To move a patch to another commit, change its `base` and `commit` in the lock, then run `prepare.py --refresh ~/Development/kelchm/TensorFold` to rewrite the patch and `build/build.sh --record` to rebuild and record the binary.
+The kit pins an engine commit with neither discovery change, so `0010` and `0011` are a local backport until the kit moves its pin. Each is that commit's change to the source files its lock entry lists, without upstream's test files, fixtures and README text. To move one to another commit, change its `base` and `commit` in the lock, then run `prepare.py --refresh ~/Development/kelchm/TensorFold` to rewrite the patch and `build/build.sh --record` to rebuild and record the binary.
 
-The other four fix the kit's two-rank defects. They are Apache-2.0 like the kit, and each is kept byte for byte as its source published it, except `0015`, which is this lab's. The lock's `site_patches` records each one's source, author, licence and sha256, and `prepare.py` refuses a copy that differs. The kit closed PR #4 and reverted PR #2 for reasons that weren't technical; [#940](https://github.com/kelchm/home-lab/issues/940) has the history.
+The four fixes are Apache-2.0 like the kit, and each is kept byte for byte as its source published it, except `0015`, which is this lab's. The lock's `site_patches` records each one's source, author, licence and sha256, and `prepare.py` refuses a copy that differs. The kit closed PR #4 and reverted PR #2 for reasons that weren't technical; [#940](https://github.com/kelchm/home-lab/issues/940) has the history. The qualification ran on binary `9f28a902…`, whose `0015` refused whole-vocabulary sampling outright. The clamp replaced that refusal and was [checked on the Sparks](https://github.com/kelchm/home-lab/issues/940#issuecomment-6344709923) the same day.
 
-| Patch | Fixes | Source | Change |
-| --- | --- | --- | --- |
-| `0012-record-notification-first.patch` | [#3](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/3), the control-link stall | Zebro (`321sssrt-bit`), [kit PR #4](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/pull/4) at `36356337`; the same bytes in their [maintained fork](https://github.com/321sssrt-bit/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold) at `4e96a866` | Rank 0 sends a record before its long payload, so rank 1 knows to drain the link. Before, rank 0 blocked writing the payload into a full link and never sent the record rank 1 was waiting for |
-| `0013-admission-agreed-before-sequence.patch` | [#6](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/6), a one-rank `NoRoom` that exits both ranks | xinlu8439, [the version for `be3ed857`](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/6#issuecomment-6166228691) | The ranks agree on admission before either makes a sequence, so a refusal fails only that request (`OtherRankFailed`) |
-| `0014-prompt-cache-evicted-kept-state.patch` | [#9](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/9), a segfault in `endPass` | xinlu8439, [the issue's own patch](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/9) | A state the store evicts in the pass that kept it is left out of rank 1's note and freed on both ranks |
-| `0015-two-ranks-sample-within-248.patch` | [#8](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/8), sampling that exits both ranks | this lab | With more than one rank, a sampled request with `top_k` off (−1 or 0) is drawn with `top_k` 248, and its `top_p` and `min_p` still cut within those candidates. A `top_k` above 248 gets HTTP 400 naming the fix: it needs more than the sampler's 256 candidates (`top_k` plus 8), and otherwise fails after admission with `TopKPastScratch` |
-
-Expected entry on this profile:
+Expected entry:
 
 ```json
 {"id": "Qwen3.8-Flash-Next", "object": "model", "created": 0, "owned_by": "tensorfold",
@@ -199,37 +131,46 @@ Expected entry on this profile:
                "supported_efforts": ["xhigh", "medium", "low", "none"]}}
 ```
 
-`created` is the time of the request. `reasoning.default_effort` appears only when the server is started with `--reasoning-effort`, which this profile does not do. The server accepts seven efforts, `none`, `minimal`, `low`, `medium`, `high`, `xhigh` and `max`, and answers one that is not in `supported_efforts` with the nearest listed level, ties going higher. The [October 13 table](#october-13-live-test) records what this model does.
+`created` is the time of the request. `reasoning.default_effort` appears only when the server is started with `--reasoning-effort`, which this profile does not do. The pinned checkpoint's `chat_template.jinja` accepts `xhigh`, `medium` and `low` and defaults to `xhigh`. The server accepts seven efforts, `none`, `minimal`, `low`, `medium`, `high`, `xhigh` and `max`, and answers one that is not in `supported_efforts` with the nearest listed level, ties going higher. Chat requests of 8 tokens with no `chat_template_kwargs` echoed these on October 13, and again on October 22:
 
-What a client must not read into these fields:
+| `reasoning_effort` sent | Echoed `reasoning_effort` | Echoed `enable_thinking` |
+| --- | --- | --- |
+| Omitted | `null` | `true` |
+| `none` | `none` | `false` |
+| `minimal` | `low` | `true` |
+| `low` | `low` | `true` |
+| `medium` | `medium` | `true` |
+| `high` | `xhigh` | `true` |
+| `xhigh` | `xhigh` | `true` |
+| `max` | `xhigh` | `true` |
 
-- `context_length` is the configured window, which #943 requires to be qualified on the Sparks. 491,520 [qualified on October 22](#october-22-qualification). A request that sets `max_tokens` is refused when the prompt plus that budget exceeds the window. Without `max_tokens`, the reply gets 32,768 tokens or the room the prompt leaves, whichever is less.
+`reasoning_effort: "none"` with `chat_template_kwargs: {"enable_thinking": true}` echoed thinking on with a null effort and produced reasoning text, so the switch wins over the effort. What a client must not read into the entry:
+
+- `context_length` is the configured window. A request that sets `max_tokens` is refused when the prompt plus that budget exceeds it. Without `max_tokens`, the reply gets 32,768 tokens or the room the prompt leaves, whichever is less.
 - The entry lists no input modalities. Vision and video on this server come from the kit's `0009-vision-python.patch`, which the discovery fields do not describe.
 - The reasoning defaults describe `/v1/chat/completions` and `/v1/responses`. Raw `/v1/completions` and Anthropic `/v1/messages` keep their own thinking defaults.
 
-#### Kit revision
+v1.1 (`be3ed857`) is pinned over the kit's `main` (`6730319`). Besides the changelog, credits and README, `main` removes `tools/context_boundary.py` and reverts v1.1's admission change ([kit PR #2](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/pull/2)) in `patches/0007-serving.patch`:
 
-v1.1 (`be3ed857`) is pinned over the kit's `main` (`6730319`):
+- On `main`, a request is refused when its prompt, `max_tokens` and the draft window together exceed `--context`. v1.1 counts only the prompt and `max_tokens`. Both size an admitted request's memory from all three; the draft window is 16 rows at the kit's depth of 15, the margin [kit issue #1](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/1) found.
+- A client that sends no `max_tokens` gets the reply budget above, so a prompt longer than the window less 32,768 fills the window exactly. At this window, `main` would refuse every such prompt from 458,737 to 491,519 tokens. v1.1 admits them, as `/v1/models` advertises.
+- The changelog gives no defect as the reason for the revert, and `main` has no published image.
 
-- **What differs.** Besides the changelog, credits and README, `main` removes `tools/context_boundary.py` and reverts v1.1's admission change ([kit PR #2](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/pull/2)) in `patches/0007-serving.patch`.
-  - On `main`, a request is refused when its prompt, `max_tokens` and the draft window together exceed `--context`. v1.1 counts only the prompt and `max_tokens`.
-  - Both size an admitted request's memory from all three. The draft window is 16 rows at the kit's depth of 15, the margin [kit issue #1](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/1) found.
-  - When a client sends no `max_tokens`, the server gives the reply 32,768 tokens or the room the prompt leaves, whichever is less. So a prompt longer than the window less 32,768 fills the window exactly, and `main` refuses it. At this window, `main` would refuse every such prompt from 458,737 to 491,519 tokens. v1.1 admits them, as `/v1/models` advertises.
-  - The changelog gives no defect as the reason for the revert.
-- **Open defects**, as reported:
-  - [#3](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/3), the control-link stall: on v1.1's candidate, on `main`, and on the v1.0 image ([comment on PR #4](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/pull/4)).
-  - [#6](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/6) and [#9](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/9): on both revisions, with a patch posted for each.
-  - [#8](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/8): on `main`.
-  - [#7](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/7): on v1.1, with long agentic prompts at the 1M window. Its reporter suspects v1.1's admission change. That change does admit the longest prompts, which `main` refuses, and so adds memory pressure. The exit is the engine's general path for a call that fails after the ranks agree, on both revisions.
-- **Evidence here.** v1.1's image is the one measured on [October 8](#october-8-nvfp4-evaluation), and it served from October 8 to 17. `main` has no published image, and the kit's own workflow builds a full one for it: an NVIDIA base, the Triton kernel set, a new image ID and an empty CUDA cache on both hosts. `main` changes only Zig source, so this mod's overlay could instead carry it on v1.1's image, with the reference check made against v1.1 before the revert goes on. The choice rests on admission and on the evidence above, not on that cost.
+How the profile differs from the kit's own launch:
 
-#### Inputs outside SparkRun
+- **Launcher:** `start.sh` and `scripts/prepare.sh` never run, so their preflight, argument check, free-memory stop, memory watch while loading, saved logs and smoke test are absent. The kit refuses to start a rank on a Spark with less than about 102 GiB `MemAvailable` at its 1M window; here that is a manual check on both hosts before launch.
+- **Rendezvous gate:** rank 0 loads and warms the vision tower before it opens its listener, and allows the helper 900 s, while SparkRun 0.3.10 waits a fixed 120 s for the port and then removes both containers. A boot that ends with `Head node failed to become ready` while the helper is still loading is this gate, not an engine fault; upstream starts rank 1 first and has no such gate.
+- **Fabric:** SparkRun detects the NCCL interface, devices and GID index at launch; the kit's link detection does not run. The engine's one-shot RoCE all-gather takes its devices from `NCCL_IB_HCA` and, per upstream, leaves both ranks on NCCL when a rank cannot open RoCE. Each rank's log says which path is in use.
+- **Container:** SparkRun clears the image entrypoint, so NVIDIA's entrypoint script does not run, and adds `--user root`, `no-new-privileges` and an open-file limit. Both ranks use host IPC and networking, all GPUs, `/dev/infiniband`, `IPC_LOCK` and unlimited locked memory.
+- **Weights and caches:** each host keeps its own copy in SparkRun's cache, mounted at `/cache/huggingface`; upstream's documented setup has the worker read the head's over NFS. The CUDA cache goes to SparkRun's image-keyed `/cache/runtime`.
+
+### Inputs outside SparkRun
 
 - **The rebuilt binary:** `out/tensorfold-native` in the mod, ignored by Git. `build/build.sh` builds it, and it goes to the head with the mod.
 - **The image:** on both Sparks on October 22, as `5eb5d4d3…`. `docker images` doesn't list it, but `docker image inspect` with the lock's `image_id` finds it. If it's missing, pull it on the head by the lock's `image`; SparkRun copies it to the worker at launch.
-- **Weights:** `nvidia/Qwen3.8-Flash-Next-NVFP4@fc694b54` in SparkRun's cache on both hosts, 25 files and 132,734,506,847 bytes each on October 22.
+- **Weights:** `nvidia/Qwen3.8-Flash-Next-NVFP4@fc694b54` in SparkRun's cache on both hosts, 25 files and 132,734,506,847 bytes each on October 22. Check free space under the cache on both hosts before a first launch.
 
-#### Build
+### Build
 
 The image is not rebuilt. [`build/build.sh`](mods/mia-tensorfold-qwen38fn-v1.1-discovery/build/build.sh) compiles `tensorfold-native` alone on any linux/arm64 Docker daemon, with no GPU, no `nvcc` and no NVIDIA base image. Its inputs are pinned:
 
@@ -246,103 +187,33 @@ Before the six patches go on, the build compiles the kit's tree as it is. It sto
 
 The result goes to the ignored `out/tensorfold-native`, and its sha256 is in the lock.
 
-This route was chosen over the kit's own image build because the recipe keeps the published image digest. SparkRun addresses a workload and keys its runtime cache by image, so the profile reuses the v1.1 profile's image, kernel set and CUDA cache on both hosts. Adding a patch to the kit's build instead changes its image hash. That means:
+This route was chosen over the kit's own image build because the recipe keeps the published image digest, and with it the image's kernel set and the CUDA cache already on both hosts. Adding a patch to the kit's build instead changes its image hash. That means:
 
 - a new 11 GiB-class image, built on the head from an NVIDIA base that is not on either Spark;
 - a Triton kernel-set compile;
 - a copy to the worker;
 - a different SparkRun workload, with an empty image-keyed cache.
 
-All of that for a change to one HTTP handler.
+All of that for changes to the Zig server alone.
 
 Checked on a workstation:
 
-- Both patches apply to engine `db281878` with the kit's nine patches applied, and regenerate byte for byte from the pinned commits.
-- On that tree the server unit tests pass, 53 and 17, including the five model-discovery tests.
+- Both discovery patches apply to engine `db281878` with the kit's nine patches applied, and regenerate byte for byte from the pinned commits.
 - The unpatched rebuild matches the published binary in every loaded section. The two files differ only in compiler-numbered symbol names in the unloaded string table.
-- The patched build takes about four minutes with that reference build. Three of four builds from an empty Docker cache produced `1713bf57…`. The fourth ran while another container shared the build VM: it had the same loaded sections and different unloaded symbol names. The lock check rejects such a file, and rebuilding gives the recorded one. On October 22, `build.sh` on Colima `tf-build` gave `1713bf57…` again, from that VM's build cache.
-- The binary carries the RoCE proxy as the published one does. The `dlopen libibverbs.so.1` path and the `ibv_*` entry-point names are in it, and the stub's `built without libibverbs headers` message is not.
-- Its only `NEEDED` library is `libc.so.6`, and it has no `RPATH` or `RUNPATH`.
-- With all six patches, on October 22: the build gave `9f28a902…`, after the reference check passed from cache. The engine's host tests (`zig build test`) passed 183 of 183, against 180 without the four fixes, and the server's (`zig/tests/server/zig_test.sh`) 56 and 17, against 53 and 17.
-- With `0015` as the clamp: the build gave `6ae47f69…`. The engine's host tests pass 184, adding a draw over a flat row at `top_k` 248, which stays within the 248 best candidates for `top_p` 0.95 and 1. The server's pass 56 and 17, including request-path tests:
+- The patched build takes about four minutes with that reference build. Three of four builds of the two discovery patches from an empty Docker cache gave the same binary. The fourth ran while another container shared the build VM: it had the same loaded sections and different unloaded symbol names. The lock check rejects such a file.
+- The binary carries the RoCE proxy as the published one does. The `dlopen libibverbs.so.1` path and the `ibv_*` entry-point names are in it, and the stub's `built without libibverbs headers` message is not. Its only `NEEDED` library is `libc.so.6`, and it has no `RPATH` or `RUNPATH`.
+- With all six patches, the engine's host tests (`zig build test`) pass 184, against 180 without the four fixes, and the server's (`zig/tests/server/zig_test.sh`) 56 and 17, against 53 and 17. The engine's tests include a draw over a flat row at `top_k` 248, which stays within the 248 best candidates for `top_p` 0.95 and 1. The server's include request-path tests:
   - with two ranks, `top_k` −1 with `top_p` 0.95, and with `top_p` 1, each reach the engine as `top_k` 248;
   - with one rank, `top_k` −1 stays off;
   - `top_k` 249 gets HTTP 400 with two ranks, while `top_k` 248 and greedy requests are served.
 
-The October 13 results below are for the two earlier builds, `3dea815d…` of draft `4612b958` and `3f22bd80…` of draft `68911640`, under the earlier 1,048,576-token recipe. The [October 22 qualification](#october-22-qualification) is for `9f28a902…`.
+### Launch, stop and roll back
 
-#### October 13 live test
-
-The first build, `3dea815d…` of draft commit `4612b958`, built from this branch's commit `c7643951`, replaced the v1.1 instance at 20:45 EDT on October 13 by the steps below. Both hosts were idle with carrier counters at 12 and 1,432, the binary printed its usage line in a throwaway container on the head, and the v1.1 instance stopped in 3 s with 116 GiB available on each host. The API was down for 118 s, from 20:45:16 to 20:47:14; the launch took 112.0 s and its readiness hook passed, including the new window check. Sequence memory was 31.67 GiB. Both ranks ran the rebuilt binary by sha256.
-
-`GET /v1/models` returned the entry expected for that draft: the one above plus `"default_max_tokens": 32768`, which the final draft dropped. `supported_efforts` matched in order. The pinned checkpoint's `chat_template.jinja` accepts `('xhigh', 'medium', 'low')` and defaults to `xhigh`, which is that list with `none` for the switch. Chat requests of 8 tokens with no `chat_template_kwargs` echoed:
-
-| `reasoning_effort` sent | Advertised | Echoed `reasoning_effort` | Echoed `enable_thinking` |
-| --- | --- | --- | --- |
-| omitted | `default_enabled: true`, no `default_effort` | `null` | `true` |
-| `none` | `none` | `none` | `false` |
-| `minimal` | `low` | `low` | `true` |
-| `low` | `low` | `low` | `true` |
-| `medium` | `medium` | `medium` | `true` |
-| `high` | `xhigh` | `xhigh` | `true` |
-| `xhigh` | `xhigh` | `xhigh` | `true` |
-| `max` | `xhigh` | `xhigh` | `true` |
-
-One case the fields do not describe: `reasoning_effort: "none"` with `chat_template_kwargs: {"enable_thinking": true}` echoed thinking on with a null effort and produced reasoning text, so the switch wins over the effort.
-
-The gates repeated from October 8 and 9 all passed: `exact.py`, with all 18 reply and token hashes equal to the October 8 run and 520 drafts accepted; `toolcheck.py` 3 of 3; `prompt_reuse.py 30000 4 --other` at 99.3% or better with a 9.82 s cold prefill of 31,557 tokens against 9.68 s; `context_boundary.py` 16 checks; `acceptance.py` with five images and a 0.140 s newcomer; and all 18 agent cases in the five applicable sections.
-
-Decode was slower. Replaying the October 8 request bodies gave 56.25 and 55.73 tok/s at one stream against 62.58 and 61.18, 129.05 at four against 137.45 and 149.82, and 276.52 and 305.15 at sixteen against 312.95 and 316.93. Both rank logs say why: `RoCE: built without libibverbs headers: no RoCE all-gather`, with NCCL carrying every gather. Replies are the same bits either way, which the equal hashes show; the cost is speed, about 10% at one stream. That build had no `infiniband/verbs.h`, and the build above now does. The instance was left serving after the checks, idle, with 39 and 42 GiB available and the carrier counters unchanged. Receipts are on the head under `~/sparkrun/results/qwen38fn-v1.1/discovery-20261013/`.
-
-The second build, `3f22bd80…` of draft `68911640` from branch commit `a4aefb8f`, replaced that instance at 00:46 EDT on October 14 by the same steps, after the same idle and link gates. The API was down for 120 s, from 00:46:50 to 00:48:50; the launch took 108.7 s and readiness passed. Both ranks ran `3f22bd80…` and logged `RoCE all-gather on 2 port(s)`, and sequence memory was 31.24 GiB. `GET /v1/models` returned the entry above plus the draft's `effort_map`, which matched the October 13 table, and no `default_max_tokens`. The eight echoes and the `none` plus `enable_thinking: true` probe gave the same results as the October 13 table. The same gates passed, with `exact.py` hashes again identical to October 8, `acceptance.py` with a 0.127 s newcomer, and all 18 agent cases. Replaying the October 8 bodies gave 61.61 and 61.43 tok/s at one stream, 137.35 at four, and 290.95 and 312.48 at sixteen, so decode is back in the October 8 range. The instance was left serving, idle, with 39 and 42 GiB available and the carrier counters unchanged. Receipts are under `~/sparkrun/results/qwen38fn-v1.1/discovery-20261014/` on the head.
-
-#### October 22 qualification
-
-The profile at `59e1a475`, binary `9f28a902…`, in a window from the #938 orchestrator. It ran under a guard on the head, with a fallback there that would have restored DeepSeek at a deadline. DeepSeek was down from 10:17:28 to 10:47:20 EDT.
-
-| Boot | Launch → gate passed | Cold long prompts (prompt tokens, server prefill) | Agent gate, five sections | `prompt_reuse 64k 6 --other` |
-| --- | --- | --- | --- | --- |
-| A | 10:17:44 → 10:19:33, HTTP after 94.6 s | 490,480 in 204.09 s, then 490,015 in 204.29 s; both needles found | 18 of 18 | every turn 99.7% resumed |
-| B | 10:30:51 → 10:32:40, HTTP after 94.5 s | 489,625 in 203.09 s, then 490,517 in 203.62 s; both needles found | 18 of 18 | every turn 99.7% resumed |
-
-The first long prompt of each boot was the first request after the shared gate, the kind that stalled every boot before the fixes. Prefill ran at about 2,400 tok/s. On boot B:
-- **Discovery:** exact at 491,520, with `xhigh, medium, low, none`. The echoes matched the October 13 table.
-- **Kit checks:** `exact.py` passed (draft and concurrent replies equal), `toolcheck.py` 3 of 3, and `context_boundary.py --context 491520` 16 checks.
-- **Decode replay of the October 8 bodies:** 62.13 and 61.82 tok/s at one stream, 138.13 at four, 309.92 and 310.06 at sixteen.
-- **The guard, live:** a request with `top_k` −1 and `top_p` 1, and one with `top_k` 249, each got HTTP 400 with its message, and the server kept serving.
-
-Both ranks ran `9f28a902…` with the control link on `FABRIC_MASTER` (`198.19.240.11:25000`) and the RoCE all-gather on both rails, with 31.72 and 31.45 GiB of sequence memory. Available memory never went below 34.9 GiB on the head or 38.4 GiB on the worker. The management links' carrier counters stayed at 20 and 1,436, neither rank logged an error, and the kernel logs had no NVRM, Xid or OOM lines. After each stop, both GPUs went idle with no process. The agent gate's `structured` section is left out because this server refuses `response_format`, a v1.1 limit above. Receipts are on the head under `~/sparkrun/experiments/qwen38fn-mia-959-w2/receipts/`.
-
-#### October 22 clamp check
-
-A 45-minute window from the #938 orchestrator, the same afternoon, with the same safeguards. DeepSeek was down from 11:19:08 to 11:34:32 EDT.
-
-1. **Reproduction, on the qualified `9f28a902…` without the clamp.** The boot passed the gate. Then requests with `top_k` −1, `top_p` 0.95, temperature 5 and 32 reply tokens:
-   - seed 1 was served;
-   - seed 2 dropped the connection. Rank 0 logged `a window's draws failed after the ranks agreed (OutOfMemory); exiting`, and rank 1 followed on the closed control link.
-
-   spark-2's GPU then stayed at 96% busy with no process. Stopping and restarting the GPU exporter and `nvidia-persistenced` cleared it to 0% and P8, with no kernel errors and no reboot.
-2. **The clamp, `6ae47f69…`.** The boot passed the gate, with both ranks on `6ae47f69…`. Then:
-   - the same request was served for six seeds, the server healthy after each;
-   - `top_k` 249 got HTTP 400;
-   - `top_k` −1 with `top_p` 1 was served;
-   - a cold 490,467-token prompt completed in 202.9 s, with its needle found.
-
-   Neither rank logged an error. Available memory stayed at or above 38.7 GiB on the head and 42.9 GiB on the worker, the kernel logs had no NVRM, Xid or OOM lines, and both GPUs went idle after the stop.
-
-Receipts are on the head under `~/sparkrun/experiments/qwen38fn-mia-959-w3/receipts/`.
-
-#### Launch, stop and rollback
-
-Merging this directory changes nothing on the Sparks. Each step below is manual, and it runs in a Spark window from the #938 orchestrator. The stop in step 6 begins the outage.
+Merging this directory changes nothing on the Sparks. Each step below is manual. The stop in step 6 begins the outage.
 
 1. On the workstation, confirm the binary: `python3 sparks/inference/sparkrun/mods/mia-tensorfold-qwen38fn-v1.1-discovery/prepare.py --check --require-binary`. If `out/` is missing, `build/build.sh` rebuilds it in about four minutes, and fails unless the result matches the lock.
 2. On the head, confirm the image with `docker image inspect` on the lock's `image_id`. If it's missing, `docker pull` the lock's `image`.
-3. Check both hosts with `task sparks:status`, and against the gates used for every trial here:
-   - no request in flight on the running engine;
-   - no other GPU workload;
-   - both management links at 10GbE, with carrier counters unchanged since the last check;
-   - nobody relying on the endpoint for the next ten minutes.
+3. Pass the [checks before a launch](#before-a-launch).
 4. Copy the mod, with its `out/`, the shared gate and the recipe to the head. This does not touch the running containers, which hold their own copy of the mods they started with. `--delete` drops a file an earlier copy carried, which `prepare.py` would otherwise refuse:
 
    ```sh
@@ -365,201 +236,67 @@ Merging this directory changes nothing on the Sparks. Each step below is manual,
    sparkrun run "$qwen" --cluster sparks --no-auto-detect --no-sync-tuning --no-follow --dry-run
    ```
 
-6. Stop the running profile with the recipe that launched it. Then confirm on both hosts that no engine process remains and at least 102 GiB is available, the kit's preflight floor at its 1M window.
+6. Stop the running profile with the recipe that launched it. Then confirm on both hosts that no engine process remains and at least 102 GiB is available, the kit's preflight floor.
 7. Launch. The shared gate runs once the head answers, so a launch with the wrong discovery fields, smoke replies, tool call or level renders fails here:
 
    ```sh
    sparkrun run "$qwen" --cluster sparks --no-auto-detect --no-sync-tuning --no-follow
    ```
 
-8. Read both rank logs, as on a first boot:
+8. Read both rank logs with `sparkrun logs "$qwen" --cluster sparks --all-sources`:
    - the control-link line, naming the head's CX7 address;
    - the load and the NCCL join;
-   - `RoCE all-gather on 2 port(s)` on both ranks;
-   - the sequence-memory line.
+   - `RoCE all-gather on 2 port(s)` on both ranks, with no `built without libibverbs headers` line;
+   - the sequence-memory line, about 31.5 GiB on October 22.
 
    Confirm each rank runs the rebuilt binary: `docker exec <container> sha256sum /opt/tensorfold-mod/bin/tensorfold-native` matches `binary_sha256` in the lock, on both hosts.
 
-To stop it, use `sparkrun stop "$qwen" --cluster sparks`. To roll back, stop it, confirm both GPUs are free, and launch the profile that was serving with its own recipe and the same flags. Nothing is left to undo on the hosts except the copied files and the pulled image.
+Then, from `~/sparkrun/recipes/glm53` on the head:
 
-#### Checks after launch
-
-On the head, from `~/sparkrun/recipes/glm53`. The first is read-only; the rest send requests:
-
-1. The entry: `python3 tests/qwen_model_discovery.py --context 491520` prints the entry and checks:
-   - `context_length` and `max_model_len` against the window;
-   - that `default_max_tokens` is absent;
-   - the reasoning object's consistency.
-
-   Compare it with the expected entry above, `supported_efforts` order included.
+1. The entry: `python3 tests/qwen_model_discovery.py --context 491520` prints the entry and checks `context_length` and `max_model_len` against the window, that `default_max_tokens` is absent, and the reasoning object's consistency. Compare it with the expected entry above, `supported_efforts` order included.
 2. The echoes: `python3 tests/qwen_model_discovery.py --context 491520 --completions` sends eight 8-token chat requests with no `chat_template_kwargs`.
    - One names no effort. Its `tensorfold.enable_thinking` must equal `default_enabled`, and its `tensorfold.reasoning_effort` must be null, since no `default_effort` is advertised.
-   - Seven name each accepted effort. Each echo must be in `supported_efforts`, an effort listed there must echo itself, and thinking must be off exactly when the echo is `none`. Compare the other three with the October 13 table.
-
-   Then send one request with `reasoning_effort: "none"` and `chat_template_kwargs: {"enable_thinking": true}`. On October 13, that echoed thinking on with a null effort.
-3. Nothing else moved: repeat the gates the [October 8](#october-8-nvfp4-evaluation) and [October 9](#october-9-thinking-and-agent-continuation) records used on v1.1, with the same commands and no long prompt:
-   - the kit's `exact.py`, `toolcheck.py`, `prompt_reuse.py 30000 4 --other` and `context_boundary.py --context 491520`;
-   - `acceptance.py --model Qwen3.8-Flash-Next`;
-   - `agent_acceptance.py --model Qwen3.8-Flash-Next --require-cache`, for the tools, isolation, cache, coding and cancellation sections.
-4. RoCE and one throughput point. Both rank logs show the RoCE all-gather open, with no `built without libibverbs headers` line. The one-stream and 16-stream cases of the October 8 table come back near 61–63 and 313–317 tok/s.
+   - Seven name each accepted effort. Each echo must be in `supported_efforts`, an effort listed there must echo itself, and thinking must be off exactly when the echo is `none`. Compare the other three with the table above.
+3. The shared checks in [Validate](#validate), with the agent gate run once for each `--section` of `tools`, `isolation`, `cache`, `coding` and `cancellation`, each with its own `--output`, since this server refuses the `structured` section's fields. Then the kit's own [checks](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/blob/be3ed857ab1055ca47b36134d22691f00f2bb94a/tools), which talk to the server with the standard library: `exact.py`, `toolcheck.py`, `prompt_reuse.py 30000 4 --other` and `context_boundary.py --context 491520`.
+4. One throughput point: replaying the October 8 decode request bodies, under `~/sparkrun/results/qwen38fn-v1.1/evaluation-20261008/` on the head, gave about 62, 138 and 310 tok/s at one, four and sixteen streams on October 22.
 5. The window: retrieval prompts that fill the window less the reply. Send one as the first long request after the boot, and one after shorter long prompts. The configured window is the largest at which both pass twice (#940).
 
-#### Known limits
+To stop it, use `sparkrun stop "$qwen" --cluster sparks`. To roll back, stop it, confirm both GPUs are free, and launch the profile that was serving with its own recipe and the same flags. Nothing is left to undo on the hosts except the copied files and the pulled image.
 
-The v1.1 limits above still apply, including structured outputs, `/health` and prompt reuse for pictures. The kit's open issues add these. The [patches](#discovery-and-fix-patches) above address #3, #6, #8 and #9. On the Sparks, #3's fix and #8's guard are confirmed, as recorded under [October 22 qualification](#october-22-qualification); nothing in the trial reached #6's or #9's failure:
+### Known limits
 
-- **Control-link stall** ([#3](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/3)). A long prompt can deadlock the two ranks' control link. Rank 1 exits at `TF_TP_TIMEOUT_S` (300 s), and rank 0 follows. The reports disagree on where it starts:
+The six patches above address the kit's open issues #3, #6, #8 and #9. On the Sparks, #3's fix and #8's clamp are confirmed; nothing in the trials reached #6's or #9's failure.
+
+- **Control-link stall** ([#3](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/3)). Without `0012`, a long prompt can deadlock the two ranks' control link. Rank 1 exits at `TF_TP_TIMEOUT_S` (300 s), and rank 0 follows. The reports disagree on where it starts:
   - 503,359 tokens stalled and 382,416 completed on `main`;
   - 288,012 stalled on `dbcaaed`, with every repeat;
   - here on October 8, 524,135 completed and 999,874 stalled, over the management link, after shorter prompts;
-  - here on October 22, over CX7, the first long request after each boot stalled at 489,437, 390,775 and 260,504 tokens ([#940](https://github.com/kelchm/home-lab/issues/940#issuecomment-6341022722)).
-
-  `0012` carries the transport-ordering fix from [kit PR #4](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/pull/4).
+  - here on October 22, over CX7, the first long request after each boot stalled at 489,437, 390,775 and 260,504 tokens.
 - **One failed prefill ends the server** ([#6](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/6), [#7](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/7)). A `NoRoom` on one rank after admission exits both ranks. It is reported with long prompts and a full prompt cache. With `0013`, a refusal on either rank fails only that request; a failure after both ranks agree still exits both, as #7 reports. SparkRun does not restart the ranks.
-- **Full-vocabulary sampling** ([#8](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/8)). `top_p` 1 with `top_k` −1 can exit both ranks in the drafts' sampling. `top_k` 20 with `top_p` 0.95 ran cleanly in that report. Two ranks reach that exchange only with `top_k` off. The same whole-shard fallback can also be reached with `top_k` off and a `top_p` cut, when the nucleus is wider than 1,024 candidates a rank, as at a high temperature. That was [reproduced on the Sparks](#october-22-clamp-check) with the binary before the clamp: `top_k` −1, `top_p` 0.95 at temperature 5 exited both ranks on its second request. `0015` closes both: with two ranks, `top_k` off is drawn as `top_k` 248, with `top_p` and `min_p` still cutting within it, so no draw takes the nucleus exchange. A client that asks for the whole vocabulary gets the best 248 candidates instead. `top_k` above 248 gets HTTP 400, because it otherwise exits both ranks with `TopKPastScratch`. The server's own defaults, used when a client sends none, are `top_k` 20 and `top_p` 0.95.
+- **Whole-vocabulary sampling** ([#8](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/8)). Two ranks reach the drafts' nucleus exchange only with `top_k` off, and it can exit both ranks: with `top_p` 1, as reported, and with a `top_p` cut when the nucleus is wider than 1,024 candidates a rank, as at a high temperature. Without the clamp, `top_k` −1 with `top_p` 0.95 at temperature 5 exited both ranks here on its second request. With `0015`, a client that asks for the whole vocabulary gets the best 248 candidates instead. The server's own defaults, used when a client sends none, are `top_k` 20 and `top_p` 0.95.
 - **Prompt-cache use-after-free** ([#9](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/9)). Rank 0 can segfault in `endPass` when the prompt cache evicts a state the same pass kept. It is reported with long prompts and a full cache, and with a small cache at 45–57K-token prompts. `0014` is the issue's fix, which one other operator reports stopped the crash.
-- **A GPU stuck busy after both ranks exit.** On October 22 this happened twice, after the first control-link stall and after the clamp check's reproduced crash. spark-2's GPU, rank 1's, then read 96% busy at P0 with no process, through the stop. To clear it without a reboot:
-  1. stop the GPU exporter container (`monitoring-gpu-gpu-exporter-1`) and `nvidia-persistenced`;
-  2. wait about 20 s;
-  3. start both again.
-
-  The GPU then settles at 0% and P8. `nvidia-smi -r` is refused on that primary GPU. Check both GPUs after any crash, before the next launch.
-- **YaRN.** The factor stays at the kit's 4, as on October 8. A factor of 2 would also cover this window, and is untried here.
-
-### October 8 NVFP4 evaluation
-
-One read-only campaign ran on the evening of October 8 EDT against the instance from the first boot, at `http://localhost:8888/v1` on the head, with no stop, restart, relaunch or setting change during the campaign. It covered correctness gates, throughput at 1, 4, 8 and 16 streams, cold prefill and retrieval up to 524,135 prompt tokens, and then stopped: the 999,874-token retrieval request stalled before any reply token and ended in a transport error after 301 s, both engine processes exited, and the thinking soak and the OpenCode session that were to follow did not run. Every measurement used thinking off, although the recipe defaults to thinking on, so nothing here measures thinking. This is not a qualification of the profile, and it does not test every feature the kit advertises.
-
-Every correctness gate passed, and all 15 needle checks in the three retrieval cases up to 524,135 prompt tokens were exact. Throughput was in the same broad range as the published figures. The one request near the 1M window stalled the two ranks' control link in the way [upstream #3](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/3) describes and ended with the server down. The profile is therefore not qualified at its 1,048,576 window or for unattended use. That rests on one request: sizes between 524,135 and 999,874 tokens are untested, and one request per size below that is not a reliability result for those sizes. The instance was left down until the separately authorized recovery recorded below. Relying on the window needs a reviewed transport fix, [PR #4](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/pull/4) or an equivalent, and a fresh trial that passes the ~1M case.
-
-Correctness gates, all passed. The kit's tools are the pinned `be3ed857` copies:
-
-- `exact.py`: six prompts at 160 tokens, temperature 0, thinking off, seed 4321. All 18 replies, serial, with drafts off and concurrent, matched in text and token hash, with 520 drafts accepted.
-- `toolcheck.py`: 3 of 3, a nonstreamed call, a streamed call and a tool-result turn, with a typed array argument and call IDs preserved.
-- `prompt_reuse.py 30000 4 --other`: 31,557 prompt tokens cold in 9.68 s of prefill, then four growing turns of 31,783, 32,010, 32,219 and 32,430 tokens reusing 31,550, 31,776, 32,003 and 32,212, at least 99.3% each.
-- `context_boundary.py --context 1048576`: all 16 checks. It probes admission arithmetic with a 20-token prompt and a very large reply budget, so it is not a long-input result.
-- `acceptance.py --model Qwen3.8-Flash-Next`: five random solid-colour 64×64 PNGs identified, and a short request arriving during a 1,024-token prose decode began its reply in 0.116 s.
-- Video: a synthetic 128×128, 4 fps, 2 s clip, red then blue, was described in the right order, from 127 prompt tokens in a 4-token reply.
-
-Throughput. Two repetitions at each concurrency in ascending order (1, 1, 4, 4, 8, 8, 16, 16), each stream a distinct 70–72-token database-tutorial prompt returning exactly 1,024 completion tokens at temperature 0, seed 20261008, with the default MTP and copy drafts on. The head-local standard-library streaming client retained request bodies, timestamped SSE events and final API usage. The rate is all completion tokens in the batch over the batch's elapsed time, so it includes the short prefill and is the conservative figure:
-
-| Streams | Repetition 1, tok/s | Repetition 2, tok/s | Time to first token, s | Published, tok/s |
-| --- | --- | --- | --- | --- |
-| 1 | 62.58 | 61.18 | 0.12 | 67.4 |
-| 4 | 137.45 | 149.82 | 0.12–0.34 | 152.2 |
-| 8 | 213.19 | 212.37 | 0.12–0.43 | not published |
-| 16 | 312.95 | 316.93 | 0.13–0.68 | 390.1 |
-
-The published column is sparkDash on the maintainer's prompts, not these, so the two are not a matched comparison. Ours are lower at 1 and 16 streams and in the same broad range; two repetitions on one instance support no regression claim either way. The tutorial replies were counted, not scored, so this table says nothing about their quality. Sums of per-stream decode windows are kept in the receipts as diagnostics and are not aggregate rates, because the streams end at different times.
-
-Long prompts. Each row is one cold request, zero cached tokens, temperature 0, thinking off. The prefill rows allow 32 reply tokens and got a two-token `OK`. The retrieval rows hide five key-value needles at depths 0.02, 0.25, 0.5, 0.75 and 0.98 with upstream's `long_context.py` builder, ask for all five in a 256-token budget and score with upstream's scorer. The builder's seed is 20261008 plus the target size, the generation seed is 20261008, and the three completed replies used 67, 66 and 67 tokens of the budget. Token counts are the server's own:
-
-| Case | Prompt tokens | Server prefill, s | Client time to first token, s | Prefill, tok/s | Result |
-| --- | --- | --- | --- | --- | --- |
-| Prefill | 8,145 | 2.50 | 2.51 | 3,258 | `OK` |
-| Prefill | 32,805 | 9.97 | 10.01 | 3,290 | `OK` |
-| Prefill | 130,517 | 43.61 | 43.77 | 2,993 | `OK` |
-| Retrieval | 130,886 | 44.48 | 44.63 | 2,943 | 5 of 5 exact, 45.5 s total |
-| Retrieval | 261,902 | 94.87 | 95.15 | 2,761 | 5 of 5 exact, 96.1 s total |
-| Retrieval | 524,135 | 221.45 | 222.22 | 2,367 | 5 of 5 exact, 223.9 s total |
-| Retrieval | 999,874 | none | none | none | Stalled, then `LinkWriteFailed` at 301.18 s, no reply token |
-
-Single-stream prefill fell from about 3,300 tok/s at 32k to about 2,370 at 524k. Upstream publishes roughly 2,500–2,750 for NVFP4 at eight streams with a bf16 cache on an earlier build, which is a different shape and not a comparison. One prompt per size shows that retrieval works at that length on that prompt; it is not a general quality result.
-
-The stall. Before the last case both hosts were idle with 35.44 and 38.34 GiB available, which left 4.44 and 7.34 GiB after the 31 GiB estimated for the prompt, above the 2 GiB floor. The request carried 999,874 prompt tokens and a 256-token reply budget and produced no generated delta. Socket captures of the rank control connection, `10.32.21.31:25000` to `10.32.21.32:37436` on the management network, show rank 0 with 1,633,712 bytes queued and unsent and rank 1 with 1,243,464 bytes unread. Both figures and the 6,361,019 acknowledged bytes were identical at 22:43:13 and 22:43:31 EDT, the sender had been limited by the receiver's window for 99.6% of its busy time, and it had last sent about 86 s before the first capture, shortly after the request began. Neither management link's carrier count changed (12 and 1,432 throughout the campaign) and about 41 and 38 GiB were available, so neither low memory nor a carrier change was observed. The head's reading had risen from 35.44 GiB since the request began; the telemetry shows the rise and not its reason. This is strong evidence consistent with upstream #3's deadlock on a long control record. It is not proof: the socket state and the unpatched source fit that defect, and the blocked code path itself was not observed. No retry and no further inference request was sent.
-
-Terminal state. The stream ended in an error 301.18 s after it began: `LinkWriteFailed`, with 999,874 prompt tokens and none generated. Rank 0's log records that the release was not sent to rank 1 (`FollowerGone`) and then `ended chatcmpl-502f84ff0d0397f43662bbb54379185c reason=error (LinkWriteFailed) prompt=999874 tokens=0 after=301.17s`. Rank 1 logged that a call had passed its deadline (`TF_TP_TIMEOUT_S`) with the other rank stalled, and exited; rank 0 logged that the other rank had closed the control link, and exited. At 22:47:28–29 EDT `ps` showed no engine process on either host and no vision helper, neither GPU listed a compute process, and port 8888 refused connections. Both containers were still running with their original start times, 01:59:53 and 01:59:54 UTC on October 9, and `OOMKilled: false`, each holding only its `sleep infinity` shell. The adapter keeps that shell alive, so a container Docker reports as up is no evidence of a live engine. 116.76 and 116.82 GiB were available. The worker still reported 96% GPU utilization with no process listed; the reading is kept as taken with no cause assigned, and utilization alone is not used here to call a GPU idle or busy.
-
-Over the whole campaign the lowest available memory was 31.66 and 34.97 GiB and the highest swap use 0.22 and 0.11 GiB, and all 291 two-host memory/link samples completed. The 25 health connection failures were recorded after the engines exited. The kernel journal slices captured for the throughput step and the stall contain no entries, which shows that those slices are empty and does not prove the absence of a GPU fault. This campaign stopped, restarted and relaunched nothing: it ended with the instance down because its engines exited.
-
-Not run in this campaign, because the stall ended it. The soak, the OpenCode session and the agent gate ran later, in the [October 9 continuation](#october-9-thinking-and-agent-continuation); the list stands as the campaign's own record:
-
-- The 20-minute thinking soak. No thinking-on request was sent, so v1.1's fix for the failed CUDA graph capture under many concurrent thinking requests is not tested here.
-- The OpenCode multi-turn accounting session. Reasoning content, call IDs and cache-read accounting across real agent turns are unqualified; the plain reply and file-read turn under the first boot stand as separate, earlier evidence.
-- `agent_acceptance.py`, every section: tools, isolation, cache, coding and cancellation. Its structured-response case does not apply to this server, as above; the HTTP 400 answers for `json_object`, `json_schema`, `logprobs` and `n` are known from source and were not rechecked.
-- `long_sessions.py`, deliberately: its guard can stop the service, which this campaign was not allowed to do.
-- INT4-AR, concurrent long prompts, and any prompt between 524,135 and 999,874 tokens.
-
-Conduct. Both hosts' memory, management-link carrier counters and `/health` were sampled every five seconds, with a sticky abort after three samples under 2 GiB or three missing. Available memory was 42.4 and 45.1 GiB at the start. The harness paused once, after the first one-stream repetition, when `/health` still showed one live connection just after the stream's `[DONE]`; it resumed after three zero readings 0.5 s apart, with no failed request. Before each timing run the harness checked `live.connections == 0`; after the cleanup pause it required three zero readings 0.5 s apart. No foreign traffic was observed. Long requests also used a client-only watchdog that checks telemetry freshness during silent prefill and cannot stop the service. A `/health` answer says only that the server is listening: its `status: ok` is unconditional, as noted above, so it is no evidence of a healthy decoder. It kept answering `ok` while the request was stalled, and stopped answering only when the engines exited and the port began refusing connections.
-
-Raw receipts are outside git on the head under `~/sparkrun/results/qwen38fn-v1.1/evaluation-20261008/`, with the tools and harness scripts in its parent directory:
-
-| Evidence | Files |
-| --- | --- |
-| Correctness gates | `exact.log`, `toolcheck.py.log`, `prompt_reuse.py.log`, `context_boundary.py.log`, `acceptance.py.log`, `video.json` |
-| Throughput and prefill | `decode-summary.jsonl`, `prefill-summary.jsonl`, `throughput-gpu-kernel.txt` |
-| Completed retrieval | `retrieval-131072.json`, `retrieval-262144.json`, `retrieval-524288.json`, `headroom-524288.json` |
-| The 999,874-token request | `headroom-1000000.json`, `retrieval-1000000.expected.json`, `.request.json` and `.sse.jsonl`, `requests.jsonl`, `SERVICE_ERROR` |
-| Stall and terminal state | `control-1m-early.txt`, `control-1m-stalled.txt`, `stalled-1m-gpu-kernel.txt`, `post-failure-rank0.txt`, `post-failure-rank1.txt` and their `-processes.txt` pairs |
-| Whole campaign | `telemetry.jsonl`, `telemetry-summary.json`, `receipt-manifest.json` |
-
-The rank serve log is `/tmp/sparkrun_serve.log` inside each rank container, not in the workspace; the post-failure captures hold its closing lines.
-
-Operator-requested recovery, October 8 at 23:11 EDT. After preserving the failure receipts and checking both hosts had about 117 GiB available with no GPU compute processes, SparkRun removed the two shell-only containers and relaunched the same pinned NVFP4 recipe, image, weights and mod. No recipe, mod or host configuration changed. The vision helper was ready in 11.5 s, both ranks joined NCCL and opened the two-port RoCE all-gather, sequence memory was 31.00 GiB, and HTTP was ready 93.62 s after container start. The readiness hook passed all 16 concurrent short replies; the complete launch took 107.1 s. A workstation request to `http://10.32.21.31:8888/v1`, temperature 0, thinking off, 32-token reply budget, returned `323` for `17 × 19` (28 prompt tokens, 4 completion tokens). Afterwards `/health` was idle, available memory was 42.8/46.1 GiB on head/worker, and management-link carrier counters remained 12/1,432. Recovery receipts, both ranks' logs and five-second telemetry are under `~/sparkrun/results/qwen38fn-v1.1/recovery-20261008-2311/` on the head. The monitor ended after the checks. No evaluation step resumed during the recovery and no long prompt was retried; the [continuation below](#october-9-thinking-and-agent-continuation) was authorized later. The transport defect remains unresolved.
-
-### October 9 thinking and agent continuation
-
-After the recovery the operator authorized more benchmarking on the recovered instance, avoiding one-shot prompts near the window. The campaign's rule against service changes stayed in force: nothing was stopped, restarted, relaunched or reconfigured, and the recipe, image, weights and mod are the pinned ones the recovery relaunched. The engine processes, PID 1879890 on the head and 2803753 on the worker, started at 23:11:21 and 23:11:39 EDT on October 8, and both ranks showed the same PID and start time after the soak. Three things ran against that instance: a 20-minute thinking soak at 16 streams, an OpenCode session checked for token accounting on the wire, and the agent gate's five applicable sections. No long prompt was sent.
-
-All three completed without a failed request. That adds thinking-on decode under sustained concurrency, reasoning and call-ID round-trips through a real client, and the short agent cases to what the [October 8 campaign](#october-8-nvfp4-evaluation) measured. It changes nothing about the window: the control-link defect is unfixed, the ~1M case has not been retried, and the profile is still not qualified at 1,048,576 tokens or for unattended use.
-
-Thinking soak. From 00:00:08.706 to 00:20:48.804 EDT on October 9, 16 client threads submitted requests for 20 minutes and then drained for 40 s. The requests were distinct database-ledger design prompts, repeated over the run, of 135–137 prompt tokens by the API's count, sent with temperature 0, thinking explicitly on, seed 20261008, a 1,024-token reply budget and the default drafts on. All 365 completed, for 373,760 completion tokens: every one ended with `finish_reason: length`, with non-empty reasoning and no answer content. The soak therefore exercises concurrent thinking decode for its length and says nothing about answers or their quality, since every reply spent its whole budget reasoning. Neither rank's log has a graph-capture failure or a pause warning, and the API was idle at the end. `TF_FLASHNEXT_GRAPH_LOG`, the detailed graph log, was off, so this does not prove that the capture fallback v1.1 added was exercised or that v1.0's trigger was reproduced; it shows one 20-minute run of that shape ending with both engines up. It is one soak, not a repeated result.
-
-Soak conduct. The client guard was set to stop further submissions after three samples below 2 GiB on either host, three missing samples or stale telemetry; it could not stop the service. All 229 five-second memory, link and health samples completed without an abort condition. The lowest available memory was 41.04 GiB on the head and 43.84 GiB on the worker, and the management-link carrier counters stayed at 12 and 1,432. `/health` reported 16 live connections in 221 samples and never more; the other eight, during transitions and the drain, read 15, 14, 13, 11, 10, 7, 4 and 1. All 365 new completion IDs in the rank log matched the soak receipts, with no unowned request; there were 17 completed requests before the soak. No foreign request was observed. A first launch of the soak harness failed on a receipt path before it sent any request; it is kept separately and is not part of the run.
-
-OpenCode session. OpenCode 2.0.24 on the workstation ran `spark/Qwen3.8-Flash-Next` in a private instance with a read-only custom agent, through the same `@ai-sdk/openai-compatible` provider as the normal configuration, pointed at a localhost pass-through proxy that kept every request and response. No global client configuration changed. The test model entry declared a 32,768 context and 2,048 output limit, only `read`, `glob` and `grep` were advertised, and MCP was off. Three user turns over a small fixture workspace made four successful `read` calls, of the manifest, the dimensions file, the adjustment file and the dimensions file again, and the three answers matched exactly: `TOTAL=323`, `AVAILABLE=316;EXPANDED=361` and `FINAL=354`. The first user prompt carried 8,192 repeated padding words to exercise the accounting; OpenCode compacted that padding on its own before the tool loop began, so the agent calls never carried it.
-
-That made eight API calls, one compaction and seven agent calls:
-
-| Call | Prompt tokens | Cached | Completion tokens | Reasoning tokens |
-| --- | --- | --- | --- | --- |
-| Compaction | 10,082 | 0 | 431 | 123 |
-| Agent 1 | 1,591 | 1,234 | 100 | 59 |
-| Agent 2 | 1,764 | 1,234 | 61 | 19 |
-| Agent 3 | 1,900 | 1,234 | 34 | 27 |
-| Agent 4 | 2,016 | 1,234 | 108 | 66 |
-| Agent 5 | 2,196 | 1,234 | 61 | 46 |
-| Agent 6 | 2,317 | 1,234 | 123 | 81 |
-| Agent 7 | 2,515 | 1,234 | 77 | 70 |
-
-The stored OpenCode session totals, which include the compaction call, were 15,743 input, 504 output, 491 reasoning, 8,638 cache read and 0 cache write. They equal the wire sums with OpenCode's ordinary input as prompt minus cached tokens and its ordinary output as completion minus reasoning tokens. Each call's usage was checked against its final SSE event, the request ID in rank 0's log and the OpenCode export. Call IDs and arguments were byte-exact and unique, every tool result referenced its call's ID, each earlier `reasoning_content` was returned byte-exact in the later requests and matched the reasoning text OpenCode saved, and the message prefix was unchanged from one agent call to the next. Every agent call reported the same 1,234 cached tokens while its prompt grew, so the cache figure here is a constant reused prefix and not reuse of the growing history.
-
-Conditions of that session, as sent. The client's requests omitted `temperature` and `chat_template_kwargs`, although the provider configuration carries legacy options for both, and carried no seed; `max_completion_tokens: 2048` and `include_usage: true` were on the wire. So this session did not ask for thinking or for temperature 0. Thinking was on by the server's default, confirmed by `tensorfold.enable_thinking` in each final event and by the non-empty reasoning, and sampling ran at the server's default temperature. A first attempt failed on the local agent's read permissions and fell back to `grep`; it is kept under `opencode/permission-mismatch/` and is excluded from the figures above.
-
-Agent gate. Run on the head after the OpenCode session, the repository's unchanged [`agent_acceptance.py`](tests/agent_acceptance.py) passed with `--model Qwen3.8-Flash-Next --require-cache` over the tools, isolation, cache, coding and cancellation sections, with no tokenizer argument: all 18 cases, five tool cases, four isolation cases including the two high-thinking ones and the reversed history, two cache cases, six coding cases (three functions at temperatures 0 and 0.6, seed 20260930) and one cancellation. The structured section was excluded, because this server refuses those fields. That refusal was checked live: `response_format` of `json_object`, of `json_schema`, and `logprobs: true` each answered HTTP 400. `n` other than 1 and the `guided_*` fields were not rechecked.
-
-Still not established:
-
-- The window. No prompt between 524,135 and 999,874 tokens and no new long prompt of any size was sent, the ~1M request was not retried, and the control-link defect is unfixed.
-- Concurrent long contexts, growing long sessions and `long_sessions.py`, which was again left out because its guard can stop the service.
-- General coding quality. The six coding cases are short functions, and the soak's replies were counted, not read.
-- Unattended reliability. One 20-minute soak and one three-turn session on one boot are not that.
-- Thinking under a client's explicit request through OpenCode, and INT4-AR.
-
-Raw receipts are outside git on the head under `~/sparkrun/results/qwen38fn-v1.1/continuation-20261008-2324/`. The `2324` in the name is only a label; the soak began at 00:00 EDT on October 9.
-
-| Evidence | Files |
-| --- | --- |
-| Soak requests | `soak-start.json`, `soak-summary.json`, `soak-analysis.json`, `requests.jsonl`, `soak-*.request.json` and `.sse.jsonl` |
-| Soak conduct | `telemetry.jsonl`, `pre-soak-rank0.txt`, `pre-soak-rank1.txt`, `post-soak-rank0.txt`, `post-soak-rank1.txt`, `engine-processes-before.txt`, `engine-processes-after-soak.txt` |
-| Final state | `final-rank0.txt`, `final-rank1.txt`, `final-health.json` |
-| Agent gate | `agent-acceptance.json`, `agent-{section}.log`, `agent-exits.txt`, `protocol-limits.json` and its log |
-| OpenCode session | `opencode/wire/NNN.request.json`, `NNN.response` and `NNN.meta.json`, `opencode/turn1`–`turn3` `.export.json` and `.cli.jsonl`, the status JSON, `analysis.json`, `run_agent.py`, `analyze.py`, `expected.json`, `opencode.json` and the workspace fixtures |
-
-The OpenCode receipts were produced on the workstation and uploaded to that `opencode/` directory on the head; server password logs were excluded. The final API was healthy and idle, both original engine processes remained up, and the finite monitor and clients exited. `receipt-manifest.json` indexes the receipts; `soak-log-analysis.json` matches the soak IDs to the rank log.
+- **A GPU stuck busy after both ranks exit.** It happened twice on October 22, both times to spark-2's GPU, rank 1's. [Operate and roll back](#operate-and-roll-back) has the recovery; check both GPUs after any crash, before the next launch.
+- **Health:** this server's `/health` handler always answers `status: ok`, so SparkRun's probe sees a listening server, not a healthy decoder. The gate's replies and tool call are what show a working decoder.
+- **Admission:** a request is admitted when its prompt plus its whole reply budget fits beside the others, and is refused otherwise.
+- **Unsupported fields:** a `response_format` of `json_object` or `json_schema`, the `guided_*` fields, `logprobs: true` and `n` other than 1 answer HTTP 400.
+- **Pictures:** image and video prompts are not kept, so each turn of a chat with pictures processes them again.
+- **Capacity:** the kit's 16 streams and 10 GiB reserve, not the 8 GiB headroom goal the GLM profile works to. With two cold ~490K prompts on October 22, available memory stayed above 34.9 GiB on the head and 38.4 GiB on the worker.
+- **YaRN:** the factor stays at the kit's 4. A factor of 2 would also cover this window, and is untried here.
+- **Access and memory:** the endpoint has no API key, and no memory watchdog runs ([#944](https://github.com/kelchm/home-lab/issues/944)).
 
 ## DeepSeek-V4.1-Flash-1017 on bertholomus's Zig engine
 
-Two profiles serve [`deepseek-ai/DeepSeek-V4.1-Flash-1017`](https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017) as `DeepSeek-V4.1-Flash-1017`, through [LibertAI's EXL3 2.9 bpw quant](https://huggingface.co/LibertAIDAI/DeepSeek-V4.1-Flash-1017-EXL3-2.9bpw/tree/0be63c3337efbb2a0061d5b8bb4006fa186d433f) on the native Zig engine of [`bertholomus/TensorFold`](https://github.com/bertholomus/TensorFold/tree/deepseek-v41-zig), branch `deepseek-v41-zig`. Upstream TensorFold refuses DeepSeek checkpoints until its whole-model gate lands ([ashhart/TensorFold#827](https://github.com/ashhart/TensorFold/pull/827)).
+`bertholomus-tensorfold-dsv41-tp2/` holds the profile that serves [`deepseek-ai/DeepSeek-V4.1-Flash-1017`](https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017) as `DeepSeek-V4.1-Flash-1017`, through [LibertAI's EXL3 2.9 bpw quant](https://huggingface.co/LibertAIDAI/DeepSeek-V4.1-Flash-1017-EXL3-2.9bpw/tree/0be63c3337efbb2a0061d5b8bb4006fa186d433f) on the native Zig engine of [`bertholomus/TensorFold`](https://github.com/bertholomus/TensorFold/tree/deepseek-v41-zig), branch `deepseek-v41-zig`. Upstream TensorFold refuses DeepSeek checkpoints until its whole-model gate lands ([ashhart/TensorFold#827](https://github.com/ashhart/TensorFold/pull/827)). It has served since its [launch on October 22](https://github.com/kelchm/home-lab/issues/942#issuecomment-6330745295), apart from other models' trial windows.
 
-| Profile | Engine | Window | State |
+### Current profile
+
+| Profile | Engine | Image | Window |
 | --- | --- | --- | --- |
-| `dsv41-1017-exl3-tp2-bth-tf-2970bcd-libertai-512k` | `2970bcd` with six patches | 524,288 | Serving since October 22, qualified to 524,139 prompt tokens |
-| `dsv41-1017-exl3-tp2-bth-tf-6366d2c-libertai-1m` | `6366d2c` with three patches | 1,048,576 | Served October 21–22; the rollback, with its image kept on the head |
+| `dsv41-1017-exl3-tp2-bth-tf-2970bcd-libertai-512k` | `2970bcd` with six patches | `a7845d4e…`, built here | 524,288, qualified to 524,139 prompt tokens |
 
-Rank 0 runs `tensorfold-native serve` with the OpenAI and Anthropic routes; rank 1 runs `tf-dsv41-lanes`. Settings: four streams, a 32,768-token reply budget, thinking on, temperature 1.0, top-p 0.95, top-k 20, DSpark drafts, CUDA graphs and the Engram read-ahead. The ranks link over the CX7 cable, not the management network SparkRun's rendezvous address uses: the `2970bcd` profile takes the head's CX7 address from the adapter's `FABRIC_MASTER` and refuses to start without it, while the `6366d2c` profile names it in its recipe as `DSV41_TP_MASTER`. Both gather over both rails with RDMA on the devices and GID index SparkRun detects. The rank-1 pool equals the window.
+Rank 0 runs `tensorfold-native serve` with the OpenAI and Anthropic routes; rank 1 runs `tf-dsv41-lanes`. Settings: four streams, a 32,768-token reply budget, thinking on, temperature 1.0, top-p 0.95, top-k 20, DSpark drafts, CUDA graphs and the Engram read-ahead. The ranks link over the CX7 cable, not the management network SparkRun's rendezvous address uses: `serve.py` takes the head's CX7 address from the adapter's `FABRIC_MASTER` and refuses to start without it. Both gather over both rails with RDMA on the devices and GID index SparkRun detects. The rank-1 pool equals the window.
 
-Each profile's mod ([`2970bcd`](mods/bertholomus-tensorfold-dsv41-2970bcd/), [`6366d2c`](mods/bertholomus-tensorfold-dsv41-6366d2c/)) builds its image and launches both ranks. `upstream.lock.json` pins the engine, the inputs, the kit, the Engram tables and every mod file. The `2970bcd` patches:
+The [mod](mods/bertholomus-tensorfold-dsv41-2970bcd/) builds the image and launches both ranks. `upstream.lock.json` pins the engine, the inputs, the kit, the Engram tables and every mod file. The patches:
 
 | Patch | Source | Change |
 | --- | --- | --- |
@@ -570,13 +307,11 @@ Each profile's mod ([`2970bcd`](mods/bertholomus-tensorfold-dsv41-2970bcd/), [`6
 | `0005-deepseek-efforts.patch` | This lab | The engine's efforts are DeepSeek's own `max` = 100, `high` = 75 and `low` = 50, and any other effort name goes to the nearest of them |
 | `0006-literal-object-keys.patch` | This lab | `0004` also covers JSON object keys, such as a tool's parameter names and a tool call's argument names |
 
-The `6366d2c` mod carries the first three, with the earlier RDMA nap from Mia's [PR #26](https://github.com/MiaAI-Lab/DeepSeek-v4.1-Flash-1017-2x-DGX-Sparks/pull/26), which takes a nap of 0 as 1 µs.
+**Reasoning efforts.** DeepSeek's encoder (`encoding/encoding.py` in the checkpoint) names `low`, `high` and `max` and renders the chosen one as `Reasoning Effort: N` before the first turn when thinking; non-thinking is a separate mode. With `0005`, `/v1/models` lists `max`, `high`, `low` and `none`, highest first, and a request's other names are taken to the nearest listed level with ties going higher: `minimal` to `low`, `medium` to `high` and `xhigh` to `max`. A request's `none` turns thinking off unless the same request switches thinking on explicitly, with `chat_template_kwargs.enable_thinking` or the Anthropic `thinking` field; a request without an effort hears the template's default, `high`. The shared readiness gate checks the list in that order and renders each level and each other name through `/tokenize`.
 
-**Reasoning efforts.** DeepSeek's encoder (`encoding/encoding.py` in the checkpoint) names `low`, `high` and `max` and renders the chosen one as `Reasoning Effort: N` before the first turn when thinking; non-thinking is a separate mode. With `0005`, `/v1/models` lists `max`, `high`, `low` and `none`, highest first, and a request's other names are taken to the nearest listed level with ties going higher: `minimal` to `low`, `medium` to `high` and `xhigh` to `max`. A request's `none` turns thinking off unless the same request switches thinking on explicitly, with `chat_template_kwargs.enable_thinking` or the Anthropic `thinking` field; a request without an effort hears the template's default, `high`. The shared readiness gate checks the list in that order and renders each level and each other name through `/tokenize`. The `6366d2c` engine instead lists seven levels, three of them its own numbers between DeepSeek's (`minimal` = 25, `medium` = 62, `xhigh` = 88).
+At launch `serve.py` links three views under `/tmp/dsv41` from the read-only snapshots: the weights with the mod's `chat_template.jinja` (a port of DeepSeek's `encoding.py`), the [kernel kit](https://huggingface.co/bertholomus/DeepSeek-V4.1-Flash-TensorFold-TP2-2xGB10/tree/4996441a82d95b9a7853b01a1255e1dafc926387) with the 1017 image routing bias made from the weights and checked against the lock, and the Engram shards with their embed-only index. It sets the engine's `oom_score_adj` to 1000 so the kernel ends the engine before anything else when host memory runs out. Readiness is the shared gate (`mods/tensorfold-readiness`): healthy status with four lanes, the exact `/v1/models` entry, four concurrent replies, one tool call and the level renders.
 
-At launch `serve.py` links three views under `/tmp/dsv41` from the read-only snapshots: the weights with the mod's `chat_template.jinja` (a port of DeepSeek's `encoding.py`), the [kernel kit](https://huggingface.co/bertholomus/DeepSeek-V4.1-Flash-TensorFold-TP2-2xGB10/tree/4996441a82d95b9a7853b01a1255e1dafc926387) with the 1017 image routing bias made from the weights and checked against the lock, and the Engram shards with their embed-only index. It sets the engine's `oom_score_adj` to 1000 so the kernel ends the engine before anything else when host memory runs out. The `2970bcd` profile checks readiness with the shared gate (`mods/tensorfold-readiness`): healthy status with four lanes, the exact `/v1/models` entry, four concurrent replies, one tool call and the level renders. The `6366d2c` profile keeps its mod's own hook, which requires healthy status, four lanes and the window in `/v1/models`, then sends four concurrent replies and one tool call.
-
-### Inputs outside SparkRun's distribution
+### Inputs outside SparkRun
 
 SparkRun distributes the weights and the kit. Two inputs are staged once per host:
 
@@ -604,79 +339,48 @@ docker run -d --name dsv41-inputs --gpus all --network host --ipc host --ulimit 
   --master 198.19.240.11 --host 127.0.0.1 --port 18891 --context 1048576 --vision --parallel 4 --mtp-drafts 5
 ```
 
-These are the settings that wrote the current inputs on October 17, with this layout's paths. Both images carry the same Python engine (`deepseek-v41-tp2` at `4691715`), and the `2970bcd` engine reads the rank inputs with the loader of `6366d2c`, so the staged inputs serve both profiles.
-
-On October 21 both were hard-linked from the hand-run copies, so neither was downloaded or rebuilt; the rank inputs moved to their own root at the relaunch that afternoon, and the hand-run copies were then deleted.
+These are the settings that wrote the current inputs on October 17, with this layout's paths.
 
 ### Build
 
-The image is built on any linux/arm64 Docker daemon, never on a serving Spark, where the Zig and `nvcc` build would compete with the engine for host memory. The mod's `build/build.sh` fetches the engine and inputs at the lock's commits, applies the patches and builds on NVIDIA PyTorch 26.07 by digest; the October 21 build of `6366d2c` took about three minutes on the workstation's Colima `tf-build` profile. Load it on the head; SparkRun copies it to the worker at launch:
+The image is built on any linux/arm64 Docker daemon, never on a serving Spark, where the Zig and `nvcc` build would compete with the engine for host memory. The mod's `build/build.sh` fetches the engine and inputs at the lock's commits, applies the patches and builds on NVIDIA PyTorch 26.07 by digest, on the workstation's Colima `tf-build` profile:
 
 ```sh
 DOCKER_CONTEXT=colima-tf-build sparks/inference/sparkrun/mods/bertholomus-tensorfold-dsv41-2970bcd/build/build.sh
-DOCKER_CONTEXT=colima-tf-build docker save dsv41-tf:2970bcd-4691715-e1c6ebe02e2a | ssh kelchm@10.32.21.31 docker load
 ```
 
-The recipe's `container` and the lock's `image_id` are the image ID the head reports, which is the image's config digest; Colima's containerd store shows the index digest instead. To read it before loading, `colima ssh -p tf-build -- sudo ctr -n moby images ls` gives the index digest; `ctr -n moby content get` on that lists the arm64 manifest, and that manifest's `config.digest` is the ID. The `2970bcd` build of October 21 is `sha256:a7845d4e…`, and the `6366d2c` image is `sha256:66ce7619…`. A rebuild can produce another ID; record it in both before launching.
+The recipe's `container` and the lock's `image_id` are the image ID the head reports, which is the image's config digest; Colima's containerd store shows the index digest instead. To read it before loading, `colima ssh -p tf-build -- sudo ctr -n moby images ls` gives the index digest; `ctr -n moby content get` on that lists the arm64 manifest, and that manifest's `config.digest` is the ID. The October 21 build is `sha256:a7845d4e…`. A rebuild can produce another ID; record it in both before launching.
 
 ### Launch, stop and roll back
 
-From `~/sparkrun/recipes/glm53` on the head, after syncing this directory as in [Deploy](#deploy). Stop the running instance with its own recipe first:
+From `~/sparkrun/recipes/glm53` on the head, after syncing this directory as in [Deploy](#deploy) and passing the [checks before a launch](#before-a-launch). Stop the running instance with its own recipe first. If the image isn't on the head yet, load it only after that stop, so the 37 GB load never runs beside a serving engine on the head's unified memory. Then confirm both GPUs list no compute process and the image ID matches the recipe's `container`:
 
 ```sh
+# On the workstation: DOCKER_CONTEXT=colima-tf-build docker save dsv41-tf:2970bcd-4691715-e1c6ebe02e2a | ssh kelchm@10.32.21.31 docker load
+ssh 10.32.21.32 'nvidia-smi --query-compute-apps=pid --format=csv,noheader'; nvidia-smi --query-compute-apps=pid --format=csv,noheader  # both empty
+docker image inspect --format '{{.Id}}' dsv41-tf:2970bcd-4691715-e1c6ebe02e2a
 dsv41="$PWD/bertholomus-tensorfold-dsv41-tp2/dsv41-1017-exl3-tp2-bth-tf-2970bcd-libertai-512k.yaml"
+python3 mods/tensorfold-readiness/prepare.py --check
 python3 mods/bertholomus-tensorfold-dsv41-2970bcd/prepare.py --check
+sparkrun run "$dsv41" --cluster sparks --no-auto-detect --no-sync-tuning --no-follow --dry-run
 sparkrun run "$dsv41" --cluster sparks --no-auto-detect --no-sync-tuning --no-follow
-sparkrun logs "$dsv41" --cluster sparks
+sparkrun logs "$dsv41" --cluster sparks --all-sources
 # When stopping or replacing the workload:
 sparkrun stop "$dsv41" --cluster sparks
 ```
 
-The `6366d2c` profile is the rollback; its image stays on the head until it is retired. After it, Qwen's [discovery profile on the shared contract](#discovery-profile-on-the-shared-contract), `qwen38fn-nvfp4-tp2-mia-tf-v1.1-discovery-nvidia-480k`, is the rollback.
+After a boot, run the shared checks in [Validate](#validate). [`tests/dsv41_chat_template.py`](tests/dsv41_chat_template.py) compares the mod's template with DeepSeek's four text reference renderings in the image's Python template engine.
 
-To switch from the `6366d2c` profile, stop it first and load the new image only then, so the 37 GB load never runs beside a serving engine on the head's unified memory:
-
-```sh
-old="$PWD/bertholomus-tensorfold-dsv41-tp2/dsv41-1017-exl3-tp2-bth-tf-6366d2c-libertai-1m.yaml"
-sparkrun stop "$old" --cluster sparks
-ssh 10.32.21.32 'nvidia-smi --query-compute-apps=pid --format=csv,noheader'; nvidia-smi --query-compute-apps=pid --format=csv,noheader  # both empty
-# On the workstation: DOCKER_CONTEXT=colima-tf-build docker save dsv41-tf:2970bcd-4691715-e1c6ebe02e2a | ssh kelchm@10.32.21.31 docker load
-docker image inspect --format '{{.Id}}' dsv41-tf:2970bcd-4691715-e1c6ebe02e2a  # the recipe's container
-```
-
-Then launch the new profile as above. To roll back, stop it and `sparkrun run "$old"` with the same flags; the shared readiness gate does not apply to the `6366d2c` profile, which keeps its own hook.
-
-### October 22 launch
-
-This is the `2970bcd` profile, launched in a window granted from #938. The `6366d2c` profile was stopped idle at 01:20:20 UTC. The image then loaded on the head in 4 min 11 s, SparkRun copied it to the worker in 209 s, and the engine was HTTP-ready 55 s after its container started. The API was back at 01:29:25, about 9 minutes after the stop, and the shared readiness gate passed at 01:29:32.
-
-- Both ranks linked on `FABRIC_MASTER` `198.19.240.11:25000`, and RDMA came up on both rails at GID index 3.
-- `/v1/models` reported `max`, `high`, `low` and `none` and a 524,288 window. `/tokenize` rendered budgets 100, 75 and 50, and no effort line for `none`; `xhigh`, `medium` and `minimal` rendered as 100, 75 and 50.
-- One prime-count prompt answered 12 at every thinking level, with 337, 158 and 104 reasoning tokens at `max`, `high` and `low`, and none at `none`.
-- Quoted control tokens in a message, a tool result, a tool description, a schema property name and a tool-call argument name left the prompt's control-token counts equal to a clean request's.
-- `tool_choice` `auto`, `required` and a named function each returned a call, `required` also with thinking on.
-- A needle at 480,478 prompt tokens was found at 10%, 50% and 90% depth, in about 249 s each, and at 524,139 tokens at 50% depth in 275 s, with thinking off at temperature 0.
-- `MemAvailable` stayed at or above 5.96 GiB on the head, its low during the 524K prompt, and 8.63 GiB on the worker. The kernel logged no `NV_ERR`, OOM or Xid on either host.
-
-### October 21 launch
-
-This is the `6366d2c` profile. The hand-started containers were stopped idle at 17:05:11 UTC with nothing in flight, and SparkRun's launch returned 73 s later with the readiness hook passed; the API was down for about 85 s. Rank 0 read its 95.1 GiB of expert entries in 8.6 s and rank 1 loaded in 24.0 s; rank 0 logged RDMA to rank 1 on both rails at GID index 3, and the ranks' link ran between `198.19.240.11:25000` and `198.19.240.12`. `up{job="spark-inference"}` reported the model with SparkRun's labels within a minute.
-
-- The idle engine processes use 1.6% and 1.8% of a core, against about 100% each before.
-- `tool_choice: "required"` returned a call to the offered function for a prompt that asks for none; engine `3ff3b2a` refused it.
-- Prompts of exactly 512 and 513 tokens complete, the case [recipe issue #13](https://github.com/bertholomus/deepseek-v4.1-tensorfold-tp2-2xgb10/issues/13) reports failing with `MissingTritonVariant` on the kit's previous revision.
-- The chat template matches DeepSeek's four text reference renderings in the image's Python template engine ([`tests/dsv41_chat_template.py`](tests/dsv41_chat_template.py)).
-- Mia's `tools/bench.py` with the arguments used on October 19 (`--suite prefill,decode,multi --prefill-sizes 2000,8000,30000 --streams 1,4 --reps 2`), medians, against engine `3ff3b2a`: decode 59.5 tok/s against 59.4, four streams 113.2 tok/s in total against 113.5, and prefill 1,946, 2,325 and 2,409 tok/s at 2K, 8K and 30K tokens against 1,902, 2,131 and 2,087.
-- `MemAvailable` after the benchmark: 6.0 GiB on the head and 8.1 GiB on the worker.
+The rollback is Qwen's profile, `qwen38fn-nvfp4-tp2-mia-tf-v1.1-discovery-nvidia-480k`: stop DeepSeek with its own recipe and launch Qwen as [its section](#qwen38-flash-next-on-mias-zig-engine-kit) describes. It is another model, so clients that read `/v1/models` follow it and clients with a fixed entry need Qwen's.
 
 ### Known limits
 
-- On the `6366d2c` profile, control-token spellings in request text, tool results included, become control tokens: the engine renders the template to text and encodes it with the added vocabulary ([MiaAI-Lab/DeepSeek-v4.1-Flash-1017-2x-DGX-Sparks#21](https://github.com/MiaAI-Lab/DeepSeek-v4.1-Flash-1017-2x-DGX-Sparks/issues/21)). The `2970bcd` profile's `0004` and `0006` keep them text on input; text the model writes is not covered. Keys of one JSON object that differ only by private-use characters U+E000 to U+E03A or U+FFFD collapse into one key in the rendered prompt; the request's own tools and arguments are unchanged.
-- The prompt cache evicts kept conversations oldest first, so an agent's idle main conversation goes before finished subagents' ([#27](https://github.com/MiaAI-Lab/DeepSeek-v4.1-Flash-1017-2x-DGX-Sparks/issues/27) there).
-- A request with `tool_choice: "required"` or a named function reads every token synchronously, even after the call gate (`0002`) has forced the call's opening, so it loses decode overlap for the call's arguments. Other requests are unaffected, and `0002` stays verbatim from Mia's recipe.
-- The engine's piecewise prompt passes (`TF_FILL_CHUNKS`) stay off: Mia's comparable interleave starved several queued long prompts ([#18](https://github.com/MiaAI-Lab/DeepSeek-v4.1-Flash-1017-2x-DGX-Sparks/issues/18) there), and a long prompt pass holds other streams' tokens until it finishes. The `2970bcd` engine's opt-in `TF_DS_SOLO_OVERHEAD` and `TF_DS_NO_COPIES` also stay off until measured here.
-- The `6366d2c` profile's window is configured at 1,048,576 tokens and qualified here only to about 154K. The head keeps about 6 GiB available with the model loaded; Mia reports 512K as the practical limit for a head like this one and found a needle at 479,012 tokens in a 524,288 window, which the `2970bcd` profile configures and qualified on October 22 (below). No memory watchdog runs.
-- The endpoint has no API key.
+- **Quoted control tokens:** `0004` and `0006` keep control-token spellings in request text, tool results, tool descriptions and JSON object keys as text on input; text the model writes is not covered. Keys of one JSON object that differ only by private-use characters U+E000 to U+E03A or U+FFFD collapse into one key in the rendered prompt; the request's own tools and arguments are unchanged.
+- **Prompt cache:** it evicts kept conversations oldest first, so an agent's idle main conversation goes before finished subagents' ([#27](https://github.com/MiaAI-Lab/DeepSeek-v4.1-Flash-1017-2x-DGX-Sparks/issues/27) there).
+- **Forced calls:** a request with `tool_choice: "required"` or a named function reads every token synchronously, even after the call gate (`0002`) has forced the call's opening, so it loses decode overlap for the call's arguments. Other requests are unaffected, and `0002` stays verbatim from Mia's recipe.
+- **Scheduling flags:** the engine's piecewise prompt passes (`TF_FILL_CHUNKS`) stay off. Mia's comparable interleave starved several queued long prompts ([#18](https://github.com/MiaAI-Lab/DeepSeek-v4.1-Flash-1017-2x-DGX-Sparks/issues/18) there), and a long prompt pass holds other streams' tokens until it finishes. The engine's opt-in `TF_DS_SOLO_OVERHEAD` and `TF_DS_NO_COPIES` also stay off until measured here.
+- **Window and memory:** the head keeps about 6 GiB available with the model loaded, and its low was 5.96 GiB during the 524,139-token prompt on October 22. Mia reports 512K as the practical limit for a head like this one. No memory watchdog runs.
+- **Access:** the endpoint has no API key.
 
 ## Deploy
 
@@ -722,9 +426,9 @@ plugins:
 
 The [adapter](plugins/tensorfold/__init__.py) requires exactly two TP2 ranks with PP1 and uses SparkRun's native launcher, rendezvous gate, cache mounts, log sources and stop operation. It names no model or engine: a recipe that leaves out `defaults.entrypoint`, `served_model_name` or `context` fails validation. Each rank gets `RANK`, `MASTER`, `MASTER_PORT`, `MODEL_PATH` (the immutable HF snapshot under `/cache/huggingface/hub`), `CONTEXT`, `SERVED_NAME`, `HOST`, `PORT` and, when set, `DRAFTER`, `MAX_TOKENS`, `EXTRA_ARGS`, `MTP_DRAFTS` and `NO_DRAFTS`. Rank 0 must listen on `MASTER_PORT`, which SparkRun waits on before it starts rank 1. When SparkRun reaches the head over a CX7 address, `FABRIC_MASTER` carries that address, for engines whose ranks link over the fabric rather than the rendezvous network. CUDA, Triton and Torch kernel caches go to SparkRun's persistent `/cache/runtime`; anything engine-specific is set by its own recipe and mod. No upstream two-host launcher or watchdog is installed.
 
-Each mod pins its image, weights and inputs in `upstream.lock.json`, and its `run.sh` starts with `prepare.py --check`, which refuses a changed, missing or linked file. The contract also sets a common layout, which profiles adopt as they are refreshed: the rank launcher at `/usr/local/bin/tensorfold-entrypoint`, static files under `/opt/tensorfold-mod/`, the engine's `oom_score_adj` at 1000, and no lab addresses, host names or paths in recipes or mods. GLM `3fd60dfc`, DeepSeek `2970bcd` and Qwen's discovery profile follow it. GLM v1.10 and the older Mia Qwen mods install their own launcher and readiness paths and leave the engine's OOM score unchanged. DeepSeek `6366d2c` sets the score but keeps its own paths, and its recipe names its dedicated runtime-cache root under `/opt/spark-cache`, which [#932](https://github.com/kelchm/home-lab/issues/932) settles.
+Each mod pins its image, weights and inputs in `upstream.lock.json`, and its `run.sh` starts with `prepare.py --check`, which refuses a changed, missing or linked file. The contract also sets a common layout, which every profile follows: the rank launcher at `/usr/local/bin/tensorfold-entrypoint`, static files under `/opt/tensorfold-mod/`, the engine's `oom_score_adj` at 1000, and no lab addresses, host names or paths in recipes or mods. The one exception is DeepSeek's recipe, which names its dedicated runtime-cache root under `/opt/spark-cache` until [#932](https://github.com/kelchm/home-lab/issues/932) settles the host layout.
 
-Profiles share one readiness gate, the [`tensorfold-readiness` mod](mods/tensorfold-readiness/), listed beside the engine's own mod and called from `post_exec` as `python3 /opt/tensorfold-readiness/readiness.py --model NAME --context WINDOW --lanes STREAMS --efforts LEVELS`. It requires health in the server's own format: the Zig servers' `status`, `warming` and `max_batch_size`, or Mia's Python server's strict `ok`, streams and window, plus a pool floor when the profile passes `--min-pool-tokens`. It also requires a `/v1/models` entry with `owned_by: tensorfold`, `context_length` and `max_model_len` equal to the window, and exactly the profile's reasoning levels, in the server's order. It then needs one correct concurrent reply per stream and one tool call. Where the server has `/tokenize`, it also checks that each advertised level renders its own prompt and that every other standard level name renders as the nearest of them. `--min-pool-tokens` and `--warmup-words` are optional, for the Python server's pool floor and shape warmup. SparkRun 0.3.10's own readiness probe checks HTTP status only, and it discards a passing hook's output; to keep the gate's output, run the same command once more against the live server from the head's rank container. Profiles move onto the gate as their recipes are refreshed; until then each mod keeps its own hook.
+Profiles share one readiness gate, the [`tensorfold-readiness` mod](mods/tensorfold-readiness/), listed beside the engine's own mod and called from `post_exec` as `python3 /opt/tensorfold-readiness/readiness.py --model NAME --context WINDOW --lanes STREAMS --efforts LEVELS`. It requires health in the server's own format: the Zig servers' `status`, `warming` and `max_batch_size`, or Mia's Python server's strict `ok`, streams and window, plus a pool floor when the profile passes `--min-pool-tokens`. It also requires a `/v1/models` entry with `owned_by: tensorfold`, `context_length` and `max_model_len` equal to the window, and exactly the profile's reasoning levels, in the server's order. It then needs one correct concurrent reply per stream and one tool call. Where the server has `/tokenize`, it also checks that each advertised level renders its own prompt and that every other standard level name renders as the nearest of them. `--min-pool-tokens` and `--warmup-words` are optional, for the Python server's pool floor and shape warmup. SparkRun 0.3.10's own readiness probe checks HTTP status only, and it discards a passing hook's output; to keep the gate's output, run the same command once more against the live server from the head's rank container.
 
 ## Operate and roll back
 
@@ -833,7 +537,7 @@ python3 ~/sparkrun/recipes/glm53/tests/agent_acceptance.py --model "$model" --re
 - **Tools:** run `tool-eval-bench` v1.8.0 directly for its 15 core scenarios, because SparkRun 0.3.10's tool integration passes the model's repository ID instead of the served name, ignores a model override and shell-quotes JSON arguments. Keep the fixture date `2026-03-20`: the [v1.8.0 validators](https://github.com/SeraphimSerapis/tool-eval-bench/blob/7a1af7dffaade6b7b2d8f36ab8a454a7eccddcd7/src/tool_eval_bench/evals/scenarios.py) for TC-05 and TC-08 hard-code March 23 and 21 whatever `--reference-date` says. Read `scores.scenario_results` and the conversation report, not only the exit status. No results are submitted to Spark Arena.
 - **Acceptance:** [`acceptance.py`](tests/acceptance.py) requires the colors of five distinct images in random order, and a correct short reply that begins within five seconds while another decode is still running. `--url` takes the server root or the API base ending in `/v1`.
 - **Agent:** [`agent_acceptance.py`](tests/agent_acceptance.py) exercises streamed and non-streamed tools, null assistant content, thinking, interleaved histories with identical tool arguments, structured responses, cache accounting, bounded execution of generated Python, and cancellation. Read per-case results, including model failures and format limits, rather than counting a finished process as a pass. Generated code runs as restricted pure Python under CPU and memory limits.
-- **Long sessions:** the [long-session client](benchmarks/long_sessions.py) runs on the head with `uv run --with llama-benchy==0.4.0 python`, `--model "$model"` (its default is an old GLM name), the pinned target's `tokenizer.json`, an absolute recipe path and output outside the checkout. `--suite full` covers C1, C2 and C4 controls, unrelated and shared prefixes, warm replay, edits and forks, 250k prompts with small and 32k output budgets, the 262k admission boundary and a short newcomer during long prefill; `growth`, `repeat`, `250k`, `boundary` and `ceiling` run parts of it, and each paired boot needs a new `--campaign` value. It records per-stream time to first token, chunk gaps, usage and cache details, and both hosts' memory minima, and stops the recipe through SparkRun after three low-memory samples or lost telemetry. `--require-stable-links` aborts on a lost 10GbE carrier or any new drop. Payloads are synthetic repository text, so this is not a general long-context coding benchmark. Its cancellation can miss a silent stream ([#651](https://github.com/kelchm/home-lab/issues/651)).
+- **Long sessions:** the [long-session client](benchmarks/long_sessions.py) runs on the head with `uv run --with llama-benchy==0.4.0 python`, `--model "$model"`, `--worker kelchm@10.32.21.32`, the pinned target's `tokenizer.json`, an absolute recipe path and output outside the checkout. `--suite full` covers C1, C2 and C4 controls, unrelated and shared prefixes, warm replay, edits and forks, 250k prompts with small and 32k output budgets, the 262k admission boundary and a short newcomer during long prefill; `growth`, `repeat`, `250k`, `boundary` and `ceiling` run parts of it, and `--campaign` names the run, new for each paired boot. It records per-stream time to first token, chunk gaps, usage and cache details, and both hosts' memory minima, and stops the recipe through SparkRun after three low-memory samples or lost telemetry. `--require-stable-links` aborts on a lost 10GbE carrier or any new drop. Payloads are synthetic repository text, so this is not a general long-context coding benchmark. Its cancellation can miss a silent stream ([#651](https://github.com/kelchm/home-lab/issues/651)).
 
 ## Update a pinned mod
 

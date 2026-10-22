@@ -23,15 +23,13 @@ if str(PLUGINS) not in sys.path:
 from tensorfold import TensorFoldRuntime, hf_snapshot_path  # noqa: E402
 
 from sparkrun.core.recipe import Recipe  # noqa: E402
-from sparkrun.core.runtime_cache import build_runtime_cache_mounts, resolve_runtime_cache_settings  # noqa: E402
 from sparkrun.core.validation import ERROR  # noqa: E402
-from sparkrun.orchestration.job_metadata import generate_intent_id  # noqa: E402
+from sparkrun.orchestration.executors.docker import DockerExecutor  # noqa: E402
+from sparkrun.runtimes._cluster_ops import ClusterContext  # noqa: E402
 
 RECIPES = ROOT / "mia-tensorfold-qwen38fn-tp2"
 RECIPE = RECIPES / "qwen38fn-nvfp4-tp2-mia-tf-v1.1-discovery-nvidia-480k.yaml"
-V11_RECIPE = RECIPES / "qwen38fn-nvfp4-tp2-mia-tf-v1.1-nvidia-1m.yaml"
 MOD = ROOT / "mods/mia-tensorfold-qwen38fn-v1.1-discovery"
-V11_MOD = ROOT / "mods/mia-tensorfold-qwen38fn-v1.1"
 SERVED = "Qwen3.8-Flash-Next"
 WINDOW = 491520
 # The shortest prompt the kit's issue #3 reports stalling the two ranks' control link.
@@ -80,32 +78,23 @@ def _bundle(tmp_path, binary=None):
     return bundle
 
 
-def test_recipe_pins_the_v11_kit_and_weights_with_its_launcher_settings():
+def test_recipe_pins_the_kit_and_weights_with_its_launcher_settings():
     recipe, lock = _recipe(), json.loads((MOD / "upstream.lock.json").read_text())
-    v11, v11_lock = _recipe(V11_RECIPE), json.loads((V11_MOD / "upstream.lock.json").read_text())
     assert recipe.name == recipe.metadata["profile"] == RECIPE.stem
     assert recipe.container == lock["image"]
     assert {"repository": recipe.model, "revision": recipe.model_revision} == lock["weights"]
     for field in ("kit_revision", "engine_revision", "upstream_patch_count", "upstream_patch_hash"):
-        assert recipe.metadata[field] == lock[field] == v11_lock[field], field
+        assert recipe.metadata[field] == lock[field], field
     assert recipe.metadata["server_patch_count"] == len(lock["server_patches"]) + len(lock["site_patches"]) == 6
-    for field in ("image", "image_id"):
-        assert lock[field] == v11_lock[field], field
-    # The kit's launcher settings, unchanged from the v1.1 profile.
-    assert recipe.env == v11.env
+    assert recipe.env == {
+        "NCCL_MIN_NCHANNELS": "4", "NCCL_MAX_NCHANNELS": "4", "TENSORFOLD_NO_UPDATE_CHECK": "1",
+        "TENSORFOLD_MEMORY_RESERVE_GIB": "10", "TENSORFOLD_VISION_WORKSPACE_MIB": "2048",
+        "TF_FLASHNEXT_YARN": "4", "TF_FLASHNEXT_ROCE": "1", "TF_FLASHNEXT_L2PF": "1", "TF_FLASHNEXT_DEPTH": "15",
+        "TENSORFOLD_MAX_IMAGES": "50", "TENSORFOLD_IMAGE_TOKENS": "16384", "TENSORFOLD_VIDEO_TOKENS": "16384",
+    }
+    assert not [issue for issue in TensorFoldRuntime().validate_recipe(recipe) if getattr(issue, "severity", None) == ERROR]
     assert recipe.defaults["context"] == WINDOW < STALL
     assert recipe.defaults["entrypoint"] == "/usr/local/bin/tensorfold-entrypoint"
-
-
-def test_recipe_is_the_v11_workload_and_shares_its_cache():
-    runtime, recipe, v11 = TensorFoldRuntime(), _recipe(), _recipe(V11_RECIPE)
-    assert not [issue for issue in runtime.validate_recipe(recipe) if getattr(issue, "severity", None) == ERROR]
-    # SparkRun's stop, logs and status with either file act on whichever of the two is running.
-    assert generate_intent_id(recipe) == generate_intent_id(v11)
-    leaves = {build_runtime_cache_mounts(
-        runtime=runtime, recipe=each, settings=resolve_runtime_cache_settings(runtime=runtime, recipe=each),
-        root="/opt/spark-cache/huggingface/runtime-cache", image=each.container).leaf for each in (recipe, v11)}
-    assert len(leaves) == 1
 
 
 def test_recipe_uses_the_shared_gate_with_qwens_levels():
@@ -125,6 +114,17 @@ def test_recipe_uses_the_shared_gate_with_qwens_levels():
 
 def test_rank_commands_link_over_the_heads_fabric_address(monkeypatch):
     runtime, recipe = TensorFoldRuntime(), _recipe()
+    ctx = ClusterContext.build(
+        runtime, [HEAD, WORKER], recipe.container, "tf-profile-test",
+        recipe.env, None, None, dry_run=True, recipe=recipe,
+    )
+    script = shlex.split(DockerExecutor().generate_launch_script(
+        image=recipe.container, container_name="tf-profile-test", command="sleep infinity",
+        env=ctx.all_env, volumes=ctx.volumes,
+    ))
+    for setting in ("TF_FLASHNEXT_YARN=4", "TF_FLASHNEXT_ROCE=1", "TENSORFOLD_MEMORY_RESERVE_GIB=10",
+                    "NCCL_MIN_NCHANNELS=4", "NCCL_MAX_NCHANNELS=4"):
+        assert setting in script
     serve = _load("qwen_serve", MOD / "serve.py")
     seen = {}
 
@@ -140,6 +140,7 @@ def test_rank_commands_link_over_the_heads_fabric_address(monkeypatch):
     for rank in (0, 1):
         env, argv = seen[rank]
         assert argv == ["/usr/local/bin/tensorfold-entrypoint"]
+        assert "DRAFTER" not in env
         # The rank command inherits the recipe env from its container.
         args = serve.command({**recipe.env, **env})
         assert args[:3] == ["/opt/tensorfold-mod/bin/tensorfold-native", "serve",

@@ -278,7 +278,7 @@ print('PASS')
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--url", default="http://127.0.0.1:8888/v1")
-    parser.add_argument("--model", default="GLM-5.3-Flash-EXL3")
+    parser.add_argument("--model", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--require-cache", action="store_true")
     parser.add_argument("--section", choices=("all", "tools", "isolation", "structured", "cache", "coding", "cancellation"), default="all")
