@@ -90,6 +90,8 @@ def test_rank_commands_reach_mias_cli():
                                ("--context", "1048576"), ("--parallel", "4"), ("--max-tokens", "32768")):
             assert args[args.index(flag) + 1] == expected
         assert ("--name" in args) is (rank == 0) and "--thinking" in args and "--vision" in args
+        if rank == 0:
+            assert args[args.index("--name") + 1] == recipe.defaults["served_model_name"] == "GLM-5.3-Flash"
     source = (MOD / "serve.py").read_text()
     assert source.index('"/proc/self/oom_score_adj"') < source.index("os.execvp")
 
@@ -112,6 +114,17 @@ def test_mod_is_frozen_and_self_contained(tmp_path):
     (bundle / "serve.py").write_text((bundle / "serve.py").read_text() + "\n# Unreviewed change\n")
     result = subprocess.run(check, capture_output=True, text=True)
     assert result.returncode != 0 and "Missing or changed frozen mod file: serve.py" in result.stderr
+
+
+def test_a_linked_prepare_checks_the_bundle_it_runs_from(tmp_path):
+    pristine, bundle = tmp_path / "pristine", tmp_path / MOD.name
+    for target in (pristine, bundle):
+        shutil.copytree(MOD, target, ignore=shutil.ignore_patterns("__pycache__"))
+    (bundle / "serve.py").write_text("# Unreviewed\n")
+    (bundle / "prepare.py").unlink()
+    (bundle / "prepare.py").symlink_to(pristine / "prepare.py")
+    result = subprocess.run([sys.executable, str(bundle / "prepare.py"), "--check"], capture_output=True, text=True)
+    assert result.returncode != 0
 
 
 def _stand_in_tree(tmp_path):
@@ -152,7 +165,10 @@ def test_site_guards_refuse_other_sources_and_apply_once(tmp_path):
     result = subprocess.run([sys.executable, str(MOD / "site_fixes.py"), "--root", str(root)], capture_output=True, text=True)
     assert result.returncode != 0 and "installed source drifted" in result.stderr
     fixes.apply(root)
-    guarded = {name: (root / name).read_text() for name in ("cuda/http.py", "cuda/health.py")}
+    guarded = {name: (root / name).read_text()
+               for name in ("cuda/http.py", "cuda/health.py", "families/glm5_next/cuda/kept_reasoning.py")}
+    reasoning = guarded["families/glm5_next/cuda/kept_reasoning.py"]
+    assert "_OUR_ID.match(i)]" in reasoning and "[signature(history, calls)]" not in reasoning
     assert "_model_entry(app, model_id) for model_id in app.model_ids" in guarded["cuda/http.py"]
     assert '200 if report.get("ok") is True else 503' in guarded["cuda/http.py"]
     compile(guarded["cuda/http.py"], "http.py", "exec")

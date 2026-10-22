@@ -10,7 +10,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="Compatibility alias; both modes only verify files")
     parser.parse_args()
-    here = Path(__file__).resolve().parent
+    # Not resolved: a linked prepare.py must check the bundle it was run from.
+    here = Path(__file__).absolute().parent
     manifest = here / "upstream.lock.json"
     if manifest.is_symlink() or not manifest.is_file():
         raise ValueError("Missing or linked Mia TensorFold mod manifest")
