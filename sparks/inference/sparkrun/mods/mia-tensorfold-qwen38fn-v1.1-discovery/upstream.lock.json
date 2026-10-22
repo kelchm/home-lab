@@ -45,7 +45,7 @@
     {
       "file": "patches/0013-admission-agreed-before-sequence.patch",
       "fixes": "MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold#6",
-      "source": "https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/6#issuecomment-6166228691, the version for be3ed857, last edited 2026-10-14T10:26:39Z",
+      "source": "https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/6#issuecomment-6166228691, the version for be3ed857, last edited 2026-10-14T10:26:39Z (GitHub lastEditedAt)",
       "author": "xinlu8439",
       "license": "Apache-2.0",
       "sha256": "bf82dcedfcfc5f832519417f0c0cf0f05618e29906a43a185be248072405ec2c"
@@ -53,18 +53,18 @@
     {
       "file": "patches/0014-prompt-cache-evicted-kept-state.patch",
       "fixes": "MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold#9",
-      "source": "https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/9, the issue body of 2026-10-17T08:06:15Z, not edited since",
+      "source": "https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/9, the issue body of 2026-10-17T08:06:15Z, never edited (GitHub lastEditedAt null)",
       "author": "xinlu8439",
       "license": "Apache-2.0",
       "sha256": "ac6e1d7af8219e6c889d11312776de6ae0d007dff2cd0e67dd23d365acc6ad4d"
     },
     {
-      "file": "patches/0015-refuse-whole-vocabulary-sampling.patch",
+      "file": "patches/0015-refuse-sampling-two-ranks-cannot-draw.patch",
       "fixes": "MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold#8",
-      "source": "this mod: refuses top_k off with neither a top_p cut nor min_p when the engine has more than one rank",
+      "source": "this mod: with more than one rank, refuses top_k off with neither a top_p cut nor min_p, and top_k above 248",
       "author": "kelchm/home-lab",
       "license": "Apache-2.0",
-      "sha256": "345d45bb26768fd9b5270739793966bb62ea73b603712d95a7a78c00933e682c"
+      "sha256": "7e2e9440db40f7d22bf2d4d0cb5d901468c07b810721bacf8ac7dfad4fef2999"
     }
   ],
   "build": {
@@ -76,7 +76,7 @@
     "fatbin_layer": "sha256:b75cd6a6d6c59b3020947b108872a1b071960200d135a39e8be8d210076ff1aa",
     "published_binary_sha256": "24a7bda5d257a9ddc7af77d7a12baa6c274bce76abe493e19767292644f0b200"
   },
-  "binary_sha256": "ba463e07c975a3b37596c8c4b9c4f9f91b90cb29379724cf325e1a27a0d3eb4f",
+  "binary_sha256": "9f28a90242d7ee440ddfb0ba930ecbc5ecadd6fbe2d247dda162c42c87343d8f",
   "mod_files": {
     "prepare.py": "8e52b6ddf3ff9bfe79c3558bacf2bb4345c1f416e9405b976c0dc88b2624aae1",
     "run.sh": "b140c09cfc6143ea1d577d9534190ed53880cbe31260794d4ff55e82cc108652",
@@ -88,6 +88,6 @@
     "patches/0012-record-notification-first.patch": "adda97ecb1b9ce17ca11ba5fd39f7b704214ba51ed3701bed8cb6bd82067a2c2",
     "patches/0013-admission-agreed-before-sequence.patch": "bf82dcedfcfc5f832519417f0c0cf0f05618e29906a43a185be248072405ec2c",
     "patches/0014-prompt-cache-evicted-kept-state.patch": "ac6e1d7af8219e6c889d11312776de6ae0d007dff2cd0e67dd23d365acc6ad4d",
-    "patches/0015-refuse-whole-vocabulary-sampling.patch": "345d45bb26768fd9b5270739793966bb62ea73b603712d95a7a78c00933e682c"
+    "patches/0015-refuse-sampling-two-ranks-cannot-draw.patch": "7e2e9440db40f7d22bf2d4d0cb5d901468c07b810721bacf8ac7dfad4fef2999"
   }
 }

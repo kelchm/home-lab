@@ -11,7 +11,7 @@ index d9793a84..c4423944 100644
          .request_log = env(s, "TENSORFOLD_REQUEST_LOG"),
          .dashboard = args.dashboard,
 diff --git a/zig/src/server/server.zig b/zig/src/server/server.zig
-index 695a48d9..b09ec695 100644
+index 695a48d9..e5b73242 100644
 --- a/zig/src/server/server.zig
 +++ b/zig/src/server/server.zig
 @@ -35,6 +35,8 @@ pub const Config = struct {
@@ -23,7 +23,7 @@ index 695a48d9..b09ec695 100644
      seed_salt: i64 = 0,
      /// TENSORFOLD_REQUEST_LOG: where chat and completion bodies are appended; null: nowhere.
      request_log: ?[]const u8 = null,
-@@ -115,13 +117,15 @@ pub const Server = struct {
+@@ -115,13 +117,16 @@ pub const Server = struct {
          const temp = number(options.get("temperature")) orelse 0;
          if (temp <= 0) return null;
          const seed: u64 = if (options.get("seed")) |s| seedBits(s) else api.seedFor(prompt_ids, srv.config.seed_salt);
@@ -36,11 +36,12 @@ index 695a48d9..b09ec695 100644
              .min_p = @floatCast(number(options.get("min_p")) orelse 0.0),
          };
 +        if (srv.config.ranks > 1 and wholeVocabulary(sampling)) return cx.refuse("top_k off with top_p 1 and no min_p draws from the whole vocabulary, which two ranks cannot serve: set top_k (this model's default is 20) or a top_p below 1");
++        if (srv.config.ranks > 1 and sampling.top_k > ranks_top_k) return cx.refuse("top_k above 248 needs more candidates than two ranks gather: send a top_k of 248 or less");
 +        return sampling;
      }
  
      /// The call gate and grammar a request asks for, or its refusal when the engine cannot enforce them.
-@@ -316,3 +320,18 @@ fn lateSystem(a: Allocator, text: model_text.Text) ![]const u8 {
+@@ -316,3 +321,22 @@ fn lateSystem(a: Allocator, text: model_text.Text) ![]const u8 {
  fn needsUserAfterTool(source: []const u8) bool {
      return std.mem.indexOf(u8, source, "No user query found") != null;
  }
@@ -52,6 +53,10 @@ index 695a48d9..b09ec695 100644
 +    return s.temperature > 0 and s.top_k == 0 and !(0 < s.top_p and s.top_p < 1) and s.min_p <= 0;
 +}
 +
++/// The largest top_k two ranks draw from: the TP sampler's scratch holds 256 candidates (flashnext cuda_engine.max_k)
++/// and a draw reads top_k plus 8 (cuda_sampler.margin); more fails after admission (TopKPastScratch) and exits both.
++const ranks_top_k = 248;
++
 +test "sampling that draws from the whole vocabulary is refused, and any cut is served" {
 +    try std.testing.expect(wholeVocabulary(.{ .seed = 1, .temperature = 1, .top_k = 0, .top_p = 1, .min_p = 0 }));
 +    try std.testing.expect(wholeVocabulary(.{ .seed = 1, .temperature = 0.7, .top_k = 0, .top_p = 0, .min_p = 0 }));
@@ -60,7 +65,7 @@ index 695a48d9..b09ec695 100644
 +    try std.testing.expect(!wholeVocabulary(.{ .seed = 1, .temperature = 1, .top_k = 0, .top_p = 1, .min_p = 0.05 }));
 +}
 diff --git a/zig/src/server/stream_preflight_test.zig b/zig/src/server/stream_preflight_test.zig
-index c33defe2..a1452557 100644
+index c33defe2..14f8f8ba 100644
 --- a/zig/src/server/stream_preflight_test.zig
 +++ b/zig/src/server/stream_preflight_test.zig
 @@ -83,6 +83,7 @@ const HiEngine = struct {
@@ -79,7 +84,7 @@ index c33defe2..a1452557 100644
      }, null);
      defer srv.deinit();
      var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-@@ -213,3 +215,13 @@ test "a reply labels a greedy request greedy and a sampled one exact" {
+@@ -213,3 +215,25 @@ test "a reply labels a greedy request greedy and a sampled one exact" {
      try std.testing.expectEqual(.exact, sampled.label.?);
      try std.testing.expectEqual(@as(i64, 0), sampled.preparing);
  }
@@ -92,4 +97,16 @@ index c33defe2..a1452557 100644
 +    try std.testing.expectEqual(@as(?u16, 200), (try send(.chat, whole)).status);
 +    const cut = "{\"model\":\"test-model\",\"messages\":[{\"role\":\"user\",\"content\":\"x\"}],\"max_tokens\":2,\"temperature\":0.7,\"top_k\":20,\"top_p\":1}";
 +    try std.testing.expectEqual(@as(?u16, 200), (try sendTo(.chat, cut, .{ .ranks = 2 })).status);
++}
++
++test "two ranks refuse a top_k past their 248 candidates and serve 248" {
++    const past = "{\"model\":\"test-model\",\"messages\":[{\"role\":\"user\",\"content\":\"x\"}],\"max_tokens\":2,\"temperature\":1,\"top_k\":249,\"top_p\":0.95}";
++    const two = try sendTo(.chat, past, .{ .ranks = 2 });
++    try std.testing.expectEqual(@as(?u16, 400), two.status);
++    try std.testing.expectEqual(@as(i64, 0), two.preparing);
++    try std.testing.expectEqual(@as(?u16, 200), (try send(.chat, past)).status);
++    const most = "{\"model\":\"test-model\",\"messages\":[{\"role\":\"user\",\"content\":\"x\"}],\"max_tokens\":2,\"temperature\":1,\"top_k\":248,\"top_p\":0.95}";
++    try std.testing.expectEqual(@as(?u16, 200), (try sendTo(.chat, most, .{ .ranks = 2 })).status);
++    const greedy = "{\"model\":\"test-model\",\"messages\":[{\"role\":\"user\",\"content\":\"x\"}],\"max_tokens\":2,\"temperature\":0,\"top_k\":1000}";
++    try std.testing.expectEqual(@as(?u16, 200), (try sendTo(.chat, greedy, .{ .ranks = 2 })).status);
 +}
