@@ -542,7 +542,7 @@ The v1.1 profile and mod are unchanged.
 
 #### Discovery and fix patches
 
-The [mod](mods/mia-tensorfold-qwen38fn-v1.1-discovery/) adds six patches to the kit's nine, applied in file order. The first two add discovery to the server's `status_routes.zig` and `server.zig`. Both halves are upstream TensorFold changes, released in 1.0.3 and 1.0.12, but the kit pins an engine commit that has neither, so this is a local backport until the kit moves its pin. Earlier builds of this binary [served from October 13](#october-13-live-test) until DeepSeek-V4.1-Flash-1017 replaced Qwen on October 17. They carried the upstream PR's draft, which also listed an `effort_map` that upstream dropped before merging. The build in this directory has the merged change. With the four fixes below it was `9f28a902…` when it [qualified on October 22](#october-22-qualification), and it is now `6ae47f69…`, which replaces `0015`'s whole-vocabulary refusal with a clamp.
+The [mod](mods/mia-tensorfold-qwen38fn-v1.1-discovery/) adds six patches to the kit's nine, applied in file order. The first two add discovery to the server's `status_routes.zig` and `server.zig`. Both halves are upstream TensorFold changes, released in 1.0.3 and 1.0.12, but the kit pins an engine commit that has neither, so this is a local backport until the kit moves its pin. Earlier builds of this binary [served from October 13](#october-13-live-test) until DeepSeek-V4.1-Flash-1017 replaced Qwen on October 17. They carried the upstream PR's draft, which also listed an `effort_map` that upstream dropped before merging. The build in this directory has the merged change. With the four fixes below it was `9f28a902…` when it [qualified on October 22](#october-22-qualification), and it is now `6ae47f69…`, which replaces `0015`'s whole-vocabulary refusal with a clamp, [checked on the Sparks](#october-22-clamp-check) the same day.
 
 | Patch | Source | Adds |
 | --- | --- | --- |
@@ -683,6 +683,25 @@ The first long prompt of each boot was the first request after the shared gate, 
 
 Both ranks ran `9f28a902…` with the control link on `FABRIC_MASTER` (`198.19.240.11:25000`) and the RoCE all-gather on both rails, with 31.72 and 31.45 GiB of sequence memory. Available memory never went below 34.9 GiB on the head or 38.4 GiB on the worker. The management links' carrier counters stayed at 20 and 1,436, neither rank logged an error, and the kernel logs had no NVRM, Xid or OOM lines. After each stop, both GPUs went idle with no process. The agent gate's `structured` section is left out because this server refuses `response_format`, a v1.1 limit above. Receipts are on the head under `~/sparkrun/experiments/qwen38fn-mia-959-w2/receipts/`.
 
+#### October 22 clamp check
+
+A 45-minute window from the #938 orchestrator, the same afternoon, with the same safeguards. DeepSeek was down from 11:19:08 to 11:34:32 EDT.
+
+1. **Reproduction, on the qualified `9f28a902…` without the clamp.** The boot passed the gate. Then requests with `top_k` −1, `top_p` 0.95, temperature 5 and 32 reply tokens:
+   - seed 1 was served;
+   - seed 2 dropped the connection. Rank 0 logged `a window's draws failed after the ranks agreed (OutOfMemory); exiting`, and rank 1 followed on the closed control link.
+
+   spark-2's GPU then stayed at 96% busy with no process. Stopping and restarting the GPU exporter and `nvidia-persistenced` cleared it to 0% and P8, with no kernel errors and no reboot.
+2. **The clamp, `6ae47f69…`.** The boot passed the gate, with both ranks on `6ae47f69…`. Then:
+   - the same request was served for six seeds, the server healthy after each;
+   - `top_k` 249 got HTTP 400;
+   - `top_k` −1 with `top_p` 1 was served;
+   - a cold 490,467-token prompt completed in 202.9 s, with its needle found.
+
+   Neither rank logged an error. Available memory stayed at or above 38.7 GiB on the head and 42.9 GiB on the worker, the kernel logs had no NVRM, Xid or OOM lines, and both GPUs went idle after the stop.
+
+Receipts are on the head under `~/sparkrun/experiments/qwen38fn-mia-959-w3/receipts/`.
+
 #### Launch, stop and rollback
 
 Merging this directory changes nothing on the Sparks. Each step below is manual, and it runs in a Spark window from the #938 orchestrator. The stop in step 6 begins the outage.
@@ -763,12 +782,18 @@ The v1.1 limits above still apply, including structured outputs, `/health` and p
   - 503,359 tokens stalled and 382,416 completed on `main`;
   - 288,012 stalled on `dbcaaed`, with every repeat;
   - here on October 8, 524,135 completed and 999,874 stalled, over the management link, after shorter prompts;
-  - here on October 22, over CX7, the first long request after each boot stalled at 489,437, 390,775 and 260,504 tokens ([#940](https://github.com/kelchm/home-lab/issues/940#issuecomment-6341022722)). From about 03:15, after the first of these stalls, spark-2's GPU read 96% busy with no process. Stopping `nvidia-persistenced` and the GPU exporter released it without a reboot; `nvidia-smi -r` is refused on that primary GPU.
+  - here on October 22, over CX7, the first long request after each boot stalled at 489,437, 390,775 and 260,504 tokens ([#940](https://github.com/kelchm/home-lab/issues/940#issuecomment-6341022722)).
 
   `0012` carries the transport-ordering fix from [kit PR #4](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/pull/4).
 - **One failed prefill ends the server** ([#6](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/6), [#7](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/7)). A `NoRoom` on one rank after admission exits both ranks. It is reported with long prompts and a full prompt cache. With `0013`, a refusal on either rank fails only that request; a failure after both ranks agree still exits both, as #7 reports. SparkRun does not restart the ranks.
-- **Full-vocabulary sampling** ([#8](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/8)). `top_p` 1 with `top_k` −1 can exit both ranks in the drafts' sampling. `top_k` 20 with `top_p` 0.95 ran cleanly in that report. Two ranks reach that exchange only with `top_k` off. The same whole-shard fallback can also be reached with `top_k` off and a `top_p` cut, when the nucleus is wider than 1,024 candidates a rank, as at a high temperature; that path is read from the source, and no report of it is known. `0015` closes both: with two ranks, `top_k` off is drawn as `top_k` 248, with `top_p` and `min_p` still cutting within it, so no draw takes the nucleus exchange. A client that asks for the whole vocabulary gets the best 248 candidates instead. `top_k` above 248 gets HTTP 400, because it otherwise exits both ranks with `TopKPastScratch`. The server's own defaults, used when a client sends none, are `top_k` 20 and `top_p` 0.95.
+- **Full-vocabulary sampling** ([#8](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/8)). `top_p` 1 with `top_k` −1 can exit both ranks in the drafts' sampling. `top_k` 20 with `top_p` 0.95 ran cleanly in that report. Two ranks reach that exchange only with `top_k` off. The same whole-shard fallback can also be reached with `top_k` off and a `top_p` cut, when the nucleus is wider than 1,024 candidates a rank, as at a high temperature. That was [reproduced on the Sparks](#october-22-clamp-check) with the binary before the clamp: `top_k` −1, `top_p` 0.95 at temperature 5 exited both ranks on its second request. `0015` closes both: with two ranks, `top_k` off is drawn as `top_k` 248, with `top_p` and `min_p` still cutting within it, so no draw takes the nucleus exchange. A client that asks for the whole vocabulary gets the best 248 candidates instead. `top_k` above 248 gets HTTP 400, because it otherwise exits both ranks with `TopKPastScratch`. The server's own defaults, used when a client sends none, are `top_k` 20 and `top_p` 0.95.
 - **Prompt-cache use-after-free** ([#9](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/9)). Rank 0 can segfault in `endPass` when the prompt cache evicts a state the same pass kept. It is reported with long prompts and a full cache, and with a small cache at 45–57K-token prompts. `0014` is the issue's fix, which one other operator reports stopped the crash.
+- **A GPU stuck busy after both ranks exit.** On October 22 this happened twice, after the first control-link stall and after the clamp check's reproduced crash. spark-2's GPU, rank 1's, then read 96% busy at P0 with no process, through the stop. To clear it without a reboot:
+  1. stop the GPU exporter container (`monitoring-gpu-gpu-exporter-1`) and `nvidia-persistenced`;
+  2. wait about 20 s;
+  3. start both again.
+
+  The GPU then settles at 0% and P8. `nvidia-smi -r` is refused on that primary GPU. Check both GPUs after any crash, before the next launch.
 - **YaRN.** The factor stays at the kit's 4, as on October 8. A factor of 2 would also cover this window, and is untried here.
 
 ### October 8 NVFP4 evaluation
