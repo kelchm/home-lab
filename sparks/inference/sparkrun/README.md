@@ -57,7 +57,14 @@ Nothing is built here. For a new kit revision, check the published image before 
 2. Apply the kit's patches to the pinned engine commit with `patch -p0`, check that they hash with the kit's extras line to the image's `tf.patches` label, and compare the image's patched-files layer with the reconstruction, at least for every file the mod guards or reads.
 3. Add a new versioned recipe and mod with the new image, upstream hashes and guarded hashes, so the current profile stays as the rollback.
 
-Before any live check, run the source regressions against the installed code inside each rank's container: the [Mia regression](tests/mia_tensorfold_site.py) for call-ID reasoning and HTTP health, the [capacity regression](tests/mia_tensorfold_capacity.py) for the queue cap and HTTP 429, and the [switch and route regression](tests/mia_tensorfold_switches_and_routes.py) for the recipe's launcher switches, streamed admission refusals and the Anthropic route. Feed each one unchanged to the rank's own Python, from the head for rank 0 and the worker for rank 1: `docker exec -i -e PYTHONDONTWRITEBYTECODE=1 <rank container> python3 -B - < tests/mia_tensorfold_site.py`. They use mocked handlers and decoders, so they are source evidence, not live traffic.
+Before any live check, run the source regressions against the installed code inside each rank's container: the [Mia regression](tests/mia_tensorfold_site.py) for call-ID reasoning and HTTP health, the [capacity regression](tests/mia_tensorfold_capacity.py) for the queue cap and HTTP 429, and the [switch and route regression](tests/mia_tensorfold_switches_and_routes.py) for the recipe's launcher switches, streamed admission refusals and the Anthropic route. Feed each one unchanged to the rank's own Python, from the head for rank 0 and the worker for rank 1. They use mocked handlers and decoders, so they are source evidence, not live traffic:
+
+```sh
+rank=<rank container>
+for t in site capacity switches_and_routes; do
+  docker exec -i -e PYTHONDONTWRITEBYTECODE=1 "$rank" python3 -B - < "tests/mia_tensorfold_$t.py" || echo "FAIL $t"
+done
+```
 
 ### Launch, stop and roll back
 
