@@ -4,6 +4,7 @@ kind: Kustomization
 resources:
   - helmrepository.yaml
   - helmrelease.yaml
+  - helmrelease-events.yaml
   - podmonitor.yaml
   - networkpolicy.yaml
   - talos-service.yaml
@@ -15,5 +16,10 @@ configMapGenerator:
       - config/parsers.conf
       - config/normalize.lua
       - config/unifi.lua
+  # Its own ConfigMap, so an events change never restarts the node collectors.
+  - name: fluent-bit-events-config
+    files:
+      - fluent-bit.conf=config/events/fluent-bit.conf
+      - events.lua=config/events/events.lua
 generatorOptions:
   disableNameSuffixHash: true

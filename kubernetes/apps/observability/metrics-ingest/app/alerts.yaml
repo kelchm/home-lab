@@ -64,6 +64,33 @@ spec:
           annotations:
             summary: NVMe on {{ $labels.instance }} is at {{ printf "%.0f" $value }} C
 
+        # Pods are covered by Kubernetes; this catches the kernel killing a process on the host itself.
+        - alert: HostOomKill
+          expr: increase(node_vmstat_oom_kill{job=~"(pve|spark|pi)-node"}[15m]) > 0
+          labels:
+            severity: warning
+          annotations:
+            summary: The kernel killed a process for memory on {{ $labels.instance }}
+            description: Find the process with `journalctl -k | grep -i "killed process"` on the host, and check that it came back.
+
+        # Headroom to each CPU's own limit: the critical temperature the PVE hosts report, and 85 C, where a Pi 5 throttles.
+        - alert: HostCpuHot
+          expr: |
+            (
+              (node_hwmon_temp_crit_celsius{job="pve-node"} - node_hwmon_temp_celsius{job="pve-node"})
+              * on (instance, chip, sensor) group_left
+                node_hwmon_sensor_label{job="pve-node", label="Package id 0"}
+              or
+              (85 - node_hwmon_temp_celsius{job="pi-node"})
+              * on (instance, chip) group_left
+                node_hwmon_chip_names{job="pi-node", chip_name="cpu_thermal"}
+            ) < 5
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: CPU on {{ $labels.instance }} is {{ printf "%.0f" $value }} C from its limit
+
         - alert: SparkGpuThermalThrottling
           expr: |
             max by (instance, platform) (
