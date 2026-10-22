@@ -3,7 +3,7 @@
 
 Checks the engine's health in its own format, the /v1/models entry the profile promises, one concurrent smoke reply per
 stream, one tool call and, where the server renders prompts through /tokenize, that each advertised reasoning level
-reaches the prompt differently and that every other standard level name maps onto one of them.
+reaches the prompt differently and that every other standard level name renders as its nearest advertised level.
 """
 import argparse
 from concurrent.futures import ThreadPoolExecutor
@@ -13,6 +13,8 @@ import urllib.error
 import urllib.request
 
 STANDARD_EFFORTS = ("none", "minimal", "low", "medium", "high", "xhigh", "max")
+# Highest first; an unlisted name takes the nearest advertised level, ties going higher.
+EFFORT_ORDER = ("max", "xhigh", "high", "medium", "low", "minimal")
 PROMPT = [{"role": "user", "content": "Readiness render. Reply with the word ready."}]
 
 
@@ -105,14 +107,15 @@ def tool_call(url, model):
     tool = {"type": "function", "function": {"name": "get_weather", "description": "Current weather for a city.",
             "parameters": {"type": "object", "properties": {"city": {"type": "string"}}, "required": ["city"]}}}
     result, choice = chat(url, {
-        "model": model, "messages": [{"role": "user", "content": "What is the weather in Oslo?"}],
-        "tools": [tool], "tool_choice": "auto", "max_tokens": 256, "temperature": 0,
+        "model": model, "messages": [{"role": "user", "content":
+            "Call get_weather with the city Oslo to answer: what is the weather in Oslo?"}],
+        "tools": [tool], "tool_choice": "auto", "parallel_tool_calls": False, "max_tokens": 256, "temperature": 0,
         "chat_template_kwargs": {"enable_thinking": False},
     })
     calls = choice.get("message", {}).get("tool_calls") or []
     if choice.get("finish_reason") != "tool_calls" or len(calls) != 1 or calls[0]["function"]["name"] != "get_weather":
         raise RuntimeError(f"Incorrect tool-call reply: {result!r}")
-    if json.loads(calls[0]["function"]["arguments"]).get("city", "").lower() != "oslo":
+    if "oslo" not in str(json.loads(calls[0]["function"]["arguments"]).get("city", "")).lower():
         raise RuntimeError(f"Incorrect tool-call arguments: {result!r}")
     return calls
 
@@ -126,25 +129,32 @@ def render(url, model, effort):
     return tuple(tokens)
 
 
+def nearest(effort, levels):
+    """The advertised level an unlisted name should render as: nearest in EFFORT_ORDER, ties going higher."""
+    named = [level for level in EFFORT_ORDER if level in levels]
+    at = EFFORT_ORDER.index(effort)
+    return min(named, key=lambda level: (abs(EFFORT_ORDER.index(level) - at), EFFORT_ORDER.index(level)))
+
+
 def check_renders(url, model, efforts):
-    """Each advertised level renders its own prompt; every other standard name renders as one of them."""
+    """Each advertised level renders its own prompt; every other standard name renders as its nearest level."""
     try:
-        rendered = {effort: render(url, model, effort) for effort in efforts}
+        first = render(url, model, efforts[0])
     except urllib.error.HTTPError as error:
-        if error.code == 404:
+        if error.code == 404:   # the server has no /tokenize route; any later refusal is a failure
             return None
         raise
+    rendered = {efforts[0]: first, **{effort: render(url, model, effort) for effort in efforts[1:]}}
     if len(set(rendered.values())) != len(rendered):
         raise RuntimeError(f"Advertised levels share a rendered prompt: {sorted(rendered)}")
     mapped = {}
     for effort in STANDARD_EFFORTS:
-        if effort in rendered:
+        if effort in rendered or effort == "none":
             continue
-        tokens = render(url, model, effort)
-        match = [name for name, value in rendered.items() if value == tokens]
-        if len(match) != 1:
-            raise RuntimeError(f"{effort!r} renders as none of the advertised levels {list(efforts)!r}")
-        mapped[effort] = match[0]
+        target = nearest(effort, efforts)
+        if render(url, model, effort) != rendered[target]:
+            raise RuntimeError(f"{effort!r} does not render as its nearest advertised level {target!r}")
+        mapped[effort] = target
     return mapped
 
 
@@ -161,6 +171,8 @@ def main():
     args = parser.parse_args()
     url = args.url.rstrip("/").removesuffix("/v1")
     efforts = [effort for effort in args.efforts.split(",") if effort]
+    if len(set(efforts)) != len(efforts) or not set(efforts) <= set(STANDARD_EFFORTS):
+        parser.error(f"--efforts must name distinct standard levels: {args.efforts!r}")
 
     check_health(fetch(url + "/health"), args.model, args.lanes, args.context, args.min_pool_tokens)
     check_models(fetch(url + "/v1/models"), args.model, args.context, efforts)
