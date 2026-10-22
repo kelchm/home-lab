@@ -88,7 +88,7 @@ def test_recipe_pins_the_v11_kit_and_weights_with_its_launcher_settings():
     assert {"repository": recipe.model, "revision": recipe.model_revision} == lock["weights"]
     for field in ("kit_revision", "engine_revision", "upstream_patch_count", "upstream_patch_hash"):
         assert recipe.metadata[field] == lock[field] == v11_lock[field], field
-    assert recipe.metadata["server_patch_count"] == len(lock["server_patches"]) == 2
+    assert recipe.metadata["server_patch_count"] == len(lock["server_patches"]) + len(lock["site_patches"]) == 6
     for field in ("image", "image_id"):
         assert lock[field] == v11_lock[field], field
     # The kit's launcher settings, unchanged from the v1.1 profile.
@@ -178,7 +178,8 @@ def test_bundle_requires_the_locked_binary(tmp_path):
     assert result.returncode != 0 and "Rebuilt binary does not match the lock" in result.stderr
 
 
-@pytest.mark.parametrize("name", ("serve.py", "run.sh", "build/Dockerfile", "patches/0011-models-reasoning.patch"))
+@pytest.mark.parametrize("name", ("serve.py", "run.sh", "build/Dockerfile", "patches/0011-models-reasoning.patch",
+                                  "patches/0012-record-notification-first.patch"))
 def test_bundle_rejects_changed_files_and_a_missing_binary(tmp_path, name):
     bundle = _bundle(tmp_path)
     prepare = [sys.executable, str(bundle / "prepare.py")]
@@ -188,6 +189,23 @@ def test_bundle_rejects_changed_files_and_a_missing_binary(tmp_path, name):
     (bundle / name).write_text((bundle / name).read_text() + "\n# Unreviewed change\n")
     result = subprocess.run([*prepare, "--check"], capture_output=True, text=True)
     assert result.returncode != 0 and f"Missing or changed frozen mod file: {name}" in result.stderr
+
+
+def test_site_patches_are_the_recorded_copies_of_their_sources(tmp_path):
+    lock = json.loads((MOD / "upstream.lock.json").read_text())
+    assert [patch["fixes"].rsplit("#", 1)[1] for patch in lock["site_patches"]] == ["3", "6", "9", "8"]
+    # Applied in file order, after the discovery patches.
+    files = [patch["file"] for patch in lock["server_patches"] + lock["site_patches"]]
+    assert files == sorted(files) == sorted(str(p.relative_to(MOD)) for p in (MOD / "patches").iterdir())
+    for patch in lock["site_patches"]:
+        assert patch["source"] and patch["author"] and patch["license"] == "Apache-2.0"
+        assert patch["sha256"] == lock["mod_files"][patch["file"]] == hashlib.sha256((MOD / patch["file"]).read_bytes()).hexdigest()
+    bundle = _bundle(tmp_path)
+    changed = json.loads((bundle / "upstream.lock.json").read_text())
+    changed["site_patches"][0]["sha256"] = "0" * 64
+    (bundle / "upstream.lock.json").write_text(json.dumps(changed))
+    result = subprocess.run([sys.executable, str(bundle / "prepare.py"), "--check"], capture_output=True, text=True)
+    assert result.returncode != 0 and "is not the recorded copy of" in result.stderr
 
 
 def test_a_linked_prepare_checks_the_bundle_it_runs_from(tmp_path):

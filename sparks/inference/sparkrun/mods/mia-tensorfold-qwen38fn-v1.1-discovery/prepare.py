@@ -23,9 +23,12 @@ def sha256(path):
 
 def check(lock, require_binary):
     files = lock["mod_files"]
-    patches = {patch["file"] for patch in lock["server_patches"]}
+    patches = {patch["file"] for patch in lock["server_patches"] + lock["site_patches"]}
     if set(files) != FROZEN | patches or {str(p.relative_to(HERE)) for p in (HERE / "patches").iterdir()} != patches:
         raise ValueError("Incomplete Mia TensorFold mod manifest")
+    for patch in lock["site_patches"]:
+        if files[patch["file"]] != patch["sha256"]:
+            raise ValueError(f"{patch['file']} is not the recorded copy of {patch['source']}")
     for name, digest in files.items():
         path = HERE / name
         if path.is_symlink() or not path.is_file() or sha256(path) != digest:
@@ -70,7 +73,8 @@ def main():
         lock["binary_sha256"] = sha256(HERE / BINARY)
         LOCK.write_text(json.dumps(lock, indent=2) + "\n")
     check(lock, args.require_binary)
-    print(f"Verified Mia TensorFold mod for {lock['kit_revision']} with {len(lock['server_patches'])} server patches")
+    print(f"Verified Mia TensorFold mod for {lock['kit_revision']} with "
+          f"{len(lock['server_patches']) + len(lock['site_patches'])} server patches")
 
 
 if __name__ == "__main__":

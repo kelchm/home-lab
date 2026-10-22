@@ -33,6 +33,40 @@
       ]
     }
   ],
+  "site_patches": [
+    {
+      "file": "patches/0012-record-notification-first.patch",
+      "fixes": "MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold#3",
+      "source": "https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/pull/4 at 36356337a6077d25367a6b53844581288fc6e8da, patches/0011-record-notification-first.patch; the same bytes in 321sssrt-bit/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold at 4e96a8660c910d481153f2130be6f3c27bca4f4a",
+      "author": "Zebro (321sssrt-bit)",
+      "license": "Apache-2.0",
+      "sha256": "adda97ecb1b9ce17ca11ba5fd39f7b704214ba51ed3701bed8cb6bd82067a2c2"
+    },
+    {
+      "file": "patches/0013-admission-agreed-before-sequence.patch",
+      "fixes": "MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold#6",
+      "source": "https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/6#issuecomment-6166228691, the version for be3ed857, last edited 2026-10-14T10:26:39Z",
+      "author": "xinlu8439",
+      "license": "Apache-2.0",
+      "sha256": "bf82dcedfcfc5f832519417f0c0cf0f05618e29906a43a185be248072405ec2c"
+    },
+    {
+      "file": "patches/0014-prompt-cache-evicted-kept-state.patch",
+      "fixes": "MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold#9",
+      "source": "https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/9, the issue body of 2026-10-17T08:06:15Z, not edited since",
+      "author": "xinlu8439",
+      "license": "Apache-2.0",
+      "sha256": "ac6e1d7af8219e6c889d11312776de6ae0d007dff2cd0e67dd23d365acc6ad4d"
+    },
+    {
+      "file": "patches/0015-refuse-whole-vocabulary-sampling.patch",
+      "fixes": "MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold#8",
+      "source": "this mod: refuses top_k off with neither a top_p cut nor min_p when the engine has more than one rank",
+      "author": "kelchm/home-lab",
+      "license": "Apache-2.0",
+      "sha256": "345d45bb26768fd9b5270739793966bb62ea73b603712d95a7a78c00933e682c"
+    }
+  ],
   "build": {
     "base_image": "ubuntu:24.04@sha256:534baea6a22c03a63003dbc8dbe78fe34bc0d7e595d9a9dc9834884ff530eb55",
     "zig_version": "0.17.0",
@@ -42,14 +76,18 @@
     "fatbin_layer": "sha256:b75cd6a6d6c59b3020947b108872a1b071960200d135a39e8be8d210076ff1aa",
     "published_binary_sha256": "24a7bda5d257a9ddc7af77d7a12baa6c274bce76abe493e19767292644f0b200"
   },
-  "binary_sha256": "1713bf570749ddba3b6da88d3d0a6812d11175032d32b8868b51dee69ffe2379",
+  "binary_sha256": "ba463e07c975a3b37596c8c4b9c4f9f91b90cb29379724cf325e1a27a0d3eb4f",
   "mod_files": {
-    "prepare.py": "98db9f6b4aa20e3a30ba2befc93fd5f72ad939399b50f909d4693d157c55498d",
+    "prepare.py": "8e52b6ddf3ff9bfe79c3558bacf2bb4345c1f416e9405b976c0dc88b2624aae1",
     "run.sh": "b140c09cfc6143ea1d577d9534190ed53880cbe31260794d4ff55e82cc108652",
     "serve.py": "2e3be383615c88e05d3bb62d43dd695f1fe32b218d60eaa96f58cac0f9bbde19",
     "build/Dockerfile": "931aeec0a765759a12df6de11a28f2aa9af3e09cdb999f5dbedf67df2a8c057f",
     "build/build.sh": "6fa408076151ffc742cbaa72cdc6b1aac5bcfcd808593c1d5fa9ff5351d110b6",
     "patches/0010-models-context-length.patch": "18cf9c302d6bf50516b2cfed4da69527cfa9f16717e5bbbf366e8e330138e766",
-    "patches/0011-models-reasoning.patch": "73171ca4137cc2b87c7ac581c8eea1b4bc743f8ef4fa17175cbcbb8c7f903d6b"
+    "patches/0011-models-reasoning.patch": "73171ca4137cc2b87c7ac581c8eea1b4bc743f8ef4fa17175cbcbb8c7f903d6b",
+    "patches/0012-record-notification-first.patch": "adda97ecb1b9ce17ca11ba5fd39f7b704214ba51ed3701bed8cb6bd82067a2c2",
+    "patches/0013-admission-agreed-before-sequence.patch": "bf82dcedfcfc5f832519417f0c0cf0f05618e29906a43a185be248072405ec2c",
+    "patches/0014-prompt-cache-evicted-kept-state.patch": "ac6e1d7af8219e6c889d11312776de6ae0d007dff2cd0e67dd23d365acc6ad4d",
+    "patches/0015-refuse-whole-vocabulary-sampling.patch": "345d45bb26768fd9b5270739793966bb62ea73b603712d95a7a78c00933e682c"
   }
 }

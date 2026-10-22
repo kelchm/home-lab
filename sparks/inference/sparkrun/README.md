@@ -517,7 +517,7 @@ A first boot is a memory-fit and fabric check under the same abort rules as the 
 
 ### Discovery profile on the shared contract
 
-`qwen38fn-nvfp4-tp2-mia-tf-v1.1-discovery-nvidia-480k` is the profile meant to serve Qwen across both Sparks ([#940](https://github.com/kelchm/home-lab/issues/940)). Its [October 22 trial](https://github.com/kelchm/home-lab/issues/940#issuecomment-6341022722) qualified no window: at 491,520, 393,216 and 262,144 tokens, the first long request after a boot stalled the two ranks' control link, and both ranks exited. It is the v1.1 NVFP4 profile with `tensorfold-native` rebuilt so `GET /v1/models` reports the window and the reasoning levels, moved onto the [#943](https://github.com/kelchm/home-lab/issues/943) contract, with a 491,520-token window. The v1.1 profile and mod are unchanged and remain the fallback until it passes.
+`qwen38fn-nvfp4-tp2-mia-tf-v1.1-discovery-nvidia-480k` is the profile meant to serve Qwen across both Sparks ([#940](https://github.com/kelchm/home-lab/issues/940)). Its [October 22 trial](https://github.com/kelchm/home-lab/issues/940#issuecomment-6341022722) qualified no window: at 491,520, 393,216 and 262,144 tokens, the first long request after a boot stalled the two ranks' control link, and both ranks exited. It is the v1.1 NVFP4 profile with `tensorfold-native` rebuilt so `GET /v1/models` reports the window and the reasoning levels, moved onto the [#943](https://github.com/kelchm/home-lab/issues/943) contract, with a 491,520-token window. Since that trial, its binary also carries the community fixes for the control-link stall, the admission exit and the prompt-cache crash, and a guard against sampling from the whole vocabulary ([patches](#discovery-and-fix-patches)); it has not booted with them. The v1.1 profile and mod are unchanged and remain the fallback until it passes.
 
 - **Kit and image:** v1.1 at `be3ed857` and its published image, manifest `e188128d…` and config `5eb5d4d3…`, as the v1.1 profile pins them. Only `tensorfold-native` is replaced, by the build below. [Kit revision](#kit-revision) has the case for v1.1 over `main`.
 - **Window:** 491,520 tokens, below the 503,359-token prompt that stalled the two ranks' control link on `main` in [kit issue #3](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/3). The kit's YaRN factor of 4 stays, so the engine could admit up to 1,048,576 and `--context` sets the limit. The October 22 trial found no window that passes, down to 262,144. A smaller window changes `context` and the gate's `--context` in the recipe.
@@ -534,7 +534,9 @@ A first boot is a memory-fit and fabric check under the same abort rules as the 
   - that no lab address or path is named;
   - the expected entry, against the gate and the live check.
 
-The [mod](mods/mia-tensorfold-qwen38fn-v1.1-discovery/) adds two patches to the server's `status_routes.zig` and `server.zig`, on top of the kit's nine, and nothing else in the engine changes. Both halves are upstream TensorFold changes, released in 1.0.3 and 1.0.12, but the kit pins an engine commit that has neither, so this is a local backport until the kit moves its pin. Earlier builds of this binary [served from October 13](#october-13-live-test) until DeepSeek-V4.1-Flash-1017 replaced Qwen on October 17. They carried the upstream PR's draft, which also listed an `effort_map` that upstream dropped before merging. The build in this directory is the merged change and has not served yet.
+#### Discovery and fix patches
+
+The [mod](mods/mia-tensorfold-qwen38fn-v1.1-discovery/) adds six patches to the kit's nine, applied in file order. The first two add discovery to the server's `status_routes.zig` and `server.zig`. Both halves are upstream TensorFold changes, released in 1.0.3 and 1.0.12, but the kit pins an engine commit that has neither, so this is a local backport until the kit moves its pin. Earlier builds of this binary [served from October 13](#october-13-live-test) until DeepSeek-V4.1-Flash-1017 replaced Qwen on October 17. They carried the upstream PR's draft, which also listed an `effort_map` that upstream dropped before merging. The build in this directory is the merged change and has not served yet.
 
 | Patch | Source | Adds |
 | --- | --- | --- |
@@ -542,6 +544,15 @@ The [mod](mods/mia-tensorfold-qwen38fn-v1.1-discovery/) adds two patches to the 
 | `0011-models-reasoning.patch` | [`ashhart/TensorFold@60f27da0`](https://github.com/ashhart/TensorFold/commit/60f27da01cb86d076a078d3b4ae3e36c2f3b41c2), upstream PR #819, released in 1.0.12 | `reasoning` |
 
 Each is that commit's change to the source files its lock entry lists; upstream's test files, fixtures and README text are left out. To move a patch to another commit, change its `base` and `commit` in the lock, then run `prepare.py --refresh ~/Development/kelchm/TensorFold` to rewrite the patch and `build/build.sh --record` to rebuild and record the binary.
+
+The other four fix the kit's two-rank defects. They are Apache-2.0 like the kit, and each is kept byte for byte as its source published it, except `0015`, which is this lab's. The lock's `site_patches` records each one's source, author, licence and sha256, and `prepare.py` refuses a copy that differs. The kit closed PR #4 and reverted PR #2 for reasons that weren't technical; [#940](https://github.com/kelchm/home-lab/issues/940) has the history.
+
+| Patch | Fixes | Source | Change |
+| --- | --- | --- | --- |
+| `0012-record-notification-first.patch` | [#3](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/3), the control-link stall | Zebro (`321sssrt-bit`), [kit PR #4](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/pull/4) at `36356337`; the same bytes in their [maintained fork](https://github.com/321sssrt-bit/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold) at `4e96a866` | Rank 0 sends a record before its long payload, so rank 1 knows to drain the link. Before, rank 0 blocked writing the payload into a full link and never sent the record rank 1 was waiting for |
+| `0013-admission-agreed-before-sequence.patch` | [#6](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/6), a one-rank `NoRoom` that exits both ranks | xinlu8439, [the version for `be3ed857`](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/6#issuecomment-6166228691) | The ranks agree on admission before either makes a sequence, so a refusal fails only that request (`OtherRankFailed`) |
+| `0014-prompt-cache-evicted-kept-state.patch` | [#9](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/9), a segfault in `endPass` | xinlu8439, [the issue's own patch](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/9) | A state the store evicts in the pass that kept it is left out of rank 1's note and freed on both ranks |
+| `0015-refuse-whole-vocabulary-sampling.patch` | [#8](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/8), sampling that exits both ranks | this lab | With more than one rank, a request with `top_k` off and neither a `top_p` cut nor `min_p` gets HTTP 400 naming the fix, instead of a draw that exchanges whole vocabulary shards |
 
 Expected entry on this profile:
 
@@ -589,10 +600,10 @@ The image is not rebuilt. [`build/build.sh`](mods/mia-tensorfold-qwen38fn-v1.1-d
 - Ubuntu 24.04 by digest, with its `gcc`, `libc6-dev` and `libibverbs-dev` packages;
 - Zig 0.17.0 by the kit's checksum;
 - engine `db281878`, and the kit's nine patches at `be3ed857` by checksum;
-- the two patches above;
+- the six patches above;
 - the CUDA fatbins, taken from the published image's own layer by digest and embedded with the engine's `-Dfatbins` option.
 
-Before the two patches go on, the build compiles the kit's tree as it is. It stops unless that build's `.text`, `.rodata`, `.data` and `.eh_frame` equal the published binary's byte for byte, so the patched binary is the published program plus the two patches and nothing else. Matching takes two things:
+Before the six patches go on, the build compiles the kit's tree as it is. It stops unless that build's `.text`, `.rodata`, `.data` and `.eh_frame` equal the published binary's byte for byte, so the patched binary is the published program plus the six patches and nothing else. Matching takes two things:
 
 - naming the CPU the published build detected, `cortex_a725` with the features Zig 0.17.0 reads from a Spark;
 - having `infiniband/verbs.h` present. Without that header, the engine compiles a stub in place of its RoCE all-gather.
@@ -616,6 +627,7 @@ Checked on a workstation:
 - The patched build takes about four minutes with that reference build. Three of four builds from an empty Docker cache produced `1713bf57…`. The fourth ran while another container shared the build VM: it had the same loaded sections and different unloaded symbol names. The lock check rejects such a file, and rebuilding gives the recorded one. On October 22, `build.sh` on Colima `tf-build` gave `1713bf57…` again, from that VM's build cache.
 - The binary carries the RoCE proxy as the published one does. The `dlopen libibverbs.so.1` path and the `ibv_*` entry-point names are in it, and the stub's `built without libibverbs headers` message is not.
 - Its only `NEEDED` library is `libc.so.6`, and it has no `RPATH` or `RUNPATH`.
+- With all six patches, on October 22: the build gave `ba463e07…`, after the reference check passed from cache. The engine's host tests (`zig build test`) pass 183 of 183, against 180 without the four fixes. The server's (`zig/tests/server/zig_test.sh`) pass 55 and 17, against 53 and 17, including the guard's request-path test: two ranks refuse the #8 request with HTTP 400, and one rank, or the same request with `top_k` 20, is served.
 
 The live results below are for the two earlier builds, `3dea815d…` of draft `4612b958` and `3f22bd80…` of draft `68911640`, under the earlier 1,048,576-token recipe.
 
@@ -718,7 +730,7 @@ On the head, from `~/sparkrun/recipes/glm53`. The first is read-only; the rest s
 
 #### Known limits
 
-The v1.1 limits above still apply, including structured outputs, `/health` and prompt reuse for pictures. The kit's open issues add these, and none of the fixes posted on them is applied here:
+The v1.1 limits above still apply, including structured outputs, `/health` and prompt reuse for pictures. The kit's open issues add these. The [patches](#discovery-and-fix-patches) above address #3, #6, #8 and #9, and none of them has run on the Sparks yet:
 
 - **Control-link stall** ([#3](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/3)). A long prompt can deadlock the two ranks' control link. Rank 1 exits at `TF_TP_TIMEOUT_S` (300 s), and rank 0 follows. The reports disagree on where it starts:
   - 503,359 tokens stalled and 382,416 completed on `main`;
@@ -726,10 +738,10 @@ The v1.1 limits above still apply, including structured outputs, `/health` and p
   - here on October 8, 524,135 completed and 999,874 stalled, over the management link, after shorter prompts;
   - here on October 22, over CX7, the first long request after each boot stalled at 489,437, 390,775 and 260,504 tokens ([#940](https://github.com/kelchm/home-lab/issues/940#issuecomment-6341022722)). From about 03:15, after the first of these stalls, spark-2's GPU read 96% busy with no process. Stopping `nvidia-persistenced` and the GPU exporter released it without a reboot; `nvidia-smi -r` is refused on that primary GPU.
 
-  The transport-ordering fix in [kit PR #4](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/pull/4) was closed unmerged.
-- **One failed prefill ends the server** ([#6](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/6), [#7](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/7)). A `NoRoom` on one rank after admission exits both ranks. It is reported with long prompts and a full prompt cache. SparkRun does not restart the ranks.
-- **Full-vocabulary sampling** ([#8](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/8)). `top_p` 1 with `top_k` −1 can exit both ranks in the drafts' sampling. `top_k` 20 with `top_p` 0.95 ran cleanly in that report.
-- **Prompt-cache use-after-free** ([#9](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/9)). Rank 0 can segfault in `endPass` when the prompt cache evicts a state the same pass kept. It is reported with long prompts and a full cache, and with a small cache at 45–57K-token prompts.
+  `0012` carries the transport-ordering fix from [kit PR #4](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/pull/4).
+- **One failed prefill ends the server** ([#6](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/6), [#7](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/7)). A `NoRoom` on one rank after admission exits both ranks. It is reported with long prompts and a full prompt cache. With `0013`, a refusal on either rank fails only that request; a failure after both ranks agree still exits both, as #7 reports. SparkRun does not restart the ranks.
+- **Full-vocabulary sampling** ([#8](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/8)). `top_p` 1 with `top_k` −1 can exit both ranks in the drafts' sampling. `top_k` 20 with `top_p` 0.95 ran cleanly in that report. `0015` refuses that request with HTTP 400. The server's own defaults, used when a client sends none, are `top_k` 20 and `top_p` 0.95.
+- **Prompt-cache use-after-free** ([#9](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/9)). Rank 0 can segfault in `endPass` when the prompt cache evicts a state the same pass kept. It is reported with long prompts and a full cache, and with a small cache at 45–57K-token prompts. `0014` is the issue's fix, which one other operator reports stopped the crash.
 - **YaRN.** The factor stays at the kit's 4, as on October 8. A factor of 2 would also cover this window, and is untried here.
 
 ### October 8 NVFP4 evaluation
