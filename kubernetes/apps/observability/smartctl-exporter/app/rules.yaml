@@ -68,6 +68,7 @@ spec:
                 "device", "Disk $1", "diskSMARTInfoDevName", "/dev/sata([0-9]+)"
               )
             )
+        # 1 for each expected drive without health, 0 for each drive with it.
         - record: drive:health_missing
           expr: |
             max by (instance, platform, device) (
@@ -78,6 +79,7 @@ spec:
               or (label_replace({__name__=~"diskStatus|diskHealthStatus|diskModel", job="synology-snmp"}, "device", "$1", "diskID", "(.+)")
                 unless on (instance, platform, device) drive:health_status)
             ) * 0 + 1
+            or drive:health_status * 0
         - alert: DriveHealthMissing
           expr: drive:health_missing == 1
           for: 15m

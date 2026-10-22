@@ -1000,7 +1000,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "count(drive:health_missing{platform=~\"$platform\",instance=~\"$instance\"}) or (0 * count(node_uname_info{platform=~\"$platform\",instance=~\"$instance\"}))",
+          "expr": "count(drive:health_missing{platform=~\"$platform\",instance=~\"$instance\"} == 1) or (0 * count(node_uname_info{platform=~\"$platform\",instance=~\"$instance\"}))",
           "instant": true,
           "range": false,
           "refId": "A"

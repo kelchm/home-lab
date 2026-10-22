@@ -161,9 +161,9 @@ smartctl_device_smart_status{platform=~"k8s|pve|spark"}
 # No missing canonical labels, no IP-valued instance, no missing controller health.
 smartctl_device_smart_status{platform=""} or smartctl_device_smart_status{instance=~".*:9633"}
 node_nvme_info{platform=~"k8s|pve|spark"} unless on (instance, platform, device) smartctl_device_smart_status
-# Sixteen total disks: eight NVMe plus eight NAS HDDs.
+# Sixteen total disks: eight NVMe plus eight NAS HDDs, none missing health.
 count by (platform) (drive:health_status)
-drive:health_missing
+drive:health_missing == 1
 # Eight zero-valued series per HDD attribute; health must include Disk 7 and Disk 8.
 drive:ata_reallocated_sectors
 drive:ata_pending_sectors
