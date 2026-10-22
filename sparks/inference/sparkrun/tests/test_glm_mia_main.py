@@ -94,6 +94,16 @@ def test_rank_commands_reach_mias_cli():
     assert source.index('"/proc/self/oom_score_adj"') < source.index("os.execvp")
 
 
+def test_ranks_meet_on_the_fabric_address_when_sparkrun_supplies_it():
+    serve = _load("glm_serve", MOD / "serve.py")
+    env = {"RANK": "1", "MASTER": HEAD, "MASTER_PORT": "29511", "MODEL_PATH": "/m", "DRAFTER": "/d",
+           "CONTEXT": "1048576", "MAX_TOKENS": "32768"}
+    for extra, master in (({}, HEAD), ({"FABRIC_MASTER": "172.16.240.11"}, "172.16.240.11")):
+        args = serve.command({**env, **extra})
+        assert args[args.index("--master") + 1] == master
+        assert args[args.index("--master-port") + 1] == "29511"
+
+
 def test_mod_is_frozen_and_self_contained(tmp_path):
     bundle = tmp_path / MOD.name
     shutil.copytree(MOD, bundle, ignore=shutil.ignore_patterns("__pycache__"))

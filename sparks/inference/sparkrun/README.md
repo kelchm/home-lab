@@ -35,6 +35,7 @@ What `3fd60dfc` changes against v1.10:
 - **Engine:** eleven patches, `0098` to `0108`, speed up prompt processing, and the launcher adds `TF_GLM_FILL_ROWS=2048`, so a fill's chunk is the whole prompt chunk. Several of the CUDA attention changes target three Sparks; the kit keeps the two-Spark 32-head path on Triton.
 - **Discovery:** a third site guard makes `/v1/models` report `owned_by: tensorfold`, the window as `context_length` and `max_model_len`, and `reasoning` with the thinking default and the levels `max`, `high`, `low` and `none`. The template defines `low` and `high` and renders anything else as `max`; the server maps `minimal` to `low`, `medium` to `high` and `xhigh` to `max`, and `none` turns thinking off.
 - **Served name:** `GLM-5.3-Flash`, without the `-EXL3` suffix, like the other models' names.
+- **Rendezvous:** the ranks meet on `FABRIC_MASTER`, the head's CX7 address, as the kit's launcher does, and fall back to SparkRun's management address only when the adapter has no fabric address.
 - **Mod:** the rank launcher installs as `/usr/local/bin/tensorfold-entrypoint` and gives the engine `oom_score_adj` 1000. Readiness is the [shared gate](#enable-tensorfold-in-sparkrun), with the 1.2M pool floor and the C4 shape warmup at 128, 4,096 and 16,384 words that v1.10's own hook runs.
 
 How both profiles differ from the kit's own launch:
@@ -42,7 +43,7 @@ How both profiles differ from the kit's own launch:
 - **No `start.sh`:** its preflight, memory warning and smoke test do not run, and neither do its recoveries: the retry with a smaller window when the requested one does not fit, and the `SPLIT=0` retry after a first NCCL connection failure ([upstream #36](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold/issues/36)). Either failure ends the launch here.
 - **No rail test:** `start.sh` pings each RoCE rail at full size in both directions and drops a rail that does not answer. SparkRun passes every RDMA device whose port is active to NCCL, and the engine pairs the two ranks' devices by list position, so the [rail check](#before-a-launch) runs by hand first and a failure holds the launch.
 - **Rank command:** the kit's serve flags plus `--backend cuda` and `--no-update-check`.
-- **Fabric:** the ranks meet on SparkRun's rendezvous address, the head's management address, and its port, where the kit uses the CX7 link address and port 29551. NCCL's collectives run over RoCE on both rails, with the devices and GID index SparkRun detects.
+- **Fabric:** the ranks meet on SparkRun's `MASTER_PORT`, where the kit uses port 29551; v1.10's meet on the head's management address. NCCL's collectives run over RoCE on both rails, with the devices and GID index SparkRun detects.
 - **Container:** SparkRun clears the image entrypoint and adds `--user root`, `no-new-privileges` and an open-file limit. Both ranks use host IPC and networking, all GPUs, `/dev/infiniband`, `IPC_LOCK`, unlimited locked memory and a 64 MiB stack.
 - **Caches:** weights mount at `/cache/huggingface`, and compiled kernels go to SparkRun's image-keyed `/cache/runtime`, so each image's first boot compiles from empty.
 
@@ -83,7 +84,7 @@ The rollback from `3fd60dfc` is v1.10: stop `3fd60dfc` with its own recipe, then
 
 - **Measured on v1.10 only, on October 8:** the boot's lowest `MemAvailable` was 8.80 GiB on the head and 7.50 GiB on the worker. A finite 44-minute study completed 124 of 124 latency requests, including a 562,572-token prompt, with minima of 7.30 and 9.41 GiB, below the 8 GiB goal on the head. One four-stream batch stalled for 29 s around a worker management-link drop, unexplained.
 - **Not established:** four long sessions growing together, a retrieval near 1M, full 32k replies, coding and quantization quality, stability beyond that study, and any speed comparison between v1.10 and `3fd60dfc`. #941's comparison measures what it can of these.
-- **Rank coordination over the management network:** rendezvous, and some of NCCL's socket traffic, use the head's management address, and the worker's management link drops for seconds at a time ([#649](https://github.com/kelchm/home-lab/issues/649)).
+- **Rank coordination over the management network:** v1.10's rendezvous, and on both profiles some of NCCL's socket traffic, use the head's management address, and the worker's management link drops for seconds at a time ([#649](https://github.com/kelchm/home-lab/issues/649)).
 - **Open kit reports** of memory growth and hangs under long multi-agent load: [#143](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold/issues/143), [#154](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold/issues/154), [#163](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold/issues/163) and [#197](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold/issues/197).
 - **Admission:** requests past the four streams queue without limit, because `TF_GLM_MAX_QUEUED` is empty.
 - **Access and memory:** the endpoint has no API key, and no memory watchdog runs ([#944](https://github.com/kelchm/home-lab/issues/944)).
