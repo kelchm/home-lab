@@ -8,6 +8,10 @@
   "upstream_patch_hash": "f3e1300f4f62",
   "image": "ghcr.io/miaai-lab/qwen3.8-flash-dual-dgx-sparks-tensorfold@sha256:e188128ddabdc67ac02c05781f5c0c6b348db5f050cac297861d82b7f086e18c",
   "image_id": "sha256:5eb5d4d384773543109baa26783fc6ea38ad619dff330f01672e05c01721cfb0",
+  "weights": {
+    "repository": "nvidia/Qwen3.8-Flash-Next-NVFP4",
+    "revision": "fc694b54fb0174e0913e6adf86691ef85a4ead47"
+  },
   "server_patches": [
     {
       "file": "patches/0010-models-context-length.patch",
@@ -29,6 +33,40 @@
       ]
     }
   ],
+  "site_patches": [
+    {
+      "file": "patches/0012-record-notification-first.patch",
+      "fixes": "MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold#3",
+      "source": "https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/pull/4 at 36356337a6077d25367a6b53844581288fc6e8da, patches/0011-record-notification-first.patch; the same bytes in 321sssrt-bit/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold at 4e96a8660c910d481153f2130be6f3c27bca4f4a",
+      "author": "Zebro (321sssrt-bit)",
+      "license": "Apache-2.0",
+      "sha256": "adda97ecb1b9ce17ca11ba5fd39f7b704214ba51ed3701bed8cb6bd82067a2c2"
+    },
+    {
+      "file": "patches/0013-admission-agreed-before-sequence.patch",
+      "fixes": "MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold#6",
+      "source": "https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/6#issuecomment-6166228691, the version for be3ed857, last edited 2026-10-14T10:26:39Z (GitHub lastEditedAt)",
+      "author": "xinlu8439",
+      "license": "Apache-2.0",
+      "sha256": "bf82dcedfcfc5f832519417f0c0cf0f05618e29906a43a185be248072405ec2c"
+    },
+    {
+      "file": "patches/0014-prompt-cache-evicted-kept-state.patch",
+      "fixes": "MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold#9",
+      "source": "https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/9, the issue body of 2026-10-17T08:06:15Z, never edited (GitHub lastEditedAt null)",
+      "author": "xinlu8439",
+      "license": "Apache-2.0",
+      "sha256": "ac6e1d7af8219e6c889d11312776de6ae0d007dff2cd0e67dd23d365acc6ad4d"
+    },
+    {
+      "file": "patches/0015-two-ranks-sample-within-248.patch",
+      "fixes": "MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold#8",
+      "source": "this mod: with more than one rank, top_k off becomes 248 (top_p and min_p still cut within it), and top_k above 248 is refused",
+      "author": "kelchm/home-lab",
+      "license": "Apache-2.0",
+      "sha256": "7a0bba9c5e806dce7191297cfb3e7d331f16417e5c430be32ebcd5dd2c98cd3e"
+    }
+  ],
   "build": {
     "base_image": "ubuntu:24.04@sha256:534baea6a22c03a63003dbc8dbe78fe34bc0d7e595d9a9dc9834884ff530eb55",
     "zig_version": "0.17.0",
@@ -38,15 +76,18 @@
     "fatbin_layer": "sha256:b75cd6a6d6c59b3020947b108872a1b071960200d135a39e8be8d210076ff1aa",
     "published_binary_sha256": "24a7bda5d257a9ddc7af77d7a12baa6c274bce76abe493e19767292644f0b200"
   },
-  "binary_sha256": "1713bf570749ddba3b6da88d3d0a6812d11175032d32b8868b51dee69ffe2379",
+  "binary_sha256": "6ae47f6925edb8da6aea54e168132281d39db6a33785ee94d29b13d72f54fdd8",
   "mod_files": {
-    "prepare.py": "53c0e3c58350ae6ab66938bb258024293876b1c701b50f7e7a9baa3239793a5c",
-    "run.sh": "f5335e737511e4d1f3b75f22c1e83e56255d742a46ff512695c3b576881815df",
-    "serve.py": "4b2bc4223157ba53f7aa0142f99b9f81e542d3ee293712eff3d44fadc8388f0e",
-    "readiness.py": "506577b9c6ab7ca5747e485a9e6df85325b198437ba66ada9625ee24ffea44c5",
+    "prepare.py": "4e77bb706466fa5e3b8608282fdf0aa8cdca1f81015de0359714816fd98c6e7d",
+    "run.sh": "b140c09cfc6143ea1d577d9534190ed53880cbe31260794d4ff55e82cc108652",
+    "serve.py": "2e3be383615c88e05d3bb62d43dd695f1fe32b218d60eaa96f58cac0f9bbde19",
     "build/Dockerfile": "931aeec0a765759a12df6de11a28f2aa9af3e09cdb999f5dbedf67df2a8c057f",
     "build/build.sh": "6fa408076151ffc742cbaa72cdc6b1aac5bcfcd808593c1d5fa9ff5351d110b6",
     "patches/0010-models-context-length.patch": "18cf9c302d6bf50516b2cfed4da69527cfa9f16717e5bbbf366e8e330138e766",
-    "patches/0011-models-reasoning.patch": "73171ca4137cc2b87c7ac581c8eea1b4bc743f8ef4fa17175cbcbb8c7f903d6b"
+    "patches/0011-models-reasoning.patch": "73171ca4137cc2b87c7ac581c8eea1b4bc743f8ef4fa17175cbcbb8c7f903d6b",
+    "patches/0012-record-notification-first.patch": "adda97ecb1b9ce17ca11ba5fd39f7b704214ba51ed3701bed8cb6bd82067a2c2",
+    "patches/0013-admission-agreed-before-sequence.patch": "bf82dcedfcfc5f832519417f0c0cf0f05618e29906a43a185be248072405ec2c",
+    "patches/0014-prompt-cache-evicted-kept-state.patch": "ac6e1d7af8219e6c889d11312776de6ae0d007dff2cd0e67dd23d365acc6ad4d",
+    "patches/0015-two-ranks-sample-within-248.patch": "7a0bba9c5e806dce7191297cfb3e7d331f16417e5c430be32ebcd5dd2c98cd3e"
   }
 }

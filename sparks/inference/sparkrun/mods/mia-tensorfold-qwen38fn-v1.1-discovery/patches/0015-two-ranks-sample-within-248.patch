@@ -1,0 +1,175 @@
+diff --git a/zig/src/core/lanes/sampling.zig b/zig/src/core/lanes/sampling.zig
+index 859cf329..f3541593 100644
+--- a/zig/src/core/lanes/sampling.zig
++++ b/zig/src/core/lanes/sampling.zig
+@@ -134,3 +134,17 @@ test "seeds keep 63 bits and uniforms fall in (0, 1]" {
+     const u = uniform(7, 11, 13);
+     try std.testing.expect(u > 0.0 and u <= 1.0);
+ }
++
++test "a flat row drawn at top_k 248 stays within its 248 best candidates for any top_p" {
++    const gpa = std.testing.allocator;
++    var values: [512]f64 = undefined;
++    var ids: [512]u64 = undefined;
++    for (&values, &ids, 0..) |*v, *id, i| {
++        v.* = 0.0;
++        id.* = 511 - i; // ties keep the lowest ids
++    }
++    for ([_]f64{ 0.95, 1.0 }) |top_p| for (0..64) |position| {
++        const token = try choose(gpa, &values, &ids, position, .{ .seed = 7, .temperature = 1.5, .top_k = 248, .top_p = top_p });
++        try std.testing.expect(token < 248);
++    };
++}
+diff --git a/zig/src/server/serve.zig b/zig/src/server/serve.zig
+index d9793a84..c4423944 100644
+--- a/zig/src/server/serve.zig
++++ b/zig/src/server/serve.zig
+@@ -117,6 +117,7 @@ pub fn run(gpa: Allocator, io: std.Io, args: cli.Args, s: Setup) u8 {
+         .loop_guard = args.loop_guard,
+         .default_sampling = s.sampling,
+         .use_drafts = !args.no_drafts,
++        .ranks = args.tp,
+         .seed_salt = salt,
+         .request_log = env(s, "TENSORFOLD_REQUEST_LOG"),
+         .dashboard = args.dashboard,
+diff --git a/zig/src/server/server.zig b/zig/src/server/server.zig
+index 695a48d9..27599a9d 100644
+--- a/zig/src/server/server.zig
++++ b/zig/src/server/server.zig
+@@ -35,6 +35,8 @@ pub const Config = struct {
+     /// Sampling when a request names none (generation_config.json and the serve flags), or null for greedy.
+     default_sampling: ?Value = null,
+     use_drafts: bool = true,
++    /// The engine's ranks (--tp).
++    ranks: u32 = 1,
+     seed_salt: i64 = 0,
+     /// TENSORFOLD_REQUEST_LOG: where chat and completion bodies are appended; null: nowhere.
+     request_log: ?[]const u8 = null,
+@@ -115,13 +117,15 @@ pub const Server = struct {
+         const temp = number(options.get("temperature")) orelse 0;
+         if (temp <= 0) return null;
+         const seed: u64 = if (options.get("seed")) |s| seedBits(s) else api.seedFor(prompt_ids, srv.config.seed_salt);
+-        return .{
++        var sampling: api.Sampling = .{
+             .seed = seed,
+             .temperature = @floatCast(temp),
+             .top_k = @intCast(@min(@max(0, (if (options.get("top_k")) |k| k.int64() else null) orelse 0), std.math.maxInt(u32))),
+             .top_p = @floatCast(number(options.get("top_p")) orelse 1.0),
+             .min_p = @floatCast(number(options.get("min_p")) orelse 0.0),
+         };
++        if (srv.config.ranks > 1) sampling = forRanks(sampling) orelse return cx.refuse("top_k above 248 needs more candidates than two ranks gather: send a top_k of 248 or less");
++        return sampling;
+     }
+ 
+     /// The call gate and grammar a request asks for, or its refusal when the engine cannot enforce them.
+@@ -316,3 +320,28 @@ fn lateSystem(a: Allocator, text: model_text.Text) ![]const u8 {
+ fn needsUserAfterTool(source: []const u8) bool {
+     return std.mem.indexOf(u8, source, "No user query found") != null;
+ }
++
++/// The largest top_k two ranks draw from: the TP sampler's scratch holds 256 candidates (flashnext cuda_engine.max_k)
++/// and a draw reads top_k plus 8 (cuda_sampler.margin); more fails after admission (TopKPastScratch) and exits both.
++const ranks_top_k = 248;
++
++/// A sampled request as two ranks can draw it, or null when they cannot. Top_k off becomes 248, with top_p and min_p
++/// still cutting within it: off, a draw goes through the nucleus exchange, whose whole-shard fallback for a nucleus
++/// past 1,024 candidates a rank exits both ranks (MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold#8).
++fn forRanks(s: api.Sampling) ?api.Sampling {
++    if (s.top_k > ranks_top_k) return null;
++    var out = s;
++    if (out.top_k == 0) out.top_k = ranks_top_k;
++    return out;
++}
++
++test "two ranks draw top_k off from 248 candidates, keep the other cuts, and refuse more than 248" {
++    const off = forRanks(.{ .seed = 1, .temperature = 1.5, .top_k = 0, .top_p = 0.95, .min_p = 0.02 }).?;
++    try std.testing.expectEqual(@as(u32, 248), off.top_k);
++    try std.testing.expectEqual(@as(f64, 0.95), off.top_p);
++    try std.testing.expectEqual(@as(f64, 0.02), off.min_p);
++    try std.testing.expectEqual(@as(f64, 1.5), off.temperature);
++    try std.testing.expectEqual(@as(u32, 20), forRanks(.{ .seed = 1, .top_k = 20 }).?.top_k);
++    try std.testing.expectEqual(@as(u32, 248), forRanks(.{ .seed = 1, .top_k = 248 }).?.top_k);
++    try std.testing.expect(forRanks(.{ .seed = 1, .top_k = 249 }) == null);
++}
+diff --git a/zig/src/server/stream_preflight_test.zig b/zig/src/server/stream_preflight_test.zig
+index c33defe2..3da3360d 100644
+--- a/zig/src/server/stream_preflight_test.zig
++++ b/zig/src/server/stream_preflight_test.zig
+@@ -53,8 +53,10 @@ const TestText = struct {
+     }
+ };
+ 
+-/// An 8-token window whose engine answers "hi" at once.
++/// An 8-token window whose engine answers "hi" at once, keeping the top_k each request reaches it with.
+ const HiEngine = struct {
++    top_k: ?u32 = null,
++
+     fn engine(e: *@This()) api.Engine {
+         return .{ .ctx = e, .vtable = &.{ .info = info, .submit = submit, .cancel = cancel, .status = status, .memory = memory } };
+     }
+@@ -63,7 +65,9 @@ const HiEngine = struct {
+         return .{ .context_window = 8 };
+     }
+ 
+-    fn submit(_: *anyopaque, id: api.Id, _: *const api.Request, sink: api.Sink) api.SubmitError!void {
++    fn submit(ctx: *anyopaque, id: api.Id, request: *const api.Request, sink: api.Sink) api.SubmitError!void {
++        const e: *HiEngine = @ptrCast(@alignCast(ctx));
++        e.top_k = if (request.sampling) |s| s.top_k else null;
+         sink.event(sink.ctx, id, &.{ .prefilled = 0 });
+         sink.event(sink.ctx, id, &.{ .tokens = &.{ 'h', 'i' } });
+         sink.event(sink.ctx, id, &.{ .finished = .{ .reason = .stop } });
+@@ -83,6 +87,8 @@ const HiEngine = struct {
+ /// What the route's output saw: a whole reply's status, error code and sampling label, or a stream and its first role.
+ const Seen = struct {
+     gone_at_open: bool = false, // the client is gone when the stream opens
++    ranks: u32 = 1, // the engine's ranks
++    top_k: ?u32 = null, // the top_k the engine was given
+     opened: bool = false,
+     events: usize = 0,
+     role_first: bool = false,
+@@ -145,6 +151,7 @@ fn sendTo(route: Route, body: []const u8, start: Seen) !Seen {
+         .model_ids = &.{"test-model"},
+         .enable_thinking = false,
+         .use_drafts = false,
++        .ranks = start.ranks,
+     }, null);
+     defer srv.deinit();
+     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+@@ -161,6 +168,7 @@ fn sendTo(route: Route, body: []const u8, start: Seen) !Seen {
+     var seen = start;
+     openai.run(srv, a, seen.out(), .{ .conn = &conn }, true, chat);
+     seen.preparing = srv.preparing.load(.acquire);
++    seen.top_k = backend.top_k;
+     return seen;
+ }
+ 
+@@ -213,3 +221,29 @@ test "a reply labels a greedy request greedy and a sampled one exact" {
+     try std.testing.expectEqual(.exact, sampled.label.?);
+     try std.testing.expectEqual(@as(i64, 0), sampled.preparing);
+ }
++
++test "two ranks give top_k off 248 candidates, with or without a top_p cut; one rank keeps it off" {
++    const cut = "{\"model\":\"test-model\",\"messages\":[{\"role\":\"user\",\"content\":\"x\"}],\"max_tokens\":2,\"temperature\":1.5,\"top_k\":-1,\"top_p\":0.95}";
++    const two = try sendTo(.chat, cut, .{ .ranks = 2 });
++    try std.testing.expectEqual(@as(?u16, 200), two.status);
++    try std.testing.expectEqual(@as(?u32, 248), two.top_k);
++    const one = try send(.chat, cut);
++    try std.testing.expectEqual(@as(?u16, 200), one.status);
++    try std.testing.expectEqual(@as(?u32, 0), one.top_k);
++    const whole = "{\"model\":\"test-model\",\"messages\":[{\"role\":\"user\",\"content\":\"x\"}],\"max_tokens\":2,\"temperature\":0.7,\"top_k\":-1,\"top_p\":1}";
++    const clamped = try sendTo(.chat, whole, .{ .ranks = 2 });
++    try std.testing.expectEqual(@as(?u16, 200), clamped.status);
++    try std.testing.expectEqual(@as(?u32, 248), clamped.top_k);
++}
++
++test "two ranks refuse a top_k past their 248 candidates and serve 248" {
++    const past = "{\"model\":\"test-model\",\"messages\":[{\"role\":\"user\",\"content\":\"x\"}],\"max_tokens\":2,\"temperature\":1,\"top_k\":249,\"top_p\":0.95}";
++    const two = try sendTo(.chat, past, .{ .ranks = 2 });
++    try std.testing.expectEqual(@as(?u16, 400), two.status);
++    try std.testing.expectEqual(@as(i64, 0), two.preparing);
++    try std.testing.expectEqual(@as(?u16, 200), (try send(.chat, past)).status);
++    const most = "{\"model\":\"test-model\",\"messages\":[{\"role\":\"user\",\"content\":\"x\"}],\"max_tokens\":2,\"temperature\":1,\"top_k\":248,\"top_p\":0.95}";
++    try std.testing.expectEqual(@as(?u16, 200), (try sendTo(.chat, most, .{ .ranks = 2 })).status);
++    const greedy = "{\"model\":\"test-model\",\"messages\":[{\"role\":\"user\",\"content\":\"x\"}],\"max_tokens\":2,\"temperature\":0,\"top_k\":1000}";
++    try std.testing.expectEqual(@as(?u16, 200), (try sendTo(.chat, greedy, .{ .ranks = 2 })).status);
++}
