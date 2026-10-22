@@ -852,7 +852,7 @@ DOCKER_CONTEXT=colima-tf-build sparks/inference/sparkrun/images/ashhart-tensorfo
 DOCKER_CONTEXT=colima-tf-build docker save tensorfold:1.1.2-4ff7844-f08f8e2506fd | ssh kelchm@10.32.21.31 docker load
 ```
 
-`build.sh` fails if the patched server's SHA-256 differs from the lock's `binary_sha256`; `--record` writes a new one and the image ID instead. The recipes' `container` is the image ID, which a rebuild can change. Record the ID the head reports in both locks and both recipes before launching.
+`build.sh` fails if the patched server's SHA-256 differs from the lock's `binary_sha256`; `--record` writes a new one and the image ID instead. The image ID is the digest of the image's config, `sha256:85a7dc76…`, which is what the head reports after `docker load`. Colima's containerd store reports another digest for the same image. A rebuild can change the ID, so record it in both locks and both recipes before launching.
 
 ### Launch, stop and roll back
 

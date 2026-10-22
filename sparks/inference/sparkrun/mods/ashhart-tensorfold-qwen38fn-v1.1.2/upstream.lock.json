@@ -3,7 +3,7 @@
   "engine_release": "v1.1.2",
   "engine_revision": "4ff784410f70b95767684d337e59dfd6d94fec8b",
   "image": "tensorfold:1.1.2-4ff7844-f08f8e2506fd",
-  "image_id": "sha256:1e346b30b9fefcd6e9251a042ebcd2de78c6dc23aebf5f764700df1cf4ca88a0",
+  "image_id": "sha256:85a7dc7692e96474260c068c79c8939cf6b06c428ab4dc00058316811c4b8eb5",
   "weights": {
     "repository": "nvidia/Qwen3.8-Flash-Next-FP4-Local",
     "revision": "b9ce18a6887e18c089fdea8509a33e63429a3300",

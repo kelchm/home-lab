@@ -37,7 +37,8 @@ docker build --platform linux/arm64 -t "$image" -f "$here/Dockerfile" \
   "$ctx"
 
 built=$(docker run --rm --entrypoint sha256sum "$image" /opt/tensorfold/bin/tensorfold-native | cut -d' ' -f1)
-id=$(docker image inspect --format '{{.Id}}' "$image")
+# The image config's digest: the ID a host's Docker reports after docker load, whichever store built it.
+id=$(docker save "$image" | tar -xOf - manifest.json | python3 -c 'import json,sys; c=json.load(sys.stdin)[0]["Config"]; print("sha256:" + c.rsplit("/", 1)[-1].removesuffix(".json"))')
 echo "Built $image: image ID $id, tensorfold-native sha256 $built"
 if (( record )); then
   python3 - "$here/image.lock.json" "$built" "$id" <<'EOF'
