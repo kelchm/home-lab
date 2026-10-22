@@ -138,13 +138,18 @@ def nearest(effort, levels):
 
 def check_renders(url, model, efforts):
     """Each advertised level renders its own prompt; every other standard name renders as its nearest level."""
-    try:
-        first = render(url, model, efforts[0])
-    except urllib.error.HTTPError as error:
-        if error.code == 404:   # the server has no /tokenize route; any later refusal is a failure
-            return None
-        raise
-    rendered = {efforts[0]: first, **{effort: render(url, model, effort) for effort in efforts[1:]}}
+    rendered, missing = {}, []
+    for effort in efforts:
+        try:
+            rendered[effort] = render(url, model, effort)
+        except urllib.error.HTTPError as error:
+            if error.code != 404:
+                raise
+            missing.append(effort)
+    if missing and not rendered:   # no /tokenize route at all
+        return None
+    if missing:
+        raise RuntimeError(f"/tokenize refuses advertised levels {missing} and renders {sorted(rendered)}")
     if len(set(rendered.values())) != len(rendered):
         raise RuntimeError(f"Advertised levels share a rendered prompt: {sorted(rendered)}")
     mapped = {}
