@@ -8,8 +8,10 @@ def command(env):
     rank = env["RANK"]
     if rank not in ("0", "1"):
         raise ValueError("Mia TensorFold requires rank 0 or 1")
+    # The ranks meet on the head's CX7 address, as the kit's launcher does, when SparkRun supplies it.
+    master = env.get("FABRIC_MASTER") or env["MASTER"]
     args = ["tensorfold", "serve", env["MODEL_PATH"], "--backend", "cuda", "--tp", "2",
-            "--rank", rank, "--master", env["MASTER"], "--master-port", env["MASTER_PORT"],
+            "--rank", rank, "--master", master, "--master-port", env["MASTER_PORT"],
             "--drafter", env["DRAFTER"], "--context", env["CONTEXT"], "--parallel", "4",
             "--max-tokens", env["MAX_TOKENS"], "--thinking", "--vision", "--no-update-check"]
     if rank == "0":

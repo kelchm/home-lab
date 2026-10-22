@@ -28,6 +28,7 @@ W20's output reservations matter before that boundary: four 250k prompts with 32
 - **Site guards:** the same two as v1.10, reasoning restored only by original call IDs and a failed decoder answering `/health` with HTTP 503. The three guarded files are unchanged since v1.10. A third guard adds model discovery to the server's catalog.
 - **Discovery:** `/v1/models` reports `context_length` and `max_model_len` as the served window. It also reports `reasoning` with the thinking default and the template's own levels, highest first, plus `none`: `max`, `high`, `low`, `none`. The template defines `low` and `high` and renders anything else as `max`. The server maps `minimal` to `low`, `medium` to `high` and `xhigh` to `max`, and `none` turns thinking off.
 - **Served name:** `GLM-5.3-Flash`, like the other profiles' model names, without the `-EXL3` suffix the earlier profiles used.
+- **Rendezvous:** the ranks meet on `FABRIC_MASTER`, the head's CX7 address, as the kit's launcher does, and on SparkRun's management address only when the adapter has no fabric address. The earlier profiles always use the management address.
 - **Mod:** the rank launcher installs as `/usr/local/bin/tensorfold-entrypoint` and gives the engine `oom_score_adj` 1000. Readiness is the shared gate, with the pool floor of 1.2M tokens and the C4 shape warmup at 128, 4,096 and 16,384 words that v1.10's hook ran.
 
 ### Versioned Mia TensorFold profiles

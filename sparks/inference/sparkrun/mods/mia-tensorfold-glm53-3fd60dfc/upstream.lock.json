@@ -66,7 +66,7 @@
   "mod_files": {
     "prepare.py": "30034755242960db5747c1a55ad87f7c79aac06593a049ee9173b226f72e2fed",
     "run.sh": "42264da43237bd2b8062cb553dbdf97d7910d4eb6d98a3b8c8536d713c077bff",
-    "serve.py": "175e2ac3de42373e01d696512a8e887185712138ed61be97107ea89c8adb46cd",
+    "serve.py": "c40c6f4e2f42d85f6d2539053de2ba8a7e00bddbf9e4776ee12c4f7dc113c7e4",
     "site_fixes.py": "ccae2cec634fe2209afcecdbecbb10c4650fbc04a8fa04ad43afae5a7b077ffd"
   }
 }
