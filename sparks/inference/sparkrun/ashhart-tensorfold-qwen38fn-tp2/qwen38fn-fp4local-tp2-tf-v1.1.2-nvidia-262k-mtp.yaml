@@ -8,7 +8,7 @@ min_nodes: 2
 max_nodes: 2
 metadata:
   profile: qwen38fn-fp4local-tp2-tf-v1.1.2-nvidia-262k-mtp
-  description: Upstream TensorFold v1.1.2 serving NVIDIA's FP4-Local weights on two ranks, a 262,144-token window and MTP drafts with no prompt cache, as many lanes as fit up to eight
+  description: Upstream TensorFold v1.1.2 serving NVIDIA's FP4-Local weights on two ranks, a 262,144-token window and MTP drafts with no prompt cache, four lanes
   engine_revision: 4ff784410f70b95767684d337e59dfd6d94fec8b
   image: tensorfold:1.1.2-4ff7844-f08f8e2506fd
   weights: nvidia
@@ -24,7 +24,7 @@ defaults:
   context: 262144
   max_tokens: 32768
   entrypoint: /usr/local/bin/qwen38fn-tf-entrypoint
-  extra_args: --parallel auto
+  extra_args: --parallel 4
 env:
   TENSORFOLD_NO_UPDATE_CHECK: '1'
   # The digest of the snapshot's file list (README); each rank checks it against its own copy before asserting it.
@@ -49,9 +49,10 @@ executor_config:
 runtime_cache:
   key_by_image: true
 mods:
+- ../mods/tensorfold-readiness
 - ../mods/ashhart-tensorfold-qwen38fn-v1.1.2
 post_exec:
-- python3 /opt/qwen38fn-tensorfold/readiness.py --model Qwen3.8-Flash-Next --context 262144 --efforts xhigh,medium,low,none --min-lanes 1
+- python3 /opt/tensorfold-readiness/readiness.py --model Qwen3.8-Flash-Next --context 262144 --lanes 4 --efforts xhigh,medium,low,none
 distribution_config:
   models:
     entries:

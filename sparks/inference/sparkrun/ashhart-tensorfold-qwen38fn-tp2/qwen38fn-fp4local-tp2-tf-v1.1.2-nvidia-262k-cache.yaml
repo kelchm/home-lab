@@ -50,9 +50,10 @@ executor_config:
 runtime_cache:
   key_by_image: true
 mods:
+- ../mods/tensorfold-readiness
 - ../mods/ashhart-tensorfold-qwen38fn-v1.1.2
 post_exec:
-- python3 /opt/qwen38fn-tensorfold/readiness.py --model Qwen3.8-Flash-Next --context 262144 --efforts xhigh,medium,low,none --lanes 4
+- python3 /opt/tensorfold-readiness/readiness.py --model Qwen3.8-Flash-Next --context 262144 --lanes 4 --efforts xhigh,medium,low,none
 distribution_config:
   models:
     entries:

@@ -11,8 +11,7 @@
   },
   "mod_files": {
     "prepare.py": "fd7cac10cf4684a7aac3f82416598b8302c96a53206168b4dd2ba40a78d6fd51",
-    "readiness.py": "47c734f9977cd22806ac4efc8580a1e6484f8f7e4a654156dec4564a7fad7850",
-    "run.sh": "2cbfb1db6f2f7591556b24e1ba47840b4a2c50b07f89f14eed72a49ba14efd79",
+    "run.sh": "0683cd26545693a7f07affa63be160fe72dc22e0d9de6577738d5035ce92a02b",
     "serve.py": "f83755b42cf959c5090e45c073212d40a5bcbaa749ad17de82959ef062f9bece"
   }
 }

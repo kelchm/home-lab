@@ -773,7 +773,7 @@ The `ashhart-tensorfold-qwen38fn-tp2/` directory holds two profiles that serve [
 
 | Profile | MTP drafts | Prompt cache | Lanes |
 | --- | --- | --- | --- |
-| `qwen38fn-fp4local-tp2-tf-v1.1.2-nvidia-262k-mtp` | On | Off: `--prompt-cache-gib 0` | `--parallel auto`: as many as fit, up to eight |
+| `qwen38fn-fp4local-tp2-tf-v1.1.2-nvidia-262k-mtp` | On | Off: `--prompt-cache-gib 0` | Four |
 | `qwen38fn-fp4local-tp2-tf-v1.1.2-nvidia-262k-cache` | Off: `--no-drafts` | 16 GiB | Four |
 
 Settings and behaviour:
@@ -794,7 +794,7 @@ No two-GB10 run of this path is published. What upstream's source fixes for two 
 - **Weights:** ModelOpt only. MLX 4-bit is refused at world size 2, and upstream calls the ModelOpt path experimental.
 - **Drafts and the prompt cache:** with drafts on, any positive prompt cache is refused, because the engine keeps no draft snapshots across ranks ([`cuda_refusal.zig:37-41`](https://github.com/ashhart/TensorFold/blob/4ff784410f70b95767684d337e59dfd6d94fec8b/zig/src/native/cuda_refusal.zig#L37)). Every turn then reads its whole prompt again. With drafts on, `serve.py` passes `--prompt-cache-gib 0` unless the recipe gives a size, and the engine refuses any size above zero.
 - **Window:** at most 262,144 tokens, with BF16 KV and no YaRN.
-- **Lanes:** every stream holds its whole window on each rank, because the sequence size does not depend on the rank count. Upstream's one-GB10 FP4-Local run measured about 7.8 GiB per stream at 262,144 tokens, so few lanes fit at this window.
+- **Lanes:** every stream holds its whole window on each rank, because the sequence size does not depend on the rank count. Upstream's one-GB10 FP4-Local run measured about 7.8 GiB per stream at 262,144 tokens, so few lanes fit at this window. Both profiles load four, the shape used for the GLM trials, and the first boot's log shows whether more would fit.
 
 **Ranks and fabric.** The [mod](mods/ashhart-tensorfold-qwen38fn-v1.1.2/) installs `serve.py` as the rank command, and each rank runs the same command apart from `--rank`. No recipe or mod file holds a lab address.
 
@@ -814,13 +814,12 @@ No two-GB10 run of this path is published. What upstream's source fixes for two 
 
 - **Memory:** the engine's `oom_score_adj` is 1000. The memory reserve is upstream's default for unified memory, a tenth of the total, about 12 GiB.
 
-**Readiness.** The [hook](mods/ashhart-tensorfold-qwen38fn-v1.1.2/readiness.py) requires:
+**Readiness.** Both profiles use the shared [`tensorfold-readiness`](mods/tensorfold-readiness/) gate, with four lanes, the 262,144 window and the efforts `xhigh`, `medium`, `low`, `none` in the server's order.
 
-- healthy status;
-- the profile's lane count: exactly four for the cache profile, at least one for the auto one;
-- the `/v1/models` entry exactly: `owned_by: tensorfold`, 262,144 as both `context_length` and `max_model_len`, and the efforts `xhigh`, `medium`, `low`, `none` in that order.
-
-It then sends a short reply on every lane at once, and one tool call.
+- **Health:** it requires healthy status and the four lanes.
+- **Discovery:** it requires the `/v1/models` entry exactly: `owned_by: tensorfold`, and the window as both `context_length` and `max_model_len`.
+- **Replies:** it then needs one correct reply on every lane at once, and one tool call.
+- **Efforts:** through `/tokenize`, each of the four efforts must render its own prompt, and `minimal`, `high` and `max` must each render as one of them. Upstream maps `high` and `max` to `xhigh` and `minimal` to `low`.
 
 ### Inputs outside SparkRun
 
@@ -893,7 +892,6 @@ The rollback is the [DeepSeek profile](#deepseek-v41-flash-1017-on-bertholomuss-
 
 - **Window:** 262,144 tokens is upstream's cap and is not yet qualified here. The trial qualifies it or lowers it. The Mia profiles and DeepSeek configure 1,048,576.
 - **Vision:** off. Upstream's Flash Next tower is experimental at two ranks and unqualified with this checkpoint.
-- **Readiness:** it is mod-local until the shared gate in #943 replaces it, and it renders no reasoning levels through `/tokenize`.
 - **No safeguards:** the endpoint has no API key, and no memory watchdog runs.
 
 ## DeepSeek-V4.1-Flash-1017 on bertholomus's Zig engine
