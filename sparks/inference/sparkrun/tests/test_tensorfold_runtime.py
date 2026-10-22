@@ -1091,7 +1091,8 @@ def test_upstream_qwen_rank0_listens_on_the_port_sparkrun_gates(runtime, tmp_pat
         assert argv == ["/usr/local/bin/tensorfold-entrypoint"]
         assert env["MODEL_PATH"] == hf_snapshot_path(UPSTREAM_QWEN_TARGET, recipe.model_revision)
         child = {**recipe.env, **env, **UPSTREAM_QWEN_FABRIC}
-        with mock.patch.object(serve, "checkpoint_digest", return_value=recipe.env["TENSORFOLD_CHECKPOINT_SHA256"]):
+        with mock.patch.object(serve, "checkpoint_digest", return_value=recipe.env["TENSORFOLD_CHECKPOINT_SHA256"]), \
+                mock.patch.object(serve, "flat_view", Path):
             args = serve.command(child)
         assert args[:3] == ["tensorfold-native", "serve", env["MODEL_PATH"]]
         for flag, expected in (("--backend", "cuda"), ("--name", "Qwen3.8-Flash-Next"), ("--port", "8888"),
@@ -1109,7 +1110,8 @@ def test_upstream_qwen_rank0_listens_on_the_port_sparkrun_gates(runtime, tmp_pat
         with mock.patch.object(runtime, "_run_native_cluster", native):
             runtime._run_cluster([FABRIC_HEAD, FABRIC_WORKER], recipe.container, recipe=recipe,
                                  ib_ip_map={FABRIC_HEAD: "192.0.2.11", FABRIC_WORKER: "192.0.2.12"})
-        with mock.patch.object(serve, "checkpoint_digest", return_value=recipe.env["TENSORFOLD_CHECKPOINT_SHA256"]):
+        with mock.patch.object(serve, "checkpoint_digest", return_value=recipe.env["TENSORFOLD_CHECKPOINT_SHA256"]), \
+                mock.patch.object(serve, "flat_view", Path):
             fabric = serve.command({**recipe.env, **seen["env"], **UPSTREAM_QWEN_FABRIC})
         assert fabric[fabric.index("--master") + 1] == "192.0.2.11"
         assert fabric[fabric.index("--master-port") + 1] == "29511"
@@ -1131,7 +1133,8 @@ def test_upstream_qwen_ranks_check_the_snapshot_and_both_rails(tmp_path):
     base = {"RANK": "0", "MASTER": FABRIC_HEAD, "MASTER_PORT": "25000", "MODEL_PATH": str(head), "HOST": "0.0.0.0",
             "PORT": "8888", "SERVED_NAME": "Qwen3.8-Flash-Next", "CONTEXT": "262144", "MAX_TOKENS": "32768",
             "TENSORFOLD_CHECKPOINT_SHA256": digest, **UPSTREAM_QWEN_FABRIC}
-    assert serve.command(base)[serve.command(base).index("--master") + 1] == FABRIC_HEAD
+    with mock.patch.object(serve, "flat_view", Path):
+        assert serve.command(base)[serve.command(base).index("--master") + 1] == FABRIC_HEAD
     with pytest.raises(SystemExit, match="TENSORFOLD_CHECKPOINT_SHA256"):
         serve.command({**base, "TENSORFOLD_CHECKPOINT_SHA256": "0" * 64})
     config = worker / "config.json"
@@ -1162,7 +1165,7 @@ def test_upstream_qwen_drafts_keep_the_prompt_cache_at_zero(tmp_path):
     base = {"RANK": "1", "MASTER": FABRIC_HEAD, "MASTER_PORT": "25000", "MODEL_PATH": "/m", "HOST": "0.0.0.0",
             "PORT": "8888", "SERVED_NAME": "Qwen3.8-Flash-Next", "CONTEXT": "262144", "MAX_TOKENS": "32768",
             "TENSORFOLD_CHECKPOINT_SHA256": "a" * 64, **UPSTREAM_QWEN_FABRIC}
-    with mock.patch.object(serve, "checkpoint_digest", return_value="a" * 64):
+    with mock.patch.object(serve, "checkpoint_digest", return_value="a" * 64), mock.patch.object(serve, "flat_view", Path):
         drafted = serve.command(base)
         assert drafted.count("--prompt-cache-gib") == 1 and drafted[drafted.index("--prompt-cache-gib") + 1] == "0"
         # A size given with drafts on reaches the engine, which refuses it at TP2; it is not doubled or replaced.
@@ -1207,3 +1210,46 @@ def test_upstream_qwen_frozen_bundle_rejects_changed_added_and_linked_files(tmp_
         result = subprocess.run([sys.executable, str(bundle / "prepare.py"), mode], capture_output=True, text=True)
         assert result.returncode != 0 and "Traceback" not in result.stderr
     assert (bundle / "upstream.lock.json").exists() is (change != "missing lock")
+
+
+def test_upstream_qwen_serves_a_flat_view_of_a_snapshot_with_nested_shards(tmp_path, monkeypatch):
+    _, _, serve = _upstream_qwen_bundle(tmp_path, UPSTREAM_QWEN_PROFILES[0])
+    files = {"config.json": "1efa9baa6f332ef821a9468eddd0414ee9bfefb0",
+             "model.safetensors.index.json": "5fa166bb" + "0" * 56,
+             "tensors/model-00001-of-00002.safetensors": "ebf3648c" + "0" * 56,
+             "tensors/model-00002-of-00002.safetensors": "79a643fc" + "0" * 56}
+    snapshot, digest = _hf_snapshot(tmp_path / "hub", files, shared=True)
+    index = {"metadata": {"total_size": 2}, "weight_map": {"a.weight": "tensors/model-00001-of-00002.safetensors",
+                                                           "b.weight": "tensors/model-00002-of-00002.safetensors"}}
+    blob = snapshot / "model.safetensors.index.json"
+    blob.resolve().write_text(json.dumps(index))
+    monkeypatch.setattr(serve, "VIEW", tmp_path / "view")
+    view = serve.flat_view(snapshot)
+    assert view == tmp_path / "view" and sorted(p.name for p in view.iterdir()) == [
+        "config.json", "model-00001-of-00002.safetensors", "model-00002-of-00002.safetensors",
+        "model.safetensors.index.json"]
+    # The engine's own check: every shard name plain, opened beside the index, the same bytes as the snapshot's.
+    rewritten = json.loads((view / "model.safetensors.index.json").read_text())
+    assert rewritten["metadata"] == index["metadata"]
+    assert all("/" not in name for name in rewritten["weight_map"].values())
+    for key, name in index["weight_map"].items():
+        assert (view / rewritten["weight_map"][key]).read_bytes() == (snapshot / name).read_bytes()
+    assert (view / "config.json").read_bytes() == (snapshot / "config.json").read_bytes()
+    # Both ranks build it from the same snapshot, so the index the engine hashes agrees; the snapshot is untouched.
+    first = (view / "model.safetensors.index.json").read_bytes()
+    assert (serve.flat_view(snapshot) / "model.safetensors.index.json").read_bytes() == first
+    assert serve.checkpoint_digest(snapshot) == digest
+    # A rank command serves the view.
+    base = {"RANK": "1", "MASTER": FABRIC_HEAD, "MASTER_PORT": "25000", "MODEL_PATH": str(snapshot), "HOST": "0.0.0.0",
+            "PORT": "8888", "SERVED_NAME": "Qwen3.8-Flash-Next", "CONTEXT": "262144", "MAX_TOKENS": "32768",
+            "TENSORFOLD_CHECKPOINT_SHA256": digest, **UPSTREAM_QWEN_FABRIC}
+    assert serve.command(base)[2] == str(view)
+    # Shards already beside the index are served from the snapshot; colliding names are refused.
+    blob.resolve().write_text(json.dumps({"weight_map": {"a.weight": "config.json"}}))
+    assert serve.flat_view(snapshot) == snapshot
+    blob.resolve().write_text(json.dumps({"weight_map": {"a.weight": "tensors/config.json"}}))
+    with pytest.raises(SystemExit, match="distinct names"):
+        serve.flat_view(snapshot)
+    blob.resolve().write_text(json.dumps({"weight_map": {"a.weight": "x/s.safetensors", "b.weight": "y/s.safetensors"}}))
+    with pytest.raises(SystemExit, match="distinct names"):
+        serve.flat_view(snapshot)

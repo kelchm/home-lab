@@ -4,12 +4,17 @@
 Rank 0 serves the API and listens for rank 1 at MASTER_PORT, the port SparkRun's rendezvous gate watches. It listens on
 FABRIC_MASTER, the head's CX7 address the adapter passes when SparkRun has one, or else on SparkRun's MASTER. The engine
 keeps no MTP draft state across ranks, so with drafts on the prompt cache is 0. Both ranks assert the same
-TENSORFOLD_CHECKPOINT_SHA256, which each first checks against its own snapshot.
+TENSORFOLD_CHECKPOINT_SHA256, which each first checks against its own snapshot, and serve a flat view of it.
 """
 import hashlib
+import json
 import os
 import shlex
+import shutil
 from pathlib import Path
+
+INDEX = "model.safetensors.index.json"
+VIEW = Path("/tmp/qwen38fn-model")
 
 
 def checkpoint_digest(snapshot):
@@ -34,6 +39,33 @@ def checkpoint_digest(snapshot):
     return hashlib.sha256("".join(sorted(lines)).encode()).hexdigest()
 
 
+def flat_view(snapshot, view=None):
+    """The snapshot with every shard beside config.json, as links, and an index naming them plainly.
+
+    v1.1.2 refuses an index that names a shard in a subfolder (zig/src/core/checkpoint_index.zig, plainName), and
+    FP4-Local keeps its shards under tensors/. A snapshot whose shards are already at the top is used as it is.
+    """
+    src, view = Path(snapshot), Path(view or VIEW)
+    index = json.loads((src / INDEX).read_text())
+    nested = {name for name in index["weight_map"].values() if "/" in name}
+    if not nested:
+        return src
+    flat = {name.rsplit("/", 1)[1]: name for name in nested}
+    top = {entry.name for entry in src.iterdir()}
+    if len(flat) != len(nested) or flat.keys() & top:
+        raise SystemExit(f"{src}: its shards do not have distinct names beside its other files")
+    index["weight_map"] = {k: v.rsplit("/", 1)[-1] for k, v in index["weight_map"].items()}
+    shutil.rmtree(view, ignore_errors=True)
+    view.mkdir(parents=True)
+    for entry in sorted(src.iterdir()):
+        if entry.name != INDEX and not entry.is_dir():
+            (view / entry.name).symlink_to(entry)
+    for name, path in sorted(flat.items()):
+        (view / name).symlink_to(src / path)
+    (view / INDEX).write_text(json.dumps(index, indent=2) + "\n")
+    return view
+
+
 def command(env):
     rank = env["RANK"]
     if rank not in ("0", "1"):
@@ -44,7 +76,8 @@ def command(env):
     digest = checkpoint_digest(env["MODEL_PATH"])
     if digest != env.get("TENSORFOLD_CHECKPOINT_SHA256"):
         raise SystemExit(f"{env['MODEL_PATH']} hashes to {digest}, not TENSORFOLD_CHECKPOINT_SHA256")
-    args = ["tensorfold-native", "serve", env["MODEL_PATH"], "--backend", "cuda", "--name", env["SERVED_NAME"],
+    model = flat_view(env["MODEL_PATH"])
+    args = ["tensorfold-native", "serve", str(model), "--backend", "cuda", "--name", env["SERVED_NAME"],
             "--host", env["HOST"], "--port", env["PORT"], "--context", env["CONTEXT"],
             "--max-tokens", env["MAX_TOKENS"], "--thinking", "--tp", "2", "--rank", rank,
             "--master", env.get("FABRIC_MASTER") or env["MASTER"], "--master-port", env["MASTER_PORT"]]
