@@ -18,7 +18,7 @@ spec:
               > 0.05
             )
             and on (exported_service)
-            sum by (exported_service) (rate(traefik_service_requests_total{cluster="k8s-prod"}[1h])) > 1 / 60
+            sum by (exported_service) (rate(traefik_service_requests_total{cluster="k8s-prod"}[1h])) >= 1 / 60
           for: 5m
           labels:
             severity: warning

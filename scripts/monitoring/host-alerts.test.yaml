@@ -2,19 +2,29 @@ rule_files:
   - rules.yaml
 evaluation_interval: 1m
 tests:
-  - name: A host out-of-memory kill alerts for 15 minutes; cluster nodes are left to Kubernetes
+  - name: A host out-of-memory kill on a Spark or a Pi alerts for 15 minutes; cluster nodes are left to Kubernetes
     interval: 1m
     input_series:
       - series: node_vmstat_oom_kill{instance="spark-1",platform="spark",job="spark-node"}
         values: 0x10 1x40
       - series: node_vmstat_oom_kill{instance="pve-sbx-1",platform="pve",job="pve-node"}
         values: 0x50
+      - series: node_vmstat_oom_kill{instance="streamer-basement-workbench",platform="pi",job="pi-node"}
+        values: 0x5 1x45
       - series: node_vmstat_oom_kill{instance="k8s-prod-1",platform="k8s",job="node-exporter"}
         values: 0x10 3x40
     alert_rule_test:
       - eval_time: 12m
         alertname: HostOomKill
         exp_alerts:
+          - exp_labels:
+              instance: streamer-basement-workbench
+              platform: pi
+              job: pi-node
+              severity: warning
+            exp_annotations:
+              summary: The kernel killed a process for memory on streamer-basement-workbench
+              description: Find the process with `journalctl -k | grep -i "killed process"` on the host, and check that it came back.
           - exp_labels:
               instance: spark-1
               platform: spark
