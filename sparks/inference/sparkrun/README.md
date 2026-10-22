@@ -15,7 +15,7 @@ Every profile follows the contract in [#943](https://github.com/kelchm/home-lab/
 
 ## GLM-5.3-Flash on Mia's TensorFold kit
 
-`mia-tensorfold-glm53-exl3-tp2/` holds the profile for [Mia's two-Spark GLM kit](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold): TensorFold 0.6.0's Python CUDA engine with Mia's patches, serving Mia's 4 bpw EXL3 checkpoint across both Sparks. It replaced the kit's v1.10 release after [#941's comparison on October 22](https://github.com/kelchm/home-lab/issues/941#issuecomment-6334247435), in which the same 48 requests gave identical replies on both, and decode and prefill were within 3% of v1.10's. GLM last served day to day on October 8, on v1.10.
+`mia-tensorfold-glm53-exl3-tp2/` holds the profile for [Mia's two-Spark GLM kit](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold): TensorFold 0.6.0's Python CUDA engine with Mia's patches, serving Mia's 4 bpw EXL3 checkpoint across both Sparks. It replaced the kit's v1.10 release after [#941's comparison on October 22](https://github.com/kelchm/home-lab/issues/941#issuecomment-6334247435), in which the same 48 requests gave identical replies on both, and decode and prefill were within about 3% of v1.10's. GLM last served day to day on October 8, on v1.10.
 
 ### Current profile
 
@@ -43,7 +43,7 @@ How the profile differs from the kit's own launch:
 - **Rank command:** the kit's serve flags plus `--backend cuda` and `--no-update-check`.
 - **Fabric:** the ranks meet on `FABRIC_MASTER`, the head's CX7 address, as the kit's launcher does, but on SparkRun's `MASTER_PORT` where the kit uses port 29551. They fall back to SparkRun's management address only when the adapter has no fabric address. NCCL's collectives run over RoCE on both rails, with the devices and GID index SparkRun detects.
 - **Container:** SparkRun clears the image entrypoint and adds `--user root`, `no-new-privileges` and an open-file limit. Both ranks use host IPC and networking, all GPUs, `/dev/infiniband`, `IPC_LOCK`, unlimited locked memory and a 64 MiB stack.
-- **Caches:** weights mount at `/cache/huggingface`, and compiled kernels go to SparkRun's image-keyed `/cache/runtime`, so a new image's first boot compiles from empty. This image's first boot took 460 s on October 22.
+- **Caches:** weights mount at `/cache/huggingface`, and compiled kernels go to SparkRun's image- and model-keyed `/cache/runtime`, so a new image's first boot compiles from empty. This image's first boot took 460 s on October 22.
 
 ### Inputs outside SparkRun
 
@@ -171,7 +171,7 @@ How the profile differs from the kit's own launch:
 - **Rendezvous gate:** rank 0 loads and warms the vision tower before it opens its listener, and allows the helper 900 s, while SparkRun 0.3.10 waits a fixed 120 s for the port and then removes both containers. A boot that ends with `Head node failed to become ready` while the helper is still loading is this gate, not an engine fault; upstream starts rank 1 first and has no such gate.
 - **Fabric:** SparkRun detects the NCCL interface, devices and GID index at launch; the kit's link detection does not run. The engine's one-shot RoCE all-gather takes its devices from `NCCL_IB_HCA` and, per upstream, leaves both ranks on NCCL when a rank cannot open RoCE. Each rank's log says which path is in use.
 - **Container:** SparkRun clears the image entrypoint, so NVIDIA's entrypoint script does not run, and adds `--user root`, `no-new-privileges` and an open-file limit. Both ranks use host IPC and networking, all GPUs, `/dev/infiniband`, `IPC_LOCK` and unlimited locked memory.
-- **Weights and caches:** each host keeps its own copy in SparkRun's cache, mounted at `/cache/huggingface`; upstream's documented setup has the worker read the head's over NFS. The CUDA cache goes to SparkRun's image-keyed `/cache/runtime`.
+- **Weights and caches:** each host keeps its own copy in SparkRun's cache, mounted at `/cache/huggingface`; upstream's documented setup has the worker read the head's over NFS. The CUDA cache goes to SparkRun's image- and model-keyed `/cache/runtime`.
 
 ### Inputs outside SparkRun
 
@@ -201,7 +201,7 @@ This route was chosen over the kit's own image build because the recipe keeps th
 - a new 11 GiB-class image, built on the head from an NVIDIA base that is not on either Spark;
 - a Triton kernel-set compile;
 - a copy to the worker;
-- a different SparkRun workload, with an empty image-keyed cache.
+- a different SparkRun workload, with an empty runtime cache.
 
 All of that for changes to the Zig server alone.
 
@@ -245,7 +245,7 @@ Merging this directory changes nothing on the Sparks. Each step below is manual.
    sparkrun run "$qwen" --cluster sparks --no-auto-detect --no-sync-tuning --no-follow --dry-run
    ```
 
-6. Stop the running profile with the recipe that launched it. Then confirm on both hosts that no engine process remains and at least 102 GiB is available, the kit's preflight floor.
+6. Stop the running profile with the recipe that launched it. Then confirm on both hosts that no engine process remains and at least 102 GiB is available, the kit's preflight floor at its 1M window.
 7. Launch. The shared gate runs once the head answers, so a launch with the wrong discovery fields, smoke replies, tool call or level renders fails here:
 
    ```sh
@@ -256,7 +256,7 @@ Merging this directory changes nothing on the Sparks. Each step below is manual.
    - the control-link line, naming the head's CX7 address;
    - the load and the NCCL join;
    - `RoCE all-gather on 2 port(s)` on both ranks, with no `built without libibverbs headers` line;
-   - the sequence-memory line, about 31.5 GiB on October 22.
+   - the sequence-memory line, 31.45 and 31.72 GiB on the October 22 boots.
 
    Confirm each rank runs the rebuilt binary: `docker exec <container> sha256sum /opt/tensorfold-mod/bin/tensorfold-native` matches `binary_sha256` in the lock, on both hosts.
 
@@ -266,9 +266,13 @@ Then, from `~/sparkrun/recipes/glm53` on the head:
 2. The echoes: `python3 tests/qwen_model_discovery.py --context 491520 --completions` sends eight 8-token chat requests with no `chat_template_kwargs`.
    - One names no effort. Its `tensorfold.enable_thinking` must equal `default_enabled`, and its `tensorfold.reasoning_effort` must be null, since no `default_effort` is advertised.
    - Seven name each accepted effort. Each echo must be in `supported_efforts`, an effort listed there must echo itself, and thinking must be off exactly when the echo is `none`. Compare the other three with the table above.
+
+   Then send one request with `reasoning_effort: "none"` and `chat_template_kwargs: {"enable_thinking": true}`. It should echo thinking on with a null effort, as recorded above.
 3. The shared checks in [Validate](#validate), with the agent gate run once for each `--section` of `tools`, `isolation`, `cache`, `coding` and `cancellation`, each with its own `--output`, since this server refuses the `structured` section's fields. Then the kit's own [checks](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/blob/be3ed857ab1055ca47b36134d22691f00f2bb94a/tools), which talk to the server with the standard library: `exact.py`, `toolcheck.py`, `prompt_reuse.py 30000 4 --other` and `context_boundary.py --context 491520`.
 4. One throughput point: replaying the October 8 decode request bodies, under `~/sparkrun/results/qwen38fn-v1.1/evaluation-20261008/` on the head, gave about 62, 138 and 310 tok/s at one, four and sixteen streams on October 22.
 5. The window: retrieval prompts that fill the window less the reply. Send one as the first long request after the boot, and one after shorter long prompts. The configured window is the largest at which both pass twice (#940).
+
+The head may still hold older Qwen recipes from earlier syncs, such as the retired `qwen38fn-nvfp4-tp2-mia-tf-v1.1-nvidia-1m.yaml`. Those on the kit's image share this profile's runtime, model, image, port, served name and parallelism, so SparkRun takes them for the same workload and runtime cache: `stop`, `logs` and `status` with one act on whichever is running, and `run` with the v1.1 file serves the image's own binary at a 1M window. Use this profile's path, and tell instances apart by `context_length` in `/v1/models` or by the binary each rank runs.
 
 To stop it, use `sparkrun stop "$qwen" --cluster sparks`. To roll back, stop it, confirm both GPUs are free, and launch the profile that was serving with its own recipe and the same flags. Nothing is left to undo on the hosts except the copied files and the pulled image.
 
@@ -363,15 +367,18 @@ The recipe's `container` and the lock's `image_id` are the image ID the head rep
 
 ### Launch, stop and roll back
 
-From `~/sparkrun/recipes/glm53` on the head, after syncing this directory as in [Deploy](#deploy) and passing the [checks before a launch](#before-a-launch). Stop the running instance with its own recipe first. If the image isn't on the head yet, load it only after that stop, so the 37 GB load never runs beside a serving engine on the head's unified memory. Then confirm both GPUs list no compute process and the image ID matches the recipe's `container`:
+From `~/sparkrun/recipes/glm53` on the head, after syncing this directory as in [Deploy](#deploy) and passing the [checks before a launch](#before-a-launch). Stop the running instance with its own recipe before loading the image, so the 37 GB load never runs beside a serving engine on the head's unified memory:
 
 ```sh
-# On the workstation: DOCKER_CONTEXT=colima-tf-build docker save dsv41-tf:2970bcd-4691715-e1c6ebe02e2a | ssh kelchm@10.32.21.31 docker load
-ssh 10.32.21.32 'nvidia-smi --query-compute-apps=pid --format=csv,noheader'; nvidia-smi --query-compute-apps=pid --format=csv,noheader  # both empty
-docker image inspect --format '{{.Id}}' dsv41-tf:2970bcd-4691715-e1c6ebe02e2a
 dsv41="$PWD/bertholomus-tensorfold-dsv41-tp2/dsv41-1017-exl3-tp2-bth-tf-2970bcd-libertai-512k.yaml"
+running="$PWD/<family>/<profile>.yaml"  # The recipe that launched the running instance.
 python3 mods/tensorfold-readiness/prepare.py --check
 python3 mods/bertholomus-tensorfold-dsv41-2970bcd/prepare.py --check
+sparkrun stop "$running" --cluster sparks
+test -z "$(nvidia-smi --query-compute-apps=pid --format=csv,noheader; ssh kelchm@10.32.21.32 nvidia-smi --query-compute-apps=pid --format=csv,noheader)"  # No compute process on either GPU.
+# If the image isn't on the head, load it now, from the workstation:
+#   DOCKER_CONTEXT=colima-tf-build docker save dsv41-tf:2970bcd-4691715-e1c6ebe02e2a | ssh kelchm@10.32.21.31 docker load
+docker image inspect --format '{{.Id}}' dsv41-tf:2970bcd-4691715-e1c6ebe02e2a  # The recipe's container.
 sparkrun run "$dsv41" --cluster sparks --no-auto-detect --no-sync-tuning --no-follow --dry-run
 sparkrun run "$dsv41" --cluster sparks --no-auto-detect --no-sync-tuning --no-follow
 sparkrun logs "$dsv41" --cluster sparks --all-sources
@@ -458,7 +465,7 @@ SparkRun 0.3.10 finds a workload for `stop`, `logs` and relaunch by its runtime,
 
 Before an upgrade, keep the exact working recipe, its mods and the adapter outside the checkout, under `~/sparkrun/rollback/`, and dry-run the rollback recipe against the synced tree before stopping anything. The rollback is then: stop the new instance with its own recipe, confirm both GPUs are free, and launch the kept recipe with the same cluster and flags.
 
-A rank that dies mid-collective can leave a kernel running on its GPU with no process attached: `nvidia-smi` reads about 96% utilization, an SM clock near 1.1 GHz and about 4.7 W with no compute process, where an idle GB10 reads 0% at 208 MHz in P8. To clear it, stop the host's GPU exporter container and `nvidia-persistenced`, so nothing holds the GPU and the driver tears down its state, then start both again and confirm 0% at 208 MHz before the next launch. `nvidia-smi -r` refuses on these hosts because the GPU is the primary one. Reboot only if stopping the daemon doesn't clear it. This cleared spark-2 on 2026-10-22.
+A rank that dies mid-collective can leave a kernel running on its GPU with no process attached: `nvidia-smi` reads about 96% utilization, an SM clock near 1.1 GHz and about 4.7 W with no compute process, where an idle GB10 reads 0% at 208 MHz in P8. To clear it, stop the host's GPU exporter container, `monitoring-gpu-gpu-exporter-1`, and `nvidia-persistenced`, so nothing holds the GPU and the driver tears down its state. Wait about 20 s, then start both again and confirm 0% at 208 MHz before the next launch. `nvidia-smi -r` refuses on these hosts because the GPU is the primary one. Reboot only if stopping the daemon doesn't clear it. This cleared spark-2 on 2026-10-22.
 
 The endpoint has no API key ([#943](https://github.com/kelchm/home-lab/issues/943)). spark-1's firewall admits port 8888 from the workstation, `10.32.10.244`, and from loopback, which the metrics scrape and sparkDash use. That rule is not persistent; check access after a host reboot or a workstation address change.
 
