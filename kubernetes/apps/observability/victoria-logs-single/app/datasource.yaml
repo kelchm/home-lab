@@ -26,6 +26,16 @@ data:
           # handoff to the browser-reachable, OIDC-protected native VMUI.
           maxLines: 1000
           vmuiUrl: https://vlogs.home.kelch.io/select/vmui/
+          # A container record's details link to the Kubernetes events of the
+          # pod that wrote it, matched by pod UID. Provisioning expands
+          # environment variables, so `$$` keeps Grafana's `${__value.raw}`.
+          derivedFields:
+            - name: Pod events
+              matcherType: label
+              matcherRegex: k8s.pod.uid
+              datasourceUid: victorialogs
+              url: '{service.name="kubernetes-events"} k8s.object.uid:="$${__value.raw}"'
+              urlDisplayLabel: Events for this pod
           # Collector records carry OpenTelemetry severity_number (ranges per the
           # OTel log data model). The level and msg.level rules color retained
           # vlagent and Alloy rows.
