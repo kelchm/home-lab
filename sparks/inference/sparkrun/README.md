@@ -15,7 +15,7 @@ Every profile follows the contract in [#943](https://github.com/kelchm/home-lab/
 
 ## GLM-5.3-Flash on Mia's TensorFold kit
 
-`mia-tensorfold-glm53-exl3-tp2/` holds the profile for [Mia's two-Spark GLM kit](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold): TensorFold 0.6.0's Python CUDA engine with Mia's patches, serving Mia's 4 bpw EXL3 checkpoint across both Sparks. It replaced the kit's v1.10 release after [#941's comparison on October 22](https://github.com/kelchm/home-lab/issues/941#issuecomment-6334247435), in which the same 48 requests gave identical replies on both, at the same speed. GLM last served day to day on October 8, on v1.10.
+`mia-tensorfold-glm53-exl3-tp2/` holds the profile for [Mia's two-Spark GLM kit](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold): TensorFold 0.6.0's Python CUDA engine with Mia's patches, serving Mia's 4 bpw EXL3 checkpoint across both Sparks. It replaced the kit's v1.10 release after [#941's comparison on October 22](https://github.com/kelchm/home-lab/issues/941#issuecomment-6334247435), in which the same 48 requests gave identical replies on both, and decode and prefill were within 3% of v1.10's. GLM last served day to day on October 8, on v1.10.
 
 ### Current profile
 
@@ -57,7 +57,7 @@ Nothing is built here. For a new kit revision, check the published image before 
 2. Apply the kit's patches to the pinned engine commit with `patch -p0`, check that they hash with the kit's extras line to the image's `tf.patches` label, and compare the image's patched-files layer with the reconstruction, at least for every file the mod guards or reads.
 3. Add a new versioned recipe and mod with the new image, upstream hashes and guarded hashes, so the current profile stays as the rollback.
 
-Before any live check, run the source regressions against the installed code inside each rank's container: the [Mia regression](tests/mia_tensorfold_site.py) for call-ID reasoning and HTTP health, and the [capacity regression](tests/mia_tensorfold_capacity.py) for the queue cap and HTTP 429. Feed each one unchanged to the rank's own Python, from the head for rank 0 and the worker for rank 1: `docker exec -i -e PYTHONDONTWRITEBYTECODE=1 <rank container> python3 -B - < tests/mia_tensorfold_site.py`. They use mocked handlers and decoders, so they are source evidence, not live traffic.
+Before any live check, run the source regressions against the installed code inside each rank's container: the [Mia regression](tests/mia_tensorfold_site.py) for call-ID reasoning and HTTP health, the [capacity regression](tests/mia_tensorfold_capacity.py) for the queue cap and HTTP 429, and the [switch and route regression](tests/mia_tensorfold_switches_and_routes.py) for the recipe's launcher switches, streamed admission refusals and the Anthropic route. Feed each one unchanged to the rank's own Python, from the head for rank 0 and the worker for rank 1: `docker exec -i -e PYTHONDONTWRITEBYTECODE=1 <rank container> python3 -B - < tests/mia_tensorfold_site.py`. They use mocked handlers and decoders, so they are source evidence, not live traffic.
 
 ### Launch, stop and roll back
 
@@ -281,6 +281,7 @@ The six patches above address the kit's open issues #3, #6, #8 and #9. On the Sp
 - **Unsupported fields:** a `response_format` of `json_object` or `json_schema`, the `guided_*` fields, `logprobs: true` and `n` other than 1 answer HTTP 400.
 - **Pictures:** image and video prompts are not kept, so each turn of a chat with pictures processes them again.
 - **Capacity:** the kit's 16 streams and 10 GiB reserve, not the 8 GiB headroom goal the GLM profile works to. With two cold ~490K prompts on October 22, available memory stayed above 34.9 GiB on the head and 38.4 GiB on the worker.
+- **Not established:** concurrent long prompts, long sessions growing together, coding quality, and stability beyond the October 22 trials. `long_sessions.py` has not run against this server.
 - **YaRN:** the factor stays at the kit's 4. A factor of 2 would also cover this window, and is untried here.
 - **Access and memory:** the endpoint has no API key, and no memory watchdog runs ([#944](https://github.com/kelchm/home-lab/issues/944)).
 
