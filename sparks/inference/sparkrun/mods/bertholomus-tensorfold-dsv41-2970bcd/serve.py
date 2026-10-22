@@ -14,7 +14,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-SITE = Path("/opt/dsv41-tensorfold")
+SITE = Path("/opt/tensorfold-mod")
 VIEWS = Path("/tmp/dsv41")
 HUB = Path("/cache/huggingface/hub")
 

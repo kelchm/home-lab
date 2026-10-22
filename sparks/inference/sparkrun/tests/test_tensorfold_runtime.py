@@ -878,7 +878,8 @@ def test_dsv41_recipe_maps_native_rank_wiring_to_both_engine_binaries(runtime, t
     model, kit, engram = Path("/v/model"), Path("/v/kit"), Path("/v/engram")
     for rank in (0, 1):
         env, argv = _parse_env_command(_node_command(runtime, recipe, rank, init_port=29511))
-        assert argv == ["/usr/local/bin/dsv41-tf-entrypoint"]
+        assert argv == [recipe.defaults["entrypoint"]]
+        assert f"serve.py {argv[0]}" in (bundle / "run.sh").read_text()
         assert env["MODEL_PATH"] == hf_snapshot_path(DSV41_TARGET, recipe.model_revision)
         args, child = serve.command({**recipe.env, **env, **fabric}, model, kit, engram)
         assert child["TF_TP_MASTER"] == "198.19.240.11" and child["TF_TP_PORT"] == "29511"

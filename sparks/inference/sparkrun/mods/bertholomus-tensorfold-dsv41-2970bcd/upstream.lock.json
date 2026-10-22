@@ -40,7 +40,7 @@
     "patches/0005-deepseek-efforts.patch": "ad04c267ff67cadd705a8b4596a92b2f88af5e5a2fd6e978566d3221828ab2d2",
     "patches/0006-literal-object-keys.patch": "902838061c9b6ef41176d2c6c72cae005eee0202c83d37ba7aafc93856159360",
     "prepare.py": "557c49eb893f1d6350f021687e511fc24acd04c85761f9de5c8ec02baf53ad2b",
-    "run.sh": "ae47e319988c7034f3b71e73e7159dfffa4085e80483b8429a0ac6d945f2e405",
-    "serve.py": "0a9babce3ecd3c851e2ff5005e7ba9e9e63916cab2e9ff1c3b595203847cbaa5"
+    "run.sh": "e223322ce028bf007329a8484bcd73811aadcc400c9f1414521f7671ff5b1977",
+    "serve.py": "6bc2ba8d8fc1d932d6d4b4e2b316a9019a3b2baa01ed649fb3eadabb9af592b6"
   }
 }

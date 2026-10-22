@@ -22,7 +22,7 @@ defaults:
   served_model_name: DeepSeek-V4.1-Flash-1017
   context: 524288
   max_tokens: 32768
-  entrypoint: /usr/local/bin/dsv41-tf-entrypoint
+  entrypoint: /usr/local/bin/tensorfold-entrypoint
 env:
   TENSORFOLD_NO_UPDATE_CHECK: '1'
   TF_DS_RANK_CACHE: /cache/runtime/tf-ds-rank
