@@ -1,9 +1,11 @@
 -- Maps Kubernetes Event objects from the kubernetes_events input onto the
 -- OpenTelemetry log data model as the OpenTelemetry Collector's k8sevents
--- receiver does: message as body, type as severity, k8s.event.* and
--- k8s.object.* attributes. An event series (events.k8s.io reporters) takes
--- its count and time from `series`. docs/evaluations/log-schema-and-collector.md
--- records each rule's source.
+-- receiver does: type as severity, k8s.event.* and k8s.object.* attributes.
+-- The body takes the reason, object and message columns of `kubectl events`,
+-- so a line-oriented view names what happened to which object; the receiver
+-- stores the message alone. An event series (events.k8s.io reporters)
+-- takes its count and time from `series`.
+-- docs/evaluations/log-schema-and-collector.md records each rule's source.
 
 -- The OTLP output sends one resource per chunk, so everything that varies per
 -- event travels as a record attribute; VictoriaLogs stores both as fields.
@@ -61,7 +63,9 @@ function normalize(tag, ts, group, metadata, record)
   local severity = kind and SEVERITY[kind:lower()]
   if kind and not severity then attributes['pipeline.severity_unmapped'] = true end
   attributes.otlp = { severity_number = severity or 0, severity_text = kind }
-  local out = { body = text(record.message) or '', resource = { attributes = RESOURCE } }
+  local body = string.format('%s %s/%s: %s', text(record.reason) or '', text(object.kind) or '',
+    text(object.name) or '', text(record.message) or '')
+  local out = { body = body, resource = { attributes = RESOURCE } }
   -- The input dates a series by its creation; its last occurrence is when this write happened.
   local last = microtime(series.lastObservedTime)
   if last then return 1, last, attributes, out end

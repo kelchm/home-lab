@@ -14,9 +14,7 @@ namespace_query = 'k8s.namespace.name:*'
 # Container records only: events carry a namespace too, but no stream.
 service_query = 'k8s.namespace.name:in(${namespace}) log.iostream:*'
 expr = 'k8s.namespace.name:in(${namespace}) service.name:in(${service}) log.iostream:in(${stream})\n' + LEVEL
-# Each event reads as kubectl lists it: reason, object, then the message.
-events_expr = ('{service.name="kubernetes-events"} k8s.namespace.name:in(${namespace})\n' + LEVEL
-               + '\n| format "<k8s.event.reason> <k8s.object.kind>/<k8s.object.name>: <_msg>" as _msg')
+events_expr = '{service.name="kubernetes-events"} k8s.namespace.name:in(${namespace})\n' + LEVEL
 datasource = {'type': 'victoriametrics-logs-datasource', 'uid': 'victorialogs'}
 
 

@@ -43,7 +43,7 @@
         "timestamp": "lastTimestamp",
         "severity_number": 9,
         "severity_text": "Normal",
-        "body": "Container image \"ghcr.io/home-operations/sonarr:4.0.15\" already present on machine",
+        "body": "Pulled Pod/sonarr-6d5f8b7c9-x2kqp: Container image \"ghcr.io/home-operations/sonarr:4.0.15\" already present on machine",
         "attributes": {
           "k8s.namespace.name": "media",
           "k8s.node.name": "k8s-prod-2",
@@ -106,7 +106,7 @@
         "timestamp": "lastTimestamp",
         "severity_number": 13,
         "severity_text": "Warning",
-        "body": "Back-off restarting failed container app in pod radarr-7c9d8b6f5-m4pzt_media(a0000000-0000-4000-8000-000000000002)",
+        "body": "BackOff Pod/radarr-7c9d8b6f5-m4pzt: Back-off restarting failed container app in pod radarr-7c9d8b6f5-m4pzt_media(a0000000-0000-4000-8000-000000000002)",
         "attributes": {
           "k8s.namespace.name": "media",
           "k8s.event.reason": "BackOff",
@@ -153,6 +153,7 @@
           "k8s.event.reporting_controller": "default-scheduler",
           "k8s.event.reporting_instance": "default-scheduler-k8s-prod-1"
         },
+        "body": "Scheduled Pod/sonarr-6d5f8b7c9-x2kqp: Successfully assigned media/sonarr-6d5f8b7c9-x2kqp to k8s-prod-2",
         "absent": [
           "k8s.node.name",
           "k8s.event.count",
@@ -199,6 +200,7 @@
           "k8s.object.kind": "CronJob",
           "k8s.object.api_version": "batch/v1"
         },
+        "body": "SawCompletedJob CronJob/recyclarr: Saw completed job: recyclarr-29877240, condition: Complete",
         "absent": [
           "k8s.event.reporting_instance",
           "k8s.node.name"
@@ -244,6 +246,7 @@
           "k8s.object.name": "k8s-prod-1",
           "k8s.node.name": "k8s-prod-1"
         },
+        "body": "NodeReady Node/k8s-prod-1: Node k8s-prod-1 status is now: NodeReady",
         "absent": [
           "k8s.namespace.name"
         ]
@@ -272,7 +275,7 @@
           "apiVersion": "v1"
         },
         "reason": "Synced",
-        "message": "A controller reporting its own event type",
+        "message": "A controller reporting its own event type\nat 100% of a %s quota",
         "source": {
           "component": "example-controller"
         },
@@ -286,7 +289,8 @@
         "severity_text": "Info",
         "attributes": {
           "pipeline.severity_unmapped": true
-        }
+        },
+        "body": "Synced ConfigMap/example: A controller reporting its own event type\nat 100% of a %s quota"
       }
     },
     {
@@ -331,7 +335,8 @@
           "k8s.event.count": 3,
           "k8s.event.action": "Scheduling",
           "k8s.event.start_time": "@creationTimestamp"
-        }
+        },
+        "body": "FailedScheduling Pod/lidarr-5f7d9c8b4-q8wzn: 0/3 nodes are available: 3 Insufficient memory. preemption: 0/3 nodes are available: 3 No preemption victims found for incoming pod."
       }
     },
     {
@@ -372,7 +377,8 @@
         "timestamp": "series.lastObservedTime",
         "attributes": {
           "k8s.event.count": 8
-        }
+        },
+        "body": "FailedScheduling Pod/bazarr-6b8c7d9f5-h3jkl: 0/3 nodes are available: 3 node(s) didn't match pod anti-affinity rules."
       }
     },
     {
@@ -412,7 +418,8 @@
         "timestamp": "series.lastObservedTime",
         "attributes": {
           "k8s.event.count": 1480
-        }
+        },
+        "body": "FailedScheduling Pod/old: 0/3 nodes are available: 3 node(s) had untolerated taint {node.kubernetes.io/disk-pressure: }."
       }
     },
     {
@@ -456,7 +463,8 @@
         "severity_number": 13,
         "attributes": {
           "k8s.event.count": 6
-        }
+        },
+        "body": "BackOff Pod/radarr-7c9d8b6f5-m4pzt: Back-off restarting failed container app in pod radarr-7c9d8b6f5-m4pzt_media(a0000000-0000-4000-8000-000000000002)"
       }
     },
     {
@@ -498,7 +506,7 @@
         "timestamp": "lastTimestamp",
         "severity_number": 13,
         "severity_text": "Warning",
-        "body": "MountVolume.SetUp failed for volume \"config\" : rpc error: code = Aborted desc = volume is not ready",
+        "body": "FailedMount Pod/jellyfin-0: MountVolume.SetUp failed for volume \"config\" : rpc error: code = Aborted desc = volume is not ready",
         "attributes": {
           "k8s.event.reason": "FailedMount",
           "k8s.node.name": "k8s-prod-3"
@@ -543,7 +551,8 @@
         "timestamp": "series.lastObservedTime",
         "attributes": {
           "k8s.event.count": 9
-        }
+        },
+        "body": "FailedScheduling Pod/bazarr-6b8c7d9f5-h3jkl: 0/3 nodes are available: 3 node(s) didn't match pod anti-affinity rules."
       },
       "watch_type": "MODIFIED"
     },
@@ -669,7 +678,8 @@
         "severity_number": 13,
         "attributes": {
           "k8s.event.reason": "Unhealthy"
-        }
+        },
+        "body": "Unhealthy Pod/prowlarr-7d6c5b4a3-z9xwv: Readiness probe failed: Get \"http://10.42.1.77:9696/ping\": context deadline exceeded"
       }
     }
   ]

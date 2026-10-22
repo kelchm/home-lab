@@ -223,11 +223,11 @@ The `fluent-bit-events` collector, one replica of the node collectors' chart and
 
 ### Event fields
 
-[`events.lua`](../../kubernetes/apps/observability/fluent-bit/app/config/events/events.lua) maps each event as the OpenTelemetry Collector's Kubernetes events receiver does.
+[`events.lua`](../../kubernetes/apps/observability/fluent-bit/app/config/events/events.lua) maps each event as the OpenTelemetry Collector's Kubernetes events receiver does, with the differences the [evaluation](../evaluations/log-schema-and-collector.md#kubernetes-events) lists; the most visible is that the line names the reason and object.
 
 | Field | Content |
 | --- | --- |
-| `_msg` | The event's message. |
+| `_msg` | The reason, involved object and message, in the order `kubectl events` shows them, as in `Unhealthy Pod/prowlarr-7d6c5b4a3-z9xwv: Readiness probe failed: …`. Events stored before this line format was deployed on October 22, 2026 hold the message alone until retention removes them. |
 | `severity_number`, `severity_text` | `Normal` is 9 (info), `Warning` 13 (warn), `Error` 17 and `Critical` 21, with the type as the text. Any other type is stored as unspecified with `pipeline.severity_unmapped`. |
 | `k8s.namespace.name` | The involved object's namespace, absent for cluster-scoped objects such as nodes. Stream field. |
 | `k8s.object.kind`, `k8s.object.name`, `k8s.object.uid`, `k8s.object.fieldpath`, `k8s.object.api_version`, `k8s.object.resource_version` | The involved object. `fieldpath` names a container, as in `spec.containers{app}`. |
@@ -245,7 +245,7 @@ The output buffer is 256 MiB on the pod's `emptyDir`, under the same retry and b
 
 ### Query events
 
-In Grafana, the **Events** panel of [Kubernetes / Logs](https://grafana.home.kelch.io/d/kubernetes-logs) lists the chosen namespaces' events, filtered by **Severity**. Each line reads as `kubectl get events` lists it: the reason, the object, then the message. Explore and VMUI take LogsQL such as:
+Each event's line names the reason and object, so a word such as `BackOff` or a quoted pod name, `"jellyfin-0"`, finds events in Explore and VMUI, not only words from the message. In Grafana, the **Events** panel of [Kubernetes / Logs](https://grafana.home.kelch.io/d/kubernetes-logs) lists the chosen namespaces' events, filtered by **Severity**. Explore and VMUI take LogsQL such as:
 
 - `{service.name="kubernetes-events", k8s.namespace.name="media"}` lists one namespace's events.
 - `{service.name="kubernetes-events"} severity_number:>=13` lists warnings across the cluster.

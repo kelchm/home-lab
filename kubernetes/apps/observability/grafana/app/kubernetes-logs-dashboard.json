@@ -214,7 +214,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "{service.name=\"kubernetes-events\"} k8s.namespace.name:in(${namespace})\n| format if (severity_number:range[1, 4]) \"trace\" as level\n| format if (severity_number:range[5, 8]) \"debug\" as level\n| format if (severity_number:range[9, 12]) \"info\" as level\n| format if (severity_number:range[13, 16]) \"warning\" as level\n| format if (severity_number:range[17, 20]) \"error\" as level\n| format if (severity_number:range[21, 24]) \"critical\" as level\n| format if (level:=\"\") \"unknown\" as level\n| filter level:in(${level})\n| format \"<k8s.event.reason> <k8s.object.kind>/<k8s.object.name>: <_msg>\" as _msg",
+          "expr": "{service.name=\"kubernetes-events\"} k8s.namespace.name:in(${namespace})\n| format if (severity_number:range[1, 4]) \"trace\" as level\n| format if (severity_number:range[5, 8]) \"debug\" as level\n| format if (severity_number:range[9, 12]) \"info\" as level\n| format if (severity_number:range[13, 16]) \"warning\" as level\n| format if (severity_number:range[17, 20]) \"error\" as level\n| format if (severity_number:range[21, 24]) \"critical\" as level\n| format if (level:=\"\") \"unknown\" as level\n| filter level:in(${level})",
           "editorMode": "code",
           "queryType": "instant",
           "maxLines": 1000,
