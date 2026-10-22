@@ -1,6 +1,6 @@
 # Logging
 
-Kubernetes application and control-plane container stdout/stderr is collected into VictoriaLogs, which is the only log backend. Fluent Bit runs on every node, enriches each record from the Kubernetes API, maps it onto the OpenTelemetry log data model and sends it to VictoriaLogs over OTLP; see [Log schema](#log-schema). Fluent Bit also receives each Talos node's service and kernel logs, and syslog from the UniFi console and its devices, and stores them in the same schema; see [Talos node logs](#talos-node-logs) and [UniFi console logs](#unifi-console-logs). The [schema and collector evaluation](../evaluations/log-schema-and-collector.md) records why the schema and collector look the way they do.
+Kubernetes application and control-plane container stdout/stderr is collected into VictoriaLogs, which is the only log backend. Fluent Bit runs on every node, enriches each record from the Kubernetes API, maps it onto the OpenTelemetry log data model and sends it to VictoriaLogs over OTLP; see [Log schema](#log-schema). Fluent Bit also receives each Talos node's service and kernel logs, and syslog from the UniFi console and its devices, and stores them in the same schema; see [Talos node logs](#talos-node-logs) and [UniFi console logs](#unifi-console-logs). A separate Fluent Bit collector stores Kubernetes events; see [Kubernetes events](#kubernetes-events). The [schema and collector evaluation](../evaluations/log-schema-and-collector.md) records why the schema and collector look the way they do.
 
 Collection covers kubelet-managed container logs, including init containers, native sidecars and static control-plane pods. Talos service and kernel logs are a separate source with their own gaps; see [Delivery and gaps](#delivery-and-gaps). Application files outside stdout/stderr are not collected. Quiet or empty containers do not establish a collection failure: compare Kubernetes inventory, node log files and stored records before declaring a source missing.
 
@@ -217,6 +217,41 @@ Merge the receiver first and let Flux roll the DaemonSet; Talos must not be poin
 
 To roll back, revert the patch and apply it the same way; Talos stops sending without a reboot. A Talos node pointed at a missing collector only keeps retrying.
 
+## Kubernetes events
+
+The `fluent-bit-events` collector, one replica of the node collectors' chart and image, watches the API server's events with Fluent Bit's `kubernetes_events` input and stores them in the same schema with `service.name=kubernetes-events`, one stream per namespace. Its pipeline is [`config/events/`](../../kubernetes/apps/observability/fluent-bit/app/config/events/), delivered as the `fluent-bit-events-config` ConfigMap, so changing it never restarts the node collectors. The [evaluation](../evaluations/log-schema-and-collector.md#kubernetes-events) records the decisions.
+
+### Event fields
+
+[`events.lua`](../../kubernetes/apps/observability/fluent-bit/app/config/events/events.lua) maps each event as the OpenTelemetry Collector's Kubernetes events receiver does.
+
+| Field | Content |
+| --- | --- |
+| `_msg` | The event's message. |
+| `severity_number`, `severity_text` | `Normal` is 9 (info) and `Warning` 13 (warn), with the type as the text. Any other type is stored as unspecified with `pipeline.severity_unmapped`. |
+| `k8s.namespace.name` | The involved object's namespace, absent for cluster-scoped objects such as nodes. Stream field. |
+| `k8s.object.kind`, `k8s.object.name`, `k8s.object.uid`, `k8s.object.fieldpath`, `k8s.object.api_version`, `k8s.object.resource_version` | The involved object. `fieldpath` names a container, as in `spec.containers{app}`. |
+| `k8s.event.reason`, `k8s.event.action`, `k8s.event.count` | The reason (`BackOff`, `FailedMount`, `Scheduled`), the action newer reporters set, and how many times the event has occurred. |
+| `k8s.event.reporting_controller`, `k8s.event.reporting_instance`, `k8s.node.name` | Who reported it: the controller (`reportingComponent`, else `source.component`), its instance, and the node for kubelet events. |
+| `k8s.event.name`, `k8s.event.uid`, `k8s.event.start_time` | The Event object and its creation time. |
+
+Record time is the event's `lastTimestamp`, else `firstTimestamp`, else its creation time, as Fluent Bit's input sets it. A repeated event, such as a crash loop's `BackOff`, is stored again at each new count, at the time of that occurrence.
+
+### Event delivery
+
+The API server keeps events for an hour. The collector lists them, then watches for changes; each watch ends after 10 minutes and the collector lists again, skipping what it has already sent. A new collector process has no such memory, so after a restart it stores the last hour of events a second time; the copies share `k8s.event.uid` and `k8s.event.count`. An outage longer than an hour loses the events that expired during it. Deletions are not recorded.
+
+The output buffer is 256 MiB on the pod's `emptyDir`, under the same retry and buffer alerts as the node collectors; see [Pipeline failures](#pipeline-failures). `KubernetesEventsIngestionSilent` fires when `fluentbit_input_records_total{job="fluent-bit-events",name="events"}` has not risen for 45 minutes or the collector is not scraped; Flux alone records more than 200 events an hour. A watch the API server refuses appears in the pod's log as `http_status=`, such as 403 if the ClusterRole lacks events.
+
+### Query events
+
+- `{service.name="kubernetes-events", k8s.namespace.name="media"}` lists one namespace's events.
+- `{service.name="kubernetes-events"} severity_number:>=13` lists warnings across the cluster.
+- `{service.name="kubernetes-events"} k8s.object.name:="jellyfin-0"` follows one object: scheduling, image pulls, mounts and probe failures.
+- `{service.name="kubernetes-events"} k8s.event.reason:=BackOff | stats by (k8s.namespace.name, k8s.object.name) max(k8s.event.count) restarts` ranks crash loops.
+
+`python3 scripts/logging/test-fluent-bit-events.py` runs the production events configuration through the pinned image against [`events-api.py`](../../scripts/logging/events-api.py), which serves a list and a watch stream as the API server does, with [fixtures](../../scripts/logging/fluent-bit-events-fixtures.json) for each mapping rule, retention, repeated events, ignored watch types and the list that follows a watch. CI runs it through `scripts/ci/validate-logging.sh`.
+
 ## Source inventory
 
 Measured 2026-09-18 over a 24-hour window with `stats by (service_name) count()` and its `NOT level:~".+"` variant. "No recognized severity" means the stored top-level `level` is absent or empty; it does not establish that a row is unstructured. This is a dated inventory of the former Alloy pipeline, not a complete list of sources or a current traffic baseline. The later [collector evaluation](../evaluations/kubernetes-log-collectors.md#stdoutstderr-and-severity) records additional source-level findings, including Broadsheet renderer warnings whose explicit prefix is not normalized by Alloy.
@@ -237,7 +272,7 @@ Traefik access logs carry their request fields under HTTP semantic-convention na
 
 ## Pipeline failures
 
-Metrics-native rules in the `fluent-bit-pipeline` group page through VMAlertmanager when a node's collector target disappears (`FluentBitCollectorTargetMissing`), a node reads no container logs (`FluentBitNodeLogIngestionSilent`) or receives no Talos logs (`TalosLogIngestionSilent`), delivery keeps retrying (`FluentBitDeliveryRetrying`), the output buffer passes 75% (`FluentBitBufferNearCapacity`) or records are dropped, including container log lines over 1 MiB that the collector skips (`FluentBitRecordsDropped`), and when no UniFi syslog arrives for two days (`UniFiSyslogSilent`). The `logging-pipeline` group covers VictoriaLogs itself, including `VictoriaLogsIngestionSilent` on `vl_rows_ingested_total{type="opentelemetry_protobuf"}`. These alerts depend on the metrics path rather than querying the log backend they diagnose. Follow the [alert-delivery runbook](alerting.md#end-to-end-delivery-test) when retesting delivery.
+Metrics-native rules in the `fluent-bit-pipeline` group page through VMAlertmanager when a node's collector target disappears (`FluentBitCollectorTargetMissing`), a node reads no container logs (`FluentBitNodeLogIngestionSilent`) or receives no Talos logs (`TalosLogIngestionSilent`), delivery keeps retrying (`FluentBitDeliveryRetrying`), the output buffer passes 75% (`FluentBitBufferNearCapacity`) or records are dropped, including container log lines over 1 MiB that the collector skips (`FluentBitRecordsDropped`), and when no UniFi syslog arrives for two days (`UniFiSyslogSilent`). The retry, buffer and drop alerts also cover the `fluent-bit-events` collector, and `KubernetesEventsIngestionSilent` fires when it reads no [Kubernetes events](#event-delivery) for 45 minutes. The `logging-pipeline` group covers VictoriaLogs itself, including `VictoriaLogsIngestionSilent` on `vl_rows_ingested_total{type="opentelemetry_protobuf"}`. These alerts depend on the metrics path rather than querying the log backend they diagnose. Follow the [alert-delivery runbook](alerting.md#end-to-end-delivery-test) when retesting delivery.
 
 Fluent Bit's drop counter undercounts loss when its buffer is exhausted (a local drill dropped 2,336 records and counted 1,072), so treat `FluentBitBufferNearCapacity` as the actionable signal and the drop alert as a lower bound.
 
@@ -273,7 +308,7 @@ These sources log warnings or errors in normal operation. Each was traced to its
 
 ## Fluent Bit collector
 
-The DaemonSet runs the official chart with the pinned upstream image. Its pipeline is plain files under [`kubernetes/apps/observability/fluent-bit/app/config/`](../../kubernetes/apps/observability/fluent-bit/app/config/), delivered as the `fluent-bit-config` ConfigMap; Reloader restarts the pods when it changes.
+The DaemonSet runs the official chart with the pinned upstream image. Its pipeline is plain files under [`kubernetes/apps/observability/fluent-bit/app/config/`](../../kubernetes/apps/observability/fluent-bit/app/config/), delivered as the `fluent-bit-config` ConfigMap; Reloader restarts the pods when it changes. The `fluent-bit-events` release runs the [Kubernetes events](#kubernetes-events) pipeline as a single-replica Deployment from the same chart and image.
 
 - **Inputs:** `tail` on `/var/log/containers/*.log` with the `cri` multiline parser, which joins CRI partial records. The path deliberately excludes kubelet-rotated files: matching them replays rotated files as duplicates after every restart. `Read_from_Head` keeps the start of files discovered after startup, so new pods' first lines are collected. `tcp` on 5170 receives [Talos logs](#talos-node-logs) as JSON. `syslog` on UDP 5140 receives [UniFi syslog](#unifi-console-logs); a `rewrite_tag` filter gives each device its own tag, by hostname or else sender address, because the OTLP output takes a chunk's resource from its first record.
 - **Enrichment:** the `kubernetes` filter adds labels, annotations and owner references from the API server (get/list/watch on pods and namespaces).

@@ -145,7 +145,7 @@ spec:
             description: Each node needs both the v2 and v1 metrics targets up. Check DaemonSet scheduling, PodMonitor conversion and the metrics network path.
 
         - alert: FluentBitDeliveryRetrying
-          expr: increase(fluentbit_output_retries_total{job="fluent-bit"}[2m]) > 0
+          expr: increase(fluentbit_output_retries_total{job=~"fluent-bit|fluent-bit-events"}[2m]) > 0
           for: 10m
           labels:
             severity: warning
@@ -154,17 +154,17 @@ spec:
             description: Chunks are buffering on the node's filesystem. Restore the sink; do not restart the collector or remove /var/lib/fluent-bit.
 
         - alert: FluentBitBufferNearCapacity
-          expr: fluentbit_output_chunk_available_capacity_percent{job="fluent-bit"} < 25
+          expr: fluentbit_output_chunk_available_capacity_percent{job=~"fluent-bit|fluent-bit-events"} < 25
           for: 2m
           labels:
             severity: critical
           annotations:
             summary: Fluent Bit on {{ $labels.node }} has used 75% of its {{ $labels.name }} buffer
-            description: The output buffer limits are 4 GiB for container logs (victorialogs) and 256 MiB each for Talos logs (talos) and UniFi syslog (unifi). At capacity Fluent Bit discards chunks and its drop counter undercounts the loss; inspect backend health and node disk space now.
+            description: The output buffer limits are 4 GiB for container logs (victorialogs) and 256 MiB each for Talos logs (talos), UniFi syslog (unifi) and Kubernetes events (events). At capacity Fluent Bit discards chunks and its drop counter undercounts the loss; inspect backend health and node disk space now.
 
         - alert: FluentBitRecordsDropped
           expr: |
-            increase(fluentbit_output_dropped_records_total{job="fluent-bit"}[10m]) > 0
+            increase(fluentbit_output_dropped_records_total{job=~"fluent-bit|fluent-bit-events"}[10m]) > 0
             or increase(fluentbit_input_long_line_skipped_total{job="fluent-bit"}[10m]) > 0
           labels:
             severity: critical
@@ -180,6 +180,18 @@ spec:
           annotations:
             summary: Fluent Bit on {{ $labels.node }} is reading no container logs
             description: Check the /var/log/containers mount, file permissions and the tail database. A healthy scrape target alone does not prove log collection.
+
+        # Flux alone records more than 200 events an hour (October 22, 2026).
+        - alert: KubernetesEventsIngestionSilent
+          expr: |
+            increase(fluentbit_input_records_total{job="fluent-bit-events",name="events"}[30m]) == 0
+            or absent(up{job="fluent-bit-events"} == 1)
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: The Kubernetes events collector is receiving no events
+            description: fluent-bit-events read no events for 45 minutes, or is not being scraped. Its log shows watch failures, such as http_status=403 if its ClusterRole lacks events. The API server keeps events for an hour; a collector that recovers within it lists them again.
 
         # The input counts records before the collector drops any. On October 19,
         # 2026 every node sent several a second (machined's console-dashboard

@@ -33,3 +33,21 @@ spec:
         - sourceLabels: [__name__]
           regex: fluentbit_input_(long_line_skipped|long_line_truncated|multiline_truncated)_total
           action: keep
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: fluent-bit-events
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: fluent-bit-events
+  podMetricsEndpoints:
+    - port: http
+      path: /api/v2/metrics/prometheus
+      interval: 30s
+      relabelings:
+        - targetLabel: job
+          replacement: fluent-bit-events
+        - sourceLabels: [__meta_kubernetes_pod_node_name]
+          targetLabel: node

@@ -59,4 +59,21 @@ logging = subprocess.check_output(['yq', '-o=json', '-I=0', '.', str(root / 'tal
 docs = [json.loads(d) for d in logging]
 assert [d['endpoint'] for d in docs[0]['machine']['logging']['destinations']] == [endpoint]
 assert docs[1]['kind'] == 'KmsgLogConfig' and docs[1]['url'] == endpoint
+
+# Kubernetes events: one watcher on the node collectors' image, under its own name.
+events = json.loads(subprocess.check_output(['yq', '-o=json', '.spec.values', str(app / 'helmrelease-events.yaml')]))
+assert events['image'] == values['image']
+assert events['kind'] == 'Deployment' and events['replicaCount'] == 1 and events['updateStrategy'] == {'type': 'Recreate'}
+assert events['nameOverride'] == 'fluent-bit-events' and events['existingConfigMap'] == 'fluent-bit-events-config'
+assert events['rbac']['eventsAccess']
+security = events['securityContext']
+assert security['runAsNonRoot'] and security['readOnlyRootFilesystem'] and not security['allowPrivilegeEscalation']
+assert security['capabilities']['drop'] == ['ALL'] and security['seccompProfile']['type'] == 'RuntimeDefault'
+conf = (app / 'config/events/fluent-bit.conf').read_text()
+setting = lambda key: re.search(rf'^\s*{re.escape(key)}\s+(\S+)', conf, re.M | re.I)
+# A DB records each event once by uid, dropping a repeated event's later counts.
+assert setting('Name').group(1) == 'kubernetes_events' and not setting('DB')
+assert setting('storage.checksum').group(1).lower() == 'off' and setting('Retry_Limit').group(1) == 'no_limits'
+assert setting('Logs_URI').group(1) == '/insert/opentelemetry/v1/logs'
+assert 'VL-Ignore-Fields scope.name,scope.version' in conf
 print('Fluent Bit image, hardening, mounts and pipeline guarantees validated.')

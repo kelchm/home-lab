@@ -1,0 +1,84 @@
+---
+# Kubernetes events collector: watches the API server's events and delivers
+# them to VictoriaLogs over OTLP, in the same schema as the node collectors.
+# The pipeline lives in the fluent-bit-events-config ConfigMap
+# (config/events/), not chart values.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: fluent-bit-events
+spec:
+  chart:
+    spec:
+      chart: fluent-bit
+      version: 0.58.3
+      sourceRef:
+        kind: HelmRepository
+        name: fluent
+  interval: 1h
+  values:
+    # Keeps the node collectors' PodMonitor and network policy off this pod.
+    nameOverride: fluent-bit-events
+
+    # One watcher: a second replica, or a surge during a rollout, would send
+    # every event twice.
+    kind: Deployment
+    replicaCount: 1
+    updateStrategy:
+      type: Recreate
+
+    image:
+      repository: fluent/fluent-bit
+      tag: 5.1.4@sha256:a9cc9627aeabb8bb33077ee85b6ec8c0fe40aff8e7000bb4e8cd924511fa626c
+
+    existingConfigMap: fluent-bit-events-config
+    # The chart checksums only its own ConfigMap.
+    annotations:
+      reloader.stakater.com/auto: "true"
+
+    rbac:
+      create: true
+      eventsAccess: true
+
+    testFramework:
+      enabled: false
+
+    # Health_Check stays off: a backend outage must not restart the collector.
+    livenessProbe:
+      httpGet:
+        path: /
+        port: http
+    readinessProbe:
+      httpGet:
+        path: /
+        port: http
+
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        memory: 128Mi
+
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 65534
+      runAsGroup: 65534
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop: [ALL]
+      seccompProfile:
+        type: RuntimeDefault
+
+    # The output buffer. A new pod starts with an empty one and lists the
+    # last hour of events again.
+    extraVolumes:
+      - name: state
+        emptyDir: {}
+    extraVolumeMounts:
+      - name: state
+        mountPath: /var/lib/fluent-bit
+
+    serviceMonitor:
+      enabled: false
