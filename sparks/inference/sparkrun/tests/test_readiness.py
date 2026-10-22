@@ -200,11 +200,12 @@ def test_a_recipe_carries_the_gate_beside_its_engine_mod(tmp_path):
     assert [dest in command for dest, command in zip(copies, commands)] == [True, True]
 
 
-def test_a_level_the_route_refuses_fails_rather_than_skipping(server):
+@pytest.mark.parametrize("refused", ["max", "low"])
+def test_a_level_the_route_refuses_fails_rather_than_skipping(server, refused):
     handler, url = server
-    handler.missing = ("low",)
+    handler.missing = (refused,)
     result = gate(url)
-    assert result.returncode != 0 and "404" in result.stderr
+    assert result.returncode != 0 and f"refuses advertised levels ['{refused}']" in result.stderr
 
 
 @pytest.mark.parametrize("efforts", ["max,max,low,none", "max,ultra,none"])
