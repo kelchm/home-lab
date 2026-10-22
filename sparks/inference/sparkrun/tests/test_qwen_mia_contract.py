@@ -208,6 +208,26 @@ def test_site_patches_are_the_recorded_copies_of_their_sources(tmp_path):
     assert result.returncode != 0 and "is not the recorded copy of" in result.stderr
 
 
+def test_record_binary_writes_the_lock_only_after_every_check(tmp_path):
+    bundle = _bundle(tmp_path, b"rebuilt")
+    before = (bundle / "upstream.lock.json").read_text()
+    (bundle / "serve.py").write_text("# Unreviewed\n")
+    (bundle / "out/tensorfold-native").write_bytes(b"rebuilt again")
+    result = subprocess.run([sys.executable, str(bundle / "prepare.py"), "--record-binary"], capture_output=True, text=True)
+    assert result.returncode != 0 and "serve.py" in result.stderr
+    assert (bundle / "upstream.lock.json").read_text() == before
+
+
+@pytest.mark.parametrize("directory", ("patches", "build", "out"))
+def test_bundle_refuses_a_linked_directory(tmp_path, directory):
+    bundle = _bundle(tmp_path, b"rebuilt")
+    elsewhere = tmp_path / f"{directory}-elsewhere"
+    (bundle / directory).rename(elsewhere)
+    (bundle / directory).symlink_to(elsewhere)
+    result = subprocess.run([sys.executable, str(bundle / "prepare.py"), "--check"], capture_output=True, text=True)
+    assert result.returncode != 0 and f"Linked {directory}/" in result.stderr
+
+
 def test_a_linked_prepare_checks_the_bundle_it_runs_from(tmp_path):
     pristine, bundle = _bundle(tmp_path / "pristine"), _bundle(tmp_path)
     (bundle / "serve.py").write_text("# Unreviewed\n")

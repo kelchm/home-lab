@@ -22,6 +22,9 @@ def sha256(path):
 
 
 def check(lock, require_binary):
+    for directory in ("patches", "build", "out"):
+        if (HERE / directory).is_symlink():
+            raise ValueError(f"Linked {directory}/ in the Mia TensorFold mod")
     files = lock["mod_files"]
     patches = {patch["file"] for patch in lock["server_patches"] + lock["site_patches"]}
     if set(files) != FROZEN | patches or {str(p.relative_to(HERE)) for p in (HERE / "patches").iterdir()} != patches:
@@ -71,8 +74,10 @@ def main():
         refresh(lock, args.refresh)
     if args.record_binary:
         lock["binary_sha256"] = sha256(HERE / BINARY)
+    # The lock records a binary only once the whole bundle, that binary included, checks out.
+    check(lock, args.require_binary or args.record_binary)
+    if args.record_binary:
         LOCK.write_text(json.dumps(lock, indent=2) + "\n")
-    check(lock, args.require_binary)
     print(f"Verified Mia TensorFold mod for {lock['kit_revision']} with "
           f"{len(lock['server_patches']) + len(lock['site_patches'])} server patches")
 

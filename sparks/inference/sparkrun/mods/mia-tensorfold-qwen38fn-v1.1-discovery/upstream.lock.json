@@ -78,7 +78,7 @@
   },
   "binary_sha256": "9f28a90242d7ee440ddfb0ba930ecbc5ecadd6fbe2d247dda162c42c87343d8f",
   "mod_files": {
-    "prepare.py": "8e52b6ddf3ff9bfe79c3558bacf2bb4345c1f416e9405b976c0dc88b2624aae1",
+    "prepare.py": "4e77bb706466fa5e3b8608282fdf0aa8cdca1f81015de0359714816fd98c6e7d",
     "run.sh": "b140c09cfc6143ea1d577d9534190ed53880cbe31260794d4ff55e82cc108652",
     "serve.py": "2e3be383615c88e05d3bb62d43dd695f1fe32b218d60eaa96f58cac0f9bbde19",
     "build/Dockerfile": "931aeec0a765759a12df6de11a28f2aa9af3e09cdb999f5dbedf67df2a8c057f",
