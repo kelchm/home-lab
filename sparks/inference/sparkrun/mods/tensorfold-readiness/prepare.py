@@ -5,7 +5,8 @@ import hashlib
 import json
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
+# Not resolved: a linked prepare.py must check the bundle it was run from.
+HERE = Path(__file__).absolute().parent
 LOCK = HERE / "upstream.lock.json"
 
 
@@ -27,7 +28,9 @@ def main():
         raise SystemExit("Missing or linked readiness mod lock")
     lock = json.loads(LOCK.read_text()) if LOCK.exists() else {}
     if args.record:
-        lock["mod_files"] = {name: digest(name) for name in files() if not (HERE / name).is_symlink()}
+        if any((HERE / name).is_symlink() for name in files()):
+            raise SystemExit("Cannot record a readiness mod containing linked files")
+        lock["mod_files"] = {name: digest(name) for name in files()}
         LOCK.write_text(json.dumps(lock, indent=2) + "\n")
     if "mod_files" not in lock:
         raise SystemExit("Missing or linked readiness mod lock")
