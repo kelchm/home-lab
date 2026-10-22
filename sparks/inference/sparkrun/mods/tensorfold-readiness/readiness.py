@@ -139,11 +139,12 @@ def nearest(effort, levels):
 def check_renders(url, model, efforts):
     """Each advertised level renders its own prompt; every other standard name renders as its nearest level."""
     try:
-        rendered = {effort: render(url, model, effort) for effort in efforts}
+        first = render(url, model, efforts[0])
     except urllib.error.HTTPError as error:
-        if error.code == 404:
+        if error.code == 404:   # the server has no /tokenize route; any later refusal is a failure
             return None
         raise
+    rendered = {efforts[0]: first, **{effort: render(url, model, effort) for effort in efforts[1:]}}
     if len(set(rendered.values())) != len(rendered):
         raise RuntimeError(f"Advertised levels share a rendered prompt: {sorted(rendered)}")
     mapped = {}
@@ -170,6 +171,8 @@ def main():
     args = parser.parse_args()
     url = args.url.rstrip("/").removesuffix("/v1")
     efforts = [effort for effort in args.efforts.split(",") if effort]
+    if len(set(efforts)) != len(efforts) or not set(efforts) <= set(STANDARD_EFFORTS):
+        parser.error(f"--efforts must name distinct standard levels: {args.efforts!r}")
 
     check_health(fetch(url + "/health"), args.model, args.lanes, args.context, args.min_pool_tokens)
     check_models(fetch(url + "/v1/models"), args.model, args.context, efforts)
