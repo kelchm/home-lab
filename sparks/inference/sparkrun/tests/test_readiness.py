@@ -42,6 +42,7 @@ class Fake(BaseHTTPRequestHandler):
     models = staticmethod(models)
     tokenize = True
     levels = dict(LEVELS)
+    missing = ()
 
     def _send(self, code, body):
         data = json.dumps(body).encode()
@@ -62,6 +63,8 @@ class Fake(BaseHTTPRequestHandler):
         body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
         if self.path == "/tokenize":
             if not type(self).tokenize:
+                return self._send(404, {"error": "not found"})
+            if body["reasoning_effort"] in type(self).missing:
                 return self._send(404, {"error": "not found"})
             effort = NEAREST.get(body["reasoning_effort"], body["reasoning_effort"])
             return self._send(200, {"count": 3, "tokens": [1, 2, type(self).levels[effort]]})
@@ -195,3 +198,34 @@ def test_a_recipe_carries_the_gate_beside_its_engine_mod(tmp_path):
     commands = [step for step in recipe.pre_exec if isinstance(step, str)]
     assert copies == ["/workspace/mods/tensorfold-readiness", "/workspace/mods/engine-mod"]
     assert [dest in command for dest, command in zip(copies, commands)] == [True, True]
+
+
+def test_a_level_the_route_refuses_fails_rather_than_skipping(server):
+    handler, url = server
+    handler.missing = ("low",)
+    result = gate(url)
+    assert result.returncode != 0 and "404" in result.stderr
+
+
+@pytest.mark.parametrize("efforts", ["max,max,low,none", "max,ultra,none"])
+def test_levels_must_be_distinct_standard_names(server, efforts):
+    _, url = server
+    result = gate(url, efforts)
+    assert result.returncode == 2 and "--efforts must name distinct standard levels" in result.stderr
+
+
+def test_links_are_refused_in_the_mod_and_as_its_lock(tmp_path):
+    bundle = tmp_path / MOD.name
+    shutil.copytree(MOD, bundle, ignore=shutil.ignore_patterns("__pycache__"))
+    (bundle / "extra.py").symlink_to(tmp_path / "absent.py")
+    result = subprocess.run([sys.executable, str(bundle / "prepare.py"), "--check"], capture_output=True, text=True)
+    assert result.returncode != 0 and "extra.py" in result.stderr
+    (bundle / "extra.py").unlink()
+    outside = tmp_path / "shared.lock.json"
+    outside.write_text((bundle / "upstream.lock.json").read_text())
+    (bundle / "upstream.lock.json").unlink()
+    (bundle / "upstream.lock.json").symlink_to(outside)
+    before = outside.read_text()
+    result = subprocess.run([sys.executable, str(bundle / "prepare.py"), "--record"], capture_output=True, text=True)
+    assert result.returncode != 0 and "linked readiness mod lock" in result.stderr
+    assert outside.read_text() == before
