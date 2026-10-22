@@ -2,8 +2,8 @@
 """Map SparkRun's rank environment to upstream tensorfold-native serving Qwen3.8-Flash-Next on two ranks.
 
 Rank 0 serves the API and listens for rank 1 at MASTER_PORT, the port SparkRun's rendezvous gate watches. It listens on
-FABRIC_MASTER, the head's fabric address from the cluster's env, or else on SparkRun's MASTER. The engine keeps no MTP
-draft state across ranks, so with drafts on the prompt cache is 0. Both ranks assert the same
+FABRIC_MASTER, the head's CX7 address the adapter passes when SparkRun has one, or else on SparkRun's MASTER. The engine
+keeps no MTP draft state across ranks, so with drafts on the prompt cache is 0. Both ranks assert the same
 TENSORFOLD_CHECKPOINT_SHA256, which each first checks against its own snapshot.
 """
 import hashlib

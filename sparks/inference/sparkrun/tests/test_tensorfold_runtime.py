@@ -1074,9 +1074,16 @@ def test_upstream_qwen_rank0_listens_on_the_port_sparkrun_gates(runtime, tmp_pat
                                ("--context", "262144"), ("--max-tokens", "32768"), ("--tp", "2"),
                                ("--rank", str(rank)), ("--master", FABRIC_HEAD), ("--master-port", "29511")):
             assert args[args.index(flag) + 1] == expected
+        # With the head's CX7 address from SparkRun, the adapter passes it and the control link uses it.
+        runtime._fabric_master = "192.0.2.11"
+        try:
+            env, _ = _parse_env_command(_node_command(runtime, recipe, rank, init_port=29511))
+        finally:
+            runtime._fabric_master = None
         with mock.patch.object(serve, "checkpoint_digest", return_value=recipe.env["TENSORFOLD_CHECKPOINT_SHA256"]):
-            fabric = serve.command({**child, "FABRIC_MASTER": "192.0.2.11"})
+            fabric = serve.command({**recipe.env, **env, **UPSTREAM_QWEN_FABRIC})
         assert fabric[fabric.index("--master") + 1] == "192.0.2.11"
+        assert fabric[fabric.index("--master-port") + 1] == "29511"
         assert "--thinking" in args and ("--no-drafts" in args) is not drafts
         cache = [args[i + 1] for i, a in enumerate(args) if a == "--prompt-cache-gib"]
         assert cache == (["0"] if drafts else ["16"])
@@ -1139,9 +1146,15 @@ def test_upstream_qwen_readiness_checks_lanes_window_and_efforts(tmp_path):
         with pytest.raises(RuntimeError):
             ready.check_health({**health, **change}, served, lanes, least)
     efforts = ["xhigh", "medium", "low", "none"]
-    entry = {"id": served, "context_length": 262144, "reasoning": {"default_enabled": True, "supported_efforts": efforts}}
+    entry = {"id": served, "object": "model", "created": 0, "owned_by": "tensorfold", "context_length": 262144,
+             "max_model_len": 262144, "reasoning": {"default_enabled": True, "supported_efforts": efforts}}
     ready.check_models({"data": [entry]}, served, 262144, efforts)
-    for body in ({"data": []}, {"data": [{**entry, "context_length": 1048576}]}, {"data": [{**entry, "reasoning": {}}]},
-                 {"data": [{**entry, "reasoning": {"supported_efforts": ["xhigh", "low", "none"]}}]}):
+    for change in ({"context_length": 1048576}, {"max_model_len": 1048576}, {"max_model_len": None},
+                   {"owned_by": "vllm"}, {"reasoning": {}}, {"reasoning": None},
+                   {"reasoning": {"supported_efforts": ["xhigh", "low", "none"]}},
+                   {"reasoning": {"supported_efforts": ["low", "medium", "xhigh", "none"]}}):
+        with pytest.raises(RuntimeError):
+            ready.check_models({"data": [{**entry, **change}]}, served, 262144, efforts)
+    for body in ({"data": []}, {"data": [entry, entry]}):
         with pytest.raises(RuntimeError):
             ready.check_models(body, served, 262144, efforts)

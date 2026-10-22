@@ -29,14 +29,18 @@ def check_health(body, model, lanes, min_lanes):
 
 
 def check_models(body, model, context, efforts):
+    """The discovery entry the contract fixes: one entry, TensorFold's owner, the window twice, the efforts in order."""
     entries = [m for m in body.get("data", []) if m.get("id") == model]
     if len(entries) != 1:
         raise RuntimeError(f"/v1/models does not list {model} once: {body!r}")
-    if entries[0].get("context_length") != context:
-        raise RuntimeError(f"/v1/models reports context_length {entries[0].get('context_length')!r}, not {context}")
-    reported = entries[0].get("reasoning", {}).get("supported_efforts")
-    if reported != efforts:
-        raise RuntimeError(f"/v1/models reports efforts {reported!r}, not {efforts!r}")
+    entry = entries[0]
+    reported = {"owned_by": entry.get("owned_by"), "context_length": entry.get("context_length"),
+                "max_model_len": entry.get("max_model_len"),
+                "supported_efforts": (entry.get("reasoning") or {}).get("supported_efforts")}
+    expected = {"owned_by": "tensorfold", "context_length": context, "max_model_len": context,
+                "supported_efforts": efforts}
+    if reported != expected:
+        raise RuntimeError(f"/v1/models reports {reported!r}, not {expected!r}")
 
 
 def chat(url, body):

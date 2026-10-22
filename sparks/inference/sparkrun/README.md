@@ -799,7 +799,7 @@ No two-GB10 run of this path is published. What upstream's source fixes for two 
 **Ranks and fabric.** The [mod](mods/ashhart-tensorfold-qwen38fn-v1.1.2/) installs `serve.py` as the rank command, and each rank runs the same command apart from `--rank`. No recipe or mod file holds a lab address.
 
 - **Rendezvous:** rank 0 listens for rank 1 at SparkRun's `MASTER_PORT`, in place of upstream's default 29551. SparkRun starts rank 1 once that port appears in the head's socket table. Rank 0 opens the port before loading weights and gives rank 1 60 s to connect.
-- **Control link:** rank 0 listens on `FABRIC_MASTER` when the cluster's env sets it, and on SparkRun's `MASTER` otherwise. `MASTER` is the management address whenever the worker can reach it, and the worker's management link drops for seconds at a time ([#649](https://github.com/kelchm/home-lab/issues/649)). Setting `FABRIC_MASTER` is under the inputs below.
+- **Control link:** rank 0 listens on `FABRIC_MASTER`, the head's CX7 address, which the adapter passes when SparkRun reaches the head over the fabric. Otherwise it listens on SparkRun's `MASTER`, the management address, and the worker's management link drops for seconds at a time ([#649](https://github.com/kelchm/home-lab/issues/649)). The adapter gets that CX7 address only while spark-1 trusts the CX7 host keys ([Sparks README](../../README.md#sparkrun-operation)).
 - **NCCL:** tensors cross both CX7 rails, on the devices and GID index SparkRun detects. `serve.py` refuses to start unless `NCCL_IB_HCA` names two devices. The recipes also set `NCCL_RUNTIME_CONNECT=0`, `NCCL_CUMEM_ENABLE=0` and `NCCL_CUMEM_HOST_ENABLE=0`, which upstream sets for GLM's ranks on GB10 and not for Flash Next's.
 - **Checkpoint identity:** at two ranks the engine requires `TENSORFOLD_CHECKPOINT_SHA256`, 64 hex characters. It refuses a peer whose value, `config.json`, index, executable or settings differ, and it does not read the shards for the check.
   - The recipes set the SHA-256 of the snapshot's sorted `path blob` lines. The HF cache names each blob by its content hash: SHA-256 for LFS files, git SHA-1 for the rest.
@@ -818,16 +818,13 @@ No two-GB10 run of this path is published. What upstream's source fixes for two 
 
 - healthy status;
 - the profile's lane count: exactly four for the cache profile, at least one for the auto one;
-- the 262,144 window in `/v1/models`, and exactly the efforts `xhigh`, `medium`, `low`, `none`.
+- the `/v1/models` entry exactly: `owned_by: tensorfold`, 262,144 as both `context_length` and `max_model_len`, and the efforts `xhigh`, `medium`, `low`, `none` in that order.
 
 It then sends a short reply on every lane at once, and one tool call.
 
 ### Inputs outside SparkRun
 
-SparkRun downloads and distributes the weights: 33 files, 95.24 GiB on each host. Two inputs are staged by hand:
-
-- **Image:** loaded on the head, as in the build below. SparkRun copies it to the worker at launch.
-- **Fabric address:** `FABRIC_MASTER`, the head's rail-0 address (`198.19.240.11`), in the `env` of the `sparks` cluster definition on the head. SparkRun layers a cluster's `env` under recipe env on every container. Without it, the control link runs over the management network.
+SparkRun downloads and distributes the weights: 33 files, 95.24 GiB on each host. Only the image is staged by hand. Load it on the head as in the build below, and SparkRun copies it to the worker at launch.
 
 ### Build
 
@@ -863,7 +860,6 @@ The trial has not run. Spark time for it comes from the #938 orchestrator, insid
 
 1. **Stage, while DeepSeek serves.**
    - Load the image on the head.
-   - Set `FABRIC_MASTER` in the cluster's env.
    - Make the checkpoint visible in both hosts' caches, as for earlier switches, after checking free space under the cache on both hosts.
 2. **Check the gates used for every trial here:**
    - DeepSeek idle: `live.connections` and `live.waiting` zero in `/health`;
@@ -871,7 +867,7 @@ The trial has not run. Spark time for it comes from the #938 orchestrator, insid
    - both management links up at 10GbE;
    - the [rail check](#pre-stage-on-october-8) passing both rails at MTU 9000.
 3. **Stop DeepSeek** with its recipe, and confirm both GPUs are free with about 116 GiB available on each host.
-4. **Boot the MTP profile.** Read both rank logs for the load, the NCCL version, both IB devices and their GID index, the lane count and the memory lines.
+4. **Boot the MTP profile.** Read both rank logs for the load, the NCCL version, both IB devices and their GID index, the control link's address, the lane count and the memory lines.
 5. **Measure:**
    - decode and prefill at 1, 4, 8 and 16 streams;
    - turn latency on a multi-turn agent session;
