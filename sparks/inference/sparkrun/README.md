@@ -554,6 +554,8 @@ SparkRun 0.3.10 finds a workload for `stop`, `logs` and relaunch by its runtime,
 
 Before an upgrade, keep the exact working recipe, its mods and the adapter outside the checkout, under `~/sparkrun/rollback/`, and dry-run the rollback recipe against the synced tree before stopping anything. The rollback is then: stop the new instance with its own recipe, confirm both GPUs are free, and launch the kept recipe with the same cluster and flags.
 
+A rank that dies mid-collective can leave a kernel running on its GPU with no process attached: `nvidia-smi` reads about 96% utilization, an SM clock near 1.1 GHz and about 4.7 W with no compute process, where an idle GB10 reads 0% at 208 MHz in P8. To clear it, stop the host's GPU exporter container and `nvidia-persistenced`, so nothing holds the GPU and the driver tears down its state, then start both again and confirm 0% at 208 MHz before the next launch. `nvidia-smi -r` refuses on these hosts because the GPU is the primary one. Reboot only if stopping the daemon doesn't clear it. This cleared spark-2 on 2026-10-22.
+
 The endpoint has no API key ([#943](https://github.com/kelchm/home-lab/issues/943)). spark-1's firewall admits port 8888 from the workstation, `10.32.10.244`, and from loopback, which the metrics scrape and sparkDash use. That rule is not persistent; check access after a host reboot or a workstation address change.
 
 ### Before a launch
