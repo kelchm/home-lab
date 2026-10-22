@@ -6,7 +6,7 @@ Collection covers kubelet-managed container logs, including init containers, nat
 
 ## Query logs
 
-- **Kubernetes logs dashboard:** [Kubernetes / Logs](https://grafana.home.kelch.io/d/kubernetes-logs) — the production starting point for application logs. Its namespace/service selectors and stream/severity filters read the stored OpenTelemetry fields, so it shows records from the Fluent Bit cutover on 2026-10-19; older records are in Explore and VMUI (see [Retained history](#retained-history)).
+- **Kubernetes logs dashboard:** [Kubernetes / Logs](https://grafana.home.kelch.io/d/kubernetes-logs) — the production starting point for application logs. Its **Events** panel lists the chosen namespaces' [Kubernetes events](#kubernetes-events) below the container logs. Its namespace/service selectors and stream/severity filters read the stored OpenTelemetry fields, so it shows records from the Fluent Bit cutover on 2026-10-19; older records are in Explore and VMUI (see [Retained history](#retained-history)).
 - **Grafana Explore:** `https://grafana.home.kelch.io/explore` — select the `VictoriaLogs` datasource for the query editor, visual builder and live logs. The query editor's `Run in VMUI` action opens the query in the external VMUI. Open a row's log menu and select `Show log details` to inspect its structured fields alongside `_msg`.
 - **VictoriaLogs VMUI:** `https://vlogs.home.kelch.io/select/vmui/` — use the native LogsQL explorer and live-stream view. The bare hostname redirects here.
 
@@ -244,6 +244,8 @@ The API server keeps an event for an hour after its last write. The collector li
 The output buffer is 256 MiB on the pod's `emptyDir`, under the same retry and buffer alerts as the node collectors; see [Pipeline failures](#pipeline-failures). `KubernetesEventsIngestionSilent` fires when `fluentbit_input_records_total{job="fluent-bit-events",name="events"}` has not risen for 45 minutes, summed over pods so a replaced collector's last counter does not count, or is absent because the collector is down, unscraped or has no events input; Flux alone records more than 200 events an hour. A watch the API server refuses appears in the pod's log as `http_status=`, such as 403 if the ClusterRole lacks events.
 
 ### Query events
+
+In Grafana, the **Events** panel of [Kubernetes / Logs](https://grafana.home.kelch.io/d/kubernetes-logs) lists the chosen namespaces' events, filtered by **Severity**. Each line reads as `kubectl get events` lists it: the reason, the object, then the message. Explore and VMUI take LogsQL such as:
 
 - `{service.name="kubernetes-events", k8s.namespace.name="media"}` lists one namespace's events.
 - `{service.name="kubernetes-events"} severity_number:>=13` lists warnings across the cluster.

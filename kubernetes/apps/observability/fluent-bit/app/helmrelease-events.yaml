@@ -2,7 +2,9 @@
 # Kubernetes events collector: watches the API server's events and delivers
 # them to VictoriaLogs over OTLP, in the same schema as the node collectors.
 # The pipeline lives in the fluent-bit-events-config ConfigMap
-# (config/events/), not chart values.
+# (config/events/), not chart values. Its pods share the node collectors'
+# app.kubernetes.io/name, so their own log lines are read as Fluent Bit's;
+# selectors tell the two apart by app.kubernetes.io/instance.
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
@@ -17,9 +19,6 @@ spec:
         name: fluent
   interval: 1h
   values:
-    # Keeps the node collectors' PodMonitor and network policy off this pod.
-    nameOverride: fluent-bit-events
-
     # One watcher: a second replica, or a surge during a rollout, would send
     # every event twice.
     kind: Deployment

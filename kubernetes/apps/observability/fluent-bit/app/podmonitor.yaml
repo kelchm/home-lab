@@ -6,6 +6,7 @@ metadata:
 spec:
   selector:
     matchLabels:
+      app.kubernetes.io/instance: fluent-bit
       app.kubernetes.io/name: fluent-bit
   podMetricsEndpoints:
     - port: http
@@ -41,7 +42,8 @@ metadata:
 spec:
   selector:
     matchLabels:
-      app.kubernetes.io/name: fluent-bit-events
+      app.kubernetes.io/instance: fluent-bit-events
+      app.kubernetes.io/name: fluent-bit
   podMetricsEndpoints:
     - port: http
       path: /api/v2/metrics/prometheus
