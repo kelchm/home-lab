@@ -813,6 +813,11 @@ No two-GB10 run of this path is published. What upstream's source fixes for two 
       python3 -c 'import hashlib, json, sys; files = [e for e in json.load(sys.stdin) if e["type"] == "file"]; print(hashlib.sha256("".join(sorted(e["path"] + " " + e.get("lfs", {}).get("oid", e["oid"]) + "\n" for e in files)).encode()).hexdigest())'
     ```
 
+- **Checkpoint layout:** FP4-Local keeps its 21 shards under `tensors/`, and v1.1.2 refuses any index that names a shard in a subfolder. Its `plainName` (`zig/src/core/checkpoint_index.zig`) rejects `/`, and upstream `main` at `f8d254c5` keeps the rule.
+  - Before exec, `serve.py` builds a flat view at `/tmp/qwen38fn-model`: each top-level snapshot file and each shard linked side by side, and the index rewritten with plain names.
+  - It refuses a flattened name that collides with another file.
+  - Both ranks write byte-identical indexes, so the engine's index hashes agree. The checkpoint digest above is still taken from the snapshot.
+  - A snapshot whose shards are already at the top is served as it is.
 - **Memory:** the engine's `oom_score_adj` is 1000. The memory reserve is upstream's default for unified memory, a tenth of the total, about 12 GiB.
 
 **Readiness.** Both profiles use the shared [`tensorfold-readiness`](mods/tensorfold-readiness/) gate, with four lanes, the 262,144 window and the efforts `xhigh`, `medium`, `low`, `none` in the server's order.
