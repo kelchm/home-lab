@@ -229,3 +229,25 @@ def test_links_are_refused_in_the_mod_and_as_its_lock(tmp_path):
     result = subprocess.run([sys.executable, str(bundle / "prepare.py"), "--record"], capture_output=True, text=True)
     assert result.returncode != 0 and "linked readiness mod lock" in result.stderr
     assert outside.read_text() == before
+
+
+def test_record_writes_nothing_while_a_file_is_linked(tmp_path):
+    bundle = tmp_path / MOD.name
+    shutil.copytree(MOD, bundle, ignore=shutil.ignore_patterns("__pycache__"))
+    before = (bundle / "upstream.lock.json").read_text()
+    (bundle / "readiness.py").rename(tmp_path / "readiness.py")
+    (bundle / "readiness.py").symlink_to(tmp_path / "readiness.py")
+    result = subprocess.run([sys.executable, str(bundle / "prepare.py"), "--record"], capture_output=True, text=True)
+    assert result.returncode != 0 and "containing linked files" in result.stderr
+    assert (bundle / "upstream.lock.json").read_text() == before
+
+
+def test_a_linked_prepare_checks_the_bundle_it_runs_from(tmp_path):
+    pristine, bundle = tmp_path / "pristine", tmp_path / MOD.name
+    for target in (pristine, bundle):
+        shutil.copytree(MOD, target, ignore=shutil.ignore_patterns("__pycache__"))
+    (bundle / "readiness.py").write_text("# Unreviewed\n")
+    (bundle / "prepare.py").unlink()
+    (bundle / "prepare.py").symlink_to(pristine / "prepare.py")
+    result = subprocess.run([sys.executable, str(bundle / "prepare.py"), "--check"], capture_output=True, text=True)
+    assert result.returncode != 0
