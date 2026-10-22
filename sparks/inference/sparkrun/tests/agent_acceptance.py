@@ -125,7 +125,7 @@ class Qualification:
             self.record("high-thinking-tool-" + secret, result, elapsed)
             # Deliberately omit reasoning while preserving the server call IDs.
             # Renumbered-ID cache isolation is checked against installed code by
-            # tensorfold_tool_history.py; output alone cannot prove that lookup.
+            # mia_tensorfold_site.py; output alone cannot prove that lookup.
             return secret, history + [{"role": "assistant", "content": None, "tool_calls": calls},
                                      {"role": "tool", "tool_call_id": calls[0]["id"], "content": "323"},
                                      {"role": "user", "content": "Reply with exactly marker:result and no extra text."}]
