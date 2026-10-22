@@ -1,6 +1,6 @@
 # Talos 1.14 upgrade
 
-This procedure covers the k8s-prod v1.13.11 → v1.14.4 OS upgrade and the live Cilium SELinux acceptance check tracked in [#921](https://github.com/kelchm/home-lab/issues/921) and [#911](https://github.com/kelchm/home-lab/issues/911). Preparation on October 20, 2026 confirmed all three nodes still ran v1.13.11 with Kubernetes v1.36.4. The upgrade and the expected AVC reduction have not yet been verified on a node.
+This procedure covers the k8s-prod v1.13.11 → v1.14.4 OS upgrade and the live Cilium SELinux acceptance check tracked in [#921](https://github.com/kelchm/home-lab/issues/921) and [#911](https://github.com/kelchm/home-lab/issues/911). The approved OS rollout ran on October 20, 2026 (October 21 UTC), in node order 2 → 1 → 3. All three nodes now run Talos v1.14.4 with Kubernetes v1.36.4. Read-only host-label checks confirmed `pod_containerd_run_t` on `/run/cilium` and `/run/cilium/state` on every node; timed audit evidence and the remaining sources are recorded in [#911](https://github.com/kelchm/home-lab/issues/911).
 
 ## Compatibility and configuration
 
@@ -27,7 +27,7 @@ Generate production configuration into a private temporary output directory, kee
 
 After any direct `talhelper genconfig` invocation, run `scripts/talos/preserve-encryption.sh <output-dir>/*.yaml` before validating or considering the output for use. `task talos:generate-config`, the bootstrap task (through that same generation task), and CI run this automatically. Talhelper's new-cluster output calls the secretbox key `key1` and omits the identity fallback; this existing cluster uses secretbox `key2` followed by identity. The helper preserves the generated key material, changes the provider metadata to match the existing cluster, and refuses unknown provider layouts or a missing control-plane encryption document. CI checks provider names/order, unchanged fixture key material, required API SANs and all component image pins. Never apply an uncorrected direct talhelper render.
 
-A full 1.14 render cannot be dry-run successfully against the current 1.13 API: all three nodes rejected `DiscoveryServiceConfig` as unregistered. This is a format-version boundary, not a successful apply preview. Repeat the full dry-run after each node runs 1.14, with a matching talosctl, before contemplating any configuration apply. Do not apply the new documents to a 1.13 node.
+During preparation, all three 1.13 nodes rejected a full 1.14 dry-run with `DiscoveryServiceConfig` unregistered. This is a format-version boundary, not a successful apply preview. Repeat the full dry-run after each node runs 1.14, with a matching talosctl, before contemplating any configuration apply. Do not apply the new documents to a 1.13 node.
 
 The OS upgrade retains the live configuration. Do not run `task talos:apply-node` as part of this OS-only acceptance test. An eventual configuration migration needs its own explicit approval and review of the post-upgrade dry-run. Talos 1.14 also removes apply-config's `--mode=reboot`; configuration changes requiring a reboot must be handled with the guarded node procedure.
 
@@ -45,7 +45,7 @@ mise exec 'aqua:siderolabs/talos@1.13.11' -- talosctl \
   -e 10.32.30.12 -n 10.32.30.12 version
 ```
 
-Preparation preflight found direct `en0` routes to the API and all three nodes, healthy etcd, three Ready/uncordoned nodes, 24 attached/healthy Longhorn volumes, three Ready instance-managers with `lhnet1`, and no suspended Flux Kustomizations. Both singleton database primaries were on node 3 (`visionect-db` and `bambuddy-db`). These observations expire: rerun preflight immediately before every approved node. Node 2 is the proposed first canary because it has neither primary and its audit baseline is mostly Cilium.
+Preparation preflight found direct `en0` routes to the API and all three nodes, healthy etcd, three Ready/uncordoned nodes, 24 attached/healthy Longhorn volumes, three Ready instance-managers with `lhnet1`, and no suspended Flux Kustomizations. Both singleton database primaries were on node 3 (`visionect-db` and `bambuddy-db`). These observations expire: rerun preflight immediately before every approved node. Node 2 was selected as the first canary because it had neither primary and its audit baseline was mostly Cilium.
 
 Before the first upgrade, save and verify an etcd snapshot outside the repository. Keep out-of-band power control available. Before node 3, explicitly settle both singleton database availability decisions using the skill's CNPG procedure and fresh placement/backup facts. Resolve eviction blockers deliberately; never force a drain or bypass Longhorn's policy. Any temporary topology or Flux suspension requires separate authorization, recording and deliberate restoration.
 
@@ -55,7 +55,7 @@ Run only the approved node through `task talos:upgrade-node IP=<ip>`. Preflight 
 
 After the node returns, use talosctl 1.14.4 for it. Verify the version and the skill's complete gates: etcd quorum, every Kubernetes node Ready and uncordoned, every in-use Longhorn volume attached and healthy with none degraded/faulted, and every instance-manager Running/Ready with `longhorn-system/storage-network` on `lhnet1` and a `10.32.25.x` address. Verify Cilium, Multus and the untaint safeguards recover. Stop on any failure.
 
-[Upstream #14046](https://github.com/siderolabs/talos/pull/14046) grants pods rw on `bpf_t` and changes directories created by `pod_p` under `run_t` to `pod_containerd_run_t`. The expected outcome is that kubelet recreates `/run/cilium` with the new label after reboot, and `state` and endpoint directories inherit it. This remains a hypothesis until checked on a live upgraded node.
+[Upstream #14046](https://github.com/siderolabs/talos/pull/14046) grants pods rw on `bpf_t` and changes directories created by `pod_p` under `run_t` to `pod_containerd_run_t`. The expected outcome is that kubelet recreates `/run/cilium` with the new label after reboot, and `state` and endpoint directories inherit it. Live read-only checks after this rollout confirmed both directory labels on all three nodes. The original `run_t`/`bpf_t` acceptance target is narrower than every Cilium AVC: low-rate `prog_run` denials against `sys_containerd_t` and `pod_containerd_t` appeared in the post-upgrade samples. These are BPF program operations, not filesystem `bpf_t` denials.
 
 For each upgraded node:
 
@@ -66,3 +66,38 @@ For each upgraded node:
 5. Record rates, sample/interval counts, label evidence, remaining sources and the health result in #911, then stop for the next node's approval.
 
 Expect Longhorn-backed workloads to retain `unlabeled_t` denials and Multus to retain some `cni_state_t` denials. Workload movement may move the high audit/loss rate between nodes, so record placement alongside rates. Keep #911 open on `hold` until its Longhorn acceptance check and auditd collection decision are complete. Do not change #905 or #907.
+
+
+## Verified rollout state
+
+The operator merged [#922](https://github.com/kelchm/home-lab/pull/922) and approved each node individually. All three guarded upgrades completed with powercycle reboots, without a forced drain or physical power intervention. Storage returned fully healthy after each node; the post-reboot watchers took 2m01s for node 2, 4m49s for node 1 and 5m35s for node 3. An etcd snapshot outside the repository was checksum-verified and passed a local-only, hash-validating `etcdutl` restore before the first upgrade. The checksum was rechecked after the rollout. No Talos machine configuration was applied.
+
+Before node 3, both CloudNativePG singletons received temporary streaming standbys and verified zero-lag switchovers using the client matched to CNPG 1.30.1. The temporary standbys, `visionect-db-2` and `bambuddy-db-1`, were each confirmed Ready and streaming with zero replay lag on node 1 before promotion; neither was on the reboot candidate, node 3. Before starting node 3's upgrade, both promoted instances were writable on node 1, their RW EndpointSlices pointed to those instances, and the old primaries were streaming as standbys. After the reboot, Bambuddy switched to its synchronized instance on node 2 to separate the primaries. The original complete Cluster specs are restored, each database has one Ready instance, and the RW services point to writable `visionect-db-2` on node 1 and `bambuddy-db-2` on node 2. CNPG reclaimed the surplus standby PVCs, PVs and Longhorn volumes; no replication slots remain. Both owning Kustomizations resumed and reconciled successfully.
+
+The authorized rebalance placed VictoriaMetrics on node 3 and left VictoriaLogs on node 2. Longhorn has 24 attached, healthy volumes and 50 active replicas spread 16 / 17 / 17 across nodes 1 / 2 / 3. Replica moves ran one volume at a time, retaining at least two healthy RW copies throughout. Every temporary per-volume locality, replica-count and auto-balance setting was restored. The two database volumes have three replicas each; the other 22 volumes have two each. These are observed placements, not permanent scheduling constraints.
+
+Older unreferenced replica directories were found separately from the active volume inventory. Their retention and any irreversible cleanup are tracked in [#925](https://github.com/kelchm/home-lab/issues/925); healthy volume status alone does not establish that historical recovery data should be deleted.
+
+The per-node acceptance captures below were uninterrupted, had no unparsed AVCs or reported loss growth, and contained no Cilium `run_t`/`bpf_t` AVCs. Times are UTC on October 21, 2026, rounded to the nearest second; serial coverage is counted from the private continuous streams between each capture's start and end serials.
+
+| Node, in rollout order | Acceptance capture | Audit serial coverage | Other Cilium AVCs |
+| --- | --- | --- | --- |
+| k8s-prod-2 | 02:22:46–02:32:47 | 153/153 | One `prog_run` against `pod_containerd_t` |
+| k8s-prod-1 | 02:47:10–02:57:11 | 406/406 | Four `prog_run`: two each against `sys_containerd_t` and `pod_containerd_t` |
+| k8s-prod-3 | 04:04:10–04:14:11 | 2,724/2,724 | Two `prog_run`: one each against `sys_containerd_t` and `pod_containerd_t` |
+
+Node 2's result was reviewed and [reported](https://github.com/kelchm/home-lab/issues/911#issuecomment-6306562957) before the operator approved node 1 at 02:41 UTC. Node 1's result was reviewed and [reported](https://github.com/kelchm/home-lab/issues/911#issuecomment-6306920944) before the operator approved the database switchovers and node 3 at 03:20 UTC. Node 3 was the last node: its acceptance used the simultaneous final capture after rebalancing, reviewed after that capture ended, with no subsequent node upgrade. The simultaneous captures on nodes 1 and 2 were follow-up measurements, not their pre-next-node acceptance captures.
+
+The simultaneous final audit captures ran for about 600.8 seconds on each node, from 04:04:10 to 04:14:11 UTC on October 21. The fresh pre-upgrade baseline ran for about 601.5 seconds per node. Workload movement matters: the final VictoriaLogs host is node 2 and the VictoriaMetrics host is node 3.
+
+| Node | Baseline audit events/s | Final audit events/s | Baseline lost records/s | Final lost records/s |
+| --- | --- | --- | --- | --- |
+| k8s-prod-1 | 35.6682 | 0.1648 | 18.9504 | 0 |
+| k8s-prod-2 | 5.9969 | 19.6494 | 0 | 4.1247 |
+| k8s-prod-3 | 6.3894 | 4.5343 | 0 | 0 |
+
+Nodes 1 and 3 had full final serial coverage (99/99 and 2,724/2,724 respectively), no unparsed AVCs, no reported loss growth and no Cilium `run_t`/`bpf_t` AVCs. Node 3 retained two Cilium `prog_run` denials, one each against `pod_containerd_t` and `sys_containerd_t`. Node 2's final received records also contained no Cilium AVCs, but its loss counter grew by 2,478 and 1,440 audit serials were absent, so that window cannot independently establish zero denials. Its original post-reboot acceptance capture at 02:22:46–02:32:47 UTC was loss-free with complete 153/153 serial coverage and no original Cilium target denials; the final read-only directory-label check corroborated the earlier result. All three continuous final streams remained connected.
+
+The remaining final AVCs were dominated by VictoriaLogs (`victoria-logs-p`, 10,375 received AVCs) on node 2 and VictoriaMetrics (`victoria-metric`, 2,798) on node 3, both targeting `unlabeled_t`. Other received sources included media/.NET processes, Grafana and PostgreSQL against `unlabeled_t`, Multus against `cni_state_t`, and a handful of NFS, Longhorn-manager and node-exporter denials. These counts describe received AVC records; they are incomplete on the lossy node. Zero reported loss growth uses the last printed dmesg `audit_lost` counter and is not a direct kernel audit-status query. [#911](https://github.com/kelchm/home-lab/issues/911) remains open on `hold` for Longhorn labeling acceptance and the auditd collection decision.
+
+The final health watch ran 04:04:08–04:19:08 UTC for 900.54 seconds, with 31 checks. Every check found 144 running pods Ready, 24 healthy volumes, stable replica placement, correct database RW endpoints, converged Flux Kustomizations/HelmReleases and desired controller readiness. No new container restarts or kernel OOM messages were found. Repeated HTTP checks passed for VictoriaMetrics, VictoriaLogs, Grafana, Broadsheet, Visionect, Bambuddy and Kanidm, and all 136 scrape targets were up. All 25 HTTP routes were accepted and all seven certificates were Ready. Periodic queries confirmed all three etcd members responding and Talos health passing; the final complete rollout preflight also passed.

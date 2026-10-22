@@ -77,6 +77,11 @@ jobs:
               - 'scripts/monitoring/unifi-alerts.test.yaml'
               - 'scripts/monitoring/cilium-alerts.test.yaml'
               - 'scripts/monitoring/host-network-alerts.test.yaml'
+              - 'scripts/monitoring/traefik-alerts.test.yaml'
+              - 'scripts/ci/validate-host-alerts.sh'
+              - 'scripts/monitoring/host-alerts.test.yaml'
+              - 'scripts/ci/validate-cnpg-alerts.sh'
+              - 'scripts/monitoring/cnpg-alerts.test.yaml'
               - 'scripts/logging/**'
               - 'scripts/grafana/**'
               - 'scripts/ci/test-validate-cilium-policies.sh'
@@ -295,6 +300,14 @@ jobs:
       - name: Validate network health alerts
         if: needs.pre-job.outputs.kubernetes_changed == 'true'
         run: scripts/ci/validate-network-alerts.sh
+
+      - name: Validate host out-of-memory and CPU heat alerts
+        if: needs.pre-job.outputs.kubernetes_changed == 'true'
+        run: scripts/ci/validate-host-alerts.sh
+
+      - name: Validate CloudNativePG cluster alerts
+        if: needs.pre-job.outputs.kubernetes_changed == 'true'
+        run: scripts/ci/validate-cnpg-alerts.sh
 
       - name: Render Flux Kustomizations recursively
         if: needs.pre-job.outputs.kubernetes_changed == 'true'
