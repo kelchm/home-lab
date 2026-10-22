@@ -186,7 +186,8 @@ W.table("k8s-namespaces", "Namespaces · k8s-prod", "namespace", "Namespace", [
     ("Restarts", f'round(sum by (namespace) (increase(kube_pod_container_status_restarts_total{{{K}}}[24h])))', CTEXT((5, "orange")))],
     sort="CPU cores", desc="Where the cluster's CPU and memory are going. Restarts are counted over the last 24 hours.")
 add_links(W.elements["k8s-namespaces"], "Namespace", [to("Workloads in ${__value.text}", "/d/a87fb0d919ec0ea5f6543124e16c42a5?var-namespace=${__value.raw}&${__url_time_range}"),
-                                                      to("Logs from ${__value.text}", explore('k8s.namespace.name:="${__value.raw}"'))])
+                                                      to("Logs from ${__value.text}", explore('k8s.namespace.name:="${__value.raw}" (log.iostream:* OR (service.name:=kubernetes-events severity_number:>=13))')),
+                                                      to("Events in ${__value.text}", explore('{service.name="kubernetes-events"} k8s.namespace.name:="${__value.raw}"'))])
 W.tiles("volumes", "Volumes · k8s-prod", [
     ("Healthy", zero(f'sum(longhorn_volume_robustness{{state="healthy",{K}}})'), {}),
     ("Degraded", zero(f'sum(longhorn_volume_robustness{{state="degraded",{K}}})'), dict(thresholds=PROBLEM)),

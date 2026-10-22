@@ -2,7 +2,7 @@
 
 ## Decision and scope
 
-On October 22, 2026, Grafana Explore replaced Kubernetes / Logs as the routine entry point and the dashboard was removed; the logging runbook's [Query logs](../runbooks/logging.md#query-logs) describes the current workflow. The qualification record below is unchanged.
+On October 22, 2026, Grafana Explore replaced Kubernetes / Logs as the routine entry point and the dashboard was removed; the logging runbook's [Query logs](../runbooks/logging.md#query-logs) describes the current workflow. The record below documents the October 18 trial; its recommendation and acceptance to keep Kubernetes / Logs as the entry point are superseded.
 
 **Recommendation: adopt with the limitations below; retain Kubernetes / Logs as the routine entry point.** The candidate adds useful field/stream discovery and patterns, but the trial does not establish a substantial improvement to a scoped application-incident workflow. The operator found the Fields view noisy. It mixes infrastructure labels, IDs and application internals without a preferred-field or hide-list configuration. Normalized service and severity exist in the dashboard query, which the drawer discards. A plugin upgrade alone does not provide a curated log explorer.
 
