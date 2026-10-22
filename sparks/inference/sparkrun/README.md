@@ -517,10 +517,16 @@ A first boot is a memory-fit and fabric check under the same abort rules as the 
 
 ### Discovery profile on the shared contract
 
-`qwen38fn-nvfp4-tp2-mia-tf-v1.1-discovery-nvidia-480k` is the profile meant to serve Qwen across both Sparks ([#940](https://github.com/kelchm/home-lab/issues/940)). Its [October 22 trial](https://github.com/kelchm/home-lab/issues/940#issuecomment-6341022722) qualified no window: at 491,520, 393,216 and 262,144 tokens, the first long request after a boot stalled the two ranks' control link, and both ranks exited. It is the v1.1 NVFP4 profile with `tensorfold-native` rebuilt so `GET /v1/models` reports the window and the reasoning levels, moved onto the [#943](https://github.com/kelchm/home-lab/issues/943) contract, with a 491,520-token window. Since that trial, its binary also carries the community fixes for the control-link stall, the admission exit and the prompt-cache crash, and a guard against sampling the two ranks can't draw ([patches](#discovery-and-fix-patches)); it has not booted with them. The v1.1 profile and mod are unchanged and remain the fallback until it passes.
+`qwen38fn-nvfp4-tp2-mia-tf-v1.1-discovery-nvidia-480k` is the profile meant to serve Qwen across both Sparks ([#940](https://github.com/kelchm/home-lab/issues/940)). It is the v1.1 NVFP4 profile with `tensorfold-native` rebuilt so `GET /v1/models` reports the window and the reasoning levels, moved onto the [#943](https://github.com/kelchm/home-lab/issues/943) contract, with a 491,520-token window. Its binary also carries the community fixes for the control-link stall, the admission exit and the prompt-cache crash, and a guard against sampling the two ranks can't draw ([patches](#discovery-and-fix-patches)).
+
+Two trials on October 22:
+- [Without the fixes](https://github.com/kelchm/home-lab/issues/940#issuecomment-6341022722), no window qualified: at 491,520, 393,216 and 262,144 tokens, the first long request after a boot stalled the ranks' control link, and both ranks exited.
+- [With them](#october-22-qualification), 491,520 qualified: on two fresh boots, two cold prompts of about 490K tokens each completed, the first as the first long request after the boot. The agent gate, the kit's checks and the decode replay passed too.
+
+The v1.1 profile and mod are unchanged.
 
 - **Kit and image:** v1.1 at `be3ed857` and its published image, manifest `e188128d…` and config `5eb5d4d3…`, as the v1.1 profile pins them. Only `tensorfold-native` is replaced, by the build below. [Kit revision](#kit-revision) has the case for v1.1 over `main`.
-- **Window:** 491,520 tokens, below the 503,359-token prompt that stalled the two ranks' control link on `main` in [kit issue #3](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/3). The kit's YaRN factor of 4 stays, so the engine could admit up to 1,048,576 and `--context` sets the limit. The October 22 trial found no window that passes, down to 262,144. A smaller window changes `context` and the gate's `--context` in the recipe.
+- **Window:** 491,520 tokens, below the 503,359-token prompt that stalled the two ranks' control link on `main` in [kit issue #3](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/3). The kit's YaRN factor of 4 stays, so the engine could admit up to 1,048,576 and `--context` sets the limit. It qualified on October 22 with the fixes; the first trial, without them, found no window that passes, down to 262,144. A smaller window changes `context` and the gate's `--context` in the recipe.
 - **Rendezvous:** the ranks link on `FABRIC_MASTER`, the head's CX7 address from the adapter, and each rank logs it. `serve.py` refuses to start without it. The v1.1 profile links on the management address, where the October 8 stall happened.
 - **Mod:** `run.sh` verifies the mod and the rebuilt binary against the lock. It installs the binary as `/opt/tensorfold-mod/bin/tensorfold-native` and the rank launcher as `/usr/local/bin/tensorfold-entrypoint`, and leaves the image's own binary in place, unused. The launcher sets the engine's `oom_score_adj` to 1000 and runs the binary by its path. The engine finds its kernels and vision helper through the image's `TENSORFOLD_CUDA_KERNELS` and `TENSORFOLD_VISION_PYTHONPATH`. It links only `libc` and opens CUDA, NCCL and the verbs library by name, so moving the binary changes nothing else.
 - **Readiness:** the shared gate replaces the mod's own hook, with 16 lanes, the window and `xhigh,medium,low,none`. Its `/tokenize` check renders each level, and expects `minimal` to render as `low` and `high` and `max` as `xhigh`, as the October 13 echoes showed.
@@ -656,6 +662,23 @@ Decode was slower. Replaying the October 8 request bodies gave 56.25 and 55.73 t
 
 The second build, `3f22bd80…` of draft `68911640` from branch commit `a4aefb8f`, replaced that instance at 00:46 EDT on October 14 by the same steps, after the same idle and link gates. The API was down for 120 s, from 00:46:50 to 00:48:50; the launch took 108.7 s and readiness passed. Both ranks ran `3f22bd80…` and logged `RoCE all-gather on 2 port(s)`, and sequence memory was 31.24 GiB. `GET /v1/models` returned the entry above plus the draft's `effort_map`, which matched the October 13 table, and no `default_max_tokens`. The eight echoes and the `none` plus `enable_thinking: true` probe gave the same results as the October 13 table. The same gates passed, with `exact.py` hashes again identical to October 8, `acceptance.py` with a 0.127 s newcomer, and all 18 agent cases. Replaying the October 8 bodies gave 61.61 and 61.43 tok/s at one stream, 137.35 at four, and 290.95 and 312.48 at sixteen, so decode is back in the October 8 range. The instance was left serving, idle, with 39 and 42 GiB available and the carrier counters unchanged. Receipts are under `~/sparkrun/results/qwen38fn-v1.1/discovery-20261014/` on the head.
 
+#### October 22 qualification
+
+The profile at `59e1a475`, binary `9f28a902…`, in a window from the #938 orchestrator. It ran under a guard on the head, with a fallback there that would have restored DeepSeek at a deadline. DeepSeek was down from 10:17:28 to 10:47:20 EDT.
+
+| Boot | Launch → gate passed | Cold long prompts (prompt tokens, server prefill) | Agent gate, five sections | `prompt_reuse 64k 6 --other` |
+| --- | --- | --- | --- | --- |
+| A | 10:17:44 → 10:19:33, HTTP after 94.6 s | 490,480 in 204.09 s, then 490,015 in 204.29 s; both needles found | 18 of 18 | every turn 99.7% resumed |
+| B | 10:30:51 → 10:32:40, HTTP after 94.5 s | 489,625 in 203.09 s, then 490,517 in 203.62 s; both needles found | 18 of 18 | every turn 99.7% resumed |
+
+The first long prompt of each boot was the first request after the shared gate, the kind that stalled every boot before the fixes. Prefill ran at about 2,400 tok/s. On boot B:
+- **Discovery:** exact at 491,520, with `xhigh, medium, low, none`. The echoes matched the October 13 table.
+- **Kit checks:** `exact.py` passed (draft and concurrent replies equal), `toolcheck.py` 3 of 3, and `context_boundary.py --context 491520` 16 checks.
+- **Decode replay of the October 8 bodies:** 62.13 and 61.82 tok/s at one stream, 138.13 at four, 309.92 and 310.06 at sixteen.
+- **The guard, live:** a request with `top_k` −1 and `top_p` 1, and one with `top_k` 249, each got HTTP 400 with its message, and the server kept serving.
+
+Both ranks ran `9f28a902…` with the control link on `FABRIC_MASTER` (`198.19.240.11:25000`) and the RoCE all-gather on both rails, with 31.72 and 31.45 GiB of sequence memory. Available memory never went below 34.9 GiB on the head or 38.4 GiB on the worker. The management links' carrier counters stayed at 20 and 1,436, neither rank logged an error, and the kernel logs had no NVRM, Xid or OOM lines. After each stop, both GPUs went idle with no process. The agent gate's `structured` section is left out because this server refuses `response_format`, a v1.1 limit above. Receipts are on the head under `~/sparkrun/experiments/qwen38fn-mia-959-w2/receipts/`.
+
 #### Launch, stop and rollback
 
 Merging this directory changes nothing on the Sparks. Each step below is manual, and it runs in a Spark window from the #938 orchestrator. The stop in step 6 begins the outage.
@@ -730,7 +753,7 @@ On the head, from `~/sparkrun/recipes/glm53`. The first is read-only; the rest s
 
 #### Known limits
 
-The v1.1 limits above still apply, including structured outputs, `/health` and prompt reuse for pictures. The kit's open issues add these. The [patches](#discovery-and-fix-patches) above address #3, #6, #8 and #9, and none of them has run on the Sparks yet:
+The v1.1 limits above still apply, including structured outputs, `/health` and prompt reuse for pictures. The kit's open issues add these. The [patches](#discovery-and-fix-patches) above address #3, #6, #8 and #9. On the Sparks, #3's fix and #8's guard are confirmed, as recorded under [October 22 qualification](#october-22-qualification); nothing in the trial reached #6's or #9's failure:
 
 - **Control-link stall** ([#3](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/3)). A long prompt can deadlock the two ranks' control link. Rank 1 exits at `TF_TP_TIMEOUT_S` (300 s), and rank 0 follows. The reports disagree on where it starts:
   - 503,359 tokens stalled and 382,416 completed on `main`;
