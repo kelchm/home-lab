@@ -275,7 +275,7 @@
           "apiVersion": "v1"
         },
         "reason": "Synced",
-        "message": "A controller reporting its own event type",
+        "message": "A controller reporting its own event type\nat 100% of a %s quota",
         "source": {
           "component": "example-controller"
         },
@@ -290,7 +290,7 @@
         "attributes": {
           "pipeline.severity_unmapped": true
         },
-        "body": "Synced ConfigMap/example: A controller reporting its own event type"
+        "body": "Synced ConfigMap/example: A controller reporting its own event type\nat 100% of a %s quota"
       }
     },
     {

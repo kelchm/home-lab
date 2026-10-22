@@ -1,9 +1,9 @@
 -- Maps Kubernetes Event objects from the kubernetes_events input onto the
 -- OpenTelemetry log data model as the OpenTelemetry Collector's k8sevents
 -- receiver does: type as severity, k8s.event.* and k8s.object.* attributes.
--- The body reads as `kubectl events` prints an event, reason, object and
--- message, so a line-oriented view names what happened to which object; the
--- receiver stores the message alone. An event series (events.k8s.io reporters)
+-- The body takes the reason, object and message columns of `kubectl events`,
+-- so a line-oriented view names what happened to which object; the receiver
+-- stores the message alone. An event series (events.k8s.io reporters)
 -- takes its count and time from `series`.
 -- docs/evaluations/log-schema-and-collector.md records each rule's source.
 
