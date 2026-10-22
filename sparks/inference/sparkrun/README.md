@@ -1,6 +1,6 @@
 # GLM-5.3-Flash recipes through SparkRun
 
-These recipes serve models across two DGX Sparks at `http://10.32.21.31:8888/v1`; since October 21 the running instance is [DeepSeek-V4.1-Flash-1017](#deepseek-v41-flash-1017-on-bertholomuss-zig-engine). SparkRun 0.3.10 owns model/image distribution, fabric detection, containers, runtime caches, readiness, warmup, logs, stop, and native benchmarking for both engines. TensorFold uses the adjacent external runtime adapter. These hosts are outside Flux. Check actual host state before launching; other experiments can use either GPU. Two [Qwen3.8-Flash-Next profiles](#qwen38-flash-next-on-mias-zig-engine-kit) on Mia's Zig-engine kit sit beside them; the NVFP4 one booted on October 8, and its [evaluation](#october-8-nvfp4-evaluation) that night ended when a 999,874-token request stalled between the ranks and both engine processes exited. At the operator's request the unchanged NVFP4 recipe was relaunched at 23:11 EDT and passed readiness and a short LAN reply. It served until DeepSeek-V4.1-Flash-1017 replaced it on October 17; the stall's cause remains unresolved.
+These recipes serve models across two DGX Sparks at `http://10.32.21.31:8888/v1`; since October 21 the running instance is [DeepSeek-V4.1-Flash-1017](#deepseek-v41-flash-1017-on-bertholomuss-zig-engine). SparkRun 0.3.10 owns model/image distribution, fabric detection, containers, runtime caches, readiness, warmup, logs, stop, and native benchmarking for both engines. TensorFold uses the adjacent external runtime adapter. These hosts are outside Flux. Check actual host state before launching; other experiments can use either GPU. Two [Qwen3.8-Flash-Next profiles](#qwen38-flash-next-on-mias-zig-engine-kit) on Mia's Zig-engine kit sit beside them; the NVFP4 one booted on October 8, and its [evaluation](#october-8-nvfp4-evaluation) that night ended when a 999,874-token request stalled between the ranks and both engine processes exited. At the operator's request the unchanged NVFP4 recipe was relaunched at 23:11 EDT and passed readiness and a short LAN reply. It served until DeepSeek-V4.1-Flash-1017 replaced it on October 17; the stall's cause remains unresolved. Two Qwen profiles on [upstream TensorFold](#qwen38-flash-next-across-both-sparks-on-upstream-tensorfold) are staged for a trial and have not booted.
 
 The September 30/October 1 candidates are under evaluation in [#645](https://github.com/kelchm/home-lab/issues/645) and [PR #648](https://github.com/kelchm/home-lab/pull/648). The versioned Mia TensorFold profiles retain the measured v1.2 config, the v1.5 and v1.8 server candidates on the same stock TR3 weights, and the v1.5, v1.8 and v1.10 published TP2 defaults with Mia’s own weights. From 16:07 EDT on October 8 until it was stopped for the Qwen trial that evening, the Sparks ran `glm53-exl3-tp2-mia-tf-v1.10-mia-1m` for operator evaluation. It is [source-verified](#v110-mia-weights-candidate) and passed its native boot and readiness gate, the source fixtures inside both ranks and a short vision, agent, cut-call and Anthropic-protocol gate; a [finite 44-minute study](#october-8-finite-study) then completed all 124 latency requests with no failed check, restart or kernel fault line. Against v1.8 that study shows no obvious regression and no large change on short sampled requests, lower long-prompt timings at one to three repetitions that need repeating, and one unexplained 29 s stall in a four-stream replay. Its [live record](#october-8-boot-and-short-gates) and the study list what is and is not established. It is not an adopted recipe and has no formal qualification. `glm53-exl3-tp2-mia-tf-v1.8-mia-1m` ran from October 7 EDT until it was stopped for this trial; its [live record](#october-7-live-boot-of-the-v18-mia-weights-profile) and run-in stay below, and its retained recipe is the immediate rollback. The other three v1.5 and v1.8 profiles are source-verified and have not started on the Sparks. v1.2, which ran until the October 7 switch, passed native boot/shape warmup, the live API/client gates, all 13 long-session cases and actual C4 output growth on October 1. The intermediate v1.3 candidate was source-verified but never live-qualified; its only launch aborted before containers started. Refreshed Mia/vLLM v7 passed native boot, CUDA/protocol and client-accounting checks, but only 18/20 agent cases. Its 13-case comparison completed with valid telemetry; headroom was below target and the short arrival during long prefill took 10.35s. TensorFold W20 remains a diagnostic comparison, and the exact September 19 Mia recipe, image and prepared mod remain the older retained fallback; the retained v1.8 recipe is the immediate rollback from the v1.10 trial, and the original v1.2 recipe, retained with its mod, image and weights, is the proven fallback behind it. Provisional trials require fresh healthy-link/idle checks and a finite guard: a recovered management-link drop is recorded and its timings excluded, 30 s of a continuously unhealthy link or missing telemetry ends the load, and a confirmed fatal condition or sustained sub-2 GiB headroom stops the candidate; the separate defect in [#649](https://github.com/kelchm/home-lab/issues/649) remains open. These are evaluation candidates; raw receipts stay outside git.
 
@@ -764,6 +764,141 @@ Raw receipts are outside git on the head under `~/sparkrun/results/qwen38fn-v1.1
 | OpenCode session | `opencode/wire/NNN.request.json`, `NNN.response` and `NNN.meta.json`, `opencode/turn1`–`turn3` `.export.json` and `.cli.jsonl`, the status JSON, `analysis.json`, `run_agent.py`, `analyze.py`, `expected.json`, `opencode.json` and the workspace fixtures |
 
 The OpenCode receipts were produced on the workstation and uploaded to that `opencode/` directory on the head; server password logs were excluded. The final API was healthy and idle, both original engine processes remained up, and the finite monitor and clients exited. `receipt-manifest.json` indexes the receipts; `soak-log-analysis.json` matches the soak IDs to the rank log.
+
+## Qwen3.8-Flash-Next across both Sparks on upstream TensorFold
+
+The `ashhart-tensorfold-qwen38fn-tp2/` directory holds two profiles that serve [`nvidia/Qwen3.8-Flash-Next-FP4-Local`](https://huggingface.co/nvidia/Qwen3.8-Flash-Next-FP4-Local/tree/b9ce18a6887e18c089fdea8509a33e63429a3300) at `b9ce18a6` as `Qwen3.8-Flash-Next`. They run on upstream [TensorFold v1.1.2](https://github.com/ashhart/TensorFold/releases/tag/v1.1.2)'s native CUDA server, patched by one line so the server takes its tensor-parallel flags. They are the trial in [#940](https://github.com/kelchm/home-lab/issues/940) and have not booted on the Sparks. If the trial fails, NVIDIA's [two-Spark vLLM recipe](https://github.com/NVIDIA/local-ai-inference-recipes/blob/7d1162cfb965847d9412cef9bd5c5d4ade53d957/models/qwen/qwen3.8-flash-next/dgx-spark-2gpu/linux/vllm/128gb/fp4-local/recipe.yaml) for the same checkpoint replaces them.
+
+### Current profile
+
+| Profile | MTP drafts | Prompt cache | Lanes |
+| --- | --- | --- | --- |
+| `qwen38fn-fp4local-tp2-tf-v1.1.2-nvidia-262k-mtp` | On | Off: `--prompt-cache-gib 0` | `--parallel auto`: as many as fit, up to eight |
+| `qwen38fn-fp4local-tp2-tf-v1.1.2-nvidia-262k-cache` | Off: `--no-drafts` | 16 GiB | Four |
+
+Settings and behaviour:
+
+- **Shared settings:** a 262,144-token window, prompt plus reply, and a 32,768-token reply budget. Thinking is on at the template's default effort, sampling comes from the checkpoint's `generation_config.json` (temperature 1.0, top-p 0.95, top-k 20), and the profiles serve text only.
+- **One workload:** SparkRun treats the two profiles as one, because the runtime, model, image, port, served name and parallelism match. `stop` and `logs` work with either file.
+- **Clients:** the API name is the one the Mia profiles use, so clients need no new entry.
+- **Filenames:** they follow the Qwen pattern above: model, format, topology, engine release (`tf-v1.1.2`), quantization creator and window, then the serving variant.
+
+**The patch.** Stock v1.1.2 refuses `--tp` on CUDA. The CLI turns on `--tp`, `--rank`, `--master` and `--master-port` only when the backend lists `--tp` in `serves`, and [`zig/src/native/cuda.zig:32`](https://github.com/ashhart/TensorFold/blob/4ff784410f70b95767684d337e59dfd6d94fec8b/zig/src/native/cuda.zig#L32) does not. [`0001-cuda-serves-tp.patch`](images/ashhart-tensorfold-v1.1.2/patches/0001-cuda-serves-tp.patch) adds it, the same hunk as BlivionIaG's draft ashhart/TensorFold#1113.
+
+- **What's already there:** everything behind the flag is in the release for ModelOpt checkpoints at two ranks: option forwarding ([`cuda_options.zig:12-16`](https://github.com/ashhart/TensorFold/blob/4ff784410f70b95767684d337e59dfd6d94fec8b/zig/src/native/cuda_options.zig#L12)), the follower rank, placement, the TCP control link and the NCCL setup.
+- **Other families:** a family whose options have no rank still refuses `--tp` at admission, and GLM's options have none. The patched server therefore serves GLM and one-Spark Qwen exactly as the release does.
+- **Upstream's tests:** one host test, `zig/src/server/benchmark_server_test.zig`, asserts that CUDA refuses `--tp`, and it fails with the patch. The image build does not run upstream's tests.
+
+No two-GB10 run of this path is published. What upstream's source fixes for two ranks:
+
+- **Weights:** ModelOpt only. MLX 4-bit is refused at world size 2, and upstream calls the ModelOpt path experimental.
+- **Drafts and the prompt cache:** with drafts on, any positive prompt cache is refused, because the engine keeps no draft snapshots across ranks ([`cuda_refusal.zig:37-41`](https://github.com/ashhart/TensorFold/blob/4ff784410f70b95767684d337e59dfd6d94fec8b/zig/src/native/cuda_refusal.zig#L37)). Every turn then reads its whole prompt again. With drafts on, `serve.py` passes `--prompt-cache-gib 0` unless the recipe gives a size, and the engine refuses any size above zero.
+- **Window:** at most 262,144 tokens, with BF16 KV and no YaRN.
+- **Lanes:** every stream holds its whole window on each rank, because the sequence size does not depend on the rank count. Upstream's one-GB10 FP4-Local run measured about 7.8 GiB per stream at 262,144 tokens, so few lanes fit at this window.
+
+**Ranks and fabric.** The [mod](mods/ashhart-tensorfold-qwen38fn-v1.1.2/) installs `serve.py` as the rank command, and each rank runs the same command apart from `--rank`. No recipe or mod file holds a lab address.
+
+- **Rendezvous:** rank 0 listens for rank 1 at SparkRun's `MASTER_PORT`, in place of upstream's default 29551. SparkRun starts rank 1 once that port appears in the head's socket table. Rank 0 opens the port before loading weights and gives rank 1 60 s to connect.
+- **Control link:** rank 0 listens on `FABRIC_MASTER` when the cluster's env sets it, and on SparkRun's `MASTER` otherwise. `MASTER` is the management address whenever the worker can reach it, and the worker's management link drops for seconds at a time ([#649](https://github.com/kelchm/home-lab/issues/649)). Setting `FABRIC_MASTER` is under the inputs below.
+- **NCCL:** tensors cross both CX7 rails, on the devices and GID index SparkRun detects. `serve.py` refuses to start unless `NCCL_IB_HCA` names two devices. The recipes also set `NCCL_RUNTIME_CONNECT=0`, `NCCL_CUMEM_ENABLE=0` and `NCCL_CUMEM_HOST_ENABLE=0`, which upstream sets for GLM's ranks on GB10 and not for Flash Next's.
+- **Checkpoint identity:** at two ranks the engine requires `TENSORFOLD_CHECKPOINT_SHA256`, 64 hex characters. It refuses a peer whose value, `config.json`, index, executable or settings differ, and it does not read the shards for the check.
+  - The recipes set the SHA-256 of the snapshot's sorted `path blob` lines. The HF cache names each blob by its content hash: SHA-256 for LFS files, git SHA-1 for the rest.
+  - `serve.py` computes the same digest from each rank's snapshot and refuses to start on a mismatch.
+  - The value comes from the HF API's file list, before anything is downloaded:
+
+    ```sh
+    rev=b9ce18a6887e18c089fdea8509a33e63429a3300
+    curl -fsSL "https://huggingface.co/api/models/nvidia/Qwen3.8-Flash-Next-FP4-Local/tree/$rev?recursive=true" |
+      python3 -c 'import hashlib, json, sys; files = [e for e in json.load(sys.stdin) if e["type"] == "file"]; print(hashlib.sha256("".join(sorted(e["path"] + " " + e.get("lfs", {}).get("oid", e["oid"]) + "\n" for e in files)).encode()).hexdigest())'
+    ```
+
+- **Memory:** the engine's `oom_score_adj` is 1000. The memory reserve is upstream's default for unified memory, a tenth of the total, about 12 GiB.
+
+**Readiness.** The [hook](mods/ashhart-tensorfold-qwen38fn-v1.1.2/readiness.py) requires:
+
+- healthy status;
+- the profile's lane count: exactly four for the cache profile, at least one for the auto one;
+- the 262,144 window in `/v1/models`, and exactly the efforts `xhigh`, `medium`, `low`, `none`.
+
+It then sends a short reply on every lane at once, and one tool call.
+
+### Inputs outside SparkRun
+
+SparkRun downloads and distributes the weights: 33 files, 95.24 GiB on each host. Two inputs are staged by hand:
+
+- **Image:** loaded on the head, as in the build below. SparkRun copies it to the worker at launch.
+- **Fabric address:** `FABRIC_MASTER`, the head's rail-0 address (`198.19.240.11`), in the `env` of the `sparks` cluster definition on the head. SparkRun layers a cluster's `env` under recipe env on every container. Without it, the control link runs over the management network.
+
+### Build
+
+[`images/ashhart-tensorfold-v1.1.2/`](images/ashhart-tensorfold-v1.1.2/) builds `tensorfold:1.1.2-4ff7844-f08f8e2506fd` from the pins in its `image.lock.json`. It builds on any linux/arm64 Docker daemon without a GPU, and never on a serving Spark. Nothing in the image is model-specific, so upstream GLM and one-Spark Qwen profiles can use it too.
+
+- **Server:** TensorFold `4ff78441`, built from source with Zig 0.17.0 and nvcc 13.0 (V13.0.88) on NVIDIA's CUDA 13.0.2 devel image. It uses the release's settings: glibc 2.28, the baseline CPU, stripped, and kernels for upstream's release SMs (80, 86, 120 and 121). Before the patch goes on, the build fails unless the server it makes equals the release archive's `tensorfold-native` byte for byte, so the patched server is the release plus one line.
+- **Release files:** the rest of the checksum-verified release archive, including `libtfgrammar.so` for structured output and required tools, and the licences.
+- **NCCL 2.30.7,** built from source for sm_121 against CUDA 13.0. The engine needs 2.30 or later, and NVIDIA packages none for CUDA 13.0, so the base's 2.28.3 is removed.
+- **Runtime:** NVIDIA's CUDA 13.0.2 runtime image, which carries `libcublasLt.so.13` for vision. It adds `libibverbs1` and `ibverbs-providers` (the mlx5 provider for the CX7 ports), and `python3` for the mods, at pinned versions.
+
+Built on October 21 on the workstation's Colima `tf-build` profile (12 CPUs, 24 GiB): about 15 minutes from an empty cache, 1.96 GB compressed and 5 GB unpacked, of which the CUDA runtime base is 1.77 GB.
+
+- **Reproducing the release:** the unpatched server equalled the release's `tensorfold-native` (`a18a3e2d…`) byte for byte. A first attempt with kernels for sm_121 alone made a 30 MB binary that did not.
+- **The patched server,** `74e34b93…`, differs from the release in 4 bytes. A second build from an empty cache produced the same file.
+- **The CLI, in a container with no GPU:**
+  - the release refuses `serve <dir> --backend cuda --tp 2 --rank 1 --master <addr> --master-port 25000` with `--tp is not served by the native engine yet`;
+  - the patched server accepts it and goes on to the checkpoint;
+  - `capabilities --json` lists `--tp` and `--master-port` only for the patched server.
+- **Libraries:** the image resolves `libnccl.so.2` to 2.30.7 in `/opt/tensorfold/lib`, and carries `libmlx5`, `libcublasLt.so.13` and Python 3.12.3.
+
+Nothing has run on a GPU.
+
+```sh
+DOCKER_CONTEXT=colima-tf-build sparks/inference/sparkrun/images/ashhart-tensorfold-v1.1.2/build.sh
+DOCKER_CONTEXT=colima-tf-build docker save tensorfold:1.1.2-4ff7844-f08f8e2506fd | ssh kelchm@10.32.21.31 docker load
+```
+
+`build.sh` fails if the patched server's SHA-256 differs from the lock's `binary_sha256`; `--record` writes a new one and the image ID instead. The recipes' `container` is the image ID, which a rebuild can change. Record the ID the head reports in both locks and both recipes before launching.
+
+### Launch, stop and roll back
+
+The trial has not run. Spark time for it comes from the #938 orchestrator, inside a window the owner has approved. From `~/sparkrun/recipes/glm53` on the head, after syncing this directory as in [Deploy](#deploy):
+
+1. **Stage, while DeepSeek serves.**
+   - Load the image on the head.
+   - Set `FABRIC_MASTER` in the cluster's env.
+   - Make the checkpoint visible in both hosts' caches, as for earlier switches, after checking free space under the cache on both hosts.
+2. **Check the gates used for every trial here:**
+   - DeepSeek idle: `live.connections` and `live.waiting` zero in `/health`;
+   - no other GPU workload;
+   - both management links up at 10GbE;
+   - the [rail check](#pre-stage-on-october-8) passing both rails at MTU 9000.
+3. **Stop DeepSeek** with its recipe, and confirm both GPUs are free with about 116 GiB available on each host.
+4. **Boot the MTP profile.** Read both rank logs for the load, the NCCL version, both IB devices and their GID index, the lane count and the memory lines.
+5. **Measure:**
+   - decode and prefill at 1, 4, 8 and 16 streams;
+   - turn latency on a multi-turn agent session;
+   - tool calls;
+   - completed prompts up to the window;
+   - the minimum `MemAvailable` on both hosts.
+6. **Boot the cache profile.** Stop the MTP profile, set the cache profile's lanes and cache size from what step 4 shows, boot it, and repeat step 5.
+7. **Relaunch DeepSeek** with its recipe, unless the orchestrator says otherwise.
+
+```sh
+mtp="$PWD/ashhart-tensorfold-qwen38fn-tp2/qwen38fn-fp4local-tp2-tf-v1.1.2-nvidia-262k-mtp.yaml"
+cache="$PWD/ashhart-tensorfold-qwen38fn-tp2/qwen38fn-fp4local-tp2-tf-v1.1.2-nvidia-262k-cache.yaml"
+python3 mods/ashhart-tensorfold-qwen38fn-v1.1.2/prepare.py --check
+sparkrun run "$mtp" --cluster sparks --no-auto-detect --no-sync-tuning --no-follow --dry-run
+sparkrun run "$mtp" --cluster sparks --no-auto-detect --no-sync-tuning --no-follow
+sparkrun logs "$mtp" --cluster sparks
+sparkrun stop "$mtp" --cluster sparks
+```
+
+The rollback is the [DeepSeek profile](#deepseek-v41-flash-1017-on-bertholomuss-zig-engine), whose image, weights and rank inputs stay on both hosts.
+
+### Known limits
+
+- **Window:** 262,144 tokens is upstream's cap and is not yet qualified here. The trial qualifies it or lowers it. The Mia profiles and DeepSeek configure 1,048,576.
+- **Vision:** off. Upstream's Flash Next tower is experimental at two ranks and unqualified with this checkpoint.
+- **Readiness:** it is mod-local until the shared gate in #943 replaces it, and it renders no reasoning levels through `/tokenize`.
+- **No safeguards:** the endpoint has no API key, and no memory watchdog runs.
 
 ## DeepSeek-V4.1-Flash-1017 on bertholomus's Zig engine
 

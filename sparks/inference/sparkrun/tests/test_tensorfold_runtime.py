@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import importlib.util
+import re
 import shlex
 import shutil
 import subprocess
@@ -985,3 +986,162 @@ def test_dsv41_rdma_devices_take_exact_names_on_port_1(tmp_path):
     for selector, message in (("^rocep1s0f1", "exclusion"), ("rocep1s0f0:2", "port 1"), ("rocep", "in full")):
         with pytest.raises(SystemExit, match=message):
             serve.rdma_devices({"NCCL_IB_HCA": selector}, devices)
+
+
+UPSTREAM_QWEN_DIR = Path(__file__).resolve().parents[1] / "ashhart-tensorfold-qwen38fn-tp2"
+UPSTREAM_QWEN_PROFILES = sorted(UPSTREAM_QWEN_DIR.glob("*.yaml"))
+UPSTREAM_IMAGE_LOCK = Path(__file__).resolve().parents[1] / "images/ashhart-tensorfold-v1.1.2/image.lock.json"
+UPSTREAM_QWEN_TARGET = "nvidia/Qwen3.8-Flash-Next-FP4-Local"
+UPSTREAM_QWEN_FABRIC = {"NCCL_IB_HCA": "=rocep1s0f0:1,roceP2p1s0f0:1"}
+
+
+def _upstream_qwen_bundle(tmp_path, path):
+    recipe = Recipe(yaml.safe_load(path.read_text()), source_path=str(path))
+    source = path.parent / recipe.mods[0]
+    bundle = tmp_path / source.name
+    shutil.copytree(source, bundle, ignore=shutil.ignore_patterns("__pycache__"))
+    modules = {}
+    for name in ("serve", "readiness"):
+        spec = importlib.util.spec_from_file_location(f"upstream_qwen_{name}", bundle / f"{name}.py")
+        modules[name] = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(modules[name])
+    return recipe, bundle, modules["serve"], modules["readiness"]
+
+
+def _hf_snapshot(root, files):
+    """An HF cache snapshot whose files link to blobs named by their hashes, and the digest the HF API's list gives."""
+    snapshot = root / "snapshots/rev"
+    for name, blob in files.items():
+        (root / "blobs").mkdir(parents=True, exist_ok=True)
+        (root / "blobs" / blob).write_text(name)
+        (snapshot / name).parent.mkdir(parents=True, exist_ok=True)
+        (snapshot / name).symlink_to(Path("../" * name.count("/")) / "../../blobs" / blob)
+    listed = sorted(f"{name} {blob}\n" for name, blob in files.items())
+    return snapshot, hashlib.sha256("".join(listed).encode()).hexdigest()
+
+
+def test_upstream_qwen_profiles_are_one_workload_on_the_locked_image(runtime):
+    image = json.loads(UPSTREAM_IMAGE_LOCK.read_text())
+    assert [p.stem.rsplit("-", 1)[1] for p in UPSTREAM_QWEN_PROFILES] == ["cache", "mtp"]
+    recipes = [Recipe(yaml.safe_load(p.read_text()), source_path=str(p)) for p in UPSTREAM_QWEN_PROFILES]
+    for path, recipe in zip(UPSTREAM_QWEN_PROFILES, recipes):
+        assert recipe.name == recipe.metadata["profile"] == path.stem
+        assert not [issue for issue in runtime.validate_recipe(recipe) if getattr(issue, "severity", None) == ERROR]
+        assert recipe.container == image["image_id"] and recipe.metadata["image"] == image["image"]
+        assert recipe.metadata["engine_revision"] == image["tensorfold"]["revision"]
+        assert recipe.model_revision == recipe.metadata["target_model_revision"]
+        mod = json.loads((path.parent / recipe.mods[0] / "upstream.lock.json").read_text())
+        assert (mod["image"], mod["image_id"]) == (image["image"], image["image_id"])
+        assert mod["engine_revision"] == image["tensorfold"]["revision"]
+        assert (mod["weights"]["repository"], mod["weights"]["revision"]) == (recipe.model, recipe.model_revision)
+        assert mod["weights"]["checkpoint_sha256"] == recipe.env["TENSORFOLD_CHECKPOINT_SHA256"]
+        assert (UPSTREAM_QWEN_TARGET, recipe.model_revision) in {
+            (e.name, e.revision) for e in recipe.distribution_config.models.entries}
+    # Everything SparkRun finds a workload by is shared, so stop and logs work with either file.
+    keys = [(r.runtime, r.model, r.container, r.defaults["port"], r.defaults["served_model_name"],
+             r.defaults["tensor_parallel"]) for r in recipes]
+    assert keys[0] == keys[1]
+    assert recipes[0].env == recipes[1].env
+    # Fabric addresses come from SparkRun's detection or the cluster's env, so no lab value is in the tree.
+    mod = UPSTREAM_QWEN_DIR / recipes[0].mods[0]
+    for text in [p.read_text() for p in UPSTREAM_QWEN_PROFILES] + [p.read_text() for p in mod.rglob("*") if p.is_file()]:
+        assert not re.search(r"\b(?!(127\.0\.0\.1|0\.0\.0\.0)\b)\d{1,3}(\.\d{1,3}){3}\b|/home/|/opt/spark|NCCL_IB_(HCA|GID_INDEX)\s*:", text)
+
+
+@pytest.mark.parametrize("path", UPSTREAM_QWEN_PROFILES, ids=lambda p: p.stem)
+def test_upstream_qwen_rank0_listens_on_the_port_sparkrun_gates(runtime, tmp_path, path):
+    recipe, bundle, serve, _ = _upstream_qwen_bundle(tmp_path, path)
+    subprocess.run([sys.executable, str(bundle / "prepare.py"), "--check"], cwd=tmp_path, check=True)
+    ctx = ClusterContext.build(runtime, [FABRIC_HEAD, FABRIC_WORKER], recipe.container, "tf-profile-test",
+                               recipe.env, None, None, dry_run=True, recipe=recipe)
+    script = shlex.split(DockerExecutor().generate_launch_script(
+        image=recipe.container, container_name="tf-profile-test", command="sleep infinity",
+        env=ctx.all_env, volumes=ctx.volumes))
+    for setting in ("NCCL_RUNTIME_CONNECT=0", "NCCL_CUMEM_ENABLE=0",
+                    "NCCL_CUMEM_HOST_ENABLE=0", "TENSORFOLD_CHECKPOINT_SHA256=" + recipe.env["TENSORFOLD_CHECKPOINT_SHA256"]):
+        assert setting in script
+    assert runtime.native_rendezvous_port(recipe, {}, num_nodes=2, init_port=29511) == 29511
+    drafts = "no_drafts" not in recipe.defaults
+    for rank in (0, 1):
+        env, argv = _parse_env_command(_node_command(runtime, recipe, rank, init_port=29511))
+        assert argv == ["/usr/local/bin/qwen38fn-tf-entrypoint"]
+        assert env["MODEL_PATH"] == hf_snapshot_path(UPSTREAM_QWEN_TARGET, recipe.model_revision)
+        child = {**recipe.env, **env, **UPSTREAM_QWEN_FABRIC}
+        with mock.patch.object(serve, "checkpoint_digest", return_value=recipe.env["TENSORFOLD_CHECKPOINT_SHA256"]):
+            args = serve.command(child)
+        assert args[:3] == ["tensorfold-native", "serve", env["MODEL_PATH"]]
+        for flag, expected in (("--backend", "cuda"), ("--name", "Qwen3.8-Flash-Next"), ("--port", "8888"),
+                               ("--context", "262144"), ("--max-tokens", "32768"), ("--tp", "2"),
+                               ("--rank", str(rank)), ("--master", FABRIC_HEAD), ("--master-port", "29511")):
+            assert args[args.index(flag) + 1] == expected
+        with mock.patch.object(serve, "checkpoint_digest", return_value=recipe.env["TENSORFOLD_CHECKPOINT_SHA256"]):
+            fabric = serve.command({**child, "FABRIC_MASTER": "192.0.2.11"})
+        assert fabric[fabric.index("--master") + 1] == "192.0.2.11"
+        assert "--thinking" in args and ("--no-drafts" in args) is not drafts
+        cache = [args[i + 1] for i, a in enumerate(args) if a == "--prompt-cache-gib"]
+        assert cache == (["0"] if drafts else ["16"])
+        assert args[args.index("--parallel") + 1] == ("auto" if drafts else "4")
+
+
+def test_upstream_qwen_ranks_check_the_snapshot_and_both_rails(tmp_path):
+    recipe, _, serve, _ = _upstream_qwen_bundle(tmp_path, UPSTREAM_QWEN_PROFILES[0])
+    snapshot, digest = _hf_snapshot(tmp_path / "models--nvidia--x", {
+        "config.json": "1efa9baa6f332ef821a9468eddd0414ee9bfefb0",
+        "tensors/model-00001-of-00002.safetensors": "ebf3648c" + "0" * 56,
+        "tensors/model-00002-of-00002.safetensors": "79a643fc" + "0" * 56,
+    })
+    assert serve.checkpoint_digest(snapshot) == digest
+    base = {"RANK": "0", "MASTER": FABRIC_HEAD, "MASTER_PORT": "25000", "MODEL_PATH": str(snapshot), "HOST": "0.0.0.0",
+            "PORT": "8888", "SERVED_NAME": "Qwen3.8-Flash-Next", "CONTEXT": "262144", "MAX_TOKENS": "32768",
+            "TENSORFOLD_CHECKPOINT_SHA256": digest, **UPSTREAM_QWEN_FABRIC}
+    assert serve.command(base)[serve.command(base).index("--master") + 1] == FABRIC_HEAD
+    with pytest.raises(SystemExit, match="TENSORFOLD_CHECKPOINT_SHA256"):
+        serve.command({**base, "TENSORFOLD_CHECKPOINT_SHA256": "0" * 64})
+    blob = (snapshot / "config.json").resolve()
+    (snapshot / "config.json").unlink()
+    (snapshot / "config.json").symlink_to(blob.parent / "79a643fc")
+    (blob.parent / "79a643fc").write_text("another file")
+    with pytest.raises(SystemExit, match="hashes to"):
+        serve.command(base)
+    for hca in ("rocep1s0f0", "^rocep1s0f1,roceP2p1s0f1", ""):
+        with pytest.raises(SystemExit, match="two CX7 rails"):
+            serve.command({**base, "NCCL_IB_HCA": hca})
+
+
+def test_upstream_qwen_drafts_keep_the_prompt_cache_at_zero(tmp_path):
+    _, _, serve, _ = _upstream_qwen_bundle(tmp_path, UPSTREAM_QWEN_PROFILES[0])
+    base = {"RANK": "1", "MASTER": FABRIC_HEAD, "MASTER_PORT": "25000", "MODEL_PATH": "/m", "HOST": "0.0.0.0",
+            "PORT": "8888", "SERVED_NAME": "Qwen3.8-Flash-Next", "CONTEXT": "262144", "MAX_TOKENS": "32768",
+            "TENSORFOLD_CHECKPOINT_SHA256": "a" * 64, **UPSTREAM_QWEN_FABRIC}
+    with mock.patch.object(serve, "checkpoint_digest", return_value="a" * 64):
+        drafted = serve.command(base)
+        assert drafted.count("--prompt-cache-gib") == 1 and drafted[drafted.index("--prompt-cache-gib") + 1] == "0"
+        # A size given with drafts on reaches the engine, which refuses it at TP2; it is not doubled or replaced.
+        asked = serve.command({**base, "EXTRA_ARGS": "--prompt-cache-gib 8"})
+        assert asked.count("--prompt-cache-gib") == 1 and asked[-1] == "8"
+        plain = serve.command({**base, "NO_DRAFTS": "1"})
+        assert "--no-drafts" in plain and "--prompt-cache-gib" not in plain
+
+
+def test_upstream_qwen_readiness_checks_lanes_window_and_efforts(tmp_path):
+    recipe, _, _, ready = _upstream_qwen_bundle(tmp_path, UPSTREAM_QWEN_PROFILES[0])
+    served = "Qwen3.8-Flash-Next"
+    for path in UPSTREAM_QWEN_PROFILES:
+        hook = shlex.split(Recipe(yaml.safe_load(path.read_text())).post_exec[0])
+        assert hook[hook.index("--model") + 1] == served and hook[hook.index("--context") + 1] == "262144"
+        assert hook[hook.index("--efforts") + 1] == "xhigh,medium,low,none"
+    health = {"status": "ok", "warming": False, "model": served, "max_batch_size": 6}
+    assert ready.check_health(health, served, None, 1) == 6
+    assert ready.check_health(health, served, 6, 1) == 6
+    for change, lanes, least in (({}, 4, 1), ({}, None, 7), ({"max_batch_size": None}, None, 1),
+                                 ({"status": "unavailable"}, None, 1), ({"warming": True}, None, 1),
+                                 ({"model": "other"}, None, 1)):
+        with pytest.raises(RuntimeError):
+            ready.check_health({**health, **change}, served, lanes, least)
+    efforts = ["xhigh", "medium", "low", "none"]
+    entry = {"id": served, "context_length": 262144, "reasoning": {"default_enabled": True, "supported_efforts": efforts}}
+    ready.check_models({"data": [entry]}, served, 262144, efforts)
+    for body in ({"data": []}, {"data": [{**entry, "context_length": 1048576}]}, {"data": [{**entry, "reasoning": {}}]},
+                 {"data": [{**entry, "reasoning": {"supported_efforts": ["xhigh", "low", "none"]}}]}):
+        with pytest.raises(RuntimeError):
+            ready.check_models(body, served, 262144, efforts)

@@ -1,0 +1,18 @@
+{
+  "engine_repository": "ashhart/TensorFold",
+  "engine_release": "v1.1.2",
+  "engine_revision": "4ff784410f70b95767684d337e59dfd6d94fec8b",
+  "image": "tensorfold:1.1.2-4ff7844-f08f8e2506fd",
+  "image_id": "sha256:1e346b30b9fefcd6e9251a042ebcd2de78c6dc23aebf5f764700df1cf4ca88a0",
+  "weights": {
+    "repository": "nvidia/Qwen3.8-Flash-Next-FP4-Local",
+    "revision": "b9ce18a6887e18c089fdea8509a33e63429a3300",
+    "checkpoint_sha256": "4b283413cb710083be5c81fb42fde350a029b30f6f558ee20162403974b4eca6"
+  },
+  "mod_files": {
+    "prepare.py": "fd7cac10cf4684a7aac3f82416598b8302c96a53206168b4dd2ba40a78d6fd51",
+    "readiness.py": "32669e22f59cced04e4b77d3649faacc9a1b7b7d86d268e320adc40b9d867e47",
+    "run.sh": "2cbfb1db6f2f7591556b24e1ba47840b4a2c50b07f89f14eed72a49ba14efd79",
+    "serve.py": "b68b997c52a77c916cc38e4aae391589db9141d9f241ef483bff48c94d716048"
+  }
+}

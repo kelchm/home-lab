@@ -1,0 +1,30 @@
+{
+  "tensorfold": {
+    "repository": "ashhart/TensorFold",
+    "version": "1.1.2",
+    "revision": "4ff784410f70b95767684d337e59dfd6d94fec8b",
+    "archive": "https://github.com/ashhart/TensorFold/releases/download/v1.1.2/tensorfold-1.1.2-linux-aarch64.tar.gz",
+    "archive_sha256": "4da070ed641e9dc6d41fa91d690a2fdf42e5023e1f84dfc69bcad8e893e6c367",
+    "release_binary_sha256": "a18a3e2d087fa4dac34b10009b4ba4c815d4c474cc6d0c8704b29702373dd1ab"
+  },
+  "patches": {
+    "patches/0001-cuda-serves-tp.patch": "f08f8e2506fd07e76c78e1b2a3c22d93d398f7fdbd155c966339d24442452a19"
+  },
+  "build": {
+    "devel_image": "nvidia/cuda:13.0.2-devel-ubuntu24.04@sha256:450d11555d20ac8ebbbc13ebf17589c2bd42869171a90179ce7098b4a5e64c6a",
+    "runtime_image": "nvidia/cuda:13.0.2-runtime-ubuntu24.04@sha256:bbfc230dfd4c3bb2eadacdc22cb7e2ea3453e93bb3ee40e241357eb0bcd5c6a6",
+    "zig_version": "0.17.0",
+    "zig_sha256": "9e8d11661d4ae3bd57702a3832781e23ad151dde5798e16a5ccd503f65234ff8",
+    "nccl_repository": "NVIDIA/nccl",
+    "nccl_release": "v2.30.7-1",
+    "nccl_revision": "73cf112295c33aee2b895f329f592f2a9b4b0f97",
+    "runtime_packages": [
+      "libibverbs1=50.0-2ubuntu0.2",
+      "ibverbs-providers=50.0-2ubuntu0.2",
+      "python3=3.12.3-0ubuntu2.1"
+    ]
+  },
+  "image": "tensorfold:1.1.2-4ff7844-f08f8e2506fd",
+  "image_id": "sha256:1e346b30b9fefcd6e9251a042ebcd2de78c6dc23aebf5f764700df1cf4ca88a0",
+  "binary_sha256": "74e34b931bafd815454554b24b49b63d4caec9c63c001382eeae9c71a858da18"
+}
