@@ -376,12 +376,12 @@
       }
     },
     {
-      "name": "older than the retention window",
+      "name": "series still written 31 days after it began",
       "phase": "list",
       "times": {
-        "creationTimestamp": 2678500,
-        "firstTimestamp": 2678500,
-        "lastTimestamp": 2678400
+        "creationTimestamp": 2678400,
+        "eventTime": 2678400,
+        "series.lastObservedTime": 600
       },
       "event": {
         "metadata": {
@@ -397,17 +397,23 @@
           "uid": "a0000000-0000-4000-8000-000000000007",
           "apiVersion": "v1"
         },
-        "reason": "Killing",
-        "message": "Stopping container app",
-        "source": {
-          "component": "kubelet",
-          "host": "k8s-prod-3"
+        "reason": "FailedScheduling",
+        "message": "0/3 nodes are available: 3 node(s) had untolerated taint {node.kubernetes.io/disk-pressure: }.",
+        "source": {},
+        "type": "Warning",
+        "action": "Scheduling",
+        "series": {
+          "count": 1480
         },
-        "count": 1,
-        "type": "Normal",
-        "reportingComponent": "kubelet"
+        "reportingComponent": "default-scheduler",
+        "reportingInstance": "default-scheduler-k8s-prod-1"
       },
-      "dropped": true
+      "expect": {
+        "timestamp": "series.lastObservedTime",
+        "attributes": {
+          "k8s.event.count": 1480
+        }
+      }
     },
     {
       "name": "the repeated warning's next count arrives from the watch",

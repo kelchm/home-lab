@@ -102,7 +102,8 @@ def run(work):
                                  '-v', f'{ROOT}/scripts/logging/events-api.py:/api.py:ro', '-v', f'{work}:/work',
                                  PYTHON_IMAGE, 'python', '/api.py', '/work/plan.json', '/work/requests.jsonl'], check=True, stdout=subprocess.DEVNULL)
         time.sleep(2)
-        subprocess.run(docker + ['run', '-d', '--rm', *user, '--name', f'{net}-fb', '--network', net,
+        # No --rm: a collector that exits keeps its log for the failure report.
+        subprocess.run(docker + ['run', '-d', *user, '--name', f'{net}-fb', '--network', net,
                                  '-v', f'{CONFIG}:/fluent-bit/etc/conf:ro', '-v', f'{work}/test.conf:/test/fluent-bit.conf:ro',
                                  '-v', f'{work}/token:/var/run/secrets/kubernetes.io/serviceaccount/token:ro',
                                  '-v', f'{work}/state:/state', fluent_bit_image(), '-c', '/test/fluent-bit.conf'],
@@ -128,12 +129,12 @@ def run(work):
 
 def check(rows, seen):
     failures = []
-    lists = [r['path'] for r in seen if 'watch=1' not in r['path']]
-    watches = [parse_qs(urlsplit(r['path']).query) for r in seen if 'watch=1' in r['path']]
-    # Each watch starts at the resource version of the list before it.
-    want = [{'watch': ['1'], 'resourceVersion': [v], 'timeoutSeconds': ['600']} for v in FIXTURES['list_resource_versions']]
-    if lists[:2] != ['/api/v1/events'] * 2 or watches[:2] != want:
-        failures.append(f'expected two lists, each followed by a watch from its resource version; saw lists {lists} and watches {watches}')
+    # Two lists, each followed by a watch from its resource version; the second watch stays open.
+    requests = [(urlsplit(r['path']).path, parse_qs(urlsplit(r['path']).query)) for r in seen]
+    want = [r for v in FIXTURES['list_resource_versions']
+            for r in (('/api/v1/events', {}), ('/api/v1/events', {'watch': ['1'], 'resourceVersion': [v], 'timeoutSeconds': ['600']}))]
+    if requests != want:
+        failures.append(f'expected requests {want}, saw {requests}')
     if any(r['authorization'] != f'Bearer {TOKEN}' for r in seen):
         failures.append('a request did not carry the service account token')
     if len(rows) != len(expected()):
