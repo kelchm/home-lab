@@ -397,19 +397,31 @@ The OpenCode receipts were produced on the workstation and uploaded to that `ope
 
 ## DeepSeek-V4.1-Flash-1017 on bertholomus's Zig engine
 
-`bertholomus-tensorfold-dsv41-tp2/dsv41-1017-exl3-tp2-bth-tf-6366d2c-libertai-1m.yaml` serves [`deepseek-ai/DeepSeek-V4.1-Flash-1017`](https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017) as `DeepSeek-V4.1-Flash-1017`, through [LibertAI's EXL3 2.9 bpw quant](https://huggingface.co/LibertAIDAI/DeepSeek-V4.1-Flash-1017-EXL3-2.9bpw/tree/0be63c3337efbb2a0061d5b8bb4006fa186d433f) on the native Zig engine of [`bertholomus/TensorFold`](https://github.com/bertholomus/TensorFold/tree/deepseek-v41-zig), branch `deepseek-v41-zig`. Upstream TensorFold refuses DeepSeek checkpoints until its whole-model gate lands ([ashhart/TensorFold#827](https://github.com/ashhart/TensorFold/pull/827)). It has served since October 21; from October 17 the same weights ran on engine `3ff3b2a` from hand-started containers that the inference scrape could not see.
+Two profiles serve [`deepseek-ai/DeepSeek-V4.1-Flash-1017`](https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017) as `DeepSeek-V4.1-Flash-1017`, through [LibertAI's EXL3 2.9 bpw quant](https://huggingface.co/LibertAIDAI/DeepSeek-V4.1-Flash-1017-EXL3-2.9bpw/tree/0be63c3337efbb2a0061d5b8bb4006fa186d433f) on the native Zig engine of [`bertholomus/TensorFold`](https://github.com/bertholomus/TensorFold/tree/deepseek-v41-zig), branch `deepseek-v41-zig`. Upstream TensorFold refuses DeepSeek checkpoints until its whole-model gate lands ([ashhart/TensorFold#827](https://github.com/ashhart/TensorFold/pull/827)).
 
-Rank 0 runs `tensorfold-native serve` with the OpenAI and Anthropic routes; rank 1 runs `tf-dsv41-lanes`. Settings: four streams, a 1,048,576-token window, a 32,768-token reply budget, thinking on, temperature 1.0, top-p 0.95, top-k 20, DSpark drafts, CUDA graphs and the Engram read-ahead. The ranks link over rail 0 of the CX7 cable (`DSV41_TP_MASTER`), not the management network SparkRun's rendezvous address uses, and gather over both rails with RDMA on the devices and GID index SparkRun detects.
+| Profile | Engine | Window | State |
+| --- | --- | --- | --- |
+| `dsv41-1017-exl3-tp2-bth-tf-2970bcd-libertai-512k` | `2970bcd` with six patches | 524,288 | Serving since October 22, qualified to 524,139 prompt tokens |
+| `dsv41-1017-exl3-tp2-bth-tf-6366d2c-libertai-1m` | `6366d2c` with three patches | 1,048,576 | Served October 21–22; the rollback, with its image kept on the head |
 
-The [mod](mods/bertholomus-tensorfold-dsv41-6366d2c/) builds the image and launches both ranks. `upstream.lock.json` pins the engine, the inputs, the kit, the Engram tables and every mod file.
+Rank 0 runs `tensorfold-native serve` with the OpenAI and Anthropic routes; rank 1 runs `tf-dsv41-lanes`. Settings: four streams, a 32,768-token reply budget, thinking on, temperature 1.0, top-p 0.95, top-k 20, DSpark drafts, CUDA graphs and the Engram read-ahead. The ranks link over the CX7 cable, not the management network SparkRun's rendezvous address uses: the `2970bcd` profile takes the head's CX7 address from the adapter's `FABRIC_MASTER` and refuses to start without it, while the `6366d2c` profile names it in its recipe as `DSV41_TP_MASTER`. Both gather over both rails with RDMA on the devices and GID index SparkRun detects. The rank-1 pool equals the window.
+
+Each profile's mod ([`2970bcd`](mods/bertholomus-tensorfold-dsv41-2970bcd/), [`6366d2c`](mods/bertholomus-tensorfold-dsv41-6366d2c/)) builds its image and launches both ranks. `upstream.lock.json` pins the engine, the inputs, the kit, the Engram tables and every mod file. The `2970bcd` patches:
 
 | Patch | Source | Change |
 | --- | --- | --- |
 | `0001-models-discovery-483-819.patch` | `ashhart/TensorFold` #483 and #819, reduced to `zig/src/server` | `/v1/models` reports `context_length` and the reasoning efforts |
 | `0002-call-gate.patch` | [Mia's 1017 recipe](https://github.com/MiaAI-Lab/DeepSeek-v4.1-Flash-1017-2x-DGX-Sparks), `zig/patches/0004-call-gate.patch` | `tool_choice` `"required"` and named functions force a call |
-| `0003-rdma-idle-nap.patch` | Mia's recipe [PR #26](https://github.com/MiaAI-Lab/DeepSeek-v4.1-Flash-1017-2x-DGX-Sparks/pull/26) | The RDMA gather's proxy sleeps 100 µs between looks after 2 s idle instead of spinning a core on each rank |
+| `0003-rdma-idle-nap.patch` | Mia's recipe at [`a22ca69`](https://github.com/MiaAI-Lab/DeepSeek-v4.1-Flash-1017-2x-DGX-Sparks/commit/a22ca693c965179923a8593ab34b72d7e065cc8b), `zig/patches/0010-rdma-idle-nap.patch` | The RDMA gather's proxy sleeps 100 µs between looks after 2 s idle instead of spinning a core on each rank; a nap of 0 or above 1,000,000 µs is refused |
+| `0004-literal-added-tokens.patch` | [bertholomus/TensorFold#36](https://github.com/bertholomus/TensorFold/pull/36) at `c2c05641` | An added token a client quotes in a chat request, a tool result or a tool description is encoded as text; tokens the template writes stay control tokens |
+| `0005-deepseek-efforts.patch` | This lab | The engine's efforts are DeepSeek's own `max` = 100, `high` = 75 and `low` = 50, and any other effort name goes to the nearest of them |
+| `0006-literal-object-keys.patch` | This lab | `0004` also covers JSON object keys, such as a tool's parameter names and a tool call's argument names |
 
-At launch [`serve.py`](mods/bertholomus-tensorfold-dsv41-6366d2c/serve.py) links three views under `/tmp/dsv41` from the read-only snapshots: the weights with the mod's `chat_template.jinja` (a port of DeepSeek's `encoding.py`), the [kernel kit](https://huggingface.co/bertholomus/DeepSeek-V4.1-Flash-TensorFold-TP2-2xGB10/tree/4996441a82d95b9a7853b01a1255e1dafc926387) with the 1017 image routing bias made from the weights and checked against the lock, and the Engram shards with their embed-only index. It sets the engine's `oom_score_adj` to 1000 so the kernel ends the engine before anything else when host memory runs out. The [readiness hook](mods/bertholomus-tensorfold-dsv41-6366d2c/readiness.py) requires healthy status, four lanes and the window in `/v1/models`, then sends four concurrent replies and one tool call.
+The `6366d2c` mod carries the first three, with the earlier RDMA nap from Mia's [PR #26](https://github.com/MiaAI-Lab/DeepSeek-v4.1-Flash-1017-2x-DGX-Sparks/pull/26), which takes a nap of 0 as 1 µs.
+
+**Reasoning efforts.** DeepSeek's encoder (`encoding/encoding.py` in the checkpoint) names `low`, `high` and `max` and renders the chosen one as `Reasoning Effort: N` before the first turn when thinking; non-thinking is a separate mode. With `0005`, `/v1/models` lists `max`, `high`, `low` and `none`, highest first, and a request's other names are taken to the nearest listed level with ties going higher: `minimal` to `low`, `medium` to `high` and `xhigh` to `max`. A request's `none` turns thinking off unless the same request switches thinking on explicitly, with `chat_template_kwargs.enable_thinking` or the Anthropic `thinking` field; a request without an effort hears the template's default, `high`. The shared readiness gate checks the list in that order and renders each level and each other name through `/tokenize`. The `6366d2c` engine instead lists seven levels, three of them its own numbers between DeepSeek's (`minimal` = 25, `medium` = 62, `xhigh` = 88).
+
+At launch `serve.py` links three views under `/tmp/dsv41` from the read-only snapshots: the weights with the mod's `chat_template.jinja` (a port of DeepSeek's `encoding.py`), the [kernel kit](https://huggingface.co/bertholomus/DeepSeek-V4.1-Flash-TensorFold-TP2-2xGB10/tree/4996441a82d95b9a7853b01a1255e1dafc926387) with the 1017 image routing bias made from the weights and checked against the lock, and the Engram shards with their embed-only index. It sets the engine's `oom_score_adj` to 1000 so the kernel ends the engine before anything else when host memory runs out. The `2970bcd` profile checks readiness with the shared gate (`mods/tensorfold-readiness`): healthy status with four lanes, the exact `/v1/models` entry, four concurrent replies, one tool call and the level renders. The `6366d2c` profile keeps its mod's own hook, which requires healthy status, four lanes and the window in `/v1/models`, then sends four concurrent replies and one tool call.
 
 ### Inputs outside SparkRun's distribution
 
@@ -429,49 +441,73 @@ inputs=/opt/spark-cache/runtime-inputs/tensorfold/LibertAIDAI__DeepSeek-V4.1-Fla
 engram=/opt/spark-cache/runtime-inputs/engram-1017  # the shards and the mod's embed-only index, by hard link
 mkdir -p "$inputs" "$engram"
 for f in config.json model-00047-of-00048.safetensors model-00048-of-00048.safetensors; do ln -f "$(readlink -f "$base/$f")" "$engram/$f"; done
-cp ~/sparkrun/recipes/glm53/mods/bertholomus-tensorfold-dsv41-6366d2c/engram.index.json "$engram/model.safetensors.index.json"
+cp ~/sparkrun/recipes/glm53/mods/bertholomus-tensorfold-dsv41-2970bcd/engram.index.json "$engram/model.safetensors.index.json"
 docker run -d --name dsv41-inputs --gpus all --network host --ipc host --ulimit memlock=-1 --ulimit stack=67108864 \
   --cap-add IPC_LOCK --device /dev/infiniband -v "$hub:$hub:ro" -v "$engram:/engram:ro" -v "$inputs:/inputs" \
   -e TF_DS_REPLAY=1 -e TF_DS_PREFILL_CHUNK=2048 -e TF_DS_RANK_CACHE=/inputs/tf-ds-rank -e TF_DS_RANK_CACHE_READERS=32 \
   -e TF_DS_ENGRAM=/engram -e TF_DS_TOKEN_MAP=/inputs/dsv41_token_map.json -e TF_RDMA_GID_INDEX=3 \
   -e NCCL_IB_HCA=rocep1s0f0,roceP2p1s0f0 -e NCCL_IB_GID_INDEX=3 -e NCCL_SOCKET_IFNAME=enp1s0f0np0 \
-  dsv41-tf:6366d2c-4691715-b52bd191b6e4 /usr/local/bin/tensorfold serve "$weights" --tp 2 --rank "$RANK" \
+  dsv41-tf:2970bcd-4691715-e1c6ebe02e2a /usr/local/bin/tensorfold serve "$weights" --tp 2 --rank "$RANK" \
   --master 198.19.240.11 --host 127.0.0.1 --port 18891 --context 1048576 --vision --parallel 4 --mtp-drafts 5
 ```
 
-These are the settings that wrote the current inputs on October 17, with this layout's paths.
+These are the settings that wrote the current inputs on October 17, with this layout's paths. Both images carry the same Python engine (`deepseek-v41-tp2` at `4691715`), and the `2970bcd` engine reads the rank inputs with the loader of `6366d2c`, so the staged inputs serve both profiles.
 
 On October 21 both were hard-linked from the hand-run copies, so neither was downloaded or rebuilt; the rank inputs moved to their own root at the relaunch that afternoon, and the hand-run copies were then deleted.
 
 ### Build
 
-The image is built on any linux/arm64 Docker daemon, never on a serving Spark, where the Zig and `nvcc` build would compete with the engine for host memory. [`build/build.sh`](mods/bertholomus-tensorfold-dsv41-6366d2c/build/build.sh) fetches the engine and inputs at the lock's commits, applies the three patches and builds on NVIDIA PyTorch 26.07 by digest; the October 21 build took about three minutes on the workstation's Colima `tf-build` profile. Load it on the head; SparkRun copies it to the worker at launch:
+The image is built on any linux/arm64 Docker daemon, never on a serving Spark, where the Zig and `nvcc` build would compete with the engine for host memory. The mod's `build/build.sh` fetches the engine and inputs at the lock's commits, applies the patches and builds on NVIDIA PyTorch 26.07 by digest; the October 21 build of `6366d2c` took about three minutes on the workstation's Colima `tf-build` profile. Load it on the head; SparkRun copies it to the worker at launch:
 
 ```sh
-DOCKER_CONTEXT=colima-tf-build sparks/inference/sparkrun/mods/bertholomus-tensorfold-dsv41-6366d2c/build/build.sh
-DOCKER_CONTEXT=colima-tf-build docker save dsv41-tf:6366d2c-4691715-b52bd191b6e4 | ssh kelchm@10.32.21.31 docker load
+DOCKER_CONTEXT=colima-tf-build sparks/inference/sparkrun/mods/bertholomus-tensorfold-dsv41-2970bcd/build/build.sh
+DOCKER_CONTEXT=colima-tf-build docker save dsv41-tf:2970bcd-4691715-e1c6ebe02e2a | ssh kelchm@10.32.21.31 docker load
 ```
 
-The recipe's `container` and the lock's `image_id` are the image ID the head reports, `sha256:66ce7619…`. A rebuild can produce another ID; record it in both before launching.
+The recipe's `container` and the lock's `image_id` are the image ID the head reports, which is the image's config digest; Colima's containerd store shows the index digest instead. To read it before loading, `colima ssh -p tf-build -- sudo ctr -n moby images ls` gives the index digest; `ctr -n moby content get` on that lists the arm64 manifest, and that manifest's `config.digest` is the ID. The `2970bcd` build of October 21 is `sha256:a7845d4e…`, and the `6366d2c` image is `sha256:66ce7619…`. A rebuild can produce another ID; record it in both before launching.
 
 ### Launch, stop and roll back
 
 From `~/sparkrun/recipes/glm53` on the head, after syncing this directory as in [Deploy](#deploy). Stop the running instance with its own recipe first:
 
 ```sh
-dsv41="$PWD/bertholomus-tensorfold-dsv41-tp2/dsv41-1017-exl3-tp2-bth-tf-6366d2c-libertai-1m.yaml"
-python3 mods/bertholomus-tensorfold-dsv41-6366d2c/prepare.py --check
+dsv41="$PWD/bertholomus-tensorfold-dsv41-tp2/dsv41-1017-exl3-tp2-bth-tf-2970bcd-libertai-512k.yaml"
+python3 mods/bertholomus-tensorfold-dsv41-2970bcd/prepare.py --check
 sparkrun run "$dsv41" --cluster sparks --no-auto-detect --no-sync-tuning --no-follow
 sparkrun logs "$dsv41" --cluster sparks
 # When stopping or replacing the workload:
 sparkrun stop "$dsv41" --cluster sparks
 ```
 
-The rollback is the Qwen [discovery profile](#model-discovery-variant). No earlier DeepSeek engine is kept: its image and the hand-run copies were removed from both hosts on October 21, and this mod has never pinned another engine.
+The `6366d2c` profile is the rollback; its image stays on the head until it is retired. After it, the Qwen [discovery profile](#model-discovery-variant) is the rollback.
+
+To switch from the `6366d2c` profile, stop it first and load the new image only then, so the 37 GB load never runs beside a serving engine on the head's unified memory:
+
+```sh
+old="$PWD/bertholomus-tensorfold-dsv41-tp2/dsv41-1017-exl3-tp2-bth-tf-6366d2c-libertai-1m.yaml"
+sparkrun stop "$old" --cluster sparks
+ssh 10.32.21.32 'nvidia-smi --query-compute-apps=pid --format=csv,noheader'; nvidia-smi --query-compute-apps=pid --format=csv,noheader  # both empty
+# On the workstation: DOCKER_CONTEXT=colima-tf-build docker save dsv41-tf:2970bcd-4691715-e1c6ebe02e2a | ssh kelchm@10.32.21.31 docker load
+docker image inspect --format '{{.Id}}' dsv41-tf:2970bcd-4691715-e1c6ebe02e2a  # the recipe's container
+```
+
+Then launch the new profile as above. To roll back, stop it and `sparkrun run "$old"` with the same flags; the shared readiness gate does not apply to the `6366d2c` profile, which keeps its own hook.
+
+### October 22 launch
+
+This is the `2970bcd` profile, launched in a window granted from #938. The `6366d2c` profile was stopped idle at 01:20:20 UTC. The image then loaded on the head in 4 min 11 s, SparkRun copied it to the worker in 209 s, and the engine was HTTP-ready 55 s after its container started. The API was back at 01:29:25, about 9 minutes after the stop, and the shared readiness gate passed at 01:29:32.
+
+- Both ranks linked on `FABRIC_MASTER` `198.19.240.11:25000`, and RDMA came up on both rails at GID index 3.
+- `/v1/models` reported `max`, `high`, `low` and `none` and a 524,288 window. `/tokenize` rendered budgets 100, 75 and 50, and no effort line for `none`; `xhigh`, `medium` and `minimal` rendered as 100, 75 and 50.
+- One prime-count prompt answered 12 at every thinking level, with 337, 158 and 104 reasoning tokens at `max`, `high` and `low`, and none at `none`.
+- Quoted control tokens in a message, a tool result, a tool description, a schema property name and a tool-call argument name left the prompt's control-token counts equal to a clean request's.
+- `tool_choice` `auto`, `required` and a named function each returned a call, `required` also with thinking on.
+- A needle at 480,478 prompt tokens was found at 10%, 50% and 90% depth, in about 249 s each, and at 524,139 tokens at 50% depth in 275 s, with thinking off at temperature 0.
+- `MemAvailable` stayed at or above 5.96 GiB on the head, its low during the 524K prompt, and 8.63 GiB on the worker. The kernel logged no `NV_ERR`, OOM or Xid on either host.
 
 ### October 21 launch
 
-The hand-started containers were stopped idle at 17:05:11 UTC with nothing in flight, and SparkRun's launch returned 73 s later with the readiness hook passed; the API was down for about 85 s. Rank 0 read its 95.1 GiB of expert entries in 8.6 s and rank 1 loaded in 24.0 s; rank 0 logged RDMA to rank 1 on both rails at GID index 3, and the ranks' link ran between `198.19.240.11:25000` and `198.19.240.12`. `up{job="spark-inference"}` reported the model with SparkRun's labels within a minute.
+This is the `6366d2c` profile. The hand-started containers were stopped idle at 17:05:11 UTC with nothing in flight, and SparkRun's launch returned 73 s later with the readiness hook passed; the API was down for about 85 s. Rank 0 read its 95.1 GiB of expert entries in 8.6 s and rank 1 loaded in 24.0 s; rank 0 logged RDMA to rank 1 on both rails at GID index 3, and the ranks' link ran between `198.19.240.11:25000` and `198.19.240.12`. `up{job="spark-inference"}` reported the model with SparkRun's labels within a minute.
 
 - The idle engine processes use 1.6% and 1.8% of a core, against about 100% each before.
 - `tool_choice: "required"` returned a call to the offered function for a prompt that asks for none; engine `3ff3b2a` refused it.
@@ -482,10 +518,11 @@ The hand-started containers were stopped idle at 17:05:11 UTC with nothing in fl
 
 ### Known limits
 
-- Control-token spellings in request text, tool results included, become control tokens: the engine renders the template to text and encodes it with the added vocabulary ([MiaAI-Lab/DeepSeek-v4.1-Flash-1017-2x-DGX-Sparks#21](https://github.com/MiaAI-Lab/DeepSeek-v4.1-Flash-1017-2x-DGX-Sparks/issues/21)). No fix exists.
+- On the `6366d2c` profile, control-token spellings in request text, tool results included, become control tokens: the engine renders the template to text and encodes it with the added vocabulary ([MiaAI-Lab/DeepSeek-v4.1-Flash-1017-2x-DGX-Sparks#21](https://github.com/MiaAI-Lab/DeepSeek-v4.1-Flash-1017-2x-DGX-Sparks/issues/21)). The `2970bcd` profile's `0004` and `0006` keep them text on input; text the model writes is not covered. Keys of one JSON object that differ only by private-use characters U+E000 to U+E03A or U+FFFD collapse into one key in the rendered prompt; the request's own tools and arguments are unchanged.
 - The prompt cache evicts kept conversations oldest first, so an agent's idle main conversation goes before finished subagents' ([#27](https://github.com/MiaAI-Lab/DeepSeek-v4.1-Flash-1017-2x-DGX-Sparks/issues/27) there).
-- The engine's piecewise prompt passes (`TF_FILL_CHUNKS`) stay off: Mia's comparable interleave starved several queued long prompts ([#18](https://github.com/MiaAI-Lab/DeepSeek-v4.1-Flash-1017-2x-DGX-Sparks/issues/18) there), and a long prompt pass holds other streams' tokens until it finishes.
-- The window is configured at 1,048,576 tokens and qualified here only to about 154K. The head keeps about 6 GiB available with the model loaded; Mia reports 512K as the practical limit for a head like this one. No memory watchdog runs.
+- A request with `tool_choice: "required"` or a named function reads every token synchronously, even after the call gate (`0002`) has forced the call's opening, so it loses decode overlap for the call's arguments. Other requests are unaffected, and `0002` stays verbatim from Mia's recipe.
+- The engine's piecewise prompt passes (`TF_FILL_CHUNKS`) stay off: Mia's comparable interleave starved several queued long prompts ([#18](https://github.com/MiaAI-Lab/DeepSeek-v4.1-Flash-1017-2x-DGX-Sparks/issues/18) there), and a long prompt pass holds other streams' tokens until it finishes. The `2970bcd` engine's opt-in `TF_DS_SOLO_OVERHEAD` and `TF_DS_NO_COPIES` also stay off until measured here.
+- The `6366d2c` profile's window is configured at 1,048,576 tokens and qualified here only to about 154K. The head keeps about 6 GiB available with the model loaded; Mia reports 512K as the practical limit for a head like this one and found a needle at 479,012 tokens in a 524,288 window, which the `2970bcd` profile configures and qualified on October 22 (below). No memory watchdog runs.
 - The endpoint has no API key.
 
 ## Deploy
@@ -532,7 +569,7 @@ plugins:
 
 The [adapter](plugins/tensorfold/__init__.py) requires exactly two TP2 ranks with PP1 and uses SparkRun's native launcher, rendezvous gate, cache mounts, log sources and stop operation. It names no model or engine: a recipe that leaves out `defaults.entrypoint`, `served_model_name` or `context` fails validation. Each rank gets `RANK`, `MASTER`, `MASTER_PORT`, `MODEL_PATH` (the immutable HF snapshot under `/cache/huggingface/hub`), `CONTEXT`, `SERVED_NAME`, `HOST`, `PORT` and, when set, `DRAFTER`, `MAX_TOKENS`, `EXTRA_ARGS`, `MTP_DRAFTS` and `NO_DRAFTS`. Rank 0 must listen on `MASTER_PORT`, which SparkRun waits on before it starts rank 1. When SparkRun reaches the head over a CX7 address, `FABRIC_MASTER` carries that address, for engines whose ranks link over the fabric rather than the rendezvous network. CUDA, Triton and Torch kernel caches go to SparkRun's persistent `/cache/runtime`; anything engine-specific is set by its own recipe and mod. No upstream two-host launcher or watchdog is installed.
 
-Each mod pins its image, weights and inputs in `upstream.lock.json`, and its `run.sh` starts with `prepare.py --check`, which refuses a changed, missing or linked file. The contract also sets a common layout, which profiles adopt as they are refreshed: the rank launcher at `/usr/local/bin/tensorfold-entrypoint`, static files under `/opt/tensorfold-mod/`, the engine's `oom_score_adj` at 1000, and no lab addresses, host names or paths in recipes or mods. GLM `3fd60dfc` follows it. GLM v1.10 and the Mia Qwen mods install their own launcher and readiness paths and leave the engine's OOM score unchanged. DeepSeek `6366d2c` sets the score but keeps its own paths, and its recipe names its dedicated runtime-cache root under `/opt/spark-cache`, which [#932](https://github.com/kelchm/home-lab/issues/932) settles.
+Each mod pins its image, weights and inputs in `upstream.lock.json`, and its `run.sh` starts with `prepare.py --check`, which refuses a changed, missing or linked file. The contract also sets a common layout, which profiles adopt as they are refreshed: the rank launcher at `/usr/local/bin/tensorfold-entrypoint`, static files under `/opt/tensorfold-mod/`, the engine's `oom_score_adj` at 1000, and no lab addresses, host names or paths in recipes or mods. GLM `3fd60dfc` and DeepSeek `2970bcd` follow it. GLM v1.10 and the Mia Qwen mods install their own launcher and readiness paths and leave the engine's OOM score unchanged. DeepSeek `6366d2c` sets the score but keeps its own paths, and its recipe names its dedicated runtime-cache root under `/opt/spark-cache`, which [#932](https://github.com/kelchm/home-lab/issues/932) settles.
 
 Profiles share one readiness gate, the [`tensorfold-readiness` mod](mods/tensorfold-readiness/), listed beside the engine's own mod and called from `post_exec` as `python3 /opt/tensorfold-readiness/readiness.py --model NAME --context WINDOW --lanes STREAMS --efforts LEVELS`. It requires health in the server's own format: the Zig servers' `status`, `warming` and `max_batch_size`, or Mia's Python server's strict `ok`, streams and window, plus a pool floor when the profile passes `--min-pool-tokens`. It also requires a `/v1/models` entry with `owned_by: tensorfold`, `context_length` and `max_model_len` equal to the window, and exactly the profile's reasoning levels, in the server's order. It then needs one correct concurrent reply per stream and one tool call. Where the server has `/tokenize`, it also checks that each advertised level renders its own prompt and that every other standard level name renders as the nearest of them. `--min-pool-tokens` and `--warmup-words` are optional, for the Python server's pool floor and shape warmup. SparkRun 0.3.10's own readiness probe checks HTTP status only, and it discards a passing hook's output; to keep the gate's output, run the same command once more against the live server from the head's rank container. Profiles move onto the gate as their recipes are refreshed; until then each mod keeps its own hook.
 

@@ -1,0 +1,46 @@
+{
+  "engine_repository": "bertholomus/TensorFold",
+  "engine_branch": "deepseek-v41-zig",
+  "engine_revision": "2970bcdbf8d078d1f29aa194e6285d8759fba4ec",
+  "inputs_branch": "deepseek-v41-tp2",
+  "inputs_revision": "469171515cd3c0df14346d83d763b4e89d4bafcf",
+  "patches": {
+    "patches/0001-models-discovery-483-819.patch": "ashhart/TensorFold #483 and #819, reduced to zig/src/server",
+    "patches/0002-call-gate.patch": "MiaAI-Lab/DeepSeek-v4.1-Flash-1017-2x-DGX-Sparks@ef6a308b zig/patches/0004-call-gate.patch",
+    "patches/0003-rdma-idle-nap.patch": "MiaAI-Lab/DeepSeek-v4.1-Flash-1017-2x-DGX-Sparks@a22ca693 zig/patches/0010-rdma-idle-nap.patch",
+    "patches/0004-literal-added-tokens.patch": "bertholomus/TensorFold#36@c2c05641",
+    "patches/0005-deepseek-efforts.patch": "this lab: DeepSeek's own efforts (low, high, max) and nearest-level coercion of other names",
+    "patches/0006-literal-object-keys.patch": "this lab: 0004 also keeps a quoted added token in a JSON object key as text"
+  },
+  "image": "dsv41-tf:2970bcd-4691715-e1c6ebe02e2a",
+  "image_id": "sha256:a7845d4e5e84c63c55bca2a382c878f7cd964ce8f14daeddab56dcaef2333178",
+  "kit": {
+    "repository": "bertholomus/DeepSeek-V4.1-Flash-TensorFold-TP2-2xGB10",
+    "revision": "4996441a82d95b9a7853b01a1255e1dafc926387",
+    "bias_vl_sha256": "4745da4b5f24c67170ee24e2c95652e45ba13c0ca0abc2be3cc7a2a3545792d0"
+  },
+  "engram": {
+    "repository": "deepseek-ai/DeepSeek-V4.1-Flash-1017",
+    "revision": "1bae0e1088993b9b82de08f59de5be5a34e42170",
+    "files": {
+      "config.json": "09917a9139b22d5bf8be52132787f435147b1020",
+      "model-00047-of-00048.safetensors": "76a05106ece259be83d1bfea0dcb54f23377864ee60fd321690f35e6698a2af5",
+      "model-00048-of-00048.safetensors": "9dc51433e195bc78b5ad846b68643cc0351d3b174e5e4309222d3b7402c83afd"
+    }
+  },
+  "mod_files": {
+    "build/Dockerfile": "d384cf938d0d261be3fcedd3bbdc59a7411158f44e770c8f3649881b00862559",
+    "build/build.sh": "fe2b05fa74b754300dcd3088579238c716411c6ca4f6506947f617ae7aa7d148",
+    "chat_template.jinja": "776a62afc3e0e814c84fcc1e453ab38ea7b9b2e40fc7bfdbbc97ed8d2ba464ee",
+    "engram.index.json": "bf54f3f6980213246daf176064446d91e1d3734eea95228ad459a01fff766ab5",
+    "patches/0001-models-discovery-483-819.patch": "11889105a3c71326065aec4a118805d7d1e75ab5af72eeb903edb1800ca725a7",
+    "patches/0002-call-gate.patch": "285a2b02e8018ecea32a4920b2e2186f4e382ab6340036cc6deaf492a1920fd6",
+    "patches/0003-rdma-idle-nap.patch": "5921662bc27c4f87a3f30587d57da11391d710eb4eaa92e25e05a3c5f74b72f8",
+    "patches/0004-literal-added-tokens.patch": "69d2becbccee30bf1b0afe08aecfa70fc446dfdeb62e66ae7aa43dde0ee46da3",
+    "patches/0005-deepseek-efforts.patch": "ad04c267ff67cadd705a8b4596a92b2f88af5e5a2fd6e978566d3221828ab2d2",
+    "patches/0006-literal-object-keys.patch": "902838061c9b6ef41176d2c6c72cae005eee0202c83d37ba7aafc93856159360",
+    "prepare.py": "476f5446f160498750460e9c4c43df4e27c1be326e6aa6b89b6677f4a8e2bab8",
+    "run.sh": "e223322ce028bf007329a8484bcd73811aadcc400c9f1414521f7671ff5b1977",
+    "serve.py": "6bc2ba8d8fc1d932d6d4b4e2b316a9019a3b2baa01ed649fb3eadabb9af592b6"
+  }
+}
