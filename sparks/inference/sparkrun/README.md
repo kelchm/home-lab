@@ -59,7 +59,7 @@ Nothing is built here. For a new kit revision, check the published image before 
 2. Apply the kit's patches to the pinned engine commit with `patch -p0`, check that they hash with the kit's extras line to the image's `tf.patches` label, and compare the image's patched-files layer with the reconstruction, at least for every file the mod guards or reads.
 3. Add a new versioned recipe and mod with the new image, upstream hashes and guarded hashes, so the current profile stays as the rollback.
 
-Before any live check, run the source regressions against the installed code inside each rank's container: the [Mia regression](tests/mia_tensorfold_site.py) for call-ID reasoning and HTTP health, the [capacity regression](tests/mia_tensorfold_capacity.py) for the queue cap and HTTP 429, and on v1.10 the [v1.10 regression](tests/mia_tensorfold_v110.py) for its launcher switches, streamed admission and Anthropic route. They use mocked handlers and decoders, so they are source evidence, not live traffic.
+Before any live check, run the source regressions against the installed code inside each rank's container: the [Mia regression](tests/mia_tensorfold_site.py) for call-ID reasoning and HTTP health, the [capacity regression](tests/mia_tensorfold_capacity.py) for the queue cap and HTTP 429, and on v1.10 the [v1.10 regression](tests/mia_tensorfold_v110.py) for its launcher switches, streamed admission and Anthropic route. Feed each one unchanged to the rank's own Python, from the head for rank 0 and the worker for rank 1: `docker exec -i -e PYTHONDONTWRITEBYTECODE=1 <rank container> python3 -B - < tests/mia_tensorfold_site.py`. They use mocked handlers and decoders, so they are source evidence, not live traffic.
 
 ### Launch, stop and roll back
 
@@ -71,14 +71,14 @@ python3 mods/tensorfold-readiness/prepare.py --check
 python3 mods/mia-tensorfold-glm53-3fd60dfc/prepare.py --check
 sparkrun run "$glm" --cluster sparks --no-auto-detect --no-sync-tuning --no-follow --dry-run
 sparkrun run "$glm" --cluster sparks --no-auto-detect --no-sync-tuning --no-follow
-sparkrun logs "$glm" --cluster sparks
+sparkrun logs "$glm" --cluster sparks --all-sources
 # When stopping or replacing the workload:
 sparkrun stop "$glm" --cluster sparks
 ```
 
 v1.10 is `glm53-exl3-tp2-mia-tf-v1.10-mia-1m.yaml`, with `mods/mia-tensorfold-v1.10`. `run --no-follow` returns after the readiness hook passes: four streams, the window, at least 1.2M pool tokens and the C4 shape warmup, and for `3fd60dfc` also the discovery fields, the four levels and their renders, a reply on every stream and a tool call. v1.10's October 8 boot took 349 s with the weights in place.
 
-After a boot, run the shared checks in [Validate](#validate) and three for GLM: the [cut-call probe](tests/mia_tensorfold_cut_calls.py), which cuts a real tool call at its output limit and needs `--model`, `--output` and the pinned `tokenizer.json` as `--tokenizer`; a `/v1/messages` tool turn; and a request with a chunked body. The repository has no script for the last two.
+After a boot, run the shared checks in [Validate](#validate) and three for GLM: the [cut-call probe](tests/mia_tensorfold_cut_calls.py), which cuts a real tool call at its output limit and needs `--model`, `--output` and the pinned `tokenizer.json` as `--tokenizer`. It imports `tokenizers`, which the head's Python lacks, so run it from the workstation with `--url http://10.32.21.31:8888/v1`; a `/v1/messages` tool turn; and a request with a chunked body. The repository has no script for the last two.
 
 The rollback from `3fd60dfc` is v1.10: stop `3fd60dfc` with its own recipe, then launch v1.10 the same way. The two differ in image and served name, so neither recipe's `stop` or `logs` finds the other's instance, and each image has its own kernel cache. A client with a fixed `GLM-5.3-Flash-EXL3` entry needs the new name; clients that read `/v1/models` follow it.
 
@@ -501,7 +501,7 @@ export PATH="$HOME/.local/share/sparkrun-glm53-0310/bin:$PATH"
 cd ~/sparkrun/recipes/glm53
 ```
 
-The sync does not delete: a recipe or mod removed from the repository stays on the head if an earlier sync put it there, so select recipes by their path here. The directory keeps its `glm53` name until [#932](https://github.com/kelchm/home-lab/issues/932) settles the host layout.
+The sync does not delete: a recipe or mod removed from the repository stays on the head if an earlier sync put it there, and its `prepare.py --check` can fail because its inputs are gone. Select recipes by their path, and check only the mods a recipe declares. The directory keeps its `glm53` name until [#932](https://github.com/kelchm/home-lab/issues/932) settles the host layout.
 
 SparkRun downloads each recipe's pinned snapshots into the HF cache and copies them to the worker, reusing snapshots already present. With the head as its own control host and `transfer_mode: auto`, that download first fills the SSH user's `~/.cache/huggingface`, not the cluster cache, so a snapshot staged only under `/opt/spark-cache/huggingface` is fetched again at launch, after the previous workload has stopped. When staging weights ahead of a switch, make the snapshot visible in the home cache as well, and confirm SparkRun's download step reports it cached before stopping anything; the two caches share a filesystem, so `cp -al` links it across without a second copy. SparkRun clears page cache after distribution; if its sudo operation is unavailable, use `sparkrun setup clear-cache --cluster sparks --save-sudo`.
 
@@ -534,7 +534,7 @@ The [adapter](plugins/tensorfold/__init__.py) requires exactly two TP2 ranks wit
 
 Each mod pins its image, weights and inputs in `upstream.lock.json`, and its `run.sh` starts with `prepare.py --check`, which refuses a changed, missing or linked file. The contract also sets a common layout, which profiles adopt as they are refreshed: the rank launcher at `/usr/local/bin/tensorfold-entrypoint`, static files under `/opt/tensorfold-mod/`, the engine's `oom_score_adj` at 1000, and no lab addresses, host names or paths in recipes or mods. GLM `3fd60dfc` follows it. GLM v1.10 and the Mia Qwen mods install their own launcher and readiness paths and leave the engine's OOM score unchanged. DeepSeek `6366d2c` sets the score but keeps its own paths, and its recipe names its dedicated runtime-cache root under `/opt/spark-cache`, which [#932](https://github.com/kelchm/home-lab/issues/932) settles.
 
-Profiles share one readiness gate, the [`tensorfold-readiness` mod](mods/tensorfold-readiness/), listed beside the engine's own mod and called from `post_exec` as `python3 /opt/tensorfold-readiness/readiness.py --model NAME --context WINDOW --lanes STREAMS --efforts LEVELS`. It requires health in the server's own format: the Zig servers' `status`, `warming` and `max_batch_size`, or Mia's Python server's strict `ok`, streams and window, plus a pool floor when the profile passes `--min-pool-tokens`. It also requires a `/v1/models` entry with `owned_by: tensorfold`, `context_length` and `max_model_len` equal to the window, and exactly the profile's reasoning levels, in the server's order. It then needs one correct concurrent reply per stream and one tool call. Where the server has `/tokenize`, it also checks that each advertised level renders its own prompt and that every other standard level name renders as the nearest of them. `--min-pool-tokens` and `--warmup-words` are optional, for the Python server's pool floor and shape warmup. SparkRun 0.3.10's own readiness probe checks HTTP status only. Profiles move onto the gate as their recipes are refreshed; until then each mod keeps its own hook.
+Profiles share one readiness gate, the [`tensorfold-readiness` mod](mods/tensorfold-readiness/), listed beside the engine's own mod and called from `post_exec` as `python3 /opt/tensorfold-readiness/readiness.py --model NAME --context WINDOW --lanes STREAMS --efforts LEVELS`. It requires health in the server's own format: the Zig servers' `status`, `warming` and `max_batch_size`, or Mia's Python server's strict `ok`, streams and window, plus a pool floor when the profile passes `--min-pool-tokens`. It also requires a `/v1/models` entry with `owned_by: tensorfold`, `context_length` and `max_model_len` equal to the window, and exactly the profile's reasoning levels, in the server's order. It then needs one correct concurrent reply per stream and one tool call. Where the server has `/tokenize`, it also checks that each advertised level renders its own prompt and that every other standard level name renders as the nearest of them. `--min-pool-tokens` and `--warmup-words` are optional, for the Python server's pool floor and shape warmup. SparkRun 0.3.10's own readiness probe checks HTTP status only, and it discards a passing hook's output; to keep the gate's output, run the same command once more against the live server from the head's rank container. Profiles move onto the gate as their recipes are refreshed; until then each mod keeps its own hook.
 
 ## Operate and roll back
 
@@ -543,12 +543,12 @@ From `~/sparkrun/recipes/glm53` on the head:
 ```sh
 recipe="$PWD/<family>/<profile>.yaml"  # The recipe that launched the running instance.
 sparkrun status --cluster sparks
-sparkrun logs "$recipe" --cluster sparks
+sparkrun logs "$recipe" --cluster sparks --all-sources
 # When stopping or replacing the workload:
 sparkrun stop "$recipe" --cluster sparks
 ```
 
-`run --no-follow` waits for readiness because every recipe has `post_exec`. A failed hook makes the command fail but does not stop the server; read the logs and stop the failed instance before rolling back. Containers need an explicit SparkRun launch after a host reboot.
+Without `--all-sources`, `logs` reads only rank 0. `run --no-follow` waits for readiness because every recipe has `post_exec`. A failed hook makes the command fail but does not stop the server; read the logs and stop the failed instance before rolling back. Containers need an explicit SparkRun launch after a host reboot.
 
 SparkRun 0.3.10 finds a workload for `stop`, `logs` and relaunch by its runtime, model, image, port, served name and parallelism, not by filename, mod path or hooks. A recipe that differs in any of those does not find another's instance, and with the greedy scheduler `run` does not check for one either, so stopping the previous profile first, with the recipe that launched it, is a manual step. Never overlap inference stacks on these GPUs.
 
@@ -566,14 +566,14 @@ Every switch of the served model starts from these checks:
 - both CX7 rails passing the check below;
 - the recipe's mods passing `prepare.py --check`, and a dry run of the recipe.
 
-After stopping the old instance, both hosts should have about 116 GiB available. From the stop until the trial ends, sample both hosts every few seconds: `MemAvailable`, both management links and the kernel log. Aim for 8 GiB available on each host.
+After stopping the old instance, both hosts should have about 116 GiB available. From the stop until the trial ends, sample both hosts every 3 s: `MemAvailable`, both management links' carrier counters and new kernel-log lines. Aim for 8 GiB available on each host. Treat a sampler that stops as samples down.
 
-- **From the launch until the trial ends,** stop the candidate on an allocation, NVRM, Xid, RoCE or OOM line in either kernel log, a rank that exits or restarts, HTTP 503 from `/health`, or headroom below 2 GiB for three samples in a row. Stop it too if readiness has not passed within 15 minutes. A nonzero launch or a failed readiness hook leaves the server running, so stopping it is always a separate step.
+- **From the stop until the trial ends,** stop the candidate on an allocation, NVRM, Xid, RoCE or OOM line in either kernel log, a rank that exits or restarts, HTTP 503 from `/health`, or headroom below 2 GiB for three samples in a row. Stop it too if readiness has not passed within 15 minutes. A nonzero launch or a failed readiness hook leaves the server running, so stopping it is always a separate step.
 - **A management link or the samples down for 30 s:** during the boot, stop the candidate; once it is ready, end the load and leave the server running. A drop that recovers is recorded, and timings within 15 s of it are excluded.
-- **Stopping:** use the recipe that launched the candidate. Record each rank's container ID when it starts; if a rank was replaced or a host rebooted, stop the recorded containers by ID instead, because the recipe also matches a replacement.
-- **After a carrier drop,** wait for a quiet period with steady counters before the next launch.
+- **Stopping:** use the recipe that launched the candidate, then confirm both GPUs are idle. Record each rank's container ID when it starts. SparkRun has no stop by ID and its recipe also matches a replacement, so if a rank was replaced or a host rebooted, `docker stop` the recorded containers by ID instead; that is the one exception.
+- **Before a stop or launch,** require 60 s of both links up at 10GbE with unchanged carrier counters, and wait out another 60 s after any drop.
 
-The rail check pairs each host's active RDMA devices by list position, as Mia's GLM engine pairs the ranks' devices, and sends unfragmentable full-size pings both ways between each pair's addresses. It changes nothing; read its output critically, including that the two hosts list the same number of devices. A failure holds the launch. After a boot, compare each rank's `NCCL_IB_HCA` between the hosts and read the rail count from the rank logs; on October 8 both ranks had `NCCL_IB_HCA=roceP2p1s0f0,rocep1s0f0`, two ports at 200G on `198.19.241.0/24` and `198.19.240.0/24` with MTU 9000.
+The rail check pairs each host's active RDMA devices by list position, as Mia's GLM engine pairs the ranks' devices, and sends unfragmentable full-size pings both ways between each pair's addresses. It changes nothing, and exits nonzero unless both rails pass and the two hosts list the same devices. A failure holds the launch. After a boot, compare each rank's `NCCL_IB_HCA` between the hosts, from each engine's environment, and read the rail count from rank 0's log, since rank 1 prints none; on October 8 both ranks had `NCCL_IB_HCA=roceP2p1s0f0,rocep1s0f0`, two ports at 200G on `198.19.241.0/24` and `198.19.240.0/24` with MTU 9000.
 
 ```bash
 rails() { for p in /sys/class/infiniband/*; do grep -q ACTIVE "$p/ports/1/state" 2>/dev/null || continue; n=$(ls "$p/device/net" | head -n 1); a=$(ip -o -4 addr show dev "$n" | awk '{print $4; exit}' | cut -d/ -f1); echo "${p##*/} $n ${a:--} $(cat "/sys/class/net/$n/mtu")"; done; }
@@ -586,7 +586,7 @@ paste <(rails) <(ssh "$worker" "$(declare -f rails); rails") | while read -r hh 
   else
     echo "FAIL rail $hh/$hn $ha <-> ${wh:--}/${wn:--} ${wa:--}"
   fi
-done
+done | tee /dev/stderr | awk '/^PASS/ { p++ } /^FAIL/ { f++ } END { exit !(p == 2 && f == 0) }'
 ```
 
 ### Clients
