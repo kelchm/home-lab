@@ -854,7 +854,7 @@ def test_dsv41_recipe_maps_native_rank_wiring_to_both_engine_binaries(runtime, t
     cache = tmp_path / "runtime"
     (cache / "tf-ds-rank").mkdir(parents=True)
     (cache / "dsv41_token_map.json").write_text("{}")
-    fabric = {"NCCL_IB_HCA": "=rocep1s0f0:1,roceP2p1s0f0:1", "NCCL_IB_GID_INDEX": "3",
+    fabric = {"NCCL_IB_HCA": "=rocep1s0f0:1,roceP2p1s0f0:1", "NCCL_IB_GID_INDEX": "3", "FABRIC_MASTER": "198.19.240.11",
               "TF_DS_RANK_CACHE": str(cache / "tf-ds-rank"), "TF_DS_TOKEN_MAP": str(cache / "dsv41_token_map.json")}
     model, kit, engram = Path("/v/model"), Path("/v/kit"), Path("/v/engram")
     for rank in (0, 1):
@@ -884,6 +884,14 @@ def test_dsv41_recipe_maps_native_rank_wiring_to_both_engine_binaries(runtime, t
                "TF_DS_RANK_CACHE": str(tmp_path / "absent")}
     with pytest.raises(SystemExit, match="rank inputs"):
         serve.command(missing, model, kit, engram)
+    if "FABRIC_MASTER" in (bundle / "serve.py").read_text():
+        # The ranks link only over the fabric: no address in the recipe, and none at all fails closed.
+        assert not any(key.endswith("TP_MASTER") for key in recipe.env)
+        node = {**recipe.env, **_parse_env_command(_node_command(runtime, recipe, 0))[0], **fabric}
+        for unset in ({}, {"FABRIC_MASTER": ""}):
+            env = {key: value for key, value in node.items() if key != "FABRIC_MASTER"} | unset
+            with pytest.raises(SystemExit, match="FABRIC_MASTER"):
+                serve.command(env, model, kit, engram)
 
 
 def test_dsv41_views_link_read_only_snapshots_and_check_the_image_bias(tmp_path, monkeypatch, dsv41_recipe):

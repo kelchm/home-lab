@@ -3,7 +3,8 @@
 
 The weights, kit and Engram tables are read-only HF snapshots, so each rank first links three views under /tmp: the
 weights with this mod's chat template, the kit with the 1017 image routing bias made from the weights, and the
-Engram shards with their embed-only index.
+Engram shards with their embed-only index. The ranks link over the head's CX7 address, which the adapter passes as
+FABRIC_MASTER from SparkRun's fabric detection.
 """
 import hashlib
 import json
@@ -84,7 +85,11 @@ def command(env, model, kit, engram):
     rank = env["RANK"]
     if rank not in ("0", "1"):
         raise ValueError("the dsv41 TP2 engine requires rank 0 or 1")
-    master = env.get("DSV41_TP_MASTER") or env["MASTER"]
+    master = env.get("FABRIC_MASTER", "").strip()
+    if not master:
+        raise SystemExit("FABRIC_MASTER is unset: SparkRun found no reachable CX7 address for the head, and the ranks link "
+                         "only over the fabric")
+    print(f"dsv41 rank {rank}: tensor-parallel link on FABRIC_MASTER {master}:{env['MASTER_PORT']}", flush=True)
     devices = rdma_devices(env)
     for name in ("TF_DS_RANK_CACHE", "TF_DS_TOKEN_MAP"):
         if not Path(env[name]).exists():
