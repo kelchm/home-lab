@@ -34,7 +34,6 @@ from sparkrun.core.runtime_cache import (  # noqa: E402
 )
 from sparkrun.core.validation import ERROR  # noqa: E402
 from sparkrun.orchestration.job_metadata import derive_recipe_fingerprint  # noqa: E402
-from sparkrun.orchestration.executors.docker import DockerExecutor  # noqa: E402
 from sparkrun.runtimes import _cluster_ops  # noqa: E402
 from sparkrun.runtimes._cluster_ops import ClusterContext  # noqa: E402
 
@@ -42,19 +41,8 @@ TARGET = "Mia-AiLab/GLM-5.3-Flash-EXL3-TR3-4bpw"
 TARGET_REV = "25a44fdbf16862a46b7cc9921142c6c81350af2f"
 DRAFT = "incoai/GLM-5.3-Flash-DFlash2"
 DRAFT_REV = "dc77ff1c99eeb2df044ee3d4f0094eb033fee410"
-MIA_RECIPE_DIR = "mia-tensorfold-glm53-exl3-tp2"
-MIA_PROFILES = [
-    ("glm53-exl3-tp2-mia-tf-v1.10-mia-1m", "Mia-AiLab/GLM-5.3-Flash-EXL3-4bpw-TensorFold",
-     "078455ffe6472f9a52fbc1139f58b9db2881b25c", "1048576"),
-]
-QWEN_RECIPE_DIR = "mia-tensorfold-qwen38fn-tp2"
-QWEN_PROFILES = [
-    ("qwen38fn-nvfp4-tp2-mia-tf-v1.1-nvidia-1m", "nvidia/Qwen3.8-Flash-Next-NVFP4",
-     "fc694b54fb0174e0913e6adf86691ef85a4ead47", "Qwen3.8-Flash-Next"),
-    ("qwen38fn-int4ar-tp2-mia-tf-v1.1-azampatti-1m", "azampatti/Qwen3.8-Flash-Next-125B-A5B-INT4-AutoRound",
-     "1464274120d36a4d8fcaa934552334a7d83ce0fd", "Qwen3.8-Flash-Next-INT4-AR"),
-]
-MIA_MODS = Path(__file__).resolve().parents[1] / "mods"
+ROOT = Path(__file__).resolve().parents[1]
+RECIPES = sorted(path for path in ROOT.glob("*/*.yaml") if path.parent.name != "benchmarks")
 FABRIC_HEAD = "172.16.21.31"
 FABRIC_WORKER = "172.16.21.32"
 ENTRYPOINT = "/usr/local/bin/tf-test-entrypoint"
@@ -234,51 +222,9 @@ def test_prepare_distributes_declared_drafter(runtime):
     assert DRAFT not in before
 
 
-@pytest.mark.parametrize("profile,target,revision,context", MIA_PROFILES)
-def test_mia_recipe_reuses_native_rank_wiring(runtime, profile, target, revision, context):
-    root = Path(__file__).resolve().parents[1] / MIA_RECIPE_DIR
-    path = root / f"{profile}.yaml"
-    recipe = Recipe(yaml.safe_load(path.read_text()), source_path=str(path))
-    assert recipe.name == recipe.metadata["profile"] == profile
-    assert not [issue for issue in runtime.validate_recipe(recipe) if getattr(issue, "severity", None) == ERROR]
-    # The rank command inherits these settings from its container.
-    ctx = ClusterContext.build(
-        runtime, [FABRIC_HEAD, FABRIC_WORKER], recipe.container, "tf-profile-test",
-        recipe.env, None, None, dry_run=True, recipe=recipe,
-    )
-    script = DockerExecutor().generate_launch_script(
-        image=recipe.container, container_name="tf-profile-test", command="sleep infinity",
-        env=ctx.all_env, volumes=ctx.volumes,
-    )
-    assert "NCCL_CUMEM_ENABLE" not in script
-    for setting in ("TENSORFOLD_NUCLEUS_UNION=1", "TF_ROCE_WAIT_S=300", "TF_GLM_MAX_QUEUED=", "TF_GLM_DISPLAY_KV_MIB=0"):
-        assert setting in shlex.split(script)
-    spec = importlib.util.spec_from_file_location("mia_serve", root / recipe.mods[0] / "serve.py")
-    serve = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(serve)
-    for rank in (0, 1):
-        env, argv = _parse_env_command(_node_command(runtime, recipe, rank, init_port=29511))
-        assert argv == ["/usr/local/bin/glm53-mia-tf-entrypoint"]
-        assert env["MODEL_PATH"] == hf_snapshot_path(target, revision)
-        assert env["DRAFTER"] == hf_snapshot_path(DRAFT, "bf582e4eacc1810f76656d1811693ff6c6737d2a")
-        args = serve.command(env)
-        assert args[:3] == ["tensorfold", "serve", env["MODEL_PATH"]]
-        for flag, expected in (("--tp", "2"), ("--rank", str(rank)), ("--master", FABRIC_HEAD),
-                               ("--master-port", "29511"), ("--context", context),
-                               ("--parallel", "4"), ("--max-tokens", "32768")):
-            assert args[args.index(flag) + 1] == expected
-        assert ("--name" in args) is (rank == 0)
-        assert "--vision" in args and "--thinking" in args
-        assert not [arg for arg in args if arg.startswith(("--spill", "--snapshot-dir", "--mtp", "--no-drafts"))]
-    assert recipe.runtime_cache["key_by_image"] is True
-
-
-def test_mia_profiles_have_separate_native_cache_namespaces(runtime):
-    base = Path(__file__).resolve().parents[1]
-    paths = [base / MIA_RECIPE_DIR / f"{row[0]}.yaml" for row in MIA_PROFILES]
-    paths += [base / QWEN_RECIPE_DIR / f"{row[0]}.yaml" for row in QWEN_PROFILES]
+def test_recipes_have_separate_native_cache_namespaces(runtime):
     leaves = []
-    for path in paths:
+    for path in RECIPES:
         recipe = Recipe.from_dict(yaml.safe_load(path.read_text()))
         mounts = build_runtime_cache_mounts(
             runtime=runtime, recipe=recipe,
@@ -286,240 +232,29 @@ def test_mia_profiles_have_separate_native_cache_namespaces(runtime):
             root="/opt/spark-cache/huggingface/runtime-cache", image=recipe.container,
         )
         leaves.append(mounts.leaf)
-    assert len(set(leaves)) == len(paths)
+    assert len(set(leaves)) == len(RECIPES)
 
 
-@pytest.mark.parametrize("profile,target,revision,context", MIA_PROFILES)
-def test_mia_native_mod_transfer_is_self_contained(tmp_path, profile, target, revision, context):
-    root = Path(__file__).resolve().parents[1] / MIA_RECIPE_DIR
-    path = root / f"{profile}.yaml"
+@pytest.mark.parametrize("path", RECIPES, ids=lambda path: path.stem)
+def test_native_mod_transfer_is_self_contained(tmp_path, path):
     recipe = Recipe(yaml.safe_load(path.read_text()), source_path=str(path))
     fingerprint = derive_recipe_fingerprint(recipe)
     registry = mock.Mock()
     resolve_and_inject_mods(recipe, registry)
-    registry.get_registry.assert_not_called()
-    copy, command = recipe.pre_exec
-    assert copy["dest"] == "/workspace/mods/" + Path(recipe.mods[0]).name
-    assert copy["dest"] in command
+    assert registry.mock_calls == []
     assert derive_recipe_fingerprint(recipe) == fingerprint
-    bundle = tmp_path / Path(copy["copy"]).name
-    shutil.copytree(copy["copy"], bundle, ignore=shutil.ignore_patterns("__pycache__"))
-    lock = json.loads((bundle / "upstream.lock.json").read_text())
-    assert lock["image"] == recipe.container
-    subprocess.run([sys.executable, str(bundle / "prepare.py"), "--check"], cwd=tmp_path, check=True)
-
-    spec = importlib.util.spec_from_file_location("mia_readiness", bundle / "readiness.py")
-    ready = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(ready)
-    hook = shlex.split(recipe.post_exec[0])
-    expected_context = int(hook[hook.index("--context") + 1])
-    body = {"ok": True, "mode": "strict", "streams": {"max": 4},
-            "context_length": int(context), "pool_tokens": 1200000}
-    ready.check_health(body, 4, expected_context, 1200000)
-    with pytest.raises(RuntimeError, match="context"):
-        ready.check_health({**body, "context_length": int(context) - 1}, 4, expected_context, 1200000)
-
-
-@pytest.mark.parametrize("change", ("content", "symlink"))
-def test_mia_frozen_bundle_rejects_changed_helpers(tmp_path, change):
-    source = MIA_MODS / "mia-tensorfold-v1.10"
-    bundle = tmp_path / source.name
-    shutil.copytree(source, bundle, ignore=shutil.ignore_patterns("__pycache__"))
-    helper = bundle / "readiness.py"
-    if change == "content":
-        helper.write_text(helper.read_text() + "\n# Unreviewed change\n")
-    else:
-        outside = tmp_path / "shared-readiness.py"
-        helper.rename(outside)
-        helper.symlink_to(outside)
-    result = subprocess.run([sys.executable, str(bundle / "prepare.py")], capture_output=True, text=True)
-    assert result.returncode != 0
-    assert "Missing or changed frozen mod file: readiness.py" in result.stderr
-
-
-@pytest.mark.parametrize("profile,target,revision,served", QWEN_PROFILES)
-def test_qwen_recipe_maps_native_rank_wiring_to_zig_cli(runtime, tmp_path, profile, target, revision, served):
-    root = Path(__file__).resolve().parents[1] / QWEN_RECIPE_DIR
-    path = root / f"{profile}.yaml"
-    recipe = Recipe(yaml.safe_load(path.read_text()), source_path=str(path))
-    assert recipe.name == recipe.metadata["profile"] == profile
-    assert not [issue for issue in runtime.validate_recipe(recipe) if getattr(issue, "severity", None) == ERROR]
-    ctx = ClusterContext.build(
-        runtime, [FABRIC_HEAD, FABRIC_WORKER], recipe.container, "tf-profile-test",
-        recipe.env, None, None, dry_run=True, recipe=recipe,
-    )
-    script = shlex.split(DockerExecutor().generate_launch_script(
-        image=recipe.container, container_name="tf-profile-test", command="sleep infinity",
-        env=ctx.all_env, volumes=ctx.volumes,
-    ))
-    for setting in ("TF_FLASHNEXT_YARN=4", "TF_FLASHNEXT_ROCE=1", "TENSORFOLD_MEMORY_RESERVE_GIB=10",
-                    "NCCL_MIN_NCHANNELS=4", "NCCL_MAX_NCHANNELS=4"):
-        assert setting in script
-    mod = root / recipe.mods[0]
-    lock = json.loads((mod / "upstream.lock.json").read_text())
-    assert lock["image"] == recipe.container
-    assert lock["kit_revision"] == recipe.metadata["kit_revision"]
-    bundle = tmp_path / mod.name
-    shutil.copytree(mod, bundle, ignore=shutil.ignore_patterns("__pycache__"))
-    subprocess.run([sys.executable, str(bundle / "prepare.py"), "--check"], cwd=tmp_path, check=True)
-    spec = importlib.util.spec_from_file_location("qwen_serve", bundle / "serve.py")
-    serve = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(serve)
-    for rank in (0, 1):
-        env, argv = _parse_env_command(_node_command(runtime, recipe, rank, init_port=29511))
-        assert argv == ["/usr/local/bin/qwen38fn-mia-tf-entrypoint"]
-        assert "DRAFTER" not in env
-        # The rank command inherits the recipe env from its container.
-        args = serve.command({**recipe.env, **env})
-        assert args[:3] == ["tensorfold-native", "serve", hf_snapshot_path(target, revision)]
-        for flag, expected in (("--name", served), ("--port", "8888"), ("--context", "1048576"),
-                               ("--parallel", "16"), ("--max-tokens", "32768"), ("--kv-dtype", "fp8"),
-                               ("--vision-max-images", "50"), ("--vision-max-videos", "4"),
-                               ("--vision-image-tokens", "16384"), ("--tp", "2"), ("--rank", str(rank)),
-                               ("--master", FABRIC_HEAD), ("--master-port", "29511")):
-            assert args[args.index(flag) + 1] == expected
-        assert "--vision" in args and "--thinking" in args and "--no-drafts" not in args
-
-    spec = importlib.util.spec_from_file_location("qwen_readiness", bundle / "readiness.py")
-    ready = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(ready)
-    hook = shlex.split(recipe.post_exec[0])
-    assert hook[hook.index("--model") + 1] == served
-    body = {"status": "ok", "warming": False, "model": served, "max_batch_size": 16}
-    ready.check_health(body, served, 16)
-    for change in ({"status": "error"}, {"warming": True}, {"model": "other"}, {"max_batch_size": 8}):
-        with pytest.raises(RuntimeError):
-            ready.check_health({**body, **change}, served, 16)
-
-
-def test_qwen_frozen_bundle_rejects_changed_helpers(tmp_path):
-    source = Path(__file__).resolve().parents[1] / "mods/mia-tensorfold-qwen38fn-v1.1"
-    bundle = tmp_path / source.name
-    shutil.copytree(source, bundle, ignore=shutil.ignore_patterns("__pycache__"))
-    helper = bundle / "serve.py"
-    helper.write_text(helper.read_text() + "\n# Unreviewed change\n")
-    result = subprocess.run([sys.executable, str(bundle / "prepare.py")], capture_output=True, text=True)
-    assert result.returncode != 0
-    assert "Missing or changed frozen mod file: serve.py" in result.stderr
-
-
-def test_mia_v110_recipe_states_the_pinned_launcher_defaults():
-    path = Path(__file__).resolve().parents[1] / MIA_RECIPE_DIR / "glm53-exl3-tp2-mia-tf-v1.10-mia-1m.yaml"
-    recipe = Recipe(yaml.safe_load(path.read_text()), source_path=str(path))
-    lock = json.loads((MIA_MODS / "mia-tensorfold-v1.10/upstream.lock.json").read_text())
-    # The lock records what the pinned scripts/config.sh exports with no local.sh or .env.
-    launcher = lock["launcher_env"]
-    assert len(launcher) == 38
-    assert {key: recipe.env.get(key) for key in launcher} == launcher
-    engine_only = {key for key in set(recipe.env) - set(launcher) if key.startswith(("TENSORFOLD_", "TF_"))}
-    assert engine_only == {
-        "TF_GLM_LOOP_GUARD", "TF_GLM_KEEP_REASONING", "TF_GLM_KEEP_REASONING_MB", "TENSORFOLD_GLM_IMAGE_TOKENS",
-        "TENSORFOLD_GLM_VIDEO_TOKENS", "TENSORFOLD_GLM_VIDEO_FRAMES", "TENSORFOLD_GLM_MAX_IMAGES",
-        "TENSORFOLD_GLM_MAX_VIDEOS", "TENSORFOLD_GLM_REQUEST_IMAGE_TOKENS", "TENSORFOLD_GLM_REQUEST_VIDEO_TOKENS"}
-    # Stated independently of the lock: the sampled-decode default is on and every optional v1.9/v1.10 switch is off.
-    assert recipe.env["TENSORFOLD_NUCLEUS_UNION"] == "1"
-    for key, off in (("TF_GLM_EFFORT_TAIL", "0"), ("TF_GLM_CACHE_SHARE_PCT", "0"), ("TF_GLM_LOOP_GUARD", "0"),
-                     ("TF_GLM_KEPT_BYTES_GIB", "0"), ("TF_GLM_KEEP_PER_CHAT", "0"), ("TF_GLM_EXL3_DEC_ORDER", "0"),
-                     ("TF_GLM_DISPLAY_KV_MIB", "0"), ("TF_GLM_DISPLAY_KV_BACKEND", "drm"), ("TF_GLM_MAX_QUEUED", ""),
-                     ("TF_GLM_MTP", "auto")):
-        assert recipe.env[key] == off, key
-    assert not [key for key in recipe.env if "SPILL" in key]
-    assert (recipe.env["TENSORFOLD_MEMORY_RESERVE_GIB"], recipe.env["TF_GLM_CACHE_GIB"]) == ("14.5", "12.5")
-    for field in ("kit_revision", "engine_revision", "upstream_patch_count", "upstream_patch_hash"):
-        assert recipe.metadata[field] == lock[field], field
-    assert recipe.metadata["site_backports"] == "exact-tool-turn-reasoning, strict-concurrent-health"
-    hook = shlex.split(recipe.post_exec[0])
-    assert hook[hook.index("--min-pool-tokens") + 1] == "1200000"
-
-
-def test_mia_v110_bundle_has_no_sibling_or_linked_fallback(tmp_path):
-    for name in ("mia-tensorfold-v1.10", "mia-tensorfold-sibling"):
-        shutil.copytree(MIA_MODS / "mia-tensorfold-v1.10", tmp_path / name, ignore=shutil.ignore_patterns("__pycache__"))
-    bundle = tmp_path / "mia-tensorfold-v1.10"
-    check = [sys.executable, str(bundle / "prepare.py"), "--check"]
-    subprocess.run(check, check=True, capture_output=True)
-    # A sibling mod's byte-identical launcher and readiness gate must not stand in for a missing helper.
-    for name in ("serve.py", "readiness.py"):
-        (bundle / name).rename(bundle / (name + ".moved"))
-        result = subprocess.run(check, capture_output=True, text=True)
-        assert result.returncode != 0 and f"Missing or changed frozen mod file: {name}" in result.stderr
-        (bundle / (name + ".moved")).rename(bundle / name)
-    manifest = bundle / "upstream.lock.json"
-    manifest.rename(tmp_path / "shared.lock.json")
-    manifest.symlink_to(tmp_path / "shared.lock.json")
-    result = subprocess.run(check, capture_output=True, text=True)
-    assert result.returncode != 0 and "Missing or linked Mia TensorFold mod manifest" in result.stderr
-
-
-def _synthetic_guard_tree(tmp_path):
-    """A mod copy whose pins describe small stand-in sources; the real pins accept only the pinned image's files."""
-    bundle = tmp_path / "mia-tensorfold-v1.10"
-    shutil.copytree(MIA_MODS / "mia-tensorfold-v1.10", bundle, ignore=shutil.ignore_patterns("__pycache__"))
-    spec = importlib.util.spec_from_file_location("mia_site_fixes", bundle / "site_fixes.py")
-    fixes = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(fixes)
-    sources = {
-        "families/glm5_next/cuda/kept_reasoning.py": (fixes.reasoning, '"""Stand-in.\n\n'
-            'ids). Here the signature covers the whole conversation before the calls, not only the last user message, '
-            'so a reply\nis only ever put back into the conversation it was written for.\n"""\n'
-            'def _keys(history, calls):\n    ids = []\n'
-            '    return [i for i in ids if isinstance(i, str) and _OUR_ID.match(i)] + [signature(history, calls)]\n'),
-        "cuda/health.py": (fixes.health, "def snapshot(app, scheduler=None, decoder=None):\n    if app:\n"
-                                         "        body = {}\n        return body\n"),
-        "cuda/http.py": (fixes.http, "def get(self, app, health):\n    if app:\n        if health:\n"
-                                     "            if self:\n                self._json(200, health.of(app).snapshot(app))\n"),
-    }
-    root = tmp_path / "tensorfold"
-    lock = json.loads((bundle / "upstream.lock.json").read_text())
-    for name, (transform, text) in sources.items():
-        (root / name).parent.mkdir(parents=True, exist_ok=True)
-        (root / name).write_text(text)
-        lock["installed_files"][name] = {
-            "upstream_sha256": hashlib.sha256(text.encode()).hexdigest(),
-            "site_sha256": hashlib.sha256(transform(text).encode()).hexdigest()}
-    (bundle / "upstream.lock.json").write_text(json.dumps(lock))
-    return fixes, root, {name: text for name, (_, text) in sources.items()}
-
-
-def test_mia_v110_site_guards_check_every_source_before_writing(tmp_path):
-    fixes, root, upstream = _synthetic_guard_tree(tmp_path)
-    read = lambda: {name: (root / name).read_text() for name in upstream}
-    # The real lock refuses anything but the pinned image's source.
-    result = subprocess.run([sys.executable, str(MIA_MODS / "mia-tensorfold-v1.10/site_fixes.py"), "--root", str(root)],
-                            capture_output=True, text=True)
-    assert result.returncode != 0 and "installed source drifted" in result.stderr
-    assert read() == upstream
-
-    last = "cuda/http.py"  # Checked last: a refusal here must leave the first two untouched.
-    (root / last).write_text(upstream[last] + "# Unreviewed change\n")
-    with pytest.raises(ValueError, match="installed source drifted: cuda/http.py"):
-        fixes.apply(root)
-    assert {name: text for name, text in read().items() if name != last} == \
-        {name: text for name, text in upstream.items() if name != last}
-
-    outside = tmp_path / "shared-http.py"
-    outside.write_text(upstream[last])
-    (root / last).unlink()
-    (root / last).symlink_to(outside)
-    with pytest.raises(ValueError, match="Missing or linked installed source: cuda/http.py"):
-        fixes.apply(root)
-    (root / last).unlink()
-    with pytest.raises(ValueError, match="Missing or linked installed source: cuda/http.py"):
-        fixes.apply(root)
-    assert outside.read_text() == upstream[last]
-    assert {name: (root / name).read_text() for name in upstream if name != last} == \
-        {name: text for name, text in upstream.items() if name != last}
-
-    (root / last).write_text(upstream[last])
-    fixes.apply(root)
-    guarded = read()
-    assert all(guarded[name] != upstream[name] for name in upstream)
-    compile(guarded["cuda/health.py"], "health.py", "exec")
-    fixes.apply(root)  # A second pass, and a pass after a partial write, change nothing further.
-    assert read() == guarded
-    (root / last).write_text(upstream[last])
-    fixes.apply(root)
-    assert read() == guarded
+    assert len(recipe.pre_exec) == 2 * len(recipe.mods)
+    for mod, copy, command in zip(recipe.mods, recipe.pre_exec[::2], recipe.pre_exec[1::2]):
+        assert copy["dest"] == "/workspace/mods/" + Path(mod).name
+        assert copy["dest"] in command
+        assert Path(copy["copy"]) == (path.parent / mod).resolve()
+        bundle = tmp_path / Path(mod).name
+        shutil.copytree(copy["copy"], bundle, ignore=shutil.ignore_patterns("__pycache__", "out"))
+        assert not (bundle / "out").exists()
+        lock = json.loads((bundle / "upstream.lock.json").read_text())
+        if "image" in lock:
+            assert recipe.container in (lock["image"], lock.get("image_id"))
+        subprocess.run([sys.executable, str(bundle / "prepare.py"), "--check"], cwd=tmp_path, check=True)
 
 
 def test_runtime_cache_and_extra_env_stay_on_managed_namespace(runtime):
@@ -676,8 +411,6 @@ def test_native_lifecycle_gates_tcpstore_then_starts_rank1(runtime, monkeypatch)
 DSV41_RECIPES = sorted((Path(__file__).resolve().parents[1] / "bertholomus-tensorfold-dsv41-tp2").glob("*.yaml"))
 DSV41_TARGET = "LibertAIDAI/DeepSeek-V4.1-Flash-1017-EXL3-2.9bpw"
 DSV41_SERVED = "DeepSeek-V4.1-Flash-1017"
-# The rollback profile, from before the shared contract: its recipe names the fabric address and its mod keeps its own readiness.
-DSV41_LEGACY = "dsv41-1017-exl3-tp2-bth-tf-6366d2c-libertai-1m"
 
 
 @pytest.fixture(params=DSV41_RECIPES, ids=lambda path: path.stem)
@@ -690,19 +423,14 @@ def _dsv41_bundle(tmp_path, path):
     source = next(path.parent / mod for mod in recipe.mods if (path.parent / mod / "serve.py").exists())
     bundle = tmp_path / source.name
     shutil.copytree(source, bundle, ignore=shutil.ignore_patterns("__pycache__"))
-    modules = {}
-    for name in ("serve", "readiness"):
-        if not (bundle / f"{name}.py").exists():
-            modules[name] = None
-            continue
-        spec = importlib.util.spec_from_file_location(f"dsv41_{name}", bundle / f"{name}.py")
-        modules[name] = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(modules[name])
-    return recipe, bundle, modules["serve"], modules["readiness"]
+    spec = importlib.util.spec_from_file_location("dsv41_serve", bundle / "serve.py")
+    serve = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(serve)
+    return recipe, bundle, serve
 
 
 def test_dsv41_recipe_maps_native_rank_wiring_to_both_engine_binaries(runtime, tmp_path, dsv41_recipe):
-    recipe, bundle, serve, _ = _dsv41_bundle(tmp_path, dsv41_recipe)
+    recipe, bundle, serve = _dsv41_bundle(tmp_path, dsv41_recipe)
     context = str(recipe.defaults["context"])
     assert recipe.name == recipe.metadata["profile"] == dsv41_recipe.stem
     assert not [issue for issue in runtime.validate_recipe(recipe) if getattr(issue, "severity", None) == ERROR]
@@ -749,18 +477,17 @@ def test_dsv41_recipe_maps_native_rank_wiring_to_both_engine_binaries(runtime, t
                "TF_DS_RANK_CACHE": str(tmp_path / "absent")}
     with pytest.raises(SystemExit, match="rank inputs"):
         serve.command(missing, model, kit, engram)
-    if recipe.name != DSV41_LEGACY:
-        # The ranks link only over the fabric: no address in the recipe, and none at all fails closed.
-        assert not any(key.endswith("TP_MASTER") for key in recipe.env)
-        node = {**recipe.env, **_parse_env_command(_node_command(runtime, recipe, 0))[0], **fabric}
-        for unset in ({}, {"FABRIC_MASTER": ""}):
-            env = {key: value for key, value in node.items() if key != "FABRIC_MASTER"} | unset
-            with pytest.raises(SystemExit, match="FABRIC_MASTER"):
-                serve.command(env, model, kit, engram)
+    # The ranks link only over the fabric: no address in the recipe, and none at all fails closed.
+    assert not any(key.endswith("TP_MASTER") for key in recipe.env)
+    node = {**recipe.env, **_parse_env_command(_node_command(runtime, recipe, 0))[0], **fabric}
+    for unset in ({}, {"FABRIC_MASTER": ""}):
+        env = {key: value for key, value in node.items() if key != "FABRIC_MASTER"} | unset
+        with pytest.raises(SystemExit, match="FABRIC_MASTER"):
+            serve.command(env, model, kit, engram)
 
 
 def test_dsv41_views_link_read_only_snapshots_and_check_the_image_bias(tmp_path, monkeypatch, dsv41_recipe):
-    recipe, bundle, serve, _ = _dsv41_bundle(tmp_path, dsv41_recipe)
+    recipe, bundle, serve = _dsv41_bundle(tmp_path, dsv41_recipe)
     lock = json.loads((bundle / "upstream.lock.json").read_text())
     hub, views = tmp_path / "hub", tmp_path / "views"
     monkeypatch.setattr(serve, "HUB", hub)
@@ -812,7 +539,7 @@ def test_dsv41_views_link_read_only_snapshots_and_check_the_image_bias(tmp_path,
 
 @pytest.mark.parametrize("change", ["edit", "extra"])
 def test_dsv41_frozen_bundle_rejects_changed_or_added_files(tmp_path, change, dsv41_recipe):
-    _, bundle, _, _ = _dsv41_bundle(tmp_path, dsv41_recipe)
+    _, bundle, _ = _dsv41_bundle(tmp_path, dsv41_recipe)
     if change == "edit":
         (bundle / "serve.py").write_text((bundle / "serve.py").read_text() + "\n# Unreviewed change\n")
     else:
@@ -840,29 +567,15 @@ def test_dsv41_frozen_bundle_refuses_linked_and_dangling_files(tmp_path):
     assert result.returncode != 0 and "linked dsv41 mod lock" in result.stderr
 
 
-def test_dsv41_readiness_requires_lanes_window_and_reasoning(tmp_path, dsv41_recipe):
-    recipe, _, _, ready = _dsv41_bundle(tmp_path, dsv41_recipe)
+def test_dsv41_readiness_requires_lanes_window_and_reasoning(dsv41_recipe):
+    recipe = Recipe(yaml.safe_load(dsv41_recipe.read_text()), source_path=str(dsv41_recipe))
     context = recipe.defaults["context"]
     hook = shlex.split(recipe.post_exec[0])
     assert hook[hook.index("--model") + 1] == DSV41_SERVED and hook[hook.index("--context") + 1] == str(context)
-    if recipe.name != DSV41_LEGACY:
-        # The shared gate: listed before the engine mod, with the streams and DeepSeek's own levels, highest first.
-        assert ready is None
-        assert hook[1] == "/opt/tensorfold-readiness/readiness.py"
-        assert recipe.mods[0] == "../mods/tensorfold-readiness"
-        assert hook[hook.index("--lanes") + 1] == "4"
-        assert hook[hook.index("--efforts") + 1] == "max,high,low,none"
-        return
-    health = {"status": "ok", "warming": False, "model": DSV41_SERVED, "max_batch_size": 4}
-    ready.check_health(health, DSV41_SERVED, 4)
-    for change in ({"status": "error"}, {"warming": True}, {"model": "other"}, {"max_batch_size": 2}):
-        with pytest.raises(RuntimeError):
-            ready.check_health({**health, **change}, DSV41_SERVED, 4)
-    entry = {"id": DSV41_SERVED, "context_length": context, "reasoning": {"supported_efforts": ["max", "high", "none"]}}
-    ready.check_models({"data": [entry]}, DSV41_SERVED, context)
-    for body in ({"data": []}, {"data": [{**entry, "context_length": 262144}]}, {"data": [{**entry, "reasoning": {}}]}):
-        with pytest.raises(RuntimeError):
-            ready.check_models(body, DSV41_SERVED, context)
+    assert hook[1] == "/opt/tensorfold-readiness/readiness.py"
+    assert recipe.mods[0] == "../mods/tensorfold-readiness"
+    assert hook[hook.index("--lanes") + 1] == "4"
+    assert hook[hook.index("--efforts") + 1] == "max,high,low,none"
 
 
 def test_dsv41_rank_inputs_follow_the_weights_in_a_root_of_their_own(runtime, dsv41_recipe):
@@ -882,7 +595,7 @@ def test_dsv41_rank_inputs_follow_the_weights_in_a_root_of_their_own(runtime, ds
 
 
 def test_dsv41_rdma_devices_take_exact_names_on_port_1(tmp_path, dsv41_recipe):
-    _, _, serve, _ = _dsv41_bundle(tmp_path, dsv41_recipe)
+    _, _, serve = _dsv41_bundle(tmp_path, dsv41_recipe)
     devices = tmp_path / "infiniband"
     for name in ("rocep1s0f0", "roceP2p1s0f0"):
         (devices / name).mkdir(parents=True)

@@ -24,6 +24,8 @@ from tensorfold import TensorFoldRuntime, hf_snapshot_path  # noqa: E402
 
 from sparkrun.core.recipe import Recipe  # noqa: E402
 from sparkrun.core.validation import ERROR  # noqa: E402
+from sparkrun.orchestration.executors.docker import DockerExecutor  # noqa: E402
+from sparkrun.runtimes._cluster_ops import ClusterContext  # noqa: E402
 
 RECIPE = ROOT / "mia-tensorfold-glm53-exl3-tp2/glm53-exl3-tp2-mia-tf-3fd60dfc-mia-1m.yaml"
 MOD = ROOT / "mods/mia-tensorfold-glm53-3fd60dfc"
@@ -62,6 +64,19 @@ def test_recipe_pins_the_kit_and_states_its_launcher_defaults():
     # Every variable the pinned scripts/config.sh exports, with the same value.
     assert len(lock["launcher_env"]) == 39 and lock["launcher_env"]["TF_GLM_FILL_ROWS"] == "2048"
     assert {key: recipe.env.get(key) for key in lock["launcher_env"]} == lock["launcher_env"]
+    engine_only = {key for key in set(recipe.env) - set(lock["launcher_env"]) if key.startswith(("TENSORFOLD_", "TF_"))}
+    assert engine_only == {
+        "TF_GLM_LOOP_GUARD", "TF_GLM_KEEP_REASONING", "TF_GLM_KEEP_REASONING_MB", "TENSORFOLD_GLM_IMAGE_TOKENS",
+        "TENSORFOLD_GLM_VIDEO_TOKENS", "TENSORFOLD_GLM_VIDEO_FRAMES", "TENSORFOLD_GLM_MAX_IMAGES",
+        "TENSORFOLD_GLM_MAX_VIDEOS", "TENSORFOLD_GLM_REQUEST_IMAGE_TOKENS", "TENSORFOLD_GLM_REQUEST_VIDEO_TOKENS"}
+    assert recipe.env["TENSORFOLD_NUCLEUS_UNION"] == "1"
+    for key, off in (("TF_GLM_EFFORT_TAIL", "0"), ("TF_GLM_CACHE_SHARE_PCT", "0"), ("TF_GLM_LOOP_GUARD", "0"),
+                     ("TF_GLM_KEPT_BYTES_GIB", "0"), ("TF_GLM_KEEP_PER_CHAT", "0"), ("TF_GLM_EXL3_DEC_ORDER", "0"),
+                     ("TF_GLM_DISPLAY_KV_MIB", "0"), ("TF_GLM_DISPLAY_KV_BACKEND", "drm"), ("TF_GLM_MAX_QUEUED", ""),
+                     ("TF_GLM_MTP", "auto")):
+        assert recipe.env[key] == off, key
+    assert not [key for key in recipe.env if "SPILL" in key]
+    assert (recipe.env["TENSORFOLD_MEMORY_RESERVE_GIB"], recipe.env["TF_GLM_CACHE_GIB"]) == ("14.5", "12.5")
     assert recipe.metadata["site_backports"] == "exact-tool-turn-reasoning, strict-concurrent-health, models-discovery"
 
 
@@ -78,17 +93,31 @@ def test_recipe_uses_the_shared_gate_with_glms_own_levels():
 def test_rank_commands_reach_mias_cli():
     runtime, recipe = TensorFoldRuntime(), _recipe()
     assert not [issue for issue in runtime.validate_recipe(recipe) if getattr(issue, "severity", None) == ERROR]
+    ctx = ClusterContext.build(
+        runtime, [HEAD, "172.16.21.32"], recipe.container, "tf-profile-test",
+        recipe.env, None, None, dry_run=True, recipe=recipe,
+    )
+    script = DockerExecutor().generate_launch_script(
+        image=recipe.container, container_name="tf-profile-test", command="sleep infinity",
+        env=ctx.all_env, volumes=ctx.volumes,
+    )
+    assert "NCCL_CUMEM_ENABLE" not in script
+    for setting in ("TENSORFOLD_NUCLEUS_UNION=1", "TF_ROCE_WAIT_S=300", "TF_GLM_MAX_QUEUED=", "TF_GLM_DISPLAY_KV_MIB=0"):
+        assert setting in shlex.split(script)
+    assert recipe.runtime_cache["key_by_image"] is True
     serve = _load("glm_serve", MOD / "serve.py")
     for rank in (0, 1):
         env, argv = _env(runtime.generate_node_command(
             recipe, {}, head_ip=HEAD, num_nodes=2, node_rank=rank, init_port=29511, hosts=[HEAD, "172.16.21.32"]))
         assert argv == ["/usr/local/bin/tensorfold-entrypoint"]
         assert env["MODEL_PATH"] == hf_snapshot_path(recipe.model, recipe.model_revision)
+        assert env["DRAFTER"] == hf_snapshot_path(recipe.defaults["drafter"], recipe.defaults["drafter_revision"])
         args = serve.command(env)
         assert args[:3] == ["tensorfold", "serve", env["MODEL_PATH"]]
         for flag, expected in (("--tp", "2"), ("--rank", str(rank)), ("--master", HEAD), ("--master-port", "29511"),
                                ("--context", "1048576"), ("--parallel", "4"), ("--max-tokens", "32768")):
             assert args[args.index(flag) + 1] == expected
+        assert not [arg for arg in args if arg.startswith(("--spill", "--snapshot-dir", "--mtp", "--no-drafts"))]
         assert ("--name" in args) is (rank == 0) and "--thinking" in args and "--vision" in args
         if rank == 0:
             assert args[args.index("--name") + 1] == recipe.defaults["served_model_name"] == "GLM-5.3-Flash"
@@ -107,14 +136,39 @@ def test_ranks_meet_on_the_fabric_address_when_sparkrun_supplies_it():
             assert args[args.index("--master-port") + 1] == "29511"
 
 
-def test_mod_is_frozen_and_self_contained(tmp_path):
+@pytest.mark.parametrize("change", ("content", "symlink"))
+def test_mod_is_frozen_and_self_contained(tmp_path, change):
     bundle = tmp_path / MOD.name
     shutil.copytree(MOD, bundle, ignore=shutil.ignore_patterns("__pycache__"))
     check = [sys.executable, str(bundle / "prepare.py"), "--check"]
     subprocess.run(check, check=True, capture_output=True)
-    (bundle / "serve.py").write_text((bundle / "serve.py").read_text() + "\n# Unreviewed change\n")
+    helper = bundle / "serve.py"
+    if change == "content":
+        helper.write_text(helper.read_text() + "\n# Unreviewed change\n")
+    else:
+        outside = tmp_path / "shared-serve.py"
+        helper.rename(outside)
+        helper.symlink_to(outside)
     result = subprocess.run(check, capture_output=True, text=True)
     assert result.returncode != 0 and "Missing or changed frozen mod file: serve.py" in result.stderr
+
+
+def test_bundle_has_no_sibling_or_linked_fallback(tmp_path):
+    for name in (MOD.name, "mia-tensorfold-sibling"):
+        shutil.copytree(MOD, tmp_path / name, ignore=shutil.ignore_patterns("__pycache__"))
+    bundle = tmp_path / MOD.name
+    check = [sys.executable, str(bundle / "prepare.py"), "--check"]
+    subprocess.run(check, check=True, capture_output=True)
+    for name in ("serve.py", "site_fixes.py"):
+        (bundle / name).rename(bundle / (name + ".moved"))
+        result = subprocess.run(check, capture_output=True, text=True)
+        assert result.returncode != 0 and f"Missing or changed frozen mod file: {name}" in result.stderr
+        (bundle / (name + ".moved")).rename(bundle / name)
+    manifest = bundle / "upstream.lock.json"
+    manifest.rename(tmp_path / "shared.lock.json")
+    manifest.symlink_to(tmp_path / "shared.lock.json")
+    result = subprocess.run(check, capture_output=True, text=True)
+    assert result.returncode != 0 and "Missing or linked Mia TensorFold mod manifest" in result.stderr
 
 
 def test_a_linked_prepare_checks_the_bundle_it_runs_from(tmp_path):
@@ -163,18 +217,45 @@ def _stand_in_tree(tmp_path):
 
 def test_site_guards_refuse_other_sources_and_apply_once(tmp_path):
     fixes, root = _stand_in_tree(tmp_path)
+    upstream = {str(path.relative_to(root)): path.read_text() for path in root.rglob("*.py")}
+    read = lambda: {name: (root / name).read_text() for name in upstream}
     result = subprocess.run([sys.executable, str(MOD / "site_fixes.py"), "--root", str(root)], capture_output=True, text=True)
     assert result.returncode != 0 and "installed source drifted" in result.stderr
+    assert read() == upstream
+    last = "cuda/http.py"
+    (root / last).write_text(upstream[last] + "# Unreviewed change\n")
+    with pytest.raises(ValueError, match="installed source drifted: cuda/http.py"):
+        fixes.apply(root)
+    assert {name: text for name, text in read().items() if name != last} == \
+        {name: text for name, text in upstream.items() if name != last}
+    outside = tmp_path / "shared-http.py"
+    outside.write_text(upstream[last])
+    (root / last).unlink()
+    (root / last).symlink_to(outside)
+    with pytest.raises(ValueError, match="Missing or linked installed source: cuda/http.py"):
+        fixes.apply(root)
+    (root / last).unlink()
+    with pytest.raises(ValueError, match="Missing or linked installed source: cuda/http.py"):
+        fixes.apply(root)
+    assert outside.read_text() == upstream[last]
+    assert {name: (root / name).read_text() for name in upstream if name != last} == \
+        {name: text for name, text in upstream.items() if name != last}
+    (root / last).write_text(upstream[last])
     fixes.apply(root)
     guarded = {name: (root / name).read_text()
                for name in ("cuda/http.py", "cuda/health.py", "families/glm5_next/cuda/kept_reasoning.py")}
+    assert all(guarded[name] != upstream[name] for name in upstream)
+    compile(guarded["cuda/health.py"], "health.py", "exec")
     reasoning = guarded["families/glm5_next/cuda/kept_reasoning.py"]
     assert "_OUR_ID.match(i)]" in reasoning and "[signature(history, calls)]" not in reasoning
     assert "_model_entry(app, model_id) for model_id in app.model_ids" in guarded["cuda/http.py"]
     assert '200 if report.get("ok") is True else 503' in guarded["cuda/http.py"]
     compile(guarded["cuda/http.py"], "http.py", "exec")
     fixes.apply(root)
-    assert {name: (root / name).read_text() for name in guarded} == guarded
+    assert read() == guarded
+    (root / last).write_text(upstream[last])
+    fixes.apply(root)
+    assert read() == guarded
 
 
 def test_discovery_reports_the_window_and_the_templates_levels():

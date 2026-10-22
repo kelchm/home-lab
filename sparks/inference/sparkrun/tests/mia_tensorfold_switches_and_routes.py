@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check v1.10's launcher switches, streamed admission and Anthropic route on installed code without GPU weights.
+"""Check the recipe's launcher switches, streamed admission and the Anthropic route on installed code without GPU weights.
 
 Run it where the rank's environment applies (`docker exec` in the SparkRun-owned container): the switch
 check reads the process environment, so it reports what the running recipe selected.
@@ -62,7 +62,7 @@ class App:
         raise CapacityError("Public capacity fixture")
 
     def reply_model(self, body):
-        return "GLM-5.3-Flash-EXL3"
+        return "GLM-5.3-Flash"
 
     def run(self, *args, **kwargs):
         raise AssertionError("A refused request must not reach generation")
@@ -89,7 +89,7 @@ def check_http_refusals():
         code, headers, body = post("/v1/chat/completions", {"stream": True, "messages": []})
         assert code == 429 and headers.get("Retry-After") == "5", (code, dict(headers))
         assert headers.get("Content-Type") == "application/json" and body["error"]["message"] == "Public capacity fixture"
-        message = {"model": "GLM-5.3-Flash-EXL3", "max_tokens": 8,
+        message = {"model": "GLM-5.3-Flash", "max_tokens": 8,
                    "messages": [{"role": "user", "content": "Public fixture."}]}
         for stage in ("prepare", "admit"):
             app.stage = stage
@@ -108,14 +108,14 @@ def check_http_refusals():
 def check_anthropic_tool_turn():
     call_id = "call_" + "1" * 24
     call = {"id": call_id, "type": "function", "function": {"name": "read_file", "arguments": '{"path": "README.md"}'}}
-    sent = Reply("GLM-5.3-Flash-EXL3", lambda event: None).completion({"choices": [{"finish_reason": "tool_calls",
+    sent = Reply("GLM-5.3-Flash", lambda event: None).completion({"choices": [{"finish_reason": "tool_calls",
         "message": {"role": "assistant", "content": None, "reasoning_content": "Public reasoning.",
                     "tool_calls": [call]}}], "usage": {"prompt_tokens": 1, "completion_tokens": 1}})
     use = [block for block in sent["content"] if block["type"] == "tool_use"]
     assert [block["id"] for block in use] == [call_id], "The route must expose the server's own call id"
 
     def resume(blocks, **fields):
-        chat = translate({"model": "GLM-5.3-Flash-EXL3", "max_tokens": 8, **fields, "messages": [
+        chat = translate({"model": "GLM-5.3-Flash", "max_tokens": 8, **fields, "messages": [
             {"role": "user", "content": "Read README.md and report status."},
             {"role": "assistant", "content": blocks},
             {"role": "user", "content": [{"type": "tool_result", "tool_use_id": blocks[-1]["id"],
