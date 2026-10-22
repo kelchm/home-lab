@@ -4,3 +4,17 @@ kind: Kustomization
 resources:
   - ./ocirepository.yaml
   - ./helmrelease.yaml
+
+configMapGenerator:
+  # grafana.com 18817 revision 1; remove __inputs and add the datasource variable its panels reference; regex matchers for the URL variables, whose values Grafana escapes; "Files Extracted" title.
+  - name: grafana-dashboard-unpackerr
+    files:
+      - unpackerr.json=./dashboards/unpackerr.json
+    options:
+      annotations:
+        grafana_folder: Services/Media
+        kustomize.toolkit.fluxcd.io/substitute: disabled
+      labels:
+        grafana_dashboard: "1"
+generatorOptions:
+  disableNameSuffixHash: true

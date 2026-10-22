@@ -1,0 +1,31 @@
+rule_files:
+  - traefik.yaml
+evaluation_interval: 1m
+tests:
+  - name: A service failing over 5% of an hour of steady traffic alerts; a quiet failing service and a healthy one do not
+    interval: 1m
+    input_series:
+      # 100 requests a minute, 10 of them server errors.
+      - series: traefik_service_requests_total{cluster="k8s-prod",exported_service="svc-busy",code="200"}
+        values: 0+90x80
+      - series: traefik_service_requests_total{cluster="k8s-prod",exported_service="svc-busy",code="502"}
+        values: 0+10x80
+      # One request every two minutes, all failing.
+      - series: traefik_service_requests_total{cluster="k8s-prod",exported_service="svc-quiet",code="500"}
+        values: 0+0.5x80
+      # 100 requests a minute, 1 failing.
+      - series: traefik_service_requests_total{cluster="k8s-prod",exported_service="svc-healthy",code="200"}
+        values: 0+99x80
+      - series: traefik_service_requests_total{cluster="k8s-prod",exported_service="svc-healthy",code="500"}
+        values: 0+1x80
+    alert_rule_test:
+      - eval_time: 75m
+        alertname: TraefikServiceErrorsHigh
+        exp_alerts:
+          - exp_labels:
+              cluster: k8s-prod
+              exported_service: svc-busy
+              severity: warning
+            exp_annotations:
+              summary: svc-busy answered 10% of requests with server errors over the last hour
+              description: The backend's own logs show why; Traefik's access logs list the failing requests.

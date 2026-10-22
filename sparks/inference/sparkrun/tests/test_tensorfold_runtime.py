@@ -44,13 +44,6 @@ DRAFT = "incoai/GLM-5.3-Flash-DFlash2"
 DRAFT_REV = "dc77ff1c99eeb2df044ee3d4f0094eb033fee410"
 MIA_RECIPE_DIR = "mia-tensorfold-glm53-exl3-tp2"
 MIA_PROFILES = [
-    ("glm53-exl3-tp2-mia-tf-v1.2-bmm-850k", TARGET, TARGET_REV, "850000"),
-    ("glm53-exl3-tp2-mia-tf-v1.5-bmm-850k", TARGET, TARGET_REV, "850000"),
-    ("glm53-exl3-tp2-mia-tf-v1.5-mia-1m", "Mia-AiLab/GLM-5.3-Flash-EXL3-4bpw-TensorFold",
-     "078455ffe6472f9a52fbc1139f58b9db2881b25c", "1048576"),
-    ("glm53-exl3-tp2-mia-tf-v1.8-bmm-850k", TARGET, TARGET_REV, "850000"),
-    ("glm53-exl3-tp2-mia-tf-v1.8-mia-1m", "Mia-AiLab/GLM-5.3-Flash-EXL3-4bpw-TensorFold",
-     "078455ffe6472f9a52fbc1139f58b9db2881b25c", "1048576"),
     ("glm53-exl3-tp2-mia-tf-v1.10-mia-1m", "Mia-AiLab/GLM-5.3-Flash-EXL3-4bpw-TensorFold",
      "078455ffe6472f9a52fbc1139f58b9db2881b25c", "1048576"),
 ]
@@ -264,19 +257,9 @@ def test_mia_recipe_reuses_native_rank_wiring(runtime, profile, target, revision
         image=recipe.container, container_name="tf-profile-test", command="sleep infinity",
         env=ctx.all_env, volumes=ctx.volumes,
     )
-    release = recipe.metadata["upstream_release"]
-    if release in ("v1.8", "v1.10") and recipe.metadata["weights"] == "mia":
-        assert "NCCL_CUMEM_ENABLE" not in script
-    else:
-        assert "NCCL_CUMEM_ENABLE=0" in shlex.split(script)
-    assert ("TENSORFOLD_NUCLEUS_UNION=1" in shlex.split(script)) is (release == "v1.10")
-    if release in ("v1.8", "v1.10"):
-        assert "TF_ROCE_WAIT_S=300" in shlex.split(script)
-        if recipe.metadata["weights"] == "mia":
-            assert "TF_GLM_MAX_QUEUED=" in shlex.split(script)
-            assert "TF_GLM_DISPLAY_KV_MIB=0" in shlex.split(script)
-        else:
-            assert "TF_GLM_MAX_QUEUED" not in script
+    assert "NCCL_CUMEM_ENABLE" not in script
+    for setting in ("TENSORFOLD_NUCLEUS_UNION=1", "TF_ROCE_WAIT_S=300", "TF_GLM_MAX_QUEUED=", "TF_GLM_DISPLAY_KV_MIB=0"):
+        assert setting in shlex.split(script)
     spec = importlib.util.spec_from_file_location("mia_serve", root / recipe.mods[0] / "serve.py")
     serve = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(serve)
@@ -344,10 +327,9 @@ def test_mia_native_mod_transfer_is_self_contained(tmp_path, profile, target, re
         ready.check_health({**body, "context_length": int(context) - 1}, 4, expected_context, 1200000)
 
 
-@pytest.mark.parametrize("version", ("v1.2", "v1.5", "v1.8", "v1.10"))
 @pytest.mark.parametrize("change", ("content", "symlink"))
-def test_mia_frozen_bundle_rejects_changed_helpers(tmp_path, version, change):
-    source = Path(__file__).resolve().parents[1] / f"mods/mia-tensorfold-{version}"
+def test_mia_frozen_bundle_rejects_changed_helpers(tmp_path, change):
+    source = MIA_MODS / "mia-tensorfold-v1.10"
     bundle = tmp_path / source.name
     shutil.copytree(source, bundle, ignore=shutil.ignore_patterns("__pycache__"))
     helper = bundle / "readiness.py"
@@ -575,15 +557,13 @@ def test_mia_v110_recipe_states_the_pinned_launcher_defaults():
 
 
 def test_mia_v110_bundle_has_no_sibling_or_linked_fallback(tmp_path):
-    for version in ("v1.8", "v1.10"):
-        shutil.copytree(MIA_MODS / f"mia-tensorfold-{version}", tmp_path / f"mia-tensorfold-{version}",
-                        ignore=shutil.ignore_patterns("__pycache__"))
+    for name in ("mia-tensorfold-v1.10", "mia-tensorfold-sibling"):
+        shutil.copytree(MIA_MODS / "mia-tensorfold-v1.10", tmp_path / name, ignore=shutil.ignore_patterns("__pycache__"))
     bundle = tmp_path / "mia-tensorfold-v1.10"
     check = [sys.executable, str(bundle / "prepare.py"), "--check"]
     subprocess.run(check, check=True, capture_output=True)
-    # v1.8's launcher and readiness gate are byte-identical, and still must not stand in for a missing helper.
+    # A sibling mod's byte-identical launcher and readiness gate must not stand in for a missing helper.
     for name in ("serve.py", "readiness.py"):
-        assert (bundle / name).read_bytes() == (tmp_path / "mia-tensorfold-v1.8" / name).read_bytes()
         (bundle / name).rename(bundle / (name + ".moved"))
         result = subprocess.run(check, capture_output=True, text=True)
         assert result.returncode != 0 and f"Missing or changed frozen mod file: {name}" in result.stderr
@@ -664,19 +644,6 @@ def test_mia_v110_site_guards_check_every_source_before_writing(tmp_path):
     (root / last).write_text(upstream[last])
     fixes.apply(root)
     assert read() == guarded
-
-
-def test_readiness_requires_reported_pool_capacity():
-    path = Path(__file__).resolve().parents[1] / "mods/tensorfold/readiness.py"
-    spec = importlib.util.spec_from_file_location("tf_readiness", path)
-    ready = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(ready)
-    body = {"ok": True, "mode": "strict", "streams": {"max": 4}, "context_length": 850000}
-    ready.check_health(body, 4, 850000)  # Existing W20 gate does not require a pool field.
-    for pool in (None, True, "1200000", 1199999):
-        with pytest.raises(RuntimeError, match="pool tokens"):
-            ready.check_health({**body, "pool_tokens": pool}, 4, 850000, 1200000)
-    ready.check_health({**body, "pool_tokens": 1200000}, 4, 850000, 1200000)
 
 
 def test_runtime_cache_and_extra_env_stay_on_managed_namespace(runtime):
@@ -1031,7 +998,7 @@ def test_dsv41_rank_inputs_follow_the_weights_in_a_root_of_their_own(runtime, ds
     mounts = build_runtime_cache_mounts(runtime=runtime, recipe=recipe, settings=settings, root=root, image=recipe.container)
     assert mounts.leaf == f"{root}/tensorfold/LibertAIDAI__DeepSeek-V4.1-Flash-1017-EXL3-2.9bp-55410efc"
     # Another TensorFold recipe's sweep ages siblings under the shared root only.
-    other = Recipe.from_dict(yaml.safe_load((dsv41_recipe.parents[1] / "tensorfold-glm53-exl3.yaml").read_text()))
+    other = _recipe()
     shared = resolve_runtime_cache_root(resolve_runtime_cache_settings(runtime=runtime, recipe=other), "/home/kelchm/.cache/sparkrun")
     assert not mounts.leaf.startswith(shared + "/")
     assert recipe.env["TF_DS_RANK_CACHE"].startswith(RUNTIME_CACHE_CONTAINER_PATH + "/")

@@ -11,6 +11,7 @@ resources:
   - ./oauth2-ops-suite.yaml
   - ./secret-oidc-session-key.sops.yaml
   - ./networkpolicy.yaml
+  - ./alerts.yaml
 
 configMapGenerator:
   # grafana.com 17347 revision 9; datasource provisioning; exporter service label -> exported_service.
