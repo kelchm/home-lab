@@ -1223,9 +1223,10 @@ def test_upstream_qwen_serves_a_flat_view_of_a_snapshot_with_nested_shards(tmp_p
                                                            "b.weight": "tensors/model-00002-of-00002.safetensors"}}
     blob = snapshot / "model.safetensors.index.json"
     blob.resolve().write_text(json.dumps(index))
-    monkeypatch.setattr(serve, "VIEW", tmp_path / "view")
+    monkeypatch.setattr(serve, "VIEWS", tmp_path)
     view = serve.flat_view(snapshot)
-    assert view == tmp_path / "view" and sorted(p.name for p in view.iterdir()) == [
+    assert view.parent == tmp_path and view.name.startswith("qwen38fn-model-")
+    assert sorted(p.name for p in view.iterdir()) == [
         "config.json", "model-00001-of-00002.safetensors", "model-00002-of-00002.safetensors",
         "model.safetensors.index.json"]
     # The engine's own check: every shard name plain, opened beside the index, the same bytes as the snapshot's.
@@ -1236,14 +1237,18 @@ def test_upstream_qwen_serves_a_flat_view_of_a_snapshot_with_nested_shards(tmp_p
         assert (view / rewritten["weight_map"][key]).read_bytes() == (snapshot / name).read_bytes()
     assert (view / "config.json").read_bytes() == (snapshot / "config.json").read_bytes()
     # Both ranks build it from the same snapshot, so the index the engine hashes agrees; the snapshot is untouched.
+    # A second start gets its own directory and leaves the first one whole.
     first = (view / "model.safetensors.index.json").read_bytes()
-    assert (serve.flat_view(snapshot) / "model.safetensors.index.json").read_bytes() == first
+    again = serve.flat_view(snapshot)
+    assert again != view and (again / "model.safetensors.index.json").read_bytes() == first
+    assert (view / "model.safetensors.index.json").read_bytes() == first
     assert serve.checkpoint_digest(snapshot) == digest
     # A rank command serves the view.
     base = {"RANK": "1", "MASTER": FABRIC_HEAD, "MASTER_PORT": "25000", "MODEL_PATH": str(snapshot), "HOST": "0.0.0.0",
             "PORT": "8888", "SERVED_NAME": "Qwen3.8-Flash-Next", "CONTEXT": "262144", "MAX_TOKENS": "32768",
             "TENSORFOLD_CHECKPOINT_SHA256": digest, **UPSTREAM_QWEN_FABRIC}
-    assert serve.command(base)[2] == str(view)
+    served = Path(serve.command(base)[2])
+    assert served.parent == tmp_path and (served / "model.safetensors.index.json").read_bytes() == first
     # Shards already beside the index are served from the snapshot; colliding names are refused.
     blob.resolve().write_text(json.dumps({"weight_map": {"a.weight": "config.json"}}))
     assert serve.flat_view(snapshot) == snapshot

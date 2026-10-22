@@ -12,6 +12,6 @@
   "mod_files": {
     "prepare.py": "a3cdf2acefe8d201b9ff0bbea30c00404db4156c8c7067207187556ffb322460",
     "run.sh": "ad69388595b92df7f35c8cbfdef3208ff327833b9a5eac698ee1a09c3f4307e3",
-    "serve.py": "9de4b6517c7d4124b82be5c427bf5211a8ec015f3666d3cfeca98eb1bd694272"
+    "serve.py": "93cc669c992a1d9d29c456b0f6cddaa937ac96420b67ae8269e76c62e331454d"
   }
 }

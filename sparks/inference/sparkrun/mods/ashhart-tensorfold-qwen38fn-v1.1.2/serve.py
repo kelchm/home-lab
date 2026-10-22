@@ -10,11 +10,11 @@ import hashlib
 import json
 import os
 import shlex
-import shutil
+import tempfile
 from pathlib import Path
 
 INDEX = "model.safetensors.index.json"
-VIEW = Path("/tmp/qwen38fn-model")
+VIEWS = Path("/tmp")
 
 
 def checkpoint_digest(snapshot):
@@ -39,13 +39,14 @@ def checkpoint_digest(snapshot):
     return hashlib.sha256("".join(sorted(lines)).encode()).hexdigest()
 
 
-def flat_view(snapshot, view=None):
-    """The snapshot with every shard beside config.json, as links, and an index naming them plainly.
+def flat_view(snapshot, root=None):
+    """A new directory holding the snapshot's files and every shard side by side, as links, and an index naming them
+    plainly. Each start gets its own, kept for the engine's life, since the rank identity hashes contents, not paths.
 
     v1.1.2 refuses an index that names a shard in a subfolder (zig/src/core/checkpoint_index.zig, plainName), and
     FP4-Local keeps its shards under tensors/. A snapshot whose shards are already at the top is used as it is.
     """
-    src, view = Path(snapshot), Path(view or VIEW)
+    src = Path(snapshot)
     index = json.loads((src / INDEX).read_text())
     nested = {name for name in index["weight_map"].values() if "/" in name}
     if not nested:
@@ -55,8 +56,7 @@ def flat_view(snapshot, view=None):
     if len(flat) != len(nested) or flat.keys() & top:
         raise SystemExit(f"{src}: its shards do not have distinct names beside its other files")
     index["weight_map"] = {k: v.rsplit("/", 1)[-1] for k, v in index["weight_map"].items()}
-    shutil.rmtree(view, ignore_errors=True)
-    view.mkdir(parents=True)
+    view = Path(tempfile.mkdtemp(prefix="qwen38fn-model-", dir=root or VIEWS))
     for entry in sorted(src.iterdir()):
         if entry.name != INDEX and not entry.is_dir():
             (view / entry.name).symlink_to(entry)
