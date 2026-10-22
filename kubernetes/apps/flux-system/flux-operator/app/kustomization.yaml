@@ -18,7 +18,7 @@ configMapGenerator:
         kustomize.toolkit.fluxcd.io/substitute: disabled
       labels:
         grafana_dashboard: "1"
-  # fluxcd/flux2-monitoring-example 830b4b9478c6a7afab801a0bb42c4b86d16496dc; clear database id and fixed datasource selection; byte units on the Memory gauge.
+  # fluxcd/flux2-monitoring-example 830b4b9478c6a7afab801a0bb42c4b86d16496dc; clear database id and fixed datasource selection; byte units on the Memory gauge and core units on CPU Usage.
   - name: grafana-dashboard-flux-control-plane
     files:
       - flux-control-plane.json=./dashboards/flux-control-plane.json

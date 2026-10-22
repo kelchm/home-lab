@@ -720,7 +720,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "builder",
-          "expr": "unpackerr_app_queue_fetch_time_seconds{url=\"$starrUrl\", instance=\"$instance\"}",
+          "expr": "unpackerr_app_queue_fetch_time_seconds{url=~\"$starrUrl\", instance=\"$instance\"}",
           "hide": false,
           "legendFormat": "{{app}} {{url}}",
           "range": true,
@@ -733,7 +733,7 @@
           },
           "editorMode": "builder",
           "exemplar": false,
-          "expr": "increase(unpackerr_app_queue_fetch_total{url=\"$starrUrl\", instance=\"$instance\"}[$__rate_interval])",
+          "expr": "increase(unpackerr_app_queue_fetch_total{url=~\"$starrUrl\", instance=\"$instance\"}[$__rate_interval])",
           "hide": false,
           "instant": false,
           "interval": "$interval",
@@ -747,7 +747,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "builder",
-          "expr": "increase(unpackerr_app_queue_fetch_errors_total{url=\"$starrUrl\", instance=\"$instance\"}[$__rate_interval])",
+          "expr": "increase(unpackerr_app_queue_fetch_errors_total{url=~\"$starrUrl\", instance=\"$instance\"}[$__rate_interval])",
           "hide": false,
           "interval": "$interval",
           "legendFormat": "Errors",
@@ -828,7 +828,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "builder",
-          "expr": "unpackerr_bytes_written_total{instance=\"$instance\", url=\"$source\"}",
+          "expr": "unpackerr_bytes_written_total{instance=\"$instance\", url=~\"$source\"}",
           "legendFormat": "{{url}}",
           "range": true,
           "refId": "A"
@@ -900,7 +900,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "builder",
-          "expr": "unpackerr_archives_read_total{instance=\"$instance\", url=\"$source\"}",
+          "expr": "unpackerr_archives_read_total{instance=\"$instance\", url=~\"$source\"}",
           "hide": false,
           "legendFormat": "__auto",
           "range": true,
@@ -965,14 +965,14 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "builder",
-          "expr": "unpackerr_files_extracted_total{instance=\"$instance\", url=\"$source\"}",
+          "expr": "unpackerr_files_extracted_total{instance=\"$instance\", url=~\"$source\"}",
           "hide": false,
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "FIles Extracted",
+      "title": "Files Extracted",
       "type": "stat"
     },
     {
@@ -1048,7 +1048,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "builder",
-          "expr": "increase(unpackerr_extract_time_seconds_bucket{instance=\"$instance\", url=\"$source\"}[$__rate_interval])",
+          "expr": "increase(unpackerr_extract_time_seconds_bucket{instance=\"$instance\", url=~\"$source\"}[$__rate_interval])",
           "format": "heatmap",
           "hide": false,
           "legendFormat": "__auto",
