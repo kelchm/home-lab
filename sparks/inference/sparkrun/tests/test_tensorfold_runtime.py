@@ -734,6 +734,22 @@ def test_fabric_master_is_the_heads_cx7_address_for_one_launch(runtime, monkeypa
     assert "FABRIC_MASTER" not in seen[0] and "FABRIC_MASTER" not in seen[1]
 
 
+def test_a_nested_launch_leaves_the_outer_launchs_fabric_master(runtime, monkeypatch):
+    recipe = _recipe()
+    seen = []
+
+    def native(**kwargs):
+        seen.append(_parse_env_command(_node_command(runtime, recipe, 0))[0].get("FABRIC_MASTER"))
+        if len(seen) == 1:
+            runtime._run_cluster(["10.0.1.1", "10.0.1.2"], "img", recipe=recipe, ib_ip_map={"10.0.1.1": "198.18.1.1"})
+        seen.append(_parse_env_command(_node_command(runtime, recipe, 1))[0].get("FABRIC_MASTER"))
+        return 0
+
+    monkeypatch.setattr(runtime, "_run_native_cluster", native)
+    runtime._run_cluster(["10.0.0.1", "10.0.0.2"], "img", recipe=recipe, ib_ip_map={"10.0.0.1": "198.18.0.1"})
+    assert seen == ["198.18.0.1", "198.18.1.1", "198.18.1.1", "198.18.0.1"]
+
+
 def test_native_lifecycle_gates_tcpstore_then_starts_rank1(runtime, monkeypatch):
     from sparkrun.orchestration.comm_env import ClusterCommEnv
 
