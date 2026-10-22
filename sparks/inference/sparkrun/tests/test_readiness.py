@@ -66,7 +66,7 @@ class Fake(BaseHTTPRequestHandler):
             effort = NEAREST.get(body["reasoning_effort"], body["reasoning_effort"])
             return self._send(200, {"count": 3, "tokens": [1, 2, type(self).levels[effort]]})
         if body.get("tools"):
-            call = {"id": "c1", "type": "function", "function": {"name": "get_weather", "arguments": '{"city": "Oslo"}'}}
+            call = {"id": "c1", "type": "function", "function": {"name": "get_weather", "arguments": '{"city": "Oslo, Norway"}'}}
             return self._send(200, {"choices": [{"finish_reason": "tool_calls", "message": {"tool_calls": [call]}}]})
         self._send(200, {"choices": [{"finish_reason": "stop", "message": {"content": "323"}}],
                          "usage": {"prompt_tokens": 20, "completion_tokens": 2}})
@@ -148,12 +148,23 @@ def test_advertised_levels_must_render_differently(server):
     assert result.returncode != 0 and "share a rendered prompt" in result.stderr
 
 
-def test_every_standard_name_must_land_on_an_advertised_level(server):
+@pytest.mark.parametrize("name,wrong", [("xhigh", "xhigh"), ("minimal", "max"), ("medium", "low")])
+def test_every_standard_name_must_render_as_its_nearest_level(server, name, wrong):
     handler, url = server
     handler.levels = {**LEVELS, "xhigh": 88}
-    with mock.patch.dict(NEAREST, {"xhigh": "xhigh"}):
+    with mock.patch.dict(NEAREST, {name: wrong}):
         result = gate(url)
-    assert result.returncode != 0 and "'xhigh' renders as none" in result.stderr
+    assert result.returncode != 0 and f"{name!r} does not render as its nearest advertised level" in result.stderr
+
+
+def test_nearest_level_matches_the_three_servers():
+    sys.path.insert(0, str(MOD))
+    import readiness
+    glm = deepseek = ["max", "high", "low", "none"]
+    assert {e: readiness.nearest(e, glm) for e in ("xhigh", "medium", "minimal")} == NEAREST
+    assert {e: readiness.nearest(e, deepseek) for e in ("xhigh", "medium", "minimal")} == NEAREST
+    qwen = ["xhigh", "medium", "low", "none"]
+    assert {e: readiness.nearest(e, qwen) for e in ("max", "high", "minimal")} == {"max": "xhigh", "high": "xhigh", "minimal": "low"}
 
 
 def test_mod_is_frozen(tmp_path):

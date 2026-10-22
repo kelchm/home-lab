@@ -12,6 +12,7 @@ engine's own health.
 from __future__ import annotations
 
 import shlex
+from contextvars import ContextVar
 from typing import Any, Mapping
 
 from sparkrun.core.parallelism import extract_parallelism
@@ -26,6 +27,9 @@ REQUIRED_TP = 2
 REQUIRED_PP = 1
 # Set by every recipe; the adapter has no default engine or model.
 REQUIRED_DEFAULTS = ("entrypoint", "served_model_name", "context")
+
+# The head's CX7 address for the launch in progress, per context so nested or concurrent launches keep their own.
+_FABRIC_MASTER: ContextVar[str | None] = ContextVar("tensorfold_fabric_master", default=None)
 
 _HF_MODELS_PREFIX = "models--"
 _SNAPSHOTS_SEGMENT = "/snapshots/"
@@ -90,7 +94,6 @@ class TensorFoldRuntime(RuntimePlugin):
     readiness_styles = (OPENAI_CHAT_STREAM,)
     readiness_health_path = "/health"
     supports_heterogeneous_images = False
-    _fabric_master: str | None = None
 
     def cluster_strategy(self) -> str:
         return "native"
@@ -213,8 +216,9 @@ class TensorFoldRuntime(RuntimePlugin):
         engine_env["RANK"] = str(node_rank)
         engine_env["MASTER"] = node_args["master_addr"]
         engine_env["MASTER_PORT"] = node_args["master_port"]
-        if self._fabric_master:
-            engine_env["FABRIC_MASTER"] = self._fabric_master
+        fabric = _FABRIC_MASTER.get()
+        if fabric:
+            engine_env["FABRIC_MASTER"] = fabric
         binary = _config_get(config, "entrypoint")
         if binary is None:
             raise ValueError("TensorFold recipes set defaults.entrypoint")
@@ -229,7 +233,7 @@ class TensorFoldRuntime(RuntimePlugin):
 
     def _run_cluster(self, hosts, image, serve_command="", recipe=None, overrides=None, **kwargs):
         # The head's CX7 address, for engines whose ranks link over the fabric rather than the rendezvous network.
-        self._fabric_master = (kwargs.get("ib_ip_map") or {}).get(hosts[0]) if hosts else None
+        token = _FABRIC_MASTER.set((kwargs.get("ib_ip_map") or {}).get(hosts[0]) if hosts else None)
         try:
             return self._run_native_cluster(
                 hosts=hosts,
@@ -243,7 +247,7 @@ class TensorFoldRuntime(RuntimePlugin):
                 **kwargs,
             )
         finally:
-            self._fabric_master = None
+            _FABRIC_MASTER.reset(token)
 
     def _stop_cluster(self, hosts, cluster_id, config=None, dry_run: bool = False):
         return self._stop_native_cluster(hosts, cluster_id, config=config, dry_run=dry_run)
