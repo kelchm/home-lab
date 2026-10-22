@@ -1,0 +1,72 @@
+{
+  "kit_repository": "MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold",
+  "kit_revision": "3fd60dfc836fab0f1ed0fd4f0afaf2a1d62b2aab",
+  "engine_repository": "ashhart/TensorFold",
+  "engine_revision": "c4646171139ee8a3c38103eaa1699dad226ec12b",
+  "engine_version": "0.6.0",
+  "upstream_patch_count": 107,
+  "upstream_patch_hash": "e66c657a433d",
+  "image": "ghcr.io/miaai-lab/glm-5.3-flash-exl3-2x-dgx-sparks-tensorfold@sha256:14b5072e8e9918f1080153f57321415a387bc7d78cf9c9b44a7aeae2d4399ccf",
+  "image_id": "sha256:9b00719301e859f7b790b5c4d80ab1e49ef64bef63d3e7af2f3829cfc32cfee1",
+  "launcher_env": {
+    "TENSORFOLD_MEMORY_RESERVE_GIB": "14.5",
+    "TENSORFOLD_NO_UPDATE_CHECK": "1",
+    "TENSORFOLD_NUCLEUS_UNION": "1",
+    "TF_GLM_CACHE_ENTRIES": "32",
+    "TF_GLM_CACHE_GIB": "12.5",
+    "TF_GLM_CACHE_SHARE_PCT": "0",
+    "TF_GLM_CLEAR_THINKING": "0",
+    "TF_GLM_COMM": "roce",
+    "TF_GLM_COPY_DRAFTS": "1",
+    "TF_GLM_COPY_MAX": "15",
+    "TF_GLM_COPY_REPLY_MATCH": "16",
+    "TF_GLM_DENSE": "q4",
+    "TF_GLM_DFLASH_POLICY": "fnc7:0.3",
+    "TF_GLM_DISPLAY_KV_BACKEND": "drm",
+    "TF_GLM_DISPLAY_KV_MIB": "0",
+    "TF_GLM_EFFORT_TAIL": "0",
+    "TF_GLM_EXL3_DEC_ORDER": "0",
+    "TF_GLM_EXL3_LOADS": "nc",
+    "TF_GLM_FILL_BUDGET_MS": "200",
+    "TF_GLM_FILL_DRAFTS": "1",
+    "TF_GLM_FILL_ROWS": "2048",
+    "TF_GLM_HC_SPLIT": "1",
+    "TF_GLM_KDA_CHUNKED": "1",
+    "TF_GLM_KEEP_PER_CHAT": "0",
+    "TF_GLM_KEPT_BYTES_GIB": "0",
+    "TF_GLM_KV": "fp8",
+    "TF_GLM_L2PF": "1",
+    "TF_GLM_MAX_QUEUED": "",
+    "TF_GLM_MTP": "auto",
+    "TF_GLM_MULTI_LONE": "0",
+    "TF_GLM_MULTI_PREFILL": "1",
+    "TF_GLM_MULTI_WINDOW": "32",
+    "TF_GLM_PREFILL_OVERLAP": "2",
+    "TF_GLM_SHARED_PREFIX": "1",
+    "TF_GLM_STREAM_SMOOTH": "1",
+    "TF_GLM_STREAM_SMOOTH_MS": "400",
+    "TF_GLM_WIDE_GRAPHS": "16",
+    "TF_ROCE_MAX_KB": "512",
+    "TF_ROCE_WAIT_S": "300"
+  },
+  "installed_files": {
+    "families/glm5_next/cuda/kept_reasoning.py": {
+      "upstream_sha256": "a7878f3c737859898d83de953a0a4e6eafffa3f5930bbac0b96073994a3be9fa",
+      "site_sha256": "bc41f4bf57e23a61fbb1a277cab190a809612ddfce2417e929c2b7438a26524b"
+    },
+    "cuda/health.py": {
+      "upstream_sha256": "f0105a78ca13ad9e3614d1976a148a7e978e13fc49f32ef22313cfba4a98a35f",
+      "site_sha256": "b28d803cdee2db4ae29a45445862bab02e64da1d56ee574129ed7fe370b98e78"
+    },
+    "cuda/http.py": {
+      "upstream_sha256": "c1c2eb0db9a20926fb39200dd5e126363b63391153217a4ada0f4b9ac242f2e1",
+      "site_sha256": "bee074791e5366595e5332a5448edecc8fa435e607926061ed578c22c6db0b12"
+    }
+  },
+  "mod_files": {
+    "prepare.py": "24f75efd837fbcd1576195a46700a33c8c645b3a756bbdc2f40bde06fc18cf93",
+    "run.sh": "42264da43237bd2b8062cb553dbdf97d7910d4eb6d98a3b8c8536d713c077bff",
+    "serve.py": "c40c6f4e2f42d85f6d2539053de2ba8a7e00bddbf9e4776ee12c4f7dc113c7e4",
+    "site_fixes.py": "ccae2cec634fe2209afcecdbecbb10c4650fbc04a8fa04ad43afae5a7b077ffd"
+  }
+}
