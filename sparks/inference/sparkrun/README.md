@@ -201,7 +201,7 @@ How the profile differs from the kit's own launch:
   - With the caches, the engine synchronizes the context before freeing a sequence or a cache region, and the same request failed alone three times out of three.
   - The cost is 1–5% of throughput and about 0.3–0.7 s on a resumed turn. The kit also documents them as its mitigation for `NV_ERR_NO_MEMORY` messages ([#33](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Single-DGX-Spark-TensorFold/issues/33)).
 - **Placement:** `min_nodes` and `max_nodes` are 1, so SparkRun runs the profile on its solo path, on the head. The worker runs nothing.
-- **Mod:** `run.sh` verifies the mod and installs `serve.py` as `/usr/local/bin/tensorfold-entrypoint`. `serve.py` refuses a two-rank launch, sets the engine's `oom_score_adj` to 1000 and runs the image's binary by its path. Readiness is the shared gate, with five lanes, the window and `xhigh,medium,low,none`.
+- **Mod:** `run.sh` verifies the mod and installs `serve.py` as `/usr/local/bin/tensorfold-entrypoint`. `serve.py` refuses a two-rank launch, and a `drafter` or `mtp_drafts` setting: the engine drafts with the checkpoint's MTP head, at the depth `TF_FLASHNEXT_DEPTH` sets. It sets the engine's `oom_score_adj` to 1000 and runs the image's binary by its path. Readiness is the shared gate, with five lanes, the window and `xhigh,medium,low,none`.
 - **Lock:** `upstream.lock.json` pins the kit, the engine, the digest of the kit's patches, the image and its ID, the weights, the discovery patches' sources and the build inputs.
 - **Tests:** [`tests/test_qwen_one_spark_contract.py`](tests/test_qwen_one_spark_contract.py) checks:
   - the recipe against the lock and the kit's settings, and the gate's arguments;

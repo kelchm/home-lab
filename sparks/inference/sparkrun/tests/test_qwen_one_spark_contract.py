@@ -131,6 +131,13 @@ def test_one_node_launch_runs_the_kits_serve_command(recipe_path, monkeypatch):
     for ranked in ({"RANK": "0"}, {"MASTER": "198.18.0.1"}):
         with pytest.raises(SystemExit, match="one rank"):
             serve.command({**recipe.env, **env, **ranked})
+    # The adapter passes these when a recipe or override sets them; this engine has no flag for either.
+    for setting in ({"MTP_DRAFTS": "3"}, {"DRAFTER": "/cache/huggingface/hub/drafter"}):
+        with pytest.raises(SystemExit, match="TF_FLASHNEXT_DEPTH"):
+            serve.command({**recipe.env, **env, **setting})
+    env, _ = _env(runtime.generate_command(recipe, {"mtp_drafts": 3}, is_cluster=False, num_nodes=1))
+    with pytest.raises(SystemExit, match="MTP_DRAFTS"):
+        serve.command({**recipe.env, **env})
     source = (MOD / "serve.py").read_text()
     assert source.index('"/proc/self/oom_score_adj"') < source.index("os.execv")
 
@@ -160,7 +167,7 @@ def test_build_takes_the_kit_and_engine_at_their_pins():
     assert '"$work"/kit/patches/*.patch "$mod"/patches/*.patch' in build
 
 
-@pytest.mark.parametrize("change", ["edit", "extra", "link"])
+@pytest.mark.parametrize("change", ["edit", "extra", "link", "linked-patches", "linked-build"])
 def test_bundle_rejects_changed_added_and_linked_files(tmp_path, change):
     bundle = _bundle(tmp_path)
     check = [sys.executable, str(bundle / "prepare.py"), "--check"]
@@ -169,9 +176,15 @@ def test_bundle_rejects_changed_added_and_linked_files(tmp_path, change):
         (bundle / "serve.py").write_text((bundle / "serve.py").read_text() + "\n# Unreviewed change\n")
     elif change == "extra":
         (bundle / "patches/0018-extra.patch").write_text("")
-    else:
+    elif change == "link":
         (bundle / "patches/0017-models-reasoning.patch").unlink()
         (bundle / "patches/0017-models-reasoning.patch").symlink_to(MOD / "patches/0017-models-reasoning.patch")
+    else:
+        # A directory linked to an identical copy outside the bundle is refused too.
+        directory = change.removeprefix("linked-")
+        elsewhere = tmp_path / f"{directory}-elsewhere"
+        (bundle / directory).rename(elsewhere)
+        (bundle / directory).symlink_to(elsewhere)
     assert subprocess.run(check, capture_output=True).returncode != 0
 
 

@@ -14,6 +14,11 @@ BINARY = "/opt/tensorfold/native/bin/tensorfold-native"
 def command(env):
     if "RANK" in env or "MASTER" in env:
         raise SystemExit("This mod serves one rank: a two-rank launch set RANK or MASTER")
+    # The Flash Next engine drafts with the checkpoint's own MTP head, at the depth TF_FLASHNEXT_DEPTH sets.
+    for name in ("DRAFTER", "MTP_DRAFTS"):
+        if name in env:
+            raise SystemExit(f"{name} has no flag in this engine: drafts come from the checkpoint's MTP head, and "
+                             "TF_FLASHNEXT_DEPTH sets their depth")
     args = [BINARY, "serve", env["MODEL_PATH"], "--name", env["SERVED_NAME"],
             "--host", env["HOST"], "--port", env["PORT"], "--context", env["CONTEXT"],
             "--parallel", "5", "--max-tokens", env["MAX_TOKENS"],
