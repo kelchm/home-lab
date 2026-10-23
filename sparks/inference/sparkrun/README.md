@@ -509,21 +509,11 @@ rail_check
 
 ### Clients
 
-Clients use the OpenAI-compatible API at `http://10.32.21.31:8888/v1`. Pi's `spark` extension (kelchm/dotfiles#35) configures itself from `/v1/models`: the served name, `context_length` and `reasoning.supported_efforts`. OpenCode carries a fixed entry per model in the workstation's `~/.config/opencode/opencode.jsonc`, under a Spark provider using `@ai-sdk/openai-compatible`; set the entry's context and output limits to the profile's window and reply budget, and its variants to the profile's levels. The provider options:
+Clients use the OpenAI-compatible API at `http://10.32.21.31:8888/v1`. Pi is the workstation's client for the Sparks: its `spark` extension (kelchm/dotfiles#35) configures itself from `/v1/models`, taking the served name, `context_length` and `reasoning.supported_efforts`, so switching profiles needs no client change. OpenCode has no Spark provider.
 
-```json
-{
-  "baseURL": "http://10.32.21.31:8888/v1",
-  "chunkTimeout": 1800000,
-  "headerTimeout": 120000,
-  "timeout": false,
-  "includeUsage": true
-}
-```
+A client's stream timeouts must cover cold prefill. A four-stream 250k batch on the GLM server took more than ten minutes before content, and that server sends nothing between its first role chunk and generation.
 
-The 30-minute chunk timeout covers cold prefill: a four-stream 250k batch on the GLM server took more than ten minutes before content, and that server sends nothing between its first role chunk and generation. The two-minute header timeout covers request preparation, and `timeout: false` avoids a separate overall deadline; a stalled stream is still cancelled. OpenCode 1.18.33, the version checked, caps output at 32,000 tokens internally even when a model declares more.
-
-Where a server reports `usage.prompt_tokens_details.cached_tokens`, `usage.prompt_tokens` includes both cached and fresh input; a missing breakdown does not mean every prompt token was processed fresh. To check a client's accounting, repeat an identical long prompt while its prefix is still cached and confirm a warm response reports nonzero cached tokens; for streaming requests send `"stream_options": {"include_usage": true}` and read the final usage chunk. Then confirm the same call's cache reads reach OpenCode's saved `tokens.cache.read` and Codeburn's cache breakdown. Server metrics alone do not show that the client captured them.
+Where a server reports `usage.prompt_tokens_details.cached_tokens`, `usage.prompt_tokens` includes both cached and fresh input; a missing breakdown does not mean every prompt token was processed fresh. To check a client's accounting, repeat an identical long prompt while its prefix is still cached and confirm a warm response reports nonzero cached tokens; for streaming requests send `"stream_options": {"include_usage": true}` and read the final usage chunk. Then confirm the client recorded the same call's cache reads: server metrics alone do not show that it captured them.
 
 ## Validate
 
