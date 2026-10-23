@@ -224,7 +224,7 @@ class TensorFoldRuntime(RuntimePlugin):
 
     def _one_node_command(self, recipe, overrides: dict[str, Any], skip_keys: set[str] | frozenset[str]) -> str:
         # One rank: no rendezvous, so no RANK, MASTER, MASTER_PORT or FABRIC_MASTER.
-        issues = self._parallelism_issues(recipe, overrides, nodes=1)
+        issues = self._launch_issues(recipe, overrides, nodes=1)
         if issues:
             raise ValueError(issues[0].message)
         config = recipe.build_config_chain(overrides)
@@ -269,9 +269,16 @@ class TensorFoldRuntime(RuntimePlugin):
             raise ValueError(self._topology_message("got %d node(s) for a ranked launch" % num_nodes))
         if node_rank not in (0, 1):
             raise ValueError(self._topology_message("got RANK=%s" % node_rank))
-        issues = self._parallelism_issues(recipe, overrides, nodes=2)
+        issues = self._launch_issues(recipe, overrides, nodes=2)
         if issues:
             raise ValueError(issues[0].message)
+
+    def _launch_issues(self, recipe, overrides: dict[str, Any] | None, *, nodes: int) -> list:
+        # A launch override cannot move a recipe to the other shape: its declared nodes must match the launch.
+        min_nodes = getattr(recipe, "min_nodes", 1)
+        if min_nodes != nodes:
+            return [self.recipe_error(self._topology_message("a %d-node launch of a recipe with min_nodes=%s" % (nodes, min_nodes)))]
+        return self._topology_issues(recipe, overrides)
 
     def _topology_issues(self, recipe, overrides: dict[str, Any] | None) -> list:
         issues = []

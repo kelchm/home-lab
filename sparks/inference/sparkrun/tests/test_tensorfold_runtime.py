@@ -204,7 +204,7 @@ def test_unsupported_topology_rejected(runtime):
     with pytest.raises(ValueError, match="data_parallel"):
         runtime.generate_node_command(_recipe(defaults={"data_parallel": 2}), {}, head_ip=FABRIC_HEAD, num_nodes=2, node_rank=0)
     # A two-rank recipe placed on one node, and a one-node recipe given ranks.
-    with pytest.raises(ValueError, match="1 node"):
+    with pytest.raises(ValueError, match="1-node launch of a recipe with min_nodes=2"):
         runtime.generate_command(_recipe(), {}, is_cluster=False)
     with pytest.raises(ValueError, match="ranked launch"):
         runtime.generate_node_command(_one_node_recipe(), {}, head_ip=FABRIC_HEAD, num_nodes=1, node_rank=0)
@@ -214,6 +214,13 @@ def test_unsupported_topology_rejected(runtime):
         errors = [issue for issue in issues if getattr(issue, "severity", None) == ERROR]
         assert errors, (nodes, tp)
         assert any("one node with tensor_parallel=1, or two nodes" in issue.message for issue in errors)
+
+    # A tensor_parallel override cannot move a recipe to the other shape.
+    with pytest.raises(ValueError, match="1-node launch of a recipe with min_nodes=2"):
+        runtime.generate_command(_recipe(), {"tensor_parallel": 1}, is_cluster=False)
+    loose = _recipe(min_nodes=1, max_nodes=None, defaults={"tensor_parallel": 1})
+    with pytest.raises(ValueError, match="2-node launch of a recipe with min_nodes=1"):
+        runtime.generate_node_command(loose, {"tensor_parallel": 2}, head_ip=FABRIC_HEAD, num_nodes=2, node_rank=0)
 
 
 def _one_node_recipe(defaults=None):
@@ -258,6 +265,11 @@ def test_one_node_recipe_lands_on_the_clusters_first_host(runtime):
 
     hosts, solo, _, placement = resolve_effective_hosts(["h1", "h2"], _one_node_recipe(), {}, runtime=runtime)
     assert (hosts, solo, placement) == (["h1"], True, None)
+    # SparkRun places a two-node recipe on one host when tensor_parallel is overridden to 1; the adapter refuses it.
+    hosts, solo, _, _ = resolve_effective_hosts(["h1", "h2"], _recipe(), {"tensor_parallel": 1}, runtime=runtime)
+    assert (hosts, solo) == (["h1"], True)
+    with pytest.raises(ValueError, match="min_nodes=2"):
+        runtime.generate_command(_recipe(), {"tensor_parallel": 1}, is_cluster=not solo, num_nodes=len(hosts))
 
 def test_prepare_distributes_declared_drafter(runtime):
     recipe = _recipe()
