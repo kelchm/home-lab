@@ -1,0 +1,68 @@
+# qwen38fn-fp4local-tp1-mia-tf-656879fd-nvidia-262k: Mia's one-Spark Qwen kit at 656879fd, built here with /v1/models discovery, serving NVIDIA's FP4-Local weights on one Spark; SparkRun owns the node and lifecycle operations.
+recipe_version: '2'
+model: nvidia/Qwen3.8-Flash-Next-FP4-Local
+model_revision: b9ce18a6887e18c089fdea8509a33e63429a3300
+runtime: tensorfold
+container: sha256:49364bc3000ba0ec106484d477924bb100119de1a036400f3446e9a63f58dde2
+min_nodes: 1
+max_nodes: 1
+metadata:
+  profile: qwen38fn-fp4local-tp1-mia-tf-656879fd-nvidia-262k
+  weights: nvidia
+  weights_variant: fp4-local
+  serving_profile: upstream
+  description: Mia's one-Spark Zig-engine kit at 656879fd with NVIDIA's FP4-Local weights, the kit's 262,144-token window and five streams, rebuilt with /v1/models discovery
+  kit_revision: 656879fd752749bbd11a6e1a065a326c00940911
+  engine_revision: db281878ddb836fd0df510d8771ecb7e0fe47d26
+  upstream_patch_count: 15
+  server_patch_count: 2
+  target_model_revision: b9ce18a6887e18c089fdea8509a33e63429a3300
+defaults:
+  tensor_parallel: 1
+  pipeline_parallel: 1
+  host: 0.0.0.0
+  port: 8888
+  served_model_name: Qwen3.8-Flash-Next
+  context: 262144
+  max_tokens: 32768
+  entrypoint: /usr/local/bin/tensorfold-entrypoint
+env:
+  # The kit's scripts/config.sh exports, at its defaults.
+  TENSORFOLD_NO_UPDATE_CHECK: '1'
+  TENSORFOLD_MEMORY_RESERVE_GIB: '10'
+  TENSORFOLD_VISION_WORKSPACE_MIB: '2048'
+  TENSORFOLD_MAX_IMAGES: '50'
+  TENSORFOLD_IMAGE_TOKENS: '16384'
+  TENSORFOLD_VIDEO_TOKENS: '16384'
+  TF_FLASHNEXT_YARN: '0'
+  TF_FLASHNEXT_DEPTH: '6'
+  TF_FLASHNEXT_PRODUCT_STREAMS: '5'
+  TF_FLASHNEXT_PREFILL_TAIL: '512'
+  TF_FLASHNEXT_PROMPT_EXPERT_TILE: '2'
+executor_config:
+  entrypoint: ''
+  user: root
+  ipc: host
+  devices:
+  - /dev/infiniband
+  cap_add:
+  - IPC_LOCK
+  ulimit:
+  - memlock=-1:-1
+  - stack=67108864
+  - nofile=65535:65535
+  auto_remove: false
+runtime_cache:
+  key_by_image: true
+mods:
+- ../mods/tensorfold-readiness
+- ../mods/mia-tensorfold-qwen38fn-tp1-656879fd
+post_exec:
+- python3 /opt/tensorfold-readiness/readiness.py --model Qwen3.8-Flash-Next --context 262144 --lanes 5 --efforts xhigh,medium,low,none
+distribution_config:
+  models:
+    entries:
+    - name: nvidia/Qwen3.8-Flash-Next-FP4-Local
+      revision: b9ce18a6887e18c089fdea8509a33e63429a3300
+      target:
+      - -1
