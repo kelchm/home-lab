@@ -30,12 +30,13 @@ TWO_SPARK_MOD = ROOT / "mods/mia-tensorfold-qwen38fn-v1.1-discovery"
 SERVED = "Qwen3.8-Flash-Next"
 EFFORTS = ["xhigh", "medium", "low", "none"]
 NATIVE = 262144
-# The kit's scripts/config.sh exports at its defaults, apart from the YaRN factor, which follows the window.
+# The kit's scripts/config.sh exports at its defaults, apart from the YaRN factor, which follows the window, and the
+# kit's opt-in system-memory cache, whose fences keep a request that fails after admission from poisoning the context.
 KIT_ENV = {
     "TENSORFOLD_NO_UPDATE_CHECK": "1", "TENSORFOLD_MEMORY_RESERVE_GIB": "10", "TENSORFOLD_VISION_WORKSPACE_MIB": "2048",
     "TENSORFOLD_MAX_IMAGES": "50", "TENSORFOLD_IMAGE_TOKENS": "16384", "TENSORFOLD_VIDEO_TOKENS": "16384",
     "TF_FLASHNEXT_DEPTH": "6", "TF_FLASHNEXT_PRODUCT_STREAMS": "5", "TF_FLASHNEXT_PREFILL_TAIL": "512",
-    "TF_FLASHNEXT_PROMPT_EXPERT_TILE": "2",
+    "TF_FLASHNEXT_PROMPT_EXPERT_TILE": "2", "TF_FLASHNEXT_SYSTEM_CACHE": "1", "TF_FLASHNEXT_RING_CACHE": "1",
 }
 
 
