@@ -459,7 +459,7 @@ sparkrun logs "$recipe" --cluster sparks --all-sources
 sparkrun stop "$recipe" --cluster sparks
 ```
 
-Without `--all-sources`, `logs` reads only rank 0. `run --no-follow` waits for readiness because every recipe has `post_exec`. A failed hook makes the command fail but does not stop the server; read the logs and stop the failed instance before rolling back. Containers need an explicit SparkRun launch after a host reboot.
+Without `--all-sources`, `logs` reads only rank 0. For a one-node profile, pass `--hosts` with the head's address instead of `--cluster sparks`, as [Enable TensorFold in SparkRun](#enable-tensorfold-in-sparkrun) explains. `run --no-follow` waits for readiness because every recipe has `post_exec`. A failed hook makes the command fail but does not stop the server; read the logs and stop the failed instance before rolling back. Containers need an explicit SparkRun launch after a host reboot.
 
 SparkRun 0.3.10 finds a workload for `stop`, `logs` and relaunch by its runtime, model, image, port, served name and parallelism, not by filename, mod path or hooks. A recipe that differs in any of those does not find another's instance, and with the greedy scheduler `run` does not check for one either, so stopping the previous profile first, with the recipe that launched it, is a manual step. Never overlap inference stacks on these GPUs.
 
