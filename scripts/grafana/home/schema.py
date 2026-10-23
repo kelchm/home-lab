@@ -123,6 +123,10 @@ BG = {"reduceOptions": RED, "orientation": "horizontal", "showUnfilled": True, "
       "minVizHeight": 14, "minVizWidth": 8, "maxVizHeight": 300, "legend": {"showLegend": False}}
 
 
+TILE = {"colorMode": "background_solid", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": RED, "textMode": "value_and_name",
+        "wideLayout": False, "text": {"titleSize": 13, "valueSize": 22}}
+
+
 def ts_custom(**kw):
     c = {"drawStyle": "line", "lineInterpolation": "smooth", "lineWidth": 2, "fillOpacity": 18, "gradientMode": "opacity", "showPoints": "never", "spanNulls": False,
          "stacking": {"mode": "none", "group": "A"}, "axisBorderShow": False, "axisPlacement": "auto", "thresholdsStyle": {"mode": "off"}}
@@ -136,6 +140,7 @@ class Panels:
 
     def __init__(self):
         self.elements = {}
+        self.groups = {}   # tile group key -> (title, its tiles' element keys, the variable a single tile repeats by, whether its words need wide tiles)
 
     def add(self, key, title, group, queries, options, defaults, overrides=None, desc="", transformations=None, qopts=None, links=None):
         self.elements[key] = {"kind": "Panel", "spec": {"id": 0, "title": title, "description": desc, "links": links or [],
@@ -143,13 +148,15 @@ class Panels:
             "vizConfig": {"kind": "VizConfig", "group": group, "version": "", "spec": {"options": options, "fieldConfig": {"defaults": defaults, "overrides": overrides or []}}}}}
         return key
 
-    def tiles(self, key, title, items, **kw):
-        """State tiles: each item is (name, expr, field properties)."""
-        qs = [q(expr, name, r) for (name, expr, _), r in zip(items, "ABCDEFGH")]
-        ov = [by_ref(r, **p) for (_, _, p), r in zip(items, "ABCDEFGH") if p]
-        opts = {"colorMode": "background_solid", "graphMode": "none", "justifyMode": "center", "orientation": "vertical",
-                "reduceOptions": RED, "textMode": "value_and_name", "wideLayout": False, "text": {"titleSize": 13, "valueSize": 24}}
-        return self.add(key, title, "stat", qs, opts, {"color": {"mode": "thresholds"}, "thresholds": th(QUIET), "decimals": 0}, ov, **kw)
+    def tiles(self, key, title, items, links=None, wide=False, **kw):
+        """State tiles under one title, each item (name, expr, field properties) its own untitled panel, so a narrow screen can wrap them onto more lines.
+        wide is for a group whose names or values are long words, which need two tiles to a line on a phone rather than three."""
+        members = []
+        for n, (name, expr, p) in enumerate(items, 1):
+            defaults = {"color": {"mode": "thresholds"}, "thresholds": th(QUIET), "decimals": 0, "links": links or []}
+            members.append(self.add(f"{key}-{n}", "", "stat", [q(expr, name)], {**TILE}, defaults, [by_ref("A", **p)] if p else [], **kw))
+        self.groups[key] = (title, members, None, wide)
+        return key
 
     def table(self, key, title, keylabel, keyname, cols, info=None, sort=None, desc_sort=True, keywidth=140, **kw):
         """Member table: one row per member. cols are (name, expr aggregated by the key label, field properties).
@@ -218,7 +225,9 @@ def item(name, repeat=None, when=None):
 
 
 def autogrid(items, cols, px, width="standard"):
-    return {"kind": "AutoGridLayout", "spec": {"maxColumnCount": cols, "columnWidthMode": width, "rowHeightMode": "custom", "rowHeight": px, "fillScreen": False, "items": items}}
+    """Panels of one size that wrap onto more lines when a line has no room; width is a named minimum column width or one in pixels."""
+    columns = {"columnWidthMode": "custom", "columnWidth": width} if isinstance(width, int) else {"columnWidthMode": width}
+    return {"kind": "AutoGridLayout", "spec": {"maxColumnCount": cols, **columns, "rowHeightMode": "custom", "rowHeight": px, "fillScreen": False, "items": items}}
 
 
 def grid(h, *cells):

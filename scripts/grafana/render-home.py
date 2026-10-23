@@ -56,19 +56,35 @@ def auto(cols, px, key, repeat=None, when=None):
     return row(autogrid([item(key, repeat, when)], cols=cols, px=px))
 
 
+# A tile is at least this wide, so a phone fits three to a line and a desktop keeps a group on one line; a group of long words fits two to a line.
+TILE_PX, TILE_WIDTH, TILE_WIDE = 76, 100, 130
+
+
+def tiles(key, repeat=None, panels=w.W):
+    """A tile group: its title over its tiles, which wrap onto more lines on a narrow screen. repeat makes one group per value of a variable."""
+    title, members, each, wide = panels.groups[key]
+    for m in members:
+        SOURCE[m] = (m, "")
+    # A group whose one tile repeats per value has as many tiles as values; 12 caps how many share a line.
+    r = row(autogrid([item(m, each) for m in members], cols=12 if each else len(members), px=TILE_PX, width=TILE_WIDE if wide else TILE_WIDTH), title)
+    if repeat:
+        r["spec"]["repeat"] = {"mode": "variable", "value": repeat}
+    return r
+
+
 GO = cells(2, ("deeper", 24))
 # Heights are in grid units of 30 px plus 8 px gaps; a table needs about 36 px a row plus 50 for its title and header.
 PAGES = {
-    "k8s-prod": [cells(4, ("k8s-state", 24)), cells(6, ("machines@k8s", 15), ("machine-cpu@k8s", 9)), cells(10, ("k8s-capacity", 7), ("k8s-deploys", 7), ("k8s-namespaces", 10)),
-                 cells(9, ("feed@k8s-prod", 24)), cells(5, ("volumes", 10), ("databases", 14)), cells(6, ("ssd-drives@k8s", 24)), cells(12, ("routes", 12), ("certs", 12)),
+    "k8s-prod": [tiles("k8s-state"), cells(6, ("machines@k8s", 15), ("machine-cpu@k8s", 9)), cells(10, ("k8s-capacity", 7), ("k8s-deploys", 7), ("k8s-namespaces", 10)),
+                 cells(9, ("feed@k8s-prod", 24)), tiles("volumes"), cells(5, ("databases", 24)), cells(6, ("ssd-drives@k8s", 24)), cells(12, ("routes", 12), ("certs", 12)),
                  cells(11, ("probes", 24)), GO],
-    "pve-sbx": [cells(4, ("pve-state", 24)), cells(6, ("machines@pve", 15), ("machine-cpu@pve", 9)), cells(8, ("pve-guests", 15), ("pve-pools", 9)), cells(6, ("ssd-drives@pve", 24)), GO],
-    "spark": [auto(2, 130, "gpu", "gpu"), auto(1, 70, "inference-idle", when=False), only_while(cells(4, ("inference", 24)), "model", ".+"), only_while(cells(7, ("tokens", 24)), "model", ".+"),
+    "pve-sbx": [tiles("pve-state"), cells(6, ("machines@pve", 15), ("machine-cpu@pve", 9)), cells(8, ("pve-guests", 15), ("pve-pools", 9)), cells(6, ("ssd-drives@pve", 24)), GO],
+    "spark": [tiles("gpu", repeat="gpu"), auto(1, 70, "inference-idle", when=False), only_while(tiles("inference"), "model", ".+"), only_while(cells(7, ("tokens", 24)), "model", ".+"),
               cells(5, ("machines@spark", 15), ("machine-cpu@spark", 9)), cells(7, ("gpu-use", 24)), cells(5, ("ssd-drives@spark", 24)), GO],
-    "athena": [cells(4, ("nas-state", 24)), cells(4, ("machines@synology", 15), ("nas-volumes", 9)), cells(10, ("hdd-drives", 24)), GO],
-    "network": [cells(12, ("netdev", 24)), cells(9, ("feed@network", 24)), cells(5, ("wan", 24)), cells(4, ("starlink", 14), ("tmobile", 10)), cells(11, ("wifi", 24)), GO],
-    "power": [auto(1, 130, "ups", "ups"), cells(7, ("ups-load", 12), ("ups-runtime", 12)), GO],
-    "devices": [cells(6, ("machines@pi", 15), ("machine-cpu@pi", 9)), cells(4, ("glkvm", 24)), GO]}
+    "athena": [tiles("nas-state"), cells(4, ("machines@synology", 15), ("nas-volumes", 9)), cells(10, ("hdd-drives", 24)), GO],
+    "network": [cells(12, ("netdev", 24)), cells(9, ("feed@network", 24)), cells(5, ("wan", 24)), tiles("starlink"), tiles("tmobile"), cells(11, ("wifi", 24)), GO],
+    "power": [tiles("ups", repeat="ups"), cells(7, ("ups-load", 12), ("ups-runtime", 12)), GO],
+    "devices": [cells(6, ("machines@pi", 15), ("machine-cpu@pi", 9)), tiles("glkvm"), GO]}
 # The repeat variables a system's widgets may use; anything else would be a widget on the wrong tab.
 VARIABLES = {"spark": ("$gpu", "$model"), "power": ("$ups", "${ups")}
 
@@ -124,7 +140,7 @@ def everything():
             o["matcher"]["options"] = f'{w.GLYPH[o["matcher"]["options"]]} {o["matcher"]["options"]}'
     layout = rows(row(autogrid([item("board"), item("strip")], cols=2, px=314)),
                   row(autogrid([item("attention", when=True), item("quiet", when=False)], cols=1, px=300)),
-                  row(autogrid([item("reach")], cols=1, px=110)), row(autogrid([item("watch")], cols=1, px=120)), row(autogrid([item("inventory")], cols=1, px=760)))
+                  tiles("reach", panels=e.E), tiles("watch", panels=e.E), row(autogrid([item("inventory")], cols=1, px=760)))
     return els, tab(f'{w.GLYPH["Everything"]} Everything', layout)
 
 
@@ -137,9 +153,12 @@ def system(c):
     for v in els.values():
         v["spec"]["title"] = v["spec"]["title"].replace(f" · {c}", "")   # the tab already says which system this is
     text = json.dumps(els)
-    for stray in ("$gpu", "$model", "$ups", "${ups"):
+    for stray in ("$gpu", "$model", "$ups", "${ups", "$probe"):
         assert stray in VARIABLES.get(c, ()) or stray not in text, f"{c}: a panel refers to {stray}"
-    return {f"{c}-{k}": v for k, v in els.items()}, tab(f"{w.GLYPH[c]} {c}", prefixed(layout, f"{c}-"))
+    layout = prefixed(layout, f"{c}-")
+    for r in layout["spec"]["rows"]:
+        r["spec"]["title"] = r["spec"]["title"].replace(f" · {c}", "")
+    return {f"{c}-{k}": v for k, v in els.items()}, tab(f"{w.GLYPH[c]} {c}", layout)
 
 
 def home():
