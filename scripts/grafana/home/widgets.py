@@ -193,7 +193,7 @@ W.tiles("volumes", "Volumes · k8s-prod", [
     ("Degraded", zero(f'sum(longhorn_volume_robustness{{state="degraded",{K}}})'), dict(thresholds=PROBLEM)),
     ("Faulted", zero(f'sum(longhorn_volume_robustness{{state="faulted",{K}}})'), dict(thresholds=BROKEN)),
     ("Backup target", zero(f'max(longhorn_backup_target_available{{{K}}})'), dict(mappings=yes("Reachable", "Unreachable"), thresholds=th([{"value": None, "color": "red"}, {"value": 1, "color": NEUTRAL}])))],
-    desc="Longhorn volumes by state, and whether the place backups go can be reached.")
+    wide=True, desc="Longhorn volumes by state, and whether the place backups go can be reached.")
 
 # ================================================================== Proxmox cluster
 GI = 'max by (id, name) (pve_guest_info{template="0"})'
@@ -210,7 +210,7 @@ W.tiles("pve-state", "Cluster state · pve-sbx", [
     ("Guests running", zero(f"count(({GUEST}) == 1)"), {}),
     ("Guests stopped", zero(f"count(({GUEST}) == 0)"), dict(thresholds=PROBLEM)),
     ("Guests without a backup", zero("max(pve_not_backed_up_total)"), dict(thresholds=PROBLEM))],
-    desc="Nodes, quorum and guests, in the same shape as the Kubernetes tiles.")
+    wide=True, desc="Nodes, quorum and guests, in the same shape as the Kubernetes tiles.")
 W.table("pve-guests", "Guests · pve-sbx", "name", "Guest", [
     ("State", G("pve_up"), dict(mappings=yes("Running", "Stopped", "orange"), custom__cellOptions=TEXT)),
     ("CPU", f'100 * {G("pve_cpu_usage_ratio")}', LOADBAR),
@@ -266,7 +266,7 @@ W.tiles("nas-state", "NAS · athena", [
     ("Disks not in use", zero(f"count(diskStatus{{{SYN}}} == 3)"), dict(thresholds=NOTICE)),
     ("Inside", f"max(temperature{{{SYN}}})", dict(unit="celsius")),
     ("DSM update", f"max(upgradeAvailable{{{SYN}}})", dict(mappings=words(_1=("Available", None), _2=("None", None)), thresholds=th(QUIET + [{"value": 1, "color": LOOK}, {"value": 2, "color": NEUTRAL}])))],
-    desc="What DSM reports about the box itself: its own status, power, fans, the storage pool and the disks.")
+    wide=True, desc="What DSM reports about the box itself: its own status, power, fans, the storage pool and the disks.")
 W.bars("nas-volumes", "Volumes · athena", f'100 * (1 - max by (raidName) (raidFreeSize{{{SYN},raidName=~"Volume.*"}}) / max by (raidName) (raidTotalSize{{{SYN},raidName=~"Volume.*"}}))', "{{raidName}}",
        desc="How full each NAS volume is, from DSM's own figures. The storage pool under it is always fully allocated, so it is not shown.")
 
@@ -373,7 +373,7 @@ W.tiles("tmobile", "T-Mobile gateway", [
     ("Signal", f"max(tmobile_5g_rsrp_dbm{{{TM}}})", dict(unit="suffix: dBm")),
     ("Quality", f"max(tmobile_5g_sinr_db{{{TM}}})", dict(unit="dB")),
     ("Up for", f"max(tmobile_uptime_seconds{{{TM}}})", dict(unit="dtdurations"))],
-    desc="The gateway's own view of its radio link: registration, bars, received signal power and signal quality.")
+    wide=True, desc="The gateway's own view of its radio link: registration, bars, received signal power and signal quality.")
 
 
 def radio(metric, extra=""):
@@ -445,4 +445,5 @@ W.tiles("glkvm", "Recovery console · glkvm", [
 UPS_RX = '/(?=.*lbl="(?<text>[^"]+)")(?=.*ups="(?<value>[^"]+)")/'
 VARS = [qvar("gpu", "query_result(nvidia_smi_gpu_info)", '/instance="([^"]+)"/', hide="hideVariable", multi=True, all_=True, current=ALL),
         qvar("model", "query_result(tensorfold:kv_cache_usage_ratio)", '/model="([^"]+)"/', hide="hideVariable"),
-        qvar("ups", f"query_result({UPS_LIST})", UPS_RX, hide="hideVariable", multi=True, all_=True, current=ALL)]
+        qvar("ups", f"query_result({UPS_LIST})", UPS_RX, hide="hideVariable", multi=True, all_=True, current=ALL),
+        qvar("probe", f"query_result(max by (probe) (probe_success{{{BB}}}))", '/probe="([^"]+)"/', hide="hideVariable", multi=True, all_=True, current=ALL)]

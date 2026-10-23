@@ -5,7 +5,7 @@ different kind of thing. A rule returns a row only while its line is crossed: al
 things worth a look before they become alerts.
 """
 from . import widgets as w
-from .schema import FIRE, NEUTRAL, NOALERT, QUIET, LOOK, BROKEN, PROBLEM, TEXT, RED, Panels, T, by_name, fixed, ls, match, q, th, union, yes, zero
+from .schema import FIRE, NEUTRAL, NOALERT, QUIET, LOOK, BROKEN, PROBLEM, TEXT, RED, TILE, Panels, T, by_name, fixed, ls, match, q, th, union, yes, zero
 from .widgets import FS, HOSTS, K, SYS, SYSTEMS
 
 KEYS = "system, thing, what, detail"
@@ -168,7 +168,8 @@ def needs_attention(system=None):
     where = f"on {system}" if system else "in the lab"
     P = Panels()
     P.add("attention", "Needs attention", "table", [q(Q(tagged(seen)), fmt="table")], {"cellHeight": "sm", "showHeader": True, "sortBy": [{"displayName": "Level", "desc": True}]}, TDEF,
-          [by_name("Level", custom__width=108, custom__cellOptions=TEXT, mappings=LEVEL), by_name("System", custom__width=88), by_name("tab", custom__hidden=True)],
+          [by_name("Level", custom__width=108, custom__cellOptions=TEXT, mappings=LEVEL), by_name("What", custom__wrapText=True), by_name("System", custom__width=88),
+           by_name("Where", custom__wrapText=True), by_name("tab", custom__hidden=True)],
           desc=f"Everything {where} that has crossed its own line: alerts that are firing, and quieter things worth a look before they become alerts. Each kind of thing is judged by its own rule.",
           transformations=[T("organize", excludeByName={"Time": True, "order": True, **({"system": True} if system else {})},
                              indexByName={"Value": 0, "what": 1, "system": 2, "thing": 3, "detail": 4},
@@ -179,13 +180,13 @@ def needs_attention(system=None):
     return P.elements
 
 # ------------------------------------------------------------------ the services, seen from outside the cluster
-REACH = f"(1000 * max by (probe) (probe_duration_seconds{{{BB}}}) and on (probe) (max by (probe) (probe_success{{{BB}}}) == 1)) or (max by (probe) (probe_success{{{BB}}}) - 1)"
-E.add("reach", "Services, from outside the cluster", "stat", [q(REACH, "{{probe}}")],
-      {"colorMode": "background_solid", "graphMode": "none", "justifyMode": "center", "orientation": "vertical", "reduceOptions": RED, "textMode": "value_and_name", "wideLayout": False,
-       "text": {"titleSize": 12, "valueSize": 17}},
+PB = f'{BB},probe="$probe"'
+REACH = f"(1000 * max by (probe) (probe_duration_seconds{{{PB}}}) and on (probe) (max by (probe) (probe_success{{{PB}}}) == 1)) or (max by (probe) (probe_success{{{PB}}}) - 1)"
+E.add("reach", "", "stat", [q(REACH, "{{probe}}")], {**TILE},
       {"unit": "ms", "decimals": 0, "color": {"mode": "thresholds"}, "thresholds": th(QUIET + [{"value": 1000, "color": LOOK}, {"value": 2000, "color": "orange"}]),
        "mappings": [{"type": "value", "options": {"-1": {"text": "Down", "color": "red", "index": 0}}}], "links": [{"title": "Open the probes", "url": "/d/pi-blackbox?${__url_time_range}"}]},
       desc="How long each service takes to answer a Pi on the LAN that reaches it the way a person would. Yellow from one second, orange from two, where the alert fires; red when it does not answer.")
+E.groups["reach"] = ("Services, from outside the cluster", ["reach"], "probe", False)
 
 # ------------------------------------------------------------------ the watch itself
 LOG_LINES = 'sum(rate(vl_rows_ingested_total{cluster="k8s-prod",job="victoria-logs-single-server",type="opentelemetry_protobuf"}[10m]))'
@@ -198,8 +199,8 @@ E.tiles("watch", "The watch itself", [
     ("Alert delivery", zero('count(ALERTS{alertname="Watchdog",alertstate="firing"})'), dict(mappings=yes("Alive", "Silent"), thresholds=th([{"value": None, "color": "red"}, {"value": 1, "color": NEUTRAL}]))),
     ("Alert rules loaded", "count(vmalert_alerting_rules_last_evaluation_samples)", {}),
     ("Alert rules failing", zero("count(increase(vmalert_alerting_rules_errors_total[1h]) > 0)"), dict(thresholds=BROKEN))],
+    links=[{"title": "Open the monitoring pipeline", "url": "/d/observability-pipeline?${__url_time_range}"}],
     desc="An empty list only means something if the monitoring is alive. These show that metrics and logs are arriving, that alerts can be delivered, and that the rules are being evaluated.")
-E.elements["watch"]["spec"]["vizConfig"]["spec"]["fieldConfig"]["defaults"]["links"] = [{"title": "Open the monitoring pipeline", "url": "/d/observability-pipeline?${__url_time_range}"}]
 
 # ------------------------------------------------------------------ the inventory: every kind of thing in every system
 ORDER = ["Machines", "GPUs", "Drives", "Filesystems", "Storage pools", "Volumes", "Guests", "Namespaces", "Models", "Certificates", "Routes", "Databases",
