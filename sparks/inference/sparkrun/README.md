@@ -195,7 +195,7 @@ How the profile differs from the kit's own launch:
   - a 10 GiB memory reserve and a 2 GiB vision workspace.
 
   The recipe states the ten variables the kit exports, and `serve.py` passes the kit's serve flags.
-- **Window:** 1,048,576 tokens, with the kit's YaRN factor of 4 past the trained 262,144. A request's prompt plus reply must fit the shared sequence pool, 24.36 GiB on October 23. That's about 1.46M FP8 tokens, so one full window leaves room for about 400K tokens across the other four streams. Qualification is pending ([#969](https://github.com/kelchm/home-lab/issues/969)).
+- **Window:** 1,048,576 tokens, with the kit's YaRN factor of 4 past the trained 262,144. A request's prompt plus reply must fit the shared sequence pool, 24.36 GiB on October 23. That's about 1.46M FP8 tokens, so one full window leaves room for about 400K tokens across the other four streams. It [qualified on October 23](https://github.com/kelchm/home-lab/issues/969#issuecomment-6359010017): on two fresh boots, two cold prompts of about 1.04M tokens each found their needle, the first as the first long request after the boot. Each took about 16 minutes to prefill, at about 1,080 tok/s.
 - **System-memory cache:** the recipe also sets the kit's opt-in `TF_FLASHNEXT_SYSTEM_CACHE=1` and `TF_FLASHNEXT_RING_CACHE=1`, which back the caches and sequence state with registered system memory. Without them, the engine can free a sequence's memory while the GPU still writes to it.
   - On October 23, a request that failed after admission (`top_k` 249) raised `Xid 31`, a `FAULT_PDE` write fault, twice. That's the kit's [#67](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Single-DGX-Spark-TensorFold/issues/67): afterwards the engine fails every request while `/health` answers OK.
   - With the caches, the engine synchronizes the context before freeing a sequence or a cache region, and the same request failed alone three times out of three.
@@ -221,9 +221,12 @@ On October 23, on spark-1 alone, with #940's `bench.py` and the arguments of its
 | Code at 1 / 4 / 5 streams, the kit's `bench_streams.py` with thinking on | 49.9 / 166.4 / 192.9 tok/s | 50.4 / 171.0 / 202.6 | not run |
 | 64K session turn after the first | 1.6 s, 99.7% resumed | 0.9 s | not run |
 
+At the 1M window, `bench.py`'s decode and prefill matched the first column. The kit's thinking-on decode was about 8% lower, and its replies differed from the 262K ones: code 46.1 / 151.4 / 179.4 tok/s at 1 / 4 / 5 streams on a fresh boot. A resumed 64K turn took 1.9 to 2.6 s.
+
 Quality, on the kit's defaults:
 - **tool-eval-bench 2.8.1** at [Alfonso Fortunato's](https://github.com/devopsfortunato/Qwen3.8-Flash-Next-FP4-Local-DGX-Spark) pin and settings: 86/100, equal in every category to his TensorFold run. NVIDIA's vLLM recipe scored 89 and 90 there on the same weights, and the gap is mostly Structured Output (6/12 against 10/12), which this engine refuses.
 - **The repository's checks:** the agent gate passed 18 of 18, `toolcheck.py` 3/3, and tool-eval-bench v1.8.0's core run 97.
+- **At the 1M window**, with YaRN 4 and the system-memory cache: tool-eval-bench 2.8.1 scored 86 again (166 points), v1.8.0 97, and the agent gate 18 of 18 on both boots.
 
 How the profile differs from the kit's own launch:
 
@@ -426,7 +429,8 @@ The two-Spark kit's #3, #6 and #9 cannot occur with one rank: there is no contro
 - **Repeated sampling:** without a `seed`, a sampled request repeats the same reply ([#75](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Single-DGX-Spark-TensorFold/issues/75)). Send a seed per request for varied samples.
 - **Long prompts hold the queue:** prompts fill one at a time, so a short request waits for a long prompt's pass. The kit's fair fill would change that and stays off.
 - **Admission:** a request is admitted when its prompt plus reply budget fits the pool beside the others, and is refused otherwise.
-- **YaRN:** the factor is 4 for every request, short ones included. Qwen recommends static YaRN only where long prompts need it.
+- **YaRN:** the factor is 4 for every request, short ones included; Qwen recommends static YaRN only where long prompts need it. On October 23, tool-eval scored the same at 1M as at 262,144, and thinking-on decode was about 8% slower.
+- **Full windows:** a 1.04M-token prompt prefills for about 16 minutes, and requests behind it wait. With the prompt cache full and such a prompt filling, the head's `MemAvailable` fell to 13.9 GiB.
 - **Not established:** long sessions growing together, concurrent long prompts, and stability beyond the October 23 trials.
 - **Access and memory:** the endpoint has no API key, and no memory watchdog runs ([#944](https://github.com/kelchm/home-lab/issues/944)).
 
