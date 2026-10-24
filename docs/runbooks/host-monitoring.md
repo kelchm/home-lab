@@ -63,6 +63,14 @@ Before going further, confirm on the node that guests still pass traffic, `cat /
 
 The deployer runs without Docker's default AppArmor profile: on PVE's kernel that profile denies Unix sockets, including the Docker socket. Containers on a PVE node use host networking only. doco-cd has no bind-address setting, so its health and metrics ports (8080, 9120) listen on every interface of the node; its webhook and API stay disabled without a secret.
 
+CPU fan speed and chassis temperature come from the BIOS through HP's WMI sensor interface. PVE's kernel ships the `hp-wmi-sensors` driver but does not autoload it, so load it at boot; node-exporter then reports `node_hwmon_fan_rpm` and two more `node_hwmon_temp_celsius` sensors (CPU and chassis) on the chip named `hp_wmi_sensors`. All three nodes have it since 2026-10-24.
+
+```sh
+ssh kelchm@NODE 'echo hp-wmi-sensors | sudo tee /etc/modules-load.d/hp-wmi-sensors.conf && sudo modprobe hp-wmi-sensors'
+```
+
+The Talos nodes' BIOS offers the same interface, but Talos builds its kernel without `CONFIG_SENSORS_HP_WMI`.
+
 ## NAS
 
 Athena runs the [NAS monitoring](../../synology/monitoring/README.md) project from its existing doco-cd, so enrollment is the host state the project expects, then a merge. Its instance is `nas`, from the address registry, and its jobs are `synology-node`, `synology-snmp` and `synology-vmagent`.
