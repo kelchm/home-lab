@@ -122,7 +122,7 @@ Check memory with `docker stats --no-stream`, which matters on a Spark where a l
 | `spark-1`, `spark-2` | One Samsung MZALC4T0HBL1-00B07 4 TB NVMe each, controller `nvme0`, namespace `nvme0n1` | Compose, v0.15.0, `spark-smartctl` |
 | Athena (`instance="nas"`) | Eight Seagate ST14000NM001G-2KJ103 14 TB HDDs, `/dev/sata1`–`/dev/sata8` | DSM SNMP, `synology-snmp`, device `Disk 1`–`Disk 8` |
 
-The hardware inventory includes the three Pis (`streamer-basement-workbench`, `ups-compute-rack`, `ups-office`): all have only SD storage (`mmcblk0`), with no NVMe disk. SD cards expose no SMART, so the Pis are excluded. Adding a disk requires checking its actual device/controller name and extending the explicit Compose device list. A new NVMe controller reported by node-exporter without health data raises `DriveMetricsMissing`.
+The hardware inventory includes the four Pis (`streamer-basement-workbench`, `ups-compute-rack`, `ups-office`, `adsb-office`): all have only SD storage (`mmcblk0`), with no NVMe disk. SD cards expose no SMART, so the Pis are excluded. Adding a disk requires checking its actual device/controller name and extending the explicit Compose device list. A new NVMe controller reported by node-exporter without health data raises `DriveMetricsMissing`.
 
 ### Device permissions
 
