@@ -1,0 +1,356 @@
+:root {
+  color-scheme: dark light;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
+  /* Dark utility palette (default) */
+  --bg-toolbar: #111418;
+  --bg-stage: #090b0d;
+  --border-toolbar: #262c34;
+  --text-primary: #e6edf3;
+  --text-muted: #8b949e;
+
+  --btn-bg: #1a1f26;
+  --btn-bg-hover: #242b35;
+  --btn-bg-active: #2d3642;
+  --btn-border: #303742;
+  --btn-border-hover: #485262;
+  --btn-port-bg: #262d37;
+  --btn-port-text: #9ca7b4;
+
+  --last-req-border: #388bfd;
+  --last-req-bg: rgba(56, 139, 253, 0.12);
+
+  --pending-border: #d29922;
+  --pending-bg: rgba(210, 153, 34, 0.16);
+  --text-warning: #d29922;
+  --text-error: #f85149;
+
+  --focus-ring: #58a6ff;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg-toolbar: #f6f8fa;
+    --bg-stage: #e6eaef;
+    --border-toolbar: #d0d7de;
+    --text-primary: #1f2328;
+    --text-muted: #59636e;
+
+    --btn-bg: #ffffff;
+    --btn-bg-hover: #f3f4f6;
+    --btn-bg-active: #eaeef2;
+    --btn-border: #d0d7de;
+    --btn-border-hover: #8c959f;
+    --btn-port-bg: #eaeef2;
+    --btn-port-text: #59636e;
+
+    --last-req-border: #0969da;
+    --last-req-bg: rgba(9, 105, 218, 0.08);
+
+    --pending-border: #9a6700;
+    --pending-bg: rgba(154, 103, 0, 0.1);
+    --text-warning: #9a6700;
+    --text-error: #cf222e;
+
+    --focus-ring: #0969da;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--text-primary);
+  background: var(--bg-stage);
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+}
+
+.toolbar {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 6px 10px;
+  background: var(--bg-toolbar);
+  border-bottom: 1px solid var(--border-toolbar);
+  z-index: 10;
+}
+
+.toolbar-brand {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding-right: 2px;
+  user-select: none;
+}
+
+.brand-title {
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.brand-subtitle {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.host-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  flex: 1 1 auto;
+}
+
+.host-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px 4px 5px;
+  border-radius: 5px;
+  border: 1px solid var(--btn-border);
+  background: var(--btn-bg);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: background-color 100ms ease, border-color 100ms ease, opacity 100ms ease;
+  white-space: nowrap;
+}
+
+.host-btn:hover:not(:disabled) {
+  background: var(--btn-bg-hover);
+  border-color: var(--btn-border-hover);
+}
+
+.host-btn:active:not(:disabled) {
+  background: var(--btn-bg-active);
+}
+
+.host-btn:focus-visible,
+.tool-btn:focus-visible,
+.stock-link:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.host-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.host-port {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: var(--btn-port-bg);
+  color: var(--btn-port-text);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.host-name {
+  font-weight: 500;
+}
+
+
+.host-btn[data-last-requested="true"] {
+  border-color: var(--last-req-border);
+  background: var(--last-req-bg);
+}
+
+.host-btn[data-pending="true"] {
+  border-color: var(--pending-border);
+  background: var(--pending-bg);
+  opacity: 0.85;
+  animation: host-pulse 1.1s ease-in-out infinite;
+}
+
+.host-btn[data-feedback="success"] .host-port {
+  color: transparent;
+}
+
+.host-btn[data-feedback="success"] .host-port::after {
+  content: "✓";
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--text-primary);
+}
+
+.toolbar-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  min-width: 0;
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  font-size: 12px;
+  color: var(--text-primary);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.status-text {
+  overflow-wrap: anywhere;
+}
+
+/* Normal progress stays on the host button; announcements remain accessible. */
+#status:is([data-state="checking"], [data-state="ready"], [data-state="pending"], [data-state="success"]),
+.playback-status:is([data-state="ready"], [data-state="paused"]) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.status:is([data-state="unauthenticated"], [data-state="unconfirmed"]) {
+  color: var(--text-warning);
+}
+
+.status:is([data-state="error"], [data-state="halted"]) {
+  color: var(--text-error);
+  font-weight: 600;
+}
+
+@keyframes host-pulse {
+  50% { box-shadow: 0 0 0 2px var(--pending-bg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .host-btn[data-pending="true"] { animation: none; }
+}
+
+.playback {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.playback-status[hidden] {
+  display: none;
+}
+
+.tool-btn {
+  appearance: none;
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  border-radius: 5px;
+  border: 1px solid var(--btn-border);
+  background: var(--btn-bg);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.tool-btn:hover {
+  background: var(--btn-bg-hover);
+  border-color: var(--btn-border-hover);
+}
+
+.tool-btn:active {
+  background: var(--btn-bg-active);
+}
+
+.stock-link {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 5px;
+  border: 1px solid var(--btn-border);
+  background: var(--btn-bg);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.stock-link:hover {
+  color: var(--text-primary);
+  background: var(--btn-bg-hover);
+  border-color: var(--btn-border-hover);
+}
+
+.console-stage {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  background: var(--bg-stage);
+}
+
+.console-frame {
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+  background: #000;
+}
+
+@media (max-width: 900px) {
+  .toolbar-meta {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: space-between;
+  }
+
+  .status {
+    flex: 1 1 100%;
+    order: 1;
+  }
+
+  .playback {
+    flex-wrap: wrap;
+  }
+}

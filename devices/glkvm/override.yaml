@@ -1,11 +1,17 @@
-# PiKVM UI controls for the downstream eight-port KVM. The switch recognizes
-# Left Ctrl, Left Ctrl, DigitN, but needs more time between events than the
-# GL.iNet shortcut UI provides.
+otg:
+    devices:
+        # Camera support sets the whole gadget's class to EF/02/01 even when
+        # no USB camera function is linked. The Hotkey port stops consuming HID.
+        camera:
+            enabled: false
+
 kvmd:
     # Serves /export/prometheus/metrics without login; every other path still requires it.
     prometheus:
         auth:
             enabled: false
+    # Retained channels for the downstream eight-port KVM. The switch recognizes
+    # Left Ctrl, Left Ctrl, DigitN, with more delay than GL.iNet shortcuts provide.
     gpio:
         drivers:
             kvm_channel_1:
