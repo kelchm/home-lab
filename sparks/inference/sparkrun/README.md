@@ -1,11 +1,11 @@
 # Spark inference through SparkRun
 
-These recipes serve one model at a time across the two DGX Sparks at `http://10.32.21.31:8888/v1`; since October 21 the running instance is [DeepSeek-V4.1-Flash-1017](#deepseek-v41-flash-1017-on-bertholomuss-zig-engine). SparkRun 0.3.10 owns model and image distribution, fabric detection, containers, runtime caches, readiness, logs, stop and benchmarking, through the TensorFold runtime adapter in `plugins/`. The hosts are outside Flux: merging a recipe changes nothing on them, and each launch is a manual step. Check host state before launching; other experiments can use either GPU.
+These recipes serve one model at a time from the two DGX Sparks at `http://10.32.21.31:8888/v1`, across both or, for one Qwen profile, from the head alone; since October 21 the running instance is [DeepSeek-V4.1-Flash-1017](#deepseek-v41-flash-1017-on-bertholomuss-zig-engine). SparkRun 0.3.10 owns model and image distribution, fabric detection, containers, runtime caches, readiness, logs, stop and benchmarking, through the TensorFold runtime adapter in `plugins/`. The hosts are outside Flux: merging a recipe changes nothing on them, and each launch is a manual step. Check host state before launching; other experiments can use either GPU.
 
 | Model | Engine | Profiles | Work |
 | --- | --- | --- | --- |
 | [GLM-5.3-Flash](#glm-53-flash-on-mias-tensorfold-kit) | Mia's TensorFold kit, on TensorFold 0.6.0's Python CUDA engine | `mia-tensorfold-glm53-exl3-tp2/` | [#941](https://github.com/kelchm/home-lab/issues/941) |
-| [Qwen3.8-Flash-Next](#qwen38-flash-next-on-mias-zig-engine-kit) | Mia's Zig-engine kit v1.1, with a rebuilt server | `mia-tensorfold-qwen38fn-tp2/` | [#940](https://github.com/kelchm/home-lab/issues/940) |
+| [Qwen3.8-Flash-Next](#qwen38-flash-next-on-mias-zig-engine-kits) | Mia's Zig-engine kits: v1.1 for two Sparks with a rebuilt server, and the one-Spark kit at `656879fd`, built here | `mia-tensorfold-qwen38fn-tp2/`, `mia-tensorfold-qwen38fn-tp1/` | [#940](https://github.com/kelchm/home-lab/issues/940), [#969](https://github.com/kelchm/home-lab/issues/969) |
 | [DeepSeek-V4.1-Flash-1017](#deepseek-v41-flash-1017-on-bertholomuss-zig-engine) | bertholomus's fork of TensorFold's Zig engine | `bertholomus-tensorfold-dsv41-tp2/` | [#942](https://github.com/kelchm/home-lab/issues/942) |
 
 Every profile follows the contract in [#943](https://github.com/kelchm/home-lab/issues/943): the same endpoint and `/v1/models` fields, one shared readiness gate, one runtime adapter, and pinned mods. [Deploy](#deploy) covers the shared parts and [Operate and roll back](#operate-and-roll-back) the checks before any launch. Each model's section has the same parts: current profile, inputs outside SparkRun, build, launch, stop and roll back, and known limits. Trial records belong in each model's issue. Records of retired profiles stay in Git history:
@@ -98,11 +98,17 @@ To roll back, stop it with its own recipe and launch the profile that served bef
 - **Admission:** requests past the four streams queue without limit, because `TF_GLM_MAX_QUEUED` is empty.
 - **Access and memory:** the endpoint has no API key, and no memory watchdog runs ([#944](https://github.com/kelchm/home-lab/issues/944)).
 
-## Qwen3.8-Flash-Next on Mia's Zig-engine kit
+## Qwen3.8-Flash-Next on Mia's Zig-engine kits
+
+Qwen has two profiles, one across both Sparks and one on the head alone. Each part below describes the two-Spark profile first.
 
 `mia-tensorfold-qwen38fn-tp2/` holds the profile for Mia's [Qwen3.8-Flash-Next two-Spark kit](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/blob/be3ed857ab1055ca47b36134d22691f00f2bb94a/README.md), v1.1 of October 8. The kit serves text through TensorFold's Zig engine, `tensorfold-native`; a Python helper on rank 0 decodes pictures and video and runs the checkpoint's vision tower on the GPU. The profile keeps the kit's published image and replaces only `tensorfold-native`, rebuilt here with `/v1/models` discovery and community fixes for the kit's two-rank stalls and crashes. It [qualified at a 491,520-token window on October 22](https://github.com/kelchm/home-lab/issues/940#issuecomment-6343678459). Qwen last served from October 8 to 17, on the kit's own binary and then on earlier builds of this one.
 
+`mia-tensorfold-qwen38fn-tp1/` holds the one-Spark profile, for Mia's [one-Spark kit](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Single-DGX-Spark-TensorFold), which serves NVIDIA's FP4-Local checkpoint on TensorFold's Zig engine with MTP drafts and the prompt cache together. The image is built here from the kit's patches and the same discovery backports. On one Spark it decodes four streams 2.7 times as fast as upstream v1.1.2 and prefills 60–70% faster ([#969](https://github.com/kelchm/home-lab/issues/969)). It leaves the worker free.
+
 ### Current profile
+
+#### Two Sparks
 
 | Profile | Image | Server | Weights | Served name |
 | --- | --- | --- | --- | --- |
@@ -173,13 +179,78 @@ How the profile differs from the kit's own launch:
 - **Container:** SparkRun clears the image entrypoint, so NVIDIA's entrypoint script does not run, and adds `--user root`, `no-new-privileges` and an open-file limit. Both ranks use host IPC and networking, all GPUs, `/dev/infiniband`, `IPC_LOCK` and unlimited locked memory.
 - **Weights and caches:** each host keeps its own copy in SparkRun's cache, mounted at `/cache/huggingface`; upstream's documented setup has the worker read the head's over NFS. The CUDA cache goes to SparkRun's image- and model-keyed `/cache/runtime`.
 
+#### One Spark
+
+| Profile | Image | Engine | Weights | Served name |
+| --- | --- | --- | --- | --- |
+| `qwen38fn-fp4local-tp1-mia-tf-656879fd-nvidia-1m` | Built here, `49364bc3…` | `zig-flashnext` `db281878`, the kit's 15 patches and the two discovery backports | [`nvidia/Qwen3.8-Flash-Next-FP4-Local`](https://huggingface.co/nvidia/Qwen3.8-Flash-Next-FP4-Local/tree/b9ce18a6887e18c089fdea8509a33e63429a3300) at `b9ce18a6` | `Qwen3.8-Flash-Next` |
+
+- **Kit:** Mia's [one-Spark kit](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Single-DGX-Spark-TensorFold/tree/656879fd752749bbd11a6e1a065a326c00940911) at `656879fd`, October 18. It is a separate line from the two-Spark kit: the same engine commit, different patches. Its `0011` to `0013` read NVIDIA's FP4-Local checkpoint, with CSF-compressed expert scales, MXFP8 linears and the NVFP4 n-gram table read from disk through the page cache, and tune decoding. `0014` adds the prompt expert tile, and `0015` an opt-in fair prefill that stays off. The kit publishes no image for these patches, so the mod builds one.
+- **Serving:** the kit's defaults from `scripts/config.sh` and `start.sh`, with no `.env`:
+  - five streams and a 32,768-token reply budget;
+  - thinking on, with temperature 1.0, top-p 0.95 and top-k 20;
+  - an FP8 KV cache;
+  - vision on, with picture URLs off;
+  - MTP drafts at depth 6, together with the prompt cache;
+  - a 10 GiB memory reserve and a 2 GiB vision workspace.
+
+  The recipe states the ten variables the kit exports, and `serve.py` passes the kit's serve flags.
+- **Window:** 1,048,576 tokens, with the kit's YaRN factor of 4 past the trained 262,144. A request's prompt plus reply must fit the shared sequence pool, 24.36 GiB on October 23. That's about 1.46M FP8 tokens, so one full window leaves room for about 400K tokens across the other four streams. It [qualified on October 23](https://github.com/kelchm/home-lab/issues/969#issuecomment-6359010017): on two fresh boots, two cold prompts of about 1.04M tokens each found their needle, the first as the first long request after the boot. Each took about 16 minutes to prefill, at about 1,080 tok/s.
+- **System-memory cache:** the recipe also sets the kit's opt-in `TF_FLASHNEXT_SYSTEM_CACHE=1` and `TF_FLASHNEXT_RING_CACHE=1`, which back the caches and sequence state with registered system memory. Without them, the engine can free a sequence's memory while the GPU still writes to it.
+  - On October 23, a request that failed after admission (`top_k` 249) raised `Xid 31`, a `FAULT_PDE` write fault, twice. That's the kit's [#67](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Single-DGX-Spark-TensorFold/issues/67): afterwards the engine fails every request while `/health` answers OK.
+  - With the caches, the engine synchronizes the context before freeing a sequence or a cache region, and the same request failed alone three times out of three.
+  - The cost is 1–5% of throughput and about 0.3–0.7 s on a resumed turn. The kit also documents them as its mitigation for `NV_ERR_NO_MEMORY` messages ([#33](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Single-DGX-Spark-TensorFold/issues/33)).
+- **Placement:** `min_nodes` and `max_nodes` are 1, so SparkRun runs the profile on its solo path, on the head. The worker runs nothing.
+- **Mod:** `run.sh` verifies the mod and installs `serve.py` as `/usr/local/bin/tensorfold-entrypoint`. `serve.py` refuses a two-rank launch, and a `drafter` or `mtp_drafts` setting: the engine drafts with the checkpoint's MTP head, at the depth `TF_FLASHNEXT_DEPTH` sets. It sets the engine's `oom_score_adj` to 1000 and runs the image's binary by its path. Readiness is the shared gate, with five lanes, the window and `xhigh,medium,low,none`.
+- **Lock:** `upstream.lock.json` pins the kit, the engine, the digest of the kit's patches, the image and its ID, the weights, the discovery patches' sources and the build inputs.
+- **Tests:** [`tests/test_qwen_one_spark_contract.py`](tests/test_qwen_one_spark_contract.py) checks:
+  - the recipe against the lock and the kit's settings, and the gate's arguments;
+  - the one-node command and the kit's serve flags;
+  - the install path, the frozen mod, and that the discovery patches are the two-Spark profile's;
+  - that no lab address or path is named.
+
+Discovery is the two-Spark profile's, with this window. The eight effort echoes in the table above were the same on October 23.
+
+On October 23, on spark-1 alone, with #940's `bench.py` and the arguments of its [one-Spark control](https://github.com/kelchm/home-lab/issues/940#issuecomment-6332485912) of upstream v1.1.2 (thinking off, temperature 0, two repetitions), at the kit's 262,144 window:
+
+| | With the system-memory cache | The kit's defaults | v1.1.2 control |
+| --- | ---: | ---: | ---: |
+| Decode, 1 stream | 39.8 tok/s | 38.9 | 37.0 |
+| Aggregate decode, 4 streams | 94.9 tok/s | 97.6 | 35.7 |
+| Prefill at 8K / 32K / 128K | 2,415 / 2,466 / 2,265 tok/s | 2,478 / 2,498 / 2,293 | 1,421 / 1,497 / 1,420 |
+| Code at 1 / 4 / 5 streams, the kit's `bench_streams.py` with thinking on | 49.9 / 166.4 / 192.9 tok/s | 50.4 / 171.0 / 202.6 | not run |
+| 64K session turn after the first | 1.6 s, 99.7% resumed | 0.9 s | not run |
+
+At the 1M window, `bench.py`'s decode and prefill matched the first column. The kit's thinking-on decode was about 8% lower, and its replies differed from the 262K ones: code 46.1 / 151.4 / 179.4 tok/s at 1 / 4 / 5 streams on a fresh boot. A resumed 64K turn took 1.9 to 2.6 s.
+
+Quality, on the kit's defaults:
+- **tool-eval-bench 2.8.1** at [Alfonso Fortunato's](https://github.com/devopsfortunato/Qwen3.8-Flash-Next-FP4-Local-DGX-Spark) pin and settings: 86/100, equal in every category to his TensorFold run. NVIDIA's vLLM recipe scored 89 and 90 there on the same weights, and the gap is mostly Structured Output (6/12 against 10/12), which this engine refuses.
+- **The repository's checks:** the agent gate passed 18 of 18, `toolcheck.py` 3/3, and tool-eval-bench v1.8.0's core run 97.
+- **At the 1M window**, with YaRN 4 and the system-memory cache: tool-eval-bench 2.8.1 scored 86 again (166 points), v1.8.0 97, and the agent gate 18 of 18 on both boots.
+
+How the profile differs from the kit's own launch:
+
+- **No `start.sh`:** its argument check, free-memory stop (about 108 GiB `MemAvailable` at the kit's default window), memory watch while loading and smoke test do not run.
+- **Container:** SparkRun clears the image entrypoint and adds `--user root`, `no-new-privileges` and an open-file limit. Host IPC and networking, all GPUs, unlimited locked memory and the 64 MiB stack are as the kit has them. `/dev/infiniband` and `IPC_LOCK` come from the adapter's defaults and go unused on one node.
+- **Caches:** the weights come from SparkRun's cache at `/cache/huggingface`, and the CUDA cache goes to its image- and model-keyed `/cache/runtime`.
+- **Image:** built from the kit's stages with the Spark's CPU named and the Python packages pinned; see the build below.
+
 ### Inputs outside SparkRun
+
+#### Two Sparks
 
 - **The rebuilt binary:** `out/tensorfold-native` in the mod, ignored by Git. `build/build.sh` builds it, and it goes to the head with the mod.
 - **The image:** on both Sparks on October 22, as `5eb5d4d3…`. `docker images` doesn't list it, but `docker image inspect` with the lock's `image_id` finds it. If it's missing, pull it on the head by the lock's `image`; SparkRun copies it to the worker at launch.
 - **Weights:** `nvidia/Qwen3.8-Flash-Next-NVFP4@fc694b54` in SparkRun's cache on both hosts, 25 files and 132,734,506,847 bytes each on October 22. Check free space under the cache on both hosts before a first launch.
 
+#### One Spark
+
+- **The image:** built here and loaded on the head, which reports the recipe's ID; `docker image inspect` on the lock's `image_id` finds it. It has been on spark-1 since October 23, as `qwen38fn-tf-tp1:656879f-603dab7933ca`. SparkRun does not copy it to the worker, which the profile does not use.
+- **Weights:** `nvidia/Qwen3.8-Flash-Next-FP4-Local@b9ce18a6` in both of the head's caches, the home cache and `/opt/spark-cache/huggingface`: 33 files and 102,262,310,289 bytes, since #940. The checkpoint keeps its shards under `tensors/`; this engine reads that index as published, so the profile serves the snapshot directly.
+
 ### Build
+
+#### Two Sparks
 
 The image is not rebuilt. [`build/build.sh`](mods/mia-tensorfold-qwen38fn-v1.1-discovery/build/build.sh) compiles `tensorfold-native` alone on any linux/arm64 Docker daemon, with no GPU, no `nvcc` and no NVIDIA base image. Its inputs are pinned:
 
@@ -216,7 +287,29 @@ Checked on a workstation:
   - with one rank, `top_k` −1 stays off;
   - `top_k` 249 gets HTTP 400 with two ranks, while `top_k` 248 and greedy requests are served.
 
+#### One Spark
+
+[`build/build.sh`](mods/mia-tensorfold-qwen38fn-tp1-656879fd/build/build.sh) builds the image on any linux/arm64 Docker daemon, never on a Spark. Its inputs are pinned:
+
+- NVIDIA PyTorch 26.07 by digest, the DeepSeek image's base;
+- Zig 0.17.0 by checksum;
+- engine `db281878`;
+- the kit at `656879fd`, whose patch files must match the lock's digest, then this mod's two patches.
+
+The build follows the kit's `scripts/prepare.sh`: the Zig build with its `nvcc` fatbins, the TP=1 Triton kernel set compiled ahead of time, then `transformers` and `av` without dependencies. It differs from the kit's in two ways. It names the Spark's CPU, `cortex_a725` with the features Zig reads on a Spark, where the kit's build on a Spark detects it. And it pins the Python packages; the base already has `huggingface_hub` 1.24.0. The binary targets the Spark's CPU, so the build host cannot run it: on Colima it exits with an illegal instruction.
+
+```sh
+DOCKER_CONTEXT=colima-tf-build sparks/inference/sparkrun/mods/mia-tensorfold-qwen38fn-tp1-656879fd/build/build.sh
+DOCKER_CONTEXT=colima-tf-build docker save qwen38fn-tf-tp1:656879f-603dab7933ca -o qwen38fn-tf-tp1.tar
+# Stage it on the head's disk without filling its page cache; docker load waits for a stop.
+dd if=qwen38fn-tf-tp1.tar bs=16m | ssh kelchm@10.32.21.31 'dd of=sparkrun/stage/qwen38fn-tf-tp1.tar bs=16M iflag=fullblock oflag=direct'
+```
+
+`build.sh` reads the image ID from `docker save`'s manifest and fails unless it equals the lock's. A rebuild can produce another ID, which `--record` writes into the lock; record it in the recipe too. On October 22 the build took about four minutes on the `tf-build` profile with the base image already there: about 150 s for the Zig build and 30 s for the kernel set. The saved image is 11.4 GB and loads in 40 s on the head.
+
 ### Launch, stop and roll back
+
+#### Two Sparks
 
 Merging this directory changes nothing on the Sparks. Each step below is manual. The stop in step 6 begins the outage.
 
@@ -276,7 +369,34 @@ The head may still hold older Qwen recipes from earlier syncs, such as the retir
 
 To stop it, use `sparkrun stop "$qwen" --cluster sparks`. To roll back, stop it, confirm both GPUs are free, and launch the profile that was serving with its own recipe and the same flags. Nothing is left to undo on the hosts except the copied files and the pulled image.
 
+#### One Spark
+
+From `~/sparkrun/recipes/glm53` on the head, after syncing this directory as in [Deploy](#deploy) and passing the [checks before a launch](#before-a-launch). The rail check is for two-rank profiles. Stop the running instance with its own recipe before loading the image:
+
+```sh
+qwen1="$PWD/mia-tensorfold-qwen38fn-tp1/qwen38fn-fp4local-tp1-mia-tf-656879fd-nvidia-1m.yaml"
+running="$PWD/<family>/<profile>.yaml"  # The recipe that launched the running instance.
+python3 mods/tensorfold-readiness/prepare.py --check
+python3 mods/mia-tensorfold-qwen38fn-tp1-656879fd/prepare.py --check
+sparkrun run "$qwen1" --cluster sparks --no-auto-detect --no-sync-tuning --no-follow --dry-run  # Mode: solo, Target: the head
+sparkrun stop "$running" --cluster sparks
+# If the image isn't on the head, load the staged tar now: docker load -i ~/sparkrun/stage/qwen38fn-tf-tp1.tar
+docker image inspect --format '{{.Id}}' "$(awk '$1 == "container:" { print $2 }' "$qwen1")"  # Fails unless the recipe's pinned image is here.
+sparkrun run "$qwen1" --cluster sparks --no-auto-detect --no-sync-tuning --no-follow
+sparkrun logs "$qwen1" --hosts 10.32.21.31  # Not --cluster sparks; see Enable TensorFold.
+# When stopping or replacing the workload:
+sparkrun stop "$qwen1" --cluster sparks
+```
+
+The launch returns when the shared gate passes; on October 23 that was 77 to 79 s from the start. The engine loads in about 66 s. After a boot, run:
+- the shared checks in [Validate](#validate), with the agent gate once per section but `structured`;
+- `tests/qwen_model_discovery.py` with `--context 1048576`, with and without `--completions`, as for the two-Spark profile.
+
+To roll back, stop it with its recipe, confirm the head's GPU is idle, and launch the profile that was serving with its own recipe.
+
 ### Known limits
+
+#### Two Sparks
 
 The six patches above address the kit's open issues #3, #6, #8 and #9. On the Sparks, #3's fix and #8's clamp are confirmed; nothing in the trials reached #6's or #9's failure.
 
@@ -296,6 +416,22 @@ The six patches above address the kit's open issues #3, #6, #8 and #9. On the Sp
 - **Capacity:** the kit's 16 streams and 10 GiB reserve, not the 8 GiB headroom goal the GLM profile works to. With two cold ~490K prompts on October 22, available memory stayed above 34.9 GiB on the head and 38.4 GiB on the worker.
 - **Not established:** concurrent long prompts, long sessions growing together, coding quality, and stability beyond the October 22 trials. `long_sessions.py` has not run against this server.
 - **YaRN:** the factor stays at the kit's 4. A factor of 2 would also cover this window, and is untried here.
+- **Access and memory:** the endpoint has no API key, and no memory watchdog runs ([#944](https://github.com/kelchm/home-lab/issues/944)).
+
+#### One Spark
+
+The two-Spark kit's #3, #6 and #9 cannot occur with one rank: there is no control link or cross-rank admission, and #9's freed state is read only by the two-rank note. #8's two-rank exchange is absent too.
+
+- **Speed against upstream:** one-stream prose decode on #940's harness is about upstream v1.1.2's, 39 against 37 tok/s. The gains are concurrent streams (2.7× at four), prefill (60–70% faster) and resumed turns.
+- **Context poisoning** ([#67](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Single-DGX-Spark-TensorFold/issues/67)): the system-memory cache's fences cover the frees that faulted here, not every path the kit's open [PR #72](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Single-DGX-Spark-TensorFold/pull/72) changes. If a request ever logs `CudaFailed` or the kernel logs an Xid from `tensorfold-native`, the engine is lost: stop the profile with its recipe and relaunch.
+- **`top_k` above 248:** the request fails after admission with HTTP 500 `TopKPastScratch`, since the sampler holds 256 candidates. The server keeps serving. `top_k` off was served with `top_p` 0.95 at temperature 5, and with `top_p` 1.
+- **Structured output:** a `response_format` of `json_object` or `json_schema`, and the `guided_*` fields, answer HTTP 400. The kit's open [PR #69](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Single-DGX-Spark-TensorFold/pull/69) would add them, in 1,826 lines.
+- **Repeated sampling:** without a `seed`, a sampled request repeats the same reply ([#75](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Single-DGX-Spark-TensorFold/issues/75)). Send a seed per request for varied samples.
+- **Long prompts hold the queue:** prompts fill one at a time, so a short request waits for a long prompt's pass. The kit's fair fill would change that and stays off.
+- **Admission:** a request is admitted when its prompt plus reply budget fits the pool beside the others, and is refused otherwise.
+- **YaRN:** the factor is 4 for every request, short ones included; Qwen recommends static YaRN only where long prompts need it. On October 23, tool-eval scored the same at 1M as at 262,144, and thinking-on decode was about 8% slower.
+- **Full windows:** a 1.04M-token prompt prefills for about 16 minutes, and requests behind it wait. With the prompt cache full and such a prompt filling, the head's `MemAvailable` fell to 13.9 GiB.
+- **Not established:** long sessions growing together, concurrent long prompts, and stability beyond the October 23 trials.
 - **Access and memory:** the endpoint has no API key, and no memory watchdog runs ([#944](https://github.com/kelchm/home-lab/issues/944)).
 
 ## DeepSeek-V4.1-Flash-1017 on bertholomus's Zig engine
@@ -388,7 +524,7 @@ sparkrun stop "$dsv41" --cluster sparks
 
 After a boot, run the shared checks in [Validate](#validate). [`tests/dsv41_chat_template.py`](tests/dsv41_chat_template.py) compares the mod's template with DeepSeek's four text reference renderings in the image's Python template engine.
 
-The rollback is Qwen's profile, `qwen38fn-nvfp4-tp2-mia-tf-v1.1-discovery-nvidia-480k`: stop DeepSeek with its own recipe and launch Qwen as [its section](#qwen38-flash-next-on-mias-zig-engine-kit) describes. It is another model, so clients that read `/v1/models` follow it and clients with a fixed entry need Qwen's.
+The rollback is Qwen's profile, `qwen38fn-nvfp4-tp2-mia-tf-v1.1-discovery-nvidia-480k`: stop DeepSeek with its own recipe and launch Qwen as [its section](#qwen38-flash-next-on-mias-zig-engine-kits) describes. It is another model, so clients that read `/v1/models` follow it and clients with a fixed entry need Qwen's.
 
 ### Known limits
 
