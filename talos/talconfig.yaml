@@ -88,7 +88,6 @@ nodes:
 # Global patches
 patches:
   - "@./patches/global/machine-files.yaml"
-  - "@./patches/global/machine-install.yaml"
   - "@./patches/global/machine-kubelet.yaml"
   - "@./patches/global/machine-logging.yaml"
   - "@./patches/global/machine-network.yaml"

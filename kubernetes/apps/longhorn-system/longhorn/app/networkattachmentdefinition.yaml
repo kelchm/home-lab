@@ -16,8 +16,9 @@
 # Talos `machine.network.interfaces[].bridge`), and host + pods share
 # one L2 broadcast domain. Same-host iscsiadm just works.
 #
-# `master`: br-storage is created by Talos with enp6s0 as its only
-# member and carries the host's 10.32.25.X/24 IP.
+# `master`: br-storage is created by Talos; its only member is the storage
+# NIC, bound by MAC through `bridgePort` so a renamed interface cannot drop
+# it. The bridge carries the host's 10.32.25.X/24 IP.
 #
 # `isGateway: false`, `ipMasq: false`: the bridge is a pure L2 endpoint;
 # no NAT, no acting as gateway. Pods use Whereabouts-assigned same-VLAN
