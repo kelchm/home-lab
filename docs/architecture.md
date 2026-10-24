@@ -22,8 +22,8 @@ coupling every control plane.
 
 | Role | Hardware | Specs |
 |---|---|---|
-| Prod cluster nodes (3x) | HP EliteDesk 705 G4 | Ryzen 5 2400GE, 64GB RAM, 1TB NVMe (WD_BLACK SN770), 1GbE + 2.5GbE |
-| PVE cluster nodes (3x) | HP EliteDesk 800 G3 | Intel i5-6500T, 32GB RAM, 1TB WD_BLACK SN770, 1GbE + PCIe 2.5GbE |
+| Prod cluster nodes (3x) | HP EliteDesk 705 G4 | Ryzen 5 2400GE, 64GB RAM, 1TB NVMe (WD_BLACK SN770, M.2 heatsink), 1GbE + 2.5GbE |
+| PVE cluster nodes (3x) | HP EliteDesk 800 G3 | Intel i5-6500T, 32GB RAM, 1TB WD_BLACK SN770 (M.2 heatsink), 1GbE + PCIe 2.5GbE |
 | AI compute (2x) | NVIDIA DGX Spark | GB10, 128GB unified memory, 4TB NVMe, 10GbE + ConnectX-7 direct fabric |
 | NAS | Synology DS1821+ | Ryzen V1500B, 8x 14TB Exos X16, 32GB RAM, 2x SFP+ + 4x 1GbE |
 
