@@ -134,7 +134,7 @@ spec:
           proxy:
             image:
               repository: docker.io/nginxinc/nginx-unprivileged
-              tag: 1.31.7-alpine@sha256:826d5972d5e54e527a4a749fdf1e3db9a115319adb084c92acbc60ef91e19931
+              tag: 1.31.7-alpine@sha256:c3bcf3d1a53a027bfa515b9fe4fbbe7bf6b791476a5af853de439ad494b145bd
             probes:
               readiness:
                 enabled: true
