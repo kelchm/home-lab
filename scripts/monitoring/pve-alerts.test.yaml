@@ -1,0 +1,65 @@
+rule_files: [rules.yaml]
+evaluation_interval: 1m
+tests:
+  - name: An offline node names itself as host metrics do
+    interval: 1m
+    input_series:
+      - series: pve_up{job="pve-api",cluster="pve-sbx",id="node/pve-sbx-1",instance="pve-sbx-2.home.kelch.io"}
+        values: 1x2 0x10
+      - series: pve_up{job="pve-api",cluster="pve-sbx",id="node/pve-sbx-2",instance="pve-sbx-2.home.kelch.io"}
+        values: 1x12
+    promql_expr_test:
+      - expr: ALERTS{alertname="PVENodeDown",alertstate="firing"}
+        eval_time: 7m
+        exp_samples: []
+      - expr: ALERTS{alertname="PVENodeDown",alertstate="firing"}
+        eval_time: 8m
+        exp_samples:
+          - labels: 'ALERTS{alertname="PVENodeDown",alertstate="firing",cluster="pve-sbx",id="node/pve-sbx-1",instance="pve-sbx-1",node="pve-sbx-1",severity="critical"}'
+            value: 1
+
+  - name: A stopped guest names its node only when the API instances agree on one
+    interval: 1m
+    input_series:
+      # Agreed: both API instances place qemu/103 on pve-sbx-1.
+      - series: pve_up{job="pve-api",cluster="pve-sbx",id="qemu/103",instance="pve-sbx-1.home.kelch.io"}
+        values: 0x12
+      - series: pve_onboot_status{job="pve-api",cluster="pve-sbx",id="qemu/103",instance="pve-sbx-1.home.kelch.io"}
+        values: 1x12
+      - series: pve_up{job="pve-api",cluster="pve-sbx",id="qemu/103",instance="pve-sbx-2.home.kelch.io"}
+        values: 0x12
+      - series: pve_onboot_status{job="pve-api",cluster="pve-sbx",id="qemu/103",instance="pve-sbx-2.home.kelch.io"}
+        values: 1x12
+      - series: pve_guest_info{job="pve-api",cluster="pve-sbx",id="qemu/103",node="pve-sbx-1",instance="pve-sbx-1.home.kelch.io"}
+        values: 1x12
+      - series: pve_guest_info{job="pve-api",cluster="pve-sbx",id="qemu/103",node="pve-sbx-1",instance="pve-sbx-2.home.kelch.io"}
+        values: 1x12
+      # Contested during a migration: the instances disagree.
+      - series: pve_up{job="pve-api",cluster="pve-sbx",id="qemu/104",instance="pve-sbx-1.home.kelch.io"}
+        values: 0x12
+      - series: pve_onboot_status{job="pve-api",cluster="pve-sbx",id="qemu/104",instance="pve-sbx-1.home.kelch.io"}
+        values: 1x12
+      - series: pve_guest_info{job="pve-api",cluster="pve-sbx",id="qemu/104",node="pve-sbx-1",instance="pve-sbx-1.home.kelch.io"}
+        values: 1x12
+      - series: pve_guest_info{job="pve-api",cluster="pve-sbx",id="qemu/104",node="pve-sbx-2",instance="pve-sbx-2.home.kelch.io"}
+        values: 1x12
+      # No metadata at all.
+      - series: pve_up{job="pve-api",cluster="pve-sbx",id="qemu/105",instance="pve-sbx-1.home.kelch.io"}
+        values: 0x12
+      - series: pve_onboot_status{job="pve-api",cluster="pve-sbx",id="qemu/105",instance="pve-sbx-1.home.kelch.io"}
+        values: 1x12
+      # Not set to start on boot: stays quiet.
+      - series: pve_up{job="pve-api",cluster="pve-sbx",id="qemu/106",instance="pve-sbx-1.home.kelch.io"}
+        values: 0x12
+      - series: pve_onboot_status{job="pve-api",cluster="pve-sbx",id="qemu/106",instance="pve-sbx-1.home.kelch.io"}
+        values: 0x12
+    promql_expr_test:
+      - expr: ALERTS{alertname="PVEGuestDown",alertstate="firing"}
+        eval_time: 11m
+        exp_samples:
+          - labels: 'ALERTS{alertname="PVEGuestDown",alertstate="firing",cluster="pve-sbx",id="qemu/103",node="pve-sbx-1",severity="warning"}'
+            value: 1
+          - labels: 'ALERTS{alertname="PVEGuestDown",alertstate="firing",cluster="pve-sbx",id="qemu/104",severity="warning"}'
+            value: 1
+          - labels: 'ALERTS{alertname="PVEGuestDown",alertstate="firing",cluster="pve-sbx",id="qemu/105",severity="warning"}'
+            value: 1

@@ -106,13 +106,16 @@ spec:
             - port: http-metrics
 
     # The chart calls this `alertmanager`, but it creates a VMAlertmanager CR.
-    # The complete routing configuration and Pushover credentials live in the
-    # separately managed SOPS Secret rather than Helm values.
+    # Routing and Pushover credentials live in the separately managed SOPS
+    # Secret rather than Helm values; inhibit rules come from
+    # VMAlertmanagerConfig resources, which apply to every alert rather than
+    # only to their own namespace.
     alertmanager:
       enabled: true
       monzoTemplate:
         enabled: false
       spec:
+        disableNamespaceMatcher: true
         podMetadata:
           annotations:
             resource.opentelemetry.io/service.name: vmalertmanager

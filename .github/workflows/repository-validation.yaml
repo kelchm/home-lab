@@ -83,6 +83,9 @@ jobs:
               - 'scripts/ci/validate-cnpg-alerts.sh'
               - 'scripts/monitoring/cnpg-alerts.test.yaml'
               - 'scripts/ci/validate-alert-conventions.py'
+              - 'scripts/ci/test-alert-inhibition.py'
+              - 'scripts/ci/validate-pve-alerts.sh'
+              - 'scripts/monitoring/pve-alerts.test.yaml'
               - 'scripts/logging/**'
               - 'scripts/grafana/**'
               - 'scripts/ci/test-validate-cilium-policies.sh'
@@ -276,7 +279,7 @@ jobs:
         if: needs.pre-job.outputs.kubernetes_changed == 'true'
         uses: jdx/mise-action@8418fedb1110381a0d3ba51a7a415d7c1b884550 # v5.2.2
         with:
-          install_args: "aqua:fluxcd/flux2 aqua:yannh/kubeconform aqua:mikefarah/yq aqua:prometheus/prometheus"
+          install_args: "aqua:fluxcd/flux2 aqua:yannh/kubeconform aqua:mikefarah/yq aqua:prometheus/prometheus aqua:prometheus/alertmanager"
 
       - name: Validate PVE backup alerts
         if: needs.pre-job.outputs.kubernetes_changed == 'true'
@@ -321,6 +324,14 @@ jobs:
       - name: Validate alert names, severities and annotations
         if: needs.pre-job.outputs.kubernetes_changed == 'true'
         run: python3 scripts/ci/validate-alert-conventions.py
+
+      - name: Validate Proxmox API alerts
+        if: needs.pre-job.outputs.kubernetes_changed == 'true'
+        run: scripts/ci/validate-pve-alerts.sh
+
+      - name: Test the one-alert-per-machine hold-back rules
+        if: needs.pre-job.outputs.kubernetes_changed == 'true'
+        run: python3 scripts/ci/test-alert-inhibition.py
 
       - name: Render Flux Kustomizations recursively
         if: needs.pre-job.outputs.kubernetes_changed == 'true'

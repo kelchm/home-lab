@@ -29,8 +29,12 @@ spec:
               At least one node reports the cluster as not quorate. Check
               `pvecm status` before any guest or host operation.
 
+        # node and instance name the host as its own metrics do (instance="pve-sbx-1").
         - alert: PVENodeDown
-          expr: min by (cluster, id) (pve_up{job="pve-api", id=~"node/.*"}) == 0
+          expr: |
+            label_replace(
+              label_replace(min by (cluster, id) (pve_up{job="pve-api", id=~"node/.*"}) == 0, "node", "$1", "id", "node/(.+)"),
+              "instance", "$1", "id", "node/(.+)")
           for: 5m
           labels:
             severity: critical
@@ -39,10 +43,26 @@ spec:
             description: >-
               A cluster member sees {{ $labels.id }} as offline.
 
+        # node is the host the guest is assigned to when the API instances agree
+        # on one; a guest without one still alerts, without a node.
         - alert: PVEGuestDown
           expr: |
-            max by (cluster, id) (pve_up{job="pve-api", id=~"(qemu|lxc)/.*"}) == 0
-            and on (id) max by (id) (pve_onboot_status{job="pve-api"}) == 1
+            (
+              (
+                max by (cluster, id) (pve_up{job="pve-api", id=~"(qemu|lxc)/.*"}) == 0
+                and on (id) max by (id) (pve_onboot_status{job="pve-api"}) == 1
+              )
+              * on (cluster, id) group_left (node)
+              (
+                max by (cluster, id, node) (pve_guest_info{job="pve-api"})
+                and on (cluster, id) count by (cluster, id) (max by (cluster, id, node) (pve_guest_info{job="pve-api"})) == 1
+              )
+            )
+            or on (cluster, id)
+            (
+              max by (cluster, id) (pve_up{job="pve-api", id=~"(qemu|lxc)/.*"}) == 0
+              and on (id) max by (id) (pve_onboot_status{job="pve-api"}) == 1
+            )
           for: 10m
           labels:
             severity: warning

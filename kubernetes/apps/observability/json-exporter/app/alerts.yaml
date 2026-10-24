@@ -11,7 +11,9 @@ spec:
     - name: tmobile
       rules:
         # A scrape that succeeds without the registration series means the
-        # gateway's JSON no longer matches the module.
+        # gateway's JSON no longer matches the module. Info: the only notifying
+        # rule it blinds, TMobileNotRegistered, means WAN1 carries no traffic,
+        # which UniFiWANDown also notifies.
         - alert: TMobileMetricsMissing
           expr: |
             up{job="tmobile-api"} == 0
@@ -19,7 +21,7 @@ spec:
             or (up{job="tmobile-api"} == 1 unless on (job, instance) tmobile_registration_info{job="tmobile-api"})
           for: 10m
           labels:
-            severity: warning
+            severity: info
           annotations:
             summary: T-Mobile gateway metrics are unavailable
             description: >-
