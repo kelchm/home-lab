@@ -134,6 +134,8 @@ spec:
           gethomepage.dev/weight: "10"
           gethomepage.dev/widget.type: jellyfin
           gethomepage.dev/widget.url: http://jellyfin.media.svc.cluster.local:8096
+          # Version 2 calls Jellyfin's current API paths; Jellyfin no longer serves /emby/.
+          gethomepage.dev/widget.version: "2"
           gethomepage.dev/widget.enableBlocks: "true"
           gethomepage.dev/widget.enableNowPlaying: "false"
           gethomepage.dev/widget.enableMediaControl: "false"
