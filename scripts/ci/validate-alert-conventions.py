@@ -48,8 +48,8 @@ def rules(node):
 
 
 errors, count = [], 0
-for path in sorted((ROOT / "kubernetes").rglob("*.yaml")):
-    if path.name.endswith(".sops.yaml"):
+for path in sorted((ROOT / "kubernetes").rglob("*.y*ml")):
+    if path.suffix not in (".yaml", ".yml") or path.stem.endswith(".sops"):
         continue
     for document in documents(path):
         for rule in rules(document):

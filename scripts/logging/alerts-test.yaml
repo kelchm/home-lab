@@ -215,7 +215,7 @@ tests:
       - series: fluentbit_output_chunk_available_capacity_percent{job="fluent-bit-events",node="n3",name="events"}
         values: 99+0x60
     promql_expr_test:
-      - expr: ALERTS{alertstate="firing",alertname=~"FluentBit.*|KubernetesEvents.*"}
+      - expr: ALERTS{alertstate="firing",alertname=~"FluentBit.*|KubeEvents.*"}
         eval_time: 50m
         exp_samples: []
   - name: Collector ingestion keeps VictoriaLogs quiet
