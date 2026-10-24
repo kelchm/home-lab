@@ -392,8 +392,6 @@ tests:
   - name: A node whose kubelet stops answering for four minutes is down, unless it is cordoned
     interval: 1m
     input_series:
-      - series: up{cluster="k8s-prod",job="kubelet",metrics_path="/metrics",node="k8s-prod-1"}
-        values: 1x12
       - series: up{cluster="k8s-prod",job="kubelet",metrics_path="/metrics",node="k8s-prod-2"}
         values: 1x2 0x10
       # A planned reboot: cordoned for the whole time its kubelet is down.
@@ -401,12 +399,22 @@ tests:
         values: 1x2 0x10
       - series: kube_node_spec_unschedulable{cluster="k8s-prod",job="kube-state-metrics",node="k8s-prod-3"}
         values: 0x1 1x11
+      # Cordoned, then kube-state-metrics went down with the node.
+      - series: up{cluster="k8s-prod",job="kubelet",metrics_path="/metrics",node="k8s-prod-1"}
+        values: 1x2 0x10
+      - series: kube_node_spec_unschedulable{cluster="k8s-prod",job="kube-state-metrics",node="k8s-prod-1"}
+        values: 0x1 1 stale
     promql_expr_test:
       - expr: ALERTS{alertname="KubeNodeDown",alertstate="firing"}
         eval_time: 6m
         exp_samples: []
       - expr: ALERTS{alertname="KubeNodeDown",alertstate="firing"}
         eval_time: 7m
+        exp_samples:
+          - labels: 'ALERTS{alertname="KubeNodeDown",alertstate="firing",cluster="k8s-prod",instance="k8s-prod-2",node="k8s-prod-2",severity="critical"}'
+            value: 1
+      - expr: ALERTS{alertname="KubeNodeDown",alertstate="firing"}
+        eval_time: 11m
         exp_samples:
           - labels: 'ALERTS{alertname="KubeNodeDown",alertstate="firing",cluster="k8s-prod",instance="k8s-prod-2",node="k8s-prod-2",severity="critical"}'
             value: 1

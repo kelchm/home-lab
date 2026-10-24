@@ -26,6 +26,10 @@ tests:
         values: 0x12
       - series: pve_onboot_status{job="pve-api",cluster="pve-sbx",id="qemu/103",instance="pve-sbx-1.home.kelch.io"}
         values: 1x12
+      - series: pve_up{job="pve-api",cluster="pve-sbx",id="qemu/103",instance="pve-sbx-2.home.kelch.io"}
+        values: 0x12
+      - series: pve_onboot_status{job="pve-api",cluster="pve-sbx",id="qemu/103",instance="pve-sbx-2.home.kelch.io"}
+        values: 1x12
       - series: pve_guest_info{job="pve-api",cluster="pve-sbx",id="qemu/103",node="pve-sbx-1",instance="pve-sbx-1.home.kelch.io"}
         values: 1x12
       - series: pve_guest_info{job="pve-api",cluster="pve-sbx",id="qemu/103",node="pve-sbx-1",instance="pve-sbx-2.home.kelch.io"}

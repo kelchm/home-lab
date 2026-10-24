@@ -44,14 +44,16 @@ spec:
         # machine" in the alerting runbook. It reads vmagent's scrape of the
         # kubelet rather than kube-state-metrics, which runs as one replica and
         # may be on the node that died, and fires before the alerts it holds
-        # back. A cordoned node is under maintenance and skipped. instance
-        # repeats the node name, as host alerts name their machine.
+        # back. A cordoned node is under maintenance and skipped, by its last
+        # cordon state within 15 minutes in case kube-state-metrics went down
+        # with it. instance repeats the node name, as host alerts name their
+        # machine.
         - alert: KubeNodeDown
           expr: |
             label_replace(
               max by (cluster, node) (up{cluster="k8s-prod",job="kubelet",metrics_path="/metrics"}) == 0
               unless on (cluster, node)
-              max by (cluster, node) (kube_node_spec_unschedulable{cluster="k8s-prod",job="kube-state-metrics"}) == 1,
+              last_over_time((max by (cluster, node) (kube_node_spec_unschedulable{cluster="k8s-prod",job="kube-state-metrics"}))[15m:1m]) == 1,
               "instance", "$1", "node", "(.+)")
           for: 4m
           labels:
