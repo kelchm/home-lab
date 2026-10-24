@@ -7,7 +7,7 @@ spec:
   groups:
     - name: pve
       rules:
-        - alert: PVEAPIUnavailable
+        - alert: PVEMetricsMissing
           expr: sum(up{job="pve-api"}) == 0 or absent(up{job="pve-api"})
           for: 10m
           labels:
@@ -29,7 +29,7 @@ spec:
               At least one node reports the cluster as not quorate. Check
               `pvecm status` before any guest or host operation.
 
-        - alert: PVENodeOffline
+        - alert: PVENodeDown
           expr: min by (cluster, id) (pve_up{job="pve-api", id=~"node/.*"}) == 0
           for: 5m
           labels:
@@ -39,7 +39,7 @@ spec:
             description: >-
               A cluster member sees {{ $labels.id }} as offline.
 
-        - alert: PVEGuestNotRunning
+        - alert: PVEGuestDown
           expr: |
             max by (cluster, id) (pve_up{job="pve-api", id=~"(qemu|lxc)/.*"}) == 0
             and on (id) max by (id) (pve_onboot_status{job="pve-api"}) == 1
@@ -48,8 +48,9 @@ spec:
             severity: warning
           annotations:
             summary: Guest {{ $labels.id }} is set to start on boot but is not running
+            description: 'Guest {{ $labels.id }} is set to start on boot but has not been running for ten minutes. Start it, or turn off start on boot if it is meant to stay off.'
 
-        - alert: PVEStorageNearlyFull
+        - alert: PVEStorageSpaceLow
           expr: |
             max by (cluster, id) (
               pve_disk_usage_bytes{job="pve-api", id=~"storage/.*"}
@@ -60,6 +61,7 @@ spec:
             severity: warning
           annotations:
             summary: Proxmox storage {{ $labels.id }} is {{ $value | humanizePercentage }} full
+            description: 'Storage {{ $labels.id }} has been over 90% full for 30 minutes. Free space or extend it before guests or backups fail to write.'
 
         - alert: PVEPersistentGuestNotBackedUp
           expr: |

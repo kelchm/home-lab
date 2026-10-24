@@ -22,7 +22,7 @@ spec:
       labels:
         cluster: k8s-prod
       rules:
-        - alert: NodePhysicalLinkSpeedDegraded
+        - alert: NodeLinkSpeedDegraded
           expr: |
             (
               label_replace(
@@ -65,7 +65,7 @@ spec:
       labels:
         cluster: k8s-prod
       rules:
-        - alert: NodeCpuTemperatureHigh
+        - alert: NodeCPUTemperatureHigh
           expr: |
             (
               node_hwmon_temp_celsius
@@ -83,7 +83,7 @@ spec:
               {{ printf "%.1f" $value }} C for 15 minutes; warning threshold is
               85 C and processor Tjmax is 95 C.
 
-        - alert: NodeCpuTemperatureCritical
+        - alert: NodeCPUTemperatureCritical
           expr: |
             (
               node_hwmon_temp_celsius
@@ -101,7 +101,7 @@ spec:
               {{ printf "%.1f" $value }} C for 5 minutes; critical threshold is
               92 C and processor Tjmax is 95 C.
 
-        - alert: NodeGpuTemperatureHigh
+        - alert: NodeGPUTemperatureHigh
           expr: |
             (
               node_hwmon_temp_celsius
@@ -119,7 +119,7 @@ spec:
               {{ printf "%.1f" $value }} C for 15 minutes; warning threshold is
               85 C.
 
-        - alert: NodeGpuTemperatureCritical
+        - alert: NodeGPUTemperatureCritical
           expr: |
             (
               node_hwmon_temp_celsius
@@ -137,7 +137,7 @@ spec:
               {{ printf "%.1f" $value }} C for 5 minutes; critical threshold is
               92 C.
 
-        - alert: NodeNvmeCompositeTemperatureHigh
+        - alert: NodeNVMeCompositeTemperatureHigh
           expr: |
             (
               node_hwmon_temp_celsius
@@ -155,7 +155,7 @@ spec:
               at {{ printf "%.1f" $value }} C for 15 minutes; warning threshold
               is 75 C.
 
-        - alert: NodeNvmeCompositeTemperatureCritical
+        - alert: NodeNVMeCompositeTemperatureCritical
           expr: |
             (
               node_hwmon_temp_celsius
@@ -173,7 +173,7 @@ spec:
               at {{ printf "%.1f" $value }} C for 5 minutes; critical threshold
               is 80 C.
 
-        - alert: NodeNvmeSensorTemperatureHigh
+        - alert: NodeNVMeSensorTemperatureHigh
           expr: |
             max by (instance) (node_hwmon_temp_celsius{chip=~"nvme.*"})
             * on (instance) group_left (nodename) node_uname_info{cluster="k8s-prod"}
@@ -188,7 +188,7 @@ spec:
               {{ printf "%.1f" $value }} C for 15 minutes; warning threshold is
               85 C.
 
-        - alert: NodeNvmeSensorTemperatureCritical
+        - alert: NodeNVMeSensorTemperatureCritical
           expr: |
             max by (instance) (node_hwmon_temp_celsius{chip=~"nvme.*"})
             * on (instance) group_left (nodename) node_uname_info{cluster="k8s-prod"}
@@ -216,7 +216,7 @@ spec:
               Sensor {{ $labels.sensor }} on chip {{ $labels.chip }} reports an
               active hardware temperature alarm on {{ $labels.nodename }}.
 
-        - alert: NodeCpuTemperatureSensorMissing
+        - alert: NodeCPUTemperatureSensorMissing
           expr: |
             node_uname_info{cluster="k8s-prod"}
             unless on (instance)
@@ -234,7 +234,7 @@ spec:
               Node-exporter is still reporting {{ $labels.nodename }}, but its
               CPU Tctl hwmon sensor has been absent for 15 minutes.
 
-        - alert: NodeNvmeTemperatureSensorMissing
+        - alert: NodeNVMeTemperatureSensorMissing
           expr: |
             node_uname_info{cluster="k8s-prod"}
             unless on (instance)

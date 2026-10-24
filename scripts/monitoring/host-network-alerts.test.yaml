@@ -34,7 +34,7 @@ tests:
         values: _x100 -86400x80
     alert_rule_test:
       - eval_time: 120m
-        alertname: HostLinkFlapping
+        alertname: NodeLinkFlapping
         exp_alerts:
           - exp_labels:
               severity: warning
@@ -55,7 +55,7 @@ tests:
               summary: eth0 on ups-office flapped 15 times in the last hour
               description: The link went down and up repeatedly. Check the cable, keystone and transceiver at both ends and the switch port's error counters.
       - eval_time: 180m
-        alertname: HostLinkFlapping
+        alertname: NodeLinkFlapping
         exp_alerts: []
 
   - name: A link that was up and loses carrier alerts; links never up and short drops do not
@@ -76,13 +76,13 @@ tests:
     alert_rule_test:
       # nic1 is down here; its drop ends before the 5-minute hold.
       - eval_time: 62m
-        alertname: HostLinkDown
+        alertname: NodeLinkDown
         exp_alerts: []
       - eval_time: 64m
-        alertname: HostLinkDown
+        alertname: NodeLinkDown
         exp_alerts: []
       - eval_time: 65m
-        alertname: HostLinkDown
+        alertname: NodeLinkDown
         exp_alerts:
           - exp_labels:
               severity: warning

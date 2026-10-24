@@ -2,8 +2,8 @@
 name: "Repository Validation"
 
 on:
+  # Every pull request, including a stacked one whose base is another PR's branch.
   pull_request:
-    branches: ["main"]
   push:
     branches: ["main"]
 
@@ -82,6 +82,7 @@ jobs:
               - 'scripts/monitoring/host-alerts.test.yaml'
               - 'scripts/ci/validate-cnpg-alerts.sh'
               - 'scripts/monitoring/cnpg-alerts.test.yaml'
+              - 'scripts/ci/validate-alert-conventions.py'
               - 'scripts/logging/**'
               - 'scripts/grafana/**'
               - 'scripts/ci/test-validate-cilium-policies.sh'
@@ -308,6 +309,10 @@ jobs:
       - name: Validate CloudNativePG cluster alerts
         if: needs.pre-job.outputs.kubernetes_changed == 'true'
         run: scripts/ci/validate-cnpg-alerts.sh
+
+      - name: Validate alert names, severities and annotations
+        if: needs.pre-job.outputs.kubernetes_changed == 'true'
+        run: python3 scripts/ci/validate-alert-conventions.py
 
       - name: Render Flux Kustomizations recursively
         if: needs.pre-job.outputs.kubernetes_changed == 'true'

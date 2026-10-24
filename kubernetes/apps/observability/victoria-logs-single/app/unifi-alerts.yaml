@@ -1,6 +1,6 @@
 ---
 # UniFi console events received as CEF over syslog through Fluent Bit
-# (docs/runbooks/logging.md). UniFiSyslogSilent watches the collector's input.
+# (docs/runbooks/logging.md). UniFiSyslogIngestionSilent watches the collector's input.
 # LogsQL rules: the datasource label routes them to vmalert-victoria-logs.
 # Each expression carries its own _time window, so an event keeps its alert
 # firing for that long. Series carry no cluster label.
@@ -16,7 +16,7 @@ spec:
       type: vlogs
       interval: 1m
       rules:
-        # A WAN that is down for 5 minutes pages through UniFiWANOffline.
+        # A WAN that is down for 5 minutes pages through UniFiWANDown.
         # This catches short repeated drops that recover before then. Class
         # 100 is Internet Down; drops shorter than the console's outage
         # threshold are reported as restored after a temporary disconnection.

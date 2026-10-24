@@ -21,6 +21,26 @@ Use a source-specific Pushover application for each independent alert producer. 
 
 Firing critical alerts use Pushover priority `1`, which bypasses quiet hours but does not create emergency acknowledgements. Firing warnings use priority `0`; resolved notifications use quiet priority `-1`. Emergency priority `2` remains disabled until retry and acknowledgement behavior has been deliberately designed.
 
+## Alert conventions
+
+Rules follow the [monitoring-mixins guidelines](https://monitoring.mixins.dev/#guidelines-for-alert-names-labels-and-annotations), which the bundled kubernetes-mixin rules also follow:
+
+- **Name:** a terse description of the condition, in CamelCase, starting with a capital. Related alerts share their first component, such as `UniFi…` or `Longhorn…`.
+- **Severity:** `critical` needs action now, `warning` needs action but not urgently, and `info` marks something out of the ordinary that needs no action by itself. Routing above turns these into a high-priority push, a normal push and no notification; Home shows `info` alerts as worth a look.
+- **Annotations:** every rule has a `summary`, one readable sentence, and a `description` with the detail templated in. `runbook_url` is optional.
+
+The guidelines leave some choices open. The lab settles them this way:
+
+- **First component is the thing affected,** not the machine or collector that observes it. A UPS is `UPS…` whether a Pi or the NAS reads it, and a blackbox probe is `Probe…` though a Pi runs it.
+- **Machine conditions use `Node…`** for any machine, as the upstream node-exporter alerts do; `KubeNode…` is the Kubernetes node object. An upstream name is reused only when the condition and threshold match it; otherwise the lab name must not collide with it, as `NodeFilesystemSpaceLow` and `NodeLinkFlapping` do not collide with upstream `NodeFilesystemAlmostOutOfSpace` and `NodeNetworkInterfaceFlapping`.
+- **Acronyms are capitals** as upstream writes them (`KubeAPI…`, `NodeCPU…`): CPU, GPU, NAS, UPS, PVE, API, WAN, DHCP, OOM, ATA, RAID. A project's own spelling is kept: UniFi, etcd, NVMe, GLKVM, TMobile.
+- **One word per meaning:** `Down` when something that should answer does not; `MetricsMissing` when telemetry about the thing has stopped arriving; `IngestionSilent` when a log stream has stopped; `TemperatureHigh` and `TemperatureCritical`; `SpaceLow` and `SpaceCritical` for capacity; `-ed` for an event that has happened (`LonghornBackupFailed`) and `-ing` for a condition that continues (`KanidmReplicationFailing`). A state named by the system it comes from keeps that name, such as Kubernetes and Longhorn `NotReady` or Longhorn's `LonghornBackupTargetUnavailable`.
+- **One condition, one name.** Rules for the same condition on different sets of machines share a name, and their labels tell them apart: `UPSOnBattery` covers the UPSs that Pis read over NUT and the one the NAS reads over SNMP. A rule's thresholds may differ by machine when its description says so.
+- **Names defined upstream keep their spelling:** every bundled rule, chart-provided rules such as CloudNativePG's `CNPGClusterOffline` and smartctl-exporter's `SmartCTL…`, and rules copied from upstream unchanged.
+- **The thing an alert is about is a label:** `node` for a Kubernetes node, `instance` with the hostname for any other machine, and `cluster` where the series has one.
+
+`scripts/ci/validate-alert-conventions.py` runs in CI and checks every alert rule under `kubernetes/`: the name's form, a severity of `critical`, `warning` or `info`, both annotations, and that no rule brings back a name retired when these conventions were adopted.
+
 ## First response
 
 1. Open `https://alertmanager.home.kelch.io` and inspect the complete label and annotation set. Pushover is a prompt to investigate, not the full source of truth.

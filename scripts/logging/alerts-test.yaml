@@ -146,21 +146,21 @@ tests:
       - expr: count(ALERTS{alertname="FluentBitDeliveryRetrying",alertstate="firing",job="fluent-bit-events"})
         eval_time: 21m
         exp_samples: [{labels: '{}', value: 1}]
-      - expr: ALERTS{alertname="KubernetesEventsIngestionSilent",alertstate="firing"}
+      - expr: ALERTS{alertname="KubeEventsIngestionSilent",alertstate="firing"}
         eval_time: 14m
         exp_samples: []
-      - expr: ALERTS{alertname="KubernetesEventsIngestionSilent",alertstate="firing"}
+      - expr: ALERTS{alertname="KubeEventsIngestionSilent",alertstate="firing"}
         eval_time: 17m
-        exp_samples: [{labels: '{__name__="ALERTS",alertname="KubernetesEventsIngestionSilent",alertstate="firing",severity="warning",cluster="k8s-prod"}', value: 1}]
+        exp_samples: [{labels: '{__name__="ALERTS",alertname="KubeEventsIngestionSilent",alertstate="firing",severity="warning",cluster="k8s-prod"}', value: 1}]
   - name: An events collector that is not scraped is silent
     interval: 1m
     input_series:
       - series: up{job="fluent-bit",node="n1",endpoint="http"}
         values: 1+0x30
     promql_expr_test:
-      - expr: ALERTS{alertname="KubernetesEventsIngestionSilent",alertstate="firing"}
+      - expr: ALERTS{alertname="KubeEventsIngestionSilent",alertstate="firing"}
         eval_time: 16m
-        exp_samples: [{labels: '{__name__="ALERTS",alertname="KubernetesEventsIngestionSilent",alertstate="firing",job="fluent-bit-events",name="events",severity="warning",cluster="k8s-prod"}', value: 1}]
+        exp_samples: [{labels: '{__name__="ALERTS",alertname="KubeEventsIngestionSilent",alertstate="firing",job="fluent-bit-events",name="events",severity="warning",cluster="k8s-prod"}', value: 1}]
   - name: A scraped events collector without the events input is silent
     interval: 1m
     input_series:
@@ -169,9 +169,9 @@ tests:
       - series: fluentbit_input_records_total{job="fluent-bit-events",node="n3",name="other"}
         values: 0+6x30
     promql_expr_test:
-      - expr: ALERTS{alertname="KubernetesEventsIngestionSilent",alertstate="firing"}
+      - expr: ALERTS{alertname="KubeEventsIngestionSilent",alertstate="firing"}
         eval_time: 16m
-        exp_samples: [{labels: '{__name__="ALERTS",alertname="KubernetesEventsIngestionSilent",alertstate="firing",job="fluent-bit-events",name="events",severity="warning",cluster="k8s-prod"}', value: 1}]
+        exp_samples: [{labels: '{__name__="ALERTS",alertname="KubeEventsIngestionSilent",alertstate="firing",job="fluent-bit-events",name="events",severity="warning",cluster="k8s-prod"}', value: 1}]
   - name: An events collector whose scrapes fail is silent
     interval: 1m
     input_series:
@@ -180,12 +180,12 @@ tests:
       - series: fluentbit_input_records_total{job="fluent-bit-events",node="n3",name="events"}
         values: 0+6x5 stale
     promql_expr_test:
-      - expr: ALERTS{alertname="KubernetesEventsIngestionSilent",alertstate="firing"}
+      - expr: ALERTS{alertname="KubeEventsIngestionSilent",alertstate="firing"}
         eval_time: 14m
         exp_samples: []
-      - expr: ALERTS{alertname="KubernetesEventsIngestionSilent",alertstate="firing"}
+      - expr: ALERTS{alertname="KubeEventsIngestionSilent",alertstate="firing"}
         eval_time: 22m
-        exp_samples: [{labels: '{__name__="ALERTS",alertname="KubernetesEventsIngestionSilent",alertstate="firing",job="fluent-bit-events",name="events",severity="warning",cluster="k8s-prod"}', value: 1}]
+        exp_samples: [{labels: '{__name__="ALERTS",alertname="KubeEventsIngestionSilent",alertstate="firing",job="fluent-bit-events",name="events",severity="warning",cluster="k8s-prod"}', value: 1}]
   - name: A replacement collector that receives events clears the silence
     interval: 1m
     input_series:
@@ -194,13 +194,13 @@ tests:
       - series: fluentbit_input_records_total{job="fluent-bit-events",node="n1",pod="new",name="events"}
         values: _x21 0+6x40
     promql_expr_test:
-      - expr: count(ALERTS{alertname="KubernetesEventsIngestionSilent",alertstate="firing"})
+      - expr: count(ALERTS{alertname="KubeEventsIngestionSilent",alertstate="firing"})
         eval_time: 18m
         exp_samples: [{labels: '{}', value: 1}]
-      - expr: ALERTS{alertname="KubernetesEventsIngestionSilent",alertstate="firing"}
+      - expr: ALERTS{alertname="KubeEventsIngestionSilent",alertstate="firing"}
         eval_time: 25m
         exp_samples: []
-      - expr: ALERTS{alertname="KubernetesEventsIngestionSilent",alertstate="firing"}
+      - expr: ALERTS{alertname="KubeEventsIngestionSilent",alertstate="firing"}
         eval_time: 47m
         exp_samples: []
   - name: A collector receiving events raises nothing
@@ -253,7 +253,7 @@ tests:
       - series: fluentbit_input_records_total{job="fluent-bit",node="n2",name="unifi"}
         values: 0+0x72
     promql_expr_test:
-      - expr: ALERTS{alertname="UniFiSyslogSilent",alertstate="firing"}
+      - expr: ALERTS{alertname="UniFiSyslogIngestionSilent",alertstate="firing"}
         eval_time: 72h
         exp_samples: []
   - name: UniFi syslog that stops for two days fires
@@ -262,10 +262,10 @@ tests:
       - series: fluentbit_input_records_total{job="fluent-bit",node="n1",name="unifi"}
         values: 0+10x24 240+0x60
     promql_expr_test:
-      - expr: ALERTS{alertname="UniFiSyslogSilent",alertstate="firing"}
+      - expr: ALERTS{alertname="UniFiSyslogIngestionSilent",alertstate="firing"}
         eval_time: 60h
         exp_samples: []
-      - expr: count(ALERTS{alertname="UniFiSyslogSilent",alertstate="firing"})
+      - expr: count(ALERTS{alertname="UniFiSyslogIngestionSilent",alertstate="firing"})
         eval_time: 84h
         exp_samples: [{labels: '{}', value: 1}]
   - name: A missing UniFi syslog input fires
@@ -274,10 +274,10 @@ tests:
       - series: fluentbit_input_records_total{job="fluent-bit",node="n1",name="pods"}
         values: 0+10x3
     promql_expr_test:
-      - expr: ALERTS{alertname="UniFiSyslogSilent",alertstate="firing"}
+      - expr: ALERTS{alertname="UniFiSyslogIngestionSilent",alertstate="firing"}
         eval_time: 30m
         exp_samples: []
-      - expr: count(ALERTS{alertname="UniFiSyslogSilent",alertstate="firing"})
+      - expr: count(ALERTS{alertname="UniFiSyslogIngestionSilent",alertstate="firing"})
         eval_time: 2h
         exp_samples: [{labels: '{}', value: 1}]
   - name: Talos var warning holds for 15 minutes and resolves after recovery
