@@ -1,0 +1,42 @@
+---
+# A machine that goes down raises one notifying alert: KubeNodeDown for a
+# k8s-prod node, PVENodeDown for a PVE node, NodeMetricsMissing for any other
+# machine. While it fires, Alertmanager holds back the alerts that only say
+# the same machine is unreachable or that its data has stopped arriving,
+# matched by its node or instance label. A fault the machine still reports,
+# such as a temperature or a SMART error, and anything the outage breaks, such
+# as pods, volumes, backups and services, still notify. See "One alert per
+# machine" in docs/runbooks/alerting.md.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMAlertmanagerConfig
+metadata:
+  name: one-alert-per-machine
+spec:
+  inhibit_rules:
+    # Its missing data, by its instance (the hostname, which KubeNodeDown and
+    # PVENodeDown also carry).
+    - source_matchers: ['alertname=~"KubeNodeDown|PVENodeDown|NodeMetricsMissing"']
+      target_matchers: ['alertname=~".+MetricsMissing|.+SensorMissing|NodeCollectorDown|KubeletInstanceUnreachable"', 'alertname!~"KubeNodeDown|PVENodeDown|NodeMetricsMissing"']
+      equal: [instance]
+    # A Kubernetes node's readiness and reachability, by its node label.
+    - source_matchers: ['alertname="KubeNodeDown"']
+      target_matchers: ['alertname=~"KubeNodeNotReady|KubeNodeUnreachable|KubeNodeReadinessFlapping|KubeletInstanceUnreachable|LonghornNodeNotReady|FluentBitCollectorTargetMissing"']
+      equal: [cluster, node]
+    # Control-plane instances are named by the node's address and port; the
+    # addresses are the static ones in docs/architecture.md.
+    - source_matchers: ['alertname="KubeNodeDown"', 'node="k8s-prod-1"']
+      target_matchers: ['alertname=~"KubeAPIInstanceUnreachable|KubeControllerManagerInstanceUnreachable|KubeSchedulerInstanceUnreachable"', 'instance=~"10[.]32[.]30[.]11:[0-9]+"']
+      equal: [cluster]
+    - source_matchers: ['alertname="KubeNodeDown"', 'node="k8s-prod-2"']
+      target_matchers: ['alertname=~"KubeAPIInstanceUnreachable|KubeControllerManagerInstanceUnreachable|KubeSchedulerInstanceUnreachable"', 'instance=~"10[.]32[.]30[.]12:[0-9]+"']
+      equal: [cluster]
+    - source_matchers: ['alertname="KubeNodeDown"', 'node="k8s-prod-3"']
+      target_matchers: ['alertname=~"KubeAPIInstanceUnreachable|KubeControllerManagerInstanceUnreachable|KubeSchedulerInstanceUnreachable"', 'instance=~"10[.]32[.]30[.]13:[0-9]+"']
+      equal: [cluster]
+    # A PVE node also stops sending host metrics, and its guests stop.
+    - source_matchers: ['alertname="PVENodeDown"']
+      target_matchers: ['alertname="NodeMetricsMissing"']
+      equal: [instance]
+    - source_matchers: ['alertname="PVENodeDown"']
+      target_matchers: ['alertname="PVEGuestDown"', 'node=~".+"']
+      equal: [cluster, node]

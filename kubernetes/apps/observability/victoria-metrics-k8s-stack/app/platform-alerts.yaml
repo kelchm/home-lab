@@ -36,6 +36,31 @@ spec:
             description: '{{ $labels.instance }} has {{ $value | humanizePercentage }} of /var free. Verify the live image-GC settings and inspect GC failures, container images, logs and emptyDir usage before the shared filesystem crosses its 15% free hard-eviction threshold.'
             runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/talos-ephemeral-storage.md
 
+    - name: kubernetes-nodes
+      labels:
+        cluster: k8s-prod
+      rules:
+        # The one notifying alert for a node that goes down; see "One alert per
+        # machine" in the alerting runbook. It reads vmagent's scrape of the
+        # kubelet rather than kube-state-metrics, which runs as one replica and
+        # may be on the node that died, and fires before the alerts it holds
+        # back. A cordoned node is under maintenance and skipped. instance
+        # repeats the node name, as host alerts name their machine.
+        - alert: KubeNodeDown
+          expr: |
+            label_replace(
+              max by (cluster, node) (up{cluster="k8s-prod",job="kubelet",metrics_path="/metrics"}) == 0
+              unless on (cluster, node)
+              max by (cluster, node) (kube_node_spec_unschedulable{cluster="k8s-prod",job="kube-state-metrics"}) == 1,
+              "instance", "$1", "node", "(.+)")
+          for: 4m
+          labels:
+            severity: critical
+          annotations:
+            summary: Kubernetes node {{ $labels.node }} is down
+            description: '{{ $labels.node }}''s kubelet has not answered for four minutes and the node is not cordoned. Check it with talosctl and its console. Alerts that only restate that the node is down are held back while this fires.'
+            runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/alerting.md#one-alert-per-machine
+
     - name: flux-reconciliation
       labels:
         cluster: k8s-prod
@@ -133,15 +158,17 @@ spec:
       labels:
         cluster: k8s-prod
       rules:
+        # One alert per node, so a node that is down holds back its own.
         - alert: FluentBitCollectorTargetMissing
           expr: |
-            (count(count by (node) (up{job="fluent-bit"} == 1) == 2) or vector(0))
-            < scalar(max(kube_daemonset_status_desired_number_scheduled{namespace="observability",daemonset="fluent-bit"}))
+            max by (node) (kube_node_info{job="kube-state-metrics"})
+            unless on (node)
+            count by (node) (up{job="fluent-bit"} == 1) == 2
           for: 5m
           labels:
             severity: critical
           annotations:
-            summary: A node lacks a healthy Fluent Bit scrape target
+            summary: '{{ $labels.node }} lacks a healthy Fluent Bit scrape target'
             description: Each node needs both the v2 and v1 metrics targets up. Check DaemonSet scheduling, PodMonitor conversion and the metrics network path.
 
         - alert: FluentBitDeliveryRetrying

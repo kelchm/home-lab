@@ -9,6 +9,7 @@ resources:
   - ./vmalertmanager-config.sops.yaml
   - ./alerts.yaml
   - ./platform-alerts.yaml
+  - ./one-alert-per-machine.yaml
   - ./glkvm.yaml
   - ./networkpolicy.yaml
 

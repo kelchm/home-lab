@@ -4,8 +4,12 @@ tests:
   - name: Missing target, retries, capacity, drops and silence are detected
     interval: 1m
     input_series:
-      - series: kube_daemonset_status_desired_number_scheduled{namespace="observability",daemonset="fluent-bit"}
-        values: 3+0x30
+      - series: kube_node_info{job="kube-state-metrics",node="n1"}
+        values: 1+0x30
+      - series: kube_node_info{job="kube-state-metrics",node="n2"}
+        values: 1+0x30
+      - series: kube_node_info{job="kube-state-metrics",node="n3"}
+        values: 1+0x30
       - series: up{job="fluent-bit",node="n1",endpoint="http"}
         values: 1+0x30
       - series: up{job="fluent-bit",node="n1",endpoint="http-v1"}
@@ -74,8 +78,10 @@ tests:
   - name: A node whose v2 target is gone is missing even if v1 still answers
     interval: 1m
     input_series:
-      - series: kube_daemonset_status_desired_number_scheduled{namespace="observability",daemonset="fluent-bit"}
-        values: 2+0x30
+      - series: kube_node_info{job="kube-state-metrics",node="n1"}
+        values: 1+0x30
+      - series: kube_node_info{job="kube-state-metrics",node="n2"}
+        values: 1+0x30
       - series: up{job="fluent-bit",node="n1",endpoint="http"}
         values: 1+0x30
       - series: up{job="fluent-bit",node="n1",endpoint="http-v1"}
@@ -107,7 +113,7 @@ tests:
   - name: Healthy collectors raise nothing
     interval: 1m
     input_series:
-      - series: kube_daemonset_status_desired_number_scheduled{namespace="observability",daemonset="fluent-bit"}
+      - series: kube_node_info{job="kube-state-metrics",node="n1"}
         values: 1+0x30
       - series: up{job="fluent-bit",node="n1",endpoint="http"}
         values: 1+0x30
@@ -382,3 +388,47 @@ tests:
       - expr: ALERTS{alertname="KubeNodeEphemeralStorageHigh",alertstate="firing"}
         eval_time: 20m
         exp_samples: []
+
+  - name: A node whose kubelet stops answering for four minutes is down, unless it is cordoned
+    interval: 1m
+    input_series:
+      - series: up{cluster="k8s-prod",job="kubelet",metrics_path="/metrics",node="k8s-prod-1"}
+        values: 1x12
+      - series: up{cluster="k8s-prod",job="kubelet",metrics_path="/metrics",node="k8s-prod-2"}
+        values: 1x2 0x10
+      # A planned reboot: cordoned for the whole time its kubelet is down.
+      - series: up{cluster="k8s-prod",job="kubelet",metrics_path="/metrics",node="k8s-prod-3"}
+        values: 1x2 0x10
+      - series: kube_node_spec_unschedulable{cluster="k8s-prod",job="kube-state-metrics",node="k8s-prod-3"}
+        values: 0x1 1x11
+    promql_expr_test:
+      - expr: ALERTS{alertname="KubeNodeDown",alertstate="firing"}
+        eval_time: 6m
+        exp_samples: []
+      - expr: ALERTS{alertname="KubeNodeDown",alertstate="firing"}
+        eval_time: 7m
+        exp_samples:
+          - labels: 'ALERTS{alertname="KubeNodeDown",alertstate="firing",cluster="k8s-prod",instance="k8s-prod-2",node="k8s-prod-2",severity="critical"}'
+            value: 1
+
+  - name: A node without both healthy Fluent Bit targets has its own alert
+    interval: 1m
+    input_series:
+      - series: kube_node_info{job="kube-state-metrics",node="k8s-prod-1"}
+        values: 1x10
+      - series: kube_node_info{job="kube-state-metrics",node="k8s-prod-2"}
+        values: 1x10
+      - series: up{job="fluent-bit",node="k8s-prod-1",endpoint="http"}
+        values: 1x10
+      - series: up{job="fluent-bit",node="k8s-prod-1",endpoint="http-v1"}
+        values: 1x10
+      - series: up{job="fluent-bit",node="k8s-prod-2",endpoint="http"}
+        values: 1x10
+      - series: up{job="fluent-bit",node="k8s-prod-2",endpoint="http-v1"}
+        values: 0x10
+    promql_expr_test:
+      - expr: ALERTS{alertname="FluentBitCollectorTargetMissing",alertstate="firing"}
+        eval_time: 6m
+        exp_samples:
+          - labels: 'ALERTS{alertname="FluentBitCollectorTargetMissing",alertstate="firing",cluster="k8s-prod",node="k8s-prod-2",severity="critical"}'
+            value: 1

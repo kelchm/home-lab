@@ -222,12 +222,15 @@ spec:
 
         # A UPS that has reported in the last week but sent no status for five
         # minutes, which also covers its collector being down: NUT errors and
-        # stale driver data fail the whole scrape.
+        # stale driver data fail the whole scrape. Only while the Pi itself
+        # reports: a Pi that has gone dark is NodeMetricsMissing's.
         - alert: UPSMetricsMissing
           expr: |
             max by (instance, platform, ups) (tlast_over_time(up{job="pi-nut"}[7d]))
             unless on (instance, platform, ups)
             max by (instance, platform, ups) (tlast_over_time(network_ups_tools_ups_status{job="pi-nut"}[5m]))
+            and on (instance)
+            max by (instance) (present_over_time(up{job="pi-node"}[2m]))
           for: 1m
           labels:
             severity: warning

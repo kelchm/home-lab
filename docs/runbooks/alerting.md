@@ -41,6 +41,30 @@ The guidelines leave some choices open. The lab settles them this way:
 
 `scripts/ci/validate-alert-conventions.py` runs in CI and checks every alert rule under `kubernetes/`: the name's form, a severity of `critical`, `warning` or `info`, both annotations, and that no rule brings back a name retired when these conventions were adopted.
 
+## One alert per machine
+
+A machine that goes down raises one notifying alert, whatever the machine is. While it fires, Alertmanager holds back the alerts that only say the same machine is unreachable or that its data has stopped arriving. A fault the machine still reports, such as a temperature or a SMART error, still notifies, and so does anything the outage breaks: pods that cannot run, degraded volumes, failed backups, service probes. The hold-back rules are the `VMAlertmanagerConfig` [one-alert-per-machine](../../kubernetes/apps/observability/victoria-metrics-k8s-stack/app/one-alert-per-machine.yaml). The VMAlertmanager sets `disableNamespaceMatcher` so they apply to alerts from every namespace, including host alerts, which have none.
+
+| Machine | Its alert | Held back while it fires |
+|---|---|---|
+| k8s-prod node | `KubeNodeDown`, critical: vmagent has not reached the node's kubelet for four minutes and the node is not cordoned | Its `…MetricsMissing` and `…SensorMissing` alerts; `KubeNodeNotReady`, `KubeNodeUnreachable`, `KubeNodeReadinessFlapping`, `KubeletInstanceUnreachable`, `LonghornNodeNotReady` and `FluentBitCollectorTargetMissing` for it; its API server, controller-manager and scheduler instances, named by its address |
+| PVE node | `PVENodeDown`, critical, after five minutes | Its `NodeMetricsMissing`, `…MetricsMissing`, `…SensorMissing` and `NodeCollectorDown` alerts, and `PVEGuestDown` for guests assigned to it |
+| Spark, NAS, Pi | `NodeMetricsMissing`, warning, after ten minutes without metrics | Its `…MetricsMissing`, `…SensorMissing` and `NodeCollectorDown` alerts. `UPSMetricsMissing` fires only while its Pi still reports |
+
+The rules match an alert to the machine by its `instance` (the hostname, which `KubeNodeDown` and `PVENodeDown` also carry) or `node` label, and only for these alerts. A machine that only looks down can still be running: a kubelet that stops answering while node-exporter reports a critical temperature is the likely case, so a fault the machine reports is never held back. A Longhorn volume alert names the node a volume is attached to and is about the volume, so it is not held back either. The naming conventions keep this list short: alerts about missing data share the `MetricsMissing` and `SensorMissing` endings.
+
+A hold-back works only if the down alert is already firing when the other alert would first notify, so each down alert waits less than the alerts it holds back. `KubeNodeDown` reads vmagent's scrape of the kubelet rather than kube-state-metrics, which runs as one replica and may be on the node that died; at four minutes it comes before `LonghornNodeNotReady` and `FluentBitCollectorTargetMissing` at five and the node and kubelet alerts at fifteen. `PVENodeDown` at five minutes comes before the ten of `NodeMetricsMissing` and `PVEGuestDown`. Alertmanager also waits 30 seconds before a group's first notification. When the down alert resolves, anything still firing about that machine notifies at the group's next interval; a symptom that clears within it does not.
+
+A planned reboot cordons the node, so `KubeNodeDown` skips it, and the alerts it would hold back notify as they would without it: a reboot that hangs past five minutes notifies through `LonghornNodeNotReady`.
+
+`scripts/ci/test-alert-inhibition.py` runs these rules in Alertmanager in CI and checks, for a k8s-prod node, a PVE node and the NAS going down, which simulated alerts are held back and which still notify.
+
+Two aggregate alerts about a k8s-prod node are not held back, because neither names the machine: `TargetDown` counts each scrape job's failed targets, and `etcdMembersDown` counts etcd members. A node that stays down past ten minutes therefore also raises `TargetDown` for each namespace with a per-node job, and past twenty, `etcdMembersDown`.
+
+Alertmanager groups alerts by name, cluster and namespace, not by machine: two machines that go down together arrive in one notification, a second machine joining a firing group sends an update after `group_interval`, and a firing group repeats every 12 hours and announces its resolution.
+
+A problem that only affects what can be seen of a device is `info` when every notifying rule it blinds is covered by another notifying alert, and notifies otherwise. `TMobileMetricsMissing` is info: the only notifying rule it blinds, `TMobileNotRegistered`, means WAN1 carries no traffic, which `UniFiWANDown` notifies. `StarlinkMetricsMissing` notifies, because `StarlinkObstructed` and `StarlinkPingDropSustained` have no other cover; so do `UniFiMetricsMissing`, `PVEMetricsMissing`, `NodeCollectorDown` and the Longhorn, Flux and cert-manager `MetricsMissing` alerts.
+
 ## First response
 
 1. Open `https://alertmanager.home.kelch.io` and inspect the complete label and annotation set. Pushover is a prompt to investigate, not the full source of truth.

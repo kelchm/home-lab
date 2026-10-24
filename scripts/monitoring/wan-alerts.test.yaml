@@ -104,12 +104,12 @@ tests:
       - expr: ALERTS{alertname="TMobileMetricsMissing",alertstate="firing"}
         eval_time: 40m
         exp_samples:
-          - labels: 'ALERTS{alertname="TMobileMetricsMissing",alertstate="firing",instance="tmobile-gateway",job="tmobile-api",severity="warning"}'
+          - labels: 'ALERTS{alertname="TMobileMetricsMissing",alertstate="firing",instance="tmobile-gateway",job="tmobile-api",severity="info"}'
             value: 1
       - expr: ALERTS{alertname="TMobileMetricsMissing",alertstate="firing"}
         eval_time: 75m
         exp_samples:
-          - labels: 'ALERTS{alertname="TMobileMetricsMissing",alertstate="firing",instance="tmobile-gateway",job="tmobile-api",severity="warning"}'
+          - labels: 'ALERTS{alertname="TMobileMetricsMissing",alertstate="firing",instance="tmobile-gateway",job="tmobile-api",severity="info"}'
             value: 1
 
   - name: Lost registration fires after five minutes
