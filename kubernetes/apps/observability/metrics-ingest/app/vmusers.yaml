@@ -218,3 +218,27 @@ spec:
           values:
             - instance=ups-office
             - platform=pi
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMUser
+metadata:
+  name: adsb-office
+  labels:
+    homelab.kelch.io/vmauth: metrics-ingest
+spec:
+  name: adsb-office
+  tokenRef:
+    name: metrics-ingest-tokens
+    key: ADSB_OFFICE_TOKEN
+  targetRefs:
+    - crd:
+        kind: VMSingle
+        name: victoria-metrics-k8s-stack
+        namespace: observability
+      paths:
+        - /api/v1/write
+      query_args:
+        - name: extra_label
+          values:
+            - instance=adsb-office
+            - platform=pi
