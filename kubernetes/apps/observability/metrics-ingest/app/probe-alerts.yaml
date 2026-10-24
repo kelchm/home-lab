@@ -7,8 +7,8 @@ spec:
   groups:
     - name: pi-probes
       rules:
-        # Exporter failures belong to HostCollectorDown, not every destination.
-        - alert: PiProbeFailed
+        # Exporter failures belong to NodeCollectorDown, not every destination.
+        - alert: ProbeFailed
           expr: |
             (
               probe_success{job="pi-blackbox"} == 0
@@ -25,7 +25,7 @@ spec:
             description: "{{ $labels.target }} failed the {{ $labels.module }} probe. Check the destination, DNS and the routed path from VLAN 20."
             runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/host-monitoring.md#service-probes
 
-        - alert: PiProbeSlow
+        - alert: ProbeSlow
           expr: |
             (avg_over_time(probe_duration_seconds{job="pi-blackbox"}[5m]) > 2)
             and on (instance, platform, probe)
@@ -41,7 +41,7 @@ spec:
             runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/host-monitoring.md#service-probes
 
         # Internal certificates live 160 h and renew with 53 h left; 36 h left means renewal has failed for about 17 h.
-        - alert: PiProbeCertificateExpiring
+        - alert: ProbeCertificateExpiring
           expr: |
             (probe_ssl_earliest_cert_expiry{job="pi-blackbox"} - time() < 36 * 3600)
             and on (instance, platform, probe)

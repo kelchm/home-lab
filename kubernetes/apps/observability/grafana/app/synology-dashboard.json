@@ -256,7 +256,7 @@
       "id": 3,
       "type": "stat",
       "title": "Volume used",
-      "description": "Share of each volume's capacity in use. HostFilesystemLow fires below 10% free.",
+      "description": "Share of each volume's capacity in use. NodeFilesystemSpaceLow fires below 10% free.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -401,7 +401,7 @@
       "id": 5,
       "type": "stat",
       "title": "Hottest disk",
-      "description": "Highest drive temperature. NasDiskHot fires above 50 C for 15 minutes.",
+      "description": "Highest drive temperature. NASDiskTemperatureHigh fires above 50 C for 15 minutes.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -1244,7 +1244,7 @@
       "id": 9,
       "type": "timeseries",
       "title": "Disk temperature",
-      "description": "Per-drive temperature from DSM; dashed line at the NasDiskHot threshold.",
+      "description": "Per-drive temperature from DSM; dashed line at the NASDiskTemperatureHigh threshold.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"

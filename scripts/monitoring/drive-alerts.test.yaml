@@ -216,7 +216,7 @@ tests:
         values: 1 stale _x29
     alert_rule_test:
       - eval_time: 30m
-        alertname: DriveHealthMissing
+        alertname: DriveMetricsMissing
         exp_alerts:
           - exp_labels:
               instance: pve-sbx-3
@@ -243,7 +243,7 @@ tests:
               summary: Drive health is missing for nvme0 on retired
               description: Check the collector and device access. Removed disks remain expected for seven days.
       - eval_time: 30m
-        alertname: DriveNvmeControllerNotLive
+        alertname: DriveNVMeControllerNotLive
         exp_alerts:
           - exp_labels:
               instance: pve-sbx-3
@@ -253,8 +253,9 @@ tests:
               severity: critical
             exp_annotations:
               summary: NVMe nvme0 on pve-sbx-3 is dead
+              description: 'The NVMe controller for nvme0 has reported a state other than live for five minutes, so the drive may be failing or resetting. Check the host''s kernel log.'
       - eval_time: 30m
-        alertname: DriveAtaReallocatedSectors
+        alertname: DriveATAReallocatedSectors
         exp_alerts:
           - exp_labels:
               instance: nas
@@ -265,7 +266,7 @@ tests:
               summary: Drive Disk 7 on nas has reallocated sectors
               description: The drive reports 2 reallocated sectors. Check its trend and DSM extended test results.
       - eval_time: 30m
-        alertname: DriveAtaPendingSectors
+        alertname: DriveATAPendingSectors
         exp_alerts:
           - exp_labels:
               instance: nas
@@ -276,7 +277,7 @@ tests:
               summary: Drive Disk 8 on nas has pending sectors
               description: The drive reports 3 unstable sectors awaiting reallocation.
       - eval_time: 30m
-        alertname: DriveAtaUncorrectableSectors
+        alertname: DriveATAUncorrectableSectors
         exp_alerts:
           - exp_labels:
               instance: nas
@@ -470,7 +471,7 @@ tests:
             value: 0
     alert_rule_test:
       - eval_time: 20m
-        alertname: DriveHealthMissing
+        alertname: DriveMetricsMissing
         exp_alerts:
           - exp_labels: {instance: nas, platform: synology, device: Disk 1, severity: warning}
             exp_annotations:
@@ -494,7 +495,7 @@ tests:
         values: 1 stale _x19
     alert_rule_test:
       - eval_time: 20m
-        alertname: DriveHealthMissing
+        alertname: DriveMetricsMissing
         exp_alerts:
           - exp_labels: {instance: k8s-prod-1, platform: k8s, device: nvme0, severity: warning}
             exp_annotations:
@@ -516,5 +517,5 @@ tests:
             value: 0
     alert_rule_test:
       - eval_time: 20m
-        alertname: DriveHealthMissing
+        alertname: DriveMetricsMissing
         exp_alerts: []

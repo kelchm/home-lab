@@ -75,7 +75,7 @@ sequences concurrently.
 
 vmagent in `k8s-prod` scrapes kvmd's native export at `https://10.32.20.10/api/export/prometheus/metrics` every 30 seconds as `job="glkvm-kvmd"`, `instance="glkvm"`, `platform="glkvm"`. The scrape and alert rules are in [`glkvm.yaml`](../../kubernetes/apps/observability/victoria-metrics-k8s-stack/app/glkvm.yaml) and the **GLKVM / Recovery console** dashboard is in Grafana's `Platforms/GLKVM` folder. Alerts route like every other alert; see the [alerting runbook](../../docs/runbooks/alerting.md).
 
-Applied 2026-10-17 on `V1.10.1 release2`. Before the patch, the unauthenticated metrics path returned HTTP 500; after it, the path returns the metrics below while `/api/info` still returns 401, vmagent reports the target up, and `GLKVMMetricsUnavailable` cleared. The PiKVM UI answers on 443 and the vendor UI on 8888, and no mass-storage function is linked. `/etc/init.d/S98kvmd restart` prints `Stopping kvmd: FAIL` because it checks for the old process before it has exited; one kvmd daemon was running afterwards.
+Applied 2026-10-17 on `V1.10.1 release2`. Before the patch, the unauthenticated metrics path returned HTTP 500; after it, the path returns the metrics below while `/api/info` still returns 401, vmagent reports the target up, and `GLKVMMetricsMissing` cleared. The PiKVM UI answers on 443 and the vendor UI on 8888, and no mass-storage function is linked. `/etc/init.d/S98kvmd restart` prints `Stopping kvmd: FAIL` because it checks for the old process before it has exited; one kvmd daemon was running afterwards.
 
 The appliance needs two changes. **Apply** installs the override with the rest of the console configuration; the export patch is installed separately, below, so a firmware change that invalidates it never blocks restoring the console.
 
@@ -97,12 +97,12 @@ The appliance serves its vendor's self-signed certificate (`CN=localhost`, expir
 
 | Alert | Fires when |
 |---|---|
-| `GLKVMMetricsUnavailable` | The scrape fails or is missing for 10 minutes. |
-| `GLKVMHot` | The SoC is above 95 °C for 15 minutes. |
+| `GLKVMMetricsMissing` | The scrape fails or is missing for 10 minutes. |
+| `GLKVMTemperatureHigh` | The SoC is above 95 °C for 15 minutes. |
 | `GLKVMMemoryLow` | Memory is over 90% used for 30 minutes. |
 | `GLKVMHealthMetricsMissing` | The export answers without temperature or memory for 30 minutes, so the rule that reads the missing metric cannot fire. |
 
-When `GLKVMMetricsUnavailable` fires, the status of an unauthenticated request separates the causes:
+When `GLKVMMetricsMissing` fires, the status of an unauthenticated request separates the causes:
 
 ```sh
 curl -sk -o /dev/null -w '%{http_code}\n' https://10.32.20.10/api/export/prometheus/metrics

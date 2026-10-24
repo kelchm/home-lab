@@ -36,7 +36,7 @@ spec:
   groups:
     - name: glkvm
       rules:
-        - alert: GLKVMMetricsUnavailable
+        - alert: GLKVMMetricsMissing
           expr: up{job="glkvm-kvmd"} == 0 or absent(up{job="glkvm-kvmd"})
           for: 10m
           labels:
@@ -54,7 +54,7 @@ spec:
 
         # The only thermal trip on the SoC is critical, at 115 C, where the
         # kernel powers the appliance off.
-        - alert: GLKVMHot
+        - alert: GLKVMTemperatureHigh
           expr: pikvm_hw_temp_cpu{job="glkvm-kvmd"} > 95
           for: 15m
           labels:
@@ -87,6 +87,6 @@ spec:
           annotations:
             summary: GLKVM metrics no longer include temperature or memory
             description: >-
-              The export answers but GLKVMHot or GLKVMMemoryLow can no longer
+              The export answers but GLKVMTemperatureHigh or GLKVMMemoryLow can no longer
               fire. A firmware update can change what kvmd exports; see
               devices/glkvm/README.md#monitoring.

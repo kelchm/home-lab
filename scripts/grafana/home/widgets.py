@@ -19,7 +19,7 @@ FS = 'fstype=~"ext4|xfs|btrfs"'
 # A UPS belongs to power whichever machine reads it, and the probes run from a Pi belong to what they probe.
 SYSTEMS = ["k8s-prod", "pve-sbx", "spark", "athena", "network", "power", "devices"]
 PLATFORMS = {"k8s-prod": "k8s", "pve-sbx": "pve", "spark": "spark", "athena": "synology", "network": "unifi|starlink|tmobile", "devices": "pi|glkvm"}
-ALERT_FAMILIES = {"network": "(UniFi|Starlink|TMobile).*", "athena": "Nas.*", "devices": "GLKVM.*", "power": "(PiUps|NasUps).*", "k8s-prod": "PiProbe.*"}
+ALERT_FAMILIES = {"network": "(UniFi|Starlink|TMobile).*", "athena": "NAS.*", "devices": "GLKVM.*", "power": "UPS.*", "k8s-prod": "Probe.*"}
 
 
 def S(expr):

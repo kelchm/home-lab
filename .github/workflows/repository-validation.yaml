@@ -2,8 +2,8 @@
 name: "Repository Validation"
 
 on:
+  # Every pull request, including a stacked one whose base is another PR's branch.
   pull_request:
-    branches: ["main"]
   push:
     branches: ["main"]
 
@@ -82,6 +82,7 @@ jobs:
               - 'scripts/monitoring/host-alerts.test.yaml'
               - 'scripts/ci/validate-cnpg-alerts.sh'
               - 'scripts/monitoring/cnpg-alerts.test.yaml'
+              - 'scripts/ci/validate-alert-conventions.py'
               - 'scripts/logging/**'
               - 'scripts/grafana/**'
               - 'scripts/ci/test-validate-cilium-policies.sh'
@@ -192,15 +193,23 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 2
           path: pull
 
-      - name: Checkout Default Branch
+      # The merge preview's first parent is what the pull request merges into,
+      # including the layer below a stacked one.
+      - name: Find Merge Base
+        id: base
+        if: github.event_name == 'pull_request' && needs.pre-job.outputs.kubernetes_changed == 'true'
+        run: echo "sha=$(git -C pull rev-parse HEAD^1)" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout Merge Base
         if: github.event_name == 'pull_request' && needs.pre-job.outputs.kubernetes_changed == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          ref: "${{ github.event.repository.default_branch }}"
-          path: default
+          ref: "${{ steps.base.outputs.sha }}"
+          path: base
 
       - name: Run flate diff
         if: github.event_name == 'pull_request' && needs.pre-job.outputs.kubernetes_changed == 'true'
@@ -214,7 +223,7 @@ jobs:
           ghcr.io/home-operations/flate@sha256:e0e2d2de97539b3141977e8bb3bbb50ea5c5afe89477950e5fa972c9862478da
           diff ${{ matrix.resources }}
           --path pull/kubernetes/flux/cluster
-          --path-orig default/kubernetes/flux/cluster
+          --path-orig base/kubernetes/flux/cluster
           --no-progress
           -o github
           > diff.txt
@@ -308,6 +317,10 @@ jobs:
       - name: Validate CloudNativePG cluster alerts
         if: needs.pre-job.outputs.kubernetes_changed == 'true'
         run: scripts/ci/validate-cnpg-alerts.sh
+
+      - name: Validate alert names, severities and annotations
+        if: needs.pre-job.outputs.kubernetes_changed == 'true'
+        run: python3 scripts/ci/validate-alert-conventions.py
 
       - name: Render Flux Kustomizations recursively
         if: needs.pre-job.outputs.kubernetes_changed == 'true'

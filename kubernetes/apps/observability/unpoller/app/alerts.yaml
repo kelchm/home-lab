@@ -11,7 +11,7 @@ spec:
       rules:
         # Unpoller serves its last good poll from cache, so a console it can no
         # longer read shows as a growing cache age rather than a failed scrape.
-        - alert: UniFiMetricsStale
+        - alert: UniFiMetricsMissing
           expr: |
             max(unpoller_prometheus_cache_age_seconds{job="unifi-api"}) > 300
             or sum(up{job="unifi-api"}) == 0
@@ -26,7 +26,7 @@ spec:
               not being scraped. Check the unpoller pod's log, the unpoller-sa
               account and reachability of unifi.home.kelch.io:443.
 
-        - alert: UniFiDeviceDisconnected
+        - alert: UniFiDeviceDown
           expr: max by (subsystem) (unpoller_site_disconnected{job="unifi-api"}) > 0
           for: 10m
           labels:
@@ -53,7 +53,7 @@ spec:
 
         # The gateway's own health check (last_wan_status). The interface
         # state below stays ACTIVE through an outage, link up or down.
-        - alert: UniFiWANOffline
+        - alert: UniFiWANDown
           expr: unpoller_device_wan_status{job="unifi-api"} == 0
           for: 5m
           labels:
@@ -85,7 +85,7 @@ spec:
 
         # Share of the gateway's pings to ping.ui.com answered on each WAN port,
         # at the 10% loss line of StarlinkPingDropSustained. eth9 is WAN and
-        # eth8 is WAN2; an offline WAN is left to UniFiWANOffline.
+        # eth8 is WAN2; an offline WAN is left to UniFiWANDown.
         - alert: UniFiWANPacketLoss
           expr: |
             label_replace(label_replace(
@@ -180,7 +180,7 @@ spec:
               pool is full. Find stale leases or enlarge the pool in the
               network's settings.
 
-        - alert: UniFiDeviceHot
+        - alert: UniFiDeviceTemperatureHigh
           expr: unpoller_device_temperature_celsius{job="unifi-api"} > 70
           for: 15m
           labels:
@@ -198,6 +198,7 @@ spec:
             severity: warning
           annotations:
             summary: "{{ $labels.name }} CPU is at {{ $value | humanizePercentage }}"
+            description: '{{ $labels.name }} has used over 90% of its CPU for 15 minutes. Check its load in the UniFi console.'
 
         - alert: UniFiDeviceMemoryHigh
           expr: unpoller_device_memory_utilization_ratio{job="unifi-api"} > 0.9
@@ -206,3 +207,4 @@ spec:
             severity: warning
           annotations:
             summary: "{{ $labels.name }} memory is at {{ $value | humanizePercentage }}"
+            description: '{{ $labels.name }} has used over 90% of its memory for 15 minutes. Check it in the UniFi console; a restart may be needed.'
