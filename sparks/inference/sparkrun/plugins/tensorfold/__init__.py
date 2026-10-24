@@ -1,10 +1,11 @@
 """SparkRun 0.3.10 external TensorFold runtime (runtime_name=\"tensorfold\").
 
-Engine/rank adapter for any TensorFold build served on two ranks. Cluster
-lifecycle, fabric detection, image/model distribution, caches,
-start/status/log/stop and the rendezvous gate stay on SparkRun's native
-RuntimePlugin path. The adapter names no model or engine: each recipe sets its
-entrypoint, served name and window, and its mod owns the rank launch. SparkRun
+Engine/rank adapter for any TensorFold build served on one node, or on two
+ranks across two nodes. Cluster lifecycle, fabric detection, image/model
+distribution, caches, start/status/log/stop and the rendezvous gate stay on
+SparkRun's solo and native RuntimePlugin paths. The adapter names no model or
+engine: each recipe sets its entrypoint, served name and window, and its mod
+owns the launch. A one-node launch gets no rendezvous variables. SparkRun
 0.3.10 treats HTTP 200 as ready, so each recipe's post_exec gate checks the
 engine's own health.
 """
@@ -22,8 +23,8 @@ from sparkrun.runtimes._util import default_env_hf_offline
 from sparkrun.runtimes.base import RuntimePlugin
 
 HF_HUB_ROOT = "/cache/huggingface/hub"
-REQUIRED_NODES = 2
-REQUIRED_TP = 2
+# Node count -> tensor_parallel: one rank on one node, or one rank on each of two nodes.
+TOPOLOGIES = {1: 1, 2: 2}
 REQUIRED_PP = 1
 # Set by every recipe; the adapter has no default engine or model.
 REQUIRED_DEFAULTS = ("entrypoint", "served_model_name", "context")
@@ -88,7 +89,7 @@ def _env_assignment(name: str, value: Any) -> str:
 
 
 class TensorFoldRuntime(RuntimePlugin):
-    """Two-node TensorFold TP2 adapter on SparkRun native clustering."""
+    """TensorFold adapter: one node on SparkRun's solo path, or two TP2 ranks on its native clustering."""
 
     runtime_name = "tensorfold"
     readiness_styles = (OPENAI_CHAT_STREAM,)
@@ -179,7 +180,7 @@ class TensorFoldRuntime(RuntimePlugin):
         skip_keys: set[str] | frozenset[str] = frozenset(),
     ) -> str:
         if not is_cluster:
-            raise ValueError(self._topology_message("solo/single-node launches are unsupported"))
+            return self._one_node_command(recipe, overrides, skip_keys)
         return self.generate_node_command(
             recipe,
             overrides,
@@ -219,6 +220,17 @@ class TensorFoldRuntime(RuntimePlugin):
         fabric = _FABRIC_MASTER.get()
         if fabric:
             engine_env["FABRIC_MASTER"] = fabric
+        return self._env_command(recipe, config, engine_env)
+
+    def _one_node_command(self, recipe, overrides: dict[str, Any], skip_keys: set[str] | frozenset[str]) -> str:
+        # One rank: no rendezvous, so no RANK, MASTER, MASTER_PORT or FABRIC_MASTER.
+        issues = self._launch_issues(recipe, overrides, nodes=1)
+        if issues:
+            raise ValueError(issues[0].message)
+        config = recipe.build_config_chain(overrides)
+        return self._env_command(recipe, config, self._engine_env(recipe, config, skip_keys))
+
+    def _env_command(self, recipe, config, engine_env: dict[str, str]) -> str:
         binary = _config_get(config, "entrypoint")
         if binary is None:
             raise ValueError("TensorFold recipes set defaults.entrypoint")
@@ -253,30 +265,39 @@ class TensorFoldRuntime(RuntimePlugin):
         return self._stop_native_cluster(hosts, cluster_id, config=config, dry_run=dry_run)
 
     def _require_launch_topology(self, recipe, overrides, num_nodes: int, node_rank: int) -> None:
-        if num_nodes != REQUIRED_NODES:
-            raise ValueError(self._topology_message("got %d node(s)" % num_nodes))
+        if num_nodes != 2:
+            raise ValueError(self._topology_message("got %d node(s) for a ranked launch" % num_nodes))
         if node_rank not in (0, 1):
             raise ValueError(self._topology_message("got RANK=%s" % node_rank))
-        issues = self._parallelism_issues(recipe, overrides)
+        issues = self._launch_issues(recipe, overrides, nodes=2)
         if issues:
             raise ValueError(issues[0].message)
+
+    def _launch_issues(self, recipe, overrides: dict[str, Any] | None, *, nodes: int) -> list:
+        # A launch override cannot move a recipe to the other shape: its declared nodes must match the launch.
+        min_nodes = getattr(recipe, "min_nodes", 1)
+        if min_nodes != nodes:
+            return [self.recipe_error(self._topology_message("a %d-node launch of a recipe with min_nodes=%s" % (nodes, min_nodes)))]
+        return self._topology_issues(recipe, overrides)
 
     def _topology_issues(self, recipe, overrides: dict[str, Any] | None) -> list:
         issues = []
         min_nodes = getattr(recipe, "min_nodes", 1)
         max_nodes = getattr(recipe, "max_nodes", None)
-        if min_nodes != REQUIRED_NODES:
+        if min_nodes not in TOPOLOGIES:
             issues.append(self.recipe_error(self._topology_message("min_nodes=%s" % min_nodes)))
-        if max_nodes is not None and max_nodes != REQUIRED_NODES:
-            issues.append(self.recipe_error(self._topology_message("max_nodes=%s" % max_nodes)))
-        issues.extend(self._parallelism_issues(recipe, overrides))
+            return issues
+        if max_nodes is not None and max_nodes != min_nodes:
+            issues.append(self.recipe_error(self._topology_message("min_nodes=%s, max_nodes=%s" % (min_nodes, max_nodes))))
+        issues.extend(self._parallelism_issues(recipe, overrides, nodes=min_nodes))
         return issues
 
-    def _parallelism_issues(self, recipe, overrides: dict[str, Any] | None) -> list:
+    def _parallelism_issues(self, recipe, overrides: dict[str, Any] | None, *, nodes: int) -> list:
         issues = []
         parallelism = extract_parallelism(recipe.build_config_chain(overrides or {}))
-        if parallelism.tensor_parallel != REQUIRED_TP:
-            issues.append(self.recipe_error(self._topology_message("tensor_parallel=%s" % parallelism.tensor_parallel)))
+        if parallelism.tensor_parallel != TOPOLOGIES[nodes]:
+            issues.append(self.recipe_error(self._topology_message(
+                "%d node(s) with tensor_parallel=%s" % (nodes, parallelism.tensor_parallel))))
         if parallelism.pipeline_parallel != REQUIRED_PP:
             issues.append(self.recipe_error(self._topology_message("pipeline_parallel=%s" % parallelism.pipeline_parallel)))
         if parallelism.data_parallel != 1:
@@ -285,8 +306,8 @@ class TensorFoldRuntime(RuntimePlugin):
 
     def _topology_message(self, detail: str) -> str:
         return (
-            "TensorFold requires exactly two nodes, one GPU per rank, tensor_parallel=2, "
-            "pipeline_parallel=1 (%s)" % detail
+            "TensorFold requires one node with tensor_parallel=1, or two nodes with tensor_parallel=2, "
+            "one GPU per rank and pipeline_parallel=1 (%s)" % detail
         )
 
     def _engine_env(self, recipe, config, skip_keys: set[str] | frozenset[str]) -> dict[str, str]:
