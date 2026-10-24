@@ -24,12 +24,12 @@
       ],
       "promql_expr_test": [
         {
-          "expr": "count(ALERTS{alertname=\"PiProbeFailed\",alertstate=\"firing\"})",
+          "expr": "count(ALERTS{alertname=\"ProbeFailed\",alertstate=\"firing\"})",
           "eval_time": "2m",
           "exp_samples": []
         },
         {
-          "expr": "count(ALERTS{alertname=\"PiProbeFailed\",alertstate=\"firing\"})",
+          "expr": "count(ALERTS{alertname=\"ProbeFailed\",alertstate=\"firing\"})",
           "eval_time": "4m",
           "exp_samples": [
             {
@@ -55,12 +55,12 @@
       ],
       "promql_expr_test": [
         {
-          "expr": "count(ALERTS{alertname=\"PiProbeFailed\",alertstate=\"firing\"})",
+          "expr": "count(ALERTS{alertname=\"ProbeFailed\",alertstate=\"firing\"})",
           "eval_time": "2m",
           "exp_samples": []
         },
         {
-          "expr": "count(ALERTS{alertname=\"PiProbeFailed\",alertstate=\"firing\"})",
+          "expr": "count(ALERTS{alertname=\"ProbeFailed\",alertstate=\"firing\"})",
           "eval_time": "4m",
           "exp_samples": [
             {
@@ -106,17 +106,17 @@
       ],
       "promql_expr_test": [
         {
-          "expr": "count(ALERTS{alertname=\"PiProbeFailed\"})",
+          "expr": "count(ALERTS{alertname=\"ProbeFailed\"})",
           "eval_time": "4m",
           "exp_samples": []
         },
         {
-          "expr": "count(ALERTS{alertname=\"HostCollectorDown\",alertstate=\"firing\"})",
+          "expr": "count(ALERTS{alertname=\"NodeCollectorDown\",alertstate=\"firing\"})",
           "eval_time": "9m",
           "exp_samples": []
         },
         {
-          "expr": "count by (job) (ALERTS{alertname=\"HostCollectorDown\",alertstate=\"firing\"})",
+          "expr": "count by (job) (ALERTS{alertname=\"NodeCollectorDown\",alertstate=\"firing\"})",
           "eval_time": "11m",
           "exp_samples": [
             {
@@ -126,17 +126,17 @@
           ]
         },
         {
-          "expr": "count(ALERTS{alertname=\"PiProbeFailed\"})",
+          "expr": "count(ALERTS{alertname=\"ProbeFailed\"})",
           "eval_time": "11m",
           "exp_samples": []
         },
         {
-          "expr": "count(ALERTS{alertname=\"HostCollectorDown\"})",
+          "expr": "count(ALERTS{alertname=\"NodeCollectorDown\"})",
           "eval_time": "14m",
           "exp_samples": []
         },
         {
-          "expr": "count(ALERTS{alertname=\"PiProbeFailed\"})",
+          "expr": "count(ALERTS{alertname=\"ProbeFailed\"})",
           "eval_time": "20m",
           "exp_samples": []
         }
@@ -169,17 +169,17 @@
       ],
       "promql_expr_test": [
         {
-          "expr": "count(ALERTS{alertname=\"PiProbeFailed\",alertstate=\"firing\"})",
+          "expr": "count(ALERTS{alertname=\"ProbeFailed\",alertstate=\"firing\"})",
           "eval_time": "65m",
           "exp_samples": []
         },
         {
-          "expr": "count(ALERTS{alertname=\"PiProbeSlow\",alertstate=\"firing\"})",
+          "expr": "count(ALERTS{alertname=\"ProbeSlow\",alertstate=\"firing\"})",
           "eval_time": "9m",
           "exp_samples": []
         },
         {
-          "expr": "count(ALERTS{alertname=\"PiProbeSlow\",alertstate=\"firing\"})",
+          "expr": "count(ALERTS{alertname=\"ProbeSlow\",alertstate=\"firing\"})",
           "eval_time": "11m",
           "exp_samples": [
             {
@@ -189,12 +189,12 @@
           ]
         },
         {
-          "expr": "count(ALERTS{alertname=\"PiProbeCertificateExpiring\",alertstate=\"firing\"})",
+          "expr": "count(ALERTS{alertname=\"ProbeCertificateExpiring\",alertstate=\"firing\"})",
           "eval_time": "59m",
           "exp_samples": []
         },
         {
-          "expr": "count(ALERTS{alertname=\"PiProbeCertificateExpiring\",alertstate=\"firing\"})",
+          "expr": "count(ALERTS{alertname=\"ProbeCertificateExpiring\",alertstate=\"firing\"})",
           "eval_time": "61m",
           "exp_samples": [
             {
@@ -232,17 +232,17 @@
       ],
       "promql_expr_test": [
         {
-          "expr": "count(ALERTS{alertname=\"PiProbeCertificateExpiring\"})",
+          "expr": "count(ALERTS{alertname=\"ProbeCertificateExpiring\"})",
           "eval_time": "65m",
           "exp_samples": []
         },
         {
-          "expr": "count(ALERTS{alertname=\"PiProbeSlow\"})",
+          "expr": "count(ALERTS{alertname=\"ProbeSlow\"})",
           "eval_time": "65m",
           "exp_samples": []
         },
         {
-          "expr": "count(ALERTS{alertname=\"PiProbeFailed\"})",
+          "expr": "count(ALERTS{alertname=\"ProbeFailed\"})",
           "eval_time": "65m",
           "exp_samples": []
         }
@@ -275,7 +275,7 @@
       ],
       "promql_expr_test": [
         {
-          "expr": "count(ALERTS{alertname=\"PiProbeFailed\",alertstate=\"firing\"})",
+          "expr": "count(ALERTS{alertname=\"ProbeFailed\",alertstate=\"firing\"})",
           "eval_time": "65m",
           "exp_samples": [
             {
@@ -285,12 +285,12 @@
           ]
         },
         {
-          "expr": "count(ALERTS{alertname=\"PiProbeSlow\",alertstate=\"firing\"})",
+          "expr": "count(ALERTS{alertname=\"ProbeSlow\",alertstate=\"firing\"})",
           "eval_time": "65m",
           "exp_samples": []
         },
         {
-          "expr": "count(ALERTS{alertname=\"PiProbeCertificateExpiring\",alertstate=\"firing\"})",
+          "expr": "count(ALERTS{alertname=\"ProbeCertificateExpiring\",alertstate=\"firing\"})",
           "eval_time": "65m",
           "exp_samples": []
         }

@@ -44,7 +44,7 @@
       "id": 1,
       "type": "stat",
       "title": "Metrics endpoint",
-      "description": "Whether vmagent's last scrape of kvmd's export succeeded. GLKVMMetricsUnavailable fires after 10 minutes of failures and names the checks that tell a broken export from a down appliance.",
+      "description": "Whether vmagent's last scrape of kvmd's export succeeded. GLKVMMetricsMissing fires after 10 minutes of failures and names the checks that tell a broken export from a down appliance.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -128,7 +128,7 @@
       "id": 2,
       "type": "stat",
       "title": "SoC temperature",
-      "description": "The SoC's only thermal trip is critical, at 115 C, where the kernel shuts the appliance down. GLKVMHot fires above 95 C for 15 minutes.",
+      "description": "The SoC's only thermal trip is critical, at 115 C, where the kernel shuts the appliance down. GLKVMTemperatureHigh fires above 95 C for 15 minutes.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -420,7 +420,7 @@
       "id": 6,
       "type": "timeseries",
       "title": "SoC temperature",
-      "description": "The red line is the 115 C critical trip; the dashed line is GLKVMHot's 95 C threshold.",
+      "description": "The red line is the 115 C critical trip; the dashed line is GLKVMTemperatureHigh's 95 C threshold.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"

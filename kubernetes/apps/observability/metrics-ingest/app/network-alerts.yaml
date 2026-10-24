@@ -13,7 +13,7 @@ spec:
         # Down then up adds 2 to the counter. A reboot resets it and a new
         # host's first sample carries its whole history, so the uptime guard
         # and the hour-old sample keep both out.
-        - alert: HostLinkFlapping
+        - alert: NodeLinkFlapping
           expr: |
             (
               node_network_carrier_changes_total{job=~"(pve|spark|synology|pi)-node", device=~"(en|eth|nic)[^.]*"}
@@ -30,7 +30,7 @@ spec:
 
         # A link counts as expected while it has been up in the last week, so
         # a cable removed on purpose stops alerting after seven days.
-        - alert: HostLinkDown
+        - alert: NodeLinkDown
           expr: |
             node_network_carrier{job=~"(pve|spark|synology|pi)-node", device=~"(en|eth|nic)[^.]*"} == 0
             and max_over_time(node_network_carrier{job=~"(pve|spark|synology|pi)-node", device=~"(en|eth|nic)[^.]*"}[7d]) == 1

@@ -44,7 +44,7 @@ The edit has different scope on each platform:
 
 Restore the removed self document or file after correcting the definition and completing recovery, then repeat takeover checks on affected instances. Do not remove the shared PVE, `spark-1`, or Athena target file, or drop their polls to stop a self-update loop.
 
-Repeated refusals can raise `HostDeployFailing` on PVE and the Sparks while migration or a recovery override is pending. Diagnose the refused self target rather than changing collector containers; finish the migration or fix the self definition. Athena is not covered by that host alert rule.
+Repeated refusals can raise `NodeDeployFailing` on PVE and the Sparks while migration or a recovery override is pending. Diagnose the refused self target rather than changing collector containers; finish the migration or fix the self definition. Athena is not covered by that host alert rule.
 
 Record the baseline before applying: doco-cd's image and health, recent logs, and workload container IDs, images, start times, restart counts, and deployment revisions. For PVE and the Sparks, substitute the address above:
 

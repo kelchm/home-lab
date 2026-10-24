@@ -80,7 +80,7 @@ spec:
                 unless on (instance, platform, device) drive:health_status)
             ) * 0 + 1
             or drive:health_status * 0
-        - alert: DriveHealthMissing
+        - alert: DriveMetricsMissing
           expr: drive:health_missing == 1
           for: 15m
           labels:
@@ -88,14 +88,15 @@ spec:
           annotations:
             summary: Drive health is missing for {{ $labels.device }} on {{ $labels.instance }}
             description: Check the collector and device access. Removed disks remain expected for seven days.
-        - alert: DriveNvmeControllerNotLive
+        - alert: DriveNVMeControllerNotLive
           expr: node_nvme_info{platform=~"k8s|pve|spark", state!="live"} == 1
           for: 5m
           labels:
             severity: critical
           annotations:
             summary: NVMe {{ $labels.device }} on {{ $labels.instance }} is {{ $labels.state }}
-        - alert: DriveAtaReallocatedSectors
+            description: 'The NVMe controller for {{ $labels.device }} has reported a state other than live for five minutes, so the drive may be failing or resetting. Check the host''s kernel log.'
+        - alert: DriveATAReallocatedSectors
           expr: drive:ata_reallocated_sectors > 0
           for: 15m
           labels:
@@ -103,7 +104,7 @@ spec:
           annotations:
             summary: Drive {{ $labels.device }} on {{ $labels.instance }} has reallocated sectors
             description: "The drive reports {{ $value }} reallocated sectors. Check its trend and DSM extended test results."
-        - alert: DriveAtaPendingSectors
+        - alert: DriveATAPendingSectors
           expr: drive:ata_pending_sectors > 0
           for: 5m
           labels:
@@ -111,7 +112,7 @@ spec:
           annotations:
             summary: Drive {{ $labels.device }} on {{ $labels.instance }} has pending sectors
             description: "The drive reports {{ $value }} unstable sectors awaiting reallocation."
-        - alert: DriveAtaUncorrectableSectors
+        - alert: DriveATAUncorrectableSectors
           expr: drive:ata_uncorrectable_sectors > 0
           for: 5m
           labels:

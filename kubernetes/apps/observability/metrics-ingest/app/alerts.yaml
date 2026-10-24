@@ -11,7 +11,7 @@ spec:
       rules:
         # A node is enrolled once it has reported; one that falls silent keeps
         # alerting for a week, after which it counts as retired.
-        - alert: HostMetricsMissing
+        - alert: NodeMetricsMissing
           expr: time() - tlast_over_time(up{job=~"(pve|spark|synology|pi)-node"}[7d]) > 600
           labels:
             severity: warning
@@ -22,15 +22,16 @@ spec:
               ingestion endpoint. Samples queued on the node replay with their
               original timestamps once delivery resumes.
 
-        - alert: HostCollectorDown
+        - alert: NodeCollectorDown
           expr: up{job=~"(pve|spark|synology|pi)-(node|gpu|snmp|smartctl|vmagent|deployer|blackbox-exporter)"} == 0
           for: 10m
           labels:
             severity: warning
           annotations:
             summary: Collector {{ $labels.job }} is down on {{ $labels.instance }}
+            description: 'The {{ $labels.job }} scrape on {{ $labels.instance }} has failed for ten minutes, so the rules that read it see nothing while the machine itself still reports. Check that collector''s container on the host.'
 
-        - alert: HostFilesystemLow
+        - alert: NodeFilesystemSpaceLow
           expr: |
             node_filesystem_avail_bytes{job=~"(pve|spark|synology|pi)-node", fstype!~"tmpfs|overlay|squashfs|ramfs|efivarfs|nfs.*|cifs|fuse.*"}
             / node_filesystem_size_bytes{job=~"(pve|spark|synology|pi)-node", fstype!~"tmpfs|overlay|squashfs|ramfs|efivarfs|nfs.*|cifs|fuse.*"}
@@ -40,18 +41,20 @@ spec:
             severity: warning
           annotations:
             summary: "{{ $labels.mountpoint }} on {{ $labels.instance }} has {{ $value | humanizePercentage }} free"
+            description: 'Less than 10% of {{ $labels.mountpoint }} on {{ $labels.instance }} has been free for 30 minutes. Find what is growing before the filesystem fills.'
 
         # Available memory is low by design on a Spark with a model loaded, so
         # this uses stall time rather than a free-memory threshold.
-        - alert: HostMemoryStalled
+        - alert: NodeMemoryStalled
           expr: rate(node_pressure_memory_stalled_seconds_total{job=~"(pve|spark|pi)-node"}[5m]) > 0.10
           for: 15m
           labels:
             severity: warning
           annotations:
             summary: "{{ $labels.instance }} is stalled on memory {{ $value | humanizePercentage }} of the time"
+            description: 'Tasks on {{ $labels.instance }} spent over 10% of the last five minutes waiting for memory, by pressure stall information; memory use alone is not the signal. Check which processes are reclaiming or swapping.'
 
-        - alert: HostNvmeHot
+        - alert: NodeNVMeCompositeTemperatureHigh
           expr: |
             (
               node_hwmon_temp_celsius{job=~"(pve|spark)-node"}
@@ -63,9 +66,10 @@ spec:
             severity: warning
           annotations:
             summary: NVMe on {{ $labels.instance }} is at {{ printf "%.0f" $value }} C
+            description: 'The NVMe composite temperature on {{ $labels.instance }} has been above 75 C for 15 minutes. Check airflow around the drive.'
 
         # Pods are covered by Kubernetes; this catches the kernel killing a process on the host itself.
-        - alert: HostOomKill
+        - alert: NodeOOMKillDetected
           expr: increase(node_vmstat_oom_kill{job=~"(pve|spark|pi)-node"}[15m]) > 0
           labels:
             severity: warning
@@ -74,7 +78,7 @@ spec:
             description: Find the process with `journalctl -k | grep -i "killed process"` on the host, and check that it came back.
 
         # Headroom to each CPU's own limit: the critical temperature the PVE hosts report, and 85 C, where a Pi 5 throttles.
-        - alert: HostCpuHot
+        - alert: NodeCPUTemperatureHigh
           expr: |
             (
               (node_hwmon_temp_crit_celsius{job="pve-node"} - node_hwmon_temp_celsius{job="pve-node"})
@@ -90,8 +94,9 @@ spec:
             severity: warning
           annotations:
             summary: CPU on {{ $labels.instance }} is {{ printf "%.0f" $value }} C from its limit
+            description: 'The CPU on {{ $labels.instance }} has been within 5 C of its limit for 15 minutes: the critical temperature a PVE host reports, or 85 C, where a Pi 5 throttles. Check cooling and load.'
 
-        - alert: SparkGpuThermalThrottling
+        - alert: NodeGPUThermalThrottling
           expr: |
             max by (instance, platform) (
               {__name__=~"nvidia_smi_clocks_event_reasons_(hw|sw)_thermal_slowdown", job="spark-gpu"}
@@ -101,8 +106,9 @@ spec:
             severity: warning
           annotations:
             summary: GPU on {{ $labels.instance }} is thermally throttled
+            description: 'The GPU on {{ $labels.instance }} has been slowing its clocks for heat for five minutes. Check the Spark''s airflow and its workload.'
 
-        - alert: HostQueueDropping
+        - alert: NodeMetricsDropped
           expr: increase(vm_persistentqueue_bytes_dropped_total{job=~"(pve|spark|synology|pi)-vmagent"}[15m]) > 0
           labels:
             severity: warning
@@ -112,7 +118,7 @@ spec:
               The 1 GiB on-disk queue filled while the ingestion endpoint was
               unreachable, so the oldest samples were dropped.
 
-        - alert: HostDeployFailing
+        - alert: NodeDeployFailing
           expr: increase(doco_cd_deployment_errors_total{job=~"(pve|spark)-deployer"}[15m]) > 0
           for: 15m
           labels:
@@ -126,29 +132,32 @@ spec:
     # DSM's own assessment through SNMP. Status codes are from the Synology MIBs.
     - name: nas
       rules:
-        - alert: NasRaidDegraded
+        - alert: NASRAIDDegraded
           expr: raidStatus{job="synology-snmp"} == 11 or raidStatus{job="synology-snmp"} == 12
           labels:
             severity: critical
           annotations:
             summary: "{{ $labels.raidName }} on {{ $labels.instance }} is {{ if eq $value 12.0 }}crashed{{ else }}degraded{{ end }}"
+            description: 'DSM reports {{ $labels.raidName }} as degraded or crashed, so it has lost redundancy or data. Check Storage Manager before replacing any disk.'
 
-        - alert: NasDiskHealthWarning
+        - alert: NASDiskHealthWarning
           expr: diskHealthStatus{job="synology-snmp"} == 2
           labels:
             severity: warning
           annotations:
             summary: DSM reports a health warning for {{ $labels.diskID }} on {{ $labels.instance }}
+            description: 'DSM''s health status for {{ $labels.diskID }} is Warning. Check the disk''s SMART details in Storage Manager and plan a replacement.'
 
-        - alert: NasDiskHot
+        - alert: NASDiskTemperatureHigh
           expr: diskTemperature{job="synology-snmp"} > 50
           for: 15m
           labels:
             severity: warning
           annotations:
             summary: "{{ $labels.diskID }} on {{ $labels.instance }} is at {{ $value }} C"
+            description: '{{ $labels.diskID }} has been above 50 C for 15 minutes. Check the NAS fans and the room temperature.'
 
-        - alert: NasHardwareFault
+        - alert: NASHardwareFault
           expr: |
             label_replace(
               {__name__=~"systemStatus|powerStatus|systemFanStatus|cpuFanStatus", job="synology-snmp"},
@@ -159,35 +168,39 @@ spec:
             severity: critical
           annotations:
             summary: DSM reports a {{ $labels.component }} failure on {{ $labels.instance }}
+            description: 'DSM has reported a failed {{ $labels.component }} for five minutes. Check the system status in DSM.'
 
         # NUT status flags from the UPS DSM is attached to: OB on battery, LB low battery.
-        - alert: NasUpsOnBattery
+        - alert: UPSOnBattery
           expr: upsInfoStatus{job="synology-snmp", upsInfoStatus=~"(.* )?OB( .*)?"} == 1
           for: 1m
           labels:
             severity: warning
           annotations:
             summary: The UPS on {{ $labels.instance }} is on battery
+            description: 'The network-rack UPS, read by the NAS over SNMP, has been on battery for a minute: its mains power has failed.'
 
-        - alert: NasUpsBatteryLow
+        - alert: UPSBatteryLow
           expr: upsInfoStatus{job="synology-snmp", upsInfoStatus=~"(.* )?LB( .*)?"} == 1
           labels:
             severity: critical
           annotations:
             summary: The UPS on {{ $labels.instance }} reports a low battery
+            description: 'The network-rack UPS, read by the NAS over SNMP, reports a low battery and may cut power soon.'
 
     # NUT status flags and runtime from the UPS a Pi monitors, through nut_exporter.
     - name: pi-ups
       rules:
-        - alert: PiUpsOnBattery
+        - alert: UPSOnBattery
           expr: network_ups_tools_ups_status{job="pi-nut", flag="OB"} == 1
           for: 1m
           labels:
             severity: warning
           annotations:
             summary: The {{ $labels.ups }} UPS on {{ $labels.instance }} is on battery
+            description: 'The {{ $labels.ups }} UPS has been on battery for a minute: its mains power has failed.'
 
-        - alert: PiUpsRuntimeLow
+        - alert: UPSRuntimeLow
           expr: |
             network_ups_tools_battery_runtime{job="pi-nut"} < 300
             and on (instance, platform, ups)
@@ -197,18 +210,20 @@ spec:
             severity: critical
           annotations:
             summary: The {{ $labels.ups }} UPS on {{ $labels.instance }} has {{ $value | humanizeDuration }} of battery left
+            description: 'The {{ $labels.ups }} UPS is on battery with under five minutes of runtime left at its present load.'
 
-        - alert: PiUpsBatteryLow
+        - alert: UPSBatteryLow
           expr: network_ups_tools_ups_status{job="pi-nut", flag="LB"} == 1
           labels:
             severity: critical
           annotations:
             summary: The {{ $labels.ups }} UPS on {{ $labels.instance }} reports a low battery
+            description: 'The {{ $labels.ups }} UPS reports a low battery and may cut power soon.'
 
         # A UPS that has reported in the last week but sent no status for five
         # minutes, which also covers its collector being down: NUT errors and
         # stale driver data fail the whole scrape.
-        - alert: PiUpsDataStale
+        - alert: UPSMetricsMissing
           expr: |
             max by (instance, platform, ups) (tlast_over_time(up{job="pi-nut"}[7d]))
             unless on (instance, platform, ups)
@@ -218,3 +233,4 @@ spec:
             severity: warning
           annotations:
             summary: No status from the {{ $labels.ups }} UPS on {{ $labels.instance }} for over five minutes
+            description: 'The UPS has reported in the last week, but NUT on {{ $labels.instance }} has sent no status for five minutes, so the on-battery and runtime alerts cannot fire. Check the NUT driver and the UPS''s USB connection.'

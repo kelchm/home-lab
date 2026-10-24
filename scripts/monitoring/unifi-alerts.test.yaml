@@ -131,7 +131,7 @@ tests:
         values: 0.84x20
     alert_rule_test:
       - eval_time: 15m
-        alertname: UniFiDeviceHot
+        alertname: UniFiDeviceTemperatureHigh
         exp_alerts:
           - exp_labels:
               severity: warning
@@ -150,6 +150,7 @@ tests:
               name: Gateway DMP
             exp_annotations:
               summary: Gateway DMP CPU is at 95%
+              description: 'Gateway DMP has used over 90% of its CPU for 15 minutes. Check its load in the UniFi console.'
       - eval_time: 15m
         alertname: UniFiDeviceMemoryHigh
         exp_alerts:
@@ -159,6 +160,7 @@ tests:
               name: Gateway DMP
             exp_annotations:
               summary: Gateway DMP memory is at 92%
+              description: 'Gateway DMP has used over 90% of its memory for 15 minutes. Check it in the UniFi console; a restart may be needed.'
 
   - name: An offline WAN alerts after 5 minutes although its interface stays ACTIVE
     interval: 1m
@@ -175,10 +177,10 @@ tests:
         values: _x3 0x66
     alert_rule_test:
       - eval_time: 7m
-        alertname: UniFiWANOffline
+        alertname: UniFiWANDown
         exp_alerts: []
       - eval_time: 8m
-        alertname: UniFiWANOffline
+        alertname: UniFiWANDown
         exp_alerts:
           - exp_labels:
               severity: warning
@@ -217,7 +219,7 @@ tests:
         values: 1x40
       - series: unpoller_device_wan_availability_percent{job="unifi-api",name="Gateway DMP",port="eth9"}
         values: 80x40
-      # Starlink offline with its link up: no pings answered, left to UniFiWANOffline.
+      # Starlink offline with its link up: no pings answered, left to UniFiWANDown.
       - series: unpoller_device_wan_status{job="unifi-api",name="Gateway DMP",status="offline",wan_networkgroup="WAN2"}
         values: 0x40
       - series: unpoller_device_wan_availability_percent{job="unifi-api",name="Gateway DMP",port="eth8"}
