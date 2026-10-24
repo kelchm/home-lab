@@ -19,7 +19,7 @@ PLUGINS = Path(__file__).resolve().parents[1] / "plugins"
 if str(PLUGINS) not in sys.path:
     sys.path.insert(0, str(PLUGINS))
 
-from tensorfold import REQUIRED_DEFAULTS, TensorFoldRuntime, hf_snapshot_path  # noqa: E402
+from tensorfold import _FABRIC_MASTER, REQUIRED_DEFAULTS, TensorFoldRuntime, hf_snapshot_path  # noqa: E402
 
 from sparkrun.core.bootstrap import get_runtime, init_sparkrun  # noqa: E402
 from sparkrun.core.external_plugins import load_external_plugins  # noqa: E402
@@ -203,14 +203,73 @@ def test_unsupported_topology_rejected(runtime):
         runtime.generate_node_command(_recipe(defaults={"pipeline_parallel": 2}), {}, head_ip=FABRIC_HEAD, num_nodes=2, node_rank=0)
     with pytest.raises(ValueError, match="data_parallel"):
         runtime.generate_node_command(_recipe(defaults={"data_parallel": 2}), {}, head_ip=FABRIC_HEAD, num_nodes=2, node_rank=0)
-    with pytest.raises(ValueError, match="solo"):
+    # A two-rank recipe placed on one node, and a one-node recipe given ranks.
+    with pytest.raises(ValueError, match="1-node launch of a recipe with min_nodes=2"):
         runtime.generate_command(_recipe(), {}, is_cluster=False)
+    with pytest.raises(ValueError, match="ranked launch"):
+        runtime.generate_node_command(_one_node_recipe(), {}, head_ip=FABRIC_HEAD, num_nodes=1, node_rank=0)
 
-    issues = runtime.validate_recipe(_recipe(min_nodes=1, max_nodes=1, defaults={"tensor_parallel": 1}))
-    errors = [issue for issue in issues if getattr(issue, "severity", None) == ERROR]
-    assert errors
-    assert any("two nodes" in issue.message for issue in errors)
+    for nodes, tp in (((1, 1), 2), ((2, 2), 1), ((1, 2), 1), ((3, 3), 3), ((1, None), 2)):
+        issues = runtime.validate_recipe(_recipe(min_nodes=nodes[0], max_nodes=nodes[1], defaults={"tensor_parallel": tp}))
+        errors = [issue for issue in issues if getattr(issue, "severity", None) == ERROR]
+        assert errors, (nodes, tp)
+        assert any("one node with tensor_parallel=1, or two nodes" in issue.message for issue in errors)
 
+    # A tensor_parallel override cannot move a recipe to the other shape.
+    with pytest.raises(ValueError, match="1-node launch of a recipe with min_nodes=2"):
+        runtime.generate_command(_recipe(), {"tensor_parallel": 1}, is_cluster=False)
+    loose = _recipe(min_nodes=1, max_nodes=None, defaults={"tensor_parallel": 1})
+    with pytest.raises(ValueError, match="2-node launch of a recipe with min_nodes=1"):
+        runtime.generate_node_command(loose, {"tensor_parallel": 2}, head_ip=FABRIC_HEAD, num_nodes=2, node_rank=0)
+
+
+def _one_node_recipe(defaults=None):
+    return _recipe(min_nodes=1, max_nodes=1, defaults={"tensor_parallel": 1, **(defaults or {})})
+
+
+def test_one_node_launch_gets_the_engine_env_and_no_rendezvous(runtime):
+    recipe = _one_node_recipe()
+    assert recipe.mode == "solo"
+    assert not [issue for issue in runtime.validate_recipe(recipe) if getattr(issue, "severity", None) == ERROR]
+    env, argv = _parse_env_command(runtime.generate_command(recipe, {}, is_cluster=False, num_nodes=1))
+    assert argv == [ENTRYPOINT]
+    assert env == {
+        "MODEL_PATH": hf_snapshot_path(TARGET, TARGET_REV), "DRAFTER": hf_snapshot_path(DRAFT, DRAFT_REV),
+        "CONTEXT": CONTEXT, "SERVED_NAME": SERVED, "MAX_TOKENS": "65536", "HOST": "0.0.0.0", "PORT": "8888",
+    }
+    # A launch in progress elsewhere leaves its fabric address out of a one-node command.
+    token = _FABRIC_MASTER.set("198.18.0.1")
+    try:
+        env, _ = _parse_env_command(runtime.generate_command(recipe, {"port": 9999}, is_cluster=False))
+    finally:
+        _FABRIC_MASTER.reset(token)
+    assert env["PORT"] == "9999" and not {"RANK", "MASTER", "MASTER_PORT", "FABRIC_MASTER"} & set(env)
+
+
+def test_one_node_launch_takes_sparkruns_solo_path(runtime, monkeypatch):
+    recipe = _one_node_recipe()
+    seen = {}
+    monkeypatch.setattr(runtime, "_run_solo", lambda **kwargs: seen.update(kwargs) or 0)
+    monkeypatch.setattr(runtime, "_run_native_cluster", lambda **kwargs: pytest.fail("ranked launch"))
+    command = runtime.generate_command(recipe, {}, is_cluster=False, num_nodes=1)
+    assert runtime.run(["h1"], "img", command, recipe, {}) == 0
+    assert seen["host"] == "h1" and seen["serve_command"] == command
+    assert runtime.get_head_container_name("cid", is_solo=True) == "cid_solo"
+    sources = runtime.log_sources("cid", ["h1"], is_solo=True, scope=SCOPE_ALL)
+    assert [source.container for source in sources] == ["cid_solo"]
+
+
+
+def test_one_node_recipe_lands_on_the_clusters_first_host(runtime):
+    from sparkrun.api._hosts import resolve_effective_hosts
+
+    hosts, solo, _, placement = resolve_effective_hosts(["h1", "h2"], _one_node_recipe(), {}, runtime=runtime)
+    assert (hosts, solo, placement) == (["h1"], True, None)
+    # SparkRun places a two-node recipe on one host when tensor_parallel is overridden to 1; the adapter refuses it.
+    hosts, solo, _, _ = resolve_effective_hosts(["h1", "h2"], _recipe(), {"tensor_parallel": 1}, runtime=runtime)
+    assert (hosts, solo) == (["h1"], True)
+    with pytest.raises(ValueError, match="min_nodes=2"):
+        runtime.generate_command(_recipe(), {"tensor_parallel": 1}, is_cluster=not solo, num_nodes=len(hosts))
 
 def test_prepare_distributes_declared_drafter(runtime):
     recipe = _recipe()
