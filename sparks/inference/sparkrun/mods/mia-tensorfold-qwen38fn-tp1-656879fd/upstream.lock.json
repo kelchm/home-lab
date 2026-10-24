@@ -1,0 +1,56 @@
+{
+  "kit_repository": "MiaAI-Lab/Qwen3.8-Flash-Next-Single-DGX-Spark-TensorFold",
+  "kit_revision": "656879fd752749bbd11a6e1a065a326c00940911",
+  "kit_patch_count": 15,
+  "kit_patches_sha256": "168ed7c1d8b6c9dc22c02bec6ad5e5e9f21ec93ff3556b69970ed8c1578a24f7",
+  "engine_repository": "ashhart/TensorFold",
+  "engine_branch": "zig-flashnext",
+  "engine_revision": "db281878ddb836fd0df510d8771ecb7e0fe47d26",
+  "image": "qwen38fn-tf-tp1:656879f-603dab7933ca",
+  "image_id": "sha256:49364bc3000ba0ec106484d477924bb100119de1a036400f3446e9a63f58dde2",
+  "weights": {
+    "repository": "nvidia/Qwen3.8-Flash-Next-FP4-Local",
+    "revision": "b9ce18a6887e18c089fdea8509a33e63429a3300"
+  },
+  "server_patches": [
+    {
+      "file": "patches/0016-models-context-length.patch",
+      "repository": "ashhart/TensorFold",
+      "base": "041d14a94e951834470fd514ed33e65b8be1059a",
+      "commit": "51ad073feadd81d04809edf8f0822cc5380a832c",
+      "paths": [
+        "zig/src/server/status_routes.zig"
+      ]
+    },
+    {
+      "file": "patches/0017-models-reasoning.patch",
+      "repository": "ashhart/TensorFold",
+      "base": "2962468f1af075c822e535ebb9d5767d076718f0",
+      "commit": "60f27da01cb86d076a078d3b4ae3e36c2f3b41c2",
+      "paths": [
+        "zig/src/server/server.zig",
+        "zig/src/server/status_routes.zig"
+      ]
+    }
+  ],
+  "build": {
+    "base_image": "nvcr.io/nvidia/pytorch@sha256:2140e699b3beaf7f96a0081fd9c9406bc3832b435cdb60dfa2d261f7d2f34a1c",
+    "zig_version": "0.17.0",
+    "zig_sha256": "9e8d11661d4ae3bd57702a3832781e23ad151dde5798e16a5ccd503f65234ff8",
+    "zig_cpu": "cortex_a725+aes-mte-perfmon+sha2+sha3+sm4-spe",
+    "kernel_source_mtime": "1791318675",
+    "pip_packages": [
+      "transformers==5.17.0",
+      "av==19.0.1"
+    ]
+  },
+  "mod_files": {
+    "build/Dockerfile": "76bea2c555bddb344ce77c6cf9a9ed5245bd8444d82984859a1b87e85a0768e5",
+    "build/build.sh": "026f6e8b99d7a2f9572f2bc572b5219e35e48ba41f1aba945d7df295299eba52",
+    "patches/0016-models-context-length.patch": "18cf9c302d6bf50516b2cfed4da69527cfa9f16717e5bbbf366e8e330138e766",
+    "patches/0017-models-reasoning.patch": "73171ca4137cc2b87c7ac581c8eea1b4bc743f8ef4fa17175cbcbb8c7f903d6b",
+    "prepare.py": "59870992f98dc214513195a5bf8a0c57fd81497bcf422ebcc68bd993eac126e2",
+    "run.sh": "ad69388595b92df7f35c8cbfdef3208ff327833b9a5eac698ee1a09c3f4307e3",
+    "serve.py": "774c3604b1613527546500a0501a426ee6218f19d4555286a25963301514207d"
+  }
+}
