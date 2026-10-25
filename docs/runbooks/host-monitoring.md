@@ -186,6 +186,27 @@ ALERTS{alertname=~"Drive.*|SmartCTL.*", alertstate="firing"}
 
 Before deployment, the live label-transformation query confirmed all three cluster SMART series can map to their node names with `platform="k8s"`. Healthy values matched none of the failure/media/critical/spare/wear or HDD sector alert predicates. The missing-health expression correctly identified the five PVE/Spark controllers without SMART data. Render and fixture tests cover host series without a `cluster` label; the post-merge queries above establish actual collection and reconciliation.
 
+## Pending updates
+
+Each PVE node and Spark runs `apt-metrics` in its monitoring stack. Every 15 minutes it runs `apt-get -s dist-upgrade`, a simulation, against the host's package state, which is mounted read-only. It writes three values into node-exporter's textfile directory, so they arrive as `pve-node` or `spark-node` series:
+
+| Metric | Meaning |
+|---|---|
+| `apt_upgrades_pending` | Packages with an upgrade available |
+| `apt_security_upgrades_pending` | Those whose new version comes from a `-security` archive |
+| `apt_package_lists_refreshed_timestamp_seconds` | When the host last refreshed its package lists: the time of `/var/lib/apt/lists/partial`, which apt touches on every refresh |
+
+The container never refreshes the lists itself; the host does. On PVE, `pve-daily-update` refreshes them once a day in the early morning. NVIDIA's apt configuration on the Sparks turns the daily refresh off (`APT::Periodic::Update-Package-Lists "0"` in `99update-notifier-nvidia`). The Spark stack's one-shot `apt-list-refresh` service copies [`zz-monitoring-apt-refresh`](../../sparks/monitoring/apt/zz-monitoring-apt-refresh) into `/etc/apt/apt.conf.d` to turn it back on. That file only refreshes the lists. Unattended upgrades stay off, and the `unattended-upgrades` package isn't installed. If the service is retired, delete `/etc/apt/apt.conf.d/zz-monitoring-apt-refresh` on each Spark by hand.
+
+`NodeSecurityUpdatesPending` warns once security upgrades have been waiting for three days. `NodePackageListsStale` warns when the lists haven't been refreshed for two days, which also covers `apt-metrics` stopping or failing once it has written the file, because the file keeps its last refresh time. A host whose `apt-metrics` has never written the file has no series and raises nothing, so check for the three series after deploying to a new host.
+
+Limits:
+
+- Security is judged by archive. Fixes that Proxmox or NVIDIA publish in their ordinary repositories count as ordinary upgrades.
+- Reboot-required isn't collected.
+- `apt-metrics` uses the stock image of the host's release (Debian 13 on PVE, Ubuntu 24.04 on the Sparks). Change it when a host moves to a new major release.
+- The NixOS Pis aren't covered.
+
 ## Change, pause, rotate, remove
 
 - **Change:** merge to `main`. Each host applies it on its next poll; only the service whose files changed is recreated, and the queue survives. A commit whose images cannot be pulled leaves the running containers in place. A service that starts and then keeps failing makes doco-cd recreate its whole project on every poll until it is fixed. Either case raises `NodeDeployFailing`. `scripts/ci/validate-host-monitoring.sh` renders every deployment and has the pinned vmagent parse its scrape files; run it before merging a change.

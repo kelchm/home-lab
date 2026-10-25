@@ -117,6 +117,27 @@ spec:
             summary: "{{ $labels.instance }} is running undervolted"
             description: 'The Pi firmware on {{ $labels.instance }} has reported undervoltage for 15 minutes. An undervolted Pi throttles its CPU. Check the power supply and its cable: a long or thin USB cable drops voltage.'
 
+        # Read over the window rather than held with for:, so an evaluator restart doesn't reset the wait.
+        - alert: NodeSecurityUpdatesPending
+          expr: |
+            apt_security_upgrades_pending{job=~"(pve|spark)-node"} > 0
+            and min_over_time(apt_security_upgrades_pending{job=~"(pve|spark)-node"}[3d]) > 0
+            and apt_security_upgrades_pending{job=~"(pve|spark)-node"} offset 3d > 0
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.instance }} has had security updates waiting for three days"
+            description: 'Packages from a security archive have had upgrades available on {{ $labels.instance }} for three days; {{ $value }} are waiting now. Install them, then reboot the host if they need it.'
+
+        - alert: NodePackageListsStale
+          expr: time() - apt_package_lists_refreshed_timestamp_seconds{job=~"(pve|spark)-node"} > 2 * 86400
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.instance }} hasn't refreshed its package lists for {{ $value | humanizeDuration }}"
+            description: 'Its pending-update counts may be out of date. Check the daily refresh (pve-daily-update on PVE, apt-daily on a Spark) and the apt-metrics container.'
+
         # A Spark's GB10 publishes a temperature limit only for its GPU; slowing for heat is the chip at that limit.
         - alert: NodeGPUThermalThrottling
           expr: |
