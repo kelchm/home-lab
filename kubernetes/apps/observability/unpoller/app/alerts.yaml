@@ -30,7 +30,7 @@ spec:
           expr: max by (subsystem) (unpoller_site_disconnected{job="unifi-api"}) > 0
           for: 10m
           labels:
-            severity: warning
+            severity: critical
           annotations:
             summary: "{{ $value }} UniFi {{ $labels.subsystem }} device(s) disconnected"
             description: >-

@@ -71,7 +71,7 @@ spec:
           expr: flux_resource_info{kind=~"Kustomization|HelmRelease",ready="False",suspended="False"} == 1
           for: 10m
           labels:
-            severity: critical
+            severity: warning
           annotations:
             summary: Flux {{ $labels.kind }} {{ $labels.exported_namespace }}/{{ $labels.name }} is failing
             description: Flux has reported this unsuspended resource Ready=False for 10 minutes (reason={{ $labels.reason }}). Inspect the resource conditions and controller logs before retrying reconciliation.
@@ -89,7 +89,7 @@ spec:
           expr: absent(flux_resource_info{kind=~"Kustomization|HelmRelease"})
           for: 15m
           labels:
-            severity: critical
+            severity: warning
           annotations:
             summary: Flux resource health metrics are missing
             description: flux_resource_info has been absent for 15 minutes, so reconciliation failures cannot be detected. Check the Flux Operator ServiceMonitor and scrape target.
@@ -126,7 +126,7 @@ spec:
           expr: certmanager_certificate_ready_status{condition="True"} == 0
           for: 15m
           labels:
-            severity: critical
+            severity: warning
           annotations:
             summary: Certificate {{ $labels.exported_namespace }}/{{ $labels.name }} is not ready
             description: cert-manager has reported the Certificate Ready condition false for 15 minutes. Inspect its CertificateRequest, Order, and Challenge resources.
@@ -135,7 +135,7 @@ spec:
           expr: absent(certmanager_certificate_expiration_timestamp_seconds)
           for: 15m
           labels:
-            severity: critical
+            severity: warning
           annotations:
             summary: cert-manager certificate metrics are missing
             description: Certificate expiration timestamps have been absent for 15 minutes, so expiry cannot be detected. Check the cert-manager ServiceMonitor and scrape target.
