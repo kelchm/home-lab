@@ -902,7 +902,7 @@
       "id": 12,
       "type": "timeseries",
       "title": "NVMe temperature",
-      "description": "Composite NVMe temperature per device. The 75 °C line matches the hot-NVMe alert after 15 minutes.",
+      "description": "Composite NVMe temperature per device. The 77.85 °C line, 5 °C under the drive's own 82.85 °C warning temperature, matches the hot-NVMe alert after five minutes.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -931,7 +931,7 @@
               },
               {
                 "color": "red",
-                "value": 75
+                "value": 77.85
               }
             ]
           },

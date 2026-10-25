@@ -46,7 +46,7 @@ SCENARIOS = {
         ("PVEGuestDown", {**P, "id": "qemu/103", "node": "pve-sbx-1", "severity": "warning"}, True),
         ("DriveMetricsMissing", {"instance": "pve-sbx-1", "device": "nvme0", "platform": "pve", "severity": "warning"}, True),
         ("NodeCollectorDown", {"instance": "pve-sbx-1", "job": "pve-smartctl", "platform": "pve", "severity": "warning"}, True),
-        ("NodeCPUTemperatureHigh", {"instance": "pve-sbx-1", "platform": "pve", "severity": "warning"}, False),
+        ("NodeCPUTemperatureCritical", {"instance": "pve-sbx-1", "platform": "pve", "severity": "critical"}, False),
         ("PVEGuestDown", {**P, "id": "qemu/150", "severity": "warning"}, False),
         ("PVEGuestDown", {**P, "id": "qemu/101", "node": "pve-sbx-2", "severity": "warning"}, False),
         ("NodeMetricsMissing", {"instance": "pve-sbx-2", "platform": "pve", "severity": "warning"}, False),

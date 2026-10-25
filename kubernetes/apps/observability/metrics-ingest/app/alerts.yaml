@@ -1,6 +1,8 @@
 ---
 # PVE nodes, Sparks, the NAS and Pis. Series keep the `instance` (node) and `platform`
-# (type) their ingestion token gives them; this group adds no cluster label.
+# (type) their ingestion token gives them; this group adds no cluster label. The CPU
+# and NVMe temperature rules also read the k8s-prod nodes' node-exporter, whose
+# series carry their own `cluster`.
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMRule
 metadata:
@@ -54,19 +56,22 @@ spec:
             summary: "{{ $labels.instance }} is stalled on memory {{ $value | humanizePercentage }} of the time"
             description: 'Tasks on {{ $labels.instance }} spent over 10% of the last five minutes waiting for memory, by pressure stall information; memory use alone is not the signal. Check which processes are reclaiming or swapping.'
 
-        - alert: NodeNVMeCompositeTemperatureHigh
+        # Headroom to the drive's own warning temperature, above which it throttles.
+        - alert: NodeNVMeCompositeTemperatureCritical
           expr: |
             (
-              node_hwmon_temp_celsius{job=~"(pve|spark)-node"}
-              * on (instance, chip, sensor) group_left (label)
-                node_hwmon_sensor_label{job=~"(pve|spark)-node", label="Composite"}
-            ) > 75
-          for: 15m
+              node_hwmon_temp_max_celsius{job=~"node-exporter|(pve|spark)-node"}
+              - node_hwmon_temp_celsius{job=~"node-exporter|(pve|spark)-node"}
+            )
+            * on (instance, chip, sensor) group_left (label)
+              node_hwmon_sensor_label{job=~"node-exporter|(pve|spark)-node", label="Composite"}
+            < 5
+          for: 5m
           labels:
-            severity: warning
+            severity: critical
           annotations:
-            summary: NVMe on {{ $labels.instance }} is at {{ printf "%.0f" $value }} C
-            description: 'The NVMe composite temperature on {{ $labels.instance }} has been above 75 C for 15 minutes. Check airflow around the drive.'
+            summary: NVMe on {{ $labels.instance }} is {{ printf "%.0f" $value }} C from its warning temperature
+            description: 'The NVMe drive on {{ $labels.instance }} has been within 5 C of its own warning temperature for five minutes. Above it, the drive throttles and raises a SMART warning. Check airflow around the drive.'
 
         # Pods are covered by Kubernetes; this catches the kernel killing a process on the host itself.
         - alert: NodeOOMKillDetected
@@ -77,24 +82,30 @@ spec:
             summary: The kernel killed a process for memory on {{ $labels.instance }}
             description: Find the process with `journalctl -k | grep -i "killed process"` on the host, and check that it came back.
 
-        # Headroom to each CPU's own limit: the critical temperature the PVE hosts report, and 85 C, where a Pi 5 throttles.
-        - alert: NodeCPUTemperatureHigh
+        # Headroom to each CPU's own limit: the critical temperature the PVE hosts report;
+        # 95 C for the k8s-prod nodes' Ryzen, which reports none, read from the hotter of
+        # its CPU (Tctl) and integrated GPU (edge) sensors; and 85 C, where a Pi 5 throttles.
+        - alert: NodeCPUTemperatureCritical
           expr: |
-            (
+            min by (cluster, instance, job, platform) (
               (node_hwmon_temp_crit_celsius{job="pve-node"} - node_hwmon_temp_celsius{job="pve-node"})
               * on (instance, chip, sensor) group_left
                 node_hwmon_sensor_label{job="pve-node", label="Package id 0"}
+              or
+              (95 - node_hwmon_temp_celsius{job="node-exporter"})
+              * on (instance, chip, sensor) group_left
+                node_hwmon_sensor_label{job="node-exporter", label=~"Tctl|edge"}
               or
               (85 - node_hwmon_temp_celsius{job="pi-node"})
               * on (instance, chip) group_left
                 node_hwmon_chip_names{job="pi-node", chip_name="cpu_thermal"}
             ) < 5
-          for: 15m
+          for: 5m
           labels:
-            severity: warning
+            severity: critical
           annotations:
             summary: CPU on {{ $labels.instance }} is {{ printf "%.0f" $value }} C from its limit
-            description: 'The CPU on {{ $labels.instance }} has been within 5 C of its limit for 15 minutes: the critical temperature a PVE host reports, or 85 C, where a Pi 5 throttles. Check cooling and load.'
+            description: 'The CPU on {{ $labels.instance }} has been within 5 C of its limit for five minutes: the critical temperature a PVE host reports, 95 C for a k8s-prod node, or 85 C, where a Pi 5 throttles. Check cooling and load.'
 
         # The Pi firmware's undervoltage alarm; node-exporter scales it as millivolts, so a set alarm reads 0.001.
         - alert: NodeSupplyVoltageLow
@@ -106,6 +117,7 @@ spec:
             summary: "{{ $labels.instance }} is running undervolted"
             description: 'The Pi firmware on {{ $labels.instance }} has reported undervoltage for 15 minutes. An undervolted Pi throttles its CPU. Check the power supply and its cable: a long or thin USB cable drops voltage.'
 
+        # A Spark's GB10 publishes a temperature limit only for its GPU; slowing for heat is the chip at that limit.
         - alert: NodeGPUThermalThrottling
           expr: |
             max by (instance, platform) (
@@ -113,7 +125,7 @@ spec:
             ) == 1
           for: 5m
           labels:
-            severity: warning
+            severity: critical
           annotations:
             summary: GPU on {{ $labels.instance }} is thermally throttled
             description: 'The GPU on {{ $labels.instance }} has been slowing its clocks for heat for five minutes. Check the Spark''s airflow and its workload.'
