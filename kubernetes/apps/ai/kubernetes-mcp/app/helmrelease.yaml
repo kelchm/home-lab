@@ -3,9 +3,10 @@
 # http://kubernetes-mcp.ai.svc.cluster.local:8080/mcp. Not on any Gateway.
 #
 # Read-only Kubernetes introspection for the CRDs Flux doesn't model (Cilium,
-# Longhorn, Kanidm, Traefik, cert-manager, CNPG). --read-only refuses writes and
-# --disable-destructive drops delete/update tools; the durable boundary is the
-# read-only ServiceAccount in rbac.yaml. A single --port enables /mcp + /sse.
+# Longhorn, Kanidm, Traefik, cert-manager, CNPG). read_only refuses writes and
+# disable_destructive drops delete/update tools; the durable boundary is the
+# read-only ServiceAccount in rbac.yaml. Runtime settings are TOML only; the
+# mounted file replaces the image's default /etc/kubernetes-mcp-server/config.toml.
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
@@ -23,11 +24,7 @@ spec:
             image:
               # quay tags are v-prefixed.
               repository: quay.io/containers/kubernetes_mcp_server
-              tag: v0.0.67
-            args:
-              - --port=8080
-              - --read-only
-              - --disable-destructive
+              tag: v0.0.69
             probes:
               liveness: &probes
                 enabled: true
@@ -62,6 +59,21 @@ spec:
         runAsUser: 1000
         runAsGroup: 1000
         seccompProfile: { type: RuntimeDefault }
+    configMaps:
+      config:
+        data:
+          config.toml: |-
+            port = "8080"
+            read_only = true
+            disable_destructive = true
+    persistence:
+      config-file:
+        type: configMap
+        identifier: config
+        globalMounts:
+          - path: /etc/kubernetes-mcp-server/config.toml
+            subPath: config.toml
+            readOnly: true
     service:
       app:
         controller: kubernetes-mcp
