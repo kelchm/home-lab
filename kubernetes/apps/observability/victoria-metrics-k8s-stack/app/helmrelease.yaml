@@ -374,3 +374,8 @@ spec:
         # intentionally absent. KPS disables the matching scrape and rule too.
         KubeProxyDown:
           enabled: false
+        # Talos calls the API server with certificates it signs for 10
+        # minutes, which briefly look like client certificates about to expire.
+        KubeClientCertificateExpiration:
+          spec:
+            for: 1h
