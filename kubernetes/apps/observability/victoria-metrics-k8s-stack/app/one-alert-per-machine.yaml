@@ -33,6 +33,11 @@ spec:
     - source_matchers: ['alertname="KubeNodeDown"', 'node="k8s-prod-3"']
       target_matchers: ['alertname=~"KubeAPIInstanceUnreachable|KubeControllerManagerInstanceUnreachable|KubeSchedulerInstanceUnreachable"', 'instance=~"10[.]32[.]30[.]13:[0-9]+"']
       equal: [cluster]
+    # Counts of failed scrape targets and etcd members name no machine, so
+    # they are held back for the whole cluster.
+    - source_matchers: ['alertname="KubeNodeDown"']
+      target_matchers: ['alertname=~"TargetDown|etcdMembersDown"']
+      equal: [cluster]
     # A PVE node also stops sending host metrics, and its guests stop.
     - source_matchers: ['alertname="PVENodeDown"']
       target_matchers: ['alertname="NodeMetricsMissing"']

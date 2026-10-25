@@ -29,6 +29,8 @@ SCENARIOS = {
         ("NodeCPUTemperatureSensorMissing", {**K, "instance": "k8s-prod-2", "severity": "warning"}, True),
         ("KubeAPIInstanceUnreachable", {**K, "instance": "10.32.30.12:6443", "job": "apiserver", "severity": "warning"}, True),
         ("KubeSchedulerInstanceUnreachable", {**K, "instance": "10.32.30.12:10259", "job": "kube-scheduler", "severity": "warning"}, True),
+        ("TargetDown", {**K, "job": "node-exporter", "namespace": "observability", "severity": "warning"}, True),
+        ("etcdMembersDown", {**K, "job": "kube-etcd", "severity": "warning"}, True),
         # A fault the machine still reports, what the outage breaks, and other machines.
         ("SmartCTLDeviceMediaErrors", {"instance": "k8s-prod-2", "device": "nvme0", "severity": "critical"}, False),
         ("NodeCPUTemperatureCritical", {**K, "instance": "k8s-prod-2", "severity": "critical"}, False),
@@ -37,8 +39,6 @@ SCENARIOS = {
         ("LonghornNodeNotReady", {**K, "node": "k8s-prod-1", "namespace": "longhorn-system", "severity": "critical"}, False),
         ("KubeSchedulerInstanceUnreachable", {**K, "instance": "10.32.30.13:10259", "job": "kube-scheduler", "severity": "warning"}, False),
         ("DriveMetricsMissing", {"instance": "k8s-prod-1", "device": "nvme0", "platform": "k8s", "severity": "warning"}, False),
-        ("TargetDown", {**K, "job": "node-exporter", "namespace": "observability", "severity": "warning"}, False),
-        ("etcdMembersDown", {**K, "job": "kube-etcd", "severity": "warning"}, False),
     ],
     "pve-sbx-1 is down": [
         ("PVENodeDown", {**P, "id": "node/pve-sbx-1", "node": "pve-sbx-1", "instance": "pve-sbx-1", "severity": "critical"}, False),
