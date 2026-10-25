@@ -690,6 +690,6 @@ The NVIDIA PyTorch base is locked by digest alone, `nvcr.io/nvidia/pytorch@sha25
 
 Review the base and upstream releases with the other coupled inputs at the next refresh of a profile that uses it, then rebuild and run that profile's readiness and acceptance checks on the Sparks before adopting a new base. This is a manual review trigger; no separate automatic check reports newer PyTorch releases or security fixes for these pins. A new snapshot mod's base takes a digest-only `FROM` or a lock-supplied build argument, so Renovate cannot edit a checksummed file in place.
 
-The same next-profile-refresh trigger applies to the kit, engine, weights, toolchain and patches recorded in each lock: review upstream changes as a coupled set. CI checks the listed file hashes and recipe contracts before merge, but the manifest itself remains a reviewed input and some dependency fields still lack semantic validation ([#1052](https://github.com/kelchm/home-lab/issues/1052)).
+The same next-profile-refresh trigger applies to the kit, engine, weights, toolchain and patches recorded across the applicable lock, recipe and build files: review upstream changes as a coupled set. CI checks the listed file hashes and recipe contracts before merge, but the manifest itself remains a reviewed input and some dependency fields still lack semantic validation ([#1052](https://github.com/kelchm/home-lab/issues/1052)).
 
 SparkRun fingerprints the declared mod references, not their contents, so relaunch after a mod change and use `--fresh` for a new benchmark comparison.
