@@ -23,11 +23,11 @@ Renovate opens PRs every weekend. Only GitHub Actions updates automerge; every o
 | Path | On merge |
 | --- | --- |
 | `kubernetes/` | Flux applies it within seconds |
-| `synology/<project>`, if listed in `synology/.doco-cd.yml` | doco-cd deploys it within about three minutes |
-| `synology/platform/doco-cd` | Nothing; applied by hand |
+| A project listed in `synology/.doco-cd.yml`, `proxmox/monitoring/.doco-cd.yml` or `sparks/monitoring/.doco-cd*.yml` | doco-cd deploys it within about three minutes |
+| `*/platform/doco-cd` | doco-cd replaces itself on every host that lists it; more than two replacements of one host means a loop |
 | `talos/` | Nothing until nodes are rolled with the `talos-rollout` skill |
 | `bootstrap/` | Nothing; only a cluster rebuild reads it |
-| `proxmox/guests/`, `sparks/` | Nothing until deployed by hand, as each README describes |
+| Other `proxmox/` and `sparks/` paths, such as `proxmox/guests/` | Nothing until deployed by hand, as each README describes |
 | `.mise.toml` | Local tools and CI validators only |
 
 Report merges that only staged a manual rollout.
