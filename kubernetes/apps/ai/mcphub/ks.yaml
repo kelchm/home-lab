@@ -13,7 +13,6 @@ spec:
     - name: lemon-manuals-mcp
     - name: open-meteo-mcp
     - name: pcbparts-mcp
-    - name: playwright-stealth-mcp
   healthChecks:
     - apiVersion: helm.toolkit.fluxcd.io/v2
       kind: HelmRelease
