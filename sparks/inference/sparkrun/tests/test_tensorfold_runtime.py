@@ -282,16 +282,17 @@ def test_prepare_distributes_declared_drafter(runtime):
 
 
 def test_recipes_have_separate_native_cache_namespaces(runtime):
-    leaves = []
+    # Recipes share a cache only when it belongs to their weights, not their image.
+    owners = {}
     for path in RECIPES:
         recipe = Recipe.from_dict(yaml.safe_load(path.read_text()))
+        settings = resolve_runtime_cache_settings(runtime=runtime, recipe=recipe)
         mounts = build_runtime_cache_mounts(
-            runtime=runtime, recipe=recipe,
-            settings=resolve_runtime_cache_settings(runtime=runtime, recipe=recipe),
+            runtime=runtime, recipe=recipe, settings=settings,
             root="/opt/spark-cache/huggingface/runtime-cache", image=recipe.container,
         )
-        leaves.append(mounts.leaf)
-    assert len(set(leaves)) == len(RECIPES)
+        owner = (recipe.model, recipe.model_revision) if not settings.key_by_image else path
+        assert owners.setdefault(mounts.leaf, owner) == owner, path
 
 
 @pytest.mark.parametrize("path", RECIPES, ids=lambda path: path.stem)

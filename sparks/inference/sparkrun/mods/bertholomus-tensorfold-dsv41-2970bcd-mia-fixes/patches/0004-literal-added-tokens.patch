@@ -1,0 +1,503 @@
+diff --git a/zig/src/server/hf_text.zig b/zig/src/server/hf_text.zig
+index b7358b415..99dbfe54b 100644
+--- a/zig/src/server/hf_text.zig
++++ b/zig/src/server/hf_text.zig
+@@ -4,6 +4,7 @@ const tokenizer = @import("tokenizer");
+ const template = @import("template");
+ const json = @import("json.zig");
+ const model_text = @import("model_text.zig");
++const literal_tokens = @import("literal_tokens.zig");
+ const Value = json.Value;
+ const Allocator = std.mem.Allocator;
+ 
+@@ -19,6 +20,7 @@ pub const HfText = struct {
+     eos: []const u32 = &.{},
+     prefix: []const u32 = &.{}, // the post-processor's tokens before a text (add_special_tokens)
+     suffix: []const u32 = &.{},
++    literals: literal_tokens.Table = .{}, // added tokens a client's quoted text keeps as text
+ 
+     /// Loads ``dir``'s tokenizer.json, chat template, special tokens and end-of-sequence ids; a failure's reason in `problem` (from `pa`).
+     pub fn load(gpa: Allocator, io: std.Io, dir: []const u8, pa: Allocator, problem: *[]const u8) !*HfText {
+@@ -37,6 +39,9 @@ pub const HfText = struct {
+         t.specials = try specialsOf(a, config);
+         t.eos = try t.eosIds(a, model_config, config);
+         try t.readPostProcessor(io, a, dir);
++        const contents = try a.alloc([]const u8, t.tok.added.len);
++        for (contents, t.tok.added) |*c, at| c.* = at.content;
++        t.literals = try literal_tokens.Table.init(a, contents);
+         if (t.source.len > 0) {
+             var diag: template.Diag = .{};
+             t.compiled = template.compile(gpa, t.source, &diag) catch |e| {
+@@ -201,9 +206,14 @@ pub const HfText = struct {
+             .render = renderFn,
+             .template_source = sourceFn,
+             .special = specialFn,
++            .literals = literalsFn,
+         } };
+     }
+ 
++    fn literalsFn(ctx: *anyopaque) *const literal_tokens.Table {
++        return &self(ctx).literals;
++    }
++
+     fn specialFn(ctx: *anyopaque, id: u32) bool {
+         const t = self(ctx);
+         const piece = t.tok.id_to_token.get(id) orelse return false;
+diff --git a/zig/src/server/literal_tokens.zig b/zig/src/server/literal_tokens.zig
+new file mode 100644
+index 000000000..96d444427
+--- /dev/null
++++ b/zig/src/server/literal_tokens.zig
+@@ -0,0 +1,192 @@
++//! An added token a client quotes in a chat request's strings stays text: hidden before the template, encoded plain.
++const std = @import("std");
++const json = @import("json.zig");
++const model_text = @import("model_text.zig");
++const Value = json.Value;
++const Allocator = std.mem.Allocator;
++
++/// The first private-use character; literal `i` is ``pua0 + i``.
++pub const pua0: u21 = 0xE000;
++const pua_room: usize = 0xF8FF - 0xE000 + 1;
++pub const image = "<｜deepseek_image｜>";
++const replacement = "\u{fffd}";
++
++pub const Table = struct {
++    /// The literals, longest first (a longer literal wins over a shorter one it contains).
++    lits: []const []const u8 = &.{},
++    /// Bytes a literal or a private-use character of the range may start with.
++    starts: [256]bool = @splat(false),
++
++    /// The added tokens a client could quote, in `a`: one-character tokens, placeholders and the image token left out.
++    pub fn init(a: Allocator, contents: []const []const u8) Allocator.Error!Table {
++        var out: std.ArrayList([]const u8) = .empty;
++        for (contents) |c| {
++            const n = std.unicode.utf8CountCodepoints(c) catch continue;
++            if (n <= 1) continue;
++            if (std.mem.indexOf(u8, c, "place_holder") != null or std.mem.indexOf(u8, c, "place▁holder") != null) continue;
++            if (std.mem.eql(u8, c, image)) continue;
++            var seen = false;
++            for (out.items) |o| {
++                if (std.mem.eql(u8, o, c)) {
++                    seen = true;
++                    break;
++                }
++            }
++            if (!seen) try out.append(a, c);
++        }
++        std.mem.sort([]const u8, out.items, {}, longerFirst);
++        if (out.items.len > pua_room) out.shrinkRetainingCapacity(pua_room);
++        var t: Table = .{ .lits = try out.toOwnedSlice(a) };
++        for (t.lits) |l| t.starts[l[0]] = true;
++        if (t.lits.len > 0) {
++            t.starts[0xEE] = true; // U+E000 .. U+EFFF
++            t.starts[0xEF] = true; // U+F000 .. U+F8FF
++        }
++        return t;
++    }
++
++    fn longerFirst(_: void, x: []const u8, y: []const u8) bool {
++        if (x.len != y.len) return x.len > y.len;
++        return std.mem.lessThan(u8, x, y);
++    }
++
++    /// The literal a private-use character at `s[at..]` stands for (its index), else null.
++    fn charAt(t: *const Table, s: []const u8, at: usize) ?usize {
++        if (at + 3 > s.len) return null;
++        const b0 = s[at];
++        const b1 = s[at + 1];
++        const b2 = s[at + 2];
++        if ((b0 != 0xEE and b0 != 0xEF) or (b1 & 0xC0) != 0x80 or (b2 & 0xC0) != 0x80) return null;
++        const cp: usize = (@as(usize, b0 & 0x0F) << 12) | (@as(usize, b1 & 0x3F) << 6) | @as(usize, b2 & 0x3F);
++        if (cp < pua0 or cp >= pua0 + t.lits.len) return null;
++        return cp - pua0;
++    }
++
++    /// The longest literal starting at `s[at..]` (its index), else null.
++    fn literalAt(t: *const Table, s: []const u8, at: usize) ?usize {
++        for (t.lits, 0..) |l, i| if (std.mem.startsWith(u8, s[at..], l)) return i;
++        return null;
++    }
++
++    /// Whether ``hide`` would change `s`.
++    fn touches(t: *const Table, s: []const u8) bool {
++        for (s, 0..) |b, i| {
++            if (!t.starts[b]) continue;
++            if (t.charAt(s, i) != null or t.literalAt(s, i) != null) return true;
++        }
++        return false;
++    }
++
++    /// Whether ``hide`` would change any string in `v` (object keys are left alone, as Python's copy keeps them).
++    pub fn needs(t: *const Table, v: Value) bool {
++        if (t.lits.len == 0) return false;
++        return switch (v) {
++            .string => |s| t.touches(s),
++            .array => |xs| for (xs) |x| {
++                if (t.needs(x)) break true;
++            } else false,
++            .object => |o| for (o.values()) |x| {
++                if (t.needs(x)) break true;
++            } else false,
++            else => false,
++        };
++    }
++
++    /// `s` with every literal replaced by its private-use character and the range's own characters by U+FFFD.
++    fn hideString(t: *const Table, a: Allocator, s: []const u8) Allocator.Error![]const u8 {
++        var out: std.ArrayList(u8) = .empty;
++        var i: usize = 0;
++        while (i < s.len) {
++            if (t.starts[s[i]]) {
++                if (t.charAt(s, i) != null) {
++                    try out.appendSlice(a, replacement);
++                    i += 3;
++                    continue;
++                }
++                if (t.literalAt(s, i)) |k| {
++                    var buf: [4]u8 = undefined;
++                    const n = std.unicode.utf8Encode(@intCast(pua0 + k), &buf) catch unreachable;
++                    try out.appendSlice(a, buf[0..n]);
++                    i += t.lits[k].len;
++                    continue;
++                }
++            }
++            try out.append(a, s[i]);
++            i += 1;
++        }
++        return out.toOwnedSlice(a);
++    }
++
++    /// `v` with every literal in its strings hidden: `v` itself when nothing changes, else a copy of what changes.
++    pub fn hide(t: *const Table, a: Allocator, v: Value) Allocator.Error!Value {
++        if (!t.needs(v)) return v;
++        return switch (v) {
++            .string => |s| .{ .string = try t.hideString(a, s) },
++            .array => |xs| blk: {
++                const out = try a.alloc(Value, xs.len);
++                for (out, xs) |*o, x| o.* = try t.hide(a, x);
++                break :blk .{ .array = out };
++            },
++            .object => |o| blk: {
++                const n = try json.newObject(a);
++                var it = o.iterator();
++                while (it.next()) |e| try n.put(a, e.key_ptr.*, try t.hide(a, e.value_ptr.*));
++                break :blk .{ .object = n };
++            },
++            else => v,
++        };
++    }
++
++    /// A rendered prompt's ids: `text` encoded around its private-use characters, each its literal's plain pieces.
++    pub fn encode(t: *const Table, a: Allocator, text: []const u8, tx: model_text.Text) model_text.Error![]u32 {
++        var out: std.ArrayList(u32) = .empty;
++        var at: usize = 0;
++        var i: usize = 0;
++        var any = false;
++        while (i < text.len) {
++            if (text[i] == 0xEE or text[i] == 0xEF) {
++                if (t.charAt(text, i)) |k| {
++                    any = true;
++                    if (i > at) try append(&out, a, tx, text[at..i]);
++                    try t.plain(&out, a, tx, t.lits[k]);
++                    i += 3;
++                    at = i;
++                    continue;
++                }
++            }
++            i += 1;
++        }
++        if (!any) return tx.encode(a, text, false);
++        if (at < text.len) try append(&out, a, tx, text[at..]);
++        return out.toOwnedSlice(a);
++    }
++
++    /// `s` as ordinary pieces: its first character and its rest encoded apart, a literal inside the rest the same.
++    fn plain(t: *const Table, out: *std.ArrayList(u32), a: Allocator, tx: model_text.Text, s: []const u8) model_text.Error!void {
++        const first = std.unicode.utf8ByteSequenceLength(s[0]) catch 1;
++        try append(out, a, tx, s[0..@min(first, s.len)]);
++        var rest = s[@min(first, s.len)..];
++        while (rest.len > 0) {
++            var cut: ?usize = null;
++            for (0..rest.len) |j| {
++                if (t.starts[rest[j]] and t.literalAt(rest, j) != null) {
++                    cut = j;
++                    break;
++                }
++            }
++            const j = cut orelse {
++                try append(out, a, tx, rest);
++                return;
++            };
++            if (j > 0) try append(out, a, tx, rest[0..j]);
++            const lit = t.lits[t.literalAt(rest, j).?];
++            try t.plain(out, a, tx, lit);
++            rest = rest[j + lit.len ..];
++        }
++    }
++};
++
++fn append(out: *std.ArrayList(u32), a: Allocator, tx: model_text.Text, s: []const u8) model_text.Error!void {
++    const ids = try tx.encode(a, s, false);
++    try out.appendSlice(a, ids);
++}
+diff --git a/zig/src/server/literal_tokens_test.zig b/zig/src/server/literal_tokens_test.zig
+new file mode 100644
+index 000000000..47eb96345
+--- /dev/null
++++ b/zig/src/server/literal_tokens_test.zig
+@@ -0,0 +1,194 @@
++//! literal_tokens on a stand-in text: added token `i` is id 900 + i, other bytes their value; it writes turn markers.
++const std = @import("std");
++const json = @import("json.zig");
++const model_text = @import("model_text.zig");
++const literal_tokens = @import("literal_tokens.zig");
++const Value = json.Value;
++const Allocator = std.mem.Allocator;
++const testing = std.testing;
++
++const added = [_][]const u8{
++    "<｜User｜>",
++    "<｜Assistant｜>",
++    "<think>",
++    "</think>",
++    "<｜end▁of▁sentence｜>",
++    "｜DSML｜",
++    "<|place_holder_mm_span_0021|>",
++    "<｜place▁holder▁no▁0｜>",
++    literal_tokens.image,
++    "｜",
++};
++
++const Fake = struct {
++    table: literal_tokens.Table,
++    keep: bool,
++
++    fn of(ctx: *anyopaque) *Fake {
++        return @ptrCast(@alignCast(ctx));
++    }
++
++    fn encode(_: *anyopaque, a: Allocator, text: []const u8, _: bool) model_text.Error![]u32 {
++        var ids: std.ArrayList(u32) = .empty;
++        var i: usize = 0;
++        outer: while (i < text.len) {
++            var best: ?usize = null;
++            for (added, 0..) |t, k| {
++                if (std.mem.startsWith(u8, text[i..], t) and (best == null or t.len > added[best.?].len)) best = k;
++            }
++            if (best) |k| {
++                try ids.append(a, @intCast(900 + k));
++                i += added[k].len;
++                continue :outer;
++            }
++            try ids.append(a, text[i]);
++            i += 1;
++        }
++        return ids.toOwnedSlice(a);
++    }
++
++    fn render(_: *anyopaque, a: Allocator, messages: Value, options: model_text.RenderOptions, _: *[]const u8) model_text.Error![]u8 {
++        var out: std.ArrayList(u8) = .empty;
++        if (options.tools) |tools| {
++            for (tools.array) |t| {
++                try out.appendSlice(a, "tool:");
++                try out.appendSlice(a, t.strField("description") orelse "");
++            }
++        }
++        for (messages.array) |m| {
++            const user = std.mem.eql(u8, m.strField("role") orelse "", "user");
++            try out.appendSlice(a, if (user) "<｜User｜>" else "<｜Assistant｜>");
++            try out.appendSlice(a, m.strField("content") orelse "");
++        }
++        if (options.add_generation_prompt) try out.appendSlice(a, "<｜Assistant｜><think>");
++        return out.toOwnedSlice(a);
++    }
++
++    fn literals(ctx: *anyopaque) *const literal_tokens.Table {
++        return &of(ctx).table;
++    }
++
++    fn decode(_: *anyopaque, a: Allocator, _: []const u32) Allocator.Error![]u8 {
++        return a.dupe(u8, "");
++    }
++    fn tokenId(_: *anyopaque, _: []const u8) ?u32 {
++        return null;
++    }
++    fn tokenString(_: *anyopaque, a: Allocator, _: u32) Allocator.Error![]u8 {
++        return a.dupe(u8, "");
++    }
++    fn vocab(_: *anyopaque) u32 {
++        return 1000;
++    }
++    fn eos(_: *anyopaque) []const u32 {
++        return &.{};
++    }
++    fn source(_: *anyopaque) []const u8 {
++        return "";
++    }
++
++    const with: model_text.Text.VTable = .{ .encode = encode, .decode = decode, .token_id = tokenId, .token_string = tokenString, .vocab_size = vocab, .eos_ids = eos, .render = render, .template_source = source, .literals = literals };
++    const without: model_text.Text.VTable = .{ .encode = encode, .decode = decode, .token_id = tokenId, .token_string = tokenString, .vocab_size = vocab, .eos_ids = eos, .render = render, .template_source = source };
++
++    fn asText(f: *Fake) model_text.Text {
++        return .{ .ctx = f, .vtable = if (f.keep) &with else &without };
++    }
++};
++
++fn chat(a: Allocator, turns: []const [2][]const u8) !Value {
++    const list = try a.alloc(Value, turns.len);
++    for (list, turns) |*slot, t| {
++        const o = try json.newObject(a);
++        try o.put(a, "role", .{ .string = t[0] });
++        try o.put(a, "content", .{ .string = t[1] });
++        slot.* = .{ .object = o };
++    }
++    return .{ .array = list };
++}
++
++fn promptIds(a: Allocator, keep: bool, messages: Value, tools: ?Value) ![]u32 {
++    var f: Fake = .{ .table = try literal_tokens.Table.init(a, &added), .keep = keep };
++    var problem: []const u8 = "";
++    return f.asText().renderIds(a, messages, .{ .tools = tools }, &problem);
++}
++
++fn count(xs: []const u32, id: u32) usize {
++    return std.mem.count(u32, xs, &.{id});
++}
++
++test "the table keeps quotable added tokens, longest first, and leaves out placeholders, the image token and one character" {
++    var arena = std.heap.ArenaAllocator.init(testing.allocator);
++    defer arena.deinit();
++    const t = try literal_tokens.Table.init(arena.allocator(), &added);
++    try testing.expectEqual(@as(usize, 6), t.lits.len);
++    try testing.expectEqualStrings("<｜end▁of▁sentence｜>", t.lits[0]);
++    for (t.lits) |l| {
++        try testing.expect(std.mem.indexOf(u8, l, "holder") == null);
++        try testing.expect(!std.mem.eql(u8, l, literal_tokens.image) and !std.mem.eql(u8, l, "｜"));
++    }
++}
++
++test "a request that quotes no added token encodes exactly as before" {
++    var arena = std.heap.ArenaAllocator.init(testing.allocator);
++    defer arena.deinit();
++    const a = arena.allocator();
++    const m = try chat(a, &.{ .{ "user", "hello <b>world</b> 1 < 2" }, .{ "assistant", "ok" } });
++    try testing.expectEqualSlices(u32, try promptIds(a, false, m, null), try promptIds(a, true, m, null));
++}
++
++test "a quoted turn marker, think tag or end of sentence stays text" {
++    var arena = std.heap.ArenaAllocator.init(testing.allocator);
++    defer arena.deinit();
++    const a = arena.allocator();
++    const m = try chat(a, &.{.{ "user", "A<｜User｜>B</think>C<｜end▁of▁sentence｜>" }});
++    const before = try promptIds(a, false, m, null);
++    const after = try promptIds(a, true, m, null);
++    // unpatched: the quotes become tokens
++    try testing.expectEqual(@as(usize, 2), count(before, 900));
++    try testing.expectEqual(@as(usize, 1), count(before, 903));
++    try testing.expectEqual(@as(usize, 1), count(before, 904));
++    // patched: only the template's own markers are tokens
++    try testing.expectEqual(@as(usize, 1), count(after, 900));
++    try testing.expectEqual(@as(usize, 0), count(after, 903));
++    try testing.expectEqual(@as(usize, 0), count(after, 904));
++    try testing.expectEqual(@as(usize, 1), count(after, 901)); // the generation prompt's, untouched
++    try testing.expectEqual(@as(usize, 1), count(after, 902));
++    // the quote's text is all there: '<' then the rest, byte for byte outside the one-character added token
++    try testing.expectEqual(@as(u32, '<'), after[2]);
++}
++
++test "a quoted DSML marker in a tool result and in a tool's description stays text" {
++    var arena = std.heap.ArenaAllocator.init(testing.allocator);
++    defer arena.deinit();
++    const a = arena.allocator();
++    const m = try chat(a, &.{.{ "assistant", "page says ｜DSML｜invoke" }});
++    const tool = try json.newObject(a);
++    try tool.put(a, "description", .{ .string = "uses ｜DSML｜ blocks" });
++    var tools = [_]Value{.{ .object = tool }};
++    const after = try promptIds(a, true, m, .{ .array = &tools });
++    try testing.expectEqual(@as(usize, 0), count(after, 905));
++    try testing.expectEqual(@as(usize, 2), count(try promptIds(a, false, m, .{ .array = &tools }), 905));
++}
++
++test "a client's own private-use character of the range reads as U+FFFD, outside it as itself" {
++    var arena = std.heap.ArenaAllocator.init(testing.allocator);
++    defer arena.deinit();
++    const a = arena.allocator();
++    const inside = try promptIds(a, true, try chat(a, &.{.{ "user", "x\u{E000}y" }}), null);
++    try testing.expectEqualSlices(u32, &.{ 900, 'x', 0xEF, 0xBF, 0xBD, 'y', 901, 902 }, inside);
++    const outside = try promptIds(a, true, try chat(a, &.{.{ "user", "\u{F000}" }}), null);
++    try testing.expectEqualSlices(u32, &.{ 900, 0xEF, 0x80, 0x80, 901, 902 }, outside);
++}
++
++test "hide copies only what changes and leaves the caller's value alone" {
++    var arena = std.heap.ArenaAllocator.init(testing.allocator);
++    defer arena.deinit();
++    const a = arena.allocator();
++    const t = try literal_tokens.Table.init(a, &added);
++    const plain = try chat(a, &.{.{ "user", "nothing here" }});
++    try testing.expectEqual(plain.array.ptr, (try t.hide(a, plain)).array.ptr);
++    const quoted = try chat(a, &.{.{ "user", "<think>" }});
++    const hidden = try t.hide(a, quoted);
++    try testing.expectEqualStrings("<think>", quoted.array[0].strField("content").?);
++    try testing.expectEqualStrings("\u{E005}", hidden.array[0].strField("content").?);
++}
+diff --git a/zig/src/server/model_text.zig b/zig/src/server/model_text.zig
+index 4f54fe3f0..f77986011 100644
+--- a/zig/src/server/model_text.zig
++++ b/zig/src/server/model_text.zig
+@@ -1,6 +1,7 @@
+ //! The tokenizer and chat template a server renders prompts and replies with (the tok and jinja branches plug in here).
+ const std = @import("std");
+ const json = @import("json.zig");
++const literal_tokens = @import("literal_tokens.zig");
+ const Allocator = std.mem.Allocator;
+ 
+ pub const RenderOptions = struct {
+@@ -38,6 +39,8 @@ pub const Text = struct {
+         template_source: *const fn (ctx: *anyopaque) []const u8,
+         /// Whether an id is a special token (an added token flagged special); null: none are known.
+         special: ?*const fn (ctx: *anyopaque, id: u32) bool = null,
++        /// The added tokens a client's quoted text keeps as text (literal_tokens); null: none are kept.
++        literals: ?*const fn (ctx: *anyopaque) *const literal_tokens.Table = null,
+     };
+ 
+     pub fn encode(t: Text, a: Allocator, text: []const u8, add_special: bool) Error![]u32 {
+@@ -68,10 +71,17 @@ pub const Text = struct {
+         return t.vtable.render(t.ctx, a, messages, options, problem);
+     }
+ 
+-    /// The chat template's ids, as ``apply_chat_template(tokenize=True)`` gives them.
++    /// The chat template's ids (``apply_chat_template(tokenize=True)``), an added token the client quotes kept as text.
+     pub fn renderIds(t: Text, a: Allocator, messages: json.Value, options: RenderOptions, problem: *[]const u8) Error![]u32 {
+-        const text = try t.render(a, messages, options, problem);
+-        return t.encode(a, text, false);
++        const lits = if (t.vtable.literals) |f| f(t.ctx) else null;
++        const table = lits orelse {
++            const text = try t.render(a, messages, options, problem);
++            return t.encode(a, text, false);
++        };
++        var hidden = options;
++        if (options.tools) |tools| hidden.tools = try table.hide(a, tools);
++        const text = try t.render(a, try table.hide(a, messages), hidden, problem);
++        return table.encode(a, text, t);
+     }
+ 
+     pub fn templateSource(t: Text) []const u8 {
+@@ -82,5 +92,4 @@ pub const Text = struct {
+         const f = t.vtable.special orelse return false;
+         return f(t.ctx, id);
+     }
+-
+ };
+diff --git a/zig/src/server/root.zig b/zig/src/server/root.zig
+index 7efe9b4ef..1c69a85ba 100644
+--- a/zig/src/server/root.zig
++++ b/zig/src/server/root.zig
+@@ -36,6 +36,7 @@ test {
+     _ = @import("log.zig");
+     _ = @import("messages.zig");
+     _ = @import("stream_preflight_test.zig");
++    _ = @import("literal_tokens_test.zig");
+     _ = @import("late_system_test.zig");
+     _ = @import("effort_values_test.zig");
+     _ = @import("compact_test.zig");
