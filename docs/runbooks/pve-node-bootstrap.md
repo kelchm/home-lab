@@ -153,7 +153,7 @@ Before moving to the next node:
 
 ## Troubleshooting
 
-- **Viewer works but scripted capture fails:** the helper can't open `/dev/video0` while another stream holds it; close stray captures with `pgrep -a ustreamer` on GLKVM and retry. With no viewer open, a failed capture means the selected port has no signal.
+- **Viewer works but scripted capture fails:** check SSH to GLKVM first. With no viewer open, the helper needs `/dev/video0` to itself: a leftover capture shows in `pgrep -af capture-screen.sock` on GLKVM and can be killed, while kvmd's own stream is the one without that socket name. When the port is dark, as during POST or shutdown or on a blanked console, the helper says `no HDMI signal on the selected port`.
 - **Keyboard disappears in BIOS:** ensure GLKVM virtual media/mass storage is disabled, reconnect the viewer if needed, and cold-power-cycle physically if the composite device remains wedged.
 - **POST ignores F12:** use held Esc for 30 seconds, then choose F12 from the Startup Menu.
 - **iPXE prompt drops characters:** restart the PXE sequence instead of typing a long `chain` command.

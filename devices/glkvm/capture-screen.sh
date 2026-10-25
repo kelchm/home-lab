@@ -20,10 +20,14 @@ pkill -USR1 -f /usr/sbin/lt86102sxe_setup 2>/dev/null || true
 pid=$!
 frame=$(mktemp)
 rc=1
-for _ in 1 2 3 4 5 6 7 8 9 10; do
+deadline=$(($(date +%s) + 8))
+while [ "$(date +%s)" -lt "$deadline" ]; do
   sleep 1
-  if curl -fsS -m 3 --unix-socket "$own_sock" http://localhost/snapshot -o "$frame" 2>/dev/null; then rc=0; break; fi
+  if curl -fsS -m 2 --unix-socket "$own_sock" http://localhost/snapshot -o "$frame" 2>/dev/null; then rc=0; break; fi
 done
+if [ "$rc" -ne 0 ] && curl -fsS -m 2 --unix-socket "$own_sock" http://localhost/state 2>/dev/null | tr -d ' \n' | grep -q '"hdmi":{"signal":false'; then
+  echo 'no HDMI signal on the selected port' >&2
+fi
 kill "$pid" 2>/dev/null; sleep 1; kill -9 "$pid" 2>/dev/null; wait "$pid" 2>/dev/null
 kvmd_live || pkill -USR2 -f /usr/sbin/lt86102sxe_setup 2>/dev/null || true
 [ "$rc" -eq 0 ] && cat "$frame"
