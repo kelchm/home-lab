@@ -248,15 +248,19 @@ containers and images were removed.
 
 | Component | Recorded state |
 |---|---|
-| NVIDIA driver | `580.173.02` |
-| ConnectX-7 firmware | `28.45.4028` on both hosts |
-| Firmware manager | `nvidia-spark-mlnx-firmware-manager` `5.0.8-1` |
+| DGX OS | `7.6.0`, NVIDIA's October 2026 release, on both hosts since 2026-10-25 |
+| Kernel | `7.0.0-1019-nvidia` with `kho=off`; `6.17.0-1032-nvidia` installed as the fallback |
+| NVIDIA driver | `580.178.04` |
+| SoC firmware (UEFI) | `0x02009e0f` (2.158.15), BIOS `5.36_0ACUM028`; Display Reserved Memory 2 GB |
+| Embedded controller | `0x03000d07` (3.13.7) |
+| USB-C PD controller | `0x00000519` (0.5.25) |
+| ConnectX-7 firmware | `28.50.1002` on both hosts |
+| Firmware manager | `nvidia-spark-mlnx-firmware-manager` `6.0.1-1` |
 | NCCL | NVIDIA tag `v2.30.7-1`, commit `73cf112`, built for `sm_121` |
 | nccl-tests | `2.19.7` test binary |
 | Additional packages | `perftest`, `libopenmpi-dev`, `iperf3`, `traceroute` |
 
-The installed firmware and package payload matched, so no firmware flash was
-performed. NCCL is built at `~/nccl`; tests are built at `~/nccl-tests` on both
+At bring-up the installed firmware and package payload matched, so no firmware flash was performed. The October 2026 update ([#1030](https://github.com/kelchm/home-lab/issues/1030)) flashed every component above; [Updating DGX OS and firmware](#updating-dgx-os-and-firmware) covers how. NCCL is built at `~/nccl`; tests are built at `~/nccl-tests` on both
 hosts. Build logs are retained as `~/dgx-nccl-build.log` and
 `~/dgx-nccl-tests-rebuild.log`.
 
@@ -280,6 +284,21 @@ git clone --branch v2.19.7 --depth 1 \
 NCCL_HOME="$NCCL_HOME" MPI_HOME="$MPI_HOME" \
   make -C "$HOME/nccl-tests" -j"$(nproc)" MPI=1
 ```
+
+### Updating DGX OS and firmware
+
+The Sparks take NVIDIA's OTA releases through apt and fwupd, one host at a time, with the inference workload stopped on both because it spans them. NVIDIA's [release notes](https://docs.nvidia.com/dgx/dgx-spark/release-notes.html) and [update guide](https://docs.nvidia.com/dgx/dgx-spark/os-and-component-update.html) are the reference; these are the parts specific to this pair:
+
+- **Stop the workload first.** `nvidia-spark-mlnx-firmware-manager` starts flashing the ConnectX-7 as soon as apt installs it. The new CX7 firmware loads on the next reboot.
+- **Packages:** `apt-get dist-upgrade` with `DEBIAN_FRONTEND=noninteractive` and `--force-confold`. The release's meta package pulls in the kernel, the driver and NVIDIA's grub fragments.
+- **Keep a fallback kernel whose NVIDIA modules match the new driver.** A driver update removes the modules for older kernels, so the kernel that was running is no longer bootable with the GPU. For driver `580.178.04` that is `linux-image-6.17.0-1032-nvidia` with `linux-modules-nvidia-580-open-6.17.0-1032-nvidia` `6.17.0-1032.32+1`.
+- **Firmware:** `fwupdmgr refresh --force`, then `fwupdmgr upgrade --assume-yes --no-reboot-check` stages the EC, SoC and USB-PD capsules together, and one reboot applies them. The reboot took about eight minutes. Some users report USB-PD failing on the first attempt; check every version in `fwupdmgr get-devices` afterwards and rerun if one is behind.
+- **spark-1's port 8888 rules are not persistent.** Save them with `iptables-save` before the reboot and restore the workstation rule and the `VONK-FORGE` chains with `iptables-restore --noflush` afterwards.
+- **After each boot, before the second host:** the new kernel and `kho=off` in `/proc/cmdline`, every firmware version, both CX7 rails `ACTIVE` at 200G with MTU 9000 and full-size pings both ways, the 10GbE link at 10000, and all monitoring containers running.
+
+Kernel `7.0.0-1019` enables Kexec HandOver by default. Its scratch area, about 9.3 GiB, can't hold long-term pins, so NCCL's RoCE memory registration fails with `ENOMEM` under memory pressure ([forum 383023](https://forums.developer.nvidia.com/t/dgx-spark-regression-kernel-7-0-0-1019-nvidia-causes-nccl-roce-ibv-reg-mr-iova2-enomem-6-17-0-1032-works/383023), [NV-Kernels#590](https://github.com/NVIDIA/NV-Kernels/pull/590)). NVIDIA's `nvidia-spark-grub-kho` package adds `kho=off`; confirm it is on the command line and that `/sys/kernel/debug/kho` is absent. `cma=128M` is not needed: `CmaTotal` of 0 on the 7.0 kernel is expected.
+
+UEFI's Advanced → Advanced Menu → Platform Configuration → **Display Reserved Memory** stays at its **2 GB** default on both hosts. Smaller sizes ([UEFI manual](https://docs.nvidia.com/dgx/dgx-spark-uefi/advanced-tab.html#spark-uefi-advanced-display-reserved-memory)) are not safe with the GLKVM here. UEFI counts the GLKVM as one display. A fixed 0.5 GB raised `MemTotal` by 1.50 GiB, to 129,168,328 kB. But on 2026-10-25 the first KVM switch away from spark-2, about a minute after boot, hung the GPU's GSP (`Xid 119`, then failed display-engine register reads). `nvidia-persistenced` then blocked shutdown until the hardware watchdog reset the host 10 minutes later. Both hosts have taken many KVM switches at 2 GB without an Xid. spark-1 survived four switches at 0.5 GB while idle, so the failure is intermittent, and Auto would choose the same 0.5 GB for the GLKVM's 2560×1440 preset. `sudo systemctl reboot --firmware-setup` boots straight into the setup UI.
 
 ## Validation record
 
