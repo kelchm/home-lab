@@ -117,6 +117,7 @@ spec:
             summary: "{{ $labels.instance }} is running undervolted"
             description: 'The Pi firmware on {{ $labels.instance }} has reported undervoltage for 15 minutes. An undervolted Pi throttles its CPU. Check the power supply and its cable: a long or thin USB cable drops voltage.'
 
+        # A Spark's GB10 publishes a temperature limit only for its GPU; slowing for heat is the chip at that limit.
         - alert: NodeGPUThermalThrottling
           expr: |
             max by (instance, platform) (
@@ -124,7 +125,7 @@ spec:
             ) == 1
           for: 5m
           labels:
-            severity: warning
+            severity: critical
           annotations:
             summary: GPU on {{ $labels.instance }} is thermally throttled
             description: 'The GPU on {{ $labels.instance }} has been slowing its clocks for heat for five minutes. Check the Spark''s airflow and its workload.'
