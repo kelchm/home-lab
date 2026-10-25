@@ -282,17 +282,16 @@ def test_prepare_distributes_declared_drafter(runtime):
 
 
 def test_recipes_have_separate_native_cache_namespaces(runtime):
-    # Recipes share a cache only when it belongs to their weights, not their image.
-    owners = {}
+    leaves = []
     for path in RECIPES:
         recipe = Recipe.from_dict(yaml.safe_load(path.read_text()))
-        settings = resolve_runtime_cache_settings(runtime=runtime, recipe=recipe)
         mounts = build_runtime_cache_mounts(
-            runtime=runtime, recipe=recipe, settings=settings,
+            runtime=runtime, recipe=recipe,
+            settings=resolve_runtime_cache_settings(runtime=runtime, recipe=recipe),
             root="/opt/spark-cache/huggingface/runtime-cache", image=recipe.container,
         )
-        owner = (recipe.model, recipe.model_revision) if not settings.key_by_image else path
-        assert owners.setdefault(mounts.leaf, owner) == owner, path
+        leaves.append(mounts.leaf)
+    assert len(set(leaves)) == len(RECIPES)
 
 
 @pytest.mark.parametrize("path", RECIPES, ids=lambda path: path.stem)
@@ -609,7 +608,7 @@ def test_dsv41_frozen_bundle_rejects_changed_or_added_files(tmp_path, change, ds
 
 
 def test_dsv41_frozen_bundle_refuses_linked_and_dangling_files(tmp_path):
-    source = DSV41_RECIPES[0].parents[1] / "mods/bertholomus-tensorfold-dsv41-2970bcd"
+    source = DSV41_RECIPES[0].parents[1] / "mods/bertholomus-tensorfold-dsv41-2970bcd-mia-fixes"
     bundle = tmp_path / source.name
     shutil.copytree(source, bundle, ignore=shutil.ignore_patterns("__pycache__"))
     check = [sys.executable, str(bundle / "prepare.py"), "--check"]
