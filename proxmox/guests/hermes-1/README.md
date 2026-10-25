@@ -18,9 +18,9 @@ This directory is the source for the application deployment and its operating re
 | TLS state | `/srv/caddy`, with the DNS credential in root-only `/srv/caddy/.env` |
 | Backup | Included in cluster job `daily-backups` |
 
-The VM uses the official Debian 13 genericcloud image with SHA-512 `184761b0dad0f9ace02f9298050ca96ce3caa39a461a47706d47ff9698b59933918b91b40177fbd4d392f6446af8b4d18ecb94caca988169b19641606bf34003`. The container image is pinned to the multi-architecture digest published for Hermes `v2026.8.27`.
+The VM uses the official Debian 13 genericcloud image with SHA-512 `184761b0dad0f9ace02f9298050ca96ce3caa39a461a47706d47ff9698b59933918b91b40177fbd4d392f6446af8b4d18ecb94caca988169b19641606bf34003`. `compose.yaml` pins the Hermes image by release tag and multi-architecture digest; Renovate proposes updates.
 
-The default model is the active OpenAI-compatible `deepseek-v4-flash-dspark` endpoint on `spark-1:8888`. The Qwen endpoint on `spark-1:8000` is mutually exclusive with that two-node deployment; change the Hermes model configuration when the operator changes Spark workloads.
+The model settings in `config.yaml` point at the OpenAI-compatible endpoint on `spark-1:8888`. Spark workloads are mutually exclusive, so change the Hermes model configuration when the operator changes what the Sparks serve.
 
 MetaMCP is retired and its client connection has been removed from the checked-in configuration. The existing MCPHub Hacker News connection remains enabled; additional capability connections require explicit configuration. UniFi permits this guest alone to reach the shared admin gateway at `10.32.130.1` on TCP 443, ordered immediately above the broader Workloads-to-`admin-prod` deny.
 
@@ -28,7 +28,7 @@ The read-only Hacker News pilot is a separate untrusted MCP connection through M
 
 The Hermes runtime `.env` is intentionally not in Git. It contains the dashboard break-glass authentication values, API-server token, MCPHub workload token, and messaging-adapter credentials and allowlists. A root-readable recovery copy of the dashboard and API client credentials is stored at `/root/hermes-access.txt` inside the backed-up VM; the authoritative MCPHub key remains in the SOPS source above. The separate Cloudflare token used by Caddy is stored in `/srv/caddy/.env` at runtime and is therefore also captured by VM backups; do not add this infrastructure credential to the client-access file. Its authoritative copy belongs in 1Password under `hermes - kelch.io`.
 
-Telegram is enabled for the private `@MaiaRelayBot` adapter. Its BotFather token is stored authoritatively in the `Telegram - hermes-1` 1Password item and copied at runtime to `TELEGRAM_BOT_TOKEN` in `/srv/hermes/.env`. `TELEGRAM_ALLOWED_USERS` contains the single operator's numeric Telegram user ID; neither `TELEGRAM_ALLOW_ALL_USERS` nor `GATEWAY_ALLOW_ALL_USERS` is set. Gateway streaming is enabled with the `auto` transport, which selects Telegram's native draft transport for direct messages and retains the adapter's edit-based fallback. Do not commit the token or numeric allowlist value.
+Telegram is enabled for the private `@MaiaRelayBot` adapter. Its BotFather token is stored authoritatively in the `Telegram - hermes-1` 1Password item and copied at runtime to `TELEGRAM_BOT_TOKEN` in `/srv/hermes/.env`. `TELEGRAM_ALLOWED_USERS` contains the single operator's numeric Telegram user ID; neither `TELEGRAM_ALLOW_ALL_USERS` nor `GATEWAY_ALLOW_ALL_USERS` is set. Gateway streaming is enabled with the `auto` transport, which selects Telegram's native draft transport for direct messages and retains the adapter's edit-based fallback. `TELEGRAM_HOME_CHANNEL` and `TELEGRAM_HOME_CHANNEL_THREAD_ID` in the same file set the home channel, and the checked-in DM topics reference the operator chat as `${TELEGRAM_HOME_CHANNEL}`. Do not commit the token, the numeric allowlist value, or the chat ID.
 
 ## Retired Flatrate profile
 
@@ -62,7 +62,7 @@ An on-demand QGA-assisted snapshot backup completed successfully and produced `b
 
 ## Operations
 
-Stage this directory at `/opt/hermes` on the guest. Hermes reads its persistent configuration from `/srv/hermes/config.yaml`, not the staged copy, so explicitly install a reviewed config change before recreating the containers. Dashboard-managed preferences such as the active theme can also mutate the persistent file; reconcile any preferences that should survive into Git before replacing it. `/srv/caddy/.env` must already contain `CLOUDFLARE_API_TOKEN` with mode `0600` and root ownership. Caddy's two state directories must remain owned by its numeric runtime identity:
+Stage this directory at `/opt/hermes` on the guest. Hermes reads its persistent configuration from `/srv/hermes/config.yaml`, not the staged copy, so explicitly install a reviewed config change before recreating the containers. The dashboard, Telegram commands, and Hermes's own schema migrations also rewrite the persistent file, so diff it against this directory's `config.yaml` and commit anything worth keeping before replacing it. `/srv/caddy/.env` must already contain `CLOUDFLARE_API_TOKEN` with mode `0600` and root ownership. Caddy's two state directories must remain owned by its numeric runtime identity:
 
 ```sh
 ssh kelchm@hermes.home.kelch.io 'sudo install -d -o 1000 -g 1000 -m 0750 /srv/caddy/data /srv/caddy/config && sudo chown -R 1000:1000 /srv/caddy/data /srv/caddy/config && sudo install -o kelchm -g kelchm -m 0640 /opt/hermes/config.yaml /srv/hermes/config.yaml && cd /opt/hermes && sudo docker compose pull hermes && sudo docker compose build --pull caddy && sudo docker compose up -d'

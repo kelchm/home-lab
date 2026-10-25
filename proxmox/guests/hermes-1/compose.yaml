@@ -23,7 +23,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.caddy
-    image: localhost/hermes-caddy:2.11.4-cloudflare-0.2.4
+    image: localhost/hermes-caddy
     container_name: hermes-caddy
     restart: unless-stopped
     network_mode: host
