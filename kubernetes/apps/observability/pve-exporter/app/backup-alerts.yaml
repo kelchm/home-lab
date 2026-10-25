@@ -48,7 +48,7 @@ spec:
             )
           for: 10m
           labels:
-            severity: critical
+            severity: warning
             cluster: pve-sbx
             backup_job: daily-backups
           annotations:

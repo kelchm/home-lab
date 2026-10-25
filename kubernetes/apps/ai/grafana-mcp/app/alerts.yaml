@@ -38,7 +38,7 @@ spec:
           expr: absent(kube_cronjob_status_last_successful_time{namespace="ai", cronjob="grafana-mcp-functional-probe"})
           for: 12m
           labels:
-            severity: critical
+            severity: warning
           annotations:
             summary: AI/MCP functional probe has no success metric
             description: The scheduled Grafana functional probe has not produced a success metric for 12 minutes.
