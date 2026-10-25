@@ -179,6 +179,18 @@ spec:
             summary: "{{ $labels.diskID }} on {{ $labels.instance }} is at {{ $value }} C"
             description: '{{ $labels.diskID }} has been above 50 C for 15 minutes. Check the NAS fans and the room temperature.'
 
+        # upgradeAvailable is 1 when an update is available; 2 none, 3-5 checking or unknown. Every sample of the
+        # last week and the one a week ago must be 1.
+        - alert: NASDSMUpdatePending
+          expr: |
+            max_over_time(upgradeAvailable{job="synology-snmp"}[7d]) == 1
+            and upgradeAvailable{job="synology-snmp"} offset 7d == 1
+          labels:
+            severity: warning
+          annotations:
+            summary: DSM on {{ $labels.instance }} has had an update waiting for a week
+            description: 'DSM has offered an update for seven days. Read the release notes, check the backups are current, and install it from Control Panel.'
+
         - alert: NASHardwareFault
           expr: |
             label_replace(
