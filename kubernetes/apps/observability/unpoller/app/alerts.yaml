@@ -105,6 +105,28 @@ spec:
               of load-balanced flows is degraded while it still reads online.
               Compare the modem's or dish's own metrics.
 
+        # 45 minutes outlasts T-Mobile's daily rise, which has stayed above 75 ms for up to half an hour.
+        - alert: UniFiWANLatencyHigh
+          expr: |
+            label_replace(label_replace(
+              avg_over_time(unpoller_device_wan_latency_seconds{job="unifi-api"}[15m]) > 0.075,
+              "wan_networkgroup", "WAN", "port", "eth9"), "wan_networkgroup", "WAN2", "port", "eth8")
+            unless on (name, wan_networkgroup) unpoller_device_wan_status{job="unifi-api"} == 0
+            unless on (name, port) avg_over_time(unpoller_device_wan_availability_percent{job="unifi-api"}[15m]) < 90
+          for: 45m
+          labels:
+            severity: warning
+          annotations:
+            summary: >-
+              {{ with printf "unpoller_wan_interface_state{job=\"unifi-api\", wan_networkgroup=%q}" $labels.wan_networkgroup | query }}{{ . | first | label "wan_interface" }}{{ else }}{{ $labels.port }}{{ end }}
+              averages {{ $value | humanizeDuration }} to its pings
+            description: >-
+              The gateway's pings to ping.ui.com over {{ $labels.port }} have
+              averaged over 75 ms for 45 minutes while this WAN reads online
+              and answers them. Check the WAN's traffic and the modem's or
+              dish's own metrics; a saturating transfer or a degraded link can
+              be moved off it on the UniFi Internet page.
+
         # The expected uplink speed of every device; any device not named here
         # must reach 1 Gb/s. The two switch LAGs report their aggregate, so one
         # member down reads as 10000. The gateway's uplink is a WAN, covered above.
