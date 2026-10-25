@@ -351,3 +351,40 @@ tests:
       - eval_time: 120m
         alertname: UniFiWANLatencyHigh
         exp_alerts: []
+
+  - name: A firmware update waiting a whole week alerts; one installed sooner, or on a device seen for less than a week, does not
+    interval: 1h
+    input_series:
+      - series: unpoller_device_upgradable{job="unifi-api",name="Basement AP"}
+        values: 0x2 1x200
+      - series: unpoller_device_upgradable{job="unifi-api",name="Office AP"}
+        values: 0x2 1x72 0x130
+      - series: unpoller_controller_update_available{job="unifi-api",hostname="Gateway-DMP"}
+        values: 1x202
+      # Adopted at 100h already offered firmware: younger than a week, so quiet.
+      - series: unpoller_device_upgradable{job="unifi-api",name="Sunroom AP"}
+        values: _x100 1x102
+    alert_rule_test:
+      - eval_time: 168h
+        alertname: UniFiFirmwareUpdatePending
+        exp_alerts: []
+      - eval_time: 171h
+        alertname: UniFiFirmwareUpdatePending
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: unifi-api
+              name: Basement AP
+            exp_annotations:
+              summary: Basement AP has had a firmware update waiting for a week
+              description: UniFi has offered Basement AP a firmware update for seven days. Read the release notes and install it from the UniFi console.
+      - eval_time: 171h
+        alertname: UniFiControllerUpdatePending
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: unifi-api
+              hostname: Gateway-DMP
+            exp_annotations:
+              summary: Gateway-DMP has had a UniFi Network update waiting for a week
+              description: The console has offered a UniFi Network update for seven days. Read the release notes and install it from the console's update page.

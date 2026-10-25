@@ -230,3 +230,25 @@ spec:
           annotations:
             summary: "{{ $labels.name }} memory is at {{ $value | humanizePercentage }}"
             description: '{{ $labels.name }} has used over 90% of its memory for 15 minutes. Check it in the UniFi console; a restart may be needed.'
+
+        # Offered at every sample of the last week and a week ago, so an evaluator restart doesn't reset the wait
+        # and a newly adopted device doesn't fire at once.
+        - alert: UniFiFirmwareUpdatePending
+          expr: |
+            min_over_time(unpoller_device_upgradable{job="unifi-api"}[7d]) == 1
+            and unpoller_device_upgradable{job="unifi-api"} offset 7d == 1
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.name }} has had a firmware update waiting for a week"
+            description: 'UniFi has offered {{ $labels.name }} a firmware update for seven days. Read the release notes and install it from the UniFi console.'
+
+        - alert: UniFiControllerUpdatePending
+          expr: |
+            min_over_time(unpoller_controller_update_available{job="unifi-api"}[7d]) == 1
+            and unpoller_controller_update_available{job="unifi-api"} offset 7d == 1
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.hostname }} has had a UniFi Network update waiting for a week"
+            description: 'The console has offered a UniFi Network update for seven days. Read the release notes and install it from the console''s update page.'
