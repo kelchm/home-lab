@@ -12,6 +12,9 @@
   dependencyDashboard: true,
   dependencyDashboardTitle: "Renovate Dashboard :robot:",
   schedule: ["every weekend"],
+  // A held or disabled minor update would otherwise also hide the patch
+  // releases of the version in use.
+  separateMinorPatch: true,
   ignorePaths: ["**/*.sops.*"],
   flux: {
     managerFilePatterns: ["/(^|/)kubernetes/.+\\.ya?ml$/"],
@@ -97,14 +100,6 @@
       extractVersion: "^(?:jq-|kustomize/v|lychee-v)(?<version>\\d.*)$",
     },
     {
-      // Without a separate patch update, the newest update is the disabled
-      // minor below and patch releases never get a PR.
-      description: "Talos Kubernetes: offer patch releases on their own",
-      matchDatasources: ["docker"],
-      matchPackageNames: ["ghcr.io/siderolabs/kubelet"],
-      separateMinorPatch: true,
-    },
-    {
       // Talos supports only a bounded range of Kubernetes minors. Let patch
       // releases flow, but pair minor and major Kubernetes bumps with the
       // compatible Talos upgrade and its guarded manual rollout.
@@ -112,6 +107,14 @@
       matchDatasources: ["docker"],
       matchPackageNames: ["ghcr.io/siderolabs/kubelet"],
       matchUpdateTypes: ["major", "minor"],
+      enabled: false,
+    },
+    {
+      // A PostgreSQL major upgrade is a data migration, not an image bump.
+      description: "CloudNativePG PostgreSQL: offer minor releases only",
+      matchDatasources: ["docker"],
+      matchPackageNames: ["ghcr.io/cloudnative-pg/postgresql"],
+      matchUpdateTypes: ["major"],
       enabled: false,
     },
     {
@@ -265,6 +268,15 @@
       // Rewrite both pins together; changing only one leaves the installer
       // version and the downloaded archive out of sync.
       autoReplaceStringTemplate: "{{{depName}}}@{{{newValue}}}@https://grafana.com/api/plugins/{{{packageName}}}/versions/{{{newValue}}}/download",
+    },
+    {
+      customType: "regex",
+      description: "Process CloudNativePG cluster images",
+      managerFilePatterns: ["/(^|/)kubernetes/.+\\.ya?ml$/"],
+      matchStrings: [
+        "imageName:\\s*(?<depName>[^\\s:@]+):(?<currentValue>[^\\s@]+)(@(?<currentDigest>sha256:[a-f0-9]+))?",
+      ],
+      datasourceTemplate: "docker",
     },
     {
       customType: "regex",
