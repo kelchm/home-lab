@@ -96,6 +96,16 @@ spec:
             summary: CPU on {{ $labels.instance }} is {{ printf "%.0f" $value }} C from its limit
             description: 'The CPU on {{ $labels.instance }} has been within 5 C of its limit for 15 minutes: the critical temperature a PVE host reports, or 85 C, where a Pi 5 throttles. Check cooling and load.'
 
+        # The Pi firmware's undervoltage alarm; node-exporter scales it as millivolts, so a set alarm reads 0.001.
+        - alert: NodeSupplyVoltageLow
+          expr: node_hwmon_in_lcrit_alarm_volts{job="pi-node", chip=~".*firmware_raspberrypi_hwmon", sensor="in0"} > 0
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.instance }} is running undervolted"
+            description: 'The Pi firmware on {{ $labels.instance }} has reported undervoltage for 15 minutes. An undervolted Pi throttles its CPU. Check the power supply and its cable: a long or thin USB cable drops voltage.'
+
         - alert: NodeGPUThermalThrottling
           expr: |
             max by (instance, platform) (
