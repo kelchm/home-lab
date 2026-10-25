@@ -23,6 +23,10 @@ Plan and track unfinished work in GitHub issues; do not create new plan files in
 - Update current-state docs and runbooks with implementation. Write procedures before risky operations, clearly distinguishing intended behavior from verified state. Keep durable decisions and useful evaluation results in the relevant documentation, progress in issues, and session handoffs in conversations.
 - Retire existing plans incrementally: move remaining work to issues, preserve current behavior and operations in maintained docs, and retain useful rationale or evidence before archiving or removing a plan. Completed plans stay historical; later improvements get new issues.
 
+## Dependency locks
+
+Hold a dependency back with the narrowest mechanism that fits: a version constraint, review approval, or an exact-content lock with its reason recorded. Never exclude paths on a guess about what is frozen, and never add a tag just to silence a Renovate lookup warning. [Dependency updates](docs/runbooks/dependency-updates.md) covers the reference forms and what a lock records.
+
 ## Markdown style
 
 Do not hard-wrap prose in Markdown. Keep each paragraph on one source line and rely on soft wrapping. Wrap only when Markdown syntax or readability requires it. Do not reflow existing prose merely to satisfy a column limit.
