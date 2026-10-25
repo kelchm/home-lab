@@ -63,7 +63,7 @@ Two aggregate alerts about a k8s-prod node are not held back, because neither na
 
 Alertmanager groups alerts by name, cluster and namespace, not by machine: two machines that go down together arrive in one notification, a second machine joining a firing group sends an update after `group_interval`, and a firing group repeats every 12 hours and announces its resolution.
 
-A problem that only affects what can be seen of a device is `info` when every notifying rule it blinds is covered by another notifying alert, and notifies otherwise. `TMobileMetricsMissing` is info: the only notifying rule it blinds, `TMobileNotRegistered`, means WAN1 carries no traffic, which `UniFiWANDown` notifies. `StarlinkMetricsMissing` notifies, because `StarlinkObstructed` and `StarlinkPingDropSustained` have no other cover; so do `UniFiMetricsMissing`, `PVEMetricsMissing`, `NodeCollectorDown` and the Longhorn, Flux and cert-manager `MetricsMissing` alerts.
+A problem that only affects what can be seen of a device is `info` when every notifying rule it blinds is covered by another notifying alert, and notifies otherwise. `TMobileMetricsMissing` is info: no notifying rule reads the T-Mobile gateway, because `UniFiWANDown` reports a WAN1 outage. `StarlinkMetricsMissing` notifies, because `StarlinkObstructed` and `StarlinkPingDropSustained` have no other cover; so do `UniFiMetricsMissing`, `PVEMetricsMissing`, `NodeCollectorDown` and the Longhorn, Flux and cert-manager `MetricsMissing` alerts.
 
 ## First response
 
