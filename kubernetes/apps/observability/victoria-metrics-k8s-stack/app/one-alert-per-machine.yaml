@@ -3,10 +3,11 @@
 # k8s-prod node, PVENodeDown for a PVE node, NodeMetricsMissing for any other
 # machine. While it fires, Alertmanager holds back the alerts that only say
 # the same machine is unreachable or that its data has stopped arriving,
-# matched by its node or instance label. A fault the machine still reports,
-# such as a temperature or a SMART error, and anything the outage breaks, such
-# as pods, volumes, backups and services, still notify. See "One alert per
-# machine" in docs/runbooks/alerting.md.
+# matched by its node or instance label, or by cluster for the counts that
+# name no machine. A fault the machine still reports, such as a temperature or
+# a SMART error, and anything the outage breaks, such as pods, volumes, backups
+# and services, still notify. See "One alert per machine" in
+# docs/runbooks/alerting.md.
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMAlertmanagerConfig
 metadata:
