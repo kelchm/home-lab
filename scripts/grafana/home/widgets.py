@@ -131,11 +131,11 @@ def ssd_drives(p):
         ("Worn", ssd("smartctl_device_percentage_used"), dict(PCT, custom__cellOptions=GAUGE, thresholds=RUNS_OUT)),
         ("Spare left", ssd("smartctl_device_available_spare"), dict(unit="percent", custom__cellOptions=TEXT, mappings=NODASH,
                                                                     thresholds=th([{"value": None, "color": "red"}, {"value": 10, "color": "orange"}, {"value": 30, "color": "text"}]))),
-        ("Temperature", ssd("drive:temperature_celsius"), dict(unit="celsius", **CTEXT((65, "orange"), (75, "red")))),
+        ("Temperature", ssd("drive:temperature_celsius"), dict(unit="celsius", **CTEXT((68, "orange"), (78, "red")))),
         ("Media errors", ssd("smartctl_device_media_errors"), CTEXT((1, "red"))),
         ("Powered on", ssd("smartctl_device_power_on_seconds"), dict(unit="dtdurations"))],
         info=(f'max by (drive, model_name) (label_join(drive:info{{platform="{p}",device=~"nvme.*"}}, "drive", " ", "instance", "device"))', {"model_name": "Model"}), keywidth=150,
-        desc="What each NVMe drive says about itself, the same on every platform. Temperature turns orange 10 °C before the 75 °C alert line.")
+        desc="What each NVMe drive says about itself, the same on every platform. Temperature turns red at 78 °C, about where the alert fires, 5 °C under these drives' own 83 °C and 84 °C warning temperatures, and orange 10 °C before.")
     return P.elements["ssd-drives"]
 
 
