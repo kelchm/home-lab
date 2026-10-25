@@ -170,6 +170,23 @@ Use these checks to investigate a notification or audit the automation:
 
 Rule logic and the full 21-day wait are tested offline by `scripts/ci/validate-longhorn-alerts.sh`, using the committed production expression and delay. Fixtures cover pending before the boundary, firing at the boundary despite a stale backup sample midway through the wait, resolution after the backup-presence lookback expires, same-name restoration resetting the timer, detached/restoring/never-backed-up volumes, duplicate backups/scrapes, zero-valued states, and isolation from other clusters. This proves Prometheus rule semantics on synthetic samples; it does not prove production vmalert loading, a real orphan remaining for weeks, or Pushover delivery.
 
+## Retained orphan replica directories
+
+When replica data is left on a node disk with no volume using it, Longhorn records it as an `Orphan` (`orphans.longhorn.io`). These are not active replicas: no Volume, Replica, Engine, PV or PVC references them. They are also not orphaned backup volumes: [Review orphaned backup volumes](#review-orphaned-backup-volumes) and `LonghornBackupVolumeOrphaned` cover backups on the target, and deleting a backup volume leaves replica directories alone.
+
+Two orphaned replica directories on k8s-prod-3 are kept on purpose following the 2026-10-21 inventory and the 2026-10-25 retention decision ([#925](https://github.com/kelchm/home-lab/issues/925)). Each is a copy of an original database volume, replaced when its successor instance was promoted on 2026-08-23, and holds named historical checkpoints paired with application-side recovery assets verified present in that inventory:
+
+| Directory | GiB | Holds | Paired asset |
+|---|---:|---|---|
+| `pvc-9ce0f3c1-0579-44ad-8848-ef747d47a935-023042dc` | 5.34 | Original `iot/visionect-db-1` volume, with the `vss-cutover-db` snapshot | The `vss-cutover-data` backup |
+| `pvc-c09ee0bc-9bfe-4eec-87a9-588f065e71be-d7c59992` | 2.61 | Original `printing/bambuddy-db-1` volume, with the pre- and post-historical-import snapshots | The post-import application backup and the pre-import local snapshot on the live `printing/bambuddy` volume |
+
+They are not a verified backup. Their consistent recoverability has never been tested, and the Longhorn backups of their original volumes were deleted in [#297](https://github.com/kelchm/home-lab/issues/297). The running databases do not use them.
+
+- Exclude both from any orphan cleanup, and do not enable automatic deletion of orphaned replica data (Longhorn's `orphan-resource-auto-deletion` setting) while they exist.
+- Decide a directory's fate when its paired application-side asset is retired, and decide both before k8s-prod-3 is reinstalled or its disk is replaced: installing wipes the Longhorn data partition.
+- Retention does not authorize deletion; any later cleanup needs an explicit decision and fresh reference and health checks as recorded in #925.
+
 ## Drill: restore a single PV
 
 Use case: an app's data is corrupted/wiped and you want the previous night's copy back.
@@ -268,7 +285,7 @@ Do not read this section as a tested procedure. Each step below is tagged with o
 
 - The cluster was created on 2026-04-24. No rebuild from `task bootstrap:talos` and `task bootstrap:apps` is recorded since, and `scripts/bootstrap-apps.sh` has changed since then. Steps 1–5 are **undrilled**.
 - One thing was **drilled**, on 2026-09-30 ([Visionect restore drill](visionect-migration.md#restore-drill-2026-09-30)): restoring the `visionect-db-1` and `visionect` backups into new single-replica volumes in a disposable namespace, and starting PostgreSQL on the restored database volume. Everything else, including the same restore for any other application, is **undrilled**.
-- `task bootstrap:apps` could not finish on a clean cluster ([#758](https://github.com/kelchm/home-lab/issues/758)). The bootstrap now installs Multus itself. That was tested on 2026-10-05 on a disposable three-node Talos v1.13.11 cluster of PVE guests, with the test's limits listed in the issue; on this cluster's hardware it is **undrilled**, and step 4 says what to check if it stalls.
+- `task bootstrap:apps` could not finish on a clean cluster ([#758](https://github.com/kelchm/home-lab/issues/758)). The bootstrap now installs Multus itself. That was tested on 2026-10-05 on a disposable three-node Talos v1.13.11 cluster of PVE guests, which overrode the NIC selection, dropped the node patches and volume configs, skipped `sops-age` and never synced this repository. On this cluster's hardware it is **undrilled**; those checks and cold image-pull timing are acceptance criteria in [#224](https://github.com/kelchm/home-lab/issues/224). Step 4 says what to check if it stalls.
 - Recovery time is unmeasured. Backups run daily at 07:00 UTC, so data loss is one day when the schedule was healthy and longer if backups were failing before the outage; record the timestamp of each backup you restore. The drill and its measurements are tracked in [#224](https://github.com/kelchm/home-lab/issues/224).
 
 ### Prerequisites
