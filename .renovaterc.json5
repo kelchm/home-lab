@@ -82,6 +82,13 @@
       versioning: "regex:^(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)-nbxyz(?<build>\\d+)$",
     },
     {
+      // pcbparts-mcp publishes only main-<sha>-<YYYYMMDD> build tags.
+      description: "pcbparts-mcp: order main builds by their tag date",
+      matchDatasources: ["docker"],
+      matchPackageNames: ["ghcr.io/averyy/pcbparts-mcp"],
+      versioning: "regex:^main-[0-9a-f]+-(?<major>\\d{4})(?<minor>\\d{2})(?<patch>\\d{2})$",
+    },
+    {
       // Renovate's mise manager strips only a leading "v" from aqua tool
       // tags; these projects prefix their release tags with the tool name.
       description: "mise aqua tools: strip tool-name tag prefixes",
