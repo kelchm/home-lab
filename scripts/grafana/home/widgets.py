@@ -350,13 +350,13 @@ def wan(metric):
 
 
 W.table("wan", "Internet links", "wan", "Link", [
-    ("State", f'max by (wan) (label_replace(unpoller_wan_interface_state{{{UNI}}}, "wan", "$1", "wan_interface", "(.*)"))', dict(mappings=yes("Active", "Down"), custom__cellOptions=TEXT)),
+    ("State", by_wan("unpoller_device_wan_status", "min"), dict(mappings=yes("Online", "Offline"), custom__cellOptions=TEXT)),
     ("Latency", by_wan("unpoller_device_wan_monitor_latency_average_seconds"), dict(unit="s", **CTEXT((0.1, LOOK)))),
     ("Monitors answering", by_wan("unpoller_device_wan_monitor_availability_percent", "min"),
      dict(unit="percent", custom__cellOptions=TEXT, thresholds=th([{"value": None, "color": "red"}, {"value": 90, "color": "orange"}, {"value": 99, "color": "text"}]))),
     ("Rated down", f'1000 * {wan("unpoller_wan_provider_download_kbps")}', dict(unit="bps")),
     ("Rated up", f'1000 * {wan("unpoller_wan_provider_upload_kbps")}', dict(unit="bps"))],
-    keywidth=150, desc="Each link as the gateway sees it: whether it carries traffic, how long its monitor targets take to answer, and the speed the provider is rated for.")
+    keywidth=150, desc="Each link as the gateway sees it: whether its health check passes, how long its monitor targets take to answer, and the speed the provider is rated for.")
 SL = 'job="starlink-api"'
 W.tiles("starlink", "Starlink dish", [
     ("To its point of presence", f"1000 * max(starlink_dish_pop_ping_latency_seconds{{{SL}}})", dict(unit="ms", thresholds=th(QUIET + [{"value": 100, "color": LOOK}]))),
