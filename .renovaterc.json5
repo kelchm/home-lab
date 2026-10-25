@@ -97,6 +97,14 @@
       extractVersion: "^(?:jq-|kustomize/v|lychee-v)(?<version>\\d.*)$",
     },
     {
+      // Without a separate patch update, the newest update is the disabled
+      // minor below and patch releases never get a PR.
+      description: "Talos Kubernetes: offer patch releases on their own",
+      matchDatasources: ["docker"],
+      matchPackageNames: ["ghcr.io/siderolabs/kubelet"],
+      separateMinorPatch: true,
+    },
+    {
       // Talos supports only a bounded range of Kubernetes minors. Let patch
       // releases flow, but pair minor and major Kubernetes bumps with the
       // compatible Talos upgrade and its guarded manual rollout.
