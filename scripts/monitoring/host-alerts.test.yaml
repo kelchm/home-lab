@@ -223,8 +223,9 @@ tests:
   - name: Security updates waiting three days alert; ones installed sooner do not
     interval: 1h
     input_series:
+      # More arrive on day two; the alert reports the count waiting now.
       - series: apt_security_upgrades_pending{instance="pve-sbx-1",platform="pve",job="pve-node"}
-        values: 24x80
+        values: 24x50 30x30
       - series: apt_security_upgrades_pending{instance="spark-1",platform="spark",job="spark-node"}
         values: 3x24 0x56
       # A host that starts reporting already behind waits three days like any other.
@@ -244,7 +245,7 @@ tests:
               severity: warning
             exp_annotations:
               summary: pve-sbx-1 has had security updates waiting for three days
-              description: 'Packages from a security archive have had upgrades available on pve-sbx-1 for three days; 24 are waiting now. Install them, then reboot the host if they need it.'
+              description: 'Packages from a security archive have had upgrades available on pve-sbx-1 for three days; 30 are waiting now. Install them, then reboot the host if they need it.'
 
   - name: Package lists not refreshed for two days alert
     interval: 1m

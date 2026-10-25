@@ -120,7 +120,8 @@ spec:
         # Read over the window rather than held with for:, so an evaluator restart doesn't reset the wait.
         - alert: NodeSecurityUpdatesPending
           expr: |
-            min_over_time(apt_security_upgrades_pending{job=~"(pve|spark)-node"}[3d]) > 0
+            apt_security_upgrades_pending{job=~"(pve|spark)-node"} > 0
+            and min_over_time(apt_security_upgrades_pending{job=~"(pve|spark)-node"}[3d]) > 0
             and apt_security_upgrades_pending{job=~"(pve|spark)-node"} offset 3d > 0
           labels:
             severity: warning
