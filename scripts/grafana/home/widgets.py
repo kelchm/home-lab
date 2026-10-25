@@ -370,10 +370,10 @@ TM = 'job="tmobile-api"'
 W.tiles("tmobile", "T-Mobile gateway", [
     ("Network", zero(f'max(tmobile_registration_info{{{TM},registration="registered"}})'), dict(mappings=yes("Registered", "Not registered"), thresholds=th([{"value": None, "color": "red"}, {"value": 1, "color": NEUTRAL}]))),
     ("Bars", f"max(tmobile_5g_bars{{{TM}}})", dict(thresholds=th([{"value": None, "color": "red"}, {"value": 2, "color": LOOK}, {"value": 3, "color": NEUTRAL}]))),
-    ("Signal", f"max(tmobile_5g_rsrp_dbm{{{TM}}})", dict(unit="suffix: dBm")),
-    ("Quality", f"max(tmobile_5g_sinr_db{{{TM}}})", dict(unit="dB")),
+    ("Signal", f"max(tmobile_5g_rsrp_dbm{{{TM}}})", dict(unit="suffix: dBm", thresholds=th([{"value": None, "color": "red"}, {"value": -110, "color": LOOK}, {"value": -100, "color": NEUTRAL}]))),
+    ("Quality", f"max(tmobile_5g_sinr_db{{{TM}}})", dict(unit="dB", thresholds=th([{"value": None, "color": "red"}, {"value": 0, "color": LOOK}, {"value": 10, "color": NEUTRAL}]))),
     ("Up for", f"max(tmobile_uptime_seconds{{{TM}}})", dict(unit="dtdurations"))],
-    wide=True, desc="The gateway's own view of its radio link: registration, bars, received signal power and signal quality.")
+    wide=True, desc="The gateway's own view of its radio link: registration, bars, received signal power and signal quality. Signal turns yellow below −100 dBm and quality below 10 dB, the weakest 1% of the first week here; red is below −110 dBm and 0 dB.")
 
 
 def radio(metric, extra=""):
