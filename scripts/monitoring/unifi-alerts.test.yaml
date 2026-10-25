@@ -259,3 +259,95 @@ tests:
             exp_annotations:
               summary: Starlink (WAN2) is BACKUP
               description: The gateway is not balancing traffic onto Starlink (WAN2). Check the load-balancing mode and failover priorities on the UniFi Internet page.
+
+  - name: Sustained WAN latency alerts after 45 minutes on either WAN
+    interval: 1m
+    input_series:
+      - series: unpoller_device_wan_latency_seconds{job="unifi-api",name="Gateway DMP",port="eth9"}
+        values: 0.034x59 0.2x120
+      - series: unpoller_device_wan_latency_seconds{job="unifi-api",name="Gateway DMP",port="eth8"}
+        values: 0.034x59 0.2x120
+      - series: unpoller_device_wan_status{job="unifi-api",name="Gateway DMP",status="online",wan_networkgroup="WAN"}
+        values: 1x180
+      - series: unpoller_device_wan_status{job="unifi-api",name="Gateway DMP",status="online",wan_networkgroup="WAN2"}
+        values: 1x180
+      - series: unpoller_device_wan_availability_percent{job="unifi-api",name="Gateway DMP",port="eth9"}
+        values: 100x180
+      - series: unpoller_device_wan_availability_percent{job="unifi-api",name="Gateway DMP",port="eth8"}
+        values: 100x180
+      - series: unpoller_wan_interface_state{job="unifi-api",state="ACTIVE",wan_interface="T-Mobile (WAN1)",wan_networkgroup="WAN"}
+        values: 1x180
+      - series: unpoller_wan_interface_state{job="unifi-api",state="ACTIVE",wan_interface="Starlink (WAN2)",wan_networkgroup="WAN2"}
+        values: 1x180
+    alert_rule_test:
+      - eval_time: 107m
+        alertname: UniFiWANLatencyHigh
+        exp_alerts: []
+      - eval_time: 108m
+        alertname: UniFiWANLatencyHigh
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: unifi-api
+              name: Gateway DMP
+              port: eth9
+              wan_networkgroup: WAN
+            exp_annotations:
+              summary: T-Mobile (WAN1) averages 200ms to its pings
+              description: "The 15-minute average of the gateway's pings to ping.ui.com over eth9 has stayed above 75 ms for 45 minutes while this WAN reads online and answers them. Check the WAN's traffic and the modem's or dish's own metrics; a saturating transfer or a degraded link can be moved off it on the UniFi Internet page."
+          - exp_labels:
+              severity: warning
+              job: unifi-api
+              name: Gateway DMP
+              port: eth8
+              wan_networkgroup: WAN2
+            exp_annotations:
+              summary: Starlink (WAN2) averages 200ms to its pings
+              description: "The 15-minute average of the gateway's pings to ping.ui.com over eth8 has stayed above 75 ms for 45 minutes while this WAN reads online and answers them. Check the WAN's traffic and the modem's or dish's own metrics; a saturating transfer or a degraded link can be moved off it on the UniFi Internet page."
+
+  - name: T-Mobile's daily latency rise clears before the 45 minutes run out
+    interval: 1m
+    input_series:
+      # 17 minutes at 338 ms, the highest daily rise seen, keeps the 15-minute average over 75 ms for 28 minutes.
+      - series: unpoller_device_wan_latency_seconds{job="unifi-api",name="Gateway DMP",port="eth9"}
+        values: 0.034x59 0.3382x17 0.034x102
+      - series: unpoller_device_wan_status{job="unifi-api",name="Gateway DMP",status="online",wan_networkgroup="WAN"}
+        values: 1x180
+      - series: unpoller_device_wan_availability_percent{job="unifi-api",name="Gateway DMP",port="eth9"}
+        values: 100x180
+      - series: unpoller_wan_interface_state{job="unifi-api",state="ACTIVE",wan_interface="T-Mobile (WAN1)",wan_networkgroup="WAN"}
+        values: 1x180
+    alert_rule_test:
+      - eval_time: 89m
+        alertname: UniFiWANLatencyHigh
+        exp_alerts: []
+      - eval_time: 105m
+        alertname: UniFiWANLatencyHigh
+        exp_alerts: []
+      - eval_time: 180m
+        alertname: UniFiWANLatencyHigh
+        exp_alerts: []
+
+  - name: An offline WAN or one already losing pings raises no latency alert
+    interval: 1m
+    input_series:
+      - series: unpoller_device_wan_latency_seconds{job="unifi-api",name="Gateway DMP",port="eth8"}
+        values: 0.2x180
+      - series: unpoller_device_wan_status{job="unifi-api",name="Gateway DMP",status="offline",wan_networkgroup="WAN2"}
+        values: '0x180'
+      - series: unpoller_device_wan_availability_percent{job="unifi-api",name="Gateway DMP",port="eth8"}
+        values: 100x180
+      - series: unpoller_wan_interface_state{job="unifi-api",state="ACTIVE",wan_interface="Starlink (WAN2)",wan_networkgroup="WAN2"}
+        values: 1x180
+      - series: unpoller_device_wan_latency_seconds{job="unifi-api",name="Gateway DMP",port="eth9"}
+        values: 0.2x180
+      - series: unpoller_device_wan_status{job="unifi-api",name="Gateway DMP",status="online",wan_networkgroup="WAN"}
+        values: 1x180
+      - series: unpoller_device_wan_availability_percent{job="unifi-api",name="Gateway DMP",port="eth9"}
+        values: 80x180
+      - series: unpoller_wan_interface_state{job="unifi-api",state="ACTIVE",wan_interface="T-Mobile (WAN1)",wan_networkgroup="WAN"}
+        values: 1x180
+    alert_rule_test:
+      - eval_time: 120m
+        alertname: UniFiWANLatencyHigh
+        exp_alerts: []
