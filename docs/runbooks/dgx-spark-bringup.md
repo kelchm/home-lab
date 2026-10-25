@@ -260,7 +260,7 @@ containers and images were removed.
 | nccl-tests | `2.19.7` test binary |
 | Additional packages | `perftest`, `libopenmpi-dev`, `iperf3`, `traceroute` |
 
-At bring-up the installed firmware and package payload matched, so no firmware flash was performed. The October 2026 update ([#1030](https://github.com/kelchm/home-lab/issues/1030)) flashed every component above; [Updating DGX OS and firmware](#updating-dgx-os-and-firmware) covers how. NCCL is built at `~/nccl`; tests are built at `~/nccl-tests` on both
+At bring-up the installed firmware and package payload matched, so no firmware flash was performed. The October 2026 update ([#1030](https://github.com/kelchm/home-lab/issues/1030)) upgraded the software above and flashed the SoC, EC, USB-PD and ConnectX-7 firmware; [Updating DGX OS and firmware](#updating-dgx-os-and-firmware) covers how. NCCL is built at `~/nccl`; tests are built at `~/nccl-tests` on both
 hosts. Build logs are retained as `~/dgx-nccl-build.log` and
 `~/dgx-nccl-tests-rebuild.log`.
 
@@ -290,10 +290,10 @@ NCCL_HOME="$NCCL_HOME" MPI_HOME="$MPI_HOME" \
 The Sparks take NVIDIA's OTA releases through apt and fwupd, one host at a time, with the inference workload stopped on both because it spans them. NVIDIA's [release notes](https://docs.nvidia.com/dgx/dgx-spark/release-notes.html) and [update guide](https://docs.nvidia.com/dgx/dgx-spark/os-and-component-update.html) are the reference; these are the parts specific to this pair:
 
 - **Stop the workload first.** `nvidia-spark-mlnx-firmware-manager` starts flashing the ConnectX-7 as soon as apt installs it. The new CX7 firmware loads on the next reboot.
-- **Packages:** `apt-get dist-upgrade` with `DEBIAN_FRONTEND=noninteractive` and `--force-confold`. The release's meta package pulls in the kernel, the driver and NVIDIA's grub fragments.
+- **Packages:** `sudo apt-get update`, then `sudo DEBIAN_FRONTEND=noninteractive apt-get -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold dist-upgrade`. The release's meta package pulls in the kernel, the driver and NVIDIA's grub fragments.
 - **Keep a fallback kernel whose NVIDIA modules match the new driver.** A driver update removes the modules for older kernels, so the kernel that was running is no longer bootable with the GPU. For driver `580.178.04` that is `linux-image-6.17.0-1032-nvidia` with `linux-modules-nvidia-580-open-6.17.0-1032-nvidia` `6.17.0-1032.32+1`.
 - **Firmware:** `fwupdmgr refresh --force`, then `fwupdmgr upgrade --assume-yes --no-reboot-check` stages the EC, SoC and USB-PD capsules together, and one reboot applies them. The reboot took about eight minutes. Some users report USB-PD failing on the first attempt; check every version in `fwupdmgr get-devices` afterwards and rerun if one is behind.
-- **spark-1's port 8888 rules are not persistent.** Save them with `iptables-save` before the reboot and restore the workstation rule and the `VONK-FORGE` chains with `iptables-restore --noflush` afterwards.
+- **spark-1's port 8888 rules are not persistent.** Before the reboot, `sudo iptables-save > ~/iptables-before.rules`. Afterwards, copy the `VONK-FORGE` and `VONK-FORGE-HOST` chain declarations and every rule naming them or port 8888 into a file between `*filter` and `COMMIT`, and load it with `sudo iptables-restore --noflush`. Restoring the whole save would duplicate Docker's rules.
 - **After each boot, before the second host:** the new kernel and `kho=off` in `/proc/cmdline`, every firmware version, both CX7 rails `ACTIVE` at 200G with MTU 9000 and full-size pings both ways, the 10GbE link at 10000, and all monitoring containers running.
 
 Kernel `7.0.0-1019` enables Kexec HandOver by default. Its scratch area, about 9.3 GiB, can't hold long-term pins, so NCCL's RoCE memory registration fails with `ENOMEM` under memory pressure ([forum 383023](https://forums.developer.nvidia.com/t/dgx-spark-regression-kernel-7-0-0-1019-nvidia-causes-nccl-roce-ibv-reg-mr-iova2-enomem-6-17-0-1032-works/383023), [NV-Kernels#590](https://github.com/NVIDIA/NV-Kernels/pull/590)). NVIDIA's `nvidia-spark-grub-kho` package adds `kho=off`; confirm it is on the command line and that `/sys/kernel/debug/kho` is absent. `cma=128M` is not needed: `CmaTotal` of 0 on the 7.0 kernel is expected.
