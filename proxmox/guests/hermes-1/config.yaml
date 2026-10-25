@@ -1,18 +1,8 @@
 model:
-  provider: custom:10.32.21.31:8888
-  default: glm-5.3-flash-dual
+  provider: custom
+  default: spark
   base_url: http://10.32.21.31:8888/v1
   api_mode: chat_completions
-providers:
-  vonk:
-    name: Vonk Forge
-    base_url: https://vonk.home.kelch.io/v1
-    key_env: VONK_GLM_API_KEY
-    default_model: glm-5.3-flash-dual
-    models:
-      glm-5.3-flash-dual:
-        context_length: 850000
-    max_output_tokens: 32000
 agent:
   reasoning_effort: xhigh
 tool_loop_guardrails:
@@ -39,13 +29,6 @@ onboarding:
   seen:
     busy_input_prompt: true
 _config_version: 51
-custom_providers:
-  - name: 10.32.21.31:8888
-    base_url: http://10.32.21.31:8888/v1
-    model: deepseek-v4-flash-dspark
-    models:
-      GLM-5.3-Flash-EXL3: {}
-    models_discovered: true
 mcp_servers:
   mcphub_hacker_news:
     url: https://mcphub.home.kelch.io/mcp/hacker-news

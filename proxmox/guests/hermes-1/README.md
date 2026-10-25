@@ -20,7 +20,7 @@ This directory is the source for the application deployment and its operating re
 
 The VM uses the official Debian 13 genericcloud image with SHA-512 `184761b0dad0f9ace02f9298050ca96ce3caa39a461a47706d47ff9698b59933918b91b40177fbd4d392f6446af8b4d18ecb94caca988169b19641606bf34003`. `compose.yaml` pins the Hermes image by release tag and multi-architecture digest; Renovate proposes updates.
 
-The model settings in `config.yaml` point at the OpenAI-compatible endpoint on `spark-1:8888`. Spark workloads are mutually exclusive, so change the Hermes model configuration when the operator changes what the Sparks serve.
+Hermes uses the Sparks' OpenAI-compatible endpoint on `spark-1:8888` under the fixed model name `spark`. The Sparks serve one model at a time and answer any requested name with it, and Hermes reads the context window from the endpoint's `/v1/models`, rechecking it on use, so switching Spark profiles needs no Hermes change. Scheduled jobs should leave their model unset so they follow this default.
 
 MetaMCP is retired and its client connection has been removed from the checked-in configuration. The existing MCPHub Hacker News connection remains enabled; additional capability connections require explicit configuration. UniFi permits this guest alone to reach the shared admin gateway at `10.32.130.1` on TCP 443, ordered immediately above the broader Workloads-to-`admin-prod` deny.
 
