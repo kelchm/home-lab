@@ -9,6 +9,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+from functools import partial
 from pathlib import Path
 from unittest import mock
 
@@ -488,8 +489,13 @@ def _dsv41_bundle(tmp_path, path):
     return recipe, bundle, serve
 
 
-def test_dsv41_recipe_maps_native_rank_wiring_to_both_engine_binaries(runtime, tmp_path, dsv41_recipe):
+def test_dsv41_recipe_maps_native_rank_wiring_to_both_engine_binaries(runtime, tmp_path, monkeypatch, dsv41_recipe):
     recipe, bundle, serve = _dsv41_bundle(tmp_path, dsv41_recipe)
+    # Exercise device validation against the Spark's inventory, not the test host's sysfs.
+    devices = tmp_path / "infiniband"
+    for name in ("rocep1s0f0", "roceP2p1s0f0"):
+        (devices / name).mkdir(parents=True)
+    monkeypatch.setattr(serve, "rdma_devices", partial(serve.rdma_devices, devices=devices))
     context = str(recipe.defaults["context"])
     assert recipe.name == recipe.metadata["profile"] == dsv41_recipe.stem
     assert not [issue for issue in runtime.validate_recipe(recipe) if getattr(issue, "severity", None) == ERROR]
