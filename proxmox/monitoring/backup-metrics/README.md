@@ -92,7 +92,7 @@ Expect one series per node, each with that node's `instance`. If a sample is mis
 
 ### Merge after the first scheduled run
 
-Leave the rules unmerged until the next 05:00 run has written a `backup_job="daily-backups"`, `outcome="info"` sample from all three nodes. That run is the first real check of the matcher and the job ID, and it means `PVEBackupStale` starts out satisfied. Merged any earlier, the rule correctly reports three nodes with no success and pages critical ten minutes later. If the owner wants to merge sooner, first add a silence for `alertname=PVEBackupStale`, `cluster=pve-sbx` that expires an hour after the next scheduled run, with #720 in its comment.
+Leave the rules unmerged until the next 05:00 run has written a `backup_job="daily-backups"`, `outcome="info"` sample from all three nodes. That run is the first real check of the matcher and the job ID, and it means `PVEBackupStale` starts out satisfied. Merged any earlier, the rule correctly reports three nodes with no success and notifies ten minutes later. If the owner wants to merge sooner, first add a silence for `alertname=PVEBackupStale`, `cluster=pve-sbx` that expires an hour after the next scheduled run, with #720 in its comment.
 
 If a node's run fails that morning, it has no success sample: fix the backup, and expect that node to alert until its next clean scheduled run.
 

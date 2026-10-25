@@ -139,6 +139,8 @@ Within roughly two minutes, verify all of the following:
 - Exactly one normal-priority Pushover notification arrives from `k8s-prod Alerts` through the VM path.
 - `alertmanager_notifications_failed_total{integration="pushover"}` does not increase.
 
+To test the critical route, repeat with `severity: critical` and expect a high-priority notification instead.
+
 Delete the rule and confirm exactly one quiet-priority resolved notification arrives through the VM path and that the Pushover failure counter does not increase:
 
 ```sh
@@ -165,7 +167,7 @@ spec:
           expr: time() - max(longhorn_volume_last_backup_at > 0) > 0
           for: 1m
           labels:
-            severity: critical
+            severity: warning
             test: synthetic
           annotations:
             summary: Synthetic Longhorn stale-backup delivery test
@@ -173,7 +175,7 @@ spec:
 EOF
 ```
 
-Confirm one high-priority Pushover notification, then clean up and confirm a quiet-priority resolution:
+Confirm one normal-priority Pushover notification, then clean up and confirm a quiet-priority resolution:
 
 ```sh
 kubectl -n observability delete prometheusrule longhorn-backup-delivery-test
