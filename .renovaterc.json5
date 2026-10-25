@@ -15,7 +15,12 @@
   // A held or disabled minor update would otherwise also hide the patch
   // releases of the version in use.
   separateMinorPatch: true,
-  ignorePaths: ["**/*.sops.*"],
+  ignorePaths: [
+    "**/*.sops.*",
+    // SparkRun mods are frozen by upstream.lock.json; upgrades get a new
+    // versioned mod and recipe, never an in-place dependency bump.
+    "sparks/inference/sparkrun/mods/**",
+  ],
   flux: {
     managerFilePatterns: ["/(^|/)kubernetes/.+\\.ya?ml$/"],
   },
