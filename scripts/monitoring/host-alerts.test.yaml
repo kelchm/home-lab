@@ -219,3 +219,53 @@ tests:
             exp_annotations:
               summary: ups-office is running undervolted
               description: 'The Pi firmware on ups-office has reported undervoltage for 15 minutes. An undervolted Pi throttles its CPU. Check the power supply and its cable: a long or thin USB cable drops voltage.'
+
+  - name: Security updates waiting three days alert; ones installed sooner do not
+    interval: 1h
+    input_series:
+      - series: apt_security_upgrades_pending{instance="pve-sbx-1",platform="pve",job="pve-node"}
+        values: 24x80
+      - series: apt_security_upgrades_pending{instance="spark-1",platform="spark",job="spark-node"}
+        values: 3x24 0x56
+      # A host that starts reporting already behind waits three days like any other.
+      - series: apt_security_upgrades_pending{instance="pve-sbx-2",platform="pve",job="pve-node"}
+        values: _x30 5x50
+    alert_rule_test:
+      - eval_time: 71h
+        alertname: NodeSecurityUpdatesPending
+        exp_alerts: []
+      - eval_time: 73h
+        alertname: NodeSecurityUpdatesPending
+        exp_alerts:
+          - exp_labels:
+              instance: pve-sbx-1
+              platform: pve
+              job: pve-node
+              severity: warning
+            exp_annotations:
+              summary: pve-sbx-1 has had security updates waiting for three days
+              description: 'Packages from a security archive have had upgrades available on pve-sbx-1 for three days; 24 are waiting now. Install them, then reboot the host if they need it.'
+
+  - name: Package lists not refreshed for two days alert
+    interval: 1m
+    input_series:
+      # pve-sbx-1 refreshes daily; spark-1 last refreshed at time zero.
+      - series: apt_package_lists_refreshed_timestamp_seconds{instance="pve-sbx-1",platform="pve",job="pve-node"}
+        values: 0x1439 86400x1440 172800x1440
+      - series: apt_package_lists_refreshed_timestamp_seconds{instance="spark-1",platform="spark",job="spark-node"}
+        values: 0x4320
+    alert_rule_test:
+      - eval_time: 48h
+        alertname: NodePackageListsStale
+        exp_alerts: []
+      - eval_time: 50h
+        alertname: NodePackageListsStale
+        exp_alerts:
+          - exp_labels:
+              instance: spark-1
+              platform: spark
+              job: spark-node
+              severity: warning
+            exp_annotations:
+              summary: spark-1 hasn't refreshed its package lists for 2d 2h 0m 0s
+              description: 'Its pending-update counts may be out of date. Check the daily refresh (pve-daily-update on PVE, apt-daily on a Spark) and the apt-metrics container.'
