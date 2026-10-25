@@ -22,7 +22,12 @@ Verified on the hosts that day:
 - **PVE:** on each node, `ip_forward`, `br_netfilter`, the forward policy and the firewall rulesets were identical before and after installing Docker, and a guest on that node kept reaching its gateway.
 - **Proxmox API:** quorum, node and guest state, start-on-boot flags, storage use and the two guests outside the backup job match what the PVE API reports directly.
 
-Not yet verified: that Docker comes back with the same settings after a PVE node reboot, and the GPU exporter under sustained inference load.
+Verified since, as the events happened:
+
+- **Model swaps:** across the GLM, Qwen and DeepSeek profiles and their recipe changes, the head rank's inference series moved to each new `model`, `runtime` and `recipe` label set with no configuration change. Over the 30 days to 2026-10-25 the store holds 19 such label sets.
+- **Sustained load:** on 2026-10-08 both GPUs averaged 95% utilization over an hour. The GPU exporter's target never went down that day, and its collections took a median of 50 ms (at most 0.68 s on `spark-1`). This shows collection kept up under load; it does not measure whether collection cost any throughput.
+
+Not yet verified: that Docker comes back with the same settings after a PVE node reboot. The PVE nodes last booted on 2026-08-27, before host monitoring, so this waits for the next reboot they need for their own reasons.
 
 ## Identity
 
