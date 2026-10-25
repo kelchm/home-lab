@@ -1,7 +1,8 @@
 ---
 # T-Mobile (WAN1) state read from the 5G gateway. Series carry
 # job="tmobile-api", instance="tmobile-gateway" and no cluster label. Signal
-# strength has no rule until a week of baseline exists.
+# strength has no rule; Home shows it. See "Alerts" in
+# docs/runbooks/host-monitoring.md.
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMRule
 metadata:

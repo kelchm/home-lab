@@ -107,7 +107,7 @@ R += [rule(at(say(f"({w.U_RUNTIME} < 600) / 60", "$1 min of battery at this load
       rule(at(say(f'1000 * {w.by_wan("unpoller_device_wan_monitor_latency_average_seconds")} > 100', "$1 ms to its monitors"), "network"), "Internet link slow", 1, ("wan",)),
       rule(at(say("100 * max by (instance) (avg_over_time(starlink_dish_currently_obstructed[1h])) >= 1", "obstructed $1% of the last hour"), "network"), "Dish obstructed", 1, ("instance",)),
       rule(at(say("100 * max by (instance) (avg_over_time(starlink_dish_pop_ping_drop_ratio[15m])) >= 2", "$1% of pings dropped"), "network"), "Dish dropping pings", 1, ("instance",)),
-      rule(at(say("max by (instance) (tmobile_5g_bars) <= 1", "$1 bars"), "network"), "Weak 5G signal", 1, ("instance",)),
+      rule(at(say("max by (instance) (avg_over_time(tmobile_5g_rsrp_dbm[15m])) < -100", "$1 dBm"), "network"), "Weak 5G signal", 1, ("instance",)),
       rule(f'sys({say(f"1000 * max by (probe, job) (probe_duration_seconds{{{BB}}}) > 1000", "$1 ms to answer")})', "Slow from outside the cluster", 1, ("probe",))]
 
 FSEL = f"{HOSTS},{FS}"
