@@ -2,7 +2,7 @@ name: netbootxyz-nas
 
 services:
   netbootxyz:
-    image: ghcr.io/netbootxyz/netbootxyz:0.7.6-nbxyz24@sha256:7bd0964fd3648cd3323772ad6ad8b0a507afe797385e4c0f587a8c23972ee4e3
+    image: ghcr.io/netbootxyz/netbootxyz:0.7.6-nbxyz26@sha256:694465165d974049728f088f2dd46597d865a5f0cc09d53b2342288f3b1929cd
     environment:
       MENU_VERSION: 3.0.2
       NGINX_PORT: 80
@@ -32,7 +32,7 @@ services:
   # Publishes the committed menus after first-start menu generation. local/
   # holds overrides that netboot.xyz re-applies after a web-UI menu refresh.
   menus:
-    image: ghcr.io/netbootxyz/netbootxyz:0.7.6-nbxyz24@sha256:7bd0964fd3648cd3323772ad6ad8b0a507afe797385e4c0f587a8c23972ee4e3
+    image: ghcr.io/netbootxyz/netbootxyz:0.7.6-nbxyz26@sha256:694465165d974049728f088f2dd46597d865a5f0cc09d53b2342288f3b1929cd
     entrypoint: ["/bin/sh", "-euc"]
     command:
       - |
