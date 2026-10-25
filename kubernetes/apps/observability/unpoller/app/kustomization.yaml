@@ -11,9 +11,10 @@ configMapGenerator:
   - name: unpoller-config
     files:
       - up.conf
-  # unpoller/dashboards v2.0.0 Prometheus set at adbe342 (grafana.com 11311-11314);
+  # unpoller/dashboards v2.0.0 Prometheus set at adbe342 (grafana.com 11311-11315);
   # datasource variable, the renamed port satisfaction ratio, and panels on
-  # client, DPI and clock-plugin data removed.
+  # client, DPI and clock-plugin data, or on the upstream author's own devices,
+  # removed.
   - name: grafana-dashboard-stock-unifi-usg
     files:
       - stock-unifi-usg.json=./dashboards/stock-unifi-usg.json
@@ -47,6 +48,16 @@ configMapGenerator:
   - name: grafana-dashboard-stock-unifi-sites
     files:
       - stock-unifi-sites.json=./dashboards/stock-unifi-sites.json
+    options:
+      disableNameSuffixHash: true
+      labels:
+        grafana_dashboard: "1"
+      annotations:
+        grafana_folder: Platforms/UniFi
+        kustomize.toolkit.fluxcd.io/substitute: disabled
+  - name: grafana-dashboard-stock-unifi-clients
+    files:
+      - stock-unifi-clients.json=./dashboards/stock-unifi-clients.json
     options:
       disableNameSuffixHash: true
       labels:
