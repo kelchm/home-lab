@@ -52,17 +52,11 @@ boot-menu, and console work:
 - [`hid-hold-key.py`](hid-hold-key.py) repeatedly reasserts one key through USB
   re-enumeration during POST. The proven HP Startup Menu sequence is Esc
   (`0x29`) for 30 seconds; F9/F10/F12 are `0x42`/`0x43`/`0x45`.
-- [`capture-screen.sh`](capture-screen.sh) copies a JPEG directly from kvmd's
-  `/run/kvmd/ustreamer.sock` to the operator workstation.
+- [`capture-screen.sh`](capture-screen.sh) copies a JPEG of the selected port's screen to the operator workstation, with or without a viewer open.
 
 For the end-to-end HP Startup Menu, PXE, and PVE installation sequence, use the [PVE node bootstrap runbook](../../docs/runbooks/pve-node-bootstrap.md). For DGX host networking and recovery, use the [DGX Spark bring-up runbook](../../docs/runbooks/dgx-spark-bringup.md). This README remains the appliance configuration and recovery source.
 
-The GLKVM starts `ustreamer` only while an authenticated KVM viewer is active
-and stops it about ten seconds after the final viewer disconnects. The Unix
-socket pathname can therefore exist while refusing connections. Open the KVM
-video page first, keep it open while taking unattended captures, and treat the
-helper's demand-stream error as a viewer-state problem rather than a lost HDMI
-or HID path. The helper removes partial JPEGs when capture fails.
+The GLKVM starts `ustreamer` only while an authenticated KVM viewer is active and stops it about ten seconds after the final viewer disconnects. The helper reads kvmd's `/run/kvmd/ustreamer.sock` while that stream is live. Otherwise it runs its own `ustreamer` on `/dev/video0` for a few seconds, with the same capture settings and HDMI-switch signals as kvmd's, takes one frame and stops it. A viewer opened during that window can't get video until the helper exits. A capture fails when the selected port has no signal, such as a host in POST or shutdown, and the helper removes partial JPEGs when it does.
 
 The Python helpers are installed in `/etc/kvmd/user/bin`, which normally
 survives a firmware update as the appliance's persistent user partition. It is
