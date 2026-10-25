@@ -206,6 +206,18 @@ The exporter reports quorum, node and guest state, storage use and which guests 
 
 [Unpoller](../../kubernetes/apps/observability/unpoller/app/) reads the UniFi console at `unifi.home.kelch.io` with a local account and exports gateway, WAN, switch, port, PoE and access-point metrics. Its series carry `job="unifi-api"`, `instance="unifi"` and `platform="unifi"`; the device is in the `name` label. It refreshes from the console once a minute, and everything it exports is kept: client series (signal, retries, roaming and traffic per device), DHCP pools and leases, and the topology. Client series are labelled with the client's current access point, channel and IP, so a roam or a new lease starts new series. Ports that are down or disabled keep their series (`dead_ports`), and the neighbouring access points the console can see are exported as `unpoller_rogueap_*` (`save_rogue`). DPI, traffic per country, events, alarms, IDS and syslog collection stay off. Since v5.7.0 Unpoller exports per-WAN health from the gateway: `unpoller_device_wan_status` (`last_wan_status`, 1 when online), per-port `unpoller_device_wan_latency_seconds` and `unpoller_device_wan_availability_percent` (the gateway's checks against the first target in the WAN's health-check settings, `ping.ui.com` by default, over about the last 50 seconds, with availability rounded down to a whole percent), `unpoller_device_wan_uptime_stats_uptime_seconds` and `_downtime_seconds`, and per-monitor `unpoller_device_wan_monitor_*`. `unpoller_wan_interface_state` stayed `ACTIVE` through staged outages with the WAN's link up and down, so outage rules read `unpoller_device_wan_status`; monitor availability is not a reachability signal.
 
+Series count and churn, measured over the first full day of this collection (2026-10-18 16:30 to 2026-10-19 16:30 UTC), as series present at the end of the day and distinct series seen during it:
+
+| Family | Present | Distinct in the day |
+|---|---:|---:|
+| Whole `unifi-api` job | 5,720 | 8,034 |
+| Clients (`unpoller_client_*`, 97 clients) | 1,479 | 3,135 |
+| DHCP (`unpoller_dhcp_*`) | 167 | 171 |
+| Neighbouring access points (`unpoller_rogueap_*`) | 414 | 801 |
+| Topology (`unpoller_topology_*`) | 105 | 129 |
+
+Of 63 wireless clients that day, 25 were seen on more than one access point, 26 on more than one channel and 14 with more than one IP. Those are clients whose series turned over, not a count of roams. On 2026-10-25 the job had 5,811 series present and 8,804 distinct over the previous day.
+
 The account is `unpoller-sa`, a local admin with the View Only role, which UniFi OS grants as read-only on Network, Protect and user management; a settings write returns `403 api.err.NoPermission`. Its password is in 1Password at `op://Project - home-lab/unpoller-sa/password`. Write it into the SOPS Secret from a checkout:
 
 ```sh
