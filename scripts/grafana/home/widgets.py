@@ -135,7 +135,7 @@ def ssd_drives(p):
         ("Media errors", ssd("smartctl_device_media_errors"), CTEXT((1, "red"))),
         ("Powered on", ssd("smartctl_device_power_on_seconds"), dict(unit="dtdurations"))],
         info=(f'max by (drive, model_name) (label_join(drive:info{{platform="{p}",device=~"nvme.*"}}, "drive", " ", "instance", "device"))', {"model_name": "Model"}), keywidth=150,
-        desc="What each NVMe drive says about itself, the same on every platform. Temperature turns red at 78 °C, about where the alert fires, 5 °C under these drives' own 83 °C and 84 °C warning temperatures, and orange 10 °C before.")
+        desc="What each NVMe drive says about itself, the same on every platform. Temperature turns red at 78 °C, near where each drive's alert fires: 5 °C under its own warning temperature, 77.85 °C on a Spark and 78.85 °C on the others. It turns orange 10 °C before.")
     return P.elements["ssd-drives"]
 
 
