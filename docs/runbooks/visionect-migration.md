@@ -63,6 +63,10 @@ Renovate is disabled specifically for the Visionect image so it cannot open
 version or digest-update PRs. Any intentional upgrade must be a reviewed change
 that updates the pinned images and removes or changes the Renovate rule.
 
+On 2026-10-25, a Docker Hub manifest lookup confirmed that `7.6.5` still resolves to the digest above. This section owns the lock decision. Revisit it when licensing requirements change or a vendor security or compatibility fix calls for an upgrade, and read the upstream release notes whenever VSS maintenance is undertaken; Renovate supplies no update notifications for this disabled package.
+
+Before adopting another image, review the target release's licensing and migration requirements, restore a current database backup into an isolated test deployment, and verify database migration, application startup, and a representative device render. Record those results and the new tag-to-digest mapping before changing the production pins or lock rule. The Valkey 7.x ceiling is a conservative limit for the existing opaque VSS client, not evidence that 8.x is broken; reconsider it with a VSS/client change and validate rendering against the candidate cache version. Compatible 7.x patches remain tracked by Renovate.
+
 ### Why VSS does not get privileged/FUSE access
 
 Visionect 2.8 introduced a FUSE-backed cookie filesystem and the official

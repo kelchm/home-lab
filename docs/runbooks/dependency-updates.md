@@ -16,7 +16,7 @@ Use a constraint when some updates remain acceptable, approval when updates need
 
 ## Write references
 
-- **Default:** `name:tag@sha256:digest`. The digest makes the pull reproducible and the tag tells Renovate what to follow; Renovate updates both together. An exact version tag alone, such as `26.07-py3`, is not a content lock, because the registry can repoint it.
+- **Default:** `name:tag@sha256:digest`. The digest makes the pull reproducible and the tag tells Renovate what to follow. Renovate can update the digest while retaining the tag, or propose a newer tag with its matching digest. An exact version tag alone, such as `26.07-py3`, is not a content lock, because the registry can repoint it.
 - **Dockerfile content lock:** `FROM name@sha256:digest` with no tag. A rule in `.renovaterc.json5` disables the Dockerfile manager's Docker dependencies that have a digest and no tag, so Renovate neither proposes updates for them nor reports a failed lookup. Without the rule it looks for `latest`, which images such as NVIDIA PyTorch don't publish. Tagged references in the same file stay managed. The rule reads the form, not the intent, so write a digest-only `FROM` only as a recorded lock.
 - **Other managers:** the digest-only convention covers only the Dockerfile manager's Docker dependencies. Lock anything else, such as a Kubernetes image, a workflow image or an annotated custom-manager value, with an `enabled: false` rule scoped to the package, manager and files that need the lock. Record the reason in its comment. A package-wide rule is appropriate only when every use has the same restriction, as with Visionect.
 - **Existing locks:** a tagged reference that is already intentionally locked keeps its form and gets a narrowly scoped rule. Don't rewrite frozen or checksummed files to adopt the digest-only form.
@@ -50,4 +50,14 @@ When a lock's trigger fires, or work touches the component that owns it, review 
 
 ## SparkRun mods
 
-Each mod is a reviewed snapshot: an upstream change gets a new versioned mod and recipe, and the current one stays as the rollback ([Update a pinned mod](../../sparks/inference/sparkrun/README.md#update-a-pinned-mod)). The checksums in `upstream.lock.json`, which cover each mod's `build/Dockerfile`, verify the reviewed bytes. They don't decide when to update, and are never rewritten to clear a failure. A mod's base image therefore takes a content lock, either a digest-only `FROM` or a build argument supplied from the lock, since a Renovate edit in place would fail `prepare.py --check`. The SparkRun README records the current base's rationale.
+Each mod is a reviewed snapshot: an upstream change gets a new versioned mod and recipe, and the current one stays as the rollback ([Update a pinned mod](../../sparks/inference/sparkrun/README.md#update-a-pinned-mod)). The `mod_files` checksums in `upstream.lock.json` verify the listed files, including `build/Dockerfile` in mods that have one. They don't decide when to update, and are never rewritten to clear a failure. For a mod with a custom image build, the base takes a content lock, either a digest-only `FROM` or a build argument supplied from the lock, since a Renovate edit in place would fail `prepare.py --check`. The SparkRun README records the current base's rationale.
+
+The lock manifest is itself a reviewed input, not covered by its own file hashes. Review its changes alongside the code and recipe. [CI runs the existing integrity and contract checks](../repository-validation.md#sparkrun-locks-and-contracts); semantic validation of all manifest fields remains separate work in [#1052](https://github.com/kelchm/home-lab/issues/1052).
+
+## Current audit limits
+
+The 2026-10-25 audit at `9de1b662` checked all five mod bundles, 38 recorded file hashes, the pinned upstream sources and applicable patches, and 93 passing contract tests. This establishes consistency of the recorded inputs, not a fresh image rebuild or live qualification. PyTorch's tag-to-digest mapping was verified; the original tag-resolution date for the two-Spark Qwen Ubuntu base was not recovered. Its pinned digest still resolves even though `24.04` has moved. Qwen's recorded engine branch name is historical; its pinned commit still resolves and is what the builders fetch.
+
+Three inline CI container references remain outside Renovate extraction ([#1051](https://github.com/kelchm/home-lab/issues/1051)). Treat these as a coverage gap rather than declaring them frozen. The managed workflow images use explicit tags and digests so version comments cannot accidentally conceal `latest` tracking.
+
+DeepSeek's builder also lacks an image-ID acceptance check ([#1053](https://github.com/kelchm/home-lab/issues/1053)). Its qualified local image is the artifact to retain; a rebuild may differ and needs separate qualification rather than being assumed equivalent from the source pins alone.

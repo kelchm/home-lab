@@ -43,7 +43,7 @@ Rate a PR by what changes on the running system, not by its semver label.
 - **External writers can delete real state.** Controllers such as external-dns, which writes Cloudflare records, act on their first sync. Read the upgrade notes, stage with a dry-run and inspect the planned actions.
 - **Identity is never routine.** Keep kanidm, kaniop and the Traefik OIDC plugin out of routine batches, since a broken login path locks out everything behind it.
 - **Some updates merge alone.** app-template re-renders every app built on it. The flux-operator group also bumps the manifests artifact the FluxInstance installs from, which upgrades the Flux controllers. The `flux-instance` Kustomization doesn't wait, so a Ready HelmRelease doesn't prove the controllers rolled.
-- **Renovate limits are deliberate.** Work within those in `.renovaterc.json5` and follow `docs/runbooks/dependency-updates.md` when adding or changing a lock. Check its reason and revisit trigger when work touches the component. Diagnose Dashboard lookup failures before changing references; registry failures and missing tags do not establish lock intent.
+- **Renovate limits are deliberate.** Work within those in `.renovaterc.json5` and follow [the dependency-update runbook](../../../docs/runbooks/dependency-updates.md) when adding or changing a lock. Check its reason and revisit trigger when work touches the component. Diagnose Dashboard lookup failures before changing references; registry failures and missing tags do not establish lock intent.
 - Hold or close updates to components that are being retired or no longer run, after checking that nothing still depends on them. A security fix jumps the queue once its preconditions are confirmed here.
 
 ## Read the real changelog
