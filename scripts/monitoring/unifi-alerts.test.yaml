@@ -294,7 +294,7 @@ tests:
               wan_networkgroup: WAN
             exp_annotations:
               summary: T-Mobile (WAN1) averages 200ms to its pings
-              description: "The gateway's pings to ping.ui.com over eth9 have averaged over 75 ms for 45 minutes while this WAN reads online and answers them. Check the WAN's traffic and the modem's or dish's own metrics; a saturating transfer or a degraded link can be moved off it on the UniFi Internet page."
+              description: "The 15-minute average of the gateway's pings to ping.ui.com over eth9 has stayed above 75 ms for 45 minutes while this WAN reads online and answers them. Check the WAN's traffic and the modem's or dish's own metrics; a saturating transfer or a degraded link can be moved off it on the UniFi Internet page."
           - exp_labels:
               severity: warning
               job: unifi-api
@@ -303,7 +303,7 @@ tests:
               wan_networkgroup: WAN2
             exp_annotations:
               summary: Starlink (WAN2) averages 200ms to its pings
-              description: "The gateway's pings to ping.ui.com over eth8 have averaged over 75 ms for 45 minutes while this WAN reads online and answers them. Check the WAN's traffic and the modem's or dish's own metrics; a saturating transfer or a degraded link can be moved off it on the UniFi Internet page."
+              description: "The 15-minute average of the gateway's pings to ping.ui.com over eth8 has stayed above 75 ms for 45 minutes while this WAN reads online and answers them. Check the WAN's traffic and the modem's or dish's own metrics; a saturating transfer or a degraded link can be moved off it on the UniFi Internet page."
 
   - name: T-Mobile's daily latency rise clears before the 45 minutes run out
     interval: 1m

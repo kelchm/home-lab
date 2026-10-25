@@ -121,9 +121,9 @@ spec:
               {{ with printf "unpoller_wan_interface_state{job=\"unifi-api\", wan_networkgroup=%q}" $labels.wan_networkgroup | query }}{{ . | first | label "wan_interface" }}{{ else }}{{ $labels.port }}{{ end }}
               averages {{ $value | humanizeDuration }} to its pings
             description: >-
-              The gateway's pings to ping.ui.com over {{ $labels.port }} have
-              averaged over 75 ms for 45 minutes while this WAN reads online
-              and answers them. Check the WAN's traffic and the modem's or
+              The 15-minute average of the gateway's pings to ping.ui.com over
+              {{ $labels.port }} has stayed above 75 ms for 45 minutes while
+              this WAN reads online and answers them. Check the WAN's traffic and the modem's or
               dish's own metrics; a saturating transfer or a degraded link can
               be moved off it on the UniFi Internet page.
 
