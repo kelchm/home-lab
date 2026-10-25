@@ -15,12 +15,7 @@
   // A held or disabled minor update would otherwise also hide the patch
   // releases of the version in use.
   separateMinorPatch: true,
-  ignorePaths: [
-    "**/*.sops.*",
-    // SparkRun mods are frozen by upstream.lock.json; upgrades get a new
-    // versioned mod and recipe, never an in-place dependency bump.
-    "sparks/inference/sparkrun/mods/**",
-  ],
+  ignorePaths: ["**/*.sops.*"],
   flux: {
     managerFilePatterns: ["/(^|/)kubernetes/.+\\.ya?ml$/"],
   },
@@ -37,6 +32,18 @@
     managerFilePatterns: ["/^kustomization\\.ya?ml$/"],
   },
   packageRules: [
+    {
+      // A digest-only FROM declares exact content without a tag to follow.
+      // Do not guess latest. Tagged references in the same file stay managed.
+      // Lock rationale and review process: docs/runbooks/dependency-updates.md.
+      description: "Dockerfile images: leave digest-only pins unchanged",
+      matchManagers: ["dockerfile"],
+      matchDatasources: ["docker"],
+      matchJsonata: [
+        "currentDigest and ($not($exists(currentValue)) or currentValue = null or currentValue = '')",
+      ],
+      enabled: false,
+    },
     {
       // external-dns v0.22.0 (chart 1.22.0) changed the default annotation
       // prefix with no fallback; the first `policy: sync` pass then deleted
