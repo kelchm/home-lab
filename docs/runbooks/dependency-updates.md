@@ -54,10 +54,4 @@ Each mod is a reviewed snapshot: an upstream change gets a new versioned mod and
 
 The lock manifest is itself a reviewed input, not covered by its own file hashes. Review its changes alongside the code and recipe. [CI runs the existing integrity and contract checks](../repository-validation.md#sparkrun-locks-and-contracts); semantic validation of all manifest fields remains separate work in [#1052](https://github.com/kelchm/home-lab/issues/1052).
 
-## Current audit limits
-
-The 2026-10-25 audit at `9de1b662` checked all five mod bundles, 38 recorded file hashes, the pinned upstream sources and applicable patches, and 93 passing contract tests. This establishes consistency of the recorded inputs, not a fresh image rebuild or live qualification. PyTorch's tag-to-digest mapping was verified; the original tag-resolution date for the two-Spark Qwen Ubuntu base was not recovered. Its pinned digest still resolves even though `24.04` has moved. Qwen's recorded engine branch name is historical; its pinned commit still resolves and is what the builders fetch.
-
-Three inline CI container references remain outside Renovate extraction ([#1051](https://github.com/kelchm/home-lab/issues/1051)). Treat these as a coverage gap rather than declaring them frozen. The managed workflow images use explicit tags and digests so version comments cannot accidentally conceal `latest` tracking.
-
-DeepSeek's builder also lacks an image-ID acceptance check ([#1053](https://github.com/kelchm/home-lab/issues/1053)). Its qualified local image is the artifact to retain; a rebuild may differ and needs separate qualification rather than being assumed equivalent from the source pins alone.
+A rebuild is a candidate artifact until its identity and profile qualification establish that it can be adopted. Retain the qualified image for rollback; source and base-image pins alone do not prove that a fresh build is equivalent.

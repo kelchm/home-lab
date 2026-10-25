@@ -37,6 +37,8 @@ Labels are coarse filters. Existing labels and mappings stay in place; the added
 
 The SparkRun job runs each mod's `prepare.py --check` and the recipe/runtime contract tests when `sparks/inference/**`, the workflow, or `.mise.toml` changes on a PR, and on every push to `main`. It has a successful no-op path and is required by `Validation Success`. Tests use Python 3.12 and the dependencies in [`requirements-test.txt`](../sparks/inference/sparkrun/requirements-test.txt), including SparkRun 0.3.10. They use temporary fixtures without GPU weights, image builds, or access to the Sparks.
 
+The `sparkrun` test dependency requires Renovate dashboard approval. Review its upgrade with the host venv installation, adapter version notes, and the SparkRun and repository-validation documentation so CI continues to test the version recorded for the Sparks. Pytest and PyYAML remain ordinary tracked test dependencies.
+
 Run the tests locally with `uv run --no-project --python 3.12 --with-requirements sparks/inference/sparkrun/requirements-test.txt python -m pytest -q sparks/inference/sparkrun/tests`. These checks verify the listed mod files and recipe/lock agreement. The manifest itself remains a reviewed input; they do not authenticate its history, validate every dependency field, prove a reproducible image rebuild, or replace live qualification on the Sparks.
 
 ## Relationship to Flux

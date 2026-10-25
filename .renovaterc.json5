@@ -45,6 +45,18 @@
       enabled: false,
     },
     {
+      // CI must test the SparkRun version recorded for the host venv.
+      // Review upgrades with the host installation, adapter version notes,
+      // and the SparkRun and repository-validation documentation together.
+      description: "SparkRun test SDK: coordinate upgrades with the Sparks",
+      matchManagers: ["pip_requirements"],
+      matchDatasources: ["pypi"],
+      matchFileNames: ["sparks/inference/sparkrun/requirements-test.txt"],
+      matchPackageNames: ["sparkrun"],
+      automerge: false,
+      dependencyDashboardApproval: true,
+    },
+    {
       // external-dns v0.22.0 (chart 1.22.0) changed the default annotation
       // prefix with no fallback; the first `policy: sync` pass then deleted
       // every managed record in the zone (2026-09-19 incident). Any future
