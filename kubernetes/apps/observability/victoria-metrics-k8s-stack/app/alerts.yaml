@@ -83,12 +83,17 @@ spec:
           expr: |
             node_uname_info{cluster="k8s-prod"}
             unless on (instance)
-            node_hwmon_temp_celsius{chip=~"nvme.*"}
+            (
+              (node_hwmon_temp_max_celsius - node_hwmon_temp_celsius)
+              * on (instance, chip, sensor) group_left (label)
+                node_hwmon_sensor_label{label="Composite"}
+            )
           for: 15m
           labels:
             severity: warning
           annotations:
-            summary: NVMe temperature sensors are missing on {{ $labels.nodename }}
+            summary: NVMe temperature sensor is missing on {{ $labels.nodename }}
             description: >-
-              Node-exporter is still reporting {{ $labels.nodename }}, but all
-              NVMe hwmon temperature sensors have been absent for 15 minutes.
+              Node-exporter is still reporting {{ $labels.nodename }}, but its
+              NVMe Composite temperature or warning temperature has been absent
+              for 15 minutes.

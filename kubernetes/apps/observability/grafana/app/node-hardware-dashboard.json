@@ -41,7 +41,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "AMD CPU control temperature. The alert fires at 90 °C, 5 °C under the 95 °C Tjmax, after 15 minutes.",
+      "description": "AMD CPU control temperature. The alert fires at 90 °C, 5 °C under the 95 °C Tjmax, on the hotter of this and the GPU edge sensor, after five minutes.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -189,7 +189,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "NVMe controller composite temperature. The alert fires at 78.85 °C, 5 °C under the drive's own 83.85 °C warning temperature, after 15 minutes.",
+      "description": "NVMe controller composite temperature. The alert fires at 78.85 °C, 5 °C under the drive's own 83.85 °C warning temperature, after five minutes.",
       "fieldConfig": {
         "defaults": {
           "color": {

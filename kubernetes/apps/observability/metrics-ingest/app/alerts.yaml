@@ -66,12 +66,12 @@ spec:
             * on (instance, chip, sensor) group_left (label)
               node_hwmon_sensor_label{job=~"node-exporter|(pve|spark)-node", label="Composite"}
             < 5
-          for: 15m
+          for: 5m
           labels:
             severity: critical
           annotations:
             summary: NVMe on {{ $labels.instance }} is {{ printf "%.0f" $value }} C from its warning temperature
-            description: 'The NVMe drive on {{ $labels.instance }} has been within 5 C of its own warning temperature for 15 minutes. Above it, the drive throttles and raises a SMART warning. Check airflow around the drive.'
+            description: 'The NVMe drive on {{ $labels.instance }} has been within 5 C of its own warning temperature for five minutes. Above it, the drive throttles and raises a SMART warning. Check airflow around the drive.'
 
         # Pods are covered by Kubernetes; this catches the kernel killing a process on the host itself.
         - alert: NodeOOMKillDetected
@@ -82,29 +82,30 @@ spec:
             summary: The kernel killed a process for memory on {{ $labels.instance }}
             description: Find the process with `journalctl -k | grep -i "killed process"` on the host, and check that it came back.
 
-        # Headroom to each CPU's own limit: the critical temperature the PVE hosts report,
-        # 95 C for the k8s-prod nodes' Ryzen, which reports none, and 85 C, where a Pi 5 throttles.
+        # Headroom to each CPU's own limit: the critical temperature the PVE hosts report;
+        # 95 C for the k8s-prod nodes' Ryzen, which reports none, read from the hotter of
+        # its CPU (Tctl) and integrated GPU (edge) sensors; and 85 C, where a Pi 5 throttles.
         - alert: NodeCPUTemperatureCritical
           expr: |
-            (
+            min by (cluster, instance, job, platform) (
               (node_hwmon_temp_crit_celsius{job="pve-node"} - node_hwmon_temp_celsius{job="pve-node"})
               * on (instance, chip, sensor) group_left
                 node_hwmon_sensor_label{job="pve-node", label="Package id 0"}
               or
               (95 - node_hwmon_temp_celsius{job="node-exporter"})
               * on (instance, chip, sensor) group_left
-                node_hwmon_sensor_label{job="node-exporter", label="Tctl"}
+                node_hwmon_sensor_label{job="node-exporter", label=~"Tctl|edge"}
               or
               (85 - node_hwmon_temp_celsius{job="pi-node"})
               * on (instance, chip) group_left
                 node_hwmon_chip_names{job="pi-node", chip_name="cpu_thermal"}
             ) < 5
-          for: 15m
+          for: 5m
           labels:
             severity: critical
           annotations:
             summary: CPU on {{ $labels.instance }} is {{ printf "%.0f" $value }} C from its limit
-            description: 'The CPU on {{ $labels.instance }} has been within 5 C of its limit for 15 minutes: the critical temperature a PVE host reports, 95 C for a k8s-prod node, or 85 C, where a Pi 5 throttles. Check cooling and load.'
+            description: 'The CPU on {{ $labels.instance }} has been within 5 C of its limit for five minutes: the critical temperature a PVE host reports, 95 C for a k8s-prod node, or 85 C, where a Pi 5 throttles. Check cooling and load.'
 
         # The Pi firmware's undervoltage alarm; node-exporter scales it as millivolts, so a set alarm reads 0.001.
         - alert: NodeSupplyVoltageLow
