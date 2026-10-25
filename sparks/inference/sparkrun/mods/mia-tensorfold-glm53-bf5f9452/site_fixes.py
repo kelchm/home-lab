@@ -14,9 +14,7 @@ def replace_once(text, old, new):
 
 
 def reasoning(text):
-    text = replace_once(text,
-        '    return [i for i in ids if isinstance(i, str) and _OUR_ID.match(i)] + [signature(history, calls)]',
-        '    return [i for i in ids if isinstance(i, str) and _OUR_ID.match(i)]')
+    text = replace_once(text, '    return _ids(calls) + [signature(history, calls)]\n', '    return _ids(calls)\n')
     return replace_once(text,
         'ids). Here the signature covers the whole conversation before the calls, not only the last user message, so a reply\n'
         'is only ever put back into the conversation it was written for.',
