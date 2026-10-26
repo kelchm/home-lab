@@ -25,7 +25,7 @@ spec:
               original timestamps once delivery resumes.
 
         - alert: NodeCollectorDown
-          expr: up{job=~"(pve|spark|synology|pi)-(node|gpu|snmp|smartctl|vmagent|deployer|blackbox-exporter)"} == 0
+          expr: up{job=~"(pve|spark|synology|pi)-(node|gpu|snmp|smartctl|vmagent|deployer|blackbox-exporter|fluent-bit)"} == 0
           for: 10m
           labels:
             severity: warning
@@ -160,6 +160,43 @@ spec:
             description: >-
               The 1 GiB on-disk queue filled while the ingestion endpoint was
               unreachable, so the oldest samples were dropped.
+
+        # Each host's Fluent Bit keeps its journal cursor and buffers up to 256 MiB on disk, so
+        # an unreachable endpoint delays its logs; only a full buffer loses them.
+        - alert: NodeLogDeliveryFailing
+          expr: increase(fluentbit_output_retries_total{job=~"(pve|spark)-fluent-bit"}[10m]) > 0
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.instance }} cannot deliver its logs"
+            description: >-
+              Its Fluent Bit has been retrying for 30 minutes and is buffering
+              the journal on disk. Check the ingestion endpoint and the
+              fluent-bit container's log on the node.
+
+        - alert: NodeLogsDropped
+          expr: increase(fluentbit_output_dropped_records_total{job=~"(pve|spark)-fluent-bit"}[15m]) > 0
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.instance }} discarded log records"
+            description: >-
+              Its Fluent Bit dropped records it could not deliver, which
+              happens when its 256 MiB on-disk buffer is full or VictoriaLogs
+              rejects them. Check the fluent-bit container's log on the node.
+
+        - alert: NodeLogsSilent
+          expr: increase(fluentbit_input_records_total{job=~"(pve|spark)-fluent-bit", name="journal"}[2h]) == 0
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.instance }} has read nothing from its journal for two hours"
+            description: >-
+              A running host writes to its journal every few minutes, so its
+              Fluent Bit has likely lost the journal. Check the fluent-bit
+              container's log and its journal mounts on the node.
 
         - alert: NodeDeployFailing
           expr: increase(doco_cd_deployment_errors_total{job=~"(pve|spark)-deployer"}[15m]) > 0

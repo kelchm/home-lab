@@ -17,6 +17,7 @@ function write_fixture() {
         mkdir -p "${TEMP_DIR}/${platform}/monitoring" "${TEMP_DIR}/${platform}/platform/doco-cd"
         cp "${ROOT_DIR}/${platform}/platform/doco-cd/compose.yaml" "${TEMP_DIR}/${platform}/platform/doco-cd/"
         cp "${ROOT_DIR}/${platform}/monitoring/apt-metrics.sh" "${TEMP_DIR}/${platform}/monitoring/"
+        cp -R "${ROOT_DIR}/${platform}/monitoring/logs" "${TEMP_DIR}/${platform}/monitoring/"
     done
     printf 'name: doco-cd\nworking_dir: proxmox/platform/doco-cd\n' >"${TEMP_DIR}/proxmox/monitoring/.doco-cd.yml"
     printf 'name: doco-cd\nworking_dir: sparks/platform/doco-cd\nenvironment:\n  SPARK_HOST: spark-1\n' >"${TEMP_DIR}/sparks/monitoring/.doco-cd.spark-1.yml"
@@ -89,5 +90,9 @@ done
 write_fixture
 echo '# diverged' >>"${TEMP_DIR}/sparks/monitoring/apt-metrics.sh"
 expect_failure 'diverged apt-metrics.sh copies' 'must be identical'
+
+write_fixture
+echo '-- diverged' >>"${TEMP_DIR}/sparks/monitoring/logs/host.lua"
+expect_failure 'diverged host log configuration' 'logs must be identical'
 
 echo 'Host deployer regression tests passed.'

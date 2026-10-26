@@ -1,0 +1,64 @@
+# Sends this host's journal, kernel messages included, to VictoriaLogs through
+# the ingest endpoint, which stamps host.name, service.namespace and the stream
+# fields from the host's token. Kept identical in proxmox/monitoring/logs and
+# sparks/monitoring/logs; see "Host logs" in docs/runbooks/logging.md.
+# Fluent Bit reads the token only when it starts; see "Rotate a token" in
+# docs/runbooks/host-monitoring.md.
+env:
+  - name: INGEST_TOKEN
+    uri: file:///etc/monitoring/token
+
+service:
+  flush: 5
+  grace: 30
+  log_level: warn
+  http_server: on
+  http_listen: 127.0.0.1
+  http_port: 2020
+  storage.path: /state/storage
+  storage.sync: full
+  storage.checksum: off
+  storage.metrics: on
+  # As the cluster's collector: retry at least every 30 seconds, and keep the
+  # backlog well inside the container's 128 MiB.
+  scheduler.cap: 30
+  storage.max_chunks_up: 16
+  storage.backlog.mem_limit: 16M
+
+pipeline:
+  inputs:
+    # Starts at the end of the journal on first run, then resumes from its
+    # saved cursor, so a stop, a redeploy or an endpoint outage loses nothing;
+    # a crash can lose the batch it was reading.
+    - name: systemd
+      alias: journal
+      tag: journal
+      db: /state/journal.db
+      db.sync: full
+      read_from_tail: on
+      storage.type: filesystem
+
+  filters:
+    - name: lua
+      match: journal
+      script: /fluent-bit/etc/host.lua
+      call: normalize
+      type_int_key: severity_number process.pid
+
+  outputs:
+    - name: opentelemetry
+      alias: ingest
+      match: journal
+      host: metrics-ingest.home.kelch.io
+      port: 443
+      tls: on
+      tls.verify: on
+      tls.verify_hostname: on
+      logs_uri: /insert/opentelemetry/v1/logs
+      header:
+        - Authorization Bearer ${INGEST_TOKEN}
+        - VL-Ignore-Fields scope.name,scope.version
+      logs_body_key: $body
+      logs_body_key_attributes: off
+      retry_limit: no_limits
+      storage.total_limit_size: 256M

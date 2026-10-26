@@ -19,6 +19,10 @@ scrape_configs:
   - job_name: spark-deployer
     static_configs:
       - targets: ["127.0.0.1:9120"]
+  - job_name: spark-fluent-bit
+    metrics_path: /api/v2/metrics/prometheus
+    static_configs:
+      - targets: ["127.0.0.1:2020"]
 
   # Whatever SparkRun is serving. The target exists only while a SparkRun
   # container runs, and its identity comes from the labels SparkRun sets, so a

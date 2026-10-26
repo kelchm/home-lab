@@ -4,9 +4,10 @@ Host, GPU and inference metrics for the two DGX Sparks. Enrollment, verification
 
 | File | Purpose |
 |---|---|
-| [compose.yaml](compose.yaml) | node-exporter, smartctl-exporter and vmagent. |
+| [compose.yaml](compose.yaml) | node-exporter, smartctl-exporter, apt-metrics, vmagent and fluent-bit. |
+| [logs/](logs/) | fluent-bit's configuration and journal mapping; see [Host logs](../../docs/runbooks/logging.md#host-logs). Identical to the PVE nodes'. |
 | [gpu/compose.yaml](gpu/compose.yaml) | The NVIDIA GPU exporter, as its own project. |
-| [scrape.yaml](scrape.yaml) | Host, SMART, GPU, vmagent, deployer and inference scrape jobs. |
+| [scrape.yaml](scrape.yaml) | Host, SMART, GPU, vmagent, deployer, log collector and inference scrape jobs. |
 | [.doco-cd.yml](.doco-cd.yml) | The two deployments every Spark's doco-cd applies. |
 | [sparkdash/compose.yaml](sparkdash/compose.yaml) | The sparkDash dashboard, on `spark-1` only. |
 | [.doco-cd.spark-1.yml](.doco-cd.spark-1.yml) | sparkDash and doco-cd with `SPARK_HOST` set to `spark-1`. |

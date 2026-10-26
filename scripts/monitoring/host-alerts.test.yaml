@@ -270,3 +270,77 @@ tests:
             exp_annotations:
               summary: spark-1 hasn't refreshed its package lists for 2d 2h 0m 0s
               description: 'Its pending-update counts may be out of date. Check the daily refresh (pve-daily-update on PVE, apt-daily on a Spark) and the apt-metrics container.'
+
+  - name: Log delivery retrying for 30 minutes alerts; a short endpoint outage does not
+    interval: 1m
+    input_series:
+      - series: fluentbit_output_retries_total{instance="pve-sbx-1",platform="pve",job="pve-fluent-bit",name="ingest"}
+        values: 0+1x60
+      # Five minutes of retries, then delivered.
+      - series: fluentbit_output_retries_total{instance="spark-1",platform="spark",job="spark-fluent-bit",name="ingest"}
+        values: 0x10 1+1x5 6x45
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: NodeLogDeliveryFailing
+        exp_alerts: []
+      - eval_time: 35m
+        alertname: NodeLogDeliveryFailing
+        exp_alerts:
+          - exp_labels:
+              instance: pve-sbx-1
+              platform: pve
+              job: pve-fluent-bit
+              name: ingest
+              severity: warning
+            exp_annotations:
+              summary: pve-sbx-1 cannot deliver its logs
+              description: "Its Fluent Bit has been retrying for 30 minutes and is buffering the journal on disk. Check the ingestion endpoint and the fluent-bit container's log on the node."
+
+  - name: Dropped log records alert until fifteen minutes pass without more
+    interval: 1m
+    input_series:
+      - series: fluentbit_output_dropped_records_total{instance="pve-sbx-1",platform="pve",job="pve-fluent-bit",name="ingest"}
+        values: 0x20 5x30
+      - series: fluentbit_output_dropped_records_total{instance="spark-1",platform="spark",job="spark-fluent-bit",name="ingest"}
+        values: 0x50
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: NodeLogsDropped
+        exp_alerts:
+          - exp_labels:
+              instance: pve-sbx-1
+              platform: pve
+              job: pve-fluent-bit
+              name: ingest
+              severity: warning
+            exp_annotations:
+              summary: pve-sbx-1 discarded log records
+              description: "Its Fluent Bit dropped records it could not deliver, which happens when its 256 MiB on-disk buffer is full or VictoriaLogs rejects them. Check the fluent-bit container's log on the node."
+      - eval_time: 40m
+        alertname: NodeLogsDropped
+        exp_alerts: []
+
+  - name: A journal read nothing for two hours alerts
+    interval: 1m
+    input_series:
+      - series: fluentbit_input_records_total{instance="pve-sbx-1",platform="pve",job="pve-fluent-bit",name="journal"}
+        values: 0+10x200
+      # Stops reading at one hour.
+      - series: fluentbit_input_records_total{instance="spark-1",platform="spark",job="spark-fluent-bit",name="journal"}
+        values: 0+10x60 600x140
+    alert_rule_test:
+      - eval_time: 190m
+        alertname: NodeLogsSilent
+        exp_alerts: []
+      - eval_time: 200m
+        alertname: NodeLogsSilent
+        exp_alerts:
+          - exp_labels:
+              instance: spark-1
+              platform: spark
+              job: spark-fluent-bit
+              name: journal
+              severity: warning
+            exp_annotations:
+              summary: spark-1 has read nothing from its journal for two hours
+              description: "A running host writes to its journal every few minutes, so its Fluent Bit has likely lost the journal. Check the fluent-bit container's log and its journal mounts on the node."
