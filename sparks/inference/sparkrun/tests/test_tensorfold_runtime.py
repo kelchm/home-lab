@@ -614,7 +614,7 @@ def test_dsv41_frozen_bundle_rejects_changed_or_added_files(tmp_path, change, ds
 
 
 def test_dsv41_frozen_bundle_refuses_linked_and_dangling_files(tmp_path):
-    source = DSV41_RECIPES[0].parents[1] / "mods/bertholomus-tensorfold-dsv41-2970bcd"
+    source = DSV41_RECIPES[0].parents[1] / "mods/bertholomus-tensorfold-dsv41-2970bcd-mia-fixes"
     bundle = tmp_path / source.name
     shutil.copytree(source, bundle, ignore=shutil.ignore_patterns("__pycache__"))
     check = [sys.executable, str(bundle / "prepare.py"), "--check"]

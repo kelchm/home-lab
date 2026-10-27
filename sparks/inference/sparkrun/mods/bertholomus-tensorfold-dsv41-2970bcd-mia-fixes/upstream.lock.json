@@ -10,10 +10,13 @@
     "patches/0003-rdma-idle-nap.patch": "MiaAI-Lab/DeepSeek-v4.1-Flash-1017-2x-DGX-Sparks@a22ca693 zig/patches/0010-rdma-idle-nap.patch",
     "patches/0004-literal-added-tokens.patch": "bertholomus/TensorFold#36@c2c05641",
     "patches/0005-deepseek-efforts.patch": "this lab: DeepSeek's own efforts (low, high, max) and nearest-level coercion of other names",
-    "patches/0006-literal-object-keys.patch": "this lab: 0004 also keeps a quoted added token in a JSON object key as text"
+    "patches/0006-literal-object-keys.patch": "this lab: 0004 also keeps a quoted added token in a JSON object key as text",
+    "patches/0007-server-prepare-memory.patch": "MiaAI-Lab/DeepSeek-v4.1-Flash-1017-2x-DGX-Sparks@27741e17 zig/patches/0023-server-prepare-memory.patch, by Robert Wojciechowski (wojo), Apache-2.0",
+    "patches/0008-tool-call-prose.patch": "MiaAI-Lab/DeepSeek-v4.1-Flash-1017-2x-DGX-Sparks@27741e17 zig/patches/0027-tool-call-prose.patch, by Coinupbtc (kit PR #44), Apache-2.0",
+    "patches/0009-anthropic-budget-default.patch": "MiaAI-Lab/DeepSeek-v4.1-Flash-1017-2x-DGX-Sparks@27741e17 zig/patches/0029-anthropic-budget-default.patch, by Maciej Kowalik (koniaik, kit PR #53), Apache-2.0"
   },
-  "image": "dsv41-tf:2970bcd-4691715-e1c6ebe02e2a",
-  "image_id": "sha256:a7845d4e5e84c63c55bca2a382c878f7cd964ce8f14daeddab56dcaef2333178",
+  "image": "dsv41-tf:2970bcd-4691715-348c4339cc15",
+  "image_id": "sha256:00cbfac02248ac83acbc751a00bdc3e5c53df22b3d249d93d7ffadd94fe0d604",
   "kit": {
     "repository": "bertholomus/DeepSeek-V4.1-Flash-TensorFold-TP2-2xGB10",
     "revision": "4996441a82d95b9a7853b01a1255e1dafc926387",
@@ -39,6 +42,9 @@
     "patches/0004-literal-added-tokens.patch": "69d2becbccee30bf1b0afe08aecfa70fc446dfdeb62e66ae7aa43dde0ee46da3",
     "patches/0005-deepseek-efforts.patch": "ad04c267ff67cadd705a8b4596a92b2f88af5e5a2fd6e978566d3221828ab2d2",
     "patches/0006-literal-object-keys.patch": "902838061c9b6ef41176d2c6c72cae005eee0202c83d37ba7aafc93856159360",
+    "patches/0007-server-prepare-memory.patch": "46e92c1fe76fa3c95552c480ba139d20e3fc7d7e97b8f6e18c0fb3daa6830d60",
+    "patches/0008-tool-call-prose.patch": "edcadfd51f42802b9a30dbfc32aba0fbf2a7f38616aea3e57795c01bc01c4467",
+    "patches/0009-anthropic-budget-default.patch": "25414d273c5ca4a149585f748c2838d1f198a57510b8a56821316c8466512844",
     "prepare.py": "476f5446f160498750460e9c4c43df4e27c1be326e6aa6b89b6677f4a8e2bab8",
     "run.sh": "e223322ce028bf007329a8484bcd73811aadcc400c9f1414521f7671ff5b1977",
     "serve.py": "6bc2ba8d8fc1d932d6d4b4e2b316a9019a3b2baa01ed649fb3eadabb9af592b6"
