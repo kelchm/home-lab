@@ -6,7 +6,7 @@ Collection covers kubelet-managed container logs, including init containers, nat
 
 ## Query logs
 
-- **Grafana Explore:** `https://grafana.home.kelch.io/explore` — the starting point for logs and [Kubernetes events](#kubernetes-events). Select the `VictoriaLogs` datasource for the query editor, visual builder and live logs. Home's log links open it with a query and Home's time range, such as **Logs from** on a namespace in the k8s-prod **Namespaces** table. The query editor's `Run in VMUI` action opens the query in the external VMUI. Open a row's log menu and select `Show log details` to inspect its structured fields alongside `_msg`.
+- **Grafana Explore:** `https://grafana.home.kelch.io/explore` — the starting point for logs and [Kubernetes events](#kubernetes-events). Select the `VictoriaLogs` datasource for the query editor, visual builder and live logs. Home's log links open it with a query and Home's time range, such as **Logs from** on a namespace in the k8s-prod **Namespaces** table or on a machine in the PVE and Spark **Machines** tables. The query editor's `Run in VMUI` action opens the query in the external VMUI. Open a row's log menu and select `Show log details` to inspect its structured fields alongside `_msg`.
 - **VictoriaLogs VMUI:** `https://vlogs.home.kelch.io/select/vmui/` — use the native LogsQL explorer and live-stream view. The bare hostname redirects here.
 
 For routine application browsing:
@@ -284,6 +284,8 @@ The mapping is [`host.lua`](../../proxmox/monitoring/logs/host.lua). The `pipeli
 `NodeLogDeliveryFailing` warns after 10 minutes of retries, `NodeLogsDropped` when records are dropped, and `NodeLogsSilent` when a host's collector has read nothing from its journal for two hours; `NodeCollectorDown` covers its scrape target (`pve-fluent-bit`, `spark-fluent-bit`). See [Alerts](host-monitoring.md#alerts) for host rules.
 
 ### Query host logs
+
+On Home, **Logs from** on a machine in the PVE or Spark tab's **Machines** table opens that host's records in Explore, and **Go deeper** has **PVE logs** and **Spark logs** for all of them. Each tab's **Recent warnings and errors** lists its hosts' journal lines at warning and above. It leaves out login sessions, and on the Sparks Bluetooth too: every SSH login, and SparkRun logs in many times a minute, starts desktop services that warn and re-register Bluetooth profiles.
 
 Host records carry no Kubernetes namespace, so filter on `host.name` or `service.namespace`. Explore and VMUI take LogsQL such as:
 

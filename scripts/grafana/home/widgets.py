@@ -108,8 +108,14 @@ def machines(p):
 
 
 # Where a machine's own detail is.
+def host_links(p):
+    return [to("${__value.text} in Hosts", f"/d/hosts?var-platform={p}&var-node=${{__value.raw}}&${{__url_time_range}}"),
+            to("Logs from ${__value.text}", explore('host.name:="${__value.raw}"'))]
+
+
 MACHINE_LINKS = {"k8s": [to("${__value.text} in Node Exporter Full", "/d/rYdddlPWk?var-job=node-exporter&var-nodename=${__value.raw}&var-node=${__value.raw}&${__url_time_range}"),
-                         to("Talos logs from ${__value.text}", explore('service.namespace:=talos k8s.node.name:="${__value.raw}"'))]}
+                         to("Talos logs from ${__value.text}", explore('service.namespace:=talos k8s.node.name:="${__value.raw}"'))],
+                 "pve": host_links("pve"), "spark": host_links("spark")}
 
 
 def machine_cpu_trend(p):
@@ -395,7 +401,12 @@ FEEDS = {
                  ' | format if (service.namespace:!=talos) "<service.namespace>/<service.name>: <_msg>" as _msg',
                  "Container and Talos node logs at warning level and above, newest first, each line led by its source. Known noisy sources, listed in the logging runbook, appear here too."),
     "network": (f"service.namespace:=unifi severity_number:>=13 {LEVEL}" ' | format "<service.name>: <_msg>" as _msg',
-                "UniFi syslog at warning level and above, newest first, each line led by the device. Access points log routine Wi-Fi driver lines as errors.")}
+                "UniFi syslog at warning level and above, newest first, each line led by the device. Access points log routine Wi-Fi driver lines as errors."),
+    # Each SSH login starts the user's service manager, whose desktop services warn and re-register Bluetooth profiles; SparkRun logs in many times a minute.
+    "pve-sbx": (f'service.namespace:=pve severity_number:>=13 -systemd.unit:~"^user@" {LEVEL}' ' | format "<host.name> <service.name>: <_msg>" as _msg',
+                "Journal lines from the PVE nodes at warning level and above, newest first, each led by its node and service. Login sessions are left out; Explore has them."),
+    "spark": (f'service.namespace:=spark severity_number:>=13 -systemd.unit:~"^user@" -service.name:=bluetooth {LEVEL}' ' | format "<host.name> <service.name>: <_msg>" as _msg',
+              "Journal lines from the Sparks at warning level and above, newest first, each led by its Spark and service. Login sessions and Bluetooth are left out, because every SSH login starts desktop services that warn and re-register Bluetooth profiles; Explore has them. Containers, inference included, log to Docker rather than the journal, so their output is not here.")}
 def feed(system):
     query, desc = FEEDS[system]
     P = Panels()
