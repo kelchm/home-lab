@@ -124,6 +124,19 @@ for replacement procurement.
   on both hosts for passwordless cluster launch. Private keys remain on their
   originating Spark.
 
+### User sessions
+
+DGX OS is Ubuntu's desktop image. Its packages enable PipeWire, PipeWire-Pulse, filter-chain and WirePlumber in every account's service manager (`user@<uid>.service`), not only in a graphical session, so booting to `multi-user.target` doesn't stop them. Every SSH login starts that manager, and logind stops it 10 seconds after the last login ends, so SparkRun's bursts of logins started and stopped the stack about twice a minute. WirePlumber also turns its Bluetooth support on and off as each login opens and closes. A login that started the manager wrote about 90 journal lines from it, Bluetooth and rtkit; a login while it was already up still wrote 26 Bluetooth lines. On 2026-10-27, two-thirds of spark-1's journal over 30 minutes was Bluetooth lines. About hourly, the manager overran Ubuntu's 5-second stop limit (`/usr/lib/systemd/system/user@.service.d/timeout.conf`) and was killed, because the document portal that the snap desktop helper starts didn't unmount in time.
+
+Both hosts mask the audio stack for every account and keep `kelchm`'s manager running:
+
+```sh
+sudo systemctl --global mask pipewire.socket pipewire.service pipewire-pulse.socket pipewire-pulse.service filter-chain.service wireplumber.service
+sudo loginctl enable-linger kelchm
+```
+
+A login now writes only its own lines, such as `sshd`, `systemd-logind` and its session scope. `systemctl --global is-enabled wireplumber.service` prints `masked` and `loginctl show-user kelchm -p Linger` prints `Linger=yes`. The masks cover `sparkdash` on spark-2 too; its manager stays up through sparkDash's persistent login. Bluetooth stays enabled, but nothing registers with it. To undo, `sudo systemctl --global unmask` the same units and `sudo loginctl disable-linger kelchm`; neither needs a reboot. The GNOME desktop would need the units back for sound and screen sharing.
+
 ### NetworkManager profiles
 
 The persistent connection names are the automation contract. Recreating a host

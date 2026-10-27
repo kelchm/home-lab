@@ -286,7 +286,7 @@ The mapping is [`host.lua`](../../proxmox/monitoring/logs/host.lua). The `pipeli
 
 ### Query host logs
 
-On Home, **Logs from** on a machine in the PVE or Spark tab's **Machines** table opens that host's records in Explore, and **Go deeper** has **PVE logs** and **Spark logs** for all of them. Each tab's **Recent warnings and errors** lists its hosts' journal lines at warning and above. It leaves out users' service managers (`user@` units), and on the Sparks Bluetooth too: every SSH login, and SparkRun logs in many times a minute, starts desktop services that warn and re-register Bluetooth profiles. A login's own lines, such as `sudo` and `sshd`, stay in.
+On Home, **Logs from** on a machine in the PVE or Spark tab's **Machines** table opens that host's records in Explore, and **Go deeper** has **PVE logs** and **Spark logs** for all of them. Each tab's **Recent warnings and errors** lists its hosts' journal lines at warning and above.
 
 Host records carry no Kubernetes namespace, so filter on `host.name` or `service.namespace`. Explore and VMUI take LogsQL such as:
 
