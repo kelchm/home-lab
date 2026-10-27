@@ -265,7 +265,7 @@ The mapping is [`host.lua`](../../proxmox/monitoring/logs/host.lua). The `pipeli
 | Field | Content |
 | --- | --- |
 | `host.name`, `service.namespace` | The host (`pve-sbx-1`, `spark-2`) and its platform (`pve`, `spark`), from its token: the same values as its metrics' `instance` and `platform`. `host.name` is a stream field. |
-| `service.name` | `kernel` for kernel messages; a service's systemd unit without `.service`, such as `pveproxy`, `sshd` or `docker`; otherwise the syslog identifier or program, such as `sudo` in a login session; or a container's name for a container on the `journald` driver. Stream field. |
+| `service.name` | `kernel` for kernel messages; a service's systemd unit without `.service`, such as `pveproxy`, `ssh` or `docker`; otherwise the syslog identifier or program, such as `sudo` in a login session; or a container's name for a container on the `journald` driver. Stream field. |
 | `severity_number`, `severity_text` | The journal priority, mapped as for [UniFi syslog](#fields): `err` 17, `warning` 13, `info` 9. Container lines have none (0), because Docker's driver writes stdout as `info` and stderr as `err` whatever the line says. |
 | `_msg` | The journal's `MESSAGE`. An entry that repeats `MESSAGE` keeps every value, one per line, and a NUL byte in a binary message is written as `\0`, because OTLP strings end at one. |
 | `_time` | When journald stored the entry. |
@@ -281,7 +281,7 @@ The mapping is [`host.lua`](../../proxmox/monitoring/logs/host.lua). The `pipeli
 - **Endpoint outage:** records wait in a 256 MiB on-disk buffer and arrive with their original timestamps once the endpoint answers; when the buffer is full, the collector drops records. In a local test before rollout, lines written while the endpoint was down, and while the collector was stopped, all arrived once it returned, with no duplicates.
 - **Shutdown:** the collector stops before the host finishes shutting down. With a persistent journal, the last records should go out after the next boot, from the saved cursor; this hasn't been checked on a host yet.
 
-`NodeLogDeliveryFailing` warns after 30 minutes of retries, `NodeLogsDropped` when records are dropped, and `NodeLogsSilent` when a host's collector has read nothing from its journal for two hours; `NodeCollectorDown` covers its scrape target (`pve-fluent-bit`, `spark-fluent-bit`). See [Alerts](host-monitoring.md#alerts) for host rules.
+`NodeLogDeliveryFailing` warns after 10 minutes of retries, `NodeLogsDropped` when records are dropped, and `NodeLogsSilent` when a host's collector has read nothing from its journal for two hours; `NodeCollectorDown` covers its scrape target (`pve-fluent-bit`, `spark-fluent-bit`). See [Alerts](host-monitoring.md#alerts) for host rules.
 
 ### Query host logs
 
@@ -290,7 +290,7 @@ Host records carry no Kubernetes namespace, so filter on `host.name` or `service
 - One host's services: `host.name:=pve-sbx-1 | stats by (service.name) count()`
 - Kernel warnings and worse on the Sparks: `service.namespace:=spark service.name:=kernel severity_number:>=13`
 - GPU Xid errors on a Spark: `service.namespace:=spark service.name:=kernel "Xid"`
-- SSH logins: `service.namespace:in(pve, spark) service.name:=sshd "Accepted"`
+- SSH logins: `service.namespace:in(pve, spark) service.name:=ssh "Accepted"`
 - Errors on every host: `service.namespace:in(pve, spark) severity_number:>=17`
 
 `python3 scripts/logging/test-host-logs.py` runs the host configuration on the machine's own journal and checks what a pinned VictoriaLogs stores: a syslog line at two levels, a container's stdout and stderr through the `journald` driver, a kernel message, and a client header that tries to rename the host. It also checks that every host's log route stamps the identity its metrics route does. It needs a Docker daemon that logs to journald, such as a GitHub runner or Colima's VM. CI runs it with the host monitoring checks.

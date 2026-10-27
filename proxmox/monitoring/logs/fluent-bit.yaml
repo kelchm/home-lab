@@ -28,8 +28,8 @@ service:
 pipeline:
   inputs:
     # Starts at the end of the journal on first run, then resumes from its
-    # saved cursor, so a stop, a redeploy or an endpoint outage loses nothing;
-    # a crash can lose the batch it was reading.
+    # saved cursor after a stop or a redeploy; a crash can lose the batch it
+    # was reading.
     - name: systemd
       alias: journal
       tag: journal

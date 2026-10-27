@@ -140,6 +140,8 @@ jobs:
               - 'scripts/ci/validate-host-monitoring.sh'
               - 'scripts/ci/test-validate-host-monitoring.sh'
               - 'scripts/logging/test-host-logs.py'
+              - 'scripts/logging/test-fluent-bit.py'
+              - 'scripts/logging/test-logsql-rules.py'
               - 'kubernetes/apps/observability/metrics-ingest/app/vmusers.yaml'
               - 'scripts/ci/validate-pve-backups.sh'
             synology:

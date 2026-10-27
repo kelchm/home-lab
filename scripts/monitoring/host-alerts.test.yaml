@@ -271,7 +271,7 @@ tests:
               summary: spark-1 hasn't refreshed its package lists for 2d 2h 0m 0s
               description: 'Its pending-update counts may be out of date. Check the daily refresh (pve-daily-update on PVE, apt-daily on a Spark) and the apt-metrics container.'
 
-  - name: Log delivery retrying for 30 minutes alerts; a short endpoint outage does not
+  - name: Log delivery retrying for 10 minutes alerts; a short endpoint outage does not
     interval: 1m
     input_series:
       - series: fluentbit_output_retries_total{instance="pve-sbx-1",platform="pve",job="pve-fluent-bit",name="ingest"}
@@ -280,10 +280,10 @@ tests:
       - series: fluentbit_output_retries_total{instance="spark-1",platform="spark",job="spark-fluent-bit",name="ingest"}
         values: 0x10 1+1x5 6x45
     alert_rule_test:
-      - eval_time: 25m
+      - eval_time: 8m
         alertname: NodeLogDeliveryFailing
         exp_alerts: []
-      - eval_time: 35m
+      - eval_time: 20m
         alertname: NodeLogDeliveryFailing
         exp_alerts:
           - exp_labels:
@@ -294,7 +294,7 @@ tests:
               severity: warning
             exp_annotations:
               summary: pve-sbx-1 cannot deliver its logs
-              description: "Its Fluent Bit has been retrying for 30 minutes and is buffering the journal on disk. Check the ingestion endpoint and the fluent-bit container's log on the node."
+              description: "Its Fluent Bit has been retrying for 10 minutes and is buffering the journal on disk. Check the ingestion endpoint and the fluent-bit container's log on the node."
 
   - name: Dropped log records alert until fifteen minutes pass without more
     interval: 1m
