@@ -245,6 +245,20 @@ spec:
           values:
             - instance=streamer-basement-workbench
             - platform=pi
+    - static:
+        url: http://victoria-logs-single-server.observability.svc:9428
+      paths:
+        - /insert/opentelemetry/v1/logs
+      query_args:
+        - name: extra_fields
+          values:
+            - host.name=streamer-basement-workbench,service.namespace=pi
+        - name: _stream_fields
+          values:
+            - host.name,service.name
+      headers:
+        - "AccountID: 0"
+        - "ProjectID: 0"
 ---
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMUser
@@ -269,6 +283,20 @@ spec:
           values:
             - instance=ups-compute-rack
             - platform=pi
+    - static:
+        url: http://victoria-logs-single-server.observability.svc:9428
+      paths:
+        - /insert/opentelemetry/v1/logs
+      query_args:
+        - name: extra_fields
+          values:
+            - host.name=ups-compute-rack,service.namespace=pi
+        - name: _stream_fields
+          values:
+            - host.name,service.name
+      headers:
+        - "AccountID: 0"
+        - "ProjectID: 0"
 ---
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMUser
@@ -293,6 +321,20 @@ spec:
           values:
             - instance=ups-office
             - platform=pi
+    - static:
+        url: http://victoria-logs-single-server.observability.svc:9428
+      paths:
+        - /insert/opentelemetry/v1/logs
+      query_args:
+        - name: extra_fields
+          values:
+            - host.name=ups-office,service.namespace=pi
+        - name: _stream_fields
+          values:
+            - host.name,service.name
+      headers:
+        - "AccountID: 0"
+        - "ProjectID: 0"
 ---
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMUser
@@ -317,3 +359,17 @@ spec:
           values:
             - instance=adsb-office
             - platform=pi
+    - static:
+        url: http://victoria-logs-single-server.observability.svc:9428
+      paths:
+        - /insert/opentelemetry/v1/logs
+      query_args:
+        - name: extra_fields
+          values:
+            - host.name=adsb-office,service.namespace=pi
+        - name: _stream_fields
+          values:
+            - host.name,service.name
+      headers:
+        - "AccountID: 0"
+        - "ProjectID: 0"
