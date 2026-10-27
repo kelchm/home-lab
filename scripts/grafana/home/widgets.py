@@ -404,9 +404,9 @@ FEEDS = {
                 "UniFi syslog at warning level and above, newest first, each line led by the device. Access points log routine Wi-Fi driver lines as errors."),
     # Each SSH login starts the user's service manager, whose desktop services warn and re-register Bluetooth profiles; SparkRun logs in many times a minute.
     "pve-sbx": (f'service.namespace:=pve severity_number:>=13 -systemd.unit:~"^user@" {LEVEL}' ' | format "<host.name> <service.name>: <_msg>" as _msg',
-                "Journal lines from the PVE nodes at warning level and above, newest first, each led by its node and service. Login sessions are left out; Explore has them."),
+                "Journal lines from the PVE nodes at warning level and above, newest first, each led by its node and service. Users' service managers are left out; Explore has them. A login's own lines, such as sudo and sshd, stay in."),
     "spark": (f'service.namespace:=spark severity_number:>=13 -systemd.unit:~"^user@" -service.name:=bluetooth {LEVEL}' ' | format "<host.name> <service.name>: <_msg>" as _msg',
-              "Journal lines from the Sparks at warning level and above, newest first, each led by its Spark and service. Login sessions and Bluetooth are left out, because every SSH login starts desktop services that warn and re-register Bluetooth profiles; Explore has them. Containers, inference included, log to Docker rather than the journal, so their output is not here.")}
+              "Journal lines from the Sparks at warning level and above, newest first, each led by its Spark and service. Users' service managers and Bluetooth are left out, because every SSH login starts desktop services that warn and re-register Bluetooth profiles; Explore has them. A login's own lines, such as sudo and sshd, stay in. Containers, inference included, log to Docker rather than the journal, so their output is not here.")}
 def feed(system):
     query, desc = FEEDS[system]
     P = Panels()
