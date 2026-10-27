@@ -297,7 +297,7 @@ Host records carry no Kubernetes namespace, so filter on `host.name` or `service
 - Kernel warnings and worse on the Sparks: `service.namespace:=spark service.name:=kernel severity_number:>=13`
 - GPU Xid errors on a Spark: `service.namespace:=spark service.name:=kernel "Xid"`
 - Undervoltage on the Pis: `service.namespace:=pi service.name:=kernel "Undervoltage"`
-- AirPlay playback statistics on the streamer: `host.name:=streamer-basement-workbench service.name:=shairport-sync`
+- AirPlay sessions on the streamer, each start, stop and its playing time: `host.name:=streamer-basement-workbench service.name:=shairport-sync "Connection"`
 - SSH logins: `service.namespace:in(pve, spark, pi) "Accepted"`
 - Errors on every host: `service.namespace:in(pve, spark, pi) severity_number:>=17`
 
