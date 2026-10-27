@@ -15,22 +15,24 @@ Every profile follows the contract in [#943](https://github.com/kelchm/home-lab/
 
 ## GLM-5.3-Flash on Mia's TensorFold kit
 
-`mia-tensorfold-glm53-exl3-tp2/` holds the profile for [Mia's two-Spark GLM kit](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold): TensorFold 0.6.0's Python CUDA engine with Mia's patches, serving Mia's 4 bpw EXL3 checkpoint across both Sparks. It replaced the kit's v1.10 release after [#941's comparison on October 22](https://github.com/kelchm/home-lab/issues/941#issuecomment-6334247435), in which the same 48 requests gave identical replies on both, and decode and prefill were within about 3% of v1.10's. GLM last served day to day on October 8, on v1.10.
+`mia-tensorfold-glm53-exl3-tp2/` holds the profile for [Mia's two-Spark GLM kit](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold): TensorFold 0.6.0's Python CUDA engine with Mia's patches, serving Mia's 4 bpw EXL3 checkpoint across both Sparks. The kit's `main` at `3fd60dfc` replaced its v1.10 release after [#941's comparison on October 22](https://github.com/kelchm/home-lab/issues/941#issuecomment-6334247435), in which the same 48 requests gave identical replies on both, and decode and prefill were within about 3% of v1.10's. `bf5f9452` replaced `3fd60dfc` on October 25 after source checks only; it has not been launched here. GLM last served day to day on October 8, on v1.10.
 
 ### Current profile
 
 | Profile | Kit | Image | Served name |
 | --- | --- | --- | --- |
-| `glm53-exl3-tp2-mia-tf-3fd60dfc-mia-1m` | `main` at [`3fd60dfc`](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold/commit/3fd60dfc836fab0f1ed0fd4f0afaf2a1d62b2aab), October 12, 107 patches | `14b5072e…`, config `9b007193…` | `GLM-5.3-Flash` |
+| `glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m` | `main` at [`bf5f9452`](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold/commit/bf5f94523a8251029cedae86bf61f8ce37fac218), October 25, 123 patches | `99fe7496…`, config `b925352f…` | `GLM-5.3-Flash` |
 
-The kit patches engine commit `c4646171` and has no numbered release after v1.10. The image is ARM64 and labelled with the kit's patch hash, `tf.patches=e66c657a433d`. Its patched files match a reconstruction of the engine plus the kit's patches byte for byte, for every file the mod guards or reads.
+The kit patches engine commit `c4646171` and has no numbered release after v1.10. The image is ARM64 and labelled with the kit's patch hash, `tf.patches=789e8f3bdfa2`. All 426 of its engine source files match a reconstruction of the engine plus the kit's patches byte for byte.
 
 - **Weights:** [Mia's 4 bpw TensorFold checkpoint](https://huggingface.co/Mia-AiLab/GLM-5.3-Flash-EXL3-4bpw-TensorFold/tree/078455ffe6472f9a52fbc1139f58b9db2881b25c) at `078455ff`, 83 shards and 175,642,267,944 bytes, and the DFlash2 drafter `incoai/GLM-5.3-Flash-DFlash2` at `bf582e4e`, 2,342,169,800 bytes.
-- **Serving:** a 1,048,576-token window per request and a 32,768-token reply budget, four streams sharing one FP8 KV pool, and thinking and vision on. The engine sizes the pool from the memory free at startup, inside the kit's 14.5 GiB memory reserve and 12.5 GiB kept-prompt cap; on October 22 it loaded 2,330,624 tokens. Readiness requires at least 1.2M, room for four 262,144-token prompts plus their replies. `TF_GLM_FILL_ROWS=2048` makes a fill's chunk the whole prompt chunk. Several of the kit's CUDA attention changes target three Sparks; the kit keeps the two-Spark 32-head path on Triton.
-- **Launcher settings:** SparkRun never runs the kit's `start.sh`, and the engine's built-in defaults differ from it, so the recipe states all 39 variables the kit's [`scripts/config.sh`](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold/blob/3fd60dfc836fab0f1ed0fd4f0afaf2a1d62b2aab/scripts/config.sh) exports in a clean environment. The mod's lock records them as `launcher_env`, and the tests compare recipe and lock.
+- **Serving:** a 1,048,576-token window per request and a 32,768-token reply budget, four streams sharing one FP8 KV pool, and thinking and vision on. The engine sizes the pool from the memory free at startup, inside the kit's 14.5 GiB memory reserve and 12.5 GiB kept-prompt cap; with `3fd60dfc` on October 22 it loaded 2,330,624 tokens, and the kit measures the larger picture workspace below at about 1.7% of the pool. Readiness requires at least 1.2M, room for four 262,144-token prompts plus their replies. `TF_GLM_FILL_ROWS=2048` makes a fill's chunk the whole prompt chunk. Several of the kit's CUDA attention changes target three Sparks; the kit keeps the two-Spark 32-head path on Triton.
+- **Pictures:** a request's pictures share a budget of 102,400 tokens, 50 pictures at 2,048, so a new picture never shrinks the earlier ones and a chat with more than eight still resumes from its kept prompt state. The vision workspace on rank 0 grows from 768 to 1,440 MiB to hold their rows. Setting `TENSORFOLD_GLM_REQUEST_IMAGE_TOKENS` to 16,384 restores the former eight-picture budget, where a ninth picture shrinks every earlier one; 768 MiB of workspace is then enough.
+- **Off:** the kit's spill tier (`TF_GLM_SPILL_QUOTA=0`), KV sharding (`TF_GLM_KV_SHARD`, in testing upstream) and the process exit on a broken engine (`TF_GLM_EXIT_ON_BROKEN`), as the kit ships them.
+- **Launcher settings:** SparkRun never runs the kit's `start.sh`, and the engine's built-in defaults differ from it, so the recipe states all 45 variables the kit's [`scripts/config.sh`](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold/blob/bf5f94523a8251029cedae86bf61f8ce37fac218/scripts/config.sh) exports in a clean environment. The mod's lock records them as `launcher_env`, and the tests compare recipe and lock.
 - **Site guards:** the mod patches three behaviours into the installed engine.
   - Reasoning is restored only by the server's original call IDs. Clients that renumber or omit call IDs must keep their own reasoning.
-  - A failed decoder or dead scheduler thread answers `/health` with HTTP 503 and `ok: false`.
+  - A failed decoder or dead scheduler thread answers `/health` with HTTP 503 and `ok: false`. The kit's own `0118` reports a failed decoder as `ok: false` with HTTP 200, and doesn't see the scheduler thread.
   - `/v1/models` reports `owned_by: tensorfold`, the window as `context_length` and `max_model_len`, and `reasoning` with the thinking default and the levels `max`, `high`, `low` and `none`. The template defines `low` and `high` and renders anything else as `max`; the server maps `minimal` to `low`, `medium` to `high` and `xhigh` to `max`, and `none` turns thinking off.
 
   The mod checks every guarded file's upstream hash before changing it, so it refuses files that differ from the ones it was written for. That is not an image check: the recipe's image pin pairs the recipe with its image.
@@ -43,11 +45,11 @@ How the profile differs from the kit's own launch:
 - **Rank command:** the kit's serve flags plus `--backend cuda` and `--no-update-check`.
 - **Fabric:** the ranks meet on `FABRIC_MASTER`, the head's CX7 address, as the kit's launcher does, but on SparkRun's `MASTER_PORT` where the kit uses port 29551. They fall back to SparkRun's management address only when the adapter has no fabric address. NCCL's collectives run over RoCE on both rails, with the devices and GID index SparkRun detects.
 - **Container:** SparkRun clears the image entrypoint and adds `--user root`, `no-new-privileges` and an open-file limit. Both ranks use host IPC and networking, all GPUs, `/dev/infiniband`, `IPC_LOCK`, unlimited locked memory and a 64 MiB stack.
-- **Caches:** weights mount at `/cache/huggingface`, and compiled kernels go to SparkRun's image- and model-keyed `/cache/runtime`, so a new image's first boot compiles from empty. This image's first boot took 460 s on October 22.
+- **Caches:** weights mount at `/cache/huggingface`, and compiled kernels go to SparkRun's image- and model-keyed `/cache/runtime`, so a new image's first boot compiles from empty. The `3fd60dfc` image's first boot took 460 s on October 22.
 
 ### Inputs outside SparkRun
 
-None. Mia publishes the image by digest, and SparkRun fetches the image and both snapshots and copies them to the worker. All three were on both hosts after the October 22 comparison. Stage weights in the head's home cache before a switch, as [Deploy](#deploy) describes.
+None. Mia publishes the image by digest, and SparkRun fetches the image and both snapshots and copies them to the worker. The weights and drafter have been on both hosts since October 22; the `bf5f9452` image is fetched at its first launch. Stage weights in the head's home cache before a switch, as [Deploy](#deploy) describes.
 
 ### Build
 
@@ -73,9 +75,9 @@ test "$failed" -eq 0
 From `~/sparkrun/recipes/glm53` on the head, after syncing this directory as in [Deploy](#deploy) and passing the [checks before a launch](#before-a-launch). Stop the running instance with its own recipe first:
 
 ```sh
-glm="$PWD/mia-tensorfold-glm53-exl3-tp2/glm53-exl3-tp2-mia-tf-3fd60dfc-mia-1m.yaml"
+glm="$PWD/mia-tensorfold-glm53-exl3-tp2/glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m.yaml"
 python3 mods/tensorfold-readiness/prepare.py --check
-python3 mods/mia-tensorfold-glm53-3fd60dfc/prepare.py --check
+python3 mods/mia-tensorfold-glm53-bf5f9452/prepare.py --check
 sparkrun run "$glm" --cluster sparks --no-auto-detect --no-sync-tuning --no-follow --dry-run
 sparkrun run "$glm" --cluster sparks --no-auto-detect --no-sync-tuning --no-follow
 sparkrun logs "$glm" --cluster sparks --all-sources
@@ -91,10 +93,12 @@ To roll back, stop it with its own recipe and launch the profile that served bef
 
 ### Known limits
 
-- **Measured once, on October 22:** a 500K needle was found, four 128K sessions completed together, and the lowest `MemAvailable` was 6.61 GiB on the head and 8.42 GiB on the worker. That is below the 8 GiB goal on the head and well above the 2 GiB stop line.
+- **Not launched:** `bf5f9452` has passed the source checks in [Build](#build) only.
+- **Measured once, with `3fd60dfc` on October 22:** a 500K needle was found, four 128K sessions completed together, and the lowest `MemAvailable` was 6.61 GiB on the head and 8.42 GiB on the worker. That is below the 8 GiB goal on the head and well above the 2 GiB stop line.
 - **Not established:** four long sessions growing together past 128K, retrieval near 1M, full 32k replies, coding and quantization quality, and stability beyond that trial.
 - **NCCL sockets on the management network:** SparkRun sets NCCL's socket interface to the management network, so some of NCCL's socket traffic crosses the worker's management link, which has dropped for seconds at a time ([#649](https://github.com/kelchm/home-lab/issues/649)).
-- **Open kit reports** of memory growth and hangs under long multi-agent load: [#143](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold/issues/143), [#154](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold/issues/154), [#163](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold/issues/163) and [#197](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold/issues/197).
+- **Open kit reports** of memory growth and hangs under long multi-agent load: [#143](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold/issues/143), [#154](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold/issues/154) and [#163](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold/issues/163).
+- **Kept prompt states** hold device memory outside the pool with no byte cap, the kit's default `TF_GLM_KEPT_BYTES_GIB=0`, and nothing returns it until a restart. In one report a 1 GiB cap left about 4 GiB more `MemAvailable` on each Spark, at the cost of a full prefill when a dropped conversation returns ([#197](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold/issues/197)).
 - **Admission:** requests past the four streams queue without limit, because `TF_GLM_MAX_QUEUED` is empty.
 - **Access and memory:** the endpoint has no API key, and no memory watchdog runs ([#944](https://github.com/kelchm/home-lab/issues/944)).
 
