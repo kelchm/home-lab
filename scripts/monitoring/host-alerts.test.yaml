@@ -294,7 +294,7 @@ tests:
               severity: warning
             exp_annotations:
               summary: pve-sbx-1 cannot deliver its logs
-              description: "Its Fluent Bit has been retrying for 10 minutes and is buffering the journal on disk. Check the ingestion endpoint and the fluent-bit container's log on the node."
+              description: "Its Fluent Bit has been retrying for 10 minutes and is buffering the journal. Check the ingestion endpoint and the collector's log: the fluent-bit container on a PVE node or Spark, `journalctl -u fluent-bit` on a Pi."
 
   - name: Dropped log records alert until fifteen minutes pass without more
     interval: 1m
@@ -303,6 +303,8 @@ tests:
         values: 0x20 5x30
       - series: fluentbit_output_dropped_records_total{instance="spark-1",platform="spark",job="spark-fluent-bit",name="ingest"}
         values: 0x50
+      - series: fluentbit_output_dropped_records_total{instance="ups-office",platform="pi",job="pi-fluent-bit",name="ingest"}
+        values: 0x20 5x30
     alert_rule_test:
       - eval_time: 25m
         alertname: NodeLogsDropped
@@ -315,7 +317,16 @@ tests:
               severity: warning
             exp_annotations:
               summary: pve-sbx-1 discarded log records
-              description: "Its Fluent Bit dropped records it could not deliver, which happens when its 256 MiB on-disk buffer is full or VictoriaLogs rejects them. Check the fluent-bit container's log on the node."
+              description: "Its Fluent Bit dropped records it could not deliver, which happens when its buffer is full or the endpoint answers with an error other than 429, 502, 503 or 504. Check the collector's log: the fluent-bit container on a PVE node or Spark, `journalctl -u fluent-bit` on a Pi."
+          - exp_labels:
+              instance: ups-office
+              platform: pi
+              job: pi-fluent-bit
+              name: ingest
+              severity: warning
+            exp_annotations:
+              summary: ups-office discarded log records
+              description: "Its Fluent Bit dropped records it could not deliver, which happens when its buffer is full or the endpoint answers with an error other than 429, 502, 503 or 504. Check the collector's log: the fluent-bit container on a PVE node or Spark, `journalctl -u fluent-bit` on a Pi."
       - eval_time: 40m
         alertname: NodeLogsDropped
         exp_alerts: []
@@ -328,6 +339,9 @@ tests:
       # Stops reading at one hour.
       - series: fluentbit_input_records_total{instance="spark-1",platform="spark",job="spark-fluent-bit",name="journal"}
         values: 0+10x60 600x140
+      # The quietest Pi: three lines on the hour.
+      - series: fluentbit_input_records_total{instance="ups-office",platform="pi",job="pi-fluent-bit",name="journal"}
+        values: 0x59 3x59 6x59 9x59
     alert_rule_test:
       - eval_time: 190m
         alertname: NodeLogsSilent
@@ -343,4 +357,4 @@ tests:
               severity: warning
             exp_annotations:
               summary: spark-1 has read nothing from its journal for two hours
-              description: "A running host writes to its journal every few minutes, so its Fluent Bit has likely lost the journal. Check the fluent-bit container's log and its journal mounts on the node."
+              description: "A running host writes to its journal at least every hour, so its Fluent Bit has likely lost the journal. On a PVE node or Spark, check the fluent-bit container's log and journal mounts; on a Pi, `journalctl -u fluent-bit`, and whether the host imports the debug profile, which moves its journal out of /run/log/journal."

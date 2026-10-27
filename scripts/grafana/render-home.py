@@ -36,7 +36,7 @@ DEEPER = {
     "network": [("UniFi sites", d("9WaGWZaZk")), ("Switches", d("FsfxpWaZz")), ("Access points", d("g5wFWqxZk")), ("Gateway", d("4Yo8IZ-Wk")),
                 ("Network logs", w.explore("service.namespace:=unifi"))],
     "power": [("Synology / Storage and hardware health", d("synology-health"))],
-    "devices": [("Hosts", d("hosts")), ("GLKVM / Recovery console", d("glkvm-console")), ("Probes", d("pi-blackbox"))]}
+    "devices": [("Hosts", d("hosts")), ("GLKVM / Recovery console", d("glkvm-console")), ("Probes", d("pi-blackbox")), ("Pi logs", w.explore("service.namespace:=pi"))]}
 
 SOURCE = {}   # element name -> (widget, the platform or system it is built for)
 
@@ -86,7 +86,7 @@ PAGES = {
     "athena": [tiles("nas-state"), cells(4, ("machines@synology", 15), ("nas-volumes", 9)), cells(10, ("hdd-drives", 24)), GO],
     "network": [cells(12, ("netdev", 24)), cells(9, ("feed@network", 24)), cells(5, ("wan", 24)), tiles("starlink"), tiles("tmobile"), cells(11, ("wifi", 24)), GO],
     "power": [tiles("ups", repeat="ups"), cells(7, ("ups-load", 12), ("ups-runtime", 12)), GO],
-    "devices": [cells(6, ("machines@pi", 15), ("machine-cpu@pi", 9)), tiles("glkvm"), GO]}
+    "devices": [cells(6, ("machines@pi", 15), ("machine-cpu@pi", 9)), cells(9, ("feed@devices", 24)), tiles("glkvm"), GO]}
 # The repeat variables a system's widgets may use; anything else would be a widget on the wrong tab.
 VARIABLES = {"spark": ("$gpu", "$model"), "power": ("$ups", "${ups")}
 

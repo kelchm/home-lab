@@ -254,7 +254,9 @@ Each event's line names the reason and object, so a word such as `BackOff` or a 
 
 ## Host logs
 
-Each PVE node and Spark sends its systemd journal, kernel messages included, to VictoriaLogs. A `fluent-bit` container in the host's monitoring stack reads the journal read-only and sends OTLP to `https://metrics-ingest.home.kelch.io/insert/opentelemetry/v1/logs` with the host's metrics token. Its configuration is [`proxmox/monitoring/logs/`](../../proxmox/monitoring/logs/), kept identical in [`sparks/monitoring/logs/`](../../sparks/monitoring/logs/). The host's VMUser routes that path to VictoriaLogs and adds `host.name`, `service.namespace` and the stream fields as query arguments, so, as with metrics, the configuration carries no identity and a host cannot give itself another: VMAuth drops a client's own `extra_fields` and `_stream_fields`, VictoriaLogs reads those arguments before its `VL-Extra-Fields` and `VL-Stream-Fields` headers, and `extra_fields` override the same fields in a record. The route also sets the `AccountID` and `ProjectID` headers to 0, so every record lands in the default tenant the datasource reads. A host does choose its own `service.name`, a stream field, so a host's token could create streams at will; `VictoriaLogsStreamChurnHigh` would show it. The NAS, the Pis and the GLKVM don't send logs yet ([#914](https://github.com/kelchm/home-lab/issues/914)).
+Each PVE node, Spark and Pi sends its systemd journal, kernel messages included, to VictoriaLogs. On a PVE node or Spark, a `fluent-bit` container in the host's monitoring stack reads the journal read-only and sends OTLP to `https://metrics-ingest.home.kelch.io/insert/opentelemetry/v1/logs` with the host's metrics token. Its configuration is [`proxmox/monitoring/logs/`](../../proxmox/monitoring/logs/), kept identical in [`sparks/monitoring/logs/`](../../sparks/monitoring/logs/). The host's VMUser routes that path to VictoriaLogs and adds `host.name`, `service.namespace` and the stream fields as query arguments, so, as with metrics, the configuration carries no identity and a host cannot give itself another: VMAuth drops a client's own `extra_fields` and `_stream_fields`, VictoriaLogs reads those arguments before its `VL-Extra-Fields` and `VL-Stream-Fields` headers, and `extra_fields` override the same fields in a record. The route also sets the `AccountID` and `ProjectID` headers to 0, so every record lands in the default tenant the datasource reads. A host does choose its own `service.name`, a stream field, so a host's token could create streams at will; `VictoriaLogsStreamChurnHigh` would show it. The NAS, the Pis and the GLKVM don't send logs yet ([#914](https://github.com/kelchm/home-lab/issues/914)).
+
+Each Pi runs the same configuration as a NixOS `fluent-bit` service from rpi-nixos's [`modules/profiles/logs`](https://github.com/kelchm/rpi-nixos/tree/main/modules/profiles/logs), with the same `host.lua` byte for byte, so a change to the mapping needs the same change there. A Pi keeps its journal in RAM (`/run/log/journal`, at most 16 MB), so its collector keeps its cursor and a 16 MiB buffer in RAM as well.
 
 Docker puts a container's output in the journal only when the container uses the `journald` log driver. Every container on these hosts uses `json-file`, so container output stays in `docker logs` for now; [#914](https://github.com/kelchm/home-lab/issues/914) tracks switching the driver. The mapping already handles those records.
 
@@ -264,7 +266,7 @@ The mapping is [`host.lua`](../../proxmox/monitoring/logs/host.lua). The `pipeli
 
 | Field | Content |
 | --- | --- |
-| `host.name`, `service.namespace` | The host (`pve-sbx-1`, `spark-2`) and its platform (`pve`, `spark`), from its token: the same values as its metrics' `instance` and `platform`. `host.name` is a stream field. |
+| `host.name`, `service.namespace` | The host (`pve-sbx-1`, `spark-2`, `ups-office`) and its platform (`pve`, `spark`, `pi`), from its token: the same values as its metrics' `instance` and `platform`. `host.name` is a stream field. |
 | `service.name` | `kernel` for kernel messages; a service's systemd unit without `.service`, such as `pveproxy`, `ssh` or `docker`; otherwise the syslog identifier or program, such as `sudo` in a login session; or a container's name for a container on the `journald` driver. Stream field. |
 | `severity_number`, `severity_text` | The journal priority, mapped as for [UniFi syslog](#fields): `err` 17, `warning` 13, `info` 9. Container lines have none (0), because Docker's driver writes stdout as `info` and stderr as `err` whatever the line says. |
 | `_msg` | The journal's `MESSAGE`. An entry that repeats `MESSAGE` keeps every value, one per line, and a NUL byte in a binary message is written as `\0`, because OTLP strings end at one. |
@@ -275,32 +277,35 @@ The mapping is [`host.lua`](../../proxmox/monitoring/logs/host.lua). The `pipeli
 
 ### Host delivery and gaps
 
-- **First start:** the collector starts at the end of the journal, so nothing written before it was deployed is sent.
-- **Restart and redeploy:** it saves its journal cursor in the stack's `logs` volume and resumes from it, so entries written while it was stopped are sent when it returns, provided the journal still holds them. The cursor is saved as each batch is read, so a crash can lose the batch in hand.
+- **First start:** on a PVE node or Spark the collector starts at the end of the journal, so nothing written before it was deployed is sent. A Pi's collector reads its journal from the start at every boot, because its cursor is in RAM; its first deploy sent what the RAM journal held, back to that boot.
+- **Restart and redeploy:** it saves its journal cursor, in the stack's `logs` volume or under a Pi's `/run`, and resumes from it, so entries written while it was stopped are sent when it returns, provided the journal still holds them. The cursor is saved as each batch is read, so a crash can lose the batch in hand.
 - **Missing route:** VMAuth refuses a host whose ingest user has no log route, and Fluent Bit drops what it refuses rather than retrying. Make a new host's route live before its collector starts. At rollout the Sparks' collectors started about 30 seconds before their routes, and about 165 lines from each were lost.
 - **Token rotation:** Fluent Bit reads the token only when it starts, and drops records the endpoint rejects. Stop it before rotating the token; see [Rotate a token](host-monitoring.md#change-pause-rotate-remove).
-- **Endpoint outage:** records wait in a 256 MiB on-disk buffer and arrive with their original timestamps once the endpoint answers; when the buffer is full, the collector drops records. In a local test before rollout, lines written while the endpoint was down, and while the collector was stopped, all arrived once it returned, with no duplicates.
-- **Shutdown:** the collector stops before the host finishes shutting down. With a persistent journal, the last records should go out after the next boot, from the saved cursor; this hasn't been checked on a host yet.
+- **Endpoint outage:** records wait in the buffer, 256 MiB on disk on a PVE node or Spark and 16 MiB in RAM on a Pi, and arrive with their original timestamps once the endpoint answers; when the buffer is full, the collector drops records. In a local test before rollout, lines written while the endpoint was down, and while the collector was stopped, all arrived once it returned, with no duplicates.
+- **Error responses:** Fluent Bit retries a refused connection and HTTP 429, 502, 503 and 504. Any other error status, such as a 500 from VictoriaLogs or VMAuth's 400 for a missing route, drops the batch, and `NodeLogsDropped` reports it. The cluster's collectors use the same output and behave the same way.
+- **Shutdown:** the collector stops before the host finishes shutting down. With a persistent journal, the last records should go out after the next boot, from the saved cursor; this hasn't been checked on a host yet. On a Pi, whatever wasn't sent before shutdown is gone with the RAM journal.
 
-`NodeLogDeliveryFailing` warns after 10 minutes of retries, `NodeLogsDropped` when records are dropped, and `NodeLogsSilent` when a host's collector has read nothing from its journal for two hours; `NodeCollectorDown` covers its scrape target (`pve-fluent-bit`, `spark-fluent-bit`). See [Alerts](host-monitoring.md#alerts) for host rules.
+`NodeLogDeliveryFailing` warns after 10 minutes of retries, `NodeLogsDropped` when records are dropped, and `NodeLogsSilent` when a host's collector has read nothing from its journal for two hours; `NodeCollectorDown` covers its scrape target (`pve-fluent-bit`, `spark-fluent-bit`, `pi-fluent-bit`). The quietest host, `ups-office`, writes three lines every hour, so two hours of silence means the collector has lost the journal. See [Alerts](host-monitoring.md#alerts) for host rules.
 
 ### Query host logs
 
-On Home, **Logs from** on a machine in the PVE or Spark tab's **Machines** table opens that host's records in Explore, and **Go deeper** has **PVE logs** and **Spark logs** for all of them. Each tab's **Recent warnings and errors** lists its hosts' journal lines at warning and above.
+On Home, **Logs from** on a machine in the PVE, Spark or devices tab's **Machines** table opens that host's records in Explore, and **Go deeper** has **PVE logs**, **Spark logs** and **Pi logs** for all of them. Each tab's **Recent warnings and errors** lists its hosts' journal lines at warning and above.
 
 Host records carry no Kubernetes namespace, so filter on `host.name` or `service.namespace`. Explore and VMUI take LogsQL such as:
 
 - One host's services: `host.name:=pve-sbx-1 | stats by (service.name) count()`
 - Kernel warnings and worse on the Sparks: `service.namespace:=spark service.name:=kernel severity_number:>=13`
 - GPU Xid errors on a Spark: `service.namespace:=spark service.name:=kernel "Xid"`
-- SSH logins: `service.namespace:in(pve, spark) service.name:=ssh "Accepted"`
-- Errors on every host: `service.namespace:in(pve, spark) severity_number:>=17`
+- Undervoltage on the Pis: `service.namespace:=pi service.name:=kernel "Undervoltage"`
+- AirPlay playback statistics on the streamer: `host.name:=streamer-basement-workbench service.name:=shairport-sync`
+- SSH logins: `service.namespace:in(pve, spark, pi) "Accepted"`
+- Errors on every host: `service.namespace:in(pve, spark, pi) severity_number:>=17`
 
 `python3 scripts/logging/test-host-logs.py` runs the host configuration on the machine's own journal and checks what a pinned VictoriaLogs stores: a syslog line at two levels, a container's stdout and stderr through the `journald` driver, a kernel message, and a client header that tries to rename the host. It also checks that every host's log route stamps the identity its metrics route does. It needs a Docker daemon that logs to journald, such as a GitHub runner or Colima's VM. CI runs it with the host monitoring checks.
 
 ### Verify a host
 
-After a deploy, on each host: `up{job=~"(pve|spark)-fluent-bit"}` is 1, `fluentbit_output_retries_total` stays flat, `host.name:=<host> | stats by (service.name) count()` lists services written since it started, and `host.name:=<host> (pipeline.normalize_error:* OR pipeline.severity_unmapped:*)` is empty.
+After a deploy, on each host: `up{job=~"(pve|spark|pi)-fluent-bit"}` is 1, `fluentbit_output_retries_total` stays flat, `host.name:=<host> | stats by (service.name) count()` lists services written since it started, and `host.name:=<host> (pipeline.normalize_error:* OR pipeline.severity_unmapped:*)` is empty.
 
 ## Source inventory
 
