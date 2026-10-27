@@ -161,10 +161,11 @@ spec:
               The 1 GiB on-disk queue filled while the ingestion endpoint was
               unreachable, so the oldest samples were dropped.
 
-        # Each host's Fluent Bit buffers up to 256 MiB on disk, so an unreachable endpoint
-        # delays its logs until the buffer fills.
+        # Each host's Fluent Bit buffers what it cannot deliver, 256 MiB on disk on a PVE node or
+        # Spark and 16 MiB in RAM on a Pi, so an unreachable endpoint delays its logs until the
+        # buffer fills.
         - alert: NodeLogDeliveryFailing
-          expr: increase(fluentbit_output_retries_total{job=~"(pve|spark)-fluent-bit"}[2m]) > 0
+          expr: increase(fluentbit_output_retries_total{job=~"(pve|spark|pi)-fluent-bit"}[2m]) > 0
           for: 10m
           labels:
             severity: warning
@@ -172,31 +173,36 @@ spec:
             summary: "{{ $labels.instance }} cannot deliver its logs"
             description: >-
               Its Fluent Bit has been retrying for 10 minutes and is buffering
-              the journal on disk. Check the ingestion endpoint and the
-              fluent-bit container's log on the node.
+              the journal. Check the ingestion endpoint and the collector's
+              log: the fluent-bit container on a PVE node or Spark,
+              `journalctl -u fluent-bit` on a Pi.
 
         - alert: NodeLogsDropped
-          expr: increase(fluentbit_output_dropped_records_total{job=~"(pve|spark)-fluent-bit"}[15m]) > 0
+          expr: increase(fluentbit_output_dropped_records_total{job=~"(pve|spark|pi)-fluent-bit"}[15m]) > 0
           labels:
             severity: warning
           annotations:
             summary: "{{ $labels.instance }} discarded log records"
             description: >-
               Its Fluent Bit dropped records it could not deliver, which
-              happens when its 256 MiB on-disk buffer is full or VictoriaLogs
-              rejects them. Check the fluent-bit container's log on the node.
+              happens when its buffer is full or the endpoint answers with an
+              error other than 429, 502, 503 or 504. Check the collector's
+              log: the fluent-bit container on a PVE node or Spark,
+              `journalctl -u fluent-bit` on a Pi.
 
         - alert: NodeLogsSilent
-          expr: increase(fluentbit_input_records_total{job=~"(pve|spark)-fluent-bit", name="journal"}[2h]) == 0
+          expr: increase(fluentbit_input_records_total{job=~"(pve|spark|pi)-fluent-bit", name="journal"}[2h]) == 0
           for: 15m
           labels:
             severity: warning
           annotations:
             summary: "{{ $labels.instance }} has read nothing from its journal for two hours"
             description: >-
-              A running host writes to its journal every few minutes, so its
-              Fluent Bit has likely lost the journal. Check the fluent-bit
-              container's log and its journal mounts on the node.
+              A running host writes to its journal at least every hour, so its
+              Fluent Bit has likely lost the journal. On a PVE node or Spark,
+              check the fluent-bit container's log and journal mounts; on a Pi,
+              `journalctl -u fluent-bit`, and whether the host imports the
+              debug profile, which moves its journal out of /run/log/journal.
 
         - alert: NodeDeployFailing
           expr: increase(doco_cd_deployment_errors_total{job=~"(pve|spark)-deployer"}[15m]) > 0
