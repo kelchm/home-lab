@@ -139,6 +139,10 @@ jobs:
               - 'sparks/platform/**'
               - 'scripts/ci/validate-host-monitoring.sh'
               - 'scripts/ci/test-validate-host-monitoring.sh'
+              - 'scripts/logging/test-host-logs.py'
+              - 'scripts/logging/test-fluent-bit.py'
+              - 'scripts/logging/test-logsql-rules.py'
+              - 'kubernetes/apps/observability/metrics-ingest/app/vmusers.yaml'
               - 'scripts/ci/validate-pve-backups.sh'
             synology:
               - '.github/workflows/repository-validation.yaml'
@@ -524,6 +528,10 @@ jobs:
           scripts/ci/test-validate-host-monitoring.sh
           scripts/ci/validate-host-monitoring.sh
           scripts/ci/validate-pve-backups.sh
+
+      - name: Send a journal through the host log collector
+        if: needs.pre-job.outputs.hosts_changed == 'true'
+        run: scripts/logging/test-host-logs.py
 
       - name: No host monitoring changes
         if: needs.pre-job.outputs.hosts_changed != 'true'

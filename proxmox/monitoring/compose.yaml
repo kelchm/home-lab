@@ -1,4 +1,4 @@
-# Host and collector metrics for one PVE node. Identical on every node: node
+# Host and collector metrics, and the journal, for one PVE node. Identical on every node: node
 # identity comes from the host's ingestion token, not from this file.
 name: monitoring
 
@@ -80,6 +80,25 @@ services:
     mem_limit: 256m
     stop_grace_period: 30s
 
+  # Sends this host's journal to VictoriaLogs; see logs/fluent-bit.yaml.
+  fluent-bit:
+    <<: *service
+    image: docker.io/fluent/fluent-bit:5.1.5@sha256:2740f387f6e68fab66d28e4fa6a853387b9cab6ffb4cb78958f69bba4eb0e7b4
+    # Root without capabilities, to read the root-owned journal and token.
+    user: "0:0"
+    command: ["-c", "/fluent-bit/etc/fluent-bit.yaml"]
+    volumes:
+      - ./logs/fluent-bit.yaml:/fluent-bit/etc/fluent-bit.yaml:ro
+      - ./logs/host.lua:/fluent-bit/etc/host.lua:ro
+      - /var/log/journal:/var/log/journal:ro
+      - /run/log/journal:/run/log/journal:ro
+      - /etc/machine-id:/etc/machine-id:ro
+      - /etc/monitoring:/etc/monitoring:ro
+      - logs:/state
+    mem_limit: 128m
+    stop_grace_period: 40s
+
 volumes:
+  logs:
   queue:
   textfile:
