@@ -126,8 +126,8 @@ VLAN 40 (Lab Services) is being retired — it existed only to host node subinte
 
 - K8s 2 ↔ K8s Prod: deny (environments isolated)
 - Main → Infra Mgmt: allow from admin devices only
-- Main → Remote Admin: allow only to the two router VM addresses; every other Internal → Remote Admin path is denied by the zone boundary
-- Remote Admin → routed LAN destinations: the router pair advertises `10.32.0.0/16`, but UniFi allows only `10.32.19.101/.102` to the six enforcement prefixes (`10.32.1.0/24`, `10.32.10.0/24`, `10.32.20.0/24`, `10.32.30.0/24`, `10.32.130.0/24`, and `10.32.140.0/24`); every other Internal destination remains denied
+- Main → Remote Admin: the legacy allow to retired routers `10.32.19.101/.102` remains pending removal under #1069; Main has no direct management path to the NetBird peer `.103`, which is managed through its PVE host
+- Remote Admin → routed LAN destinations: NetBird uses per-resource IP and port allows; the retired Tailscale routers' six-prefix allow remains inert pending removal under #1069. See the [applied UniFi state](../network/unifi/README.md#remote-admin-applied-state) for the exact policies
 - Main (admin devices) → K8s Prod: allow on 50000/tcp (talosctl) + 6443/tcp (Kube API) — Talos consolidates its mgmt plane onto VLAN 30; mTLS enforces isolation
 - PVE guests on Workloads → Infra Mgmt, Storage, and K8s Prod: deny by default; add explicit service exceptions only
 - PVE and K8s storage identities → Storage: scope to named peers and services
@@ -288,7 +288,7 @@ Talos nodes do NOT have IPs on Infra Mgmt. Talos has no classic management plane
 10.32.19.103      netbird-pilot-router       Disposable PVE VM on pve-sbx-1 (#625)
 ```
 
-DHCP and IPv6 are disabled on this network. Its VMs are single-homed VLAN-local endpoints and therefore sit outside the cross-VLAN system identity rule. VLAN 19 has its own UniFi zone: it can reach the gateway and Internet for coordination, and reaches Internal only through per-source allow rules whose generated reverse rules accept only established and related traffic. UniFi evaluates the BGP-routed `10.32.130.0/24` and `10.32.140.0/24` paths through the Internal transition for this custom source zone, so an allow toward a VIP must name that exact prefix or address. The Tailscale routers `.101/.102` were retired on 2026-10-25; their two UniFi policies are inert until removed under #1069. Main cannot reach `.103` directly; manage it from a PVE node with `qm guest exec 103`. `.103` is a disposable NetBird routing peer for the location-aware routing evaluation in #625; `Allow NetBird Pilot Router to Services VIP` permits it only to `10.32.140.1` on TCP 443.
+DHCP and IPv6 are disabled on this network. Its VMs are single-homed VLAN-local endpoints and therefore sit outside the cross-VLAN system identity rule. VLAN 19 has its own UniFi zone: it can reach the gateway and Internet for coordination, and reaches Internal only through per-source allow rules whose generated reverse rules accept only established and related traffic. UniFi evaluates the BGP-routed `10.32.130.0/24` and `10.32.140.0/24` paths through the Internal transition for this custom source zone, so an allow toward a VIP must name that exact prefix or address. The Tailscale routers `.101/.102` were retired on 2026-10-25; their two UniFi policies are inert until removed under #1069. Main cannot reach `.103` directly; manage it through its PVE host's guest agent (`qm guest exec 103 -- hostname` is a verified check). `.103` is a disposable NetBird routing peer for the location-aware routing evaluation in #625; `Allow NetBird Pilot Router to Services VIP` permits it only to `10.32.140.1` on TCP 443.
 
 ## LB Pool Allocation
 
@@ -298,8 +298,8 @@ Three policy classes:
 
 | Class | Pool (prod) | Reachable from | Use cases |
 |---|---|---|---|
-| **admin** | `admin-prod` (10.32.130.0/24) | VLAN 10 admin devices; approved Tailnet clients through the VLAN 19 routers | Operator UIs via Traefik admin gateway, k8s-gateway DNS |
-| **services** | `services-prod` (10.32.140.0/24) | VLAN 10 (Main), VLAN 21 (Workloads), approved Tailnet clients through the VLAN 19 routers | Household-facing apps (Traefik services gateway, per-service IPs) |
+| **admin** | `admin-prod` (10.32.130.0/24) | VLAN 10 admin devices; approved NetBird clients through the VLAN 19 peer, limited to explicitly allowed resource IPs and ports | Operator UIs via Traefik admin gateway, k8s-gateway DNS |
+| **services** | `services-prod` (10.32.140.0/24) | VLAN 10 (Main), VLAN 21 (Workloads); approved NetBird clients through the VLAN 19 peer, limited to explicitly allowed resource IPs and ports | Household-facing apps (Traefik services gateway, per-service IPs) |
 | **shared** | `shared-prod` (10.32.150.0/24) | All client VLANs (per-IP+port) | Cross-zone services with per-IP+port firewall rules (Visionect device gateway, future DNS/NTP) |
 
 Sandbox-side pools (`admin-sandbox` 10.32.131.0/24, `services-sandbox` 10.32.141.0/24) follow the same naming under a future second cluster.

@@ -73,8 +73,8 @@ line "candidate:   ${candidate:-<none given>}"
 
 # --- operator access path -----------------------------------------------------
 # The destination address does not tell you which link you actually use. Ask the
-# host routing table which interface carries each rollout destination, then show
-# who serves that path so the candidate can be judged against it.
+# host routing table which interface carries each rollout destination. For a
+# tunnel, the operator must separately identify the router serving that path.
 route_iface() {
     local dest="$1"
     case "$(uname -s)" in
@@ -86,9 +86,9 @@ route_iface() {
 
 iface_kind() {
     case "$1" in
-        '')             echo 'no route' ;;
-        utun*|wt*|tun*) echo 'tunnel' ;;
-        *)              echo 'direct' ;;
+        '')                            echo 'no route' ;;
+        utun*|wt*|tun*|wg*|tailscale*) echo 'tunnel' ;;
+        *)                             echo 'direct' ;;
     esac
 }
 
