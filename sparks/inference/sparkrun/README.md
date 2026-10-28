@@ -615,13 +615,12 @@ Before an upgrade, keep the exact working recipe, its mods and the adapter outsi
 
 A rank that dies mid-collective can leave a kernel running on its GPU with no process attached: `nvidia-smi` reads about 96% utilization, an SM clock near 1.1 GHz and about 4.7 W with no compute process, where an idle GB10 reads 0% at 208 MHz in P8. To clear it, stop the host's GPU exporter container, `monitoring-gpu-gpu-exporter-1`, and `nvidia-persistenced`, so nothing holds the GPU and the driver tears down its state. Wait about 20 s, then start both again and confirm 0% at 208 MHz before the next launch. `nvidia-smi -r` refuses on these hosts because the GPU is the primary one. Reboot only if stopping the daemon doesn't clear it. This cleared spark-2 on 2026-10-22.
 
-The endpoint has no API key ([#943](https://github.com/kelchm/home-lab/issues/943)). spark-1's firewall admits port 8888 from the workstation, `10.32.10.244`, from the [Hermes guest](../../../proxmox/guests/hermes-1/README.md), `10.32.21.100`, and from loopback, which the metrics scrape and sparkDash use. Each client has an `INPUT` accept rule commented with its name (`sparkrun-glm-workstation`, `hermes-1`) ahead of the `VONK-FORGE-HOST` chain, which drops every other source. These rules are not persistent; check access after a host reboot or a client address change.
-
 ### Before a launch
 
 Every switch of the served model starts from these checks:
 
 - the running instance idle, with nothing in flight in its `/health`;
+- port 8888 admitting only the [listed clients](#api-access);
 - no other GPU workload on either host;
 - both management links up at 10GbE, with their carrier counters recorded, because the worker's link drops for seconds at a time ([#649](https://github.com/kelchm/home-lab/issues/649));
 - both CX7 rails passing the check below;
@@ -662,6 +661,43 @@ Clients use the OpenAI-compatible API at `http://10.32.21.31:8888/v1`. Pi is the
 A client's stream timeouts must cover cold prefill. A four-stream 250k batch on the GLM server took more than ten minutes before content, and that server sends nothing between its first role chunk and generation.
 
 Where a server reports `usage.prompt_tokens_details.cached_tokens`, `usage.prompt_tokens` includes both cached and fresh input; a missing breakdown does not mean every prompt token was processed fresh. To check a client's accounting, repeat an identical long prompt while its prefix is still cached and confirm a warm response reports nonzero cached tokens; for streaming requests send `"stream_options": {"include_usage": true}` and read the final usage chunk. Then confirm the client recorded the same call's cache reads: server metrics alone do not show that it captured them.
+
+### API access
+
+The endpoint has no API key ([#943](https://github.com/kelchm/home-lab/issues/943)), so the agreed policy admits port 8888 from loopback, which the metrics scrape and sparkDash use, Main (`10.32.10.0/24`), and the [Hermes guest](../../../proxmox/guests/hermes-1/README.md), `10.32.21.100`. spark-2 serves nothing on that port.
+
+[`host/sparkrun-api-access.nft`](host/sparkrun-api-access.nft) is that policy as its own nftables table, `inet sparkrun_api_access`. It drops every other source, over IPv4 and IPv6, and leaves other ports alone. SparkRun's containers use the host network, so every request to the port passes this input hook; a port Docker publishes from a bridge network would not. Its drop is final whatever Docker's or any other table accepts, Docker restarts leave it in place, and loading the file replaces the table in one transaction. [`host/sparkrun-api-access.service`](host/sparkrun-api-access.service) loads it at boot, before Docker. Docker doesn't depend on it, so a policy that fails to load leaves the port open rather than taking the monitoring containers down too; SparkRun's containers never start on their own, so check the policy before each launch. [`test_api_access.py`](tests/test_api_access.py) loads the file into network namespaces with the real `nft` and checks which sources reach the port.
+
+**Installed on spark-1, 2026-10-28 at 21:46 UTC ([#1093](https://github.com/kelchm/home-lab/pull/1093)).** Matt selected Main as the trusted client boundary and approved the manual before-launch check: every Main device can submit inference requests, Hermes is the explicit server exception, and loopback serves local monitoring. The set has one aggregate counter for Main and one for Hermes. The unit is enabled and active. Main and Hermes model discovery and loopback health passed before and after retiring exactly five old API rules; spark-2 timed out and the new drop counter rose. VictoriaMetrics still reports the inference scrape up. Both model ranks and all other containers kept their IDs and start times; no model or Docker restart was performed. This is installation acceptance, not post-reboot acceptance: repeat the checks below at the next planned reboot under [#943](https://github.com/kelchm/home-lab/issues/943).
+
+The remaining `VONK-FORGE-HOST` and `VONK-FORGE` chains and their hooks still enforce non-8888 fabric and forwarded-container restrictions. They are not made persistent by this unit; keep the selective save/restore in the [OS update procedure](../../../docs/runbooks/dgx-spark-bringup.md#updating-dgx-os-and-firmware). The retired API rules no longer admit `.101` or fabric sources to port 8888. The model interconnect ports are unchanged.
+
+Install or update the policy from the checkout:
+
+```sh
+scp sparks/inference/sparkrun/host/sparkrun-api-access.nft sparks/inference/sparkrun/host/sparkrun-api-access.service kelchm@10.32.21.31:/tmp/
+ssh kelchm@10.32.21.31
+sudo nft -c -f /tmp/sparkrun-api-access.nft  # Checks the file against the kernel without loading it.
+sudo install -m 0644 /tmp/sparkrun-api-access.nft /etc/sparkrun-api-access.nft
+sudo install -m 0644 /tmp/sparkrun-api-access.service /etc/systemd/system/sparkrun-api-access.service
+rm /tmp/sparkrun-api-access.nft /tmp/sparkrun-api-access.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now sparkrun-api-access.service
+sudo systemctl reload sparkrun-api-access.service  # Applies a changed file to an already active unit.
+```
+
+Use `reload`, not `restart`: a restart deletes the table before loading it again. After a reboot and before each launch:
+
+```sh
+systemctl is-enabled sparkrun-api-access.service && systemctl is-active sparkrun-api-access.service
+sudo nft list table inet sparkrun_api_access  # Each client's counter, and the drop counter.
+```
+
+From a source it does not list, such as spark-2, `curl --max-time 5 http://10.32.21.31:8888/health` must time out, while the intended clients' requests succeed. To add or remove a client, change the `clients` set and the test's list together, then install and reload as above. Set entries must not overlap: a Main host is already covered by the prefix. Counters report traffic since the latest load and reset when the table is replaced. When retiring the hand-loaded API rules, preserve the Vonk chains and their hooks and non-8888 rules: they also restrict host-bound fabric traffic and forwarded container ports. Remove only the reviewed port-8888 entries after the new policy passes its checks. Keep saving and selectively restoring the remaining legacy restrictions at every reboot as the [OS update procedure](../../../docs/runbooks/dgx-spark-bringup.md#updating-dgx-os-and-firmware) describes; the new API unit does not persist them.
+
+The initial installation retained a root-only baseline and `restore-old-api.py` under `/var/backups/sparkrun-api-access/20261028T214546Z` on spark-1. It restores only the five saved API rules in their original order; verify that baseline still fits before using it for a later rollback.
+
+For rollback or removal while the model is serving, restore and verify the previous API restriction **before** stopping the new unit. If restoration fails, keep the new table active and stop the rollback. `sudo systemctl disable --now sparkrun-api-access.service` deletes its table; only then remove the two installed files and run `sudo systemctl daemon-reload`. Removing it without a replacement opens the port to every reachable source and requires a deliberate decision to expose or stop the listener. Restore only the saved API rules in their original order, not the complete Docker-owned ruleset or unrelated Vonk restrictions. The previous baseline is IPv4-only; a future IPv6 listener also needs replacement IPv6 protection.
 
 ## Validate
 
