@@ -24,7 +24,7 @@ B2 is the copy of last resort. The databases never write to it, the cluster hold
 | Archive (`serverName`) | `visionect-db-pg17` | `bambuddy-db-pg18` |
 | Base backup | 08:30 UTC daily | 08:40 UTC daily |
 | Kept | 30 days | 30 days |
-| Volume | 30Gi | 5Gi |
+| Volume | 30Gi | 20Gi |
 
 Retention is the plugin's own `retentionPolicy` on each `ObjectStore`. The sidecar applies it every 5 minutes: it deletes base backups older than the newest one that still covers the window, the WAL before that backup, and the matching `Backup` objects. The window is a recovery window, not an age limit on objects: the base backup that anchors its oldest point is kept even when it is older than 30 days.
 
@@ -84,7 +84,7 @@ Archiving resumes on its own once the store answers; the queue drained within a 
 
 **Do not restart the database pod or drain its node while the store is unreachable.** PostgreSQL waits for the archiver while shutting down, and each attempt against a dead address takes about 5 minutes to give up. In the test one restart took 8.5 minutes with the database down throughout, and another 80 seconds. CloudNativePG's `stopDelay` allows up to 30 minutes.
 
-How long there is: measured on 2026-10-27 over the previous 7 days, `visionect-db` writes about 113 MiB of WAL a day (272 MiB on its busiest day in 30) and `bambuddy-db` about 42 MiB, but both write in every 5-minute window and `archive_timeout` is 5 minutes, so each closes a 16 MiB segment every 5 minutes: about 4.5 GiB a day of unarchived WAL while the store is down. `visionect-db` has 26.5 GiB free on 30Gi, about 6 days. `bambuddy-db` has 4.2 GiB free on 5Gi, about 22 hours, with `CNPGVolumeFillingUp` firing about 9 hours in; growing it to 20Gi would give about 4 days ([home-lab#1076](https://github.com/kelchm/home-lab/pull/1076)).
+How long there is: measured on 2026-10-27 over the previous 7 days, `visionect-db` writes about 113 MiB of WAL a day (272 MiB on its busiest day in 30) and `bambuddy-db` about 42 MiB, but both write in every 5-minute window and `archive_timeout` is 5 minutes, so each closes a 16 MiB segment every 5 minutes: about 4.5 GiB a day of unarchived WAL while the store is down. `visionect-db` has 26.5 GiB free on 30Gi, about 6 days. `bambuddy-db` has 18.9 GiB free on 20Gi (grown on 2026-10-28 in [home-lab#1076](https://github.com/kelchm/home-lab/pull/1076)), about 4 days, with `CNPGVolumeFillingUp` firing about 2 days in.
 
 ### The database volume is filling
 
