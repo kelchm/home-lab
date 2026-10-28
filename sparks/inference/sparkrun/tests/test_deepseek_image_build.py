@@ -15,9 +15,10 @@ BUILD = ROOT / "build-deepseek-image.sh"
 MOD = ROOT / "mods/bertholomus-tensorfold-dsv41-2970bcd-mia-fixes"
 LOCK = json.loads((MOD / "upstream.lock.json").read_text())
 DRIFT_ID = "sha256:" + "f" * 64
+INDEX_ID = "sha256:" + "a" * 64
 
 DOCKER = r'''
-import json, os, sys
+import io, json, os, sys, tarfile
 from pathlib import Path
 
 args = sys.argv[1:]
@@ -42,8 +43,29 @@ elif args[:4] == ["image", "inspect", "--format", "{{.Id}}"]:
     print(state[args[4]])
     if mode == "retag-after-inspect":
         state[args[4]] = os.environ["DRIFT_ID"]
+elif args[:2] == ["image", "save"]:
+    assert len(args) == 3 and args[2] == os.environ["MOCK_IMAGE_ID"], args
+    if mode == "save":
+        sys.exit(15)
+    if mode == "save-invalid-tar":
+        sys.stdout.buffer.write(b"invalid archive")
+        sys.exit(0)
+    digest = os.environ["MOCK_CONFIG_ID"].removeprefix("sha256:")
+    config = os.environ.get("MOCK_CONFIG_PATH", "blobs/sha256/" + digest)
+    manifest = [{"Config": config, "RepoTags": [], "Layers": []}]
+    if mode == "save-multiple":
+        manifest *= 2
+    if mode == "save-no-config":
+        manifest = [{}]
+    data = json.dumps(manifest).encode()
+    with tarfile.open(fileobj=sys.stdout.buffer, mode="w|") as archive:
+        entry = tarfile.TarInfo("index.json" if mode == "save-no-manifest" else "manifest.json")
+        entry.size = len(data)
+        archive.addfile(entry, io.BytesIO(data))
+    if mode == "save-late-failure":
+        sys.exit(16)
 elif args[:2] == ["image", "tag"]:
-    assert args[2] == os.environ["EXPECTED_ID"], args
+    assert args[2] == os.environ["EXPECTED_DAEMON_ID"], args
     assert args[3] == os.environ["QUALIFIED_TAG"], args
     if mode == "tag":
         sys.exit(12)
@@ -98,7 +120,8 @@ class DeepSeekImageBuildTests(unittest.TestCase):
             "PATH": f"{self.bin}{os.pathsep}{os.environ['PATH']}",
             "MOCK_STATE": str(self.state), "MOCK_CALLS": str(self.calls),
             "MOCK_GIT_CALLS": str(self.git_calls), "MOCK_FAILURE": "",
-            "MOCK_IMAGE_ID": LOCK["image_id"], "EXPECTED_ID": LOCK["image_id"],
+            "MOCK_IMAGE_ID": LOCK["image_id"], "EXPECTED_DAEMON_ID": LOCK["image_id"],
+            "MOCK_CONFIG_ID": LOCK["image_id"],
             "QUALIFIED_TAG": LOCK["image"], "DRIFT_ID": DRIFT_ID,
             "DOCKERFILE": str(MOD / "build/Dockerfile"),
         }
@@ -121,6 +144,7 @@ class DeepSeekImageBuildTests(unittest.TestCase):
         candidate = calls[0][2]
         self.assertNotEqual(candidate, LOCK["image"])
         self.assertEqual(calls, [calls[0], ["image", "inspect", "--format", "{{.Id}}", candidate],
+                                 ["image", "save", LOCK["image_id"]],
                                  ["image", "tag", LOCK["image_id"], LOCK["image"]], ["image", "rm", candidate]])
         self.assertIn(LOCK["image_id"], result.stdout)
         self.assertEqual(json.loads(self.state.read_text()), {LOCK["image"]: LOCK["image_id"]})
@@ -133,18 +157,61 @@ class DeepSeekImageBuildTests(unittest.TestCase):
         self.assertEqual([Path(call[-1]).name for call in git if call[0] == "-C" and call[2] == "apply"],
                          [Path(patch).name for patch in sorted(LOCK["patches"])])
 
-    def test_drift_empty_or_invalid_inspection_leaves_qualified_tag_untouched(self):
-        for actual in (DRIFT_ID, "", "not-an-image-id"):
+    def test_containerd_id_checks_export_config_and_promotes_by_daemon_id(self):
+        self.env.update(MOCK_IMAGE_ID=INDEX_ID, EXPECTED_DAEMON_ID=INDEX_ID)
+        self.state.write_text(json.dumps({LOCK["image"]: INDEX_ID}))
+        result = self.run_build(MOD)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        calls = self.docker_calls()
+        self.assertIn(["image", "save", INDEX_ID], calls)
+        self.assertIn(["image", "tag", INDEX_ID, LOCK["image"]], calls)
+        self.assertEqual(json.loads(self.state.read_text()), {LOCK["image"]: INDEX_ID})
+        self.assertIn(f"config {LOCK['image_id']}", result.stdout)
+
+    def test_legacy_export_config_path_is_supported(self):
+        self.env["MOCK_CONFIG_PATH"] = LOCK["image_id"].removeprefix("sha256:") + ".json"
+        result = self.run_build()
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_config_drift_leaves_qualified_tag_untouched(self):
+        self.env["MOCK_CONFIG_ID"] = DRIFT_ID
+        result = self.run_build()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(f"expected: {LOCK['image_id']}", result.stderr)
+        self.assertIn(f"actual:   {DRIFT_ID}", result.stderr)
+        self.assertIn("new versioned mod and profile", result.stderr)
+        self.assertIn("was not changed", result.stderr)
+        self.assert_qualified_untouched()
+        self.assertEqual(json.loads(self.state.read_text()), {LOCK["image"]: LOCK["image_id"]})
+
+    def test_empty_invalid_or_whitespace_daemon_id_is_refused(self):
+        for actual in ("", "not-an-image-id", LOCK["image_id"] + " "):
             with self.subTest(actual=actual):
                 self.env["MOCK_IMAGE_ID"] = actual
                 result = self.run_build()
                 self.assertNotEqual(result.returncode, 0)
-                self.assertIn(f"expected: {LOCK['image_id']}", result.stderr)
-                self.assertIn(f"actual:   {actual}", result.stderr)
-                self.assertIn("new versioned mod and profile", result.stderr)
-                self.assertIn("was not changed", result.stderr)
+                self.assertIn("Invalid daemon image ID", result.stderr)
                 self.assert_qualified_untouched()
-                self.assertEqual(json.loads(self.state.read_text()), {LOCK["image"]: LOCK["image_id"]})
+                self.assertFalse(any(call[:2] == ["image", "save"] for call in self.docker_calls()))
+
+    def test_export_failures_and_bad_manifests_do_not_publish(self):
+        for failure in ("save", "save-invalid-tar", "save-no-manifest", "save-multiple",
+                        "save-no-config", "save-late-failure"):
+            with self.subTest(failure=failure):
+                self.env["MOCK_FAILURE"] = failure
+                result = self.run_build()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("Cannot read config digest", result.stderr)
+                self.assert_qualified_untouched()
+
+    def test_malformed_config_paths_do_not_publish(self):
+        for config in ("", "../config.json", "sha256:" + "a" * 64, "blobs/sha256/not-a-digest"):
+            with self.subTest(config=config):
+                self.env["MOCK_CONFIG_PATH"] = config
+                result = self.run_build()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("Cannot read config digest", result.stderr)
+                self.assert_qualified_untouched()
 
     def test_build_inspect_and_fetch_failures_do_not_publish(self):
         for failure, diagnostic in (("build", "Candidate build failed"), ("inspect", "Cannot inspect candidate"),
@@ -172,7 +239,7 @@ class DeepSeekImageBuildTests(unittest.TestCase):
         self.assertEqual(self.docker_calls()[-1][:2], ["image", "rm"])
 
     def test_cleanup_failure_does_not_hide_drift(self):
-        self.env.update(MOCK_FAILURE="cleanup", MOCK_IMAGE_ID=DRIFT_ID)
+        self.env.update(MOCK_FAILURE="cleanup", MOCK_CONFIG_ID=DRIFT_ID)
         result = self.run_build()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("DeepSeek rebuild refused", result.stderr)

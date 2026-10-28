@@ -44,11 +44,30 @@ if ! id=$(docker image inspect --format '{{.Id}}' "$candidate"); then
   echo "Cannot inspect candidate $candidate; qualified tag $image was not changed." >&2
   exit 1
 fi
-if [[ "$id" != "$expected" ]]; then
+[[ "$id" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "Invalid daemon image ID for candidate $candidate: $id" >&2; exit 1; }
+# Containerd stores can report an index/manifest ID. The lock records the config
+# digest seen after docker load on the Sparks. Export this exact immutable ID,
+# never the candidate tag, so a concurrent retag cannot change what is checked.
+if ! config_id=$(docker image save "$id" | tar -xOf - manifest.json | python3 -c '
+import json,re,sys
+manifest=json.load(sys.stdin)
+if not isinstance(manifest,list) or len(manifest)!=1:
+    raise SystemExit("Expected one image in the Docker export manifest")
+config=manifest[0]["Config"]
+match=re.fullmatch(r"(?:blobs/sha256/)?([0-9a-f]{64})(?:\.json)?",config)
+if not match:
+    raise SystemExit("Invalid config digest path in the Docker export manifest")
+print("sha256:"+match[1])
+'); then
+  echo "Cannot read config digest for candidate $id; qualified tag $image was not changed." >&2
+  exit 1
+fi
+if [[ "$config_id" != "$expected" ]]; then
   cat >&2 <<EOF
 DeepSeek rebuild refused: candidate $candidate
   expected: $expected
-  actual:   $id
+  actual:   $config_id
+  daemon ID: $id
 Qualified tag $image was not changed.
 Different content requires a new versioned mod and profile, a new image tag and an updated lock, followed by qualification. Do not rewrite the existing profile's image ID or frozen checksums to accept this rebuild.
 EOF
@@ -59,4 +78,4 @@ if ! docker image tag "$id" "$image"; then
   echo "Candidate $id matched, but publishing qualified tag $image failed." >&2
   exit 1
 fi
-echo "Verified and tagged $image: $id"
+echo "Verified and tagged $image: config $config_id (daemon ID $id)"
