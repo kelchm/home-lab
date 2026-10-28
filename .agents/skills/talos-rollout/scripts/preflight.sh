@@ -361,6 +361,9 @@ fi
 
 # --- verdict ------------------------------------------------------------------
 printf '\n'
+if (( ! comparison_complete )); then
+    printf 'Version comparison incomplete: one or more versions could not be parsed; review the rows above before go/no-go.\n' >&2
+fi
 if (( ${#FAILURES[@]} > 0 )); then
     printf 'PREFLIGHT FAILED (%d check(s)):\n' "${#FAILURES[@]}" >&2
     printf '  - %s\n' "${FAILURES[@]}" >&2
@@ -380,9 +383,7 @@ printf 'PREFLIGHT CHECKS PASSED: talosctl health is OK, all %s nodes are Ready a
     "$node_total" "$(( volume_count - idle_count ))" "$volume_count" "$idle_count" "$instance_count"
 if (( ${#WARNINGS[@]} > 0 )); then
     printf 'Version skew warnings are listed above; settle them before go/no-go.\n'
-elif (( ! comparison_complete )); then
-    printf 'Version comparison incomplete: one or more versions could not be parsed; review the rows above before go/no-go.\n'
-else
+elif (( comparison_complete )); then
     printf 'Version pins agree: no unsupported skew between talosctl client, talenv target, and the live nodes.\n'
 fi
 printf 'Still owed before go/no-go: an etcd snapshot verified at its path, and an explicit decision for any CloudNativePG primary on the candidate.\n'
