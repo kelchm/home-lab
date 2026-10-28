@@ -6,7 +6,7 @@ The [off-site job](../offsite-backup/README.md) does not read this share yet. Mo
 
 doco-cd deploys this project from `main`; the [Synology README](../README.md) describes the deployment model, rollback, and break-glass apply.
 
-State as of 2026-10-27: not deployed, and the share does not exist yet. Everything below is the intended configuration. The gateway, the Traefik route and the plain-file restore were exercised in a scratch namespace on `k8s-prod`, not on Athena; [First deployment](#first-deployment) lists what has to be confirmed on the NAS itself.
+State as of 2026-10-28: not deployed. The four steps under [Before merging](#first-deployment) are done: the share and its directories exist on volume1, the UniFi record resolves to `10.32.25.5` from the Default, Main and K8s Prod resolvers, nothing listened on port 9000, and both env files hold the real credentials. Everything else below is the intended configuration. The gateway, the Traefik route and the plain-file restore were exercised in a scratch namespace on `k8s-prod`, not on Athena; [First deployment](#first-deployment) lists what has to be confirmed on the NAS itself.
 
 ## What is where
 
@@ -47,7 +47,15 @@ Both `*.sops.env` files are encrypted to the NAS-scoped age recipient in [`.sops
 SOPS_AGE_KEY="$(op read 'op://Private/athena-doco-cd-sops-age-key/password')" sops synology/s3-storage/versitygw.sops.env
 ```
 
-The Cloudflare token needs `Zone:Zone:Read` and `Zone:DNS:Edit` on `kelch.io`; Traefik's ACME client reads the zone to find its ID. Cloudflare scopes tokens to a zone, not a record.
+The Cloudflare token needs `Zone:Zone:Read` and `Zone:DNS:Edit` on `kelch.io`; Traefik's ACME client reads the zone to find its ID. Cloudflare scopes tokens to a zone, not a record. The token in use, `athena-s3-storage-acme`, has no expiry or client-IP filter.
+
+The values in both files are kept in 1Password:
+
+| Value | 1Password reference |
+|---|---|
+| Cloudflare token | `op://Project - home-lab/athena-s3-storage-acme/credential` |
+| Gateway root access key | `op://Project - home-lab/athena-s3-storage-root/username` |
+| Gateway root secret key | `op://Project - home-lab/athena-s3-storage-root/credential` |
 
 ## First deployment
 
@@ -67,7 +75,7 @@ Before merging, all on Athena and in UniFi:
 
 2. Confirm nothing on Athena already listens on `10.32.25.5:9000`.
 3. Add a static record `s3-storage.home.kelch.io` → `10.32.25.5` in UniFi. Without it the name resolves to the `*.home.kelch.io` wildcard.
-4. Create the Cloudflare token described under [Credentials](#credentials), and replace the `REPLACE_ME` values in `versitygw.sops.env` and `traefik.sops.env`. With the placeholders in place the gateway starts with a known root key and Traefik cannot get a certificate.
+4. Create the Cloudflare token described under [Credentials](#credentials) and a random root key pair, store them in 1Password, and encrypt them into `traefik.sops.env` and `versitygw.sops.env`.
 
 Then merge. doco-cd deploys the project, and Traefik requests the certificate on its first start.
 
@@ -99,7 +107,7 @@ ssh kelchm@10.32.20.5 'sudo /usr/local/bin/docker logs --since 1h s3-storage-tra
 ssh kelchm@10.32.20.5 'sudo du -sh /volume1/object-storage/data/*'
 ```
 
-Nothing here alerts on its own. A stopped or unreachable endpoint shows up in the cluster as `CNPGWALArchivingStalled` within 15 minutes. A certificate that fails to renew has about 30 days before it expires, and then shows up the same way.
+Nothing here alerts on its own, and nothing in the cluster uses the endpoint until the database side is deployed.
 
 ## Serve a copy of the share
 
@@ -117,7 +125,7 @@ Do not edit files under `data/` by hand. The gateway returns the checksum it rec
 ## Limits
 
 - Accounts and bucket ownership are created by hand and live outside Git. On a rebuilt NAS, repeat step 5 with the secrets already in the cluster's `backup-secret.sops.yaml` files.
-- The off-site job copies the whole share, so every bucket goes to B2 under the same 30-day lock.
+- The off-site job does not copy the share until the database side adds it as a source. Until then the objects exist only on Athena.
 - The endpoint is published on the storage VLAN only. A client needs an address there.
 - `users.json` is not copied off-site. Losing it loses no backup data.
-- The gateway's own Object Lock and versioning are not used. Protection against deletion comes from the off-site copy's 30-day lock.
+- The gateway's own Object Lock and versioning are not used, so nothing protects an object against deletion until the off-site copy exists.
