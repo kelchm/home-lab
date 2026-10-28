@@ -10,6 +10,7 @@ Compose projects that run directly on the Synology NAS (`Athena`), outside Kuber
 | [`modelkeep`](modelkeep/) | Hugging Face pull-through mirror for LAN clients | doco-cd |
 | [`offsite-backup`](offsite-backup/) | Daily Kopia snapshot of the backup shares to an Object Lock bucket | doco-cd |
 | [`monitoring`](monitoring/) | Host, disk, RAID and UPS metrics pushed to the cluster's metrics store | doco-cd |
+| [`s3-storage`](s3-storage/) | The lab's S3 object store; holds the CloudNativePG backups | doco-cd |
 
 doco-cd has run on Athena since 2026-09-26; the remaining workload acceptance checks are tracked in [home-lab#379](https://github.com/kelchm/home-lab/issues/379). Its current version, native self-update migration status, and handover checks are maintained in the [self-update runbook](../docs/runbooks/doco-cd-self-update.md). A project that doco-cd does not deploy must still have its running Compose definition match its directory, and any out-of-band DSM edit must be brought back to Git.
 

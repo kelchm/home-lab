@@ -1,0 +1,92 @@
+# The lab's S3 object store: versitygw stores objects as plain files on the
+# `object-storage` share, and Traefik terminates HTTPS in front of it.
+# README.md covers buckets, credentials, first deployment and restore.
+name: s3-storage
+
+services:
+  versitygw:
+    image: ghcr.io/versity/versitygw:v1.8.0@sha256:30292fc2eeacc67a36993b01f7a7a5e3361a19cced0e80c1d71cfa2a4b0a2499
+    # Root without capabilities: it writes only root-owned directories, and the off-site job reads the share as root.
+    user: "0:0"
+    read_only: true
+    command:
+      - --health=/health
+      - --iam-dir=/iam
+      # Reachable only with docker exec, for the user and bucket commands in README.md.
+      - --admin-port=127.0.0.1:7080
+      - posix
+      # Metadata as files beside the objects, so a copy of the share is a complete store.
+      - --sidecar=/share/meta
+      - /share/data
+    # ROOT_ACCESS_KEY, ROOT_SECRET_KEY
+    env_file:
+      - versitygw.sops.env
+    volumes:
+      - /volume1/object-storage:/share
+      - /volume1/docker/s3-storage/iam:/iam
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    # Docker 24 runs the first probe one interval after start, and doco-cd waits 180 seconds for it.
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:7070/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  traefik:
+    image: docker.io/library/traefik:v3.7.14@sha256:575fa15b135078fe5e50aa847987d96dbddd7b093c172429618404df73f3fa7c
+    user: "0:0"
+    read_only: true
+    command:
+      - --global.checknewversion=false
+      - --global.sendanonymoususage=false
+      - --entrypoints.s3.address=:9000
+      - --entrypoints.s3.http.tls.certresolver=letsencrypt
+      - --entrypoints.s3.http.tls.domains[0].main=s3-storage.home.kelch.io
+      - --entrypoints.ping.address=:8082
+      - --ping.entrypoint=ping
+      - --providers.file.directory=/dynamic
+      - --certificatesresolvers.letsencrypt.acme.storage=/acme/acme.json
+      - --certificatesresolvers.letsencrypt.acme.dnschallenge.provider=cloudflare
+      # Public resolvers: the LAN resolver answers home.kelch.io itself.
+      - --certificatesresolvers.letsencrypt.acme.dnschallenge.resolvers=1.1.1.1:53,1.0.0.1:53
+    # CF_DNS_API_TOKEN
+    env_file:
+      - traefik.sops.env
+    ports:
+      - "10.32.25.5:9000:9000"
+    volumes:
+      - /volume1/docker/s3-storage/acme:/acme
+      - /volume1/docker/s3-storage/dynamic:/dynamic:ro
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--entrypoints.ping.address=:8082", "--ping.entrypoint=ping"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      versitygw:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Publishes the committed route; Traefik watches the directory.
+  publish:
+    image: docker.io/library/busybox:1.38.0@sha256:fd7dc98638c8e305f4dc34e979f1c0fdfdcaeb0fbf8fcff77ae834b6da3d7e6e
+    command: ["cp", "/source/routes.yaml", "/dynamic/routes.yaml"]
+    labels:
+      cd.doco.deployment.one_shot: "true"
+    volumes:
+      - ./traefik/routes.yaml:/source/routes.yaml:ro
+      - /volume1/docker/s3-storage/dynamic:/dynamic
+    depends_on:
+      traefik:
+        condition: service_healthy
+    restart: "no"

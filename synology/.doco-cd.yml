@@ -31,3 +31,8 @@ name: monitoring
 working_dir: synology/monitoring
 prune_images: false
 reconciliation: false
+---
+name: s3-storage
+working_dir: synology/s3-storage
+prune_images: false
+reconciliation: false

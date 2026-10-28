@@ -209,7 +209,7 @@ The storage VLAN bends the skeleton because its primary inhabitants are storage 
 
 | Range | Owner |
 |---|---|
-| `.2-.10` | Storage providers (NAS `.5`, S3 endpoint `.6`, PBS `.7`) |
+| `.2-.10` | Storage providers (NAS `.5`, S3 on `.5:9000`, PBS `.7`; `.6` reserved) |
 | `.11-.19` | System 1 — k8s-prod node NICs |
 | `.21-.29` | System 2 — pve-sbx host NICs |
 | `.31-.39` | System 3 — workload hosts (DGX Sparks; future standalone servers and storage-attached guests) |
@@ -245,7 +245,7 @@ API VIP is managed by the Talos `vipController` (GARP-based at the machine-confi
 ```
 10.32.25.1         gateway-storage           Router interface
 10.32.25.5         nas-storage               Synology (SFP+ interface)
-10.32.25.6         s3-storage                (reserved) NAS S3 endpoint
+10.32.25.6         (reserved; the NAS S3 endpoint is nas-storage port 9000)
 10.32.25.7         pbs-storage               (reserved) PBS data interface
 10.32.25.8-.10     (reserved for future storage providers)
 10.32.25.11-.13    k8s-prod-{1,2,3}-storage  System 1 node NICs (2.5GbE)
@@ -408,6 +408,7 @@ hermes.home.kelch.io                10.32.21.100
 # Shared infrastructure
 nas.home.kelch.io                   10.32.20.5
 nas-storage.home.kelch.io           10.32.25.5
+s3-storage.home.kelch.io            10.32.25.5    (S3 object store, port 9000)
 gateway.home.kelch.io               10.32.1.1
 
 # Wildcard for Traefik-fronted household services
@@ -445,7 +446,7 @@ Cluster-wide values are written as literals wherever they are used, so searching
 | Service domain | `home.kelch.io` | LAN admin and household routes and the `*.home.kelch.io` certificate; see [DNS Plan](#dns-plan) |
 | Public apex | `kelch.io` | ClusterIssuer and k8s-gateway zone, Cloudflare DNS and tunnel, and the `*.kelch.io` certificate (`kelch-io-production-tls`) |
 | Timezone | `America/New_York` | Container `TZ` and CronJob `timeZone`; Longhorn RecurringJobs run in UTC ([backup runbook](runbooks/longhorn-backup-restore.md)) |
-| NAS storage address | `10.32.25.5` (`nas-storage`) | NFS PVs and the Longhorn BackupTarget; see [Storage VLAN registry](#storage-vlan-registry) |
+| NAS storage address | `10.32.25.5` (`nas-storage`) | NFS PVs, the Longhorn BackupTarget and the S3 object store (`s3-storage`, port 9000); see [Storage VLAN registry](#storage-vlan-registry) |
 | NAS management address | `10.32.20.5` (`nas`) | DSM and container UIs |
 | Talos log receiver | `10.43.0.20:5170` (`fluent-bit-talos` ClusterIP) | Talos `machine.logging` and `KmsgLogConfig` destination; changing it needs a Talos config rollout on every node |
 
