@@ -48,7 +48,7 @@ Hermes Desktop for macOS and compatible native clients connect to the canonical 
 
 Kanidm and local-password sessions are distinct authentication principals: daily Kanidm sessions use the Kanidm subject UUID, while the break-glass principal is `basic:kelchm`. They are not separate Hermes tenants; conversations, projects, memory, credentials, and dashboard preferences belong to this single instance. Browser-controller authorization remains scoped to the principal that registered a controller session.
 
-Caddy obtains and renews an exact-host Let's Encrypt certificate through Cloudflare DNS-01. The dedicated token has Zone Read and DNS Edit on `kelch.io`; it is not shared with Kubernetes cert-manager or PVE. Caddy runs as UID/GID 1000 with a read-only root filesystem and only `NET_BIND_SERVICE`; its writable `/data` and `/config` paths persist under `/srv/caddy` so container recreation does not create a new ACME account or reissue unnecessarily. Caddy runs under Docker's init, which reaps the processes its healthcheck leaves behind. BusyBox `wget` starts a separate `ssl_client` for HTTPS that outlives it, and Caddy as PID 1 never reaps it. Without the init, one zombie per check filled the container's 4539-task limit in about 38 hours, after which the healthcheck could not fork.
+Caddy obtains and renews an exact-host Let's Encrypt certificate through Cloudflare DNS-01. The dedicated token has Zone Read and DNS Edit on `kelch.io`; it is not shared with Kubernetes cert-manager or PVE. Caddy runs as UID/GID 1000 with a read-only root filesystem and only `NET_BIND_SERVICE`; its writable `/data` and `/config` paths persist under `/srv/caddy` so container recreation does not create a new ACME account or reissue unnecessarily. Caddy currently runs as PID 1. Its BusyBox HTTPS healthcheck leaves `ssl_client` zombies, which previously filled the container's 4539-task limit in about 38 hours. Enabling `init: true` with this non-root image broke its privileged port-443 bind during the 2026-10-28 rollout and was rolled back. Leave init disabled; [#1079](https://github.com/kelchm/home-lab/issues/1079) tracks a replacement that preserves HTTPS and prevents process accumulation.
 
 ## Deployment verification
 
@@ -74,10 +74,10 @@ ssh kelchm@hermes.home.kelch.io 'sudo install -d -o 1000 -g 1000 -m 0750 /srv/ca
 
 ### Recreate only Caddy from its running image
 
-Use this procedure for a Caddy container-setting change such as enabling init. Merging the configuration does not change the guest. Recreating Caddy briefly interrupts HTTPS; obtain approval for that interruption. The full deployment command above also builds images and recreates Hermes, so use the targeted command below for this operation.
+Use this procedure for a separately reviewed Caddy container-setting change. Before a live retry, qualify the actual port-443 bind under the current non-root user, capabilities and `no-new-privileges` setting. `init: true` is known to fail that bind with the current image and must remain disabled. Merging the configuration does not change the guest. Recreating Caddy briefly interrupts HTTPS; obtain approval for that interruption. The full deployment command above also builds images and recreates Hermes, so use the targeted command below for this operation.
 
 1. On the guest, record Caddy's image ID, init setting and container start time, Hermes's container ID and start time, and the served certificate's SHA-256 fingerprint. Stop if the guest differs unexpectedly from the reviewed rollout state. Keep `/srv/caddy/data`, `/srv/caddy/config`, `Caddyfile`, the managed Hermes configuration and both runtime environment files unchanged.
-2. In `/opt/hermes`, save the current compose with `sudo cp -p compose.yaml compose.yaml.pre-init`. Stage the reviewed, merged `compose.yaml`, preserving its owner and mode. Check the diff against the saved file: for the init fix, only Caddy's `init: true` should change. Keep the saved file until acceptance passes.
+2. In `/opt/hermes`, save the current compose with `sudo cp -p compose.yaml compose.yaml.pre-caddy-recreate`. Stage the reviewed, merged `compose.yaml`, preserving its owner and mode. Check that the diff against the saved file contains only the reviewed Caddy change. Keep the saved file until acceptance passes.
 3. Run on the guest. The image name in compose is `localhost/hermes-caddy`; this supplies its `latest` tag from the already-running image if needed. A conflicting tag requires reconciliation before proceeding. Builds and pulls are disabled, and dependencies are not recreated.
 
    ```sh
@@ -93,16 +93,16 @@ Use this procedure for a Caddy container-setting change such as enabling init. M
    sudo docker compose up -d --no-deps --no-build --pull never caddy
    ```
 
-4. Measure the HTTPS interruption by polling `/api/status`. Verify Caddy uses the same image ID with `HostConfig.Init` true and PID 1 `docker-init`. It must become healthy, complete several natural 30-second healthchecks without accumulating zombie children, and keep its process count near its thread count. The healthcheck has a two-minute start period. Confirm the served certificate fingerprint and Hermes's container ID and start time are unchanged. The ten-second stop timeout does not bound startup or recovery time if the new container fails.
+4. Measure the HTTPS interruption by polling `/api/status`. Verify Caddy uses the same image ID, serves HTTPS on port 443 and becomes healthy. Record its actual init setting and PID 1; the current baseline has init unset and Caddy as PID 1. For a process-leak fix, require several natural 30-second healthchecks without accumulating zombie children and a process count near its thread count. The healthcheck has a two-minute start period. Confirm the served certificate fingerprint and Hermes's container ID and start time are unchanged. The ten-second stop timeout does not bound startup or recovery time if the new container fails.
 5. If acceptance fails, restore the saved compose and recreate only Caddy from the same local image, with no build or pull:
 
    ```sh
    cd /opt/hermes
-   sudo cp -p compose.yaml.pre-init compose.yaml
+   sudo cp -p compose.yaml.pre-caddy-recreate compose.yaml
    sudo docker compose up -d --no-deps --no-build --pull never caddy
    ```
 
-Rolling back init restores the original leak. A Caddy-only restart clears the existing zombies temporarily; neither action completes [#1079](https://github.com/kelchm/home-lab/issues/1079). Updating the Caddy image and automating its rollout remain separate work in [#1074](https://github.com/kelchm/home-lab/issues/1074).
+The current configuration still has the process leak. A Caddy-only restart clears existing zombies temporarily; this does not complete [#1079](https://github.com/kelchm/home-lab/issues/1079). Updating the Caddy image and automating its rollout remain separate work in [#1074](https://github.com/kelchm/home-lab/issues/1074).
 
 ### Hermes configuration and service checks
 

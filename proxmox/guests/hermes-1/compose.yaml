@@ -28,7 +28,6 @@ services:
     image: localhost/hermes-caddy
     container_name: hermes-caddy
     restart: unless-stopped
-    init: true
     network_mode: host
     read_only: true
     cap_drop:
