@@ -20,7 +20,9 @@
   const playbackEl = document.getElementById("playback-status");
   const playbackTextEl = document.getElementById("playback-text");
   const VIDEO_EVENTS = ["loadeddata", "canplay", "play", "playing", "pause", "waiting", "emptied", "resize", "error"];
-  const MEDIA_CONTROL_EVENTS = ["pointerdown", "pointerup", "mousedown", "mouseup", "mousemove", "click", "dblclick", "contextmenu", "wheel", "touchstart", "touchmove", "touchend", "keydown", "keyup"];
+  const MEDIA_CONTROL_EVENTS = ["pointerdown", "pointerup", "pointermove", "pointercancel", "mousedown", "mouseup", "mousemove", "click", "dblclick", "contextmenu", "wheel", "touchstart", "touchmove", "touchend", "touchcancel", "keydown", "keyup"];
+  const mediaEventIsolation = new WeakMap();
+  const mediaKeyIsolation = new Map();
 
   let isAuthenticated = false;
   let consoleReady = false;
@@ -35,6 +37,8 @@
   let inputLayer = null;
   let frameObserver = null;
   let playAttempt = 0;
+  let mediaPointerGesture = null;
+  let mediaKeyboardClick = null;
 
   function setStatus(state, message) {
     statusEl.dataset.state = state;
@@ -201,7 +205,7 @@
       const recent = validReads && performance.now() - lastValidAt < STREAM_READ_TIMEOUT_MS + VIDEO_POLL_MS * 2;
       // Later stable video cannot establish "unchanged" without a reference.
       // A real loss/recovery observed above still succeeds without the baseline.
-      return { kind: !recent || !baseline ? "unavailable" : !latest.signal ? "no-signal" : latest.online ? "unchanged" : "not-ready" };
+      return { kind: !recent || !baseline ? "unavailable" : !latest.signal ? "no-signal" : !latest.online ? "not-ready" : sawLoss || !baseline.online ? "unavailable" : "unchanged" };
     })();
     return { promise, cancel: () => controller.abort() };
   }
@@ -420,10 +424,50 @@
     inputLayer?.toggleAttribute("data-hosts-playback-paused", !hasVideoFrame(video));
   }
 
+  function captureMediaControl(event) {
+    const onVideo = event.target === observedVideo;
+    const startsPaused = onVideo && !hasVideoFrame(observedVideo);
+    const type = event.type;
+    const key = event.code || event.key || "";
+    // Snapshot before native Play can start video. Compatibility mouse events
+    // belong to the pointer/touch gesture that generated them.
+    if (type === "pointerdown" || (type === "touchstart" && mediaPointerGesture?.source !== "pointer") || (type === "mousedown" && (!mediaPointerGesture || mediaPointerGesture.source === "mouse"))) {
+      mediaPointerGesture = { source: type === "pointerdown" ? "pointer" : type === "touchstart" ? "touch" : "mouse", isolate: startsPaused };
+      mediaKeyboardClick = null;
+    }
+    if (type === "keydown") {
+      if (!event.repeat || !mediaKeyIsolation.has(key)) {
+        mediaKeyIsolation.set(key, startsPaused);
+      }
+      mediaKeyboardClick = mediaKeyIsolation.get(key);
+    }
+    let isolate = startsPaused;
+    if (type === "keydown" || type === "keyup") {
+      isolate = mediaKeyIsolation.get(key) ?? startsPaused;
+    } else if (type === "click" && event.detail === 0 && mediaKeyboardClick !== null) {
+      isolate = mediaKeyboardClick;
+    } else if (type !== "wheel" && mediaPointerGesture) {
+      isolate = mediaPointerGesture.isolate;
+    }
+    mediaEventIsolation.set(event, isolate);
+    // Playback may restore the sibling HID overlay before release/click. Catch
+    // those retargeted events before its handlers, but let native video controls
+    // receive video-targeted events before the bubble listener isolates them.
+    if (isolate && !onVideo) {
+      event.stopPropagation();
+    }
+    if (type === "keyup") {
+      mediaKeyIsolation.delete(key);
+    }
+    if (type === "click" || type === "pointercancel" || type === "touchcancel") {
+      mediaPointerGesture = null;
+      mediaKeyboardClick = null;
+    }
+  }
+
   function isolateMediaControl(event) {
-    // Bubble phase: native controls must receive the event before we stop it from
-    // reaching the stock stream-box mouse/keyboard handlers. Keep default actions.
-    if (!hasVideoFrame(event.currentTarget)) {
+    // Never prevent native control actions; only stop forwarding to stock HID.
+    if (mediaEventIsolation.get(event) ?? !hasVideoFrame(event.currentTarget)) {
       event.stopPropagation();
     }
   }
@@ -462,8 +506,12 @@
       }
       for (const name of MEDIA_CONTROL_EVENTS) {
         observedVideo.removeEventListener(name, isolateMediaControl);
+        observedVideo.ownerDocument.removeEventListener(name, captureMediaControl, true);
       }
     }
+    mediaPointerGesture = null;
+    mediaKeyboardClick = null;
+    mediaKeyIsolation.clear();
     inputLayer?.removeAttribute("data-hosts-playback-paused");
     observedVideo = video;
     inputLayer = video?.ownerDocument.getElementById("video-wrapper") || null;
@@ -472,6 +520,7 @@
         video.addEventListener(name, onVideoEvent);
       }
       for (const name of MEDIA_CONTROL_EVENTS) {
+        video.ownerDocument.addEventListener(name, captureMediaControl, true);
         video.addEventListener(name, isolateMediaControl);
       }
       reportVideoState(video);
