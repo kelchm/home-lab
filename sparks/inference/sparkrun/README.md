@@ -15,22 +15,24 @@ Every profile follows the contract in [#943](https://github.com/kelchm/home-lab/
 
 ## GLM-5.3-Flash on Mia's TensorFold kit
 
-`mia-tensorfold-glm53-exl3-tp2/` holds the profile for [Mia's two-Spark GLM kit](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold): TensorFold 0.6.0's Python CUDA engine with Mia's patches, serving Mia's 4 bpw EXL3 checkpoint across both Sparks. It replaced the kit's v1.10 release after [#941's comparison on October 22](https://github.com/kelchm/home-lab/issues/941#issuecomment-6334247435), in which the same 48 requests gave identical replies on both, and decode and prefill were within about 3% of v1.10's. GLM last served day to day on October 8, on v1.10.
+`mia-tensorfold-glm53-exl3-tp2/` holds the profile for [Mia's two-Spark GLM kit](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold): TensorFold 0.6.0's Python CUDA engine with Mia's patches, serving Mia's 4 bpw EXL3 checkpoint across both Sparks. The kit's `main` at `3fd60dfc` replaced its v1.10 release after [#941's comparison on October 22](https://github.com/kelchm/home-lab/issues/941#issuecomment-6334247435), in which the same 48 requests gave identical replies on both, and decode and prefill were within about 3% of v1.10's. `bf5f9452` replaced `3fd60dfc` on October 25 and passed [a trial on October 27](https://github.com/kelchm/home-lab/issues/938#issuecomment-6448276787). GLM last served day to day on October 8, on v1.10.
 
 ### Current profile
 
 | Profile | Kit | Image | Served name |
 | --- | --- | --- | --- |
-| `glm53-exl3-tp2-mia-tf-3fd60dfc-mia-1m` | `main` at [`3fd60dfc`](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold/commit/3fd60dfc836fab0f1ed0fd4f0afaf2a1d62b2aab), October 12, 107 patches | `14b5072e…`, config `9b007193…` | `GLM-5.3-Flash` |
+| `glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m` | `main` at [`bf5f9452`](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold/commit/bf5f94523a8251029cedae86bf61f8ce37fac218), October 25, 123 patches | `99fe7496…`, config `b925352f…` | `GLM-5.3-Flash` |
 
-The kit patches engine commit `c4646171` and has no numbered release after v1.10. The image is ARM64 and labelled with the kit's patch hash, `tf.patches=e66c657a433d`. Its patched files match a reconstruction of the engine plus the kit's patches byte for byte, for every file the mod guards or reads.
+The kit patches engine commit `c4646171` and has no numbered release after v1.10. The image is ARM64 and labelled with the kit's patch hash, `tf.patches=789e8f3bdfa2`. All 426 of its engine source files match a reconstruction of the engine plus the kit's patches byte for byte.
 
 - **Weights:** [Mia's 4 bpw TensorFold checkpoint](https://huggingface.co/Mia-AiLab/GLM-5.3-Flash-EXL3-4bpw-TensorFold/tree/078455ffe6472f9a52fbc1139f58b9db2881b25c) at `078455ff`, 83 shards and 175,642,267,944 bytes, and the DFlash2 drafter `incoai/GLM-5.3-Flash-DFlash2` at `bf582e4e`, 2,342,169,800 bytes.
-- **Serving:** a 1,048,576-token window per request and a 32,768-token reply budget, four streams sharing one FP8 KV pool, and thinking and vision on. The engine sizes the pool from the memory free at startup, inside the kit's 14.5 GiB memory reserve and 12.5 GiB kept-prompt cap; on October 22 it loaded 2,330,624 tokens. Readiness requires at least 1.2M, room for four 262,144-token prompts plus their replies. `TF_GLM_FILL_ROWS=2048` makes a fill's chunk the whole prompt chunk. Several of the kit's CUDA attention changes target three Sparks; the kit keeps the two-Spark 32-head path on Triton.
-- **Launcher settings:** SparkRun never runs the kit's `start.sh`, and the engine's built-in defaults differ from it, so the recipe states all 39 variables the kit's [`scripts/config.sh`](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold/blob/3fd60dfc836fab0f1ed0fd4f0afaf2a1d62b2aab/scripts/config.sh) exports in a clean environment. The mod's lock records them as `launcher_env`, and the tests compare recipe and lock.
+- **Serving:** a 1,048,576-token window per request and a 32,768-token reply budget, four streams sharing one FP8 KV pool, and thinking and vision on. The engine sizes the pool from the memory free at startup, inside the kit's 14.5 GiB memory reserve and 12.5 GiB kept-prompt cap; on October 27 it loaded 2,582,528 tokens, with the larger picture workspace below. Readiness requires at least 1.2M, room for four 262,144-token prompts plus their replies. `TF_GLM_FILL_ROWS=2048` makes a fill's chunk the whole prompt chunk. Several of the kit's CUDA attention changes target three Sparks; the kit keeps the two-Spark 32-head path on Triton.
+- **Pictures:** a request's pictures share a budget of 102,400 tokens, 50 pictures at 2,048, so a new picture never shrinks the earlier ones and a chat with more than eight still resumes from its kept prompt state. The vision workspace on rank 0 grows from 768 to 1,440 MiB to hold their rows. Setting `TENSORFOLD_GLM_REQUEST_IMAGE_TOKENS` to 16,384 restores the former eight-picture budget, where a ninth picture shrinks every earlier one; 768 MiB of workspace is then enough.
+- **Off:** the kit's spill tier (`TF_GLM_SPILL_QUOTA=0`), KV sharding (`TF_GLM_KV_SHARD`, in testing upstream) and the process exit on a broken engine (`TF_GLM_EXIT_ON_BROKEN`), as the kit ships them.
+- **Launcher settings:** SparkRun never runs the kit's `start.sh`, and the engine's built-in defaults differ from it, so the recipe states all 45 variables the kit's [`scripts/config.sh`](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold/blob/bf5f94523a8251029cedae86bf61f8ce37fac218/scripts/config.sh) exports in a clean environment. The mod's lock records them as `launcher_env`, and the tests compare recipe and lock.
 - **Site guards:** the mod patches three behaviours into the installed engine.
   - Reasoning is restored only by the server's original call IDs. Clients that renumber or omit call IDs must keep their own reasoning.
-  - A failed decoder or dead scheduler thread answers `/health` with HTTP 503 and `ok: false`.
+  - A failed decoder or dead scheduler thread answers `/health` with HTTP 503 and `ok: false`. The kit's own `0118` reports a failed decoder as `ok: false` with HTTP 200, and doesn't see the scheduler thread.
   - `/v1/models` reports `owned_by: tensorfold`, the window as `context_length` and `max_model_len`, and `reasoning` with the thinking default and the levels `max`, `high`, `low` and `none`. The template defines `low` and `high` and renders anything else as `max`; the server maps `minimal` to `low`, `medium` to `high` and `xhigh` to `max`, and `none` turns thinking off.
 
   The mod checks every guarded file's upstream hash before changing it, so it refuses files that differ from the ones it was written for. That is not an image check: the recipe's image pin pairs the recipe with its image.
@@ -43,11 +45,11 @@ How the profile differs from the kit's own launch:
 - **Rank command:** the kit's serve flags plus `--backend cuda` and `--no-update-check`.
 - **Fabric:** the ranks meet on `FABRIC_MASTER`, the head's CX7 address, as the kit's launcher does, but on SparkRun's `MASTER_PORT` where the kit uses port 29551. They fall back to SparkRun's management address only when the adapter has no fabric address. NCCL's collectives run over RoCE on both rails, with the devices and GID index SparkRun detects.
 - **Container:** SparkRun clears the image entrypoint and adds `--user root`, `no-new-privileges` and an open-file limit. Both ranks use host IPC and networking, all GPUs, `/dev/infiniband`, `IPC_LOCK`, unlimited locked memory and a 64 MiB stack.
-- **Caches:** weights mount at `/cache/huggingface`, and compiled kernels go to SparkRun's image- and model-keyed `/cache/runtime`, so a new image's first boot compiles from empty. This image's first boot took 460 s on October 22.
+- **Caches:** weights mount at `/cache/huggingface`, and compiled kernels go to SparkRun's image- and model-keyed `/cache/runtime`, so a new image's first boot compiles from empty. The `bf5f9452` image's first boot passed readiness 7.4 minutes after launch on October 27.
 
 ### Inputs outside SparkRun
 
-None. Mia publishes the image by digest, and SparkRun fetches the image and both snapshots and copies them to the worker. All three were on both hosts after the October 22 comparison. Stage weights in the head's home cache before a switch, as [Deploy](#deploy) describes.
+None. Mia publishes the image by digest, and SparkRun fetches the image and both snapshots and copies them to the worker. The weights and drafter have been on both hosts since October 22, and the `bf5f9452` image since October 27. Stage weights in the head's home cache before a switch, as [Deploy](#deploy) describes.
 
 ### Build
 
@@ -73,9 +75,9 @@ test "$failed" -eq 0
 From `~/sparkrun/recipes/glm53` on the head, after syncing this directory as in [Deploy](#deploy) and passing the [checks before a launch](#before-a-launch). Stop the running instance with its own recipe first:
 
 ```sh
-glm="$PWD/mia-tensorfold-glm53-exl3-tp2/glm53-exl3-tp2-mia-tf-3fd60dfc-mia-1m.yaml"
+glm="$PWD/mia-tensorfold-glm53-exl3-tp2/glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m.yaml"
 python3 mods/tensorfold-readiness/prepare.py --check
-python3 mods/mia-tensorfold-glm53-3fd60dfc/prepare.py --check
+python3 mods/mia-tensorfold-glm53-bf5f9452/prepare.py --check
 sparkrun run "$glm" --cluster sparks --no-auto-detect --no-sync-tuning --no-follow --dry-run
 sparkrun run "$glm" --cluster sparks --no-auto-detect --no-sync-tuning --no-follow
 sparkrun logs "$glm" --cluster sparks --all-sources
@@ -91,10 +93,11 @@ To roll back, stop it with its own recipe and launch the profile that served bef
 
 ### Known limits
 
-- **Measured once, on October 22:** a 500K needle was found, four 128K sessions completed together, and the lowest `MemAvailable` was 6.61 GiB on the head and 8.42 GiB on the worker. That is below the 8 GiB goal on the head and well above the 2 GiB stop line.
+- **Measured once, with `bf5f9452` on October 27:** a needle in a 490,917-token prompt was found, twelve 1080p pictures in one chat each read only their own tokens, and the lowest `MemAvailable` was 7.21 GiB on the head and 7.49 GiB on the worker. That is below the 8 GiB goal and well above the 2 GiB stop line. Four 128K sessions completed together with `3fd60dfc` on October 22 and were not repeated.
 - **Not established:** four long sessions growing together past 128K, retrieval near 1M, full 32k replies, coding and quantization quality, and stability beyond that trial.
 - **NCCL sockets on the management network:** SparkRun sets NCCL's socket interface to the management network, so some of NCCL's socket traffic crosses the worker's management link, which has dropped for seconds at a time ([#649](https://github.com/kelchm/home-lab/issues/649)).
-- **Open kit reports** of memory growth and hangs under long multi-agent load: [#143](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold/issues/143), [#154](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold/issues/154), [#163](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold/issues/163) and [#197](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold/issues/197).
+- **Open kit reports** of memory growth and hangs under long multi-agent load: [#143](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold/issues/143), [#154](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold/issues/154) and [#163](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold/issues/163).
+- **Kept prompt states** hold device memory outside the pool with no byte cap, the kit's default `TF_GLM_KEPT_BYTES_GIB=0`, and nothing returns it until a restart. In one report a 1 GiB cap left about 4 GiB more `MemAvailable` on each Spark, at the cost of a full prefill when a dropped conversation returns ([#197](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold/issues/197)).
 - **Admission:** requests past the four streams queue without limit, because `TF_GLM_MAX_QUEUED` is empty.
 - **Access and memory:** the endpoint has no API key, and no memory watchdog runs ([#944](https://github.com/kelchm/home-lab/issues/944)).
 
@@ -442,11 +445,11 @@ The two-Spark kit's #3, #6 and #9 cannot occur with one rank: there is no contro
 
 | Profile | Engine | Image | Window |
 | --- | --- | --- | --- |
-| `dsv41-1017-exl3-tp2-bth-tf-2970bcd-libertai-512k` | `2970bcd` with six patches | `a7845d4e…`, built here | 524,288, qualified to 524,139 prompt tokens |
+| `dsv41-1017-exl3-tp2-bth-tf-2970bcd-mia-fixes-libertai-512k` | `2970bcd` with six patches of ours and three of Mia's | `00cbfac0…`, built here | 524,288, qualified to 523,713 prompt tokens |
 
 Rank 0 runs `tensorfold-native serve` with the OpenAI and Anthropic routes; rank 1 runs `tf-dsv41-lanes`. Settings: four streams, a 32,768-token reply budget, thinking on, temperature 1.0, top-p 0.95, top-k 20, DSpark drafts, CUDA graphs and the Engram read-ahead. The ranks link over the CX7 cable, not the management network SparkRun's rendezvous address uses: `serve.py` takes the head's CX7 address from the adapter's `FABRIC_MASTER` and refuses to start without it. Both gather over both rails with RDMA on the devices and GID index SparkRun detects. The rank-1 pool equals the window.
 
-The [mod](mods/bertholomus-tensorfold-dsv41-2970bcd/) builds the image and launches both ranks. `upstream.lock.json` pins the engine, the inputs, the kit, the Engram tables and every mod file. The patches:
+The [mod](mods/bertholomus-tensorfold-dsv41-2970bcd-mia-fixes/) builds the image and launches both ranks. `upstream.lock.json` pins the engine, the inputs, the kit, the Engram tables and every mod file. The patches:
 
 | Patch | Source | Change |
 | --- | --- | --- |
@@ -456,6 +459,9 @@ The [mod](mods/bertholomus-tensorfold-dsv41-2970bcd/) builds the image and launc
 | `0004-literal-added-tokens.patch` | [bertholomus/TensorFold#36](https://github.com/bertholomus/TensorFold/pull/36) at `c2c05641` | An added token a client quotes in a chat request, a tool result or a tool description is encoded as text; tokens the template writes stay control tokens |
 | `0005-deepseek-efforts.patch` | This lab | The engine's efforts are DeepSeek's own `max` = 100, `high` = 75 and `low` = 50, and any other effort name goes to the nearest of them |
 | `0006-literal-object-keys.patch` | This lab | `0004` also covers JSON object keys, such as a tool's parameter names and a tool call's argument names |
+| `0007-server-prepare-memory.patch` | Mia's recipe at [`27741e1`](https://github.com/MiaAI-Lab/DeepSeek-v4.1-Flash-1017-2x-DGX-Sparks/tree/27741e176a9e5b98c10c9c7d012fd3e4fcdc19b6), `zig/patches/0023-server-prepare-memory.patch`, by wojo | A prompt's render and tokenization give their scratch back when done, not when the reply ends, and a new prepare waits while others run if MemAvailable would fall under `TENSORFOLD_PREPARE_FLOOR_GIB` (3 GiB by default) |
+| `0008-tool-call-prose.patch` | The same, `zig/patches/0027-tool-call-prose.patch`, by Coinupbtc | The text a reply writes before its tool calls is its `content`, which a non-streamed reply returned as `null`; a streamed reply no longer sends the calls' two leading newlines as content |
+| `0009-anthropic-budget-default.patch` | The same, `zig/patches/0029-anthropic-budget-default.patch`, by koniaik | The Anthropic route accepts `thinking: {"type": "enabled"}` without `budget_tokens` and uses the server's thinking budget |
 
 **Reasoning efforts.** DeepSeek's encoder (`encoding/encoding.py` in the checkpoint) names `low`, `high` and `max` and renders the chosen one as `Reasoning Effort: N` before the first turn when thinking; non-thinking is a separate mode. With `0005`, `/v1/models` lists `max`, `high`, `low` and `none`, highest first, and a request's other names are taken to the nearest listed level with ties going higher: `minimal` to `low`, `medium` to `high` and `xhigh` to `max`. A request's `none` turns thinking off unless the same request switches thinking on explicitly, with `chat_template_kwargs.enable_thinking` or the Anthropic `thinking` field; a request without an effort hears the template's default, `high`. The shared readiness gate checks the list in that order and renders each level and each other name through `/tokenize`.
 
@@ -479,13 +485,13 @@ inputs=/opt/spark-cache/runtime-inputs/tensorfold/LibertAIDAI__DeepSeek-V4.1-Fla
 engram=/opt/spark-cache/runtime-inputs/engram-1017  # the shards and the mod's embed-only index, by hard link
 mkdir -p "$inputs" "$engram"
 for f in config.json model-00047-of-00048.safetensors model-00048-of-00048.safetensors; do ln -f "$(readlink -f "$base/$f")" "$engram/$f"; done
-cp ~/sparkrun/recipes/glm53/mods/bertholomus-tensorfold-dsv41-2970bcd/engram.index.json "$engram/model.safetensors.index.json"
+cp ~/sparkrun/recipes/glm53/mods/bertholomus-tensorfold-dsv41-2970bcd-mia-fixes/engram.index.json "$engram/model.safetensors.index.json"
 docker run -d --name dsv41-inputs --gpus all --network host --ipc host --ulimit memlock=-1 --ulimit stack=67108864 \
   --cap-add IPC_LOCK --device /dev/infiniband -v "$hub:$hub:ro" -v "$engram:/engram:ro" -v "$inputs:/inputs" \
   -e TF_DS_REPLAY=1 -e TF_DS_PREFILL_CHUNK=2048 -e TF_DS_RANK_CACHE=/inputs/tf-ds-rank -e TF_DS_RANK_CACHE_READERS=32 \
   -e TF_DS_ENGRAM=/engram -e TF_DS_TOKEN_MAP=/inputs/dsv41_token_map.json -e TF_RDMA_GID_INDEX=3 \
   -e NCCL_IB_HCA=rocep1s0f0,roceP2p1s0f0 -e NCCL_IB_GID_INDEX=3 -e NCCL_SOCKET_IFNAME=enp1s0f0np0 \
-  dsv41-tf:2970bcd-4691715-e1c6ebe02e2a /usr/local/bin/tensorfold serve "$weights" --tp 2 --rank "$RANK" \
+  dsv41-tf:2970bcd-4691715-348c4339cc15 /usr/local/bin/tensorfold serve "$weights" --tp 2 --rank "$RANK" \
   --master 198.19.240.11 --host 127.0.0.1 --port 18891 --context 1048576 --vision --parallel 4 --mtp-drafts 5
 ```
 
@@ -496,24 +502,24 @@ These are the settings that wrote the current inputs on October 17, with this la
 The image is built on any linux/arm64 Docker daemon, never on a serving Spark, where the Zig and `nvcc` build would compete with the engine for host memory. The mod's `build/build.sh` fetches the engine and inputs at the lock's commits, applies the patches and builds on NVIDIA PyTorch 26.07 by digest, on the workstation's Colima `tf-build` profile:
 
 ```sh
-DOCKER_CONTEXT=colima-tf-build sparks/inference/sparkrun/mods/bertholomus-tensorfold-dsv41-2970bcd/build/build.sh
+DOCKER_CONTEXT=colima-tf-build sparks/inference/sparkrun/mods/bertholomus-tensorfold-dsv41-2970bcd-mia-fixes/build/build.sh
 ```
 
-The recipe's `container` and the lock's `image_id` are the image ID the head reports, which is the image's config digest; Colima's containerd store shows the index digest instead. To read it before loading, `colima ssh -p tf-build -- sudo ctr -n moby images ls` gives the index digest; `ctr -n moby content get` on that lists the arm64 manifest, and that manifest's `config.digest` is the ID. The October 21 build is `sha256:a7845d4e…`. A rebuild can produce another ID; record it in both before launching.
+The recipe's `container` and the lock's `image_id` are the image ID the head reports, which is the image's config digest; Colima's containerd store shows the index digest instead. To read it before loading, `colima ssh -p tf-build -- sudo ctr -n moby images ls` gives the index digest; `ctr -n moby content get` on that lists the arm64 manifest, and that manifest's `config.digest` is the ID. The October 25 build is `sha256:00cbfac0…`. A rebuild can produce another ID; record it in both before launching.
 
 ### Launch, stop and roll back
 
 From `~/sparkrun/recipes/glm53` on the head, after syncing this directory as in [Deploy](#deploy) and passing the [checks before a launch](#before-a-launch). Stop the running instance with its own recipe before loading the image, so the 37 GB load never runs beside a serving engine on the head's unified memory:
 
 ```sh
-dsv41="$PWD/bertholomus-tensorfold-dsv41-tp2/dsv41-1017-exl3-tp2-bth-tf-2970bcd-libertai-512k.yaml"
+dsv41="$PWD/bertholomus-tensorfold-dsv41-tp2/dsv41-1017-exl3-tp2-bth-tf-2970bcd-mia-fixes-libertai-512k.yaml"
 running="$PWD/<family>/<profile>.yaml"  # The recipe that launched the running instance.
 python3 mods/tensorfold-readiness/prepare.py --check
-python3 mods/bertholomus-tensorfold-dsv41-2970bcd/prepare.py --check
+python3 mods/bertholomus-tensorfold-dsv41-2970bcd-mia-fixes/prepare.py --check
 sparkrun stop "$running" --cluster sparks
 apps=$(nvidia-smi --query-compute-apps=pid --format=csv,noheader && ssh kelchm@10.32.21.32 nvidia-smi --query-compute-apps=pid --format=csv,noheader) && test -z "$apps"  # No compute process on either GPU.
 # If the image isn't on the head, load it now, from the workstation:
-#   DOCKER_CONTEXT=colima-tf-build docker save dsv41-tf:2970bcd-4691715-e1c6ebe02e2a | ssh kelchm@10.32.21.31 docker load
+#   DOCKER_CONTEXT=colima-tf-build docker save dsv41-tf:2970bcd-4691715-348c4339cc15 | ssh kelchm@10.32.21.31 docker load
 docker image inspect --format '{{.Id}}' "$(awk '$1 == "container:" { print $2 }' "$dsv41")"  # Fails unless the recipe's pinned image is here.
 sparkrun run "$dsv41" --cluster sparks --no-auto-detect --no-sync-tuning --no-follow --dry-run
 sparkrun run "$dsv41" --cluster sparks --no-auto-detect --no-sync-tuning --no-follow
@@ -522,7 +528,7 @@ sparkrun logs "$dsv41" --cluster sparks --all-sources
 sparkrun stop "$dsv41" --cluster sparks
 ```
 
-After a boot, run the shared checks in [Validate](#validate). [`tests/dsv41_chat_template.py`](tests/dsv41_chat_template.py) compares the mod's template with DeepSeek's four text reference renderings in the image's Python template engine.
+After a boot, run the shared checks in [Validate](#validate), with the agent gate once per `--section` but `structured`. [`tests/dsv41_chat_template.py`](tests/dsv41_chat_template.py) compares the mod's template with DeepSeek's four text reference renderings in the image's Python template engine.
 
 The rollback is Qwen's profile, `qwen38fn-nvfp4-tp2-mia-tf-v1.1-discovery-nvidia-480k`: stop DeepSeek with its own recipe and launch Qwen as [its section](#qwen38-flash-next-on-mias-zig-engine-kits) describes. It is another model, so clients that read `/v1/models` follow it and clients with a fixed entry need Qwen's.
 
@@ -532,7 +538,9 @@ The rollback is Qwen's profile, `qwen38fn-nvfp4-tp2-mia-tf-v1.1-discovery-nvidia
 - **Prompt cache:** it evicts kept conversations oldest first, so an agent's idle main conversation goes before finished subagents' ([#27](https://github.com/MiaAI-Lab/DeepSeek-v4.1-Flash-1017-2x-DGX-Sparks/issues/27) there).
 - **Forced calls:** a request with `tool_choice: "required"` or a named function reads every token synchronously, even after the call gate (`0002`) has forced the call's opening, so it loses decode overlap for the call's arguments. Other requests are unaffected, and `0002` stays verbatim from Mia's recipe.
 - **Scheduling flags:** the engine's piecewise prompt passes (`TF_FILL_CHUNKS`) stay off. Mia's comparable interleave starved several queued long prompts ([#18](https://github.com/MiaAI-Lab/DeepSeek-v4.1-Flash-1017-2x-DGX-Sparks/issues/18) there), and a long prompt pass holds other streams' tokens until it finishes. The engine's opt-in `TF_DS_SOLO_OVERHEAD` and `TF_DS_NO_COPIES` also stay off until measured here.
-- **Window and memory:** the head keeps about 6 GiB available with the model loaded, and its low was 5.96 GiB during the 524,139-token prompt on October 22. Mia reports 512K as the practical limit for a head like this one. No memory watchdog runs.
+- **Window and memory:** the head keeps about 6.5 GiB available with the model loaded. On October 25 its low was 5.69 GiB during the short checks and 6.44 GiB during the 523,713-token prompt, and the worker's low was 7.45 GiB. Mia reports 512K as the practical limit for a head like this one. No memory watchdog runs.
+- **Text before tool calls:** with `0008`, a non-streamed reply's `content` is that text with its leading and trailing whitespace trimmed, so a client that sends the turn back can differ from the generated tokens just before the calls when the text ended with extra blank lines or started indented. A streamed reply keeps the text as generated.
+- **Structured output:** a `response_format` and the `guided_*` fields answer HTTP 400; the engine has no grammar support.
 - **Access:** the endpoint has no API key.
 
 ## Deploy
@@ -685,5 +693,11 @@ python3 ~/sparkrun/recipes/glm53/tests/agent_acceptance.py --model "$model" --re
 ## Update a pinned mod
 
 Each mod is frozen: `upstream.lock.json` pins the image, the upstream revisions and every mod file, and `prepare.py --check` refuses any other. For an upstream update, review the kit's or engine's launcher, runtime files and tests together, and add a new versioned recipe and mod rather than editing the current ones, so the current profile stays as the rollback. Update the lock's revisions and hashes from the reviewed source, including every mod file's hash, then dry-run and validate the new profile on the Sparks. Do not update checksums to silence a failure.
+
+The NVIDIA PyTorch base is locked by digest alone, `nvcr.io/nvidia/pytorch@sha256:2140e699b3beaf7f96a0081fd9c9406bc3832b435cdb60dfa2d261f7d2f34a1c`. A registry manifest lookup on 2026-10-25 returned that same digest for `26.07-py3`. The DeepSeek mod names it in its `build/Dockerfile`, and the one-Spark Qwen mod in its lock's `build.base_image`. These pins preserve the reviewed base and source/patch inputs; a rebuild can still differ because DeepSeek resolves APT and Python dependencies at build time. A newer base has not been independently qualified here. Renovate leaves the digest-only `FROM` alone under the [dependency-update policy](../../../docs/runbooks/dependency-updates.md), and the current managers do not extract the base from the lock JSON.
+
+Review the base and upstream releases with the other coupled inputs at the next refresh of a profile that uses it, then rebuild and run that profile's readiness and acceptance checks on the Sparks before adopting a new base. This is a manual review trigger; no separate automatic check reports newer PyTorch releases or security fixes for these pins. A new snapshot mod's base takes a digest-only `FROM` or a lock-supplied build argument, so Renovate cannot edit a checksummed file in place.
+
+The same next-profile-refresh trigger applies to the kit, engine, weights, toolchain and patches recorded across the applicable lock, recipe and build files: review upstream changes as a coupled set. CI checks the listed file hashes and recipe contracts before merge, but the manifest itself remains a reviewed input and some dependency fields still lack semantic validation ([#1052](https://github.com/kelchm/home-lab/issues/1052)).
 
 SparkRun fingerprints the declared mod references, not their contents, so relaunch after a mod change and use `--fresh` for a new benchmark comparison.

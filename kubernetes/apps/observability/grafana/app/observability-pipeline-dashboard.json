@@ -1556,7 +1556,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "Rows Fluent Bit read from container logs on each node, and rows VictoriaLogs received. Received should track the sum of collected.",
+      "description": "Rows Fluent Bit read from container logs on each node and from each host's journal, and rows VictoriaLogs received from every source.",
       "id": 19,
       "title": "Log rows per second",
       "type": "timeseries",
@@ -1576,6 +1576,17 @@
           "expr": "sum by (node) (rate(fluentbit_input_records_total{job=\"fluent-bit\",name=\"pods\"}[$__rate_interval]))",
           "legendFormat": "collected on {{node}}",
           "refId": "A",
+          "range": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum by (instance) (rate(fluentbit_input_records_total{job=~\".+-fluent-bit\",name=\"journal\"}[$__rate_interval]))",
+          "legendFormat": "collected on {{instance}}",
+          "refId": "C",
+          "editorMode": "code",
           "range": true
         },
         {
@@ -1661,9 +1672,9 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "Share of each node's 4 GiB output buffer in use. The line marks FluentBitBufferNearCapacity at 75%.",
+      "description": "Share of each collector's output buffer in use: 4 GiB on each node, 256 MiB on each host. The line marks FluentBitBufferNearCapacity at 75%, which covers the nodes.",
       "id": 20,
-      "title": "Fluent Bit buffer per node",
+      "title": "Fluent Bit buffer per collector",
       "type": "timeseries",
       "gridPos": {
         "h": 8,
@@ -1681,6 +1692,17 @@
           "expr": "100 - max by (node) (fluentbit_output_chunk_available_capacity_percent{job=\"fluent-bit\",name=\"victorialogs\"})",
           "legendFormat": "{{node}}",
           "refId": "A",
+          "range": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "100 - max by (instance) (fluentbit_output_chunk_available_capacity_percent{job=~\".+-fluent-bit\",name=\"ingest\"})",
+          "legendFormat": "{{instance}}",
+          "refId": "B",
+          "editorMode": "code",
           "range": true
         }
       ],
@@ -1777,7 +1799,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(increase(fluentbit_output_dropped_records_total{job=\"fluent-bit\"}[$__interval]))",
+          "expr": "sum(increase(fluentbit_output_dropped_records_total{job=~\"(.+-)?fluent-bit\"}[$__interval]))",
           "legendFormat": "Fluent Bit records dropped (lower bound)",
           "refId": "A",
           "range": true

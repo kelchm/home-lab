@@ -13,7 +13,6 @@ MCPHub groups represent reusable capability and failure boundaries. They are not
 | `electronics-reference` | DigiKey catalog tools, PCBParts | Electronics and component reference data. |
 | `weather` | Open-Meteo | Weather lookup. |
 | `hacker-news` | Hacker News | Read-only HN feeds, threads, users, and full-text search. |
-| `browser` | Playwright Stealth | High prompt-injection surface; isolated from every other capability and given a per-session upstream client. |
 | `digikey-lists` | DigiKey MyLists tools | Reads and changes saved lists on the operator's DigiKey account through its OAuth refresh token. |
 
 Static system bearer keys represent workload principals. The current matrix is:
@@ -24,11 +23,11 @@ Static system bearer keys represent workload principals. The current matrix is:
 | `operator-codex` | Every group except `digikey-lists`; covers the Codex CLI and the ChatGPT desktop app, which share `~/.codex/config.toml`. |
 | `operator-opencode` | Every group except `homelab-read` and `digikey-lists`. |
 | `operator-claude-desktop` | `automotive-reference`, `electronics-reference`, `weather`, `hacker-news`, and `digikey-lists`. |
-| `hermes-personal` | Every group except `browser` and `digikey-lists`. |
+| `hermes-personal` | Every group except `digikey-lists`. |
 | `hermes-ops-cron` | `homelab-read` only. |
 | `flatrate-discord` | `automotive-reference` only. |
 
-The `operator-*` keys belong to agent clients on the operator workstation. `homelab-read` is the sensitive group: Kubernetes and Flux run under the `view` ClusterRole and cannot read Secrets, but Grafana's Viewer token queries every datasource, including all pod logs. `browser` and `hacker-news` return untrusted text, and `browser` can send data to any public host. Claude Code, Codex, and Grok are the operator's interactive agents and receive every read-only group; `homelab-read` gives them cluster state and pod logs in every project, not only in this repository, where `.mise.toml` supplies an admin kubeconfig. OpenCode omits `homelab-read` because its `opencode-go` provider sends tool output to third-party model hosts. Claude Desktop is used for reference lookups, so it omits `homelab-read` and `browser`, and it is the only client that manages DigiKey lists.
+The `operator-*` keys belong to agent clients on the operator workstation. `homelab-read` is the sensitive group: Kubernetes and Flux run under the `view` ClusterRole and cannot read Secrets, but Grafana's Viewer token queries every datasource, including all pod logs. `hacker-news` returns untrusted text. Claude Code, Codex, and Grok are the operator's interactive agents and receive every read-only group; `homelab-read` gives them cluster state and pod logs in every project, not only in this repository, where `.mise.toml` supplies an admin kubeconfig. OpenCode omits `homelab-read` because its `opencode-go` provider sends tool output to third-party model hosts. Claude Desktop is used for reference lookups, so it omits `homelab-read`, and it is the only client that manages DigiKey lists.
 
 Separate keys give each client its own log attribution, revocation, and default tool set. They do not isolate agents that run as the same macOS user: any client with shell access can read another client's configuration and key.
 

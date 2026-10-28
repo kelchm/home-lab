@@ -93,11 +93,3 @@ spec:
         - ports:
             - port: "8080"
               protocol: TCP
-    - toEndpoints:
-        - matchLabels:
-            k8s:io.kubernetes.pod.namespace: ai
-            app.kubernetes.io/name: playwright-stealth-mcp
-      toPorts:
-        - ports:
-            - port: "8931"
-              protocol: TCP

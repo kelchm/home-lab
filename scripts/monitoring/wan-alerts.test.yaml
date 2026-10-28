@@ -112,7 +112,7 @@ tests:
           - labels: 'ALERTS{alertname="TMobileMetricsMissing",alertstate="firing",instance="tmobile-gateway",job="tmobile-api",severity="info"}'
             value: 1
 
-  - name: Lost registration fires after five minutes
+  - name: A registration state other than registered is not missing metrics
     interval: 1m
     input_series:
       - series: up{job="tmobile-api",instance="tmobile-gateway"}
@@ -122,20 +122,6 @@ tests:
       - series: tmobile_registration_info{job="tmobile-api",instance="tmobile-gateway",registration="searching"}
         values: _x20 1x40
     alert_rule_test:
-      - eval_time: 19m
-        alertname: TMobileNotRegistered
-        exp_alerts: []
-      - eval_time: 26m
-        alertname: TMobileNotRegistered
-        exp_alerts:
-          - exp_labels:
-              job: tmobile-api
-              instance: tmobile-gateway
-              registration: searching
-              severity: warning
-            exp_annotations:
-              summary: T-Mobile gateway registration is searching
-              description: The gateway is not registered on the T-Mobile network, so WAN1 carries no traffic. Check T-Mobile for an outage in the area, then power-cycle the gateway.
       - eval_time: 26m
         alertname: TMobileMetricsMissing
         exp_alerts: []

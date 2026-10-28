@@ -1,4 +1,4 @@
-"""GLM-5.3-Flash on Mia's kit at main 3fd60dfc: recipe, mod, site guards and discovery, without GPU weights."""
+"""GLM-5.3-Flash on Mia's kit at main bf5f9452: recipe, mod, site guards and discovery, without GPU weights."""
 
 from __future__ import annotations
 
@@ -27,8 +27,8 @@ from sparkrun.core.validation import ERROR  # noqa: E402
 from sparkrun.orchestration.executors.docker import DockerExecutor  # noqa: E402
 from sparkrun.runtimes._cluster_ops import ClusterContext  # noqa: E402
 
-RECIPE = ROOT / "mia-tensorfold-glm53-exl3-tp2/glm53-exl3-tp2-mia-tf-3fd60dfc-mia-1m.yaml"
-MOD = ROOT / "mods/mia-tensorfold-glm53-3fd60dfc"
+RECIPE = ROOT / "mia-tensorfold-glm53-exl3-tp2/glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m.yaml"
+MOD = ROOT / "mods/mia-tensorfold-glm53-bf5f9452"
 SERVED = "GLM-5.3-Flash"
 HEAD = "172.16.21.31"
 
@@ -62,27 +62,29 @@ def test_recipe_pins_the_kit_and_states_its_launcher_defaults():
     for field in ("kit_revision", "engine_revision", "upstream_patch_count", "upstream_patch_hash"):
         assert recipe.metadata[field] == lock[field], field
     # Every variable the pinned scripts/config.sh exports, with the same value.
-    assert len(lock["launcher_env"]) == 39 and lock["launcher_env"]["TF_GLM_FILL_ROWS"] == "2048"
+    assert len(lock["launcher_env"]) == 45 and lock["launcher_env"]["TF_GLM_FILL_ROWS"] == "2048"
+    assert (lock["launcher_env"]["TENSORFOLD_GLM_REQUEST_IMAGE_TOKENS"], lock["launcher_env"]["TENSORFOLD_VISION_WORKSPACE_MIB"]) == \
+        ("102400", "1440")
     assert {key: recipe.env.get(key) for key in lock["launcher_env"]} == lock["launcher_env"]
     engine_only = {key for key in set(recipe.env) - set(lock["launcher_env"]) if key.startswith(("TENSORFOLD_", "TF_"))}
     assert engine_only == {
         "TF_GLM_LOOP_GUARD", "TF_GLM_KEEP_REASONING", "TF_GLM_KEEP_REASONING_MB", "TENSORFOLD_GLM_IMAGE_TOKENS",
         "TENSORFOLD_GLM_VIDEO_TOKENS", "TENSORFOLD_GLM_VIDEO_FRAMES", "TENSORFOLD_GLM_MAX_IMAGES",
-        "TENSORFOLD_GLM_MAX_VIDEOS", "TENSORFOLD_GLM_REQUEST_IMAGE_TOKENS", "TENSORFOLD_GLM_REQUEST_VIDEO_TOKENS"}
+        "TENSORFOLD_GLM_MAX_VIDEOS", "TENSORFOLD_GLM_REQUEST_VIDEO_TOKENS"}
     assert recipe.env["TENSORFOLD_NUCLEUS_UNION"] == "1"
     for key, off in (("TF_GLM_EFFORT_TAIL", "0"), ("TF_GLM_CACHE_SHARE_PCT", "0"), ("TF_GLM_LOOP_GUARD", "0"),
                      ("TF_GLM_KEPT_BYTES_GIB", "0"), ("TF_GLM_KEEP_PER_CHAT", "0"), ("TF_GLM_EXL3_DEC_ORDER", "0"),
                      ("TF_GLM_DISPLAY_KV_MIB", "0"), ("TF_GLM_DISPLAY_KV_BACKEND", "drm"), ("TF_GLM_MAX_QUEUED", ""),
-                     ("TF_GLM_MTP", "auto")):
+                     ("TF_GLM_MTP", "auto"), ("TF_GLM_SPILL_QUOTA", "0"), ("TF_GLM_PREFIX_WAIT", "0")):
         assert recipe.env[key] == off, key
-    assert not [key for key in recipe.env if "SPILL" in key]
+    assert not [key for key in recipe.env if "KV_SHARD" in key or key == "TF_GLM_EXIT_ON_BROKEN"]
     assert (recipe.env["TENSORFOLD_MEMORY_RESERVE_GIB"], recipe.env["TF_GLM_CACHE_GIB"]) == ("14.5", "12.5")
     assert recipe.metadata["site_backports"] == "exact-tool-turn-reasoning, strict-concurrent-health, models-discovery"
 
 
 def test_recipe_uses_the_shared_gate_with_glms_own_levels():
     recipe = _recipe()
-    assert recipe.mods == ["../mods/tensorfold-readiness", "../mods/mia-tensorfold-glm53-3fd60dfc"]
+    assert recipe.mods == ["../mods/tensorfold-readiness", "../mods/mia-tensorfold-glm53-bf5f9452"]
     hook = shlex.split(recipe.post_exec[0])
     assert hook[:2] == ["python3", "/opt/tensorfold-readiness/readiness.py"]
     for flag, value in (("--model", SERVED), ("--context", "1048576"), ("--lanes", "4"),
@@ -191,8 +193,7 @@ def _stand_in_tree(tmp_path):
         "families/glm5_next/cuda/kept_reasoning.py": (fixes.reasoning, '"""Stand-in.\n\n'
             'ids). Here the signature covers the whole conversation before the calls, not only the last user message, '
             'so a reply\nis only ever put back into the conversation it was written for.\n"""\n'
-            'def _keys(history, calls):\n    ids = []\n'
-            '    return [i for i in ids if isinstance(i, str) and _OUR_ID.match(i)] + [signature(history, calls)]\n'),
+            'def _keys(history, calls):\n    return _ids(calls) + [signature(history, calls)]\n'),
         "cuda/health.py": (fixes.health, "def snapshot(app, scheduler=None, decoder=None):\n    if app:\n"
                                          "        body = {}\n        return body\n"),
         "cuda/http.py": (fixes.http,
@@ -247,7 +248,7 @@ def test_site_guards_refuse_other_sources_and_apply_once(tmp_path):
     assert all(guarded[name] != upstream[name] for name in upstream)
     compile(guarded["cuda/health.py"], "health.py", "exec")
     reasoning = guarded["families/glm5_next/cuda/kept_reasoning.py"]
-    assert "_OUR_ID.match(i)]" in reasoning and "[signature(history, calls)]" not in reasoning
+    assert "    return _ids(calls)\n" in reasoning and "[signature(history, calls)]" not in reasoning
     assert "_model_entry(app, model_id) for model_id in app.model_ids" in guarded["cuda/http.py"]
     assert '200 if report.get("ok") is True else 503' in guarded["cuda/http.py"]
     compile(guarded["cuda/http.py"], "http.py", "exec")

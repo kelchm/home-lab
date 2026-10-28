@@ -37,7 +37,7 @@ tests:
         alertname: NodeOOMKillDetected
         exp_alerts: []
 
-  - name: A CPU within 5 C of its own limit for 15 minutes alerts
+  - name: A CPU within 5 C of its own limit for five minutes alerts once per machine
     interval: 1m
     input_series:
       # pve-sbx-1's package runs 4 C under its critical 100 C, pve-sbx-2's 10 C under.
@@ -60,42 +60,125 @@ tests:
         values: 100x30
       - series: node_hwmon_sensor_label{instance="pve-sbx-2",platform="pve",job="pve-node",chip="platform_coretemp_0",sensor="temp2",label="Core 0"}
         values: 1x30
-      # A Pi 5 at 81 C is 4 C from 85 C; one at 79 C is not close.
+      # k8s-prod-1's Tctl is 4 C from 95 C. k8s-prod-2's Tctl is cool but its integrated GPU, on the same die, is 3 C away.
+      # Neither of k8s-prod-3's is within 5 C.
+      - series: node_hwmon_temp_celsius{instance="k8s-prod-1",platform="k8s",job="node-exporter",cluster="k8s-prod",chip="pci0000:00_0000:00:18_3",sensor="temp1"}
+        values: 91x30
+      - series: node_hwmon_sensor_label{instance="k8s-prod-1",platform="k8s",job="node-exporter",cluster="k8s-prod",chip="pci0000:00_0000:00:18_3",sensor="temp1",label="Tctl"}
+        values: 1x30
+      - series: node_hwmon_temp_celsius{instance="k8s-prod-2",platform="k8s",job="node-exporter",cluster="k8s-prod",chip="pci0000:00_0000:00:18_3",sensor="temp1"}
+        values: 80x30
+      - series: node_hwmon_sensor_label{instance="k8s-prod-2",platform="k8s",job="node-exporter",cluster="k8s-prod",chip="pci0000:00_0000:00:18_3",sensor="temp1",label="Tctl"}
+        values: 1x30
+      - series: node_hwmon_temp_celsius{instance="k8s-prod-2",platform="k8s",job="node-exporter",cluster="k8s-prod",chip="pci0000:00_0000:08:00_0",sensor="temp1"}
+        values: 92x30
+      - series: node_hwmon_sensor_label{instance="k8s-prod-2",platform="k8s",job="node-exporter",cluster="k8s-prod",chip="pci0000:00_0000:08:00_0",sensor="temp1",label="edge"}
+        values: 1x30
+      - series: node_hwmon_temp_celsius{instance="k8s-prod-3",platform="k8s",job="node-exporter",cluster="k8s-prod",chip="pci0000:00_0000:00:18_3",sensor="temp1"}
+        values: 89x30
+      - series: node_hwmon_sensor_label{instance="k8s-prod-3",platform="k8s",job="node-exporter",cluster="k8s-prod",chip="pci0000:00_0000:00:18_3",sensor="temp1",label="Tctl"}
+        values: 1x30
+      - series: node_hwmon_temp_celsius{instance="k8s-prod-3",platform="k8s",job="node-exporter",cluster="k8s-prod",chip="pci0000:00_0000:08:00_0",sensor="temp1"}
+        values: 88x30
+      - series: node_hwmon_sensor_label{instance="k8s-prod-3",platform="k8s",job="node-exporter",cluster="k8s-prod",chip="pci0000:00_0000:08:00_0",sensor="temp1",label="edge"}
+        values: 1x30
+      # A Pi reports its CPU twice; ups-office at 81 C is 4 C from 85 C, ups-compute-rack at 79 C is not close.
       - series: node_hwmon_temp_celsius{instance="ups-office",platform="pi",job="pi-node",chip="thermal_thermal_zone0",sensor="temp0"}
         values: 81x30
+      - series: node_hwmon_temp_celsius{instance="ups-office",platform="pi",job="pi-node",chip="thermal_thermal_zone0",sensor="temp1"}
+        values: 80.5x30
       - series: node_hwmon_chip_names{instance="ups-office",platform="pi",job="pi-node",chip="thermal_thermal_zone0",chip_name="cpu_thermal"}
         values: 1x30
       - series: node_hwmon_temp_celsius{instance="ups-compute-rack",platform="pi",job="pi-node",chip="thermal_thermal_zone0",sensor="temp0"}
         values: 79x30
+      - series: node_hwmon_temp_celsius{instance="ups-compute-rack",platform="pi",job="pi-node",chip="thermal_thermal_zone0",sensor="temp1"}
+        values: 79x30
       - series: node_hwmon_chip_names{instance="ups-compute-rack",platform="pi",job="pi-node",chip="thermal_thermal_zone0",chip_name="cpu_thermal"}
         values: 1x30
     alert_rule_test:
-      - eval_time: 10m
-        alertname: NodeCPUTemperatureHigh
+      - eval_time: 4m
+        alertname: NodeCPUTemperatureCritical
         exp_alerts: []
-      - eval_time: 20m
-        alertname: NodeCPUTemperatureHigh
+      - eval_time: 10m
+        alertname: NodeCPUTemperatureCritical
         exp_alerts:
           - exp_labels:
               instance: pve-sbx-1
               platform: pve
               job: pve-node
-              chip: platform_coretemp_0
-              sensor: temp1
-              severity: warning
+              severity: critical
             exp_annotations:
               summary: CPU on pve-sbx-1 is 4 C from its limit
-              description: 'The CPU on pve-sbx-1 has been within 5 C of its limit for 15 minutes: the critical temperature a PVE host reports, or 85 C, where a Pi 5 throttles. Check cooling and load.'
+              description: 'The CPU on pve-sbx-1 has been within 5 C of its limit for five minutes: the critical temperature a PVE host reports, 95 C for a k8s-prod node, or 85 C, where a Pi 5 throttles. Check cooling and load.'
+          - exp_labels:
+              instance: k8s-prod-1
+              platform: k8s
+              job: node-exporter
+              cluster: k8s-prod
+              severity: critical
+            exp_annotations:
+              summary: CPU on k8s-prod-1 is 4 C from its limit
+              description: 'The CPU on k8s-prod-1 has been within 5 C of its limit for five minutes: the critical temperature a PVE host reports, 95 C for a k8s-prod node, or 85 C, where a Pi 5 throttles. Check cooling and load.'
+          - exp_labels:
+              instance: k8s-prod-2
+              platform: k8s
+              job: node-exporter
+              cluster: k8s-prod
+              severity: critical
+            exp_annotations:
+              summary: CPU on k8s-prod-2 is 3 C from its limit
+              description: 'The CPU on k8s-prod-2 has been within 5 C of its limit for five minutes: the critical temperature a PVE host reports, 95 C for a k8s-prod node, or 85 C, where a Pi 5 throttles. Check cooling and load.'
           - exp_labels:
               instance: ups-office
               platform: pi
               job: pi-node
-              chip: thermal_thermal_zone0
-              sensor: temp0
-              severity: warning
+              severity: critical
             exp_annotations:
               summary: CPU on ups-office is 4 C from its limit
-              description: 'The CPU on ups-office has been within 5 C of its limit for 15 minutes: the critical temperature a PVE host reports, or 85 C, where a Pi 5 throttles. Check cooling and load.'
+              description: 'The CPU on ups-office has been within 5 C of its limit for five minutes: the critical temperature a PVE host reports, 95 C for a k8s-prod node, or 85 C, where a Pi 5 throttles. Check cooling and load.'
+
+  - name: An NVMe drive within 5 C of its own warning temperature for five minutes alerts
+    interval: 1m
+    input_series:
+      # k8s-prod-1 is 3.85 C under its 83.85 C warning temperature, spark-1 6.85 C under its 82.85 C.
+      - series: node_hwmon_temp_celsius{instance="k8s-prod-1",platform="k8s",job="node-exporter",cluster="k8s-prod",chip="nvme_nvme0",sensor="temp1"}
+        values: 80x30
+      - series: node_hwmon_temp_max_celsius{instance="k8s-prod-1",platform="k8s",job="node-exporter",cluster="k8s-prod",chip="nvme_nvme0",sensor="temp1"}
+        values: 83.85x30
+      - series: node_hwmon_sensor_label{instance="k8s-prod-1",platform="k8s",job="node-exporter",cluster="k8s-prod",chip="nvme_nvme0",sensor="temp1",label="Composite"}
+        values: 1x30
+      - series: node_hwmon_temp_celsius{instance="spark-1",platform="spark",job="spark-node",chip="nvme_nvme0",sensor="temp1"}
+        values: 76x30
+      - series: node_hwmon_temp_max_celsius{instance="spark-1",platform="spark",job="spark-node",chip="nvme_nvme0",sensor="temp1"}
+        values: 82.85x30
+      - series: node_hwmon_sensor_label{instance="spark-1",platform="spark",job="spark-node",chip="nvme_nvme0",sensor="temp1",label="Composite"}
+        values: 1x30
+      # A drive's other sensors run hotter than Composite and report no usable limit.
+      - series: node_hwmon_temp_celsius{instance="pve-sbx-1",platform="pve",job="pve-node",chip="nvme_nvme0",sensor="temp3"}
+        values: 95x30
+      - series: node_hwmon_temp_max_celsius{instance="pve-sbx-1",platform="pve",job="pve-node",chip="nvme_nvme0",sensor="temp3"}
+        values: 65261.85x30
+      - series: node_hwmon_sensor_label{instance="pve-sbx-1",platform="pve",job="pve-node",chip="nvme_nvme0",sensor="temp3",label="Sensor 2"}
+        values: 1x30
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: NodeNVMeCompositeTemperatureCritical
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: NodeNVMeCompositeTemperatureCritical
+        exp_alerts:
+          - exp_labels:
+              instance: k8s-prod-1
+              platform: k8s
+              job: node-exporter
+              cluster: k8s-prod
+              chip: nvme_nvme0
+              sensor: temp1
+              label: Composite
+              severity: critical
+            exp_annotations:
+              summary: NVMe on k8s-prod-1 is 4 C from its warning temperature
+              description: 'The NVMe drive on k8s-prod-1 has been within 5 C of its own warning temperature for five minutes. Above it, the drive throttles and raises a SMART warning. Check airflow around the drive.'
 
   - name: A Pi undervolted for 15 minutes alerts; a blip at boot does not
     interval: 1m
@@ -136,3 +219,142 @@ tests:
             exp_annotations:
               summary: ups-office is running undervolted
               description: 'The Pi firmware on ups-office has reported undervoltage for 15 minutes. An undervolted Pi throttles its CPU. Check the power supply and its cable: a long or thin USB cable drops voltage.'
+
+  - name: Security updates waiting three days alert; ones installed sooner do not
+    interval: 1h
+    input_series:
+      # More arrive on day two; the alert reports the count waiting now.
+      - series: apt_security_upgrades_pending{instance="pve-sbx-1",platform="pve",job="pve-node"}
+        values: 24x50 30x30
+      - series: apt_security_upgrades_pending{instance="spark-1",platform="spark",job="spark-node"}
+        values: 3x24 0x56
+      # A host that starts reporting already behind waits three days like any other.
+      - series: apt_security_upgrades_pending{instance="pve-sbx-2",platform="pve",job="pve-node"}
+        values: _x30 5x50
+    alert_rule_test:
+      - eval_time: 71h
+        alertname: NodeSecurityUpdatesPending
+        exp_alerts: []
+      - eval_time: 73h
+        alertname: NodeSecurityUpdatesPending
+        exp_alerts:
+          - exp_labels:
+              instance: pve-sbx-1
+              platform: pve
+              job: pve-node
+              severity: warning
+            exp_annotations:
+              summary: pve-sbx-1 has had security updates waiting for three days
+              description: 'Packages from a security archive have had upgrades available on pve-sbx-1 for three days; 30 are waiting now. Install them, then reboot the host if they need it.'
+
+  - name: Package lists not refreshed for two days alert
+    interval: 1m
+    input_series:
+      # pve-sbx-1 refreshes daily; spark-1 last refreshed at time zero.
+      - series: apt_package_lists_refreshed_timestamp_seconds{instance="pve-sbx-1",platform="pve",job="pve-node"}
+        values: 0x1439 86400x1440 172800x1440
+      - series: apt_package_lists_refreshed_timestamp_seconds{instance="spark-1",platform="spark",job="spark-node"}
+        values: 0x4320
+    alert_rule_test:
+      - eval_time: 48h
+        alertname: NodePackageListsStale
+        exp_alerts: []
+      - eval_time: 50h
+        alertname: NodePackageListsStale
+        exp_alerts:
+          - exp_labels:
+              instance: spark-1
+              platform: spark
+              job: spark-node
+              severity: warning
+            exp_annotations:
+              summary: spark-1 hasn't refreshed its package lists for 2d 2h 0m 0s
+              description: 'Its pending-update counts may be out of date. Check the daily refresh (pve-daily-update on PVE, apt-daily on a Spark) and the apt-metrics container.'
+
+  - name: Log delivery retrying for 10 minutes alerts; a short endpoint outage does not
+    interval: 1m
+    input_series:
+      - series: fluentbit_output_retries_total{instance="pve-sbx-1",platform="pve",job="pve-fluent-bit",name="ingest"}
+        values: 0+1x60
+      # Five minutes of retries, then delivered.
+      - series: fluentbit_output_retries_total{instance="spark-1",platform="spark",job="spark-fluent-bit",name="ingest"}
+        values: 0x10 1+1x5 6x45
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: NodeLogDeliveryFailing
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: NodeLogDeliveryFailing
+        exp_alerts:
+          - exp_labels:
+              instance: pve-sbx-1
+              platform: pve
+              job: pve-fluent-bit
+              name: ingest
+              severity: warning
+            exp_annotations:
+              summary: pve-sbx-1 cannot deliver its logs
+              description: "Its Fluent Bit has been retrying for 10 minutes and is buffering the journal. Check the ingestion endpoint and the collector's log: the fluent-bit container on a PVE node or Spark, `journalctl -u fluent-bit` on a Pi."
+
+  - name: Dropped log records alert until fifteen minutes pass without more
+    interval: 1m
+    input_series:
+      - series: fluentbit_output_dropped_records_total{instance="pve-sbx-1",platform="pve",job="pve-fluent-bit",name="ingest"}
+        values: 0x20 5x30
+      - series: fluentbit_output_dropped_records_total{instance="spark-1",platform="spark",job="spark-fluent-bit",name="ingest"}
+        values: 0x50
+      - series: fluentbit_output_dropped_records_total{instance="ups-office",platform="pi",job="pi-fluent-bit",name="ingest"}
+        values: 0x20 5x30
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: NodeLogsDropped
+        exp_alerts:
+          - exp_labels:
+              instance: pve-sbx-1
+              platform: pve
+              job: pve-fluent-bit
+              name: ingest
+              severity: warning
+            exp_annotations:
+              summary: pve-sbx-1 discarded log records
+              description: "Its Fluent Bit dropped records it could not deliver, which happens when its buffer is full or the endpoint answers with an error other than 429, 502, 503 or 504. Check the collector's log: the fluent-bit container on a PVE node or Spark, `journalctl -u fluent-bit` on a Pi."
+          - exp_labels:
+              instance: ups-office
+              platform: pi
+              job: pi-fluent-bit
+              name: ingest
+              severity: warning
+            exp_annotations:
+              summary: ups-office discarded log records
+              description: "Its Fluent Bit dropped records it could not deliver, which happens when its buffer is full or the endpoint answers with an error other than 429, 502, 503 or 504. Check the collector's log: the fluent-bit container on a PVE node or Spark, `journalctl -u fluent-bit` on a Pi."
+      - eval_time: 40m
+        alertname: NodeLogsDropped
+        exp_alerts: []
+
+  - name: A journal read nothing for two hours alerts
+    interval: 1m
+    input_series:
+      - series: fluentbit_input_records_total{instance="pve-sbx-1",platform="pve",job="pve-fluent-bit",name="journal"}
+        values: 0+10x200
+      # Stops reading at one hour.
+      - series: fluentbit_input_records_total{instance="spark-1",platform="spark",job="spark-fluent-bit",name="journal"}
+        values: 0+10x60 600x140
+      # The quietest Pi: three lines on the hour.
+      - series: fluentbit_input_records_total{instance="ups-office",platform="pi",job="pi-fluent-bit",name="journal"}
+        values: 0x59 3x59 6x59 9x59
+    alert_rule_test:
+      - eval_time: 190m
+        alertname: NodeLogsSilent
+        exp_alerts: []
+      - eval_time: 200m
+        alertname: NodeLogsSilent
+        exp_alerts:
+          - exp_labels:
+              instance: spark-1
+              platform: spark
+              job: spark-fluent-bit
+              name: journal
+              severity: warning
+            exp_annotations:
+              summary: spark-1 has read nothing from its journal for two hours
+              description: "A running host writes to its journal at least every hour, so its Fluent Bit has likely lost the journal. On a PVE node or Spark, check the fluent-bit container's log and journal mounts; on a Pi, `journalctl -u fluent-bit`, and whether the host imports the debug profile, which moves its journal out of /run/log/journal."

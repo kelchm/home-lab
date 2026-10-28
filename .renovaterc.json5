@@ -33,6 +33,30 @@
   },
   packageRules: [
     {
+      // A digest-only FROM declares exact content without a tag to follow.
+      // Do not guess latest. Tagged references in the same file stay managed.
+      // Lock rationale and review process: docs/runbooks/dependency-updates.md.
+      description: "Dockerfile images: leave digest-only pins unchanged",
+      matchManagers: ["dockerfile"],
+      matchDatasources: ["docker"],
+      matchJsonata: [
+        "currentDigest and ($not($exists(currentValue)) or currentValue = null or currentValue = '')",
+      ],
+      enabled: false,
+    },
+    {
+      // CI must test the SparkRun version recorded for the host venv.
+      // Review upgrades with the host installation, adapter version notes,
+      // and the SparkRun and repository-validation documentation together.
+      description: "SparkRun test SDK: coordinate upgrades with the Sparks",
+      matchManagers: ["pip_requirements"],
+      matchDatasources: ["pypi"],
+      matchFileNames: ["sparks/inference/sparkrun/requirements-test.txt"],
+      matchPackageNames: ["sparkrun"],
+      automerge: false,
+      dependencyDashboardApproval: true,
+    },
+    {
       // external-dns v0.22.0 (chart 1.22.0) changed the default annotation
       // prefix with no fallback; the first `policy: sync` pass then deleted
       // every managed record in the zone (2026-09-19 incident). Any future

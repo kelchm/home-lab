@@ -1,0 +1,4 @@
+// Copied in by the apt-list-refresh service of sparks/monitoring in kelchm/home-lab.
+// NVIDIA's 99update-notifier-nvidia turns the daily package-list refresh off; this later file
+// turns it back on so pending-update counts stay current. It installs nothing.
+APT::Periodic::Update-Package-Lists "1";

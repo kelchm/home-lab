@@ -9,6 +9,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+from functools import partial
 from pathlib import Path
 from unittest import mock
 
@@ -488,8 +489,13 @@ def _dsv41_bundle(tmp_path, path):
     return recipe, bundle, serve
 
 
-def test_dsv41_recipe_maps_native_rank_wiring_to_both_engine_binaries(runtime, tmp_path, dsv41_recipe):
+def test_dsv41_recipe_maps_native_rank_wiring_to_both_engine_binaries(runtime, tmp_path, monkeypatch, dsv41_recipe):
     recipe, bundle, serve = _dsv41_bundle(tmp_path, dsv41_recipe)
+    # Exercise device validation against the Spark's inventory, not the test host's sysfs.
+    devices = tmp_path / "infiniband"
+    for name in ("rocep1s0f0", "roceP2p1s0f0"):
+        (devices / name).mkdir(parents=True)
+    monkeypatch.setattr(serve, "rdma_devices", partial(serve.rdma_devices, devices=devices))
     context = str(recipe.defaults["context"])
     assert recipe.name == recipe.metadata["profile"] == dsv41_recipe.stem
     assert not [issue for issue in runtime.validate_recipe(recipe) if getattr(issue, "severity", None) == ERROR]
@@ -608,7 +614,7 @@ def test_dsv41_frozen_bundle_rejects_changed_or_added_files(tmp_path, change, ds
 
 
 def test_dsv41_frozen_bundle_refuses_linked_and_dangling_files(tmp_path):
-    source = DSV41_RECIPES[0].parents[1] / "mods/bertholomus-tensorfold-dsv41-2970bcd"
+    source = DSV41_RECIPES[0].parents[1] / "mods/bertholomus-tensorfold-dsv41-2970bcd-mia-fixes"
     bundle = tmp_path / source.name
     shutil.copytree(source, bundle, ignore=shutil.ignore_patterns("__pycache__"))
     check = [sys.executable, str(bundle / "prepare.py"), "--check"]

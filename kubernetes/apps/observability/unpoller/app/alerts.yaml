@@ -30,7 +30,7 @@ spec:
           expr: max by (subsystem) (unpoller_site_disconnected{job="unifi-api"}) > 0
           for: 10m
           labels:
-            severity: warning
+            severity: critical
           annotations:
             summary: "{{ $value }} UniFi {{ $labels.subsystem }} device(s) disconnected"
             description: >-
@@ -104,6 +104,28 @@ spec:
               averaged under 90% answered for 15 minutes, so this WAN's share
               of load-balanced flows is degraded while it still reads online.
               Compare the modem's or dish's own metrics.
+
+        # 45 minutes outlasts T-Mobile's daily rise, which has stayed above 75 ms for up to half an hour.
+        - alert: UniFiWANLatencyHigh
+          expr: |
+            label_replace(label_replace(
+              avg_over_time(unpoller_device_wan_latency_seconds{job="unifi-api"}[15m]) > 0.075,
+              "wan_networkgroup", "WAN", "port", "eth9"), "wan_networkgroup", "WAN2", "port", "eth8")
+            unless on (name, wan_networkgroup) unpoller_device_wan_status{job="unifi-api"} == 0
+            unless on (name, port) avg_over_time(unpoller_device_wan_availability_percent{job="unifi-api"}[15m]) < 90
+          for: 45m
+          labels:
+            severity: warning
+          annotations:
+            summary: >-
+              {{ with printf "unpoller_wan_interface_state{job=\"unifi-api\", wan_networkgroup=%q}" $labels.wan_networkgroup | query }}{{ . | first | label "wan_interface" }}{{ else }}{{ $labels.port }}{{ end }}
+              averages {{ $value | humanizeDuration }} to its pings
+            description: >-
+              The 15-minute average of the gateway's pings to ping.ui.com over
+              {{ $labels.port }} has stayed above 75 ms for 45 minutes while
+              this WAN reads online and answers them. Check the WAN's traffic and the modem's or
+              dish's own metrics; a saturating transfer or a degraded link can
+              be moved off it on the UniFi Internet page.
 
         # The expected uplink speed of every device; any device not named here
         # must reach 1 Gb/s. The two switch LAGs report their aggregate, so one
@@ -208,3 +230,25 @@ spec:
           annotations:
             summary: "{{ $labels.name }} memory is at {{ $value | humanizePercentage }}"
             description: '{{ $labels.name }} has used over 90% of its memory for 15 minutes. Check it in the UniFi console; a restart may be needed.'
+
+        # Offered at every sample of the last week and a week ago, so an evaluator restart doesn't reset the wait
+        # and a newly adopted device doesn't fire at once.
+        - alert: UniFiFirmwareUpdatePending
+          expr: |
+            min_over_time(unpoller_device_upgradable{job="unifi-api"}[7d]) == 1
+            and unpoller_device_upgradable{job="unifi-api"} offset 7d == 1
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.name }} has had a firmware update waiting for a week"
+            description: 'UniFi has offered {{ $labels.name }} a firmware update for seven days. Read the release notes and install it from the UniFi console.'
+
+        - alert: UniFiControllerUpdatePending
+          expr: |
+            min_over_time(unpoller_controller_update_available{job="unifi-api"}[7d]) == 1
+            and unpoller_controller_update_available{job="unifi-api"} offset 7d == 1
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.hostname }} has had a UniFi Network update waiting for a week"
+            description: 'The console has offered a UniFi Network update for seven days. Read the release notes and install it from the console''s update page.'

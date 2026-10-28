@@ -124,6 +124,22 @@ for replacement procurement.
   on both hosts for passwordless cluster launch. Private keys remain on their
   originating Spark.
 
+### User sessions
+
+DGX OS is Ubuntu's desktop image. Its packages enable PipeWire, PipeWire-Pulse, filter-chain and WirePlumber in every account's service manager (`user@<uid>.service`), not only in a graphical session, so booting to `multi-user.target` doesn't stop them. Every SSH login starts that manager, and logind stops it 10 seconds after the last login ends, so SparkRun's bursts of logins started and stopped the stack about twice a minute. WirePlumber also turns its Bluetooth support on and off as each login opens and closes. A login that started the manager wrote about 90 journal lines from it, Bluetooth and rtkit; a login while it was already up still wrote 26 Bluetooth lines. On 2026-10-27, two-thirds of spark-1's journal over 30 minutes was Bluetooth lines. About hourly, the manager overran Ubuntu's 5-second stop limit (`/usr/lib/systemd/system/user@.service.d/timeout.conf`) and was killed, because the document portal that the snap desktop helper starts didn't unmount in time.
+
+Both hosts mask the audio stack for every account and keep `kelchm`'s manager running. A mask doesn't stop running instances, so stop them in each running manager too:
+
+```sh
+units="pipewire.socket pipewire.service pipewire-pulse.socket pipewire-pulse.service filter-chain.service wireplumber.service"
+sudo loginctl enable-linger kelchm
+sudo systemctl --global mask $units
+systemctl --user stop $units                     # kelchm's manager
+sudo systemctl --user -M sparkdash@ stop $units  # spark-2 only
+```
+
+A login now writes only its own lines, such as `sshd`, `systemd-logind` and its session scope. `systemctl --global is-enabled wireplumber.service` prints `masked`, `loginctl show-user kelchm -p Linger` prints `Linger=yes`, and `pgrep -a 'pipewire|wireplumber'` prints nothing. The masks cover `sparkdash` on spark-2 too; its manager stays up through sparkDash's persistent login. Bluetooth stays enabled, but nothing registers with it. To undo, `sudo systemctl --global unmask` the same units and `sudo loginctl disable-linger kelchm`; neither needs a reboot. The GNOME desktop would need the units back for sound and screen sharing.
+
 ### NetworkManager profiles
 
 The persistent connection names are the automation contract. Recreating a host
@@ -248,15 +264,20 @@ containers and images were removed.
 
 | Component | Recorded state |
 |---|---|
-| NVIDIA driver | `580.173.02` |
-| ConnectX-7 firmware | `28.45.4028` on both hosts |
-| Firmware manager | `nvidia-spark-mlnx-firmware-manager` `5.0.8-1` |
+| DGX OS | `7.6.0`, NVIDIA's October 2026 release, on both hosts since 2026-10-25 |
+| Kernel | `7.0.0-1019-nvidia` with `kho=off`; `6.17.0-1032-nvidia` installed as the fallback |
+| NVIDIA driver | `580.178.04` |
+| SoC firmware (UEFI) | `0x02009e0f` (2.158.15), BIOS `5.36_0ACUM028`; Display Reserved Memory 0.5 GB |
+| Boot target | `multi-user.target`; the GNOME desktop doesn't start |
+| Embedded controller | `0x03000d07` (3.13.7) |
+| USB-C PD controller | `0x00000519` (0.5.25) |
+| ConnectX-7 firmware | `28.50.1002` on both hosts |
+| Firmware manager | `nvidia-spark-mlnx-firmware-manager` `6.0.1-1` |
 | NCCL | NVIDIA tag `v2.30.7-1`, commit `73cf112`, built for `sm_121` |
 | nccl-tests | `2.19.7` test binary |
 | Additional packages | `perftest`, `libopenmpi-dev`, `iperf3`, `traceroute` |
 
-The installed firmware and package payload matched, so no firmware flash was
-performed. NCCL is built at `~/nccl`; tests are built at `~/nccl-tests` on both
+At bring-up the installed firmware and package payload matched, so no firmware flash was performed. The October 2026 update ([#1030](https://github.com/kelchm/home-lab/issues/1030)) upgraded the software above and flashed the SoC, EC, USB-PD and ConnectX-7 firmware; [Updating DGX OS and firmware](#updating-dgx-os-and-firmware) covers how. NCCL is built at `~/nccl`; tests are built at `~/nccl-tests` on both
 hosts. Build logs are retained as `~/dgx-nccl-build.log` and
 `~/dgx-nccl-tests-rebuild.log`.
 
@@ -280,6 +301,25 @@ git clone --branch v2.19.7 --depth 1 \
 NCCL_HOME="$NCCL_HOME" MPI_HOME="$MPI_HOME" \
   make -C "$HOME/nccl-tests" -j"$(nproc)" MPI=1
 ```
+
+### Updating DGX OS and firmware
+
+The Sparks take NVIDIA's OTA releases through apt and fwupd, one host at a time, with the inference workload stopped on both because it spans them. NVIDIA's [release notes](https://docs.nvidia.com/dgx/dgx-spark/release-notes.html) and [update guide](https://docs.nvidia.com/dgx/dgx-spark/os-and-component-update.html) are the reference; these are the parts specific to this pair:
+
+- **Stop the workload first.** `nvidia-spark-mlnx-firmware-manager` starts flashing the ConnectX-7 as soon as apt installs it. The new CX7 firmware loads on the next reboot.
+- **Packages:** `sudo apt-get update`, then `sudo DEBIAN_FRONTEND=noninteractive apt-get -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold dist-upgrade`. The release's meta package pulls in the kernel, the driver and NVIDIA's grub fragments.
+- **Keep a fallback kernel whose NVIDIA modules match the new driver.** A driver update removes the modules for older kernels, so the kernel that was running is no longer bootable with the GPU. For driver `580.178.04` that is `linux-image-6.17.0-1032-nvidia` with `linux-modules-nvidia-580-open-6.17.0-1032-nvidia` `6.17.0-1032.32+1`.
+- **Firmware:** `fwupdmgr refresh --force`, then `fwupdmgr upgrade --assume-yes --no-reboot-check` stages the EC, SoC and USB-PD capsules together, and one reboot applies them. The reboot took about eight minutes. Some users report USB-PD failing on the first attempt; check every version in `fwupdmgr get-devices` afterwards and rerun if one is behind.
+- **spark-1's port 8888 rules are not persistent.** Before the reboot, `sudo iptables-save > ~/iptables-before.rules`. Afterwards, copy the `VONK-FORGE` and `VONK-FORGE-HOST` chain declarations and every rule naming them or port 8888 into a file between `*filter` and `COMMIT`, and load it with `sudo iptables-restore --noflush`. Restoring the whole save would duplicate Docker's rules.
+- **After each boot, before the second host:** the new kernel and `kho=off` in `/proc/cmdline`, every firmware version, both CX7 rails `ACTIVE` at 200G with MTU 9000 and full-size pings both ways, the 10GbE link at 10000, and all monitoring containers running.
+
+Kernel `7.0.0-1019` enables Kexec HandOver by default. Its scratch area, about 9.3 GiB, can't hold long-term pins, so NCCL's RoCE memory registration fails with `ENOMEM` under memory pressure ([forum 383023](https://forums.developer.nvidia.com/t/dgx-spark-regression-kernel-7-0-0-1019-nvidia-causes-nccl-roce-ibv-reg-mr-iova2-enomem-6-17-0-1032-works/383023), [NV-Kernels#590](https://github.com/NVIDIA/NV-Kernels/pull/590)). NVIDIA's `nvidia-spark-grub-kho` package adds `kho=off`; confirm it is on the command line and that `/sys/kernel/debug/kho` is absent. `cma=128M` is not needed: `CmaTotal` of 0 on the 7.0 kernel is expected.
+
+UEFI's Advanced → Advanced Menu → Platform Configuration → **Display Reserved Memory** is a fixed **0.5 GB** on both hosts, down from the 2 GB factory default. Set it again after loading UEFI defaults. The change raised `MemTotal` by 1.50 GiB, to 129,168,328 kB. Auto would choose the same size for the one display UEFI detects through the KVM ([UEFI manual](https://docs.nvidia.com/dgx/dgx-spark-uefi/advanced-tab.html#spark-uefi-advanced-display-reserved-memory)). Before booting with a display above 1440p attached, raise it to a fixed size that covers that display; NVIDIA warns that an undersized reservation causes display-driver errors. `sudo systemctl reboot --firmware-setup` boots straight into the setup UI.
+
+Both hosts boot to `multi-user.target`. The GNOME desktop's processes held about 830 MB, and nothing here uses them; DGX Dashboard runs as its own services.
+
+**Don't switch the KVM away from a Spark in its first few minutes after boot.** An HDMI unplug then can hang the GPU's GSP: `Xid 119` within about seven seconds, then `Xid 154` (GPU reset required). With the desktop running, `bad register read` errors on display-engine registers 0x611ef0–0x613878 follow. On 2026-10-25, unplugs about 55 seconds after boot hung spark-2 in 6 of 14 tries. That happened at both 0.5 GB and 2 GB, with or without the desktop, and with nvidia-drm kernel modesetting on (`modeset=1 fbdev=1`) as well as NVIDIA's default off. 24 controlled unplugs long after boot, idle and under full GPU load, never did. That register signature appears in [NVIDIA forum reports](https://forums.developer.nvidia.com/t/bug-when-connecting-hdmi-to-av-receiver/356179) of HDMI-triggered failures since December 2025, with no fix announced. This reproduction is reported in [forum topic 386810](https://forums.developer.nvidia.com/t/gb10-gsp-hang-xid-119-xid-154-when-hdmi-is-unplugged-about-a-minute-after-boot/386810); check it for a fix before relaxing the rule. A wedged host can't shut down cleanly: `nvidia-persistenced` blocks the reboot until the hardware watchdog resets the host. systemd first spends about six minutes on the service's stop timeouts. Only then does it arm the watchdog. `/etc/systemd/system.conf.d/90-reboot-watchdog.conf` sets `RebootWatchdogSec=2min` on both hosts, down from systemd's 10-minute default, so a reboot completes about eight minutes after it's requested. To recover sooner from a host already in that state, stop its containers if it still responds, then force the reboot with `sudo sh -c 'echo s > /proc/sysrq-trigger; echo b > /proc/sysrq-trigger'`. It syncs filesystems but skips the normal service shutdown.
 
 ## Validation record
 

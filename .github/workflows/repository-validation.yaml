@@ -32,6 +32,7 @@ jobs:
       scripts_changed: ${{ steps.changed-files.outputs.scripts_any_changed || 'true' }}
       skills_changed: ${{ steps.changed-files.outputs.skills_any_changed || 'true' }}
       sops_changed: ${{ steps.changed-files.outputs.sops_any_changed || 'true' }}
+      sparkrun_changed: ${{ steps.changed-files.outputs.sparkrun_any_changed || 'true' }}
       synology_changed: ${{ steps.changed-files.outputs.synology_any_changed || 'true' }}
       talos_changed: ${{ steps.changed-files.outputs.talos_any_changed || 'true' }}
     steps:
@@ -116,6 +117,10 @@ jobs:
             skills:
               - '.github/workflows/repository-validation.yaml'
               - '.agents/skills/**'
+            sparkrun:
+              - '.github/workflows/repository-validation.yaml'
+              - '.mise.toml'
+              - 'sparks/inference/**'
             sops:
               - '.github/workflows/repository-validation.yaml'
               - '.mise.toml'
@@ -134,6 +139,10 @@ jobs:
               - 'sparks/platform/**'
               - 'scripts/ci/validate-host-monitoring.sh'
               - 'scripts/ci/test-validate-host-monitoring.sh'
+              - 'scripts/logging/test-host-logs.py'
+              - 'scripts/logging/test-fluent-bit.py'
+              - 'scripts/logging/test-logsql-rules.py'
+              - 'kubernetes/apps/observability/metrics-ingest/app/vmusers.yaml'
               - 'scripts/ci/validate-pve-backups.sh'
             synology:
               - '.github/workflows/repository-validation.yaml'
@@ -167,7 +176,7 @@ jobs:
 
       - name: Run flate test
         if: needs.pre-job.outputs.kubernetes_changed == 'true'
-        uses: docker://ghcr.io/home-operations/flate@sha256:e0e2d2de97539b3141977e8bb3bbb50ea5c5afe89477950e5fa972c9862478da # 0.6.5
+        uses: docker://ghcr.io/home-operations/flate:0.6.5@sha256:e0e2d2de97539b3141977e8bb3bbb50ea5c5afe89477950e5fa972c9862478da
         env:
           XDG_CACHE_HOME: /tmp/flate-cache
           FLATE_NO_PROGRESS: "1"
@@ -520,6 +529,10 @@ jobs:
           scripts/ci/validate-host-monitoring.sh
           scripts/ci/validate-pve-backups.sh
 
+      - name: Send a journal through the host log collector
+        if: needs.pre-job.outputs.hosts_changed == 'true'
+        run: scripts/logging/test-host-logs.py
+
       - name: No host monitoring changes
         if: needs.pre-job.outputs.hosts_changed != 'true'
         run: echo "Host monitoring validation is not required."
@@ -672,6 +685,42 @@ jobs:
         if: needs.pre-job.outputs.docs_changed != 'true'
         run: echo "Markdown link validation is not required."
 
+  sparkrun:
+    name: SparkRun Lock and Contract Validation
+    needs: pre-job
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        if: needs.pre-job.outputs.sparkrun_changed == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        if: needs.pre-job.outputs.sparkrun_changed == 'true'
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          version: "0.13.5"
+          enable-cache: false
+
+      - name: Verify mod file checksums
+        if: needs.pre-job.outputs.sparkrun_changed == 'true'
+        run: |
+          for checker in sparks/inference/sparkrun/mods/*/prepare.py; do
+            python3 "$checker" --check
+          done
+
+      - name: Test SparkRun recipes and locks
+        if: needs.pre-job.outputs.sparkrun_changed == 'true'
+        run: >-
+          uv run --no-project --python 3.12
+          --with-requirements sparks/inference/sparkrun/requirements-test.txt
+          python -m pytest -q sparks/inference/sparkrun/tests
+
+      - name: No SparkRun changes
+        if: needs.pre-job.outputs.sparkrun_changed != 'true'
+        run: echo "SparkRun validation is not required."
+
   repository-config:
     name: Repository Configuration Validation
     runs-on: ubuntu-latest
@@ -690,7 +739,7 @@ jobs:
         run: actionlint
 
       - name: Validate Renovate repository configuration
-        uses: docker://ghcr.io/renovatebot/renovate@sha256:611eac05a6ee11c06d23157ae2ca11364f5b4a096c12d7f82a65aec2b6ec8a48 # 44.133.0
+        uses: docker://ghcr.io/renovatebot/renovate:44.181.5@sha256:611eac05a6ee11c06d23157ae2ca11364f5b4a096c12d7f82a65aec2b6ec8a48
         with:
           entrypoint: renovate-config-validator
           args: --no-global .renovaterc.json5
@@ -737,6 +786,7 @@ jobs:
       - hosts
       - scripts
       - skills
+      - sparkrun
       - network
       - docs
     runs-on: ubuntu-latest

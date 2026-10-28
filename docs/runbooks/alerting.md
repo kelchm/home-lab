@@ -4,7 +4,7 @@ Operational procedure for VMAlertmanager in `observability`, including ownership
 
 ## Ownership and routing
 
-The homelab operator owns every alert. `critical` means act as soon as the notification arrives; `warning` means investigate before the condition can consume redundancy or capacity. Alerts without one of those severities stay in Alertmanager for inspection but do not notify externally.
+The homelab operator owns every alert. `critical` means act as soon as the notification arrives; `warning` means act, but not urgently. Alerts without one of those severities stay in Alertmanager for inspection but do not notify externally.
 
 Alertmanager routes as follows:
 
@@ -26,7 +26,7 @@ Firing critical alerts use Pushover priority `1`, which bypasses quiet hours but
 Rules follow the [monitoring-mixins guidelines](https://monitoring.mixins.dev/#guidelines-for-alert-names-labels-and-annotations), which the bundled kubernetes-mixin rules also follow:
 
 - **Name:** a terse description of the condition, in CamelCase, starting with a capital. Related alerts share their first component, such as `UniFi…` or `Longhorn…`.
-- **Severity:** `critical` needs action now, `warning` needs action but not urgently, and `info` marks something out of the ordinary that needs no action by itself. Routing above turns these into a high-priority push, a normal push and no notification; Home shows `info` alerts as worth a look.
+- **Severity:** `critical` when something that should be up is down, or something is at risk of failing or of damage, and nothing else is covering for it. `warning` when it needs action but not urgently: lost visibility, a failed or stale backup, a change that did not apply, or a failure that something else is covering for, such as one WAN of two, which escalates to `critical` if it lasts. `info` marks something out of the ordinary that needs no action by itself. Routing above turns these into a high-priority push, a normal push and no notification; Home shows `info` alerts as worth a look.
 - **Annotations:** every rule has a `summary`, one readable sentence, and a `description` with the detail templated in. `runbook_url` is optional.
 
 The guidelines leave some choices open. The lab settles them this way:
@@ -63,7 +63,7 @@ Two aggregate alerts about a k8s-prod node are not held back, because neither na
 
 Alertmanager groups alerts by name, cluster and namespace, not by machine: two machines that go down together arrive in one notification, a second machine joining a firing group sends an update after `group_interval`, and a firing group repeats every 12 hours and announces its resolution.
 
-A problem that only affects what can be seen of a device is `info` when every notifying rule it blinds is covered by another notifying alert, and notifies otherwise. `TMobileMetricsMissing` is info: the only notifying rule it blinds, `TMobileNotRegistered`, means WAN1 carries no traffic, which `UniFiWANDown` notifies. `StarlinkMetricsMissing` notifies, because `StarlinkObstructed` and `StarlinkPingDropSustained` have no other cover; so do `UniFiMetricsMissing`, `PVEMetricsMissing`, `NodeCollectorDown` and the Longhorn, Flux and cert-manager `MetricsMissing` alerts.
+A problem that only affects what can be seen of a device is `info` when every notifying rule it blinds is covered by another notifying alert, and notifies otherwise. `TMobileMetricsMissing` is info: no notifying rule reads the T-Mobile gateway, because `UniFiWANDown` reports a WAN1 outage. `StarlinkMetricsMissing` notifies, because `StarlinkObstructed` and `StarlinkPingDropSustained` have no other cover; so do `UniFiMetricsMissing`, `PVEMetricsMissing`, `NodeCollectorDown` and the Longhorn, Flux and cert-manager `MetricsMissing` alerts.
 
 ## First response
 
@@ -139,6 +139,8 @@ Within roughly two minutes, verify all of the following:
 - Exactly one normal-priority Pushover notification arrives from `k8s-prod Alerts` through the VM path.
 - `alertmanager_notifications_failed_total{integration="pushover"}` does not increase.
 
+To test the critical route, repeat with `severity: critical` and expect a high-priority notification instead.
+
 Delete the rule and confirm exactly one quiet-priority resolved notification arrives through the VM path and that the Pushover failure counter does not increase:
 
 ```sh
@@ -165,7 +167,7 @@ spec:
           expr: time() - max(longhorn_volume_last_backup_at > 0) > 0
           for: 1m
           labels:
-            severity: critical
+            severity: warning
             test: synthetic
           annotations:
             summary: Synthetic Longhorn stale-backup delivery test
@@ -173,7 +175,7 @@ spec:
 EOF
 ```
 
-Confirm one high-priority Pushover notification, then clean up and confirm a quiet-priority resolution:
+Confirm one normal-priority Pushover notification, then clean up and confirm a quiet-priority resolution:
 
 ```sh
 kubectl -n observability delete prometheusrule longhorn-backup-delivery-test

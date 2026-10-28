@@ -11,12 +11,12 @@ MetaMCP and MarkItDown were retired in September 2026. MCPHub is the remaining g
 | Source | Allowed destination | Ports | Reason |
 | --- | --- | --- | --- |
 | All AI workloads | CoreDNS pods | UDP/TCP 53 | Cluster DNS |
-| MCPHub | Nine exact MCP pod identities | Each backend's MCP port | Tool aggregation |
+| MCPHub | Eight exact MCP pod identities | Each backend's MCP port | Tool aggregation |
 | Grafana MCP | Grafana pods in `observability` | TCP 3000 | Read-only Grafana API |
 | LEMON manuals MCP | `lemon-website` pods in `lemon-manuals` | TCP 8080 | Self-hosted manual page retrieval |
 | Kubernetes/Flux MCP | Cilium `kube-apiserver` entity | API server ports | Read-only cluster APIs |
 | Grafana functional probe | Grafana MCP pods | TCP 8000 | Initialize, tool call, and session cleanup |
-| Browser, weather, news, and parts MCPs | Public IPv4 only | TCP 80/443 | Untrusted web/API fetches |
+| Weather, news, and parts MCPs | Public IPv4 only | TCP 80/443 | Untrusted web/API fetches |
 
 The public-egress rule explicitly excludes pod/Service space, all RFC 1918
 space, loopback, link-local, CGNAT, benchmarking, documentation, multicast, and

@@ -2,7 +2,12 @@
 # One user per host. The token decides `instance` (the node) and `platform`
 # (its type): VMAuth adds them to every sample and a host cannot override
 # them, so collector configs carry no identity. `spec.name` labels VMAuth's own
-# per-user metrics with the host instead of a token hash.
+# per-user metrics with the host instead of a token hash. A host that also
+# sends its journal gets a second route, which stamps the same identity on
+# every log record as `host.name` and `service.namespace` and sets the stream
+# fields; VMAuth drops a host's own `extra_fields` and `_stream_fields`, and
+# VictoriaLogs' `extra_fields` override fields in the record. The route also
+# overwrites the tenant headers, so every record lands in the default tenant.
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMUser
 metadata:
@@ -26,6 +31,20 @@ spec:
           values:
             - instance=spark-1
             - platform=spark
+    - static:
+        url: http://victoria-logs-single-server.observability.svc:9428
+      paths:
+        - /insert/opentelemetry/v1/logs
+      query_args:
+        - name: extra_fields
+          values:
+            - host.name=spark-1,service.namespace=spark
+        - name: _stream_fields
+          values:
+            - host.name,service.name
+      headers:
+        - "AccountID: 0"
+        - "ProjectID: 0"
 ---
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMUser
@@ -50,6 +69,20 @@ spec:
           values:
             - instance=spark-2
             - platform=spark
+    - static:
+        url: http://victoria-logs-single-server.observability.svc:9428
+      paths:
+        - /insert/opentelemetry/v1/logs
+      query_args:
+        - name: extra_fields
+          values:
+            - host.name=spark-2,service.namespace=spark
+        - name: _stream_fields
+          values:
+            - host.name,service.name
+      headers:
+        - "AccountID: 0"
+        - "ProjectID: 0"
 ---
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMUser
@@ -74,6 +107,20 @@ spec:
           values:
             - instance=pve-sbx-1
             - platform=pve
+    - static:
+        url: http://victoria-logs-single-server.observability.svc:9428
+      paths:
+        - /insert/opentelemetry/v1/logs
+      query_args:
+        - name: extra_fields
+          values:
+            - host.name=pve-sbx-1,service.namespace=pve
+        - name: _stream_fields
+          values:
+            - host.name,service.name
+      headers:
+        - "AccountID: 0"
+        - "ProjectID: 0"
 ---
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMUser
@@ -98,6 +145,20 @@ spec:
           values:
             - instance=pve-sbx-2
             - platform=pve
+    - static:
+        url: http://victoria-logs-single-server.observability.svc:9428
+      paths:
+        - /insert/opentelemetry/v1/logs
+      query_args:
+        - name: extra_fields
+          values:
+            - host.name=pve-sbx-2,service.namespace=pve
+        - name: _stream_fields
+          values:
+            - host.name,service.name
+      headers:
+        - "AccountID: 0"
+        - "ProjectID: 0"
 ---
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMUser
@@ -122,6 +183,20 @@ spec:
           values:
             - instance=pve-sbx-3
             - platform=pve
+    - static:
+        url: http://victoria-logs-single-server.observability.svc:9428
+      paths:
+        - /insert/opentelemetry/v1/logs
+      query_args:
+        - name: extra_fields
+          values:
+            - host.name=pve-sbx-3,service.namespace=pve
+        - name: _stream_fields
+          values:
+            - host.name,service.name
+      headers:
+        - "AccountID: 0"
+        - "ProjectID: 0"
 ---
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMUser
@@ -170,6 +245,20 @@ spec:
           values:
             - instance=streamer-basement-workbench
             - platform=pi
+    - static:
+        url: http://victoria-logs-single-server.observability.svc:9428
+      paths:
+        - /insert/opentelemetry/v1/logs
+      query_args:
+        - name: extra_fields
+          values:
+            - host.name=streamer-basement-workbench,service.namespace=pi
+        - name: _stream_fields
+          values:
+            - host.name,service.name
+      headers:
+        - "AccountID: 0"
+        - "ProjectID: 0"
 ---
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMUser
@@ -194,6 +283,20 @@ spec:
           values:
             - instance=ups-compute-rack
             - platform=pi
+    - static:
+        url: http://victoria-logs-single-server.observability.svc:9428
+      paths:
+        - /insert/opentelemetry/v1/logs
+      query_args:
+        - name: extra_fields
+          values:
+            - host.name=ups-compute-rack,service.namespace=pi
+        - name: _stream_fields
+          values:
+            - host.name,service.name
+      headers:
+        - "AccountID: 0"
+        - "ProjectID: 0"
 ---
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMUser
@@ -218,6 +321,20 @@ spec:
           values:
             - instance=ups-office
             - platform=pi
+    - static:
+        url: http://victoria-logs-single-server.observability.svc:9428
+      paths:
+        - /insert/opentelemetry/v1/logs
+      query_args:
+        - name: extra_fields
+          values:
+            - host.name=ups-office,service.namespace=pi
+        - name: _stream_fields
+          values:
+            - host.name,service.name
+      headers:
+        - "AccountID: 0"
+        - "ProjectID: 0"
 ---
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMUser
@@ -242,3 +359,17 @@ spec:
           values:
             - instance=adsb-office
             - platform=pi
+    - static:
+        url: http://victoria-logs-single-server.observability.svc:9428
+      paths:
+        - /insert/opentelemetry/v1/logs
+      query_args:
+        - name: extra_fields
+          values:
+            - host.name=adsb-office,service.namespace=pi
+        - name: _stream_fields
+          values:
+            - host.name,service.name
+      headers:
+        - "AccountID: 0"
+        - "ProjectID: 0"

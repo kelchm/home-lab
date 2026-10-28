@@ -1,16 +1,16 @@
-# dsv41-1017-exl3-tp2-bth-tf-2970bcd-libertai-512k: DeepSeek-V4.1-Flash-1017 on bertholomus's deepseek-v41-zig TensorFold engine with LibertAI's EXL3 weights; SparkRun owns both ranks and lifecycle operations.
+# dsv41-1017-exl3-tp2-bth-tf-2970bcd-mia-fixes-libertai-512k: DeepSeek-V4.1-Flash-1017 on bertholomus's deepseek-v41-zig TensorFold engine and three of Mia's server fixes, with LibertAI's EXL3 weights; SparkRun owns both ranks and lifecycle operations.
 recipe_version: '2'
 model: LibertAIDAI/DeepSeek-V4.1-Flash-1017-EXL3-2.9bpw
 model_revision: 0be63c3337efbb2a0061d5b8bb4006fa186d433f
 runtime: tensorfold
-container: sha256:a7845d4e5e84c63c55bca2a382c878f7cd964ce8f14daeddab56dcaef2333178
+container: sha256:00cbfac02248ac83acbc751a00bdc3e5c53df22b3d249d93d7ffadd94fe0d604
 min_nodes: 2
 max_nodes: 2
 metadata:
-  profile: dsv41-1017-exl3-tp2-bth-tf-2970bcd-libertai-512k
-  description: bertholomus deepseek-v41-zig engine 2970bcd with six server and lane patches, LibertAI EXL3 2.9 bpw weights, four streams and a 512K window
+  profile: dsv41-1017-exl3-tp2-bth-tf-2970bcd-mia-fixes-libertai-512k
+  description: bertholomus deepseek-v41-zig engine 2970bcd with six server and lane patches and three of Mia's server fixes, LibertAI EXL3 2.9 bpw weights, four streams and a 512K window
   engine_revision: 2970bcdbf8d078d1f29aa194e6285d8759fba4ec
-  image: dsv41-tf:2970bcd-4691715-e1c6ebe02e2a
+  image: dsv41-tf:2970bcd-4691715-348c4339cc15
   weights: libertai
   weights_variant: exl3-2.9bpw
   target_model_revision: 0be63c3337efbb2a0061d5b8bb4006fa186d433f
@@ -52,7 +52,7 @@ runtime_cache:
   key_by_image: false
 mods:
 - ../mods/tensorfold-readiness
-- ../mods/bertholomus-tensorfold-dsv41-2970bcd
+- ../mods/bertholomus-tensorfold-dsv41-2970bcd-mia-fixes
 post_exec:
 - python3 /opt/tensorfold-readiness/readiness.py --model DeepSeek-V4.1-Flash-1017 --context 524288 --lanes 4 --efforts max,high,low,none
 distribution_config:

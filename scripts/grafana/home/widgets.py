@@ -108,8 +108,14 @@ def machines(p):
 
 
 # Where a machine's own detail is.
+def host_links(p):
+    return [to("${__value.text} in Hosts", f"/d/hosts?var-platform={p}&var-node=${{__value.raw}}&${{__url_time_range}}"),
+            to("Logs from ${__value.text}", explore('host.name:="${__value.raw}"'))]
+
+
 MACHINE_LINKS = {"k8s": [to("${__value.text} in Node Exporter Full", "/d/rYdddlPWk?var-job=node-exporter&var-nodename=${__value.raw}&var-node=${__value.raw}&${__url_time_range}"),
-                         to("Talos logs from ${__value.text}", explore('service.namespace:=talos k8s.node.name:="${__value.raw}"'))]}
+                         to("Talos logs from ${__value.text}", explore('service.namespace:=talos k8s.node.name:="${__value.raw}"'))],
+                 "pve": host_links("pve"), "spark": host_links("spark"), "pi": host_links("pi")}
 
 
 def machine_cpu_trend(p):
@@ -131,11 +137,11 @@ def ssd_drives(p):
         ("Worn", ssd("smartctl_device_percentage_used"), dict(PCT, custom__cellOptions=GAUGE, thresholds=RUNS_OUT)),
         ("Spare left", ssd("smartctl_device_available_spare"), dict(unit="percent", custom__cellOptions=TEXT, mappings=NODASH,
                                                                     thresholds=th([{"value": None, "color": "red"}, {"value": 10, "color": "orange"}, {"value": 30, "color": "text"}]))),
-        ("Temperature", ssd("drive:temperature_celsius"), dict(unit="celsius", **CTEXT((65, "orange"), (75, "red")))),
+        ("Temperature", ssd("drive:temperature_celsius"), dict(unit="celsius", **CTEXT((68, "orange"), (78, "red")))),
         ("Media errors", ssd("smartctl_device_media_errors"), CTEXT((1, "red"))),
         ("Powered on", ssd("smartctl_device_power_on_seconds"), dict(unit="dtdurations"))],
         info=(f'max by (drive, model_name) (label_join(drive:info{{platform="{p}",device=~"nvme.*"}}, "drive", " ", "instance", "device"))', {"model_name": "Model"}), keywidth=150,
-        desc="What each NVMe drive says about itself, the same on every platform. Temperature turns orange 10 °C before the 75 °C alert line.")
+        desc="What each NVMe drive says about itself, the same on every platform. Temperature turns red at 78 °C, near where each drive's alert fires: 5 °C under its own warning temperature, 77.85 °C on a Spark and 78.85 °C on the others. It turns orange 10 °C before.")
     return P.elements["ssd-drives"]
 
 
@@ -350,13 +356,13 @@ def wan(metric):
 
 
 W.table("wan", "Internet links", "wan", "Link", [
-    ("State", f'max by (wan) (label_replace(unpoller_wan_interface_state{{{UNI}}}, "wan", "$1", "wan_interface", "(.*)"))', dict(mappings=yes("Active", "Down"), custom__cellOptions=TEXT)),
+    ("State", by_wan("unpoller_device_wan_status", "min"), dict(mappings=yes("Online", "Offline"), custom__cellOptions=TEXT)),
     ("Latency", by_wan("unpoller_device_wan_monitor_latency_average_seconds"), dict(unit="s", **CTEXT((0.1, LOOK)))),
     ("Monitors answering", by_wan("unpoller_device_wan_monitor_availability_percent", "min"),
      dict(unit="percent", custom__cellOptions=TEXT, thresholds=th([{"value": None, "color": "red"}, {"value": 90, "color": "orange"}, {"value": 99, "color": "text"}]))),
     ("Rated down", f'1000 * {wan("unpoller_wan_provider_download_kbps")}', dict(unit="bps")),
     ("Rated up", f'1000 * {wan("unpoller_wan_provider_upload_kbps")}', dict(unit="bps"))],
-    keywidth=150, desc="Each link as the gateway sees it: whether it carries traffic, how long its monitor targets take to answer, and the speed the provider is rated for.")
+    keywidth=150, desc="Each link as the gateway sees it: whether its health check passes, how long its monitor targets take to answer, and the speed the provider is rated for.")
 SL = 'job="starlink-api"'
 W.tiles("starlink", "Starlink dish", [
     ("To its point of presence", f"1000 * max(starlink_dish_pop_ping_latency_seconds{{{SL}}})", dict(unit="ms", thresholds=th(QUIET + [{"value": 100, "color": LOOK}]))),
@@ -370,10 +376,10 @@ TM = 'job="tmobile-api"'
 W.tiles("tmobile", "T-Mobile gateway", [
     ("Network", zero(f'max(tmobile_registration_info{{{TM},registration="registered"}})'), dict(mappings=yes("Registered", "Not registered"), thresholds=th([{"value": None, "color": "red"}, {"value": 1, "color": NEUTRAL}]))),
     ("Bars", f"max(tmobile_5g_bars{{{TM}}})", dict(thresholds=th([{"value": None, "color": "red"}, {"value": 2, "color": LOOK}, {"value": 3, "color": NEUTRAL}]))),
-    ("Signal", f"max(tmobile_5g_rsrp_dbm{{{TM}}})", dict(unit="suffix: dBm")),
-    ("Quality", f"max(tmobile_5g_sinr_db{{{TM}}})", dict(unit="dB")),
+    ("Signal", f"max(tmobile_5g_rsrp_dbm{{{TM}}})", dict(unit="suffix: dBm", thresholds=th([{"value": None, "color": "red"}, {"value": -110, "color": LOOK}, {"value": -100, "color": NEUTRAL}]))),
+    ("Quality", f"max(tmobile_5g_sinr_db{{{TM}}})", dict(unit="dB", thresholds=th([{"value": None, "color": "red"}, {"value": 0, "color": LOOK}, {"value": 10, "color": NEUTRAL}]))),
     ("Up for", f"max(tmobile_uptime_seconds{{{TM}}})", dict(unit="dtdurations"))],
-    wide=True, desc="The gateway's own view of its radio link: registration, bars, received signal power and signal quality.")
+    wide=True, desc="The gateway's own view of its radio link: registration, bars, received signal power and signal quality. Signal turns yellow below −100 dBm and quality below 10 dB, the weakest 1% of the first week here; red is below −110 dBm and 0 dB.")
 
 
 def radio(metric, extra=""):
@@ -395,7 +401,13 @@ FEEDS = {
                  ' | format if (service.namespace:!=talos) "<service.namespace>/<service.name>: <_msg>" as _msg',
                  "Container and Talos node logs at warning level and above, newest first, each line led by its source. Known noisy sources, listed in the logging runbook, appear here too."),
     "network": (f"service.namespace:=unifi severity_number:>=13 {LEVEL}" ' | format "<service.name>: <_msg>" as _msg',
-                "UniFi syslog at warning level and above, newest first, each line led by the device. Access points log routine Wi-Fi driver lines as errors.")}
+                "UniFi syslog at warning level and above, newest first, each line led by the device. Access points log routine Wi-Fi driver lines as errors."),
+    "pve-sbx": (f"service.namespace:=pve severity_number:>=13 {LEVEL}" ' | format "<host.name> <service.name>: <_msg>" as _msg',
+                "Journal lines from the PVE nodes at warning level and above, newest first, each led by its node and service."),
+    "spark": (f"service.namespace:=spark severity_number:>=13 {LEVEL}" ' | format "<host.name> <service.name>: <_msg>" as _msg',
+              "Journal lines from the Sparks at warning level and above, newest first, each led by its Spark and service. Containers, inference included, log to Docker rather than the journal, so their output is not here."),
+    "devices": (f"service.namespace:=pi severity_number:>=13 {LEVEL}" ' | format "<host.name> <service.name>: <_msg>" as _msg',
+                "Journal lines from the Pis at warning level and above, newest first, each led by its Pi and service. A Pi keeps its journal in RAM, so VictoriaLogs holds the only copy of lines from before its last boot.")}
 def feed(system):
     query, desc = FEEDS[system]
     P = Panels()

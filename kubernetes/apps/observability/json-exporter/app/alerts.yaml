@@ -1,7 +1,8 @@
 ---
 # T-Mobile (WAN1) state read from the 5G gateway. Series carry
 # job="tmobile-api", instance="tmobile-gateway" and no cluster label. Signal
-# strength has no rule until a week of baseline exists.
+# strength has no rule; Home shows it. See "Alerts" in
+# docs/runbooks/host-monitoring.md.
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMRule
 metadata:
@@ -11,9 +12,8 @@ spec:
     - name: tmobile
       rules:
         # A scrape that succeeds without the registration series means the
-        # gateway's JSON no longer matches the module. Info: the only notifying
-        # rule it blinds, TMobileNotRegistered, means WAN1 carries no traffic,
-        # which UniFiWANDown also notifies.
+        # gateway's JSON no longer matches the module. Info: no notifying rule
+        # reads the gateway, because UniFiWANDown reports a WAN1 outage.
         - alert: TMobileMetricsMissing
           expr: |
             up{job="tmobile-api"} == 0
@@ -31,15 +31,3 @@ spec:
               is off or rebooting also shows as UniFiWANDown for WAN1.
               After a gateway firmware update, compare the endpoint's JSON with
               the module in the json-exporter HelmRelease.
-
-        - alert: TMobileNotRegistered
-          expr: tmobile_registration_info{job="tmobile-api", registration!="registered"}
-          for: 5m
-          labels:
-            severity: warning
-          annotations:
-            summary: T-Mobile gateway registration is {{ $labels.registration }}
-            description: >-
-              The gateway is not registered on the T-Mobile network, so WAN1
-              carries no traffic. Check T-Mobile for an outage in the area,
-              then power-cycle the gateway.

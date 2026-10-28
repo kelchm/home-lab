@@ -122,6 +122,13 @@ while IFS= read -r config; do
     done <<<"${deployments}"
 done <<<"${configs}"
 
+if ! cmp -s "${ROOT_DIR}/proxmox/monitoring/apt-metrics.sh" "${ROOT_DIR}/sparks/monitoring/apt-metrics.sh"; then
+    violation "proxmox/monitoring/apt-metrics.sh and sparks/monitoring/apt-metrics.sh must be identical"
+fi
+if ! diff -r -q "${ROOT_DIR}/proxmox/monitoring/logs" "${ROOT_DIR}/sparks/monitoring/logs" >/dev/null; then
+    violation "proxmox/monitoring/logs and sparks/monitoring/logs must be identical"
+fi
+
 if ((violations > 0)); then
     echo "host monitoring validation failed with ${violations} violation(s)" >&2
     exit 1

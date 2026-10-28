@@ -31,11 +31,11 @@ tests:
       - expr: 'ALERTS{alertstate="firing"}'
         eval_time: 31h10m
         exp_samples:
-          - labels: 'ALERTS{alertname="PVEBackupStale",alertstate="firing",severity="critical",cluster="pve-sbx",backup_job="daily-backups",instance="pve-sbx-1"}'
+          - labels: 'ALERTS{alertname="PVEBackupStale",alertstate="firing",severity="warning",cluster="pve-sbx",backup_job="daily-backups",instance="pve-sbx-1"}'
             value: 1
-          - labels: 'ALERTS{alertname="PVEBackupStale",alertstate="firing",severity="critical",cluster="pve-sbx",backup_job="daily-backups",instance="pve-sbx-2"}'
+          - labels: 'ALERTS{alertname="PVEBackupStale",alertstate="firing",severity="warning",cluster="pve-sbx",backup_job="daily-backups",instance="pve-sbx-2"}'
             value: 1
-          - labels: 'ALERTS{alertname="PVEBackupStale",alertstate="firing",severity="critical",cluster="pve-sbx",backup_job="daily-backups",instance="pve-sbx-3"}'
+          - labels: 'ALERTS{alertname="PVEBackupStale",alertstate="firing",severity="warning",cluster="pve-sbx",backup_job="daily-backups",instance="pve-sbx-3"}'
             value: 1
 
   - name: nodes that never reported are stale, and other hosts, jobs and clusters neither satisfy nor trigger the rules

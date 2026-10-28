@@ -69,7 +69,7 @@ spec:
           expr: absent(longhorn_backup_target_available{backup_target="default"})
           for: 15m
           labels:
-            severity: critical
+            severity: warning
           annotations:
             summary: Longhorn BackupTarget availability is not being monitored
             description: kube-state-metrics has not exported status.available for BackupTarget/default for 15 minutes. Check its custom-resource-state configuration and RBAC.
@@ -81,7 +81,7 @@ spec:
           expr: longhorn_backup_state == 4
           for: 5m
           labels:
-            severity: critical
+            severity: warning
           annotations:
             summary: Longhorn backup {{ $labels.backup }} failed
             description: Backup {{ $labels.backup }} for volume {{ $labels.volume }} has remained in Error state for five minutes (recurring job={{ $labels.recurring_job }}). Inspect the Backup CR and Longhorn manager logs, then confirm the next recurring backup completes.
@@ -106,14 +106,14 @@ spec:
 
         # The 2026-08-16 failure: the NFS backup target went unreachable and
         # every backup silently stopped for two days. One aggregate alert
-        # rather than one per volume, so a dead target is a single page
+        # rather than one per volume, so a dead target is a single notification
         # instead of two dozen. backup-daily runs at 07:00, so 26h means a
         # whole scheduled run was missed.
         - alert: LonghornBackupsStalled
           expr: time() - max(longhorn_volume_last_backup_at > 0) > 26 * 3600
           for: 15m
           labels:
-            severity: critical
+            severity: warning
           annotations:
             summary: No Longhorn volume has been backed up in over 26 hours
             description: The most recent backup across all volumes is more than 26 hours old, so at least one scheduled daily run did not complete. Check BackupTarget/default is available and that longhorn-manager can reach the NFS target.
@@ -236,7 +236,7 @@ spec:
           expr: absent(longhorn_volume_robustness)
           for: 15m
           labels:
-            severity: critical
+            severity: warning
           annotations:
             summary: No Longhorn metrics are being scraped
             description: longhorn_volume_robustness has been absent for 15 minutes, so every Longhorn alert is evaluating against no data. Check the longhorn-manager ServiceMonitor and its scrape targets.

@@ -1,4 +1,4 @@
-# Host and collector metrics for one Spark. Identical on every Spark: node
+# Host and collector metrics, and the journal, for one Spark. Identical on every Spark: node
 # identity comes from the host's ingestion token, not from this file.
 name: monitoring
 
@@ -25,8 +25,10 @@ services:
       - --path.rootfs=/host
       # This collector never returns on a Spark and stalls the whole scrape.
       - --no-collector.cpufreq
+      - --collector.textfile.directory=/textfile
     volumes:
       - /:/host:ro,rslave
+      - textfile:/textfile:ro
     mem_limit: 128m
 
   smartctl-exporter:
@@ -42,6 +44,42 @@ services:
       - --smartctl.device=/dev/nvme0;nvme
       - --smartctl.interval=60s
     mem_limit: 128m
+
+  # Counts this host's pending apt upgrades for node-exporter's textfile collector. Its
+  # image must stay on the host's release (Ubuntu 24.04) so apt reads the host's state the way
+  # the host does.
+  apt-metrics:
+    <<: *service
+    image: docker.io/library/ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac
+    # Root without capabilities, to write the root-owned textfile volume.
+    user: "0:0"
+    entrypoint: ["/bin/sh", "/usr/local/bin/apt-metrics"]
+    volumes:
+      - ./apt-metrics.sh:/usr/local/bin/apt-metrics:ro
+      - /etc/apt:/etc/apt:ro
+      - /var/lib/apt:/var/lib/apt:ro
+      - /var/lib/dpkg:/var/lib/dpkg:ro
+      - /etc/machine-id:/etc/machine-id:ro
+      - textfile:/textfile
+    tmpfs:
+      - /tmp
+    mem_limit: 128m
+
+  # NVIDIA's apt configuration turns the daily package-list refresh off, which would leave
+  # apt-metrics counting against old lists. This copies in a later file that turns the refresh
+  # back on; unattended upgrades stay off. Remove /etc/apt/apt.conf.d/zz-monitoring-apt-refresh
+  # by hand if this service is retired.
+  apt-list-refresh:
+    <<: *service
+    image: docker.io/library/ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac
+    user: "0:0"
+    restart: "no"
+    labels:
+      cd.doco.deployment.one_shot: "true"
+    command: ["cp", "/src/zz-monitoring-apt-refresh", "/dst/zz-monitoring-apt-refresh"]
+    volumes:
+      - ./apt/zz-monitoring-apt-refresh:/src/zz-monitoring-apt-refresh:ro
+      - /etc/apt/apt.conf.d:/dst
 
   vmagent:
     <<: *service
@@ -62,5 +100,25 @@ services:
     mem_limit: 256m
     stop_grace_period: 30s
 
+  # Sends this host's journal to VictoriaLogs; see logs/fluent-bit.yaml.
+  fluent-bit:
+    <<: *service
+    image: docker.io/fluent/fluent-bit:5.1.5@sha256:2740f387f6e68fab66d28e4fa6a853387b9cab6ffb4cb78958f69bba4eb0e7b4
+    # Root without capabilities, to read the root-owned journal and token.
+    user: "0:0"
+    command: ["-c", "/fluent-bit/etc/fluent-bit.yaml"]
+    volumes:
+      - ./logs/fluent-bit.yaml:/fluent-bit/etc/fluent-bit.yaml:ro
+      - ./logs/host.lua:/fluent-bit/etc/host.lua:ro
+      - /var/log/journal:/var/log/journal:ro
+      - /run/log/journal:/run/log/journal:ro
+      - /etc/machine-id:/etc/machine-id:ro
+      - /etc/monitoring:/etc/monitoring:ro
+      - logs:/state
+    mem_limit: 128m
+    stop_grace_period: 40s
+
 volumes:
+  logs:
   queue:
+  textfile:

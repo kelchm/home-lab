@@ -18,4 +18,3 @@ resources:
   - ./mcphub/ks.yaml
   - ./open-meteo-mcp/ks.yaml
   - ./pcbparts-mcp/ks.yaml
-  - ./playwright-stealth-mcp/ks.yaml

@@ -25,9 +25,9 @@ Nothing new runs on the nodes: no script, service, credential, ingestion user, A
 | Alert | Severity | Fires when |
 |---|---|---|
 | `PVEBackupFailed` | warning | A run of a job finished with errors on a node. Labelled with `instance` and `backup_job`. |
-| `PVEBackupStale` | critical | A node in the expected list has no clean `daily-backups` completion within 30 hours, held for ten minutes. |
+| `PVEBackupStale` | warning | A node in the expected list has no clean `daily-backups` completion within 30 hours, held for ten minutes. |
 
-Thirty hours is the daily schedule plus six hours, so one missed or failed 05:00 run pages by about 11:00.
+Thirty hours is the daily schedule plus six hours, so one missed or failed 05:00 run notifies by about 11:00.
 
 **Expected nodes.** `PVEBackupStale` names `pve-sbx-1`, `pve-sbx-2` and `pve-sbx-3` in its expression. The list is deliberate: a node that has never reported, whose webhook was removed, or whose samples have aged out alerts exactly like one whose last success is old, and no other exporter has to be up for that to hold. Edit the list when a node joins or leaves the cluster, and keep the fixtures in step. Every listed node needs at least one guest in `daily-backups`; whether PVE sends a notification from a node with nothing to back up has not been checked.
 
@@ -92,9 +92,9 @@ Expect one series per node, each with that node's `instance`. If a sample is mis
 
 ### Merge after the first scheduled run
 
-Leave the rules unmerged until the next 05:00 run has written a `backup_job="daily-backups"`, `outcome="info"` sample from all three nodes. That run is the first real check of the matcher and the job ID, and it means `PVEBackupStale` starts out satisfied. Merged any earlier, the rule correctly reports three nodes with no success and pages critical ten minutes later. If the owner wants to merge sooner, first add a silence for `alertname=PVEBackupStale`, `cluster=pve-sbx` that expires an hour after the next scheduled run, with #720 in its comment.
+Leave the rules unmerged until the next 05:00 run has written a `backup_job="daily-backups"`, `outcome="info"` sample from all three nodes. That run is the first real check of the matcher and the job ID, and it means `PVEBackupStale` starts out satisfied. Merged any earlier, the rule correctly reports three nodes with no success and notifies ten minutes later. If the owner wants to merge sooner, first add a silence for `alertname=PVEBackupStale`, `cluster=pve-sbx` that expires an hour after the next scheduled run, with #720 in its comment.
 
-If a node's run fails that morning, it has no success sample: fix the backup, and expect that node to page until its next clean scheduled run.
+If a node's run fails that morning, it has no success sample: fix the backup, and expect that node to alert until its next clean scheduled run.
 
 ## Acceptance test
 
@@ -155,7 +155,7 @@ Staleness and a node that never reports are exercised by the rule fixtures and b
 
 ## Remove
 
-Reverting the rules in Git does not touch PVE, and removing the webhook while the rules are live makes `PVEBackupStale` page 30 hours after the last success. Revert the rules first, then remove the matcher before the target it references:
+Reverting the rules in Git does not touch PVE, and removing the webhook while the rules are live makes `PVEBackupStale` fire 30 hours after the last success. Revert the rules first, then remove the matcher before the target it references:
 
 ```sh
 sudo pvesh delete /cluster/notifications/matchers/pve-backup-results

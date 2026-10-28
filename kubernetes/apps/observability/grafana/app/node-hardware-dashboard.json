@@ -41,7 +41,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "AMD CPU control temperature. Warning alert: 85 °C for 15 minutes. Critical alert: 92 °C for 5 minutes.",
+      "description": "AMD CPU control temperature. The alert fires at 90 °C, 5 °C under the 95 °C Tjmax, on the hotter of this and the GPU edge sensor, after five minutes.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -66,7 +66,7 @@
               },
               {
                 "color": "red",
-                "value": 92
+                "value": 90
               }
             ]
           },
@@ -189,7 +189,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "NVMe controller composite temperature. Warning alert: 75 °C for 15 minutes. Critical alert: 80 °C for 5 minutes.",
+      "description": "NVMe controller composite temperature. The alert fires at 78.85 °C, 5 °C under the drive's own 83.85 °C warning temperature, after five minutes.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -214,7 +214,7 @@
               },
               {
                 "color": "red",
-                "value": 80
+                "value": 78.85
               }
             ]
           },
@@ -263,7 +263,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "Hottest reported NVMe channel on each node. Warning alert: 85 °C for 15 minutes. Critical alert: 90 °C for 5 minutes.",
+      "description": "Hottest reported NVMe channel on each node. These run hotter than the composite temperature, which the alert reads.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -389,7 +389,7 @@
               },
               {
                 "color": "red",
-                "value": 92
+                "value": 90
               }
             ]
           },
@@ -589,7 +589,7 @@
               },
               {
                 "color": "red",
-                "value": 80
+                "value": 78.85
               }
             ]
           },

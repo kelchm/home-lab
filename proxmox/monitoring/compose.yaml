@@ -1,4 +1,4 @@
-# Host and collector metrics for one PVE node. Identical on every node: node
+# Host and collector metrics, and the journal, for one PVE node. Identical on every node: node
 # identity comes from the host's ingestion token, not from this file.
 name: monitoring
 
@@ -23,8 +23,10 @@ services:
     command:
       - --web.listen-address=127.0.0.1:9100
       - --path.rootfs=/host
+      - --collector.textfile.directory=/textfile
     volumes:
       - /:/host:ro,rslave
+      - textfile:/textfile:ro
     mem_limit: 128m
 
   smartctl-exporter:
@@ -39,6 +41,26 @@ services:
       - --web.listen-address=127.0.0.1:9633
       - --smartctl.device=/dev/nvme0;nvme
       - --smartctl.interval=60s
+    mem_limit: 128m
+
+  # Counts this host's pending apt upgrades for node-exporter's textfile collector. Its
+  # image must stay on the host's release (Debian 13) so apt reads the host's state the way
+  # the host does.
+  apt-metrics:
+    <<: *service
+    image: docker.io/library/debian:13-slim@sha256:62bd423aeee912639ca8ee681c2b762cb3e25137e0a92b20be455898a9f034ad
+    # Root without capabilities, to write the root-owned textfile volume.
+    user: "0:0"
+    entrypoint: ["/bin/sh", "/usr/local/bin/apt-metrics"]
+    volumes:
+      - ./apt-metrics.sh:/usr/local/bin/apt-metrics:ro
+      - /etc/apt:/etc/apt:ro
+      - /var/lib/apt:/var/lib/apt:ro
+      - /var/lib/dpkg:/var/lib/dpkg:ro
+      - /etc/machine-id:/etc/machine-id:ro
+      - textfile:/textfile
+    tmpfs:
+      - /tmp
     mem_limit: 128m
 
   vmagent:
@@ -58,5 +80,25 @@ services:
     mem_limit: 256m
     stop_grace_period: 30s
 
+  # Sends this host's journal to VictoriaLogs; see logs/fluent-bit.yaml.
+  fluent-bit:
+    <<: *service
+    image: docker.io/fluent/fluent-bit:5.1.5@sha256:2740f387f6e68fab66d28e4fa6a853387b9cab6ffb4cb78958f69bba4eb0e7b4
+    # Root without capabilities, to read the root-owned journal and token.
+    user: "0:0"
+    command: ["-c", "/fluent-bit/etc/fluent-bit.yaml"]
+    volumes:
+      - ./logs/fluent-bit.yaml:/fluent-bit/etc/fluent-bit.yaml:ro
+      - ./logs/host.lua:/fluent-bit/etc/host.lua:ro
+      - /var/log/journal:/var/log/journal:ro
+      - /run/log/journal:/run/log/journal:ro
+      - /etc/machine-id:/etc/machine-id:ro
+      - /etc/monitoring:/etc/monitoring:ro
+      - logs:/state
+    mem_limit: 128m
+    stop_grace_period: 40s
+
 volumes:
+  logs:
   queue:
+  textfile:

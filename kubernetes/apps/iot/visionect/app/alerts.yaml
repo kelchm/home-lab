@@ -1,6 +1,7 @@
 ---
 # CloudNativePG cluster chart rule (charts/cluster/prometheus_rules/cluster-offline.yaml at f8b22d4e0041),
-# rendered for this cluster as the chart does, with the selector scoped to k8s-prod.
+# rendered for this cluster as the chart does, with the selector scoped to k8s-prod
+# and counting only instances whose PostgreSQL is up.
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
@@ -21,7 +22,7 @@ spec:
               potential service disruption and/or data loss.
             runbook_url: https://github.com/cloudnative-pg/charts/blob/main/charts/cluster/docs/runbooks/CNPGClusterOffline.md
           expr: |
-            (count(cnpg_collector_up{cluster="k8s-prod",namespace="iot",pod=~"visionect-db-([1-9][0-9]*)$"}) OR on() vector(0)) == 0
+            (count(cnpg_collector_up{cluster="k8s-prod",namespace="iot",pod=~"visionect-db-([1-9][0-9]*)$"} == 1) OR on() vector(0)) == 0
           for: 5m
           labels:
             severity: critical
