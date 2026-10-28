@@ -65,9 +65,10 @@ Every node's RTL8125-backed `vmbr0` is VLAN-aware with an explicit `bridge-vids 
 
 | VMID | Guest | Address | Purpose | Source |
 |---|---|---|---|---|
+| `103` | `netbird-pilot-router` | `10.32.19.103` | NetBird routing peer for remote access | [`guests/netbird-router`](guests/netbird-router/) |
 | `200` | `hermes-1` | `10.32.21.100` | Hermes Agent, dashboard, and client API | [`guests/hermes-1`](guests/hermes-1/) |
 
-`hermes-1` is enabled at host boot, covered by `daily-backups`, and intentionally not a PVE HA resource. It keeps its application state on its local VM disk under `/srv/hermes`.
+Both guests are enabled at host boot and intentionally not PVE HA resources. `hermes-1` is covered by `daily-backups` and keeps its application state on its local VM disk under `/srv/hermes`. `netbird-pilot-router` holds no application state beyond its NetBird peer identity and can be rebuilt from its guest definition and re-enrolled; whether it is also backed up and protected is decided in #625.
 
 ## Retired guests
 

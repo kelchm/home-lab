@@ -1,6 +1,65 @@
 # NetBird remote access
 
-NetBird is Matt's selected replacement for Tailscale. Its routing peer is VM 103, `netbird-pilot-router`, at `10.32.19.103` on the isolated Remote Admin VLAN. Setup and comprehensive testing remain unfinished in [#625](https://github.com/kelchm/home-lab/issues/625). Tailscale was retired on October 25, 2026; the remaining retirement work is tracked in [#1069](https://github.com/kelchm/home-lab/issues/1069). NetBird Cloud and UniFi policy are applied manually; merging this document changes neither.
+NetBird is Matt's selected replacement for Tailscale. Its routing peer is VM 103, `netbird-pilot-router`, at `10.32.19.103` on the isolated Remote Admin VLAN. Setup and comprehensive testing remain unfinished in [#625](https://github.com/kelchm/home-lab/issues/625). Tailscale was retired on October 25, 2026; the remaining retirement work is tracked in [#1069](https://github.com/kelchm/home-lab/issues/1069). NetBird Cloud and UniFi policy are applied manually; merging this document changes neither. The routing peer's definition, rebuild and enrollment are in [`proxmox/guests/netbird-router`](../../proxmox/guests/netbird-router/README.md).
+
+## Current configuration
+
+The names below are current. Dropping `pilot` from them is an open decision in #625.
+
+### Verified on 2026-10-27
+
+These were read from the routing peer through `qm guest exec`, from Hyperion, and from UniFi's read-only API:
+
+- **Routing peer:** VM 103 runs NetBird 0.79.0, connected to NetBird Cloud management (`api.netbird.io`), and routes `10.32.130.1/32`, `10.32.140.1/32` and `10.32.30.1/32`. Forwarding from `wt0` drops by default. With no client passing the posture check, the forward chain held only its established/related accept.
+- **UniFi:** `Allow NetBird Pilot Router to Services VIP` allows `10.32.19.103` → `10.32.140.1` and `Allow NetBird Pilot Router to Admin HTTPS` allows `10.32.19.103` → `10.32.130.1`. Both are TCP 443 with generated established/related returns. The [UniFi reference](../../network/unifi/README.md#remote-admin-applied-state) has the details.
+- **Gateway addresses:** the Remote Admin zone's default Gateway allow lets VM 103 reach every UniFi gateway address, including the console on `10.32.30.1:443`. Only NetBird policy stops a client from reaching that port through the DNS resource.
+- **Hyperion's DNS:** Hyperion's NetBird resolver forwards `home.kelch.io` to `10.32.30.1`. UniFi answers the same records at `10.32.10.1`, so name resolution at home does not depend on NetBird.
+
+### NetBird Cloud objects as last recorded
+
+The API token at `op://Private/netbird-automation/credential` returned `401 token invalid` on 2026-10-27, so these objects have not been re-verified. They come from the 2026-09-27 setup record and the 2026-10-19 admin extension in #625. Re-verify them with the read-back below before relying on them.
+
+| Kind | Name | Definition |
+|---|---|---|
+| Account | — | Overlay `100.64.0.0/16`; peer login and inactivity expiration off; lazy connections on; client auto-update off |
+| Group | `pilot-clients` | Hyperion and the iPhone |
+| Group | `pilot-routers` | `netbird-pilot-router` |
+| Group | `pilot-home-resources` | Resource group from the original setup; its members are not recorded |
+| Group | `pilot-admin-resources` | `pilot-admin-https` only |
+| Posture check | `pilot-exclude-home-main` | Peer network range: block `10.32.10.0/24` |
+| Network | `pilot-home` | Routed by group `pilot-routers`, metric 9999, masquerade |
+| Resources | Names not recorded | `10.32.140.1/32` (household services) and `10.32.30.1/32` (split DNS) |
+| Resource | `pilot-admin-https` | `10.32.130.1/32` |
+| Policy | `pilot-mesh` | `pilot-clients` ↔ `pilot-clients`, all protocols, no posture check |
+| Policy | `pilot-jellyfin` | `pilot-clients` → household services, TCP 443, with the posture check |
+| Policies | `pilot-home-dns-udp`, `pilot-home-dns-tcp` | `pilot-clients` → DNS, port 53, with the posture check |
+| Policy | Name not recorded | `pilot-clients` → `pilot-admin-https` as a direct resource, TCP 443, with the posture check |
+| Policy | `Default` | All ↔ All, disabled |
+| DNS | Nameserver group, name not recorded | `home.kelch.io` → `10.32.30.1:53` for `pilot-clients` |
+
+The record doesn't say whether `pilot-jellyfin` and the DNS policies target the `pilot-home-resources` group or each resource directly. If they target the group, TCP 443 is open to the UniFi console on `10.32.30.1` and port 53 to `10.32.140.1`. Check this first in the next read-back.
+
+## Read back NetBird Cloud
+
+[`scripts/netbird-export.sh`](../../scripts/netbird-export.sh) exports the account, groups, posture checks, policies, DNS, peers, setup keys, service users, networks, resources and routers. It writes them to a new private temporary directory and prints its path. The script makes only `GET` requests and removes setup-key values. It reads the token from `NETBIRD_TOKEN_FILE` if set, otherwise from 1Password.
+
+The export also contains peer addresses and IDs. Compare it against the table above, record the differences and the verified state in #625, and keep the raw files out of Git and issue comments. Run it before and after every NetBird Cloud change.
+
+With an invalid token, every request fails with HTTP 401 and the script exits non-zero. The full export has not yet been run against a valid token.
+
+## Clients and upgrades
+
+Read back on 2026-10-27:
+
+| Peer | Installed from | Version | Upgrade owner and effect |
+|---|---|---|---|
+| `netbird-pilot-router` | Debian package from `pkgs.netbird.io` `stable`, installed by vendor data | 0.79.0; 0.81.5 available | Operator, by hand through guest exec ([procedure](../../proxmox/guests/netbird-router/README.md#upgrades)). Away clients lose the resources until the daemon reconnects. |
+| Hyperion | Homebrew `netbirdio/tap/netbird` (daemon and CLI) and cask `netbirdio/tap/netbird-ui`; LaunchDaemon `netbird` runs `/opt/homebrew/bin/netbird service run` | Running daemon 0.80.0; installed formula 0.81.4; UI 0.80.0; 0.81.5 available | Operator, with `brew upgrade`. The running daemon keeps its old version until `sudo netbird service restart` or a reboot. |
+| iPhone | App Store | iOS core 0.75.0 as of 2026-09-27; not re-read | App Store updates |
+
+NetBird's client auto-update setting is off, so no client upgrades itself through NetBird.
+
+Hyperion's daemon plist sets `RunAtLoad: false` and `KeepAlive: true`. On 2026-10-19 the daemon started 16 minutes after boot and 3 seconds before the UI. Whether it connects before anyone logs in is unverified; #625 tests it.
 
 ## Verified baseline
 
@@ -32,7 +91,7 @@ sudo qm guest exec 103 -- hostname
 sudo qm guest exec 103 -- netbird status
 ```
 
-This management path was verified on October 27: guest exec returned the VM's hostname and NetBird status. Inspect the returned guest `exitcode` and `out-data`/`err-data`; a successful PVE request alone does not establish that the guest command succeeded. Main cannot reach VM 103's SSH directly, and the retired Tailscale routers are no longer a management hop.
+This management path was verified on October 27: guest exec returned the VM's hostname and NetBird status. Inspect the returned guest `exitcode` and `out-data`/`err-data`; a successful PVE request alone does not establish that the guest command succeeded. Main cannot reach VM 103's SSH directly, and the retired Tailscale routers are no longer a management hop. To rebuild or re-enroll the VM, follow its [guest definition](../../proxmox/guests/netbird-router/README.md).
 
 NetBird does not expose PVE management. Recovery requires a reachable admin session on Main; without one, an away operator must wait for local access to repair the routing peer or its host. Arrange that access before any disruptive test in #625. Native peer access to a host on Main is separate from the routed resources, but has not been qualified as a recovery path.
 
