@@ -1,6 +1,6 @@
 # Spark inference through SparkRun
 
-These recipes serve one model at a time from the two DGX Sparks at `http://10.32.21.31:8888/v1`, across both or, for one Qwen profile, from the head alone; since October 21 the running instance is [DeepSeek-V4.1-Flash-1017](#deepseek-v41-flash-1017-on-bertholomuss-zig-engine). SparkRun 0.3.10 owns model and image distribution, fabric detection, containers, runtime caches, readiness, logs, stop and benchmarking, through the TensorFold runtime adapter in `plugins/`. The hosts are outside Flux: merging a recipe changes nothing on them, and each launch is a manual step. Check host state before launching; other experiments can use either GPU.
+These recipes serve one model at a time from the two DGX Sparks at `http://10.32.21.31:8888/v1`, across both or, for one Qwen profile, from the head alone; since October 28 the running instance is [GLM-5.3-Flash](#glm-53-flash-on-mias-tensorfold-kit) ([switch record](https://github.com/kelchm/home-lab/issues/938#issuecomment-6458998037)), and [DeepSeek-V4.1-Flash-1017](#deepseek-v41-flash-1017-on-bertholomuss-zig-engine) is the fallback. SparkRun 0.3.10 owns model and image distribution, fabric detection, containers, runtime caches, readiness, logs, stop and benchmarking, through the TensorFold runtime adapter in `plugins/`. The hosts are outside Flux: merging a recipe changes nothing on them, and each launch is a manual step. Check host state before launching; other experiments can use either GPU.
 
 | Model | Engine | Profiles | Work |
 | --- | --- | --- | --- |
@@ -15,7 +15,7 @@ Every profile follows the contract in [#943](https://github.com/kelchm/home-lab/
 
 ## GLM-5.3-Flash on Mia's TensorFold kit
 
-`mia-tensorfold-glm53-exl3-tp2/` holds the profile for [Mia's two-Spark GLM kit](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold): TensorFold 0.6.0's Python CUDA engine with Mia's patches, serving Mia's 4 bpw EXL3 checkpoint across both Sparks. The kit's `main` at `3fd60dfc` replaced its v1.10 release after [#941's comparison on October 22](https://github.com/kelchm/home-lab/issues/941#issuecomment-6334247435), in which the same 48 requests gave identical replies on both, and decode and prefill were within about 3% of v1.10's. `bf5f9452` replaced `3fd60dfc` on October 25 and passed [a trial on October 27](https://github.com/kelchm/home-lab/issues/938#issuecomment-6448276787). GLM last served day to day on October 8, on v1.10.
+`mia-tensorfold-glm53-exl3-tp2/` holds the profile for [Mia's two-Spark GLM kit](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold): TensorFold 0.6.0's Python CUDA engine with Mia's patches, serving Mia's 4 bpw EXL3 checkpoint across both Sparks. The kit's `main` at `3fd60dfc` replaced its v1.10 release after [#941's comparison on October 22](https://github.com/kelchm/home-lab/issues/941#issuecomment-6334247435), in which the same 48 requests gave identical replies on both, and decode and prefill were within about 3% of v1.10's. `bf5f9452` replaced `3fd60dfc` on October 25 and passed [a trial on October 27](https://github.com/kelchm/home-lab/issues/938#issuecomment-6448276787). `bf5f9452` has served day to day since [October 28](https://github.com/kelchm/home-lab/issues/938#issuecomment-6458998037); GLM had last served day to day on October 8, on v1.10.
 
 ### Current profile
 
@@ -439,7 +439,7 @@ The two-Spark kit's #3, #6 and #9 cannot occur with one rank: there is no contro
 
 ## DeepSeek-V4.1-Flash-1017 on bertholomus's Zig engine
 
-`bertholomus-tensorfold-dsv41-tp2/` holds the profile that serves [`deepseek-ai/DeepSeek-V4.1-Flash-1017`](https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017) as `DeepSeek-V4.1-Flash-1017`, through [LibertAI's EXL3 2.9 bpw quant](https://huggingface.co/LibertAIDAI/DeepSeek-V4.1-Flash-1017-EXL3-2.9bpw/tree/0be63c3337efbb2a0061d5b8bb4006fa186d433f) on the native Zig engine of [`bertholomus/TensorFold`](https://github.com/bertholomus/TensorFold/tree/deepseek-v41-zig), branch `deepseek-v41-zig`. Upstream TensorFold refuses DeepSeek checkpoints until its whole-model gate lands ([ashhart/TensorFold#827](https://github.com/ashhart/TensorFold/pull/827)). It has served since its [launch on October 22](https://github.com/kelchm/home-lab/issues/942#issuecomment-6330745295), apart from other models' trial windows.
+`bertholomus-tensorfold-dsv41-tp2/` holds the profile that serves [`deepseek-ai/DeepSeek-V4.1-Flash-1017`](https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017) as `DeepSeek-V4.1-Flash-1017`, through [LibertAI's EXL3 2.9 bpw quant](https://huggingface.co/LibertAIDAI/DeepSeek-V4.1-Flash-1017-EXL3-2.9bpw/tree/0be63c3337efbb2a0061d5b8bb4006fa186d433f) on the native Zig engine of [`bertholomus/TensorFold`](https://github.com/bertholomus/TensorFold/tree/deepseek-v41-zig), branch `deepseek-v41-zig`. Upstream TensorFold refuses DeepSeek checkpoints until its whole-model gate lands ([ashhart/TensorFold#827](https://github.com/ashhart/TensorFold/pull/827)). It served from its [launch on October 22](https://github.com/kelchm/home-lab/issues/942#issuecomment-6330745295) until GLM replaced it on [October 28](https://github.com/kelchm/home-lab/issues/938#issuecomment-6458998037), apart from other models' trial windows. It is the fallback for GLM: stop GLM with its recipe and launch this one, which was ready 65 s after launch on October 27.
 
 ### Current profile
 
@@ -571,7 +571,7 @@ export PATH="$HOME/.local/share/sparkrun-glm53-0310/bin:$PATH"
 sparkrun cluster create sparks --hosts 10.32.21.31,10.32.21.32 --user kelchm --cache-dir /opt/spark-cache/huggingface --transfer-mode auto --transfer-interface mgmt --scheduler greedy
 ```
 
-Keep this venv on PATH for the commands here; the head's older SparkRun 0.3.9 in `~/.local/bin` stays untouched. Benchmarks need `uvx` on PATH.
+Keep this venv on PATH for the commands here; the head's older SparkRun 0.3.9 in `~/.local/bin` stays untouched. A login shell puts `~/.local/bin` first, so export the venv's path and check that `sparkrun --version` reports 0.3.10 before a stop or launch. Benchmarks need `uvx` on PATH.
 
 ### Enable TensorFold in SparkRun
 
