@@ -22,6 +22,22 @@ Use a constraint when some updates remain acceptable, approval when updates need
 - **Existing locks:** a tagged reference that is already intentionally locked keeps its form and gets a narrowly scoped rule. Don't rewrite frozen or checksummed files to adopt the digest-only form.
 - **Not extracted:** the current managers don't extract the image behind a `FROM ${ARG}` without a default or the inputs in SparkRun's `upstream.lock.json`. Those inputs are invisible to Renovate rather than locked by a rule, and their record lives with them.
 
+## CI workflow images
+
+The workflow image custom manager extracts tagged, digest-pinned images written on their own line in multiline `docker run` commands under `.github/workflows/`. Folded YAML (`>-`) and literal shell continuations (`|` with `\`) are supported. Keep new inline images in that form; the native GitHub Actions manager owns `uses: docker://` references. The repository configuration job checks extraction and replacement with the actual Renovate version pinned in the workflow.
+
+The Flate render action and diff command are one `Flate CI image` group across both managers. Both references must start at the same tag and digest, wait three days, and pass CI and review; this group overrides GitHub Actions auto-merge. A minimum group size of two withholds a new branch if either reference has no eligible update. The regression test also rejects manual drift and exercises digest, patch, minor and major replacements in one branch.
+
+The inline references were identified from primary registry metadata on 2026-10-28 UTC, preserving all existing digests:
+
+| Image | Verified origin | Update stream |
+| --- | --- | --- |
+| `ghcr.io/home-operations/flate` | `0.6.5` resolves directly to `sha256:e0e2d2de97539b3141977e8bb3bbb50ea5c5afe89477950e5fa972c9862478da`; its image config reports version `0.6.5` and source revision `631b76b69c4e58c6f4d1cb01e23616fa61aebafa` ([upstream package](https://github.com/home-operations/flate/pkgs/container/flate)). | Versioned releases and digest refreshes, with render and diff reviewed together. |
+| `ghcr.io/yannh/kubeconform` | `v0.8.0-amd64` resolves directly to `sha256:5103f6f5e89061728aad4ad5a250627dd0fc9b2a92eb876f3762677a4222f9e0` ([upstream package](https://github.com/yannh/kubeconform/pkgs/container/kubeconform)). | Versioned releases retaining Docker versioning's `amd64` compatibility suffix, and digest refreshes. |
+| `quay.io/frrouting/frr` | The `10.3.4` index, `sha256:c8790a83db3cb105c0823f76afe55de5c9f77d968fb1ebd28174a8ddd49b989c`, contains the pinned `linux/amd64` manifest `sha256:5a3a646db8bc911a996e48d67fc6dfed4c49f8d893c76cc6ef52a620a9ec6312` ([upstream tag metadata](https://quay.io/api/v1/repository/frrouting/frr/tag/?specificTag=10.3.4)). | Versioned stable releases and digest refreshes. The current pin remains the amd64 child manifest; a switch to an index would be a separate image update. |
+
+These are managed CI tools, with no exact-content locks. Updating FRR's CI parser does not upgrade or qualify the UniFi gateway's FRR runtime. Verify origins with `crane digest IMAGE:TAG` and `crane manifest IMAGE:TAG`; for a platform pin, check its membership and platform in the release index instead of equating a child digest with the index digest.
+
 ## Record a lock
 
 Write the record beside the reference, in the rule's comment, or in the README that owns the component, and link it from the others. It states:

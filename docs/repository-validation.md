@@ -25,7 +25,9 @@ preserved when outputs are added or refactored.
 
 ## Repository configuration checks
 
-The Repository Configuration Validation job runs on every pull request and push to `main`, independently of changed-file filtering. It uses actionlint and ShellCheck pinned in `.mise.toml` to check all GitHub workflows, then invokes `renovate-config-validator --no-global .renovaterc.json5` from a digest-pinned Renovate image to validate repository configuration. Either failure fails the job and the aggregate `Validation Success` check.
+The Repository Configuration Validation job runs on every pull request and push to `main`, independently of changed-file filtering. It uses actionlint and ShellCheck pinned in `.mise.toml` to check all GitHub workflows, then invokes `renovate-config-validator --no-global .renovaterc.json5` and `scripts/ci/test-renovate-workflow-images.mjs` from the same digest-pinned Renovate image. The image tests use Renovate's real extraction, grouping and replacement APIs on the current workflow and multiline fixtures. They require coverage for all three inline image references, identical Flate render/diff pins, and one reviewed Flate branch that replaces both references for digest, patch, minor and major updates. They also verify kubeconform/FRR replacements without changing their surrounding commands. Any failure fails the job and the aggregate `Validation Success` check. The test uses internal Renovate APIs, so a Renovate upgrade that changes them requires adapting the test before it can pass.
+
+Run the same image test locally with `docker run --rm -v "$PWD:/workspace:ro" -w /workspace --entrypoint node IMAGE scripts/ci/test-renovate-workflow-images.mjs`, using the Renovate image reference from the workflow. For an existing npm installation, pass its Renovate package directory as the script's first argument. Image origins and update streams are recorded in [Dependency updates](runbooks/dependency-updates.md#ci-workflow-images).
 
 ## Label checks
 

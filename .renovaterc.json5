@@ -178,6 +178,20 @@
       ignoreTests: true,
     },
     {
+      // The render action and inline diff command must use one reviewed image.
+      // Override the GitHub Actions auto-merge policy for both managers.
+      description: "Flate CI: update render and diff together",
+      matchManagers: ["github-actions", "custom.regex"],
+      matchDatasources: ["docker"],
+      matchFileNames: [".github/workflows/repository-validation.yaml"],
+      matchPackageNames: ["ghcr.io/home-operations/flate"],
+      groupName: "Flate CI image",
+      minimumGroupSize: 2,
+      minimumReleaseAge: "3 days",
+      automerge: false,
+      ignoreTests: false,
+    },
+    {
       matchUpdateTypes: ["major"],
       semanticCommitType: "feat",
       commitMessagePrefix: "{{semanticCommitType}}({{semanticCommitScope}})!:",
@@ -267,6 +281,17 @@
     },
   },
   customManagers: [
+    {
+      description: "Track inline workflow images",
+      customType: "regex",
+      managerFilePatterns: ["/^\\.github/workflows/[^/]+\\.ya?ml$/"],
+      // A tagged, digest-pinned image on its own line in a folded or literal
+      // docker run command. Leave uses: docker:// to the native manager.
+      matchStrings: [
+        "(?:^|\\n)[ \\t]+(?<depName>[a-z0-9.-]+(?::[0-9]+)?/[a-z0-9._/-]+):(?<currentValue>[^\\s\"'@]+)@(?<currentDigest>sha256:[a-f0-9]{64})(?:[ \\t]+\\\\)?[ \\t]*(?:\\r?\\n|$)",
+      ],
+      datasourceTemplate: "docker",
+    },
     {
       description: "Process annotated dependencies",
       customType: "regex",
