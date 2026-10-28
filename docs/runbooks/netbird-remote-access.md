@@ -1,6 +1,6 @@
 # NetBird remote access
 
-NetBird is a location-aware pilot tracked in [#625](https://github.com/kelchm/home-lab/issues/625). Its routing peer is VM 103, `netbird-pilot-router`, at `10.32.19.103` on the isolated Remote Admin VLAN. Tailscale remains the fallback for broader lab access. NetBird Cloud and UniFi policy are applied manually; merging this document changes neither.
+NetBird is Matt's selected replacement for Tailscale. Its routing peer is VM 103, `netbird-pilot-router`, at `10.32.19.103` on the isolated Remote Admin VLAN. Setup and comprehensive testing remain unfinished in [#625](https://github.com/kelchm/home-lab/issues/625). Tailscale was retired on October 25, 2026; the remaining retirement work is tracked in [#1069](https://github.com/kelchm/home-lab/issues/1069). NetBird Cloud and UniFi policy are applied manually; merging this document changes neither.
 
 ## Verified baseline
 
@@ -10,7 +10,7 @@ Grafana resolves to the admin gateway, `10.32.130.1`, which the original pilot e
 
 ## Extend access to admin web apps
 
-The admin HTTPS extension was applied on October 19, 2026: NetBird resource `pilot-admin-https` at `10.32.130.1/32` is in its dedicated `pilot-admin-resources` group, with a direct-resource policy from `pilot-clients` for TCP 443 and the existing `pilot-exclude-home-main` posture check. The matching UniFi allowance and paired established/related return rule were created through an administrator browser session and read back with the exact single-IP source and destination. The original services policy remains unchanged. VM checks pass; iPhone acceptance remains pending.
+The admin HTTPS extension was applied on October 19, 2026: NetBird resource `pilot-admin-https` at `10.32.130.1/32` is in its dedicated `pilot-admin-resources` group, with a direct-resource policy from `pilot-clients` for TCP 443 and the existing `pilot-exclude-home-main` posture check. The matching UniFi allowance and paired established/related return rule were created through an administrator browser session and read back with the exact single-IP source and destination. The original services policy was preserved. The October 19 VM checks passed, and Matt's successful remote iPhone acceptance is recorded below.
 
 The extension adds access to every matching HTTPS route on `gateway-admin`, including Grafana and MCPHub's `/mcp` and `/sse` transports. The address and port cannot isolate Grafana from those other routes. Application authentication continues to apply: Grafana uses its native Kanidm login, while MCPHub requires its existing bearer keys. Per-node management endpoints such as Proxmox, other ports and other destination IPs are outside this extension.
 
@@ -23,31 +23,37 @@ The extension adds access to every matching HTTPS route on `gateway-admin`, incl
 
 NetBird's [Networks API](https://docs.netbird.io/api/resources/networks) and [Policies API](https://docs.netbird.io/api/resources/policies) describe the corresponding objects. Prefer cloning the shape of the live household HTTPS policy with only the name and destination resource changed, after checking its scope. UniFi's routed-prefix classification for this source zone is documented in the applied-state reference; do not widen the destination zone or prefix to work around a failed probe.
 
-## Verify
+## Manage VM 103
 
-Reach the routing VM from Main through the existing Tailscale router:
+VM 103 runs on `pve-sbx-1` (`10.32.20.21`). Manage it through PVE's QEMU guest agent. On the hosting PVE node:
 
 ```sh
-ssh -J kelchm@10.32.19.101 kelchm@10.32.19.103
+qm guest exec 103 -- hostname
+qm guest exec 103 -- netbird status
 ```
 
-From the VM, Grafana's `/api/health` must return HTTP 200 with a healthy database, and Jellyfin's `/health` must still return HTTP 200. Use HTTPS with certificate validation. Connection attempts to `10.32.130.1:80`, `10.32.140.1:80`, and `10.32.20.21:8006` must remain blocked. These VM tests verify the UniFi path; they do not prove that a remote client received the NetBird resource or policy.
+This management path was verified on October 27: guest exec returned the VM's hostname and NetBird status. Inspect the returned guest `exitcode` and `out-data`/`err-data`; a successful PVE request alone does not establish that the guest command succeeded. Main cannot reach VM 103's SSH directly, and the retired Tailscale routers are no longer a management hop.
+
+For later application diagnostics, run the probe inside VM 103 through the same management path:
+
+```sh
+qm guest exec 103 -- curl --fail --show-error --max-time 10 https://grafana.home.kelch.io/api/health
+```
+
+## Verification and owner acceptance
+
+For future changes, Grafana's `/api/health` from the VM must return HTTP 200 with a healthy database, and Jellyfin's `/health` must still return HTTP 200. Use HTTPS with certificate validation. Connection attempts to `10.32.130.1:80`, `10.32.140.1:80`, and `10.32.20.21:8006` must remain blocked. These VM tests verify the UniFi path; they do not prove that a remote client received the NetBird resource or policy.
 
 The October 19 post-apply VM checks passed: Grafana returned HTTP 200 with `database: ok`, Jellyfin returned HTTP 200, and all three negative connections above timed out. The adjacent-address TCP DNS check below also timed out from the VM while answering from Main. Hyperion on Main still reported no NetBird resource routes.
 
 As an adjacent-address check, first confirm that k8s-gateway at `10.32.130.2` answers a TCP DNS query from Main, then confirm that the same query times out from the routing VM. This detects unintended DNS access. It does not prove that TCP 443 is limited to one IP: k8s-gateway has no HTTPS listener, so a failed connection to its port 443 cannot distinguish a correct `/32` rule from an overbroad prefix rule. The exact destination readback remains required.
 
-With the iPhone away from Main and connected through NetBird, open `https://grafana.home.kelch.io` and complete the normal login through `auth.home.kelch.io` (the existing household-services gateway). Confirm that the application loads and can query a dashboard. During the test, a bounded capture on the routing VM provides path evidence:
+Owner acceptance recorded October 27, 2026: Matt confirmed **“Yes, login and dashboards work”** on the iPhone over NetBird while away from home. This completes acceptance of the Grafana admin HTTPS extension. It is owner-reported application evidence, separate from the October 19 VM probes. A packet capture is an optional diagnostic tool for later troubleshooting, not a condition on this accepted result.
 
-```sh
-sudo timeout 45 tcpdump -ni wt0 -c 100 \
-  'host 100.64.41.255 and (host 10.32.130.1 or host 10.32.140.1 or host 10.32.30.1)'
-```
-
-The iPhone's NetBird address above is the October 19 value; check it before reuse. An admin HTTPS connection in this capture proves the remote path. Do not treat a successful Main-network request as remote acceptance. Confirm that Hyperion on Main still has no NetBird resource routes, that Grafana uses the physical LAN route, and that native peer access remains connected. The remaining transition, sleep/wake and failure-mode qualification belongs to #625.
+NetBird setup and comprehensive testing, including home/away transitions, sleep/wake, failure modes and any broader resource access, remain in #625. The accepted Grafana check does not complete that work.
 
 ## Roll back the admin extension
 
-Disable the new NetBird admin HTTPS policy first, then disable the new UniFi forward rule and its paired return rule using the IDs recorded during application. Do not select return rules by name alone. Remove the new resource and policy, and the dedicated resource group if unused, after confirming that the original household HTTPS and DNS resources remain present and functional. Leave the original services policy, split DNS, peer policy, posture check and Tailscale configuration intact. Verify that remote admin HTTPS is withdrawn while Jellyfin and native peer access continue to work, and update the same applied-state references with the withdrawal.
+Disable the new NetBird admin HTTPS policy first, then disable the new UniFi forward rule and its paired return rule using the IDs recorded during application. Do not select return rules by name alone. Remove the new resource and policy, and the dedicated resource group if unused, after confirming that the original household HTTPS and DNS resources remain present and functional. Leave the original services policy, split DNS, peer policy and posture check intact. Verify that remote admin HTTPS is withdrawn while Jellyfin and native peer access continue to work, and update the same applied-state references with the withdrawal.
 
-For immediate broader lab access, disconnect NetBird on the iPhone and connect Tailscale; only one iOS VPN can run at a time. Switching away from NetBird also interrupts its native peer connections.
+VM 103 is the only routed remote path. Retain it and the household HTTPS, DNS and peer access when rolling back this admin-only extension.

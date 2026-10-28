@@ -29,7 +29,7 @@ or fixing.
 | Runbook | Use when |
 |---|---|
 | [alerting](runbooks/alerting.md) | Receiving, silencing, testing, and troubleshooting Alertmanager notifications and control-plane coverage. |
-| [netbird-remote-access](runbooks/netbird-remote-access.md) | Diagnosing pilot routing limits, extending access to the admin HTTPS gateway, and verifying or rolling back the remote path. |
+| [netbird-remote-access](runbooks/netbird-remote-access.md) | Managing NetBird remote access, the admin HTTPS extension and VM 103 through PVE guest exec. |
 | [logging](runbooks/logging.md) | Querying Kubernetes, Talos node and UniFi console logs, rolling out Talos log delivery, the UniFi log alerts, and diagnosing the Fluent Bit-to-VictoriaLogs ingestion path. |
 | [longhorn-backup-restore](runbooks/longhorn-backup-restore.md) | Restoring a PV from a Longhorn backup; DR drills. |
 | [longhorn-storage-network-cutover](runbooks/longhorn-storage-network-cutover.md) | Moving Longhorn replica traffic onto the dedicated storage VLAN. |
