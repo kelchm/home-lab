@@ -232,7 +232,7 @@ jobs:
           --workdir /workspace
           --env XDG_CACHE_HOME=/tmp/flate-cache
           --env FLATE_NO_PROGRESS=1
-          ghcr.io/home-operations/flate@sha256:e0e2d2de97539b3141977e8bb3bbb50ea5c5afe89477950e5fa972c9862478da
+          ghcr.io/home-operations/flate:0.6.5@sha256:e0e2d2de97539b3141977e8bb3bbb50ea5c5afe89477950e5fa972c9862478da
           diff ${{ matrix.resources }}
           --path pull/kubernetes/flux/cluster
           --path-orig base/kubernetes/flux/cluster
@@ -637,7 +637,7 @@ jobs:
         run: >-
           docker run --rm
           --volume "${GITHUB_WORKSPACE}:/workspace:ro"
-          ghcr.io/yannh/kubeconform@sha256:5103f6f5e89061728aad4ad5a250627dd0fc9b2a92eb876f3762677a4222f9e0
+          ghcr.io/yannh/kubeconform:v0.8.0-amd64@sha256:5103f6f5e89061728aad4ad5a250627dd0fc9b2a92eb876f3762677a4222f9e0
           -strict
           -kubernetes-version 1.36.0
           -summary
@@ -649,7 +649,7 @@ jobs:
           docker run --rm
           --entrypoint vtysh
           --volume "${GITHUB_WORKSPACE}:/workspace:ro"
-          quay.io/frrouting/frr@sha256:5a3a646db8bc911a996e48d67fc6dfed4c49f8d893c76cc6ef52a620a9ec6312
+          quay.io/frrouting/frr:10.3.4@sha256:5a3a646db8bc911a996e48d67fc6dfed4c49f8d893c76cc6ef52a620a9ec6312
           -C -f /workspace/network/unifi/frr.conf
 
       - name: No network changes
@@ -738,11 +738,13 @@ jobs:
       - name: Validate GitHub workflows
         run: actionlint
 
-      - name: Validate Renovate repository configuration
+      - name: Validate Renovate configuration and workflow image updates
         uses: docker://ghcr.io/renovatebot/renovate:44.181.5@sha256:611eac05a6ee11c06d23157ae2ca11364f5b4a096c12d7f82a65aec2b6ec8a48
         with:
-          entrypoint: renovate-config-validator
-          args: --no-global .renovaterc.json5
+          entrypoint: bash
+          args: >-
+            -c "renovate-config-validator --no-global .renovaterc.json5 &&
+            node scripts/ci/test-renovate-workflow-images.mjs"
 
   labels:
     name: Label Catalog Validation
