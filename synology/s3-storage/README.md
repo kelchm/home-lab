@@ -77,6 +77,8 @@ Before merging, all on Athena and in UniFi:
 3. Add a static record `s3-storage.home.kelch.io` → `10.32.25.5` in UniFi. Without it the name resolves to the `*.home.kelch.io` wildcard.
 4. Create the Cloudflare token described under [Credentials](#credentials) and a random root key pair, store them in 1Password, and encrypt them into `traefik.sops.env` and `versitygw.sops.env`.
 
+Before the first merge, run an explicitly authorized disposable container probe with the gateway image, UID/GID 0, all capabilities dropped, `no-new-privileges` and the same share bind mount. Prove that it can create, rename and delete its own temporary files under both bucket directories and `meta`, leaving existing files untouched. Root ownership alone does not prove access through DSM's share ACL. If this fails, stop before merging and review the permissions; do not change ACLs, modes or capabilities as an unreviewed workaround.
+
 Then merge. doco-cd deploys the project, and Traefik requests the certificate on its first start.
 
 After merging:
@@ -97,14 +99,14 @@ After merging:
    - With one database's account, a 40 MB file goes up and comes back intact, which the AWS CLI sends as a multipart upload, and is deleted again: `aws --endpoint-url https://s3-storage.home.kelch.io:9000 s3 cp test.bin s3://k8s-prod-visionect-db/acceptance/test.bin`, then `s3 cp` it back, compare checksums, and `s3 rm` it.
    - The same account is refused (`AccessDenied`) on the other database's bucket. Repeat both checks with the other account.
 
-   The scratch test ran on a 6.18 kernel and ext4. If object writes fail on DSM's 4.4 kernel and Btrfs, add `--disableotmp` and `--disable-copy-file-range` to the `posix` arguments; both replace a newer kernel facility with a plain copy. Until the first certificate issue succeeds, Traefik serves its built-in self-signed certificate and every S3 client refuses the endpoint.
+   The scratch test ran on a 6.18 kernel and ext4. The disposable probe above checks DSM's ACL with the configured identity, but the multipart test must still prove object operations on the NAS's 4.4 kernel and Btrfs. If a write fails, retain the exact error and review permissions or filesystem compatibility before changing the configuration; copy-related flags are not a remedy for `permission denied`. Until the first certificate issue succeeds, Traefik serves its built-in self-signed certificate and every S3 client refuses the endpoint.
 
 ### Roll back the first deployment
 
 Reverting the merge alone does not stop the store: doco-cd only manages declared projects and never destroys one, so dropping the target leaves the containers running. Revert first, wait for doco-cd's next poll, then remove this project only:
 
 ```sh
-ssh kelchm@10.32.20.5 'sudo /usr/local/bin/docker compose -p s3-storage down'
+ssh kelchm@10.32.20.5 'sudo /usr/local/bin/docker-compose -p s3-storage down'
 ```
 
 Stopping the containers while the target is still on `main` does not hold: doco-cd's next poll recreates a declared project whose services are missing. If the store has to stop before the revert lands, stop doco-cd first as in [break-glass](../README.md#break-glass-apply-over-ssh), and start it again once the revert is on `main`.
