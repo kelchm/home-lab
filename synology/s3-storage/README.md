@@ -99,6 +99,18 @@ After merging:
 
    The scratch test ran on a 6.18 kernel and ext4. If object writes fail on DSM's 4.4 kernel and Btrfs, add `--disableotmp` and `--disable-copy-file-range` to the `posix` arguments; both replace a newer kernel facility with a plain copy. Until the first certificate issue succeeds, Traefik serves its built-in self-signed certificate and every S3 client refuses the endpoint.
 
+### Roll back the first deployment
+
+Reverting the merge alone does not stop the store: doco-cd only manages declared projects and never destroys one, so dropping the target leaves the containers running. Revert first, wait for doco-cd's next poll, then remove this project only:
+
+```sh
+ssh kelchm@10.32.20.5 'sudo /usr/local/bin/docker compose -p s3-storage down'
+```
+
+Stopping the containers while the target is still on `main` does not hold: doco-cd's next poll recreates a declared project whose services are missing. If the store has to stop before the revert lands, stop doco-cd first as in [break-glass](../README.md#break-glass-apply-over-ssh), and start it again once the revert is on `main`.
+
+`down` removes the three containers and the project network. Leave out `--rmi` and `-v`, and prune nothing: the share, `users.json` and `acme.json` are bind mounts and stay as they are, and the other projects on Athena are untouched.
+
 ## Check on it
 
 ```sh
