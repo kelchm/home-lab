@@ -6,8 +6,7 @@ Use this runbook to operate the existing out-of-band console and PXE infrastruct
 
 | Component | Endpoint | Role |
 |---|---|---|
-| GLKVM PiKVM UI | `https://10.32.20.10/` | HDMI console, USB HID keyboard, downstream KVM selection |
-| GLKVM appliance UI | `https://10.32.20.10:8888/` | Firmware and appliance management only |
+| Stock GLKVM UI | `https://10.32.20.10/` | HDMI console, USB HID keyboard, firmware and appliance management |
 | netboot.xyz UI | `http://10.32.20.5:3000/` | Menu and local-asset administration |
 | netboot.xyz assets | `http://10.32.20.5:8080/` | Locally served installer and live-image payloads |
 | netboot.xyz TFTP | `10.32.20.5:69/udp`, `netboot.xyz-snponly.efi` | UEFI PXE bootloader |
@@ -28,9 +27,9 @@ The owner-confirmed downstream mapping is committed in `devices/glkvm/override.y
 
 Before sending HID input:
 
-1. Select one candidate downstream port from the PiKVM **Hosts** menu or with `/etc/kvmd/user/bin/kvm-switch PORT` on GLKVM.
+1. Select one candidate downstream port with the physical switch buttons or `/etc/kvmd/user/bin/kvm-switch PORT` over SSH on GLKVM. The stock UI has no custom Hosts menu.
 2. Compare the displayed hostname, chassis label, and expected power state. Do not identify a node from an old IP shown by a stale installation.
-3. Stop if the observed host disagrees with the committed mapping. Correct the physical or recorded mapping before continuing, apply the override, and verify every button once.
+3. Stop if the observed host disagrees with the committed mapping. Correct the physical or recorded mapping before continuing, apply the override, and verify channel selection once.
 
 Treat an unverified channel as the wrong host. Never launch a destructive installer or firmware tool until the on-screen identity and the private hardware inventory agree.
 
@@ -49,7 +48,7 @@ Ports 1–3 use the VLAN 20 access profile. Ports 13–15 use `pve-guest-trunk`,
 ## Preflight
 
 1. Unlock the operator SSH key provider and verify non-interactive access to GLKVM and Athena before starting a reboot.
-2. Open the PiKVM video page to watch the sequence. Scripted captures don't need it: `capture-screen.sh` starts its own short-lived stream when no viewer is open.
+2. Open the stock GLKVM video page to watch the sequence. Scripted captures don't need it: `capture-screen.sh` starts its own short-lived stream when no viewer is open.
 3. Verify the PXE services from a VLAN 20 client:
 
    ```sh
@@ -95,7 +94,7 @@ Apply this checklist independently to `pve-sbx-1`, `pve-sbx-2`, and `pve-sbx-3`.
 One-shot F9, F10, and F12 presses during POST are unreliable on these EliteDesk hosts. Holding Esc through POST and selecting the desired function from the HP Startup Menu is the proven sequence.
 
 1. Select and visually verify the target KVM channel.
-2. Reboot a healthy host through its OS. If only HID is available, send Ctrl-Alt-Delete from the PiKVM UI or run:
+2. Reboot a healthy host through its OS. If only HID is available, send Ctrl-Alt-Delete from the stock GLKVM UI or run:
 
    ```sh
    ssh root@10.32.20.10 '/etc/kvmd/user/bin/hid-type ctrl-alt-del'
@@ -149,7 +148,7 @@ Before moving to the next node:
    devices/glkvm/capture-screen.sh /tmp/pve-bootstrap.jpg
    ```
 
-5. Confirm the node can be recovered through both the PiKVM UI and the held-Esc PXE sequence before depending on remote-only maintenance.
+5. Confirm the node can be recovered through both the stock GLKVM UI and the held-Esc PXE sequence before depending on remote-only maintenance.
 
 ## Troubleshooting
 

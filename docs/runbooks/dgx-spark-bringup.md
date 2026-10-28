@@ -49,7 +49,7 @@ independent physical rails or failure domains.
 
 ### GLKVM console
 
-Both Sparks are connected to the GLKVM at `https://10.32.20.10/`: `spark-1` is downstream port 7 and `spark-2` is port 8. Select the named host from the PiKVM **Hosts** menu, or switch explicitly over SSH:
+Both Sparks are connected to the stock GLKVM console at `https://10.32.20.10/`: `spark-1` is downstream port 7 and `spark-2` is port 8. The optional [Hosts bar](../../devices/glkvm/README.md#optional-hosts-bar) at `https://10.32.20.10/hosts/` adds switching buttons around the stock console. Physical switch buttons and the paced SSH helper also work:
 
 ```sh
 ssh root@10.32.20.10 '/etc/kvmd/user/bin/kvm-switch 7' # spark-1
@@ -57,6 +57,98 @@ ssh root@10.32.20.10 '/etc/kvmd/user/bin/kvm-switch 8' # spark-2
 ```
 
 Visually confirm the expected Spark before sending keyboard input. GLKVM provides video and USB HID but no ATX control, so a powered-off or hard-hung Spark still requires a physical power action. Appliance deployment and recovery live in [`devices/glkvm/README.md`](../../devices/glkvm/README.md).
+
+#### Restoring a missing Spark text console
+
+A host can be reachable over SSH and enumerate the GLKVM keyboard while producing no HDMI signal. Inspect `/proc/fb`, `/sys/class/drm/`, and the live `nvidia_drm` `modeset` parameter before resetting the KVM. On 2026-10-20, spark-1 had driver `580.173.02` with `modeset=N` from NVIDIA's `nvidia-drm-options-modeset0` package, no framebuffer or display connectors, and inactive GDM and `getty@tty1` services. A [firsthand report with this driver](https://forums.developer.nvidia.com/t/dgx-spark-ota-update-to-dgx-os-7-5-0-kills-all-display-output-when-nvidias-own-nvidia-drm-options-modeset0-package-is-installed/382452) describes the same symptoms.
+
+Check GPU workloads and arrange an interruption window before changing display-driver state. Keep SSH connected. When `/dev/dri/card0` has no clients and `/sys/module/nvidia_drm/refcnt` is zero, try reloading only the display module and starting a text login; leave the CUDA driver and desktop manager alone:
+
+```sh
+ssh kelchm@10.32.21.31 'sudo -n sh -s' <<'REMOTE'
+set -eu
+test "$(cat /sys/module/nvidia_drm/refcnt)" = 0
+if fuser /dev/dri/card0 >/dev/null 2>&1; then
+    echo "Display has an active client; stop before reloading" >&2
+    exit 1
+fi
+rmmod nvidia_drm
+if ! modprobe nvidia_drm modeset=1 fbdev=1; then
+    modprobe nvidia_drm modeset=0 fbdev=1
+    exit 1
+fi
+systemctl start getty@tty1
+cat /proc/fb
+ls /sys/class/drm/
+REMOTE
+```
+
+Do not force-remove a busy module or unload `nvidia`, `nvidia_uvm`, or `nvidia_modeset`. If the attempt does not restore video, inspect connector status, available modes, EDID, and the GLKVM's `/sys/bus/i2c/devices/1-002b/resolution` before further changes. The module options above are temporary; a rollback to `modeset=0 fbdev=1` uses the same guarded display-module reload and must stop if the module is busy. A host reboot or physical power cycle is a separate escalation after saving workload state.
+
+Validated live on spark-1 on 2026-10-20: the display-only reload completed without stopping the TensorFold process, created `nvidia-drmdrmfb` and an enabled HDMI connector, and restored a visible `spark-1 login:` prompt at `1920x1080@60`. The host recorded both a Right-arrow press and release from GLKVM. TensorFold retained PID 846013 and its 109,309 MiB allocation, and `/health` still reported `status: ok`. GDM remained stopped; `getty@tty1` was started and was already enabled. No change was made to spark-2 or the existing boot target.
+
+After successful live checks, persist the site override from [`sparks/console/zz-spark-console.conf`](../../sparks/console/zz-spark-console.conf). It sorts after the vendor override and enables both modesetting and a framebuffer without editing the package-owned file. Back up existing initramfs images outside `/boot` before rebuilding them. Applied on spark-1 on 2026-10-20: both installed initramfs images (`6.11.0-1014-nvidia` and `6.17.0-1031-nvidia`) were regenerated and contain the site override, and `modprobe -c` listed it after the vendor's `modeset=0` option. That run's historical backups are in `/var/backups/spark1-console.l3WC9o`; do not use them for a later run. No reboot was part of the October 20 check. The later [DGX OS and firmware update](#updating-dgx-os-and-firmware) records subsequent reboot-era console evidence and the current early-boot HDMI-unplug restriction; it does not revalidate these old initramfs backups against newer kernels.
+
+```sh
+scp sparks/console/zz-spark-console.conf kelchm@10.32.21.31:/tmp/zz-spark-console.conf
+ssh kelchm@10.32.21.31 'sudo -n sh -s' <<'REMOTE'
+set -eu
+site=/etc/modprobe.d/zz-spark-console.conf
+if [ -e "$site" ]; then
+    cmp /tmp/zz-spark-console.conf "$site"
+fi
+if grep -Eq "nvidia[-_]drm[.](modeset|fbdev)=" /proc/cmdline; then
+    echo "Review explicit boot-command-line display options before continuing" >&2
+    exit 1
+fi
+backup_dir=$(mktemp -d /var/backups/spark1-console.XXXXXX)
+printf "Pre-change backup directory: %s\n" "$backup_dir"
+cp -p /boot/initrd.img-*nvidia "$backup_dir/"
+if [ -e "$site" ]; then
+    cp -p "$site" "$backup_dir/site.conf"
+fi
+rollback() {
+    cp -p "$backup_dir"/initrd.img-*nvidia /boot/
+    if [ -e "$backup_dir/site.conf" ]; then
+        cp -p "$backup_dir/site.conf" "$site"
+    else
+        rm -f "$site"
+    fi
+    sync
+    printf "Persistence failed; pre-change images restored from %s\n" "$backup_dir" >&2
+}
+trap rollback EXIT
+install -o root -g root -m 0644 /tmp/zz-spark-console.conf "$site"
+rm /tmp/zz-spark-console.conf
+update-initramfs -u -k all
+for image in /boot/initrd.img-*nvidia; do
+    lsinitramfs "$image" | grep -q "etc/modprobe.d/zz-spark-console.conf"
+done
+test "$(modprobe -c | grep "^options nvidia_drm " | tail -n 1)" = "options nvidia_drm modeset=1 fbdev=1"
+trap - EXIT
+printf "Pre-change initramfs backups: %s\n" "$backup_dir"
+REMOTE
+```
+
+To undo the persistent setting, remove only `/etc/modprobe.d/zz-spark-console.conf` and rebuild initramfs again; the package-owned `modeset=0` override remains available. This does not change the currently loaded module. A runtime rollback, during an interruption window and after the same zero-reference/no-client checks, must use `modprobe nvidia_drm modeset=0 fbdev=1` after `rmmod nvidia_drm`; the recovery command above loads `modeset=1` and is not the undo command. Otherwise reboot after saving workload state. The EXIT trap restores both images and any saved site override if persistence fails. If manual recovery is needed, use the exact backup directory printed by the failed run, replacing the placeholder below. Do not mix images from a historical run with the current configuration or installed kernels:
+
+```sh
+ssh kelchm@10.32.21.31 'sudo -n sh -s' <<'REMOTE'
+set -eu
+backup_dir=/var/backups/spark1-console.REPLACE_WITH_CURRENT_RUN
+test -d "$backup_dir"
+cp -p "$backup_dir"/initrd.img-*nvidia /boot/
+site=/etc/modprobe.d/zz-spark-console.conf
+if [ -e "$backup_dir/site.conf" ]; then
+    cp -p "$backup_dir/site.conf" "$site"
+else
+    rm -f "$site"
+fi
+sync
+REMOTE
+```
+
+Future persistence changes need boot-time verification at the next authorized maintenance opportunity, respecting the early-boot HDMI restriction below. Merging this runbook does not apply or retest appliance or Spark state.
 
 ### Fabric address allocation
 

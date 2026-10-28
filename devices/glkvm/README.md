@@ -7,17 +7,16 @@ Firmware `V1.10.1 release2` (`/etc/version`), build `rm10-1.10.0beta2-30-g265a7f
 
 ## Web interfaces
 
-[`nginx-kvmd.conf`](nginx-kvmd.conf) makes the bundled upstream PiKVM UI the
-primary interface while retaining GL.iNet's UI for firmware and appliance
-management:
+The stock GL.iNet UI serves the console, firmware updates, and appliance management at `https://10.32.20.10/`. The PiKVM frontend is disabled. An optional [Hosts bar](#optional-hosts-bar) at `/hosts/` frames the stock console and adds downstream switching buttons; the normal root address remains the stock UI.
 
 | Port | Interface |
 |------|-----------|
-| 443 | PiKVM |
-| 8888 | GLKVM |
+| 443 | Stock GLKVM |
+| 8888 | Disabled |
 
-Port 80 redirects to the primary PiKVM interface. Both HTTPS listeners use the
-certificate configured in `/etc/kvmd/user/ssl`.
+Port 80 redirects to HTTPS. The active nginx configuration is copied unchanged from `/rom/etc/kvmd/nginx-kvmd.conf`, supplied by the installed firmware, and uses the certificate in `/etc/kvmd/user/ssl`. Do not restore an old custom nginx file after a firmware update.
+
+Restored 2026-10-20 by validating and copying the firmware's nginx configuration, then reloading nginx. The prior web configuration is backed up on the appliance at `/etc/kvmd/user/backups/nginx-kvmd.conf.before-stock-ui-20261020`. The USB compatibility fix, monitoring, and SSH helpers remain applied; switching web interfaces does not require rebuilding USB or restarting kvmd.
 
 ## Downstream KVM controls
 
@@ -26,8 +25,11 @@ then the port number. GL.iNet's shortcut UI sends those events too quickly for
 the switch. [`kvm-switch.py`](kvm-switch.py) writes standard eight-byte USB HID
 keyboard reports with a 75 ms key hold and a 250 ms inter-key delay.
 
-[`override.yaml`](override.yaml) exposes the known hosts as buttons in the
-bundled PiKVM UI:
+The downstream mapping is recorded below and in [`override.yaml`](override.yaml). The override retains the command channels previously used by the PiKVM Hosts menu, but the stock GL.iNet UI does not display them. Use the optional Hosts bar, physical switch buttons, or the paced SSH helper to select a host:
+
+```sh
+ssh root@10.32.20.10 '/etc/kvmd/user/bin/kvm-switch 2'
+```
 
 | KVM port | Host |
 |----------|------|
@@ -40,7 +42,80 @@ bundled PiKVM UI:
 | 7 | `spark-1` |
 | 8 | `spark-2` |
 
-All eight downstream ports are assigned and exposed in the UI. Update the table and the corresponding row under `view.table` together if the physical mapping changes.
+All eight downstream ports are assigned. Update this table, the matching command-channel label in the override, and the host label in `hosts-prototype/index.html` together if the physical mapping changes. Always confirm the selected host on screen before sending further input.
+
+### Optional Hosts bar
+
+[`hosts-prototype/`](hosts-prototype/) adds eight host buttons at `https://10.32.20.10/hosts/` above an iframe containing the stock console. Sign in inside that console to enable the buttons once its video or Direct canvas exists. The page reuses the existing same-origin session cookie and protected GPIO API; it does not store credentials or add a backend service. The **Stock UI** link opens the normal root address directly.
+
+The Hosts page coordinates playback with the stock console's input layer. While video is paused or has no current frame, it makes `#video-wrapper` ignore pointer events so the browser's native Play control can receive the click. It decides at the start of each pointer, touch, or key gesture whether that gesture belongs to the paused video, before native Play can change the playback state. That decision covers the release and click as well, including events retargeted to the sibling input overlay after playback starts. Video-targeted events reach native controls before forwarding to stock input handlers is stopped; native default actions remain available. Once video is playing with frames, new gestures use the stock input layer normally. A host-button click also calls the paused video's `play()` synchronously before sending the switch request, using the same browser gesture for both actions. The page watches for video creation, replacement, and iframe reloads, including sign-in and transfer-mode changes. These changes apply inside `/hosts/`; the vendor files and standalone `/` page are unchanged.
+
+**Start video** remains an explicit fallback. It calls the embedded video's `play()` directly from a click, without sending input or changing transport, audio, or appliance settings. The separate playback status reports rejection, missing video, or waiting for frames without clearing a failed host-switch lock. Playback controls do not reconnect a stalled WebRTC session.
+
+Cold-load playback diagnosis, verified 2026-10-21 in Orion: macOS **Low Power** Energy Mode blocks automatic video playback even when the site's **Allow All Auto-Play** setting is enabled. Both the stock `/` page and `/hosts/` had a visible, muted video with a live video-only MediaStream, buffered frames (`readyState: 4`), and `paused: true`; calling `play()` without a user gesture rejected with `NotAllowedError`. A separate, newly created muted video using the same stream was also rejected, ruling out a restriction specific to the stock element. Changing the Mac's plugged-in Energy Mode from **Low Power** to **Automatic** made the stock page autoplay after a hard reload and `/hosts/` autoplay on a fresh load, without calling `play()` or changing **Transfer**. Restoring **Low Power** and hard-reloading `/hosts/` reproduced the paused video and rejection. The original Low Power setting was restored after testing.
+
+This matches WebKit's [separate low-power user-gesture restriction](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/html/MediaElementSession.cpp), which applies even to muted video. WebKit also [forces a native Play control for autoplay video under this restriction](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/html/HTMLMediaElement.cpp). The stock input layer covered that control and received clicks at the video's center, explaining the visible but unusable Play button. The Hosts compatibility layer fixes this interaction; it cannot remove the browser's requirement for a gesture. A normal host selection now supplies that gesture, so a separate playback action is unnecessary. The earlier onset of the symptom was not established.
+
+Live acceptance after the compatibility change, 2026-10-21: with Low Power enabled and **WebRTC(FEC)** retained, the stock Play control started video from a physical click. After another hard reload, selecting the already-visible `k8s-prod-1` host started playback at 640×480 and issued exactly one GPIO pulse request. The video reported `paused: false` and `readyState: 4`, the input layer returned to `pointer-events: auto`, and the stock state reported HDMI signal present. The startup buttons stayed disabled until the video existed. Local browser checks verified trusted-gesture playback, isolation of media-control events from the simulated HID handler, restoration of normal input routing, video removal/reappearance, and preservation of a switch-error lockout during playback recovery.
+
+For zero-click startup, the stock **Direct** transport also survived a hard reload of `/hosts/` and a fresh load of `/` in Low Power. It decodes H.264 with WebCodecs onto a canvas rather than playing an HTML video element, but [does not support audio](https://docs.gl-inet.com/kvm/en/user_guide/gl-rm1pe/console_guide/). The test restored **WebRTC(FEC)** afterward. **Automatic** Energy Mode also permits ordinary WebRTC autoplay on this Mac; it was tested temporarily and restored to Low Power.
+
+The operator also confirmed that **Start video** restores playback after a hard reload without changing **Transfer**. The failure was reported in both **WebRTC** and **WebRTC(FEC)**. Changing Transfer modes also restored playback, but that stops the old video session and constructs a new one and is not needed when Start video works. Appliance capture was independently verified at 1080p60. Local browser checks covered a real paused MediaStream, rejected and pending play requests, missing/inaccessible frames, and an existing switch lockout.
+
+Only one switch request can run at a time in a browser tab. The page reads a baseline from the authenticated `/api/streamer` endpoint, sends one GPIO pulse, and watches capture state every 250 ms for up to 12 seconds from command dispatch. After the helper reports success, it can report **Video returned** for HDMI loss followed by recovery, **Video detected** when an absent signal appears, or **Video changed** for a resolution or refresh-rate change. The resulting signal and mode must remain stable for at least 750 ms with capture online. This is evidence following the request, not active-port or host-identity readback. Confirm the hostname on screen before typing.
+
+The toolbar keeps routine feedback on the host button: a highlight records the last request, a subtle amber pulse shows a request in progress, and a check briefly replaces the port number when a video transition is observed. No badge or persistent success pill is shown. The full result remains in the button's hover text and a screen-reader announcement; playback-success text is also visually hidden. Loading, paused-video guidance, sign-in guidance, uncertain results, and errors remain visible as compact plain text. Button sizes stay fixed, accessible names keep the port and hostname, and the pending animation respects reduced-motion preferences.
+
+If no change appears against a valid, online baseline, the amber status says that the requested input may already be selected. Without that baseline, stable later video is unverifiable; only an actual later loss/recovery can establish a transition. Recovery too late to meet the stability window is also unverifiable. Missing video, unavailable status reads, and capture not being ready have separate messages. A completed command with an inconclusive video check unlocks switching without retrying. An interrupted, failed, or ten-second command timeout still disables switching until reload, even if video changed; video evidence never overrides an uncertain command result. Status polling stops after the check or command failure and does not run while idle. The lockout is page-local: a second tab, another session, or a reload can queue behind the shared helper's unbounded lock or HID write. Browser cancellation does not cancel that appliance process, so an abandoned command can still switch later when USB recovers. Check the console and specific helpers before reloading. Backend deadlines and stale-command prevention remain in [#928](https://github.com/kelchm/home-lab/issues/928); this prototype does not solve them. See [USB class compatibility](#usb-class-compatibility) for helper diagnosis.
+
+Switch feedback measured and applied 2026-10-21: switching from `k8s-prod-1` to Spark 1 produced HDMI signal loss, signal recovery about 1.8 seconds later, and a capture-mode change from 640×480 to 1920×1080. The browser continued to report buffered, playing video throughout the loss, and capture `source.online` stayed true, so neither is used as loss evidence. With feedback deployed, switching back to `k8s-prod-1` reported **Video returned** at 640×480 @ 60 Hz and issued exactly one pulse. Selecting `k8s-prod-1` again produced no video transition, finished with the amber already-selected explanation, and issued one more pulse without retrying. Local checks covered loss/recovery without a resolution change, signal appearance, resolution and refresh-rate changes, formatting-only changes, short unstable changes, unavailable status, persistent signal loss, concurrent-click suppression, and observation cancellation after an HTTP failure. A command timeout remained locked even when video recovery had already been observed.
+
+Install or update from the repository root after applying the normal appliance configuration:
+
+```sh
+devices/glkvm/hosts-prototype/install.sh
+```
+
+The installer requires the main nginx configuration to match the firmware copy, backs up any previous prototype, installs static assets under `/etc/kvmd/user/hosts-prototype/`, and adds `/usr/share/kvmd/extras/hosts-prototype/nginx.ctx-server.conf` through the firmware's existing include. It validates nginx before reloading it; no kvmd restart or USB rebuild is needed. The added route makes only these static files public, like the stock login page; `/api/gpio` and pulse requests still require authentication. Firmware updates may remove the extra include file, so reapply the installer after checking the updated stock configuration.
+
+The Hosts location restricts framing with `X-Frame-Options: SAMEORIGIN` and CSP `frame-ancestors 'self'`; its own same-origin stock iframe remains allowed. The archived `V1.10.1 release2` nginx configuration includes HSTS from `ssl.conf` at server scope, with no framing policy there or in `gl.ctx-server.conf`. Location-level `add_header` replaces that inheritance, so the Hosts location repeats the firmware's HSTS value explicitly. Check the effective headers again before applying this include after a firmware change. This protects `/hosts/`, not the unchanged vendor `/` route; historical stock-root response headers had no framing policy.
+
+The 2026-10-27 review corrections are repository-only: conditional media-event isolation, visible paused/loading guidance, missing-baseline handling, and Hosts framing headers have not been deployed. The 2026-10-20/21 records in this section are historical acceptance of the earlier assets. Before calling the revised page applied, verify served assets and headers, then ordinary stock keyboard/mouse input and one-command switching in supported playback modes during an authorized appliance session. GLKVM reboot persistence remains a separate, unperformed acceptance check.
+
+Installed 2026-10-20. The operator confirmed that the embedded stock console and switching buttons work together. Live checks verified the three served assets, unchanged firmware main configuration, and unauthenticated GPIO reads and pulse requests returning 401. Local browser checks covered all eight channel mappings, concurrent-click suppression, expired-session recovery, malformed responses, and timeout lockout; desktop and phone layouts were inspected. This remains an optional prototype, with no port readback or cross-tab request lock.
+
+To disable the prototype, remove only its nginx include, validate, and reload; the stock console remains available:
+
+```sh
+ssh root@10.32.20.10 '
+    set -eu
+    rm -f /usr/share/kvmd/extras/hosts-prototype/nginx.ctx-server.conf
+    nginx -t -p /etc/kvmd/nginx -c /etc/kvmd/nginx-kvmd.conf \
+        -g "pid /run/kvmd/nginx-test.pid; user root; error_log stderr;"
+    kill -HUP "$(cat /run/kvmd/nginx.pid)"
+'
+```
+
+### USB class compatibility
+
+On `V1.10.1 release2`, leaving `otg.devices.camera.enabled` true makes the entire USB gadget advertise class/subclass/protocol `EF/02/01` (an IAD composite device), even when no USB camera function is linked. The downstream switch's Hotkey port configures this device but does not consume keyboard or mouse reports. Physical channel buttons and HDMI video still work. [`override.yaml`](override.yaml) disables this unused USB camera capability so a freshly created gadget uses `00/00/00` and its interfaces identify themselves as HID. HDMI capture is separate and unaffected by this setting. Keyboard and both mice remain enabled; virtual media remains disabled through `user/boot.yaml`.
+
+Verified 2026-10-20: the original class accepted zero empty keyboard reports, changing only those three class bytes allowed 12 successive reports, restoring the original class reproduced the failure, and returning to `00/00/00` restored it again. The existing switch helper then selected port 2 (`pve-sbx-2`), its host enumerated all three HID interfaces, and paced typing appeared at its login prompt and was erased without submission. Rebuilding the gadget from the saved override also produced `00/00/00`; switching between ports 1 and 2 worked, and pve-sbx-2 recorded a Right-arrow press and release in its input events after the rebuild. The Logitech USB identity was unchanged. An appliance reboot was not part of this validation; recheck the class bytes, linked functions, and actual input after the next appliance reboot. The exact time the incompatible setting first appeared is unknown.
+
+Changing the override requires rebuilding the USB gadget; restarting only kvmd does not change its USB descriptors. Run **Apply** below to install the override and rebuild the gadget. Stop kvmd and wait for its HID workers to exit before tearing down the gadget: rebuilding while they held open HID devices produced a kernel reference-count warning on this firmware. This briefly disconnects keyboard and mouse from the selected host and drops open console sessions. No host reboot is needed. After applying, check the live class bytes and linked functions:
+
+```sh
+ssh root@10.32.20.10 '
+    cat /sys/kernel/config/usb_gadget/rockchip/bDeviceClass
+    cat /sys/kernel/config/usb_gadget/rockchip/bDeviceSubClass
+    cat /sys/kernel/config/usb_gadget/rockchip/bDeviceProtocol
+    ls -l /sys/kernel/config/usb_gadget/rockchip/configs/b.1/
+'
+```
+
+Expect `0x00` three times and only `hid.usb0`, `hid.usb1`, and `hid.usb2` linked. Then verify actual channel selection and one harmless key at a safe screen. USB state `configured`, an existing `/dev/hidg0`, and healthy Prometheus metrics do not prove that input works.
+
+If switch clicks hang, inspect `ps -ef` and each helper's `/proc/<pid>/wchan`. A helper blocked in `f_hidg_write` can hold `/run/kvmd-kvm-switch.lock` indefinitely while later clicks queue behind it. Stop those specific `kvm-switch` processes before reconnecting USB so old channel selections cannot fire after recovery. The helpers have no write or lock timeout ([#928](https://github.com/kelchm/home-lab/issues/928)). Power-cycling the switch, rebooting the GLKVM, changing USB identity, and unlinking the mice did not restore input while the class was `EF/02/01`.
 
 ## Remote console helpers
 
@@ -69,7 +144,7 @@ sequences concurrently.
 
 vmagent in `k8s-prod` scrapes kvmd's native export at `https://10.32.20.10/api/export/prometheus/metrics` every 30 seconds as `job="glkvm-kvmd"`, `instance="glkvm"`, `platform="glkvm"`. The scrape and alert rules are in [`glkvm.yaml`](../../kubernetes/apps/observability/victoria-metrics-k8s-stack/app/glkvm.yaml) and the **GLKVM / Recovery console** dashboard is in Grafana's `Platforms/GLKVM` folder. Alerts route like every other alert; see the [alerting runbook](../../docs/runbooks/alerting.md).
 
-Applied 2026-10-17 on `V1.10.1 release2`. Before the patch, the unauthenticated metrics path returned HTTP 500; after it, the path returns the metrics below while `/api/info` still returns 401, vmagent reports the target up, and `GLKVMMetricsMissing` cleared. The PiKVM UI answers on 443 and the vendor UI on 8888, and no mass-storage function is linked. `/etc/init.d/S98kvmd restart` prints `Stopping kvmd: FAIL` because it checks for the old process before it has exited; one kvmd daemon was running afterwards.
+Applied 2026-10-17 on `V1.10.1 release2`. Before the patch, the unauthenticated metrics path returned HTTP 500; after it, the path returns the metrics below while `/api/info` still returns 401, vmagent reports the target up, and `GLKVMMetricsMissing` cleared. After restoring the stock UI on 443 on 2026-10-20, those HTTP checks still pass and no mass-storage function is linked. `/etc/init.d/S98kvmd restart` prints `Stopping kvmd: FAIL` because it checks for the old process before it has exited; one kvmd daemon was running afterwards.
 
 The appliance needs two changes. **Apply** installs the override with the rest of the console configuration; the export patch is installed separately, below, so a firmware change that invalidates it never blocks restoring the console.
 
@@ -85,7 +160,7 @@ What the export provides on this firmware:
 | `pikvm_hw_mem_percent`, `_total`, `_available` | Memory. The appliance has about 1 GiB, plus a compressed swap device in RAM (`/dev/zram0`, about 490 MiB) that this firmware adds. |
 | `pikvm_hw_net_bytes_sent`, `_recv` | Bytes on every interface except loopback since boot; use `rate()`. |
 
-The scrape drops `pikvm_atx_*` and `pikvm_gpio_*`. ATX is not wired, so its power state means nothing. The GPIO rows are the PiKVM host buttons, which only pulse a switch sequence; they do not read back the selected port, and the vendor code reports each button's state under both its `online` and `state` names. The export has no HDMI signal, USB enumeration, selected port, uptime or filesystem metrics, and nothing in it observes the host on the selected port. A blank screen or missing video is not an appliance failure. Load average stays between 8 and 10 because of the SoC's media threads and is not a useful signal.
+The scrape drops `pikvm_atx_*` and `pikvm_gpio_*`. ATX is not wired, so its power state means nothing. The GPIO rows are the retained host-switch command channels, which only pulse a switch sequence; they do not read back the selected port, and the vendor code reports each channel's state under both its `online` and `state` names. The export has no HDMI signal, USB enumeration, selected port, uptime or filesystem metrics, and nothing in it observes the host on the selected port. A blank screen or missing video is not an appliance failure. Load average stays between 8 and 10 because of the SoC's media threads and is not a useful signal.
 
 The appliance serves its vendor's self-signed certificate (`CN=localhost`, expired 1979), so the scrape skips verification and there is no certificate-expiry alert; [#419](https://github.com/kelchm/home-lab/issues/419) tracks a real certificate.
 
@@ -149,11 +224,13 @@ The appliance's Dropbear server does not provide an SFTP subsystem, so force
 legacy SCP mode with `-O`:
 
 ```sh
+(
+set -e
+ssh root@10.32.20.10 'command -v timeout >/dev/null && command -v pkill >/dev/null && command -v pgrep >/dev/null'
 scp -O devices/glkvm/kvm-switch.py root@10.32.20.10:/tmp/kvm-switch
 scp -O devices/glkvm/hid-type.py root@10.32.20.10:/tmp/hid-type
 scp -O devices/glkvm/hid-hold-key.py root@10.32.20.10:/tmp/hid-hold-key
 scp -O devices/glkvm/override.yaml root@10.32.20.10:/tmp/override.yaml
-scp -O devices/glkvm/nginx-kvmd.conf root@10.32.20.10:/tmp/nginx-kvmd.conf
 
 ssh root@10.32.20.10 '
     set -eu
@@ -169,33 +246,63 @@ ssh root@10.32.20.10 '
         /etc/kvmd/user/bin/hid-type /etc/kvmd/user/bin/hid-hold-key
     cp /tmp/override.yaml /etc/kvmd/override.yaml
     if [ -e /etc/kvmd/nginx-kvmd.conf ] && \
-        [ ! -e /etc/kvmd/user/backups/nginx-kvmd.conf.before-pikvm-primary ]; then
+        [ ! -e /etc/kvmd/user/backups/nginx-kvmd.conf.before-stock-ui ]; then
         cp /etc/kvmd/nginx-kvmd.conf \
-            /etc/kvmd/user/backups/nginx-kvmd.conf.before-pikvm-primary
+            /etc/kvmd/user/backups/nginx-kvmd.conf.before-stock-ui
     fi
-    nginx -t -p /etc/kvmd/nginx -c /tmp/nginx-kvmd.conf \
+    nginx -t -p /etc/kvmd/nginx -c /rom/etc/kvmd/nginx-kvmd.conf \
         -g "pid /run/kvmd/nginx-test.pid; user root; error_log stderr;"
-    cp /tmp/nginx-kvmd.conf /etc/kvmd/nginx-kvmd.conf
+    cp /rom/etc/kvmd/nginx-kvmd.conf /etc/kvmd/nginx-kvmd.conf
     rm -f /tmp/kvm-switch /tmp/hid-type /tmp/hid-hold-key \
-        /tmp/override.yaml /tmp/nginx-kvmd.conf
-    /etc/init.d/S98kvmd restart
+        /tmp/override.yaml
+    restore_kvmd() {
+        if ! pgrep -f "[k]vmd/main" >/dev/null; then
+            /etc/init.d/S98kvmd start
+        fi
+    }
+    trap restore_kvmd EXIT
+    # Discard queued input before USB returns. SIGKILL skips blocked cleanup writes.
+    helpers="^[^ ]*python3 /etc/kvmd/user/bin/(kvm-switch|hid-type|hid-hold-key)( |$)"
+    /etc/init.d/S98kvmd stop
+    workers="[k]vmd/(main|hid-|streamer)|$helpers"
+    for attempt in 1 2 3 4 5 6 7 8 9 10; do
+        pkill -KILL -f "$helpers" || true
+        pgrep -f "$workers" >/dev/null || break
+        sleep 1
+    done
+    if pgrep -f "$workers" >/dev/null; then
+        echo "kvmd workers have not exited; USB gadget was not rebuilt" >&2
+        exit 1
+    fi
+    timeout 15 /usr/bin/kvmd-otg stop
+    /usr/bin/kvmd-otg start
+    /etc/init.d/S98kvmd start
+    trap - EXIT
     if [ -f /run/kvmd/pikvm-nginx.pid ]; then
         kill "$(cat /run/kvmd/pikvm-nginx.pid)" 2>/dev/null || true
     fi
     /etc/init.d/S99kvmd-nginx restart
 '
+)
 ```
 
-Confirm `kvmd` restarted and the PiKVM UI responds:
+Confirm `kvmd` restarted, the stock UI responds, and only the expected HID functions are linked. The port-8888 probe below checks only IPv4 loopback HTTPS; failure is not proof that all TCP listeners are absent. The capture helper works with or without an authenticated viewer:
 
 ```sh
 ssh root@10.32.20.10 '
     set -eu
     /etc/init.d/S98kvmd status
-    curl -ksS https://127.0.0.1/login/ | grep -q "PiKVM"
-    curl -ksS https://127.0.0.1:8888/ | grep -q "GLKVM"
+    cmp /rom/etc/kvmd/nginx-kvmd.conf /etc/kvmd/nginx-kvmd.conf
+    curl -ksS https://127.0.0.1/ | grep -q "<title>GLKVM</title>"
+    if curl -ksS --connect-timeout 2 --max-time 3 https://127.0.0.1:8888/ >/dev/null 2>&1; then
+        echo "Unexpected IPv4 HTTPS response on port 8888" >&2
+        exit 1
+    fi
+    for field in bDeviceClass bDeviceSubClass bDeviceProtocol; do
+        test "$(cat /sys/kernel/config/usb_gadget/rockchip/$field)" = 0x00
+    done
+    python3 -c "from pathlib import Path; assert sorted(p.name for p in Path(\"/sys/kernel/config/usb_gadget/rockchip/configs/b.1\").iterdir() if p.is_symlink()) == [\"hid.usb0\", \"hid.usb1\", \"hid.usb2\"]"
     test -c /dev/hidg0
-    test -S /run/kvmd/ustreamer.sock
     python3 -m py_compile /etc/kvmd/user/bin/kvm-switch \
         /etc/kvmd/user/bin/hid-type /etc/kvmd/user/bin/hid-hold-key
 '
@@ -225,9 +332,8 @@ scp -O root@10.32.20.10:/etc/kvmd/nginx-kvmd.conf "$backup_dir/"
 After the update:
 
 1. Confirm SSH, `/dev/hidg0`, and `/run/kvmd/ustreamer.sock` exist, and that `ls /sys/kernel/config/usb_gadget/rockchip/configs/*/` links no `mass_storage` function.
-2. Compare the vendor nginx configuration with the committed customization;
-   do not blindly overwrite a changed vendor schema.
-3. Re-run **Apply** to restore the known files and modes.
+2. Keep the firmware's stock nginx configuration; do not restore the old PiKVM web configuration from a backup.
+3. Re-run **Apply** to restore the known files and modes. The USB gadget rebuild applies the camera-disable override; confirm the three device class bytes are `00/00/00` as described under **USB class compatibility**.
 4. Run the non-interactive checks above and capture a screen.
 5. With a host at a safe menu, verify one paced HID key and one downstream KVM
    channel switch.
@@ -240,17 +346,13 @@ The repository is the recovery source even if a firmware update wipes both
 
 ### Bootstrap after a wipe
 
-Restore the appliance's network configuration and SSH access through the vendor
-UI first. Confirm `ssh root@10.32.20.10` works; this firmware uses Dropbear, so
-the `scp -O` commands in **Apply** are intentional. Then run the complete
-**Apply** procedure from a repository checkout. It recreates the user
-directories, installs all three HID tools, restores the committed PiKVM override
-and nginx configuration, and restarts the affected services. Finish with the
-non-interactive checks and safe live-input test above, then install the [monitoring](#monitoring) export patch.
+Restore the appliance's network configuration and SSH access through the vendor UI first. Confirm `ssh root@10.32.20.10` works; this firmware uses Dropbear, so the `scp -O` commands in **Apply** are intentional. Then run the complete **Apply** procedure from a repository checkout. It recreates the user directories, installs all three HID tools, restores the committed appliance override and the installed firmware's stock nginx configuration, and restarts the affected services. Finish with the non-interactive checks and safe live-input test above, then install the [monitoring](#monitoring) export patch.
 
 Do not run `kvmd` itself over SSH, including `kvmd -M` to validate configuration. Unlike upstream PiKVM, firmware `V1.9.1 release1` started another daemon instead of performing a validation-only run.
 
 ## Recovery
+
+For a missing keyboard or hung channel switches with USB class `EF/02/01`, use **Apply** to install the camera-disable override and rebuild the USB gadget. The kvmd-only restarts below recover the daemon's configuration; they do not change USB descriptors. If gadget teardown fails or times out, stop and inspect its log and remaining configfs state; the Apply exit trap restarts kvmd if it is not running, but cannot repair a partially removed USB gadget.
 
 If `kvmd` does not start and the appliance backup survived, restore it:
 
@@ -261,6 +363,8 @@ ssh root@10.32.20.10 '
     /etc/init.d/S98kvmd restart
 '
 ```
+
+That backup may predate the camera-disable fix. Before another appliance reboot or USB rebuild, run **Apply** or ensure the restored override contains `otg.devices.camera.enabled: false`. A kvmd restart alone does not update the USB descriptors. Verify the live class bytes and actual input after the next reboot.
 
 If the appliance backup did not survive, upload the committed override instead:
 
@@ -282,7 +386,4 @@ ssh root@10.32.20.10 '
 '
 ```
 
-The script lives on the persistent user partition. Firmware upgrades may still
-replace `/etc/kvmd/override.yaml` or change the vendor nginx configuration.
-After an upgrade, compare `/etc/kvmd/nginx-kvmd.conf` with
-`/rom/etc/kvmd/nginx-kvmd.conf`, then rebase and reapply these customizations.
+The helpers live on the persistent user partition. Firmware upgrades may still replace `/etc/kvmd/override.yaml` or change the vendor nginx configuration. After an upgrade, keep the new firmware's stock nginx file and recheck the USB compatibility and monitoring overrides before restoring them.
