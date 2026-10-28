@@ -49,12 +49,12 @@ With an invalid token, every request fails with HTTP 401 and the script exits no
 
 ## Clients and upgrades
 
-Read back on 2026-10-27:
+Read back on 2026-10-27, and Hyperion again on 2026-10-28:
 
 | Peer | Installed from | Version | Upgrade owner and effect |
 |---|---|---|---|
 | `netbird-pilot-router` | Debian package from `pkgs.netbird.io` `stable`, installed by vendor data | 0.79.0; 0.81.5 available | Operator, by hand through guest exec ([procedure](../../proxmox/guests/netbird-router/README.md#upgrades)). Away clients lose the resources until the daemon reconnects. |
-| Hyperion | Homebrew `netbirdio/tap/netbird` (daemon and CLI) and cask `netbirdio/tap/netbird-ui`; LaunchDaemon `netbird` runs `/opt/homebrew/bin/netbird service run` | Running daemon 0.80.0; installed formula 0.81.4; UI 0.80.0; 0.81.5 available | Operator, with `brew upgrade`. The running daemon keeps its old version until `sudo netbird service restart` or a reboot. |
+| Hyperion | Homebrew `netbirdio/tap/netbird` (daemon and CLI) and cask `netbirdio/tap/netbird-ui`; LaunchDaemon `netbird` runs `/opt/homebrew/bin/netbird service run` | Running daemon 0.80.0; installed formula 0.81.5, installed 2026-10-28; UI 0.80.0 | Operator, with `brew upgrade`. The running daemon keeps its old version until `sudo netbird service restart` or a reboot. |
 | iPhone | App Store | iOS core 0.75.0 as of 2026-09-27; not re-read | App Store updates |
 
 NetBird's client auto-update setting is off, so no client upgrades itself through NetBird.

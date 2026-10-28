@@ -80,10 +80,16 @@ Verify with `netbird status`. It must show Management connected and `Networks: 1
 
 ## Upgrades
 
-The vendor data sets `package_upgrade: false`, and Debian's unattended-upgrades ignore the NetBird repository. NetBird therefore stays at its installed version until someone upgrades it:
+Debian's unattended-upgrades ignore the NetBird repository, so NetBird stays at its installed version until someone upgrades it:
 
 ```sh
 sudo qm guest exec 103 --timeout 300 -- sh -c 'apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install --yes netbird'
 ```
 
 Treat an upgrade as a router restart: away clients lose the home resources until the daemon reconnects. Run it as its own change with someone at home, then repeat the enrollment checks.
+
+### Cloud-init settings upgrade NetBird
+
+The vendor data's `package_upgrade: false` has no effect. PVE's generated user data sets `package_upgrade: true`, its `ciupgrade` default, and user data takes precedence. The first boot of each cloud-init instance therefore runs `apt-get dist-upgrade`, then the vendor bootstrap's `apt-get install netbird`; VM 103's first boot on 2026-09-27 did both.
+
+PVE derives the instance ID from the user and network data, and regenerates them each time it starts the VM. They hold the VM name as the hostname, the cloud-init user, its SSH keys and the network settings. Changing any of these makes the next start, including one after a host reboot, a new instance: it upgrades every package including NetBird, and applies any new hostname. Make such a change only as part of a planned upgrade, and restart VM 103 immediately afterwards rather than leaving it for the next host reboot. This was read from PVE 9.2.21 and the guest's cloud-init and apt logs on 2026-10-28.
