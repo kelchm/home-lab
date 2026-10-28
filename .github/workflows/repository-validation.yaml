@@ -112,6 +112,7 @@ jobs:
               - '**/*.sh'
               - 'scripts/healthchecks.py'
               - 'scripts/ci/test-healthchecks.py'
+              - 'devices/glkvm/*.py'
               - 'healthchecks/**'
               - '.taskfiles/healthchecks/**'
             skills:
@@ -582,6 +583,10 @@ jobs:
       - name: Test healthchecks apply safety without credentials or network access
         if: needs.pre-job.outputs.scripts_changed == 'true'
         run: python3 scripts/ci/test-healthchecks.py
+
+      - name: Test GLKVM HID deadlines without devices or appliance access
+        if: needs.pre-job.outputs.scripts_changed == 'true'
+        run: python3 -m unittest discover -s devices/glkvm -p 'test_hid_input.py' -v
 
       - name: No shell changes
         if: needs.pre-job.outputs.scripts_changed != 'true'
