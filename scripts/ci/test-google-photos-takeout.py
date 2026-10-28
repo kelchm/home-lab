@@ -299,6 +299,9 @@ def tests(parent):
 
     f = Fixture(parent, 'interrupted-version-write')
     (f.work / 'state').mkdir()
+    # CI's host UID differs from the collector's; only synthetic fixture paths
+    # are writable by both, as in Fixture.__init__ above.
+    (f.work / 'state').chmod(0o777)
     (f.work / 'state/.version.tmp').write_text('partial marker')
     f.zip()
     f.run()
