@@ -1,0 +1,29 @@
+# SparkRun's API port answers only loopback and the clients listed here, over
+# IPv4 and IPv6; other ports are untouched. A drop in this table is final
+# whatever other tables accept. Loading the file replaces the table in one
+# transaction, so it's safe to reload at any time.
+
+table inet sparkrun_api_access
+delete table inet sparkrun_api_access
+
+table inet sparkrun_api_access {
+	set clients {
+		type ipv4_addr
+		counter
+		elements = {
+			10.32.10.244 comment "workstation",
+			10.32.21.100 comment "hermes-1",
+		}
+	}
+
+	chain input {
+		type filter hook input priority -10; policy accept;
+		tcp dport 8888 jump api
+	}
+
+	chain api {
+		iif "lo" accept
+		ip saddr @clients accept
+		counter drop
+	}
+}

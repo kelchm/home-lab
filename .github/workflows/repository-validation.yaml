@@ -716,6 +716,15 @@ jobs:
           version: "0.13.5"
           enable-cache: false
 
+      # The API access test loads its policy into network namespaces with the real nft.
+      - name: Install nftables
+        if: needs.pre-job.outputs.sparkrun_changed == 'true'
+        run: |
+          if ! command -v nft >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq --no-install-recommends nftables
+          fi
+
       - name: Verify mod file checksums
         if: needs.pre-job.outputs.sparkrun_changed == 'true'
         run: |

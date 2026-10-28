@@ -1,0 +1,13 @@
+[Unit]
+Description=Admit SparkRun's API port only from its listed clients
+Before=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/nft -f /etc/sparkrun-api-access.nft
+ExecReload=/usr/sbin/nft -f /etc/sparkrun-api-access.nft
+ExecStop=-/usr/sbin/nft delete table inet sparkrun_api_access
+
+[Install]
+WantedBy=multi-user.target
