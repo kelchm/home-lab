@@ -43,7 +43,7 @@ coupling every control plane.
 with one closed, non-routed ConnectX-7 link. Applied state and recovery are in
 the [bring-up runbook](runbooks/dgx-spark-bringup.md).
 
-**PVE environment:** an independent three-node virtualization cluster using Infra Mgmt for host control, Storage for migration/NFS, and Workloads for general-purpose guests. Its 2.5 GbE guest trunk also carries the isolated Remote Admin VLAN for the two Tailscale subnet-router VMs. See the [PVE cluster plan](plans/20260814-pve-cluster.md) and [operator reference](../proxmox/README.md).
+**PVE environment:** an independent three-node virtualization cluster using Infra Mgmt for host control, Storage for migration/NFS, and Workloads for general-purpose guests. Its 2.5 GbE guest trunk also carries the isolated Remote Admin VLAN for the NetBird routing peer. See the [PVE cluster plan](plans/20260814-pve-cluster.md) and [operator reference](../proxmox/README.md).
 
 **K8s 2 (reserved):** VLAN 31, storage identities, LB pools, and BGP ASN remain
 reserved for a future second Kubernetes cluster. It may run as one Talos VM per
@@ -111,7 +111,7 @@ Removing or moving many dashboards at once can leave stale files in the Grafana 
 | 1 | Default | 10.32.1.0/24 | UniFi management |
 | 5 | Cameras | 10.32.5.0/24 | Existing |
 | 10 | Main | 10.32.10.0/24 | Trusted household devices |
-| 19 | Remote Admin | 10.32.19.0/24 | Isolated Tailscale subnet-router transit and management |
+| 19 | Remote Admin | 10.32.19.0/24 | Isolated remote-access routing-peer transit |
 | 20 | Infra Mgmt | 10.32.20.0/24 | Classic mgmt planes for non-Talos tenants |
 | 21 | Workloads | 10.32.21.0/24 | DGX Sparks and general-purpose workload servers |
 | 25 | Storage | 10.32.25.0/24 | NFS/iSCSI to Synology |
@@ -126,8 +126,8 @@ VLAN 40 (Lab Services) is being retired — it existed only to host node subinte
 
 - K8s 2 ↔ K8s Prod: deny (environments isolated)
 - Main → Infra Mgmt: allow from admin devices only
-- Main → Remote Admin: allow only to the two router VM addresses; every other Internal → Remote Admin path is denied by the zone boundary
-- Remote Admin → routed LAN destinations: the router pair advertises `10.32.0.0/16`, but UniFi allows only `10.32.19.101/.102` to the six enforcement prefixes (`10.32.1.0/24`, `10.32.10.0/24`, `10.32.20.0/24`, `10.32.30.0/24`, `10.32.130.0/24`, and `10.32.140.0/24`); every other Internal destination remains denied
+- Main → Remote Admin: the legacy allow to retired routers `10.32.19.101/.102` remains pending removal under #1069; Main has no direct management path to the NetBird peer `.103`, which is managed through its PVE host
+- Remote Admin → routed LAN destinations: NetBird uses per-resource IP and port allows; the retired Tailscale routers' six-prefix allow remains inert pending removal under #1069. See the [applied UniFi state](../network/unifi/README.md#remote-admin-applied-state) for the exact policies
 - Main (admin devices) → K8s Prod: allow on 50000/tcp (talosctl) + 6443/tcp (Kube API) — Talos consolidates its mgmt plane onto VLAN 30; mTLS enforces isolation
 - PVE guests on Workloads → Infra Mgmt, Storage, and K8s Prod: deny by default; add explicit service exceptions only
 - PVE and K8s storage identities → Storage: scope to named peers and services
@@ -283,12 +283,12 @@ Talos nodes do NOT have IPs on Infra Mgmt. Talos has no classic management plane
 
 ```text
 10.32.19.1        gateway-remote-admin       Router interface; DNS and Internet egress
-10.32.19.101      tailscale-router-1         PVE VM on pve-sbx-2
-10.32.19.102      tailscale-router-2         PVE VM on pve-sbx-3
-10.32.19.103      netbird-pilot-router       Disposable PVE VM on pve-sbx-1 (#625)
+10.32.19.101      tailscale-router-1         Retired; VM destroyed 2026-10-28, address unused (#1069)
+10.32.19.102      tailscale-router-2         Retired; VM destroyed 2026-10-28, address unused (#1069)
+10.32.19.103      netbird-pilot-router       NetBird routing peer on pve-sbx-1 (#625)
 ```
 
-DHCP and IPv6 are disabled on this network. The two VMs are single-homed VLAN-local endpoints and therefore sit outside the cross-VLAN system identity rule. Both advertise the aggregate `10.32.0.0/16`, allowing each local VLAN `/24` to remain more specific on at-home clients. VLAN 19 has its own UniFi zone: it can reach the gateway and Internet for Tailscale coordination, while `Allow Tailscale Routers to Routed LAN` permits only `.101/.102` to the six authorized destination prefixes. UniFi evaluates the BGP-routed `10.32.130.0/24` and `10.32.140.0/24` paths through the Internal transition for this custom source zone, so those exact prefixes are included in the rule alongside the four VLAN subnets. The generated reverse rule accepts only established and related traffic. `.103` is a disposable NetBird routing peer for the location-aware routing evaluation in #625; `Allow NetBird Pilot Router to Services VIP` permits it only to `10.32.140.1` on TCP 443.
+DHCP and IPv6 are disabled on this network. Its VMs are single-homed VLAN-local endpoints and therefore sit outside the cross-VLAN system identity rule. VLAN 19 has its own UniFi zone: it can reach the gateway and Internet for coordination, and reaches Internal only through per-source allow rules whose generated reverse rules accept only established and related traffic. UniFi evaluates the BGP-routed `10.32.130.0/24` and `10.32.140.0/24` paths through the Internal transition for this custom source zone, so an allow toward a VIP must name that exact prefix or address. The Tailscale routers `.101/.102` were retired on 2026-10-25; their two UniFi policies are inert until removed under #1069. Main cannot reach `.103` directly; manage it through its hosting PVE node's guest agent on `pve-sbx-1` (`sudo qm guest exec 103 -- hostname` was verified October 27). `.103` is the routing peer for NetBird, Matt's selected replacement for Tailscale; setup and comprehensive testing remain in #625. Separate UniFi policies permit only TCP 443 to `10.32.140.1` (household services) and `10.32.130.1` (admin HTTPS). NetBird advertises those two `/32` resources, whose HTTPS policies retain the Main-network posture exclusion, plus the existing gateway resolver at `10.32.30.1/32`. See the [NetBird runbook](runbooks/netbird-remote-access.md) for the applied extension and Matt's accepted remote iPhone login and dashboard check.
 
 ## LB Pool Allocation
 
@@ -298,8 +298,8 @@ Three policy classes:
 
 | Class | Pool (prod) | Reachable from | Use cases |
 |---|---|---|---|
-| **admin** | `admin-prod` (10.32.130.0/24) | VLAN 10 admin devices; approved Tailnet clients through the VLAN 19 routers | Operator UIs via Traefik admin gateway, k8s-gateway DNS |
-| **services** | `services-prod` (10.32.140.0/24) | VLAN 10 (Main), VLAN 21 (Workloads), approved Tailnet clients through the VLAN 19 routers | Household-facing apps (Traefik services gateway, per-service IPs) |
+| **admin** | `admin-prod` (10.32.130.0/24) | VLAN 10 admin devices; approved NetBird clients through the VLAN 19 peer, limited to explicitly allowed resource IPs and ports | Operator UIs via Traefik admin gateway, k8s-gateway DNS |
+| **services** | `services-prod` (10.32.140.0/24) | VLAN 10 (Main), VLAN 21 (Workloads); approved NetBird clients through the VLAN 19 peer, limited to explicitly allowed resource IPs and ports | Household-facing apps (Traefik services gateway, per-service IPs) |
 | **shared** | `shared-prod` (10.32.150.0/24) | All client VLANs (per-IP+port) | Cross-zone services with per-IP+port firewall rules (Visionect device gateway, future DNS/NTP) |
 
 Sandbox-side pools (`admin-sandbox` 10.32.131.0/24, `services-sandbox` 10.32.141.0/24) follow the same naming under a future second cluster.

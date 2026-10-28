@@ -24,7 +24,7 @@ for command in "${kubectl_bin}" jq; do
   }
 done
 
-exceptions='["kube-system","longhorn-system","media","network-perf","observability","tailscale"]'
+exceptions='["kube-system","longhorn-system","media","network-perf","observability"]'
 namespaces_file="$(mktemp)"
 namespace_list_file="$(mktemp)"
 controllers_file="$(mktemp)"

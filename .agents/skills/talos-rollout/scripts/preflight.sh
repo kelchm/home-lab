@@ -73,8 +73,8 @@ line "candidate:   ${candidate:-<none given>}"
 
 # --- operator access path -----------------------------------------------------
 # The destination address does not tell you which link you actually use. Ask the
-# host routing table which interface carries each rollout destination, then show
-# who serves that path so the candidate can be judged against it.
+# host routing table which interface carries each rollout destination. For a
+# tunnel, the operator must separately identify the router serving that path.
 route_iface() {
     local dest="$1"
     case "$(uname -s)" in
@@ -86,40 +86,26 @@ route_iface() {
 
 iface_kind() {
     case "$1" in
-        '')                  echo 'no route' ;;
-        utun*|tailscale*|ts*) echo 'tailnet' ;;
-        *)                   echo 'direct' ;;
+        '')                            echo 'no route' ;;
+        utun*|wt*|tun*|wg*|tailscale*) echo 'tunnel' ;;
+        *)                             echo 'direct' ;;
     esac
 }
 
 section "operator access path"
-via_tailnet=0
+via_tunnel=0
 for dest in "$API_ENDPOINT" "${IPS[@]}"; do
     iface="$(route_iface "$dest")"
     kind="$(iface_kind "$iface")"
-    [[ "$kind" == 'tailnet' ]] && via_tailnet=1
+    [[ "$kind" == 'tunnel' ]] && via_tunnel=1
     label='talos'
     [[ "$dest" == "$API_ENDPOINT" ]] && label='kube-API'
     line "$(printf '%-9s %-13s %-10s %s' "$label" "$dest" "${iface:-none}" "$kind")"
     [[ "$kind" == 'no route' ]] && fail "no route to $dest from this workstation"
 done
 
-if command -v tailscale >/dev/null 2>&1; then
-    ts_json="$(tailscale status --json 2>/dev/null || echo '{}')"
-    ts_state="$(jq -r '.BackendState // "unknown"' <<<"$ts_json")"
-    line "tailscale backend: $ts_state"
-    ts_routers="$(jq -r '
-      (.Peer // {}) | to_entries[] | .value
-      | select((.PrimaryRoutes // []) | length > 0)
-      | "\(.HostName)  \((.PrimaryRoutes // []) | join(","))"
-    ' <<<"$ts_json")"
-    if [[ -n "$ts_routers" ]]; then
-        printf '%s\n' "$ts_routers" | sed 's/^/  route peer: /'
-    elif (( via_tailnet )); then
-        fail 'a rollout destination routes over the tailnet but no peer advertises a primary route'
-    fi
-elif (( via_tailnet )); then
-    note 'destinations route over a tunnel interface but the tailscale CLI is unavailable to name the peer'
+if (( via_tunnel )); then
+    note 'a rollout destination routes over a tunnel interface; confirm the router serving it lives outside this cluster'
 fi
 
 # --- Talos + etcd -------------------------------------------------------------

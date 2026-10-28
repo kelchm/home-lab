@@ -1,6 +1,6 @@
 # Tailscale remote-admin architecture
 
-**Status:** Implemented — 2026-09-02; the PVE router pair is carrying the aggregate lab route, split DNS and bidirectional failover are validated, and the Kubernetes Connector routes are withdrawn. Its Flux resources are removed by this change and will be pruned after merge.
+**Status:** Superseded — 2026-10-25; Tailscale was retired across the lab and both router VMs were destroyed on 2026-10-28, with their backup archives kept. Remaining tailnet and UniFi cleanup is tracked in [#1069](https://github.com/kelchm/home-lab/issues/1069). The design and acceptance evidence below are historical.
 
 ## Outcome
 

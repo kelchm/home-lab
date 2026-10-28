@@ -29,6 +29,7 @@ or fixing.
 | Runbook | Use when |
 |---|---|
 | [alerting](runbooks/alerting.md) | Receiving, silencing, testing, and troubleshooting Alertmanager notifications and control-plane coverage. |
+| [netbird-remote-access](runbooks/netbird-remote-access.md) | Managing NetBird remote access, the admin HTTPS extension and VM 103 through PVE guest exec. |
 | [logging](runbooks/logging.md) | Querying Kubernetes, Talos node and UniFi console logs, rolling out Talos log delivery, the UniFi log alerts, and diagnosing the Fluent Bit-to-VictoriaLogs ingestion path. |
 | [longhorn-backup-restore](runbooks/longhorn-backup-restore.md) | Restoring a PV from a Longhorn backup; DR drills. |
 | [longhorn-storage-network-cutover](runbooks/longhorn-storage-network-cutover.md) | Moving Longhorn replica traffic onto the dedicated storage VLAN. |
@@ -86,7 +87,7 @@ Implemented or superseded plans preserve context. Use the maintained documentati
 - [20260705-broadsheet-rename-migration](plans/20260705-broadsheet-rename-migration.md) — paperboy → broadsheet rename with PVC-preserving migration.
 - [20260802-lemon-manuals-selfhost](plans/20260802-lemon-manuals-selfhost.md) — self-host the LEMON manuals archive on NFS with an MCP server in front.
 - [20260818-sn770-zfs-qualification-procedure](plans/20260818-sn770-zfs-qualification-procedure.md) — the bounded, destructive test procedure and safety guards used for the SN770 reproduction run.
-- [20260902-tailscale-remote-admin](plans/20260902-tailscale-remote-admin.md) — implemented independent two-VM PVE subnet-router pair on isolated VLAN 19, replacing the Kubernetes-hosted route.
+- [20260902-tailscale-remote-admin](plans/20260902-tailscale-remote-admin.md) — superseded two-VM PVE Tailscale subnet-router pair on isolated VLAN 19, retired 2026-10-25; routing and failover evidence retained.
 
 ## Decision records & benchmarks
 

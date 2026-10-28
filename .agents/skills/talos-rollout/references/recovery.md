@@ -46,7 +46,7 @@ A failed drain leaves state behind. Retrying on top of it stacks a second attemp
 
 ## The access path moves
 
-The destination address does not tell you which link you are using. `10.32.30.x` is a LAN range, but reaching it from the workstation may still traverse a tunnel. `preflight.sh` resolves this by asking the host routing table which interface actually carries the Kubernetes API endpoint and each Talos node address, reports whether that is a direct link or a tunnel, and names the peer advertising the route.
+The destination address does not tell you which link you are using. `10.32.30.x` is a LAN range, but reaching it from the workstation may still traverse a tunnel. `preflight.sh` asks the host routing table which interface actually carries the Kubernetes API endpoint and each Talos node address, and reports whether that is a direct link or a tunnel. For a tunnel, identify the routing peer separately and confirm that it lives outside the cluster before starting the rollout.
 
 A direct link is unaffected by the rollout. A tunnelled path is only safe when the router serving it runs outside this cluster; a router hosted on the candidate would be evicted by the drain and reset your API connection mid-rollout. Establish which case you are in before you start.
 
