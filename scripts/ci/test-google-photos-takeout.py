@@ -13,6 +13,7 @@ from pathlib import Path
 import subprocess
 import shutil
 import tempfile
+from unittest.mock import patch
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -31,6 +32,7 @@ NOW = int(dt.datetime(2026, 10, 28, 12, tzinfo=dt.timezone.utc).timestamp())
 PHOTO = 'Takeout/Google Photos/Album é /猫.jpg'
 TIMELINE = 'Takeout/Timeline/Settings.json'
 NAME = 'takeout-20261006T022413Z-1-001.zip'
+ZIP_MEMBER_TIME = (2026, 10, 6, 2, 24, 12)
 
 
 def archive_name(epoch, suffix='1-001'):
@@ -53,7 +55,11 @@ class Fixture:
         path = self.source / name
         with zipfile.ZipFile(path, 'w', compression=zipfile.ZIP_STORED) as z:
             for member, data in (members if members is not None else [(PHOTO, b'PHOTO-BYTES')]):
-                z.writestr(member, data)
+                # Recreating identical source content must retain its ZIP identity;
+                # wall-clock member timestamps otherwise change the source MD5.
+                info = zipfile.ZipInfo(member, date_time=ZIP_MEMBER_TIME)
+                info.external_attr = (0o40775 << 16) | 0x10 if info.is_dir() else 0o600 << 16
+                z.writestr(info, data)
         if corrupt:
             data = path.read_bytes()
             assert b'PHOTO-BYTES' in data
@@ -129,6 +135,14 @@ def tests(parent):
     assert config['profiles'] == ['inactive']
     assert config['environment']['COLLECTOR_ENABLED'] == 'false'
     assert all(not v['source'].startswith(str(ROOT)) for v in config['volumes'])
+
+    f = Fixture(parent, 'stable-archive-identity')
+    with patch('zipfile.time.localtime', return_value=(2026, 10, 28, 12, 0, 0, 2, 301, 0)):
+        original = f.zip().read_bytes()
+    with patch('zipfile.time.localtime', return_value=(2026, 10, 28, 12, 0, 4, 2, 301, 0)):
+        assert f.zip().read_bytes() == original
+    assert f.zip(members=[(PHOTO, b'changed payload')]).read_bytes() != original
+    print('Verified stable ZIP identity across wall-clock changes and distinct identity for changed payload')
 
     f = Fixture(parent, 'photos-multipart-unicode-trailing-space')
     f.zip(members=[('Takeout/', b''), ('Takeout/Google Photos/', b''), (PHOTO, b'PHOTO-BYTES'),
