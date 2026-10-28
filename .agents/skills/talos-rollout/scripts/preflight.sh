@@ -51,11 +51,18 @@ readonly API_ENDPOINT=10.32.30.8
 readonly VERBOSE="${VERBOSE:-}"
 
 FAILURES=()
+WARNINGS=()
 
 section() { printf '\n== %s ==\n' "$1"; }
 line()    { printf '  %s\n' "$1"; }
 note()    { printf '  note: %s\n' "$1"; }
 detail()  { [[ -n "$VERBOSE" ]] && printf '%s\n' "$1" | sed 's/^/    /'; return 0; }
+
+# warn <headline> — reported like a failure but does not block a rollout.
+warn() {
+    WARNINGS+=("$1")
+    printf '  WARN: %s\n' "$1" >&2
+}
 
 # fail <headline> [raw-detail]
 fail() {
@@ -109,15 +116,66 @@ if (( via_tunnel )); then
 fi
 
 # --- Talos + etcd -------------------------------------------------------------
+# Adjacent-minor rule: Talos supports upgrades between adjacent minors only, so
+# any pair of client pin, desired target, and a node's live version more than
+# one minor apart is unsupported. Warnings name the combination; they do not
+# block a rollout on their own. The pin drives manual/apply-node commands;
+# preflight's own queries use a matching client independently for each node.
+minor_index() {
+    local tag="${1#v}"
+    local major="${tag%%.*}"
+    local rest="${tag#*.}"
+    local minor="${rest%%.*}"
+    echo $(( major * 1000 + minor ))
+}
+
+valid_semver() { [[ "$1" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+ ]]; }
+
+# skew_pair <label-a> <ver-a> <label-b> <ver-b>
+skew_pair() {
+    valid_semver "$2" && valid_semver "$4" || return 0
+    local skew=$(( $(minor_index "$2") - $(minor_index "$4") ))
+    if (( skew > 1 || skew < -1 )); then
+        warn "$1 ($2) and $3 ($4) are more than one minor apart — unsupported combination"
+    fi
+}
+
 section "Talos versions"
+client_version="$(awk -F'"' '$2 == "aqua:siderolabs/talos" { print "v" $4; exit }' "$ROOT_DIR/.mise.toml" 2>/dev/null || true)"
+desired_version="$(awk '/^talosVersion:/ { print $2; exit }' "$ROOT_DIR/talos/talenv.yaml" 2>/dev/null || true)"
+comparison_complete=1
+valid_semver "$client_version" && valid_semver "$desired_version" || comparison_complete=0
+
+line "$(printf '%-11s %-13s %s' 'client pin' '.mise.toml' "${client_version:-unparsed}")"
+line "$(printf '%-11s %-13s %s' 'desired' 'talenv.yaml' "${desired_version:-unparsed}")"
+
+live_versions=("" "" "")
 for index in "${!NODES[@]}"; do
     if version_out="$(talos_node "${IPS[$index]}" version --short 2>&1)"; then
         server="$(awk '/^Server:/ { s = 1; next } s && /Tag:/ { print $2; exit }' <<<"$version_out")"
+        live_versions["$index"]="$server"
+        valid_semver "$server" || comparison_complete=0
         line "$(printf '%-11s %-13s %s' "${NODES[$index]}" "${IPS[$index]}" "${server:-unparsed}")"
         detail "$version_out"
     else
+        comparison_complete=0
         fail "talosctl version failed for ${NODES[$index]} (${IPS[$index]})" "$version_out"
     fi
+done
+
+# Nodes on mixed versions is normal mid-rollout and only a note; the
+# unsupported case is any pair of the three more than one minor apart.
+if [[ -n "$(printf '%s\n' "${live_versions[@]}" | grep . | sort -u | tail -n +2)" ]]; then
+    note "nodes report different Talos versions ($(printf '%s\n' "${live_versions[@]}" | grep . | sort -u | paste -sd' ' -)) — expected during a version rollout"
+elif [[ -n "${live_versions[0]:-}" && -n "$desired_version" && "${live_versions[0]}" != "$desired_version" ]]; then
+    note "nodes are not on the desired version — expected during a version rollout"
+fi
+
+skew_pair "talosctl client pin" "$client_version" "talenv target" "$desired_version"
+for index in "${!NODES[@]}"; do
+    [[ -n "${live_versions[$index]:-}" ]] || continue
+    skew_pair "talosctl client pin" "$client_version" "${NODES[$index]} live" "${live_versions[$index]}"
+    skew_pair "talenv target" "$desired_version" "${NODES[$index]} live" "${live_versions[$index]}"
 done
 
 # A stopped etcd member stays registered, so ask Talos for health, not membership.
@@ -303,12 +361,29 @@ fi
 
 # --- verdict ------------------------------------------------------------------
 printf '\n'
+if (( ! comparison_complete )); then
+    printf 'Version comparison incomplete: one or more versions could not be parsed; review the rows above before go/no-go.\n' >&2
+fi
 if (( ${#FAILURES[@]} > 0 )); then
     printf 'PREFLIGHT FAILED (%d check(s)):\n' "${#FAILURES[@]}" >&2
     printf '  - %s\n' "${FAILURES[@]}" >&2
+    (( ${#WARNINGS[@]} > 0 )) && {
+        printf 'PREFLIGHT WARNINGS (%d, do not by themselves block a rollout):\n' "${#WARNINGS[@]}" >&2
+        printf '  - %s\n' "${WARNINGS[@]}" >&2
+    }
     exit 1
+fi
+
+if (( ${#WARNINGS[@]} > 0 )); then
+    printf 'PREFLIGHT WARNINGS (%d, do not by themselves block a rollout):\n' "${#WARNINGS[@]}" >&2
+    printf '  - %s\n' "${WARNINGS[@]}" >&2
 fi
 
 printf 'PREFLIGHT CHECKS PASSED: talosctl health is OK, all %s nodes are Ready and uncordoned, networking safeguards are Ready, %s of %s Longhorn volumes are in use and healthy (%s idle), and %s instance-managers are Ready with lhnet1.\n' \
     "$node_total" "$(( volume_count - idle_count ))" "$volume_count" "$idle_count" "$instance_count"
+if (( ${#WARNINGS[@]} > 0 )); then
+    printf 'Version skew warnings are listed above; settle them before go/no-go.\n'
+elif (( comparison_complete )); then
+    printf 'Version pins agree: no unsupported skew between talosctl client, talenv target, and the live nodes.\n'
+fi
 printf 'Still owed before go/no-go: an etcd snapshot verified at its path, and an explicit decision for any CloudNativePG primary on the candidate.\n'

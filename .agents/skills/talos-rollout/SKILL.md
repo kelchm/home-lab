@@ -45,6 +45,8 @@ Preflight prints a one-line summary per check and expands raw output only for ch
 
 It gates on: routes to every rollout destination, Talos reachable at each node, `talosctl health` passing across the three control-plane nodes, every node answering an etcd member query, all Kubernetes nodes Ready **and uncordoned**, Multus safeguards Ready, every in-use Longhorn volume attached and healthy, and all instance-managers Ready with `lhnet1`. It reports without judging: which interface carries your API and Talos paths, any idle Longhorn volume, every CloudNativePG cluster with its instance count and primary placement, every suspended Flux Kustomization, and every PodDisruptionBudget at zero allowed disruptions.
 
+It also reads the `talosctl` client pin from `.mise.toml`, prints it alongside the desired target (`talos/talenv.yaml`) and each node's live version, and warns when any pair is more than one minor apart. The pin drives manual and `apply-node` commands; preflight's own queries select a matching client per node as described above. Talos upgrades only between adjacent minors, so a wider skew is an unsupported combination: settle it before go/no-go, but a warning does not by itself block the rollout. Unparsed versions make the comparison incomplete rather than confirming agreement.
+
 Then, in order:
 
 1. Save an etcd snapshot before the first node, to an operator-chosen local path outside the repository:
@@ -102,7 +104,7 @@ For the selected node:
 
 `task talos:apply-node IP=<node-ip>` regenerates `talos/clusterconfig/` from `talconfig.yaml`, `talenv.yaml`, the patches, and the secrets on every run, prints the requested Talos and Kubernetes versions, shows the dry-run diff against the node, and asks before applying. The generated directory is gitignored and is never trusted as-is.
 
-Read the dry-run before answering: the diff must contain only the change you intend, and the summary line says whether Talos will apply it live or reboot the node. The task does not gate on cluster health. If the summary says the node will reboot, treat it as a node roll: preflight first, one node at a time, and verify afterwards. A change Talos applies live does not restart the kubelet; reboot deliberately when the change needs a fresh one.
+Read the dry-run before answering: the diff must contain only the change you intend. On the pinned Talos 1.14.4, `auto` mode becomes `no-reboot`; the dry-run summary alone does not prove that every intended change takes effect live. Check the change's supported application behavior and verify the resulting state after applying. The task does not gate on cluster health. If the change needs a reboot, treat it as a node roll: preflight first, one node at a time, and verify afterwards. A change Talos applies live does not restart the kubelet; reboot deliberately when the change needs a fresh one.
 
 ## Finish the rollout
 
