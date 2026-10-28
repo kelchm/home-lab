@@ -18,7 +18,7 @@ services:
         set -o errexit -o nounset -o pipefail
         umask 077
         export LC_ALL=C
-        VERSION=photos-v1
+        VERSION=photos-v2
 
         fail() { echo "ERROR: $$*" >&2; return 1; }
 
@@ -48,6 +48,8 @@ services:
         prepare_state() {
           mkdir -p /work/state /work/archives /exports || return 1
           if [ ! -f /work/state/version ]; then
+            # An interrupted first marker write is not evidence of accepted output.
+            rm -f /work/state/.version.tmp || return 1
             # No deployed legacy collector is recorded. Never infer success from old
             # extracted.txt/last-arrival, or silently import exports after state loss.
             existing=$$(find /work/state /work/archives /exports -mindepth 1 -print -quit) || return 1
@@ -69,7 +71,7 @@ services:
           for saved in /work/state/decisions/*; do
             [ -e "$$saved" ] || continue
             saved_key=$${saved##*/}
-            printf '%s\n' "$$saved_key" | grep -Eq '^takeout-[0-9]{8}T[0-9]{6}Z(-[0-9]+){1,2}\.zip\.[0-9a-f]{32}\.[0-9]+$$' || return 1
+            printf '%s\n' "$$saved_key" | grep -Eq '^takeout-[0-9]{8}T[0-9]{6}Z(-[0-9]+){1,2}\.zip\.[0-9a-f]{32}\.[0-9]+$$' || { fail "invalid state identity $$saved_key"; return 1; }
             export_time "$${saved_key%%.zip.*}.zip" || { fail "invalid state identity $$saved_key"; return 1; }
             saved_decision=$$(cat "$$saved") || return 1
             printf '%s\n' "$$saved_decision" | grep -Eq "^$$VERSION (accepted|ignored|quarantined) $$epoch [a-z-]+$$" || { fail "invalid state record $$saved_key"; return 1; }
@@ -160,7 +162,9 @@ services:
           esac
           # Unfiltered extraction CRC-reads EVERY file, including sidecars. No Photos
           # filter can hide a second product or skip its corrupt body.
-          if ! rclone archive extract "$$archive" "/exports/$$stamp"; then
+          # Each source identity owns a separate tree. A failed or changed part
+          # must never overwrite/delete files from any already accepted identity.
+          if ! rclone archive extract "$$archive" "/exports/$$stamp/$$key"; then
             record quarantined extraction-failed || return 1
             fail "extraction failed: $$name (retained for retry)"
             return 1
@@ -202,8 +206,9 @@ services:
 
         # Fixtures execute this exact command, with local read-only source and no pings.
         if [ "$${COLLECTOR_MODE:-}" = fixture ] && [ "$${SOURCE:-}" = /source ]; then
-          collect
-          exit $$?
+          fixture_status=0
+          collect || fixture_status=1
+          exit "$$fixture_status"
         fi
 
         # Deliberately inert even if manually started with the encrypted placeholders.

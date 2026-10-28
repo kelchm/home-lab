@@ -7,6 +7,7 @@ CI uses the default Docker context. No images are built; no credentials are read
 
 import argparse
 import datetime as dt
+import hashlib
 import json
 from pathlib import Path
 import subprocess
@@ -114,6 +115,11 @@ mv() {
     def output_files(self):
         return [p for p in self.exports.rglob('*') if p.is_file()]
 
+    def part_file(self, name, member):
+        source = self.source / name
+        identity = f'{name}.{hashlib.md5(source.read_bytes()).hexdigest()}.{source.stat().st_size}'
+        return self.exports / name.split('-')[1] / identity / member
+
 
 def tests(parent):
     # Shellcheck the production logic, not a separately maintained script.
@@ -131,8 +137,8 @@ def tests(parent):
     (f.source / 'ignore.txt').write_text('not a ZIP')
     f.run(message='accepted Photos part:')
     assert len(f.decisions('accepted')) == 2 and len(f.output_files()) == 3
-    assert (f.exports / '20261006T022413Z' / PHOTO).read_bytes() == b'PHOTO-BYTES'
-    assert (f.exports / '20261006T022413Z/Takeout/Google Photos/Year/a.jpg ').read_bytes() == b'second'
+    assert f.part_file(NAME, PHOTO).read_bytes() == b'PHOTO-BYTES'
+    assert f.part_file(NAME.replace('001.zip', '002.zip'), 'Takeout/Google Photos/Year/a.jpg ').read_bytes() == b'second'
     f.run(message='already committed')
     assert not list((f.work / 'archives').iterdir())
 
@@ -140,6 +146,43 @@ def tests(parent):
     (f.work / 'archives' / NAME).write_bytes(b'not even a ZIP')
     f.run(message='already committed')
     assert len(f.decisions('accepted')) == 2
+
+    # Large bodies exercise rclone's streamed CRC-failure cleanup. Each part and
+    # same-name replacement must leave previously accepted output intact.
+    f = Fixture(parent, 'changed-identity-never-destroys-accepted-output')
+    member = 'Takeout/Google Photos/Album/big.jpg'
+    original = b'PHOTO-BYTES' + b'x' * (256 * 1024)
+    source = f.zip(members=[(member, original)])
+    original_zip = source.read_bytes()
+    accepted = f.part_file(NAME, member)
+    f.run()
+    f.zip(members=[(member, original)], corrupt=True)
+    f.run(1, message='checksum error')
+    assert accepted.read_bytes() == original and len(f.decisions('accepted')) == 1
+    source.write_bytes(original_zip)
+    f.run(message='already committed')
+    assert accepted.read_bytes() == original
+    f.zip(members=[(member, b'changed valid content')])
+    changed = f.part_file(NAME, member)
+    f.run()
+    assert changed != accepted and changed.read_bytes() == b'changed valid content'
+    assert accepted.read_bytes() == original and len(f.decisions('accepted')) == 2
+
+    f = Fixture(parent, 'colliding-parts-never-overwrite-accepted-output')
+    f.zip(members=[(member, original)])
+    accepted = f.part_file(NAME, member)
+    f.run()
+    second = NAME.replace('001.zip', '002.zip')
+    f.zip(second, [(member, original)], corrupt=True)
+    f.run(1, message='checksum error')
+    assert accepted.read_bytes() == original and len(f.decisions('accepted')) == 1
+    (f.source / second).unlink()
+    f.run(message='already committed')
+    assert accepted.read_bytes() == original
+    f.zip(second, [(member, b'second part content')])
+    f.run()
+    assert f.part_file(second, member).read_bytes() == b'second part content'
+    assert accepted.read_bytes() == original and len(f.decisions('accepted')) == 2
 
     for label, members, decision in [
         ('timeline', [(TIMELINE, b'{}')], 'ignored'),
@@ -253,6 +296,27 @@ def tests(parent):
     shutil.rmtree(f.work / 'state')
     f.run(1, message='unversioned/nonempty')
     assert f.output_files()
+
+    f = Fixture(parent, 'interrupted-version-write')
+    (f.work / 'state').mkdir()
+    (f.work / 'state/.version.tmp').write_text('partial marker')
+    f.zip()
+    f.run()
+    assert len(f.decisions('accepted')) == 1
+    assert not (f.work / 'state/.version.tmp').exists()
+
+    f = Fixture(parent, 'stray-ledger-file-diagnostic')
+    f.zip()
+    f.run()
+    (f.work / 'state/decisions/notes.txt').touch()
+    f.run(1, message='ERROR: invalid state identity notes.txt')
+
+    f = Fixture(parent, 'prior-shared-output-version-refused')
+    (f.work / 'state').mkdir()
+    (f.work / 'state/version').write_text('photos-v1\n')
+    f.zip()
+    f.run(1, message='unsupported state version')
+    assert not f.decisions('accepted') and not f.output_files()
 
     f = Fixture(parent, 'timeline-never-refreshes-photos')
     photos_time = NOW - 39 * 86400
