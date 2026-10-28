@@ -106,6 +106,8 @@ One-shot F9, F10, and F12 presses during POST are unreliable on these EliteDesk 
    ssh root@10.32.20.10 '/etc/kvmd/user/bin/hid-hold-key 0x29 30'
    ```
 
+   This hold was proven with the older GLKVM helpers. With the [bounded helpers](../../devices/glkvm/README.md#bounded-hid-helpers), a POST hold is not yet accepted: a USB report stall longer than one second ends it with a nonzero exit after earlier input may have acted. Check the screen before repeating, and record the exit status, elapsed time and result in [#419](https://github.com/kelchm/home-lab/issues/419).
+
 4. At the HP Startup Menu, choose **F12 Network Boot**, then select **IPv4** with Down and Enter. The paced helper sequence is:
 
    ```sh
