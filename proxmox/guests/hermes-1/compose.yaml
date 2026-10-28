@@ -48,7 +48,7 @@ services:
       - /srv/caddy/data:/data
       - /srv/caddy/config:/config
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--spider", "https://hermes.home.kelch.io/api/status"]
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "--output", "/dev/null", "https://hermes.home.kelch.io/api/status"]
       interval: 30s
       timeout: 10s
       retries: 3
