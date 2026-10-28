@@ -75,6 +75,8 @@ def system_prompt(config, workdir):
     before = len(requests)
     run = subprocess.run(["/opt/hermes/.venv/bin/hermes", "chat", "-Q", "-q", "say ok"], check=False, env=env,
                          capture_output=True, text=True, timeout=180, cwd=workdir)
+    if run.returncode:
+        sys.exit(f"hermes failed (exit {run.returncode}):\n{run.stdout}\n{run.stderr}")
     sent = requests[before:]
     if not sent:
         sys.exit(f"hermes sent no request (exit {run.returncode}):\n{run.stdout}\n{run.stderr}")
