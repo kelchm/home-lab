@@ -37,7 +37,7 @@ The API token at `op://Private/netbird-automation/credential` returned `401 toke
 | Policy | `Default` | All ↔ All, disabled |
 | DNS | Nameserver group, name not recorded | `home.kelch.io` → `10.32.30.1:53` for `pilot-clients` |
 
-The record doesn't say whether `pilot-jellyfin` and the DNS policies target the `pilot-home-resources` group or each resource directly. If they target the group, TCP 443 is open to the UniFi console on `10.32.30.1` and port 53 to `10.32.140.1`. Check this first in the next read-back.
+The record doesn't say whether `pilot-jellyfin` and the DNS policies target the `pilot-home-resources` group or each resource directly, or which resources belong to that group. If an enabled, applicable TCP-443 allow rule targets a group containing the DNS resource, an eligible away client may also reach the UniFi console on `10.32.30.1:443`. Likewise, an applicable port-53 allow rule targeting a group containing the household-services resource may allow DNS traffic to `10.32.140.1`. Check the actual group memberships and every enabled grant's destinations, source groups, posture checks, protocols and ports first in the next read-back, then verify effective behavior in #625's I1 device checks. The router's own access to gateway 443 establishes the UniFi path, not a client's current NetBird authorization.
 
 ## Read back NetBird Cloud
 

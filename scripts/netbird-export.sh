@@ -33,7 +33,7 @@ failures=0
 
 fetch() {
   local path="$1" file="$2" filter="${3:-.}" body
-  if body="$(curl --silent --show-error --fail-with-body --max-time 20 \
+  if body="$(curl -q --silent --show-error --fail-with-body --max-time 20 \
     --header @"${header}" --header 'Accept: application/json' "${api}/${path}")"; then
     jq "${filter}" <<<"${body}" >"${out}/${file}.json"
     printf '%-40s ok, %s entries\n' "${path}" "$(jq 'if type == "array" then length else 1 end' "${out}/${file}.json")"
@@ -57,8 +57,8 @@ fetch networks networks
 if [[ -f "${out}/networks.json" ]]; then
   while IFS=$'\t' read -r id name; do
     name="${name//[^A-Za-z0-9._-]/_}"
-    fetch "networks/${id}/resources" "network-${name}-resources"
-    fetch "networks/${id}/routers" "network-${name}-routers"
+    fetch "networks/${id}/resources" "network-${id}-${name}-resources"
+    fetch "networks/${id}/routers" "network-${id}-${name}-routers"
   done < <(jq -r '.[] | [.id, .name] | @tsv' "${out}/networks.json")
 fi
 
