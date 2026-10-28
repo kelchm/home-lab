@@ -435,6 +435,10 @@
       mediaPointerGesture = { source: type === "pointerdown" ? "pointer" : type === "touchstart" ? "touch" : "mouse", isolate: startsPaused };
       mediaKeyboardClick = null;
     }
+    if (type === "pointermove" && event.pointerType !== "touch" && event.buttons === 0) {
+      // Hover ends a press that had no click, such as a context menu or drag-out.
+      mediaPointerGesture = null;
+    }
     if (type === "keydown") {
       if (!event.repeat || !mediaKeyIsolation.has(key)) {
         mediaKeyIsolation.set(key, startsPaused);
@@ -444,7 +448,7 @@
     let isolate = startsPaused;
     if (type === "keydown" || type === "keyup") {
       isolate = mediaKeyIsolation.get(key) ?? startsPaused;
-    } else if (type === "click" && event.detail === 0 && mediaKeyboardClick !== null) {
+    } else if (type === "click" && event.detail === 0 && onVideo && mediaKeyboardClick !== null) {
       isolate = mediaKeyboardClick;
     } else if (type !== "wheel" && mediaPointerGesture) {
       isolate = mediaPointerGesture.isolate;
