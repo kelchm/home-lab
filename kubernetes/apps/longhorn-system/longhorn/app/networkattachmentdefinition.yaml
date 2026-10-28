@@ -22,7 +22,7 @@
 #
 # `isGateway: false`, `ipMasq: false`: the bridge is a pure L2 endpoint;
 # no NAT, no acting as gateway. Pods use Whereabouts-assigned same-VLAN
-# IPs and reach NAS / other nodes directly via the bridge → enp6s0 wire
+# IPs and reach NAS / other nodes directly via the bridge → storage NIC wire
 # path. Default route stays on the pod's primary Cilium interface.
 apiVersion: k8s.cni.cncf.io/v1
 kind: NetworkAttachmentDefinition

@@ -119,7 +119,8 @@ fi
 # Adjacent-minor rule: Talos supports upgrades between adjacent minors only, so
 # any pair of client pin, desired target, and a node's live version more than
 # one minor apart is unsupported. Warnings name the combination; they do not
-# block a rollout on their own.
+# block a rollout on their own. The pin drives manual/apply-node commands;
+# preflight's own queries use a matching client independently for each node.
 minor_index() {
     local tag="${1#v}"
     local major="${tag%%.*}"
@@ -140,15 +141,10 @@ skew_pair() {
 }
 
 section "Talos versions"
-client_version=''
-if client_out="$(talosctl version --client 2>&1)"; then
-    client_version="$(awk '/Tag:/ { print $2; exit }' <<<"$client_out")"
-    detail "talosctl client: $client_version"
-else
-    fail "talosctl client version failed" "$client_out"
-fi
-
+client_version="$(awk -F'"' '$2 == "aqua:siderolabs/talos" { print "v" $4; exit }' "$ROOT_DIR/.mise.toml" 2>/dev/null || true)"
 desired_version="$(awk '/^talosVersion:/ { print $2; exit }' "$ROOT_DIR/talos/talenv.yaml" 2>/dev/null || true)"
+comparison_complete=1
+valid_semver "$client_version" && valid_semver "$desired_version" || comparison_complete=0
 
 line "$(printf '%-11s %-13s %s' 'client pin' '.mise.toml' "${client_version:-unparsed}")"
 line "$(printf '%-11s %-13s %s' 'desired' 'talenv.yaml' "${desired_version:-unparsed}")"
@@ -158,9 +154,11 @@ for index in "${!NODES[@]}"; do
     if version_out="$(talos_node "${IPS[$index]}" version --short 2>&1)"; then
         server="$(awk '/^Server:/ { s = 1; next } s && /Tag:/ { print $2; exit }' <<<"$version_out")"
         live_versions["$index"]="$server"
+        valid_semver "$server" || comparison_complete=0
         line "$(printf '%-11s %-13s %s' "${NODES[$index]}" "${IPS[$index]}" "${server:-unparsed}")"
         detail "$version_out"
     else
+        comparison_complete=0
         fail "talosctl version failed for ${NODES[$index]} (${IPS[$index]})" "$version_out"
     fi
 done
@@ -382,6 +380,8 @@ printf 'PREFLIGHT CHECKS PASSED: talosctl health is OK, all %s nodes are Ready a
     "$node_total" "$(( volume_count - idle_count ))" "$volume_count" "$idle_count" "$instance_count"
 if (( ${#WARNINGS[@]} > 0 )); then
     printf 'Version skew warnings are listed above; settle them before go/no-go.\n'
+elif (( ! comparison_complete )); then
+    printf 'Version comparison incomplete: one or more versions could not be parsed; review the rows above before go/no-go.\n'
 else
     printf 'Version pins agree: no unsupported skew between talosctl client, talenv target, and the live nodes.\n'
 fi

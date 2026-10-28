@@ -51,7 +51,7 @@ yq -i '.filesystem.invalidField = true' "${TEST_DIR}/talos/patches/global/user-v
 expect_failure 'unknown UserVolumeConfig field' 'invalidField'
 
 reset_fixture
-yq -i '.machine.install.image = "factory.talos.dev/installer:v1.13.1"' "${TEST_DIR}/talos/patches/global/machine-network.yaml"
+yq -i '.machine.install.image = "factory.talos.dev/installer:v1.13.1"' "${TEST_DIR}/talos/patches/global/machine-sysctls.yaml"
 expect_failure 'Talos version drift' '.machine.install.image version v1.13.1 does not match talenv.yaml'
 
 reset_fixture
