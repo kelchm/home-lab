@@ -150,6 +150,7 @@ jobs:
               - 'synology/**'
               - 'scripts/ci/test-validate-synology.sh'
               - 'scripts/ci/validate-synology.sh'
+              - 'scripts/ci/test-google-photos-takeout.py'
             talos:
               - '.github/workflows/repository-validation.yaml'
               - '.mise.toml'
@@ -487,11 +488,11 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install yq
+      - name: Install yq and ShellCheck
         if: needs.pre-job.outputs.synology_changed == 'true'
         uses: jdx/mise-action@82a612c5ab8bcda7cc5db6b7e81a8e7584c3dc6e # v5.2.3
         with:
-          install_args: "aqua:mikefarah/yq"
+          install_args: "aqua:mikefarah/yq aqua:koalaman/shellcheck"
 
       - name: Validate Compose projects and doco-cd targets
         if: needs.pre-job.outputs.synology_changed == 'true'
@@ -499,6 +500,10 @@ jobs:
           docker compose version
           scripts/ci/test-validate-synology.sh
           scripts/ci/validate-synology.sh
+
+      - name: Test inactive Photos collector offline in its pinned image
+        if: needs.pre-job.outputs.synology_changed == 'true'
+        run: python3 scripts/ci/test-google-photos-takeout.py
 
       - name: No Synology changes
         if: needs.pre-job.outputs.synology_changed != 'true'
