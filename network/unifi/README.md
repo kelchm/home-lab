@@ -20,7 +20,7 @@ The Tailscale router rollout created an isolated VLAN and replaced the PVE trunk
 | Item | Applied value |
 |---|---|
 | Network | `Remote Admin`, VLAN 19, `10.32.19.1/24` |
-| Addressing | DHCP disabled; IPv6 disabled; static guest addresses: NetBird routing peer `10.32.19.103`, retired Tailscale routers `.101` and `.102` |
+| Addressing | DHCP disabled; IPv6 disabled; NetBird routing peer `10.32.19.103`; `.101` and `.102` unused since the Tailscale routers were destroyed |
 | Zone | Dedicated `Remote Admin` zone |
 | Default zone policy | Allow to Gateway and External; block to Internal, VPN, Hotspot, DMZ, and Remote Admin |
 | `pve-guest-trunk` native network | None |
@@ -38,7 +38,7 @@ Three custom policies cross the new boundary:
 | `Allow Tailscale Routers to Routed LAN` | `Remote Admin`; IPs `10.32.19.101`, `10.32.19.102` | `Internal`; IPs `10.32.1.0/24`, `10.32.10.0/24`, `10.32.20.0/24`, `10.32.30.0/24`, `10.32.130.0/24`, `10.32.140.0/24` | Allow; IPv4; all protocols |
 | `Allow NetBird Pilot Router to Services VIP` | `Remote Admin`; IP `10.32.19.103` | `Internal`; IP `10.32.140.1`, port 443 | Allow; IPv4; TCP |
 
-The two Tailscale policies are inert: their router endpoints, VMs 101 and 102, have been stopped since Tailscale was retired on 2026-10-25. Deleting them needs an administrator session and is tracked in [#1069](https://github.com/kelchm/home-lab/issues/1069). UniFi generated an established/related return policy for each rule. No other Remote Admin → Internal initiation policy is live. Although the policy table describes the Cilium BGP pools as External for ordinary Internal sources, live probes from the custom Remote Admin zone timed out until `10.32.130.0/24` and `10.32.140.0/24` were included in the Internal destination rule; both returned HTTP 404 immediately afterward. Keep those routed prefixes in this exact rule and revalidate the behavior after UniFi upgrades.
+The two Tailscale policies are inert: their router endpoints, VMs 101 and 102, were stopped on 2026-10-25 and destroyed on 2026-10-28. Deleting the policies needs an administrator session and is tracked in [#1069](https://github.com/kelchm/home-lab/issues/1069). UniFi generated an established/related return policy for each rule. No other Remote Admin → Internal initiation policy is live. Although the policy table describes the Cilium BGP pools as External for ordinary Internal sources, live probes from the custom Remote Admin zone timed out until `10.32.130.0/24` and `10.32.140.0/24` were included in the Internal destination rule; both returned HTTP 404 immediately afterward. Keep those routed prefixes in this exact rule and revalidate the behavior after UniFi upgrades.
 
 The NetBird pilot policy belongs to the evaluation in #625. VM 103 is now the only routed remote path, so do not remove it or this policy without a replacement. From `10.32.19.103`, `10.32.140.1:443` connects, while `10.32.140.1:80`, `10.32.130.1:443`, and `10.32.20.21:8006` time out. Its DNS resource `10.32.30.1` needs no policy because gateway interface addresses fall in the Gateway zone.
 

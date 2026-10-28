@@ -1,6 +1,6 @@
 # Tailscale remote-admin architecture
 
-**Status:** Superseded — 2026-10-25; Tailscale was retired across the lab and both router VMs are stopped. Remaining tailnet, UniFi, and disk cleanup is tracked in [#1069](https://github.com/kelchm/home-lab/issues/1069). The design and acceptance evidence below are historical.
+**Status:** Superseded — 2026-10-25; Tailscale was retired across the lab and both router VMs were destroyed on 2026-10-28, with their backup archives kept. Remaining tailnet and UniFi cleanup is tracked in [#1069](https://github.com/kelchm/home-lab/issues/1069). The design and acceptance evidence below are historical.
 
 ## Outcome
 

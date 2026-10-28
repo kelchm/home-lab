@@ -283,8 +283,8 @@ Talos nodes do NOT have IPs on Infra Mgmt. Talos has no classic management plane
 
 ```text
 10.32.19.1        gateway-remote-admin       Router interface; DNS and Internet egress
-10.32.19.101      tailscale-router-1         Retired PVE VM on pve-sbx-2; stopped (#1069)
-10.32.19.102      tailscale-router-2         Retired PVE VM on pve-sbx-3; stopped (#1069)
+10.32.19.101      tailscale-router-1         Retired; VM destroyed 2026-10-28, address unused (#1069)
+10.32.19.102      tailscale-router-2         Retired; VM destroyed 2026-10-28, address unused (#1069)
 10.32.19.103      netbird-pilot-router       Disposable PVE VM on pve-sbx-1 (#625)
 ```
 

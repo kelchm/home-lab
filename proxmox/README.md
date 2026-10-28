@@ -51,7 +51,7 @@ The initial certificates were issued and hostname-validated on 2026-08-27. A man
 
 Both stores use hard NFSv4.1 mounts and are allowed only from the three PVE storage addresses. `library-pve` is platform-specific but reusable across PVE clusters; `backups-pve-sbx` is intentionally cluster-specific. Shared external storage uses the DSM shared-folder leaf as its PVE storage ID so the same resource has one canonical name across both systems.
 
-The cluster job `daily-backups` backs up all non-disposable guests to `backups-pve-sbx` at 05:00 America/New_York in snapshot mode with Zstandard compression. The live job uses `all=1`; add every disposable VMID to its explicit `exclude` field. As of 2026-10-04 the live field excludes only `103` (`netbird-pilot-router`, the disposable routing peer for #625). Its retention policy is last 3, daily 7, weekly 4, and monthly 6. The built-in matcher currently targets `mail-to-root`, but direct delivery to Gmail failed with `550 5.7.1`; do not depend on email alerts until an authenticated SMTP relay is configured and tested.
+The cluster job `daily-backups` backs up all non-disposable guests to `backups-pve-sbx` at 05:00 America/New_York in snapshot mode with Zstandard compression. The live job uses `all=1`; add every disposable VMID to its explicit `exclude` field. The October 28 read-back found only `103` (`netbird-pilot-router`) excluded. NetBird is now the selected remote-access system; VM 103's backup and protection decision remains in #625. Its retention policy is last 3, daily 7, weekly 4, and monthly 6. The built-in matcher currently targets `mail-to-root`, but direct delivery to Gmail failed with `550 5.7.1`; do not depend on email alerts until an authenticated SMTP relay is configured and tested.
 
 ### Backup alerting
 
@@ -71,7 +71,7 @@ Every node's RTL8125-backed `vmbr0` is VLAN-aware with an explicit `bridge-vids 
 
 ## Retired guests
 
-VMs 101 `tailscale-router-1` (`pve-sbx-2`) and 102 `tailscale-router-2` (`pve-sbx-3`) were the Tailscale subnet routers on VLAN 19. Tailscale was retired on 2026-10-25: both VMs are stopped with `onboot: 0` and keep `protection: 1`. Leave them stopped. Whether to keep or destroy their disks is tracked in [#1069](https://github.com/kelchm/home-lab/issues/1069). Until then `daily-backups` (`all=1`) still includes them. Their design and acceptance evidence remain in the [remote-admin plan](../docs/plans/20260902-tailscale-remote-admin.md).
+VMs 101 `tailscale-router-1` (`pve-sbx-2`) and 102 `tailscale-router-2` (`pve-sbx-3`) were the Tailscale subnet routers on VLAN 19. Tailscale was retired on 2026-10-25; both VMs and their local disks were destroyed on 2026-10-28 under [#1069](https://github.com/kelchm/home-lab/issues/1069). Their 28 vzdump archives, dated 2026-09-20 through 2026-10-27, remain on `backups-pve-sbx`. Nothing prunes them automatically, they have no offsite copy, and no restore has been tested. Keep VMIDs 101 and 102 reserved while the archives are kept: backups of a new guest with either ID would apply retention to those archives. Their design and acceptance evidence remain in the [remote-admin plan](../docs/plans/20260902-tailscale-remote-admin.md).
 
 ## Applied guest network policy
 
