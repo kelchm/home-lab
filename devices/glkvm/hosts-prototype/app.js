@@ -54,7 +54,7 @@
 
   function reportAuthenticatedStatus() {
     if (!consoleReady) {
-      setStatus("checking", "Loading console…");
+      setStatus("checking", "Loading console… If stuck, open Stock UI");
     } else if (lastRequestedHost) {
       setStatus(lastSwitchFeedback?.state || "success", lastSwitchFeedback?.message || `Requested ${lastRequestedHost} · Confirm host on screen`);
     } else {
@@ -199,7 +199,9 @@
         await new Promise((resolve) => window.setTimeout(resolve, VIDEO_POLL_MS));
       }
       const recent = validReads && performance.now() - lastValidAt < STREAM_READ_TIMEOUT_MS + VIDEO_POLL_MS * 2;
-      return { kind: !recent ? "unavailable" : !latest.signal ? "no-signal" : latest.online ? "unchanged" : "not-ready" };
+      // Later stable video cannot establish "unchanged" without a reference.
+      // A real loss/recovery observed above still succeeds without the baseline.
+      return { kind: !recent || !baseline ? "unavailable" : !latest.signal ? "no-signal" : latest.online ? "unchanged" : "not-ready" };
     })();
     return { promise, cancel: () => controller.abort() };
   }
@@ -421,7 +423,9 @@
   function isolateMediaControl(event) {
     // Bubble phase: native controls must receive the event before we stop it from
     // reaching the stock stream-box mouse/keyboard handlers. Keep default actions.
-    event.stopPropagation();
+    if (!hasVideoFrame(event.currentTarget)) {
+      event.stopPropagation();
+    }
   }
 
   function reportVideoState(video) {
@@ -429,11 +433,11 @@
     if (video.error) {
       setPlayback("error", `Video error (code ${video.error.code}) · Try Start video`);
     } else if (video.paused) {
-      setPlayback("paused", "Video paused · Click Play in the console or choose a host");
+      setPlayback("paused", "Video paused · Start video or choose a host");
     } else if (hasVideoFrame(video)) {
       setPlayback("ready", `Playback started · ${video.videoWidth}×${video.videoHeight}`);
     } else {
-      setPlayback("checking", "Waiting for video frames");
+      setPlayback("checking", "Waiting for frames · If stuck, reload the console");
     }
   }
 
@@ -441,7 +445,7 @@
     if (event.target === observedVideo) {
       syncInputLayer(observedVideo);
       if (event.type === "waiting" || event.type === "emptied") {
-        setPlayback("checking", "Waiting for video frames");
+        setPlayback("checking", "Waiting for frames · If stuck, reload the console");
       } else {
         reportVideoState(observedVideo);
       }

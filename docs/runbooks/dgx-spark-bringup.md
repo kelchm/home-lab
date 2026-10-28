@@ -87,7 +87,7 @@ Do not force-remove a busy module or unload `nvidia`, `nvidia_uvm`, or `nvidia_m
 
 Validated live on spark-1 on 2026-10-20: the display-only reload completed without stopping the TensorFold process, created `nvidia-drmdrmfb` and an enabled HDMI connector, and restored a visible `spark-1 login:` prompt at `1920x1080@60`. The host recorded both a Right-arrow press and release from GLKVM. TensorFold retained PID 846013 and its 109,309 MiB allocation, and `/health` still reported `status: ok`. GDM remained stopped; `getty@tty1` was started and was already enabled. No change was made to spark-2 or the existing boot target.
 
-After successful live checks, persist the site override from [`sparks/console/zz-spark-console.conf`](../../sparks/console/zz-spark-console.conf). It sorts after the vendor override and enables both modesetting and a framebuffer without editing the package-owned file. Back up existing initramfs images outside `/boot` before rebuilding them. Applied on spark-1 on 2026-10-20: both installed initramfs images (`6.11.0-1014-nvidia` and `6.17.0-1031-nvidia`) were regenerated and contain the site override, and `modprobe -c` lists it after the vendor's `modeset=0` option. Pre-change images are in `/var/backups/spark1-console.l3WC9o`. Boot-time behavior has not been tested by rebooting.
+After successful live checks, persist the site override from [`sparks/console/zz-spark-console.conf`](../../sparks/console/zz-spark-console.conf). It sorts after the vendor override and enables both modesetting and a framebuffer without editing the package-owned file. Back up existing initramfs images outside `/boot` before rebuilding them. Applied on spark-1 on 2026-10-20: both installed initramfs images (`6.11.0-1014-nvidia` and `6.17.0-1031-nvidia`) were regenerated and contain the site override, and `modprobe -c` listed it after the vendor's `modeset=0` option. That run's historical backups are in `/var/backups/spark1-console.l3WC9o`; do not use them for a later run. No reboot was part of the October 20 check. The later [DGX OS and firmware update](#updating-dgx-os-and-firmware) records subsequent reboot-era console evidence and the current early-boot HDMI-unplug restriction; it does not revalidate these old initramfs backups against newer kernels.
 
 ```sh
 scp sparks/console/zz-spark-console.conf kelchm@10.32.21.31:/tmp/zz-spark-console.conf
@@ -102,6 +102,7 @@ if grep -Eq "nvidia[-_]drm[.](modeset|fbdev)=" /proc/cmdline; then
     exit 1
 fi
 backup_dir=$(mktemp -d /var/backups/spark1-console.XXXXXX)
+printf "Pre-change backup directory: %s\n" "$backup_dir"
 cp -p /boot/initrd.img-*nvidia "$backup_dir/"
 if [ -e "$site" ]; then
     cp -p "$site" "$backup_dir/site.conf"
@@ -129,7 +130,25 @@ printf "Pre-change initramfs backups: %s\n" "$backup_dir"
 REMOTE
 ```
 
-To undo the persistent setting, remove only `/etc/modprobe.d/zz-spark-console.conf` and rebuild initramfs again; the package-owned `modeset=0` override remains available. This does not change the currently loaded module. A runtime rollback, during an interruption window and after the same zero-reference/no-client checks, must use `modprobe nvidia_drm modeset=0 fbdev=1` after `rmmod nvidia_drm`; the recovery command above loads `modeset=1` and is not the undo command. Otherwise reboot after saving workload state. If a rebuild fails, restore the saved images with `cp -p /var/backups/spark1-console.l3WC9o/initrd.img-*nvidia /boot/` followed by `sync`. An actual reboot is required to verify boot-time persistence.
+To undo the persistent setting, remove only `/etc/modprobe.d/zz-spark-console.conf` and rebuild initramfs again; the package-owned `modeset=0` override remains available. This does not change the currently loaded module. A runtime rollback, during an interruption window and after the same zero-reference/no-client checks, must use `modprobe nvidia_drm modeset=0 fbdev=1` after `rmmod nvidia_drm`; the recovery command above loads `modeset=1` and is not the undo command. Otherwise reboot after saving workload state. The EXIT trap restores both images and any saved site override if persistence fails. If manual recovery is needed, use the exact backup directory printed by the failed run, replacing the placeholder below. Do not mix images from a historical run with the current configuration or installed kernels:
+
+```sh
+ssh kelchm@10.32.21.31 'sudo -n sh -s' <<'REMOTE'
+set -eu
+backup_dir=/var/backups/spark1-console.REPLACE_WITH_CURRENT_RUN
+test -d "$backup_dir"
+cp -p "$backup_dir"/initrd.img-*nvidia /boot/
+site=/etc/modprobe.d/zz-spark-console.conf
+if [ -e "$backup_dir/site.conf" ]; then
+    cp -p "$backup_dir/site.conf" "$site"
+else
+    rm -f "$site"
+fi
+sync
+REMOTE
+```
+
+Future persistence changes need boot-time verification at the next authorized maintenance opportunity, respecting the early-boot HDMI restriction below. Merging this runbook does not apply or retest appliance or Spark state.
 
 ### Fabric address allocation
 

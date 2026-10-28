@@ -234,8 +234,8 @@ body {
 }
 
 /* Normal progress stays on the host button; announcements remain accessible. */
-#status:is([data-state="checking"], [data-state="ready"], [data-state="pending"], [data-state="success"]),
-.playback-status:is([data-state="ready"], [data-state="paused"]) {
+#status:is([data-state="ready"], [data-state="pending"], [data-state="success"]),
+.playback-status[data-state="ready"] {
   position: absolute;
   width: 1px;
   height: 1px;

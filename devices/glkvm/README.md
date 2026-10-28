@@ -48,7 +48,7 @@ All eight downstream ports are assigned. Update this table and the matching comm
 
 [`hosts-prototype/`](hosts-prototype/) adds eight host buttons at `https://10.32.20.10/hosts/` above an iframe containing the stock console. Sign in inside that console to enable the buttons once its video or Direct canvas exists. The page reuses the existing same-origin session cookie and protected GPIO API; it does not store credentials or add a backend service. The **Stock UI** link opens the normal root address directly.
 
-The Hosts page coordinates playback with the stock console's input layer. While video is paused or has no current frame, it makes `#video-wrapper` ignore pointer events so the browser's native Play control can receive the click. Media-control events stop bubbling at the video, after native controls receive them, so they cannot become remote mouse or keyboard events. Once video is playing with frames, the input layer resumes its normal behavior. A host-button click also calls the paused video's `play()` synchronously before sending the switch request, using the same browser gesture for both actions. The page watches for video creation, replacement, and iframe reloads, including sign-in and transfer-mode changes. These changes apply inside `/hosts/`; the vendor files and standalone `/` page are unchanged.
+The Hosts page coordinates playback with the stock console's input layer. While video is paused or has no current frame, it makes `#video-wrapper` ignore pointer events so the browser's native Play control can receive the click. In that state, media-control events stop bubbling at the video, after native controls receive them, so they cannot become remote mouse or keyboard events. Once video is playing with frames, the input layer resumes its normal behavior and video-targeted events propagate normally. The stock input overlay and video are siblings inside the focusable stream box, so overlay events do not pass through the video listener. A host-button click also calls the paused video's `play()` synchronously before sending the switch request, using the same browser gesture for both actions. The page watches for video creation, replacement, and iframe reloads, including sign-in and transfer-mode changes. These changes apply inside `/hosts/`; the vendor files and standalone `/` page are unchanged.
 
 **Start video** remains an explicit fallback. It calls the embedded video's `play()` directly from a click, without sending input or changing transport, audio, or appliance settings. The separate playback status reports rejection, missing video, or waiting for frames without clearing a failed host-switch lock. Playback controls do not reconnect a stalled WebRTC session.
 
@@ -62,11 +62,11 @@ For zero-click startup, the stock **Direct** transport also survived a hard relo
 
 The operator also confirmed that **Start video** restores playback after a hard reload without changing **Transfer**. The failure was reported in both **WebRTC** and **WebRTC(FEC)**. Changing Transfer modes also restored playback, but that stops the old video session and constructs a new one and is not needed when Start video works. Appliance capture was independently verified at 1080p60. Local browser checks covered a real paused MediaStream, rejected and pending play requests, missing/inaccessible frames, and an existing switch lockout.
 
-Only one switch request can run at a time. The page reads a baseline from the authenticated `/api/streamer` endpoint, sends one GPIO pulse, and watches capture state every 250 ms for up to 12 seconds from command dispatch. After the helper reports success, it can report **Video returned** for HDMI loss followed by recovery, **Video detected** when an absent signal appears, or **Video changed** for a resolution or refresh-rate change. The resulting signal and mode must remain stable for at least 750 ms with capture online. This is evidence following the request, not active-port or host-identity readback. Confirm the hostname on screen before typing.
+Only one switch request can run at a time in a browser tab. The page reads a baseline from the authenticated `/api/streamer` endpoint, sends one GPIO pulse, and watches capture state every 250 ms for up to 12 seconds from command dispatch. After the helper reports success, it can report **Video returned** for HDMI loss followed by recovery, **Video detected** when an absent signal appears, or **Video changed** for a resolution or refresh-rate change. The resulting signal and mode must remain stable for at least 750 ms with capture online. This is evidence following the request, not active-port or host-identity readback. Confirm the hostname on screen before typing.
 
-The toolbar keeps routine feedback on the host button: a highlight records the last request, a subtle amber pulse shows a request in progress, and a check briefly replaces the port number when a video transition is observed. No badge or persistent success pill is shown. The full result remains in the button's hover text and a screen-reader announcement; playback-success text is also visually hidden. Sign-in guidance, uncertain results, and errors remain visible as plain text. Button sizes stay fixed, accessible names keep the port and hostname, and the pending animation respects reduced-motion preferences.
+The toolbar keeps routine feedback on the host button: a highlight records the last request, a subtle amber pulse shows a request in progress, and a check briefly replaces the port number when a video transition is observed. No badge or persistent success pill is shown. The full result remains in the button's hover text and a screen-reader announcement; playback-success text is also visually hidden. Loading, paused-video guidance, sign-in guidance, uncertain results, and errors remain visible as compact plain text. Button sizes stay fixed, accessible names keep the port and hostname, and the pending animation respects reduced-motion preferences.
 
-If no change appears, the amber status says that the requested input may already be selected. Missing video, unavailable status reads, and capture not being ready have separate messages. A completed command with an inconclusive video check unlocks switching without retrying. An interrupted, failed, or ten-second command timeout still disables switching until reload, even if video changed; video evidence never overrides an uncertain command result. Status polling stops after the check or command failure and does not run while idle. Check the console and any blocked helper before reloading: canceling a browser request does not stop a helper blocked on USB, and repeated reloads can still queue commands. See [USB class compatibility](#usb-class-compatibility) for helper diagnosis.
+If no change appears against a valid baseline, the amber status says that the requested input may already be selected. Without a baseline, stable later video is unverifiable; only an actual later loss/recovery can establish a transition. Missing video, unavailable status reads, and capture not being ready have separate messages. A completed command with an inconclusive video check unlocks switching without retrying. An interrupted, failed, or ten-second command timeout still disables switching until reload, even if video changed; video evidence never overrides an uncertain command result. Status polling stops after the check or command failure and does not run while idle. The lockout is page-local: a second tab, another session, or a reload can queue behind the shared helper's unbounded lock or HID write. Browser cancellation does not cancel that appliance process, so an abandoned command can still switch later when USB recovers. Check the console and specific helpers before reloading. Backend deadlines and stale-command prevention remain in [#928](https://github.com/kelchm/home-lab/issues/928); this prototype does not solve them. See [USB class compatibility](#usb-class-compatibility) for helper diagnosis.
 
 Switch feedback measured and applied 2026-10-21: switching from `k8s-prod-1` to Spark 1 produced HDMI signal loss, signal recovery about 1.8 seconds later, and a capture-mode change from 640×480 to 1920×1080. The browser continued to report buffered, playing video throughout the loss, and capture `source.online` stayed true, so neither is used as loss evidence. With feedback deployed, switching back to `k8s-prod-1` reported **Video returned** at 640×480 @ 60 Hz and issued exactly one pulse. Selecting `k8s-prod-1` again produced no video transition, finished with the amber already-selected explanation, and issued one more pulse without retrying. Local checks covered loss/recovery without a resolution change, signal appearance, resolution and refresh-rate changes, formatting-only changes, short unstable changes, unavailable status, persistent signal loss, concurrent-click suppression, and observation cancellation after an HTTP failure. A command timeout remained locked even when video recovery had already been observed.
 
@@ -77,6 +77,10 @@ devices/glkvm/hosts-prototype/install.sh
 ```
 
 The installer requires the main nginx configuration to match the firmware copy, backs up any previous prototype, installs static assets under `/etc/kvmd/user/hosts-prototype/`, and adds `/usr/share/kvmd/extras/hosts-prototype/nginx.ctx-server.conf` through the firmware's existing include. It validates nginx before reloading it; no kvmd restart or USB rebuild is needed. The added route makes only these static files public, like the stock login page; `/api/gpio` and pulse requests still require authentication. Firmware updates may remove the extra include file, so reapply the installer after checking the updated stock configuration.
+
+The Hosts location restricts framing with `X-Frame-Options: SAMEORIGIN` and CSP `frame-ancestors 'self'`; its own same-origin stock iframe remains allowed. The archived `V1.10.1 release2` nginx configuration includes HSTS from `ssl.conf` at server scope, with no framing policy there or in `gl.ctx-server.conf`. Location-level `add_header` replaces that inheritance, so the Hosts location repeats the firmware's HSTS value explicitly. Check the effective headers again before applying this include after a firmware change. This protects `/hosts/`, not the unchanged vendor `/` route; historical stock-root response headers had no framing policy.
+
+The 2026-10-27 review corrections are repository-only: conditional media-event isolation, visible paused/loading guidance, missing-baseline handling, and Hosts framing headers have not been deployed. The 2026-10-20/21 records in this section are historical acceptance of the earlier assets. Before calling the revised page applied, verify served assets and headers, then ordinary stock keyboard/mouse input and one-command switching in supported playback modes during an authorized appliance session. GLKVM reboot persistence remains a separate, unperformed acceptance check.
 
 Installed 2026-10-20. The operator confirmed that the embedded stock console and switching buttons work together. Live checks verified the three served assets, unchanged firmware main configuration, and unauthenticated GPIO reads and pulse requests returning 401. Local browser checks covered all eight channel mappings, concurrent-click suppression, expired-session recovery, malformed responses, and timeout lockout; desktop and phone layouts were inspected. This remains an optional prototype, with no port readback or cross-tab request lock.
 
@@ -220,6 +224,9 @@ The appliance's Dropbear server does not provide an SFTP subsystem, so force
 legacy SCP mode with `-O`:
 
 ```sh
+(
+set -e
+ssh root@10.32.20.10 'command -v timeout >/dev/null && command -v pkill >/dev/null'
 scp -O devices/glkvm/kvm-switch.py root@10.32.20.10:/tmp/kvm-switch
 scp -O devices/glkvm/hid-type.py root@10.32.20.10:/tmp/hid-type
 scp -O devices/glkvm/hid-hold-key.py root@10.32.20.10:/tmp/hid-hold-key
@@ -248,8 +255,6 @@ ssh root@10.32.20.10 '
     cp /rom/etc/kvmd/nginx-kvmd.conf /etc/kvmd/nginx-kvmd.conf
     rm -f /tmp/kvm-switch /tmp/hid-type /tmp/hid-hold-key \
         /tmp/override.yaml
-    command -v timeout >/dev/null
-    command -v pkill >/dev/null
     restore_kvmd() {
         if ! pgrep -f "[k]vmd/main" >/dev/null; then
             /etc/init.d/S98kvmd start
@@ -278,9 +283,10 @@ ssh root@10.32.20.10 '
     fi
     /etc/init.d/S99kvmd-nginx restart
 '
+)
 ```
 
-Confirm `kvmd` restarted, the stock UI responds, and only the expected HID functions are linked. Keep an authenticated stock-console viewer open for the screenshot check:
+Confirm `kvmd` restarted, the stock UI responds, and only the expected HID functions are linked. The port-8888 probe below checks only IPv4 loopback HTTPS; failure is not proof that all TCP listeners are absent. The capture helper works with or without an authenticated viewer:
 
 ```sh
 ssh root@10.32.20.10 '
@@ -288,8 +294,8 @@ ssh root@10.32.20.10 '
     /etc/init.d/S98kvmd status
     cmp /rom/etc/kvmd/nginx-kvmd.conf /etc/kvmd/nginx-kvmd.conf
     curl -ksS https://127.0.0.1/ | grep -q "<title>GLKVM</title>"
-    if curl -ksS --connect-timeout 2 https://127.0.0.1:8888/ >/dev/null 2>&1; then
-        echo "Unexpected web listener on port 8888" >&2
+    if curl -ksS --connect-timeout 2 --max-time 3 https://127.0.0.1:8888/ >/dev/null 2>&1; then
+        echo "Unexpected IPv4 HTTPS response on port 8888" >&2
         exit 1
     fi
     for field in bDeviceClass bDeviceSubClass bDeviceProtocol; do
@@ -297,7 +303,6 @@ ssh root@10.32.20.10 '
     done
     python3 -c "from pathlib import Path; assert sorted(p.name for p in Path(\"/sys/kernel/config/usb_gadget/rockchip/configs/b.1\").iterdir() if p.is_symlink()) == [\"hid.usb0\", \"hid.usb1\", \"hid.usb2\"]"
     test -c /dev/hidg0
-    test -S /run/kvmd/ustreamer.sock
     python3 -m py_compile /etc/kvmd/user/bin/kvm-switch \
         /etc/kvmd/user/bin/hid-type /etc/kvmd/user/bin/hid-hold-key
 '
