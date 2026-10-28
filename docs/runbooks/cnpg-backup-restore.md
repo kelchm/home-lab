@@ -23,10 +23,12 @@ B2 is the copy of last resort. The databases never write to it, the cluster hold
 | Bucket | `k8s-prod-visionect-db` | `k8s-prod-bambuddy-db` |
 | Archive (`serverName`) | `visionect-db-pg17` | `bambuddy-db-pg18` |
 | Base backup | 08:30 UTC daily | 08:40 UTC daily |
-| Kept | 14 days | 14 days |
+| Kept | 30 days | 30 days |
 | Volume | 30Gi | 5Gi |
 
-Retention is the plugin's own `retentionPolicy` on each `ObjectStore`. The sidecar applies it every 5 minutes: it deletes base backups older than the newest one that still covers the window, the WAL before that backup, and the matching `Backup` objects.
+Retention is the plugin's own `retentionPolicy` on each `ObjectStore`. The sidecar applies it every 5 minutes: it deletes base backups older than the newest one that still covers the window, the WAL before that backup, and the matching `Backup` objects. The window is a recovery window, not an age limit on objects: the base backup that anchors its oldest point is kept even when it is older than 30 days.
+
+The off-site job's own retention is unchanged: 14 daily and 4 weekly snapshots of the share, each holding the 30 days the share held that day. How much space 30 days takes on Athena has not been measured on the real data; check `du` on the share after the first weeks.
 
 Base backups are scheduled after Longhorn's 07:00 and 08:00 UTC jobs and before the off-site run at 10:00 UTC. This leaves time for them to finish, but does not guarantee that each off-site snapshot contains that day's completed base backup and required WAL. Verify the contents of a completed Kopia snapshot before relying on it for recovery. A scheduled base backup waits for PostgreSQL's next checkpoint, up to 5 minutes, before it copies anything.
 
@@ -270,7 +272,7 @@ Only needed if `retentionPolicy` has been removed. Run Barman's own command from
 ```sh
 kubectl -n <ns> run barman-prune --rm -it --restart=Never \
   --image=ghcr.io/cloudnative-pg/plugin-barman-cloud-sidecar:v0.15.1 \
-  --overrides='{"metadata":{"annotations":{"k8s.v1.cni.cncf.io/networks":"cnpg-system/storage-network"}},"spec":{"containers":[{"name":"barman-prune","image":"ghcr.io/cloudnative-pg/plugin-barman-cloud-sidecar:v0.15.1","envFrom":[{"secretRef":{"name":"<name>-backup"}}],"command":["python3","-c","import os;os.environ.update(AWS_ACCESS_KEY_ID=os.environ[\"ACCESS_KEY_ID\"],AWS_SECRET_ACCESS_KEY=os.environ[\"ACCESS_SECRET_KEY\"]);os.execvp(\"barman-cloud-backup-delete\",[\"barman-cloud-backup-delete\",\"--endpoint-url\",\"https://s3-storage.home.kelch.io:9000\",\"--retention-policy\",\"RECOVERY WINDOW OF 14 DAYS\",\"--dry-run\",\"s3://k8s-prod-<name>/\",\"<serverName>\"])"]}]}}'
+  --overrides='{"metadata":{"annotations":{"k8s.v1.cni.cncf.io/networks":"cnpg-system/storage-network"}},"spec":{"containers":[{"name":"barman-prune","image":"ghcr.io/cloudnative-pg/plugin-barman-cloud-sidecar:v0.15.1","envFrom":[{"secretRef":{"name":"<name>-backup"}}],"command":["python3","-c","import os;os.environ.update(AWS_ACCESS_KEY_ID=os.environ[\"ACCESS_KEY_ID\"],AWS_SECRET_ACCESS_KEY=os.environ[\"ACCESS_SECRET_KEY\"]);os.execvp(\"barman-cloud-backup-delete\",[\"barman-cloud-backup-delete\",\"--endpoint-url\",\"https://s3-storage.home.kelch.io:9000\",\"--retention-policy\",\"RECOVERY WINDOW OF 30 DAYS\",\"--dry-run\",\"s3://k8s-prod-<name>/\",\"<serverName>\"])"]}]}}'
 ```
 
 Remove `--dry-run` once the list is right.
