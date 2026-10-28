@@ -106,7 +106,8 @@ today it sees the masqueraded Talos node rather than the Bambuddy pod.
 ## Backup and restore drill
 
 Both the CNPG data PVC and the archive PVC inherit Longhorn's daily and weekly
-backup jobs. Leave Bambuddy's scheduled local backup disabled until a separate
+backup jobs. The database also has continuous WAL archiving and daily base
+backups; see [cnpg-backup-restore](cnpg-backup-restore.md). Leave Bambuddy's scheduled local backup disabled until a separate
 NFS-backed backup path is mounted. A complete portable backup contains the
 database and every data directory; keeping its default five retained copies
 under `/app/data/backups` can consume several times the live archive capacity.

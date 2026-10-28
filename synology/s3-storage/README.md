@@ -1,8 +1,6 @@
 # S3 storage on Athena
 
-The lab's S3 object store. Its first buckets hold the CloudNativePG backups from `k8s-prod`. [versitygw](https://github.com/versity/versitygw) 1.8.0 stores each object as a plain file on the `object-storage` share, and a Traefik container in front of it terminates HTTPS with a Let's Encrypt certificate. The decisions are recorded in [home-lab#224](https://github.com/kelchm/home-lab/issues/224), and the database side is [home-lab#816](https://github.com/kelchm/home-lab/pull/816).
-
-The [off-site job](../offsite-backup/README.md) does not read this share yet. Mounting a share that does not exist stops that job's container from starting, so the source is added with the database side, after the share has been created and checked on Athena.
+The lab's S3 object store. Its first buckets hold the CloudNativePG backups from `k8s-prod`. [versitygw](https://github.com/versity/versitygw) 1.8.0 stores each object as a plain file on the `object-storage` share, and a Traefik container in front of it terminates HTTPS with a Let's Encrypt certificate. The decisions are recorded in [home-lab#224](https://github.com/kelchm/home-lab/issues/224), and the database side is in the [CloudNativePG backup runbook](../../docs/runbooks/cnpg-backup-restore.md). The [off-site job](../offsite-backup/README.md) snapshots the share to Backblaze B2 once a day.
 
 doco-cd deploys this project from `main`; the [Synology README](../README.md) describes the deployment model, rollback, and break-glass apply.
 
@@ -33,7 +31,7 @@ The share is not tied to one system. A bucket is named `<system>-<workload>` and
 
 versitygw is not published. Only Traefik listens, and it forwards to the gateway over the project's private network. The gateway's admin API listens on the container's loopback, so it is reachable only with `docker exec`.
 
-The endpoint is on the storage VLAN only. Pods on `k8s-prod` cannot reach that VLAN through Cilium, which masquerades pod traffic only on the node's primary interface: measured on 2026-10-12, an ordinary pod timed out on `10.32.25.5:2049` and `:8090`. The database side gives the database pods a second interface on the storage bridge, from a `cnpg-system/storage-network` attachment, with addresses in `10.32.25.160/28`. A scratch database pod attached that way connected to both ports.
+The endpoint is on the storage VLAN only. Pods on `k8s-prod` cannot reach that VLAN through Cilium, which masquerades pod traffic only on the node's primary interface: measured on 2026-10-12, an ordinary pod timed out on `10.32.25.5:2049` and `:8090`. The database pods therefore carry a second interface on the storage bridge, from the [`cnpg-system/storage-network`](../../kubernetes/apps/cnpg-system/plugin-barman-cloud/app/networkattachmentdefinition.yaml) attachment, with addresses in `10.32.25.160/28`. A scratch database pod attached that way connected to both ports.
 
 ## Credentials
 
