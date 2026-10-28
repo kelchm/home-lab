@@ -106,6 +106,7 @@ jobs:
               - 'network/**'
             scripts:
               - '.github/workflows/repository-validation.yaml'
+              - '.github/workflows/kanidm-ceiling-sync.yaml'
               - '.mise.toml'
               - '.renovaterc.json5'
               - '.shellcheckrc'
@@ -574,7 +575,9 @@ jobs:
 
       - name: Validate Kanidm ceiling sync
         if: needs.pre-job.outputs.scripts_changed == 'true'
-        run: scripts/ci/test-sync-kanidm-version-ceiling.sh
+        run: |
+          scripts/ci/test-sync-kanidm-version-ceiling.sh
+          scripts/ci/test-publish-kanidm-version-ceiling.sh
 
       - name: Test bootstrap scripts
         if: needs.pre-job.outputs.scripts_changed == 'true'
