@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -217,6 +218,33 @@ def test_unknown_locks_and_new_fields_are_not_silently_skipped(source):
     edit_json(manifest(source, "qwen1"), ("new_dependency",), "main")
     with pytest.raises(validator.InvalidManifest, match="unexpected.*new_dependency"):
         validator.validate_repository(source)
+
+
+@pytest.mark.parametrize("suffix,nested", [(".yml", False), (".yaml", True), (".yml", True)])
+def test_recursive_yaml_and_yml_recipes_cannot_bypass_validation(source, suffix, nested):
+    original = recipe_for(source, "glm")
+    recipe = yaml.safe_load(original.read_text())
+    folder = original.parent / "variants" if nested else original.parent
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / (original.stem + "-variant" + suffix)
+    recipe["metadata"]["profile"] = path.stem
+    recipe["mods"] = [os.path.relpath((original.parent / ref).resolve(), folder) for ref in recipe["mods"]]
+    path.write_text(yaml.safe_dump(recipe))
+    assert all(validator.validate_repository(source))
+    recipe["container"] = "ghcr.io/example/glm:latest"
+    path.write_text(yaml.safe_dump(recipe))
+    with pytest.raises(validator.InvalidManifest, match="container.*disagrees"):
+        validator.validate_repository(source)
+
+
+@pytest.mark.parametrize("directory", ["benchmarks", "mods", "tests", "plugins"])
+def test_recipe_discovery_skips_nonrecipe_trees(source, directory):
+    folder = source / directory
+    if directory == "mods":
+        folder /= MODS["readiness"]
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "not-a-recipe.yml").write_text("not a recipe\n")
+    assert all(validator.validate_repository(source))
 
 
 def test_a_new_checksum_only_mod_needs_an_explicit_supported_shape(source):

@@ -376,7 +376,8 @@ def validate_repository(root=ROOT):
                 images[reference] = config_id  # Same ID under several aliases is valid.
         except (ValueError, KeyError, TypeError, OSError) as exc:
             raise InvalidManifest(f"{manifest.relative_to(root)}: {exc}") from exc
-    recipes = sorted(path for path in root.glob("*/*.yaml") if path.parent.name != "benchmarks")
+    recipes = sorted(path for extension in ("*.yaml", "*.yml") for path in root.rglob(extension)
+                     if path.relative_to(root).parts[0] not in {"benchmarks", "mods", "tests", "plugins"})
     require(bool(recipes), str(root), "no owning recipes found")
     for path in recipes:
         try:
