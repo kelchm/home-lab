@@ -24,6 +24,8 @@ Use a constraint when some updates remain acceptable, approval when updates need
 
 ## CI workflow images
 
+Eligible updates to the Renovate image in Repository Validation use PR auto-merge with tests required. This exception to branch auto-merge lets the workflow's internal-API regression harness check compatibility before a new Renovate image lands.
+
 The workflow image custom manager extracts tagged, digest-pinned images written on their own line in multiline `docker run` commands under `.github/workflows/`. Folded YAML (`>-`) and literal shell continuations (`|` with `\`) are supported. Keep new inline images in that form; the native GitHub Actions manager owns `uses: docker://` references. The repository configuration job checks extraction and replacement with the actual Renovate version pinned in the workflow.
 
 The Flate render action and diff command are one `Flate CI image` group across both managers. Both references must start at the same tag and digest, wait three days, and pass CI and review; this group overrides GitHub Actions auto-merge. A minimum group size of two withholds a new branch if either reference has no eligible update. The regression test also rejects manual drift and exercises digest, patch, minor and major replacements in one branch.

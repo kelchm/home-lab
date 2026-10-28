@@ -178,6 +178,16 @@
       ignoreTests: true,
     },
     {
+      // The workflow test imports Renovate internals; check compatibility before a bump lands.
+      description: "Renovate CI image: test before merging",
+      matchManagers: ["github-actions"],
+      matchDatasources: ["docker"],
+      matchFileNames: [".github/workflows/repository-validation.yaml"],
+      matchPackageNames: ["ghcr.io/renovatebot/renovate"],
+      automergeType: "pr",
+      ignoreTests: false,
+    },
+    {
       // The render action and inline diff command must use one reviewed image.
       // Override the GitHub Actions auto-merge policy for both managers.
       description: "Flate CI: update render and diff together",
