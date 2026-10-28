@@ -7,8 +7,10 @@ that the native throughput profile does not cover.
 """
 import argparse
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 import json
 from pathlib import Path
+import socket
 import subprocess
 import threading
 import time
@@ -84,6 +86,36 @@ class Campaign:
         # Decode once; the measured API prompt count includes the chat template.
         return prefix + self.tokenizer.decode(tokens, skip_special_tokens=False)
 
+    @contextmanager
+    def _interrupt_on_cancel(self, response):
+        """Interrupt urllib body reads, including incomplete lines and HTTP chunks.
+
+        Once response headers arrive, check cancellation every 100 ms while this
+        process is scheduled. Connection/header waits still use --timeout.
+        """
+        # urllib's HTTP(S) response owns a buffered SocketIO. Cross-thread close()
+        # waits for its reader lock; shutdown() wakes the read without taking it.
+        # Keep normal urllib buffering/parsing and let the request thread close it.
+        sock = response.fp.raw._sock
+        done = threading.Event()
+
+        def interrupt():
+            while not done.wait(0.1):
+                if self.cancel.is_set():
+                    try:
+                        sock.shutdown(socket.SHUT_RDWR)
+                    except OSError:
+                        pass  # The response may already have closed at EOF.
+                    return
+
+        watcher = threading.Thread(target=interrupt, name="long-session-cancel")
+        watcher.start()
+        try:
+            yield
+        finally:
+            done.set()
+            watcher.join()
+
     def request(self, content, limit=256, expected=None, case=None, min_completion=0):
         body = {"model": self.args.model, "messages": [{"role": "user", "content": content}],
                 "temperature": 0, "seed": self.args.seed, "max_tokens": limit, "stream": True,
@@ -101,10 +133,13 @@ class Campaign:
                                          data=json.dumps(body).encode(), headers={"Content-Type": "application/json"})
         stream_error = None
         try:
-            with urllib.request.urlopen(request, timeout=self.args.timeout) as response:
+            if self.cancel.is_set():
+                raise RuntimeError("Campaign aborted")
+            with (urllib.request.urlopen(request, timeout=self.args.timeout) as response,
+                  self._interrupt_on_cancel(response)):
                 for line in response:
                     if self.cancel.is_set():
-                        raise RuntimeError("Campaign aborted: " + self.failures[-1])
+                        break
                     if not line.startswith(b"data:"):
                         continue
                     payload = line[5:].strip()
@@ -128,6 +163,11 @@ class Campaign:
                             chunks.append(value)
         except Exception as error:
             stream_error = error
+        if self.cancel.is_set():
+            # Socket shutdown can surface as EOF or a transport error. Preserve one
+            # cancellation outcome and the already-parsed content in either case.
+            reason = self.failures[-1] if self.failures else "cancellation requested"
+            stream_error = RuntimeError("Campaign aborted: " + reason)
         ended = time.monotonic()
         text = "".join(chunks)
         completion = (usage or {}).get("completion_tokens", 0)
