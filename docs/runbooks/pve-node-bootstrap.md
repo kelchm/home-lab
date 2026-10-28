@@ -49,7 +49,7 @@ Ports 1–3 use the VLAN 20 access profile. Ports 13–15 use `pve-guest-trunk`,
 ## Preflight
 
 1. Unlock the operator SSH key provider and verify non-interactive access to GLKVM and Athena before starting a reboot.
-2. Open the PiKVM video page and keep it open. GLKVM starts `ustreamer` on demand and stops it shortly after the last authenticated viewer disconnects.
+2. Open the PiKVM video page to watch the sequence. Scripted captures don't need it: `capture-screen.sh` starts its own short-lived stream when no viewer is open.
 3. Verify the PXE services from a VLAN 20 client:
 
    ```sh
@@ -143,7 +143,7 @@ Before moving to the next node:
 1. Reboot without intervening at the console and confirm the host boots from its NVMe installation.
 2. Verify the expected hostname, management address, PVE UI on TCP 8006, and SSH host key. Replace temporary DHCP or qualification-era known-host entries deliberately.
 3. Complete the PVE plan's NIC inventory, RTL8125 link test, storage burn-in, backup/restore, reboot, and cold-power gates.
-4. Capture the final console and record the verified downstream KVM port. Keep the viewer open while running:
+4. Capture the final console and record the verified downstream KVM port:
 
    ```sh
    devices/glkvm/capture-screen.sh /tmp/pve-bootstrap.jpg
@@ -153,7 +153,7 @@ Before moving to the next node:
 
 ## Troubleshooting
 
-- **Viewer works but scripted capture fails:** keep an authenticated PiKVM video viewer open so `ustreamer` remains running, then retry the capture.
+- **Viewer works but scripted capture fails:** check SSH to GLKVM first. With no viewer open, the helper needs `/dev/video0` to itself: a leftover capture shows in `pgrep -af capture-screen.sock` on GLKVM and can be killed, while kvmd's own stream is the one without that socket name. When the port is dark, as during POST or shutdown or on a blanked console, the helper says `no HDMI signal on the selected port`.
 - **Keyboard disappears in BIOS:** ensure GLKVM virtual media/mass storage is disabled, reconnect the viewer if needed, and cold-power-cycle physically if the composite device remains wedged.
 - **POST ignores F12:** use held Esc for 30 seconds, then choose F12 from the Startup Menu.
 - **iPXE prompt drops characters:** restart the PXE sequence instead of typing a long `chain` command.
