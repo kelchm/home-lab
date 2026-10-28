@@ -93,6 +93,17 @@
       allowedVersions: "<8.0.0",
     },
     {
+      // apt-metrics reads the host's apt and dpkg state, so its image must match
+      // the Sparks' Ubuntu release (DGX OS 7 is 24.04). Digest refreshes still
+      // flow. Revisit when the Sparks move to a new Ubuntu release, or when a
+      // different image release is qualified against the host's apt state.
+      description: "Spark apt helpers: hold the image at the hosts' Ubuntu release",
+      matchDatasources: ["docker"],
+      matchFileNames: ["sparks/monitoring/compose.yaml"],
+      matchPackageNames: ["docker.io/library/ubuntu"],
+      allowedVersions: "/^24\\.04$/",
+    },
+    {
       // Kaniop rejects kanidm server minors newer than its bundled client SDK.
       // Ceiling value is machine-managed by the "Kanidm Ceiling Sync" workflow.
       description: "kanidm/server: cap at the minor supported by kaniop's SDK",

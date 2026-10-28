@@ -204,7 +204,7 @@ Limits:
 
 - Security is judged by archive. Fixes that Proxmox or NVIDIA publish in their ordinary repositories count as ordinary upgrades.
 - Reboot-required isn't collected.
-- `apt-metrics` uses the stock image of the host's release (Debian 13 on PVE, Ubuntu 24.04 on the Sparks). Change it when a host moves to a new major release.
+- `apt-metrics` uses the stock image of the host's release (Debian 13 on PVE, Ubuntu 24.04 on the Sparks). Change it when a host moves to a new major release. A rule in `.renovaterc.json5` holds the Sparks' image at `24.04` and still refreshes its digest; change that rule with the image.
 - The NixOS Pis aren't covered.
 
 ## Change, pause, rotate, remove
