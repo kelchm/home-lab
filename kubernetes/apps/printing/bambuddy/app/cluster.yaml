@@ -10,7 +10,8 @@ spec:
   instances: 1
   imageName: ghcr.io/cloudnative-pg/postgresql:18.6-system-trixie
   storage:
-    size: 5Gi
+    # Room for about 4 days of unarchived WAL while the backup store is down.
+    size: 20Gi
     # New PVCs use this tier; existing volumes require a separate replica-count patch.
     storageClass: longhorn-3replica
   resources:
