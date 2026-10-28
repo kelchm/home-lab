@@ -115,7 +115,7 @@ ssh root@10.32.20.10 '
 
 Expect `0x00` three times and only `hid.usb0`, `hid.usb1`, and `hid.usb2` linked. Then verify actual channel selection and one harmless key at a safe screen. USB state `configured`, an existing `/dev/hidg0`, and healthy Prometheus metrics do not prove that input works.
 
-If switch clicks hang, inspect `ps -ef` and each helper's `/proc/<pid>/wchan`. A helper blocked in `f_hidg_write` can hold `/run/kvmd-kvm-switch.lock` indefinitely while later clicks queue behind it. Stop those specific `kvm-switch` processes before reconnecting USB so old channel selections cannot fire after recovery. The helpers have no write or lock timeout ([#928](https://github.com/kelchm/home-lab/issues/928)). Power-cycling the switch, rebooting the GLKVM, changing USB identity, and unlinking the mice did not restore input while the class was `EF/02/01`.
+If switch clicks hang, inspect `ps -ef` and each helper's `/proc/<pid>/wchan`. An old helper blocked in `f_hidg_write` can hold `/run/kvmd-kvm-switch.lock` indefinitely while later clicks queue behind it. Stop those specific `kvm-switch` processes before reconnecting USB so their remaining userspace sequences cannot resume after recovery. The manually installed helpers remain unbounded until the [bounded helper candidate](#bounded-hid-helper-candidate) is separately installed and accepted under [#928](https://github.com/kelchm/home-lab/issues/928). Power-cycling the switch, rebooting the GLKVM, changing USB identity, and unlinking the mice did not restore input while the class was `EF/02/01`.
 
 ## Remote console helpers
 
@@ -139,6 +139,24 @@ not assumed to survive a factory reset or every future update; Git remains
 authoritative. Convenience copies in `/tmp` are not authoritative and disappear
 on reboot. All HID tools share `/run/kvmd-kvm-switch.lock`; do not run two input
 sequences concurrently.
+
+### Bounded HID helper candidate
+
+Repository code now shares [`hid_input.py`](hid_input.py) between all three helpers. This candidate has offline verification only; it has not been installed or exercised on the appliance. Install the module beside the extensionless helper executables in `/etc/kvmd/user/bin/`. It uses Python 3.12's standard library, retains the existing CLI/channel commands, keeps the same advisory lock inode, and opens the HID descriptor with `O_NONBLOCK`.
+
+Deadlines use monotonic time from each helper's `main()` entry, not from an HTTP request or eventual lock acquisition. Lock acquisition, device open, and the first report share a one-second start deadline. Every normal report has at most one second for slot readiness, nonblocking submission, and subsequent slot readiness. A cumulative deadline allows two seconds of overhead, plus the deliberate pauses already performed and 50 ms per completed report slot; retries never reset it. This leaves normal bus/processing time for long text and POST holds while preventing a fresh one-second allowance from accumulating at every stalled record. Final cleanup gets a separate 250 ms window and can submit only an all-zero release report. Short writes are errors, never retried as a report tail. Any failure stops the remaining sequence, returns nonzero, and has no automatic retry or reopen. Cleanup failure is reported without hiding the original failure, and both descriptors are closed.
+
+Under normal scheduling and the documented driver behavior, total helper time is bounded by `P + 2 + 0.05*N + 0.25` seconds, where `P` is the deliberate pause time and `N` counts normal report slots completed before cleanup. A switch has `P=0.725` and at most seven such reports, so its conservative userspace allowance is 3.325 seconds. Typing `K` keys with explicit sleeps totaling `S` has `P=0.225*K+S`, `N<=1+2*K`, and a bound of `2.30+0.325*K+S`. Hold repeats still use 400 ms down / 100 ms released cycles for the requested monotonic duration, including the final cycle; a 25-second hold permits up to 50 cycles and a conservative 32.25-second allowance. Lock contention fails within one second from helper entry. A completely unavailable first slot returns within approximately 1.25 seconds including unsuccessful release cleanup. These are userspace deadline limits, not hard real-time guarantees against arbitrary kernel/filesystem faults, scheduler stalls, or process suspension.
+
+The boundary matters: Rockchip's [Linux 6.1 HID implementation](https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/drivers/usb/gadget/function/f_hid.c#L419-L550) returns `EAGAIN` for an occupied slot under `O_NONBLOCK`, then queues writes asynchronously with `usb_ep_queue`. Its completion callback clears `write_pending` even on completion error; `POLLOUT` establishes slot readiness, **not host delivery or a completed switch**. Its file release does not cancel a queued USB report. This is primary-source reasoning about that driver family, not a new verification of the exact shipped appliance kernel. Helper expiry stops further non-neutral userspace input, but close, timeout, and HTTP abort cannot retract an already accepted USB report. Failure after submission is ambiguous; verify the selected host and key state before any new request. Neutral cleanup is best effort and cannot guarantee release while USB is unavailable.
+
+Offline regression tests use a one-slot asynchronous fake driver that deliberately retains accepted reports after close, virtual clocks, temporary lock files, and a full nonblocking pipe. They never open a real HID or USB interface:
+
+```sh
+python3 -m unittest discover -s devices/glkvm -p 'test_hid_input.py' -v
+```
+
+For a future authorized helper-only rollout, first freeze all input request sources and inspect/stop old queued helper processes at a harmless host screen. Stage and compile all four files, take a run-specific backup of the three executables and any existing module, then acquire `/run/kvmd-kvm-switch.lock` with `LOCK_EX|LOCK_NB` before changing files; stop if busy. Install the module first and replace each helper from a staged file while retaining that same lock inode. Check imports and hashes before releasing the lock. No kvmd restart, USB rebuild, firmware change, or host reboot is needed. Normal switching and one harmless key require separate live acceptance, with on-screen host confirmation; do not switch away from a Spark during its early-boot window described in the [Spark runbook](../../docs/runbooks/dgx-spark-bringup.md#updating-dgx-os-and-firmware). Rollback restores all three helpers and the module from that exact backup under the same quiescent/locked conditions, removing the module only if it was previously absent. Restoring old helpers also restores their unbounded-wait behavior. Issue #928 stays open through installation and acceptance; optional Hosts/native Play/Direct/USB acceptance remains in [#419](https://github.com/kelchm/home-lab/issues/419).
 
 ## Monitoring
 
@@ -230,6 +248,7 @@ ssh root@10.32.20.10 'command -v timeout >/dev/null && command -v pkill >/dev/nu
 scp -O devices/glkvm/kvm-switch.py root@10.32.20.10:/tmp/kvm-switch
 scp -O devices/glkvm/hid-type.py root@10.32.20.10:/tmp/hid-type
 scp -O devices/glkvm/hid-hold-key.py root@10.32.20.10:/tmp/hid-hold-key
+scp -O devices/glkvm/hid_input.py root@10.32.20.10:/tmp/hid_input.py
 scp -O devices/glkvm/override.yaml root@10.32.20.10:/tmp/override.yaml
 
 ssh root@10.32.20.10 '
@@ -239,6 +258,8 @@ ssh root@10.32.20.10 '
         cp /etc/kvmd/override.yaml \
             /etc/kvmd/user/backups/override.yaml.before-kvm-controls
     fi
+    cp /tmp/hid_input.py /etc/kvmd/user/bin/hid_input.py
+    chmod 0644 /etc/kvmd/user/bin/hid_input.py
     cp /tmp/kvm-switch /etc/kvmd/user/bin/kvm-switch
     cp /tmp/hid-type /etc/kvmd/user/bin/hid-type
     cp /tmp/hid-hold-key /etc/kvmd/user/bin/hid-hold-key
@@ -254,7 +275,7 @@ ssh root@10.32.20.10 '
         -g "pid /run/kvmd/nginx-test.pid; user root; error_log stderr;"
     cp /rom/etc/kvmd/nginx-kvmd.conf /etc/kvmd/nginx-kvmd.conf
     rm -f /tmp/kvm-switch /tmp/hid-type /tmp/hid-hold-key \
-        /tmp/override.yaml
+        /tmp/hid_input.py /tmp/override.yaml
     restore_kvmd() {
         if ! pgrep -f "[k]vmd/main" >/dev/null; then
             /etc/init.d/S98kvmd start
@@ -304,7 +325,8 @@ ssh root@10.32.20.10 '
     python3 -c "from pathlib import Path; assert sorted(p.name for p in Path(\"/sys/kernel/config/usb_gadget/rockchip/configs/b.1\").iterdir() if p.is_symlink()) == [\"hid.usb0\", \"hid.usb1\", \"hid.usb2\"]"
     test -c /dev/hidg0
     python3 -m py_compile /etc/kvmd/user/bin/kvm-switch \
-        /etc/kvmd/user/bin/hid-type /etc/kvmd/user/bin/hid-hold-key
+        /etc/kvmd/user/bin/hid-type /etc/kvmd/user/bin/hid-hold-key \
+        /etc/kvmd/user/bin/hid_input.py
 '
 devices/glkvm/capture-screen.sh /tmp/kvm-snap.jpg
 ```
@@ -346,7 +368,7 @@ The repository is the recovery source even if a firmware update wipes both
 
 ### Bootstrap after a wipe
 
-Restore the appliance's network configuration and SSH access through the vendor UI first. Confirm `ssh root@10.32.20.10` works; this firmware uses Dropbear, so the `scp -O` commands in **Apply** are intentional. Then run the complete **Apply** procedure from a repository checkout. It recreates the user directories, installs all three HID tools, restores the committed appliance override and the installed firmware's stock nginx configuration, and restarts the affected services. Finish with the non-interactive checks and safe live-input test above, then install the [monitoring](#monitoring) export patch.
+Restore the appliance's network configuration and SSH access through the vendor UI first. Confirm `ssh root@10.32.20.10` works; this firmware uses Dropbear, so the `scp -O` commands in **Apply** are intentional. Then run the complete **Apply** procedure from a repository checkout. It recreates the user directories, installs all three HID tools and their shared `hid_input.py` module, restores the committed appliance override and the installed firmware's stock nginx configuration, and restarts the affected services. Finish with the non-interactive checks and safe live-input test above, then install the [monitoring](#monitoring) export patch.
 
 Do not run `kvmd` itself over SSH, including `kvmd -M` to validate configuration. Unlike upstream PiKVM, firmware `V1.9.1 release1` started another daemon instead of performing a validation-only run.
 

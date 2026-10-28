@@ -7,10 +7,10 @@ Usage: hid-type.py TOKEN [TOKEN...]
   text, and ``sleep:SECONDS`` to pause.
 """
 
-import fcntl
-import os
 import sys
 import time
+
+from hid_input import HidKeyboard, run
 
 
 DEVICE = "/dev/hidg0"
@@ -82,59 +82,48 @@ for base, symbol in [
     SHIFTED[symbol] = PLAIN[base]
 
 
-def write_report(fd: int, modifier: int = 0, key: int = 0) -> None:
-    report = bytes([modifier, 0, key, 0, 0, 0, 0, 0])
-    if os.write(fd, report) != len(report):
-        raise OSError("short write to HID gadget")
-
-
-def tap(fd: int, modifier: int = 0, key: int = 0) -> None:
-    write_report(fd, modifier, key)
-    time.sleep(KEY_HOLD)
-    write_report(fd)
-    time.sleep(INTER_KEY)
+def tap(keyboard: HidKeyboard, modifier: int = 0, key: int = 0) -> None:
+    keyboard.write_report(modifier, key)
+    keyboard.pause(KEY_HOLD)
+    keyboard.write_report()
+    keyboard.pause(INTER_KEY)
 
 
 def main() -> int:
+    requested_at = time.monotonic()
     tokens = sys.argv[1:]
     if not tokens:
         raise SystemExit("usage: hid-type.py TOKEN [TOKEN...]")
 
-    with open(LOCK_FILE, "w", encoding="ascii") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
-        fd = os.open(DEVICE, os.O_WRONLY)
-        try:
-            write_report(fd)
-            for token in tokens:
-                if token.startswith("sleep:"):
-                    time.sleep(float(token[6:]))
-                elif token.startswith("type:"):
-                    for char in token[5:]:
-                        if char in PLAIN:
-                            tap(fd, 0, PLAIN[char][1])
-                        elif char in SHIFTED:
-                            tap(fd, 0x02, SHIFTED[char][1])
-                        else:
-                            raise SystemExit(f"untypable char: {char!r}")
-                elif token.lower() in NAMED:
-                    tap(fd, 0, NAMED[token.lower()])
-                elif token.lower().startswith("ctrl-alt-"):
-                    rest = token.lower()[9:]
-                    if rest in NAMED:
-                        key = NAMED[rest]
-                    elif rest in PLAIN:
-                        key = PLAIN[rest][1]
+    with HidKeyboard(requested_at, DEVICE, LOCK_FILE) as keyboard:
+        keyboard.write_report()
+        for token in tokens:
+            if token.startswith("sleep:"):
+                keyboard.pause(float(token[6:]))
+            elif token.startswith("type:"):
+                for char in token[5:]:
+                    if char in PLAIN:
+                        tap(keyboard, 0, PLAIN[char][1])
+                    elif char in SHIFTED:
+                        tap(keyboard, 0x02, SHIFTED[char][1])
                     else:
-                        raise SystemExit(f"unknown Ctrl-Alt key: {rest}")
-                    tap(fd, 0x05, key)
+                        raise SystemExit(f"untypable char: {char!r}")
+            elif token.lower() in NAMED:
+                tap(keyboard, 0, NAMED[token.lower()])
+            elif token.lower().startswith("ctrl-alt-"):
+                rest = token.lower()[9:]
+                if rest in NAMED:
+                    key = NAMED[rest]
+                elif rest in PLAIN:
+                    key = PLAIN[rest][1]
                 else:
-                    raise SystemExit(f"unknown token: {token}")
-        finally:
-            write_report(fd)
-            os.close(fd)
+                    raise SystemExit(f"unknown Ctrl-Alt key: {rest}")
+                tap(keyboard, 0x05, key)
+            else:
+                raise SystemExit(f"unknown token: {token}")
 
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(run(main))
