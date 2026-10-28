@@ -302,15 +302,12 @@ spec:
             summary: VictoriaLogs has no observable collector ingestion
             description: No OTLP rows from Fluent Bit have reached the production VictoriaLogs backend for 15 minutes, or the ingestion metric is absent. Check collector buffers, VictoriaLogs availability, and vmagent scraping.
 
-        # The prior seven-day peak was 819 streams/hour. Fluent Bit's stream
-        # fields are one identity per service/namespace/pod/container/node, with
-        # no per-event values. The collector cutover adds one new stream per
-        # running container; rebaseline 1500/hour after it.
+        # Normal peak is about 200/hour: each UTC day re-counts its active streams, plus rollouts.
         - alert: VictoriaLogsStreamChurnHigh
-          expr: increase(vl_streams_created_total[1h]) > 1500
+          expr: increase(vl_streams_created_total[1h]) > 500
           for: 15m
           labels:
             severity: warning
           annotations:
             summary: VictoriaLogs stream creation is abnormally high
-            description: More than 1,500 streams were created in one hour. Look for volatile stream fields, duplicated collectors, or runaway pod churn.
+            description: More than 500 streams were created in one hour. Look for volatile stream fields, duplicated collectors, or runaway pod churn.
