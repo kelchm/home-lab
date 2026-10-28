@@ -5,6 +5,11 @@ model:
   base_url: http://10.32.21.31:8888/v1
   api_mode: chat_completions
 
+# Hermes picks these prompt blocks by model name, and `spark` matches no family.
+agent:
+  tool_use_enforcement: true
+  execution_guidance: true
+
 mcp_servers:
   mcphub_hacker_news:
     url: https://mcphub.home.kelch.io/mcp/hacker-news
