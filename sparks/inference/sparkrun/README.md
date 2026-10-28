@@ -499,13 +499,17 @@ These are the settings that wrote the current inputs on October 17, with this la
 
 ### Build
 
-The image is built on any linux/arm64 Docker daemon, never on a serving Spark, where the Zig and `nvcc` build would compete with the engine for host memory. The mod's `build/build.sh` fetches the engine and inputs at the lock's commits, applies the patches and builds on NVIDIA PyTorch 26.07 by digest, on the workstation's Colima `tf-build` profile:
+The image is built on any linux/arm64 Docker daemon, never on a serving Spark, where the Zig and `nvcc` build would compete with the engine for host memory. The shared [`build-deepseek-image.sh`](build-deepseek-image.sh) entrypoint reads the current mod's lock, checks its frozen files, fetches the engine and inputs at the locked commits, applies the patches and builds on NVIDIA PyTorch 26.07 by digest, on the workstation's Colima `tf-build` profile:
 
 ```sh
-DOCKER_CONTEXT=colima-tf-build sparks/inference/sparkrun/mods/bertholomus-tensorfold-dsv41-2970bcd-mia-fixes/build/build.sh
+DOCKER_CONTEXT=colima-tf-build sparks/inference/sparkrun/build-deepseek-image.sh
 ```
 
-The recipe's `container` and the lock's `image_id` are the image ID the head reports, which is the image's config digest; Colima's containerd store shows the index digest instead. To read it before loading, `colima ssh -p tf-build -- sudo ctr -n moby images ls` gives the index digest; `ctr -n moby content get` on that lists the arm64 manifest, and that manifest's `config.digest` is the ID. The October 25 build is `sha256:00cbfac0…`. A rebuild can produce another ID; record it in both before launching.
+The helper builds under a unique `home-lab-deepseek-candidate` tag and compares Docker's inspected `.Id` with the lock's `image_id` before changing the qualified tag. Only an exact match is tagged, using the accepted immutable ID as the source. Build or inspection failure and image-ID drift leave the qualified tag untouched. It removes the temporary tag and build context on exit; a failed tag cleanup reports the temporary tag for manual removal. The mod's historical `build/build.sh` remains frozen for provenance and tags directly without this guard; use the shared entrypoint for all current rebuilds.
+
+The recipe's `container` and the lock's `image_id` are the image ID the head reports, which is the image's config digest; Colima's containerd store shows the index digest instead. To read it before loading, `colima ssh -p tf-build -- sudo ctr -n moby images ls` gives the index digest; `ctr -n moby content get` on that lists the arm64 manifest, and that manifest's `config.digest` is the ID. The October 25 build is `sha256:00cbfac0…`. A daemon reporting a different ID is refused too; do not replace the qualified config digest with an index digest to bypass the check.
+
+A rebuild can differ because APT and Python dependencies resolve at build time. The helper has no `--record` or acceptance override. To adopt different content, follow [Update a pinned mod](#update-a-pinned-mod): add a separately versioned mod and profile, choose a new image tag, record the reviewed candidate's config digest in the new lock and recipe, and qualify that new profile before adoption. Pass the new mod directory as the helper's sole argument to verify its build against that recorded ID. Preserve the existing profile, tag and frozen checksums as the rollback; a successful build-ID comparison alone does not qualify new content.
 
 ### Launch, stop and roll back
 
