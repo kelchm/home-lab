@@ -9,9 +9,10 @@ delete table inet sparkrun_api_access
 table inet sparkrun_api_access {
 	set clients {
 		type ipv4_addr
+		flags interval
 		counter
 		elements = {
-			10.32.10.244 comment "workstation",
+			10.32.10.0/24 comment "Main trusted clients",
 			10.32.21.100 comment "hermes-1",
 		}
 	}

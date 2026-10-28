@@ -19,9 +19,11 @@ UNIT = HOST_FILES / "sparkrun-api-access.service"
 HELPER = Path(__file__).with_name("api_access_netns.py")
 HOST = "10.32.21.31"
 PORT, OTHER_PORT = 8888, 9100
-CLIENTS = ["10.32.10.244", "10.32.21.100"]
+# Multiple Main devices, including subnet edges, must work without individual pins.
+CLIENTS = ["10.32.10.1", "10.32.10.244", "10.32.10.254", "10.32.21.100"]
+COUNTER_ENTRIES = {"10.32.10.0/24", "10.32.21.100"}
 # Unlisted sources: 10.32.21.101, spark-2 and the NAS's storage address.
-REFUSED = ["10.32.21.101", "10.32.21.32", "10.32.25.5"]
+REFUSED = ["10.32.21.101", "10.32.21.32", "10.32.25.5", "10.32.9.254", "10.32.11.1", "10.32.90.1", "10.32.99.1"]
 SBIN = os.pathsep.join([os.environ.get("PATH", ""), "/usr/sbin", "/sbin"])
 
 
@@ -78,8 +80,8 @@ def test_reloading_replaces_the_table(result):
     assert result["reload_identical"]
 
 
-def test_each_client_counts_its_own_packets(result):
-    assert set(result["counters"]) == set(CLIENTS)
+def test_each_allowed_network_or_host_counts_its_packets(result):
+    assert set(result["counters"]) == COUNTER_ENTRIES
     assert all(packets > 0 for packets in result["counters"].values())
 
 

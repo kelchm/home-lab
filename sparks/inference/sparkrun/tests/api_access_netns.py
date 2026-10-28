@@ -81,7 +81,11 @@ def counters(ruleset: dict) -> dict:
     for item in ruleset["nftables"]:
         for element in item.get("set", {}).get("elem", []):
             if isinstance(element, dict) and "counter" in element.get("elem", {}):
-                found[element["elem"]["val"]] = element["elem"]["counter"]["packets"]
+                value = element["elem"]["val"]
+                if isinstance(value, dict) and "prefix" in value:
+                    prefix = value["prefix"]
+                    value = f"{prefix['addr']}/{prefix['len']}"
+                found[value] = element["elem"]["counter"]["packets"]
     return found
 
 
