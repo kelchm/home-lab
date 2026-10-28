@@ -1,0 +1,263 @@
+# INACTIVE: prepared collector; no doco-cd registration or active healthcheck.
+# README.md covers the Takeout schedule, credentials, first deployment and upkeep.
+name: google-photos-takeout
+
+services:
+  collector:
+    profiles: ["inactive"]
+    image: docker.io/rclone/rclone:1.75.1@sha256:45401ad7410db1d67ffdb58e19059ad20b0d8e0285a60e38bbec55cc1019c7a5
+    # kelchm:users on Athena, the owner of the home directory the exports are written to.
+    user: "1026:100"
+    read_only: true
+    entrypoint: ["/bin/sh", "-c"]
+    # Compose interpolates single-dollar variables, so shell variables are written with two.
+    command:
+      - |
+        # BusyBox ash in the pinned image supports pipefail.
+        # shellcheck disable=SC3040
+        set -o errexit -o nounset -o pipefail
+        umask 077
+        export LC_ALL=C
+        VERSION=photos-v1
+
+        fail() { echo "ERROR: $$*" >&2; return 1; }
+
+        # Timestamp semantics still require real-export confirmation before activation.
+        export_time() {
+          stamp=$${1#takeout-}
+          stamp=$${stamp%%-*}
+          iso=$$(printf '%s' "$$stamp" | sed 's/^\([0-9]\{4\}\)\([0-9]\{2\}\)\([0-9]\{2\}\)T\([0-9]\{2\}\)\([0-9]\{2\}\)\([0-9]\{2\}\)Z$$/\1-\2-\3 \4:\5:\6/') || return 1
+          epoch=$$(date -u -d "$$iso" +%s) || return 1
+          [ "$$(date -u -d "@$$epoch" +%Y%m%dT%H%M%SZ)" = "$$stamp" ] || return 1
+          [ "$$epoch" -le "$$now" ] && [ "$$epoch" -gt 0 ] || return 1
+        }
+
+        # One atomic decision per name + source MD5 + size, with a classifier version.
+        # Old accepted identities remain evidence when same-name content changes.
+        record() {
+          decision=$$1
+          reason=$$2
+          pending="/work/state/decisions/.$$key.tmp"
+          if ! printf '%s %s %s %s\n' "$$VERSION" "$$decision" "$$epoch" "$$reason" > "$$pending" ||
+             ! mv -f "$$pending" "/work/state/decisions/$$key"; then
+            fail "state commit failed for $$name; preserve scratch and retry"
+            return 1
+          fi
+        }
+
+        prepare_state() {
+          mkdir -p /work/state /work/archives /exports || return 1
+          if [ ! -f /work/state/version ]; then
+            # No deployed legacy collector is recorded. Never infer success from old
+            # extracted.txt/last-arrival, or silently import exports after state loss.
+            existing=$$(find /work/state /work/archives /exports -mindepth 1 -print -quit) || return 1
+            if [ -n "$$existing" ]; then
+              fail 'unversioned/nonempty state or output: preserve all files, use new empty work/output paths and explicitly revalidate retained source archives; do not import last-arrival/extracted.txt'
+              return 1
+            fi
+            printf '%s\n' "$$VERSION" > /work/state/.version.tmp &&
+              mv /work/state/.version.tmp /work/state/version || return 1
+          fi
+          [ "$$(cat /work/state/version)" = "$$VERSION" ] || { fail 'unsupported state version; preserve and revalidate'; return 1; }
+          if [ -e /work/state/extracted.txt ] || [ -e /work/state/last-arrival ]; then
+            fail 'legacy state present; preserve and explicitly revalidate in empty paths'
+            return 1
+          fi
+          mkdir -p /work/state/decisions || return 1
+          # Acceptance records alone determine freshness; no second timestamp commit.
+          latest=0
+          for saved in /work/state/decisions/*; do
+            [ -e "$$saved" ] || continue
+            saved_key=$${saved##*/}
+            printf '%s\n' "$$saved_key" | grep -Eq '^takeout-[0-9]{8}T[0-9]{6}Z(-[0-9]+){1,2}\.zip\.[0-9a-f]{32}\.[0-9]+$$' || return 1
+            export_time "$${saved_key%%.zip.*}.zip" || { fail "invalid state identity $$saved_key"; return 1; }
+            saved_decision=$$(cat "$$saved") || return 1
+            printf '%s\n' "$$saved_decision" | grep -Eq "^$$VERSION (accepted|ignored|quarantined) $$epoch [a-z-]+$$" || { fail "invalid state record $$saved_key"; return 1; }
+            case "$$saved_decision" in
+              "$$VERSION accepted "*) [ "$$epoch" -le "$$latest" ] || latest=$$epoch ;;
+            esac
+          done
+        }
+
+        classify() {
+          # archive list is RAW, unlike :archive: (which hides unsafe paths). Its two
+          # formats have no escaping. Cross-check them: a newline continuation cannot
+          # both start with a size prefix and equal that same line with its prefix
+          # removed. Never classify a plain-line list alone.
+          rclone archive list "$$archive" > /tmp/sized || return 1
+          rclone archive list --plain "$$archive" > /tmp/names || return 1
+          awk '
+            !/^ *[0-9]+ / { exit 1 }
+            { size=$$1; sub(/^ *[0-9]+ /, ""); if (/\/$$/ && size != 0) exit 1; print }
+          ' /tmp/sized > /tmp/decoded || return 1
+          cmp -s /tmp/decoded /tmp/names || return 1
+          tr -d '\000-\011\013-\037\177' < /tmp/names > /tmp/clean || return 1
+          cmp -s /tmp/clean /tmp/names || return 1
+          # Reject cleaned/aliased paths, duplicates and file/directory collisions.
+          if grep -Eq '(^/|\\|(^|/)\.\.?(/|$$)|//)' /tmp/names; then return 1; fi
+          sed 's|/$$||' /tmp/names | sort | uniq -d > /tmp/duplicates || return 1
+          [ ! -s /tmp/duplicates ] || return 1
+          rclone archive list --plain --files-only "$$archive" > /tmp/files || return 1
+          # Only actual file members prove a product. Directory names prove nothing.
+          product=$$(awk '
+            /^Takeout\/$$/ { next }
+            /^Takeout\/Google Photos\// { next }
+            /^Takeout\/Timeline\// { next }
+            /^Takeout\/archive_browser\.html$$/ { next }
+            { bad=1 }
+            END { if (bad) exit 1 }
+          ' /tmp/names && awk '
+            /^Takeout\/Google Photos\/.+[^\/]$$/ { photos=1; next }
+            /^Takeout\/Google Photos\/[^\/]$$/ { photos=1; next }
+            /^Takeout\/Timeline\/.+[^\/]$$/ { timeline=1; next }
+            /^Takeout\/Timeline\/[^\/]$$/ { timeline=1; next }
+            /^Takeout\/archive_browser\.html$$/ { has_index=1; next }
+            { bad=1 }
+            END {
+              if (bad || (photos && timeline)) exit 1
+              # Until the real index schema is confirmed, hold all index-bearing parts.
+              if (has_index) print "index-unconfirmed"
+              else if (photos) print "photos"
+              else if (timeline) print "timeline"
+              else exit 1
+            }
+          ' /tmp/files) || return 1
+        }
+
+        process_archive() {
+          export_time "$$name" || { fail "invalid/future export timestamp: $$name"; return 1; }
+          key="$$name.$$fingerprint.$$size"
+          archive="/work/archives/$$name"
+          saved="/work/state/decisions/$$key"
+          if [ -f "$$saved" ]; then
+            saved_decision=$$(cat "$$saved") || return 1
+            case "$$saved_decision" in
+              "$$VERSION accepted "*)
+                echo "accepted identity already committed: $$name"
+                rm -f "$$archive" || return 1
+                return 0 ;;
+              "$$VERSION ignored "*) echo "ignored Timeline identity: $$name"; return 0 ;;
+            esac
+          fi
+          # --checksum prevents size/mtime-only reuse. Verify the cached bytes against
+          # the inventory identity too, so a changing source cannot inherit a decision.
+          rclone copyto "$$SOURCE/$$name" "$$archive" --checksum --drive-acknowledge-abuse || return 1
+          actual=$$(md5sum "$$archive") || return 1
+          [ "$${actual%% *}" = "$$fingerprint" ] && [ "$$(stat -c %s "$$archive")" = "$$size" ] || { fail "source/copy identity changed: $$name"; return 1; }
+          # Only ZIPs are eligible: archive commands otherwise auto-detect other formats.
+          magic=$$(od -An -tx1 -N4 "$$archive" | tr -d ' \n') || return 1
+          if [ "$$magic" != 504b0304 ] || ! classify; then
+            record quarantined unsafe-mixed-or-unknown || return 1
+            fail "quarantined unsafe, mixed or unknown archive: $$name (kept in scratch)"
+            return 1
+          fi
+          case "$$product" in
+            timeline) record ignored timeline || return 1; echo "ignored Timeline: $$name"; return 0 ;;
+            index-unconfirmed)
+              record quarantined index-unconfirmed || return 1
+              fail "index layout unconfirmed: $$name (kept outside Photos output)"
+              return 1 ;;
+          esac
+          # Unfiltered extraction CRC-reads EVERY file, including sidecars. No Photos
+          # filter can hide a second product or skip its corrupt body.
+          if ! rclone archive extract "$$archive" "/exports/$$stamp"; then
+            record quarantined extraction-failed || return 1
+            fail "extraction failed: $$name (retained for retry)"
+            return 1
+          fi
+          record accepted photos || return 1
+          accepted_this_run=$$((accepted_this_run + 1))
+          [ "$$epoch" -le "$$latest" ] || latest=$$epoch
+          echo "accepted Photos part: $$name, export=$$stamp (no whole-export completeness claim)"
+          rm -f "$$archive" || return 1
+        }
+
+        collect() {
+          now=$$(date -u +%s) || return 1
+          prepare_state || return 1
+          # CSV quotes ambiguous source names; the strict unquoted grammar rejects
+          # them rather than parsing newline-delimited paths. MD5 must be available.
+          rclone lsf "$$SOURCE" --max-depth 1 --files-only --include '/takeout-*.zip' \
+            --csv --format phs --hash MD5 --drive-skip-shortcuts --drive-acknowledge-abuse > /tmp/inventory || return 1
+          if ! awk -F, 'NF != 3 || $$1 !~ /^takeout-[0-9]{8}T[0-9]{6}Z(-[0-9]+){1,2}\.zip$$/ || $$2 !~ /^[0-9a-f]{32}$$/ || $$3 !~ /^[0-9]+$$/ { exit 1 }' /tmp/inventory; then
+            fail 'ambiguous source names, unsupported fingerprint or malformed archive filename'
+            return 1
+          fi
+          cut -d, -f1 /tmp/inventory | sort | uniq -d > /tmp/duplicates || return 1
+          [ ! -s /tmp/duplicates ] || { fail 'duplicate source names'; return 1; }
+          status=0
+          accepted_this_run=0
+          while IFS=, read -r name fingerprint size; do
+            process_archive || status=1
+          done < /tmp/inventory
+          echo "Photos parts accepted this run=$$accepted_this_run"
+          echo "latest accepted Photos export epoch=$$latest; now=$$now"
+          # Exactly 40 days is stale. Replays/late parts cannot move latest either way.
+          if [ "$$latest" -eq 0 ] || [ "$$((now - latest))" -ge 3456000 ]; then
+            fail 'no accepted Photos export newer than 40 days'
+            status=1
+          fi
+          return "$$status"
+        }
+
+        # Fixtures execute this exact command, with local read-only source and no pings.
+        if [ "$${COLLECTOR_MODE:-}" = fixture ] && [ "$${SOURCE:-}" = /source ]; then
+          collect
+          exit $$?
+        fi
+
+        # Deliberately inert even if manually started with the encrypted placeholders.
+        [ "$${COLLECTOR_ENABLED:-false}" = true ] || { fail 'inactive project: activation review required'; exit 1; }
+        for value in "$${GDRIVE_CLIENT_ID:-}" "$${GDRIVE_CLIENT_SECRET:-}" "$${GDRIVE_TOKEN:-}" "$${HC_PING_URL:-}"; do
+          case "$$value" in
+            ''|*ENC\[*|*PLACEHOLDER*|*placeholder*|*REPLACE*|*CHANGEME*|*changeme*) fail 'missing/placeholder credentials'; exit 1 ;;
+          esac
+        done
+        case "$$GDRIVE_CLIENT_ID" in *.apps.googleusercontent.com) ;; *) fail 'invalid OAuth client ID'; exit 1 ;; esac
+        printf '%s\n' "$$GDRIVE_TOKEN" | grep -Eq '"refresh_token"[[:space:]]*:[[:space:]]*"[^"]+"' || { fail 'missing refresh token'; exit 1; }
+        case "$$HC_PING_URL" in https://hc-ping.com/*) ;; *) fail 'invalid ping URL'; exit 1 ;; esac
+        printf '[gdrive]\ntype = drive\nscope = drive.readonly\nclient_id = %s\nclient_secret = %s\ntoken = %s\n' \
+          "$$GDRIVE_CLIENT_ID" "$$GDRIVE_CLIENT_SECRET" "$$GDRIVE_TOKEN" > /config/rclone/rclone.conf
+
+        ping() { wget -q -T 10 -O /dev/null "$$HC_PING_URL/$$1" || true; }
+        while true; do
+          now=$$(date -u +%s)
+          next=$$(date -u -d "$$RUN_AT_UTC" +%s)
+          if [ "$$next" -le "$$now" ]; then next=$$((next + 86400)); fi
+          sleep "$$((next - now))"
+          ping start
+          result=0
+          collect || result=1
+          ping "$$result"
+        done
+    # GDRIVE_CLIENT_ID, GDRIVE_CLIENT_SECRET, GDRIVE_TOKEN, HC_PING_URL
+    env_file:
+      - secrets.sops.env
+    environment:
+      TZ: UTC
+      COLLECTOR_ENABLED: "false"
+      SOURCE: "gdrive:Takeout"
+      # Before the off-site job's 10:00 UTC run.
+      RUN_AT_UTC: "04:00"
+      RCLONE_CACHE_DIR: /tmp/rclone-cache
+    volumes:
+      - /volume1/homes/kelchm/cloud-backups/google-photos:/exports
+      - /volume1/docker/google-photos-takeout:/work
+    tmpfs:
+      # The Drive token is rebuilt from the environment at start and refreshed in memory only.
+      - /config/rclone:mode=0700,uid=1026,gid=100
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    # Docker 24 runs the first probe one interval after start, and doco-cd waits 180 seconds for it.
+    healthcheck:
+      test: ["CMD", "test", "-s", "/config/rclone/rclone.conf"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    # The shell as PID 1 ignores SIGTERM; an interrupted pull or extraction is repeated on the next run.
+    stop_signal: SIGKILL
+    restart: unless-stopped
