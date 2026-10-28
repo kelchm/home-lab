@@ -9,6 +9,7 @@ import fcntl
 import math
 import os
 import select
+import signal
 import sys
 import time
 
@@ -176,7 +177,14 @@ class HidKeyboard:
 
 def run(main):
     """Keep operational failures concise; context cleanup runs before this."""
+    def interrupt(signum, frame):
+        raise KeyboardInterrupt
+
+    previous = {}
     try:
+        # CLI termination must unwind the HID context just like Ctrl-C.
+        for signum in (signal.SIGTERM, signal.SIGHUP):
+            previous[signum] = signal.signal(signum, interrupt)
         return main()
     except (HidError, OSError, ValueError) as error:
         print(f"{os.path.basename(sys.argv[0])}: {error}; verify host/input before retrying", file=sys.stderr)
@@ -184,3 +192,6 @@ def run(main):
     except KeyboardInterrupt:
         print("Input interrupted; verify host/input before retrying", file=sys.stderr)
         return 130
+    finally:
+        for signum, handler in previous.items():
+            signal.signal(signum, handler)

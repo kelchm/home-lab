@@ -11,6 +11,7 @@ import io
 import os
 from pathlib import Path
 import select
+import signal
 import subprocess
 import sys
 import tempfile
@@ -321,6 +322,31 @@ class Fixture(unittest.TestCase):
         self.assertEqual(self.helper(SWITCH, ["2"]), 130)
         self.assertEqual(self.reports(), [bytes(8), bytes(8)])
         self.assertEqual(self.driver.closed, [11, 10])
+
+    def test_termination_signals_unwind_with_bounded_cleanup_and_restore_handlers(self):
+        key = bytes([0, 0, 4, 0, 0, 0, 0, 0])
+        for signum in (signal.SIGTERM, signal.SIGHUP):
+            for available in (True, False):
+                with self.subTest(signal=signum, cleanup_available=available):
+                    self.clock.now = 0
+                    self.driver.__init__(self.clock)
+                    previous = {s: signal.getsignal(s) for s in (signal.SIGTERM, signal.SIGHUP)}
+
+                    def main():
+                        with self.keyboard() as keyboard:
+                            keyboard.write_report(key=4)
+                            self.driver.available = available
+                            # Fail safely on old code rather than send a fatal signal.
+                            self.assertIsNot(signal.getsignal(signum), previous[signum])
+                            self.assertTrue(callable(signal.getsignal(signum)))
+                            signal.raise_signal(signum)
+                            self.fail("terminated sequence resumed")
+
+                    self.assertEqual(hid_input.run(main), 130)
+                    self.assertEqual(self.reports(), [key, bytes(8)] if available else [key])
+                    self.assertLessEqual(self.clock.now, hid_input.CLEANUP_TIMEOUT + .001)
+                    self.assertEqual(self.driver.closed, [11, 10])
+                    self.assertEqual({s: signal.getsignal(s) for s in previous}, previous)
 
     def test_interrupt_storm_cannot_extend_poll_deadline(self):
         def interrupted_poll(milliseconds):
