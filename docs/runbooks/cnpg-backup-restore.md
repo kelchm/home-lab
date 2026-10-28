@@ -2,7 +2,7 @@
 
 How the two PostgreSQL clusters, `iot/visionect-db` and `printing/bambuddy-db`, are backed up, what to do when an alert fires, and how to restore. The design decisions are in [home-lab#224](https://github.com/kelchm/home-lab/issues/224).
 
-State as of 2026-10-27: **not deployed.** This describes the intended configuration. Every procedure below was exercised on scratch clusters in a throwaway namespace on `k8s-prod` against a throwaway versitygw, with CloudNativePG 1.30.1, plugin 0.15.1 and versitygw 1.8.0; [What has been exercised](#what-has-been-exercised) says exactly what that covers. Nothing has run against the real databases, Athena or Backblaze.
+State as of 2026-10-28: **not deployed.** On Athena the share, DNS record and gateway credentials are in place, but the store is not running and the per-database accounts do not exist. This describes the intended configuration. Every procedure below was exercised on scratch clusters in a throwaway namespace on `k8s-prod` against a throwaway versitygw, with CloudNativePG 1.30.1, plugin 0.15.1 and versitygw 1.8.0; [What has been exercised](#what-has-been-exercised) says exactly what that covers. Nothing has run against the real databases, Athena or Backblaze.
 
 ## How it works
 

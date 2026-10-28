@@ -125,7 +125,7 @@ ssh kelchm@10.32.20.5 'sudo /usr/local/bin/docker logs --since 1h s3-storage-tra
 ssh kelchm@10.32.20.5 'sudo du -sh /volume1/object-storage/data/*'
 ```
 
-Nothing here alerts on its own, and nothing in the cluster uses the endpoint until the database side is deployed.
+Nothing here alerts on its own. A stopped or unreachable endpoint shows up in the cluster as `CNPGWALArchivingStalled` once a WAL segment has waited 15 minutes for the archiver; the databases close a segment every 5 minutes, so that is 15 to 20 minutes after the endpoint stops. A certificate that fails to renew has about 30 days before it expires, and then shows up the same way.
 
 ## Serve a copy of the share
 
@@ -143,7 +143,7 @@ Do not edit files under `data/` by hand. The gateway returns the checksum it rec
 ## Limits
 
 - Accounts and bucket ownership are created by hand and live outside Git. On a rebuilt NAS, repeat step 5 with the secrets already in the cluster's `backup-secret.sops.yaml` files.
-- The off-site job does not copy the share until the database side adds it as a source. Until then the objects exist only on Athena.
+- The off-site job copies the whole share, so every bucket goes to B2 under the same 30-day lock.
 - The endpoint is published on the storage VLAN only. A client needs an address there.
 - `users.json` is not copied off-site. Losing it loses no backup data.
-- The gateway's own Object Lock and versioning are not used, so nothing protects an object against deletion until the off-site copy exists.
+- The gateway's own Object Lock and versioning are not used. Protection against deletion comes from the off-site copy's 30-day lock.
