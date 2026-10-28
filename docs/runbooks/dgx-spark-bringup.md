@@ -70,7 +70,7 @@ renumbering.
 
 This allocation is valid only while the fabric remains closed: no DNS or
 service discovery, no gateway/router firewall object, no static or dynamic
-route, and no Tailscale advertisement. Host nftables rules refer to interface
+route, and no VPN route advertisement. Host nftables rules refer to interface
 names rather than fabric prefixes. If general applications or clients ever
 need fabric access, renumber path A to `10.254.240.0/24` and path B to
 `10.254.241.0/24` instead of weakening those boundaries.

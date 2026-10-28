@@ -17,9 +17,6 @@
     - Cloudflare:
         - icon: cloudflare.svg
           href: https://dash.cloudflare.com
-    - Tailscale:
-        - icon: tailscale.svg
-          href: https://login.tailscale.com/admin
     - UniFi Site Manager:
         - icon: unifi.svg
           href: https://unifi.ui.com

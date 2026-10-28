@@ -20,7 +20,7 @@ The Tailscale router rollout created an isolated VLAN and replaced the PVE trunk
 | Item | Applied value |
 |---|---|
 | Network | `Remote Admin`, VLAN 19, `10.32.19.1/24` |
-| Addressing | DHCP disabled; IPv6 disabled; router VMs use `10.32.19.101` and `.102` |
+| Addressing | DHCP disabled; IPv6 disabled; static guest addresses: NetBird routing peer `10.32.19.103`, retired Tailscale routers `.101` and `.102` |
 | Zone | Dedicated `Remote Admin` zone |
 | Default zone policy | Allow to Gateway and External; block to Internal, VPN, Hotspot, DMZ, and Remote Admin |
 | `pve-guest-trunk` native network | None |
@@ -38,13 +38,13 @@ Three custom policies cross the new boundary:
 | `Allow Tailscale Routers to Routed LAN` | `Remote Admin`; IPs `10.32.19.101`, `10.32.19.102` | `Internal`; IPs `10.32.1.0/24`, `10.32.10.0/24`, `10.32.20.0/24`, `10.32.30.0/24`, `10.32.130.0/24`, `10.32.140.0/24` | Allow; IPv4; all protocols |
 | `Allow NetBird Pilot Router to Services VIP` | `Remote Admin`; IP `10.32.19.103` | `Internal`; IP `10.32.140.1`, port 443 | Allow; IPv4; TCP |
 
-UniFi generated an established/related return policy for each rule. No other Remote Admin → Internal initiation policy is live. Although the policy table describes the Cilium BGP pools as External for ordinary Internal sources, live probes from the custom Remote Admin zone timed out until `10.32.130.0/24` and `10.32.140.0/24` were included in the Internal destination rule; both returned HTTP 404 immediately afterward. Keep those routed prefixes in this exact rule and revalidate the behavior after UniFi upgrades.
+The two Tailscale policies are inert: their only sources, VMs 101 and 102, have been stopped since Tailscale was retired on 2026-10-25. Deleting them needs an administrator session and is tracked in [#1069](https://github.com/kelchm/home-lab/issues/1069). UniFi generated an established/related return policy for each rule. No other Remote Admin → Internal initiation policy is live. Although the policy table describes the Cilium BGP pools as External for ordinary Internal sources, live probes from the custom Remote Admin zone timed out until `10.32.130.0/24` and `10.32.140.0/24` were included in the Internal destination rule; both returned HTTP 404 immediately afterward. Keep those routed prefixes in this exact rule and revalidate the behavior after UniFi upgrades.
 
-The NetBird pilot policy belongs to the evaluation in #625 and is removed with VM 103. From `10.32.19.103`, `10.32.140.1:443` connects, while `10.32.140.1:80`, `10.32.130.1:443`, and `10.32.20.21:8006` time out. Its DNS resource `10.32.30.1` needs no policy because gateway interface addresses fall in the Gateway zone.
+The NetBird pilot policy belongs to the evaluation in #625. VM 103 is now the only routed remote path, so do not remove it or this policy without a replacement. From `10.32.19.103`, `10.32.140.1:443` connects, while `10.32.140.1:80`, `10.32.130.1:443`, and `10.32.20.21:8006` time out. Its DNS resource `10.32.30.1` needs no policy because gateway interface addresses fall in the Gateway zone.
 
-The Tailscale routers advertise `10.32.0.0/16`; that routing aggregate is deliberately broader than this authorization rule. A client can therefore install one stable lab route while UniFi continues to decide which destination networks traffic from `.101/.102` may actually enter. Positive tests through the aggregate reached every allowlisted class, while actual hosts in Workloads (`10.32.21.31`) and Storage (`10.32.25.5`) remained blocked. UniFi classifies traffic addressed to any of its own VLAN interface IPs in the Gateway zone, so those interface addresses remain reachable under the zone's gateway allow even when their attached networks are absent from the Internal allowlist.
+While they ran, the Tailscale routers advertised `10.32.0.0/16`; that routing aggregate is deliberately broader than this authorization rule. A client could therefore install one stable lab route while UniFi continued to decide which destination networks traffic from `.101/.102` may actually enter. Positive tests through the aggregate reached every allowlisted class, while actual hosts in Workloads (`10.32.21.31`) and Storage (`10.32.25.5`) remained blocked. UniFi classifies traffic addressed to any of its own VLAN interface IPs in the Gateway zone, so those interface addresses remain reachable under the zone's gateway allow even when their attached networks are absent from the Internal allowlist.
 
-Positive validation from both router VMs reached the Default and Main gateways, PVE at `10.32.20.21:8006` (HTTP 200), the Kubernetes API at `10.32.30.8:6443` (HTTP 401 without credentials), and the two Traefik VIPs at `10.32.130.1:443` and `10.32.140.1:443` (HTTP 404 without a host match). Before this allow existed, both routers were unable to ping PVE management or connect to its UI.
+On 2026-09-02, positive validation from both router VMs reached the Default and Main gateways, PVE at `10.32.20.21:8006` (HTTP 200), the Kubernetes API at `10.32.30.8:6443` (HTTP 401 without credentials), and the two Traefik VIPs at `10.32.130.1:443` and `10.32.140.1:443` (HTTP 404 without a host match). Before this allow existed, both routers were unable to ping PVE management or connect to its UI.
 
 ## DGX Spark applied state
 

@@ -176,7 +176,7 @@ The switch port is a trunk (`pve-guest-trunk`: tagged 10, 19, 21, 25, 90 — no 
 - `vmbr0` itself has no address;
 - `vmbr0.25` carries `10.32.25.21/24` (then `.22`, `.23`) with no gateway —
   storage, migration, and Corosync link 1;
-- guest NICs attach to `vmbr0` tagged `21` by default; `19` is reserved for the two Tailscale subnet routers; `90` or `10` require deliberate zone placement, and `25` is only for a registered storage-attached guest with an explicit per-IP NAS/export ACL; and
+- guest NICs attach to `vmbr0` tagged `21` by default; `19` is reserved for remote-access routing peers; `90` or `10` require deliberate zone placement, and `25` is only for a registered storage-attached guest with an explicit per-IP NAS/export ACL; and
 - no guest may be created with an untagged NIC.
 
 With no native VLAN on the trunk, an accidentally untagged guest fails closed

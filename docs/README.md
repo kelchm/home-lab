@@ -86,7 +86,7 @@ Implemented or superseded plans preserve context. Use the maintained documentati
 - [20260705-broadsheet-rename-migration](plans/20260705-broadsheet-rename-migration.md) — paperboy → broadsheet rename with PVC-preserving migration.
 - [20260802-lemon-manuals-selfhost](plans/20260802-lemon-manuals-selfhost.md) — self-host the LEMON manuals archive on NFS with an MCP server in front.
 - [20260818-sn770-zfs-qualification-procedure](plans/20260818-sn770-zfs-qualification-procedure.md) — the bounded, destructive test procedure and safety guards used for the SN770 reproduction run.
-- [20260902-tailscale-remote-admin](plans/20260902-tailscale-remote-admin.md) — implemented independent two-VM PVE subnet-router pair on isolated VLAN 19, replacing the Kubernetes-hosted route.
+- [20260902-tailscale-remote-admin](plans/20260902-tailscale-remote-admin.md) — superseded two-VM PVE Tailscale subnet-router pair on isolated VLAN 19, retired 2026-10-25; routing and failover evidence retained.
 
 ## Decision records & benchmarks
 

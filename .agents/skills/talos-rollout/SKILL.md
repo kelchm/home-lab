@@ -55,7 +55,7 @@ Then, in order:
 
    Verify the snapshot at that path before relying on it.
 
-2. **Settle the access path.** Preflight reports whether your route to the Kubernetes API and each Talos node runs over a direct link or a tunnel, and names the peer serving a tunnelled path. A direct link survives the rollout. A tunnelled path only survives if the router serving it lives outside this cluster — confirm that before you start, not mid-drain.
+2. **Settle the access path.** Preflight reports whether your route to the Kubernetes API and each Talos node runs over a direct link or a tunnel. A direct link survives the rollout. A tunnelled path only survives if the router serving it lives outside this cluster — confirm that before you start, not mid-drain.
 
 3. **Decide about database primaries.** Preflight flags any CloudNativePG singleton primary on the candidate. This needs an explicit availability decision — a temporary replica and switchover, or accepted downtime with a verified restorable backup. Follow [references/cnpg-failover.md](references/cnpg-failover.md). Do not automatically patch or scale a database cluster.
 

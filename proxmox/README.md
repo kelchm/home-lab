@@ -65,11 +65,13 @@ Every node's RTL8125-backed `vmbr0` is VLAN-aware with an explicit `bridge-vids 
 
 | VMID | Guest | Address | Purpose | Source |
 |---|---|---|---|---|
-| `101` | `tailscale-router-1` | `10.32.19.101` | Tailscale subnet-router candidate 1 | [`guests/tailscale-router`](guests/tailscale-router/) |
-| `102` | `tailscale-router-2` | `10.32.19.102` | Tailscale subnet-router candidate 2 | [`guests/tailscale-router`](guests/tailscale-router/) |
 | `200` | `hermes-1` | `10.32.21.100` | Hermes Agent, dashboard, and client API | [`guests/hermes-1`](guests/hermes-1/) |
 
-All three guests are enabled at host boot, covered by `daily-backups`, and intentionally not PVE HA resources. The Tailscale routers live on different PVE nodes and provide application-level failover by advertising the same route set; PVE must not restart both onto one surviving host. `hermes-1` keeps its application state on its local VM disk under `/srv/hermes`.
+`hermes-1` is enabled at host boot, covered by `daily-backups`, and intentionally not a PVE HA resource. It keeps its application state on its local VM disk under `/srv/hermes`.
+
+## Retired guests
+
+VMs 101 `tailscale-router-1` (`pve-sbx-2`) and 102 `tailscale-router-2` (`pve-sbx-3`) were the Tailscale subnet routers on VLAN 19. Tailscale was retired on 2026-10-25: both VMs are stopped with `onboot: 0` and keep `protection: 1`. Leave them stopped. Whether to keep or destroy their disks is tracked in [#1069](https://github.com/kelchm/home-lab/issues/1069). Until then `daily-backups` (`all=1`) still includes them. Their design and acceptance evidence remain in the [remote-admin plan](../docs/plans/20260902-tailscale-remote-admin.md).
 
 ## Applied guest network policy
 
