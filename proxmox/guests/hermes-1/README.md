@@ -72,6 +72,40 @@ Stage this directory at `/opt/hermes` on the guest, keeping `managed/` root-owne
 ssh kelchm@hermes.home.kelch.io 'sudo install -d -o 1000 -g 1000 -m 0750 /srv/caddy/data /srv/caddy/config && sudo chown -R 1000:1000 /srv/caddy/data /srv/caddy/config && cd /opt/hermes && sudo docker compose pull hermes && sudo docker compose build --pull caddy && sudo docker compose up -d --force-recreate'
 ```
 
+### Recreate only Caddy from its running image
+
+Use this procedure for a Caddy container-setting change such as enabling init. Merging the configuration does not change the guest. Recreating Caddy briefly interrupts HTTPS; obtain approval for that interruption. The full deployment command above also builds images and recreates Hermes, so use the targeted command below for this operation.
+
+1. On the guest, record Caddy's image ID, init setting and container start time, Hermes's container ID and start time, and the served certificate's SHA-256 fingerprint. Stop if the guest differs unexpectedly from the reviewed rollout state. Keep `/srv/caddy/data`, `/srv/caddy/config`, `Caddyfile`, the managed Hermes configuration and both runtime environment files unchanged.
+2. In `/opt/hermes`, save the current compose with `sudo cp -p compose.yaml compose.yaml.pre-init`. Stage the reviewed, merged `compose.yaml`, preserving its owner and mode. Check the diff against the saved file: for the init fix, only Caddy's `init: true` should change. Keep the saved file until acceptance passes.
+3. Run on the guest. The image name in compose is `localhost/hermes-caddy`; this supplies its `latest` tag from the already-running image if needed. A conflicting tag requires reconciliation before proceeding. Builds and pulls are disabled, and dependencies are not recreated.
+
+   ```sh
+   set -eu
+   cd /opt/hermes
+   CADDY_IMAGE_ID=$(sudo docker inspect -f '{{.Image}}' hermes-caddy)
+   CADDY_TAG_ID=$(sudo docker image inspect -f '{{.Id}}' localhost/hermes-caddy:latest 2>/dev/null || true)
+   if [ -n "$CADDY_TAG_ID" ] && [ "$CADDY_TAG_ID" != "$CADDY_IMAGE_ID" ]; then
+     printf '%s\n' 'Caddy latest tag differs from the running image; stop and reconcile.' >&2
+     exit 1
+   fi
+   sudo docker image tag "$CADDY_IMAGE_ID" localhost/hermes-caddy:latest
+   sudo docker compose up -d --no-deps --no-build --pull never caddy
+   ```
+
+4. Measure the HTTPS interruption by polling `/api/status`. Verify Caddy uses the same image ID with `HostConfig.Init` true and PID 1 `docker-init`. It must become healthy, complete several natural 30-second healthchecks without accumulating zombie children, and keep its process count near its thread count. The healthcheck has a two-minute start period. Confirm the served certificate fingerprint and Hermes's container ID and start time are unchanged. The ten-second stop timeout does not bound startup or recovery time if the new container fails.
+5. If acceptance fails, restore the saved compose and recreate only Caddy from the same local image, with no build or pull:
+
+   ```sh
+   cd /opt/hermes
+   sudo cp -p compose.yaml.pre-init compose.yaml
+   sudo docker compose up -d --no-deps --no-build --pull never caddy
+   ```
+
+Rolling back init restores the original leak. A Caddy-only restart clears the existing zombies temporarily; neither action completes [#1079](https://github.com/kelchm/home-lab/issues/1079). Updating the Caddy image and automating its rollout remain separate work in [#1074](https://github.com/kelchm/home-lab/issues/1074).
+
+### Hermes configuration and service checks
+
 Before deploying a managed-configuration change or a new Hermes image, check the system prompt that the pinned image builds from `managed/`. [`check-model-guidance.py`](check-model-guidance.py) runs a turn against a fake Spark endpoint with no network, and fails unless the prompt has both guidance blocks and loses them when the `agent` pins are removed:
 
 ```sh
