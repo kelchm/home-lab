@@ -9,6 +9,7 @@ services:
     stop_grace_period: 60s
     volumes:
       - /srv/hermes:/opt/data
+      - ./managed:/etc/hermes-managed:ro
     environment:
       HERMES_UID: "1000"
       HERMES_GID: "1000"
@@ -17,13 +18,14 @@ services:
       HERMES_DASHBOARD_PORT: "9119"
       HERMES_DASHBOARD_PUBLIC_URL: https://hermes.home.kelch.io
       API_SERVER_HOST: 127.0.0.1
+      HERMES_MANAGED_DIR: /etc/hermes-managed
     command: ["gateway", "run"]
 
   caddy:
     build:
       context: .
       dockerfile: Dockerfile.caddy
-    image: localhost/hermes-caddy:2.11.4-cloudflare-0.2.4
+    image: localhost/hermes-caddy
     container_name: hermes-caddy
     restart: unless-stopped
     network_mode: host

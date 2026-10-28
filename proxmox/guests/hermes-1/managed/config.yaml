@@ -1,0 +1,35 @@
+---
+model:
+  provider: custom
+  default: spark
+  base_url: http://10.32.21.31:8888/v1
+  api_mode: chat_completions
+
+# Hermes picks these prompt blocks by model name, and `spark` matches no family.
+agent:
+  tool_use_enforcement: true
+  execution_guidance: true
+
+mcp_servers:
+  mcphub_hacker_news:
+    url: https://mcphub.home.kelch.io/mcp/hacker-news
+    headers:
+      Authorization: "Bearer ${MCPHUB_HERMES_PERSONAL_TOKEN}"
+    enabled: true
+    connect_timeout: 30
+    timeout: 120
+    trust: untrusted
+
+dashboard:
+  public_url: https://hermes.home.kelch.io
+  oauth:
+    provider: self-hosted
+    self_hosted:
+      issuer: https://auth.home.kelch.io/oauth2/openid/hermes
+      client_id: hermes
+      scopes: openid profile email
+
+gateway:
+  streaming:
+    enabled: true
+    transport: auto
