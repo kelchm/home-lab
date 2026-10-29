@@ -6,7 +6,11 @@ The [off-site job](../offsite-backup/README.md) does not read this share yet. Mo
 
 doco-cd deploys this project from `main`; the [Synology README](../README.md) describes the deployment model, rollback, and break-glass apply.
 
-State as of 2026-10-28: not deployed. The four steps under [Before merging](#first-deployment) are done: the share and its directories exist on volume1, the UniFi record resolves to `10.32.25.5` from the Default, Main and K8s Prod resolvers, nothing listened on port 9000, and both env files hold the real credentials. Everything else below is the intended configuration. The gateway, the Traefik route and the plain-file restore were exercised in a scratch namespace on `k8s-prod`, not on Athena; [First deployment](#first-deployment) lists what has to be confirmed on the NAS itself.
+State as of 2026-10-29 UTC: the NAS foundation is deployed and accepted (#1077, merged as `95a0680`). The exact gateway image running as UID/GID 0 with all capabilities dropped passed a disposable create/rename/read/delete probe under both bucket directories and `meta` without changing ACLs or modes. doco-cd then deployed the store; gateway and proxy are healthy, the route publisher exited 0, and an unsigned request from the storage VLAN returns `403 0` with a trusted Let’s Encrypt certificate. `acme.json` is root-owned `0600` under its `0700` directory.
+
+Both restricted database accounts exist and own their respective buckets. Each passed a five-part, 40,000,000-byte upload/download with matching SHA-256, deletion confirmed by a subsequent 404, and `AccessDenied` for both listing and writing the other bucket. The disposable objects were deleted. All 12 pre-existing containers retained their IDs, start times and restart counts.
+
+The database layer (#816) is not deployed: neither database writes backups here yet, the share is not an off-site source, and cluster backup alerts are not active. Its activation and real-data restore remain separate gates. [First deployment](#first-deployment) remains the rebuild procedure and acceptance checklist.
 
 ## What is where
 
@@ -56,6 +60,8 @@ The values in both files are kept in 1Password:
 | Cloudflare token | `op://Project - home-lab/athena-s3-storage-acme/credential` |
 | Gateway root access key | `op://Project - home-lab/athena-s3-storage-root/username` |
 | Gateway root secret key | `op://Project - home-lab/athena-s3-storage-root/credential` |
+| Visionect account secret (access key `k8s-prod-visionect-db`) | `op://Project - home-lab/athena-s3-storage-k8s-prod-visionect-db/credential` |
+| Bambuddy account secret (access key `k8s-prod-bambuddy-db`) | `op://Project - home-lab/athena-s3-storage-k8s-prod-bambuddy-db/credential` |
 
 ## First deployment
 
