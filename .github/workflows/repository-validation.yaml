@@ -115,6 +115,10 @@ jobs:
               - 'scripts/ci/test-healthchecks.py'
               - 'devices/glkvm/*.py'
               - 'scripts/ci/test-netbird-enrollment.py'
+              - 'scripts/ci/test-netbird-router-prep.py'
+              - 'scripts/ci/fixtures/netbird-unifi.json'
+              - 'proxmox/guests/netbird-router-2/**'
+              - 'proxmox/guests/netbird-router/**'
               - 'healthchecks/**'
               - '.taskfiles/healthchecks/**'
             skills:
@@ -595,6 +599,10 @@ jobs:
       - name: Test NetBird enrollment without credentials, network or root
         if: needs.pre-job.outputs.scripts_changed == 'true'
         run: python3 scripts/ci/test-netbird-enrollment.py
+
+      - name: Test planned NetBird router guards and firewall delta offline
+        if: needs.pre-job.outputs.scripts_changed == 'true'
+        run: PYTHONDONTWRITEBYTECODE=1 python3 scripts/ci/test-netbird-router-prep.py
 
       - name: No shell changes
         if: needs.pre-job.outputs.scripts_changed != 'true'

@@ -1,0 +1,99 @@
+#cloud-config
+# PLANNED, NOT INSTALLED. New VM 104 only; the 103 vendor bytes remain frozen.
+# Retain PVE default ciupgrade=1 for first-boot Debian security updates.
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - ca-certificates
+  - curl
+  - qemu-guest-agent
+  - tcpdump
+  - iputils-arping
+
+write_files:
+  - path: /etc/sysctl.d/99-netbird-router.conf
+    owner: root:root
+    permissions: "0644"
+    content: |
+      net.ipv4.ip_forward = 1
+
+  - path: /usr/local/sbin/netbird-router-bootstrap
+    owner: root:root
+    permissions: "0755"
+    content: |
+      #!/bin/sh
+      set -eu
+
+      work_dir="$(mktemp -d)"
+      trap 'rm -rf "$work_dir"' EXIT HUP INT TERM
+
+      curl --proto '=https' --tlsv1.2 --fail --show-error --location \
+        --connect-timeout 10 --max-time 60 \
+        --output "$work_dir/netbird-archive-keyring.asc" \
+        https://pkgs.netbird.io/debian/public.key
+      printf '%s  %s\n' \
+        '6bd434c07e7c3a71211de79ca287e93b45deadedc4b74f1a2e83e11abe6e0bf5' \
+        "$work_dir/netbird-archive-keyring.asc" | sha256sum --check --status
+      install -o root -g root -m 0644 \
+        "$work_dir/netbird-archive-keyring.asc" \
+        /usr/share/keyrings/netbird-archive-keyring.asc
+
+      printf '%s\n' 'deb [signed-by=/usr/share/keyrings/netbird-archive-keyring.asc] https://pkgs.netbird.io/debian stable main' \
+        > /etc/apt/sources.list.d/netbird.list
+
+      apt-get -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::Retries=2 update
+      # Hold the second router at the existing peer's baseline until the
+      # separately approved rolling upgrade. This pin contains no credential.
+      printf '%s\n' \
+        'Package: netbird' \
+        'Pin: version 0.79.0' \
+        'Pin-Priority: 1001' \
+        > /etc/apt/preferences.d/netbird-router-baseline
+      DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::Retries=2 install --yes netbird=0.79.0
+      apt-mark hold netbird
+      test "$(dpkg-query -W -f='${Version}' netbird)" = '0.79.0'
+
+  - path: /usr/local/sbin/netbird-router-enroll
+    owner: root:root
+    permissions: "0755"
+    content: |
+      #!/bin/sh
+      # Credential-free helper. Install root:root 0755; supply the setup key on stdin.
+      set -eu
+      if [ "$#" -ne 0 ]; then
+          printf '%s\n' 'This helper accepts stdin only, with no arguments.' >&2
+          exit 64
+      fi
+      # Bound stdin delivery and enrollment together; GNU timeout signals the process group.
+      # The inner shell expands these variables, never the calling shell.
+      # shellcheck disable=SC2016
+      exec timeout --signal=TERM --kill-after=5s 90s /bin/sh -eu -c '
+          umask 077
+          key_file=
+          cleanup() {
+              if [ -n "$key_file" ]; then
+                  rm -f -- "$key_file"
+              fi
+          }
+          trap cleanup EXIT
+          trap "exit 129" HUP
+          trap "exit 130" INT
+          trap "exit 143" TERM
+          key_file=$(mktemp /run/netbird-router-enroll.XXXXXX)
+          chmod 0600 "$key_file"
+          cat > "$key_file"
+          if [ ! -s "$key_file" ]; then
+              printf "%s\n" "Empty enrollment input." >&2
+              exit 65
+          fi
+          netbird up --setup-key-file "$key_file" --disable-client-routes --disable-dns
+      '
+
+runcmd:
+  - [sysctl, --system]
+  - [systemctl, enable, --now, qemu-guest-agent.service]
+  - [/usr/local/sbin/netbird-router-bootstrap]
+
+final_message: "NetBird router 2 baseline bootstrap complete; enrollment remains intentionally manual."
