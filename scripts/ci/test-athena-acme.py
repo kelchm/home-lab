@@ -52,6 +52,21 @@ def list_response(mapping):
 
 
 class PureContracts(unittest.TestCase):
+    def test_recover_initial_cli_requires_exactly_one_digest(self):
+        digest = "a" * 64
+        with patch.object(acme.sys, "argv", ["athena-acme.py", "recover-initial", digest]), \
+                patch.object(acme.Runner, "execute") as execute:
+            self.assertEqual(acme.main(), 0)
+            execute.assert_called_once_with("recover-initial", [digest])
+        for arguments in ([], [digest, digest]):
+            with self.subTest(arguments=arguments), \
+                    patch.object(acme.sys, "argv", ["athena-acme.py", "recover-initial"] + arguments), \
+                    patch.object(acme.Runner, "execute") as execute, contextlib.redirect_stderr(io.StringIO()), \
+                    self.assertRaises(SystemExit) as error:
+                acme.main()
+            self.assertEqual(error.exception.code, 2)
+            execute.assert_not_called()
+
     def test_adapter_dash_leading_txt_reaches_main_unchanged(self):
         value = "-" + "A" * 42
         for action in ("dns-add", "dns-remove"):
@@ -171,6 +186,25 @@ class RuntimeTests(unittest.TestCase):
                 return b"X509v3 Subject Alternative Name:\n    " + (san or ("DNS:" + acme.HOST).encode()) + b"\n"
             return b"OK\n"
         return patch.object(self.runner, "checked", side_effect=output)
+
+    @contextlib.contextmanager
+    def live_leaves(self, leaves=(b"leaf", b"leaf")):
+        contexts = []
+        connection = Mock(__enter__=Mock(), __exit__=Mock(return_value=False))
+        for leaf in leaves:
+            tls = Mock(__exit__=Mock(return_value=False))
+            tls.__enter__ = Mock(return_value=tls)
+            cert = {"subjectAltName": (("DNS", acme.HOST),), "notAfter": "Dec 31 23:59:59 2099 GMT"}
+            tls.getpeercert.side_effect = lambda binary_form=False, value=leaf: value if binary_form else cert
+            context = Mock()
+            context.wrap_socket.return_value = tls
+            contexts.append(context)
+        with patch.object(acme.ssl, "create_default_context", side_effect=contexts), \
+                patch.object(acme.socket, "create_connection", return_value=connection) as connect:
+            yield connect
+
+    def runtime_files(self):
+        return {str(path.relative_to(self.root)): path.read_bytes() for path in self.root.rglob("*") if path.is_file()}
 
     def test_runtime_guards_modes_source_hashes_extra_hooks_and_symlinks(self):
         self.runner.audit()
@@ -362,6 +396,120 @@ class RuntimeTests(unittest.TestCase):
                 patch.object(self.runner, "import_bundle") as imported, contextlib.redirect_stdout(io.StringIO()):
             self.runner.import_new()
         imported.assert_not_called()
+
+    def test_recover_initial_only_publishes_candidate_after_both_listeners_verify(self):
+        self.save("baseline.json", {"mapping": baseline()})
+        before = self.runtime_files()
+        digest = hashlib.sha256(acme.canonical(accepted_map()).encode()).hexdigest()
+        fingerprint = hashlib.sha256(b"leaf").hexdigest()
+        with patch.object(self.runner, "api", return_value=list_response(accepted_map())) as api, \
+                self.mock_validation(), self.live_leaves() as connect, \
+                patch.object(self.runner, "acme") as client, patch.object(self.runner, "import_bundle") as imported, \
+                contextlib.redirect_stdout(io.StringIO()) as output:
+            self.runner.recover_initial(digest)
+        self.assertEqual([call.args for call in api.call_args_list], [("list",), ("list",)])
+        self.assertEqual([call.args[0] for call in connect.call_args_list], [("127.0.0.1", 443), ("127.0.0.1", 5001)])
+        client.assert_not_called()
+        imported.assert_not_called()
+        self.assertIn("Run accept", output.getvalue())
+        after = self.runtime_files()
+        self.assertEqual(json.loads(after.pop("candidate.json")), {"cert_id": "newDSM", "sha256": fingerprint})
+        self.assertEqual(after, before)
+
+    def test_recover_initial_refuses_invalid_or_stale_digest_without_publication(self):
+        self.save("baseline.json", {"mapping": baseline()})
+        before = self.runtime_files()
+        with patch.object(self.runner, "api", return_value=list_response(accepted_map())), \
+                patch.object(self.runner, "validate") as validate, patch.object(self.runner, "live") as live:
+            for digest in (None, "", "a" * 63, "A" * 64, "0" * 64):
+                with self.subTest(digest=digest), self.assertRaises(acme.Failure):
+                    self.runner.recover_initial(digest)
+                self.assertEqual(self.runtime_files(), before)
+            validate.assert_not_called()
+            live.assert_not_called()
+
+    def test_recover_initial_requires_exact_transition_and_unique_identity(self):
+        self.save("baseline.json", {"mapping": baseline()})
+        before = self.runtime_files()
+        for change in ("default-only", "unrelated", "metadata", "original", "duplicate"):
+            current = accepted_map()
+            if change == "default-only":
+                current[acme.ORIGINAL_ID]["services"].append(current["newDSM"]["services"].pop())
+            elif change == "unrelated":
+                current["newDSM"]["services"].append(current[acme.ORIGINAL_ID]["services"].pop())
+            elif change == "metadata":
+                current["newDSM"]["services"][0]["user_setable"] = False
+            elif change == "original":
+                del current[acme.ORIGINAL_ID]
+            else:
+                current["duplicate"] = {"desc": acme.DESCRIPTION, "is_default": False, "services": []}
+            digest = hashlib.sha256(acme.canonical(current).encode()).hexdigest()
+            with self.subTest(change=change), patch.object(self.runner, "api", return_value=list_response(current)), \
+                    patch.object(self.runner, "validate") as validate, patch.object(self.runner, "live") as live, \
+                    self.assertRaises(acme.Failure):
+                self.runner.recover_initial(digest)
+            validate.assert_not_called()
+            live.assert_not_called()
+            self.assertEqual(self.runtime_files(), before)
+
+    def test_recover_initial_requires_saved_baseline_and_no_existing_candidate_or_acceptance(self):
+        digest = hashlib.sha256(acme.canonical(accepted_map()).encode()).hexdigest()
+        for state in ("missing baseline", "candidate.json", "accepted.json"):
+            if state != "missing baseline":
+                self.save("baseline.json", {"mapping": baseline()})
+                self.save(state, {"untouched": True})
+            before = self.runtime_files()
+            with self.subTest(state=state), patch.object(self.runner, "api") as api, \
+                    patch.object(self.runner, "validate") as validate, patch.object(self.runner, "live") as live, \
+                    self.assertRaises(acme.Failure):
+                self.runner.recover_initial(digest)
+            api.assert_not_called()
+            validate.assert_not_called()
+            live.assert_not_called()
+            self.assertEqual(self.runtime_files(), before)
+            if state != "missing baseline":
+                self.root.joinpath(state).unlink()
+
+    def test_recover_initial_rejects_invalid_issued_key_or_san(self):
+        self.save("baseline.json", {"mapping": baseline()})
+        before = self.runtime_files()
+        digest = hashlib.sha256(acme.canonical(accepted_map()).encode()).hexdigest()
+        for invalid in ({"key": b"different key"}, {"san": b"DNS:*.home.kelch.io"}):
+            with self.subTest(invalid=invalid), patch.object(self.runner, "api", return_value=list_response(accepted_map())), \
+                    self.mock_validation(**invalid), patch.object(self.runner, "live") as live, self.assertRaises(acme.Failure):
+                self.runner.recover_initial(digest)
+            live.assert_not_called()
+            self.assertEqual(self.runtime_files(), before)
+
+    def test_recover_initial_rejects_wrong_live_leaf_on_either_listener(self):
+        self.save("baseline.json", {"mapping": baseline()})
+        before = self.runtime_files()
+        digest = hashlib.sha256(acme.canonical(accepted_map()).encode()).hexdigest()
+        for leaves in ((b"old", b"old"), (b"leaf", b"old"), (b"old", b"leaf")):
+            with self.subTest(leaves=leaves), patch.object(self.runner, "api", return_value=list_response(accepted_map())), \
+                    self.mock_validation(), self.live_leaves(leaves), self.assertRaises(acme.Failure):
+                self.runner.recover_initial(digest)
+            self.assertEqual(self.runtime_files(), before)
+
+    def test_recover_initial_rejects_map_change_during_verification(self):
+        self.save("baseline.json", {"mapping": baseline()})
+        before = self.runtime_files()
+        digest = hashlib.sha256(acme.canonical(accepted_map()).encode()).hexdigest()
+        changed = accepted_map()
+        changed[acme.ORIGINAL_ID]["services"][0]["metadata"] = "changed"
+        with patch.object(self.runner, "api", side_effect=[list_response(accepted_map()), list_response(changed)]), \
+                self.mock_validation(), self.live_leaves(), self.assertRaisesRegex(acme.Failure, "changed during initial recovery"):
+            self.runner.recover_initial(digest)
+        self.assertEqual(self.runtime_files(), before)
+
+    def test_inspect_reports_digest_of_sanitized_certificate_map(self):
+        output = io.StringIO()
+        with patch.object(self.runner, "api", return_value=list_response(accepted_map())), contextlib.redirect_stdout(output):
+            self.runner.inspect()
+        self.assertEqual(json.loads(output.getvalue()), {
+            "hostname": acme.HOST, "certificates": accepted_map(),
+            "current_sha256": hashlib.sha256(acme.canonical(accepted_map()).encode()).hexdigest(),
+        })
 
     def test_assignment_default_and_identity_drift_prevent_mutation(self):
         self.accepted()

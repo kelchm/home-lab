@@ -562,8 +562,8 @@ class Runner:
         # DSM may move the supplied paths; originals and rollback remain intact.
         with tempfile.TemporaryDirectory(prefix="import-", dir=str(self.root)) as stage:
             parameters = {"desc": DESCRIPTION}
-            # Omit this optional field for nondefault imports. DSM can treat a
-            # supplied JSON string "false" as a request to change the default.
+            # Omit this optional field for nondefault imports; preserve a
+            # requested default with a JSON boolean, never a string.
             if is_default:
                 parameters["as_default"] = True
             for field, filename in (("key_tmp", "key.pem"), ("cert_tmp", "cert.pem"),
@@ -594,7 +594,8 @@ class Runner:
 
     def inspect(self):
         current = self.snapshot()
-        print(json.dumps({"hostname": HOST, "certificates": current}, indent=2, sort_keys=True))
+        print(json.dumps({"hostname": HOST, "certificates": current,
+                          "current_sha256": hashlib.sha256(canonical(current).encode()).hexdigest()}, indent=2, sort_keys=True))
 
     def issue(self):
         require(not self.path("accepted.json").exists(), "Use run after initial acceptance")
@@ -630,6 +631,25 @@ class Runner:
         require(current == expected, "Initial import changed existing defaults or assignments")
         self.save("candidate.json", {"cert_id": cert_id, "sha256": fingerprint})
         print("Initial certificate imported. Bind only DSM system/default in the UI, then run accept.")
+
+    def recover_initial(self, expected_snapshot):
+        require(not self.path("accepted.json").exists(), "Initial acceptance already exists")
+        require(not self.path("candidate.json").exists(), "Initial candidate already exists")
+        require(isinstance(expected_snapshot, str) and bool(re.fullmatch(r"[a-f0-9]{64}", expected_snapshot)),
+                "Initial recovery requires the reviewed current map SHA-256")
+        baseline = self.load("baseline.json")["mapping"]
+        current = self.snapshot()
+        cert_id = named_certificate(current)
+        accepted_transition(baseline, current, cert_id)
+        require(hashlib.sha256(canonical(current).encode()).hexdigest() == expected_snapshot,
+                "DSM map differs from the reviewed snapshot")
+        fingerprint = self.validate(self.bundle("issued"))
+        self.live(fingerprint)
+        require(self.snapshot() == current, "DSM map changed during initial recovery")
+        # Record only the candidate. Normal accept must independently verify and
+        # publish the accepted identity, recovery bundle, and success marker.
+        self.save("candidate.json", {"cert_id": cert_id, "sha256": fingerprint})
+        print("Initial candidate recovered without import or binding changes. Run accept.")
 
     def accept(self):
         require(not self.path("accepted.json").exists(), "Initial acceptance already exists")
@@ -725,10 +745,10 @@ class Runner:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("inspect", "provision-token", "issue", "import-new", "accept", "run", "reimport", "rollback", "watchdog", "review-bindings", "rebaseline", "dns-add", "dns-remove"))
+    parser.add_argument("action", choices=("inspect", "provision-token", "issue", "import-new", "recover-initial", "accept", "run", "reimport", "rollback", "watchdog", "review-bindings", "rebaseline", "dns-add", "dns-remove"))
     parser.add_argument("arguments", nargs="*")
     args = parser.parse_args()
-    count = 2 if args.action in ("dns-add", "dns-remove") else 1 if args.action == "rebaseline" else 0
+    count = 2 if args.action in ("dns-add", "dns-remove") else 1 if args.action in ("rebaseline", "recover-initial") else 0
     if len(args.arguments) != count:
         parser.error("Incorrect argument count for " + args.action)
     try:
