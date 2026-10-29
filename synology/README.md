@@ -25,6 +25,8 @@ doco-cd has run on Athena since 2026-09-26; the remaining workload acceptance ch
 
 DSM Container Manager remains the inspection interface. It is not a second source of truth.
 
+The native [Athena ACME/DSM certificate runbook](../docs/runbooks/athena-acme.md) describes the separately installed certificate path under preparation in #1094. It is outside Compose and requires manual activation; merging its scripts does not install a task or change DSM's certificate.
+
 ## Project contract
 
 [`scripts/ci/validate-synology.sh`](../scripts/ci/validate-synology.sh) renders every project with `docker compose config` and enforces:

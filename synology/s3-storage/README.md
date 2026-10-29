@@ -51,13 +51,13 @@ Both `*.sops.env` files are encrypted to the NAS-scoped age recipient in [`.sops
 SOPS_AGE_KEY="$(op read 'op://Private/athena-doco-cd-sops-age-key/password')" sops synology/s3-storage/versitygw.sops.env
 ```
 
-The Cloudflare token needs `Zone:Zone:Read` and `Zone:DNS:Edit` on `kelch.io`; Traefik's ACME client reads the zone to find its ID. Cloudflare scopes tokens to a zone, not a record. The token in use, `athena-s3-storage-acme`, has no expiry or client-IP filter.
+The Cloudflare token needs `Zone:Zone:Read` and `Zone:DNS:Edit` on `kelch.io`; Traefik's ACME client reads the zone to find its ID. Cloudflare scopes tokens to a zone, not a record. The token in use, `athena-s3-storage-acme`, has no expiry or client-IP filter. [Athena's native ACME preparation](../../docs/runbooks/athena-acme.md) proposes reusing this exact token for DSM and renaming its Cloudflare label and existing 1Password item to `athena-acme`; neither reuse nor rename is activated yet. The item-ID reference below survives that title change. S3 reads the encrypted dotenv value and needs no redeployment for a metadata-only rename. Once shared, revoking this token interrupts both clients' renewal.
 
 The values in both files are kept in 1Password:
 
 | Value | 1Password reference |
 |---|---|
-| Cloudflare token | `op://Project - home-lab/athena-s3-storage-acme/credential` |
+| Cloudflare token | `op://Project - home-lab/yg4lgp23nzgmknxb7bgn3rfsvm/credential` |
 | Gateway root access key | `op://Project - home-lab/athena-s3-storage-root/username` |
 | Gateway root secret key | `op://Project - home-lab/athena-s3-storage-root/credential` |
 | Visionect account secret (access key `k8s-prod-visionect-db`) | `op://Project - home-lab/athena-s3-storage-k8s-prod-visionect-db/credential` |
