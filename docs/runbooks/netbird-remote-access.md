@@ -15,47 +15,54 @@ These were read from the routing peer through `qm guest exec`, from Hyperion, an
 - **Gateway addresses:** the Remote Admin zone's default Gateway allow lets VM 103 reach every UniFi gateway address, including the console on `10.32.30.1:443`. Only NetBird policy stops a client from reaching that port through the DNS resource.
 - **Hyperion's DNS:** Hyperion's NetBird resolver forwards `home.kelch.io` to `10.32.30.1`. UniFi answers the same records at `10.32.10.1`, so name resolution at home does not depend on NetBird.
 
-### NetBird Cloud objects as last recorded
+### NetBird Cloud, read back on 2026-10-28
 
-The API token at `op://Private/netbird-automation/credential` returned `401 token invalid` on 2026-10-27, so these objects have not been re-verified. They come from the 2026-09-27 setup record and the 2026-10-19 admin extension in #625. Re-verify them with the read-back below before relying on them.
+Read with [`scripts/netbird-export.sh`](../../scripts/netbird-export.sh):
 
 | Kind | Name | Definition |
 |---|---|---|
-| Account | — | Overlay `100.64.0.0/16`; peer login and inactivity expiration off; lazy connections on; client auto-update off |
-| Group | `pilot-clients` | Hyperion and the iPhone |
-| Group | `pilot-routers` | `netbird-pilot-router` |
-| Group | `pilot-home-resources` | Resource group from the original setup; its members are not recorded |
-| Group | `pilot-admin-resources` | `pilot-admin-https` only |
-| Posture check | `pilot-exclude-home-main` | Peer network range: block `10.32.10.0/24` |
+| Account | — | Overlay `100.64.0.0/16`, with an IPv6 overlay for group `All`; peer login and inactivity expiration off; lazy connections on; client auto-update off; peer approval off |
+| Group | `All` | All four peers |
+| Group | `pilot-clients` | Peers `Hyperion` and `iPhone-kelchm` |
+| Group | `pilot-routers` | Peer `netbird-pilot-router` |
+| Group | `pilot-home-resources` | Resources `pilot-jellyfin-vip` and `pilot-home-dns`; no policy names this group |
+| Group | `pilot-admin-resources` | Resource `pilot-admin-https`; no policy names this group |
+| Posture check | `pilot-exclude-home-main` | Peer network range: deny `10.32.10.0/24` |
 | Network | `pilot-home` | Routed by group `pilot-routers`, metric 9999, masquerade |
-| Resources | Names not recorded | `10.32.140.1/32` (household services) and `10.32.30.1/32` (split DNS) |
-| Resource | `pilot-admin-https` | `10.32.130.1/32` |
+| Resource | `pilot-jellyfin-vip` | `10.32.140.1/32` (household services) |
+| Resource | `pilot-home-dns` | `10.32.30.1/32` (split DNS) |
+| Resource | `pilot-admin-https` | `10.32.130.1/32` (admin HTTPS) |
 | Policy | `pilot-mesh` | `pilot-clients` ↔ `pilot-clients`, all protocols, no posture check |
-| Policy | `pilot-jellyfin` | `pilot-clients` → household services, TCP 443, with the posture check |
-| Policies | `pilot-home-dns-udp`, `pilot-home-dns-tcp` | `pilot-clients` → DNS, port 53, with the posture check |
-| Policy | Name not recorded | `pilot-clients` → `pilot-admin-https` as a direct resource, TCP 443, with the posture check |
+| Policy | `pilot-jellyfin` | `pilot-clients` → resource `pilot-jellyfin-vip`, TCP 443, with the posture check |
+| Policies | `pilot-home-dns-udp`, `pilot-home-dns-tcp` | `pilot-clients` → resource `pilot-home-dns`, UDP and TCP 53, with the posture check |
+| Policy | `pilot-admin-https` | `pilot-clients` → resource `pilot-admin-https`, TCP 443, with the posture check |
 | Policy | `Default` | All ↔ All, disabled |
-| DNS | Nameserver group, name not recorded | `home.kelch.io` → `10.32.30.1:53` for `pilot-clients` |
+| DNS | `pilot-home-kelch-io` | `home.kelch.io` → `10.32.30.1:53` over UDP for `pilot-clients`; not the primary resolver |
+| Setup key | `netbird-pilot-router` | One-off, used once on 2026-09-27; expired |
+| Service user | `netbird-export` | Auditor (read-only); holds the read-back token |
+| Service user | `Automation` | Admin, from the original setup; its token expired on 2026-10-27 |
 
-The record doesn't say whether `pilot-jellyfin` and the DNS policies target the `pilot-home-resources` group or each resource directly, or which resources belong to that group. If an enabled, applicable TCP-443 allow rule targets a group containing the DNS resource, an eligible away client may also reach the UniFi console on `10.32.30.1:443`. Likewise, an applicable port-53 allow rule targeting a group containing the household-services resource may allow DNS traffic to `10.32.140.1`. Check the actual group memberships and every enabled grant's destinations, source groups, posture checks, protocols and ports first in the next read-back, then verify effective behavior in #625's I1 device checks. The router's own access to gateway 443 establishes the UniFi path, not a client's current NetBird authorization.
+The peers are `netbird-pilot-router` (Debian 13, NetBird 0.79.0), `Hyperion`, `iPhone-kelchm` and `Persephone`. `Persephone` is a macOS peer running NetBird 0.80.0, enrolled through a user login on 2026-10-13. It is in `All` only, so no enabled policy lets it reach anything or be reached.
+
+Every enabled resource policy names its resource directly, and no policy names a resource group. NetBird therefore grants clients only TCP 443 to `10.32.140.1` and `10.32.130.1` and port 53 to `10.32.30.1`; nothing grants TCP 443 to the UniFi console on `10.32.30.1`. VM 103 itself can reach that port, so the routing peer's per-port filter is what blocks clients, and #625's I1 check verifies that from a client away from home. `pilot-home-resources` holds both the household-services and DNS resources, so a policy naming that group would open its ports on both addresses, the console included. Target resources directly.
 
 ## Read back NetBird Cloud
 
-[`scripts/netbird-export.sh`](../../scripts/netbird-export.sh) exports the account, groups, posture checks, policies, DNS, peers, setup keys, service users, networks, resources and routers. It writes them to a new private temporary directory and prints its path. The script makes only `GET` requests and removes setup-key values. It reads the token from `NETBIRD_TOKEN_FILE` if set, otherwise from 1Password.
+[`scripts/netbird-export.sh`](../../scripts/netbird-export.sh) exports the account, groups, posture checks, policies, DNS, peers, setup keys, service users, networks, resources and routers. It writes them to a new private temporary directory and prints its path. The script makes only `GET` requests and removes setup-key values. It reads the token from `NETBIRD_TOKEN_FILE` if set, otherwise from `op://Project - home-lab/netbird-export/credential`. That token belongs to the `netbird-export` service user, whose Auditor role can read every NetBird configuration and change nothing. It was created on 2026-10-28 and expires on 2027-10-28; replace it before then.
 
 The export also contains peer addresses and IDs. Compare it against the table above, record the differences and the verified state in #625, and keep the raw files out of Git and issue comments. Run it before and after every NetBird Cloud change.
 
-With an invalid token, every request fails with HTTP 401 and the script exits non-zero. The full export has not yet been run against a valid token.
+The script exits non-zero if any request fails. Its first full run, on 2026-10-28, succeeded for every endpoint and produced the table above. The Auditor token gets HTTP 403 from `users/current` and from other users' token lists, neither of which the script reads.
 
 ## Clients and upgrades
 
-Read back on 2026-10-27, and Hyperion again on 2026-10-28:
+Read back on 2026-10-27; Hyperion and the iPhone again on 2026-10-28:
 
 | Peer | Installed from | Version | Upgrade owner and effect |
 |---|---|---|---|
 | `netbird-pilot-router` | Debian package from `pkgs.netbird.io` `stable`, installed by vendor data | 0.79.0; 0.81.5 available | Operator, by hand through guest exec ([procedure](../../proxmox/guests/netbird-router/README.md#upgrades)). Away clients lose the resources until the daemon reconnects. |
 | Hyperion | Homebrew `netbirdio/tap/netbird` (daemon and CLI) and cask `netbirdio/tap/netbird-ui`; LaunchDaemon `netbird` runs `/opt/homebrew/bin/netbird service run` | Running daemon 0.80.0; installed formula 0.81.5, installed 2026-10-28; UI 0.80.0 | Operator, with `brew upgrade`. The running daemon keeps its old version until `sudo netbird service restart` or a reboot. |
-| iPhone | App Store | iOS core 0.75.0 as of 2026-09-27; not re-read | App Store updates |
+| iPhone | App Store | Management reports build `ci-cb7ca8ef` on iOS 27.0.1; iOS core 0.75.0 as of 2026-09-27 | App Store updates |
 
 NetBird's client auto-update setting is off, so no client upgrades itself through NetBird.
 
@@ -69,7 +76,7 @@ Grafana resolves to the admin gateway, `10.32.130.1`, which the original pilot e
 
 ## Extend access to admin web apps
 
-The admin HTTPS extension was applied on October 19, 2026: NetBird resource `pilot-admin-https` at `10.32.130.1/32` is in its dedicated `pilot-admin-resources` group, with a direct-resource policy from `pilot-clients` for TCP 443 and the existing `pilot-exclude-home-main` posture check. The matching UniFi allowance and paired established/related return rule were created through an administrator browser session and read back with the exact single-IP source and destination. The original services policy was preserved. The October 19 VM checks passed, and Matt's successful remote iPhone acceptance is recorded below.
+The admin HTTPS extension was applied on October 19, 2026: NetBird resource `pilot-admin-https` at `10.32.130.1/32` is in its dedicated `pilot-admin-resources` group, with the direct-resource policy `pilot-admin-https` from `pilot-clients` for TCP 443 and the existing `pilot-exclude-home-main` posture check. The matching UniFi allowance and paired established/related return rule were created through an administrator browser session and read back with the exact single-IP source and destination. The original services policy was preserved. The October 19 VM checks passed, and Matt's successful remote iPhone acceptance is recorded below.
 
 The extension adds access to every matching HTTPS route on `gateway-admin`, including Grafana and MCPHub's `/mcp` and `/sse` transports. The address and port cannot isolate Grafana from those other routes. Application authentication continues to apply: Grafana uses its native Kanidm login, while MCPHub requires its existing bearer keys. Per-node management endpoints such as Proxmox, other ports and other destination IPs are outside this extension.
 

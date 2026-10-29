@@ -7,7 +7,7 @@
 set -euo pipefail
 
 api="https://api.netbird.io/api"
-token_ref="op://Private/netbird-automation/credential"
+token_ref="op://Project - home-lab/netbird-export/credential"
 
 for command in curl jq; do
   command -v "${command}" >/dev/null || {

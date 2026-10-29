@@ -29,7 +29,7 @@ or fixing.
 | Runbook | Use when |
 |---|---|
 | [alerting](runbooks/alerting.md) | Receiving, silencing, testing, and troubleshooting Alertmanager notifications and control-plane coverage. |
-| [netbird-remote-access](runbooks/netbird-remote-access.md) | NetBird remote access: current and last-recorded configuration, Cloud read-back, client upgrades, the admin HTTPS extension and VM 103 management. |
+| [netbird-remote-access](runbooks/netbird-remote-access.md) | NetBird remote access: current configuration, Cloud read-back, client upgrades, the admin HTTPS extension and VM 103 management. |
 | [logging](runbooks/logging.md) | Querying Kubernetes, Talos node and UniFi console logs, rolling out Talos log delivery, the UniFi log alerts, and diagnosing the Fluent Bit-to-VictoriaLogs ingestion path. |
 | [longhorn-backup-restore](runbooks/longhorn-backup-restore.md) | Restoring a PV from a Longhorn backup; DR drills. |
 | [cnpg-backup-restore](runbooks/cnpg-backup-restore.md) | CloudNativePG WAL archiving and base backups to the NAS S3 endpoint: alerts, the emergency archiver switch, and the three restore paths. |
