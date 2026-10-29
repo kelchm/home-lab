@@ -17,7 +17,7 @@ Merging the isolation PR deploys a privileged CNI-binary installer and changes t
 
 ### Prove each replacement has the filter
 
-Record old/new Pod UIDs and container/sandbox IDs; a container restart in the same sandbox is insufficient. After each replacement, inspect the actual network namespace. Use `net1` for a manager and `lhnet1` for an IM, with the selected container name (normally `longhorn-manager` / `instance-manager`):
+Record old/new Pod UIDs and container/sandbox IDs; a container restart in the same sandbox is insufficient. After each replacement, inspect the actual network namespace. Use `net1` for a manager and `lhnet1` for an IM, with the selected container name (normally `longhorn-manager` / `instance-manager`) and `peer_ip` set to a different current Longhorn storage address:
 
 ```bash
 # Read-only, after recording the selected Pod UID and container/sandbox identity.
@@ -28,11 +28,15 @@ kubectl -n longhorn-system exec "$pod" -c "$container" -- sh -ceu '
   ip -6 address show dev "$iface"
   ip -4 rule show
   ip -4 route show table all
+  ip -4 route get "$2"
+  for destination in 10.32.25.5 10.32.25.11 10.32.25.12 10.32.25.13 10.32.25.161; do
+    ip -4 route get "$destination"
+  done
   ip -6 route show dev "$iface"
   cat /proc/sys/net/ipv4/conf/all/rp_filter
   cat "/proc/sys/net/ipv4/conf/$iface/rp_filter"
   cat "/proc/sys/net/ipv6/conf/$iface/disable_ipv6"
-' sh "$iface"
+' sh "$iface" "$peer_ip"
 ```
 
 Require an actual .129–.142 **/28** address, connected `10.32.25.128/28`, gatewayless storage routes to NAS .5 and nodes .11–.13, and the unchanged primary default route. Read the three sysctls as **0 / 1 / 1** and require **no inet6 address or IPv6 route on the storage interface**. Use local `ip -4 route get` lookups for a current peer, NAS .5 and nodes .11–.13 to confirm the storage interface; a tenant address such as .161 must resolve through the primary interface. Recheck the Pod UID and container/sandbox identity after inspection. If a pinned image lacks an inspection tool, stop for a read-only Talos netns alternative; do not install tools in production containers.
@@ -41,14 +45,14 @@ These checks prove activation; `verify-node.sh` alone only proves ordinary stora
 
 ### Roll managers, then one node at a time
 
-1. Replace **one** selected manager using a UID-preconditioned Pod delete (the [diagnostic cleanup](longhorn-storage-boundary.md#cleanup-including-failed-attempts) shows the native DeleteOptions form). Wait for its replacement Ready, verify the filter above, and check fresh manager/controller health and the `default` BackupTarget. Stop on new errors/unavailability before replacing the other managers, individually with the same checks. A DaemonSet-wide restart is not a paused canary.
+1. Select the manager on the `default` BackupTarget's current `status.ownerID` node as the first canary, so its fresh target synchronization exercises the NAS path. Verify the owner before and after; if it moved, defer that functional proof until its new owner is replaced. Replace **one** selected manager using a UID-preconditioned Pod delete (the [diagnostic cleanup](longhorn-storage-boundary.md#cleanup-including-failed-attempts) shows the native DeleteOptions form). Wait for its replacement Ready, verify the filter above, and check fresh manager/controller health and the `default` BackupTarget. Stop on new errors/unavailability before replacing the other managers, individually with the same checks. A DaemonSet-wide restart is not a paused canary.
 2. For the selected node, repeat candidate preflight and its database/PDB decision. Perform a bounded PDB-respecting `kubectl drain "$node" --ignore-daemonsets --delete-emptydir-data --timeout=15m`; do not add `--force` or `--disable-eviction`. A failed drain ends the sequence for diagnosis. Observe the old IM Pod/sandbox gone and its allocations released; do not directly delete an IM carrying engines or replicas.
 3. Uncordon that node. Wait for a new IM Pod/sandbox and verify its filter. Run `.agents/skills/talos-rollout/scripts/verify-node.sh "$node"` and Talos/etcd health. Require all in-use volumes attached/healthy, expected replicas restored and all IMs Ready. Record actual replica recovery and host iSCSI established connections to the current storage addresses through read-only Talos netstat. Ordinary peer/node/NAS routes must still work.
 4. Only then preflight the next node; database placement may have changed. Old /24 and new /28 consumers can coexist for the checked address set without .143; overlap reservations prevent duplicate allocation but do not remove the broadcast constraint.
 
 ### Acceptance and rollback
 
-After every manager and IM has passed, run the separately authorized [eight-check tenant probe in blocked mode](longhorn-storage-boundary.md#after-storage-filtering-is-activated), once, with freshly bound destinations. Require T1–T7 TCP timeouts and T8 curl timeout/HTTP 000, preserve the logs, and remove its Pod/policy/namespace and IPAM allocation. Pair these negative results with the exact filter state, healthy replicas, active node iSCSI connections, and **a completed normal Longhorn backup to the existing NAS NFS target** using the [backup procedure](longhorn-backup-restore.md). A TCP port-2049 connection is not NFS backup proof. Do not alter retention or create a new backup destination.
+After every manager and IM has passed, run the separately authorized [eight-check tenant probe in blocked mode](longhorn-storage-boundary.md#after-storage-filtering-is-activated), once, with freshly bound destinations. Require T1–T7 TCP timeouts and T8 curl timeout/HTTP 000, preserve the logs, and remove its Pod/policy/namespace and IPAM allocation. Pair these negative results with the exact filter state, healthy replicas, active node iSCSI connections, and **a completed normal Longhorn backup to the existing NAS NFS target** by creating one on-demand backup in the Longhorn UI for an existing small volume already covered by the normal backup policy. Record the volume/backup ID and completed result; use the existing default target and leave retention unchanged. The [backup runbook](longhorn-backup-restore.md) describes that target. A TCP port-2049 connection is not NFS backup proof. Do not alter retention or create a new backup destination.
 
 Stop at a failed check; preserve the observed cause and choose recovery instead of continuing automatically. To roll back, revert the isolation layer and **wait for Flux to restore the original NAD** before recreating affected managers/IMs by the same safe sequence. Verify the original /24 routes, original sysctl values and storage-interface IPv6 against the captured baseline, plus full storage/backup health. Reverting Git does not change a running sandbox. Keep `tuning` installed until all chained sandboxes are gone; pruning its installer does not remove the host binary.
 

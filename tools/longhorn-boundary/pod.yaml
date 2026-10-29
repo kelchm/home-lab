@@ -109,6 +109,7 @@ spec:
               [[ $expected == refused && $rc == 1 && $out == *"Connection refused"* ]] ||
               [[ $expected == timeout && $rc == 1 && $out == *"timed out"* ]] ||
               stop "$id unexpected result; no further attempts"
+            [[ $EXPECT_STORAGE_ACCESS != blocked ]] || sleep 1
           }
           # OpenBSD nc -n disables DNS, -z connects/closes without payload. One address/port each.
           attempt T1 refused   nc -4 -n -z -v -w 3 -s "$src4" 10.32.25.131 8504
