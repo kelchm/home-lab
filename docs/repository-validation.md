@@ -29,6 +29,8 @@ The Repository Configuration Validation job runs on every pull request and push 
 
 Run the same image test locally with `docker run --rm -v "$PWD:/workspace:ro" -w /workspace --entrypoint node IMAGE scripts/ci/test-renovate-workflow-images.mjs`, using the Renovate image reference from the workflow. For an existing npm installation, pass its Renovate package directory as the script's first argument. Image origins and update streams are recorded in [Dependency updates](runbooks/dependency-updates.md#ci-workflow-images).
 
+The same pinned Renovate job runs `scripts/ci/test-renovate-caddy.mjs` against the real Hermes Dockerfile and configuration. It checks module extraction/replacement, paired core-release updates, and independent same-release builder/runtime digest refreshes. The separate [Hermes Caddy image workflow](../.github/workflows/hermes-caddy-image.yaml) owns the single expensive native amd64 qualification build per relevant PR or main publication; the common workflow does not build Caddy again. Its cheap scope and metadata/promotion tests run without Docker, and its [runtime checks](../proxmox/guests/hermes-1/README.md#caddy-image-lifecycle-preparation) remain review evidence, without an enforced branch-protection gate or guest rollout.
+
 ## Label checks
 
 Label Catalog Validation runs the pinned label-sync action in read-only dry-run mode when label configuration or its workflows change on a PR, and on every push to `main`. It parses the catalog and prints planned label changes in the job log. Errors reported by the action fail `Validation Success`; planned deletions or merges are visible but do not themselves fail the dry run. The separate Label Sync workflow applies catalog changes after merge.
