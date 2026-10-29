@@ -1,0 +1,81 @@
+---
+# Installs the upstream `tuning` CNI plugin, which Talos leaves out of its
+# curated /opt/cni/bin. The Longhorn storage-network NAD chains it after
+# bridge to set the interface sysctls that confine that attachment to its
+# storage peers.
+#
+# Talos keeps /opt across reboots and upgrades, so after the first install
+# this is a no-op that needs no network. On a node whose EPHEMERAL was wiped,
+# storage-network pods fail sandbox creation until this has run; kubelet
+# retries them.
+#
+# Bump VERSION and SHA256 together; the checksum is published beside the
+# release tarball. Keep the binary while any pod created from a NAD that
+# chains tuning exists: Multus runs DEL through the cached chain.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: cni-tuning
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/name: cni-tuning
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cni-tuning
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: cni-tuning
+    spec:
+      hostNetwork: true
+      priorityClassName: system-node-critical
+      tolerations:
+        - operator: Exists
+      initContainers:
+        - name: install
+          image: docker.io/alpine/k8s:1.37.1@sha256:712dc5385d1c1a3f83b747fa9e40f64d433a97f72ff42f9755ff7dd1f62846e4
+          env:
+            - name: VERSION
+              value: v1.9.1
+            - name: SHA256
+              value: b98f74a0f8522f0a83867178729c1aa70f2158f90c45a2ca8fa791db1c76b303
+          command:
+            - /bin/sh
+            - -ec
+            - |
+              bin=/host/opt/cni/bin
+              if [ -x "$bin/tuning" ] && [ -f "$bin/.tuning-$VERSION" ]; then
+                echo "tuning $VERSION already installed"
+                exit 0
+              fi
+              cd /tmp
+              tgz="cni-plugins-linux-amd64-$VERSION.tgz"
+              curl -fsSLo "$tgz" "https://github.com/containernetworking/plugins/releases/download/$VERSION/$tgz"
+              echo "$SHA256  $tgz" | sha256sum -c -
+              tar -xzf "$tgz" ./tuning
+              # Rename into place so a concurrent CNI call never runs a partial file.
+              install -m 0755 tuning "$bin/.tuning.new"
+              mv -f "$bin/.tuning.new" "$bin/tuning"
+              rm -f "$bin"/.tuning-v*
+              touch "$bin/.tuning-$VERSION"
+              echo "installed tuning $VERSION"
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: cni-bin
+              mountPath: /host/opt/cni/bin
+      containers:
+        - name: pause
+          image: registry.k8s.io/pause:3.10.2@sha256:f548e0e8e3dc1896ca956272154dde3314e8cc4fde0a57577ee9fa1c63f5baf4
+          resources:
+            requests:
+              cpu: 1m
+              memory: 8Mi
+            limits:
+              memory: 16Mi
+      volumes:
+        - name: cni-bin
+          hostPath:
+            path: /opt/cni/bin
+            type: Directory

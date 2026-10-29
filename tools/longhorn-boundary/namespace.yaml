@@ -1,0 +1,9 @@
+---
+# Manual diagnostic only. Read docs/runbooks/longhorn-storage-boundary.md first.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: netprobe-226
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: v1.36
