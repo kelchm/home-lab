@@ -241,10 +241,10 @@ class RuntimeTests(unittest.TestCase):
         self.command.side_effect = None
         self.command.return_value = (0, b'prefix\n{"success":false,"error":{"code":105}}')
         with self.assertRaises(acme.Failure):
-            self.runner.api("import", {"id": "newDSM", "as_default": "true"})
+            self.runner.api("import", {"id": "newDSM", "as_default": True})
         args = self.command.call_args.args[0]
         self.assertIn('id="newDSM"', args)
-        self.assertIn('as_default="true"', args)
+        self.assertIn('as_default=true', args)
         self.assertEqual(args[0], acme.SYNOWEBAPI)
         self.assertIn(b"\"success\":false", self.runner.read(self.root / "last-error.log"))
         self.assertEqual((self.root / "last-error.log").stat().st_mode & 0o777, 0o600)
@@ -296,7 +296,7 @@ class RuntimeTests(unittest.TestCase):
         def import_api(method, params):
             self.assertEqual(method, "import")
             self.assertNotIn("id", params)
-            self.assertEqual(params["as_default"], "false")
+            self.assertNotIn("as_default", params)
             for field in ("key_tmp", "cert_tmp", "inter_cert_tmp"):
                 staged = Path(params[field])
                 self.assertEqual(staged.stat().st_mode & 0o777, 0o600)
@@ -309,6 +309,25 @@ class RuntimeTests(unittest.TestCase):
         with self.assertRaisesRegex(acme.Failure, "original"):
             self.runner.import_bundle(self.runner.bundle("issued"), acme.ORIGINAL_ID)
 
+    def test_replacement_preserves_default_with_native_boolean(self):
+        self.command.side_effect = None
+        self.command.return_value = (0, b'{"success":true,"data":{"id":"newDSM"}}')
+        self.runner.import_bundle(self.runner.bundle("issued"), "newDSM", is_default=True)
+        args = self.command.call_args.args[0]
+        self.assertIn('id="newDSM"', args)
+        self.assertEqual([arg for arg in args if arg.startswith("as_default=")], ["as_default=true"])
+        self.assertTrue((self.root / "issued/key.pem").exists())
+
+    def test_nonboolean_default_flag_is_refused_before_staging_or_import(self):
+        with patch.object(acme.tempfile, "TemporaryDirectory") as staged, \
+                patch.object(self.runner, "write") as written, patch.object(self.runner, "api") as imported:
+            for value in (0, 1, "false", "true", None, [], {}):
+                with self.subTest(value=value), self.assertRaisesRegex(acme.Failure, "must be a boolean"):
+                    self.runner.import_bundle(self.runner.bundle("issued"), "newDSM", is_default=value)
+            staged.assert_not_called()
+            written.assert_not_called()
+            imported.assert_not_called()
+
     def test_initial_import_preserves_snapshot_and_requires_returned_id(self):
         current = baseline()
         added = dict(current, newDSM={"desc": acme.DESCRIPTION, "is_default": False, "services": []})
@@ -319,6 +338,21 @@ class RuntimeTests(unittest.TestCase):
             self.runner.import_new()
         self.assertEqual(self.runner.load("baseline.json")["mapping"], baseline())
         self.assertEqual(self.runner.load("candidate.json")["cert_id"], "newDSM")
+
+    def test_initial_default_change_fails_closed_and_retry_does_not_duplicate(self):
+        changed = baseline()
+        changed[acme.ORIGINAL_ID]["is_default"] = False
+        changed["newDSM"] = {"desc": acme.DESCRIPTION, "is_default": True, "services": []}
+        with patch.object(self.runner, "snapshot", side_effect=[baseline(), changed, changed]), \
+                patch.object(self.runner, "validate", return_value=NEW), \
+                patch.object(self.runner, "import_bundle", return_value={"success": True, "data": {"id": "newDSM"}}) as imported:
+            for attempt in ("initial", "recovery"):
+                with self.subTest(attempt=attempt), self.assertRaisesRegex(acme.Failure, "changed existing defaults"):
+                    self.runner.import_new()
+                self.assertEqual(self.runner.load("baseline.json")["mapping"], baseline())
+                for name in ("candidate.json", "accepted.json", "good.json", "last-verified-success.json"):
+                    self.assertFalse(self.root.joinpath(name).exists())
+            imported.assert_called_once()
 
     def test_recover_initial_success_without_creating_duplicate(self):
         self.save("baseline.json", {"mapping": baseline()})

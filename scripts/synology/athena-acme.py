@@ -557,10 +557,15 @@ class Runner:
         return bundle
 
     def import_bundle(self, bundle, cert_id=None, is_default=False):
+        require(type(is_default) is bool, "DSM default preservation flag must be a boolean")
         require(cert_id != ORIGINAL_ID, "Refusing to replace the original DSM certificate")
         # DSM may move the supplied paths; originals and rollback remain intact.
         with tempfile.TemporaryDirectory(prefix="import-", dir=str(self.root)) as stage:
-            parameters = {"desc": DESCRIPTION, "as_default": "true" if is_default else "false"}
+            parameters = {"desc": DESCRIPTION}
+            # Omit this optional field for nondefault imports. DSM can treat a
+            # supplied JSON string "false" as a request to change the default.
+            if is_default:
+                parameters["as_default"] = True
             for field, filename in (("key_tmp", "key.pem"), ("cert_tmp", "cert.pem"),
                                     ("inter_cert_tmp", "chain.pem")):
                 target = Path(stage) / filename
