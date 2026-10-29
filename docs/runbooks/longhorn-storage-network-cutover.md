@@ -2,6 +2,58 @@
 
 Runbook for moving Longhorn replica engine ↔ replica engine traffic onto VLAN 25 (2.5GbE storage NIC) via Multus + bridge CNI. **Already executed for the prod cluster on 2026-05-02.** Kept as a reference for similar work; re-inventory cluster-specific node paths, namespaces, workloads, and safety gates before reuse.
 
+## Storage-interface isolation (#1120)
+
+**Prepared; production activation is pending.** The 2026-10-29 tenant test reached Longhorn control listeners over IPv4 and IPv6. The proposed bridge → tuning chain limits incoming storage-interface IPv4 to Longhorn peers, nodes and the NAS, and disables IPv6 on that interface. This section is a rolling filter activation, separate from the historical May cutover below. It does not change the Longhorn storage-network setting, detach every volume together, or upgrade/reboot Talos.
+
+Merging the isolation PR deploys a privileged CNI-binary installer and changes the live NAD through Flux. Existing sandboxes keep their configuration, but any replacement can immediately use the filter. **Merge only inside the approved activation window.** Approval must include manager replacement, one-node-at-a-time drains with the chosen database availability strategy, read-only network inspection inside Longhorn containers, the eight-check acceptance batch, one normal Longhorn backup, and rollback if needed.
+
+### Before merge
+
+1. Run the [Talos rollout preflight](../../.agents/skills/talos-rollout/SKILL.md#preflight-the-cluster) with usable explicit kubeconfig/talosconfig paths. Preserve the original NAD, Pod UIDs/container and sandbox IDs, storage addresses, routes/sysctls, primary routes, IPAM allocations, volume/replica state and BackupTarget status. Confirm direct recovery access, healthy etcd, three Ready nodes, every in-use volume attached/healthy and every IM Ready with `lhnet1`.
+2. Freshly inspect every Longhorn storage-network consumer and the old Whereabouts pool/reservations. **No old consumer may use 10.32.25.143:** it becomes broadcast inside a new /28. If one exists, stop and agree how to retire it before deploying the NAD. The saved .128 consumer is usable as a peer; it need not be removed solely for its address. New allocations are .129–.142. Keep the old pool while old consumers exist.
+3. Select node order from current workloads. For each CNPG singleton on a candidate, obtain the explicit temporary-replica/switchover or accepted-downtime decision with a verified restorable backup. Resolve PDB blockers deliberately; do not force drains, disable eviction or silently change database topology. Save an etcd snapshot before the first drain. Confirm no overlapping NAS maintenance/backup work.
+4. Merge the approved stack. Wait for `daemonset/cni-tuning` Ready on all three nodes, successful checksum-verified install logs, and the exact bridge → tuning NAD with its /28, four /32 routes and three sysctls. Stop on CNI setup errors. No direct host sysctl edit is part of this change.
+
+### Prove each replacement has the filter
+
+Record old/new Pod UIDs and container/sandbox IDs; a container restart in the same sandbox is insufficient. After each replacement, inspect the actual network namespace. Use `net1` for a manager and `lhnet1` for an IM, with the selected container name (normally `longhorn-manager` / `instance-manager`):
+
+```bash
+# Read-only, after recording the selected Pod UID and container/sandbox identity.
+kubectl -n longhorn-system exec "$pod" -c "$container" -- sh -ceu '
+  iface=$1
+  ip -d link show dev "$iface"
+  ip -4 address show dev "$iface"
+  ip -6 address show dev "$iface"
+  ip -4 rule show
+  ip -4 route show table all
+  ip -6 route show dev "$iface"
+  cat /proc/sys/net/ipv4/conf/all/rp_filter
+  cat "/proc/sys/net/ipv4/conf/$iface/rp_filter"
+  cat "/proc/sys/net/ipv6/conf/$iface/disable_ipv6"
+' sh "$iface"
+```
+
+Require an actual .129–.142 **/28** address, connected `10.32.25.128/28`, gatewayless storage routes to NAS .5 and nodes .11–.13, and the unchanged primary default route. Read the three sysctls as **0 / 1 / 1** and require **no inet6 address or IPv6 route on the storage interface**. Use local `ip -4 route get` lookups for a current peer, NAS .5 and nodes .11–.13 to confirm the storage interface; a tenant address such as .161 must resolve through the primary interface. Recheck the Pod UID and container/sandbox identity after inspection. If a pinned image lacks an inspection tool, stop for a read-only Talos netns alternative; do not install tools in production containers.
+
+These checks prove activation; `verify-node.sh` alone only proves ordinary storage health. The static source filter does not authenticate allowed addresses, and privileged/shared-VLAN actors can still forge them.
+
+### Roll managers, then one node at a time
+
+1. Replace **one** selected manager using a UID-preconditioned Pod delete (the [diagnostic cleanup](longhorn-storage-boundary.md#cleanup-including-failed-attempts) shows the native DeleteOptions form). Wait for its replacement Ready, verify the filter above, and check fresh manager/controller health and the `default` BackupTarget. Stop on new errors/unavailability before replacing the other managers, individually with the same checks. A DaemonSet-wide restart is not a paused canary.
+2. For the selected node, repeat candidate preflight and its database/PDB decision. Perform a bounded PDB-respecting `kubectl drain "$node" --ignore-daemonsets --delete-emptydir-data --timeout=15m`; do not add `--force` or `--disable-eviction`. A failed drain ends the sequence for diagnosis. Observe the old IM Pod/sandbox gone and its allocations released; do not directly delete an IM carrying engines or replicas.
+3. Uncordon that node. Wait for a new IM Pod/sandbox and verify its filter. Run `.agents/skills/talos-rollout/scripts/verify-node.sh "$node"` and Talos/etcd health. Require all in-use volumes attached/healthy, expected replicas restored and all IMs Ready. Record actual replica recovery and host iSCSI established connections to the current storage addresses through read-only Talos netstat. Ordinary peer/node/NAS routes must still work.
+4. Only then preflight the next node; database placement may have changed. Old /24 and new /28 consumers can coexist for the checked address set without .143; overlap reservations prevent duplicate allocation but do not remove the broadcast constraint.
+
+### Acceptance and rollback
+
+After every manager and IM has passed, run the separately authorized [eight-check tenant probe in blocked mode](longhorn-storage-boundary.md#after-storage-filtering-is-activated), once, with freshly bound destinations. Require T1–T7 TCP timeouts and T8 curl timeout/HTTP 000, preserve the logs, and remove its Pod/policy/namespace and IPAM allocation. Pair these negative results with the exact filter state, healthy replicas, active node iSCSI connections, and **a completed normal Longhorn backup to the existing NAS NFS target** using the [backup procedure](longhorn-backup-restore.md). A TCP port-2049 connection is not NFS backup proof. Do not alter retention or create a new backup destination.
+
+Stop at a failed check; preserve the observed cause and choose recovery instead of continuing automatically. To roll back, revert the isolation layer and **wait for Flux to restore the original NAD** before recreating affected managers/IMs by the same safe sequence. Verify the original /24 routes, original sysctl values and storage-interface IPv6 against the captured baseline, plus full storage/backup health. Reverting Git does not change a running sandbox. Keep `tuning` installed until all chained sandboxes are gone; pruning its installer does not remove the host binary.
+
+Close #1120 only after functional acceptance and cleanup, with the residual explicitly accepted: NAS/node/host-network identities remain trusted, shared-L2 source forgery remains possible, and host listeners/CNPG reach beyond this destination boundary remain under #226. Until then the production filter is unverified.
+
 ## Why bridge, not macvlan or ipvlan
 
 The first three cutover attempts on prod tried macvlan, then ipvlan L2. Both got the network *between pods* working (cross-host replica traffic flowed fine) but blocked Longhorn's iSCSI flow at the host: `iscsiadm` runs in the host's network namespace and has to reach the same-node engine's iSCSI target on the secondary interface IP. macvlan and ipvlan L2 both isolate the host's parent-NIC stack from same-node Multus-attached pods at the kernel level — host-to-pod ARP doesn't loop back through the wire. Volumes hung mid-attach with `Host is unreachable`.

@@ -33,7 +33,7 @@
 #     NAS (backup target) and the three node storage addresses, which the
 #     host's iscsiadm uses to reach the same-node engine.
 #   - Strict rp_filter drops IPv4 from any source not routed back through
-#     this interface and stops answering its ARP requests. The kernel
+#     this interface and suppresses ordinary ARP replies to those sources. The kernel
 #     applies the larger of the `all` and interface values, and 2 (loose)
 #     would pass everything, so `all` is pinned to 0 as on the nodes.
 #   - IPv6 is disabled on the interface. Nothing here uses it, and its

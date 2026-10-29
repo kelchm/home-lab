@@ -34,6 +34,9 @@ spec:
       env:
         - name: LC_ALL
           value: C
+        # Use blocked only after the Longhorn filter has been activated and checked.
+        - name: EXPECT_STORAGE_ACCESS
+          value: baseline
       securityContext:
         privileged: false
         allowPrivilegeEscalation: false
@@ -53,6 +56,10 @@ spec:
           set -o pipefail
           stop() { printf 'STOP: %s\n' "$*" >&2; exit 1; }
           trap 'printf "STOP at line %s\n" "$LINENO" >&2' ERR
+          case "$EXPECT_STORAGE_ACCESS" in
+            baseline|blocked) printf 'expectation=%s\n' "$EXPECT_STORAGE_ACCESS" ;;
+            *) stop 'unknown storage-access expectation' ;;
+          esac
 
           # Inspect only net1; extra harmless interfaces are irrelevant.
           a4=$(ip -j -4 address show dev net1)
@@ -95,10 +102,12 @@ spec:
           attempt() {
             local id=$1 expected=$2 out rc
             shift 2
+            [[ $EXPECT_STORAGE_ACCESS != blocked ]] || expected=timeout
             if out=$("$@" 2>&1); then rc=0; else rc=$?; fi
             printf '%s ' "$id"; printf '%q ' "$@"; printf 'rc=%s %s\n' "$rc" "$out"
             [[ $expected == connected && $rc == 0 ]] ||
               [[ $expected == refused && $rc == 1 && $out == *"Connection refused"* ]] ||
+              [[ $expected == timeout && $rc == 1 && $out == *"timed out"* ]] ||
               stop "$id unexpected result; no further attempts"
           }
           # OpenBSD nc -n disables DNS, -z connects/closes without payload. One address/port each.
@@ -115,5 +124,7 @@ spec:
             --request GET --silent --show-error --output /dev/null --write-out '%{http_code}' \
             http://10.32.25.130:9503/); then rc=0; else rc=$?; fi
           printf 'T8 source=%s destination=10.32.25.130:9503 GET / rc=%s http=%s\n' "$src4" "$rc" "$code"
-          [[ $rc == 0 && $code == 404 ]] || stop 'T8 unexpected result; record status only'
+          [[ $EXPECT_STORAGE_ACCESS == baseline && $rc == 0 && $code == 404 ]] ||
+            [[ $EXPECT_STORAGE_ACCESS == blocked && $rc == 28 && $code == 000 ]] ||
+            stop 'T8 unexpected result; record status only'
           printf 'DONE T1-T8; conclusions cover only these exact tuples\n'
