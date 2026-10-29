@@ -22,6 +22,9 @@ import subprocess
 import sys
 import tempfile
 import time
+import shutil
+import urllib.parse
+import urllib.request
 
 HOST = "athena.home.kelch.io"
 ROOT = Path("/volume1/@athena-acme")
@@ -33,11 +36,12 @@ OPENSSL = "/usr/bin/openssl"
 # dereferenced source commit 807da6498377ee5e0cf43a78091f46f12dc59a89.
 SOURCE_HASHES = {
     "acme.sh": "c7d68b021cfd6380ea83a82962abde5b484779fee0b97d38681dfa1396bbc8d7",
-    "dnsapi/dns_cf.sh": "9628ee8238cb3f9cfa1b1a985c0e9593436a3e4f8a9d65a6f775b981be9e76c8",
+    "dnsapi/dns_athena.sh": "573623524e1aeaeb8ae23a9e6652c15c0be6e66774bca5b82881a6484eb3962b",
 }
 FILES = ("cert.pem", "key.pem", "chain.pem", "fullchain.pem")
-MIN_VALIDITY = 21 * 86400
-FRESHNESS = 26 * 3600
+MIN_VALIDITY = 7 * 86400
+RECOVERY_VALIDITY = 86400
+FRESHNESS = 3 * 3600
 MAX_OUTPUT = 1024 * 1024
 
 
@@ -55,15 +59,10 @@ def canonical(value):
 
 
 def parse_api(output):
-    """Accept the known DSM text preamble, but exactly one JSON response."""
+    """Parse stdout only; native diagnostics are captured separately."""
     try:
         text = output.decode("utf-8")
-        # DSM writes param={} on its diagnostic preamble line. The response
-        # JSON starts on its own line; do not mistake that parameter for it.
-        start = re.search(r"(?m)^[ \t]*\{", text)
-        if start is None:
-            raise ValueError("missing JSON response")
-        result = json.loads(text[start.start():])
+        result = json.loads(text)
     except (ValueError, UnicodeError):
         raise Failure("DSM API returned an invalid JSON response")
     require(isinstance(result, dict) and result.get("success") is True,
@@ -131,6 +130,7 @@ def accepted_transition(baseline, current, cert_id):
 class Runner:
     def __init__(self, root=ROOT):
         self.root = Path(root)
+        self.command_stderr = b""
 
     def path(self, name):
         return self.root / name
@@ -203,7 +203,7 @@ class Runner:
         client = self.path("client")
         self.guard(client, directory=True)
         actual = {str(path.relative_to(client)) for path in client.rglob("*") if path.is_file()}
-        require(actual == set(SOURCE_HASHES), "Only the pinned ACME core and Cloudflare DNS plugin may be installed")
+        require(actual == set(SOURCE_HASHES), "Only the pinned ACME core and Athena DNS adapter may be installed")
         for name, digest in SOURCE_HASHES.items():
             require(hashlib.sha256(self.read(client / name)).hexdigest() == digest,
                     "Pinned ACME source hash mismatch")
@@ -228,7 +228,7 @@ class Runner:
                     if key == "AUTO_UPGRADE":
                         require(value.strip() in ("0", "'0'", '"0"'), "ACME automatic upgrades are forbidden")
                     if key in ("Le_Domain", "Le_Alt", "Le_Webroot", "Le_Keylength"):
-                        expected = {"Le_Domain": HOST, "Le_Alt": "no", "Le_Webroot": "dns_cf",
+                        expected = {"Le_Domain": HOST, "Le_Alt": "no", "Le_Webroot": "dns_athena",
                                     "Le_Keylength": "ec-256"}[key]
                         require(value.strip() in (expected, "'" + expected + "'", '"' + expected + '"'),
                                 "Saved ACME domain configuration is outside the allowed scope")
@@ -254,7 +254,7 @@ class Runner:
     def diagnostic(self, output):
         # Only private diagnostics retain child output, which may contain a
         # credential. Scheduler errors never include this text.
-        self.write(self.path("last-error.log"), output[:65536])
+        self.write(self.path("last-error.log"), (output[:32768] + b"\n--- stderr ---\n" + self.command_stderr[:32768]))
 
     def command(self, argv, env=None, timeout=120):
         # Outputs may contain Cloudflare credentials. Keep them in an unlinked,
@@ -262,15 +262,18 @@ class Runner:
         environment = {"PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "HOME": "/root", "LC_ALL": "C"}
         if env:
             environment.update(env)
-        with tempfile.TemporaryFile(dir=str(self.root)) as output:
-            process = subprocess.Popen(argv, stdout=output, stderr=subprocess.STDOUT,
+        self.command_stderr = b""
+        with tempfile.TemporaryFile(dir=str(self.root)) as output, tempfile.TemporaryFile(dir=str(self.root)) as errors:
+            process = subprocess.Popen(argv, stdout=output, stderr=errors,
                                        env=environment, start_new_session=True)
             deadline = time.monotonic() + timeout
             while process.poll() is None:
-                if time.monotonic() >= deadline or os.fstat(output.fileno()).st_size > MAX_OUTPUT:
+                if time.monotonic() >= deadline or sum(os.fstat(stream.fileno()).st_size for stream in (output, errors)) > MAX_OUTPUT:
                     os.killpg(process.pid, signal.SIGKILL)
                     process.wait()
                     output.seek(0)
+                    errors.seek(0)
+                    self.command_stderr = errors.read(32768)
                     self.diagnostic(output.read(65536))
                     raise Failure("External command timed out or exceeded its output limit")
                 try:
@@ -278,8 +281,10 @@ class Runner:
                 except subprocess.TimeoutExpired:
                     pass
             output.seek(0)
+            errors.seek(0)
             data = output.read(MAX_OUTPUT + 1)
-            if len(data) > MAX_OUTPUT:
+            self.command_stderr = errors.read(MAX_OUTPUT + 1)
+            if len(data) + len(self.command_stderr) > MAX_OUTPUT:
                 self.diagnostic(data)
                 raise Failure("External command exceeded its output limit")
             return process.returncode, data
@@ -316,22 +321,93 @@ class Runner:
                 "DSM certificate identity, default, or service assignments drifted")
         return accepted
 
+    def standing_identity(self, current, cert_id):
+        require(named_certificate(current) == cert_id and ORIGINAL_ID in current,
+                "Recorded DSM certificate or original certificate is missing")
+        require(current[cert_id]["is_default"] and any(
+            tuple(service[key] for key in ("owner", "subscriber", "service")) == ("root", "system", "default")
+            for service in current[cert_id]["services"]), "Recorded certificate must remain DSM system/default")
+
+    def review_bindings(self):
+        accepted = self.load("accepted.json")
+        current = self.snapshot()
+        self.standing_identity(current, accepted.get("cert_id"))
+        print(json.dumps({"accepted": accepted["mapping"], "current": current,
+                          "current_sha256": hashlib.sha256(canonical(current).encode()).hexdigest()}, indent=2, sort_keys=True))
+
+    def rebaseline(self, expected_snapshot):
+        require(bool(re.fullmatch(r"[a-f0-9]{64}", expected_snapshot or "")),
+                "Rebaseline requires the reviewed current map SHA-256")
+        accepted = self.load("accepted.json")
+        current = self.snapshot()
+        self.standing_identity(current, accepted.get("cert_id"))
+        require(hashlib.sha256(canonical(current).encode()).hexdigest() == expected_snapshot,
+                "DSM map differs from the reviewed snapshot")
+        good = self.load("good.json")
+        self.saved_bundle(good, validate=False)
+        self.live(good["sha256"], minimum=0)
+        require(self.snapshot() == current, "DSM map changed during rebaseline")
+        self.save("accepted.json", {"cert_id": accepted["cert_id"], "mapping": current})
+        # Do not advance the renewal marker. Run must still issue/check normally.
+
+    def cloudflare(self, method, endpoint, payload=None):
+        body = None if payload is None else canonical(payload).encode()
+        request = urllib.request.Request("https://api.cloudflare.com/client/v4/" + endpoint,
+            data=body, method=method, headers={"Authorization": "Bearer " + self.token(), "Content-Type": "application/json"})
+        # A default opener may follow redirects with the Authorization header.
+        # Refuse redirects; the fixed Cloudflare origin must answer directly.
+        class NoRedirect(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self, request, fp, code, message, headers, newurl):
+                return None
+        with urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect()).open(request, timeout=30) as response:
+            raw = response.read(MAX_OUTPUT + 1)
+        require(len(raw) <= MAX_OUTPUT, "Cloudflare response exceeds its size limit")
+        data = json.loads(raw)
+        require(isinstance(data, dict) and data.get("success") is True and isinstance(data.get("result"), list if method == "GET" else dict),
+                "Cloudflare DNS API did not report the expected success")
+        return data["result"]
+
+    def dns(self, action, name, value):
+        require(name == "_acme-challenge." + HOST and bool(re.fullmatch(r"[A-Za-z0-9_-]{43}", value or "")),
+                "DNS hook accepts only the Athena challenge name and a SHA-256 TXT value")
+        zones = self.cloudflare("GET", "zones?name=kelch.io")
+        require(len(zones) == 1 and isinstance(zones[0], dict) and zones[0].get("name") == "kelch.io", "Expected exactly the kelch.io zone")
+        zone = zones[0].get("id", "")
+        require(isinstance(zone, str) and bool(re.fullmatch(r"[a-f0-9]{32}", zone)), "Cloudflare zone ID is invalid")
+        endpoint = "zones/" + zone + "/dns_records"
+        records = self.cloudflare("GET", endpoint + "?" + urllib.parse.urlencode({"type": "TXT", "name.exact": name, "match": "all", "per_page": 100}))
+        require(len(records) < 100, "Ambiguous paginated challenge records require inspection")
+        matches = []
+        for record in records:
+            require(isinstance(record, dict) and record.get("type") == "TXT" and record.get("name") == name,
+                    "Unexpected challenge record response")
+            if record.get("content") != value:
+                continue  # Preserve another client's simultaneous TXT value.
+            record_id = record.get("id", "")
+            require(isinstance(record_id, str) and bool(re.fullmatch(r"[a-f0-9]{32}", record_id)), "Cloudflare record ID is invalid")
+            matches.append(record_id)
+        if action == "dns-add" and not matches:
+            self.cloudflare("POST", endpoint, {"type": "TXT", "name": name, "content": value, "ttl": 120})
+        elif action == "dns-remove":
+            for record_id in matches:
+                self.cloudflare("DELETE", endpoint + "/" + record_id)
+
     def token(self):
         token = self.read(self.path("cloudflare-token")).decode("ascii").strip()
         require(bool(re.fullmatch(r"[A-Za-z0-9_-]{20,256}", token)), "Cloudflare credential format is invalid")
         return token
 
     def acme(self, initial=False):
-        token = self.token()
+        self.token()  # Validate the protected input before starting the client.
         common = ["/bin/sh", str(self.path("client/acme.sh")),
                   "--home", str(self.path("client")), "--config-home", str(self.path("state")),
                   "--cert-home", str(self.path("certs")), "--server", "letsencrypt"]
         domain_conf = self.path("certs") / (HOST + "_ecc") / (HOST + ".conf")
         if initial and not domain_conf.exists():
-            action = ["--issue", "--dns", "dns_cf", "-d", HOST, "--keylength", "ec-256"]
+            action = ["--issue", "--dns", "dns_athena", "-d", HOST, "--keylength", "ec-256"]
         else:
             action = ["--renew", "-d", HOST, "--ecc"]
-        code, output = self.command(common + action, env={"CF_Token": token}, timeout=900)
+        code, output = self.command(common + action, timeout=1800)
         if not (code == 0 or (code == 2 and "--renew" in action)):
             self.diagnostic(output)
             raise Failure("ACME issue/renew failed")
@@ -339,7 +415,7 @@ class Runner:
         install = ["--install-cert", "-d", HOST, "--ecc", "--cert-file", str(self.path("issued/cert.pem")),
                    "--key-file", str(self.path("issued/key.pem")), "--ca-file", str(self.path("issued/chain.pem")),
                    "--fullchain-file", str(self.path("issued/fullchain.pem"))]
-        code, output = self.command(common + install, env={"CF_Token": token}, timeout=120)
+        code, output = self.command(common + install, timeout=120)
         if code != 0:
             self.diagnostic(output)
             raise Failure("ACME stable certificate installation failed")
@@ -349,7 +425,7 @@ class Runner:
     def bundle(self, directory):
         return {name: self.path(directory) / name for name in FILES}
 
-    def validate(self, bundle):
+    def validate(self, bundle, minimum=MIN_VALIDITY):
         for path in bundle.values():
             self.read(path)
         cert, key, chain = (str(bundle[name]) for name in FILES[:3])
@@ -359,7 +435,7 @@ class Runner:
         san = self.checked([OPENSSL, "x509", "-in", cert, "-noout", "-ext", "subjectAltName"])
         names = [item.strip() for item in b"\n".join(san.splitlines()[1:]).decode("ascii").split(",")]
         require(names == ["DNS:" + HOST], "Certificate must have exactly the Athena DNS SAN")
-        self.checked([OPENSSL, "x509", "-in", cert, "-noout", "-checkend", str(MIN_VALIDITY)])
+        self.checked([OPENSSL, "x509", "-in", cert, "-noout", "-checkend", str(minimum)])
         self.checked([OPENSSL, "verify", "-purpose", "sslserver", "-verify_hostname", HOST,
                       "-untrusted", chain, cert])
         # Import consumes leaf + intermediates; verify stable fullchain agrees too.
@@ -396,16 +472,16 @@ class Runner:
                     self.write(Path(stage) / name, self.read(source))
                 os.rename(stage, str(directory))
         archived = self.bundle("bundles/" + fingerprint)
-        require(self.validate(archived) == fingerprint, "Archived certificate bundle is inconsistent")
+        require(self.validate(archived, minimum=0) == fingerprint, "Archived certificate bundle is inconsistent")
         return {"sha256": fingerprint}
 
-    def saved_bundle(self, pointer, validate=True):
+    def saved_bundle(self, pointer, validate=True, minimum=MIN_VALIDITY):
         fingerprint = pointer.get("sha256", "")
         require(isinstance(fingerprint, str) and re.fullmatch(r"[a-f0-9]{64}", fingerprint),
                 "Saved certificate pointer is invalid")
         bundle = self.bundle("bundles/" + fingerprint)
         if validate:
-            require(self.validate(bundle) == fingerprint, "Saved certificate bundle does not match its pointer")
+            require(self.validate(bundle, minimum=minimum) == fingerprint, "Saved certificate bundle does not match its pointer")
         else:
             # A successful renewal must still recover when the prior good leaf
             # has aged out. Preserve its protected bytes without requiring it
@@ -430,11 +506,20 @@ class Runner:
                 parameters["id"] = cert_id
             return self.api("import", parameters)
 
-    def verified(self, bundle, fingerprint):
-        self.live(fingerprint)
+    def verified(self, bundle, fingerprint, minimum=MIN_VALIDITY):
+        self.live(fingerprint, minimum=minimum)
         self.current_accepted()
         pointer = self.archive(bundle, fingerprint)
         self.save("good.json", pointer)
+        keep = {fingerprint}
+        if self.path("previous.json").exists():
+            previous = self.load("previous.json")
+            self.saved_bundle(previous, validate=False)
+            keep.add(previous["sha256"])
+        for directory in self.path("bundles").iterdir():
+            if re.fullmatch(r"[a-f0-9]{64}", directory.name) and directory.name not in keep:
+                self.guard(directory, directory=True)
+                shutil.rmtree(str(directory))
         self.save("last-verified-success.json", {"at": int(time.time()), "sha256": fingerprint})
 
     def inspect(self):
@@ -463,7 +548,9 @@ class Runner:
             response = self.import_bundle(bundle)
             current = self.snapshot()
             cert_id = named_certificate(current)
-            returned_id = response.get("data", {}).get("id")
+            data = response.get("data")
+            require(isinstance(data, dict), "DSM import response data is invalid")
+            returned_id = data.get("id")
             require(returned_id == cert_id, "DSM import response does not identify the new certificate")
         else:
             # Recover a successful import whose response/postcheck was interrupted.
@@ -511,39 +598,51 @@ class Runner:
         else:
             self.verified(bundle, fingerprint)
 
-    def replace(self, bundle, fingerprint):
+    def replace(self, bundle, fingerprint, minimum=MIN_VALIDITY):
         accepted = self.current_accepted()
         self.import_bundle(bundle, accepted["cert_id"], accepted["mapping"][accepted["cert_id"]]["is_default"])
-        self.verified(bundle, fingerprint)
+        deadline = time.monotonic() + 60
+        while True:
+            try:
+                self.live(fingerprint, minimum=minimum)
+                break
+            except (Failure, OSError, ValueError):
+                if time.monotonic() >= deadline:
+                    raise Failure("DSM did not serve the expected trusted leaf within 60 seconds")
+                time.sleep(2)
+        self.verified(bundle, fingerprint, minimum=minimum)
 
     def reimport(self):
         self.current_accepted()
         good = self.load("good.json")
-        bundle = self.saved_bundle(good)
-        self.replace(bundle, good["sha256"])
+        bundle = self.saved_bundle(good, minimum=RECOVERY_VALIDITY)
+        self.replace(bundle, good["sha256"], minimum=RECOVERY_VALIDITY)
 
     def rollback(self):
         self.current_accepted()
         previous = self.load("previous.json")
-        bundle = self.saved_bundle(previous)
+        bundle = self.saved_bundle(previous, minimum=RECOVERY_VALIDITY)
         # Keep previous intact even on failure; rollback never revokes or issues.
-        self.replace(bundle, previous["sha256"])
+        self.replace(bundle, previous["sha256"], minimum=RECOVERY_VALIDITY)
 
     def watchdog(self):
         self.current_accepted()
         success = self.load("last-verified-success.json")
         age = time.time() - success.get("at", 0)
-        require(0 <= age <= FRESHNESS, "Last fully verified renewal check is older than 26 hours")
+        require(0 <= age <= FRESHNESS, "Last fully verified renewal check is older than 3 hours")
         fingerprint = success.get("sha256", "")
         require(isinstance(fingerprint, str) and re.fullmatch(r"[a-f0-9]{64}", fingerprint),
                 "Last verified certificate fingerprint is invalid")
         self.live(fingerprint)
 
-    def execute(self, action):
+    def execute(self, action, arguments=()):
         os.umask(0o077)
         self.audit()
-        if action in ("inspect", "watchdog"):
-            getattr(self, action)()
+        if action in ("dns-add", "dns-remove"):
+            self.dns(action, *arguments)
+            return
+        if action in ("inspect", "watchdog", "review-bindings"):
+            getattr(self, action.replace("-", "_"))()
             return
         with self.lock():
             self.audit()
@@ -551,19 +650,23 @@ class Runner:
                 directory = self.path(name)
                 directory.mkdir(mode=0o700, exist_ok=True)
                 self.guard(directory, directory=True)
-            getattr(self, action.replace("-", "_"))()
+            getattr(self, action.replace("-", "_"))(*arguments)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("inspect", "issue", "import-new", "accept", "run", "reimport", "rollback", "watchdog"))
+    parser.add_argument("action", choices=("inspect", "issue", "import-new", "accept", "run", "reimport", "rollback", "watchdog", "review-bindings", "rebaseline", "dns-add", "dns-remove"))
+    parser.add_argument("arguments", nargs="*")
     args = parser.parse_args()
+    count = 2 if args.action in ("dns-add", "dns-remove") else 1 if args.action == "rebaseline" else 0
+    if len(args.arguments) != count:
+        parser.error("Incorrect argument count for " + args.action)
     try:
-        Runner().execute(args.action)
+        Runner().execute(args.action, args.arguments)
     except Failure as error:
         print("Athena ACME: " + str(error), file=sys.stderr)
         return 1
-    except (OSError, ValueError, KeyError, TypeError, UnicodeError, ssl.SSLError):
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, UnicodeError, ssl.SSLError):
         # No traceback, argv, paths from API output, or credential-bearing output.
         print("Athena ACME: operation failed; inspect protected state and DSM certificate status", file=sys.stderr)
         return 1

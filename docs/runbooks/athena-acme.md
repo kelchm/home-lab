@@ -24,17 +24,17 @@ Intended reuse is deliberately limited:
 
 [`athena-acme.py`](../../scripts/synology/athena-acme.py) coordinates a root-only native client and DSM's local certificate API. [`prepare-athena-acme.sh`](../../scripts/synology/prepare-athena-acme.sh) prepares only the public client files on the operator machine. No doco-cd target or Flux resource installs either tool.
 
-The client is **acme.sh 3.1.6**, annotated tag object `c6e7807f8e2573bf8b02b71da186b4022afafa56`, source commit **`807da6498377ee5e0cf43a78091f46f12dc59a89`**. Only its core and Cloudflare DNS hook are installed. Their SHA-256 hashes are checked during preparation and execution. The runner invokes issuance/renewal and stable `--install-cert` output paths; it registers no deployment or reload hook. There is no upstream installer, cron installation, profile edit or automatic upgrade. Review client updates together with the DNS hook and wrapper, then rerun offline tests and the relevant compatibility checks.
+The client is **acme.sh 3.1.6**, annotated tag object `c6e7807f8e2573bf8b02b71da186b4022afafa56`, source commit **`807da6498377ee5e0cf43a78091f46f12dc59a89`**. Only the upstream core and the repository-owned `dns_athena` adapter are installed. Their SHA-256 hashes are checked during preparation and execution. The adapter accepts only the canonical Athena challenge name and operates on matching TXT values through Python HTTPS; it preserves simultaneous values from other clients. The runner invokes issuance/renewal and stable `--install-cert` output paths; it registers no deployment or reload hook. There is no upstream installer, cron installation, profile edit or automatic upgrade. Review client updates together with the local DNS adapter and wrapper, then rerun offline tests and the relevant compatibility checks.
 
-DSM import uses `/usr/syno/bin/synowebapi --exec` as root with `SYNO.Core.Certificate/import` v1 and protected staged `key_tmp`, `cert_tmp` and `inter_cert_tmp` files. Creation omits the certificate ID; replacement uses the recorded exact ID. API output must contain `success: true`; a zero process exit is insufficient. The runner then checks assignments and verifies both live TLS listeners independently. This uses DSM's own import operation without writing its generated certificate/nginx tree or invoking a service restart.
+DSM import uses `/usr/syno/bin/synowebapi --exec` as root with `SYNO.Core.Certificate/import` v1 and protected staged `key_tmp`, `cert_tmp` and `inter_cert_tmp` files. Creation omits the certificate ID; replacement uses the recorded exact ID. API output must contain `success: true`; a zero process exit is insufficient. The runner then checks assignments and allows up to about 60 seconds for both live TLS listeners to serve the expected trusted leaf. This uses DSM's own import operation without writing its generated certificate/nginx tree or invoking a service restart.
 
-Read-only local `Certificate.CRT/list` succeeded as `SYSTEM_ADMIN`, and Athena's installed API descriptor advertises import v1. The local import pattern is also used by [Tailscale's maintained client](https://github.com/tailscale/tailscale/blob/bd2a2d53d3a4d632c9fae7c1b6426c3b5ef34010/cmd/tailscale/cli/configure-synology-cert.go). This is an internal interface without an established public Synology support contract. **No import or reload has been tested on this DSM build.** Its exact interruption and service effects are commissioning gates. If the API changes, fail and review compatibility; retain manual Certificate Settings import as recovery, without adding a generated-file fallback or broad restart.
+Read-only local `Certificate.CRT/list` succeeded as `SYSTEM_ADMIN`, and Athena's installed API descriptor advertises import v1. The local import pattern is also used by [Tailscale's maintained client](https://github.com/tailscale/tailscale/blob/bd2a2d53d3a4d632c9fae7c1b6426c3b5ef34010/cmd/tailscale/cli/configure-synology-cert.go). This is an internal interface without an established public Synology support contract. **No import or reload has been tested on this DSM build.** Its exact interruption and service effects are commissioning gates. `inter_cert_tmp` comes from the separately inspected local-hook implementation, rather than the Tailscale reference. If DSM ignores that field and the served chain fails verification, stop and review passing the full chain as `cert_tmp`; do not install an unreviewed automatic fallback. If the API changes, fail and review compatibility; retain manual Certificate Settings import as recovery, without adding a generated-file fallback or broad restart.
 
 This design creates **no DSM account**, stores no DSM administrator password and does not read or modify OTP policy. The upstream `synology_dsm` deployment hook, including its temporary-administrator and OTP workaround code, is absent from the installed client tree.
 
 ## Files and credential
 
-Everything resides under **`/volume1/@athena-acme`**, owned by root. Directories are `0700`, files `0600`; the Python runner is invoked explicitly through `/usr/bin/python3`. Set `umask 077`. Protect the account key, certificate private keys, token, generated shell configuration, logs and rollback bundles together. Do not expose this directory through a share, container mount, artifact upload or unencrypted backup. Do not put secret values in command arguments, shell history, debug traces or task email. acme.sh persists the Cloudflare token in its private configuration as well as the input file.
+Everything resides under **`/volume1/@athena-acme`**, owned by root. Directories are `0700`, files `0600`; the Python runner is invoked explicitly through `/usr/bin/python3`. Set `umask 077`. Protect the account key, certificate private keys, token, generated shell configuration, logs and rollback bundles together. After verified success the wrapper retains only the current good and previous certificate bundles; acme.sh also maintains its own protected renewal state and backup. Do not expose this directory through a share, container mount, artifact upload or unencrypted backup. Do not put secret values in command arguments, shell history, debug traces or task email. The local DNS adapter reads the token directly from `cloudflare-token` and sends it in an in-process HTTPS header. It is not passed to acme.sh, saved in its shell configuration, or placed in curl/process arguments. The stock upstream `dns_cf` hook passes bearer headers to curl in argv, so it is deliberately excluded. Public challenge name/TXT data may appear in helper arguments.
 
 The existing Cloudflare token has `Zone:DNS:Edit` and `Zone:Zone:Read`, scoped to `kelch.io`, with no expiry or IP filter. These permissions allow changes across the zone, not only the challenge record. Reuse preserves its exact value and permissions. The clients keep separate ACME accounts and certificate keys. **Revoking the shared token breaks both DSM and S3 renewal.** Do not rotate, revoke, broaden or recreate it as part of this change.
 
@@ -51,28 +51,27 @@ After approval, prepare public files from the reviewed checkout locally:
 ```sh
 bash scripts/synology/prepare-athena-acme.sh /tmp/athena-acme-stage
 cp scripts/synology/athena-acme.py /tmp/athena-acme-stage/
-ssh kelchm@10.32.20.5 'umask 077; mkdir /var/tmp/athena-acme-stage'
-scp -r /tmp/athena-acme-stage/. kelchm@10.32.20.5:/var/tmp/athena-acme-stage/
 ssh kelchm@10.32.20.5 '
   set -eu
   sudo -n test ! -e /volume1/@athena-acme
   sudo -n install -d -m 0700 -o root -g root /volume1/@athena-acme /volume1/@athena-acme/client /volume1/@athena-acme/client/dnsapi
-  sudo -n install -m 0600 -o root -g root /var/tmp/athena-acme-stage/athena-acme.py /volume1/@athena-acme/athena-acme.py
-  sudo -n install -m 0600 -o root -g root /var/tmp/athena-acme-stage/client/acme.sh /volume1/@athena-acme/client/acme.sh
-  sudo -n install -m 0600 -o root -g root /var/tmp/athena-acme-stage/client/dnsapi/dns_cf.sh /volume1/@athena-acme/client/dnsapi/dns_cf.sh
 '
+ssh kelchm@10.32.20.5 'sudo -n install -m 0600 -o root -g root /dev/stdin /volume1/@athena-acme/athena-acme.py' < /tmp/athena-acme-stage/athena-acme.py
+ssh kelchm@10.32.20.5 'sudo -n install -m 0600 -o root -g root /dev/stdin /volume1/@athena-acme/client/acme.sh' < /tmp/athena-acme-stage/client/acme.sh
+ssh kelchm@10.32.20.5 'sudo -n install -m 0600 -o root -g root /dev/stdin /volume1/@athena-acme/client/dnsapi/dns_athena.sh' < /tmp/athena-acme-stage/client/dnsapi/dns_athena.sh
 ```
 
-Check every created directory's ownership and mode before provisioning secrets. `/volume1` was root:root `0755`; its `docker` share was `0777` with a DSM ACL, so private native state lives outside that share. Every ancestor must remain a root-owned directory without group/world write access. Leave the existing share and its permissions alone. Refuse an existing runtime tree or staging directory until its contents and ownership have been reviewed. Never recursively chmod/chown unrelated state.
+Check every created directory's ownership and mode before provisioning secrets. `/volume1` was root:root `0755`; its `docker` share was `0777` with a DSM ACL, so private native state lives outside that share. Every ancestor must remain a root-owned directory without group/world write access. Leave the existing share and its permissions alone. Refuse an existing runtime tree or local staging directory until its contents and ownership have been reviewed. Never recursively chmod/chown unrelated state.
 
 Provision the existing token directly into a new protected file. This pipeline sends its value only through stdin; it produces no token output and refuses an existing file or symlink:
 
 ```sh
+set -o pipefail
 op read 'op://Project - home-lab/yg4lgp23nzgmknxb7bgn3rfsvm/credential' |
   ssh kelchm@10.32.20.5 'sudo -n /usr/bin/python3 -c '\''import os,sys; p="/volume1/@athena-acme/cloudflare-token"; fd=os.open(p,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600); f=os.fdopen(fd,"w"); f.write(sys.stdin.read()); f.close()'\'''
 ```
 
-Do not run `op read` by itself or inspect the full item. Do not decrypt S3's runtime env or ACME account as a shortcut. Remove only the public staging directories after installation. The native runner creates its remaining protected state as needed. Verify installed hashes through `inspect` before any issuance.
+Do not run `op read` by itself or inspect the full item. Do not decrypt S3's runtime env or ACME account as a shortcut. Remove only the local public staging directory after installation. SSH stdin transfer avoids depending on DSM's share-scoped SFTP view. The native runner creates its remaining protected state as needed. Verify installed hashes through `inspect` before any issuance.
 
 ## Commissioning
 
@@ -90,7 +89,7 @@ Do not proceed to scheduling until failed issuance/import can be diagnosed witho
 
 ## Scheduling, failure notification and expiry
 
-In DSM Task Scheduler, create two **root / user-defined script / daily** tasks, initially disabled. DSM currently uses `US/Eastern`. Choose and record daily local times: **00:17 renewal and 01:17 watchdog** give 04:17/05:17 UTC during daylight time and 05:17/06:17 UTC in standard time. The 26-hour freshness gate accommodates the 25-hour interval when clocks fall back. Use the local times consistently rather than claiming a fixed year-round UTC schedule:
+In DSM Task Scheduler, create two **root / user-defined script / daily** tasks, initially disabled. DSM currently uses `US/Eastern`. Choose and record daily local times: **00:17 renewal and 01:17 watchdog** give 04:17/05:17 UTC during daylight time and 05:17/06:17 UTC in standard time. The watchdog requires a successful run within the preceding three hours, including the two-hour task separation possible when clocks fall back; it detects the first missed daily run. Use the local times consistently rather than claiming a fixed year-round UTC schedule:
 
 | Task | Daily local time (`US/Eastern`) | Script |
 |---|---|---|
@@ -101,11 +100,17 @@ Enable **Send run details by email**, **Send run details only when the script te
 
 After approval, use a temporary root task with the same recipient and abnormal-only email options and script `printf '%s\n' 'Athena ACME notification commissioning test'; exit 1`. Confirm the message arrives, then delete only that disposable task. Do not publish credentials or raw ACME/API output in task email. Run both real tasks manually using DSM's Run action; confirm successful task status and the fresh verified-success marker. Enable their daily schedules and confirm their next-run times. Record the first automatic not-due run separately from the manual test.
 
-The daily runner lets the pinned client decide when renewal is due; it never requests daily forced renewals. Stable output is refreshed even on not-due runs. If issuance succeeded but import failed, the existing issued bundle is retried instead of requesting another certificate. The watchdog verifies the served certificates and requires the last fully successful run within **26 hours**. Both tasks require more than **21 days** of validity; failures notify well before expiry.
+The daily runner lets the pinned client decide when renewal is due; it never requests daily forced renewals. Stable output is refreshed even on not-due runs. If issuance succeeded but import failed, the existing issued bundle is retried instead of requesting another certificate. The watchdog verifies the served certificates and requires the last fully successful run within **three hours**. Both tasks require more than **seven days** of validity; a failed client renewal/import still alerts immediately even while the old certificate has longer left. Operator `rollback` and `reimport` permit a normally trusted leaf with more than **one day** remaining. These separate floors preserve a recovery window and avoid treating healthy 45-day certificates as failures before their ARI renewal time. [Let’s Encrypt's published changes](https://letsencrypt.org/2025/12/02/from-90-to-45/) reduce default-profile validity to 64 days on 2027-02-10 and 45 days on 2028-02-16; review the client's ARI behavior and alert margins when those changes or a different profile take effect.
 
 These checks and DSM email delivery work independently of Kubernetes. They still depend on NAS scheduling and outbound mail. A stopped scheduler or NAS cannot notify through its own tasks. Independent off-host TLS probes are a separate root-coordinated monitoring change, outside this thread's cluster/repository scope; track their disposition in #1094. Do not claim complete scheduler-outage coverage or emit an unread `.prom` file: the current NAS exporter has no textfile collector enabled.
 
-The first real scheduled production renewal remains pending until due. Record its new certificate fingerprint/expiry, successful same-ID import, unchanged bindings and normally verified live leaves. Do not close #1094 merely because the PR merged, a not-due run passed or a repeat import worked.
+The first real scheduled production renewal remains pending until due. Initial `reimport` exercises the same leaf only: replacement by a different leaf and actual rollback have not yet been demonstrated. Preserve those specific live acceptance gates in #1094; record them as unverified in the activation evidence. Additional supervised issuance would require an explicit commissioning decision. Record its new certificate fingerprint/expiry, successful same-ID import, unchanged bindings and normally verified live leaves. Do not close #1094 merely because the PR merged, a not-due run passed or a repeat import worked.
+
+## A legitimate later DSM binding change
+
+The complete accepted map is intentionally frozen between operator-reviewed changes. A package install, unrelated certificate addition or DSM metadata change can therefore halt automatic renewal. Do not edit `accepted.json` by hand. Disable the renewal task while investigating, run `review-bindings`, and review its sanitized accepted/current maps and `current_sha256`. Verify the change belongs to the separate approved operation and preserves the intended unrelated assignments. Then run `rebaseline <reviewed-current_sha256>` with the exact digest from that review.
+
+Rebaseline changes only the private approved map. It requires the same uniquely named certificate ID, DSM `system/default` assignment and default marker, retained `ALK0dn`, an unchanged current map during the operation, and the last known-good trusted leaf on both listeners. It neither issues/imports nor advances the renewal success marker. Run `run` and `watchdog` afterward before re-enabling scheduling. If identity, live trust or the map differs from the reviewed digest, stop and investigate. `ALK0dn` expires on 2027-01-03; its unrelated consumers remain outside this certificate migration and need separate disposition.
 
 ## Recovery and rollback
 
@@ -127,7 +132,7 @@ Metadata naming rollback changes only the Cloudflare label and 1Password title b
 ## Sources and checks
 
 - [Let's Encrypt DNS-01](https://letsencrypt.org/docs/challenge-types/#dns-01-challenge): private web servers can prove domain control through TXT records.
-- [Pinned acme.sh core](https://github.com/acmesh-official/acme.sh/blob/807da6498377ee5e0cf43a78091f46f12dc59a89/acme.sh) and [Cloudflare DNS hook](https://github.com/acmesh-official/acme.sh/blob/807da6498377ee5e0cf43a78091f46f12dc59a89/dnsapi/dns_cf.sh): exact client behavior and protected token persistence.
+- [Pinned acme.sh core](https://github.com/acmesh-official/acme.sh/blob/807da6498377ee5e0cf43a78091f46f12dc59a89/acme.sh): exact issuance, ARI and stable-output behavior. The local [DNS adapter](../../scripts/synology/dns_athena.sh) delegates authenticated requests to the native Python runner using [Cloudflare zone listing](https://developers.cloudflare.com/api/resources/zones/methods/list/) and [DNS records](https://developers.cloudflare.com/api/resources/dns/subresources/records/methods/list/).
 - [acme.sh installation guidance](https://github.com/acmesh-official/acme.sh/tree/807da6498377ee5e0cf43a78091f46f12dc59a89#3-install-the-cert-to-apachenginx-etc): use stable installed outputs instead of depending on internal certificate files.
 - [Tailscale native Synology import implementation](https://github.com/tailscale/tailscale/blob/bd2a2d53d3a4d632c9fae7c1b6426c3b5ef34010/cmd/tailscale/cli/configure-synology-cert.go): JSON argument serialization, root execution, protected staging, omit ID for create and use ID for replacement. Its tailnet issuance and selection logic are not used here.
 - [Synology certificate settings](https://kb.synology.com/en-us/DSM/help/DSM/AdminCenter/connection_certificate?version=7) and [Task Scheduler](https://kb.synology.com/en-us/DSM/help/DSM/AdminCenter/system_taskscheduler?version=7): supported operator UI for binding and failure-email configuration.

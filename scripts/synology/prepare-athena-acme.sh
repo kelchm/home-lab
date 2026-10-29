@@ -14,9 +14,7 @@ mkdir -p "$stage/client/dnsapi"
 curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
     "https://raw.githubusercontent.com/acmesh-official/acme.sh/$commit/acme.sh" \
     --output "$stage/client/acme.sh"
-curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
-    "https://raw.githubusercontent.com/acmesh-official/acme.sh/$commit/dnsapi/dns_cf.sh" \
-    --output "$stage/client/dnsapi/dns_cf.sh"
+cp "$(dirname "${BASH_SOURCE[0]}")/dns_athena.sh" "$stage/client/dnsapi/dns_athena.sh"
 python3 - "$stage" <<'PY'
 import hashlib
 import pathlib
@@ -25,7 +23,7 @@ import sys
 stage = pathlib.Path(sys.argv[1])
 expected = {
     "client/acme.sh": "c7d68b021cfd6380ea83a82962abde5b484779fee0b97d38681dfa1396bbc8d7",
-    "client/dnsapi/dns_cf.sh": "9628ee8238cb3f9cfa1b1a985c0e9593436a3e4f8a9d65a6f775b981be9e76c8",
+    "client/dnsapi/dns_athena.sh": "573623524e1aeaeb8ae23a9e6652c15c0be6e66774bca5b82881a6484eb3962b",
 }
 for name, digest in expected.items():
     target = stage / name
@@ -33,4 +31,4 @@ for name, digest in expected.items():
         raise SystemExit("Pinned client checksum mismatch: " + name)
     target.chmod(0o600)
 PY
-echo "Prepared pinned acme.sh 3.1.6 core and Cloudflare DNS hook."
+echo "Prepared pinned acme.sh 3.1.6 core and native Athena DNS adapter."

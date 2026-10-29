@@ -2,6 +2,7 @@
 """Offline contract tests: no credentials, DSM, Cloudflare, or ACME traffic."""
 
 import contextlib
+import ast
 import copy
 import hashlib
 import importlib.util
@@ -10,6 +11,7 @@ import json
 import os
 from pathlib import Path
 import ssl
+import sys
 import tempfile
 import time
 import unittest
@@ -50,9 +52,17 @@ def list_response(mapping):
 
 
 class PureContracts(unittest.TestCase):
+    def test_python38_grammar(self):
+        for path in (Path(acme.__file__), Path(__file__)):
+            ast.parse(path.read_text(), feature_version=(3, 8))
+
+    def test_local_adapter_hash_matches_reviewed_source(self):
+        adapter = Path(acme.__file__).with_name("dns_athena.sh")
+        self.assertEqual(hashlib.sha256(adapter.read_bytes()).hexdigest(), acme.SOURCE_HASHES["dnsapi/dns_athena.sh"])
+
     def test_api_preamble_and_strict_success(self):
-        self.assertTrue(acme.parse_api(b'[Line 295] Exec WebAPI: api=SYNO.Core.Certificate.CRT, param={}, runner=SYSTEM_ADMIN\n{"success":true,"data":{}}')["success"])
-        for output in (b"not JSON", b'{"success":false}', b'{"success":1}', b'{"success":"true"}',
+        self.assertTrue(acme.parse_api(b'{"success":true,"data":{}}')["success"])
+        for output in (b"not JSON", b'prefix\n{"success":true}', b'{"success":false}', b'{"success":1}', b'{"success":"true"}',
                        b'{"success":true}\ntrailing junk', b'{"success":true}{"success":true}'):
             with self.subTest(output=output), self.assertRaises(acme.Failure):
                 acme.parse_api(output)
@@ -117,9 +127,9 @@ class RuntimeTests(unittest.TestCase):
         # parents=True uses the process umask for intermediate directories.
         self.root.joinpath("client").chmod(0o700)
         self.put("client/acme.sh", b"test core\n")
-        self.put("client/dnsapi/dns_cf.sh", b"test dns plugin\n")
+        self.put("client/dnsapi/dns_athena.sh", b"test dns plugin\n")
         hashes = {name: hashlib.sha256(self.root.joinpath("client", name).read_bytes()).hexdigest()
-                  for name in ("acme.sh", "dnsapi/dns_cf.sh")}
+                  for name in ("acme.sh", "dnsapi/dns_athena.sh")}
         patch.object(acme, "SOURCE_HASHES", hashes).start()
         self.put("cloudflare-token", b"fake_credential_for_offline_tests_only")
         for name, data in (("cert.pem", LEAF), ("key.pem", b"private test key"),
@@ -239,12 +249,12 @@ class RuntimeTests(unittest.TestCase):
         with self.mock_validation():
             self.assertEqual(self.runner.validate(bundle), hashlib.sha256(b"leaf").hexdigest())
 
-    def test_normal_chain_and_21_day_check_are_required(self):
+    def test_normal_chain_and_seven_day_check_are_required(self):
         with self.mock_validation():
             self.runner.validate(self.runner.bundle("issued"))
             calls = self.runner.checked.call_args_list
             self.assertTrue(any("-verify_hostname" in item.args[0] and "-untrusted" in item.args[0] for item in calls))
-            self.assertTrue(any(str(21 * 86400) in item.args[0] and "-checkend" in item.args[0] for item in calls))
+            self.assertTrue(any(str(7 * 86400) in item.args[0] and "-checkend" in item.args[0] for item in calls))
 
     def test_not_due_still_installs_and_never_forces_renewal(self):
         self.command.side_effect = [(2, b"not due"), (0, b"installed")]
@@ -257,7 +267,8 @@ class RuntimeTests(unittest.TestCase):
         self.assertNotIn("--reloadcmd", install)
         self.assertNotIn("--deploy-hook", install)
         self.assertFalse(any("fake_credential" in arg for arg in renew + install))
-        self.assertEqual(self.command.call_args_list[0].kwargs["env"], {"CF_Token": "fake_credential_for_offline_tests_only"})
+        self.assertNotIn("env", self.command.call_args_list[0].kwargs)
+        self.assertEqual(self.command.call_args_list[0].kwargs["timeout"], 1800)
 
     def test_issue_once_then_uses_renew(self):
         self.command.side_effect = [(0, b"issued"), (0, b"installed"), (2, b"not due"), (0, b"installed")]
@@ -331,7 +342,7 @@ class RuntimeTests(unittest.TestCase):
                 patch.object(self.runner, "acme", return_value=self.runner.bundle("issued")) as renew, \
                 patch.object(self.runner, "validate", return_value=NEW), \
                 patch.object(self.runner, "saved_bundle"), \
-                patch.object(self.runner, "live", return_value=OLD), \
+                patch.object(self.runner, "live", side_effect=[OLD, OLD, NEW]), \
                 patch.object(self.runner, "import_bundle", side_effect=[acme.Failure("import failed"), {"success": True}]) as imported, \
                 patch.object(self.runner, "verified") as verified:
             marker = self.runner.read(self.root / "last-verified-success.json")
@@ -343,7 +354,7 @@ class RuntimeTests(unittest.TestCase):
             self.runner.run()
             self.assertEqual(renew.call_count, 2)
             self.assertEqual(imported.call_args_list[0], imported.call_args_list[1])
-            verified.assert_called_once_with(self.runner.bundle("issued"), NEW)
+            verified.assert_called_once_with(self.runner.bundle("issued"), NEW, minimum=acme.MIN_VALIDITY)
             self.assertEqual(self.runner.load("previous.json"), {"sha256": OLD})
 
     def test_acme_error_is_failure_even_when_existing_live_cert_is_healthy(self):
@@ -371,11 +382,12 @@ class RuntimeTests(unittest.TestCase):
         with patch.object(self.runner, "snapshot", return_value=accepted_map()), \
                 patch.object(self.runner, "saved_bundle", return_value=self.runner.bundle("issued")), \
                 patch.object(self.runner, "import_bundle") as imported, \
+                patch.object(self.runner, "live"), \
                 patch.object(self.runner, "verified") as verified, \
                 patch.object(self.runner, "acme") as renewal:
             self.runner.rollback()
             imported.assert_called_once_with(self.runner.bundle("issued"), "newDSM", True)
-            verified.assert_called_once_with(self.runner.bundle("issued"), OLD)
+            verified.assert_called_once_with(self.runner.bundle("issued"), OLD, minimum=acme.RECOVERY_VALIDITY)
             self.assertEqual(self.runner.load("previous.json"), {"sha256": OLD})
             imported.side_effect = acme.Failure("native import failed")
             with self.assertRaises(acme.Failure):
@@ -389,6 +401,7 @@ class RuntimeTests(unittest.TestCase):
         with patch.object(self.runner, "snapshot", return_value=accepted_map()), \
                 patch.object(self.runner, "saved_bundle", return_value=self.runner.bundle("issued")), \
                 patch.object(self.runner, "import_bundle") as imported, \
+                patch.object(self.runner, "live"), \
                 patch.object(self.runner, "verified"), patch.object(self.runner, "acme") as renewal:
             self.runner.reimport()
             imported.assert_called_once_with(self.runner.bundle("issued"), "newDSM", True)
@@ -403,7 +416,7 @@ class RuntimeTests(unittest.TestCase):
             live.assert_called_once_with(OLD)
             self.assertEqual(before, {path.name: path.read_bytes() for path in self.root.glob("*.json")})
             self.save("last-verified-success.json", {"sha256": OLD, "at": int(time.time() - acme.FRESHNESS - 2)})
-            with self.assertRaisesRegex(acme.Failure, "26 hours"):
+            with self.assertRaisesRegex(acme.Failure, "3 hours"):
                 self.runner.watchdog()
             self.save("last-verified-success.json", {"at": int(time.time())})
             with self.assertRaisesRegex(acme.Failure, "fingerprint"):
@@ -439,6 +452,108 @@ class RuntimeTests(unittest.TestCase):
             self.assertEqual(acme.main(), 1)
         self.assertNotIn("fake_credential", output.getvalue())
         self.assertNotIn("Traceback", output.getvalue())
+
+    def test_dns_scope_and_exact_value_cleanup(self):
+        name, value = "_acme-challenge." + acme.HOST, "A" * 43
+        zone, record = "1" * 32, "2" * 32
+        ours = {"id": record, "type": "TXT", "name": name, "content": value}
+        other = dict(ours, id="3" * 32, content="B" * 43)
+        with patch.object(self.runner, "cloudflare", side_effect=[[{"id": zone, "name": "kelch.io"}], [], ours]) as cf:
+            self.runner.dns("dns-add", name, value)
+            self.assertEqual(cf.call_args.args, ("POST", "zones/" + zone + "/dns_records",
+                             {"type": "TXT", "name": name, "content": value, "ttl": 120}))
+        with patch.object(self.runner, "cloudflare", side_effect=[[{"id": zone, "name": "kelch.io"}], [ours, other], {"id": record}]) as cf:
+            self.runner.dns("dns-remove", name, value)
+            self.assertEqual(cf.call_args.args, ("DELETE", "zones/" + zone + "/dns_records/" + record))
+            self.assertEqual(cf.call_count, 3)
+        with patch.object(self.runner, "cloudflare") as cf:
+            for bad_name, bad_value in (("_acme-challenge.s3-storage.home.kelch.io", value), (name, "bad")):
+                with self.assertRaises(acme.Failure):
+                    self.runner.dns("dns-add", bad_name, bad_value)
+            cf.assert_not_called()
+
+    def test_cloudflare_token_stays_in_https_headers(self):
+        response = Mock()
+        response.__enter__ = Mock(return_value=response)
+        response.__exit__ = Mock(return_value=False)
+        response.read.return_value = b'{"success":true,"result":[]}'
+        opener = Mock()
+        opener.open.return_value = response
+        with patch.object(acme.urllib.request, "build_opener", return_value=opener) as build:
+            self.assertEqual(self.runner.cloudflare("GET", "zones?name=kelch.io"), [])
+            request = opener.open.call_args.args[0]
+            self.assertEqual(request.full_url, "https://api.cloudflare.com/client/v4/zones?name=kelch.io")
+            self.assertEqual(request.get_header("Authorization"), "Bearer fake_credential_for_offline_tests_only")
+            handlers = build.call_args.args
+            self.assertEqual(handlers[0].proxies, {})
+            self.assertIsNone(handlers[1].redirect_request(request, None, 302, "", {}, "https://elsewhere.invalid/"))
+            self.command.assert_not_called()
+
+    def test_accept_archives_and_unchanged_run_verifies_real_success_state(self):
+        fingerprint = hashlib.sha256(b"leaf").hexdigest()
+        self.save("baseline.json", {"mapping": baseline()})
+        self.save("candidate.json", {"cert_id": "newDSM", "sha256": fingerprint})
+        with self.mock_validation(), patch.object(self.runner, "snapshot", return_value=accepted_map()), \
+                patch.object(self.runner, "live", return_value=fingerprint):
+            self.runner.accept()
+            self.assertEqual(self.runner.load("good.json"), {"sha256": fingerprint})
+            self.assertEqual(self.runner.saved_bundle({"sha256": fingerprint})["key.pem"].read_bytes(), b"private test key")
+            extra = self.root / "bundles" / ("c" * 64)
+            extra.mkdir(mode=0o700)
+            with patch.object(self.runner, "acme", return_value=self.runner.bundle("issued")), patch.object(self.runner, "import_bundle") as imported:
+                self.runner.run()
+            imported.assert_not_called()
+            self.assertFalse(extra.exists())
+            self.assertEqual(self.runner.load("last-verified-success.json")["sha256"], fingerprint)
+
+    def test_rebaseline_requires_reviewed_digest_and_preserves_renewal_marker(self):
+        self.accepted()
+        changed = accepted_map()
+        changed[acme.ORIGINAL_ID]["services"].append({"owner": "root", "subscriber": "new", "service": "new"})
+        digest = hashlib.sha256(acme.canonical(changed).encode()).hexdigest()
+        marker = self.runner.read(self.root / "last-verified-success.json")
+        with patch.object(self.runner, "snapshot", return_value=changed), patch.object(self.runner, "live"), \
+                patch.object(self.runner, "saved_bundle"), patch.object(self.runner, "acme") as client:
+            with self.assertRaises(acme.Failure):
+                self.runner.rebaseline("0" * 64)
+            self.runner.rebaseline(digest)
+            self.assertEqual(self.runner.load("accepted.json")["mapping"], changed)
+            self.assertEqual(self.runner.read(self.root / "last-verified-success.json"), marker)
+            client.assert_not_called()
+            changed["newDSM"]["is_default"] = False
+            with self.assertRaises(acme.Failure):
+                self.runner.rebaseline(digest)
+
+    def test_recovery_uses_one_day_floor_and_waits_for_async_reload(self):
+        self.accepted()
+        with patch.object(self.runner, "snapshot", return_value=accepted_map()), \
+                patch.object(self.runner, "saved_bundle", return_value=self.runner.bundle("issued")) as saved, \
+                patch.object(self.runner, "import_bundle"), patch.object(self.runner, "verified") as verified, \
+                patch.object(self.runner, "live", side_effect=[acme.Failure("old leaf"), OLD]), patch.object(acme.time, "sleep"):
+            self.runner.reimport()
+            saved.assert_called_once_with({"sha256": OLD}, minimum=86400)
+            verified.assert_called_once_with(self.runner.bundle("issued"), OLD, minimum=86400)
+
+    def test_real_command_separates_stderr_and_kills_timed_out_group(self):
+        code, output = acme.Runner.command(self.runner, [sys.executable, "-c", 'import sys; print(\'{"success":true}\'); print("param={} preamble",file=sys.stderr)'])
+        self.assertEqual(code, 0)
+        self.assertTrue(acme.parse_api(output)["success"])
+        self.assertIn(b"param={}", self.runner.command_stderr)
+        with patch.object(acme.os, "killpg", wraps=acme.os.killpg) as kill, self.assertRaisesRegex(acme.Failure, "timed out"):
+            acme.Runner.command(self.runner, [sys.executable, "-c", "import time; time.sleep(5)"], timeout=0.02)
+        self.assertEqual(kill.call_count, 1)
+
+    def test_execute_audits_and_locks_mutation(self):
+        original_fstat = os.fstat
+        def root_fstat(descriptor):
+            values = list(original_fstat(descriptor))
+            values[4] = 0
+            return os.stat_result(values)
+        with patch.object(acme.os, "fstat", side_effect=root_fstat), patch.object(self.runner, "issue") as issue:
+            self.runner.execute("issue")
+            issue.assert_called_once_with()
+        with patch.object(self.runner, "snapshot", return_value=baseline()), contextlib.redirect_stdout(io.StringIO()):
+            self.runner.execute("inspect")
 
 
 if __name__ == "__main__":
