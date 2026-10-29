@@ -565,10 +565,10 @@ class Runner:
         # DSM may move the supplied paths; originals and rollback remain intact.
         with tempfile.TemporaryDirectory(prefix="import-", dir=str(self.root)) as stage:
             parameters = {"desc": DESCRIPTION}
-            # Omit this optional field for nondefault imports; preserve a
-            # requested default with a JSON boolean, never a string.
+            # DSM's native parameter checker requires a string for this field.
+            # Omit it for nondefault imports; request only the known true case.
             if is_default:
-                parameters["as_default"] = True
+                parameters["as_default"] = "true"
             for field, filename in (("key_tmp", "key.pem"), ("cert_tmp", "cert.pem"),
                                     ("inter_cert_tmp", "chain.pem")):
                 target = Path(stage) / filename
