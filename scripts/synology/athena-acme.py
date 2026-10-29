@@ -457,7 +457,8 @@ class Runner:
             stream.flush()
             os.fsync(stream.fileno())
 
-    def acme(self, initial=False):
+    def acme(self, initial=False, force=False):
+        require(type(force) is bool and not (force and initial), "Force must be a boolean for renewal only")
         self.token()  # Validate the protected input before starting the client.
         self.finish_dns_cleanup()
         common = ["/bin/sh", str(self.path("client/acme.sh")),
@@ -468,9 +469,11 @@ class Runner:
             action = ["--issue", "--dns", "dns_athena", "-d", HOST, "--keylength", "ec-256"]
         else:
             action = ["--renew", "-d", HOST, "--ecc"]
+        if force:
+            action.append("--force")
         code, output = self.command(common + action, timeout=1800)
         self.finish_dns_cleanup()
-        if not (code == 0 or (code == 2 and "--renew" in action)):
+        if not (code == 0 or (code == 2 and "--renew" in action and not force)):
             self.diagnostic(output)
             raise Failure("ACME issue/renew failed")
         self.audit()
@@ -557,10 +560,15 @@ class Runner:
         return bundle
 
     def import_bundle(self, bundle, cert_id=None, is_default=False):
+        require(type(is_default) is bool, "DSM default preservation flag must be a boolean")
         require(cert_id != ORIGINAL_ID, "Refusing to replace the original DSM certificate")
         # DSM may move the supplied paths; originals and rollback remain intact.
         with tempfile.TemporaryDirectory(prefix="import-", dir=str(self.root)) as stage:
-            parameters = {"desc": DESCRIPTION, "as_default": "true" if is_default else "false"}
+            parameters = {"desc": DESCRIPTION}
+            # Omit this optional field for nondefault imports; preserve a
+            # requested default with a JSON boolean, never a string.
+            if is_default:
+                parameters["as_default"] = True
             for field, filename in (("key_tmp", "key.pem"), ("cert_tmp", "cert.pem"),
                                     ("inter_cert_tmp", "chain.pem")):
                 target = Path(stage) / filename
@@ -589,7 +597,8 @@ class Runner:
 
     def inspect(self):
         current = self.snapshot()
-        print(json.dumps({"hostname": HOST, "certificates": current}, indent=2, sort_keys=True))
+        print(json.dumps({"hostname": HOST, "certificates": current,
+                          "current_sha256": hashlib.sha256(canonical(current).encode()).hexdigest()}, indent=2, sort_keys=True))
 
     def issue(self):
         require(not self.path("accepted.json").exists(), "Use run after initial acceptance")
@@ -626,6 +635,25 @@ class Runner:
         self.save("candidate.json", {"cert_id": cert_id, "sha256": fingerprint})
         print("Initial certificate imported. Bind only DSM system/default in the UI, then run accept.")
 
+    def recover_initial(self, expected_snapshot):
+        require(not self.path("accepted.json").exists(), "Initial acceptance already exists")
+        require(not self.path("candidate.json").exists(), "Initial candidate already exists")
+        require(isinstance(expected_snapshot, str) and bool(re.fullmatch(r"[a-f0-9]{64}", expected_snapshot)),
+                "Initial recovery requires the reviewed current map SHA-256")
+        baseline = self.load("baseline.json")["mapping"]
+        current = self.snapshot()
+        cert_id = named_certificate(current)
+        accepted_transition(baseline, current, cert_id)
+        require(hashlib.sha256(canonical(current).encode()).hexdigest() == expected_snapshot,
+                "DSM map differs from the reviewed snapshot")
+        fingerprint = self.validate(self.bundle("issued"))
+        self.live(fingerprint)
+        require(self.snapshot() == current, "DSM map changed during initial recovery")
+        # Record only the candidate. Normal accept must independently verify and
+        # publish the accepted identity, recovery bundle, and success marker.
+        self.save("candidate.json", {"cert_id": cert_id, "sha256": fingerprint})
+        print("Initial candidate recovered without import or binding changes. Run accept.")
+
     def accept(self):
         require(not self.path("accepted.json").exists(), "Initial acceptance already exists")
         candidate = self.load("candidate.json")
@@ -644,11 +672,26 @@ class Runner:
         self.save("accepted.json", {"cert_id": cert_id, "mapping": current})
         self.verified(bundle, fingerprint)
 
-    def run(self):
+    def renew_now(self, expected_fingerprint):
+        require(isinstance(expected_fingerprint, str) and bool(re.fullmatch(r"[a-f0-9]{64}", expected_fingerprint)),
+                "Supervised renewal requires the reviewed current good leaf SHA-256")
+        accepted = self.current_accepted()
+        good = self.load("good.json")
+        require(good.get("sha256") == expected_fingerprint, "Current good leaf differs from the reviewed fingerprint")
+        self.saved_bundle(good, minimum=RECOVERY_VALIDITY)
+        require(self.validate(self.bundle("issued")) == expected_fingerprint,
+                "Issued leaf differs from good; use ordinary run to recover any pending import before renew-now")
+        self.live(expected_fingerprint)
+        require(self.current_accepted() == accepted, "DSM map changed during supervised renewal precheck")
+        self.run(force=True)
+
+    def run(self, force=False):
+        require(type(force) is bool, "Force must be a boolean")
         self.current_accepted()
-        bundle = self.acme()
+        bundle = self.acme(force=True) if force else self.acme()
         fingerprint = self.validate(bundle)
         good = self.load("good.json")
+        require(not force or fingerprint != good.get("sha256"), "Forced renewal did not produce a different leaf")
         self.saved_bundle(good, validate=False)
         try:
             live_fingerprint = self.live(minimum=0)
@@ -720,10 +763,10 @@ class Runner:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("inspect", "provision-token", "issue", "import-new", "accept", "run", "reimport", "rollback", "watchdog", "review-bindings", "rebaseline", "dns-add", "dns-remove"))
+    parser.add_argument("action", choices=("inspect", "provision-token", "issue", "import-new", "recover-initial", "accept", "run", "renew-now", "reimport", "rollback", "watchdog", "review-bindings", "rebaseline", "dns-add", "dns-remove"))
     parser.add_argument("arguments", nargs="*")
     args = parser.parse_args()
-    count = 2 if args.action in ("dns-add", "dns-remove") else 1 if args.action == "rebaseline" else 0
+    count = 2 if args.action in ("dns-add", "dns-remove") else 1 if args.action in ("rebaseline", "recover-initial", "renew-now") else 0
     if len(args.arguments) != count:
         parser.error("Incorrect argument count for " + args.action)
     try:

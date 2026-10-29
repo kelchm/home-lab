@@ -51,7 +51,7 @@ Both `*.sops.env` files are encrypted to the NAS-scoped age recipient in [`.sops
 SOPS_AGE_KEY="$(op read 'op://Private/athena-doco-cd-sops-age-key/password')" sops synology/s3-storage/versitygw.sops.env
 ```
 
-The Cloudflare token needs `Zone:Zone:Read` and `Zone:DNS:Edit` on `kelch.io`; Traefik's ACME client reads the zone to find its ID. Cloudflare scopes tokens to a zone, not a record. The token in use, `athena-s3-storage-acme`, has no expiry or client-IP filter. [Athena's native ACME preparation](../../docs/runbooks/athena-acme.md) proposes reusing this exact token for DSM and renaming its Cloudflare label and existing 1Password item to `athena-acme`; neither reuse nor rename is activated yet. The item-ID reference below survives that title change. S3 reads the encrypted dotenv value and needs no redeployment for a metadata-only rename. Once shared, revoking this token interrupts both clients' renewal.
+The Cloudflare token needs `Zone:Zone:Read` and `Zone:DNS:Edit` on `kelch.io`; Traefik's ACME client reads the zone to find its ID. Cloudflare scopes tokens to a zone, not a record. The token in use, `athena-acme`, has no expiry or client-IP filter. Its Cloudflare label and existing 1Password item's title were renamed from `athena-s3-storage-acme` on 2026-10-29, preserving the token value and effective permissions. [Athena's native ACME client](../../docs/runbooks/athena-acme.md) now shares this credential for DSM issuance; DSM commissioning remains incomplete. The item-ID reference below survives the title change. S3 reads the encrypted dotenv value; no S3 redeployment occurred. Revoking this shared token interrupts both clients' renewal.
 
 The values in both files are kept in 1Password:
 
