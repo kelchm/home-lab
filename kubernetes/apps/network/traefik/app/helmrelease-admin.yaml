@@ -54,8 +54,9 @@ spec:
       # have no Middleware-protected routes.
       kubernetesCRD:
         enabled: true
-        # HTTPRoutes in `media/` reference Middleware kanidm-oidc in `network/`
-        # via ExtensionRef.
+        # HTTPRoute ExtensionRef resolves Middleware in the route's namespace:
+        # media/ routes use media/kanidm-oidc, although Traefik runs in network/.
+        # This CRD setting does not select the ExtensionRef namespace.
         allowCrossNamespace: true
     gateway:
       enabled: false
