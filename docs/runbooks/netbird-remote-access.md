@@ -116,6 +116,14 @@ The [node-local startup procedure](../../proxmox/guests/netbird-router/local-sta
 
 Installation needs separate authorization and no immediate reboot. Autostart acceptance waits for the next separately authorized planned host boot and its unattended-start evidence. Do not reboot solely for acceptance or fault shared NFS/NAS to test this repair. #1096 stays open and #625/P6 stays uncredited until that acceptance is recorded.
 
+## Planned second router and qualification
+
+The [104 definition and installation procedure](../../proxmox/guests/netbird-router-2/README.md) prepares a second peer on `pve-sbx-2`, with `.104` proposed but unallocated. Nothing is installed or enrolled; 103 remains the only router. The design order is #1096 installation and identity verification, then #1097 activation, then the two-peer baseline and separate rolling upgrades/stage-2 rename. #1096 host-boot acceptance waits for the next planned authorized host boot and is not an extra immediate reboot prerequisite; #625/P6 remains uncredited.
+
+The candidate keeps 103's frozen vendor bytes, uses default Debian first-boot upgrades with NetBird 0.79.0 explicitly pinned/held, and provides guarded node-local snippet provisioning and [stdin-only enrollment](../../proxmox/guests/netbird-router/enrollment.md). Before enrollment, fresh IP/MAC history plus an approved duplicate-address probe must precede `.104` source additions to the two existing UniFi forwards; destinations, TCP443, zones, `.103` and friendly renames stay intact. Administrator writes and installation require a separate concrete approval after review. No key is created/read in preparation.
+
+[Two-peer qualification](../../proxmox/guests/netbird-router-2/qualification.md) proposes a 60-second graceful-loss recovery bound and 120-second rejoin bound, with both directions, natural return behavior, P2P/relay/idle evidence and exact running client versions/update settings. Those bounds are unaccepted and unmeasured, and do not cover abrupt host loss (the inspected 0.79.0 watcher fallback can take about 3.5 minutes), backend path failure or power recovery. NetBird 0.80.0/0.81.5 source retains the inspected scoring/hysteresis and watcher constants but differs in implementation; neither source proves behavior for every running Mac/phone core. A later disruptive-test approval is required. Preserve the existing #625 matrix and owner decisions, and record actual results there after review. Two peers do not establish full HA or an identity-restore drill.
+
 ## Verification and owner acceptance
 
 For future changes, Grafana's `/api/health` from the VM must return HTTP 200 with a healthy database, and Jellyfin's `/health` must still return HTTP 200. Use HTTPS with certificate validation. Connection attempts to `10.32.130.1:80`, `10.32.140.1:80`, and `10.32.20.21:8006` must remain blocked. These VM tests verify the UniFi path; they do not prove that a remote client received the NetBird resource or policy.
