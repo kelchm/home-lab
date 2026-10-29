@@ -39,5 +39,9 @@ spec:
     domainFilters: ["kelch.io"]
     serviceMonitor:
       enabled: true
+    resources:
+      requests:
+        cpu: 10m
+        memory: 64Mi
     podAnnotations:
       secret.reloader.stakater.com/reload: *secret
