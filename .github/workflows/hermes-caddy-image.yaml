@@ -17,6 +17,7 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       selected: ${{ steps.scope.outputs.selected }}
+      publish_selected: ${{ steps.scope.outputs.publish_selected }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -32,8 +33,10 @@ jobs:
         run: |
           if [[ $EVENT == workflow_dispatch ]]; then
             echo 'selected=true' >> "$GITHUB_OUTPUT"
+            echo 'publish_selected=true' >> "$GITHUB_OUTPUT"
           else
             echo "selected=$(python3 scripts/ci/hermes-caddy-inputs.py scope "$BASE" "$HEAD")" >> "$GITHUB_OUTPUT"
+            echo "publish_selected=$(python3 scripts/ci/hermes-caddy-inputs.py scope "$BASE" "$HEAD" --publish)" >> "$GITHUB_OUTPUT"
           fi
       - name: Test input, metadata, fixture and promotion guards offline
         run: |
@@ -88,7 +91,7 @@ jobs:
     name: Caddy Publish and Qualify
     needs: scope
     if: >-
-      needs.scope.outputs.selected == 'true' && github.ref == 'refs/heads/main' &&
+      needs.scope.outputs.publish_selected == 'true' && github.ref == 'refs/heads/main' &&
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-24.04
     timeout-minutes: 30

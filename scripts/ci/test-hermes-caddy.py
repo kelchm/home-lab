@@ -74,6 +74,13 @@ class Inputs(unittest.TestCase):
                      "proxmox/guests/hermes-1/caddy-other", "proxmox/guests/netbird-router-2/README.md"):
             self.assertFalse(inputs.relevant(path), path)
 
+    def test_publication_scope_excludes_qualification_and_unrelated_config(self):
+        self.assertEqual(set(inputs.PUBLISH_INPUTS), {
+            "proxmox/guests/hermes-1/Dockerfile.caddy", "proxmox/guests/hermes-1/.dockerignore",
+        })
+        for path in inputs.INPUTS:
+            self.assertEqual(inputs.relevant(path, publish=True), path in inputs.PUBLISH_INPUTS, path)
+
     def test_cli_scope_uses_complete_base_diff_and_fails_open_for_missing_history(self):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
@@ -97,6 +104,14 @@ class Inputs(unittest.TestCase):
             for ref, expected in ((base, "true"), ("HEAD^", "false"), ("0" * 40, "true")):
                 result = subprocess.check_output(["python3", str(ROOT / "scripts/ci/hermes-caddy-inputs.py"), "scope", ref, "HEAD"], cwd=directory)
                 self.assertEqual(result.decode().strip(), expected)
+            command = ["python3", str(ROOT / "scripts/ci/hermes-caddy-inputs.py"), "scope", base, "HEAD", "--publish"]
+            self.assertEqual(subprocess.check_output(command, cwd=directory).decode().strip(), "false")
+            (directory / inputs.GUEST / "Dockerfile.caddy").write_text("image change")
+            git("add", ".")
+            git("commit", "-qm", "image input")
+            self.assertEqual(subprocess.check_output(command, cwd=directory).decode().strip(), "true")
+            command[3] = "0" * 40
+            self.assertEqual(subprocess.check_output(command, cwd=directory).decode().strip(), "true")
 
 
 class Inventory(unittest.TestCase):
@@ -155,7 +170,7 @@ class Inventory(unittest.TestCase):
 
 
 class WebSockets(unittest.TestCase):
-    def test_real_forwarding_fixture_echoes_text_and_binary_on_both_paths(self):
+    def test_real_forwarding_fixture_echoes_text_on_ws_and_binary_on_pty(self):
         server = fixture.ThreadingHTTPServer(("127.0.0.1", 0), fixture.Upstream)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()

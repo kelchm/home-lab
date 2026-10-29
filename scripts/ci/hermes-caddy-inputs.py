@@ -8,12 +8,15 @@ import subprocess
 from pathlib import Path
 
 GUEST = Path("proxmox/guests/hermes-1")
-# Also used immediately before publication promotion. No guest freshness rule.
+# Only image inputs trigger automatic publication or invalidate its promotion.
+# Workflow/qualification changes can be deliberately republished by main dispatch.
+PUBLISH_INPUTS = (str(GUEST / "Dockerfile.caddy"), str(GUEST / ".dockerignore"))
+# PR qualification is intentionally broader than automatic image publication.
 INPUTS = (
     ".github/workflows/hermes-caddy-image.yaml",
     ".github/workflows/repository-validation.yaml",
     ".renovaterc.json5", ".mise.toml", ".shellcheckrc",
-    str(GUEST / "Dockerfile.caddy"), str(GUEST / ".dockerignore"),
+    *PUBLISH_INPUTS,
     str(GUEST / "Caddyfile"), str(GUEST / "compose.yaml"),
     str(GUEST / "caddy"),
     "scripts/ci/hermes-caddy-inputs.py", "scripts/ci/hermes-caddy-promote.sh",
@@ -22,17 +25,18 @@ INPUTS = (
 )
 
 
-def relevant(path):
-    return any(path == item or path.startswith(item + "/") for item in INPUTS)
+def relevant(path, publish=False):
+    paths = PUBLISH_INPUTS if publish else INPUTS
+    return any(path == item or path.startswith(item + "/") for item in paths)
 
 
-def changed(base, head):
+def changed(base, head, publish=False):
     # --no-renames includes both old and new paths for a rename across scope.
     result = subprocess.run(
         ["git", "diff", "--no-renames", "--name-only", "-z", base, head, "--"],
         check=True, capture_output=True,
     )
-    return any(relevant(path) for path in result.stdout.decode().split("\0") if path)
+    return any(relevant(path, publish) for path in result.stdout.decode().split("\0") if path)
 
 
 def expected(text):
@@ -84,17 +88,19 @@ def main():
     scope = sub.add_parser("scope")
     scope.add_argument("base")
     scope.add_argument("head")
-    sub.add_parser("paths")
+    scope.add_argument("--publish", action="store_true")
+    paths = sub.add_parser("paths")
+    paths.add_argument("--publish", action="store_true")
     sub.add_parser("expected")
     artifact = sub.add_parser("verify")
     artifact.add_argument("report", type=Path)
     args = parser.parse_args()
     if args.command == "paths":
-        print("\n".join(INPUTS))
+        print("\n".join(PUBLISH_INPUTS if args.publish else INPUTS))
     elif args.command == "scope":
         # Missing history (including a branch-creation push) selects qualification.
         try:
-            selected = changed(args.base, args.head)
+            selected = changed(args.base, args.head, args.publish)
         except subprocess.CalledProcessError:
             selected = True
         print(str(selected).lower())

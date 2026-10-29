@@ -7,6 +7,7 @@ trap 'rm -rf "$scratch"' EXIT
 mkdir -p "$scratch/bin"
 export CADDY_TEST_DIR=$scratch
 export GITHUB_REF=refs/heads/main GITHUB_EVENT_NAME=push
+export GITHUB_STEP_SUMMARY=$scratch/summary.md
 printf '{"schemaVersion":2,"manifests":[]}' > "$scratch/source.json"
 digest=$(python3 -c 'import hashlib,sys; print("sha256:"+hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "$scratch/source.json")
 cat > "$scratch/bin/git" <<'SH'
@@ -15,8 +16,8 @@ set -euo pipefail
 case $1 in
     fetch) [[ ${MODE:-} != fetch-fail ]] ;;
     diff)
-        # Recheck must use the declared paths, never a repository-wide diff.
-        [[ $* == *'Dockerfile.caddy'* && $* == *'.renovaterc.json5'* ]]
+        # Promotion uses exactly the narrow image inputs, not broad PR scope.
+        [[ $* == 'diff --quiet HEAD FETCH_HEAD -- proxmox/guests/hermes-1/Dockerfile.caddy proxmox/guests/hermes-1/.dockerignore' ]]
         [[ ${MODE:-} != stale ]]
         ;;
     *) exit 99 ;;
@@ -60,7 +61,11 @@ run() { bash "$root/scripts/ci/hermes-caddy-promote.sh" ghcr.io/example/caddy "$
 for mode in stale fetch-fail copy-mismatch source-fail source-mismatch; do
     export MODE=$mode
     rm -f "$scratch/promoted" "$scratch/docker.calls"
-    if [[ $mode == stale ]]; then run; elif run; then echo "Expected failure: $mode" >&2; exit 1; fi
+    if [[ $mode == stale ]]; then
+        run > "$scratch/stale.txt"
+        grep -q '::warning::' "$scratch/stale.txt"
+        grep -q 'Run workflow' "$GITHUB_STEP_SUMMARY"
+    elif run; then echo "Expected failure: $mode" >&2; exit 1; fi
     [[ ! -e $scratch/promoted ]]
 done
 export MODE=success

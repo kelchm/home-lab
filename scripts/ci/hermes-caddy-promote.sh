@@ -7,12 +7,15 @@ digest=${2:?root digest}
 [[ ${GITHUB_EVENT_NAME:-} == push || ${GITHUB_EVENT_NAME:-} == workflow_dispatch ]]
 [[ ${GITHUB_REF:-} == refs/heads/main ]]
 
-# GitHub job ordering is not dispatch ordering. Compare only declared inputs;
-# unrelated main changes may proceed. This is deliberately not a guest gate.
+# GitHub job ordering is not dispatch ordering. Compare only image inputs;
+# qualification/tooling edits don't obsolete an equivalent binary.
 git fetch --no-tags origin main
-mapfile -t paths < <(python3 scripts/ci/hermes-caddy-inputs.py paths)
+mapfile -t paths < <(python3 scripts/ci/hermes-caddy-inputs.py paths --publish)
 if ! git diff --quiet HEAD FETCH_HEAD -- "${paths[@]}"; then
-    echo 'Relevant inputs changed on main; leaving this unique build unpromoted.'
+    echo '::warning::Image inputs changed on main; this unique build was not promoted. If no newer build completes, dispatch Hermes Caddy Image from main.'
+    if [[ -n ${GITHUB_STEP_SUMMARY:-} ]]; then
+        printf '%s\n' 'Image inputs changed on main; candidate was left unchanged. If no newer publisher completes, run **Hermes Caddy Image** with **Run workflow** on **main** to repair it.' >> "$GITHUB_STEP_SUMMARY"
+    fi
     exit 0
 fi
 
