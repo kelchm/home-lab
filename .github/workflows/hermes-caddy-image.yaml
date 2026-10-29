@@ -41,6 +41,7 @@ jobs:
       - name: Test input, metadata, fixture and promotion guards offline
         run: |
           PYTHONDONTWRITEBYTECODE=1 python3 scripts/ci/test-hermes-caddy.py
+          PYTHONDONTWRITEBYTECODE=1 python3 scripts/ci/test-hermes-caddy-update.py
           scripts/ci/test-hermes-caddy-promotion.sh
 
   qualify-pr:
@@ -78,14 +79,41 @@ jobs:
         env:
           IMAGE: ${{ steps.build.outputs.imageid }}
         run: proxmox/guests/hermes-1/caddy/qualify.sh "$IMAGE" "$RUNNER_TEMP/caddy-report"
+      - name: Qualify the exact reviewed promotion with the existing native contract
+        run: |
+          image=$(python3 - <<'PY'
+          import runpy
+          from pathlib import Path
+          updater = runpy.run_path('proxmox/guests/hermes-1/caddy/hermes-caddy-update')
+          print(updater['pin'](Path('proxmox/guests/hermes-1/compose.caddy-image.yaml').read_text()))
+          PY
+          )
+          docker pull --platform linux/amd64 "$image"
+          proxmox/guests/hermes-1/caddy/qualify.sh "$image" "$RUNNER_TEMP/caddy-promotion-report" promotion
       - name: Retain validation evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: caddy-pr-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/caddy-report
+          path: |
+            ${{ runner.temp }}/caddy-report
+            ${{ runner.temp }}/caddy-promotion-report
           if-no-files-found: ignore
           retention-days: 14
+
+  delivery-test:
+    name: Caddy Delivery Integration
+    needs: scope
+    if: needs.scope.outputs.selected == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Test real Compose cutover, rollback, boot recovery and idle monitoring
+        run: PYTHONDONTWRITEBYTECODE=1 python3 scripts/ci/test-hermes-caddy-update.py --docker
 
   publish:
     name: Caddy Publish and Qualify

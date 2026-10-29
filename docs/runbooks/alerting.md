@@ -231,6 +231,10 @@ To add a check for a new job:
 3. Copy the new check's ping URL from the healthchecks.io web UI into the job's own SOPS-encrypted secret. A ping URL is a credential: the script never prints one, and it stays out of the file, the terminal and issue comments.
 4. Run the job, or wait for its first run, and confirm the check goes up.
 
+### Planned Hermes Caddy heartbeat
+
+The prepared [Caddy updater](hermes-caddy-lifecycle.md) uses one scoped ping URL, root-only at `/etc/hermes-caddy/heartbeat-url`, for rollout and idle TLS/Docker/process health. Its timer runs five minutes after a oneshot ends; accepted cutovers include a five-minute settle. Commission a 15-minute timeout plus five-minute grace. Success pings once, rejected/quarantined updates and recovery failures send `/fail`, and paused runs send nothing. Keep the check paused before commissioning and during planned updater downtime. This preparation creates no check or credential; declare/provision one through the workstation process above only during authorized commissioning. The management API key never goes to the guest.
+
 ## Cluster labels
 
 `cluster` names a real clustered system. It is set where each series or alert originates rather than globally, so scrape targets and rules outside `k8s-prod` do not inherit it.

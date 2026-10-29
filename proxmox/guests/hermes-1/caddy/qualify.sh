@@ -28,18 +28,25 @@ sudo sysctl -w net.ipv4.ip_unprivileged_port_start=1024
 [[ $(sysctl -n net.ipv4.ip_unprivileged_port_start) == 1024 ]]
 sysctl net.ipv4.ip_unprivileged_port_start > "$report/host-sysctl.txt"
 
-python3 scripts/ci/hermes-caddy-inputs.py expected > "$report/expected.txt"
-builder=$(sed -n 's/^builder=//p' "$report/expected.txt")
-runtime=$(sed -n 's/^runtime=//p' "$report/expected.txt")
-for base in "$builder" "$runtime"; do docker pull --platform linux/amd64 "$base"; done
-docker image inspect "$builder" > "$report/builder.json"
-docker image inspect "$runtime" > "$report/runtime.json"
-docker run --rm --network none "$builder" go version > "$report/go-version.txt"
-docker run --rm --network none "$runtime" caddy version > "$report/runtime-version.txt"
+verify_options=()
+if [[ ${3:-source} == promotion ]]; then
+    # The existing native contract applies to the exact promoted bytes, including
+    # an older reviewed digest. Today's source pins do not veto a Git rollback.
+    verify_options=(--promotion)
+else
+    python3 scripts/ci/hermes-caddy-inputs.py expected > "$report/expected.txt"
+    builder=$(sed -n 's/^builder=//p' "$report/expected.txt")
+    runtime=$(sed -n 's/^runtime=//p' "$report/expected.txt")
+    for base in "$builder" "$runtime"; do docker pull --platform linux/amd64 "$base"; done
+    docker image inspect "$builder" > "$report/builder.json"
+    docker image inspect "$runtime" > "$report/runtime.json"
+    docker run --rm --network none "$builder" go version > "$report/go-version.txt"
+    docker run --rm --network none "$runtime" caddy version > "$report/runtime-version.txt"
+fi
 docker run --rm --network none "$image" caddy version > "$report/version.txt"
 docker run --rm --network none "$image" caddy build-info > "$report/build-info.txt"
 docker run --rm --network none "$image" caddy list-modules --skip-standard > "$report/modules.txt"
-python3 scripts/ci/hermes-caddy-inputs.py verify "$report" > "$report/inventory.json"
+python3 scripts/ci/hermes-caddy-inputs.py verify "$report" "${verify_options[@]}" > "$report/inventory.json"
 cat "$report/inventory.json"
 [[ $(docker image inspect -f '{{.Os}}/{{.Architecture}} {{.Config.User}}' "$image") == 'linux/amd64 1000:1000' ]]
 

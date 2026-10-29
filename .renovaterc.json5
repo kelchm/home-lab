@@ -33,6 +33,26 @@
   },
   packageRules: [
     {
+      description: "Hermes Caddy: reviewed digest promotion, separate from source updates",
+      matchManagers: ["docker-compose"],
+      matchFileNames: ["proxmox/guests/hermes-1/compose.caddy-image.yaml"],
+      matchPackageNames: ["ghcr.io/kelchm/home-lab/caddy-cloudflare"],
+      allowedVersions: "/^candidate$/",
+      schedule: ["at any time"],
+      automerge: false,
+      ignoreTests: false,
+    },
+    {
+      description: "Hermes Caddy: coordinate both pinned BuildKit drivers",
+      matchManagers: ["custom.regex"],
+      matchFileNames: [".github/workflows/hermes-caddy-image.yaml"],
+      matchPackageNames: ["moby/buildkit"],
+      groupName: "Hermes Caddy BuildKit",
+      minimumGroupSize: 2,
+      automerge: false,
+      ignoreTests: false,
+    },
+    {
       // A core release changes both payloads. Digest refreshes at the same
       // release can safely land independently; qualification checks the releases.
       description: "Hermes Caddy: update builder and runtime core releases together",
@@ -302,6 +322,15 @@
     },
   },
   customManagers: [
+    {
+      description: "Track Hermes Caddy BuildKit driver images",
+      customType: "regex",
+      managerFilePatterns: ["/^\\.github/workflows/hermes-caddy-image\\.yaml$/"],
+      matchStrings: [
+        "driver-opts: image=(?<depName>moby/buildkit):(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[a-f0-9]{64})",
+      ],
+      datasourceTemplate: "docker",
+    },
     {
       description: "Track the Hermes Caddy Cloudflare build input",
       customType: "regex",

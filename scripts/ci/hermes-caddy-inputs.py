@@ -18,10 +18,12 @@ INPUTS = (
     ".renovaterc.json5", ".mise.toml", ".shellcheckrc",
     *PUBLISH_INPUTS,
     str(GUEST / "Caddyfile"), str(GUEST / "compose.yaml"),
+    str(GUEST / "compose.caddy-image.yaml"),
     str(GUEST / "caddy"),
     "scripts/ci/hermes-caddy-inputs.py", "scripts/ci/hermes-caddy-promote.sh",
     "scripts/ci/test-hermes-caddy.py", "scripts/ci/test-hermes-caddy-promotion.sh",
     "scripts/ci/test-renovate-caddy.mjs",
+    "scripts/ci/test-hermes-caddy-update.py",
 )
 
 
@@ -49,12 +51,19 @@ def expected(text):
     return dict(builder=bases[0][0], runtime=bases[1][0], core="v" + bases[0][1], plugin=plugin[0])
 
 
-def verify_artifact(expect, report):
+def verify_artifact(expect, report, promotion=False):
     info = (report / "build-info.txt").read_text()
     # A replacement can change linked code while retaining the expected dep line.
     if re.search(r"^\s*=>", info, re.M):
         raise ValueError("untracked Go module replacement")
     deps = dict(re.findall(r"^dep\s+(\S+)\s+(\S+)", info, re.M))
+    if promotion:
+        # Reviewed main may deliberately name older known-good bytes. Record their
+        # inventory; never require them to match today's Dockerfile/build inputs.
+        expect = {"core": deps.get("github.com/caddyserver/caddy/v2", ""),
+                  "plugin": deps.get("github.com/caddy-dns/cloudflare", "")}
+        if not all(re.fullmatch(r"v\d+\.\d+\.\d+", value) for value in expect.values()):
+            raise ValueError("missing release inventory")
     for module, version in (("github.com/caddyserver/caddy/v2", expect["core"]),
                             ("github.com/caddy-dns/cloudflare", expect["plugin"])):
         if deps.get(module) != version:
@@ -68,6 +77,8 @@ def verify_artifact(expect, report):
     modules = set(re.findall(r"^[a-z][a-z0-9_.]+$", (report / "modules.txt").read_text(), re.M))
     if modules != {"dns.providers.cloudflare"}:
         raise ValueError("unexpected nonstandard Caddy modules")
+    if promotion:
+        return dict(core=expect["core"], cloudflare=expect["plugin"], go=go[1], compiler=compiler[1], modules=deps)
     for kind in ("builder", "runtime"):
         base = json.loads((report / f"{kind}.json").read_text())[0]
         env = dict(item.split("=", 1) for item in base["Config"]["Env"])
@@ -94,6 +105,7 @@ def main():
     sub.add_parser("expected")
     artifact = sub.add_parser("verify")
     artifact.add_argument("report", type=Path)
+    artifact.add_argument("--promotion", action="store_true")
     args = parser.parse_args()
     if args.command == "paths":
         print("\n".join(PUBLISH_INPUTS if args.publish else INPUTS))
@@ -109,7 +121,7 @@ def main():
         if args.command == "expected":
             print("\n".join(f"{key}={value}" for key, value in expect.items()))
         else:
-            print(json.dumps(verify_artifact(expect, args.report), indent=2, sort_keys=True))
+            print(json.dumps(verify_artifact(expect, args.report, args.promotion), indent=2, sort_keys=True))
 
 
 if __name__ == "__main__":

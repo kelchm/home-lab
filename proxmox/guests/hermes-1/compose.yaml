@@ -22,10 +22,9 @@ services:
     command: ["gateway", "run"]
 
   caddy:
-    build:
-      context: .
-      dockerfile: Dockerfile.caddy
+    # Standalone inspection remains valid; installed .env selects the image overlay.
     image: localhost/hermes-caddy
+    user: "1000:1000"
     container_name: hermes-caddy
     restart: unless-stopped
     network_mode: host

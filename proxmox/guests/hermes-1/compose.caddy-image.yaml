@@ -1,0 +1,4 @@
+---
+services:
+  caddy:
+    image: ghcr.io/kelchm/home-lab/caddy-cloudflare:candidate@sha256:7c3876c8fc82df32c80d43a134d2f185a70e88c78a2d431071cb5241e29403f1

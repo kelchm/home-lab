@@ -140,6 +140,17 @@ class Inventory(unittest.TestCase):
         self.assertEqual(self.verify()["go"], "go1.27.3")
         self.assertEqual(self.verify()["modules"]["github.com/caddy-dns/cloudflare"], "v0.2.4")
 
+    def test_promotion_accepts_an_older_reviewed_inventory_without_current_base_inputs(self):
+        for name in ("builder.json", "runtime.json", "runtime-version.txt", "go-version.txt"):
+            (self.report / name).unlink()
+        newer = {**self.expect, "core": "v2.12.0", "plugin": "v0.3.0"}
+        result = inputs.verify_artifact(newer, self.report, promotion=True)
+        self.assertEqual(result["core"], "v2.11.7")
+        self.assertEqual(result["cloudflare"], "v0.2.4")
+        (self.report / "modules.txt").write_text("dns.providers.cloudflare\nhttp.handlers.extra\n")
+        with self.assertRaisesRegex(ValueError, "unexpected"):
+            inputs.verify_artifact(newer, self.report, promotion=True)
+
     def test_reject_actual_plugin_core_compiler_or_extra_module_mismatch(self):
         for name, before, after in (("build-info.txt", "v0.2.4", "v0.2.3"),
                                     ("build-info.txt", "v2.11.7", "v2.11.8"),

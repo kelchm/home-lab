@@ -1,0 +1,383 @@
+#!/usr/bin/python3
+"""Root-installed Caddy image delivery. Git supplies one image reference, never code."""
+
+import fcntl
+import hashlib
+import http.client
+import json
+import os
+from pathlib import Path
+import re
+import ssl
+import subprocess
+import sys
+import threading
+import time
+import urllib.request
+
+PROJECT = Path("/opt/hermes")
+STATE = Path("/var/lib/hermes-caddy")
+PING = Path("/etc/hermes-caddy/heartbeat-url")
+REPOSITORY = "https://github.com/kelchm/home-lab"
+IMAGE = "ghcr.io/kelchm/home-lab/caddy-cloudflare"
+PIN_PATH = "proxmox/guests/hermes-1/compose.caddy-image.yaml"
+HOST, PORT = "hermes.home.kelch.io", 443
+READY, SETTLE, INTERVAL, PID_LIMIT = 30, 300, 5, 128
+REF = re.compile(re.escape(IMAGE) + r":candidate@sha256:[0-9a-f]{64}")
+CONTROLLER_SHA256 = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+
+
+class Failure(Exception):
+    pass
+
+
+class Uncertain(Failure):
+    """A timed-out Compose client may still have an Engine operation in flight."""
+
+
+def command(argv, timeout=20, mutation=False, cwd=None):
+    # No caller shell, credentials, global Git hooks, Compose overrides or SSH agent.
+    env = {"PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+           "HOME": str(STATE), "GIT_CONFIG_NOSYSTEM": "1", "GIT_TERMINAL_PROMPT": "0"}
+    try:
+        result = subprocess.run(argv, cwd=cwd, env=env, capture_output=True,
+                                text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        raise (Uncertain if mutation else Failure)("command-timeout") from None
+    if result.returncode:
+        # CLI output can include expanded environment values. Never echo it.
+        raise Failure("command-failed")
+    return result.stdout.strip()
+
+
+def atomic(path, value):
+    temporary = path.with_name(path.name + ".tmp")
+    with temporary.open("w") as stream:
+        stream.write(value)
+        stream.flush()
+        os.fsync(stream.fileno())
+    os.replace(temporary, path)
+    descriptor = os.open(path.parent, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def save(name, value):
+    atomic(STATE / name, json.dumps(value, indent=2, sort_keys=True) + "\n")
+
+
+def read(name, default=None):
+    path = STATE / name
+    return json.loads(path.read_text()) if path.exists() else default
+
+
+def pin(text):
+    match = re.fullmatch(r"(?:---\n)?services:\n  caddy:\n    image: (\S+)\n?", text)
+    if not match or not REF.fullmatch(match[1]):
+        raise Failure("invalid-image-data")
+    return match[1]
+
+
+def overlay(ref):
+    atomic(PROJECT / "compose.caddy-image.yaml", f"services:\n  caddy:\n    image: {ref}\n")
+
+
+def tls_context():
+    return ssl.create_default_context()
+
+
+def https():
+    connection = http.client.HTTPSConnection(HOST, PORT, context=tls_context(), timeout=3)
+    try:
+        connection.connect()
+        certificate = connection.sock.getpeercert()
+        fingerprint = hashlib.sha256(connection.sock.getpeercert(binary_form=True)).hexdigest()
+        if ssl.cert_time_to_seconds(certificate["notAfter"]) - time.time() < 7 * 86400:
+            raise Failure("certificate-expiry-margin")
+        connection.request("GET", "/api/status")
+        if connection.getresponse().status != 200:
+            raise Failure("https-status")
+        return fingerprint
+    except (OSError, ssl.SSLError, http.client.HTTPException):
+        raise Failure("https-unavailable") from None
+    finally:
+        connection.close()
+
+
+class Sampler:
+    """Observation only: no concurrent Docker mutations or rollback decisions."""
+
+    def __enter__(self):
+        self.stop = threading.Event()
+        self.maximum = 0
+        self.last_good = time.monotonic()
+        self.thread = threading.Thread(target=self.sample, daemon=True)
+        self.thread.start()
+        return self
+
+    def sample(self):
+        failing = False
+        while not self.stop.is_set():
+            try:
+                https()
+                if failing:
+                    self.maximum = max(self.maximum, time.monotonic() - self.last_good)
+                failing = False
+                self.last_good = time.monotonic()
+            except Failure:
+                failing = True
+                self.maximum = max(self.maximum, time.monotonic() - self.last_good)
+            self.stop.wait(0.25)
+
+    def __exit__(self, *_):
+        self.stop.set()
+        self.thread.join(timeout=4)
+
+
+class Updater:
+    def compose(self, *args, mutation=False):
+        return command(["docker", "compose", "--project-directory", str(PROJECT),
+                        "--env-file", str(PROJECT / ".env"), "-p", "hermes",
+                        "-f", str(PROJECT / "compose.yaml"),
+                        "-f", str(PROJECT / "compose.caddy-image.yaml"), *args],
+                       timeout=60, mutation=mutation)
+
+    def container(self, service):
+        identity = self.compose("ps", "--all", "--quiet", service)
+        if not re.fullmatch(r"[0-9a-f]{64}", identity):
+            raise Failure("missing-or-ambiguous-container")
+        # Deliberately select fields: no .Config.Env, health output or logs.
+        fields = '[{{json .Id}},{{json .Image}},{{json .State.Status}},' \
+                 '{{json .State.StartedAt}},{{json .RestartCount}},' \
+                 '{{with (index .State "Health")}}{{json .Status}},' \
+                 '{{json .FailingStreak}}{{else}}null,0{{end}}]'
+        values = json.loads(command(["docker", "inspect", "--format", fields, identity]))
+        return dict(zip(("container", "id", "status", "started", "restarts", "health", "streak"), values))
+
+    def image(self, ref):
+        fields = '[{{json .Id}},{{json .RepoDigests}},{{json .Config.User}},' \
+                 '{{json .Os}},{{json .Architecture}},{{json .Config.Labels}}]'
+        return json.loads(command(["docker", "image", "inspect", "--format", fields, ref]))
+
+    def desired(self):
+        git = STATE / "git"
+        if not git.exists():
+            command(["git", "init", "--bare", str(git)])
+        prefix = ["git", "-c", "core.hooksPath=/dev/null", "-c", "credential.helper=",
+                  "-c", "protocol.file.allow=never", "--git-dir", str(git)]
+        command([*prefix, "fetch", "--depth=1", REPOSITORY + ".git", "refs/heads/main"], timeout=60)
+        revision = command([*prefix, "rev-parse", "FETCH_HEAD"])
+        return revision, pin(command([*prefix, "show", "FETCH_HEAD:" + PIN_PATH]) + "\n")
+
+    def prepare(self, ref):
+        command(["docker", "pull", "--platform", "linux/amd64", ref], timeout=180)
+        identity, digests, user, system, arch, labels = self.image(ref)
+        if (IMAGE + "@" + ref.split("@")[1] not in (digests or []) or
+                user != "1000:1000" or (system, arch) != ("linux", "amd64") or
+                (labels or {}).get("org.opencontainers.image.source") != REPOSITORY or
+                not re.fullmatch(r"[0-9a-f]{40}", (labels or {}).get("org.opencontainers.image.revision", ""))):
+            raise Failure("image-identity-contract")
+        # Syntax/module validation without the real DNS environment or any network.
+        command(["docker", "run", "--rm", "--network", "none", "--read-only", "--user", "1000:1000",
+                 "--cap-drop", "ALL", "--security-opt", "no-new-privileges:true",
+                 "--mount", f"type=bind,src={PROJECT}/Caddyfile,dst=/etc/caddy/Caddyfile,readonly",
+                 "--env", "CLOUDFLARE_API_TOKEN=qualification-only", ref,
+                 "caddy", "adapt", "--validate", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"], timeout=30)
+        return {"ref": ref, "id": identity, "oci_revision": labels["org.opencontainers.image.revision"],
+                "run_url": labels.get("org.opencontainers.image.url", "unknown")}
+
+    def healthy(self, target):
+        running = self.container("caddy")
+        if (running["id"] != target["id"] or running["status"] != "running" or
+                running["health"] != "healthy" or running["streak"] or running["restarts"]):
+            raise Failure("container-health")
+        count = int(command(["docker", "exec", running["container"], "cat", "/sys/fs/cgroup/pids.current"]))
+        states = command(["docker", "top", running["container"], "-eo", "pid,stat"]).splitlines()[1:]
+        if count > PID_LIMIT or any(state.split()[-1].startswith("Z") for state in states):
+            raise Failure("process-health")
+        return {"certificate_sha256": https(), "pids": count, **running}
+
+    def ready(self, target):
+        deadline = time.monotonic() + READY
+        while True:
+            try:
+                return self.healthy(target)
+            except Failure as error:
+                if time.monotonic() >= deadline:
+                    raise Failure("readiness-failed:" + str(error)) from None
+                time.sleep(min(1, INTERVAL))
+
+    def up(self, rollback=False):
+        self.compose("up", "-d", "--no-deps", "--no-build", "--pull", "never",
+                     "-t", "1" if rollback else "10", "caddy", mutation=True)
+
+    def same_hermes(self, before):
+        if self.container("hermes") != before:
+            raise Failure("hermes-changed")
+
+    def receipt(self, value):
+        value = {**value, "recorded_at": time.time(), "controller_sha256": CONTROLLER_SHA256,
+                 "installation": read("installation.json", {"source_revision": "unknown"})}
+        (STATE / "receipts").mkdir(exist_ok=True)
+        atomic(STATE / "receipts" / f"{time.time_ns()}.json", json.dumps(value, indent=2) + "\n")
+        save("last.json", value)
+
+    def recover(self, pending, sampler=None):
+        try:
+            self.restore(pending, sampler)
+        except Failure:
+            pending["recovery_required"] = True
+            save("pending.json", pending)
+            raise Failure("recovery-required") from None
+
+    def restore(self, pending, sampler=None):
+        # Only restore cached, guarded bytes. No registry access on rollback.
+        previous = pending["previous"]
+        started = time.monotonic()
+        if self.image(previous["ref"])[0] != previous["id"]:
+            raise Failure("rollback-image-missing-or-changed")
+        overlay(previous["ref"])
+        self.up(rollback=True)
+        observed = self.ready(previous)
+        pending["rollback_to_ready_seconds"] = time.monotonic() - started
+        if sampler:
+            pending["sampled_outage_seconds"] = sampler.maximum
+        self.same_hermes(pending["hermes"])
+        save("current.json", previous)
+        failed = read("failed.json", {})
+        failed[pending["target"]["ref"]] = {"at": time.time(), "reason": pending.get("reason", "interrupted")}
+        save("failed.json", failed)
+        self.receipt({**pending, "result": "rolled-back", "observed": observed})
+        (STATE / "pending.json").unlink()
+
+    def apply(self, target, source):
+        previous = read("current.json")
+        self.healthy(previous)
+        if self.image(previous["ref"])[0] != previous["id"]:
+            raise Failure("predecessor-cache-mismatch")
+        pending = {"previous": previous, "target": target, "main_sha": source,
+                   "hermes": self.container("hermes"), "started_at": time.time()}
+        save("pending.json", pending)
+        with Sampler() as sampler:
+            try:
+                overlay(target["ref"])
+                start = time.monotonic()
+                self.up()
+                self.ready(target)
+                pending["cutover_to_ready_seconds"] = time.monotonic() - start
+                deadline = time.monotonic() + SETTLE
+                while True:
+                    observed = self.healthy(target)
+                    self.same_hermes(pending["hermes"])
+                    if time.monotonic() >= deadline:
+                        break
+                    time.sleep(min(INTERVAL, max(0, deadline - time.monotonic())))
+                save("previous.json", previous)
+                save("current.json", {**target, "main_sha": source})
+                self.receipt({**pending, "result": "accepted", "observed": observed,
+                              "sampled_outage_seconds": sampler.maximum, "sample_interval_seconds": 0.25})
+                (STATE / "pending.json").unlink()
+            except Uncertain:
+                pending["recovery_required"] = True
+                save("pending.json", pending)
+                raise
+            except Failure as error:
+                pending["reason"] = str(error)
+                pending["sampled_outage_seconds"] = sampler.maximum
+                save("pending.json", pending)
+                self.recover(pending, sampler)
+                raise Failure("candidate-rejected-and-restored") from None
+
+    def run(self):
+        pending = read("pending.json")
+        if pending:
+            if pending.get("recovery_required"):
+                raise Failure("recovery-required")
+            try:
+                self.recover(pending)
+            except Failure:
+                pending["recovery_required"] = True
+                save("pending.json", pending)
+                raise Failure("recovery-required") from None
+        if (STATE / "paused").exists():
+            return  # Deliberately no heartbeat while paused; pause the check too.
+        source, ref = self.desired()
+        current = read("current.json")
+        if not current:
+            raise Failure("adoption-required")
+        if ref == current["ref"]:
+            self.healthy(current)  # Idle checks catch leaks between rollouts.
+        elif ref in read("failed.json", {}):
+            self.healthy(current)
+            raise Failure("desired-image-quarantined")
+        else:
+            self.apply(self.prepare(ref), source)
+        heartbeat(True)
+
+
+def heartbeat(success):
+    # A single job-scoped URL; never use the Healthchecks management API on guest.
+    try:
+        if not PING.exists():
+            return
+        if PING.stat().st_uid != 0 or PING.stat().st_mode & 0o077:
+            raise Failure("heartbeat-permissions")
+        url = PING.read_text().strip()
+        if not re.fullmatch(r"https://hc-ping.com/[0-9a-f-]{36}", url):
+            raise Failure("heartbeat-url")
+        with urllib.request.urlopen(urllib.request.Request(url + ("" if success else "/fail"), data=b""), timeout=10):
+            pass
+    except (OSError, ValueError):
+        raise Failure("heartbeat-delivery") from None
+
+
+def main():
+    if os.geteuid() != 0 or len(sys.argv) != 2 or sys.argv[1] not in ("run", "status", "pause", "resume", "rollback", "retry"):
+        sys.exit("root only: hermes-caddy-update run|status|pause|resume|rollback|retry")
+    os.umask(0o077)
+    STATE.mkdir(mode=0o700, exist_ok=True)
+    with (STATE / "lock").open("w") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            sys.exit("updater-busy")
+        updater = Updater()
+        action = sys.argv[1]
+        try:
+            if action == "status":
+                print(json.dumps({"paused": (STATE / "paused").exists(),
+                                  **{name: read(name + ".json") for name in ("installation", "current", "previous", "pending", "last", "failed")}}, indent=2))
+            elif action == "pause":
+                (STATE / "paused").touch()
+            elif action == "resume":
+                if not PING.exists():
+                    raise Failure("heartbeat-not-configured")
+                (STATE / "paused").unlink(missing_ok=True)
+            elif action == "retry":
+                save("failed.json", {})  # Explicit attended retry; leaves pause intact.
+            elif action == "rollback":
+                (STATE / "paused").touch()
+                pending = read("pending.json")
+                if not pending:
+                    pending = {"previous": read("previous.json"), "target": read("current.json"),
+                               "hermes": updater.container("hermes"), "reason": "manual-rollback"}
+                    if not pending["previous"]:
+                        raise Failure("no-previous-image")
+                    save("pending.json", pending)
+                updater.recover(pending)
+            else:
+                updater.run()
+        except (Failure, OSError, ValueError, KeyError, TypeError) as error:
+            # Keep unexpected parser/IO errors secret-free as well.
+            try:
+                heartbeat(False)
+            except Failure:
+                pass
+            reason = str(error) if isinstance(error, Failure) else "state-or-io-error"
+            sys.exit("Caddy update failed: " + reason + "; inspect status and recovery runbook")
+
+
+if __name__ == "__main__":
+    main()
