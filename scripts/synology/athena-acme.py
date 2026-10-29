@@ -457,7 +457,8 @@ class Runner:
             stream.flush()
             os.fsync(stream.fileno())
 
-    def acme(self, initial=False):
+    def acme(self, initial=False, force=False):
+        require(type(force) is bool and not (force and initial), "Force must be a boolean for renewal only")
         self.token()  # Validate the protected input before starting the client.
         self.finish_dns_cleanup()
         common = ["/bin/sh", str(self.path("client/acme.sh")),
@@ -468,9 +469,11 @@ class Runner:
             action = ["--issue", "--dns", "dns_athena", "-d", HOST, "--keylength", "ec-256"]
         else:
             action = ["--renew", "-d", HOST, "--ecc"]
+        if force:
+            action.append("--force")
         code, output = self.command(common + action, timeout=1800)
         self.finish_dns_cleanup()
-        if not (code == 0 or (code == 2 and "--renew" in action)):
+        if not (code == 0 or (code == 2 and "--renew" in action and not force)):
             self.diagnostic(output)
             raise Failure("ACME issue/renew failed")
         self.audit()
@@ -669,11 +672,26 @@ class Runner:
         self.save("accepted.json", {"cert_id": cert_id, "mapping": current})
         self.verified(bundle, fingerprint)
 
-    def run(self):
+    def renew_now(self, expected_fingerprint):
+        require(isinstance(expected_fingerprint, str) and bool(re.fullmatch(r"[a-f0-9]{64}", expected_fingerprint)),
+                "Supervised renewal requires the reviewed current good leaf SHA-256")
+        accepted = self.current_accepted()
+        good = self.load("good.json")
+        require(good.get("sha256") == expected_fingerprint, "Current good leaf differs from the reviewed fingerprint")
+        self.saved_bundle(good, minimum=RECOVERY_VALIDITY)
+        require(self.validate(self.bundle("issued")) == expected_fingerprint,
+                "Issued leaf differs from good; use ordinary run to recover any pending import before renew-now")
+        self.live(expected_fingerprint)
+        require(self.current_accepted() == accepted, "DSM map changed during supervised renewal precheck")
+        self.run(force=True)
+
+    def run(self, force=False):
+        require(type(force) is bool, "Force must be a boolean")
         self.current_accepted()
-        bundle = self.acme()
+        bundle = self.acme(force=True) if force else self.acme()
         fingerprint = self.validate(bundle)
         good = self.load("good.json")
+        require(not force or fingerprint != good.get("sha256"), "Forced renewal did not produce a different leaf")
         self.saved_bundle(good, validate=False)
         try:
             live_fingerprint = self.live(minimum=0)
@@ -745,10 +763,10 @@ class Runner:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("inspect", "provision-token", "issue", "import-new", "recover-initial", "accept", "run", "reimport", "rollback", "watchdog", "review-bindings", "rebaseline", "dns-add", "dns-remove"))
+    parser.add_argument("action", choices=("inspect", "provision-token", "issue", "import-new", "recover-initial", "accept", "run", "renew-now", "reimport", "rollback", "watchdog", "review-bindings", "rebaseline", "dns-add", "dns-remove"))
     parser.add_argument("arguments", nargs="*")
     args = parser.parse_args()
-    count = 2 if args.action in ("dns-add", "dns-remove") else 1 if args.action in ("rebaseline", "recover-initial") else 0
+    count = 2 if args.action in ("dns-add", "dns-remove") else 1 if args.action in ("rebaseline", "recover-initial", "renew-now") else 0
     if len(args.arguments) != count:
         parser.error("Incorrect argument count for " + args.action)
     try:

@@ -52,20 +52,21 @@ def list_response(mapping):
 
 
 class PureContracts(unittest.TestCase):
-    def test_recover_initial_cli_requires_exactly_one_digest(self):
+    def test_operator_recovery_and_renewal_cli_require_exactly_one_digest(self):
         digest = "a" * 64
-        with patch.object(acme.sys, "argv", ["athena-acme.py", "recover-initial", digest]), \
-                patch.object(acme.Runner, "execute") as execute:
-            self.assertEqual(acme.main(), 0)
-            execute.assert_called_once_with("recover-initial", [digest])
-        for arguments in ([], [digest, digest]):
-            with self.subTest(arguments=arguments), \
-                    patch.object(acme.sys, "argv", ["athena-acme.py", "recover-initial"] + arguments), \
-                    patch.object(acme.Runner, "execute") as execute, contextlib.redirect_stderr(io.StringIO()), \
-                    self.assertRaises(SystemExit) as error:
-                acme.main()
-            self.assertEqual(error.exception.code, 2)
-            execute.assert_not_called()
+        for action in ("recover-initial", "renew-now"):
+            with patch.object(acme.sys, "argv", ["athena-acme.py", action, digest]), \
+                    patch.object(acme.Runner, "execute") as execute:
+                self.assertEqual(acme.main(), 0)
+                execute.assert_called_once_with(action, [digest])
+            for arguments in ([], [digest, digest]):
+                with self.subTest(action=action, arguments=arguments), \
+                        patch.object(acme.sys, "argv", ["athena-acme.py", action] + arguments), \
+                        patch.object(acme.Runner, "execute") as execute, contextlib.redirect_stderr(io.StringIO()), \
+                        self.assertRaises(SystemExit) as error:
+                    acme.main()
+                self.assertEqual(error.exception.code, 2)
+                execute.assert_not_called()
 
     def test_adapter_dash_leading_txt_reaches_main_unchanged(self):
         value = "-" + "A" * 42
@@ -315,6 +316,32 @@ class RuntimeTests(unittest.TestCase):
         self.assertNotIn("env", self.command.call_args_list[0].kwargs)
         self.assertEqual(self.command.call_args_list[0].kwargs["timeout"], 1800)
 
+    def test_forced_client_only_forces_renewal_and_refuses_not_due_exit(self):
+        self.command.side_effect = [(0, b"renewed"), (0, b"installed")]
+        with patch.object(self.runner, "audit"):
+            self.runner.acme(force=True)
+        renew, install = [call.args[0] for call in self.command.call_args_list]
+        self.assertEqual(renew.count("--force"), 1)
+        self.assertIn("--renew", renew)
+        self.assertNotIn("--force", install)
+        self.command.reset_mock()
+        self.command.side_effect = [(2, b"not due")]
+        with self.assertRaisesRegex(acme.Failure, "ACME issue/renew failed"):
+            self.runner.acme(force=True)
+        self.assertEqual(self.command.call_count, 1)
+
+    def test_force_requires_boolean_and_cannot_force_initial_issuance(self):
+        with patch.object(self.runner, "token") as token, patch.object(self.runner, "snapshot") as snapshot:
+            for force in (None, 1, "false", "true"):
+                for method in (self.runner.acme, self.runner.run):
+                    with self.subTest(force=force, method=method.__name__), self.assertRaises(acme.Failure):
+                        method(force=force)
+            with self.assertRaises(acme.Failure):
+                self.runner.acme(initial=True, force=True)
+            token.assert_not_called()
+            snapshot.assert_not_called()
+        self.command.assert_not_called()
+
     def test_issue_once_then_uses_renew(self):
         self.command.side_effect = [(0, b"issued"), (0, b"installed"), (2, b"not due"), (0, b"installed")]
         with patch.object(self.runner, "audit"):
@@ -549,6 +576,111 @@ class RuntimeTests(unittest.TestCase):
             self.assertEqual(imported.call_args_list[0], imported.call_args_list[1])
             verified.assert_called_once_with(self.runner.bundle("issued"), NEW, minimum=acme.MIN_VALIDITY)
             self.assertEqual(self.runner.load("previous.json"), {"sha256": OLD})
+
+    def test_renew_now_prechecks_refuse_client_on_drift_pending_import_or_wrong_leaf(self):
+        self.accepted()
+        before = self.runtime_files()
+        for failure in ("invalid digest", "wrong good", "pending issued", "wrong live", "map drift", "map changes"):
+            changed = accepted_map()
+            changed[acme.ORIGINAL_ID]["services"][0]["metadata"] = "changed"
+            snapshots = [accepted_map(), changed] if failure == "map changes" else None
+            with self.subTest(failure=failure), \
+                    patch.object(self.runner, "snapshot", side_effect=snapshots,
+                                 return_value=changed if failure == "map drift" else accepted_map()), \
+                    patch.object(self.runner, "saved_bundle"), \
+                    patch.object(self.runner, "validate", return_value=NEW if failure == "pending issued" else OLD), \
+                    patch.object(self.runner, "live", side_effect=acme.Failure("wrong live leaf") if failure == "wrong live" else None), \
+                    patch.object(self.runner, "acme") as client, self.assertRaises(acme.Failure):
+                self.runner.renew_now("invalid" if failure == "invalid digest" else NEW if failure == "wrong good" else OLD)
+            client.assert_not_called()
+            self.assertEqual(self.runtime_files(), before)
+
+    def test_renew_now_requires_a_deployable_rollback_key_before_any_order(self):
+        old = hashlib.sha256(b"leaf").hexdigest()
+        self.accepted()
+        self.save("good.json", {"sha256": old})
+        with self.mock_validation():
+            self.runner.archive(self.runner.bundle("issued"), old)
+        before = self.runtime_files()
+        with patch.object(self.runner, "snapshot", return_value=accepted_map()), \
+                self.mock_validation(key=b"mismatched rollback public key"), \
+                patch.object(self.runner, "acme") as client, \
+                self.assertRaisesRegex(acme.Failure, "does not match its private key"):
+            self.runner.renew_now(old)
+        client.assert_not_called()
+        self.assertEqual(self.runtime_files(), before)
+
+    def test_renew_now_same_leaf_never_imports_or_advances_success(self):
+        self.accepted()
+        before = self.runtime_files()
+        with patch.object(self.runner, "snapshot", return_value=accepted_map()), \
+                patch.object(self.runner, "saved_bundle"), patch.object(self.runner, "validate", return_value=OLD), \
+                patch.object(self.runner, "live", return_value=OLD), \
+                patch.object(self.runner, "acme", return_value=self.runner.bundle("issued")) as client, \
+                patch.object(self.runner, "import_bundle") as imported, self.assertRaisesRegex(acme.Failure, "different leaf"):
+            self.runner.renew_now(OLD)
+        client.assert_called_once_with(force=True)
+        imported.assert_not_called()
+        self.assertEqual(self.runtime_files(), before)
+
+    def test_renew_now_success_retains_real_rollback_bundle_and_refuses_same_approval(self):
+        old = hashlib.sha256(b"leaf").hexdigest()
+        new = hashlib.sha256(b"new-leaf").hexdigest()
+        self.accepted()
+        self.save("good.json", {"sha256": old})
+        with self.mock_validation():
+            self.runner.archive(self.runner.bundle("issued"), old)
+        def renew(**kwargs):
+            self.put("issued/cert.pem", b"-----BEGIN CERTIFICATE-----\nbmV3LWxlYWY=\n-----END CERTIFICATE-----\n")
+            self.put("issued/fullchain.pem", self.root.joinpath("issued/cert.pem").read_bytes() + CHAIN)
+            return self.runner.bundle("issued")
+        with patch.object(self.runner, "snapshot", return_value=accepted_map()), self.mock_validation(), \
+                patch.object(self.runner, "live", side_effect=[old, old, new, new]), \
+                patch.object(self.runner, "acme", side_effect=renew) as client, \
+                patch.object(self.runner, "import_bundle", return_value={"success": True}) as imported:
+            self.runner.renew_now(old)
+            before_repeat = self.runtime_files()
+            with self.assertRaisesRegex(acme.Failure, "differs from the reviewed fingerprint"):
+                self.runner.renew_now(old)
+            self.assertEqual(self.runtime_files(), before_repeat)
+        client.assert_called_once_with(force=True)
+        imported.assert_called_once_with(self.runner.bundle("issued"), "newDSM", True)
+        self.assertEqual(self.runner.load("good.json"), {"sha256": new})
+        self.assertEqual(self.runner.load("previous.json"), {"sha256": old})
+        self.assertEqual(self.runner.load("last-verified-success.json")["sha256"], new)
+        self.assertEqual(set(path.name for path in self.root.joinpath("bundles").iterdir()), {old, new})
+
+    def test_renew_now_failed_import_refuses_another_order_and_unforced_run_recovers(self):
+        old = hashlib.sha256(b"leaf").hexdigest()
+        new = hashlib.sha256(b"new-leaf").hexdigest()
+        self.accepted()
+        self.save("good.json", {"sha256": old})
+        marker = self.runner.read(self.root / "last-verified-success.json")
+        with self.mock_validation():
+            self.runner.archive(self.runner.bundle("issued"), old)
+        def renew(**kwargs):
+            self.put("issued/cert.pem", b"-----BEGIN CERTIFICATE-----\nbmV3LWxlYWY=\n-----END CERTIFICATE-----\n")
+            self.put("issued/fullchain.pem", self.root.joinpath("issued/cert.pem").read_bytes() + CHAIN)
+            return self.runner.bundle("issued")
+        with patch.object(self.runner, "snapshot", return_value=accepted_map()), self.mock_validation(), \
+                patch.object(self.runner, "live", return_value=old) as live, \
+                patch.object(self.runner, "acme", side_effect=renew) as client, \
+                patch.object(self.runner, "import_bundle", side_effect=[acme.Failure("import failed"), {"success": True}]) as imported:
+            with self.assertRaisesRegex(acme.Failure, "import failed"):
+                self.runner.renew_now(old)
+            self.assertEqual(self.runner.load("previous.json"), {"sha256": old})
+            self.assertEqual(self.runner.load("good.json"), {"sha256": old})
+            self.assertEqual(self.runner.read(self.root / "last-verified-success.json"), marker)
+            with self.assertRaisesRegex(acme.Failure, "use ordinary run"):
+                self.runner.renew_now(old)
+            client.assert_called_once_with(force=True)
+            live.side_effect = [old, new, new]
+            self.runner.run()
+        self.assertEqual([call.kwargs for call in client.call_args_list], [{"force": True}, {}])
+        self.assertEqual(imported.call_count, 2)
+        self.assertEqual(self.runner.load("previous.json"), {"sha256": old})
+        self.assertEqual(self.runner.load("good.json"), {"sha256": new})
+        self.assertEqual(self.runner.load("last-verified-success.json")["sha256"], new)
 
     def test_acme_error_is_failure_even_when_existing_live_cert_is_healthy(self):
         self.accepted()
