@@ -30,9 +30,10 @@ spec:
     annotations:
       k8s.v1.cni.cncf.io/networks: cnpg-system/storage-network
   postgresql:
-    # The storage interface is outside Cilium policy: no logins from that VLAN.
+    # The storage interface is outside Cilium policy: reject ordinary clients from that VLAN.
     pg_hba:
       - host all all 10.32.25.0/24 reject
+      - host all all fe80::/10 reject
   # Read only when the Cluster is created: a rebuild restores the newest backup.
   bootstrap:
     recovery:
