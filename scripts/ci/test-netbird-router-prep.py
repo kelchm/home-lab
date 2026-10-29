@@ -48,12 +48,41 @@ class UniFi(unittest.TestCase):
         delta.verify(self.before, after)
 
     def test_reject_other_semantic_changes(self):
-        for key, value in [('name', 'stale overwrite'), ('unknown_flag', True),
-                           ('index', 999), ('protocol', 'all')]:
+        for ident in [next(iter(delta.FORWARDS)), self.before[0]['_id']]:
+            for key, value in [('name', 'stale overwrite'), ('unknown_flag', True),
+                               ('index', 999), ('protocol', 'all')]:
+                after = self.after()
+                next(p for p in after if p['_id'] == ident)[key] = value
+                with self.subTest(ident=ident, key=key), self.assertRaises(ValueError):
+                    delta.verify(self.before, after)
+
+    def test_full_inventory_rejects_added_removed_or_changed_unrelated_policy(self):
+        unrelated = copy.deepcopy(self.before[0])
+        unrelated.update(_id='unrelated', origin_id='other', enabled=False)
+        self.before.append(unrelated)
+        for change in ['add', 'remove', 'enable', 'unknown_field']:
             after = self.after()
-            after[0][key] = value
-            with self.subTest(key=key), self.assertRaises(ValueError):
+            if change == 'add':
+                broad = copy.deepcopy(unrelated)
+                broad.update(_id='broad-104', enabled=True)
+                broad['source']['ips'] = ['10.32.19.104']
+                after.append(broad)
+            elif change == 'remove':
+                after.pop()
+            elif change == 'enable':
+                after[-1]['enabled'] = True
+            else:
+                after[-1]['unknown_flag'] = True
+            with self.subTest(change=change), self.assertRaises(ValueError):
                 delta.verify(self.before, after)
+
+    def test_full_inventory_allows_unrelated_counters_and_list_reordering(self):
+        unrelated = copy.deepcopy(self.before[0])
+        unrelated.update(_id='unrelated', origin_id='other')
+        self.before.append(unrelated)
+        after = self.after()
+        after[-1].update(hits=999, last_hit=123)
+        delta.verify(self.before, list(reversed(after)))
 
     def test_reject_broad_baseline_or_missing_103(self):
         for ips in [['10.32.19.0/24'], ['10.32.19.104']]:

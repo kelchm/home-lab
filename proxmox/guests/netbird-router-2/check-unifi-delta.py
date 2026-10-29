@@ -85,9 +85,12 @@ def prepare(snapshot):
 
 def verify(before_snapshot, after_snapshot):
     before, after = objects(before_snapshot), objects(after_snapshot)
+    require(before.keys() == after.keys(), 'Policy added or removed; refresh/review the full inventory')
     proposed = {p['_id']: p for p in prepare(before_snapshot)}
+    changed = set(proposed)
     for ident, vip in FORWARDS.items():
         old_return = next(p for p in before.values() if p.get('origin_id') == ident)
+        changed.add(old_return['_id'])
         reply = after[old_return['_id']]
         require(len([p for p in after.values() if p.get('origin_id') == ident]) == 1,
                 'Duplicate generated return')
@@ -98,6 +101,9 @@ def verify(before_snapshot, after_snapshot):
                 'Forward changed beyond source.ips; refresh/review instead of overwriting')
         require(semantic(reply) == semantic(expected_return),
                 'Generated return changed beyond destination.ips')
+    for ident in before.keys() - changed:
+        require(semantic(before[ident]) == semantic(after[ident]),
+                'Unrelated policy changed; refresh/review the full inventory')
 
 
 def main():
@@ -113,7 +119,7 @@ def main():
     else:
         require(args.after is not None, 'verify requires after snapshot')
         verify(before, json.loads(args.after.read_text()))
-        print('Both forward changes and generated returns match the reviewed source-only delta.')
+        print('The full policy inventory matches the reviewed source-only delta.')
 
 
 if __name__ == '__main__':

@@ -118,6 +118,7 @@ jobs:
               - 'scripts/ci/test-netbird-router-prep.py'
               - 'scripts/ci/fixtures/netbird-unifi.json'
               - 'proxmox/guests/netbird-router-2/**'
+              - 'proxmox/guests/netbird-router/**'
               - 'healthchecks/**'
               - '.taskfiles/healthchecks/**'
             skills:
