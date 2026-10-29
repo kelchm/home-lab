@@ -48,6 +48,20 @@ spec:
                   secretKeyRef:
                     name: arr-api-keys
                     key: LIDARR_API_KEY
+            probes:
+              liveness:
+                enabled: true
+                custom: true
+                spec:
+                  # /metrics gathers application stats; timing out catches an
+                  # unresponsive process or HTTP server while the port stays open.
+                  httpGet:
+                    path: /metrics
+                    port: 5656
+                  initialDelaySeconds: 60
+                  periodSeconds: 30
+                  timeoutSeconds: 10
+                  failureThreshold: 6
             securityContext:
               allowPrivilegeEscalation: false
               capabilities: { drop: ["ALL"] }
