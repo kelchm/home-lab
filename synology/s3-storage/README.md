@@ -10,7 +10,7 @@ Both restricted database accounts exist and own their respective buckets. Each p
 
 The database layer (#816, merged as `653afc37`) is now active. Visionect passed first, then Bambuddy resumed and passed: each has a completed manual base backup, a nonzero last-backup metric and advancing WAL objects after at least 15 minutes of observation. The accepted backup IDs are `20261029T013554` for Visionect (PostgreSQL 17.11) and `20261029T020738` for Bambuddy (18.6). Both applications are healthy; their application pods were not restarted. #1095 added `::/0` HBA rejection, and live no-credential self-probes confirmed both storage IPv4 and IPv6 rejection. Details and exact backup names are in the [runbook’s acceptance record](../../docs/runbooks/cnpg-backup-restore.md).
 
-Kopia’s read-only `/sources/object-storage` mount is present, but no completed snapshot of that source was observed at database sign-off on 2026-10-29; the next normal run is 10:00 UTC. Verify its base/WAL contents before claiming an off-site recovery point. Real-data restore remains a separate gate under #224/#782. [First deployment](#first-deployment) remains the NAS rebuild procedure and acceptance checklist.
+No completed Kopia snapshot of `/sources/object-storage` was observed at database sign-off on 2026-10-29. The subsequent normal run completed at 10:32:48 UTC, with both accepted base archives and selected WAL objects verified in its immutable catalog; the [dated runbook record](../../docs/runbooks/cnpg-backup-restore.md#first-normal-object-storage-snapshot-2026-10-29) gives the exact snapshot and limits. Payload readability, complete required WAL continuity and restore remain unverified; real-data restore remains a separate gate under #224/#782. [First deployment](#first-deployment) remains the NAS rebuild procedure and acceptance checklist.
 
 ## What is where
 
@@ -145,7 +145,7 @@ Do not edit files under `data/` by hand. The gateway returns the checksum it rec
 ## Limits
 
 - Accounts and bucket ownership are created by hand and live outside Git. On a rebuilt NAS, repeat step 5 with the secrets already in the cluster's `backup-secret.sops.yaml` files.
-- Once the database layer's source is configured and a completed snapshot is verified, the off-site job copies the whole share, so every bucket goes to B2 under the same 30-day lock.
+- The off-site job now snapshots the whole share to B2 under the same 30-day lock; the [first normal snapshot has accepted catalog evidence](../../docs/runbooks/cnpg-backup-restore.md#first-normal-object-storage-snapshot-2026-10-29).
 - The endpoint is published on the storage VLAN only. A client needs an address there.
 - `users.json` is not copied off-site. Losing it loses no backup data.
 - The gateway's own Object Lock and versioning are not used. Protection against deletion comes from the verified off-site copy's 30-day lock; the NAS foundation alone provides none.
