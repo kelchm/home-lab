@@ -77,7 +77,7 @@ capture before
 sha256sum /mnt/pve/library-pve/snippets/netbird-pilot-router.yaml
 ```
 
-Record the printed absolute `env.sh` path before proceeding. `set -e` ends this Bash session on a guard stop or command failure; the evidence and sourceable state survive in that run’s private directory. Re-enter with `sudo -i`, then `bash`, `set -euo pipefail`, and `source '/root/netbird-local-startup.<this-run>/env.sh'`, using the exact recorded path. Do not repeat the setup block or overwrite the `before` files after a stop. First inspect which steps completed; a failure during the initial `capture before` precedes any installation change.
+Record the printed absolute `env.sh` path before proceeding. `set -e` ends this Bash session on a guard stop or command failure; the evidence and sourceable state survive in that run’s private directory. Re-enter with `sudo -i`, then `bash`, `set -euo pipefail`, `umask 077`, and `source '/root/netbird-local-startup.<this-run>/env.sh'`, using the exact recorded path. Do not repeat the setup block or overwrite the `before` files after a stop. First inspect which steps completed; a failure during the initial `capture before` precedes any installation change.
 
 Inspect the private `before` records against the table: `pending.json` must have no `pending`/delete entries; `cloudinit.json` must have no pending/delete entries. Check the guest's hostname, instance ID, 0.79.0 version and connected status. Retain its profile hash and NetBird overlay address for comparison; never print the profile contents. Record the existing Cloud peer ID from the [read-only export](../../../docs/runbooks/netbird-remote-access.md#read-back-netbird-cloud), so later verification can rule out a replacement enrollment.
 
@@ -128,7 +128,7 @@ qm set 103 --digest "$(cat "$evidence/vm.digest")" --cicustom "$(cat "$evidence/
 capture after
 ```
 
-The path and ownership checks must pass before changing the VM reference. A failed command is a stop, not a reason to continue with later steps. If installation stops after enabling snippets or copying the file, roll back only the steps that completed.
+The path and ownership checks must pass before changing the VM reference. A failed command is a stop, not a reason to continue with later steps. If installation stops before the VM reference changes, leave the content flag, directory and any copied file in place, record their state and stop; no immediate cleanup is needed. If `qm set` was attempted but its outcome is unclear, read the saved configuration before deciding which state applies. Use the guarded reference rollback only after confirming that the vendor reference changed.
 
 Verify the saved configuration, generated data and guest without restarting anything:
 
@@ -160,7 +160,7 @@ Inspect `after.netbird.json` for Management/Signal connected, the same overlay a
 
 Use this for an authorized restore, migration or rebuild after the repair. These are storage/file checks, not the existing-VM reference-change procedure. The `local` content flags are cluster-wide and may already include `snippets`; the destination directory may already exist. Preserve all flags and existing matching files. This also works without the NAS by using the repository’s byte-identical vendor file.
 
-From a reviewed checkout on the workstation, select the destination explicitly (node 2 is shown), verify the source, and copy it to a private transfer directory:
+In a Bash session in a reviewed workstation checkout, select the destination explicitly (node 2 is shown), verify the source, and copy it to a private transfer directory:
 
 ```bash
 destination=kelchm@10.32.20.22
@@ -199,9 +199,11 @@ fi
 if test ! -e /var/lib/vz/snippets; then
     install -d -o root -g root -m 0755 /var/lib/vz/snippets
 fi
-test -d /var/lib/vz/snippets && test ! -L /var/lib/vz/snippets
+test -d /var/lib/vz/snippets
+test ! -L /var/lib/vz/snippets
 if test -e /var/lib/vz/snippets/netbird-pilot-router.yaml; then
-    test -f /var/lib/vz/snippets/netbird-pilot-router.yaml && test ! -L /var/lib/vz/snippets/netbird-pilot-router.yaml
+    test -f /var/lib/vz/snippets/netbird-pilot-router.yaml
+    test ! -L /var/lib/vz/snippets/netbird-pilot-router.yaml
 else
     install -o root -g root -m 0644 "$source_file" /var/lib/vz/snippets/netbird-pilot-router.yaml
 fi
@@ -219,7 +221,7 @@ assert not [k for k in before.keys() | after.keys() if k not in {'digest','conte
 expected = before['content'].split(',')
 if 'snippets' not in expected:
     expected.append('snippets')
-assert after['content'].split(',') == expected
+assert sorted(after['content'].split(',')) == sorted(expected)
 PYPROVISIONCHECK
 ```
 
@@ -233,7 +235,7 @@ After that host boot, retain the host boot time and PVE start-all/VM-start task 
 
 ## Rollback
 
-The installation approval covers reverting this run’s completed vendor-reference change and partial-install file cleanup in the same maintenance window, subject to the ownership/dependency checks below. A later rollback or removal of the cluster-wide `snippets` capability needs separate review and authorization. Use the same Main recovery access and evidence directory; if the shell ended, source this run’s recorded `env.sh` before using `capture` or the rollback blocks. Do not initialize a new run over the existing evidence. Verify the old NAS storage is online and its retained snippet matches the recorded SHA-256 before restoring the reference. If NAS is unavailable, leave the verified local reference in place and diagnose; restoring a missing NAS reference would reintroduce the startup failure.
+The installation approval covers reverting this run’s confirmed vendor-reference change in the same maintenance window, subject to the ownership/dependency checks below. Leave staging files and the enabled content flag in place after a partial installation; their presence alone requires no recovery. A later rollback or removal of the cluster-wide `snippets` capability needs separate review and authorization. Use the same Main recovery access and evidence directory; if the shell ended, source this run’s recorded `env.sh` before using `capture` or the rollback blocks. Do not initialize a new run over the existing evidence. Verify the old NAS storage is online and its retained snippet matches the recorded SHA-256 before restoring the reference. If NAS is unavailable, leave the verified local reference in place and diagnose; restoring a missing NAS reference would reintroduce the startup failure.
 
 Before any subsequent start/regeneration, with no intervening configuration changes, restore only `cicustom`. Compare the saved config with the installed evidence before issuing the change; the guard below stops on drift, including later `cicustom` keys. If installation failed before `capture after`, compare the fresh config against `before.config.json` with only the intended vendor substitution; do not use this full-install rollback block without that comparison:
 
