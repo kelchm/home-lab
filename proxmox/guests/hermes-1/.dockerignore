@@ -1,0 +1,3 @@
+# The build needs only its recipe. Never send guest configs, .env or TLS state.
+**
+!Dockerfile.caddy

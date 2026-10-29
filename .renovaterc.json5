@@ -33,6 +33,17 @@
   },
   packageRules: [
     {
+      // A core release changes both payloads. Digest refreshes at the same
+      // release can safely land independently; qualification checks the releases.
+      description: "Hermes Caddy: update builder and runtime core releases together",
+      matchManagers: ["dockerfile"],
+      matchFileNames: ["proxmox/guests/hermes-1/Dockerfile.caddy"],
+      matchPackageNames: ["caddy"],
+      matchUpdateTypes: ["major", "minor", "patch"],
+      groupName: "Hermes Caddy core",
+      minimumGroupSize: 2,
+    },
+    {
       // A digest-only FROM declares exact content without a tag to follow.
       // Do not guess latest. Tagged references in the same file stay managed.
       // Lock rationale and review process: docs/runbooks/dependency-updates.md.
@@ -291,6 +302,15 @@
     },
   },
   customManagers: [
+    {
+      description: "Track the Hermes Caddy Cloudflare build input",
+      customType: "regex",
+      managerFilePatterns: ["/^proxmox/guests/hermes-1/Dockerfile\\.caddy$/"],
+      matchStrings: [
+        "# renovate: datasource=go depName=(?<depName>github\\.com/caddy-dns/cloudflare)\\nARG CLOUDFLARE_VERSION=(?<currentValue>v\\d+\\.\\d+\\.\\d+)\\n",
+      ],
+      datasourceTemplate: "go",
+    },
     {
       description: "Track inline workflow images",
       customType: "regex",

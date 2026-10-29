@@ -785,7 +785,8 @@ jobs:
           entrypoint: bash
           args: >-
             -c "renovate-config-validator --no-global .renovaterc.json5 &&
-            node scripts/ci/test-renovate-workflow-images.mjs"
+            node scripts/ci/test-renovate-workflow-images.mjs &&
+            node scripts/ci/test-renovate-caddy.mjs"
 
   labels:
     name: Label Catalog Validation

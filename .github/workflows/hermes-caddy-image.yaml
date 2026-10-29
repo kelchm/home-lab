@@ -1,0 +1,168 @@
+---
+name: Hermes Caddy Image
+
+on:
+  # Scope inside the workflow: includes forks and stacked PR bases.
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scope:
+    name: Caddy Input Scope
+    runs-on: ubuntu-24.04
+    outputs:
+      selected: ${{ steps.scope.outputs.selected }}
+      publish_selected: ${{ steps.scope.outputs.publish_selected }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Check input scope
+        id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.sha }}
+        run: |
+          if [[ $EVENT == workflow_dispatch ]]; then
+            echo 'selected=true' >> "$GITHUB_OUTPUT"
+            echo 'publish_selected=true' >> "$GITHUB_OUTPUT"
+          else
+            echo "selected=$(python3 scripts/ci/hermes-caddy-inputs.py scope "$BASE" "$HEAD")" >> "$GITHUB_OUTPUT"
+            echo "publish_selected=$(python3 scripts/ci/hermes-caddy-inputs.py scope "$BASE" "$HEAD" --publish)" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Test input, metadata, fixture and promotion guards offline
+        run: |
+          PYTHONDONTWRITEBYTECODE=1 python3 scripts/ci/test-hermes-caddy.py
+          scripts/ci/test-hermes-caddy-promotion.sh
+
+  qualify-pr:
+    name: Caddy Native amd64 PR Qualification
+    needs: scope
+    if: github.event_name == 'pull_request' && needs.scope.outputs.selected == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    concurrency:
+      group: hermes-caddy-pr-${{ github.event.number }}
+      cancel-in-progress: true
+    steps:
+      - name: Checkout merge preview
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up pinned Buildx and BuildKit
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          # renovate: datasource=github-releases depName=docker/buildx
+          version: v0.38.1
+          driver-opts: image=moby/buildkit:v0.34.1@sha256:99368f3e46177c6405b9740e4461d91cee004128daeecca78d4ceac50ec1da5c
+      - name: Build once on native amd64 without registry credentials
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: proxmox/guests/hermes-1
+          file: proxmox/guests/hermes-1/Dockerfile.caddy
+          platforms: linux/amd64
+          load: true
+          push: false
+          provenance: false
+          tags: localhost/hermes-caddy:pr
+      - name: Qualify local PR artifact
+        env:
+          IMAGE: ${{ steps.build.outputs.imageid }}
+        run: proxmox/guests/hermes-1/caddy/qualify.sh "$IMAGE" "$RUNNER_TEMP/caddy-report"
+      - name: Retain validation evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: caddy-pr-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/caddy-report
+          if-no-files-found: ignore
+          retention-days: 14
+
+  publish:
+    name: Caddy Publish and Qualify
+    needs: scope
+    if: >-
+      needs.scope.outputs.publish_selected == 'true' && github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    # Only selected publishers enter this queue. Unrelated main no-ops cannot
+    # replace a pending required build. Ordering still needs the input recheck.
+    concurrency:
+      group: hermes-caddy-publisher
+      cancel-in-progress: false
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up pinned Buildx and BuildKit
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          # renovate: datasource=github-releases depName=docker/buildx
+          version: v0.38.1
+          driver-opts: image=moby/buildkit:v0.34.1@sha256:99368f3e46177c6405b9740e4461d91cee004128daeecca78d4ceac50ec1da5c
+      - name: Set immutable build identity
+        id: identity
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          echo "image=ghcr.io/${REPOSITORY,,}/caddy-cloudflare" >> "$GITHUB_OUTPUT"
+          echo "tag=sha-${GITHUB_SHA}-run-${GITHUB_RUN_ID}-attempt-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
+      - name: Login with short-lived repository token
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish unique build once with provenance
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: proxmox/guests/hermes-1
+          file: proxmox/guests/hermes-1/Dockerfile.caddy
+          platforms: linux/amd64
+          push: true
+          provenance: mode=max
+          tags: ${{ steps.identity.outputs.image }}:${{ steps.identity.outputs.tag }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.url=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            io.github.actions.run.id=${{ github.run_id }}
+            io.github.actions.run.attempt=${{ github.run_attempt }}
+            io.github.actions.workflow=${{ github.workflow_ref }}
+      - name: Pull and qualify the exact returned root digest
+        env:
+          IMAGE: ${{ steps.identity.outputs.image }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          [[ $DIGEST =~ ^sha256:[a-f0-9]{64}$ ]]
+          docker pull --platform linux/amd64 "$IMAGE@$DIGEST"
+          proxmox/guests/hermes-1/caddy/qualify.sh "$IMAGE@$DIGEST" "$RUNNER_TEMP/caddy-report"
+          printf '%s@%s\n' "$IMAGE" "$DIGEST" > "$RUNNER_TEMP/caddy-report/qualified-reference.txt"
+      - name: Recheck relevant main inputs and copy qualified root to candidate
+        env:
+          IMAGE: ${{ steps.identity.outputs.image }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: scripts/ci/hermes-caddy-promote.sh "$IMAGE" "$DIGEST"
+      - name: Retain validation and publication evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: caddy-main-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/caddy-report
+          if-no-files-found: ignore
+          retention-days: 30
