@@ -179,9 +179,18 @@ class Runner:
                 stream.flush()
                 os.fsync(stream.fileno())
             os.replace(temporary, str(path))
+            self.sync_directory(path.parent)
         finally:
             if os.path.exists(temporary):
                 os.unlink(temporary)
+
+    def sync_directory(self, path):
+        self.guard(path, directory=True)
+        descriptor = os.open(str(path), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
 
     def save(self, name, value):
         self.write(self.path(name), (canonical(value) + "\n").encode("utf-8"))
@@ -265,30 +274,59 @@ class Runner:
             environment.update(env)
         self.command_stderr = b""
         with tempfile.TemporaryFile(dir=str(self.root)) as output, tempfile.TemporaryFile(dir=str(self.root)) as errors:
-            process = subprocess.Popen(argv, stdout=output, stderr=errors,
-                                       env=environment, start_new_session=True)
-            deadline = time.monotonic() + timeout
-            while process.poll() is None:
-                if time.monotonic() >= deadline or sum(os.fstat(stream.fileno()).st_size for stream in (output, errors)) > MAX_OUTPUT:
-                    os.killpg(process.pid, signal.SIGKILL)
-                    process.wait()
-                    output.seek(0)
-                    errors.seek(0)
-                    self.command_stderr = errors.read(32768)
-                    self.diagnostic(output.read(65536))
-                    raise Failure("External command timed out or exceeded its output limit")
+            process = None
+            completed = False
+            interrupted = None
+            previous_handlers = {}
+
+            def requested_stop(signum, frame):
+                nonlocal interrupted
+                # Do not raise inside Popen before it returns the child PID.
+                interrupted = signum
+
+            try:
+                for signum in (signal.SIGTERM, signal.SIGHUP, signal.SIGINT):
+                    previous_handlers[signum] = signal.signal(signum, requested_stop)
+                if interrupted is not None:
+                    raise Failure("External command interrupted by a termination signal")
+                process = subprocess.Popen(argv, stdout=output, stderr=errors,
+                                           env=environment, start_new_session=True)
+                deadline = time.monotonic() + timeout
+                while process.poll() is None:
+                    if interrupted is not None:
+                        raise Failure("External command interrupted by a termination signal")
+                    if time.monotonic() >= deadline or sum(os.fstat(stream.fileno()).st_size for stream in (output, errors)) > MAX_OUTPUT:
+                        raise Failure("External command timed out or exceeded its output limit")
+                    try:
+                        process.wait(timeout=0.1)
+                    except subprocess.TimeoutExpired:
+                        pass
+                if interrupted is not None:
+                    raise Failure("External command interrupted by a termination signal")
+                output.seek(0)
+                errors.seek(0)
+                data = output.read(MAX_OUTPUT + 1)
+                self.command_stderr = errors.read(MAX_OUTPUT + 1)
+                if len(data) + len(self.command_stderr) > MAX_OUTPUT:
+                    raise Failure("External command exceeded its output limit")
+                completed = True
+                return process.returncode, data
+            finally:
                 try:
-                    process.wait(timeout=0.1)
-                except subprocess.TimeoutExpired:
-                    pass
-            output.seek(0)
-            errors.seek(0)
-            data = output.read(MAX_OUTPUT + 1)
-            self.command_stderr = errors.read(MAX_OUTPUT + 1)
-            if len(data) + len(self.command_stderr) > MAX_OUTPUT:
-                self.diagnostic(data)
-                raise Failure("External command exceeded its output limit")
-            return process.returncode, data
+                    if process is not None and not completed:
+                        try:
+                            os.killpg(process.pid, signal.SIGKILL)
+                        except ProcessLookupError:
+                            pass
+                        process.wait()  # Complete cleanup before lock() can release.
+                    if not completed:
+                        output.seek(0)
+                        errors.seek(0)
+                        self.command_stderr = errors.read(32768)
+                        self.diagnostic(output.read(32768))
+                finally:
+                    for signum, previous in previous_handlers.items():
+                        signal.signal(signum, previous)
 
     def checked(self, argv):
         code, output = self.command(argv)
@@ -497,6 +535,8 @@ class Runner:
                 os.rename(stage, str(directory))
         archived = self.bundle("bundles/" + fingerprint)
         require(self.validate(archived, minimum=0) == fingerprint, "Archived certificate bundle is inconsistent")
+        self.sync_directory(directory)
+        self.sync_directory(directory.parent)
         return {"sha256": fingerprint}
 
     def saved_bundle(self, pointer, validate=True, minimum=MIN_VALIDITY):
@@ -544,6 +584,7 @@ class Runner:
             if re.fullmatch(r"[a-f0-9]{64}", directory.name) and directory.name not in keep:
                 self.guard(directory, directory=True)
                 shutil.rmtree(str(directory))
+        self.sync_directory(self.path("bundles"))
         self.save("last-verified-success.json", {"at": int(time.time()), "sha256": fingerprint})
 
     def inspect(self):

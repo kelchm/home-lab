@@ -117,6 +117,8 @@ These checks and DSM email delivery work independently of Kubernetes. They still
 
 The first real scheduled production renewal remains pending until due. Initial `reimport` exercises the same leaf only: replacement by a different leaf and actual rollback have not yet been demonstrated. Preserve those specific live acceptance gates in #1094; record them as unverified in the activation evidence. Additional supervised issuance would require an explicit commissioning decision. Record its new certificate fingerprint/expiry, successful same-ID import, unchanged bindings and normally verified live leaves. Do not close #1094 merely because the PR merged, a not-due run passed or a repeat import worked.
 
+SIGTERM, SIGHUP and SIGINT stop and reap the current child process group before releasing the operation lock. SIGKILL cannot execute cleanup; after a forced kill, confirm no ACME client/helper remains before starting another operation. Archive and pointer publication synchronize their containing directories before reporting success, preserving the recovery ordering across a power loss.
+
 ## A legitimate later DSM binding change
 
 The complete accepted map is intentionally frozen between operator-reviewed changes. A package install, unrelated certificate addition or DSM metadata change can therefore halt automatic renewal. Do not edit `accepted.json` by hand. Disable the renewal task while investigating, run `review-bindings`, and review its sanitized accepted/current maps and `current_sha256`. Verify the change belongs to the separate approved operation and preserves the intended unrelated assignments. Then run `rebaseline <reviewed-current_sha256>` with the exact digest from that review.

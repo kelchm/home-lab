@@ -627,6 +627,81 @@ class RuntimeTests(unittest.TestCase):
             acme.Runner.command(self.runner, [sys.executable, "-c", "import time; time.sleep(5)"], timeout=0.02)
         self.assertEqual(kill.call_count, 1)
 
+    def test_termination_signals_reap_child_before_releasing_operation_lock(self):
+        original_spawn, original_kill, original_fstat = acme.subprocess.Popen, os.killpg, os.fstat
+        def root_fstat(descriptor):
+            values = list(original_fstat(descriptor))
+            values[4] = 0
+            return os.stat_result(values)
+        for requested in (acme.signal.SIGTERM, acme.signal.SIGHUP, acme.signal.SIGINT):
+            children = []
+            previous = {sig: acme.signal.getsignal(sig) for sig in (acme.signal.SIGTERM, acme.signal.SIGHUP, acme.signal.SIGINT)}
+            def spawn(*args, **kwargs):
+                child = original_spawn(*args, **kwargs)
+                children.append(child)
+                # Signal during Popen, before command() receives the child PID.
+                os.kill(os.getpid(), requested)
+                return child
+            def kill_group(pid, sig):
+                with (self.root / "lock").open("rb") as competing:
+                    with self.assertRaises(BlockingIOError):
+                        acme.fcntl.flock(competing.fileno(), acme.fcntl.LOCK_EX | acme.fcntl.LOCK_NB)
+                original_kill(pid, sig)
+            with self.subTest(signal=requested), patch.object(acme.os, "fstat", side_effect=root_fstat):
+                with self.runner.lock(), patch.object(acme.subprocess, "Popen", side_effect=spawn), \
+                        patch.object(acme.os, "killpg", side_effect=kill_group) as killed, \
+                        self.assertRaisesRegex(acme.Failure, "termination signal"):
+                    acme.Runner.command(self.runner, [sys.executable, "-c", "import time; time.sleep(5)"])
+                self.assertIsNotNone(children[0].poll())
+                killed.assert_called_once_with(children[0].pid, acme.signal.SIGKILL)
+                self.assertEqual({sig: acme.signal.getsignal(sig) for sig in previous}, previous)
+
+    def test_archive_directory_sync_failure_does_not_publish_good_or_success(self):
+        self.accepted()
+        marker = self.runner.read(self.root / "last-verified-success.json")
+        original_sync = self.runner.sync_directory
+        def fail_archive_parent(path):
+            if path == self.root / "bundles":
+                raise OSError("simulated archive directory sync failure")
+            original_sync(path)
+        with self.mock_validation(), patch.object(self.runner, "snapshot", return_value=accepted_map()), \
+                patch.object(self.runner, "live"), patch.object(self.runner, "sync_directory", side_effect=fail_archive_parent), \
+                self.assertRaises(OSError):
+            self.runner.verified(self.runner.bundle("issued"), hashlib.sha256(b"leaf").hexdigest())
+        self.assertEqual(self.runner.load("good.json"), {"sha256": OLD})
+        self.assertEqual(self.runner.read(self.root / "last-verified-success.json"), marker)
+
+    def test_pointer_directory_is_synced_after_atomic_replacement(self):
+        original_replace = acme.os.replace
+        events = []
+        def replace(source, destination):
+            original_replace(source, destination)
+            events.append("replace")
+        original_sync = self.runner.sync_directory
+        def sync(path):
+            original_sync(path)
+            events.append("sync")
+        with patch.object(acme.os, "replace", side_effect=replace), patch.object(self.runner, "sync_directory", side_effect=sync):
+            self.runner.save("good.json", {"sha256": NEW})
+        self.assertEqual(events, ["replace", "sync"])
+
+    def test_retry_client_failure_keeps_rollback_and_does_not_import_again(self):
+        self.accepted()
+        marker = self.runner.read(self.root / "last-verified-success.json")
+        with patch.object(self.runner, "snapshot", return_value=accepted_map()), \
+                patch.object(self.runner, "acme", side_effect=[self.runner.bundle("issued"), acme.Failure("retry client failed")]), \
+                patch.object(self.runner, "validate", return_value=NEW), patch.object(self.runner, "saved_bundle"), \
+                patch.object(self.runner, "live", return_value=OLD), \
+                patch.object(self.runner, "import_bundle", side_effect=acme.Failure("first import failed")) as imported:
+            with self.assertRaises(acme.Failure):
+                self.runner.run()
+            previous = self.runner.read(self.root / "previous.json")
+            with self.assertRaisesRegex(acme.Failure, "retry client"):
+                self.runner.run()
+            self.assertEqual(imported.call_count, 1)
+            self.assertEqual(self.runner.read(self.root / "previous.json"), previous)
+            self.assertEqual(self.runner.read(self.root / "last-verified-success.json"), marker)
+
     def test_execute_audits_and_locks_mutation(self):
         original_fstat = os.fstat
         def root_fstat(descriptor):
