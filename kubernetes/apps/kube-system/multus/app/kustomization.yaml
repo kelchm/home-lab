@@ -15,6 +15,7 @@ kind: Kustomization
 resources:
   - https://raw.githubusercontent.com/k8snetworkplumbingwg/multus-cni/v4.2.4/deployments/multus-daemonset-thick.yml
   - ./cni-ready-untaint.yaml
+  - ./cni-tuning.yaml
 
 images:
   - name: ghcr.io/k8snetworkplumbingwg/multus-cni
