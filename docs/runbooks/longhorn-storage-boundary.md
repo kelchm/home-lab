@@ -123,8 +123,10 @@ if [[ ! -s "$run/successful-log-path.txt" ]]; then
     printf 'Log read %s failed; preserve %s\n' "$read_number" "$log_file" >&2
   done
 fi
-[[ -s "$run/successful-log-path.txt" ]] ||
+if [[ ! -s "$run/successful-log-path.txt" ]]; then
   printf 'STOP before Pod deletion: logs unavailable; root must decide whether to discard results\n' >&2
+  exit 1
+fi
 ```
 
 Allow up to three read-only log fetches, each into a new file, with the Pod UID checked before and after. These reads send no probe traffic. Stop after the first successful capture and preserve it; cleanup never fetches logs or overwrites it. If all three reads fail, leave the terminated Pod in place and return for a deliberate decision before deleting it without results. If the container never started, record that fact and make the same explicit cleanup decision. Preserve partial/failed captures too. Report each attempted tuple's source, destination, exit/result, and HTTP status for T8; mark unattempted tuples explicitly. Unexpected controls end this batch, including timeouts that do not prove delivery. IM debug logs may record handshake EOFs; no gRPC bytes are sent. Re-read destination identities after the batch and qualify results if they changed.
