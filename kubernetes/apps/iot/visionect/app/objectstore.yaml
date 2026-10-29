@@ -1,0 +1,23 @@
+---
+# Backup store for visionect-db: base backups and WAL go to versitygw on Athena
+# (synology/s3-storage), which the off-site job then carries to B2.
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: visionect-db
+spec:
+  configuration:
+    destinationPath: s3://k8s-prod-visionect-db/
+    endpointURL: https://s3-storage.home.kelch.io:9000
+    s3Credentials:
+      accessKeyId:
+        name: visionect-db-backup
+        key: ACCESS_KEY_ID
+      secretAccessKey:
+        name: visionect-db-backup
+        key: ACCESS_SECRET_KEY
+    wal:
+      compression: gzip
+    data:
+      compression: gzip
+  retentionPolicy: 30d

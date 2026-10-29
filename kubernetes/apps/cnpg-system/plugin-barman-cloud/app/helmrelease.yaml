@@ -1,0 +1,13 @@
+---
+# Barman Cloud plugin for CloudNativePG: the operator finds it through the
+# `barman-cloud` Service, and it adds a backup sidecar to every Cluster that
+# lists it under spec.plugins. Chart defaults are used as they are.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: plugin-barman-cloud
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: plugin-barman-cloud
+  interval: 1h

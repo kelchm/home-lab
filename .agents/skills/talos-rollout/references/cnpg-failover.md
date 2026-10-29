@@ -14,6 +14,8 @@ kubectl get clusters.postgresql.cnpg.io -A \
 kubectl -n <ns> get pod <primary> -o jsonpath='{.spec.nodeName}{"\n"}'
 ```
 
+Check that WAL archiving is healthy before any step that stops a database pod: `ContinuousArchiving` is `True` on every Cluster and `CNPGWALArchivingStalled` is not firing. PostgreSQL waits for its archiver during shutdown, so while the backup store on Athena is unreachable a stop that normally takes seconds took 8.5 minutes in a test, and CloudNativePG allows it up to 30. See [cnpg-backup-restore](../../../../docs/runbooks/cnpg-backup-restore.md#wal-archiving-is-stalled).
+
 Promotion needs the `kubectl-cnpg` client matched to the running operator. The client ships from the operator's own release, and a mismatched one can write fields the running operator does not act on. Read the version off the cluster rather than assuming the chart's `appVersion` — Renovate bumps the chart:
 
 ```bash

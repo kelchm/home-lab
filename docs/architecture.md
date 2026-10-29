@@ -218,7 +218,8 @@ The storage VLAN bends the skeleton because its primary inhabitants are storage 
 | `.100-.127` | Reserved |
 | `.128/28` | k8s-prod storage-pod IPs (16 IPs) |
 | `.144/28` | Second-cluster storage-pod IPs (reserved, 16 IPs) |
-| `.160/28`, `.176/28` | Next storage-pod pools |
+| `.160/28` | k8s-prod database-pod IPs, for backups to the NAS S3 endpoint (16 IPs) |
+| `.176/28` | Next storage-pod pool |
 | `.192-.254` | Reserved |
 
 **Reading rule:** the decade decode applies to host/member IPs only. Pod-level endpoints occupy `.128/26` (`.128-.191`), sub-allocated one /28 per pool in order of need — the /28 sequence is independent of system decades, and this table is the source of truth.
@@ -257,6 +258,8 @@ API VIP is managed by the Talos `vipController` (GARP-based at the machine-confi
 10.32.25.41-.43    k8s-sbx-{1,2,3}-storage  System 4 node NICs (reserved)
 10.32.25.128-.143  k8s-prod storage-pod range (/28; longhorn-im-prod-{1,2,3} float here)
 10.32.25.144-.159  (reserved, second-cluster storage-pod range)
+10.32.25.160-.175  k8s-prod database-pod range (/28; NAS S3 backups)
+10.32.25.176-.191  (reserved, next storage-pod pool)
 ```
 
 **Infra Mgmt VLAN (20):**
@@ -493,7 +496,7 @@ The owner selected 3 replicas for both current CNPG databases in [#474](https://
 
 The class selection applies to newly provisioned PVCs. Existing PVCs retain their immutable `storageClassName: longhorn`, and changing a Cluster’s storage class does not change an existing Longhorn volume’s replica count. Existing database volumes need a separately approved increase of `spec.numberOfReplicas` from 2 to 3, followed by verification of three healthy replicas on distinct nodes; see the migration steps and current verification state in [#474](https://github.com/kelchm/home-lab/issues/474). Do not recreate database PVCs to perform this change. StorageClass parameters are immutable, so the dedicated class is created separately from the default class.
 
-Replica count is independent of backup policy: both databases currently receive daily and weekly Longhorn backups to the NAS, but neither has a configured CNPG-native backup/PITR path. Bambuddy also has a manual portable export/restore procedure. CNPG backup and recovery work remains tracked in [#224](https://github.com/kelchm/home-lab/issues/224), with independent off-site backup in [#297](https://github.com/kelchm/home-lab/issues/297).
+Replica count is independent of backup policy. The CNPG backup layer configures continuous WAL archiving and daily base backups to the NAS through the Barman Cloud plugin, plus a daily off-site source for that store. The NAS foundation is accepted as of 2026-10-29 UTC; the real database paths and a completed Kopia snapshot require the staged acceptance in the [CloudNativePG backup runbook](runbooks/cnpg-backup-restore.md) before relying on those recovery points. Both databases already receive Longhorn's daily and weekly volume backups as an independent copy, and Bambuddy has a manual portable export/restore procedure. The real-data recovery drill remains tracked in [#224](https://github.com/kelchm/home-lab/issues/224).
 
 ### Disk layout (per node)
 

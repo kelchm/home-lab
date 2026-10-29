@@ -1,0 +1,110 @@
+---
+# CloudNativePG backups fail quietly: WAL can keep archiving while base backups
+# never complete, and an unreachable store pins WAL on the database volume
+# until it fills. The Cluster reports healthy throughout, so these read the
+# instance exporters directly.
+#
+# Written against signals observed with CloudNativePG 1.30.1 and plugin 0.15.1
+# while a versitygw store was stopped and while it rejected the credentials:
+#   - cnpg_collector_pg_wal_archive_status{value="ready"} counts segments
+#     waiting for the archiver. It rises at once in both cases, where
+#     cnpg_pg_stat_archiver_failed_count and the Cluster's ContinuousArchiving
+#     condition take about five minutes to change while a connection to an
+#     unreachable store times out.
+#   - barman_cloud_cloudnative_pg_io_last_available_backup_timestamp is 0, not
+#     absent, until a backup has been recorded, and the plugin can skip
+#     recording one after a write conflict. A backup against a
+#     stopped store stays `started` for minutes before it fails, so staleness
+#     is the dependable signal.
+#   - An instance's claim has the same name as its pod.
+#   - A stuck plugin call can hang an instance's whole metrics endpoint
+#     (plugin-barman-cloud#1045), which removes every series above, so the
+#     missing-metrics and volume rules also take their pods from
+#     kube-state-metrics. The plugin's sidecar is an init container.
+#
+# Every Cluster that archives WAL is covered without being named here. The VM
+# operator converts PrometheusRule to VMRule.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: cnpg-backups
+spec:
+  groups:
+    - name: cnpg-backups
+      labels:
+        cluster: k8s-prod
+      rules:
+        - alert: CNPGWALArchivingStalled
+          expr: cnpg_collector_pg_wal_archive_status{cluster="k8s-prod", value="ready"} > 0
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: WAL archiving is stalled on {{ $labels.namespace }}/{{ $labels.pod }}
+            description: >-
+              {{ $value }} WAL segments have waited for the archiver for 15
+              minutes. Unarchived WAL stays on the database volume until the
+              store accepts it, and the recovery point stops advancing. Check
+              the plugin-barman-cloud container's log on this pod, then the
+              store on Athena.
+            runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/cnpg-backup-restore.md#wal-archiving-is-stalled
+
+        # 26h is one missed daily backup plus two hours.
+        - alert: CNPGBackupStale
+          expr: time() - barman_cloud_cloudnative_pg_io_last_available_backup_timestamp{cluster="k8s-prod"} > 26 * 3600
+          for: 1h
+          labels:
+            severity: critical
+          annotations:
+            summary: No completed base backup for {{ $labels.namespace }}/{{ $labels.pod }} in 26 hours
+            description: >-
+              The plugin has not recorded a completed base backup for this
+              instance within 26 hours, or has never recorded one. List the
+              Backup objects in the namespace: one stuck in `started` or
+              `failed` is the cause, and a `completed` one means only the
+              record is missing.
+            runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/cnpg-backup-restore.md#no-completed-backup
+
+        - alert: CNPGBackupMetricsMissing
+          expr: |
+            (
+              count by (namespace, pod) (kube_pod_init_container_info{cluster="k8s-prod", container="plugin-barman-cloud"})
+              or count by (namespace, pod) (cnpg_collector_up{cluster="k8s-prod"})
+            )
+            unless on (namespace, pod) barman_cloud_cloudnative_pg_io_last_available_backup_timestamp{cluster="k8s-prod"}
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: Backup state of {{ $labels.namespace }}/{{ $labels.pod }} is not being monitored
+            description: >-
+              No Barman Cloud metrics are arriving for this database pod, so
+              stalled archiving and stale backups would go unnoticed. Its
+              exporter is not answering or not scraped, or the Cluster's
+              plugin is disabled.
+            runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/cnpg-backup-restore.md#no-completed-backup
+
+        - alert: CNPGVolumeFillingUp
+          expr: |
+            (
+              kubelet_volume_stats_available_bytes{cluster="k8s-prod"}
+              / kubelet_volume_stats_capacity_bytes{cluster="k8s-prod"}
+              < 0.5
+            )
+            and on (namespace, persistentvolumeclaim)
+              label_replace(
+                count by (namespace, pod) (kube_pod_init_container_info{cluster="k8s-prod", container="plugin-barman-cloud"})
+                or count by (namespace, pod) (cnpg_collector_up{cluster="k8s-prod"}),
+                "persistentvolumeclaim", "$1", "pod", "(.+)"
+              )
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: Database volume {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} is {{ $value | humanizePercentage }} free
+            description: >-
+              Less than half of this database volume is free. Both volumes
+              normally sit above 85% free, so this is WAL that cannot be
+              archived or data growth. PostgreSQL stops accepting writes when
+              the volume fills.
+            runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/cnpg-backup-restore.md#the-database-volume-is-filling

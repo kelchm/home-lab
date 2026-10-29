@@ -1,8 +1,6 @@
 # S3 storage on Athena
 
-The lab's S3 object store. Its first buckets hold the CloudNativePG backups from `k8s-prod`. [versitygw](https://github.com/versity/versitygw) 1.8.0 stores each object as a plain file on the `object-storage` share, and a Traefik container in front of it terminates HTTPS with a Let's Encrypt certificate. The decisions are recorded in [home-lab#224](https://github.com/kelchm/home-lab/issues/224), and the database side is [home-lab#816](https://github.com/kelchm/home-lab/pull/816).
-
-The [off-site job](../offsite-backup/README.md) does not read this share yet. Mounting a share that does not exist stops that job's container from starting, so the source is added with the database side, after the share has been created and checked on Athena.
+The lab's S3 object store. Its first buckets are for the CloudNativePG backups from `k8s-prod`. [versitygw](https://github.com/versity/versitygw) 1.8.0 stores each object as a plain file on the `object-storage` share, and a Traefik container in front of it terminates HTTPS with a Let's Encrypt certificate. The decisions are recorded in [home-lab#224](https://github.com/kelchm/home-lab/issues/224), and the database side is in the [CloudNativePG backup runbook](../../docs/runbooks/cnpg-backup-restore.md). The database layer adds this share to the daily [off-site job](../offsite-backup/README.md); only a verified completed Kopia snapshot establishes the Backblaze B2 copy.
 
 doco-cd deploys this project from `main`; the [Synology README](../README.md) describes the deployment model, rollback, and break-glass apply.
 
@@ -10,7 +8,7 @@ State as of 2026-10-29 UTC: the NAS foundation is deployed and accepted (#1077, 
 
 Both restricted database accounts exist and own their respective buckets. Each passed a five-part, 40,000,000-byte upload/download with matching SHA-256, deletion confirmed by a subsequent 404, and `AccessDenied` for both listing and writing the other bucket. The disposable objects were deleted. All 12 pre-existing containers retained their IDs, start times and restart counts.
 
-The database layer (#816) is not deployed: neither database writes backups here yet, the share is not an off-site source, and cluster backup alerts are not active. Its activation and real-data restore remain separate gates. [First deployment](#first-deployment) remains the rebuild procedure and acceptance checklist.
+The NAS acceptance above does not establish database or off-site recovery. Merging the database layer (#816) adds the cluster backup alerts and Kopia source, then activates Visionect while Bambuddy is held for separate acceptance. Follow the database runbook's staged checks and record each accepted database and completed Kopia snapshot here afterwards; while any step is pending, keep that limit explicit. The real-data restore remains a separate gate. [First deployment](#first-deployment) remains the NAS rebuild procedure and acceptance checklist.
 
 ## What is where
 
@@ -33,7 +31,7 @@ The share is not tied to one system. A bucket is named `<system>-<workload>` and
 
 versitygw is not published. Only Traefik listens, and it forwards to the gateway over the project's private network. The gateway's admin API listens on the container's loopback, so it is reachable only with `docker exec`.
 
-The endpoint is on the storage VLAN only. Pods on `k8s-prod` cannot reach that VLAN through Cilium, which masquerades pod traffic only on the node's primary interface: measured on 2026-10-12, an ordinary pod timed out on `10.32.25.5:2049` and `:8090`. The database side gives the database pods a second interface on the storage bridge, from a `cnpg-system/storage-network` attachment, with addresses in `10.32.25.160/28`. A scratch database pod attached that way connected to both ports.
+The endpoint is on the storage VLAN only. Pods on `k8s-prod` cannot reach that VLAN through Cilium, which masquerades pod traffic only on the node's primary interface: measured on 2026-10-12, an ordinary pod timed out on `10.32.25.5:2049` and `:8090`. The database layer gives the pods a second interface on the storage bridge, from the [`cnpg-system/storage-network`](../../kubernetes/apps/cnpg-system/plugin-barman-cloud/app/networkattachmentdefinition.yaml) attachment, with addresses in `10.32.25.160/28`. A scratch database pod attached that way connected to both ports; the real attachments still require activation acceptance.
 
 ## Credentials
 
@@ -127,7 +125,7 @@ ssh kelchm@10.32.20.5 'sudo /usr/local/bin/docker logs --since 1h s3-storage-tra
 ssh kelchm@10.32.20.5 'sudo du -sh /volume1/object-storage/data/*'
 ```
 
-Nothing here alerts on its own, and nothing in the cluster uses the endpoint until the database side is deployed.
+Nothing here alerts on its own. A stopped or unreachable endpoint shows up in the cluster as `CNPGWALArchivingStalled` once a WAL segment has waited 15 minutes for the archiver; the databases close a segment every 5 minutes, so that is 15 to 20 minutes after the endpoint stops. A certificate that fails to renew has about 30 days before it expires, and then shows up the same way.
 
 ## Serve a copy of the share
 
@@ -145,7 +143,7 @@ Do not edit files under `data/` by hand. The gateway returns the checksum it rec
 ## Limits
 
 - Accounts and bucket ownership are created by hand and live outside Git. On a rebuilt NAS, repeat step 5 with the secrets already in the cluster's `backup-secret.sops.yaml` files.
-- The off-site job does not copy the share until the database side adds it as a source. Until then the objects exist only on Athena.
+- Once the database layer's source is configured and a completed snapshot is verified, the off-site job copies the whole share, so every bucket goes to B2 under the same 30-day lock.
 - The endpoint is published on the storage VLAN only. A client needs an address there.
 - `users.json` is not copied off-site. Losing it loses no backup data.
-- The gateway's own Object Lock and versioning are not used, so nothing protects an object against deletion until the off-site copy exists.
+- The gateway's own Object Lock and versioning are not used. Protection against deletion comes from the verified off-site copy's 30-day lock; the NAS foundation alone provides none.
