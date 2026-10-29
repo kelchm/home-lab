@@ -78,7 +78,7 @@ contract=(--user 1000:1000 --read-only --cap-drop ALL --cap-add NET_BIND_SERVICE
 # interpolated token; the only credential here is a literal dummy.
 docker run --rm --network none "${contract[@]}" \
     --mount "type=bind,src=$guest/Caddyfile,dst=/etc/caddy/Caddyfile,readonly" \
-    --env CLOUDFLARE_API_TOKEN=ci-dummy-never-a-real-token \
+    --env CLOUDFLARE_API_TOKEN=0000000000000000000000000000000000000000 \
     "$image" caddy adapt --validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null
 
 python3 "$guest/caddy/fixture.py" serve > "$report/upstream.log" 2>&1 &
