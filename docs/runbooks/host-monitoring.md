@@ -280,7 +280,7 @@ Backup failure and staleness rules for PVE are installed: PVE's notification web
 
 ## Service probes
 
-`ups-compute-rack` (`10.32.20.111`, VLAN 20) runs the stock nixpkgs blackbox exporter on `127.0.0.1:9115` through its host-level [rpi-nixos add-on](https://github.com/kelchm/rpi-nixos/blob/main/hosts/ups-compute-rack/probes.nix). Its vmagent scrapes nine destinations as `pi-blackbox` every 60 seconds, with a five-second probe timeout and ten-second scrape timeout. Athena DSM below is a prospective tenth destination, dependent on a separate rpi-nixos target change and Pi deployment; this alert configuration does not establish that the target is live. `pi-blackbox-exporter` scrapes the exporter's own metrics every 30 seconds. The other UPS Pi and the streamer run no probes. Modules use only blackbox's built-in HTTP, TCP, DNS and ICMP probers; HTTP status, response body and DNS answer checks are ordinary exporter configuration, with no scripts or credentials.
+`ups-compute-rack` (`10.32.20.111`, VLAN 20) runs the stock nixpkgs blackbox exporter on `127.0.0.1:9115` through its host-level [rpi-nixos add-on](https://github.com/kelchm/rpi-nixos/blob/main/hosts/ups-compute-rack/probes.nix). Its vmagent scrapes ten destinations as `pi-blackbox` every 60 seconds, with a five-second probe timeout and ten-second scrape timeout. Athena DSM joined the nine existing targets on 2026-10-29 through [rpi-nixos #25](https://github.com/kelchm/rpi-nixos/pull/25); test and persistent activation passed on this Pi without a reboot. `pi-blackbox-exporter` scrapes the exporter's own metrics every 30 seconds. The other UPS Pi and the streamer run no probes. Modules use only blackbox's built-in HTTP, TCP, DNS and ICMP probers; HTTP status, response body and DNS answer checks are ordinary exporter configuration, with no scripts or credentials.
 
 The targets come from the [address registry and LB pools](../architecture.md#lb-pool-allocation) and the live Traefik HTTPRoutes. Kanidm and Jellyfin use `gateway-services`; Grafana and Homepage use `gateway-admin`; Echo uses `gateway-public` behind the Cloudflare tunnel. Gateway TCP probes check the routed VIP listeners independently of DNS and application authentication.
 
@@ -293,7 +293,7 @@ The targets come from the [address registry and LB pools](../architecture.md#lb-
 | Grafana | `https://grafana.home.kelch.io/` | `http_redirect` | HTTP 302 with `Location: /login`, valid TLS; do not follow | 60s |
 | Homepage | `https://home.kelch.io/` | `http_401` | HTTP 401 from the authentication middleware, valid TLS; do not follow | 60s |
 | Cloudflare tunnel | `https://echo.kelch.io/` | `http_2xx` | HTTP 200 through the public edge and tunnel, valid TLS | 60s |
-| Athena DSM (`athena-dsm`, pending Pi deployment) | `https://athena.home.kelch.io:5001/` | `http_2xx` | DSM login page, HTTP 200 with normally trusted TLS | 60s |
+| Athena DSM (`athena-dsm`) | `https://athena.home.kelch.io:5001/` | `http_2xx` | DSM login page, HTTP 200 with normally trusted TLS | 60s |
 | k8s-gateway | `10.32.130.2:53` | `dns_k8s_gateway` | UDP lookup of `auth.home.kelch.io` A: `NOERROR` and `10.32.140.1` | 60s |
 | UniFi gateway | `10.32.1.1` | `icmp` | ICMP echo reply | 60s |
 
@@ -319,7 +319,7 @@ probe_duration_seconds{job="pi-blackbox"}
 (probe_ssl_earliest_cert_expiry{job="pi-blackbox"} - time()) / 3600
 ```
 
-The established nine-target baseline has nine success values and ten scrape `up` values; after the DSM target is deployed, expect ten and eleven respectively. All should be 1, with probe samples roughly one minute apart. The [probe rules](../../kubernetes/apps/observability/metrics-ingest/app/probe-alerts.yaml) use the existing vmalert → VMAlertmanager → Pushover path:
+Expect ten success values and eleven scrape `up` values. All should be 1, with probe samples roughly one minute apart. The [probe rules](../../kubernetes/apps/observability/metrics-ingest/app/probe-alerts.yaml) use the existing vmalert → VMAlertmanager → Pushover path:
 
 - `ProbeFailed`: a failed probe or probe scrape for three minutes while the exporter scrape is up; critical priority.
 - `ProbeSlow`: successful probes with a five-minute average duration above two seconds for ten minutes; warning priority.
@@ -327,7 +327,7 @@ The established nine-target baseline has nine success values and ten scrape `up`
 - `DsmCertificateExpiring`: only `probe="athena-dsm"` sees less than 14 days of certificate validity for an hour; warning priority through the existing Pushover route. It uses the same successful-probe and successful-scrape freshness gates as the 36-hour rule. DSM is excluded from that generic rule to avoid duplicate certificate warnings.
 - `NodeCollectorDown`: the exporter scrape is down for ten minutes. `pi-blackbox` is excluded from this generic rule, and probe failures require a healthy exporter scrape, so an exporter outage does not also page for every destination. The NUT collector remains owned by its UPS rules.
 
-Configuration versus live acceptance: the rule and offline fixtures configure the DSM warning; they do not verify Pi deployment or notification delivery. The normal activation order is the rpi-nixos target merge and owner-approved Pi deployment, then verification of `probe="athena-dsm"`, the exact port-5001 URL, trusted TLS, fresh success/scrape samples and served expiry, then the separate owner decision to merge the home-lab alert PR, which Flux activates. Afterwards verify the loaded 14-day/1h warning rule, the existing warning-to-Pushover route and an approved controlled warning notification. Record live acceptance in [#1094](https://github.com/kelchm/home-lab/issues/1094); these checks remain outstanding until performed.
+Pi acceptance on 2026-10-29 verified the exact `probe="athena-dsm"` port-5001 target, ordinary certificate and hostname trust, HTTP 200, and repeated fresh success/scrape/SSL samples of 1. The served leaf matched the accepted DSM renewal and expires at 2027-01-27 16:20:03 UTC; all nine existing probes were healthy after activation. Alert acceptance is separate: verify the loaded 14-day/1h warning rule, the existing warning-to-Pushover route and an approved controlled warning notification. Record the result in [#1094](https://github.com/kelchm/home-lab/issues/1094). For renewal or import diagnosis, use the [Athena ACME runbook](athena-acme.md).
 
 If the Pi stops sending metrics, `NodeMetricsMissing` covers it. If the cluster or its alerting path fails, the [healthchecks.io Watchdog](alerting.md#independent-dead-man-heartbeat) covers that outage. DSM notifications still depend on the cluster's ingestion and alerting path; there is no separate Pushover sender on the Pi or cluster-independent DSM alert guarantee.
 
