@@ -24,7 +24,7 @@ scp proxmox/guests/netbird-router/netbird-router-enroll.sh "kelchm@10.32.20.21:$
 printf 'Helper transfer directory: %s\n' "$transfer"
 ```
 
-In the node-1 session, substitute that exact directory below. Require the intended rebuilt 103, a responding guest agent and no enrollment in progress. This passes only the reviewed script on stdin; no setup key is involved. The guest stages it under `/run`, verifies the pinned hash and publishes a new destination exclusively. An existing regular file must match exactly, including owner/mode; a symlink or different file stops the procedure.
+In the node-1 session, substitute that exact directory below. Require the intended rebuilt 103, a responding guest agent and no enrollment in progress. This passes only the reviewed script on stdin; no setup key is involved. The guest stages it beside the destination on the same filesystem, verifies the pinned hash and publishes a new destination exclusively. An existing regular file must match exactly, including owner/mode; a symlink or different file stops the procedure.
 
 ```bash
 transfer='/tmp/netbird-helper.<this-run>'
@@ -32,8 +32,9 @@ sudo -n qm guest exec 103 --pass-stdin 1 --timeout 30 -- \
   timeout --kill-after=2s 20s /bin/sh -ceu '
     test "$(id -u)" -eq 0
     umask 077
-    staged=$(mktemp /run/netbird-helper-stage.XXXXXX)
+    staged=$(mktemp /usr/local/sbin/.netbird-router-enroll.XXXXXX)
     trap "rm -f -- \"$staged\"" EXIT
+    trap "exit 1" HUP INT TERM
     cat > "$staged"
     printf "9ca51dcf2e56f739f5afeb948c106e0116366933ab1b28c4ee9a68223503f433  %s\n" "$staged" | sha256sum --check --status
     chmod 0755 "$staged"
@@ -50,7 +51,7 @@ sudo -n qm guest exec 103 --pass-stdin 1 --timeout 30 -- \
   ' < "$transfer/netbird-router-enroll.sh"
 ```
 
-Require the returned `exited: 1`, `exitcode: 0` and expected SHA-256. A PID-only response needs `qm guest exec-status 103 <pid>` within 30 seconds of the initial call; a missing/ambiguous result stops enrollment until the exact guest task and installed file are reconciled. The helper is never executed during staging. Remove only this run's node transfer file/directory after successful verification. The second router gets the identical helper from its reviewed vendor data and does not need this staging step.
+Require the returned `exited: 1`, `exitcode: 0` and expected SHA-256. A PID-only response needs `qm guest exec-status 103 <pid>` within 30 seconds of the initial call; a missing/ambiguous result stops enrollment until the exact guest task and installed file are reconciled. Inspect any leftover `.netbird-router-enroll.*` only after confirming that exact task has exited; catchable signals clean it up, but SIGKILL cannot. The helper is never executed during staging. After successful verification, remove only this run's node transfer with `rm -- "$transfer/netbird-router-enroll.sh" && rmdir -- "$transfer"`. The second router gets the identical helper from its reviewed vendor data and does not need this staging step.
 
 ## Approved-window sequence
 
