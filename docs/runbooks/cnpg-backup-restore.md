@@ -2,7 +2,7 @@
 
 How the two PostgreSQL clusters, `iot/visionect-db` and `printing/bambuddy-db`, are backed up, what to do when an alert fires, and how to restore. The design decisions are in [home-lab#224](https://github.com/kelchm/home-lab/issues/224).
 
-Last verified acceptance, 2026-10-29 UTC: **both live database backup paths accepted.** After NAS foundation acceptance (#1077), #816 merged as `653afc37` with Bambuddy suspended. Visionect’s backup and WAL checks passed first. #1095 (`ce7d9079`) then added all-IPv6 login rejection by reload; after confirming Visionect’s rejection, Bambuddy resumed and passed all checks. Both have the plugin sidecar and storage interface, completed manual backups, nonzero last-backup metrics, advancing WAL objects on Athena and at least 15 minutes of WAL-queue observation with a maximum of 0. Both applications were healthy at acceptance, and their pods were not restarted. CloudNativePG is 1.30.1, plugin 0.15.1 and versitygw 1.8.0. See [What has been exercised](#what-has-been-exercised) for the scope of the earlier scratch drills.
+Last verified acceptance, 2026-10-29 UTC: **both live database backup paths and the [real-data alongside restores](#real-data-alongside-restores-2026-10-29) accepted.** After NAS foundation acceptance (#1077), #816 merged as `653afc37` with Bambuddy suspended. Visionect’s backup and WAL checks passed first. #1095 (`ce7d9079`) then added all-IPv6 login rejection by reload; after confirming Visionect’s rejection, Bambuddy resumed and passed all checks. Both have the plugin sidecar and storage interface, completed manual backups, nonzero last-backup metrics, advancing WAL objects on Athena and at least 15 minutes of WAL-queue observation with a maximum of 0. Both applications were healthy at acceptance, and their pods were not restarted. CloudNativePG is 1.30.1, plugin 0.15.1 and versitygw 1.8.0. See [What has been exercised](#what-has-been-exercised) for the scope and remaining limits.
 
 | Live database | Storage address | Accepted manual backup | Completed UTC | Compressed base object |
 |---|---|---|---|---|
@@ -26,7 +26,26 @@ Catalog traversal of that exact immutable root found both accepted base archives
 
 The two base directories also contain `backup.info`, 1,450 bytes for Visionect and 1,440 bytes for Bambuddy. Base payload sizes match the earlier database acceptance record. Verification only read existing records; it triggered no snapshot, maintenance or restart.
 
-**Still unverified:** this is completed-snapshot and selected catalog-entry evidence, not payload readability/checksums, complete required WAL continuity or an exact recovery point. This verification exercised no PostgreSQL recovery/PITR, real-data restore, B2/full-store restore or bootstrap. Both disposable restore attempts failed and were fully cleaned up; this snapshot adds no restore success credit, and #782’s hold remains. The configured 30-day Athena recovery window is intended policy; first actual retention deletion, storage use and large-catalog behavior remain unverified.
+**Still unverified for this snapshot:** payload readability/checksums, complete required WAL continuity and an exact recovery point. This catalog check exercised no PostgreSQL recovery/PITR, B2/full-store restore or bootstrap. The earlier disposable restore attempts remain failed and fully cleaned up; this snapshot adds no restore success credit. The later live-Athena restores below do not verify B2 recovery. The configured 30-day Athena recovery window is intended policy; first actual retention deletion, storage use and large-catalog behavior remain unverified.
+
+## Real-data alongside restores, 2026-10-29
+
+CNPG-native recovery from the live Athena archive passed for Visionect, then Bambuddy, with one attempt each and no overlap. Both used the inclusive target `2026-10-29T02:30:00Z` and `targetTLI: latest`. All times below are UTC; these disposable-clone timings are not production RPO/RTO measurements.
+
+| Database | Backup ID | Source → restored timeline | Created | Ready | Verified | Cleanup complete |
+|---|---|---|---|---|---|---|
+| Visionect, PostgreSQL 17.11 | `20261029T013554` | 4 → 5 | 18:02:14 | 18:04:35 | 18:06:42 | 18:07:18 |
+| Bambuddy, PostgreSQL 18.6 | `20261029T020738` | 6 → 7 | 18:08:10 | 18:09:50 | 18:10:53 | 18:11:33 |
+
+Visionect restored database/owner `koala`/`visionect`, system identifier `7677042350900830233`; Bambuddy restored `bambuddy`/`bambuddy`, system identifier `7673729494179692568`. Persistent `backup_label.old` matched each selected base backup and its source timeline. The new timeline histories named parents 4 and 6, stopping “before” `02:30:03.620747+00` and `02:30:24.356232+00` respectively, supporting the configured inclusive 02:30 recovery point.
+
+Before installing amcheck, each clone’s public-schema SHA-256 matched the source reference captured at 02:43:56 UTC. Two fixed 1,000-row historical cohorts per database also matched their reference counts, ID bounds and hashes: Visionect’s `device_events` and `status`, and Bambuddy’s `printer_sensor_history` and `ams_sensor_history`. `pg_amcheck --jobs=1 --heapallindexed --parent-check --install-missing=pg_catalog` exited 0 without diagnostics on each clone, checking supported heap/TOAST and btree structures.
+
+Both clones had archiving off, error-free HBA rejection rules, no remote clients and attached/healthy three-replica Longhorn storage. Cleanup removed every owned Cluster, ObjectStore, policy, consumer, PVC/PV, Longhorn volume, attachment, Service, Secret and Cilium endpoint; Whereabouts allocation key `162` and reservation `10.32.25.162` were absent. Controllers completed storage cleanup without forced finalizers or direct PV/Longhorn/IPAM deletion. Final independent production checks at 18:12:26 UTC found unchanged source identities, timelines and database/application Pod UIDs, zero restarts, application HTTP 200, advancing archiving with historical failure counts unchanged, three Ready nodes, all 24 production volumes attached/healthy and all instance managers Ready with `lhnet1`.
+
+**Limits:** this verifies the selected physical recovery point, public schema, sampled cohorts and supported amcheck coverage. Whole-database equality, application behavior against clones, full-cluster/B2 recovery, complete archive continuity and production RPO/RTO remain unverified. Captured main requests/limits matched `250m/512Mi` → `1 CPU/1Gi` and sidecar `100m/128Mi` → `500m/512Mi`, with no observed OOM or failed Job. Brief controller-replaced instance windows were not all captured: lifetime/peak sizing evidence is **partial**, not a full sizing pass. Earlier failed attempts receive no retroactive credit.
+
+[#224](https://github.com/kelchm/home-lab/issues/224)’s database-restore criterion is met; its broader full-cluster disaster recovery work remains open. [#782](https://github.com/kelchm/home-lab/pull/782)’s backup/restore prerequisite is met, but HA remains **held**: the stale candidate needs refresh, review and separate approval before activation.
 
 ## How it works
 
@@ -312,7 +331,7 @@ The archive name ends in the PostgreSQL major, and a major upgrade must change i
 
 ## What has been exercised
 
-Scratch database drills used PostgreSQL 17.11 clusters holding 270 to 400 MB in a throwaway namespace on `k8s-prod` on 2026-10-12 and 13. NAS foundation and live database backup acceptance followed on 2026-10-29 UTC. **Drilled** means only the scope stated in each row; real-database restores, rebuilds and a CNPG restore from Backblaze remain untested.
+Scratch database drills used PostgreSQL 17.11 clusters holding 270 to 400 MB in a throwaway namespace on `k8s-prod` on 2026-10-12 and 13. NAS foundation, live database backup acceptance and the real-data alongside restores followed on 2026-10-29 UTC. **Drilled** means only the scope stated in each row; production rebuilds and a CNPG restore from Backblaze remain untested.
 
 | Procedure | State |
 |---|---|
@@ -331,8 +350,8 @@ Scratch database drills used PostgreSQL 17.11 clusters holding 270 to 400 MB in 
 | Wrong credentials | **Drilled**: `ContinuousArchiving` turned false within a minute |
 | Archiver switched off and on again | **Drilled**, including a backup and a rebuild across the gap |
 | The alert rules firing | The four backup-related rules are loaded and healthy in vmalert with real backup metrics. Deliberately inducing every fault remains **undrilled**; `scripts/ci/validate-cnpg-alerts.sh` runs a firing and a quiet promtool case for each |
-| NAS foundation: kernel 4.4, Btrfs, doco-cd, certificate and account isolation | **Drilled** on 2026-10-29 UTC: capability-free write probe, healthy services, verified TLS (`403 0`), five-part 40 MB transfers with both accounts, matching checksums, deletion and cross-bucket list/write `AccessDenied`. Both real database backup paths were accepted afterwards; real-data restore remains **undrilled** |
+| NAS foundation: kernel 4.4, Btrfs, doco-cd, certificate and account isolation | **Drilled** on 2026-10-29 UTC: capability-free write probe, healthy services, verified TLS (`403 0`), five-part 40 MB transfers with both accounts, matching checksums, deletion and cross-bucket list/write `AccessDenied`. Both real database backup paths and the alongside restores were accepted afterwards |
 | Existing Cluster bootstrap admission | Both server-side dry runs passed, then Flux reconciled `bootstrap.recovery` on both live Clusters during activation. Their existing data directories were retained; a rebuild using that stanza remains **undrilled** |
 | The real databases: sidecar injection, storage interface, WAL and base backups | **Drilled** on 2026-10-29 for Visionect 17.11 and Bambuddy 18.6, with the exact backups recorded above; this does not verify restored data |
-| A real-database restore, including Visionect’s 2.3 GB database | **Undrilled**; separately gated under #224 and #782 |
+| A real-database restore, including Visionect’s 2.3 GB database | **Drilled** for Visionect 17.11 and Bambuddy 18.6 from live Athena on 2026-10-29: inclusive 02:30 physical recovery, matching public schema/two fixed cohorts each, single-worker amcheck exit 0 and complete cleanup. See the [dated result and limits](#real-data-alongside-restores-2026-10-29); HA remains held under #782 |
 | Kopia snapshot and restore of the object-storage source | First normal snapshot and selected base/WAL catalog entries **verified** on 2026-10-29; see the [dated record](#first-normal-object-storage-snapshot-2026-10-29). Payload readability, complete required WAL continuity and restore remain **unverified** |
