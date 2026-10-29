@@ -14,6 +14,44 @@ Source inspection establishes a narrower boundary: [QEMU v10.0.0 guest-exec](htt
 
 Before future enrollment, freshly inspect safe audit configuration on the selected node and guest: sudo `log_input`/`log_output` and I/O plugins, auditd/exec tracing, debug/auth logging, plus the delivery mechanism and Cloud audit behavior. Inspect configuration, not secret-bearing logs. The installed guest-agent version and any changed NetBird client source also need comparison. Node/guest sudo I/O capture, audit/debug auth and Cloud audit contents are unverified. If stdin capture cannot be excluded, the owner uses a private console with an assessed logging boundary and the same stdin-only helper. Do not create or read a key until that gate passes; do not promise secrecy for uninspected logging upstream of the helper.
 
+## Stage the helper for a rebuilt 103
+
+Only in the approved rebuild window, transfer the credential-free helper from the reviewed workstation checkout to a unique node-1 directory:
+
+```bash
+transfer=$(ssh kelchm@10.32.20.21 'umask 077; mktemp -d /tmp/netbird-helper.XXXXXX')
+scp proxmox/guests/netbird-router/netbird-router-enroll.sh "kelchm@10.32.20.21:$transfer/"
+printf 'Helper transfer directory: %s\n' "$transfer"
+```
+
+In the node-1 session, substitute that exact directory below. Require the intended rebuilt 103, a responding guest agent and no enrollment in progress. This passes only the reviewed script on stdin; no setup key is involved. The guest stages it under `/run`, verifies the pinned hash and publishes a new destination exclusively. An existing regular file must match exactly, including owner/mode; a symlink or different file stops the procedure.
+
+```bash
+transfer='/tmp/netbird-helper.<this-run>'
+sudo -n qm guest exec 103 --pass-stdin 1 --timeout 30 -- \
+  timeout --kill-after=2s 20s /bin/sh -ceu '
+    test "$(id -u)" -eq 0
+    umask 077
+    staged=$(mktemp /run/netbird-helper-stage.XXXXXX)
+    trap "rm -f -- \"$staged\"" EXIT
+    cat > "$staged"
+    printf "9ca51dcf2e56f739f5afeb948c106e0116366933ab1b28c4ee9a68223503f433  %s\n" "$staged" | sha256sum --check --status
+    chmod 0755 "$staged"
+    destination=/usr/local/sbin/netbird-router-enroll
+    test ! -L "$destination"
+    if test -e "$destination"; then
+      test -f "$destination"
+      cmp -- "$staged" "$destination"
+    else
+      ln -T -- "$staged" "$destination"
+    fi
+    test "$(stat -c "%U:%G %a" "$destination")" = "root:root 755"
+    sha256sum "$destination"
+  ' < "$transfer/netbird-router-enroll.sh"
+```
+
+Require the returned `exited: 1`, `exitcode: 0` and expected SHA-256. A PID-only response needs `qm guest exec-status 103 <pid>` within 30 seconds of the initial call; a missing/ambiguous result stops enrollment until the exact guest task and installed file are reconciled. The helper is never executed during staging. Remove only this run's node transfer file/directory after successful verification. The second router gets the identical helper from its reviewed vendor data and does not need this staging step.
+
 ## Approved-window sequence
 
 1. Freshly read the current router group by stable ID, not its possibly renamed label; retain the existing router, Network, masquerade, metric and policy semantics. Check peer-approval settings and policies referring to `All` or the routers group before adding a peer. Use only the intended routers auto-group, never clients. Withdraw a previous same-instance peer only as part of the approved replacement; never remove the surviving router.
