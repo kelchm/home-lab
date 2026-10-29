@@ -295,6 +295,205 @@
           "exp_samples": []
         }
       ]
+    },
+    {
+      "name": "DSM crosses 14 days then waits one hour; other certificates stay quiet",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "up{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"athena-dsm\",target=\"https://athena.home.kelch.io:5001/\",module=\"http_2xx\"}",
+          "values": "1+0x121"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"athena-dsm\",target=\"https://athena.home.kelch.io:5001/\",module=\"http_2xx\"}",
+          "values": "1+0x121"
+        },
+        {
+          "series": "probe_ssl_earliest_cert_expiry{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"athena-dsm\",target=\"https://athena.home.kelch.io:5001/\",module=\"http_2xx\"}",
+          "values": "1213200+0x121"
+        },
+        {
+          "series": "up{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"grafana\",target=\"https://grafana.home.kelch.io/\",module=\"http_redirect\"}",
+          "values": "1+0x121"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"grafana\",target=\"https://grafana.home.kelch.io/\",module=\"http_redirect\"}",
+          "values": "1+0x121"
+        },
+        {
+          "series": "probe_ssl_earliest_cert_expiry{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"grafana\",target=\"https://grafana.home.kelch.io/\",module=\"http_redirect\"}",
+          "values": "1213200+0x121"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "count by (probe, severity) (ALERTS{alertname=\"DsmCertificateExpiring\"})",
+          "eval_time": "60m",
+          "exp_samples": []
+        },
+        {
+          "expr": "count by (probe, severity) (ALERTS{alertname=\"DsmCertificateExpiring\",alertstate=\"pending\"})",
+          "eval_time": "61m",
+          "exp_samples": [
+            {
+              "labels": "{probe=\"athena-dsm\",severity=\"warning\"}",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "expr": "count by (probe, severity) (ALERTS{alertname=\"DsmCertificateExpiring\",alertstate=\"firing\"})",
+          "eval_time": "120m",
+          "exp_samples": []
+        },
+        {
+          "expr": "count by (probe, severity) (ALERTS{alertname=\"DsmCertificateExpiring\",alertstate=\"firing\"})",
+          "eval_time": "121m",
+          "exp_samples": [
+            {
+              "labels": "{probe=\"athena-dsm\",severity=\"warning\"}",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "expr": "count by (probe, severity) (ALERTS{alertname=\"ProbeCertificateExpiring\"})",
+          "eval_time": "121m",
+          "exp_samples": []
+        }
+      ]
+    },
+    {
+      "name": "Existing 36-hour boundary and hold remain; DSM never duplicates into the generic rule",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "up{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"athena-dsm\",target=\"https://athena.home.kelch.io:5001/\",module=\"http_2xx\"}",
+          "values": "1+0x121"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"athena-dsm\",target=\"https://athena.home.kelch.io:5001/\",module=\"http_2xx\"}",
+          "values": "1+0x121"
+        },
+        {
+          "series": "probe_ssl_earliest_cert_expiry{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"athena-dsm\",target=\"https://athena.home.kelch.io:5001/\",module=\"http_2xx\"}",
+          "values": "133200+0x121"
+        },
+        {
+          "series": "up{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"grafana\",target=\"https://grafana.home.kelch.io/\",module=\"http_redirect\"}",
+          "values": "1+0x121"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"grafana\",target=\"https://grafana.home.kelch.io/\",module=\"http_redirect\"}",
+          "values": "1+0x121"
+        },
+        {
+          "series": "probe_ssl_earliest_cert_expiry{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"grafana\",target=\"https://grafana.home.kelch.io/\",module=\"http_redirect\"}",
+          "values": "133200+0x121"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "count by (probe, severity) (ALERTS{alertname=\"ProbeCertificateExpiring\"})",
+          "eval_time": "60m",
+          "exp_samples": []
+        },
+        {
+          "expr": "count by (probe, severity) (ALERTS{alertname=\"DsmCertificateExpiring\",alertstate=\"firing\"})",
+          "eval_time": "60m",
+          "exp_samples": [
+            {
+              "labels": "{probe=\"athena-dsm\",severity=\"warning\"}",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "expr": "count by (probe, severity) (ALERTS{alertname=\"ProbeCertificateExpiring\",alertstate=\"pending\"})",
+          "eval_time": "61m",
+          "exp_samples": [
+            {
+              "labels": "{probe=\"grafana\",severity=\"warning\"}",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "expr": "count by (probe, severity) (ALERTS{alertname=\"ProbeCertificateExpiring\",alertstate=\"firing\"})",
+          "eval_time": "120m",
+          "exp_samples": []
+        },
+        {
+          "expr": "count by (probe, severity) (ALERTS{alertname=\"ProbeCertificateExpiring\",alertstate=\"firing\"})",
+          "eval_time": "121m",
+          "exp_samples": [
+            {
+              "labels": "{probe=\"grafana\",severity=\"warning\"}",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "expr": "count by (probe, severity) (ALERTS{alertname=\"DsmCertificateExpiring\",alertstate=\"firing\"})",
+          "eval_time": "121m",
+          "exp_samples": [
+            {
+              "labels": "{probe=\"athena-dsm\",severity=\"warning\"}",
+              "value": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "DSM certificate warning requires successful fresh probe and scrape samples",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "up{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"athena-dsm\",target=\"https://athena.home.kelch.io:5001/\",module=\"http_2xx\"}",
+          "values": "1x70 0x70 1x70"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"athena-dsm\",target=\"https://athena.home.kelch.io:5001/\",module=\"http_2xx\"}",
+          "values": "0x70 1x141"
+        },
+        {
+          "series": "probe_ssl_earliest_cert_expiry{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"athena-dsm\",target=\"https://athena.home.kelch.io:5001/\",module=\"http_2xx\"}",
+          "values": "600000+0x230"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "count by (probe, severity) (ALERTS{alertname=\"DsmCertificateExpiring\"})",
+          "eval_time": "65m",
+          "exp_samples": []
+        },
+        {
+          "expr": "count by (probe, severity) (ALERTS{alertname=\"DsmCertificateExpiring\"})",
+          "eval_time": "135m",
+          "exp_samples": []
+        },
+        {
+          "expr": "count by (probe, severity) (ALERTS{alertname=\"DsmCertificateExpiring\",alertstate=\"firing\"})",
+          "eval_time": "201m",
+          "exp_samples": []
+        },
+        {
+          "expr": "count by (probe, severity) (ALERTS{alertname=\"DsmCertificateExpiring\",alertstate=\"firing\"})",
+          "eval_time": "202m",
+          "exp_samples": [
+            {
+              "labels": "{probe=\"athena-dsm\",severity=\"warning\"}",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "expr": "count by (probe, severity) (ALERTS{alertname=\"DsmCertificateExpiring\"})",
+          "eval_time": "220m",
+          "exp_samples": []
+        }
+      ]
     }
   ]
 }

@@ -43,7 +43,7 @@ spec:
         # Internal certificates live 160 h and renew with 53 h left; 36 h left means renewal has failed for about 17 h.
         - alert: ProbeCertificateExpiring
           expr: |
-            (probe_ssl_earliest_cert_expiry{job="pi-blackbox"} - time() < 36 * 3600)
+            (probe_ssl_earliest_cert_expiry{job="pi-blackbox",probe!="athena-dsm"} - time() < 36 * 3600)
             and on (instance, platform, probe)
             (probe_success{job="pi-blackbox"} == 1)
             and on (instance, platform, probe)
@@ -54,4 +54,19 @@ spec:
           annotations:
             summary: "Certificate for {{ $labels.probe }} expires in {{ $value | humanizeDuration }}"
             description: "Check certificate renewal for {{ $labels.target }}. Public tunnel probes see Cloudflare's edge certificate; internal HTTPS probes see Traefik's certificate."
+            runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/host-monitoring.md#service-probes
+
+        - alert: DsmCertificateExpiring
+          expr: |
+            (probe_ssl_earliest_cert_expiry{job="pi-blackbox",probe="athena-dsm"} - time() < 14 * 24 * 3600)
+            and on (instance, platform, probe)
+            (probe_success{job="pi-blackbox"} == 1)
+            and on (instance, platform, probe)
+            (up{job="pi-blackbox"} == 1)
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: "Certificate for {{ $labels.probe }} expires in {{ $value | humanizeDuration }}"
+            description: "{{ $labels.target }} has less than 14 days of served certificate validity. Check Athena DSM certificate renewal and deployment."
             runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/host-monitoring.md#service-probes
