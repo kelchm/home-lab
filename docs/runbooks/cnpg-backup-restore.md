@@ -2,7 +2,7 @@
 
 How the two PostgreSQL clusters, `iot/visionect-db` and `printing/bambuddy-db`, are backed up, what to do when an alert fires, and how to restore. The design decisions are in [home-lab#224](https://github.com/kelchm/home-lab/issues/224).
 
-State as of 2026-10-28: **not deployed.** On Athena the share, DNS record and gateway credentials are in place, but the store is not running and the per-database accounts do not exist. This describes the intended configuration. Every procedure below was exercised on scratch clusters in a throwaway namespace on `k8s-prod` against a throwaway versitygw, with CloudNativePG 1.30.1, plugin 0.15.1 and versitygw 1.8.0; [What has been exercised](#what-has-been-exercised) says exactly what that covers. Nothing has run against the real databases, Athena or Backblaze.
+State as of 2026-10-29 UTC: **database backups are not activated.** The NAS foundation (#1077) is deployed and accepted: exact-identity write access, trusted TLS, per-account 40 MB multipart round trips and cross-bucket denial passed on Athena. Both restricted account pairs are saved in 1Password and staged in the two encrypted backup Secrets. The plugin, database storage interfaces, WAL archiving, base backups and Kopia source still await separate approval and the staged activation below. The earlier scratch procedures used CloudNativePG 1.30.1, plugin 0.15.1 and versitygw 1.8.0; [What has been exercised](#what-has-been-exercised) distinguishes those tests from NAS acceptance. No backup or restore has run against the real databases or Backblaze.
 
 ## How it works
 
@@ -283,7 +283,7 @@ The archive name ends in the PostgreSQL major, and a major upgrade must change i
 
 ## What has been exercised
 
-All on 2026-10-12, on scratch clusters of PostgreSQL 17.11 holding 270 to 400 MB, in a throwaway namespace on `k8s-prod`. **Drilled** here means against that scratch store, never the real databases or Athena.
+The database entries below were exercised on 2026-10-12 and 13 with scratch PostgreSQL 17.11 clusters holding 270 to 400 MB in a throwaway namespace on `k8s-prod`. NAS foundation acceptance followed on 2026-10-29 UTC. **Drilled** means only the scope stated in each row; the real databases and Backblaze restore remain untested.
 
 | Procedure | State |
 |---|---|
@@ -302,5 +302,5 @@ All on 2026-10-12, on scratch clusters of PostgreSQL 17.11 holding 270 to 400 MB
 | Wrong credentials | **Drilled**: `ContinuousArchiving` turned false within a minute |
 | Archiver switched off and on again | **Drilled**, including a backup and a rebuild across the gap |
 | The alert rules firing | **Undrilled** in vmalert: the scratch clusters were not scraped. Each expression was checked against the live metric names and labels, and `scripts/ci/validate-cnpg-alerts.sh` runs a firing and a quiet promtool case for each |
-| Anything on Athena: kernel 4.4, Btrfs, doco-cd, the certificate | **Undrilled** |
+| NAS foundation: kernel 4.4, Btrfs, doco-cd, certificate and account isolation | **Drilled** on 2026-10-29 UTC: capability-free write probe, healthy services, verified TLS (`403 0`), five-part 40 MB transfers with both accounts, matching checksums, deletion and cross-bucket list/write `AccessDenied`. CNPG backups over the storage interface and real-data restore are still **undrilled** |
 | The real databases: sidecar injection, the storage interface, a backup over it, a restore of 2.3 GB | **Undrilled** |
