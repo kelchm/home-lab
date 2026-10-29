@@ -20,8 +20,6 @@ spec:
           app:
             image:
               repository: ghcr.io/cyanheads/hn-mcp-server
-              # v0.5.14 release; tag is unprefixed in GHCR. Pin the
-              # multi-architecture OCI index for reproducibility.
               tag: 0.5.22@sha256:8f729118f80bcf0e20f95f2ab292cbd9d3095171d1c80f87de7ebdc7d0401d3e
             env:
               NODE_ENV: production

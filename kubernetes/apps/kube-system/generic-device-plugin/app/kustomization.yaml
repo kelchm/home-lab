@@ -10,7 +10,7 @@ kind: Kustomization
 #
 # Upstream ships args for serial/video/fuse/audio/capture; the
 # dri-only patch replaces them with a single device entry for the
-# AMD iGPU render node, exposed as squat.ai/dri.
+# AMD iGPU render node, exposed as devic.es/dri.
 resources:
   - https://raw.githubusercontent.com/squat/generic-device-plugin/generic-device-plugin-0.1.2/manifests/generic-device-plugin.yaml
 
