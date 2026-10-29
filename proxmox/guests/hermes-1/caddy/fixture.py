@@ -72,7 +72,7 @@ class Upstream(BaseHTTPRequestHandler):
             return
         key = self.headers.get("Sec-WebSocket-Key", "")
         if (self.path not in PATHS or self.headers.get("Upgrade", "").lower() != "websocket"
-                or "upgrade" not in self.headers.get("Connection", "").lower()
+                or "upgrade" not in {token.strip().lower() for token in self.headers.get("Connection", "").split(",")}
                 or self.headers.get("Sec-WebSocket-Version") != "13"):
             self.send_error(400)
             return
@@ -113,7 +113,7 @@ def exchange(connection, path, opcode):
             raise ValueError("unbounded response headers")
         if (headers.get("sec-websocket-accept") != accept(key)
                 or headers.get("upgrade", "").lower() != "websocket"
-                or "upgrade" not in headers.get("connection", "").lower()):
+                or "upgrade" not in {token.strip().lower() for token in headers.get("connection", "").split(",")}):
             raise ValueError("invalid WebSocket acceptance")
         payload = os.urandom(16).hex().encode()
         connection.sendall(frame(opcode, payload, masked=True))

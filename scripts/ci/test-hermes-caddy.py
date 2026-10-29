@@ -183,8 +183,8 @@ class WebSockets(unittest.TestCase):
             server.server_close()
             thread.join()
 
-    def test_fake_101_and_valid_handshake_without_forwarded_echo_fail(self):
-        for mode in ("fake-101", "no-echo", "wrong-path"):
+    def test_handshake_and_forwarded_echo_require_valid_headers_and_paths(self):
+        for mode in ("fake-101", "no-echo", "wrong-path", "bad-connection", "mixed-connection"):
             with self.subTest(mode=mode):
                 client, upstream = socket.socketpair()
                 client.settimeout(2)
@@ -197,20 +197,28 @@ class WebSockets(unittest.TestCase):
                             while not request.endswith(b"\r\n\r\n"):
                                 request += stream.read(1)
                             key = next(line.split(b": ", 1)[1].decode() for line in request.split(b"\r\n") if line.startswith(b"Sec-WebSocket-Key:"))
-                            response = "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
+                            connection_header = {"bad-connection": "notupgrade", "mixed-connection": "keep-alive, UpGrAdE"}.get(mode, "Upgrade")
+                            response = f"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: {connection_header}\r\n"
                             response += f"Sec-WebSocket-Accept: {fixture.accept(key) if mode != 'fake-101' else 'fake'}\r\n\r\n"
                             upstream.sendall(response.encode())
                             if mode != "fake-101":
                                 opcode, payload = fixture.read_frame(stream, masked=True)
                                 if mode == "wrong-path":
                                     upstream.sendall(fixture.frame(opcode, b"/wrong:" + payload))
+                                elif mode in ("bad-connection", "mixed-connection"):
+                                    upstream.sendall(fixture.frame(opcode, b"/api/ws:" + payload))
                     except Exception as error:
-                        errors.append(error)
+                        if not (mode == "bad-connection" and isinstance(error, ValueError) and str(error) == "truncated WebSocket frame"):
+                            errors.append(error)
 
                 thread = threading.Thread(target=pretend)
                 thread.start()
-                with client, self.assertRaises(ValueError):
-                    fixture.exchange(client, "/api/ws", 1)
+                with client:
+                    if mode == "mixed-connection":
+                        fixture.exchange(client, "/api/ws", 1)
+                    else:
+                        with self.assertRaises(ValueError):
+                            fixture.exchange(client, "/api/ws", 1)
                 thread.join()
                 self.assertEqual(errors, [])
 

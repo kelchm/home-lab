@@ -18,6 +18,7 @@ case $1 in
     diff)
         # Promotion uses exactly the narrow image inputs, not broad PR scope.
         [[ $* == 'diff --quiet HEAD FETCH_HEAD -- proxmox/guests/hermes-1/Dockerfile.caddy proxmox/guests/hermes-1/.dockerignore' ]]
+        if [[ ${MODE:-} == diff-fail ]]; then exit 128; fi
         [[ ${MODE:-} != stale ]]
         ;;
     *) exit 99 ;;
@@ -58,13 +59,19 @@ SH
 chmod +x "$scratch/bin/"*
 export PATH="$scratch/bin:$PATH"
 run() { bash "$root/scripts/ci/hermes-caddy-promote.sh" ghcr.io/example/caddy "$digest"; }
-for mode in stale fetch-fail copy-mismatch source-fail source-mismatch; do
+for mode in stale diff-fail fetch-fail copy-mismatch source-fail source-mismatch; do
     export MODE=$mode
-    rm -f "$scratch/promoted" "$scratch/docker.calls"
+    rm -f "$scratch/promoted" "$scratch/docker.calls" "$GITHUB_STEP_SUMMARY"
     if [[ $mode == stale ]]; then
         run > "$scratch/stale.txt"
         grep -q '::warning::' "$scratch/stale.txt"
         grep -q 'Run workflow' "$GITHUB_STEP_SUMMARY"
+    elif [[ $mode == diff-fail ]]; then
+        status=0
+        run > "$scratch/diff-fail.txt" 2>&1 || status=$?
+        [[ $status == 128 ]]
+        grep -q '::error::git diff failed' "$scratch/diff-fail.txt"
+        [[ ! -e $scratch/docker.calls && ! -e $GITHUB_STEP_SUMMARY ]]
     elif run; then echo "Expected failure: $mode" >&2; exit 1; fi
     [[ ! -e $scratch/promoted ]]
 done

@@ -11,7 +11,13 @@ digest=${2:?root digest}
 # qualification/tooling edits don't obsolete an equivalent binary.
 git fetch --no-tags origin main
 mapfile -t paths < <(python3 scripts/ci/hermes-caddy-inputs.py paths --publish)
-if ! git diff --quiet HEAD FETCH_HEAD -- "${paths[@]}"; then
+diff_status=0
+git diff --quiet HEAD FETCH_HEAD -- "${paths[@]}" || diff_status=$?
+if (( diff_status > 1 )); then
+    echo '::error::git diff failed while comparing image inputs.' >&2
+    exit "$diff_status"
+fi
+if (( diff_status == 1 )); then
     echo '::warning::Image inputs changed on main; this unique build was not promoted. If no newer build completes, dispatch Hermes Caddy Image from main.'
     if [[ -n ${GITHUB_STEP_SUMMARY:-} ]]; then
         printf '%s\n' 'Image inputs changed on main; candidate was left unchanged. If no newer publisher completes, run **Hermes Caddy Image** with **Run workflow** on **main** to repair it.' >> "$GITHUB_STEP_SUMMARY"

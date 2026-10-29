@@ -32,6 +32,7 @@ const packageFile = 'proxmox/guests/hermes-1/Dockerfile.caddy';
 const source = readFileSync(packageFile, 'utf8');
 const cloudflare = 'github.com/caddy-dns/cloudflare';
 const digest = `sha256:${'f'.repeat(64)}`; // Replacement fixture, never published.
+const pairedDigests = [`sha256:${'a'.repeat(64)}`, `sha256:${'b'.repeat(64)}`];
 
 async function extract(content = source) {
   const files = {};
@@ -72,14 +73,16 @@ test('real Dockerfile extracts exactly two pinned bases and the actual module in
 for (const updateType of ['patch', 'minor', 'major']) {
   test(`${updateType}: core release updates replace builder and runtime in one group`, async () => {
     const files = await extract();
-    for (const dep of deps(files).filter((dep) => dep.packageName === 'caddy')) {
+    const requestedValues = [];
+    for (const [baseIndex, dep] of deps(files).filter((dep) => dep.packageName === 'caddy').entries()) {
       const [version, ...suffix] = dep.currentValue.split('-');
       const parts = version.split('.').map(Number);
       const index = { major: 0, minor: 1, patch: 2 }[updateType];
       parts[index]++;
       parts.fill(0, index + 1);
       const newValue = [parts.join('.'), ...suffix].join('-');
-      dep.updates = [{ updateType, newValue, newVersion: newValue, newDigest: digest, newMajor: parts[0], newMinor: parts[1] }];
+      requestedValues.push(newValue);
+      dep.updates = [{ updateType, newValue, newVersion: newValue, newDigest: pairedDigests[baseIndex], newMajor: parts[0], newMinor: parts[1] }];
     }
     const { branches } = await branchifyUpgrades(config, files);
     assert.equal(branches.length, 1);
@@ -91,8 +94,8 @@ for (const updateType of ['patch', 'minor', 'major']) {
       updated = await doAutoReplace(upgrade, updated, false);
     }
     const bases = deps(await extract(updated)).filter((dep) => dep.packageName === 'caddy');
-    assert.equal(bases[0].currentValue.split('-')[0], bases[1].currentValue.split('-')[0]);
-    assert.ok(bases.every((dep) => dep.currentDigest === digest));
+    assert.deepEqual(bases.map((dep) => dep.currentValue), requestedValues);
+    assert.deepEqual(bases.map((dep) => dep.currentDigest), pairedDigests);
     assert.equal(updated.split('\n').filter((line) => !line.startsWith('FROM ')).join('\n'),
       source.split('\n').filter((line) => !line.startsWith('FROM ')).join('\n'));
   });
