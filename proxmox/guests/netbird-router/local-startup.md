@@ -32,11 +32,10 @@ On the workstation, check the repository source first:
 ```sh
 printf '%s  %s\n' 1c45c56620287cce1825e8af4ed7a03c7f316dd7a10744a5ad102a06a14dc52a proxmox/guests/netbird-router/vendor-data.yaml | shasum -a 256 --check
 ssh kelchm@10.32.20.21
-sudo -i
-bash
+sudo -i bash
 ```
 
-Run the following in that root Bash session. Evidence contains private VM configuration; retain it privately, and publish only hashes and a concise result. The capture function runs read-only commands and writes evidence locally on the host:
+Use `sudo -i bash` directly from the unprivileged SSH session, without a surrounding root shell: a guard stop then returns to the unprivileged shell instead of leaving another root shell active. Run the following in that root Bash session. Evidence contains private VM configuration; retain it privately, and publish only hashes and a concise result. The capture function runs read-only commands and writes evidence locally on the host:
 
 ```bash
 set -euo pipefail
@@ -77,7 +76,7 @@ capture before
 sha256sum /mnt/pve/library-pve/snippets/netbird-pilot-router.yaml
 ```
 
-Record the printed absolute `env.sh` path before proceeding. `set -e` ends this Bash session on a guard stop or command failure; the evidence and sourceable state survive in that run’s private directory. Re-enter with `sudo -i`, then `bash`, `set -euo pipefail`, `umask 077`, and `source '/root/netbird-local-startup.<this-run>/env.sh'`, using the exact recorded path. Do not repeat the setup block or overwrite the `before` files after a stop. First inspect which steps completed; a failure during the initial `capture before` precedes any installation change.
+Record the printed absolute `env.sh` path before proceeding. `set -e` ends this Bash session on a guard stop or command failure; the evidence and sourceable state survive in that run’s private directory. Re-enter with `sudo -i bash`, then `set -euo pipefail`, `umask 077`, and `source '/root/netbird-local-startup.<this-run>/env.sh'`, using the exact recorded path. Do not repeat the setup block or overwrite the `before` files after a stop. First inspect which steps completed; a failure during the initial `capture before` precedes any installation change.
 
 Inspect the private `before` records against the table: `pending.json` must have no `pending`/delete entries; `cloudinit.json` must have no pending/delete entries. Check the guest's hostname, instance ID, 0.79.0 version and connected status. Retain its profile hash and NetBird overlay address for comparison; never print the profile contents. Record the existing Cloud peer ID from the [read-only export](../../../docs/runbooks/netbird-remote-access.md#read-back-netbird-cloud), so later verification can rule out a replacement enrollment.
 
@@ -170,7 +169,7 @@ scp proxmox/guests/netbird-router/vendor-data.yaml "$destination:$transfer/vendo
 printf 'Destination source_file: %s/vendor-data.yaml\n' "$transfer"
 ```
 
-Log in to that destination and start a root Bash session. Set `source_file` to the exact printed transfer path, then run:
+Log in to that destination and start a root Bash session with `sudo -i bash`. Set `source_file` to the exact printed transfer path, then run:
 
 ```bash
 set -euo pipefail
