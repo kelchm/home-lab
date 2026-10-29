@@ -114,6 +114,7 @@ jobs:
               - 'scripts/healthchecks.py'
               - 'scripts/ci/test-healthchecks.py'
               - 'devices/glkvm/*.py'
+              - 'scripts/ci/test-netbird-enrollment.py'
               - 'healthchecks/**'
               - '.taskfiles/healthchecks/**'
             skills:
@@ -590,6 +591,10 @@ jobs:
       - name: Test GLKVM HID deadlines without devices or appliance access
         if: needs.pre-job.outputs.scripts_changed == 'true'
         run: python3 -m unittest discover -s devices/glkvm -p 'test_hid_input.py' -v
+
+      - name: Test NetBird enrollment without credentials, network or root
+        if: needs.pre-job.outputs.scripts_changed == 'true'
+        run: python3 scripts/ci/test-netbird-enrollment.py
 
       - name: No shell changes
         if: needs.pre-job.outputs.scripts_changed != 'true'

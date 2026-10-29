@@ -51,7 +51,7 @@ The initial certificates were issued and hostname-validated on 2026-08-27. A man
 
 Both stores use hard NFSv4.1 mounts and are allowed only from the three PVE storage addresses. `library-pve` is platform-specific but reusable across PVE clusters; `backups-pve-sbx` is intentionally cluster-specific. Shared external storage uses the DSM shared-folder leaf as its PVE storage ID so the same resource has one canonical name across both systems.
 
-The cluster job `daily-backups` backs up all non-disposable guests to `backups-pve-sbx` at 05:00 America/New_York in snapshot mode with Zstandard compression. The live job uses `all=1`; add every disposable VMID to its explicit `exclude` field. The October 28 read-back found only `103` (`netbird-pilot-router`) excluded. NetBird is now the selected remote-access system; VM 103's backup and protection decision remains in #625. Its retention policy is last 3, daily 7, weekly 4, and monthly 6. The built-in matcher currently targets `mail-to-root`, but direct delivery to Gmail failed with `550 5.7.1`; do not depend on email alerts until an authenticated SMTP relay is configured and tested.
+The cluster job `daily-backups` backs up all non-disposable guests to `backups-pve-sbx` at 05:00 America/New_York in snapshot mode with Zstandard compression. The live job uses `all=1`; add every disposable VMID to its explicit `exclude` field. Since 2026-10-28 the `exclude` field is unset, so the job covers every guest, including `103` (`netbird-pilot-router`) and template `9000`. Its retention policy is last 3, daily 7, weekly 4, and monthly 6. The built-in matcher currently targets `mail-to-root`, but direct delivery to Gmail failed with `550 5.7.1`; do not depend on email alerts until an authenticated SMTP relay is configured and tested.
 
 ### Backup alerting
 
@@ -65,9 +65,10 @@ Every node's RTL8125-backed `vmbr0` is VLAN-aware with an explicit `bridge-vids 
 
 | VMID | Guest | Address | Purpose | Source |
 |---|---|---|---|---|
+| `103` | `netbird-pilot-router` | `10.32.19.103` | NetBird routing peer for remote access | [`guests/netbird-router`](guests/netbird-router/) |
 | `200` | `hermes-1` | `10.32.21.100` | Hermes Agent, dashboard, and client API | [`guests/hermes-1`](guests/hermes-1/) |
 
-`hermes-1` is enabled at host boot, covered by `daily-backups`, and intentionally not a PVE HA resource. It keeps its application state on its local VM disk under `/srv/hermes`.
+Both guests are enabled at host boot and intentionally not PVE HA resources. `hermes-1` is covered by `daily-backups` and keeps its application state on its local VM disk under `/srv/hermes`. `netbird-pilot-router` holds no application state beyond its NetBird peer identity. It is covered by `daily-backups` and has `protection: 1`; it is the only protected guest. A successful post-enrollment backup can restore its archived peer identity; the first new scheduled backup still needs verification (#625). Its guest definition covers restore, rebuild and re-enrollment, including the limits of the old pre-enrollment archive.
 
 ## Retired guests
 
