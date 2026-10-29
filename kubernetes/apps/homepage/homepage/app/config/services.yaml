@@ -51,7 +51,7 @@
           password: "{{HOMEPAGE_VAR_PVE_TOKEN_SECRET}}"
     - Synology:
         icon: synology-dsm.svg
-        href: https://10.32.20.5:5001
+        href: https://athena.home.kelch.io:5001/
         description: DS1821+ NAS
         siteMonitor: https://10.32.20.5:5001
         weight: 40
