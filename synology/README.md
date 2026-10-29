@@ -25,7 +25,7 @@ doco-cd has run on Athena since 2026-09-26; the remaining workload acceptance ch
 
 DSM Container Manager remains the inspection interface. It is not a second source of truth.
 
-The native [Athena ACME/DSM certificate runbook](../docs/runbooks/athena-acme.md) describes the separately installed certificate path tracked in #1094. Trusted DSM HTTPS is verified; renewal commissioning remains incomplete. It is outside Compose; merging its scripts does not install a task or change DSM's certificate.
+The native [Athena ACME/DSM certificate runbook](../docs/runbooks/athena-acme.md) describes the separately installed certificate path tracked in #1094. Trusted DSM HTTPS, supervised different-leaf renewal/rollback and the native daily renewal task are verified; first automatic execution and selected central monitoring acceptance remain pending. It is outside Compose; merging its scripts does not install a task or change DSM's certificate.
 
 ## Project contract
 
