@@ -76,18 +76,7 @@ The original creation commands were not recorded. The steps below reproduce the 
 
 ## Enrollment
 
-Enrollment needs an administrator in the NetBird dashboard. Git and cloud-init never hold a setup key.
-
-1. In the dashboard, delete the previous instance's peer from **Peers**, if it is still listed.
-2. Create a setup key with a usage limit of 1, a short expiry and auto-group `pilot-routers`.
-3. Enroll the VM:
-
-   ```sh
-   sudo qm guest exec 103 --timeout 120 -- netbird up --setup-key <key> --disable-client-routes --disable-dns
-   ```
-
-   The key is visible in the PVE host's process list while the command runs, which the single use and short expiry contain.
-4. Revoke the key if enrollment failed.
+Follow the [stdin-only enrollment procedure](enrollment.md), including separately staging its credential-free helper for a rebuild, fresh logging checks, bounded guest-exec completion and end-of-window key revocation on every outcome. Git and cloud-init never hold a setup key. The frozen vendor snippet is unchanged. The former argv-based example could persist in guest journal/sudo logs and process lists; actual historical log contents are unknown, and the recorded old one-off key is expired.
 
 The `pilot-home` network routes through the `pilot-routers` group, not a specific peer, so the new peer takes over the routes once it is in that group. The UniFi rules match source `10.32.19.103`, so a rebuild at the same address needs no firewall change.
 
