@@ -19,7 +19,7 @@ If any of those gaps grow load-bearing, layer Velero on top — the BackupTarget
 
 - BackupTarget URL: `nfs://10.32.25.5:/volume1/backups-k8s-prod/longhorn`
 - Path on NAS: `/volume1/backups-k8s-prod/longhorn/` (Longhorn writes `backupstore/{volumes,backups}/...` underneath)
-- Network path: instance-manager pods reach `10.32.25.5` via the `lhnet1` storage-network attachment (same /24, kernel routes out the secondary interface). Backup transfer rides 2.5GbE, not the 1GbE node NIC.
+- Network path: instance-manager pods reach `10.32.25.5` via the `lhnet1` storage-network attachment. Longhorn peers use `10.32.25.128/28`, with an explicit `10.32.25.5/32` route to the NAS; backup transfer rides the 2.5GbE storage NIC. This filtered path completed an on-demand backup on 2026-10-29; see [storage-interface isolation](longhorn-storage-network-cutover.md#storage-interface-isolation-1120).
 - Synology NFS export rules (verified against DSM 2026-08-02):
 
   | Client | Privilege | Squash | Async | Non-priv ports | Cross-mount |

@@ -1,6 +1,6 @@
 # Longhorn storage-boundary check (#226)
 
-**Baseline executed on 2026-10-29:** the eight checks confirmed tenant access to Longhorn listeners over IPv4 and IPv6; the temporary resources and IPAM allocation were removed and source health passed. This establishes connectivity, not authentication or volume access. Further runs need separate approval. This replaces the oversized local probe controller for [#226](https://github.com/kelchm/home-lab/issues/226). The historical package and its unapproved `259d9877…b3a27` seal remain untouched. Review the refreshed inputs and obtain a separate execution decision before any further run. A merged PR grants no execution authority.
+**Baseline and post-filter checks executed on 2026-10-29:** the baseline confirmed tenant access to Longhorn listeners over IPv4 and IPv6. After [storage-interface isolation](longhorn-storage-network-cutover.md#storage-interface-isolation-1120), the 23:16:27–23:16:59 UTC batch completed all eight attempts once in blocked mode: T1–T7 timed out and T8 returned curl 28/HTTP 000. Target identities were stable, both runs' diagnostic resources and IPAM allocations were removed, and final storage health passed. This establishes the tested network boundary, not authentication or volume access. Further runs need separate approval. This replaces the oversized local probe controller for [#226](https://github.com/kelchm/home-lab/issues/226). The historical package and its unapproved `259d9877…b3a27` seal remain untouched. Review refreshed inputs before any further run; a merged PR grants no execution authority.
 
 The three [manual diagnostic manifests](../../tools/longhorn-boundary/) create one new namespace, a primary-veth default-deny policy, and one disposable Pod on `k8s-prod-3`. They follow the existing `tools/iperf3` convention, outside Flux's `./kubernetes/apps` path; no reconciled kustomization references them. Merging cannot create these resources. Do not move them under `kubernetes/apps` or run a directory-wide apply.
 
@@ -100,14 +100,14 @@ k create -f "$tool/pod.yaml" -o json > "$run/pod.json" &&
 
 On any failure, preserve the directory and clean up acknowledged creates below. A lost/ambiguous create response is not an ownership receipt: stop, inspect read-only and let root reconcile it; never adopt or delete an object solely by name. Cilium policy realization is asynchronous; creating the policy first does not atomically attest enforcement. The program uses only `net1` destinations and contains no primary-network test.
 
-Wait for container termination, including script failure. If startup never happens, the bounded wait may expire; record Pod status/events and proceed to cleanup. Do not create a second Pod. For a terminal Pod, verify its UID still matches before reading logs:
+Wait for container termination, including script failure. If startup never happens, the bounded wait may expire; record Pod status/events and proceed to cleanup. Do not create a second Pod. The single container's termination record is the completion signal; the Pod phase can briefly remain Running afterwards. Verify the UID and termination record before reading logs:
 
 ```bash
 k -n "$ns" wait "pod/$pod" --for=jsonpath='{.status.containerStatuses[0].state.terminated.finishedAt}' --timeout=330s --request-timeout=350s || true
 k -n "$ns" get pod "$pod" -o json > "$run/pod-final.json"
 k -n "$ns" get events > "$run/events.txt"
 jq -e --slurpfile created "$run/pod.json" \
-  '.metadata.uid == $created[0].metadata.uid and (.status.phase == "Succeeded" or .status.phase == "Failed")' "$run/pod-final.json"
+  '.metadata.uid == $created[0].metadata.uid and .status.containerStatuses[0].state.terminated.finishedAt != null' "$run/pod-final.json"
 if [[ ! -s "$run/successful-log-path.txt" ]]; then
   for read_number in 1 2 3; do
     log_file=$(mktemp "$run/pod-logs.XXXXXX")
