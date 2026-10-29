@@ -4,7 +4,7 @@
 
 The three [manual diagnostic manifests](../../tools/longhorn-boundary/) create one new namespace, a primary-veth default-deny policy, and one disposable Pod on `k8s-prod-3`. They follow the existing `tools/iperf3` convention, outside Flux's `./kubernetes/apps` path; no reconciled kustomization references them. Merging cannot create these resources. Do not move them under `kubernetes/apps` or run a directory-wide apply.
 
-The Pod attaches `cnpg-system/storage-network`: a database-tenant source class, using one Whereabouts address from `.160–.175`, rather than a Longhorn or host source. It retains UID/GID 65534, no host namespaces/token/volumes, ALL capabilities dropped, no privilege escalation, read-only root and RuntimeDefault. Requests remain 10m/16Mi, limits 100m/64Mi, deadline 300s. Its startup command runs once under a 50s timeout (TERM, then KILL after 2s); no exec, tool installation or script download. The primary NetworkPolicy does **not** isolate `net1`; verify current Cilium policy context before use. It is not evidence of a storage boundary.
+The Pod attaches `cnpg-system/storage-network`: a database-tenant source class, using one Whereabouts address from `.160–.175`, rather than a Longhorn or host source. It retains UID/GID 65534, no host namespaces/token/volumes, ALL capabilities dropped, no privilege escalation, read-only root and RuntimeDefault. Requests remain 10m/16Mi and limits 100m/64Mi. The script runs once; its seven 3s TCP connect limits and 5s HTTP limit allow about 26s of network waiting. The Pod's 300s deadline, including image pull/startup, and 5s termination grace bound a stalled run; there is no separate whole-script timeout. No exec, tool installation or script download. The primary NetworkPolicy does **not** isolate `net1`; verify current Cilium policy context before use. It is not evidence of a storage boundary.
 
 ## Exact scope
 
@@ -75,11 +75,11 @@ talosctl -n 10.32.30.13 netstat --listening --programs --tcp "longhorn-system/$m
 
 Require IM 8500 listening and 8504 absent on both nodes; manager 9500 primary-IPv4-only and 9503 listening. For each socket-owner PID, read `/proc/<PID>/cgroup` and `/proc/<PID>/net/if_inet6` with `talosctl -n <node-ip> read <path>`; match Pod UID/container ID against the current Pod status and `talosctl -n <node-ip> containers --namespace cri`. Re-read the cgroup after the address read to detect PID replacement. Record the `lhnet1` IM link-locals and manager `net1` IPv4, and the selected images/imageIDs. Do not substitute a host netns read or stale Pod name. These reads may expose configuration/metadata but need no application credentials.
 
-The stock pin is `docker.io/nicolaka/netshoot:v0.14@sha256:7f08c4aff13ff61a35d30e30c5c1ea8396eac6ab4ce19fd02d5a4b3b5d0d09a2`; linux/amd64 manifest `sha256:34eeca872db74067b1ed7fdc6201f278578bf57df7bd3081e99b5097a28464b5`. Anonymous registry index/manifest/config reads on 2026-10-29 verified both digests; no layers or workload were run. The old package's Python pin is inapplicable. Re-read this exact digest's metadata/availability before execution (for example `crane manifest <image@digest>`); do not replace it with the current tag. Its [Dockerfile](https://github.com/nicolaka/netshoot/blob/v0.14/Dockerfile) supplies bash, jq, iproute2, curl, timeout and [OpenBSD nc](https://man.openbsd.org/nc). Target-image resource use, seccomp, admission and CNI startup are still untested.
+The stock pin is `docker.io/nicolaka/netshoot:v0.14@sha256:7f08c4aff13ff61a35d30e30c5c1ea8396eac6ab4ce19fd02d5a4b3b5d0d09a2`; linux/amd64 manifest `sha256:34eeca872db74067b1ed7fdc6201f278578bf57df7bd3081e99b5097a28464b5`. Anonymous registry index/manifest/config reads on 2026-10-29 verified both digests; no layers or workload were run. The old package's Python pin is inapplicable. Re-read this exact digest's metadata/availability before execution (for example `crane manifest <image@digest>`); do not replace it with the current tag. Its [Dockerfile](https://github.com/nicolaka/netshoot/blob/v0.14/Dockerfile) supplies bash, jq, iproute2, curl and [OpenBSD nc](https://man.openbsd.org/nc). The roughly 198 MiB pull consumes part of the Pod deadline. Target-image resource use, seccomp, admission and CNI startup are still untested.
 
 Immediately before creation, repeat the destination identity/address/listener/image and health reads. Root's decision must cover the reviewed source, current exact destinations, one namespace/policy/Pod lifecycle and cleanup. If refreshed evidence changes that decision's inputs, return for review. API checks and creation are not atomic; zero-payload TCP cannot attest a remote Pod UID. No controller or extra packet test closes that race.
 
-## Create, let startup run, capture once
+## Create, let startup run, retain logs
 
 Only after that decision, use this **single chained create sequence**. UID recovery records come directly from successful create responses. No `apply`, replacement or retries. If any prerequisite fails, later commands cannot create the Pod:
 
@@ -102,19 +102,36 @@ k -n "$ns" get pod "$pod" -o json > "$run/pod-final.json"
 k -n "$ns" get events > "$run/events.txt"
 jq -e --slurpfile created "$run/pod.json" \
   '.metadata.uid == $created[0].metadata.uid and (.status.phase == "Succeeded" or .status.phase == "Failed")' "$run/pod-final.json"
-log_file=$(mktemp "$run/pod-logs.XXXXXX")
-if k -n "$ns" logs "$pod" -c probe > "$log_file" 2> "$log_file.stderr"; then
-  printf '%s\n' "$log_file" > "$run/successful-log-path.txt"
-else
-  printf 'Log capture failed; preserve %s and record logs unavailable before cleanup\n' "$log_file" >&2
+if [[ ! -s "$run/successful-log-path.txt" ]]; then
+  for read_number in 1 2 3; do
+    log_file=$(mktemp "$run/pod-logs.XXXXXX")
+    k -n "$ns" get pod "$pod" -o json > "$log_file.before.json"
+    jq -e --slurpfile created "$run/pod.json" \
+      '.metadata.uid == $created[0].metadata.uid' "$log_file.before.json" >/dev/null
+    if k -n "$ns" logs "$pod" -c probe > "$log_file" 2> "$log_file.stderr"; then
+      read_ok=true
+    else
+      read_ok=false
+    fi
+    k -n "$ns" get pod "$pod" -o json > "$log_file.after.json"
+    jq -e --slurpfile created "$run/pod.json" \
+      '.metadata.uid == $created[0].metadata.uid' "$log_file.after.json" >/dev/null
+    if [[ $read_ok == true ]]; then
+      printf '%s\n' "$log_file" > "$run/successful-log-path.txt"
+      break
+    fi
+    printf 'Log read %s failed; preserve %s\n' "$read_number" "$log_file" >&2
+  done
 fi
+[[ -s "$run/successful-log-path.txt" ]] ||
+  printf 'STOP before Pod deletion: logs unavailable; root must decide whether to discard results\n' >&2
 ```
 
-Capture once into a new file; cleanup never fetches logs or overwrites that file. Preserve partial/failed captures too. Report each attempted tuple's source, destination, exit/result, and HTTP status for T8; mark unattempted tuples explicitly. Unexpected controls end this batch, including timeouts that do not prove delivery. IM debug logs may record handshake EOFs; no gRPC bytes are sent. Re-read destination identities after the batch and qualify results if they changed.
+Allow up to three read-only log fetches, each into a new file, with the Pod UID checked before and after. These reads send no probe traffic. Stop after the first successful capture and preserve it; cleanup never fetches logs or overwrites it. If all three reads fail, leave the terminated Pod in place and return for a deliberate decision before deleting it without results. If the container never started, record that fact and make the same explicit cleanup decision. Preserve partial/failed captures too. Report each attempted tuple's source, destination, exit/result, and HTTP status for T8; mark unattempted tuples explicitly. Unexpected controls end this batch, including timeouts that do not prove delivery. IM debug logs may record handshake EOFs; no gRPC bytes are sent. Re-read destination identities after the batch and qualify results if they changed.
 
 ## Cleanup, including failed attempts
 
-Keep the evidence directory. If a failed command closed the shell, reopen bash, restore `context`, `ns`, `pod`, `run` from the printed recovery record and redefine `k`/`health`; do not repeat creates. Use only resources with valid create responses from this run; skip steps for objects never created. Before each operation compare current UID with that receipt; a mismatch/conflict or ambiguous API response stops automatic cleanup for root to reconcile. If an acknowledged deletion is already terminating, only wait; if confirmed absent, continue. The [raw DELETE](https://github.com/kubernetes/kubectl/blob/v0.37.1/pkg/cmd/delete/delete.go) below sends native `DeleteOptions` UID preconditions, protecting replacements. Never use name-only namespace deletion, force/finalizer overrides, or direct PV/Longhorn/IPAM deletion.
+Keep the evidence directory. Before Pod deletion, require the saved successful log path or root's explicit decision to discard unavailable results; do not turn a transient log-read error into automatic cleanup. If a failed command closed the shell, reopen bash, restore `context`, `ns`, `pod`, `run` from the printed recovery record and redefine `k`/`health`; do not repeat creates. Use only resources with valid create responses from this run; skip steps for objects never created. Before each operation compare current UID with that receipt; a mismatch/conflict or ambiguous API response stops automatic cleanup for root to reconcile. If an acknowledged deletion is already terminating, only wait; if confirmed absent, continue. The [raw DELETE](https://github.com/kubernetes/kubectl/blob/v0.37.1/pkg/cmd/delete/delete.go) below sends native `DeleteOptions` UID preconditions, protecting replacements. Never use name-only namespace deletion, force/finalizer overrides, or direct PV/Longhorn/IPAM deletion.
 
 ```bash
 jq -e '{apiVersion:"v1",kind:"DeleteOptions",preconditions:{uid:(.metadata.uid | select(length > 0))}}' \

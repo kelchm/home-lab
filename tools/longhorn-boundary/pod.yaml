@@ -20,6 +20,7 @@ spec:
     nameservers: [127.0.0.1]
   restartPolicy: Never
   activeDeadlineSeconds: 300
+  terminationGracePeriodSeconds: 5
   securityContext:
     runAsNonRoot: true
     runAsUser: 65534
@@ -46,7 +47,7 @@ spec:
         limits:
           cpu: 100m
           memory: 64Mi
-      command: [timeout, -s, TERM, -k, "2", "50", /bin/bash, --noprofile, --norc, -ceu]
+      command: [/bin/bash, --noprofile, --norc, -ceu]
       args:
         - |
           set -o pipefail
