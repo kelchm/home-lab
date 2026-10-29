@@ -52,6 +52,17 @@ def list_response(mapping):
 
 
 class PureContracts(unittest.TestCase):
+    def test_adapter_dash_leading_txt_reaches_main_unchanged(self):
+        value = "-" + "A" * 42
+        for action in ("dns-add", "dns-remove"):
+            with patch.object(acme.sys, "argv", ["athena-acme.py", action, "--", "_acme-challenge." + acme.HOST, value]), \
+                    patch.object(acme.Runner, "execute") as execute:
+                self.assertEqual(acme.main(), 0)
+                execute.assert_called_once_with(action, ["_acme-challenge." + acme.HOST, value])
+        adapter = Path(acme.__file__).with_name("dns_athena.sh").read_text()
+        self.assertIn('dns-add -- "$1" "$2"', adapter)
+        self.assertIn('dns-remove -- "$1" "$2"', adapter)
+
     def test_python38_grammar(self):
         for path in (Path(acme.__file__), Path(__file__)):
             ast.parse(path.read_text(), feature_version=(3, 8))
@@ -488,6 +499,79 @@ class RuntimeTests(unittest.TestCase):
             self.assertEqual(handlers[0].proxies, {})
             self.assertIsNone(handlers[1].redirect_request(request, None, 302, "", {}, "https://elsewhere.invalid/"))
             self.command.assert_not_called()
+
+    def test_quoted_txt_cleanup_and_idempotent_add_preserve_other_value(self):
+        name, value = "_acme-challenge." + acme.HOST, "-" + "A" * 42
+        zone, record = "1" * 32, "2" * 32
+        ours = {"id": record, "type": "TXT", "name": name, "content": '"' + value + '"'}
+        other = dict(ours, id="3" * 32, content='"' + "B" * 43 + '"')
+        with patch.object(self.runner, "cloudflare", side_effect=[[{"id": zone, "name": "kelch.io"}], [ours, other]]) as cf:
+            self.runner.dns("dns-add", name, value)
+            self.assertEqual(cf.call_count, 2)
+        with patch.object(self.runner, "cloudflare", side_effect=[[{"id": zone, "name": "kelch.io"}], [ours, other], {"id": record}]) as cf:
+            self.runner.dns("dns-remove", name, value)
+            self.assertEqual(cf.call_args.args, ("DELETE", "zones/" + zone + "/dns_records/" + record))
+
+    def test_failed_cleanup_is_visible_to_parent_and_retried_without_issuance(self):
+        name, value, zone = "_acme-challenge." + acme.HOST, "A" * 43, "1" * 32
+        self.save("dns-cleanup-pending.json", {"name": name, "value": value})
+        with patch.object(self.runner, "cloudflare", side_effect=acme.Failure("DNS cleanup unavailable")), self.assertRaises(acme.Failure):
+            self.runner.acme()
+        self.command.assert_not_called()
+        self.assertTrue((self.root / "dns-cleanup-pending.json").exists())
+        with patch.object(self.runner, "cloudflare", side_effect=[[{"id": zone, "name": "kelch.io"}], []]):
+            self.runner.finish_dns_cleanup()
+        self.assertFalse((self.root / "dns-cleanup-pending.json").exists())
+
+        def successful_client_with_failed_cleanup(*args, **kwargs):
+            self.save("dns-cleanup-pending.json", {"name": name, "value": value})
+            return 0, b"client ignored cleanup error"
+        self.command.side_effect = successful_client_with_failed_cleanup
+        with patch.object(self.runner, "cloudflare", side_effect=acme.Failure("DNS cleanup unavailable")), self.assertRaises(acme.Failure):
+            self.runner.acme()
+        self.assertTrue((self.root / "dns-cleanup-pending.json").exists())
+
+    def test_provision_reads_valid_stdin_before_exclusive_token_creation(self):
+        token = self.root / "cloudflare-token"
+        token.unlink()
+        for value in (b"", b"invalid", b"x" * 1025):
+            with patch.object(acme.sys, "stdin", io.TextIOWrapper(io.BytesIO(value))), self.assertRaises(acme.Failure):
+                self.runner.provision_token()
+            self.assertFalse(token.exists())
+        with patch.object(acme.sys, "stdin", io.TextIOWrapper(io.BytesIO(b"fake_valid_credential_for_offline_test\n"))):
+            self.runner.provision_token()
+        self.assertEqual(token.read_bytes(), b"fake_valid_credential_for_offline_test")
+        with patch.object(acme.sys, "stdin", io.TextIOWrapper(io.BytesIO(b"another_valid_credential_for_offline_test"))), self.assertRaises(FileExistsError):
+            self.runner.provision_token()
+        self.assertEqual(token.read_bytes(), b"fake_valid_credential_for_offline_test")
+
+    def test_review_bindings_digest_and_previous_bundle_retention(self):
+        fingerprint = hashlib.sha256(b"leaf").hexdigest()
+        old_fingerprint = hashlib.sha256(b"old-leaf").hexdigest()
+        self.accepted()
+        previous = self.root / "bundles" / old_fingerprint
+        previous.mkdir(mode=0o700)
+        old_leaf = b"-----BEGIN CERTIFICATE-----\nb2xkLWxlYWY=\n-----END CERTIFICATE-----\n"
+        for name in acme.FILES:
+            self.put(str(previous.relative_to(self.root) / name), old_leaf if name == "cert.pem" else b"private old bytes")
+        self.save("previous.json", {"sha256": old_fingerprint})
+        with self.mock_validation(), patch.object(self.runner, "snapshot", return_value=accepted_map()), \
+                patch.object(self.runner, "live", return_value=fingerprint):
+            self.runner.verified(self.runner.bundle("issued"), fingerprint)
+            self.assertTrue(previous.exists())
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                self.runner.review_bindings()
+            self.assertEqual(json.loads(output.getvalue())["current_sha256"], hashlib.sha256(acme.canonical(accepted_map()).encode()).hexdigest())
+
+    def test_reload_timeout_does_not_mark_verification_success(self):
+        self.accepted()
+        with patch.object(self.runner, "snapshot", return_value=accepted_map()), patch.object(self.runner, "import_bundle"), \
+                patch.object(self.runner, "live", side_effect=acme.Failure("old leaf")), \
+                patch.object(acme.time, "monotonic", side_effect=[0, 61]), patch.object(self.runner, "verified") as verified, \
+                self.assertRaisesRegex(acme.Failure, "within 60 seconds"):
+            self.runner.replace(self.runner.bundle("issued"), NEW)
+        verified.assert_not_called()
 
     def test_accept_archives_and_unchanged_run_verifies_real_success_state(self):
         fingerprint = hashlib.sha256(b"leaf").hexdigest()

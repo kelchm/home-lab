@@ -23,7 +23,7 @@ import sys
 stage = pathlib.Path(sys.argv[1])
 expected = {
     "client/acme.sh": "c7d68b021cfd6380ea83a82962abde5b484779fee0b97d38681dfa1396bbc8d7",
-    "client/dnsapi/dns_athena.sh": "573623524e1aeaeb8ae23a9e6652c15c0be6e66774bca5b82881a6484eb3962b",
+    "client/dnsapi/dns_athena.sh": "789ba78a2020ebe20ea4d8b8de6bd7fb09bda123acae29aaf7cef085d8fa6c5e",
 }
 for name, digest in expected.items():
     target = stage / name

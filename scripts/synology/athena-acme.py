@@ -10,6 +10,7 @@ import argparse
 import contextlib
 import fcntl
 import hashlib
+import http.client
 import json
 import os
 from pathlib import Path
@@ -36,7 +37,7 @@ OPENSSL = "/usr/bin/openssl"
 # dereferenced source commit 807da6498377ee5e0cf43a78091f46f12dc59a89.
 SOURCE_HASHES = {
     "acme.sh": "c7d68b021cfd6380ea83a82962abde5b484779fee0b97d38681dfa1396bbc8d7",
-    "dnsapi/dns_athena.sh": "573623524e1aeaeb8ae23a9e6652c15c0be6e66774bca5b82881a6484eb3962b",
+    "dnsapi/dns_athena.sh": "789ba78a2020ebe20ea4d8b8de6bd7fb09bda123acae29aaf7cef085d8fa6c5e",
 }
 FILES = ("cert.pem", "key.pem", "chain.pem", "fullchain.pem")
 MIN_VALIDITY = 7 * 86400
@@ -370,6 +371,10 @@ class Runner:
     def dns(self, action, name, value):
         require(name == "_acme-challenge." + HOST and bool(re.fullmatch(r"[A-Za-z0-9_-]{43}", value or "")),
                 "DNS hook accepts only the Athena challenge name and a SHA-256 TXT value")
+        if action == "dns-remove":
+            # acme.sh ignores cleanup-hook exit status. Retain the exact public
+            # value until deletion succeeds so the parent can retry or notify.
+            self.save("dns-cleanup-pending.json", {"name": name, "value": value})
         zones = self.cloudflare("GET", "zones?name=kelch.io")
         require(len(zones) == 1 and isinstance(zones[0], dict) and zones[0].get("name") == "kelch.io", "Expected exactly the kelch.io zone")
         zone = zones[0].get("id", "")
@@ -381,7 +386,7 @@ class Runner:
         for record in records:
             require(isinstance(record, dict) and record.get("type") == "TXT" and record.get("name") == name,
                     "Unexpected challenge record response")
-            if record.get("content") != value:
+            if record.get("content") not in (value, '"' + value + '"'):
                 continue  # Preserve another client's simultaneous TXT value.
             record_id = record.get("id", "")
             require(isinstance(record_id, str) and bool(re.fullmatch(r"[a-f0-9]{32}", record_id)), "Cloudflare record ID is invalid")
@@ -391,14 +396,32 @@ class Runner:
         elif action == "dns-remove":
             for record_id in matches:
                 self.cloudflare("DELETE", endpoint + "/" + record_id)
+            self.path("dns-cleanup-pending.json").unlink()
+
+    def finish_dns_cleanup(self):
+        if self.path("dns-cleanup-pending.json").exists():
+            pending = self.load("dns-cleanup-pending.json")
+            self.dns("dns-remove", pending.get("name"), pending.get("value"))
 
     def token(self):
         token = self.read(self.path("cloudflare-token")).decode("ascii").strip()
         require(bool(re.fullmatch(r"[A-Za-z0-9_-]{20,256}", token)), "Cloudflare credential format is invalid")
         return token
 
+    def provision_token(self):
+        data = sys.stdin.buffer.read(1025)
+        token = data.strip()
+        require(len(data) <= 1024 and bool(re.fullmatch(rb"[A-Za-z0-9_-]{20,256}", token)),
+                "No valid Cloudflare credential received; token file was not created")
+        descriptor = os.open(str(self.path("cloudflare-token")), os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(token)
+            stream.flush()
+            os.fsync(stream.fileno())
+
     def acme(self, initial=False):
         self.token()  # Validate the protected input before starting the client.
+        self.finish_dns_cleanup()
         common = ["/bin/sh", str(self.path("client/acme.sh")),
                   "--home", str(self.path("client")), "--config-home", str(self.path("state")),
                   "--cert-home", str(self.path("certs")), "--server", "letsencrypt"]
@@ -408,6 +431,7 @@ class Runner:
         else:
             action = ["--renew", "-d", HOST, "--ecc"]
         code, output = self.command(common + action, timeout=1800)
+        self.finish_dns_cleanup()
         if not (code == 0 or (code == 2 and "--renew" in action)):
             self.diagnostic(output)
             raise Failure("ACME issue/renew failed")
@@ -655,7 +679,7 @@ class Runner:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("inspect", "issue", "import-new", "accept", "run", "reimport", "rollback", "watchdog", "review-bindings", "rebaseline", "dns-add", "dns-remove"))
+    parser.add_argument("action", choices=("inspect", "provision-token", "issue", "import-new", "accept", "run", "reimport", "rollback", "watchdog", "review-bindings", "rebaseline", "dns-add", "dns-remove"))
     parser.add_argument("arguments", nargs="*")
     args = parser.parse_args()
     count = 2 if args.action in ("dns-add", "dns-remove") else 1 if args.action == "rebaseline" else 0
@@ -666,7 +690,7 @@ def main():
     except Failure as error:
         print("Athena ACME: " + str(error), file=sys.stderr)
         return 1
-    except (OSError, ValueError, KeyError, TypeError, AttributeError, UnicodeError, ssl.SSLError):
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, UnicodeError, ssl.SSLError, http.client.HTTPException):
         # No traceback, argv, paths from API output, or credential-bearing output.
         print("Athena ACME: operation failed; inspect protected state and DSM certificate status", file=sys.stderr)
         return 1
