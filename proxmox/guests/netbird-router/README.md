@@ -2,16 +2,16 @@
 
 VM 103 is NetBird's only routing peer. It carries traffic from away clients to the household HTTPS, admin HTTPS and DNS resources. NetBird Cloud objects, client ownership, access verification and recovery limits are in the [NetBird runbook](../../../docs/runbooks/netbird-remote-access.md); setup and qualification are tracked in [#625](https://github.com/kelchm/home-lab/issues/625).
 
-Read back on 2026-10-27:
+Read back on 2026-10-27, with the backup/protection changes verified on 2026-10-28:
 
 | Setting | Value |
 |---|---|
-| VMID and name | `103`, `netbird-pilot-router`. Dropping `pilot` from names is an open #625 decision. |
+| VMID and name | `103`, `netbird-pilot-router`. Dropping `pilot` is approved in stages: friendly labels first; the VM name and snippet only with the router upgrade after the R1 baseline (#625). |
 | Node | `pve-sbx-1`. Template 9000 is on that node's `local-lvm`, so a rebuild clones there. |
 | Network | `10.32.19.103/24` on VLAN 19 (`vmbr0` tag 19); gateway and resolver `10.32.19.1`; search domain `home.kelch.io` |
 | Guest | Full clone of template 9000 (Debian 13 genericcloud): 1 vCPU, 1 GiB RAM, 8 GiB `local-lvm`, OVMF, QEMU guest agent |
 | Boot | `onboot: 1`, `startup: order=10,up=30` |
-| Protection, backup, HA | No `protection`. Excluded from `daily-backups`. Not a PVE HA resource. Backup and protection are open #625 decisions. |
+| Protection, backup, HA | `protection: 1` and covered by `daily-backups`, both since 2026-10-28. Not a PVE HA resource. |
 | NetBird | 0.79.0 from the `pkgs.netbird.io` `stable` repository; kernel WireGuard on `wt0`, UDP 51820; client routes and DNS disabled, all other client settings default |
 | Tags | `netbird;pilot;remote-access` |
 
@@ -34,12 +34,27 @@ shasum -a 256 proxmox/guests/netbird-router/vendor-data.yaml
 ssh kelchm@10.32.20.21 sudo sha256sum /mnt/pve/library-pve/snippets/netbird-pilot-router.yaml
 ```
 
+## Restore
+
+Prefer a successful post-enrollment `daily-backups` archive to rebuilding. It restores the archived NetBird peer identity and installed version; if that identity is still enrolled, no setup key is needed. As of 2026-10-28, the only verified archive is from 2026-09-27 at 05:00, before enrollment at about 15:28 that day. It cannot restore the current enrolled identity. The first new scheduled backup still needs verification in #625. This restore procedure has not been drilled. While VM 103 is down, NetBird has no routed remote path. Run the following on `pve-sbx-1` through a reachable admin session on Main, with someone at home.
+
+```sh
+sudo pvesm list backups-pve-sbx --vmid 103
+sudo qm stop 103
+sudo qm set 103 --protection 0
+sudo qmrestore /mnt/pve/backups-pve-sbx/dump/<post-enrollment-archive> 103 --force 1 --storage local-lvm
+sudo qm set 103 --protection 1
+sudo qm start 103
+```
+
+PVE refuses to restore over a protected or running VM. Don't pass `--unique`: the new MAC address it assigns is part of the cloud-init network data, so the next start would become a new cloud-init instance and upgrade NetBird (see [below](#cloud-init-settings-upgrade-netbird)). Then verify `netbird status`, the existing peer enrollment and the router probes described below. Re-enroll only if the restored identity is no longer enrolled.
+
 ## Rebuild
 
 The original creation commands were not recorded. The steps below reproduce the configuration that was read back. While VM 103 is down, NetBird has no routed remote path, so rebuild it from Main with someone at home.
 
 1. Confirm that the live snippet matches this directory's copy. If it is missing, copy `vendor-data.yaml` to `/mnt/pve/library-pve/snippets/netbird-pilot-router.yaml`; the share is mounted on every node.
-2. If a broken VM 103 still exists, confirm its name and node before removing it: `sudo qm destroy 103 --purge 1 --destroy-unreferenced-disks 1`.
+2. If a broken VM 103 still exists, confirm its name and node, turn off protection with `sudo qm set 103 --protection 0`, then remove it: `sudo qm destroy 103 --purge 1 --destroy-unreferenced-disks 1`.
 3. On `pve-sbx-1`, write the operator key from `sudo qm config 200` (its `sshkeys` value, URL-decoded) to a file, then run:
 
    ```sh
@@ -51,7 +66,7 @@ The original creation commands were not recorded. The steps below reproduce the 
      --nameserver 10.32.19.1 --searchdomain home.kelch.io \
      --ciuser kelchm --sshkeys <key-file> \
      --cicustom vendor=library-pve:snippets/netbird-pilot-router.yaml \
-     --onboot 1 --startup order=10,up=30 \
+     --onboot 1 --startup order=10,up=30 --protection 1 \
      --tags 'netbird;pilot;remote-access'
    sudo qm disk resize 103 scsi0 8G
    sudo qm start 103

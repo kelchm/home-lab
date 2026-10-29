@@ -4,7 +4,7 @@ NetBird is Matt's selected replacement for Tailscale. Its routing peer is VM 103
 
 ## Current configuration
 
-The names below are current. Dropping `pilot` from them is an open decision in #625.
+The names below are current. Dropping `pilot` is approved in stages in #625: friendly labels first, with the VM hostname and snippet held until the router upgrade after the R1 baseline. The names below remain the verified current names until that first stage is applied.
 
 ### Verified on 2026-10-27
 
@@ -42,7 +42,7 @@ Read with [`scripts/netbird-export.sh`](../../scripts/netbird-export.sh):
 | Service user | `netbird-export` | Auditor (read-only); holds the read-back token |
 | Service user | `Automation` | Admin, from the original setup; its token expired on 2026-10-27 |
 
-The peers are `netbird-pilot-router` (Debian 13, NetBird 0.79.0), `Hyperion`, `iPhone-kelchm` and `Persephone`. `Persephone` is a macOS peer running NetBird 0.80.0, enrolled through a user login on 2026-10-13. It is in `All` only, so no enabled policy lets it reach anything or be reached.
+The peers are `netbird-pilot-router` (Debian 13, NetBird 0.79.0), `Hyperion`, `iPhone-kelchm` and `Persephone`. `Persephone` is Matt's older personal MacBook Pro, running NetBird 0.80.0 and enrolled through a user login on 2026-10-13. It is in `All` only, so no enabled policy lets it reach anything or be reached. Matt identified it on 2026-10-28; no enrollment or access change has been made.
 
 Every enabled resource policy names its resource directly, and no policy names a resource group. NetBird therefore grants clients only TCP 443 to `10.32.140.1` and `10.32.130.1` and port 53 to `10.32.30.1`; nothing grants TCP 443 to the UniFi console on `10.32.30.1`. VM 103 itself can reach that port, so the routing peer's per-port filter is what blocks clients, and #625's I1 check verifies that from a client away from home. `pilot-home-resources` holds both the household-services and DNS resources, so a policy naming that group would open its ports on both addresses, the console included. Target resources directly.
 
@@ -98,7 +98,7 @@ sudo qm guest exec 103 -- hostname
 sudo qm guest exec 103 -- netbird status
 ```
 
-This management path was verified on October 27: guest exec returned the VM's hostname and NetBird status. Inspect the returned guest `exitcode` and `out-data`/`err-data`; a successful PVE request alone does not establish that the guest command succeeded. Main cannot reach VM 103's SSH directly, and the retired Tailscale routers are no longer a management hop. To rebuild or re-enroll the VM, follow its [guest definition](../../proxmox/guests/netbird-router/README.md).
+This management path was verified on October 27: guest exec returned the VM's hostname and NetBird status. Inspect the returned guest `exitcode` and `out-data`/`err-data`; a successful PVE request alone does not establish that the guest command succeeded. Main cannot reach VM 103's SSH directly, and the retired Tailscale routers are no longer a management hop. It is included in the nightly `daily-backups` job and has PVE `protection`. To restore, rebuild or re-enroll it, follow its [guest definition](../../proxmox/guests/netbird-router/README.md).
 
 NetBird does not expose PVE management. Recovery requires a reachable admin session on Main; without one, an away operator must wait for local access to repair the routing peer or its host. Arrange that access before any disruptive test in #625. Native peer access to a host on Main is separate from the routed resources, but has not been qualified as a recovery path.
 
