@@ -276,10 +276,10 @@ class RuntimeTests(unittest.TestCase):
         self.command.side_effect = None
         self.command.return_value = (0, b'prefix\n{"success":false,"error":{"code":105}}')
         with self.assertRaises(acme.Failure):
-            self.runner.api("import", {"id": "newDSM", "as_default": True})
+            self.runner.api("import", {"id": "newDSM", "as_default": "true"})
         args = self.command.call_args.args[0]
         self.assertIn('id="newDSM"', args)
-        self.assertIn('as_default=true', args)
+        self.assertIn('as_default="true"', args)
         self.assertEqual(args[0], acme.SYNOWEBAPI)
         self.assertIn(b"\"success\":false", self.runner.read(self.root / "last-error.log"))
         self.assertEqual((self.root / "last-error.log").stat().st_mode & 0o777, 0o600)
@@ -370,13 +370,13 @@ class RuntimeTests(unittest.TestCase):
         with self.assertRaisesRegex(acme.Failure, "original"):
             self.runner.import_bundle(self.runner.bundle("issued"), acme.ORIGINAL_ID)
 
-    def test_replacement_preserves_default_with_native_boolean(self):
+    def test_replacement_preserves_default_with_native_string_field(self):
         self.command.side_effect = None
         self.command.return_value = (0, b'{"success":true,"data":{"id":"newDSM"}}')
         self.runner.import_bundle(self.runner.bundle("issued"), "newDSM", is_default=True)
         args = self.command.call_args.args[0]
         self.assertIn('id="newDSM"', args)
-        self.assertEqual([arg for arg in args if arg.startswith("as_default=")], ["as_default=true"])
+        self.assertEqual([arg for arg in args if arg.startswith("as_default=")], ['as_default="true"'])
         self.assertTrue((self.root / "issued/key.pem").exists())
 
     def test_nonboolean_default_flag_is_refused_before_staging_or_import(self):
