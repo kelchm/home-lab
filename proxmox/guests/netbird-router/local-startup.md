@@ -17,7 +17,7 @@ Read-only checks on `pve-sbx-1` at 2026-10-29 02:40–02:51 UTC found VM 103 run
 | Generated and guest cloud-init instance ID | `64a1a679a081c43f1510b2e2b6cf32a1a6d2abb7` |
 | `local` storage | Directory `/var/lib/vz`, content `import,iso,backup,vztmpl`, no `snippets`; `/var/lib/vz/snippets` absent |
 
-The node had about 80 GiB free on `local` and 780 GiB free on `local-lvm`. The snippet is small; this change needs no disk movement. Enabling `snippets` updates **cluster-wide** `/etc/pve/storage.cfg`: every node using storage ID `local` permits that content type. The directories and files remain **node-local**, with no replication and no `shared` flag change. Only node 1 receives this file in this procedure.
+The node had about 80 GiB free on `local` and 780 GiB free on `local-lvm`. The snippet is small; this change needs no disk movement. Enabling `snippets` updates **cluster-wide** `/etc/pve/storage.cfg`: every node using storage ID `local` permits that content type. PVE may create empty `snippets` directories on the other nodes, but the files remain **node-local**, with no replication and no `shared` flag change. Only node 1 receives this file in this procedure.
 
 The installed `qemu-server` 9.2.11 source establishes the identity behavior: `Cloudinit.pm::nocloud_gen_metadata` hashes user plus network data, while `generate_nocloud` reads vendor data independently. Changing only the vendor path, with identical bytes, leaves the generated instance ID unchanged. `QemuServer.pm::vmconfig_hotplug_pending` commits `cicustom` to the saved config and records the old image value in the cloud-init section. With the current hotplug default it does not regenerate the mounted drive; `pvesh get .../cloudinit` will show the old value and new pending value. The next normal VM start regenerates it. `qm cloudinit update` would regenerate/change the running medium and is deliberately omitted.
 
@@ -30,7 +30,7 @@ Use a reachable Main admin session, with local recovery access arranged. Do not 
 On the workstation, check the repository source first:
 
 ```sh
-shasum -a 256 proxmox/guests/netbird-router/vendor-data.yaml
+printf '%s  %s\n' 1c45c56620287cce1825e8af4ed7a03c7f316dd7a10744a5ad102a06a14dc52a proxmox/guests/netbird-router/vendor-data.yaml | shasum -a 256 --check
 ssh kelchm@10.32.20.21
 sudo -i
 bash
@@ -68,9 +68,16 @@ for kind in ('identity', 'netbird'):
     assert not result.get('out-truncated') and not result.get('err-truncated'), result
 PY
 }
+{
+    declare -p evidence api old_vendor new_vendor snippet_sha
+    declare -f capture
+} > "$evidence/env.sh"
+printf 'Run evidence and re-entry file: %s/env.sh\n' "$evidence"
 capture before
 sha256sum /mnt/pve/library-pve/snippets/netbird-pilot-router.yaml
 ```
+
+Record the printed absolute `env.sh` path before proceeding. `set -e` ends this Bash session on a guard stop or command failure; the evidence and sourceable state survive in that run’s private directory. Re-enter with `sudo -i`, then `bash`, `set -euo pipefail`, and `source '/root/netbird-local-startup.<this-run>/env.sh'`, using the exact recorded path. Do not repeat the setup block or overwrite the `before` files after a stop. First inspect which steps completed; a failure during the initial `capture before` precedes any installation change.
 
 Inspect the private `before` records against the table: `pending.json` must have no `pending`/delete entries; `cloudinit.json` must have no pending/delete entries. Check the guest's hostname, instance ID, 0.79.0 version and connected status. Retain its profile hash and NetBird overlay address for comparison; never print the profile contents. Record the existing Cloud peer ID from the [read-only export](../../../docs/runbooks/netbird-remote-access.md#read-back-netbird-cloud), so later verification can rule out a replacement enrollment.
 
@@ -147,7 +154,76 @@ assert load('after', 'status')['status'] == 'running'
 PY
 ```
 
-Inspect `after.netbird.json` for Management/Signal connected, the same overlay address and the three resource prefixes; confirm the same enrolled Cloud peer ID. Keep the NAS snippet unchanged for rollback and older restore configurations. Record the installed reference and hashes in #1096 and update the [guest baseline](README.md#vendor-data) and [runbook](../../../docs/runbooks/netbird-remote-access.md#router-startup-dependency) only after these checks pass. Do not claim P6 or autostart acceptance here.
+Inspect `after.netbird.json` for Management/Signal connected, the same overlay address and the three resource prefixes; confirm the same enrolled Cloud peer ID. A changed profile-file hash is a stop for inspection, not proof of replaced enrollment: the daemon can rewrite that file. Compare the public Cloud peer ID and overlay identity before deciding on recovery; never print the profile contents. Keep the NAS snippet unchanged for rollback and older restore configurations. Record the installed reference and hashes in #1096 and update the [guest baseline](README.md#vendor-data) and [runbook](../../../docs/runbooks/netbird-remote-access.md#router-startup-dependency) only after these checks pass. Do not claim P6 or autostart acceptance here.
+
+## Provision on another node
+
+Use this for an authorized restore, migration or rebuild after the repair. These are storage/file checks, not the existing-VM reference-change procedure. The `local` content flags are cluster-wide and may already include `snippets`; the destination directory may already exist. Preserve all flags and existing matching files. This also works without the NAS by using the repository’s byte-identical vendor file.
+
+From a reviewed checkout on the workstation, select the destination explicitly (node 2 is shown), verify the source, and copy it to a private transfer directory:
+
+```bash
+destination=kelchm@10.32.20.22
+printf '%s  %s\n' 1c45c56620287cce1825e8af4ed7a03c7f316dd7a10744a5ad102a06a14dc52a proxmox/guests/netbird-router/vendor-data.yaml | shasum -a 256 --check
+transfer=$(ssh "$destination" 'umask 077; mktemp -d /tmp/netbird-snippet.XXXXXX')
+scp proxmox/guests/netbird-router/vendor-data.yaml "$destination:$transfer/vendor-data.yaml"
+printf 'Destination source_file: %s/vendor-data.yaml\n' "$transfer"
+```
+
+Log in to that destination and start a root Bash session. Set `source_file` to the exact printed transfer path, then run:
+
+```bash
+set -euo pipefail
+umask 077
+source_file='/tmp/netbird-snippet.<this-run>/vendor-data.yaml'
+snippet_sha=1c45c56620287cce1825e8af4ed7a03c7f316dd7a10744a5ad102a06a14dc52a
+provision=$(mktemp -d /root/netbird-snippet-provision.XXXXXX)
+printf 'Provision evidence: %s\n' "$provision"
+printf '%s  %s\n' "$snippet_sha" "$source_file" | sha256sum --check --status
+pvesh get /storage/local --output-format json > "$provision/storage.before.json"
+python3 - "$provision" <<'PYPROVISION'
+import json, pathlib, sys
+root = pathlib.Path(sys.argv[1])
+s = json.loads((root / 'storage.before.json').read_text())
+assert s['type'] == 'dir' and s['path'] == '/var/lib/vz'
+assert not s.get('content-dirs') and not s.get('shared')
+content = s['content'].split(',')
+assert content and len(content) == len(set(content))
+if 'snippets' not in content:
+    (root / 'content.after').write_text(s['content'] + ',snippets')
+    (root / 'storage.digest').write_text(s['digest'])
+PYPROVISION
+if test -f "$provision/content.after"; then
+    pvesm set local --digest "$(cat "$provision/storage.digest")" --content "$(cat "$provision/content.after")"
+fi
+if test ! -e /var/lib/vz/snippets; then
+    install -d -o root -g root -m 0755 /var/lib/vz/snippets
+fi
+test -d /var/lib/vz/snippets && test ! -L /var/lib/vz/snippets
+if test -e /var/lib/vz/snippets/netbird-pilot-router.yaml; then
+    test -f /var/lib/vz/snippets/netbird-pilot-router.yaml && test ! -L /var/lib/vz/snippets/netbird-pilot-router.yaml
+else
+    install -o root -g root -m 0644 "$source_file" /var/lib/vz/snippets/netbird-pilot-router.yaml
+fi
+cmp "$source_file" /var/lib/vz/snippets/netbird-pilot-router.yaml
+resolved=$(pvesm path local:snippets/netbird-pilot-router.yaml)
+test "$resolved" = /var/lib/vz/snippets/netbird-pilot-router.yaml
+printf '%s  %s\n' "$snippet_sha" "$resolved" | sha256sum --check --status
+test "$(stat -c '%U:%G %a' "$resolved")" = 'root:root 644'
+pvesh get /storage/local --output-format json > "$provision/storage.after.json"
+python3 - "$provision" <<'PYPROVISIONCHECK'
+import json, pathlib, sys
+root = pathlib.Path(sys.argv[1])
+before, after = [json.loads((root / f'storage.{p}.json').read_text()) for p in ('before','after')]
+assert not [k for k in before.keys() | after.keys() if k not in {'digest','content'} and before.get(k) != after.get(k)]
+expected = before['content'].split(',')
+if 'snippets' not in expected:
+    expected.append('snippets')
+assert after['content'].split(',') == expected
+PYPROVISIONCHECK
+```
+
+Stop on a nonmatching existing file or any failed check; do not overwrite it to force a pass. Re-enter the root session after a failure and inspect the printed provision directory before deciding whether to continue. Keep the cluster-wide content flag and matching local file available for other peers and retained archives. Remove only this run’s private transfer copy after successful verification. This block does not change a VM reference or start a VM; return to the separately authorized restore/rebuild/migration steps afterwards.
 
 ## Acceptance at the next planned host reboot
 
@@ -157,7 +233,7 @@ After that host boot, retain the host boot time and PVE start-all/VM-start task 
 
 ## Rollback
 
-Rollback also needs authorization. Use the same Main recovery access and evidence directory. Verify the old NAS storage is online and its retained snippet matches the recorded SHA-256 before restoring the reference. If NAS is unavailable, leave the verified local reference in place and diagnose; restoring a missing NAS reference would reintroduce the startup failure.
+The installation approval covers reverting this run’s completed vendor-reference change and partial-install file cleanup in the same maintenance window, subject to the ownership/dependency checks below. A later rollback or removal of the cluster-wide `snippets` capability needs separate review and authorization. Use the same Main recovery access and evidence directory; if the shell ended, source this run’s recorded `env.sh` before using `capture` or the rollback blocks. Do not initialize a new run over the existing evidence. Verify the old NAS storage is online and its retained snippet matches the recorded SHA-256 before restoring the reference. If NAS is unavailable, leave the verified local reference in place and diagnose; restoring a missing NAS reference would reintroduce the startup failure.
 
 Before any subsequent start/regeneration, with no intervening configuration changes, restore only `cicustom`. Compare the saved config with the installed evidence before issuing the change; the guard below stops on drift, including later `cicustom` keys. If installation failed before `capture after`, compare the fresh config against `before.config.json` with only the intended vendor substitution; do not use this full-install rollback block without that comparison:
 
@@ -192,9 +268,9 @@ assert set(current['content'].split(',')) == set((root / 'content.after').read_t
 (root / 'cleanup.digest').write_text(current['digest'])
 PYCLEANUP
 printf '%s  %s\n' "$snippet_sha" /var/lib/vz/snippets/netbird-pilot-router.yaml | sha256sum --check --status
+pvesm set local --digest "$(cat "$evidence/cleanup.digest")" --content "$(cat "$evidence/content.before")"
 rm -- /var/lib/vz/snippets/netbird-pilot-router.yaml
 rmdir -- /var/lib/vz/snippets
-pvesm set local --digest "$(cat "$evidence/cleanup.digest")" --content "$(cat "$evidence/content.before")"
 ```
 
-Re-read `/storage/local` and confirm only the content flag was restored. Never delete the old NAS snippet while retained archives refer to it. A revert of this documentation PR performs none of this operational rollback.
+Re-read `/storage/local` and confirm only its content flag was restored. Empty `snippets` directories created by PVE on other nodes may remain; this procedure does not remove them. Never delete the old NAS snippet while retained archives refer to it. A revert of this documentation PR performs none of this operational rollback.
