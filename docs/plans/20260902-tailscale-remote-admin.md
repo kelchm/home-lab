@@ -1,6 +1,16 @@
 # Tailscale remote-admin architecture
 
-**Status:** Superseded — 2026-10-25; Tailscale was retired across the lab and both router VMs were destroyed on 2026-10-28, with their backup archives kept. Remaining tailnet and UniFi cleanup is tracked in [#1069](https://github.com/kelchm/home-lab/issues/1069). The design and acceptance evidence below are historical.
+**Status:** Superseded — 2026-10-29; Tailscale infrastructure retirement is complete under [#1069](https://github.com/kelchm/home-lab/issues/1069). Four personal clients still need local logout confirmation. The original design, acceptance and rollback sections below are historical; current remote access is documented in the [NetBird runbook](../runbooks/netbird-remote-access.md).
+
+## Retirement record (2026-10-29)
+
+The routers were stopped on 2026-10-25. VMs 101 and 102 and all six local disks were deleted at 2026-10-28 00:51 UTC. All 28 Athena NFS vzdump archives on `backups-pve-sbx` remain: 14 per VM, dated 2026-09-20 through 2026-10-27, totaling 12.62 GiB. No restore has been tested, there is no offsite copy and nothing prunes them automatically. Keep VMIDs 101 and 102 reserved while the archives are kept, because backups of a new guest with either ID would prune those archives under its retention policy. See [retired guests](../../proxmox/README.md#retired-guests).
+
+On 2026-10-29, the verified `kelchm.github` Free tailnet had one owner, Matthew Kelch, and all seven machine creators matched that owner; no separate shared or organization dependency was identified. The matching `10.32.0.0/16` auto-approval was removed, and both router approvals were withdrawn and read back as awaiting approval before deletion. The two routers and Hyperion, iPhone14ProMax, iPadPro, Persephone and Talaria were removed, with fresh reload counts 7 → 0. Deleting that exact tailnet ended at `/admin/deleted` with “Your tailnet has been deleted.” Do not sign back into the old identity to recheck: doing so would create a new account.
+
+Hyperion's local logout exited 0 and read back `NeedsLogin`, no current tailnet, blank self ID/DNS and UserID 0. The iPhone, iPad Pro, Persephone and Talaria registrations are revoked, but their actual local logout and retained-state cleanup remain unverified. One owner-action request is already pending in #1069; reconcile that response rather than sending another request.
+
+Both Tailscale UniFi forward policies and their owned generated returns were removed on 2026-10-29; the [applied-state reference](../../network/unifi/README.md#remote-admin-applied-state) records the readback and its limits. NetBird VM 103 remains the only routed remote path; its scope and separate #625 qualification work are unchanged.
 
 ## Outcome
 

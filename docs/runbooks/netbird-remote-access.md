@@ -1,6 +1,8 @@
 # NetBird remote access
 
-NetBird is Matt's selected replacement for Tailscale. Its routing peer is VM 103, `netbird-pilot-router`, at `10.32.19.103` on the isolated Remote Admin VLAN. Setup and comprehensive testing remain unfinished in [#625](https://github.com/kelchm/home-lab/issues/625). Tailscale was retired on October 25, 2026; the remaining retirement work is tracked in [#1069](https://github.com/kelchm/home-lab/issues/1069). NetBird Cloud and UniFi policy are applied manually; merging this document changes neither. The routing peer's definition, rebuild and enrollment are in [`proxmox/guests/netbird-router`](../../proxmox/guests/netbird-router/README.md).
+NetBird is Matt's selected replacement for Tailscale. Its only routing peer is VM 103, `netbird-pilot-router`, at `10.32.19.103` on the isolated Remote Admin VLAN. Setup and comprehensive testing remain unfinished in [#625](https://github.com/kelchm/home-lab/issues/625). NetBird Cloud and UniFi policy are applied manually; merging this document changes neither. The routing peer's definition, rebuild and enrollment are in [`proxmox/guests/netbird-router`](../../proxmox/guests/netbird-router/README.md).
+
+Tailscale infrastructure retirement completed on October 29, 2026: the router VMs and disks, UniFi policies, route approvals, seven machine registrations and tailnet are gone. The [retirement record](../plans/20260902-tailscale-remote-admin.md#retirement-record-2026-10-29) preserves the archive limits and distinguishes Hyperion's verified local logout from the four personal clients whose local logout remains unverified in [#1069](https://github.com/kelchm/home-lab/issues/1069). NetBird remains the single routed remote path, with the same household HTTPS, admin HTTPS and split-DNS scope; retirement adds no NetBird qualification or host-boot acceptance.
 
 ## Current configuration
 
