@@ -108,6 +108,14 @@ For later application diagnostics, run the probe inside VM 103 through the same 
 sudo qm guest exec 103 -- curl --fail --show-error --max-time 10 https://grafana.home.kelch.io/api/health
 ```
 
+## Router startup dependency
+
+VM 103 still uses `vendor=library-pve:snippets/netbird-pilot-router.yaml`, although its root, EFI and cloud-init disks are local. On 2026-10-25 its host-boot start failed with `storage 'library-pve' is not online`; the owner-authorized `qm start 103` around 18:24:31 UTC was manual recovery, so it does not credit #625/P6. Retired VM 101 showed the same dependency on another node; retired VMs 101/102 are historical evidence, not failover peers.
+
+The [node-local startup procedure](../../proxmox/guests/netbird-router/local-startup.md) prepares installation, verification and rollback for [#1096](https://github.com/kelchm/home-lab/issues/1096). **It is not installed.** Matt approved its design, followed by a second peer (#1097) before upgrades. The repair keeps the vendor bytes, hostname, enrolled identity, installed version and policy intact. Enabling snippets on `local` changes cluster-wide storage capabilities; the file itself must be provisioned on every chosen migration/restore node. Keep the old NAS snippet for older archives.
+
+Installation needs separate authorization and no immediate reboot. Autostart acceptance waits for the next separately authorized planned host boot and its unattended-start evidence. Do not reboot solely for acceptance or fault shared NFS/NAS to test this repair. #1096 stays open and #625/P6 stays uncredited until that acceptance is recorded.
+
 ## Verification and owner acceptance
 
 For future changes, Grafana's `/api/health` from the VM must return HTTP 200 with a healthy database, and Jellyfin's `/health` must still return HTTP 200. Use HTTPS with certificate validation. Connection attempts to `10.32.130.1:80`, `10.32.140.1:80`, and `10.32.20.21:8006` must remain blocked. These VM tests verify the UniFi path; they do not prove that a remote client received the NetBird resource or policy.
