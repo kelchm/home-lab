@@ -34,7 +34,7 @@ doco-cd recreates every container of a project on each poll while one of its ser
 
 The container is privileged, shares the host's PID namespace and network, and mounts `/` read-only, which is what its local collectors need. On `spark-2` it logs in as `sparkdash`, an account with no sudo rights and no Docker access, so it can read metrics there but cannot power the node off or start or stop a container. No model launcher is configured: SparkRun owns inference.
 
-The image is built from an upstream release by the [kelchm/sparkDash](https://github.com/kelchm/sparkDash) fork, because upstream publishes none; [MiaAI-Lab/sparkDash#197](https://github.com/MiaAI-Lab/sparkDash/pull/197) proposes the same build upstream. To build a newer release, cherry-pick the fork's publish commit onto the upstream release commit and push a `v<version>-<n>` tag to the fork.
+The image is built from an upstream release by the [kelchm/sparkDash](https://github.com/kelchm/sparkDash) fork. Upstream incorporated the publishing workflow from [MiaAI-Lab/sparkDash#197](https://github.com/MiaAI-Lab/sparkDash/pull/197) as [`bfdfe16`](https://github.com/MiaAI-Lab/sparkDash/commit/bfdfe168d154556a5e484f16f07ad4037ebccd5a), as the [maintainer confirmed](https://github.com/MiaAI-Lab/sparkDash/pull/197#issuecomment-6123639182); GitHub records the PR as closed without merging. The fork stays deployed pending a qualifying public upstream image/tag/digest and an accepted replacement ([#809](https://github.com/kelchm/home-lab/issues/809)). To build a newer release, cherry-pick the fork's publish commit onto the upstream release commit and push a `v<version>-<n>` tag to the fork.
 
 State outside Git, all on `spark-1` unless noted:
 
