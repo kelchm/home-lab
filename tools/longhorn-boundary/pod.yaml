@@ -1,0 +1,118 @@
+---
+# PREPARATION ONLY: historical destinations from 2026-10-29T03:03Z.
+# Refresh identities/addresses/listeners, review, then obtain a separate execution decision.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: storage-boundary
+  namespace: netprobe-226
+  annotations:
+    k8s.v1.cni.cncf.io/networks: cnpg-system/storage-network
+spec:
+  nodeName: k8s-prod-3
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  automountServiceAccountToken: false
+  enableServiceLinks: false
+  dnsPolicy: None
+  dnsConfig:
+    nameservers: [127.0.0.1]
+  restartPolicy: Never
+  activeDeadlineSeconds: 300
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+    runAsGroup: 65534
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: probe
+      image: docker.io/nicolaka/netshoot:v0.14@sha256:7f08c4aff13ff61a35d30e30c5c1ea8396eac6ab4ce19fd02d5a4b3b5d0d09a2
+      workingDir: /
+      env:
+        - name: LC_ALL
+          value: C
+      securityContext:
+        privileged: false
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: [ALL]
+      resources:
+        requests:
+          cpu: 10m
+          memory: 16Mi
+        limits:
+          cpu: 100m
+          memory: 64Mi
+      command: [timeout, -s, TERM, -k, "2", "50", /bin/bash, --noprofile, --norc, -ceu]
+      args:
+        - |
+          set -o pipefail
+          stop() { printf 'STOP: %s\n' "$*" >&2; exit 1; }
+          trap 'printf "STOP at line %s\n" "$LINENO" >&2' ERR
+
+          # Inspect only net1; extra harmless interfaces are irrelevant.
+          a4=$(ip -j -4 address show dev net1)
+          a6=$(ip -j -6 address show dev net1)
+          printf 'net1 IPv4=%s\nnet1 IPv6=%s\n' "$a4" "$a6"
+          src4=$(jq -er '.[0].addr_info | select(length == 1) | .[0] |
+            select(.prefixlen == 24 and .scope == "global" and
+              (.local | test("^10\\.32\\.25\\.(16[0-9]|17[0-5])$"))) | .local' <<< "$a4")
+          src6=$(jq -er '.[0].addr_info | select(length == 1) | .[0] |
+            select(.prefixlen == 64 and .scope == "link" and
+              (.local | startswith("fe80:")) and .tentative != true and .dadfailed != true) |
+            .local' <<< "$a6")
+          ip -j -4 route show dev net1 | jq -e --arg src "$src4" 'any(.[];
+            .dst == "10.32.25.0/24" and .scope == "link" and .protocol == "kernel" and
+            .prefsrc == $src and .gateway == null)' >/dev/null
+          ip -j -6 route show dev net1 | jq -e 'any(.[];
+            .dst == "fe80::/64" and .protocol == "kernel" and .gateway == null)' >/dev/null
+          route4() {
+            local r
+            r=$(ip -j -4 route get "$1" from "$src4")
+            printf 'route4 %s %s\n' "$1" "$r"
+            jq -e 'length == 1 and (.[0] | .dev == "net1" and .gateway == null and
+              .multipath == null and (.type // "unicast") == "unicast")' <<< "$r" >/dev/null
+          }
+          route6() {
+            local r
+            r=$(ip -j -6 route get "$1" from "$src6" oif net1)
+            printf 'route6 %s%%net1 %s\n' "$1" "$r"
+            jq -e 'length == 1 and (.[0] | .dev == "net1" and .gateway == null and
+              .multipath == null and (.type // "unicast") == "unicast")' <<< "$r" >/dev/null
+          }
+          # Local route lookups send no packets. All destinations stay literal.
+          route4 10.32.25.131
+          route4 10.32.25.129
+          route4 10.32.25.130
+          route6 fe80::c0aa:c7ff:fe47:6cc9
+          route6 fe80::b43e:9fff:fe07:b6e
+          printf 'sources IPv4=%s IPv6=%s%%net1\n' "$src4" "$src6"
+
+          attempt() {
+            local id=$1 expected=$2 out rc
+            shift 2
+            if out=$("$@" 2>&1); then rc=0; else rc=$?; fi
+            printf '%s ' "$id"; printf '%q ' "$@"; printf 'rc=%s %s\n' "$rc" "$out"
+            [[ $expected == connected && $rc == 0 ]] ||
+              [[ $expected == refused && $rc == 1 && $out == *"Connection refused"* ]] ||
+              stop "$id unexpected result; no further attempts"
+          }
+          # OpenBSD nc -n disables DNS, -z connects/closes without payload. One address/port each.
+          attempt T1 refused   nc -4 -n -z -v -w 3 -s "$src4" 10.32.25.131 8504
+          attempt T2 connected nc -4 -n -z -v -w 3 -s "$src4" 10.32.25.131 8500
+          attempt T3 refused   nc -4 -n -z -v -w 3 -s "$src4" 10.32.25.129 8504
+          attempt T4 connected nc -4 -n -z -v -w 3 -s "$src4" 10.32.25.129 8500
+          attempt T5 connected nc -6 -n -z -v -w 3 -s "$src6%net1" fe80::c0aa:c7ff:fe47:6cc9%net1 8500
+          attempt T6 connected nc -6 -n -z -v -w 3 -s "$src6%net1" fe80::b43e:9fff:fe07:b6e%net1 8500
+          attempt T7 refused   nc -4 -n -z -v -w 3 -s "$src4" 10.32.25.130 9500
+          # -q is first: ignore curlrc. Numeric IPv4, no proxy, retries or redirect following.
+          if code=$(curl -q --ipv4 --interface "$src4" --proxy '' --noproxy '*' --retry 0 \
+            --connect-timeout 3 --max-time 5 --max-redirs 0 --proto '=http' --http1.1 \
+            --request GET --silent --show-error --output /dev/null --write-out '%{http_code}' \
+            http://10.32.25.130:9503/); then rc=0; else rc=$?; fi
+          printf 'T8 source=%s destination=10.32.25.130:9503 GET / rc=%s http=%s\n' "$src4" "$rc" "$code"
+          [[ $rc == 0 && $code == 404 ]] || stop 'T8 unexpected result; record status only'
+          printf 'DONE T1-T8; conclusions cover only these exact tuples\n'
