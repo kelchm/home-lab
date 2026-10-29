@@ -10,7 +10,7 @@ Both restricted database accounts exist and own their respective buckets. Each p
 
 The database layer (#816, merged as `653afc37`) is now active. Visionect passed first, then Bambuddy resumed and passed: each has a completed manual base backup, a nonzero last-backup metric and advancing WAL objects after at least 15 minutes of observation. The accepted backup IDs are `20261029T013554` for Visionect (PostgreSQL 17.11) and `20261029T020738` for Bambuddy (18.6). Both applications are healthy; their application pods were not restarted. #1095 added `::/0` HBA rejection, and live no-credential self-probes confirmed both storage IPv4 and IPv6 rejection. Details and exact backup names are in the [runbook’s acceptance record](../../docs/runbooks/cnpg-backup-restore.md).
 
-Kopia’s read-only `/sources/object-storage` mount is present, but no completed snapshot of that source was observed at database sign-off on 2026-10-29; the next normal run is 10:00 UTC. Verify its base/WAL contents before claiming an off-site recovery point. Real-data restore remains a separate gate under #224/#782. [First deployment](#first-deployment) remains the NAS rebuild procedure and acceptance checklist.
+No completed Kopia snapshot of `/sources/object-storage` was observed at database sign-off on 2026-10-29. The subsequent normal run completed at 10:32:48 UTC, with both accepted base archives and selected WAL objects verified in its immutable catalog; the [dated runbook record](../../docs/runbooks/cnpg-backup-restore.md#first-normal-object-storage-snapshot-2026-10-29) gives the exact snapshot and limits. Payload readability, complete required WAL continuity and restore remain unverified; real-data restore remains a separate gate under #224/#782. [First deployment](#first-deployment) remains the NAS rebuild procedure and acceptance checklist.
 
 ## What is where
 
@@ -51,13 +51,13 @@ Both `*.sops.env` files are encrypted to the NAS-scoped age recipient in [`.sops
 SOPS_AGE_KEY="$(op read 'op://Private/athena-doco-cd-sops-age-key/password')" sops synology/s3-storage/versitygw.sops.env
 ```
 
-The Cloudflare token needs `Zone:Zone:Read` and `Zone:DNS:Edit` on `kelch.io`; Traefik's ACME client reads the zone to find its ID. Cloudflare scopes tokens to a zone, not a record. The token in use, `athena-s3-storage-acme`, has no expiry or client-IP filter.
+The Cloudflare token needs `Zone:Zone:Read` and `Zone:DNS:Edit` on `kelch.io`; Traefik's ACME client reads the zone to find its ID. Cloudflare scopes tokens to a zone, not a record. The token in use, `athena-s3-storage-acme`, has no expiry or client-IP filter. [Athena's native ACME preparation](../../docs/runbooks/athena-acme.md) proposes reusing this exact token for DSM and renaming its Cloudflare label and existing 1Password item to `athena-acme`; neither reuse nor rename is activated yet. The item-ID reference below survives that title change. S3 reads the encrypted dotenv value and needs no redeployment for a metadata-only rename. Once shared, revoking this token interrupts both clients' renewal.
 
 The values in both files are kept in 1Password:
 
 | Value | 1Password reference |
 |---|---|
-| Cloudflare token | `op://Project - home-lab/athena-s3-storage-acme/credential` |
+| Cloudflare token | `op://Project - home-lab/yg4lgp23nzgmknxb7bgn3rfsvm/credential` |
 | Gateway root access key | `op://Project - home-lab/athena-s3-storage-root/username` |
 | Gateway root secret key | `op://Project - home-lab/athena-s3-storage-root/credential` |
 | Visionect account secret (access key `k8s-prod-visionect-db`) | `op://Project - home-lab/athena-s3-storage-k8s-prod-visionect-db/credential` |
@@ -145,7 +145,7 @@ Do not edit files under `data/` by hand. The gateway returns the checksum it rec
 ## Limits
 
 - Accounts and bucket ownership are created by hand and live outside Git. On a rebuilt NAS, repeat step 5 with the secrets already in the cluster's `backup-secret.sops.yaml` files.
-- Once the database layer's source is configured and a completed snapshot is verified, the off-site job copies the whole share, so every bucket goes to B2 under the same 30-day lock.
+- The off-site job now snapshots the whole share to B2 under the same 30-day lock; the [first normal snapshot has accepted catalog evidence](../../docs/runbooks/cnpg-backup-restore.md#first-normal-object-storage-snapshot-2026-10-29).
 - The endpoint is published on the storage VLAN only. A client needs an address there.
 - `users.json` is not copied off-site. Losing it loses no backup data.
 - The gateway's own Object Lock and versioning are not used. Protection against deletion comes from the verified off-site copy's 30-day lock; the NAS foundation alone provides none.

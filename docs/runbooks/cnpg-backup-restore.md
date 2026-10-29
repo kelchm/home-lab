@@ -11,7 +11,22 @@ Last verified acceptance, 2026-10-29 UTC: **both live database backup paths acce
 
 The initial `immediate: true` requests failed on the old pods before their sidecars were available; the accepted manual backups ran after Ready. Both databases rejected no-credential probes to their own storage IPv4 and IPv6 link-local addresses; the rules had no parse errors, Visionect logged its reload, and neither had IPv6 sessions. This verifies the loaded HBA decision, not an external L2 probe. The four backup-related alerts are loaded and healthy in vmalert; their fault conditions were not deliberately induced.
 
-**Still unverified:** Kopia mounts `/sources/object-storage` read-only, but no completed snapshot of that source was observed at database sign-off; the next normal run is 10:00 UTC. Verify the completed snapshot and its base/WAL contents before claiming an off-site recovery point. No real-database restore or rebuild was performed, so #782’s hold remains. Actual 30-day retention deletion, storage use and large-catalog behavior remain unmeasured.
+## First normal object-storage snapshot, 2026-10-29
+
+No completed Kopia snapshot of `/sources/object-storage` was observed at the earlier database sign-off. Subsequent read-only verification at 11:22:58–11:25:05 UTC accepted the first normal 10:00 UTC run for this source: Longhorn completed first at 10:19:50 UTC, then object-storage ran from `2026-10-29T10:19:50.637317066Z` to `2026-10-29T10:32:48.981769139Z`. The manifest and normal-run log identify snapshot `7f745fefefe1b8424ce2c0c76bbe5da5`, immutable root catalog `k75f8b039bbe6a328c7375ae05cf3b0fa`, source `offsite@athena:/sources/object-storage`, with 1,397 files, 655,641,874 bytes and 601 directories; reported errors, ignored errors, failed entries and exclusions were all zero.
+
+Catalog traversal of that exact immutable root found both accepted base archives and these selected WAL objects. Paths are relative to the snapshot root:
+
+| Catalog path | Bytes | Catalog mtime UTC |
+|---|---:|---|
+| `data/k8s-prod-visionect-db/visionect-db-pg17/base/20261029T013554/data.tar.gz` | 300,539,253 | 2026-10-29 01:39:42 |
+| `data/k8s-prod-bambuddy-db/bambuddy-db-pg18/base/20261029T020738/data.tar.gz` | 17,238,263 | 2026-10-29 02:08:04 |
+| `data/k8s-prod-visionect-db/visionect-db-pg17/wals/000000040000004C/000000040000004C000000C5.gz` | 59,212 | 2026-10-29 10:18:52 |
+| `data/k8s-prod-bambuddy-db/bambuddy-db-pg18/wals/0000000600000054/000000060000005400000024.gz` | 52,352 | 2026-10-29 10:15:26 |
+
+The two base directories also contain `backup.info`, 1,450 bytes for Visionect and 1,440 bytes for Bambuddy. Base payload sizes match the earlier database acceptance record. Verification only read existing records; it triggered no snapshot, maintenance or restart.
+
+**Still unverified:** this is completed-snapshot and selected catalog-entry evidence, not payload readability/checksums, complete required WAL continuity or an exact recovery point. This verification exercised no PostgreSQL recovery/PITR, real-data restore, B2/full-store restore or bootstrap. Both disposable restore attempts failed and were fully cleaned up; this snapshot adds no restore success credit, and #782’s hold remains. The configured 30-day Athena recovery window is intended policy; first actual retention deletion, storage use and large-catalog behavior remain unverified.
 
 ## How it works
 
@@ -320,4 +335,4 @@ Scratch database drills used PostgreSQL 17.11 clusters holding 270 to 400 MB in 
 | Existing Cluster bootstrap admission | Both server-side dry runs passed, then Flux reconciled `bootstrap.recovery` on both live Clusters during activation. Their existing data directories were retained; a rebuild using that stanza remains **undrilled** |
 | The real databases: sidecar injection, storage interface, WAL and base backups | **Drilled** on 2026-10-29 for Visionect 17.11 and Bambuddy 18.6, with the exact backups recorded above; this does not verify restored data |
 | A real-database restore, including Visionect’s 2.3 GB database | **Undrilled**; separately gated under #224 and #782 |
-| Kopia snapshot and restore of the object-storage source | Source mount verified; no completed snapshot of it observed at database sign-off. Snapshot-content verification and restore remain **undrilled** |
+| Kopia snapshot and restore of the object-storage source | First normal snapshot and selected base/WAL catalog entries **verified** on 2026-10-29; see the [dated record](#first-normal-object-storage-snapshot-2026-10-29). Payload readability, complete required WAL continuity and restore remain **unverified** |
