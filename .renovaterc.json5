@@ -33,6 +33,13 @@
   },
   packageRules: [
     {
+      description: "Hermes Caddy: review qualified candidate digest promotions",
+      matchManagers: ["docker-compose"],
+      matchPackageNames: ["ghcr.io/kelchm/home-lab/caddy-cloudflare"],
+      automerge: false,
+      ignoreTests: false,
+    },
+    {
       // A core release changes both payloads. Digest refreshes at the same
       // release can safely land independently; qualification checks the releases.
       description: "Hermes Caddy: update builder and runtime core releases together",

@@ -18,6 +18,8 @@ INPUTS = (
     ".renovaterc.json5", ".mise.toml", ".shellcheckrc",
     *PUBLISH_INPUTS,
     str(GUEST / "Caddyfile"), str(GUEST / "compose.yaml"),
+    str(GUEST / "compose.caddy.yaml"), str(GUEST / ".doco-cd.yml"),
+    str(GUEST / "doco-cd"),
     str(GUEST / "caddy"),
     "scripts/ci/hermes-caddy-inputs.py", "scripts/ci/hermes-caddy-promote.sh",
     "scripts/ci/test-hermes-caddy.py", "scripts/ci/test-hermes-caddy-promotion.sh",

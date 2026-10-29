@@ -64,59 +64,83 @@ The private Telegram adapter test on 2026-08-28 passed a normal `telegram-ok` re
 
 An on-demand QGA-assisted snapshot backup completed successfully and produced `backups-pve-sbx:backup/vzdump-qemu-200-2026_08_27-19_03_54.vma.zst`. The cluster's enabled `daily-backups` job also includes VMID `200` through its `all=1` selection.
 
-## Caddy image lifecycle preparation
+## Caddy image delivery
 
-The [image workflow](../../../.github/workflows/hermes-caddy-image.yaml) prepares the first build layer of [#1074](https://github.com/kelchm/home-lab/issues/1074). No canonical owned artifact has been published or adopted yet; the guest still uses its manually built `localhost/hermes-caddy` image and the operations below. The build layer leaves the deployed Compose, Caddyfile, security settings, healthcheck and persistent TLS state unchanged.
+Preparation only: the guest still uses its manually built `localhost/hermes-caddy` image. [#1103](https://github.com/kelchm/home-lab/pull/1103) published and qualified the public image in [run 40870944297](https://github.com/kelchm/home-lab/actions/runs/40870944297): `ghcr.io/kelchm/home-lab/caddy-cloudflare@sha256:7c3876c8fc82df32c80d43a134d2f185a70e88c78a2d431071cb5241e29403f1` (Caddy 2.11.7, Cloudflare 0.2.4, Go 1.27.3). Adoption and live acceptance remain open in [#1074](https://github.com/kelchm/home-lab/issues/1074). Merging these files does not install a deployer on this guest.
 
-Every relevant PR, including forks and stacked bases, builds and qualifies on a disposable GitHub-hosted native Linux amd64 runner with read-only repository access, no registry login and no production credentials. The [qualifier](caddy/qualify.sh) uses real port 443 with host `ip_unprivileged_port_start=1024`, UID/GID 1000, a read-only root, no-new-privileges, only `NET_BIND_SERVICE` and Caddy as PID 1. It tests a throwaway CA, trusted HTTPS and rejection of the wrong CA, the curl health command, and valid WebSocket upgrades with forwarded text echo on `/api/ws` and binary echo on `/api/pty`. Adding only `--init` must reproduce the privileged-bind failure. It also validates the production Caddyfile offline with a dummy credential and records actual linked core/plugin/Go/compiler/module inventory, comparing the core release with both pinned base payloads. Fixture state and containers are disposable; no guest or LAN runner participates.
+[`compose.yaml`](compose.yaml) operates only Hermes, with its existing project identity. [`compose.caddy.yaml`](compose.caddy.yaml) defines only Caddy in the distinct `hermes-caddy` project. Always use `docker compose -f compose.caddy.yaml …` for Caddy; plain `docker compose …` continues to operate Hermes. Caddy has no cross-project `depends_on`; its existing HTTPS healthcheck exercises the Hermes backend. The immutable digest selects the artifact even while the `candidate` tag moves. Renovate discovers that tag through the normal Compose manager and proposes digest promotions with automerge disabled and tests enabled. Review the publication/qualification receipt for the proposed digest before merging.
 
-Merging this build layer starts its first publication because it changes `Dockerfile.caddy`. Subsequent automatic publication requires a change to that file or `.dockerignore`; qualification scripts, workflow/tooling changes, Compose/Hermes updates and repository policy edits alone do not publish another image. The separate broad PR scope still qualifies those changes. A main-only manual workflow dispatch deliberately republishes after a workflow/qualification change or repairs a missed build.
+The [image workflow](../../../.github/workflows/hermes-caddy-image.yaml) builds and qualifies on disposable GitHub-hosted native Linux amd64 runners without production credentials. The [qualifier](caddy/qualify.sh) exercises the non-root port-443 bind, curl health command, trusted TLS and WebSocket/PTY forwarding with synthetic state, and confirms that adding init breaks the current privileged-bind contract. Only `Dockerfile.caddy` or `.dockerignore` changes trigger automatic publication; configuration changes still trigger PR qualification. The publisher qualifies the returned immutable root before copying it unchanged to `candidate`, with source/run provenance. These checks do not prove guest acceptance, and branch protection does not currently enforce them. The Dockerfile's core/module pins remain Renovate-managed; this delivery change does not add BuildKit `driver-opts` tracking, which remains work in #1074.
 
-The reusable image contains Caddy with the Cloudflare DNS module and a non-root UID/GID 1000 runtime; the deployment supplies the Hermes configuration and credentials. The publisher writes a unique `ghcr.io/kelchm/home-lab/caddy-cloudflare:sha-<full-source>-run-<id>-attempt-<attempt>` using short-lived `GITHUB_TOKEN` package permission and `mode=max` provenance. It pulls and qualifies the exact returned root digest before copying that root unchanged to `candidate`. Immediately before promotion it compares only the two image inputs against current main. If they changed, candidate stays unchanged and the run warns how to repair a missed newer build. An obsolete or failed build may retain its unique tag for diagnosis. Publication is serialized after scope selection; there is no Git writer, arbitrary-ref publisher, daily repair or automated deployment. First publication requires owner approval. New GitHub packages default to private; public visibility is a separate approved operation that this workflow does not perform. The real registry copy path first runs after merge, so it remains unproven until that publication succeeds.
+### Standard doco-cd behavior
 
-The existing exact builder/runtime pins and Cloudflare version remain the initial inputs. Renovate tracks the annotated module version and groups builder/runtime core-release changes; same-release digest refreshes can proceed independently. Actual artifact checks reject release mismatches and module replacements. There is no separately regenerated module lock: exact direct versions and the immutable artifact inventory provide traceability, without claiming hermetic or byte-reproducible rebuilding. Owning this build does not remove upstream OS or Go dependency security lag. Dependency remediation remains a reviewed source change.
+[`.doco-cd.yml`](.doco-cd.yml) deploys only `hermes-caddy` and the separate `doco-cd` self target. [`doco-cd/compose.yaml`](doco-cd/compose.yaml) follows the lab's pinned 0.130.0 bootstrap/self-update pattern and polls public `main` every three minutes. It uses the normal Docker-socket and `/var/lib/doco-cd` data mounts, plus a read-only bind of the existing `/srv/caddy/.env` file at the same absolute path so the Compose loader can read it. Keep the file root-owned and `0600`; the deployer has Docker-daemon authority. No token or ACME-state migration is required. Relative Caddyfile binds resolve from doco-cd's commit export; persistent `/data` and `/config` remain the host's existing `/srv/caddy/data` and `/srv/caddy/config`, owned by numeric 1000:1000.
 
-These CI results are validation and review evidence; main currently has no branch-protection rule enforcing them. The next stack layer will add digest delivery and the bounded guest updater **after a real canonical artifact exists**. It must preserve normal Compose commands, reviewed Git digest rollback, healthy certificate renewal and the current runtime contract. Promotion PRs must explicitly disable automerge and run tests; this preparation does not enable source-update automerge. Public visibility, a standing promotion-merge rollout policy, paused guest installation, and attended TLS/dashboard/WebSocket/PTY commissioning remain owner gates. No live acceptance box in #1074 is complete from a successful build alone.
+Pinned doco-cd has [no service selector](https://github.com/kimdre/doco-cd/blob/5d001f9489b3aa97eb176e7eb80c2ba2fbe751c1/internal/config/deploy/deploy.go#L60-L95): failed deployments can force-recreate the whole project. The separate Caddy project keeps Hermes outside deployment, orphan removal and retries, following the [monitoring/GPU split](../../../sparks/monitoring/.doco-cd.yml). The Caddy target uses `timeout: 5m`, `retry: {limit: 1, delay: 5m}`, `reconciliation: false` and `prune_images: false`. One retry is eligible at least five minutes after failure on a subsequent poll. This is not a lifetime retry bound: a new revision/effective configuration, including an unrelated merge, or a deployer restart resets eligibility. See the pinned [retry settings](https://github.com/kimdre/doco-cd/blob/5d001f9489b3aa97eb176e7eb80c2ba2fbe751c1/wiki/docs/Deploy-Settings.md#retry-settings).
+
+Images pull before recreation, so pull failure leaves the existing Caddy running. After recreation, the native health gate requires three consecutive running/healthy samples one second apart; the five-minute timeout accommodates the existing two-minute healthcheck start period, not a soak test or a downtime bound. An ordinary failure is logged and does **not** restore the previous Caddy image. There is no ongoing reconciliation or independent outage watchdog. HTTPS can remain unavailable until a fix or Git revert; Hermes stays running. Native Apprise notifications are not configured, so there is no claimed push-alert delivery. The deployer's native self-update recovery is separate from Caddy recovery; use the [self-update runbook](../../../docs/runbooks/doco-cd-self-update.md) for its handover/recovery behavior.
 
 ## Operations
 
-Stage this directory at `/opt/hermes` on the guest, keeping `managed/` root-owned and not writable by UID 1000. The deploy recreates both containers, so a managed-configuration change takes effect with the deploy. `/srv/caddy/.env` must already contain `CLOUDFLARE_API_TOKEN` with mode `0600` and root ownership. Caddy's two state directories must remain owned by its numeric runtime identity:
+Keep the manually operated application copy in `/opt/hermes`, with `managed/` root-owned and not writable by UID 1000. Keep a separate deployer bootstrap/recovery copy in `/opt/doco-cd`. doco-cd does not refresh these local copies; refresh them from a reviewed Git revision before manual operation. Never run a project-wide `down` or `--remove-orphans` against the old combined definition during adoption.
+
+For a separately authorized Hermes image or managed-configuration update, stage its reviewed files and use plain Compose. Recreation loads the managed configuration without touching Caddy:
 
 ```sh
-ssh kelchm@hermes.home.kelch.io 'sudo install -d -o 1000 -g 1000 -m 0750 /srv/caddy/data /srv/caddy/config && sudo chown -R 1000:1000 /srv/caddy/data /srv/caddy/config && cd /opt/hermes && sudo docker compose pull hermes && sudo docker compose build --pull caddy && sudo docker compose up -d --force-recreate'
+cd /opt/hermes
+sudo docker compose pull hermes
+sudo docker compose up -d --force-recreate hermes
 ```
 
-### Recreate only Caddy from its running image
+### One-time attended Caddy adoption
 
-Use this procedure for a separately reviewed Caddy container-setting change, such as its healthcheck. First qualify the change locally against a real port-443 bind, with `net.ipv4.ip_unprivileged_port_start` set to 1024 as on the guest, under the same non-root user, capabilities and `no-new-privileges` setting. `init: true` fails that bind with the current image and must remain disabled. Merging the configuration does not change the guest. Recreating Caddy briefly interrupts HTTPS; obtain approval for that interruption. The full deployment command above also builds images and recreates Hermes, so use the targeted command below for this operation.
+Run only during separately authorized installation. Stage the merged files before starting the deployer. Expect a brief HTTPS interruption when replacing Caddy; leave Hermes running throughout.
 
-1. On the guest, record Caddy's image ID, init setting and container start time, Hermes's container ID and start time, and the served certificate's SHA-256 fingerprint. Stop if the guest differs unexpectedly from the reviewed rollout state. Keep `/srv/caddy/data`, `/srv/caddy/config`, `Caddyfile`, the managed Hermes configuration and both runtime environment files unchanged.
-2. In `/opt/hermes`, save the current compose with `sudo cp -p compose.yaml compose.yaml.pre-caddy-recreate`. Stage the reviewed, merged `compose.yaml`, preserving its owner and mode. Check that the diff against the saved file contains only the reviewed Caddy change. Keep the saved file until acceptance passes.
-3. Run on the guest. The image name in compose is `localhost/hermes-caddy`; this supplies its `latest` tag from the already-running image if needed. A conflicting tag requires reconciliation before proceeding. Builds and pulls are disabled, and dependencies are not recreated.
+1. Record the running Caddy image ID/reference and Compose project label, Hermes container ID/start time, and current served certificate fingerprint. Save the old combined `compose.yaml` as `/opt/hermes/compose.yaml.pre-caddy-adoption` before replacing it. Keep the old project name for recovery. Verify `/srv/caddy/.env` is still root-owned/0600 and both state directories remain 1000:1000; do not copy, print or replace credentials or ACME state.
+2. Stage the reviewed `compose.yaml`, `compose.caddy.yaml`, unchanged `Caddyfile` and `managed/` in `/opt/hermes`, and `doco-cd/compose.yaml` as `/opt/doco-cd/compose.yaml`. Preserve the running image under a local recovery tag and pre-pull both new images **before** touching the old Caddy. Run on the guest:
 
    ```sh
    set -eu
    cd /opt/hermes
-   CADDY_IMAGE_ID=$(sudo docker inspect -f '{{.Image}}' hermes-caddy)
-   CADDY_TAG_ID=$(sudo docker image inspect -f '{{.Id}}' localhost/hermes-caddy:latest 2>/dev/null || true)
-   if [ -n "$CADDY_TAG_ID" ] && [ "$CADDY_TAG_ID" != "$CADDY_IMAGE_ID" ]; then
-     printf '%s\n' 'Caddy latest tag differs from the running image; stop and reconcile.' >&2
-     exit 1
-   fi
-   sudo docker image tag "$CADDY_IMAGE_ID" localhost/hermes-caddy:latest
-   sudo docker compose up -d --no-deps --no-build --pull never caddy
+   sudo docker inspect -f '{{.Image}} {{.Config.Image}} {{index .Config.Labels "com.docker.compose.project"}}' hermes-caddy
+   sudo docker inspect -f '{{.Id}} {{.State.StartedAt}}' hermes
+   sudo docker image tag "$(sudo docker inspect -f '{{.Image}}' hermes-caddy)" localhost/hermes-caddy:recovery
+   sudo docker compose -f compose.caddy.yaml pull caddy
+   sudo docker compose -f /opt/doco-cd/compose.yaml pull
    ```
 
-4. Measure the HTTPS interruption by polling `/api/status`. Verify Caddy uses the same image ID, serves HTTPS on port 443 and becomes healthy. Record its actual init setting and PID 1; the current baseline has init unset and Caddy as PID 1. For a process-leak fix, require several natural 30-second healthchecks without accumulating zombie children and a process count near its thread count. The healthcheck has a two-minute start period. Confirm the served certificate fingerprint and Hermes's container ID and start time are unchanged. The ten-second stop timeout does not bound startup or recovery time if the new container fails. If Caddy logs a bind error or is restarting, or if HTTPS has not returned within 30 seconds, roll back at once rather than waiting through the restart loop.
-5. If acceptance fails, restore the saved compose and recreate only Caddy from the same local image, with no build or pull:
+3. Only after successful pulls, remove just the old Caddy container to release its fixed name and port 443. Start Caddy under its new project identity without a build or another pull:
 
    ```sh
    cd /opt/hermes
-   sudo cp -p compose.yaml.pre-caddy-recreate compose.yaml
-   sudo docker compose up -d --no-deps --no-build --pull never caddy
+   sudo docker stop hermes-caddy
+   sudo docker rm hermes-caddy
+   sudo docker compose -f compose.caddy.yaml up -d --no-build --pull never --wait --wait-timeout 300 caddy
    ```
 
-A Caddy-only restart clears existing zombies but does not change the healthcheck. Updating the Caddy image and automating its rollout remain separate work in [#1074](https://github.com/kelchm/home-lab/issues/1074).
+4. Verify Caddy's exact image and `com.docker.compose.project=hermes-caddy`, UID/GID 1000, init unset, healthy status, existing certificate reuse, and unchanged Hermes ID/start time. Check a fresh trusted TLS handshake, dashboard sign-in, authenticated `/api/ws` and `/api/pty` upgrades and traffic. Confirm natural curl healthchecks do not accumulate zombie children. Record evidence in #1074 without credentials. On failure, use the recovery below before proceeding.
+5. After Caddy passes, bootstrap the deployer with `sudo docker compose -f /opt/doco-cd/compose.yaml up -d`. Allow native self-takeover; inspect final deployer health, successful repository polls, and `cd.doco.deployment.target.sha`/`cd.doco.deployment.name` labels on both targets. A bootstrap `up` result alone does not prove takeover. Check logs with `sudo docker logs --since 10m doco-cd`, and confirm Hermes still has its original ID/start time. Later acceptance must include a real Renovate-originated Caddy update; this procedure alone does not close #1074.
+
+### Git revert and break-glass recovery
+
+For a bad promotion, merge a normal Git revert of the digest change (or restore the prior digest in a reviewed fix). The new revision becomes eligible on the next successful poll even after retry exhaustion. Revert any accompanying bad configuration as needed; this restores configuration, not persistent data. Record the prior image and retain it locally before an attended update; `prune_images: false` avoids deployer pruning but does not protect against manual Docker pruning.
+
+For immediate manual recovery, stop doco-cd if installed so it cannot reapply the bad desired state. Preserve its data and let any native self-update handover finish before manual deployer recovery. Use the saved known-good Compose definition and the recorded image, with the same token/state binds. For first-adoption recovery, remove only the failed new Caddy with `sudo docker rm -f hermes-caddy`, then save this ordinary override as `/opt/hermes/compose.caddy-recovery.yaml`:
+
+```yaml
+services:
+  caddy:
+    image: localhost/hermes-caddy:recovery
+```
+
+Set `OLD_CADDY_PROJECT` to the recorded old project name (normally `hermes`) and use the saved pre-adoption definition. `--no-deps` leaves Hermes alone:
+
+```sh
+cd /opt/hermes
+sudo docker compose -p "${OLD_CADDY_PROJECT:?set the recorded old project name}" -f compose.yaml.pre-caddy-adoption -f compose.caddy-recovery.yaml up -d --no-deps --no-build --pull never --wait --wait-timeout 300 caddy
+```
+
+After adoption, use a saved known-good `compose.caddy.yaml` and the same image override with `docker compose -f compose.caddy.yaml -f compose.caddy-recovery.yaml up -d --no-deps --no-build --pull never --wait --wait-timeout 300 caddy`. Recheck TLS/dashboard/WS/PTY and Hermes continuity. Keep the deployer stopped until Git declares the recovered image/configuration, then return Caddy to the `hermes-caddy` project if initial adoption was undone, refresh local recovery copies, remove the override and resume the deployer. Do not delete state directories or fetch a new DNS token for an image rollback.
 
 ### Hermes configuration and service checks
 
