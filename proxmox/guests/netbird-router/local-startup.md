@@ -1,8 +1,18 @@
 # Node-local NetBird startup snippet
 
-**Prepared, not installed.** [#1096](https://github.com/kelchm/home-lab/issues/1096) removes VM 103's NAS vendor-snippet dependency. Matt approved the design on 2026-10-28; installation and live acceptance still need separate authorization. This procedure does not upgrade NetBird, rename the VM or snippet, restart anything, regenerate the running cloud-init drive, or change NetBird Cloud/UniFi policy. The approved order is this repair, a second routing peer ([#1097](https://github.com/kelchm/home-lab/issues/1097)), then router upgrades.
+**Installed; host-boot acceptance untested.** Matt separately authorized installation and verification for [#1096](https://github.com/kelchm/home-lab/issues/1096), completed on 2026-10-29. No upgrade, rename, restart, running cloud-init-drive regeneration or NetBird Cloud/UniFi policy change occurred. The approved order remains this repair, a separately approved second routing peer ([#1097](https://github.com/kelchm/home-lab/issues/1097)), then router upgrades after the two-peer baseline.
+
+## Accepted installation, 2026-10-29
+
+Installation ran at 11:56:13–11:56:14.96 UTC, with the after-capture at 11:56:28 UTC. VM 103 now saves `vendor=local:snippets/netbird-pilot-router.yaml`. Its only configuration changes were `cicustom` and the digest. `/var/lib/vz/snippets/netbird-pilot-router.yaml` is 1517 bytes, `root:root 0644`, in a `root:root 0755` directory; its SHA-256 is `1c45c56620287cce1825e8af4ed7a03c7f316dd7a10744a5ad102a06a14dc52a`, identical to the frozen repository vendor file and retained NAS source. The NAS source remains `1024:100 0644`, with its bytes and metadata unchanged. Cluster-wide `local` storage gained only `snippets`, retaining every previous content flag; the file was provisioned only on node 1.
+
+The saved current/effective VM configurations agree, with no VM pending changes. The cloud-init image correctly retains one old-current NAS → new-pending local vendor row; the running medium was not regenerated. Generated user/network/meta hashes and instance ID below, hostname, NetBird 0.79.0, profile hash, enrolled Cloud peer ID, overlay and resource prefixes stayed unchanged, with Management and Signal connected. QEMU PID 2364, start ticks 12138 and the host boot stayed the same while uptime advanced. No active PVE tasks were present at any of the three checkpoints. Root independently verified all 145 installation evidence hashes and the before/after invariants, accepting installation only. No reboot, restart, NAS outage or rollback occurred; #1096 stays open and #625/P6 remains uncredited until the next separately authorized planned host boot.
+
+The earlier source-ownership guard and SSH pre-login stops remain historical failed receipts, superseded for current status by this successful installation. They did not require a NAS ownership change. Private receipts are retained under installation run `20261029T115334Z-857af1f4`; this records no new live acceptance.
 
 ## Verified starting point
+
+This is the historical pre-installation baseline for the reviewed commands below, not the current saved state. Do not rerun the existing-VM installation against the installed configuration; use the separate destination provisioning section for an authorized restore, migration or rebuild.
 
 Read-only checks on `pve-sbx-1` at 2026-10-29 02:40–02:51 UTC found VM 103 running (QEMU PID 2364), still named `netbird-pilot-router`, running NetBird 0.79.0 with Management and Signal connected. Its root, EFI and cloud-init disks are all on `local-lvm`; only `cicustom` names NAS storage. Both the current and effective VM configurations agree, with no VM or cloud-init changes pending. `hotplug` is unset, so its effective default is `network,disk,usb`, without `cloudinit`.
 

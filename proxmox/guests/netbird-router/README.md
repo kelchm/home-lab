@@ -2,7 +2,7 @@
 
 VM 103 is NetBird's only routing peer. It carries traffic from away clients to the household HTTPS, admin HTTPS and DNS resources. NetBird Cloud objects, client ownership, access verification and recovery limits are in the [NetBird runbook](../../../docs/runbooks/netbird-remote-access.md); setup and qualification are tracked in [#625](https://github.com/kelchm/home-lab/issues/625).
 
-Read back on 2026-10-27, with the backup/protection changes verified on 2026-10-28:
+Read back on 2026-10-27, with backup/protection changes verified on 2026-10-28 and node-local snippet installation and the first scheduled post-enrollment backup verified on 2026-10-29:
 
 | Setting | Value |
 |---|---|
@@ -19,7 +19,7 @@ Main cannot reach the VM's SSH. Manage it with `qm guest exec 103` from `pve-sbx
 
 ## Vendor data
 
-[`vendor-data.yaml`](vendor-data.yaml) is byte-identical to the live snippet `library-pve:snippets/netbird-pilot-router.yaml`. Both had SHA-256 `1c45c56620287cce1825e8af4ed7a03c7f316dd7a10744a5ad102a06a14dc52a` on 2026-10-29. The reference still points to NAS storage. A [byte-identical node-local replacement](local-startup.md) is prepared for #1096, **not installed**. It changes only the vendor storage reference, retaining the current filename and identity; installation and acceptance remain separately gated. It does the following:
+[`vendor-data.yaml`](vendor-data.yaml) is byte-identical to the installed snippet referenced by VM 103's saved `local:snippets/netbird-pilot-router.yaml` and the retained NAS source `library-pve:snippets/netbird-pilot-router.yaml`. All have SHA-256 `1c45c56620287cce1825e8af4ed7a03c7f316dd7a10744a5ad102a06a14dc52a`. The [node-local replacement](local-startup.md#accepted-installation-2026-10-29) was installed and verified on 2026-10-29 without a restart or running-medium regeneration, preserving hostname, instance ID, enrolled peer identity and NetBird 0.79.0. The cloud-init image still shows the expected old NAS value with the local value pending until a normal start; autostart acceptance remains untested in #1096. The vendor data does the following:
 
 - installs `ca-certificates`, `curl`, `qemu-guest-agent` and `tcpdump`;
 - enables IPv4 forwarding;
@@ -27,7 +27,7 @@ Main cannot reach the VM's SSH. Manage it with `qm guest exec 103` from `pve-sbx
 
 It contains no credentials or enrollment material. If NetBird rotates its repository key, the check fails and the bootstrap stops before installing anything. Update the pin only after confirming the new key from NetBird's documentation.
 
-Treat snippet edits as a separate reviewed change; do not change its contents during the node-local startup repair. Compare this file with the currently referenced snippet:
+Treat snippet edits as a separate reviewed change. The installed copy and retained NAS source were verified byte-identical at installation; the commands below compare the repository file with that retained NAS source:
 
 ```sh
 shasum -a 256 proxmox/guests/netbird-router/vendor-data.yaml
@@ -36,7 +36,7 @@ ssh kelchm@10.32.20.21 sudo sha256sum /mnt/pve/library-pve/snippets/netbird-pilo
 
 ## Restore
 
-Prefer a successful post-enrollment `daily-backups` archive to rebuilding. It restores the archived NetBird peer identity and installed version; if that identity is still enrolled, no setup key is needed. As of 2026-10-28, the only verified archive is from 2026-09-27 at 05:00, before enrollment at about 15:28 that day. It cannot restore the current enrolled identity. The first new scheduled backup still needs verification in #625. This restore procedure has not been drilled. While VM 103 is down, NetBird has no routed remote path. Run the following on `pve-sbx-1` through a reachable admin session on Main, with someone at home.
+Prefer a successful post-enrollment `daily-backups` archive to rebuilding. The restore procedure is intended to recover the archived NetBird peer identity and installed version; if that identity remains enrolled, no setup key is needed. The first scheduled post-enrollment backup was verified on 2026-10-29: `backups-pve-sbx:backup/vzdump-qemu-103-2026_10_29-05_00_02.vma.zst`, 623,690,275 bytes, VM 103 backup 09:00:02–09:00:17 UTC, enclosing task `OK` at 09:01:44 UTC. It follows enrollment on September 27 at about 15:28; the older September 27 05:00 archive predates enrollment. Today's archive predates the 11:56 UTC local-snippet installation. It was not unpacked, restored or booted, so neither its saved vendor reference nor identity recovery was verified by this check. Restore remains undrilled. While VM 103 is down, NetBird has no routed remote path. Run the following on `pve-sbx-1` through a reachable admin session on Main, with someone at home.
 
 ```sh
 sudo pvesm list backups-pve-sbx --vmid 103
@@ -46,7 +46,7 @@ sudo qmrestore /mnt/pve/backups-pve-sbx/dump/<post-enrollment-archive> 103 --for
 sudo qm set 103 --protection 1
 ```
 
-Before `qm start`, read the restored `cicustom` and resolve every referenced snippet with `sudo pvesm path <volume-id>`. Require the resolved files to exist; compare the vendor file’s SHA-256 with the pinned repository copy, and validate any additional custom files against their reviewed archive inputs. Snippets are external files, not restored by the VM disk archive. Older archives still name `library-pve:snippets/netbird-pilot-router.yaml`: keep that NAS file available while those archives remain. Archives made after a future #1096 installation will name `local:snippets/netbird-pilot-router.yaml`; enable `snippets` on `local` and place the byte-identical root-owned file on the chosen restore node before starting, using the [destination provisioning checks](local-startup.md#provision-on-another-node), without running the existing-VM reference-change commands. Preserve the existing cluster-wide content flags rather than assuming they still match the pre-installation baseline. Cluster-wide storage configuration does not copy the node-local file. Keep all other restored settings intact; do not combine identity recovery with an unreviewed snippet-path change. Never start a restored copy beside the original enrolled peer.
+Before `qm start`, read the restored `cicustom` and resolve every referenced snippet with `sudo pvesm path <volume-id>`. Require the resolved files to exist; compare the vendor file’s SHA-256 with the pinned repository copy, and validate any additional custom files against their reviewed archive inputs. Snippets are external files, not restored by the VM disk archive. Older archives still name `library-pve:snippets/netbird-pilot-router.yaml`: keep that NAS file available while those archives remain. For an archive naming `local:snippets/netbird-pilot-router.yaml`, enable `snippets` on `local` and place the byte-identical root-owned file on the chosen restore node before starting, using the [destination provisioning checks](local-startup.md#provision-on-another-node), without running the existing-VM reference-change commands. Preserve the existing cluster-wide content flags rather than assuming they still match the pre-installation baseline. Cluster-wide storage configuration does not copy the node-local file. Keep all other restored settings intact; do not combine identity recovery with an unreviewed snippet-path change. Never start a restored copy beside the original enrolled peer.
 
 After the snippet-reference checks pass, start it with `sudo qm start 103`. PVE refuses to restore over a protected or running VM. Don't pass `--unique`: the new MAC address it assigns is part of the cloud-init network data, so the next start would become a new cloud-init instance and upgrade NetBird (see [below](#cloud-init-settings-upgrade-netbird)). Then verify `netbird status`, the existing peer enrollment and the router probes described below. Re-enroll only if the restored identity is no longer enrolled.
 
@@ -54,7 +54,7 @@ After the snippet-reference checks pass, start it with `sudo qm start 103`. PVE 
 
 The original creation commands were not recorded. The steps below reproduce the configuration that was read back. While VM 103 is down, NetBird has no routed remote path, so rebuild it from Main with someone at home.
 
-1. Choose the snippet reference explicitly. The commands below reproduce the **current NAS-backed baseline**, which retains the startup dependency in #1096. For a rebuild after the separately authorized node-local repair, enable `snippets` on `local`, provision the byte-identical root-owned file on the chosen node using the [destination provisioning checks](local-startup.md#provision-on-another-node), and substitute `vendor=local:snippets/netbird-pilot-router.yaml` below. Do not run the existing-VM installation commands against a newly rebuilt VM. For the current baseline, verify the NAS copy against `vendor-data.yaml`; if missing, restore that exact file to `/mnt/pve/library-pve/snippets/netbird-pilot-router.yaml`. Retain it for older archives in either case.
+1. Choose the snippet reference explicitly. The commands below retain the original NAS-backed reference. To reproduce the installed node-local configuration, enable `snippets` on `local`, provision the byte-identical root-owned file on the chosen node using the [destination provisioning checks](local-startup.md#provision-on-another-node), and substitute `vendor=local:snippets/netbird-pilot-router.yaml` below. Do not run the existing-VM installation commands against a newly rebuilt VM. If deliberately using the NAS-backed reference, verify the NAS copy against `vendor-data.yaml`; if missing, restore that exact file to `/mnt/pve/library-pve/snippets/netbird-pilot-router.yaml`. Retain it for older archives in either case.
 2. If a broken VM 103 still exists, confirm its name and node, turn off protection with `sudo qm set 103 --protection 0`, then remove it: `sudo qm destroy 103 --purge 1 --destroy-unreferenced-disks 1`.
 3. On `pve-sbx-1`, write the operator key from `sudo qm config 200` (its `sshkeys` value, URL-decoded) to a file, then run:
 
