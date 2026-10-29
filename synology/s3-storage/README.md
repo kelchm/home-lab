@@ -8,7 +8,9 @@ State as of 2026-10-29 UTC: the NAS foundation is deployed and accepted (#1077, 
 
 Both restricted database accounts exist and own their respective buckets. Each passed a five-part, 40,000,000-byte upload/download with matching SHA-256, deletion confirmed by a subsequent 404, and `AccessDenied` for both listing and writing the other bucket. The disposable objects were deleted. All 12 pre-existing containers retained their IDs, start times and restart counts.
 
-The NAS acceptance above does not establish database or off-site recovery. Merging the database layer (#816) adds the cluster backup alerts and Kopia source, then activates Visionect while Bambuddy is held for separate acceptance. Follow the database runbook's staged checks and record each accepted database and completed Kopia snapshot here afterwards; while any step is pending, keep that limit explicit. The real-data restore remains a separate gate. [First deployment](#first-deployment) remains the NAS rebuild procedure and acceptance checklist.
+The database layer (#816, merged as `653afc37`) is now active. Visionect passed first, then Bambuddy resumed and passed: each has a completed manual base backup, a nonzero last-backup metric and advancing WAL objects after at least 15 minutes of observation. The accepted backup IDs are `20261029T013554` for Visionect (PostgreSQL 17.11) and `20261029T020738` for Bambuddy (18.6). Both applications are healthy; their application pods were not restarted. #1095 added `::/0` HBA rejection, and live no-credential self-probes confirmed both storage IPv4 and IPv6 rejection. Details and exact backup names are in the [runbook’s acceptance record](../../docs/runbooks/cnpg-backup-restore.md).
+
+Kopia’s read-only `/sources/object-storage` mount is present, but no completed snapshot of that source was observed at database sign-off on 2026-10-29; the next normal run is 10:00 UTC. Verify its base/WAL contents before claiming an off-site recovery point. Real-data restore remains a separate gate under #224/#782. [First deployment](#first-deployment) remains the NAS rebuild procedure and acceptance checklist.
 
 ## What is where
 
@@ -31,7 +33,7 @@ The share is not tied to one system. A bucket is named `<system>-<workload>` and
 
 versitygw is not published. Only Traefik listens, and it forwards to the gateway over the project's private network. The gateway's admin API listens on the container's loopback, so it is reachable only with `docker exec`.
 
-The endpoint is on the storage VLAN only. Pods on `k8s-prod` cannot reach that VLAN through Cilium, which masquerades pod traffic only on the node's primary interface: measured on 2026-10-12, an ordinary pod timed out on `10.32.25.5:2049` and `:8090`. The database layer gives the pods a second interface on the storage bridge, from the [`cnpg-system/storage-network`](../../kubernetes/apps/cnpg-system/plugin-barman-cloud/app/networkattachmentdefinition.yaml) attachment, with addresses in `10.32.25.160/28`. A scratch database pod attached that way connected to both ports; the real attachments still require activation acceptance.
+The endpoint is on the storage VLAN only. Pods on `k8s-prod` cannot reach that VLAN through Cilium, which masquerades pod traffic only on the node's primary interface: measured on 2026-10-12, an ordinary pod timed out on `10.32.25.5:2049` and `:8090`. The database layer gives the pods a second interface on the storage bridge, from the [`cnpg-system/storage-network`](../../kubernetes/apps/cnpg-system/plugin-barman-cloud/app/networkattachmentdefinition.yaml) attachment, with addresses in `10.32.25.160/28`. A scratch database pod attached that way connected to both ports. During 2026-10-29 live acceptance, Visionect used `10.32.25.160` and Bambuddy `.161` to upload their base backups and WAL to this endpoint.
 
 ## Credentials
 

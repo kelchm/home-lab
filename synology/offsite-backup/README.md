@@ -24,6 +24,8 @@ Sources:
 | `/sources/longhorn` | `/volume1/backups-k8s-prod/longhorn` | Longhorn backup store for `k8s-prod` |
 | `/sources/object-storage` | `/volume1/object-storage` | Every bucket of the [`s3-storage`](../s3-storage/README.md) object store; today the CloudNativePG base backups and WAL |
 
+As of 2026-10-29 UTC, `/sources/object-storage` is mounted read-only and both live databases have accepted base backups and advancing WAL on Athena. No completed Kopia snapshot of this new source was observed at database sign-off; the next normal run is 10:00 UTC. Verify a completed snapshot contains the accepted base backups and required WAL before relying on its off-site recovery point; a CNPG restore from B2 is also undrilled. The [database runbook](../../docs/runbooks/cnpg-backup-restore.md) records the backup IDs and remaining gates.
+
 To add a source, mount another share read-only under `/sources/`. It is picked up on the next run.
 
 Every source shares this one repository, and with it one lock period, one password and one key. Data that needs a different lock period or its own password gets a second repository under its own prefix; repositories do not deduplicate against each other. The lock period for new uploads can be changed with `kopia repository set-parameters --retention-period`, but a lock already applied to an object can only be extended.
