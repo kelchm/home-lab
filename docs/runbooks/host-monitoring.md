@@ -102,6 +102,29 @@ sops decrypt --extract '["metrics-ingest-token"]' <rpi-nixos>/secrets/<host>.yam
 
 Then add the host's `VMUser` with `platform=pi`. The vendor kernel ships with pressure stall information off; the profile turns it on at boot, so `NodeMemoryStalled` covers a Pi only after its first reboot with the profile. To remove a Pi, drop the profile from its configuration and delete its `VMUser`.
 
+### Local time service
+
+[rpi-nixos #26](https://github.com/kelchm/rpi-nixos/pull/26) was deployed and accepted on both UPS Pis on 2026-10-30 for [#1031](https://github.com/kelchm/home-lab/issues/1031): `ups-compute-rack` (`10.32.20.111`, generation 14) and `ups-office` (`10.32.20.112`, generation 8). Each runs stock chrony and scrapes its loopback exporter as `pi-chrony`, using its existing token and VMAuth identity. Time serving, tracking/source metrics and repeated fresh stored samples passed; the existing collectors and UPS monitoring remained healthy. Neither Pi rebooted or restarted its UPS services. Gateway access, DHCP advertisement and Talos client changes remain separate work; this rollout changed none of them.
+
+Both Pis served usable NTP replies while synchronized to public sources alone and to the dish alone. These checks temporarily made the other source group ineligible with native `noselect` options, then restored all flags and brought every source online before persistence. They verify source-group usability, not automatic failover timing. In the earlier short dish-loss test, chrony retained its last good dish reference despite reachable public peers: [normal source selection can remain in holdover for hours](https://chrony-project.org/faq.html#_an_unreachable_source_is_selected). A physical WAN outage and client failover have not been tested.
+
+`NodeCollectorDown` covers a failed `pi-chrony` scrape after ten minutes. With the scrape working, `NTPNotSynchronized` warns after ten minutes of incomplete chrony data, an unsynchronized stratum, or a reference timestamp more than an hour old. This last case detects prolonged holdover without treating every missed source poll as an outage. `NTPClockErrorHigh` warns when the estimated system-clock error exceeds one second for fifteen minutes while chrony reports a synchronized stratum. Both warnings use the existing Alertmanager/Pushover route. Notification depends on the cluster and ingestion path; it is not independent of them.
+
+Use the existing Grafana VictoriaMetrics data source to inspect:
+
+```promql
+chrony_up{job="pi-chrony"}
+chrony_tracking_info{job="pi-chrony"}
+chrony_sources_state_info{job="pi-chrony"}
+chrony_sources_reachability_ratio{job="pi-chrony"}
+chrony_sources_last_sample_age_seconds{job="pi-chrony"}
+abs(chrony_tracking_system_time_seconds{job="pi-chrony"}) + chrony_tracking_root_dispersion_seconds{job="pi-chrony"} + 0.5 * chrony_tracking_root_delay_seconds{job="pi-chrony"}
+```
+
+The last expression follows [chrony's tracking error estimate](https://chrony-project.org/doc/4.8/chronyc.html#tracking) and assumes the reference clock is correct. Neither RMS offset, stratum nor this estimate proves calibrated UTC accuracy. Dish and public-source reachability are separate series, so a single-source failure need not mean loss of service. On the affected Pi, use `sudo chronyc -n tracking`, `sudo chronyc -n sources -v`, and `journalctl -u chronyd -u prometheus-chrony-exporter`; source fallback and rollback follow the [NixOS procedure](https://github.com/kelchm/rpi-nixos#local-time-servers). A zero `chrony_up` can reflect any enabled collector request failing, even when tracking still looks healthy. These exporter errors are logged only at Debug; the ordinary journal may not explain them. Reproduce the local reads with `sudo chronyc -n tracking`, `sudo chronyc -n sources -v`, `sudo chronyc serverstats` and `sudo chronyc -n ntpdata <source-IP>`. Check the other server before changing clients.
+
+After changing a server or these rules, verify fresh `up` and `chrony_up` values of 1 for both instances, populated tracking/source metrics, and the loaded rules with no unexpected firing warning. Both warnings reuse the existing warning-to-Pushover route. Use the [existing synthetic delivery procedure](alerting.md#end-to-end-delivery-test) when diagnosing notification delivery; do not break either server's clock to test it. Actual WAN-outage operation and client failover remain #1031 acceptance work.
+
 ## GLKVM
 
 The recovery console runs no collector of its own. The cluster's vmagent scrapes kvmd's native export directly, as for the Proxmox API, with `instance="glkvm"` and `platform="glkvm"`. The appliance changes, metrics, alerts and acceptance checks are in the [GLKVM README](../../devices/glkvm/README.md#monitoring).
