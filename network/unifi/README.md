@@ -13,7 +13,7 @@ of truth and changes are applied manually.
 
 The "Firewall rules" and "IDS/IPS signature suppression" sections below distinguish applied state from intent for configuration that lives only in the UniFi UI; no exportable artifact lives in this repo.
 
-Local NTP client access and DHCP option 42 are prepared in the [local NTP runbook](../../docs/runbooks/local-ntp.md). Gateway/DHCP activation is pending fresh network, policy and route read-back; historical inventory here does not establish that those paths are permitted.
+The [local NTP runbook](../../docs/runbooks/local-ntp.md) records the 2026-10-30 network, DHCP, ordered-policy and WAN2 route read-back and proposes one narrow UDP 123 exception plus option 42 on seven DHCP networks. Gateway/DHCP activation and client acceptance remain pending; controller configuration alone does not prove client reachability or adoption.
 
 ## Remote Admin applied state
 
