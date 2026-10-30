@@ -25,7 +25,7 @@ spec:
           app:
             image:
               repository: ghcr.io/kelchm/digikey-mcp
-              tag: 0.1.1
+              tag: 0.1.1@sha256:019be1a81896a4325113a689735c7498efe503b49fa7a2e9999404ecfff6f981
             env:
               DIGIKEY_MCP_TRANSPORT: http
               DIGIKEY_MCP_HOST: 0.0.0.0

@@ -45,7 +45,7 @@ spec:
             image:
               # renovate: datasource=docker depName=ghcr.io/qdm12/gluetun
               repository: ghcr.io/qdm12/gluetun
-              tag: v3.41.3
+              tag: v3.41.3@sha256:fa19cc76b2af13d57a8d3dc3066f2ada061b1c761b8aecf989b3877c0486e027
             env:
               VPN_SERVICE_PROVIDER: protonvpn
               VPN_TYPE: wireguard
@@ -122,7 +122,7 @@ spec:
             image:
               # renovate: datasource=docker depName=ghcr.io/home-operations/qbittorrent
               repository: ghcr.io/home-operations/qbittorrent
-              tag: 5.3.0
+              tag: 5.3.0@sha256:5a858e61f94cf2712391db32ed03556576c700858f3e62c4c6fcde262443ebd8
             # Force umask 002 so qBittorrent writes files at 664
             # (group-writable). Required for *arr atomic-import hardlinks
             # across UIDs: protected_hardlinks blocks link() when the
