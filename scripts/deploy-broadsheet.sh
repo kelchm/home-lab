@@ -71,9 +71,9 @@ log info "Currently pinned: ${CURRENT:-<none>}"
 # --- wait for the image to exist in GHCR (anonymous pull token) ------------
 manifest_digest() {
     local tok
-    tok="$(curl -fsS "https://ghcr.io/token?scope=repository:${REG_REPO}:pull&service=ghcr.io" \
+    tok="$(curl -fsS --connect-timeout 10 --max-time 30 "https://ghcr.io/token?scope=repository:${REG_REPO}:pull&service=ghcr.io" \
         | python3 -c 'import json,sys;print(json.load(sys.stdin)["token"])')" || return 2
-    curl -fsSI -H "Authorization: Bearer ${tok}" \
+    curl -fsSI --connect-timeout 10 --max-time 30 -H "Authorization: Bearer ${tok}" \
         -H 'Accept: application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.docker.distribution.manifest.v2+json' \
         "https://ghcr.io/v2/${REG_REPO}/manifests/${1}" \
         | tr -d '\r' | awk 'tolower($1) == "docker-content-digest:" { print $2 }'
