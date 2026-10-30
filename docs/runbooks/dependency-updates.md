@@ -1,6 +1,6 @@
 # Dependency updates
 
-Renovate proposes updates according to [`.renovaterc.json5`](../../.renovaterc.json5), and the [dependency-triage skill](../../.agents/skills/dependency-triage/SKILL.md) covers landing them. This page covers holding a dependency back on purpose: which mechanism to use, how to write an exact-content lock, what a lock records, and how to read a failed lookup.
+Renovate proposes updates according to [`.renovaterc.json5`](../../.renovaterc.json5), and the [dependency-triage skill](../../.agents/skills/dependency-triage/SKILL.md) covers landing them. This page covers holding a dependency back on purpose: which mechanism to use, how to write an exact-content lock, what a lock records, and how to read a failed lookup. It also covers the [Renovate health](#renovate-health) alert.
 
 ## Choose the narrowest mechanism
 
@@ -93,6 +93,28 @@ When the Renovate Dashboard reports a failed lookup, such as `Could not determin
 3. If a digest-only reference resolves but has no lock record, determine whether its exact content must be held. Record the decision to lock it, or add a verified matching tag to opt into update tracking.
 
 Don't add a tag only to silence the warning. That turns a lock into a tracked dependency, and Renovate then proposes changes to content something depends on.
+
+## Renovate health
+
+The [Renovate Health workflow](../../.github/workflows/renovate-health.yaml) reads the [Renovate Dashboard](https://github.com/kelchm/home-lab/issues/2) daily at 13:17 UTC. A failed run is the alert: GitHub sends its workflow-failure notification to whoever last changed the cron line, provided that account has Actions notifications enabled. The check uses only the workflow's `GITHUB_TOKEN`, and each run's annotation names the failure:
+
+| Annotation | Meaning | Response |
+| --- | --- | --- |
+| `Renovate repository problem` | The dashboard has a Repository Problems section. | Follow its **View logs** link, and use [Read a failed lookup](#read-a-failed-lookup) for lookup failures. A registry or token error can clear on Renovate's next write, so rerun the workflow before fixing anything. |
+| `Renovate dashboard quiet` | The `renovate` bot has not written the dashboard for 72 hours. | Check the job list in the [Mend portal](https://developer.mend.io/github/kelchm/home-lab). Recent successful jobs mean the dashboard is simply unchanged, so no fix is needed. Otherwise check the Mend app installation, the repository's Renovate status and Mend's service status. |
+| `Renovate health unknown` | The GitHub API request failed, or issue #2 is closed or no longer looks like a dashboard. | This says nothing about Renovate. Read the message: rerun after an API, rate-limit or authentication failure, and restore the dashboard if it was closed or replaced. |
+
+Renovate [skips the write when the body is unchanged](https://github.com/renovatebot/renovate/blob/main/lib/modules/platform/github/index.ts), so a bot edit proves Renovate was running at that moment, and silence alone does not prove a missed run. Issue `updated_at` and human checkbox edits are not evidence of a run, so the check reads the attributed edit history instead. A true per-run signal needs Mend's job list, which is in the login-protected portal; Mend's hosted documentation describes no job API.
+
+The 72-hour limit comes from the dashboard's write rate. Between 2026-10-23 and 2026-10-30 Renovate wrote it 96 times with a longest gap of 11.3 hours, on weekdays as well as weekends: `schedule` holds back branches, not lookups, and upstream releases keep changing the body. The limit also catches a repository falling to [Mend's weekly schedule](https://docs.renovatebot.com/mend-hosted/job-scheduling/) for blocked jobs.
+
+Known limits:
+
+- The check samples once a day, so it can miss a problem that clears first. The one on 2026-10-30 was gone about two hours later.
+- A persisting failure notifies once per run until it clears.
+- GitHub can delay or drop scheduled runs, and nothing alerts if the check itself stops running.
+
+To test delivery, run `gh workflow run renovate-health.yaml -f drill=true`. The run fails on a bundled problem dashboard without reading or changing issue #2. Its notification goes to the account that dispatched it. [#1017](https://github.com/kelchm/home-lab/issues/1017) tracks delivery acceptance; offline tests cover the classification, not the notification.
 
 ## Review locks
 

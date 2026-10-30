@@ -1,0 +1,91 @@
+This issue lists Renovate updates and detected dependencies. Read the [Dependency Dashboard](https://docs.renovatebot.com/key-concepts/dashboard/) docs to learn more.<br>[View this repository on the Mend.io Web Portal](https://developer.mend.io/github/kelchm/home-lab).
+
+## Pending Approval
+
+The following branches are pending approval. To create them, click on a checkbox below.
+
+ - [ ] <!-- approve-branch=renovate/sparkrun-0.x -->feat(deps): update dependency sparkrun ( 0.3.10 ➔ 0.4.2 )
+
+## Awaiting Schedule
+
+The following updates are awaiting their schedule. To get an update now, click on a checkbox below.
+
+ - [ ] <!-- unschedule-branch=renovate/caddy-2.11.7-alpine -->chore(container): update image caddy ( eb4d35b ➔ e70b164 )
+ - [ ] <!-- unschedule-branch=renovate/caddy-2.11.7-builder-alpine -->chore(container): update image caddy ( ef9b65a ➔ 95a5e7e )
+ - [ ] <!-- unschedule-branch=renovate/docker.io-library-busybox-1.38.0 -->chore(container): update image docker.io/library/busybox ( fd7dc98 ➔ a46257e )
+ - [ ] <!-- unschedule-branch=renovate/docker.io-library-debian-13-slim -->chore(container): update image docker.io/library/debian ( 62bd423 ➔ f6b08b0 )
+ - [ ] <!-- unschedule-branch=renovate/docker.io-library-ubuntu-24.04 -->chore(container): update image docker.io/library/ubuntu ( 68ee220 ➔ fe81560 )
+ - [ ] <!-- unschedule-branch=renovate/jdx-mise-action-5.2.x -->ci(github-action): update action jdx/mise-action ( v5.2.3 ➔ v5.2.4 )
+ - [ ] <!-- unschedule-branch=renovate/astral-sh-uv-0.13.x -->ci(github-release): update release astral-sh/uv ( 0.13.5 ➔ 0.13.6 )
+ - [ ] <!-- unschedule-branch=renovate/docker.io-cloudflare-cloudflared-2026.10.x -->fix(container): update image docker.io/cloudflare/cloudflared ( 2026.10.3 ➔ 2026.10.7 )
+ - [ ] <!-- unschedule-branch=renovate/docker.io-library-python-3.15.x -->fix(container): update image docker.io/library/python ( 3.15.1 ➔ 3.15.2 )
+ - [ ] <!-- unschedule-branch=renovate/docker.io-library-traefik-3.7.x -->fix(container): update image docker.io/library/traefik ( v3.7.14 ➔ v3.7.16 )
+ - [ ] <!-- unschedule-branch=renovate/docker.io-prompve-prometheus-pve-exporter-3.10.x -->fix(container): update image docker.io/prompve/prometheus-pve-exporter ( 3.10.1 ➔ 3.10.2 )
+ - [ ] <!-- unschedule-branch=renovate/docker.io-rclone-rclone-1.75.x -->fix(container): update image docker.io/rclone/rclone ( 1.75.1 ➔ 1.75.2 )
+ - [ ] <!-- unschedule-branch=renovate/docker.io-samanhappy-mcphub-1.1.x -->fix(container): update image docker.io/samanhappy/mcphub ( 1.1.10 ➔ 1.1.14 )
+ - [ ] <!-- unschedule-branch=renovate/docker.io-valkey-valkey-7.2.x -->fix(container): update image docker.io/valkey/valkey ( 7.2.14 ➔ 7.2.15 )
+ - [ ] <!-- unschedule-branch=renovate/ghcr.io-averyy-pcbparts-mcp-2026.10.x -->fix(container): update image ghcr.io/averyy/pcbparts-mcp ( main-bff177e-20261025 ➔ main-39e8cdf-20261030 )
+ - [ ] <!-- unschedule-branch=renovate/ghcr.io-cmer81-open-meteo-mcp-2.5.x -->fix(container): update image ghcr.io/cmer81/open-meteo-mcp ( 2.5.4 ➔ 2.5.5 )
+ - [ ] <!-- unschedule-branch=renovate/ghcr.io-home-operations-prowlarr-2.6.x -->fix(container): update image ghcr.io/home-operations/prowlarr ( 2.6.5.5623 ➔ 2.6.6.5717 )
+ - [ ] <!-- unschedule-branch=renovate/ghcr.io-netbootxyz-netbootxyz-0.7.x -->fix(container): update image ghcr.io/netbootxyz/netbootxyz ( 0.7.6-nbxyz26 ➔ 0.7.6-nbxyz27 )
+ - [ ] <!-- unschedule-branch=renovate/ghcr.io-pando85-helm-charts-kaniop-0.19.x -->fix(container): update image ghcr.io/pando85/helm-charts/kaniop ( 0.19.1 ➔ 0.19.3 )
+ - [ ] <!-- unschedule-branch=renovate/ghcr.io-recyclarr-recyclarr-8.8.x -->fix(container): update image ghcr.io/recyclarr/recyclarr ( 8.8.0 ➔ 8.8.1 )
+ - [ ] <!-- unschedule-branch=renovate/ghcr.io-siderolabs-kubelet-1.36.x -->fix(container): update image ghcr.io/siderolabs/kubelet ( v1.36.5 ➔ v1.36.6 )
+ - [ ] <!-- unschedule-branch=renovate/ghcr.io-spegel-org-helm-charts-spegel-0.8.x -->fix(container): update image ghcr.io/spegel-org/helm-charts/spegel ( 0.8.0 ➔ 0.8.1 )
+ - [ ] <!-- unschedule-branch=renovate/ghcr.io-stakater-charts-reloader-2.2.x -->fix(container): update image ghcr.io/stakater/charts/reloader ( 2.2.18 ➔ 2.2.19 )
+ - [ ] <!-- unschedule-branch=renovate/siderolabs-talos-1.14.x -->fix(github-release): update release siderolabs/talos ( v1.14.4 ➔ v1.14.5 )
+ - [ ] <!-- unschedule-branch=renovate/aqua-cilium-cilium-cli-0.20.x -->fix(mise): update tool aqua:cilium/cilium-cli ( 0.20.1 ➔ 0.20.2 )
+ - [ ] <!-- unschedule-branch=renovate/aqua-cli-cli-2.103.x -->fix(mise): update tool aqua:cli/cli ( 2.103.2 ➔ 2.103.3 )
+ - [ ] <!-- unschedule-branch=renovate/aqua-cloudflare-cloudflared-2026.10.x -->fix(mise): update tool aqua:cloudflare/cloudflared ( 2026.10.3 ➔ 2026.10.7 )
+ - [ ] <!-- unschedule-branch=renovate/aqua-kubernetes-kubernetes-kubectl-1.37.x -->fix(mise): update tool aqua:kubernetes/kubernetes/kubectl ( 1.37.1 ➔ 1.37.2 )
+ - [ ] <!-- unschedule-branch=renovate/aqua-prometheus-alertmanager-0.34.x -->fix(mise): update tool aqua:prometheus/alertmanager ( 0.34.1 ➔ 0.34.2 )
+ - [ ] <!-- unschedule-branch=renovate/aqua-siderolabs-talos-1.14.x -->fix(mise): update tool aqua:siderolabs/talos ( 1.14.4 ➔ 1.14.5 )
+ - [ ] <!-- unschedule-branch=renovate/flux-operator -->feat(container): update flux-operator group (minor) (`ghcr.io/controlplaneio-fluxcd/charts/flux-instance`, `ghcr.io/controlplaneio-fluxcd/charts/flux-operator`, `ghcr.io/controlplaneio-fluxcd/charts/flux-operator-mcp`, `ghcr.io/controlplaneio-fluxcd/flux-operator-manifests`, `ghcr.io/controlplaneio-fluxcd/flux-operator-mcp`)
+ - [ ] <!-- unschedule-branch=renovate/docker.io-jellyfin-jellyfin-12.x -->feat(container): update image docker.io/jellyfin/jellyfin ( 12.3 ➔ 12.4 )
+ - [ ] <!-- unschedule-branch=renovate/docker.io-utkuozdemir-nvidia_gpu_exporter-1.x -->feat(container): update image docker.io/utkuozdemir/nvidia_gpu_exporter ( 1.15.1 ➔ 1.16.0 )
+ - [ ] <!-- unschedule-branch=renovate/docker.io-victoriametrics-vmagent-1.x -->feat(container): update image docker.io/victoriametrics/vmagent ( v1.154.1 ➔ v1.155.0 )
+ - [ ] <!-- unschedule-branch=renovate/ghcr.io-cyanheads-hn-mcp-server-0.x -->feat(container): update image ghcr.io/cyanheads/hn-mcp-server ( 0.5.22 ➔ 0.6.0 )
+ - [ ] <!-- unschedule-branch=renovate/ghcr.io-home-operations-lidarr-3.x -->feat(container): update image ghcr.io/home-operations/lidarr ( 3.1.6.5078 ➔ 3.2.0.5144 )
+ - [ ] <!-- unschedule-branch=renovate/ghcr.io-home-operations-prowlarr-2.x -->feat(container): update image ghcr.io/home-operations/prowlarr ( 2.6.5.5623 ➔ 2.7.0.5723 )
+ - [ ] <!-- unschedule-branch=renovate/ghcr.io-kimdre-doco-cd-0.x -->feat(container): update image ghcr.io/kimdre/doco-cd ( 0.130.0 ➔ 0.131.0 )
+ - [ ] <!-- unschedule-branch=renovate/ghcr.io-pando85-helm-charts-kaniop-0.x -->feat(container): update image ghcr.io/pando85/helm-charts/kaniop ( 0.19.1 ➔ 0.20.0 )
+ - [ ] <!-- unschedule-branch=renovate/ghcr.io-versity-versitygw-1.x -->feat(container): update image ghcr.io/versity/versitygw ( v1.8.0 ➔ v1.10.0 )
+ - [ ] <!-- unschedule-branch=renovate/quay.io-containers-kubernetes_mcp_server-0.x -->feat(container): update image quay.io/containers/kubernetes_mcp_server ( v0.0.69 ➔ v0.1.1 )
+ - [ ] <!-- unschedule-branch=renovate/quay.io-frrouting-frr-10.x -->feat(container): update image quay.io/frrouting/frr ( 10.3.4 ➔ 10.7.1 )
+ - [ ] <!-- unschedule-branch=renovate/kubernetes-sigs-gateway-api-1.x -->feat(github-release): update release kubernetes-sigs/gateway-api ( v1.6.3 ➔ v1.7.0 )
+ - [ ] <!-- unschedule-branch=renovate/grafana-14.x -->feat(helm): update chart grafana ( 14.0.1 ➔ 14.2.0 )
+ - [ ] <!-- unschedule-branch=renovate/prometheus-smartctl-exporter-0.x -->feat(helm): update chart prometheus-smartctl-exporter ( 0.17.1 ➔ 0.19.0 )
+ - [ ] <!-- unschedule-branch=renovate/traefik-42.x -->feat(helm): update chart traefik ( 42.1.3 ➔ 42.2.0 )
+ - [ ] <!-- unschedule-branch=renovate/victoria-metrics-k8s-stack-0.x -->feat(helm): update chart victoria-metrics-k8s-stack ( 0.96.1 ➔ 0.97.0 )
+ - [ ] <!-- unschedule-branch=renovate/aqua-fluxcd-flux2-2.x -->feat(mise): update tool aqua:fluxcd/flux2 ( 2.9.6 ➔ 2.10.0 )
+ - [ ] <!-- unschedule-branch=renovate/ubuntu-26.x -->ci(github-action)!: Update action ubuntu ( 24.04 ➔ 26.04 )
+ - [ ] <!-- unschedule-branch=renovate/ghcr.io-unpackerr-unpackerr-1.x -->feat(container)!: Update image ghcr.io/unpackerr/unpackerr ( v0.16.1 ➔ v1.0.1 )
+ - [ ] <!-- create-all-awaiting-schedule-prs -->🔐 **Create all awaiting schedule PRs at once** 🔐
+
+## Pending Status Checks
+
+The following updates await pending status checks. To force their creation now, click on a checkbox below.
+
+ - [ ] <!-- unpend-branch=renovate/astral-sh-setup-uv-10.3.x -->ci(github-action): update action astral-sh/setup-uv ( v10.3.2 ➔ v10.3.3 )
+ - [ ] <!-- unpend-branch=renovate/ghcr.io-renovatebot-renovate-44.181.x -->ci(github-action): update action ghcr.io/renovatebot/renovate ( 44.181.5 ➔ 44.181.12 )
+ - [ ] <!-- unpend-branch=renovate/ghcr.io-renovatebot-renovate-44.x -->ci(github-action): update action ghcr.io/renovatebot/renovate ( 44.181.5 ➔ 44.198.3 )
+
+## Open
+
+The following updates have all been created. To force a retry/rebase of any, click on a checkbox below.
+
+ - [ ] <!-- rebase-branch=renovate/sevensolutions-traefik-oidc-auth-0.x -->[feat(github-release): update release sevensolutions/traefik-oidc-auth ( v0.21.0 ➔ v0.22.0 )](../pull/1040)
+ - [ ] <!-- rebase-branch=renovate/longhorn-1.x -->[feat(helm): update chart longhorn ( 1.12.1 ➔ 1.13.0 )](../pull/686)
+ - [ ] <!-- rebase-branch=renovate/ghcr.io-home-operations-radarr-7.x -->[feat(container)!: Update image ghcr.io/home-operations/radarr ( 6.4.4.10685 ➔ 7.0.0.10815 )](../pull/1057)
+ - [ ] <!-- rebase-branch=renovate/ghcr.io-home-operations-sonarr-5.x -->[feat(container)!: Update image ghcr.io/home-operations/sonarr ( 4.0.20.3012 ➔ 5.0.0.2870 )](../pull/835)
+ - [ ] <!-- rebase-all-open-prs -->**Click on this checkbox to rebase all open PRs at once**
+
+## Detected Dependencies
+
+> [!NOTE]
+> Detected dependencies section has been truncated
+
+<details><summary>docker-compose (15)</summary>
+<blockquote>
+
+<details><summary>proxmox/guests/hermes-1/compose.yaml (1)</summary>

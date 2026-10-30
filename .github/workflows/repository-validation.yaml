@@ -108,12 +108,16 @@ jobs:
             scripts:
               - '.github/workflows/repository-validation.yaml'
               - '.github/workflows/kanidm-ceiling-sync.yaml'
+              - '.github/workflows/renovate-health.yaml'
               - '.mise.toml'
               - '.renovaterc.json5'
               - '.shellcheckrc'
               - '**/*.sh'
               - 'scripts/healthchecks.py'
               - 'scripts/ci/test-healthchecks.py'
+              - 'scripts/ci/check-renovate-health.py'
+              - 'scripts/ci/test-renovate-health.py'
+              - 'scripts/ci/fixtures/renovate-dashboard-*.txt'
               - 'devices/glkvm/*.py'
               - 'scripts/ci/test-netbird-enrollment.py'
               - 'scripts/ci/test-netbird-router-prep.py'
@@ -598,6 +602,10 @@ jobs:
       - name: Test healthchecks apply safety without credentials or network access
         if: needs.pre-job.outputs.scripts_changed == 'true'
         run: python3 scripts/ci/test-healthchecks.py
+
+      - name: Test Renovate health check without credentials or network access
+        if: needs.pre-job.outputs.scripts_changed == 'true'
+        run: python3 scripts/ci/test-renovate-health.py
 
       - name: Test GLKVM HID deadlines without devices or appliance access
         if: needs.pre-job.outputs.scripts_changed == 'true'
