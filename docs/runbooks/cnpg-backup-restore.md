@@ -78,7 +78,7 @@ PRIMARY=$(kubectl -n "$NS" get cluster "$CLUSTER" -o jsonpath='{.status.currentP
 test -n "$PRIMARY"
 kubectl -n "$NS" exec "$PRIMARY" -c postgres -- psql -X -qAt -v ON_ERROR_STOP=1 -c \
   "SELECT pg_is_in_recovery(); SELECT system_identifier FROM pg_control_system(); SELECT application_name,state,sync_state,sent_lsn,replay_lsn,pg_wal_lsn_diff(sent_lsn,replay_lsn) AS lag_bytes FROM pg_stat_replication;"
-kubectl -n "$NS" get endpointslices -l "kubernetes.io/service-name=$CLUSTER-rw" -o jsonpath='{range .items[*].endpoints[*]}{.targetRef.name}{"\\n"}{end}'
+kubectl -n "$NS" get endpointslices -l "kubernetes.io/service-name=$CLUSTER-rw" -o jsonpath='{range .items[*].endpoints[*]}{.targetRef.name}{"\n"}{end}'
 kubectl -n "$NS" get pdb
 ```
 
