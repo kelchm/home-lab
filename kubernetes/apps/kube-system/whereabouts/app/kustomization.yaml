@@ -11,11 +11,16 @@ kind: Kustomization
 # Used by: longhorn-system/storage-network NAD (see
 # kubernetes/apps/longhorn-system/longhorn/app/networkattachmentdefinition.yaml).
 resources:
-  - https://raw.githubusercontent.com/k8snetworkplumbingwg/whereabouts/v0.9.3/doc/crds/whereabouts.cni.cncf.io_ippools.yaml
-  - https://raw.githubusercontent.com/k8snetworkplumbingwg/whereabouts/v0.9.3/doc/crds/whereabouts.cni.cncf.io_overlappingrangeipreservations.yaml
-  - https://raw.githubusercontent.com/k8snetworkplumbingwg/whereabouts/v0.9.3/doc/crds/whereabouts.cni.cncf.io_nodeslicepools.yaml
-  - https://raw.githubusercontent.com/k8snetworkplumbingwg/whereabouts/v0.9.3/doc/crds/daemonset-install.yaml
+  # renovate: cni-source=k8snetworkplumbingwg/whereabouts tag=v0.9.4
+  - https://raw.githubusercontent.com/k8snetworkplumbingwg/whereabouts/3a262bd0cd873e13d9b379342f8251b852a89b8f/doc/crds/whereabouts.cni.cncf.io_ippools.yaml
+  # renovate: cni-source=k8snetworkplumbingwg/whereabouts tag=v0.9.4
+  - https://raw.githubusercontent.com/k8snetworkplumbingwg/whereabouts/3a262bd0cd873e13d9b379342f8251b852a89b8f/doc/crds/whereabouts.cni.cncf.io_overlappingrangeipreservations.yaml
+  # renovate: cni-source=k8snetworkplumbingwg/whereabouts tag=v0.9.4
+  - https://raw.githubusercontent.com/k8snetworkplumbingwg/whereabouts/3a262bd0cd873e13d9b379342f8251b852a89b8f/doc/crds/whereabouts.cni.cncf.io_nodeslicepools.yaml
+  # renovate: cni-source=k8snetworkplumbingwg/whereabouts tag=v0.9.4
+  - https://raw.githubusercontent.com/k8snetworkplumbingwg/whereabouts/3a262bd0cd873e13d9b379342f8251b852a89b8f/doc/crds/daemonset-install.yaml
+  # Scheduled allocation cleanup stays omitted: https://github.com/kelchm/home-lab/issues/1134
 
 images:
   - name: ghcr.io/k8snetworkplumbingwg/whereabouts
-    newTag: v0.9.4
+    newTag: v0.9.4@sha256:f279fd7dc1124d7819330fb2e07357990b2b4c5d8733aef1b028573c29f05e14

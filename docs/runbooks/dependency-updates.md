@@ -40,6 +40,38 @@ The inline references were identified from primary registry metadata on 2026-10-
 
 These are managed CI tools, with no exact-content locks. Updating FRR's CI parser does not upgrade or qualify the UniFi gateway's FRR runtime. Verify origins with `crane digest IMAGE:TAG` and `crane manifest IMAGE:TAG`; for a platform pin, check its membership and platform in the release index instead of equating a child digest with the index digest.
 
+## CNI and device-plugin releases
+
+The three remote-manifest apps use upstream runtime release commits and tagged image digests. The `cni-source` comment records the tag that resolves to the following URL's commit; it is an input to the narrow Renovate manager, not an exact-content lock. The source and image releases must match, with Multus retaining its `-thick` variant. Use `newTag: tag@sha256:digest`: Kustomize ignores `newTag` when a separate `digest` field is present, which would lose the release label in the rendered image.
+
+Verified against upstream tags, registry indexes and read-only cluster metadata on 2026-10-30 UTC:
+
+| App | Runtime release → source commit | Image index digest |
+| --- | --- | --- |
+| [generic-device-plugin](../../kubernetes/apps/kube-system/generic-device-plugin/app/kustomization.yaml) | [`0.2.0` → `a3d6f47`](https://github.com/squat/generic-device-plugin/tree/a3d6f47ddde5cbb24cc274f4ffd2f2cdc90f7b92) | `sha256:66c8d5c270eb2b721f1064c549b9b7898152a6d2f0163380a5d37dc7636c20ff` |
+| [Multus](../../kubernetes/apps/kube-system/multus/app/kustomization.yaml) | [`v4.3.1` → `d6170681`](https://github.com/k8snetworkplumbingwg/multus-cni/tree/d61706810cc8be60381dcb66e6a2428d5eb2795a) | `sha256:a357a79359b80ddd5f4699117946cacf3b54f5baecf7944535594863e875fc25` |
+| [Whereabouts](../../kubernetes/apps/kube-system/whereabouts/app/kustomization.yaml) | [`v0.9.4` → `3a262bd0`](https://github.com/k8snetworkplumbingwg/whereabouts/tree/3a262bd0cd873e13d9b379342f8251b852a89b8f) | `sha256:f279fd7dc1124d7819330fb2e07357990b2b4c5d8733aef1b028573c29f05e14` |
+
+Each index digest matched the running Pods' reported image IDs and contains a linux/amd64 manifest. All three DaemonSets were 3/3 Ready. The proposed references preserve these runtime releases and bytes; their image strings still change, causing Pod replacement. The generic-device-plugin source previously used a **chart** tag (`generic-device-plugin-0.1.2`); use the runtime `0.2.0` tag, not `generic-device-plugin-0.2.0`, which is also a chart release.
+
+Renovate groups release changes per app across the native Kustomize image manager and the custom GitHub-tags manager. The minimum group includes every URL plus the image (two references for Multus/device-plugin, five for Whereabouts). Missing eligible updates withhold new branches; dashboard overrides and already-existing branches still require review and CI. Same-release digest refreshes can be reviewed separately. None of these updates auto-merge. `scripts/ci/test-renovate-cni.mjs` checks the real files for release agreement, full extraction, immutable pins and one source commit per app, then exercises grouped release replacements and independent digest refreshes with the workflow's pinned Renovate version. It rejects mismatched versions even if both upstream streams offer different latest releases. It does not prove a tag's commit provenance or that a future release retains the same artifact paths: check those upstream and review the render diff before landing an update.
+
+### Effective alignment changes
+
+- **generic-device-plugin:** changing to the runtime release manifest only adds its existing `0.2.0` tag upstream. After the local DRI-only patch, the sole render change is the image digest. Device arguments, resource limits and privilege are unchanged.
+- **Multus:** the [release manifest](https://github.com/k8snetworkplumbingwg/multus-cni/blob/d61706810cc8be60381dcb66e6a2428d5eb2795a/deployments/multus-daemonset-thick.yml) adds the `nad` CRD short name, adds `get/list` on `resource.k8s.io` resourceclaims, resourceclaims/status and resourceslices to ClusterRole `multus`, and changes DaemonSet `kube-multus-ds` termination grace from 10 to 30 seconds. Both container and installer gain the same image digest. The fail-closed ConfigMap, `/var/run/netns/`, 192Mi/384Mi memory settings, tuning installer and taint reconciler remain unchanged.
+- **Whereabouts:** CRDs, RBAC, ConfigMap, DaemonSet arguments/resources/privilege and host CNI paths are unchanged. Remove the obsolete cron mount; v0.9.4 [moved scheduled cleanup to a separate Deployment](https://github.com/k8snetworkplumbingwg/whereabouts/pull/700), which remains deliberately omitted. The v0.9.3 DaemonSet ran that cleanup until the image-only update in [#103](https://github.com/kelchm/home-lab/pull/103) on 2026-06-19; earlier run outcomes are unavailable. [#1134](https://github.com/kelchm/home-lab/issues/1134) tracks whether restoring it is warranted. This alignment preserves the current absence of scheduled cleanup.
+
+### Rollout, acceptance and rollback
+
+After rollout approval, record DaemonSet readiness/image IDs, node `devic.es/dri` capacity, Longhorn health and Whereabouts allocations. Merging lets Flux roll all three DaemonSets and update CRD/RBAC resources. Their installers rewrite the same host CNI binaries. Multus remains fail-closed, so its replacement can briefly delay new Pod sandboxes; existing workload Pods are not deliberately restarted. No node reboot or drain is required.
+
+Verify all three Flux Kustomizations and DaemonSets are updated and Ready, CRDs remain Established with the same stored versions, and no persistent sandbox, authorization or allocation errors appear. Confirm `devic.es/dri` remains one per node, Longhorn volumes/instance-managers stay healthy, and existing secondary-network annotations and allocations are intact. The [Multus recovery checks](multus-conf-absent-recovery.md) cover annotation failures. Record live acceptance in #221.
+
+If acceptance fails, revert through Git and verify Flux restores the previous templates and healthy DaemonSets. This restores the old version skew and tag-only references, so recheck registry identities. A revert does not undo host installer writes; the reviewed images contain the same binaries. Do not delete CRDs or reset IP pools as rollback.
+
+The remaining #221 slices are workload image digest coverage (inventory first, preserving deliberate locks and database rollout boundaries), and Flux/OCI chart digest behavior, including the explicit `DisableChartDigestTracking=true`. This source alignment does not change either policy.
+
 ## Record a lock
 
 Write the record beside the reference, in the rule's comment, or in the README that owns the component, and link it from the others. It states:

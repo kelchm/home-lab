@@ -12,11 +12,13 @@ kind: Kustomization
 # dri-only patch replaces them with a single device entry for the
 # AMD iGPU render node, exposed as devic.es/dri.
 resources:
-  - https://raw.githubusercontent.com/squat/generic-device-plugin/generic-device-plugin-0.1.2/manifests/generic-device-plugin.yaml
+  # Use the runtime release, not the separately versioned Helm chart tags.
+  # renovate: cni-source=squat/generic-device-plugin tag=0.2.0
+  - https://raw.githubusercontent.com/squat/generic-device-plugin/a3d6f47ddde5cbb24cc274f4ffd2f2cdc90f7b92/manifests/generic-device-plugin.yaml
 
 images:
   - name: squat/generic-device-plugin
-    newTag: "0.2.0"
+    newTag: 0.2.0@sha256:66c8d5c270eb2b721f1064c549b9b7898152a6d2f0163380a5d37dc7636c20ff
 
 patches:
   - path: ./patches/dri-only.yaml

@@ -33,6 +33,39 @@
   },
   packageRules: [
     {
+      description: "CNI and device plugin: pin images and review all updates",
+      matchFileNames: ["kubernetes/apps/kube-system/{multus,whereabouts,generic-device-plugin}/app/kustomization.yaml"],
+      matchManagers: ["kustomize", "custom.regex"],
+      pinDigests: true,
+      automerge: false,
+    },
+    {
+      // Source tags resolve to commit digests; Kustomize owns image digests.
+      // Group release changes only: same-release digest refreshes can be reviewed independently.
+      description: "Multus: update the source release and thick image together",
+      matchFileNames: ["kubernetes/apps/kube-system/multus/app/kustomization.yaml"],
+      matchManagers: ["kustomize", "custom.regex"],
+      matchUpdateTypes: ["major", "minor", "patch"],
+      groupName: "Multus release",
+      minimumGroupSize: 2,
+    },
+    {
+      description: "Whereabouts: update four manifest references and the image together",
+      matchFileNames: ["kubernetes/apps/kube-system/whereabouts/app/kustomization.yaml"],
+      matchManagers: ["kustomize", "custom.regex"],
+      matchUpdateTypes: ["major", "minor", "patch"],
+      groupName: "Whereabouts release",
+      minimumGroupSize: 5,
+    },
+    {
+      description: "Generic device plugin: update the runtime source and image together",
+      matchFileNames: ["kubernetes/apps/kube-system/generic-device-plugin/app/kustomization.yaml"],
+      matchManagers: ["kustomize", "custom.regex"],
+      matchUpdateTypes: ["major", "minor", "patch"],
+      groupName: "Generic device plugin release",
+      minimumGroupSize: 2,
+    },
+    {
       // A core release changes both payloads. Digest refreshes at the same
       // release can safely land independently; qualification checks the releases.
       description: "Hermes Caddy: update builder and runtime core releases together",
@@ -302,6 +335,16 @@
     },
   },
   customManagers: [
+    {
+      description: "Track release-tagged CNI manifests by immutable source commit",
+      customType: "regex",
+      managerFilePatterns: ["/^kubernetes/apps/kube-system/(multus|whereabouts|generic-device-plugin)/app/kustomization\\.yaml$/"],
+      matchStrings: [
+        "# renovate: cni-source=(?<depName>\\S+) tag=(?<currentValue>\\S+)\\n  - https://raw\\.githubusercontent\\.com/[^/]+/[^/]+/(?<currentDigest>[a-f0-9]{40})/[^\\s]+",
+      ],
+      datasourceTemplate: "github-tags",
+      versioningTemplate: "semver",
+    },
     {
       description: "Track the Hermes Caddy Cloudflare build input",
       customType: "regex",
