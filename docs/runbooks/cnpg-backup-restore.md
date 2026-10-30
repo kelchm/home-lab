@@ -159,6 +159,50 @@ Then turn on Bambuddy:
 
 Rules are in [`alerts.yaml`](../../kubernetes/apps/cnpg-system/plugin-barman-cloud/app/alerts.yaml). The Cluster's own status is not enough: it kept reporting `Cluster in healthy state` and `Continuous archiving is working` for 5 minutes after the store was stopped.
 
+### Streaming standby is missing
+
+`CNPGStreamingStandbyMissing` is a **warning** when a reachable primary cannot confirm its required streaming standby for **10 minutes**. It also warns if a reachable database exporter loses the role or streaming series needed to establish redundancy. Check replication and metrics collection before another node is maintained: losing the primary while its standby is unavailable puts application availability and unreceived transactions at risk.
+
+The rules live beside the [Visionect Cluster](../../kubernetes/apps/iot/visionect/app/alerts.yaml) and [Bambuddy Cluster](../../kubernetes/apps/printing/bambuddy/app/alerts.yaml). Each currently desires two instances and requires one streaming standby. The expectation is a Git configuration value, not a live replica-count metric; `test-cnpg-monitoring.py` rejects disagreement with `spec.instances - 1`. A planned return to one instance must remove that Cluster's standby-loss rule. Manual live scale-down does not change the alert expectation. Other single-instance workloads are outside these selectors. Longhorn's storage replica count does not enter the calculation.
+
+#### Metric semantics and freshness
+
+The stock [`CNPGClusterHACritical` and `CNPGClusterHAWarning` rules](https://github.com/cloudnative-pg/charts/tree/f8b22d4e0041/charts/cluster/prometheus_rules) do not fit this condition: they require one and two standbys respectively, with a five-minute hold, and both use `cnpg_pg_replication_streaming_replicas`. In [CNPG 1.30.1's default query](https://github.com/cloudnative-pg/cloudnative-pg/blob/v1.30.1/config/manager/default-monitoring.yaml), that metric counts every row of `pg_stat_replication`, without filtering `state`. A connected sender in `catchup` can therefore look healthy. The stock receiver metric only establishes that a WAL receiver row exists; Pod readiness and backup success establish neither sender state nor redundancy.
+
+The per-Cluster `monitoring.yaml` adds one [CNPG user-defined monitoring query](https://github.com/cloudnative-pg/cloudnative-pg/blob/v1.30.1/docs/src/monitoring.md#user-defined-metrics), `ha`, through the existing exporter. It counts physical replication slots whose active sender is in PostgreSQL's [`streaming` state](https://www.postgresql.org/docs/17/monitoring-stats.html#MONITORING-PG-STAT-REPLICATION-VIEW), with CNPG's `streaming_replica` user and this Cluster's application-name prefix. It returns `cnpg_ha_streaming_replicas=0` when no such sender exists, including a connected but non-streaming standby. `primary: true` limits emission to the current primary. The ConfigMap's `cnpg.io/reload` label enables automatic monitoring reload; the default queries are retained. It reads only catalogs with the existing exporter role and adds no database objects or privileges.
+
+Read-only inspection on 2026-10-30 found `*-db-1` primary (`cnpg_pg_replication_in_recovery=0`) and `*-db-2` standby (`=1`) for both Clusters. Both exporters emit the stock sender metric: primary `1`, standby `0`; both have `up=1` and `cnpg_collector_up=1`. The sender labels identify `streaming_replica` and the matching `*-db-2` application name. Series carry `cluster=k8s-prod`, `namespace`, `pod`, `instance` and `job=<namespace>/<Cluster>`; only `cnpg_collector_up` also carries the database name in `exported_cluster`. The query is new and was **not installed or executed against production during implementation**; this baseline verifies the existing metric identities, not the new query's live result.
+
+vmagent scrapes and vmalert evaluates every 30 seconds. CNPG caches SQL query results for 30 seconds by default; observed query-cache ages were 4–33 seconds. The rule requires scrape, database-up and role samples younger than **120 seconds**, plus `time() - cnpg_last_update_timestamp < 120` for SQL-cache freshness. Thus a cached positive count that is merely re-scraped cannot establish redundancy indefinitely. A healthy confirmation also needs a fresh `cnpg_ha_streaming_replicas >= 1` from the same primary's `(cluster, namespace, pod, instance)` identity. The `exported_cluster` difference does not break those joins.
+
+Read-only queries of the exact proposed expressions were accepted by the existing VMSingle MetricsQL API during implementation. Because the new metric is not deployed, each expression returned one unconfirmed-redundancy series, as intended. Substituting only the stock sender-count metric made the same identity/freshness joins quiet for both live Clusters; that is a compatibility check, not proof that the new streaming-state query has run.
+
+All output is aggregated to one `(cluster, namespace)` result per scoped database, with constant `cnpg_cluster` and `severity=warning` labels. Pod/instance changes and duplicate exporters do not create additional alerts. A brief switchover or maintenance interval is tolerated; sustained loss across a role transition retains the database's alert identity. Ten minutes is an operational allowance for a short restart/switchover, not a tested upper bound for every rebuild. Use an ordinary scoped maintenance silence when a longer interruption is planned.
+
+Missing data has explicit limits:
+
+- A reachable database with a primary/unknown role and absent, stale or zero streaming data warns after the hold. A stale SQL cache or missing role also prevents a healthy confirmation. Check `cnpg_last_error` and `cnpg_collector_last_collection_error` alongside replication before diagnosing a real standby loss.
+- A failed/unobserved primary scrape with only a freshly identified standby remaining does not produce a second redundancy warning. Existing `TargetDown` covers discovered targets whose scrapes fail; `CNPGClusterOffline` covers all database-up series being absent/down, and Kubernetes availability alerts remain in effect. These signals describe availability/visibility, not proof of streaming. A missing primary while a known standby still answers is deliberately outside this warning's diagnosis; a removed discovery target is not necessarily covered by `TargetDown`.
+- Losing only the standby exporter does not warn if the primary still freshly confirms its physical streaming sender. Losing replication itself while the primary answers does warn, even if the standby Pod/exporter remains Ready.
+- If vmalert, vmagent or storage of metrics fails, this rule cannot independently report that failure; the existing monitoring/watchdog alerts remain responsible. The rule proves a physical connection's sampled streaming state, not replay progress, synchronous durability, distinct physical failure domains or a zero-loss failover. Sustained replay lag and invalidated-slot recovery remain separate concerns.
+
+#### Activation, verification and rollback
+
+**Prepared, not live-accepted:** merging the #1125 implementation enables the query references and warning via the normal Flux path. It changes only monitoring ConfigMaps, Cluster monitoring references and alert rules; it does not change instance counts, replication slots/settings, databases, storage or notification routes. No deliberate replication failure or notification test is part of acceptance.
+
+After an approved merge, require Flux's `iot/visionect` and `printing/bambuddy` Kustomizations to be Ready at the merged revision. Confirm each Cluster references its `<name>-monitoring` ConfigMap. The existing PrometheusRule-to-VMRule conversion should load exactly one `CNPGStreamingStandbyMissing`, `for: 10m`, `severity: warning` in each of these groups:
+
+| VMRule | Namespace | vmalert group | Database identity |
+|---|---|---|---|
+| `visionect-db-alert-rules` | `iot` | `cloudnative-pg/visionect-db` | `cnpg_cluster=visionect-db` |
+| `bambuddy-db-alert-rules` | `printing` | `cloudnative-pg/bambuddy-db` | `cnpg_cluster=bambuddy-db` |
+
+Compare the loaded expression and labels with each checked-in `alerts.yaml`; require healthy evaluation on both vmalert replicas. Through the existing VMSingle query API, inspect `cnpg_ha_streaming_replicas{cluster="k8s-prod",namespace=~"iot|printing"}`, role, scrape/database-up and query-cache freshness. Expected quiet state: one fresh primary sample equal to `1` per Cluster, current primary role `0`, healthy scrapes/database-up and a SQL cache age below 120 seconds; the full alert expressions return no series and `ALERTS{alertname="CNPGStreamingStandbyMissing"}` is absent after the observation window of at least 10 minutes. Standby exporters should not emit this primary-only query. Check `cnpg_last_error=0` and no new collection errors. These live query/load checks are still required; fixture execution is not production PostgreSQL acceptance.
+
+The existing notifier adds `evaluator=vmalert`; together with `severity=warning` this uses the [normal-priority Pushover route](alerting.md#ownership-and-routing), with the existing grouping, 12-hour repeat and quiet resolution. Confirm the loaded route and notifier labels without exposing receiver credentials or sending a test notification. No Alertmanager route or receiver is added by this change.
+
+Rollback is an ordinary **Git revert of the implementation commit**, followed by normal Flux reconciliation. Verify the new rule is gone from both loaded groups, the custom query references and ConfigMaps are removed, and existing offline/backup rules remain loaded. The unused new time series may remain in metrics retention. This rollback removes the redundancy warning and query only; it needs no database, PVC, replication or storage operation.
+
 ### WAL archiving is stalled
 
 `CNPGWALArchivingStalled`: the queued WAL count has remained above zero for 15 minutes. This measures a sustained backlog, not the age of an individual segment. Check whether archiving and the recovery point are advancing before diagnosing a stopped archiver.

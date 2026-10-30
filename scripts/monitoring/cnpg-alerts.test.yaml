@@ -198,3 +198,467 @@ tests:
               summary: Database volume iot/visionect-db-1 is 40% free
               description: Less than half of this database volume is free. Both volumes normally sit above 85% free, so this is WAL that cannot be archived or data growth. PostgreSQL stops accepting writes when the volume fills.
               runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/cnpg-backup-restore.md#the-database-volume-is-filling
+
+  - name: Healthy primary and standby exporters produce no standby-loss warning
+    interval: 1m
+    input_series:
+      - &v-role
+        series: cnpg_pg_replication_in_recovery{cluster="k8s-prod",namespace="iot",pod="visionect-db-1",instance="visionect-db-1:9187"}
+        values: 0x40
+      - &v-pg
+        series: cnpg_collector_up{cluster="k8s-prod",namespace="iot",pod="visionect-db-1",instance="visionect-db-1:9187",exported_cluster="visionect-db"}
+        values: 1x40
+      - &v-scrape
+        series: up{cluster="k8s-prod",namespace="iot",pod="visionect-db-1",instance="visionect-db-1:9187"}
+        values: 1x40
+      - &v-ha
+        series: cnpg_ha_streaming_replicas{cluster="k8s-prod",namespace="iot",pod="visionect-db-1",instance="visionect-db-1:9187"}
+        values: 1x40
+      - &v-cache
+        series: cnpg_last_update_timestamp{cluster="k8s-prod",namespace="iot",pod="visionect-db-1",instance="visionect-db-1:9187"}
+        values: 0+60x40
+      - &b-role
+        series: cnpg_pg_replication_in_recovery{cluster="k8s-prod",namespace="printing",pod="bambuddy-db-1",instance="bambuddy-db-1:9187"}
+        values: 0x40
+      - &b-pg
+        series: cnpg_collector_up{cluster="k8s-prod",namespace="printing",pod="bambuddy-db-1",instance="bambuddy-db-1:9187",exported_cluster="bambuddy-db"}
+        values: 1x40
+      - &b-scrape
+        series: up{cluster="k8s-prod",namespace="printing",pod="bambuddy-db-1",instance="bambuddy-db-1:9187"}
+        values: 1x40
+      - &b-ha
+        series: cnpg_ha_streaming_replicas{cluster="k8s-prod",namespace="printing",pod="bambuddy-db-1",instance="bambuddy-db-1:9187"}
+        values: 1x40
+      - &b-cache
+        series: cnpg_last_update_timestamp{cluster="k8s-prod",namespace="printing",pod="bambuddy-db-1",instance="bambuddy-db-1:9187"}
+        values: 0+60x40
+      - &v-standby-role
+        series: cnpg_pg_replication_in_recovery{cluster="k8s-prod",namespace="iot",pod="visionect-db-2",instance="visionect-db-2:9187"}
+        values: 1x40
+      - &v-standby-pg
+        series: cnpg_collector_up{cluster="k8s-prod",namespace="iot",pod="visionect-db-2",instance="visionect-db-2:9187",exported_cluster="visionect-db"}
+        values: 1x40
+      - &v-standby-scrape
+        series: up{cluster="k8s-prod",namespace="iot",pod="visionect-db-2",instance="visionect-db-2:9187"}
+        values: 1x40
+      - &v-standby-cache
+        series: cnpg_last_update_timestamp{cluster="k8s-prod",namespace="iot",pod="visionect-db-2",instance="visionect-db-2:9187"}
+        values: 0+60x40
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: CNPGStreamingStandbyMissing
+        exp_alerts: []
+
+  - name: A missing standby warns only after ten sustained minutes and clears on recovery
+    interval: 1m
+    input_series:
+      - *v-role
+      - *v-pg
+      - *v-cache
+      - *v-scrape
+      - <<: *v-ha
+        values: 0x20 1x20
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: CNPGStreamingStandbyMissing
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: CNPGStreamingStandbyMissing
+        exp_alerts: &visionect-ha-alert
+          - exp_labels:
+              cluster: k8s-prod
+              namespace: iot
+              cnpg_cluster: visionect-db
+              severity: warning
+            exp_annotations:
+              summary: Database iot/visionect-db has no confirmed streaming standby
+              description: For 10 minutes, a reachable database instance has no confirmed primary with the required streaming standby. Replication reports fewer than one streaming standby, or its role/streaming metrics are missing or stale. Database redundancy is at risk if the primary fails. Check replication and exporter collection errors before maintenance.
+              runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/cnpg-backup-restore.md#streaming-standby-is-missing
+      - eval_time: 21m
+        alertname: CNPGStreamingStandbyMissing
+        exp_alerts: []
+
+  - name: A present healthy exporter and connected sender do not prove streaming
+    interval: 1m
+    input_series:
+      - *v-role
+      - *v-pg
+      - *v-cache
+      - *v-scrape
+      - *v-standby-role
+      - *v-standby-pg
+      - *v-standby-cache
+      - *v-standby-scrape
+      - <<: *v-ha
+        values: 0x40
+      -
+        series: cnpg_pg_replication_streaming_replicas{cluster="k8s-prod",namespace="iot",pod="visionect-db-1",instance="visionect-db-1:9187"}
+        values: 1x40
+      -
+        series: cnpg_pg_replication_is_wal_receiver_up{cluster="k8s-prod",namespace="iot",pod="visionect-db-2",instance="visionect-db-2:9187"}
+        values: 1x40
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: CNPGStreamingStandbyMissing
+        exp_alerts: *visionect-ha-alert
+
+  - name: Brief maintenance and a primary switchover stay quiet
+    interval: 1m
+    input_series:
+      - <<: *v-role
+        values: 0x5 1x35
+      - *v-pg
+      - *v-cache
+      - *v-scrape
+      - <<: *v-ha
+        values: 1x3 0x36
+      - <<: *v-standby-role
+        values: 1x5 0x35
+      - *v-standby-pg
+      - *v-standby-cache
+      - *v-standby-scrape
+      -
+        series: cnpg_ha_streaming_replicas{cluster="k8s-prod",namespace="iot",pod="visionect-db-2",instance="visionect-db-2:9187"}
+        values: 0x7 1x33
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: CNPGStreamingStandbyMissing
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: CNPGStreamingStandbyMissing
+        exp_alerts: []
+
+  - name: Sustained loss keeps one database identity through a primary transition
+    interval: 1m
+    input_series:
+      - <<: *v-role
+        values: 0x5 1x35
+      - *v-pg
+      - *v-cache
+      - *v-scrape
+      - <<: *v-ha
+        values: 0x40
+      - <<: *v-standby-role
+        values: 1x5 0x35
+      - *v-standby-pg
+      - *v-standby-cache
+      - *v-standby-scrape
+      -
+        series: cnpg_ha_streaming_replicas{cluster="k8s-prod",namespace="iot",pod="visionect-db-2",instance="visionect-db-2:9187"}
+        values: 0x40
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: CNPGStreamingStandbyMissing
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: CNPGStreamingStandbyMissing
+        exp_alerts: *visionect-ha-alert
+      - eval_time: 20m
+        alertname: CNPGStreamingStandbyMissing
+        exp_alerts: *visionect-ha-alert
+
+  - name: A former primary cached positive count cannot mask loss after switchover
+    interval: 1m
+    input_series:
+      - <<: *v-role
+        values: 1x40
+      - *v-pg
+      - *v-cache
+      - *v-scrape
+      - *v-ha
+      - <<: *v-standby-role
+        values: 0x40
+      - *v-standby-pg
+      - *v-standby-cache
+      - *v-standby-scrape
+      -
+        series: cnpg_ha_streaming_replicas{cluster="k8s-prod",namespace="iot",pod="visionect-db-2",instance="visionect-db-2:9187"}
+        values: 0x40
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: CNPGStreamingStandbyMissing
+        exp_alerts: *visionect-ha-alert
+
+  - name: A missing primary streaming series is unconfirmed redundancy
+    interval: 1m
+    input_series:
+      - *v-role
+      - *v-pg
+      - *v-cache
+      - *v-scrape
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: CNPGStreamingStandbyMissing
+        exp_alerts: *visionect-ha-alert
+
+  - name: An explicit stale marker stops an old healthy streaming sample masking loss
+    interval: 1m
+    input_series:
+      - *v-role
+      - *v-pg
+      - *v-cache
+      - *v-scrape
+      - <<: *v-ha
+        values: 1 stale
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: CNPGStreamingStandbyMissing
+        exp_alerts: []
+      - eval_time: 11m
+        alertname: CNPGStreamingStandbyMissing
+        exp_alerts: *visionect-ha-alert
+
+  - name: Two-minute freshness rejects an old sample before the default lookback expires
+    interval: 1m
+    input_series:
+      - *v-role
+      - *v-pg
+      - *v-cache
+      - *v-scrape
+      - <<: *v-ha
+        values: 1 _x39
+    alert_rule_test:
+      - eval_time: 11m
+        alertname: CNPGStreamingStandbyMissing
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: CNPGStreamingStandbyMissing
+        exp_alerts: *visionect-ha-alert
+
+  - name: Missing or stale primary role metrics warn while the exporter and database answer
+    interval: 1m
+    input_series:
+      - *v-pg
+      - *v-cache
+      - *v-scrape
+      - *v-ha
+      - <<: *v-role
+        values: 0 _x39
+      - *v-standby-role
+      - *v-standby-pg
+      - *v-standby-cache
+      - *v-standby-scrape
+    alert_rule_test:
+      - eval_time: 11m
+        alertname: CNPGStreamingStandbyMissing
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: CNPGStreamingStandbyMissing
+        exp_alerts: *visionect-ha-alert
+
+  - name: A failed primary scrape leaves availability to existing alerts
+    interval: 1m
+    input_series:
+      - *v-role
+      - *v-pg
+      - *v-cache
+      - <<: *v-scrape
+        values: 0x40
+      - <<: *v-ha
+        values: 0x40
+      - *v-standby-role
+      - *v-standby-pg
+      - *v-standby-cache
+      - *v-standby-scrape
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: CNPGStreamingStandbyMissing
+        exp_alerts: []
+
+  - name: An absent primary and a known standby do not duplicate a primary target outage
+    interval: 1m
+    input_series:
+      - *v-standby-role
+      - *v-standby-pg
+      - *v-standby-cache
+      - *v-standby-scrape
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: CNPGStreamingStandbyMissing
+        exp_alerts: []
+
+  - name: Stale scrape and collector samples cannot sustain a new redundancy warning
+    interval: 1m
+    input_series:
+      - *v-role
+      - <<: *v-pg
+        values: 1 _x39
+      - *v-cache
+      - <<: *v-scrape
+        values: 1 _x39
+      - <<: *v-ha
+        values: 0x40
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: CNPGStreamingStandbyMissing
+        exp_alerts: []
+
+  - name: Total telemetry loss leaves cluster offline coverage authoritative
+    interval: 1m
+    input_series:
+      - <<: *v-role
+        values: 0x2 stale
+      - <<: *v-pg
+        values: 1x2 stale
+      - *v-cache
+      - <<: *v-scrape
+        values: 1x2 stale
+      - <<: *v-ha
+        values: 0x2 stale
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: CNPGStreamingStandbyMissing
+        exp_alerts: []
+
+  - name: Healthy other clusters namespaces and monitoring clusters cannot mask Visionect loss
+    interval: 1m
+    input_series:
+      - *v-role
+      - *v-pg
+      - *v-cache
+      - *v-scrape
+      - <<: *v-ha
+        values: 0x40
+      - *b-role
+      - *b-pg
+      - *b-cache
+      - *b-scrape
+      - *b-ha
+      -
+        series: cnpg_ha_streaming_replicas{cluster="k8s-prod",namespace="printing",pod="visionect-db-1",instance="visionect-db-1:9187"}
+        values: 1x40
+      -
+        series: cnpg_ha_streaming_replicas{cluster="k8s-prod",namespace="iot",pod="visionect-db-1",instance="foreign:9187",source="unrelated"}
+        values: 1x40
+      - series: cnpg_collector_up{cluster="other-cluster",namespace="iot",pod="visionect-db-1",instance="visionect-db-1:9187"}
+        values: 1x40
+      - series: up{cluster="other-cluster",namespace="iot",pod="visionect-db-1",instance="visionect-db-1:9187"}
+        values: 1x40
+      - series: cnpg_pg_replication_in_recovery{cluster="other-cluster",namespace="iot",pod="visionect-db-1",instance="visionect-db-1:9187"}
+        values: 0x40
+      - series: cnpg_ha_streaming_replicas{cluster="other-cluster",namespace="iot",pod="visionect-db-1",instance="visionect-db-1:9187"}
+        values: 1x40
+      - series: cnpg_last_update_timestamp{cluster="other-cluster",namespace="iot",pod="visionect-db-1",instance="visionect-db-1:9187"}
+        values: 0+60x40
+      - series: cnpg_collector_up{cluster="k8s-prod",namespace="other-namespace",pod="visionect-db-1",instance="visionect-db-1:9187"}
+        values: 1x40
+      - series: up{cluster="k8s-prod",namespace="other-namespace",pod="visionect-db-1",instance="visionect-db-1:9187"}
+        values: 1x40
+      - series: cnpg_pg_replication_in_recovery{cluster="k8s-prod",namespace="other-namespace",pod="visionect-db-1",instance="visionect-db-1:9187"}
+        values: 0x40
+      - series: cnpg_ha_streaming_replicas{cluster="k8s-prod",namespace="other-namespace",pod="visionect-db-1",instance="visionect-db-1:9187"}
+        values: 1x40
+      - series: cnpg_last_update_timestamp{cluster="k8s-prod",namespace="other-namespace",pod="visionect-db-1",instance="visionect-db-1:9187"}
+        values: 0+60x40
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: CNPGStreamingStandbyMissing
+        exp_alerts: *visionect-ha-alert
+
+  - name: Each desired HA database warns independently
+    interval: 1m
+    input_series:
+      - *v-role
+      - *v-pg
+      - *v-cache
+      - *v-scrape
+      - <<: *v-ha
+        values: 0x40
+      - *b-role
+      - *b-pg
+      - *b-cache
+      - *b-scrape
+      - <<: *b-ha
+        values: 0x40
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: CNPGStreamingStandbyMissing
+        exp_alerts:
+          - exp_labels:
+              cluster: k8s-prod
+              namespace: iot
+              cnpg_cluster: visionect-db
+              severity: warning
+            exp_annotations:
+              summary: Database iot/visionect-db has no confirmed streaming standby
+              description: For 10 minutes, a reachable database instance has no confirmed primary with the required streaming standby. Replication reports fewer than one streaming standby, or its role/streaming metrics are missing or stale. Database redundancy is at risk if the primary fails. Check replication and exporter collection errors before maintenance.
+              runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/cnpg-backup-restore.md#streaming-standby-is-missing
+          - exp_labels:
+              cluster: k8s-prod
+              namespace: printing
+              cnpg_cluster: bambuddy-db
+              severity: warning
+            exp_annotations:
+              summary: Database printing/bambuddy-db has no confirmed streaming standby
+              description: For 10 minutes, a reachable database instance has no confirmed primary with the required streaming standby. Replication reports fewer than one streaming standby, or its role/streaming metrics are missing or stale. Database redundancy is at risk if the primary fails. Check replication and exporter collection errors before maintenance.
+              runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/cnpg-backup-restore.md#streaming-standby-is-missing
+
+  - name: Duplicate scrape exporters and standby-only counts still produce one database warning
+    interval: 1m
+    input_series:
+      - *v-role
+      - *v-pg
+      - *v-cache
+      - *v-scrape
+      - <<: *v-ha
+        values: 0x40
+      - *v-standby-role
+      - *v-standby-pg
+      - *v-standby-cache
+      - *v-standby-scrape
+      -
+        series: cnpg_ha_streaming_replicas{cluster="k8s-prod",namespace="iot",pod="visionect-db-2",instance="visionect-db-2:9187"}
+        values: 5x40
+      -
+        series: cnpg_pg_replication_in_recovery{cluster="k8s-prod",namespace="iot",pod="visionect-db-1",instance="visionect-db-1:9187",prometheus="second-scrape"}
+        values: 0x40
+      -
+        series: cnpg_collector_up{cluster="k8s-prod",namespace="iot",pod="visionect-db-1",instance="visionect-db-1:9187",exported_cluster="visionect-db",prometheus="second-scrape"}
+        values: 1x40
+      -
+        series: up{cluster="k8s-prod",namespace="iot",pod="visionect-db-1",instance="visionect-db-1:9187",prometheus="second-scrape"}
+        values: 1x40
+      -
+        series: cnpg_ha_streaming_replicas{cluster="k8s-prod",namespace="iot",pod="visionect-db-1",instance="visionect-db-1:9187",prometheus="second-scrape"}
+        values: 0x40
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: CNPGStreamingStandbyMissing
+        exp_alerts: *visionect-ha-alert
+
+  - name: A frozen SQL cache cannot look healthy just because it is scraped again
+    interval: 1m
+    input_series:
+      - *v-role
+      -
+        series: cnpg_collector_up{cluster="k8s-prod",namespace="iot",pod="visionect-db-1",instance="visionect-db-1:9187",exported_cluster="visionect-db"}
+        values: 1x40
+      - *v-scrape
+      - *v-ha
+      - <<: *v-cache
+        values: 0x40
+    alert_rule_test:
+      - eval_time: 11m
+        alertname: CNPGStreamingStandbyMissing
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: CNPGStreamingStandbyMissing
+        exp_alerts: *visionect-ha-alert
+
+  - name: Unrelated singleton workloads do not acquire a standby-loss alert
+    interval: 1m
+    input_series:
+      - series: cnpg_collector_up{cluster="k8s-prod",namespace="iot",pod="singleton-db-1",instance="singleton:9187"}
+        values: 1x40
+      - series: up{cluster="k8s-prod",namespace="iot",pod="singleton-db-1",instance="singleton:9187"}
+        values: 1x40
+      - series: cnpg_pg_replication_in_recovery{cluster="k8s-prod",namespace="iot",pod="singleton-db-1",instance="singleton:9187"}
+        values: 0x40
+      - series: cnpg_ha_streaming_replicas{cluster="k8s-prod",namespace="iot",pod="singleton-db-1",instance="singleton:9187"}
+        values: 0x40
+      - series: cnpg_last_update_timestamp{cluster="k8s-prod",namespace="iot",pod="singleton-db-1",instance="singleton:9187"}
+        values: 0+60x40
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: CNPGStreamingStandbyMissing
+        exp_alerts: []

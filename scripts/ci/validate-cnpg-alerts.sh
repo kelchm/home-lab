@@ -4,6 +4,7 @@
 set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
+python3 scripts/ci/test-cnpg-monitoring.py
 test_dir="$(mktemp -d)"
 trap 'rm -rf "$test_dir"' EXIT
 yq '.spec' kubernetes/apps/iot/visionect/app/alerts.yaml > "$test_dir/visionect.yaml"

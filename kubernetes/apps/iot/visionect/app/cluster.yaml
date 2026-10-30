@@ -29,6 +29,10 @@ spec:
       memory: 1Gi
     limits:
       memory: 3Gi
+  monitoring:
+    customQueriesConfigMap:
+      - name: visionect-db-monitoring
+        key: queries
   # Backups go out over the storage VLAN.
   inheritedMetadata:
     annotations:

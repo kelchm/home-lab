@@ -28,3 +28,41 @@ spec:
             severity: critical
             namespace: iot
             cnpg_cluster: visionect-db
+        # spec.instances=2 requires one streaming standby. CI checks this expectation.
+        # Keep pod/instance out of the result so exporter duplicates and role changes
+        # retain one alert identity per database. Missing HA data is unconfirmed,
+        # but a down/unobservable primary belongs to TargetDown/CNPGClusterOffline.
+        - alert: CNPGStreamingStandbyMissing
+          expr: |
+            max by (cluster, namespace) (
+              (cnpg_collector_up{cluster="k8s-prod",namespace="iot",pod=~"visionect-db-([1-9][0-9]*)$"} == 1)
+              and (time() - timestamp(cnpg_collector_up{cluster="k8s-prod",namespace="iot",pod=~"visionect-db-([1-9][0-9]*)$"}) < 120)
+              and on (cluster, namespace, pod, instance) (up{cluster="k8s-prod",namespace="iot",pod=~"visionect-db-([1-9][0-9]*)$"} == 1)
+              and on (cluster, namespace, pod, instance) (time() - timestamp(up{cluster="k8s-prod",namespace="iot",pod=~"visionect-db-([1-9][0-9]*)$"}) < 120)
+              unless on (cluster, namespace, pod, instance) (
+                (cnpg_pg_replication_in_recovery{cluster="k8s-prod",namespace="iot",pod=~"visionect-db-([1-9][0-9]*)$"} == 1)
+                and (time() - timestamp(cnpg_pg_replication_in_recovery{cluster="k8s-prod",namespace="iot",pod=~"visionect-db-([1-9][0-9]*)$"}) < 120)
+                and on (cluster, namespace, pod, instance) (time() - cnpg_last_update_timestamp{cluster="k8s-prod",namespace="iot",pod=~"visionect-db-([1-9][0-9]*)$"} < 120)
+              )
+            )
+            unless on (cluster, namespace)
+            max by (cluster, namespace) (
+              (cnpg_ha_streaming_replicas{cluster="k8s-prod",namespace="iot",pod=~"visionect-db-([1-9][0-9]*)$"} >= 1)
+              and (time() - timestamp(cnpg_ha_streaming_replicas{cluster="k8s-prod",namespace="iot",pod=~"visionect-db-([1-9][0-9]*)$"}) < 120)
+              and on (cluster, namespace, pod, instance) (cnpg_pg_replication_in_recovery{cluster="k8s-prod",namespace="iot",pod=~"visionect-db-([1-9][0-9]*)$"} == 0)
+              and on (cluster, namespace, pod, instance) (time() - timestamp(cnpg_pg_replication_in_recovery{cluster="k8s-prod",namespace="iot",pod=~"visionect-db-([1-9][0-9]*)$"}) < 120)
+              and on (cluster, namespace, pod, instance) (time() - cnpg_last_update_timestamp{cluster="k8s-prod",namespace="iot",pod=~"visionect-db-([1-9][0-9]*)$"} < 120)
+              and on (cluster, namespace, pod, instance) (cnpg_collector_up{cluster="k8s-prod",namespace="iot",pod=~"visionect-db-([1-9][0-9]*)$"} == 1)
+              and on (cluster, namespace, pod, instance) (time() - timestamp(cnpg_collector_up{cluster="k8s-prod",namespace="iot",pod=~"visionect-db-([1-9][0-9]*)$"}) < 120)
+              and on (cluster, namespace, pod, instance) (up{cluster="k8s-prod",namespace="iot",pod=~"visionect-db-([1-9][0-9]*)$"} == 1)
+              and on (cluster, namespace, pod, instance) (time() - timestamp(up{cluster="k8s-prod",namespace="iot",pod=~"visionect-db-([1-9][0-9]*)$"}) < 120)
+            )
+          for: 10m
+          labels:
+            severity: warning
+            namespace: iot
+            cnpg_cluster: visionect-db
+          annotations:
+            summary: Database iot/visionect-db has no confirmed streaming standby
+            description: For 10 minutes, a reachable database instance has no confirmed primary with the required streaming standby. Replication reports fewer than one streaming standby, or its role/streaming metrics are missing or stale. Database redundancy is at risk if the primary fails. Check replication and exporter collection errors before maintenance.
+            runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/cnpg-backup-restore.md#streaming-standby-is-missing
