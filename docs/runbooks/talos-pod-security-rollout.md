@@ -51,8 +51,8 @@ done
 task talos:generate-config
 for config in talos/clusterconfig/kubernetes-k8s-prod-*.yaml; do
   echo "$config"
-  yq 'select(.cluster.apiServer.admissionControl) |
-    .cluster.apiServer.admissionControl' "$config"
+  yq 'select(.kind == "KubeAdmissionControlConfig" and .name == "PodSecurity") |
+    .configuration' "$config"
 done
 ```
 
@@ -215,13 +215,17 @@ kubectl --namespace=default run psa-baseline-rejection \
 Stop if a node or workload does not recover. Do not continue to the next node.
 The rollback has two deliberately ordered phases:
 
-1. Prepare a rollback Talos configuration that restores the
-   `cluster.apiServer.admissionControl: {$$patch: delete}` override. Keep all
-   three namespace `enforce: privileged` labels in Git and on the live cluster.
-   The doubled dollar is intentional in the repository source: Talhelper's
-   environment expansion emits the Talos `$patch: delete` directive in the
-   rendered patch. Confirm the generated configuration has an empty admission
-   configuration before applying it.
+1. Append this document to `talos/patches/controller/cluster.yaml` to remove the named admission configuration from the generated Talos 1.14 configuration. Keep all three namespace `enforce: privileged` labels in Git and on the live cluster. Do not restore the legacy `cluster.apiServer.admissionControl` field alongside `KubeAPIServerConfig`.
+
+   ```yaml
+   ---
+   apiVersion: v1alpha1
+   kind: KubeAdmissionControlConfig
+   name: PodSecurity
+   $$patch: delete
+   ```
+
+   The doubled dollar is intentional in the repository source: Talhelper's environment expansion emits `$patch: delete`. Confirm the generated configuration contains no `KubeAdmissionControlConfig` document and no legacy admission configuration before applying it. Other configuration documents must remain unchanged.
 2. Regenerate and validate the Talos configuration, then apply it only to nodes
    already changed, one at a time in reverse order. Run the direct API-server,
    node readiness, workload, and `talosctl health` checks after every node.
@@ -232,19 +236,14 @@ The rollback has two deliberately ordered phases:
    for node in 10.32.30.13 10.32.30.12 10.32.30.11; do
      talosctl --nodes "${node}" get \
        admissioncontrolconfigs.kubernetes.talos.dev admission-control \
-       -o json | jq -e '.spec.config == []'
+       -o json | jq -e '(.spec.config // []) == []'
    done
    ```
 
-   Each node that was rolled back must pass the `jq` assertion. The restored
-   `$$patch: delete` state retains the Talos resource with `spec.config: []`;
-   it does not make the resource return `NotFound`. Skip nodes that were never
-   changed.
-4. Only after no API server enforces the restored policy, remove the three
-   namespace labels in a second Git change (or complete the original PR
-   revert) and let Flux reconcile them.
+   Each node that was rolled back must pass the `jq` assertion. Removing the configuration document leaves the derived Talos resource with no configured admission plugins; it does not make the resource return `NotFound`. Skip nodes that were never changed.
+4. Only after no API server enforces `baseline`, remove the three namespace labels in a second Git change and let Flux reconcile them.
 
 Because Flux watches `main`, never merge or reconcile namespace-label removal
 while even one API server still enforces `baseline`. The rollback is complete
-when the admission-control resource has `spec.config: []` on every changed
+when the admission-control resource has no configured plugins on every changed
 node, all nodes are ready, and Flux reports every Kustomization ready.
