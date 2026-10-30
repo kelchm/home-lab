@@ -361,7 +361,7 @@ tests:
 
   # Local time service from the two existing UPS Pis.
 
-  - name: Healthy local time reports normal polling and estimated error without alerting
+  - name: Healthy local time and a small estimated error do not alert
     interval: 1m
     input_series:
     - series: up{job="pi-chrony",instance="ups-compute-rack",platform="pi"}
@@ -409,8 +409,8 @@ tests:
           job: pi-chrony
           severity: warning
         exp_annotations:
-          summary: NTP on ups-compute-rack has no recent synchronized reference
-          description: For ten minutes, chrony has been unreachable, reported an unsynchronized stratum, or gone over an hour without a reference update. Check chronyd and run sudo chronyc -n tracking and sudo chronyc -n sources -v. The other Pi can still serve time; check it before changing clients.
+          summary: NTP synchronization is unconfirmed on ups-compute-rack
+          description: For ten minutes, the exporter has been unable to read all chrony data, chrony has reported an unsynchronized stratum, or there has been no reference update for over an hour. Check chronyd and run sudo chronyc -n tracking and sudo chronyc -n sources -v. The other Pi may still serve time; check it before changing clients.
           runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/host-monitoring.md#local-time-service
     - eval_time: 15m
       alertname: NTPNotSynchronized
@@ -444,8 +444,8 @@ tests:
           job: pi-chrony
           severity: warning
         exp_annotations:
-          summary: NTP on ups-compute-rack has no recent synchronized reference
-          description: For ten minutes, chrony has been unreachable, reported an unsynchronized stratum, or gone over an hour without a reference update. Check chronyd and run sudo chronyc -n tracking and sudo chronyc -n sources -v. The other Pi can still serve time; check it before changing clients.
+          summary: NTP synchronization is unconfirmed on ups-compute-rack
+          description: For ten minutes, the exporter has been unable to read all chrony data, chrony has reported an unsynchronized stratum, or there has been no reference update for over an hour. Check chronyd and run sudo chronyc -n tracking and sudo chronyc -n sources -v. The other Pi may still serve time; check it before changing clients.
           runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/host-monitoring.md#local-time-service
       - exp_labels:
           instance: ups-office
@@ -453,8 +453,8 @@ tests:
           job: pi-chrony
           severity: warning
         exp_annotations:
-          summary: NTP on ups-office has no recent synchronized reference
-          description: For ten minutes, chrony has been unreachable, reported an unsynchronized stratum, or gone over an hour without a reference update. Check chronyd and run sudo chronyc -n tracking and sudo chronyc -n sources -v. The other Pi can still serve time; check it before changing clients.
+          summary: NTP synchronization is unconfirmed on ups-office
+          description: For ten minutes, the exporter has been unable to read all chrony data, chrony has reported an unsynchronized stratum, or there has been no reference update for over an hour. Check chronyd and run sudo chronyc -n tracking and sudo chronyc -n sources -v. The other Pi may still serve time; check it before changing clients.
           runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/host-monitoring.md#local-time-service
 
   - name: Holdover tolerates normal long polling but warns after an hour plus ten minutes
@@ -484,8 +484,8 @@ tests:
           job: pi-chrony
           severity: warning
         exp_annotations:
-          summary: NTP on ups-compute-rack has no recent synchronized reference
-          description: For ten minutes, chrony has been unreachable, reported an unsynchronized stratum, or gone over an hour without a reference update. Check chronyd and run sudo chronyc -n tracking and sudo chronyc -n sources -v. The other Pi can still serve time; check it before changing clients.
+          summary: NTP synchronization is unconfirmed on ups-compute-rack
+          description: For ten minutes, the exporter has been unable to read all chrony data, chrony has reported an unsynchronized stratum, or there has been no reference update for over an hour. Check chronyd and run sudo chronyc -n tracking and sudo chronyc -n sources -v. The other Pi may still serve time; check it before changing clients.
           runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/host-monitoring.md#local-time-service
     - eval_time: 75m
       alertname: NTPNotSynchronized
@@ -514,7 +514,7 @@ tests:
           severity: warning
         exp_annotations:
           summary: Collector pi-chrony is down on ups-compute-rack
-          description: The pi-chrony scrape on ups-compute-rack has failed for ten minutes, so the rules that read it see nothing while the machine itself still reports. Check that collector's container on the host.
+          description: The pi-chrony scrape on ups-compute-rack has failed for ten minutes, so the rules that read it see nothing while the machine itself still reports. Check that collector's service on the host.
     - eval_time: 15m
       alertname: NTPNotSynchronized
       exp_alerts: []
@@ -633,4 +633,36 @@ tests:
       exp_alerts: []
     - eval_time: 30m
       alertname: NTPClockErrorHigh
+      exp_alerts: []
+
+  - name: Valid 1024-second source polling stays quiet over three hours
+    interval: 16s
+    input_series:
+    - series: up{job="pi-chrony",instance="ups-compute-rack",platform="pi"}
+      values: 1x700
+    - series: chrony_up{job="pi-chrony",instance="ups-compute-rack",platform="pi"}
+      values: 1x700
+    - series: chrony_tracking_stratum{job="pi-chrony",instance="ups-compute-rack",platform="pi"}
+      values: 2x700
+    - series: chrony_tracking_reference_timestamp_seconds{job="pi-chrony",instance="ups-compute-rack",platform="pi"}
+      values: 0x63 1024x63 2048x63 3072x63 4096x63 5120x63 6144x63 7168x63 8192x63 9216x63 10240x63
+    alert_rule_test:
+    - eval_time: 3h
+      alertname: NTPNotSynchronized
+      exp_alerts: []
+
+  - name: One Pi's successful scrape never validates another Pi's unreadable chrony data
+    interval: 1m
+    input_series:
+    - series: up{job="pi-chrony",instance="ups-compute-rack",platform="pi"}
+      values: '0x30'
+    - series: chrony_up{job="pi-chrony",instance="ups-compute-rack",platform="pi"}
+      values: '0x30'
+    - series: up{job="pi-chrony",instance="ups-office",platform="pi"}
+      values: 1x30
+    - series: chrony_up{job="pi-chrony",instance="ups-office",platform="pi"}
+      values: 1x30
+    alert_rule_test:
+    - eval_time: 20m
+      alertname: NTPNotSynchronized
       exp_alerts: []

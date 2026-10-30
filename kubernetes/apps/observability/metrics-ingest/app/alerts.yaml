@@ -31,9 +31,10 @@ spec:
             severity: warning
           annotations:
             summary: Collector {{ $labels.job }} is down on {{ $labels.instance }}
-            description: 'The {{ $labels.job }} scrape on {{ $labels.instance }} has failed for ten minutes, so the rules that read it see nothing while the machine itself still reports. Check that collector''s container on the host.'
+            description: 'The {{ $labels.job }} scrape on {{ $labels.instance }} has failed for ten minutes, so the rules that read it see nothing while the machine itself still reports. Check that collector''s service on the host.'
 
-        # chrony_up describes the daemon connection, not synchronization.
+        # A zero chrony_up can reflect any collector request failure, even
+        # with healthy tracking; it is not a synchronization flag.
         # An hour without a clock update also catches prolonged holdover;
         # normal source polling can be as slow as 1024 seconds.
         - alert: NTPNotSynchronized
@@ -49,8 +50,8 @@ spec:
           labels:
             severity: warning
           annotations:
-            summary: NTP on {{ $labels.instance }} has no recent synchronized reference
-            description: 'For ten minutes, chrony has been unreachable, reported an unsynchronized stratum, or gone over an hour without a reference update. Check chronyd and run sudo chronyc -n tracking and sudo chronyc -n sources -v. The other Pi can still serve time; check it before changing clients.'
+            summary: NTP synchronization is unconfirmed on {{ $labels.instance }}
+            description: 'For ten minutes, the exporter has been unable to read all chrony data, chrony has reported an unsynchronized stratum, or there has been no reference update for over an hour. Check chronyd and run sudo chronyc -n tracking and sudo chronyc -n sources -v. The other Pi may still serve time; check it before changing clients.'
             runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/host-monitoring.md#local-time-service
 
         - alert: NTPClockErrorHigh
