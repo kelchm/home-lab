@@ -11,7 +11,7 @@ Renovate opens PRs every weekend. Only GitHub Actions updates automerge; every o
 
 - Get the queue from `gh pr list --author app/renovate --limit 100 --json number,title,labels,mergeable,statusCheckRollup` (the default limit of 30 has been smaller than a batch). `type/*` labels give the update type, `!` marks a major, and `area/*` says where it lands. The Renovate Dashboard issue lists updates awaiting approval.
 - Account for every open PR. One left out of the summary is how a sensitive update slips into a routine merge.
-- A quiet queue can mean Renovate stopped. A failed Renovate Health run reports a repository problem or a dashboard with no Renovate write for 72 hours; follow [the response](../../../docs/runbooks/dependency-updates.md#renovate-health) before trusting the queue.
+- A failed Renovate Problems run means the Dashboard lists a repository problem or couldn't be read; follow [the response](../../../docs/runbooks/dependency-updates.md#renovate-problems). A passing run does not show that Renovate is running.
 - Before merging, record the health of Flux, pods and alerts, so new breakage can be told from old.
 - Merge a component split across PRs as a set, for example a CRD chart and its OCI image, or a `bootstrap/` seed and its HelmRelease.
 - PRs that edit the same file, usually `.mise.toml`, conflict after the first merges. Renovate rebases them within minutes.

@@ -49,7 +49,7 @@ or fixing.
 | [bambuddy-bootstrap](runbooks/bambuddy-bootstrap.md) | Bringing up Bambuddy, validating printer containment and OIDC, and exercising backup recovery. |
 | [visionect-migration](runbooks/visionect-migration.md) | Staging, cutting over, validating, and rolling back the Synology-to-k8s Visionect migration. |
 | [host-monitoring](runbooks/host-monitoring.md) | Enrolling, verifying, and removing PVE and DGX Spark hosts in metrics collection; the Proxmox API exporter. |
-| [dependency-updates](runbooks/dependency-updates.md) | Holding a dependency back with a version constraint, review approval or exact-content lock, recording why, reading a failed Renovate lookup, and responding to a Renovate health alert. |
+| [dependency-updates](runbooks/dependency-updates.md) | Holding a dependency back with a version constraint, review approval or exact-content lock, recording why, reading a failed Renovate lookup, and responding to a Renovate problems alert. |
 | [doco-cd-self-update](runbooks/doco-cd-self-update.md) | Migrating doco-cd to native self-update, verifying handover, and recovering a failed update. |
 | [dgx-spark-bringup](runbooks/dgx-spark-bringup.md) | Configuring, validating, troubleshooting, and recovering the two-node DGX Spark LAN/storage/RDMA setup. |
 | [pve-node-bootstrap](runbooks/pve-node-bootstrap.md) | Using GLKVM and Athena netboot.xyz to inventory, PXE-boot, install, and recover a PVE node. |

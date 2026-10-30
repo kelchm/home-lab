@@ -1,11 +1,11 @@
 ---
-name: "Renovate Health"
+name: "Renovate Problems"
 
 on:
   workflow_dispatch:
     inputs:
       drill:
-        description: Fail on a bundled problem dashboard to test failure delivery
+        description: Fail on the bundled problem dashboard to test failure delivery
         type: boolean
         default: false
   # A failed run is the alert. GitHub notifies whoever last changed this cron line.
@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   check:
-    name: Check Renovate Health
+    name: Check Renovate Dashboard Problems
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -27,7 +27,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Check dashboard problems and last Renovate write
+      - name: Check the dashboard for repository problems
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python3 scripts/ci/check-renovate-health.py ${{ inputs.drill && '--drill' || '' }}
+        run: python3 scripts/ci/check-renovate-problems.py ${{ inputs.drill && '--drill' || '' }}
