@@ -1,6 +1,6 @@
 # Dependency updates
 
-Renovate proposes updates according to [`.renovaterc.json5`](../../.renovaterc.json5), and the [dependency-triage skill](../../.agents/skills/dependency-triage/SKILL.md) covers landing them. This page covers holding a dependency back on purpose: which mechanism to use, how to write an exact-content lock, what a lock records, and how to read a failed lookup.
+Renovate proposes updates according to [`.renovaterc.json5`](../../.renovaterc.json5), and the [dependency-triage skill](../../.agents/skills/dependency-triage/SKILL.md) covers landing them. This page covers holding a dependency back on purpose: which mechanism to use, how to write an exact-content lock, what a lock records, and how to read a failed lookup. It also covers the [Renovate problems](#renovate-problems) alert.
 
 ## Choose the narrowest mechanism
 
@@ -93,6 +93,21 @@ When the Renovate Dashboard reports a failed lookup, such as `Could not determin
 3. If a digest-only reference resolves but has no lock record, determine whether its exact content must be held. Record the decision to lock it, or add a verified matching tag to opt into update tracking.
 
 Don't add a tag only to silence the warning. That turns a lock into a tracked dependency, and Renovate then proposes changes to content something depends on.
+
+## Renovate problems
+
+The [Renovate Problems workflow](../../.github/workflows/renovate-problems.yaml) reads the [Renovate Dashboard](https://github.com/kelchm/home-lab/issues/2) daily at 13:17 UTC with the workflow's `GITHUB_TOKEN`. A failed run is the alert: GitHub sends its workflow-failure notification to whoever last changed the cron line, provided that account has Actions notifications enabled. A persisting failure notifies on every run.
+
+The result says whether the current dashboard lists problems, not that Renovate is running. A passing run on a stalled Renovate reads the last dashboard it wrote. Missed-run detection needs a trustworthy hosted-run signal and remains open in [#1017](https://github.com/kelchm/home-lab/issues/1017).
+
+| Annotation | Meaning | Response |
+| --- | --- | --- |
+| `Renovate repository problem` | The dashboard has a Repository Problems section. | Follow its **View logs** link, and use [Read a failed lookup](#read-a-failed-lookup) for lookup failures. A registry or token error can clear on Renovate's next dashboard update, so rerun the workflow before changing anything. |
+| `Renovate dashboard unreadable` | The GitHub API read failed, or issue #2 is closed, missing or no longer looks like a dashboard. | No problem result exists for this run. Rerun after an API, rate-limit or authentication failure, and restore the dashboard if it was closed or replaced. |
+
+The check samples once a day, so it can miss a problem that clears first. GitHub can delay or drop scheduled runs, and nothing alerts if this workflow stops running.
+
+Acceptance after merge: confirm the first scheduled run reads issue #2 and passes or reports a real problem. To test delivery, run `gh workflow run renovate-problems.yaml -f drill=true`. The run takes the same problem path on a bundled real dashboard body, so it needs no edit to issue #2, and it notifies the account that dispatched it.
 
 ## Review locks
 

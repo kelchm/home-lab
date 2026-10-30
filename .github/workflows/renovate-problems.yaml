@@ -1,0 +1,33 @@
+---
+name: "Renovate Problems"
+
+on:
+  workflow_dispatch:
+    inputs:
+      drill:
+        description: Fail on the bundled problem dashboard to test failure delivery
+        type: boolean
+        default: false
+  # A failed run is the alert. GitHub notifies whoever last changed this cron line.
+  schedule:
+    - cron: "17 13 * * *"
+
+permissions:
+  contents: read
+  issues: read
+
+jobs:
+  check:
+    name: Check Renovate Dashboard Problems
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check the dashboard for repository problems
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/ci/check-renovate-problems.py ${{ inputs.drill && '--drill' || '' }}

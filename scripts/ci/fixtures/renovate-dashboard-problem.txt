@@ -1,0 +1,25 @@
+This issue lists Renovate updates and detected dependencies. Read the [Dependency Dashboard](https://docs.renovatebot.com/key-concepts/dashboard/) docs to learn more.<br>[View this repository on the Mend.io Web Portal](https://developer.mend.io/github/kelchm/home-lab).
+
+## Repository Problems
+
+These problems occurred while renovating this repository. [View logs](https://developer.mend.io//github/kelchm/home-lab).
+
+ - ⚠️ WARN: Error obtaining docker token
+ - ⚠️ WARN: Package lookup failures
+
+## Pending Approval
+
+The following branches are pending approval. To create them, click on a checkbox below.
+
+ - [ ] <!-- approve-branch=renovate/sparkrun-0.x -->feat(deps): update dependency sparkrun ( 0.3.10 ➔ 0.4.2 )
+
+## Open
+
+The following updates have all been created. To force a retry/rebase of any, click on a checkbox below.
+
+ - [ ] <!-- rebase-branch=renovate/sevensolutions-traefik-oidc-auth-0.x -->[feat(github-release): update release sevensolutions/traefik-oidc-auth ( v0.21.0 ➔ v0.22.0 )](../pull/1040)
+
+## Detected Dependencies
+
+> [!NOTE]
+> Detected dependencies section has been truncated
