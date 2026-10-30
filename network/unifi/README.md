@@ -13,6 +13,8 @@ of truth and changes are applied manually.
 
 The "Firewall rules" and "IDS/IPS signature suppression" sections below distinguish applied state from intent for configuration that lives only in the UniFi UI; no exportable artifact lives in this repo.
 
+Local NTP client access and DHCP option 42 are prepared in the [local NTP runbook](../../docs/runbooks/local-ntp.md). Gateway/DHCP activation is pending fresh network, policy and route read-back; historical inventory here does not establish that those paths are permitted.
+
 ## Remote Admin applied state
 
 The Tailscale router rollout created an isolated VLAN and replaced the PVE trunk's repeated per-port overrides with one reusable port profile in UniFi Network 10.6.101:

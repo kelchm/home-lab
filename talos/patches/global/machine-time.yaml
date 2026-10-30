@@ -1,6 +1,10 @@
 machine:
   time:
     disabled: false
+    # Initial selection tries this order; Talos keeps a working server after failover.
+    # Activation and client acceptance: docs/runbooks/local-ntp.md
     servers:
+      - 10.32.20.111
+      - 10.32.20.112
       - 162.159.200.1
       - 162.159.200.123
