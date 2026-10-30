@@ -11,10 +11,6 @@ spec:
       kind: DaemonSet
       name: whereabouts
       namespace: kube-system
-    - apiVersion: apps/v1
-      kind: Deployment
-      name: whereabouts-reconciler
-      namespace: kube-system
   interval: 1h
   path: ./kubernetes/apps/kube-system/whereabouts/app
   prune: true

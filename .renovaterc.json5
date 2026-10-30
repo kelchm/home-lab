@@ -50,12 +50,12 @@
       minimumGroupSize: 2,
     },
     {
-      description: "Whereabouts: update five manifest references and the image together",
+      description: "Whereabouts: update four manifest references and the image together",
       matchFileNames: ["kubernetes/apps/kube-system/whereabouts/app/kustomization.yaml"],
       matchManagers: ["kustomize", "custom.regex"],
       matchUpdateTypes: ["major", "minor", "patch"],
       groupName: "Whereabouts release",
-      minimumGroupSize: 6,
+      minimumGroupSize: 5,
     },
     {
       description: "Generic device plugin: update the runtime source and image together",
