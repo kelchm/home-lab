@@ -13,7 +13,7 @@ of truth and changes are applied manually.
 
 The "Firewall rules" and "IDS/IPS signature suppression" sections below distinguish applied state from intent for configuration that lives only in the UniFi UI; no exportable artifact lives in this repo.
 
-The [local NTP runbook](../../docs/runbooks/local-ntp.md) covers the Pi time servers, one UDP 123 firewall exception and DHCP option 42 on seven networks. Gateway/DHCP activation and client acceptance remain pending.
+The [local NTP runbook](../../docs/runbooks/local-ntp.md) covers the applied Pi NTP firewall exception and DHCP option 42 advertisements on seven networks. All three Talos nodes on VLAN 30 have demonstrated fresh Pi synchronization; DHCP-client adoption after natural renewal, client failover and WAN-outage acceptance remain pending in [#1031](https://github.com/kelchm/home-lab/issues/1031).
 
 ## Remote Admin applied state
 
@@ -136,6 +136,10 @@ allocates from it.
 ## Firewall rules
 
 Rules are configured manually in the UniFi UI; this section distinguishes applied policies from remaining intent because there is no committable controller artifact.
+
+### Local NTP
+
+`Allow Cameras Storage Workloads to Pi NTP` is enabled for Internal → Internal traffic from the Cameras, Storage and Workloads networks to `10.32.20.111/32` and `10.32.20.112/32`, IPv4 UDP destination 123, source port Any, All states/Always. It sits immediately above `Block Workloads to Protected Networks`, ahead of the Cameras/Storage isolation block. Auto Allow Return Traffic is off; existing return policies and both `Starlink Management` routes through WAN2 were preserved. See [#1031](https://github.com/kelchm/home-lab/issues/1031) for the applied-state evidence.
 
 ### Cameras
 
