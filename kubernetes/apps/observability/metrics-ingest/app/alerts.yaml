@@ -25,13 +25,52 @@ spec:
               original timestamps once delivery resumes.
 
         - alert: NodeCollectorDown
-          expr: up{job=~"(pve|spark|synology|pi)-(node|gpu|snmp|smartctl|vmagent|deployer|blackbox-exporter|fluent-bit)"} == 0
+          expr: up{job=~"(pve|spark|synology|pi)-(node|gpu|snmp|smartctl|vmagent|deployer|blackbox-exporter|fluent-bit|chrony)"} == 0
           for: 10m
           labels:
             severity: warning
           annotations:
             summary: Collector {{ $labels.job }} is down on {{ $labels.instance }}
             description: 'The {{ $labels.job }} scrape on {{ $labels.instance }} has failed for ten minutes, so the rules that read it see nothing while the machine itself still reports. Check that collector''s container on the host.'
+
+        # chrony_up describes the daemon connection, not synchronization.
+        # An hour without a clock update also catches prolonged holdover;
+        # normal source polling can be as slow as 1024 seconds.
+        - alert: NTPNotSynchronized
+          expr: |
+            (
+              chrony_up{job="pi-chrony"} == 0
+              or chrony_tracking_stratum{job="pi-chrony"} == 0
+              or chrony_tracking_stratum{job="pi-chrony"} >= 16
+              or time() - chrony_tracking_reference_timestamp_seconds{job="pi-chrony"} > 3600
+            )
+            and on (instance, platform, job) (up{job="pi-chrony"} == 1)
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: NTP on {{ $labels.instance }} has no recent synchronized reference
+            description: 'For ten minutes, chrony has been unreachable, reported an unsynchronized stratum, or gone over an hour without a reference update. Check chronyd and run sudo chronyc -n tracking and sudo chronyc -n sources -v. The other Pi can still serve time; check it before changing clients.'
+            runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/host-monitoring.md#local-time-service
+
+        - alert: NTPClockErrorHigh
+          expr: |
+            (
+              abs(chrony_tracking_system_time_seconds{job="pi-chrony"})
+              + chrony_tracking_root_dispersion_seconds{job="pi-chrony"}
+              + 0.5 * chrony_tracking_root_delay_seconds{job="pi-chrony"}
+            ) > 1
+            and on (instance, platform, job) (chrony_up{job="pi-chrony"} == 1)
+            and on (instance, platform, job) (chrony_tracking_stratum{job="pi-chrony"} > 0)
+            and on (instance, platform, job) (chrony_tracking_stratum{job="pi-chrony"} < 16)
+            and on (instance, platform, job) (up{job="pi-chrony"} == 1)
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: NTP clock error estimate is high on {{ $labels.instance }}
+            description: 'Chrony has estimated more than one second of system-clock error for fifteen minutes. Inspect tracking, source reachability and upstream offsets. This estimate assumes the upstream clock is correct; it is not a measurement of UTC accuracy.'
+            runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/host-monitoring.md#local-time-service
 
         - alert: NodeFilesystemSpaceLow
           expr: |

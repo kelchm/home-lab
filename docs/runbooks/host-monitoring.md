@@ -102,6 +102,27 @@ sops decrypt --extract '["metrics-ingest-token"]' <rpi-nixos>/secrets/<host>.yam
 
 Then add the host's `VMUser` with `platform=pi`. The vendor kernel ships with pressure stall information off; the profile turns it on at boot, so `NodeMemoryStalled` covers a Pi only after its first reboot with the profile. To remove a Pi, drop the profile from its configuration and delete its `VMUser`.
 
+### Local time service
+
+[rpi-nixos #26](https://github.com/kelchm/rpi-nixos/pull/26) prepares stock chrony on the two UPS Pis for [#1031](https://github.com/kelchm/home-lab/issues/1031). Producer deployment and acceptance are pending. Each Pi will scrape its loopback chrony exporter as `pi-chrony`, using its existing token and VMAuth identity. No gateway, DHCP or Talos client changes are part of this monitoring configuration. Accept the producers before activating these rules; merging their NixOS configuration alone does not deploy them.
+
+`NodeCollectorDown` covers a failed `pi-chrony` scrape after ten minutes. With the scrape working, `NTPNotSynchronized` warns after ten minutes of a failed daemon connection, an unsynchronized stratum, or a reference timestamp more than an hour old. This last case detects prolonged holdover without treating every missed source poll as an outage. `NTPClockErrorHigh` warns when the estimated system-clock error exceeds one second for fifteen minutes while chrony reports a synchronized stratum. Both warnings use the existing Alertmanager/Pushover route. Notification depends on the cluster and ingestion path; it is not independent of them.
+
+Use the existing Grafana VictoriaMetrics data source to inspect:
+
+```promql
+chrony_up{job="pi-chrony"}
+chrony_tracking_info{job="pi-chrony"}
+chrony_sources_state_info{job="pi-chrony"}
+chrony_sources_reachability_ratio{job="pi-chrony"}
+chrony_sources_last_sample_age_seconds{job="pi-chrony"}
+abs(chrony_tracking_system_time_seconds{job="pi-chrony"}) + chrony_tracking_root_dispersion_seconds{job="pi-chrony"} + 0.5 * chrony_tracking_root_delay_seconds{job="pi-chrony"}
+```
+
+The last expression follows [chrony's tracking error estimate](https://chrony-project.org/doc/4.8/chronyc.html#tracking) and assumes the reference clock is correct. Neither RMS offset, stratum nor this estimate proves calibrated UTC accuracy. Dish and public-source reachability are separate series, so a single-source failure need not mean loss of service. On the affected Pi, use `sudo chronyc -n tracking`, `sudo chronyc -n sources -v`, and `journalctl -u chronyd -u prometheus-chrony-exporter`; source fallback and rollback follow the [NixOS procedure](https://github.com/kelchm/rpi-nixos#local-time-servers). Preserve the other working server while investigating.
+
+Activation acceptance requires fresh `up` and `chrony_up` values of 1 for both instances, populated tracking/source metrics, and the loaded rules with no unexpected firing warning. Confirm normal warning routing through the existing synthetic delivery procedure; do not break either server's clock to test notification delivery. Actual WAN-outage operation and client failover remain #1031 acceptance work.
+
 ## GLKVM
 
 The recovery console runs no collector of its own. The cluster's vmagent scrapes kvmd's native export directly, as for the Proxmox API, with `instance="glkvm"` and `platform="glkvm"`. The appliance changes, metrics, alerts and acceptance checks are in the [GLKVM README](../../devices/glkvm/README.md#monitoring).
