@@ -1,8 +1,6 @@
 ---
-# Dedicated PostgreSQL backing store for Bambuddy. One instance is sufficient
-# for the initial single-printer deployment; WAL archiving, Longhorn's recurring
-# backups and Bambuddy's portable exports provide DR without adding synchronous
-# replicas.
+# Dedicated PostgreSQL backing store for Bambuddy. A streaming standby on a
+# separate node provides failover; WAL archiving and volume backups remain DR.
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
@@ -11,13 +9,16 @@ metadata:
     # A rebuilt cluster recovers from, then archives into, the same archive.
     cnpg.io/skipEmptyWalArchiveCheck: enabled
 spec:
-  instances: 1
+  instances: 2
+  primaryUpdateMethod: switchover
+  affinity:
+    podAntiAffinityType: required
   imageName: ghcr.io/cloudnative-pg/postgresql:18.6-system-trixie
   storage:
     # Room for about 4 days of unarchived WAL while the backup store is down.
     size: 20Gi
-    # New PVCs use this tier; existing volumes require a separate replica-count patch.
-    storageClass: longhorn-3replica
+    # Two storage replicas per instance; existing volumes are changed separately after HA acceptance.
+    storageClass: longhorn
   resources:
     requests:
       cpu: 100m
@@ -31,6 +32,9 @@ spec:
     annotations:
       k8s.v1.cni.cncf.io/networks: cnpg-system/storage-network
   postgresql:
+    parameters:
+      # A failed standby must not retain WAL indefinitely on this 20 GiB volume.
+      max_slot_wal_keep_size: 2GB
     # The storage interface is outside Cilium policy. Apps use IPv4; reject all IPv6 clients.
     pg_hba:
       - host all all 10.32.25.0/24 reject

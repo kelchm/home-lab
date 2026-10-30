@@ -1,11 +1,6 @@
 # Bambuddy bootstrap and recovery
 
-Bambuddy runs in `printing` with a single-instance CloudNativePG database on a
-20 GiB Longhorn PVC. Live archives use a separate 100 GiB Longhorn PVC. It is
-reachable only through `gateway-admin` at
-`https://bambuddy.home.kelch.io`. Automatic discovery, host networking,
-Virtual Printer, Proxy mode, external archive roots, and cloud integrations are
-out of scope for the initial deployment.
+Bambuddy runs in `printing`. Its desired CloudNativePG topology is two instances on separate nodes, each with a 20 GiB Longhorn PVC and asynchronous PostgreSQL replication. New database volumes use two Longhorn replicas; existing volume replica counts are a separate rollout step. Live archives use a separate 100 GiB Longhorn PVC. It is reachable only through `gateway-admin` at `https://bambuddy.home.kelch.io`. Automatic discovery, host networking, Virtual Printer, Proxy mode, external archive roots, and cloud integrations are out of scope for the initial deployment. The [database HA procedure](cnpg-backup-restore.md#two-instance-ha-rollout) records activation checks and rollback; [#782](https://github.com/kelchm/home-lab/pull/782) tracks live acceptance.
 
 ## Post-merge acceptance
 
