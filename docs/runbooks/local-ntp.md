@@ -7,11 +7,11 @@ Use the UPS Pis for local time service over IPv4 UDP 123:
 | ups-compute-rack | `10.32.20.111` |
 | ups-office | `10.32.20.112` |
 
-Both servers and their central alerts were accepted on 2026-10-30. See [rpi-nixos](https://github.com/kelchm/rpi-nixos#local-time-servers) for server operation and [host monitoring](host-monitoring.md#pi) for alerts. The client changes below are pending; [#1031](https://github.com/kelchm/home-lab/issues/1031) tracks activation and acceptance. Merging the [Talos patch](../../talos/patches/global/machine-time.yaml) does not apply it to running nodes.
+Both servers and their central alerts were accepted on 2026-10-30. See [rpi-nixos](https://github.com/kelchm/rpi-nixos#local-time-servers) for server operation and [host monitoring](host-monitoring.md#pi) for alerts. The UniFi access rule and seven DHCP advertisements are applied, and all three Talos nodes have demonstrated fresh background synchronization to a Pi. [#1031](https://github.com/kelchm/home-lab/issues/1031) records the evidence and remaining acceptance. Merging the [Talos patch](../../talos/patches/global/machine-time.yaml) does not apply it to running nodes.
 
 ## Allow access in UniFi
 
-Create one policy named **Allow Cameras Storage Workloads to Pi NTP**:
+The enabled policy **Allow Cameras Storage Workloads to Pi NTP** has these settings:
 
 | Setting | Value |
 |---|---|
@@ -22,11 +22,11 @@ Create one policy named **Allow Cameras Storage Workloads to Pi NTP**:
 | Connection states / schedule | All / Always |
 | Auto Allow Return Traffic | Off; existing policies already permit replies |
 
-Place it immediately above **Block Workloads to Protected Networks**, ahead of the Cameras/Storage isolation block. Confirm the current policy order before saving. Other intended networks already have access. Preserve existing isolation policies, return rules and the **Starlink Management** routes through WAN2.
+It sits immediately above **Block Workloads to Protected Networks**, ahead of the Cameras/Storage isolation block. Existing isolation policies, return rules and the **Starlink Management** routes through WAN2 were preserved; other intended networks already have access. Confirm the current policy order before further changes.
 
 ## Configure Talos
 
-The intended list is `10.32.20.111`, `10.32.20.112`, `162.159.200.1`, `162.159.200.123`. Talos tries the list when selecting a server, then keeps using a working server. It can remain on a public server after local service recovers; list order does not guarantee automatic failback.
+All three Talos nodes use `10.32.20.111`, `10.32.20.112`, `162.159.200.1`, `162.159.200.123`. Talos tries the list when selecting a server, then keeps using a working server. It can remain on a public server after local service recovers; list order does not guarantee automatic failback.
 
 After rollout approval, use the reviewed, merged sources and handle nodes `10.32.30.11`, `.12`, then `.13`, one at a time. Run the [Talos preflight and health checks](../../.agents/skills/talos-rollout/SKILL.md), then:
 
@@ -50,7 +50,7 @@ Require a fresh successful Pi response and a normal clock adjustment in `time.Sy
 
 In **Networks → selected network → DHCP Server → NTP Server**, enable the predefined NTP option and enter both Pi addresses, rack first. This is DHCP option 42; do not add a duplicate custom option.
 
-Apply to **Default, Cameras, Main, Infra Mgmt, Workloads, K8s Prod and IoT**. Start with one network and verify a capable client before repeating. Preserve its other DHCP settings and reservations. Storage has DHCP disabled; leave Guest and Remote Admin excluded.
+Both servers are advertised on **Default, Cameras, Main, Infra Mgmt, Workloads, K8s Prod and IoT**. After each save, read back the enabled NTP option and both ordered addresses before continuing. Preserve the other DHCP settings and reservations. Storage has DHCP disabled; leave Guest and Remote Admin excluded.
 
 After a normal lease renewal, confirm the client received both addresses and synchronized to a Pi with a fresh timestamp and sensible offset. For timesyncd use `timedatectl show-timesync --all` and its journal; for chrony use `chronyc -n sources -v` and `chronyc tracking`. Record the client and VLAN in #1031. DHCP advertisement does not configure static clients, the gateway's clock or clients that ignore option 42.
 
@@ -62,4 +62,4 @@ After a normal lease renewal, confirm the client received both addresses and syn
 
 ## Remaining acceptance
 
-The Pis have served time using both the dish and public source groups. Only the peer-Pi VLAN 20 client path has been tested. Record client adoption before closing #1031; client failover timing and real WAN-outage behavior still need separate tests.
+The Pis have served time using both the dish and public source groups. Peer-Pi queries on VLAN 20 and fresh background synchronization from all three Talos nodes on VLAN 30 are verified. DHCP-client adoption after natural lease renewal, client failover timing and real WAN-outage behavior remain pending. Record that acceptance in #1031 before closing it.
