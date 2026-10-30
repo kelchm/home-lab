@@ -82,6 +82,7 @@ jobs:
               - 'scripts/ci/validate-host-alerts.sh'
               - 'scripts/monitoring/host-alerts.test.yaml'
               - 'scripts/ci/validate-cnpg-alerts.sh'
+              - 'scripts/ci/test-cnpg-monitoring.py'
               - 'scripts/monitoring/cnpg-alerts.test.yaml'
               - 'scripts/ci/validate-alert-conventions.py'
               - 'scripts/ci/test-alert-inhibition.py'

@@ -20,6 +20,7 @@ data:
           AND slot.slot_type = 'physical'
           AND sender.usename = 'streaming_replica'
           AND sender.application_name LIKE 'visionect-db-%'
+          AND sender.application_name NOT LIKE '%-join'
       metrics:
         - streaming_replicas:
             usage: GAUGE

@@ -55,7 +55,7 @@ for namespace, app in [("iot", "visionect"), ("printing", "bambuddy")]:
         ("logical sender is not a physical standby", [sender], [(11, "logical")], 0),
         ("sender without an active physical slot", [sender], [(None, "physical")], 0),
         ("foreign cluster sender", [(11, "streaming", "streaming_replica", "other-db-2")], [(11, "physical")], 0),
-        ("base backup is not the standby", [(11, "streaming", "postgres", "pg_basebackup")], [(11, "physical")], 0),
+        ("CNPG join base backup is not the standby", [(11, "streaming", "streaming_replica", f"{database}-2-join")], [(11, "physical")], 0),
         ("two streaming physical standbys", [sender, (12, *sender[1:3], f"{database}-8")], [(11, "physical"), (12, "physical")], 2),
     ]
     for name, senders, slots, expected in cases:
