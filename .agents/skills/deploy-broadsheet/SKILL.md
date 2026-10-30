@@ -22,7 +22,8 @@ scripts/deploy-broadsheet.sh --dry-run   # preview; changes nothing
 
 The script does everything: resolves the target tag (default = latest
 `origin/main` of the broadsheet checkout), **waits for CI to publish that image
-to GHCR** (~15 min for a fresh merge), bumps `tag:` in
+to GHCR** (~15 min for a fresh merge), writes that tag with its published digest
+(`sha-<short>@sha256:<digest>`) to `tag:` in
 `kubernetes/apps/iot/broadsheet/app/helmrelease.yaml`, commits + pushes to
 `main`, forces a Flux reconcile, and waits for the rollout to go healthy.
 

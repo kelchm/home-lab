@@ -21,7 +21,7 @@ spec:
             image:
               # renovate: datasource=docker depName=ghcr.io/unpackerr/unpackerr
               repository: ghcr.io/unpackerr/unpackerr
-              tag: v0.16.1
+              tag: v0.16.1@sha256:406586865431b40b29353d899fb75a788f5384743f7f381444db5fe55d206914
             env:
               TZ: America/New_York
               UN_LOG_LEVEL: info

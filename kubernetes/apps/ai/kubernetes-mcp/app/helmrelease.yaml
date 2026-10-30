@@ -24,7 +24,7 @@ spec:
             image:
               # quay tags are v-prefixed.
               repository: quay.io/containers/kubernetes_mcp_server
-              tag: v0.0.69
+              tag: v0.0.69@sha256:1da9d62ad0c008a6cadcf2718c86c2e2d18753ca1d9f1f3313068980794b24f2
             probes:
               liveness: &probes
                 enabled: true

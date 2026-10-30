@@ -16,7 +16,7 @@ spec:
           app:
             image:
               repository: ghcr.io/mendhak/http-https-echo
-              tag: 43
+              tag: 43@sha256:c4a81744e620ad3cfbffa97374c9c0e545bb3d132b07ebc7745cce6ddee745a1
             env:
               HTTP_PORT: &port 80
               # Neither request log is kept: the JSON log echoes every caller's
