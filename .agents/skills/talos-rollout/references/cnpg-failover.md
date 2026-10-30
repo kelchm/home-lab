@@ -1,8 +1,10 @@
 # Moving a CloudNativePG primary off a rollout candidate
 
-Every CloudNativePG cluster in this repository runs a single instance, so its primary is also its only copy. Draining the node that hosts one is blocked by the PodDisruptionBudget CloudNativePG maintains for it, and forcing past that budget takes the database down with no standby to serve reads.
+The desired topology for Visionect and Bambuddy is two asynchronous instances on distinct nodes. Live HA acceptance is tracked in [#782](https://github.com/kelchm/home-lab/pull/782); read the actual topology before choosing a maintenance path. A singleton's primary is its only PostgreSQL instance, so draining its node is blocked by its PodDisruptionBudget. Never force past that budget.
 
-This procedure moves a primary deliberately. **It does not decide anything.** Whether a given database is worth a temporary replica, or whether its downtime is acceptable, is the operator's judgment and stays outside any script.
+For an accepted two-instance cluster, leave CNPG's PDB protection enabled. Require a healthy streaming standby on a different, non-candidate node, zero observed replay lag, healthy archiving and all Longhorn volumes healthy. CNPG [switches over ahead of a primary-node drain](https://github.com/cloudnative-pg/cloudnative-pg/blob/v1.30.1/docs/src/kubernetes_upgrade.md#pod-disruption-budgets). Watch the ordinary drain and verify the new primary, write-service endpoint, application recovery and replication afterwards. Do not temporarily scale an already-HA cluster back to one instance. If only the standby is on the candidate, the ordinary drain moves it; require it to return to streaming on another node before continuing. If the standby is unavailable, stop and restore redundancy before proceeding.
+
+The temporary-topology procedure below is for a **singleton** only. It moves a primary deliberately. **It does not decide anything.** Whether a given database is worth a temporary replica, or whether its downtime is acceptable, is the operator's judgment and stays outside any script. See [the permanent HA rollout and rollback](../../../../docs/runbooks/cnpg-backup-restore.md#two-instance-ha-rollout) for #782.
 
 ## Prerequisites
 
@@ -77,7 +79,7 @@ The new instance clones from the primary and joins as a streaming standby. It al
 
 ## Step 4 — confirm the replica did not land on the candidate
 
-CloudNativePG's anti-affinity is a preference, not a requirement, so verify placement instead of assuming it:
+Check the singleton's actual affinity setting: CNPG's default is preferred anti-affinity, while `podAntiAffinityType: required` enforces separation between its instances. In either case, verify that the new standby is not on the rollout candidate:
 
 ```bash
 kubectl -n <ns> get pods -l cnpg.io/cluster=<name> -o wide

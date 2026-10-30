@@ -10,15 +10,19 @@ metadata:
     # A rebuilt cluster recovers from, then archives into, the same archive.
     cnpg.io/skipEmptyWalArchiveCheck: enabled
 spec:
-  instances: 1
+  instances: 2
+  # Keep a streaming standby on another node and switch over before replacing the primary.
+  primaryUpdateMethod: switchover
+  affinity:
+    podAntiAffinityType: required
   imageName: ghcr.io/cloudnative-pg/postgresql:17.11-system-trixie
   storage:
     # The source is 2 GiB with ~6.4M history rows. Leave useful growth
     # headroom; Longhorn volumes can be expanded later if retention is kept
     # indefinite.
     size: 30Gi
-    # New PVCs use this tier; existing volumes require a separate replica-count patch.
-    storageClass: longhorn-3replica
+    # Two storage replicas per instance; existing volumes are changed separately after HA acceptance.
+    storageClass: longhorn
   resources:
     requests:
       cpu: 250m
@@ -30,6 +34,9 @@ spec:
     annotations:
       k8s.v1.cni.cncf.io/networks: cnpg-system/storage-network
   postgresql:
+    parameters:
+      # Bound slot-retained WAL if a standby stops; archiving still has its own disk budget.
+      max_slot_wal_keep_size: 10GB
     # The storage interface is outside Cilium policy. Apps use IPv4; reject all IPv6 clients.
     pg_hba:
       - host all all 10.32.25.0/24 reject

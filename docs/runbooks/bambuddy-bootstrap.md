@@ -1,11 +1,6 @@
 # Bambuddy bootstrap and recovery
 
-Bambuddy runs in `printing` with a single-instance CloudNativePG database on a
-20 GiB Longhorn PVC. Live archives use a separate 100 GiB Longhorn PVC. It is
-reachable only through `gateway-admin` at
-`https://bambuddy.home.kelch.io`. Automatic discovery, host networking,
-Virtual Printer, Proxy mode, external archive roots, and cloud integrations are
-out of scope for the initial deployment.
+Bambuddy runs in `printing`. Its desired CloudNativePG topology is two instances on separate nodes, each with a 20 GiB Longhorn PVC and asynchronous PostgreSQL replication. New database volumes use two Longhorn replicas; existing volume replica counts are a separate rollout step. Live archives use a separate 100 GiB Longhorn PVC. It is reachable only through `gateway-admin` at `https://bambuddy.home.kelch.io`. Automatic discovery, host networking, Virtual Printer, Proxy mode, external archive roots, and cloud integrations are out of scope for the initial deployment. The [database HA procedure](cnpg-backup-restore.md#two-instance-ha-rollout) records activation checks and rollback; [#782](https://github.com/kelchm/home-lab/pull/782) tracks live acceptance.
 
 ## Post-merge acceptance
 
@@ -105,8 +100,7 @@ today it sees the masqueraded Talos node rather than the Bambuddy pod.
 
 ## Backup and restore drill
 
-Both the CNPG data PVC and the archive PVC inherit Longhorn's daily and weekly
-backup jobs. The database also has continuous WAL archiving and daily base
+The CNPG instance PVCs and the archive PVC inherit Longhorn's daily and weekly backup jobs. The database also has continuous WAL archiving and daily base
 backups; see [cnpg-backup-restore](cnpg-backup-restore.md). Leave Bambuddy's scheduled local backup disabled until a separate
 NFS-backed backup path is mounted. A complete portable backup contains the
 database and every data directory; keeping its default five retained copies

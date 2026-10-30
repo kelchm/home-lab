@@ -45,7 +45,59 @@ Both clones had archiving off, error-free HBA rejection rules, no remote clients
 
 **Limits:** this verifies the selected physical recovery point, public schema, sampled cohorts and supported amcheck coverage. Whole-database equality, application behavior against clones, full-cluster/B2 recovery, complete archive continuity and production RPO/RTO remain unverified. Captured main requests/limits matched `250m/512Mi` → `1 CPU/1Gi` and sidecar `100m/128Mi` → `500m/512Mi`, with no observed OOM or failed Job. Brief controller-replaced instance windows were not all captured: lifetime/peak sizing evidence is **partial**, not a full sizing pass. Earlier failed attempts receive no retroactive credit.
 
-[#224](https://github.com/kelchm/home-lab/issues/224)’s database-restore criterion is met; its broader full-cluster disaster recovery work remains open. [#782](https://github.com/kelchm/home-lab/pull/782)’s backup/restore prerequisite is met, but HA remains **held**: the stale candidate needs refresh, review and separate approval before activation.
+[#224](https://github.com/kelchm/home-lab/issues/224)’s database-restore criterion is met; its broader full-cluster disaster recovery work remains open. [#782](https://github.com/kelchm/home-lab/pull/782)’s backup/restore prerequisite is met. Its refreshed HA configuration and procedure below require independent review and separate rollout approval; the successful restores do not authorize that change.
+
+## Two-instance HA rollout
+
+The desired topology is two instances per database, on distinct Kubernetes nodes, with asynchronous streaming replication and two Longhorn replicas per volume. `primaryUpdateMethod: switchover` makes CNPG promote a streaming standby before replacing a primary for a Pod-spec update. PostgreSQL images, 30 GiB/20 GiB sizes, memory/CPU resources, application connections, backup credentials, archive names and HBA rejects are unchanged. The `longhorn-3replica` StorageClass remains available for recovery; do not remove it while existing claims still name it.
+
+**Last live baseline, 2026-10-30 UTC:** both databases still had one Ready instance, healthy archiving and completed backups. Both primaries were named `*-db-2` on node 2. Visionect's current claim is `visionect-db-2` (30 GiB, `longhorn-3replica`); Bambuddy's is `bambuddy-db-2` (20 GiB, `longhorn`). Both underlying volumes have three replicas. This is a dated baseline, not rollout acceptance. Follow #782 for the accepted revision and operational outcome.
+
+Replication is not a backup. An abrupt primary loss can lose transactions not yet received by the standby. Both database instances and their storage still share the three nodes, NAS, network and power. `max_slot_wal_keep_size` limits slot-retained WAL to 10 GB for Visionect and 2 GB for Bambuddy at checkpoints; it does not cap total WAL or replace archiving/space alerts. A standby offline beyond that budget may need re-cloning. See [CNPG's HA-slot behavior](https://github.com/cloudnative-pg/cloudnative-pg/blob/v1.30.1/docs/src/replication.md#replication-slots-for-high-availability).
+
+### Before the approved merge
+
+1. Require both Clusters Ready, `ContinuousArchiving=True`, fresh successful backups, no backup/volume/replication alert, healthy nodes and attached healthy Longhorn volumes. Keep both database PDBs enabled. Use the [Talos preflight](../../.agents/skills/talos-rollout/SKILL.md#preflight-the-cluster) to inspect shared health and access without draining anything.
+2. Save Cluster/Pod/Service/PVC/PV/Longhorn identities, each PostgreSQL system ID, active primary and replica counts outside Git. Resolve each current PVC through its PV's matching claim UID and CSI volume handle. Do not copy an old volume name into a patch.
+3. Check capacity for one extra 30 GiB volume and one extra 20 GiB volume, each initially with two storage replicas: 100 GiB additional scheduled space before reducing the old volumes, 50 GiB net afterwards. The extra database requests total 350m CPU and 1,280 MiB memory, plus two unchanged backup sidecars (100m CPU/128 MiB each). Verify placement capacity and free addresses in the existing CNPG storage pool.
+4. Record application HTTP/database health and start a simple HTTP sample log for the two applications. Expect a short reconnect interruption, not zero downtime. No node drain, PDB removal, forced eviction, PostgreSQL version upgrade or volume resize is part of this rollout.
+
+### After merge
+
+CNPG 1.30.1 [creates missing instances before rolling Pod-spec changes](https://github.com/cloudnative-pg/cloudnative-pg/blob/v1.30.1/internal/controller/cluster_controller.go#L1084-L1201). Required anti-affinity changes the existing Pod spec, so [the rolling update can promote the new standby](https://github.com/cloudnative-pg/cloudnative-pg/blob/v1.30.1/internal/controller/cluster_upgrade.go#L179-L264) before recreating the former primary. The expected source behavior is not a measured interruption bound. With the captured `*-db-2` primaries, the expected final layout is a new `*-db-1` primary and the recreated `*-db-2` standby. Record the actual transition; do not issue an extra promotion simply to force a test. Keep PostgreSQL image bumps separate from parameter changes: CNPG rejects an update that combines both under `switchover`.
+
+For each database, wait for the rolling update to finish before SQL checks or a backup. Two Ready instances can appear before the switchover. Require the Cluster Ready, its current and target primary equal, both Pods using the new required anti-affinity, and the expected primary change/former-primary Pod recreation recorded. If the observed sequence differs, inspect the rollout before accepting it. Read the primary from the Cluster rather than retaining the old name:
+
+```bash
+set -euo pipefail
+# Choose the database being accepted; repeat for printing/bambuddy-db.
+NS=iot
+CLUSTER=visionect-db
+kubectl -n "$NS" wait "cluster/$CLUSTER" --for=jsonpath='{.status.readyInstances}'=2 --timeout=15m
+kubectl -n "$NS" wait "cluster/$CLUSTER" --for=condition=Ready --timeout=15m
+kubectl -n "$NS" get pods -l "cnpg.io/cluster=$CLUSTER" -o wide
+PRIMARY=$(kubectl -n "$NS" get cluster "$CLUSTER" -o jsonpath='{.status.currentPrimary}')
+TARGET=$(kubectl -n "$NS" get cluster "$CLUSTER" -o jsonpath='{.status.targetPrimary}')
+test -n "$PRIMARY" && test "$PRIMARY" = "$TARGET"
+kubectl -n "$NS" exec "$PRIMARY" -c postgres -- psql -X -qAt -v ON_ERROR_STOP=1 -c \
+  "SELECT pg_is_in_recovery(); SELECT system_identifier FROM pg_control_system(); SELECT application_name,state,sync_state,sent_lsn,replay_lsn,pg_wal_lsn_diff(sent_lsn,replay_lsn) AS lag_bytes FROM pg_stat_replication;"
+kubectl -n "$NS" get endpointslices -l "kubernetes.io/service-name=$CLUSTER-rw" -o jsonpath='{range .items[*].endpoints[*]}{.targetRef.name}{"\n"}{end}'
+kubectl -n "$NS" get pdb
+```
+
+Require the unchanged system ID, primary out of recovery, exactly one streaming standby with replay caught up, and the write endpoint pointing only at the current primary. Query `pg_is_in_recovery()` in the standby too; it must be true. Inspect both Pods' storage attachments and HBA configuration, advancing archiving on the current primary, and fresh metrics from both instances. Existing namespace/cluster peer policy already permits replication and instance-manager traffic; do not broaden it or the storage-network HBA rules.
+
+Scheduled backups default to [prefer-standby](https://github.com/cloudnative-pg/cloudnative-pg/blob/v1.30.1/docs/src/backup.md#backup-from-a-standby): HA changes which instance can run them. After replication and storage settle, take one ordinary plugin backup per database with `target: prefer-standby`; require completed Backup status on the standby, a readable archive record and healthy backup metrics from both instances. Keep the current schedule, archive and retention policy. Check both applications recover through their existing endpoints without changing connection configuration. Stop on a failed check; inspect CNPG events and existing logs rather than deleting/recreating instances on a guess.
+
+Only after both clusters and backups pass, reduce the two captured original Longhorn volumes from three replicas to two, **one volume at a time**. Revalidate the saved PVC UID → PV claim UID → CSI handle → Longhorn UID chain, require its current count still equals three, and use a JSON patch with tests of `metadata.uid` and `spec.numberOfReplicas` before replacing the latter with `2`. Wait for attached/healthy with two running RW replicas on distinct nodes before changing the other volume. Changing `Cluster.spec.storage.storageClass` affects new claims; it does not modify an existing volume's replica count or immutable PVC storage class. Do not recreate a database PVC for this conversion.
+
+Final acceptance requires two Ready, streaming instances per database on distinct nodes; all four volumes attached/healthy with two storage replicas each; healthy archiving and backup metrics; successful standby backups and application recovery; enabled PDBs; Ready, unsuspended Flux Kustomizations; and no failed join Jobs or unexpected consumers. Record system IDs, the actual primary/timeline changes, interruptions and volume identities in #782. A promotion changes timelines normally. Initial update/switchover acceptance does not establish an abrupt-node-loss RPO/RTO; observe planned-drain behavior during the next authorized maintenance.
+
+### Rollback and a lost standby
+
+If scale-up fails before a switchover, the existing primary remains the recovery starting point. If a switchover has happened, preserve the current primary and its writes; do not force the old primary back. Before returning to one instance, restore **the current primary's** Longhorn volume to three replicas and wait for all three healthy copies. CNPG 1.30.1 scale-down deletes the removed non-primary instance's PVC; the `Delete` reclaim policy then removes its Longhorn volume. After the expected switchover, this is the original `*-db-2` copy. If that copy must be retained, resolve its PVC/PV/CSI ownership chain and change that PV's reclaim policy to `Retain` before reverting, using a JSON patch that tests its UID and existing policy. Then revert the HA change. Reverting the Pod-spec settings also restarts the remaining primary, so expect an interruption. Verify one Ready primary, its write endpoint, archiving, application recovery and PDB protection. A failed join or not-Ready standby can prevent scale-down; inspect and deliberately remove only the confirmed non-primary instance with the matching CNPG tooling. Inventory leftover PVCs, retained PVs/volumes and inactive slots; never delete the current primary's claim or clear finalizers. Do not leave Flux suspended.
+
+If an offline standby's slot becomes `lost`, leave the healthy primary alone. Check archive reachability and disk space, then re-clone only the identified standby with the matching CNPG plugin's [instance destroy operation](https://github.com/cloudnative-pg/cloudnative-pg/blob/v1.30.1/docs/src/kubectl-plugin.md#destroy), which deletes that instance's PVCs. Verify the selected instance is not current primary immediately before the operation. Allow CNPG to provision its replacement and require streaming/healthy storage again, with its replacement slot active and `wal_status` not `lost`; never disable HA replication slots or remove their WAL cap to hide a failed standby.
 
 ## How it works
 
@@ -193,7 +245,7 @@ Use this only when `CNPGVolumeFillingUp` is firing, the store cannot be brought 
        isWALArchiver: true
    ```
 
-   CloudNativePG restarts the pod without the sidecar, with the database down meanwhile. The restart took 80 seconds in the test; a plain restart in the same conditions took 8.5 minutes, for the reason given under [WAL archiving is stalled](#wal-archiving-is-stalled).
+   CloudNativePG replaces the affected pods without the sidecar. A singleton is down during its restart; an HA cluster using `switchover` can switch primary first, but the failing archiver can delay that transition. The singleton restart took 80 seconds in the test; a plain restart in the same conditions took 8.5 minutes, for the reason given under [WAL archiving is stalled](#wal-archiving-is-stalled).
 2. Confirm the queue is gone: `cnpg_collector_pg_wal_archive_status{value="ready"}` reads 0, and PostgreSQL recycles the WAL at its next checkpoint.
 
 Setting only `isWALArchiver: false` does not work. In the test the sidecar kept attempting uploads, including after a pod restart.
@@ -353,5 +405,5 @@ Scratch database drills used PostgreSQL 17.11 clusters holding 270 to 400 MB in 
 | NAS foundation: kernel 4.4, Btrfs, doco-cd, certificate and account isolation | **Drilled** on 2026-10-29 UTC: capability-free write probe, healthy services, verified TLS (`403 0`), five-part 40 MB transfers with both accounts, matching checksums, deletion and cross-bucket list/write `AccessDenied`. Both real database backup paths and the alongside restores were accepted afterwards |
 | Existing Cluster bootstrap admission | Both server-side dry runs passed, then Flux reconciled `bootstrap.recovery` on both live Clusters during activation. Their existing data directories were retained; a rebuild using that stanza remains **undrilled** |
 | The real databases: sidecar injection, storage interface, WAL and base backups | **Drilled** on 2026-10-29 for Visionect 17.11 and Bambuddy 18.6, with the exact backups recorded above; this does not verify restored data |
-| A real-database restore, including Visionect’s 2.3 GB database | **Drilled** for Visionect 17.11 and Bambuddy 18.6 from live Athena on 2026-10-29: inclusive 02:30 physical recovery, matching public schema/two fixed cohorts each, single-worker amcheck exit 0 and complete cleanup. See the [dated result and limits](#real-data-alongside-restores-2026-10-29); HA remains held under #782 |
+| A real-database restore, including Visionect’s 2.3 GB database | **Drilled** for Visionect 17.11 and Bambuddy 18.6 from live Athena on 2026-10-29: inclusive 02:30 physical recovery, matching public schema/two fixed cohorts each, single-worker amcheck exit 0 and complete cleanup. See the [dated result and limits](#real-data-alongside-restores-2026-10-29); HA rollout approval and live acceptance remain separate under #782 |
 | Kopia snapshot and restore of the object-storage source | First normal snapshot and selected base/WAL catalog entries **verified** on 2026-10-29; see the [dated record](#first-normal-object-storage-snapshot-2026-10-29). Payload readability, complete required WAL continuity and restore remain **unverified** |
