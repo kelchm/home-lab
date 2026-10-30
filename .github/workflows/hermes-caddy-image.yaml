@@ -42,6 +42,25 @@ jobs:
         run: |
           PYTHONDONTWRITEBYTECODE=1 python3 scripts/ci/test-hermes-caddy.py
           scripts/ci/test-hermes-caddy-promotion.sh
+      - name: Install YAML validation tools
+        uses: jdx/mise-action@82a612c5ab8bcda7cc5db6b7e81a8e7584c3dc6e # v5.2.3
+        with:
+          install_args: "aqua:mikefarah/yq aqua:jqlang/jq"
+      - name: Validate Caddy deployment targets
+        run: |
+          yq -o=json -I=0 '.' proxmox/guests/hermes-1/.doco-cd.yml | jq -s -e '
+            map({name, working_dir, compose_files: (.compose_files // ["compose.yaml"])})
+            | sort_by(.name) == [
+              {name: "doco-cd", working_dir: "proxmox/guests/hermes-1/doco-cd", compose_files: ["compose.yaml"]},
+              {name: "hermes-caddy", working_dir: "proxmox/guests/hermes-1", compose_files: ["compose.caddy.yaml"]}
+            ]'
+      - name: Validate separate Hermes, Caddy and deployer Compose files with a synthetic credential
+        run: |
+          sudo install -d -m 0755 /srv/caddy
+          printf 'CLOUDFLARE_API_TOKEN=ci-placeholder\n' | sudo tee /srv/caddy/.env >/dev/null
+          docker compose -f proxmox/guests/hermes-1/compose.yaml config --quiet
+          docker compose -f proxmox/guests/hermes-1/compose.caddy.yaml config --quiet
+          docker compose -f proxmox/guests/hermes-1/doco-cd/compose.yaml config --quiet
 
   qualify-pr:
     name: Caddy Native amd64 PR Qualification

@@ -1,0 +1,30 @@
+name: hermes-caddy
+
+services:
+  caddy:
+    image: ghcr.io/kelchm/home-lab/caddy-cloudflare:candidate@sha256:7c3876c8fc82df32c80d43a134d2f185a70e88c78a2d431071cb5241e29403f1
+    container_name: hermes-caddy
+    restart: unless-stopped
+    network_mode: host
+    read_only: true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=16m
+    env_file:
+      - path: /srv/caddy/.env
+        required: true
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - /srv/caddy/data:/data
+      - /srv/caddy/config:/config
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "--output", "/dev/null", "https://hermes.home.kelch.io/api/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 2m

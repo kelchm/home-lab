@@ -20,36 +20,3 @@ services:
       API_SERVER_HOST: 127.0.0.1
       HERMES_MANAGED_DIR: /etc/hermes-managed
     command: ["gateway", "run"]
-
-  caddy:
-    build:
-      context: .
-      dockerfile: Dockerfile.caddy
-    image: localhost/hermes-caddy
-    container_name: hermes-caddy
-    restart: unless-stopped
-    network_mode: host
-    read_only: true
-    cap_drop:
-      - ALL
-    cap_add:
-      - NET_BIND_SERVICE
-    security_opt:
-      - no-new-privileges:true
-    tmpfs:
-      - /tmp:rw,noexec,nosuid,nodev,size=16m
-    depends_on:
-      - hermes
-    env_file:
-      - path: /srv/caddy/.env
-        required: true
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - /srv/caddy/data:/data
-      - /srv/caddy/config:/config
-    healthcheck:
-      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "--output", "/dev/null", "https://hermes.home.kelch.io/api/status"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 2m

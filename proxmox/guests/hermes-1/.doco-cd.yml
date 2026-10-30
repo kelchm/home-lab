@@ -1,0 +1,14 @@
+name: hermes-caddy
+working_dir: proxmox/guests/hermes-1
+compose_files: [compose.caddy.yaml]
+prune_images: false
+reconciliation: false
+timeout: 5m
+retry:
+  limit: 1
+  delay: 5m
+---
+name: doco-cd
+working_dir: proxmox/guests/hermes-1/doco-cd
+prune_images: false
+reconciliation: false

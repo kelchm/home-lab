@@ -130,3 +130,27 @@ test('module update replaces only the annotated ARG and keeps source automerge p
   const updated = await doAutoReplace(branches[0].upgrades[0], source, false);
   assert.equal(updated, source.replace(`ARG CLOUDFLARE_VERSION=${module.currentValue}`, `ARG CLOUDFLARE_VERSION=${newValue}`));
 });
+
+test('Compose candidate promotion changes only the digest and requires reviewed tests', async () => {
+  const packageFile = 'proxmox/guests/hermes-1/compose.caddy.yaml';
+  const content = readFileSync(packageFile, 'utf8');
+  assert.ok(getMatchingFiles(config['docker-compose'], [packageFile]).includes(packageFile));
+  const result = await extractPackageFile('docker-compose', content, packageFile, config['docker-compose']);
+  assert.equal(result.deps.length, 1);
+  const dep = result.deps[0];
+  normalizeDepNames(dep);
+  assert.equal(dep.packageName, 'ghcr.io/kelchm/home-lab/caddy-cloudflare');
+  assert.equal(dep.currentValue, 'candidate');
+  assert.match(dep.currentDigest, /^sha256:[a-f0-9]{64}$/);
+  assert.ok(!dep.skipReason);
+  dep.updates = [{ updateType: 'digest', newValue: 'candidate', newVersion: 'candidate', newDigest: digest }];
+  const { branches } = await branchifyUpgrades(config, {
+    'docker-compose': [{ ...result, packageFile }],
+  });
+  assert.equal(branches.length, 1);
+  assert.equal(branches[0].upgrades.length, 1);
+  const upgrade = branches[0].upgrades[0];
+  assert.equal(upgrade.automerge, false);
+  assert.equal(upgrade.ignoreTests, false);
+  assert.equal(await doAutoReplace(upgrade, content, false), content.replace(dep.currentDigest, digest));
+});

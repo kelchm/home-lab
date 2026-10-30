@@ -1,0 +1,41 @@
+# Bootstrap by hand after Caddy adoption; subsequent updates use the self target.
+name: doco-cd
+
+services:
+  doco-cd:
+    image: ghcr.io/kimdre/doco-cd:0.130.0@sha256:174e1a8d6c239d67e127e89f9a89842119b7a6c13be8e16bfe468e31b1dd6240
+    container_name: doco-cd
+    environment:
+      TZ: America/New_York
+      HTTP_PORT: "8080"
+      SELF_UPDATE_ENABLED: "true"
+      SELF_UPDATE_STRATEGY: applier
+      DEPLOY_CONFIG_BASE_DIR: proxmox/guests/hermes-1
+      POLL_CONFIG: |
+        - url: https://github.com/kelchm/home-lab.git
+          reference: main
+          interval: 3m
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/lib/doco-cd:/data
+      - type: bind
+        source: /srv/caddy/.env
+        target: /srv/caddy/.env
+        read_only: true
+        bind:
+          create_host_path: false
+    cap_drop:
+      - ALL
+    mem_limit: 256m
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "/healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
