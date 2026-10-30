@@ -159,6 +159,18 @@ Then turn on Bambuddy:
 
 Rules are in [`alerts.yaml`](../../kubernetes/apps/cnpg-system/plugin-barman-cloud/app/alerts.yaml). The Cluster's own status is not enough: it kept reporting `Cluster in healthy state` and `Continuous archiving is working` for 5 minutes after the store was stopped.
 
+### Streaming standby is missing
+
+`CNPGStreamingStandbyMissing` warns after **10 minutes** with a database instance reporting up but no primary exporter confirming the required streaming standby. Visionect and Bambuddy each desire two instances and require one standby; CI checks the rule against `spec.instances - 1`. Other singletons are outside these selectors. For a planned return to one instance, remove that Cluster's standby-loss rule.
+
+The stock sender-count metric includes `catchup`. The custom `ha` query in each Cluster's `monitoring.yaml` counts physical-slot senders in `streaming` state using CNPG's replication identity. It excludes `*-join` base-backup streams, which are not usable standbys. `primary: true` stops emission after demotion; failed queries drop the metric and failed scrapes mark series stale. A streaming connection does not prove replay progress or zero-loss failover; Longhorn replica counts are separate.
+
+Check the current primary and standby, their exporter health and `cnpg_ha_streaming_replicas`. Zero means no qualifying sender; missing data needs a collection/scrape check. Inspect `cnpg_last_error` and `cnpg_collector_last_collection_error` before concluding replication has failed. Primary scrape loss with a standby still answering warns, and may coexist with `TargetDown`. Standby exporter loss stays quiet while the primary confirms streaming. Total telemetry loss remains with existing availability alerts.
+
+After an approved merge, require Flux's `iot/visionect` and `printing/bambuddy` Kustomizations to reconcile. On **`vmalert-victoria-metrics-k8s-stack`**, verify one healthy `CNPGStreamingStandbyMissing` rule per database in the existing `cloudnative-pg/<name>` groups, with `for: 10m` and `severity: warning`. Expect primary count `1`, no query/collection errors and **10 minutes quiet**. If the metric does not appear, check the monitoring ConfigMap reference; `kubectl cnpg reload <name> -n <namespace>` is the fallback after diagnosing reload failure. Verify the existing [normal-priority Pushover route](alerting.md#ownership-and-routing), without sending a notification.
+
+Rollback the PR's changes with an ordinary Git revert through Flux. Confirm the new queries and warnings are removed while existing offline/backup rules remain. No database, PVC or replication operation is needed.
+
 ### WAL archiving is stalled
 
 `CNPGWALArchivingStalled`: the queued WAL count has remained above zero for 15 minutes. This measures a sustained backlog, not the age of an individual segment. Check whether archiving and the recovery point are advancing before diagnosing a stopped archiver.

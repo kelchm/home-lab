@@ -26,6 +26,9 @@ spec:
     limits:
       memory: 1Gi
   monitoring:
+    customQueriesConfigMap:
+      - name: bambuddy-db-monitoring
+        key: queries
     enablePodMonitor: true
   # Backups go out over the storage VLAN.
   inheritedMetadata:

@@ -6,6 +6,7 @@ resources:
   - ./backup-secret.sops.yaml
   - ./cluster.yaml
   - ./alerts.yaml
+  - ./monitoring.yaml
   - ./objectstore.yaml
   - ./scheduledbackup.yaml
   - ./helmrelease.yaml

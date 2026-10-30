@@ -1,0 +1,27 @@
+---
+# The stock streaming_replicas metric counts all WAL senders, regardless of state.
+# Use CNPG's existing exporter, on the primary only, to count physical standbys
+# from this cluster that have actually reached streaming state.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bambuddy-db-monitoring
+  labels:
+    cnpg.io/reload: ""
+data:
+  queries: |
+    ha:
+      primary: true
+      query: |
+        SELECT count(*) AS streaming_replicas
+        FROM pg_catalog.pg_stat_replication AS sender
+        JOIN pg_catalog.pg_replication_slots AS slot ON slot.active_pid = sender.pid
+        WHERE sender.state = 'streaming'
+          AND slot.slot_type = 'physical'
+          AND sender.usename = 'streaming_replica'
+          AND sender.application_name LIKE 'bambuddy-db-%'
+          AND sender.application_name NOT LIKE '%-join'
+      metrics:
+        - streaming_replicas:
+            usage: GAUGE
+            description: Physical standbys of this cluster in streaming state on this primary

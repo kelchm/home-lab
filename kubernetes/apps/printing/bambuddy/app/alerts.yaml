@@ -28,3 +28,19 @@ spec:
             severity: critical
             namespace: printing
             cnpg_cluster: bambuddy-db
+        # spec.instances=2 requires one streaming standby. CI checks this expectation.
+        # The primary-only query confirms streaming; aggregate exporters to one database alert.
+        - alert: CNPGStreamingStandbyMissing
+          expr: |
+            max by (cluster, namespace) (cnpg_collector_up{cluster="k8s-prod",namespace="printing",pod=~"bambuddy-db-([1-9][0-9]*)$"} == 1)
+            unless on (cluster, namespace)
+            max by (cluster, namespace) (cnpg_ha_streaming_replicas{cluster="k8s-prod",namespace="printing",pod=~"bambuddy-db-([1-9][0-9]*)$"} >= 1)
+          for: 10m
+          labels:
+            severity: warning
+            namespace: printing
+            cnpg_cluster: bambuddy-db
+          annotations:
+            summary: Database printing/bambuddy-db has no confirmed streaming standby
+            description: A database instance is reporting up without confirmation of a streaming standby for 10 minutes. Check replication and exporter health before maintenance; another database failure could interrupt the application or lose unreceived transactions.
+            runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/cnpg-backup-restore.md#streaming-standby-is-missing
