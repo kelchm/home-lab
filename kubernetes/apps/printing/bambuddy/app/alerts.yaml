@@ -29,34 +29,12 @@ spec:
             namespace: printing
             cnpg_cluster: bambuddy-db
         # spec.instances=2 requires one streaming standby. CI checks this expectation.
-        # Keep pod/instance out of the result so exporter duplicates and role changes
-        # retain one alert identity per database. Missing HA data is unconfirmed,
-        # but a down/unobservable primary belongs to TargetDown/CNPGClusterOffline.
+        # The primary-only query confirms streaming; aggregate exporters to one database alert.
         - alert: CNPGStreamingStandbyMissing
           expr: |
-            max by (cluster, namespace) (
-              (cnpg_collector_up{cluster="k8s-prod",namespace="printing",pod=~"bambuddy-db-([1-9][0-9]*)$"} == 1)
-              and (time() - timestamp(cnpg_collector_up{cluster="k8s-prod",namespace="printing",pod=~"bambuddy-db-([1-9][0-9]*)$"}) < 120)
-              and on (cluster, namespace, pod, instance) (up{cluster="k8s-prod",namespace="printing",pod=~"bambuddy-db-([1-9][0-9]*)$"} == 1)
-              and on (cluster, namespace, pod, instance) (time() - timestamp(up{cluster="k8s-prod",namespace="printing",pod=~"bambuddy-db-([1-9][0-9]*)$"}) < 120)
-              unless on (cluster, namespace, pod, instance) (
-                (cnpg_pg_replication_in_recovery{cluster="k8s-prod",namespace="printing",pod=~"bambuddy-db-([1-9][0-9]*)$"} == 1)
-                and (time() - timestamp(cnpg_pg_replication_in_recovery{cluster="k8s-prod",namespace="printing",pod=~"bambuddy-db-([1-9][0-9]*)$"}) < 120)
-                and on (cluster, namespace, pod, instance) (time() - cnpg_last_update_timestamp{cluster="k8s-prod",namespace="printing",pod=~"bambuddy-db-([1-9][0-9]*)$"} < 120)
-              )
-            )
+            max by (cluster, namespace) (cnpg_collector_up{cluster="k8s-prod",namespace="printing",pod=~"bambuddy-db-([1-9][0-9]*)$"} == 1)
             unless on (cluster, namespace)
-            max by (cluster, namespace) (
-              (cnpg_ha_streaming_replicas{cluster="k8s-prod",namespace="printing",pod=~"bambuddy-db-([1-9][0-9]*)$"} >= 1)
-              and (time() - timestamp(cnpg_ha_streaming_replicas{cluster="k8s-prod",namespace="printing",pod=~"bambuddy-db-([1-9][0-9]*)$"}) < 120)
-              and on (cluster, namespace, pod, instance) (cnpg_pg_replication_in_recovery{cluster="k8s-prod",namespace="printing",pod=~"bambuddy-db-([1-9][0-9]*)$"} == 0)
-              and on (cluster, namespace, pod, instance) (time() - timestamp(cnpg_pg_replication_in_recovery{cluster="k8s-prod",namespace="printing",pod=~"bambuddy-db-([1-9][0-9]*)$"}) < 120)
-              and on (cluster, namespace, pod, instance) (time() - cnpg_last_update_timestamp{cluster="k8s-prod",namespace="printing",pod=~"bambuddy-db-([1-9][0-9]*)$"} < 120)
-              and on (cluster, namespace, pod, instance) (cnpg_collector_up{cluster="k8s-prod",namespace="printing",pod=~"bambuddy-db-([1-9][0-9]*)$"} == 1)
-              and on (cluster, namespace, pod, instance) (time() - timestamp(cnpg_collector_up{cluster="k8s-prod",namespace="printing",pod=~"bambuddy-db-([1-9][0-9]*)$"}) < 120)
-              and on (cluster, namespace, pod, instance) (up{cluster="k8s-prod",namespace="printing",pod=~"bambuddy-db-([1-9][0-9]*)$"} == 1)
-              and on (cluster, namespace, pod, instance) (time() - timestamp(up{cluster="k8s-prod",namespace="printing",pod=~"bambuddy-db-([1-9][0-9]*)$"}) < 120)
-            )
+            max by (cluster, namespace) (cnpg_ha_streaming_replicas{cluster="k8s-prod",namespace="printing",pod=~"bambuddy-db-([1-9][0-9]*)$"} >= 1)
           for: 10m
           labels:
             severity: warning
@@ -64,5 +42,5 @@ spec:
             cnpg_cluster: bambuddy-db
           annotations:
             summary: Database printing/bambuddy-db has no confirmed streaming standby
-            description: For 10 minutes, a reachable database instance has no confirmed primary with the required streaming standby. Replication reports fewer than one streaming standby, or its role/streaming metrics are missing or stale. Database redundancy is at risk if the primary fails. Check replication and exporter collection errors before maintenance.
+            description: A database instance is reporting up without confirmation of a streaming standby for 10 minutes. Check replication and exporter health before maintenance; another database failure could interrupt the application or lose unreceived transactions.
             runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/cnpg-backup-restore.md#streaming-standby-is-missing
