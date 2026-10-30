@@ -79,7 +79,7 @@ The new instance clones from the primary and joins as a streaming standby. It al
 
 ## Step 4 — confirm the replica did not land on the candidate
 
-CloudNativePG's anti-affinity is a preference, not a requirement, so verify placement instead of assuming it:
+Check the singleton's actual affinity setting: CNPG's default is preferred anti-affinity, while `podAntiAffinityType: required` enforces separation between its instances. In either case, verify that the new standby is not on the rollout candidate:
 
 ```bash
 kubectl -n <ns> get pods -l cnpg.io/cluster=<name> -o wide
