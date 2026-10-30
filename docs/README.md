@@ -32,6 +32,7 @@ or fixing.
 | [athena-acme](runbooks/athena-acme.md) | Preparing and commissioning native Athena ACME issuance, DSM certificate import, renewal checks and rollback. |
 | [netbird-remote-access](runbooks/netbird-remote-access.md) | NetBird remote access: current configuration, Cloud read-back, client upgrades, the admin HTTPS extension and VM 103 management. |
 | [logging](runbooks/logging.md) | Querying Kubernetes, Talos node and UniFi console logs, rolling out Talos log delivery, the UniFi log alerts, and diagnosing the Fluent Bit-to-VictoriaLogs ingestion path. |
+| [local-ntp](runbooks/local-ntp.md) | Connecting Talos and DHCP clients to the UPS Pi time servers, the current UniFi change, client acceptance and rollback. |
 | [longhorn-backup-restore](runbooks/longhorn-backup-restore.md) | Restoring a PV from a Longhorn backup; DR drills. |
 | [cnpg-backup-restore](runbooks/cnpg-backup-restore.md) | CloudNativePG WAL archiving and base backups to the NAS S3 endpoint: alerts, the emergency archiver switch, and the three restore paths. |
 | [longhorn-storage-network-cutover](runbooks/longhorn-storage-network-cutover.md) | Moving Longhorn replica traffic onto the dedicated storage VLAN. |
