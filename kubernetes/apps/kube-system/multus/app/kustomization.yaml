@@ -11,15 +11,16 @@ kind: Kustomization
 #   - Pin the image off the moving `snapshot-thick` tag.
 #   - host-run-netns hostPath must be /var/run/netns; upstream's /run/netns
 #     leaves new pods unable to attach (cluster-crippling).
-#   - 50Mi memory limit OOMs under load; bumped to 150Mi.
+#   - 50Mi memory limit OOMs under load; local burst headroom is 384Mi.
 resources:
-  - https://raw.githubusercontent.com/k8snetworkplumbingwg/multus-cni/v4.2.4/deployments/multus-daemonset-thick.yml
+  # renovate: cni-source=k8snetworkplumbingwg/multus-cni tag=v4.3.1
+  - https://raw.githubusercontent.com/k8snetworkplumbingwg/multus-cni/d61706810cc8be60381dcb66e6a2428d5eb2795a/deployments/multus-daemonset-thick.yml
   - ./cni-ready-untaint.yaml
   - ./cni-tuning.yaml
 
 images:
   - name: ghcr.io/k8snetworkplumbingwg/multus-cni
-    newTag: v4.3.1-thick
+    newTag: v4.3.1-thick@sha256:a357a79359b80ddd5f4699117946cacf3b54f5baecf7944535594863e875fc25
 
 patches:
   - path: ./patches/host-run-netns.yaml
