@@ -1,3 +1,3 @@
-sparkrun==0.3.10
+sparkrun==0.4.2
 pytest==9.2.0
 PyYAML==6.0.3
