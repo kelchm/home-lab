@@ -251,6 +251,24 @@ def tab(title, layout):
     return {"kind": "TabsLayoutTab", "spec": {"title": title, "layout": layout}}
 
 
+def repeated(r, variable):
+    """One copy of a row per value of a variable."""
+    r["spec"]["repeat"] = {"mode": "variable", "value": variable}
+    return r
+
+
+# A tile is at least this wide, so a phone fits three to a line and a desktop keeps a group on one line; a group of long words fits two to a line.
+TILE_PX, TILE_WIDTH, TILE_WIDE = 76, 100, 130
+
+
+def tile_row(group, repeat=None):
+    """A tile group: its title over its tiles, which wrap onto more lines on a narrow screen. repeat makes one group per value of a variable."""
+    title, members, each, wide = group
+    # A group whose one tile repeats per value has as many tiles as values; 12 caps how many share a line.
+    r = row(autogrid([item(m, each) for m in members], cols=12 if each else len(members), px=TILE_PX, width=TILE_WIDE if wide else TILE_WIDTH), title)
+    return repeated(r, repeat) if repeat else r
+
+
 def only_while(r, variable, pattern):
     """Show a row only while a variable's value matches a pattern."""
     r["spec"]["conditionalRendering"] = {"kind": "ConditionalRenderingGroup", "spec": {"visibility": "show", "condition": "and", "items": [
@@ -274,10 +292,16 @@ def qvar(name, query, regex, hide="dontHide", multi=False, all_=False, current=N
     return {"kind": "QueryVariable", "spec": spec}
 
 
-def dashboard(uid, title, desc, tags, variables, elements, layout):
+def fixed_list(name, values):
+    """A multi-select variable over a fixed list, All by default, for when what should exist matters more than what reports."""
+    return {"kind": "CustomVariable", "spec": {"name": name, "query": ",".join(values), "current": ALL, "options": [{"text": v, "value": v} for v in values], "multi": True, "includeAll": True,
+                                               "hide": "dontHide", "skipUrlSync": False, "allowCustomValue": False}}
+
+
+def dashboard(uid, title, desc, tags, variables, elements, layout, links=(), start="now-6h"):
     return {"apiVersion": "dashboard.grafana.app/v2", "kind": "Dashboard", "metadata": {"name": uid},
-            "spec": {"title": title, "description": desc, "annotations": [], "cursorSync": "Crosshair", "editable": False, "links": [], "liveNow": False, "preload": False, "tags": tags,
-                     "timeSettings": {"timezone": "browser", "from": "now-6h", "to": "now", "autoRefresh": "1m", "autoRefreshIntervals": ["30s", "1m", "5m", "15m"],
+            "spec": {"title": title, "description": desc, "annotations": [], "cursorSync": "Crosshair", "editable": False, "links": list(links), "liveNow": False, "preload": False, "tags": tags,
+                     "timeSettings": {"timezone": "browser", "from": start, "to": "now", "autoRefresh": "1m", "autoRefreshIntervals": ["30s", "1m", "5m", "15m"],
                                       "hideTimepicker": False, "fiscalYearStartMonth": 0},
                      "variables": variables, "elements": elements, "layout": layout}}
 

@@ -12,7 +12,7 @@ from pathlib import Path
 
 from home import overview as e
 from home import widgets as w
-from home.schema import Panels, autogrid, dashboard, datasource_variable, exprs, grid, item, only_while, row, rows, tab
+from home.schema import Panels, autogrid, dashboard, datasource_variable, exprs, grid, item, only_while, row, rows, tab, tile_row
 
 ROOT = Path(__file__).resolve().parents[2]
 OUTPUT = ROOT / "kubernetes/apps/observability/grafana/app/home-dashboard.json"
@@ -36,7 +36,7 @@ DEEPER = {
     "network": [("UniFi sites", d("9WaGWZaZk")), ("Switches", d("FsfxpWaZz")), ("Access points", d("g5wFWqxZk")), ("Gateway", d("4Yo8IZ-Wk")),
                 ("Network logs", w.explore("service.namespace:=unifi"))],
     "power": [("Synology / Storage and hardware health", d("synology-health"))],
-    "devices": [("Hosts", d("hosts")), ("GLKVM / Recovery console", d("glkvm-console")), ("Probes", d("pi-blackbox")), ("Pi logs", w.explore("service.namespace:=pi"))]}
+    "devices": [("Hosts", d("hosts")), ("NTP", d("ntp")), ("GLKVM / Recovery console", d("glkvm-console")), ("Probes", d("pi-blackbox")), ("Pi logs", w.explore("service.namespace:=pi"))]}
 
 SOURCE = {}   # element name -> (widget, the platform or system it is built for)
 
@@ -57,20 +57,10 @@ def auto(cols, px, key, repeat=None, when=None):
     return row(autogrid([item(key, repeat, when)], cols=cols, px=px))
 
 
-# A tile is at least this wide, so a phone fits three to a line and a desktop keeps a group on one line; a group of long words fits two to a line.
-TILE_PX, TILE_WIDTH, TILE_WIDE = 76, 100, 130
-
-
 def tiles(key, repeat=None, panels=w.W):
-    """A tile group: its title over its tiles, which wrap onto more lines on a narrow screen. repeat makes one group per value of a variable."""
-    title, members, each, wide = panels.groups[key]
-    for m in members:
+    for m in panels.groups[key][1]:
         SOURCE[m] = (m, "")
-    # A group whose one tile repeats per value has as many tiles as values; 12 caps how many share a line.
-    r = row(autogrid([item(m, each) for m in members], cols=12 if each else len(members), px=TILE_PX, width=TILE_WIDE if wide else TILE_WIDTH), title)
-    if repeat:
-        r["spec"]["repeat"] = {"mode": "variable", "value": repeat}
-    return r
+    return tile_row(panels.groups[key], repeat)
 
 
 GO = cells(2, ("deeper", 24))

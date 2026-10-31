@@ -7,7 +7,7 @@ Use the UPS Pis for local time service over IPv4 UDP 123:
 | ups-compute-rack | `10.32.20.111` |
 | ups-office | `10.32.20.112` |
 
-Both servers and their central alerts were accepted on 2026-10-30. See [rpi-nixos](https://github.com/kelchm/rpi-nixos#local-time-servers) for server operation and [host monitoring](host-monitoring.md#pi) for alerts. The UniFi access rule and seven DHCP advertisements are applied, and all three Talos nodes have demonstrated fresh background synchronization to a Pi. [#1031](https://github.com/kelchm/home-lab/issues/1031) records the evidence and remaining acceptance. Merging the [Talos patch](../../talos/patches/global/machine-time.yaml) does not apply it to running nodes.
+Both servers and their central alerts were accepted on 2026-10-30. See [rpi-nixos](https://github.com/kelchm/rpi-nixos#local-time-servers) for server operation and [host monitoring](host-monitoring.md#pi) for alerts. The UniFi access rule and seven DHCP advertisements are applied, and all three Talos nodes have demonstrated fresh background synchronization to a Pi. [#1031](https://github.com/kelchm/home-lab/issues/1031) records the evidence and remaining acceptance. The [NTP dashboard](https://grafana.home.kelch.io/d/ntp) shows both servers, their sources and their request load; its packet counts cannot show which clients use a server. Merging the [Talos patch](../../talos/patches/global/machine-time.yaml) does not apply it to running nodes.
 
 ## Allow access in UniFi
 
@@ -62,4 +62,4 @@ After a normal lease renewal, confirm the client received both addresses and syn
 
 ## Remaining acceptance
 
-The Pis have served time using both the dish and public source groups. Peer-Pi queries on VLAN 20 and fresh background synchronization from all three Talos nodes on VLAN 30 are verified. DHCP-client adoption after natural lease renewal, client failover timing and real WAN-outage behavior remain pending. Record that acceptance in #1031 before closing it.
+The Pis have served time using both the dish and public source groups. Peer-Pi queries on VLAN 20 and fresh background synchronization from all three Talos nodes on VLAN 30 are verified. On 2026-10-31 a natural renewal gave `adsb-office` both addresses, but dhcpcd did not pass them to timesyncd. [rpi-nixos #28](https://github.com/kelchm/rpi-nixos/pull/28) explicitly configures both Pis before the existing public pool; fresh background synchronization to `.111` is verified by advancing client packet counts and synchronization timestamps, plus the Pi's client counter. This is a static client list, so future DHCP option changes must also be applied to its NixOS configuration. Client failover timing and real WAN-outage behavior remain pending. Record those outcomes in #1031 before closing it.

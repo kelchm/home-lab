@@ -318,6 +318,10 @@ jobs:
         if: needs.pre-job.outputs.kubernetes_changed == 'true'
         run: python3 scripts/grafana/render-home.py --check
 
+      - name: Validate the NTP dashboard against its generator
+        if: needs.pre-job.outputs.kubernetes_changed == 'true'
+        run: python3 scripts/grafana/render-ntp.py --check
+
       - name: Validate Pi probe alerts
         if: needs.pre-job.outputs.kubernetes_changed == 'true'
         run: scripts/ci/validate-pi-probe-alerts.sh
