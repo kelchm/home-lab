@@ -52,7 +52,7 @@ services:
 
   vmagent:
     <<: [*service, *after-publish]
-    image: docker.io/victoriametrics/vmagent:v1.154.1@sha256:970ba603235839655e03501311c683d2269b882f7bcf0ac98892ae422603cb61
+    image: docker.io/victoriametrics/vmagent:v1.155.0@sha256:8e3c03905be15bba8312d4868e8ae6f9fc2fefee0a41d544472034249ca42bb4
     command:
       - -httpListenAddr=127.0.0.1:8429
       - -promscrape.config=/config/scrape.yaml
