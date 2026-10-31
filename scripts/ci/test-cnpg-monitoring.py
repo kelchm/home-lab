@@ -44,25 +44,27 @@ for namespace, app in [("iot", "visionect"), ("printing", "bambuddy")]:
     connection = sqlite3.connect(":memory:")
     connection.execute("ATTACH DATABASE ':memory:' AS pg_catalog")
     connection.execute("CREATE TABLE pg_catalog.pg_stat_replication (pid INTEGER, state TEXT, usename TEXT, application_name TEXT)")
-    connection.execute("CREATE TABLE pg_catalog.pg_replication_slots (active_pid INTEGER, slot_type TEXT)")
+    connection.execute("CREATE TABLE pg_catalog.pg_replication_slots (active_pid INTEGER, slot_type TEXT, invalidation_reason TEXT)")
     # A peer may be replaced or become primary. Do not pin the standby to -db-2.
     sender = (11, "streaming", "streaming_replica", f"{database}-7")
     cases = [
-        ("healthy streaming", [sender], [(11, "physical")], 1),
+        ("healthy streaming", [sender], [(11, "physical", None)], 1),
+        ("streaming on an invalidated slot is not a usable standby", [sender], [(11, "physical", "wal_removed")], 0),
+        ("one valid and one invalidated standby", [sender, (12, *sender[1:3], f"{database}-8")], [(11, "physical", None), (12, "physical", "wal_removed")], 1),
         ("standby missing", [], [], 0),
-        ("connected but catching up", [(11, "catchup", *sender[2:])], [(11, "physical")], 0),
-        ("connected but starting", [(11, "startup", *sender[2:])], [(11, "physical")], 0),
-        ("logical sender is not a physical standby", [sender], [(11, "logical")], 0),
-        ("sender without an active physical slot", [sender], [(None, "physical")], 0),
-        ("foreign cluster sender", [(11, "streaming", "streaming_replica", "other-db-2")], [(11, "physical")], 0),
-        ("CNPG join base backup is not the standby", [(11, "streaming", "streaming_replica", f"{database}-2-join")], [(11, "physical")], 0),
-        ("two streaming physical standbys", [sender, (12, *sender[1:3], f"{database}-8")], [(11, "physical"), (12, "physical")], 2),
+        ("connected but catching up", [(11, "catchup", *sender[2:])], [(11, "physical", None)], 0),
+        ("connected but starting", [(11, "startup", *sender[2:])], [(11, "physical", None)], 0),
+        ("logical sender is not a physical standby", [sender], [(11, "logical", None)], 0),
+        ("sender without an active physical slot", [sender], [(None, "physical", None)], 0),
+        ("foreign cluster sender", [(11, "streaming", "streaming_replica", "other-db-2")], [(11, "physical", None)], 0),
+        ("CNPG join base backup is not the standby", [(11, "streaming", "streaming_replica", f"{database}-2-join")], [(11, "physical", None)], 0),
+        ("two streaming physical standbys", [sender, (12, *sender[1:3], f"{database}-8")], [(11, "physical", None), (12, "physical", None)], 2),
     ]
     for name, senders, slots, expected in cases:
         connection.execute("DELETE FROM pg_catalog.pg_stat_replication")
         connection.execute("DELETE FROM pg_catalog.pg_replication_slots")
         connection.executemany("INSERT INTO pg_catalog.pg_stat_replication VALUES (?, ?, ?, ?)", senders)
-        connection.executemany("INSERT INTO pg_catalog.pg_replication_slots VALUES (?, ?)", slots)
+        connection.executemany("INSERT INTO pg_catalog.pg_replication_slots VALUES (?, ?, ?)", slots)
         actual = connection.execute(ha["query"]).fetchone()[0]
         assert actual == expected, f"{database}: {name}: got {actual}, expected {expected}"
         checks += 1

@@ -18,6 +18,7 @@ data:
         JOIN pg_catalog.pg_replication_slots AS slot ON slot.active_pid = sender.pid
         WHERE sender.state = 'streaming'
           AND slot.slot_type = 'physical'
+          AND slot.invalidation_reason IS NULL
           AND sender.usename = 'streaming_replica'
           AND sender.application_name LIKE 'bambuddy-db-%'
           AND sender.application_name NOT LIKE '%-join'

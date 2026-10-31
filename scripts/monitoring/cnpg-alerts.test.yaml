@@ -387,3 +387,43 @@ tests:
       - eval_time: 10m
         alertname: CNPGStreamingStandbyMissing
         exp_alerts: *visionect-alerts
+
+  - name: A streaming standby on an invalidated slot raises the existing warning and recovery clears it
+    interval: 1m
+    input_series:
+      - series: cnpg_collector_up{cluster="k8s-prod",namespace="iot",pod="visionect-db-1"}
+        values: 1x21
+      - series: cnpg_ha_streaming_replicas{cluster="k8s-prod",namespace="iot",pod="visionect-db-1"}
+        values: 1x2 0x12 1x5
+      - series: cnpg_collector_up{cluster="k8s-prod",namespace="printing",pod="bambuddy-db-1"}
+        values: 1x21
+      - series: cnpg_ha_streaming_replicas{cluster="k8s-prod",namespace="printing",pod="bambuddy-db-1"}
+        values: 1x2 0x12 1x5
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: CNPGStreamingStandbyMissing
+        exp_alerts: []
+      - eval_time: 13m
+        alertname: CNPGStreamingStandbyMissing
+        exp_alerts:
+          - exp_labels:
+              cluster: k8s-prod
+              severity: warning
+              namespace: iot
+              cnpg_cluster: visionect-db
+            exp_annotations:
+              summary: Database iot/visionect-db has no confirmed streaming standby
+              description: A database instance is reporting up without confirmation of a streaming standby for 10 minutes. Check replication and exporter health before maintenance; another database failure could interrupt the application or lose unreceived transactions.
+              runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/cnpg-backup-restore.md#streaming-standby-is-missing
+          - exp_labels:
+              cluster: k8s-prod
+              severity: warning
+              namespace: printing
+              cnpg_cluster: bambuddy-db
+            exp_annotations:
+              summary: Database printing/bambuddy-db has no confirmed streaming standby
+              description: A database instance is reporting up without confirmation of a streaming standby for 10 minutes. Check replication and exporter health before maintenance; another database failure could interrupt the application or lose unreceived transactions.
+              runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/cnpg-backup-restore.md#streaming-standby-is-missing
+      - eval_time: 17m
+        alertname: CNPGStreamingStandbyMissing
+        exp_alerts: []
