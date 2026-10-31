@@ -1,0 +1,51 @@
+---
+# Coverage of the UniFi flow records. A poll runs every five minutes, so one
+# failed cycle is routine and clears itself: the rules wait for several.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: unifi-flows
+spec:
+  groups:
+    - name: unifi-flows
+      rules:
+        - alert: UniFiFlowIngestionSilent
+          expr: |
+            time() - max(unifi_flows_watermark_timestamp_seconds{job="unifi-flows"}) > 1800
+            or sum(up{job="unifi-flows"}) == 0
+            or absent(up{job="unifi-flows"})
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: UniFi flow records are more than 30 minutes behind
+            description: >-
+              The collector has not read and stored flows for over 30 minutes,
+              or is not being scraped. The console keeps about a day of rows,
+              so anything older than that is lost. The UniFi / Flows dashboard
+              shows the last cycle's result.
+
+        - alert: UniFiFlowCollectionFailing
+          expr: max by (result) (unifi_flows_last_cycle_result{job="unifi-flows",result!~"ok|no_rows|backlog"}) == 1
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "UniFi flow collection is failing: {{ $labels.result }}"
+            description: >-
+              Each cycle is ending in {{ $labels.result }}. auth_failed and
+              access_denied point at the unpoller-sa account, which backs off
+              rather than retrying. incomplete means a console response did not
+              add up, which can follow a Network upgrade because the flow API is
+              private; unifi_flows_incomplete_windows_total gives the reason.
+
+        - alert: UniFiFlowCoverageGap
+          expr: increase(unifi_flows_gap_seconds_total{job="unifi-flows"}[1h]) > 0
+          labels:
+            severity: warning
+          annotations:
+            summary: UniFi flow records have a coverage gap
+            description: >-
+              The collector gave up on {{ $value | humanizeDuration }} of flows
+              in the last hour, because they had aged out or could not be read
+              below the query cap. The UniFi / Flows dashboard lists each gap.

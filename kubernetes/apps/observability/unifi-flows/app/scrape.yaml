@@ -1,0 +1,14 @@
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMStaticScrape
+metadata:
+  name: unifi-flows
+spec:
+  jobName: unifi-flows
+  targetEndpoints:
+    - targets:
+        - unifi-flows.observability.svc.cluster.local:9464
+      labels:
+        instance: unifi-flows
+      interval: 60s
+      scrapeTimeout: 30s

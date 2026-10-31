@@ -275,7 +275,7 @@ op read --no-newline "op://Project - home-lab/unpoller-sa/password" \
   > kubernetes/apps/observability/unpoller/app/credentials.sops.yaml
 ```
 
-To rotate, change the password in UniFi OS and 1Password, rerun the command and merge; Reloader restarts the pod. To remove, delete the Flux Kustomization from the observability `kustomization.yaml` and the account from UniFi OS.
+To rotate, change the password in UniFi OS and 1Password, rerun the command and merge; Reloader restarts the pod, and [`unifi-flows`](logging.md#unifi-flow-records), which shares the Secret, reads the new password at its next login. To remove, delete the Flux Kustomization from the observability `kustomization.yaml` and the account from UniFi OS.
 
 ## WAN devices
 
