@@ -115,7 +115,7 @@ def host_links(p):
 
 MACHINE_LINKS = {"k8s": [to("${__value.text} in Node Exporter Full", "/d/rYdddlPWk?var-job=node-exporter&var-nodename=${__value.raw}&var-node=${__value.raw}&${__url_time_range}"),
                          to("Talos logs from ${__value.text}", explore('service.namespace:=talos k8s.node.name:="${__value.raw}"'))],
-                 "pve": host_links("pve"), "spark": host_links("spark"), "pi": host_links("pi")}
+                 "pve": host_links("pve"), "spark": host_links("spark"), "synology": host_links("synology"), "pi": host_links("pi")}
 
 
 def machine_cpu_trend(p):
@@ -406,6 +406,9 @@ FEEDS = {
                 "Journal lines from the PVE nodes at warning level and above, newest first, each led by its node and service."),
     "spark": (f"service.namespace:=spark severity_number:>=13 {LEVEL}" ' | format "<host.name> <service.name>: <_msg>" as _msg',
               "Journal lines from the Sparks at warning level and above, newest first, each led by its Spark and service. Containers, inference included, log to Docker rather than the journal, so their output is not here."),
+    # scemd repeats one error every six seconds, which would push every other line past the 200 shown within 20 minutes.
+    "athena": (f'service.namespace:=synology severity_number:>=13 -"Failed to get ovs_bond0.20 info" {LEVEL}' ' | format "<service.name>: <_msg>" as _msg',
+               "Journal lines from the NAS at warning level and above, newest first, each led by its service. scemd's repeating ovs_bond0.20 error is left out so it can't crowd out the rest; Athena logs in Go deeper has it. Containers log to Docker, and some packages to their own files, rather than the journal, so their output is not here."),
     "devices": (f"service.namespace:=pi severity_number:>=13 {LEVEL}" ' | format "<host.name> <service.name>: <_msg>" as _msg',
                 "Journal lines from the Pis at warning level and above, newest first, each led by its Pi and service. A Pi keeps its journal in RAM, so VictoriaLogs holds the only copy of lines from before its last boot.")}
 def feed(system):

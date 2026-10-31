@@ -32,7 +32,7 @@ DEEPER = {
     "pve-sbx": [("Proxmox via Prometheus", d("Dp7Cd57Zza")), ("Hosts", d("hosts")), ("Drive health", DRIVES), ("PVE logs", w.explore("service.namespace:=pve"))],
     "spark": [("Sparks / GPU and host health", d("sparks-health")), ("AI / Inference serving", d("spark-tensorfold-performance")), ("Hosts", d("hosts")), ("Drive health", DRIVES),
               ("Spark logs", w.explore("service.namespace:=spark"))],
-    "athena": [("Synology / Storage and hardware health", d("synology-health")), ("Drive health", DRIVES), ("Hosts", d("hosts"))],
+    "athena": [("Synology / Storage and hardware health", d("synology-health")), ("Drive health", DRIVES), ("Hosts", d("hosts")), ("Athena logs", w.explore("service.namespace:=synology"))],
     "network": [("UniFi sites", d("9WaGWZaZk")), ("Switches", d("FsfxpWaZz")), ("Access points", d("g5wFWqxZk")), ("Gateway", d("4Yo8IZ-Wk")),
                 ("Network logs", w.explore("service.namespace:=unifi"))],
     "power": [("Synology / Storage and hardware health", d("synology-health"))],
@@ -83,7 +83,7 @@ PAGES = {
                 cells(6, ("ssd-drives@pve", 24)), GO],
     "spark": [tiles("gpu", repeat="gpu"), auto(1, 70, "inference-idle", when=False), only_while(tiles("inference"), "model", ".+"), only_while(cells(7, ("tokens", 24)), "model", ".+"),
               cells(5, ("machines@spark", 15), ("machine-cpu@spark", 9)), cells(7, ("gpu-use", 24)), cells(9, ("feed@spark", 24)), cells(5, ("ssd-drives@spark", 24)), GO],
-    "athena": [tiles("nas-state"), cells(4, ("machines@synology", 15), ("nas-volumes", 9)), cells(10, ("hdd-drives", 24)), GO],
+    "athena": [tiles("nas-state"), cells(4, ("machines@synology", 15), ("nas-volumes", 9)), cells(9, ("feed@athena", 24)), cells(10, ("hdd-drives", 24)), GO],
     "network": [cells(12, ("netdev", 24)), cells(9, ("feed@network", 24)), cells(5, ("wan", 24)), tiles("starlink"), tiles("tmobile"), cells(11, ("wifi", 24)), GO],
     "power": [tiles("ups", repeat="ups"), cells(7, ("ups-load", 12), ("ups-runtime", 12)), GO],
     "devices": [cells(6, ("machines@pi", 15), ("machine-cpu@pi", 9)), cells(9, ("feed@devices", 24)), tiles("glkvm"), GO]}
