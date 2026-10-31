@@ -26,7 +26,7 @@ spec:
           app:
             image:
               repository: docker.io/samanhappy/mcphub
-              tag: 1.1.14@sha256:700013d712b7e74750bb2ce05492688833f62a39472db5e88753557002735dab
+              tag: 1.1.15@sha256:230c4d748b62dff9b4deb30e7f54a66c4f57d2f469151ac9915cdb994c055c08
             env:
               NODE_ENV: production
               PORT: "3000"
