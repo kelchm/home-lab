@@ -15,6 +15,7 @@ OUTPUT = Path(__file__).resolve().parents[2] / "kubernetes/apps/observability/gr
 SERVERS = ["ups-compute-rack", "ups-office"]
 SEL = 'job="pi-chrony",instance=~"$server"'
 DISH = "192.168.100.1"
+LOCAL = "127.127.1.1"
 SILENT_AFTER = 300   # seconds without a sample; scrapes run every 30 s
 HOLDOVER_AFTER = 3600   # the reference age NTPNotSynchronized fires on
 ERROR_LIMIT = 1   # the estimate NTPClockErrorHigh fires on
@@ -24,6 +25,7 @@ LAST_SAMPLE = f"max(tlast_over_time(up{{{SEL}}}[1h]))"
 ERROR = f"abs(chrony_tracking_system_time_seconds{{{SEL}}}) + chrony_tracking_root_dispersion_seconds{{{SEL}}} + 0.5 * chrony_tracking_root_delay_seconds{{{SEL}}}"
 REFERENCE_AGE = f"time() - chrony_tracking_reference_timestamp_seconds{{{SEL}}}"
 STRATUM = f"max(chrony_tracking_stratum{{{SEL}}})"
+PUBLIC = f'chrony_sources_reachability_ratio{{{SEL},source_address!={json.dumps(DISH)},source_address!={json.dumps(LOCAL)}}}'
 BARE = {"color": fixed(OTHER)}
 
 
@@ -40,7 +42,7 @@ def known(expr):
 def upstream():
     """What each server tracks: 1 the dish, 2 a public source, 3 its own clock, 0 nothing. An unsynchronized server reports no address."""
     e = f'chrony_tracking_info{{{SEL}}}'
-    for code, pattern in ((2, ".+"), (0, ""), (1, DISH), (3, "127.127.1.1")):
+    for code, pattern in ((2, ".+"), (0, ""), (1, DISH), (3, LOCAL)):
         e = f'label_replace({e}, "code", "{code}", "tracking_address", "{pattern}")'
     return f'max by (instance) (label_value({e}, "code"))'
 
@@ -98,15 +100,15 @@ PROBLEM_AFTER = th(QUIET + [{"value": HOLDOVER_AFTER, "color": "orange"}])
 P.tiles("server", "Time server · ${server}", [
     ("Collection", union(f"(time() - {LAST_SAMPLE} >= {SILENT_AFTER}) * 0", f"(max(up{{{SEL}}}) == 0) * 0 + 1", f"(max(chrony_up{{{SEL}}}) == 1) * 0 + 3", f"(max(up{{{SEL}}}) == 1) * 0 + 2", "vector(0)"),
      dict(mappings=words(_3=("Complete", None), _2=("Partial", None), _1=("Failing", None), _0=("Silent", None)), thresholds=th([{"value": None, "color": "red"}, {"value": 2, "color": "orange"}, {"value": 3, "color": NEUTRAL}]))),
-    ("Sync", f"WITH (stratum = ({fresh(STRATUM)})) " + union("((stratum == 0) or (stratum >= 16)) * 0 + 1", f"(stratum and on () (max({REFERENCE_AGE}) > {HOLDOVER_AFTER})) * 0 + 2", "stratum * 0 + 3", "vector(0)"),
+    ("Sync", f"WITH (stratum = ({fresh(STRATUM)}), age = (max({REFERENCE_AGE}))) " + union("((stratum == 0) or (stratum >= 16)) * 0 + 1", f"(stratum and on () (age > {HOLDOVER_AFTER})) * 0 + 2", f"(stratum and on () (age <= {HOLDOVER_AFTER})) * 0 + 3", "vector(0)"),
      dict(mappings=words(_3=("Synced", None), _2=("Holdover", None), _1=("Unsynced", None), _0=("Unknown", None)), thresholds=th([{"value": None, "color": "red"}, {"value": 2, "color": "orange"}, {"value": 3, "color": NEUTRAL}]))),
-    ("Upstream", f"({fresh(f'max({upstream()})')}) or vector(0)", dict(mappings=words(_1=("Dish", None), _2=("Public", None), _3=("Local", None), _0=("None", None)), thresholds=th([{"value": None, "color": "red"}, {"value": 1, "color": NEUTRAL}]))),
+    ("Upstream", known(f'max({upstream()})'), dict(mappings=words(**{"-1": ("Unknown", None)}, _1=("Dish", None), _2=("Public", None), _3=("Local", None), _0=("None", None)), thresholds=th([{"value": None, "color": NEUTRAL}, {"value": 0, "color": "red"}, {"value": 1, "color": NEUTRAL}]))),
     ("Stratum", known(STRATUM), dict(mappings=words(**UNKNOWN), thresholds=th([{"value": None, "color": "red"}, {"value": 1, "color": NEUTRAL}, {"value": 16, "color": "red"}]))),
     ("Last clock update", known(f"max({REFERENCE_AGE})"), dict(unit="s", mappings=words(**UNKNOWN), thresholds=PROBLEM_AFTER)),
     ("Estimated error", known(f"max({ERROR})"), dict(unit="s", decimals=1, mappings=words(**UNKNOWN), thresholds=th(QUIET + [{"value": ERROR_LIMIT, "color": "orange"}]))),
     ("Dish reach", f'({fresh(f"8 * max(chrony_sources_reachability_ratio{{{SEL},source_address={json.dumps(DISH)}}})")}) or vector(-1)',
      dict(mappings=words(**{"-1": ("Missing", None)}, **POLLS), thresholds=th([{"value": None, "color": "orange"}, {"value": 1, "color": LOOK}, {"value": 8, "color": NEUTRAL}]))),
-    ("Public sources", f'({fresh(f"count(chrony_sources_reachability_ratio{{{SEL},source_address!={json.dumps(DISH)}}} > 0)")}) or vector(0)', dict(thresholds=th([{"value": None, "color": LOOK}, {"value": 1, "color": NEUTRAL}])))],
+    ("Public sources", known(f"sum({PUBLIC} > bool 0)"), dict(mappings=words(**UNKNOWN), thresholds=th([{"value": None, "color": NEUTRAL}, {"value": 0, "color": LOOK}, {"value": 1, "color": NEUTRAL}])))],
     wide=True, desc="Collection: Partial means the exporter could not read all of chrony's data, even if tracking looks healthy; Silent means no sample for five minutes. Sync: Holdover is no clock update for an hour, and Unknown is no current tracking data. "
     "These follow NTPNotSynchronized and NTPClockErrorHigh without their waiting periods. Dish reach counts the last 8 polls; Public sources counts those that answered any of theirs. The estimate assumes the upstream is right; it is not calibrated UTC accuracy.")
 
