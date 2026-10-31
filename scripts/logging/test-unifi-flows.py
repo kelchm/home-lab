@@ -405,23 +405,31 @@ class Failures(Harness):
         self.assertEqual(self.cycle(self.collector()), 'auth_failed')
         self.assertEqual(self.console.logins, 0)
 
-    def test_expired_session_loses_no_rows_and_does_not_retry_in_the_cycle(self):
+    def test_ended_session_logs_in_once_and_finishes_the_cycle(self):
         self.console.rows = self.recent(250)
         instance = self.collector()
         self.cycle(instance)
-        stored = len(self.logs.flow_ids())
         self.now += 300
         self.console.rows += [row(7000 + i, self.edge() - 1000 - i * 2500) for i in range(150)]
         self.console.expire_session_at_page = 1
         logins = self.console.logins
-        self.assertEqual(self.cycle(instance), 'session_expired')
-        self.assertEqual(self.console.logins, logins)
-        self.assertEqual(len(self.logs.flow_ids()), stored)
-        self.now += 300
         self.assertEqual(self.cycle(instance), 'ok')
         self.assertEqual(self.console.logins, logins + 1)
         self.assertEqual(len(self.logs.flow_ids()), len(set(self.logs.flow_ids())))
         self.assertEqual(len(self.logs.flow_ids()), 400)
+
+    def test_ended_session_refused_again_is_access_denied_and_backs_off(self):
+        self.console.rows = self.recent(5)
+        instance = self.collector()
+        self.cycle(instance)
+        self.now += 300
+        self.console.rows += self.recent(5)
+        self.console.refuse_flows = 401
+        logins = self.console.logins
+        self.assertEqual(self.cycle(instance), 'access_denied')
+        self.assertEqual(self.console.logins, logins + 1, 'one new login, not a loop')
+        self.assertEqual(self.cycle(instance), 'access_denied', 'the backoff holds')
+        self.assertEqual(self.console.logins, logins + 1)
 
     def test_refused_read_on_a_fresh_session_is_access_denied(self):
         self.console.refuse_flows = 403
