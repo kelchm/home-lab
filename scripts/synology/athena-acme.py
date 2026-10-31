@@ -84,7 +84,9 @@ def certificate_map(response):
             require(cert_id not in result, "DSM returned duplicate certificate IDs")
             require(isinstance(cert["desc"], str) and type(cert["is_default"]) is bool,
                     "DSM certificate metadata is invalid")
-            require(cert.get("is_broken") is False, "DSM contains a broken certificate")
+            require(type(cert.get("is_broken")) is bool, "DSM certificate health metadata is invalid")
+            if cert["desc"] == DESCRIPTION:
+                require(not cert["is_broken"], "Managed DSM certificate is broken")
             services = cert["services"]
             require(isinstance(services, list), "DSM service assignments are invalid")
             for service in services:
@@ -355,14 +357,17 @@ class Runner:
     def current_accepted(self):
         accepted = self.load("accepted.json")
         current = self.snapshot()
-        cert_id = named_certificate(current)
-        require(cert_id == accepted.get("cert_id") and current == accepted.get("mapping"),
-                "DSM certificate identity, default, or service assignments drifted")
-        return accepted
+        cert_id = accepted.get("cert_id")
+        self.standing_identity(current, cert_id)
+        mapping = accepted.get("mapping")
+        require(isinstance(mapping, dict) and current[cert_id] == mapping.get(cert_id),
+                "Managed DSM certificate metadata or service assignments drifted")
+        # Unrelated objects may change between runs. Return the current full map
+        # so each import can still prove it preserved the bindings it found.
+        return {"cert_id": cert_id, "mapping": current}
 
     def standing_identity(self, current, cert_id):
-        require(named_certificate(current) == cert_id and ORIGINAL_ID in current,
-                "Recorded DSM certificate or original certificate is missing")
+        require(named_certificate(current) == cert_id, "Recorded DSM certificate is missing or changed")
         require(current[cert_id]["is_default"] and any(
             tuple(service[key] for key in ("owner", "subscriber", "service")) == ("root", "system", "default")
             for service in current[cert_id]["services"]), "Recorded certificate must remain DSM system/default")
@@ -718,6 +723,7 @@ class Runner:
                 if time.monotonic() >= deadline:
                     raise Failure("DSM did not serve the expected trusted leaf within 60 seconds")
                 time.sleep(2)
+        require(self.current_accepted() == accepted, "DSM certificate assignments changed during import")
         self.verified(bundle, fingerprint, minimum=minimum)
 
     def reimport(self):

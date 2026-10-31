@@ -540,7 +540,7 @@ class RuntimeTests(unittest.TestCase):
 
     def test_assignment_default_and_identity_drift_prevent_mutation(self):
         self.accepted()
-        for change in ("service", "default", "identity", "duplicate"):
+        for change in ("service", "default", "identity", "duplicate", "system", "description"):
             current = accepted_map()
             if change == "service":
                 current["newDSM"]["services"].append(current["S3existing"]["services"].pop())
@@ -549,12 +549,95 @@ class RuntimeTests(unittest.TestCase):
                 current[acme.ORIGINAL_ID]["is_default"] = True
             elif change == "identity":
                 current["unexpected"] = current.pop("newDSM")
+            elif change == "system":
+                current["newDSM"]["services"] = []
+            elif change == "description":
+                current["newDSM"]["desc"] = "unexpected"
             else:
                 current["other"] = copy.deepcopy(current["newDSM"])
             with self.subTest(change=change), patch.object(self.runner, "snapshot", return_value=current), \
                     patch.object(self.runner, "acme") as issue, self.assertRaises(acme.Failure):
                 self.runner.run()
             issue.assert_not_called()
+
+    def test_unrelated_inventory_changes_allow_run_and_optional_rebaseline(self):
+        fingerprint = hashlib.sha256(b"leaf").hexdigest()
+        for change in ("removed", "replaced", "bindings", "metadata", "added", "broken"):
+            with self.subTest(change=change):
+                self.accepted()
+                self.save("good.json", {"sha256": fingerprint})
+                current = accepted_map()
+                if change == "removed":
+                    del current[acme.ORIGINAL_ID]
+                elif change == "replaced":
+                    current["replacement"] = current.pop(acme.ORIGINAL_ID)
+                elif change == "bindings":
+                    current["S3existing"]["services"].extend(current[acme.ORIGINAL_ID]["services"])
+                    current["S3existing"]["services"].sort(key=acme.canonical)
+                    current[acme.ORIGINAL_ID]["services"] = []
+                elif change == "metadata":
+                    current[acme.ORIGINAL_ID]["desc"] = "operator updated"
+                elif change == "added":
+                    current["package"] = {"desc": "new package", "is_default": False, "services": []}
+                response = list_response(current)
+                if change == "broken":
+                    response["data"]["certificates"][0]["is_broken"] = True
+                accepted = self.runner.read(self.root / "accepted.json")
+                with patch.object(self.runner, "api", return_value=response), self.mock_validation(), \
+                        patch.object(self.runner, "live", return_value=fingerprint), \
+                        patch.object(self.runner, "acme", return_value=self.runner.bundle("issued")), \
+                        patch.object(self.runner, "import_bundle") as imported:
+                    self.runner.archive(self.runner.bundle("issued"), fingerprint)
+                    self.runner.run()
+                    imported.assert_not_called()
+                    self.assertEqual(self.runner.read(self.root / "accepted.json"), accepted)
+                    before = self.runtime_files()
+                    digest = hashlib.sha256(acme.canonical(current).encode()).hexdigest()
+                    with contextlib.redirect_stdout(io.StringIO()):
+                        self.runner.review_bindings()
+                    self.runner.rebaseline(digest)
+                    self.assertEqual(self.runner.load("accepted.json")["mapping"], current)
+                    after = self.runtime_files()
+                    before.pop("accepted.json")
+                    after.pop("accepted.json")
+                    self.assertEqual(after, before)
+
+    def test_broken_managed_certificate_prevents_renewal(self):
+        self.accepted()
+        response = list_response(accepted_map())
+        response["data"]["certificates"][-1]["is_broken"] = True
+        before = self.runtime_files()
+        with patch.object(self.runner, "api", return_value=response), \
+                patch.object(self.runner, "acme") as client, self.assertRaises(acme.Failure):
+            self.runner.run()
+        client.assert_not_called()
+        self.assertEqual(self.runtime_files(), before)
+
+    def test_import_preserves_current_unrelated_bindings_without_rebaseline(self):
+        self.accepted()
+        for drift in (False, True):
+            with self.subTest(drift=drift):
+                current = accepted_map()
+                current["replacement"] = current.pop(acme.ORIGINAL_ID)
+                before = self.runtime_files()
+
+                def imported(*args):
+                    if drift:
+                        current["S3existing"]["services"].extend(current["replacement"]["services"])
+                        current["replacement"]["services"] = []
+
+                with patch.object(self.runner, "api", side_effect=lambda *args: list_response(current)), \
+                        patch.object(self.runner, "import_bundle", side_effect=imported) as native_import, \
+                        patch.object(self.runner, "live"), patch.object(self.runner, "verified") as verified:
+                    if drift:
+                        with self.assertRaisesRegex(acme.Failure, "during import"):
+                            self.runner.replace(self.runner.bundle("issued"), NEW)
+                        verified.assert_not_called()
+                    else:
+                        self.runner.replace(self.runner.bundle("issued"), NEW)
+                        verified.assert_called_once_with(self.runner.bundle("issued"), NEW, minimum=acme.MIN_VALIDITY)
+                    native_import.assert_called_once_with(self.runner.bundle("issued"), "newDSM", True)
+                self.assertEqual(self.runtime_files(), before)
 
     def test_failed_import_retries_same_issued_bundle_and_retains_rollback(self):
         self.accepted()
@@ -582,7 +665,7 @@ class RuntimeTests(unittest.TestCase):
         before = self.runtime_files()
         for failure in ("invalid digest", "wrong good", "pending issued", "wrong live", "map drift", "map changes"):
             changed = accepted_map()
-            changed[acme.ORIGINAL_ID]["services"][0]["metadata"] = "changed"
+            changed["newDSM"]["services"][0]["metadata"] = "changed"
             snapshots = [accepted_map(), changed] if failure == "map changes" else None
             with self.subTest(failure=failure), \
                     patch.object(self.runner, "snapshot", side_effect=snapshots,
