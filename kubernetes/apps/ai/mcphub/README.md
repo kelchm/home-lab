@@ -52,4 +52,6 @@ The SOPS-encrypted settings Secret is the only source of truth. It includes an a
 - Do not use `accessType: all` for a deployed workload; it is reserved from this configuration.
 - Do not configure upstream headers, OAuth, or `passthroughHeaders`. Client credentials terminate at MCPHub.
 
+`lemon` sets `enableKeepAlive`, so MCPHub pings it every 60 seconds and retries at that interval while it is disconnected. Other backends have not opted in: one that fails its first connect stays disconnected until the gateway restarts, because read-only mode blocks the reload API.
+
 Authentication events identify the bearer-key principal in container logs, and MCP transport logs identify the selected group. MCPHub has no persistent activity store in file mode. `activityLog.storeToolPayload: false` remains set as defense in depth if database mode is evaluated later.
