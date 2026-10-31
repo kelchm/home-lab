@@ -1,0 +1,145 @@
+rule_files: [unifi-flows.yaml]
+evaluation_interval: 1m
+tests:
+  - name: A collector that keeps up raises nothing, and a quiet network is not a failure
+    interval: 1m
+    input_series:
+      - series: up{job="unifi-flows"}
+        values: 1x60
+      # Five-minute polls, moving with the clock.
+      - series: unifi_flows_watermark_timestamp_seconds{job="unifi-flows"}
+        values: 0+60x60
+      - series: unifi_flows_last_cycle_result{job="unifi-flows",result="no_rows"}
+        values: 1x60
+      - series: unifi_flows_last_cycle_result{job="unifi-flows",result="auth_failed"}
+        values: 0x60
+      - series: unifi_flows_gap_seconds_total{job="unifi-flows"}
+        values: 0x60
+    alert_rule_test:
+      - eval_time: 55m
+        alertname: UniFiFlowIngestionSilent
+        exp_alerts: []
+      - eval_time: 55m
+        alertname: UniFiFlowCollectionFailing
+        exp_alerts: []
+      - eval_time: 55m
+        alertname: UniFiFlowCoverageGap
+        exp_alerts: []
+
+  - name: A stalled watermark raises silence, and the failure is named by its result
+    interval: 1m
+    input_series:
+      - series: up{job="unifi-flows"}
+        values: 1x60
+      - series: unifi_flows_watermark_timestamp_seconds{job="unifi-flows"}
+        values: 0x60
+      - series: unifi_flows_last_cycle_result{job="unifi-flows",result="auth_failed"}
+        values: 1x60
+      - series: unifi_flows_last_cycle_result{job="unifi-flows",result="ok"}
+        values: 0x60
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: UniFiFlowIngestionSilent
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: UniFi flow records are more than 30 minutes behind
+              description: >-
+                The collector has not read and stored flows for over 30 minutes,
+                or is not being scraped. The console keeps about a day of rows,
+                so anything older than that is lost. The UniFi / Flows dashboard
+                shows the last cycle's result.
+      - eval_time: 20m
+        alertname: UniFiFlowCollectionFailing
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              result: auth_failed
+            exp_annotations:
+              summary: "UniFi flow collection is failing: auth_failed"
+              description: >-
+                Each cycle is ending in auth_failed. auth_failed and
+                access_denied point at the unpoller-sa account, which backs off
+                rather than retrying. incomplete means a console response did not
+                add up, which can follow a Network upgrade because the flow API is
+                private; unifi_flows_incomplete_windows_total gives the reason.
+
+  - name: One failed cycle clears itself without an alert
+    interval: 1m
+    input_series:
+      - series: unifi_flows_last_cycle_result{job="unifi-flows",result="read_failed"}
+        values: 0x20 1x4 0x30
+    alert_rule_test:
+      - eval_time: 24m
+        alertname: UniFiFlowCollectionFailing
+        exp_alerts: []
+
+  - name: A collector that is not scraped raises silence
+    interval: 1m
+    input_series:
+      - series: up{job="other"}
+        values: 1x30
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: UniFiFlowIngestionSilent
+        exp_alerts:
+          - exp_labels:
+              alertname: UniFiFlowIngestionSilent
+              job: unifi-flows
+              severity: warning
+            exp_annotations:
+              summary: UniFi flow records are more than 30 minutes behind
+              description: >-
+                The collector has not read and stored flows for over 30 minutes,
+                or is not being scraped. The console keeps about a day of rows,
+                so anything older than that is lost. The UniFi / Flows dashboard
+                shows the last cycle's result.
+
+  - name: Time abandoned raises a gap once, and it clears
+    interval: 1m
+    input_series:
+      - series: unifi_flows_last_gap_timestamp_seconds{job="unifi-flows",instance="unifi-flows"}
+        values: 0x10 660x120
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: UniFiFlowCoverageGap
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: unifi-flows
+              instance: unifi-flows
+            exp_annotations:
+              summary: UniFi flow records have a coverage gap
+              description: >-
+                The collector recorded a coverage gap
+                in the last hour, because some time had aged out or could not be read
+                below the query cap. The UniFi / Flows dashboard lists each gap.
+      - eval_time: 100m
+        alertname: UniFiFlowCoverageGap
+        exp_alerts: []
+
+  - name: A gap before the first scrape raises a warning without a counter increase
+    interval: 1m
+    input_series:
+      - series: unifi_flows_gap_seconds_total{job="unifi-flows",instance="unifi-flows"}
+        values: 3600x120
+      - series: unifi_flows_last_gap_timestamp_seconds{job="unifi-flows",instance="unifi-flows"}
+        values: 1x120
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: UniFiFlowCoverageGap
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: unifi-flows
+              instance: unifi-flows
+            exp_annotations:
+              summary: UniFi flow records have a coverage gap
+              description: >-
+                The collector recorded a coverage gap
+                in the last hour, because some time had aged out or could not be read
+                below the query cap. The UniFi / Flows dashboard lists each gap.
+      - eval_time: 100m
+        alertname: UniFiFlowCoverageGap
+        exp_alerts: []

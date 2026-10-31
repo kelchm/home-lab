@@ -18,6 +18,7 @@ resources:
   - ./pve-exporter/ks.yaml
   - ./smartctl-exporter/ks.yaml
   - ./starlink-exporter/ks.yaml
+  - ./unifi-flows/ks.yaml
   - ./unpoller/ks.yaml
   - ./victoria-metrics-k8s-stack/ks.yaml
   - ./victoria-logs-single/ks.yaml

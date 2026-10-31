@@ -1,0 +1,19 @@
+---
+# Egress to the UniFi console only. VictoriaLogs and vmagent are in this
+# namespace, so the namespace baseline covers them.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: unifi-flows
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: unifi-flows
+  egress:
+    # The console answers on the interface of the asking VLAN, so match the name.
+    - toFQDNs:
+        - matchName: unifi.home.kelch.io
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP

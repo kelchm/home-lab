@@ -1,0 +1,18 @@
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: unifi-flows
+spec:
+  dependsOn:
+    - name: victoria-logs-single
+    - name: victoria-metrics-k8s-stack
+  interval: 1h
+  path: ./kubernetes/apps/observability/unifi-flows/app
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+    namespace: flux-system
+  targetNamespace: observability
+  wait: true

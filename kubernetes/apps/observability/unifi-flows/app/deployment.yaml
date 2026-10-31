@@ -1,0 +1,96 @@
+---
+# Copies UniFi Flow View rows into VictoriaLogs through the console's private
+# flow API. The account holds the Network View Only role; its password is
+# Unpoller's and is read again at each login, so a rotated Secret needs no
+# restart. One replica: a second would only repeat rows.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: unifi-flows
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: unifi-flows
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: unifi-flows
+    spec:
+      automountServiceAccountToken: false
+      # ndots:1 so the console name resolves as an absolute name — see the
+      # cloudflare-dns HelmRelease.
+      dnsConfig:
+        options:
+          - name: ndots
+            value: "1"
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: collector
+          image: docker.io/library/python:3.15.2-alpine@sha256:20a82dbc2783112ddb91d1534603f802d222a3e63e593cd002eb2ac534e70211
+          command: ["python", "/app/collector.py"]
+          env:
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+          ports:
+            - name: metrics
+              containerPort: 9464
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: metrics
+            periodSeconds: 60
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: metrics
+          resources:
+            # A full 10,000-row window peaks near 125 MiB; a routine poll is far less.
+            requests:
+              cpu: 10m
+              memory: 64Mi
+            limits:
+              memory: 192Mi
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: code
+              mountPath: /app
+              readOnly: true
+            - name: credentials
+              mountPath: /secrets
+              readOnly: true
+      volumes:
+        - name: code
+          configMap:
+            name: unifi-flows
+        - name: credentials
+          secret:
+            secretName: unpoller-credentials
+            defaultMode: 0440
+            items:
+              - key: password
+                path: password
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: unifi-flows
+spec:
+  selector:
+    app.kubernetes.io/name: unifi-flows
+  ports:
+    - name: metrics
+      port: 9464
+      targetPort: metrics

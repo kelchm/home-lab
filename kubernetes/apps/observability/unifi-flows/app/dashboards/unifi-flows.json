@@ -1,0 +1,967 @@
+{
+  "uid": "unifi-flows",
+  "title": "UniFi / Flows",
+  "description": "Completed flows copied from the UniFi console's Flow View. Same-network traffic and open connections are not visible, and a flow's allowing rule is not reliably named. Operations: docs/runbooks/logging.md.",
+  "tags": [
+    "unifi",
+    "network"
+  ],
+  "schemaVersion": 40,
+  "version": 1,
+  "editable": false,
+  "graphTooltip": 1,
+  "refresh": "5m",
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "timezone": "browser",
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "label": "Metrics datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "refresh": 1,
+        "current": {
+          "text": "VictoriaMetrics",
+          "value": "victoriametrics"
+        },
+        "options": []
+      },
+      {
+        "name": "scope",
+        "label": "Scope",
+        "type": "custom",
+        "query": "inter_network,same_network,gateway,internet,.*",
+        "current": {
+          "text": "inter_network",
+          "value": "inter_network"
+        },
+        "options": [
+          {
+            "selected": true,
+            "text": "inter_network",
+            "value": "inter_network"
+          },
+          {
+            "selected": false,
+            "text": "same_network",
+            "value": "same_network"
+          },
+          {
+            "selected": false,
+            "text": "gateway",
+            "value": "gateway"
+          },
+          {
+            "selected": false,
+            "text": "internet",
+            "value": "internet"
+          },
+          {
+            "selected": false,
+            "text": ".*",
+            "value": ".*"
+          }
+        ],
+        "hide": 0,
+        "includeAll": false,
+        "multi": false,
+        "skipUrlSync": false
+      },
+      {
+        "name": "source_network",
+        "label": "Source network",
+        "type": "textbox",
+        "query": ".*",
+        "current": {
+          "text": ".*",
+          "value": ".*"
+        },
+        "options": [
+          {
+            "selected": true,
+            "text": ".*",
+            "value": ".*"
+          }
+        ],
+        "hide": 0,
+        "skipUrlSync": false
+      },
+      {
+        "name": "destination_network",
+        "label": "Destination network",
+        "type": "textbox",
+        "query": ".*",
+        "current": {
+          "text": ".*",
+          "value": ".*"
+        },
+        "options": [
+          {
+            "selected": true,
+            "text": ".*",
+            "value": ".*"
+          }
+        ],
+        "hide": 0,
+        "skipUrlSync": false
+      },
+      {
+        "name": "protocol",
+        "label": "Protocol",
+        "type": "textbox",
+        "query": ".*",
+        "current": {
+          "text": ".*",
+          "value": ".*"
+        },
+        "options": [
+          {
+            "selected": true,
+            "text": ".*",
+            "value": ".*"
+          }
+        ],
+        "hide": 0,
+        "skipUrlSync": false
+      },
+      {
+        "name": "port",
+        "label": "Port",
+        "type": "textbox",
+        "query": ".*",
+        "current": {
+          "text": ".*",
+          "value": ".*"
+        },
+        "options": [
+          {
+            "selected": true,
+            "text": ".*",
+            "value": ".*"
+          }
+        ],
+        "hide": 0,
+        "skipUrlSync": false
+      }
+    ]
+  },
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Collection",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Behind now",
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "time() - max(unifi_flows_watermark_timestamp_seconds{job=\"unifi-flows\"})",
+          "legendFormat": "",
+          "refId": "A",
+          "editorMode": "code",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "description": "How far the newest time read in full and stored trails now. A poll runs every five minutes, so up to about ten minutes is normal.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 900
+              },
+              {
+                "color": "red",
+                "value": 1800
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Last cycle",
+      "gridPos": {
+        "x": 4,
+        "y": 1,
+        "w": 5,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "max by (result) (unifi_flows_last_cycle_result{job=\"unifi-flows\"}) == 1",
+          "legendFormat": "{{result}}",
+          "refId": "A",
+          "editorMode": "code",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "description": "no_rows means the console answered and had nothing; a failure shows here by name: auth_failed, access_denied, session_expired, read_failed, incomplete, ingest_failed.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "green"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "auth_failed|access_denied|session_expired|rate_limited|read_failed|ingest_failed|state_unavailable|incomplete"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "name",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Rows stored",
+      "gridPos": {
+        "x": 9,
+        "y": 1,
+        "w": 5,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum(increase(unifi_flows_rows_written_total{job=\"unifi-flows\"}[$__range]))",
+          "legendFormat": "",
+          "refId": "A",
+          "editorMode": "code",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "description": "Rows VictoriaLogs accepted over the dashboard range.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Last gap detected",
+      "gridPos": {
+        "x": 14,
+        "y": 1,
+        "w": 5,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "max(unifi_flows_last_gap_timestamp_seconds{job=\"unifi-flows\"}) * 1000",
+          "legendFormat": "",
+          "refId": "A",
+          "editorMode": "code",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "description": "Latest gap detected in this collector process, including before its first scrape. The persisted Coverage gaps table below retains earlier gaps across restarts.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "dateTimeAsIso",
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "None observed in this process"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      }
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Incomplete windows",
+      "gridPos": {
+        "x": 19,
+        "y": 1,
+        "w": 5,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum(increase(unifi_flows_incomplete_windows_total{job=\"unifi-flows\"}[$__range]))",
+          "legendFormat": "",
+          "refId": "A",
+          "editorMode": "code",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "description": "Windows whose console response did not add up, retried until they did.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Cycles by result",
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 12,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum by (result) (increase(unifi_flows_cycles_total{job=\"unifi-flows\"}[$__rate_interval]))",
+          "legendFormat": "{{result}}",
+          "refId": "A",
+          "editorMode": "code"
+        }
+      ],
+      "description": "Separates quiet from broken: no_rows is a successful read of nothing.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 40,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "sum"
+          ],
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 8,
+      "type": "table",
+      "title": "Coverage gaps",
+      "gridPos": {
+        "x": 12,
+        "y": 5,
+        "w": 12,
+        "h": 7
+      },
+      "datasource": {
+        "type": "victoriametrics-logs-datasource",
+        "uid": "victorialogs"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "victoriametrics-logs-datasource",
+            "uid": "victorialogs"
+          },
+          "editorMode": "code",
+          "expr": "{service.name=\"unifi-flows\",record.type=\"gap\"} | fields _time, gap.start, gap.end, gap.seconds, gap.reason | sort by (_time desc) | limit 50",
+          "queryType": "instant",
+          "refId": "A",
+          "maxLines": 50
+        }
+      ],
+      "description": "Time abandoned, with why. beyond_catchup: older than the collector recovers after an outage. query_cap: too many rows in the smallest window.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "filterable": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      },
+      "transformations": [
+        {
+          "id": "extractFields",
+          "options": {
+            "source": "labels",
+            "format": "json",
+            "replace": false,
+            "keepTime": false
+          }
+        },
+        {
+          "id": "convertFieldType",
+          "options": {
+            "conversions": [
+              {
+                "targetField": "gap.seconds",
+                "destinationType": "number"
+              },
+              {
+                "targetField": "gap.start",
+                "destinationType": "time"
+              },
+              {
+                "targetField": "gap.end",
+                "destinationType": "time"
+              }
+            ],
+            "fields": {}
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "includeByName": {
+              "gap.start": true,
+              "gap.end": true,
+              "gap.seconds": true,
+              "gap.reason": true
+            },
+            "indexByName": {
+              "gap.start": 0,
+              "gap.end": 1,
+              "gap.seconds": 2,
+              "gap.reason": 3
+            },
+            "renameByName": {
+              "gap.start": "From",
+              "gap.end": "To",
+              "gap.seconds": "Seconds",
+              "gap.reason": "Reason"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "row",
+      "title": "Dependencies",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 12,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Flows between networks",
+      "gridPos": {
+        "x": 0,
+        "y": 13,
+        "w": 24,
+        "h": 9
+      },
+      "datasource": {
+        "type": "victoriametrics-logs-datasource",
+        "uid": "victorialogs"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "victoriametrics-logs-datasource",
+            "uid": "victorialogs"
+          },
+          "editorMode": "code",
+          "expr": "{service.name=\"unifi-flows\",record.type=\"flow\"} flow.scope:~\"$scope\" source.network:~\"$source_network\" destination.network:~\"$destination_network\" network.transport:~\"$protocol\" destination.port:~\"$port\" | stats by (source.network, destination.network) count_uniq(flow.id) as flows",
+          "queryType": "statsRange",
+          "refId": "A",
+          "legendFormat": "{{source.network}} \u2192 {{destination.network}}"
+        }
+      ],
+      "description": "Distinct completed flows per interval. Long-lived connections count only when they end.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 40,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "sum"
+          ],
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 11,
+      "type": "table",
+      "title": "Network dependencies",
+      "gridPos": {
+        "x": 0,
+        "y": 22,
+        "w": 24,
+        "h": 10
+      },
+      "datasource": {
+        "type": "victoriametrics-logs-datasource",
+        "uid": "victorialogs"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "victoriametrics-logs-datasource",
+            "uid": "victorialogs"
+          },
+          "editorMode": "code",
+          "expr": "{service.name=\"unifi-flows\",record.type=\"flow\"} flow.scope:~\"$scope\" source.network:~\"$source_network\" destination.network:~\"$destination_network\" network.transport:~\"$protocol\" destination.port:~\"$port\" | stats by (source.network, destination.network, network.transport, destination.port, flow.service, flow.action) count_uniq(flow.id) as flows, max(_time) as last_seen | sort by (flows desc) | limit 200",
+          "queryType": "instant",
+          "refId": "A",
+          "maxLines": 200
+        }
+      ],
+      "description": "One row per source network, destination network, protocol, port and action, busiest first. Flow counts deduplicate replayed IDs; aggregate bytes are omitted because stored copies can repeat.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "filterable": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      },
+      "transformations": [
+        {
+          "id": "extractFields",
+          "options": {
+            "source": "labels",
+            "format": "json",
+            "replace": false,
+            "keepTime": false
+          }
+        },
+        {
+          "id": "convertFieldType",
+          "options": {
+            "conversions": [
+              {
+                "targetField": "destination.port",
+                "destinationType": "number"
+              },
+              {
+                "targetField": "flows",
+                "destinationType": "number"
+              },
+              {
+                "targetField": "last_seen",
+                "destinationType": "time"
+              }
+            ],
+            "fields": {}
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "includeByName": {
+              "source.network": true,
+              "destination.network": true,
+              "network.transport": true,
+              "destination.port": true,
+              "flow.service": true,
+              "flow.action": true,
+              "flows": true,
+              "last_seen": true
+            },
+            "indexByName": {
+              "source.network": 0,
+              "destination.network": 1,
+              "network.transport": 2,
+              "destination.port": 3,
+              "flow.service": 4,
+              "flow.action": 5,
+              "flows": 6,
+              "last_seen": 7
+            },
+            "renameByName": {
+              "source.network": "Source",
+              "destination.network": "Destination",
+              "network.transport": "Protocol",
+              "destination.port": "Port",
+              "flow.service": "Service",
+              "flow.action": "Action",
+              "flows": "Flows",
+              "last_seen": "Last seen"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "type": "row",
+      "title": "Recent flows",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 32,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 13,
+      "type": "table",
+      "title": "Recent flows",
+      "gridPos": {
+        "x": 0,
+        "y": 33,
+        "w": 24,
+        "h": 12
+      },
+      "datasource": {
+        "type": "victoriametrics-logs-datasource",
+        "uid": "victorialogs"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "victoriametrics-logs-datasource",
+            "uid": "victorialogs"
+          },
+          "editorMode": "code",
+          "expr": "{service.name=\"unifi-flows\",record.type=\"flow\"} flow.scope:~\"$scope\" source.network:~\"$source_network\" destination.network:~\"$destination_network\" network.transport:~\"$protocol\" destination.port:~\"$port\" | fields _time, flow.id, source.network, source.address, source.name, destination.network, destination.address, destination.name, destination.domain, destination.port, network.transport, flow.action, network.bytes | sort by (_time desc) | limit 200",
+          "queryType": "instant",
+          "refId": "A",
+          "maxLines": 200
+        }
+      ],
+      "description": "The newest 200 flows matching the filters. Same-network traffic that never crosses the gateway is not here.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "network.bytes"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "decbytes"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      },
+      "transformations": [
+        {
+          "id": "extractFields",
+          "options": {
+            "source": "labels",
+            "format": "json",
+            "replace": false,
+            "keepTime": false
+          }
+        },
+        {
+          "id": "convertFieldType",
+          "options": {
+            "conversions": [
+              {
+                "targetField": "destination.port",
+                "destinationType": "number"
+              },
+              {
+                "targetField": "network.bytes",
+                "destinationType": "number"
+              }
+            ],
+            "fields": {}
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "includeByName": {
+              "Time": true,
+              "source.network": true,
+              "source.address": true,
+              "source.name": true,
+              "destination.network": true,
+              "destination.address": true,
+              "destination.name": true,
+              "destination.domain": true,
+              "destination.port": true,
+              "network.transport": true,
+              "flow.action": true,
+              "network.bytes": true
+            },
+            "indexByName": {
+              "Time": 0,
+              "source.network": 1,
+              "source.address": 2,
+              "source.name": 3,
+              "destination.network": 4,
+              "destination.address": 5,
+              "destination.name": 6,
+              "destination.domain": 7,
+              "destination.port": 8,
+              "network.transport": 9,
+              "flow.action": 10,
+              "network.bytes": 11
+            },
+            "renameByName": {
+              "source.network": "Source",
+              "source.address": "Address",
+              "source.name": "Name",
+              "destination.network": "Destination",
+              "destination.address": "Address ",
+              "destination.name": "Name ",
+              "destination.domain": "Domain",
+              "destination.port": "Port",
+              "network.transport": "Protocol",
+              "flow.action": "Action",
+              "network.bytes": "Bytes",
+              "Time": "Ended"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "links": []
+}
