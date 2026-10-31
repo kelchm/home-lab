@@ -16,16 +16,18 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 manifest="${1:?usage: lost-slot-drill.sh <cluster.yaml>}"
 image="${PG_IMAGE:-$(yq '.spec.imageName' "${manifest}")}"
 cap="$(yq '.spec.postgresql.parameters.max_slot_wal_keep_size' "${manifest}")"
+if [[ ! "${cap}" =~ ^[1-9][0-9]*GB$ ]]; then
+    printf 'ERROR: max_slot_wal_keep_size must be a positive integer in GB, got %s\n' "${cap}" >&2
+    exit 1
+fi
 chart="${root}/kubernetes/apps/cnpg-system/cnpg-operator/app/ocirepository.yaml"
 segments=$((${cap%GB} * 1024 / 16 + 64))
 attempts="${WINDOW_MISS_ATTEMPTS:-8}"
 
-name=cnpg-lost-slot
+# A per-run name keeps a failed launch from cleaning up another drill's cluster.
+name="cnpg-lost-slot-$$-${RANDOM}-${RANDOM}"
 ns=drill
 cluster=drill-db
-work="$(mktemp -d)"
-kubeconfig="${work}/kubeconfig"
-
 for command in docker helm kind kubectl kubectl-cnpg yq; do
     command -v "${command}" >/dev/null || {
         printf 'ERROR: required command not found: %s\n' "${command}" >&2
@@ -37,6 +39,8 @@ if kind get clusters | grep -qx "${name}"; then
     exit 1
 fi
 
+work="$(mktemp -d)"
+kubeconfig="${work}/kubeconfig"
 cleanup() {
     kind delete cluster --name "${name}" --kubeconfig "${kubeconfig}" >/dev/null 2>&1 || true
     rm -rf "${work}"
@@ -103,7 +107,7 @@ SQL
     plugin fencing off "${cluster}" "${standby}"
     sleep 15
     streaming && exit 1
-    expect 'Cluster stays Ready without streaming' "$(cluster_field .status.readyInstances)" 2
+    expect 'Cluster retains two Ready instances without streaming' "$(cluster_field .status.readyInstances)" 2
 }
 
 verify() {
@@ -210,6 +214,7 @@ for ((attempt = 1; attempt <= attempts; attempt++)); do
     uid="$(pod_uid)"
     partition -I
     plugin destroy "${cluster}" "${standby}"
+    # Best-effort timing; only the observed surviving slot below proves a miss.
     eventually 60 name_returned
     sleep 2
     partition -D

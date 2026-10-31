@@ -53,7 +53,7 @@ The desired topology is two instances per database, on distinct Kubernetes nodes
 
 **Last live baseline, 2026-10-30 UTC:** both databases still had one Ready instance, healthy archiving and completed backups. Both primaries were named `*-db-2` on node 2. Visionect's current claim is `visionect-db-2` (30 GiB, `longhorn-3replica`); Bambuddy's is `bambuddy-db-2` (20 GiB, `longhorn`). Both underlying volumes have three replicas. This is a dated baseline, not rollout acceptance. Follow #782 for the accepted revision and operational outcome.
 
-Replication is not a backup. An abrupt primary loss can lose transactions not yet received by the standby. Both database instances and their storage still share the three nodes, NAS, network and power. `max_slot_wal_keep_size` limits slot-retained WAL to 10 GB for Visionect and 2 GB for Bambuddy at checkpoints; it does not cap total WAL or replace archiving/space alerts. A standby offline beyond that budget needs [rebuilding](#a-lost-standby). See [CNPG's HA-slot behavior](https://github.com/cloudnative-pg/cloudnative-pg/blob/v1.30.1/docs/src/replication.md#replication-slots-for-high-availability).
+Replication is not a backup. An abrupt primary loss can lose transactions not yet received by the standby. Both database instances and their storage still share the three nodes, NAS, network and power. `max_slot_wal_keep_size` limits slot-retained WAL to 10 GB for Visionect and 2 GB for Bambuddy at checkpoints; it does not cap total WAL or replace archiving/space alerts. A standby needs [rebuilding](#a-lost-standby) if its required WAL is unavailable from both the primary and archive. An invalidated slot still needs repair even if archive replay lets the standby catch up. See [CNPG's HA-slot behavior](https://github.com/cloudnative-pg/cloudnative-pg/blob/v1.30.1/docs/src/replication.md#replication-slots-for-high-availability).
 
 ### Before the approved merge
 
@@ -99,7 +99,7 @@ If scale-up fails before a switchover, the existing primary remains the recovery
 
 ### A lost standby
 
-A standby offline beyond its WAL budget has an invalidated physical slot. Leave the healthy primary alone: no switchover, no restart and no change to the WAL cap or HA replication slots. Don't trust the Cluster's state to find or clear this. In the [drill](#lost-slot-drill-2026-10-31), a standby stuck on its invalidated slot left the Cluster `healthy` with every instance Ready. Query the slot on the current primary; the stale standby's log wording differs by PostgreSQL major, and on PostgreSQL 17 a standby can stream on an invalidated slot that reserves no WAL. A failover in this state could promote a stale standby, so treat it as lost redundancy and finish the rebuild.
+This procedure rebuilds a standby whose physical slot has been invalidated. Leave the healthy primary alone: no switchover, no restart and no change to the WAL cap or HA replication slots. Don't trust the Cluster's state to find or clear this. In the [drill](#lost-slot-drill-2026-10-31), a standby stuck on its invalidated slot left the Cluster `healthy` with every instance Ready. Query the slot on the current primary; the stale standby's log wording differs by PostgreSQL major, and on PostgreSQL 17 a standby can stream on an invalidated slot that reserves no WAL. A failover in this state could promote a stale standby, so treat it as lost redundancy and finish the rebuild.
 
 Set the identity first and repeat this check before each mutating step. `kubectl cnpg destroy` has no primary guard:
 
@@ -112,7 +112,9 @@ STANDBY=visionect-db-2
 SLOT="_cnpg_${STANDBY//-/_}"
 PRIMARY=$(kubectl -n "$NS" get cluster "$CLUSTER" -o jsonpath='{.status.currentPrimary}')
 TARGET=$(kubectl -n "$NS" get cluster "$CLUSTER" -o jsonpath='{.status.targetPrimary}')
-test -n "$PRIMARY" && test "$PRIMARY" = "$TARGET" && test "$STANDBY" != "$PRIMARY"
+test -n "$PRIMARY"
+test "$PRIMARY" = "$TARGET"
+test "$STANDBY" != "$PRIMARY"
 test "$(kubectl -n "$NS" get pod "$PRIMARY" -o jsonpath='{.metadata.labels.cnpg\.io/instanceRole}')" = primary
 kubectl -n "$NS" exec "$PRIMARY" -c postgres -- psql -X -qAt -v ON_ERROR_STOP=1 -c \
   "SELECT slot_name,active,active_pid,restart_lsn,wal_status,safe_wal_size,invalidation_reason FROM pg_replication_slots;"
@@ -130,13 +132,14 @@ Require exactly the slot named `$SLOT` with `invalidation_reason = wal_removed`,
 
    CNPG 1.30.1 recreates the same instance and slot name on a new volume. Exit 0 only means the deletions were requested. If the standby's node is unreachable, the old Pod's termination cannot be confirmed and no replacement appears until it can; restore the node rather than force-deleting. A forced delete was not tested.
 3. Wait for the replacement Pod to be Ready, then run the [acceptance query](#accept-the-replacement). It normally passes without further action.
-4. Only if `$SLOT` still has `invalidation_reason` set, reset that one slot. `pg_drop_replication_slot` refuses an active slot and the predicates refuse any other state, so a result of `0` means stop and inspect, then unfence. CNPG recreates the slot on its next reconcile, which needs a trigger: its instance reconciler has no periodic resync.
+4. Only if `$SLOT` still has `invalidation_reason` set, reset that one slot. `pg_drop_replication_slot` refuses an active slot and the predicates refuse any other state. Require exactly one dropped slot. If a command fails or the count is not `1`, leave the standby fenced and inspect; refresh the identity check before continuing, and unfence only after confirming a fresh slot. Use `reload` to trigger reconciliation promptly rather than waiting for a later Cluster event.
 
    ```bash
    kubectl cnpg fencing on "$CLUSTER" "$STANDBY" -n "$NS"
    # Wait until the slot reports active = f, then rerun the identity check.
-   kubectl -n "$NS" exec "$PRIMARY" -c postgres -- psql -X -qAt -v ON_ERROR_STOP=1 -c \
-     "SELECT count(pg_drop_replication_slot(slot_name)) FROM pg_replication_slots WHERE slot_name = '$SLOT' AND slot_type = 'physical' AND NOT active AND wal_status = 'lost' AND invalidation_reason = 'wal_removed' AND NOT pg_is_in_recovery();"
+   DROPPED=$(kubectl -n "$NS" exec "$PRIMARY" -c postgres -- psql -X -qAt -v ON_ERROR_STOP=1 -c \
+     "SELECT count(pg_drop_replication_slot(slot_name)) FROM pg_replication_slots WHERE slot_name = '$SLOT' AND slot_type = 'physical' AND NOT active AND wal_status = 'lost' AND invalidation_reason = 'wal_removed' AND NOT pg_is_in_recovery();")
+   test "$DROPPED" = 1
    kubectl cnpg reload "$CLUSTER" -n "$NS"
    # Wait until $SLOT exists again with invalidation_reason empty.
    kubectl cnpg fencing off "$CLUSTER" "$STANDBY" -n "$NS"
