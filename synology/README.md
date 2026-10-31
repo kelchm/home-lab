@@ -25,7 +25,7 @@ doco-cd has run on Athena since 2026-09-26; the remaining workload acceptance ch
 
 DSM Container Manager remains the inspection interface. It is not a second source of truth.
 
-The native [Athena ACME/DSM certificate runbook](../docs/runbooks/athena-acme.md) describes the separately installed certificate path tracked in #1094. Trusted DSM HTTPS, supervised different-leaf renewal/rollback, the first automatic daily task execution on 2026-10-30 and central Grafana/Pushover monitoring are verified. The first natural due/fresh-DNS/ARI renewal remains pending; [#1131](https://github.com/kelchm/home-lab/issues/1131) proposes replacing the custom runner with stock acme.sh and a small local DSM import hook; the draft is not installed. It is outside Compose; merging its scripts does not install a task or change DSM's certificate.
+The native [Athena ACME/DSM certificate runbook](../docs/runbooks/athena-acme.md) describes the separately installed certificate path tracked in #1094. Trusted DSM HTTPS, supervised different-leaf renewal/rollback, the first automatic daily task execution on 2026-10-30 and central Grafana/Pushover monitoring are verified. The first natural due/fresh-DNS/ARI renewal remains pending; [#1131](https://github.com/kelchm/home-lab/issues/1131) proposes replacing the custom runner with stock Lego, file-based Cloudflare credentials and a small local DSM import hook; the draft is not installed. It is outside Compose; merging its scripts does not install a task or change DSM's certificate.
 
 ## Project contract
 

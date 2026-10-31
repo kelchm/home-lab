@@ -20,9 +20,11 @@ class ImportHookTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
-        (self.root / "issued").mkdir()
-        for name in ("key.pem", "cert.pem", "chain.pem"):
-            (self.root / "issued" / name).write_text("synthetic " + name)
+        self.issued = self.root / "lego-state" / "certificates"
+        self.issued.mkdir(parents=True)
+        self.names = {hook.HOST + suffix for suffix in (".key", ".crt", ".issuer.crt")}
+        for name in self.names:
+            (self.issued / name).write_text("synthetic " + name)
         self.certs = [
             {"id": hook.CERT_ID, "desc": hook.DESCRIPTION, "is_default": True, "is_broken": False,
              "services": [{"owner": "root", "subscriber": "system", "service": "default"}]},
@@ -58,7 +60,7 @@ class ImportHookTests(unittest.TestCase):
         with patch.object(hook.subprocess, "run", side_effect=command):
             hook.deploy()
         self.assertEqual(sum("method=import" in args for args in calls), 1)
-        self.assertEqual({p.name for p in (self.root / "issued").iterdir()}, {"key.pem", "cert.pem", "chain.pem"})
+        self.assertEqual({p.name for p in self.issued.iterdir()}, self.names)
         self.assertEqual(list(self.root.glob("dsm-import-*")), [])
 
     def test_wrong_target_or_non_root_never_imports(self):

@@ -12,68 +12,63 @@ The Pi's DSM probe and the DSM-only **less than 14 days, held for one hour** Pus
 
 ## Draft replacement — not installed
 
-[#1131](https://github.com/kelchm/home-lab/issues/1131) now proposes stock **acme.sh 3.1.6** for DNS validation, renewal timing, installed files and failed-install retries, plus one [local DSM import hook](../../scripts/synology/deploy-athena-dsm.py). No NAS access, credential use, issuance or deployment was performed to prepare this draft. Merge does not deploy it; migration needs a separate decision.
+[#1131](https://github.com/kelchm/home-lab/issues/1131) proposes stock **Lego 5.6.0** for Cloudflare DNS validation and renewal timing, plus one [local DSM import hook](../../scripts/synology/deploy-athena-dsm.py). No NAS access, credential use, issuance or deployment was performed to prepare this draft. Merge does not deploy it; migration needs a separate decision.
 
 The hook runs as root and calls `/usr/syno/bin/synowebapi --exec`. This uses local privilege, without a DSM password, HTTP login, temporary administrator or OTP-policy change. It refuses a different certificate ID, duplicate description, broken target or changed DSM-only/default binding. It checks the candidate's chain and hostname, stages private copies because DSM can consume import files, then replaces `N2RhLk` using the already-tested native API and string `as_default="true"`.
 
-acme.sh's normal `--install-cert --reloadcmd` integration invokes the hook after copying the issued files. A successful initial installation records `Le_InstallCertSuccessTime`; later renewals retry a failed installation when the certificate is newer than that marker, even if another order is not due. This is upstream behavior, not a new local retry mechanism.
+The [Lego configuration](../../scripts/synology/athena-lego.yml) covers only `athena.home.kelch.io`, uses Let's Encrypt, and invokes the hook after successful issuance or renewal. `noBundle: true` keeps the leaf and issuer chain separate for DSM. Lego uses its default ARI/renewal timing, retains the certificate key on renewal and writes its own account and certificate state; no local renewal scheduler or success-marker framework is added.
 
-There is no local inventory snapshot, rebaseline command, success-marker framework or automatic rollback. Unrelated certificate objects are not a standing invariant. The same-ID import is expected to retain their assignments; verify them during migration. The hook checks the managed DSM binding before and after import, while the existing TLS probe observes the served certificate. It does not maintain a transaction journal or independently verify every unrelated binding across process failures.
+There is no local inventory snapshot, rebaseline command or automatic rollback. Unrelated certificate objects are not a standing invariant. The same-ID import is expected to retain their assignments; verify them during migration. The hook checks the managed DSM binding before and after import, while the existing TLS probe observes the served certificate. It does not maintain a transaction journal or independently verify every unrelated binding across process failures.
 
-### Credential tradeoff to review
+### Credential handling
 
-This draft uses upstream `dns_cf` instead of our custom DNS adapter. The existing `athena-acme` Cloudflare token has `Zone:Zone:Read` and `Zone:DNS:Edit` for `kelch.io` and is shared with S3. Keep its value and permissions unchanged; do not revoke or rotate it as cleanup.
+The existing `athena-acme` Cloudflare token has `Zone:Zone:Read` and `Zone:DNS:Edit` for `kelch.io` and is shared with S3. Keep its value and permissions unchanged; do not revoke or rotate it as cleanup. The token already lives in the root-only `cloudflare-token` file.
 
-**Unlike the current adapter, stock `dns_cf` persists the token in acme.sh's protected configuration, and its HTTP transport can place the authorization header in curl/wget process arguments.** This draft therefore does not retain the current guarantee that the token never appears in process arguments. That difference needs to be accepted before migration. Do not print the token, pass it in an operator command line or enable debug logging. If that upstream behavior is unacceptable, choose a stock client with in-process DNS requests instead of rebuilding the DNS client here.
+Set **`CF_DNS_API_TOKEN_FILE=/volume1/@athena-acme/cloudflare-token`**. Lego reads that file into memory and sends HTTPS requests through its Go HTTP client. The token is not copied into a new credentials file or put into curl/wget arguments. Only its path is exported. Plain-token environment variables take precedence over `_FILE`, so leave them unset as shown in the task command below. Do not print the token or enable debug logging. This removes the command-line exposure identified in the earlier acme.sh draft; it does not prevent root from reading the token or process memory.
+
+A stolen token would still permit DNS edits within `kelch.io`; choosing Lego does not narrow the token's existing permissions. The draft adds no DSM credentials and does not change S3's credential or renewal setup.
 
 ## Files and pins
 
-Everything remains under root-owned `/volume1/@athena-acme`, outside the writable Docker share. Keep directories `0700` and files `0600`. No container, cluster service, DSM account, listener, DNS exposure or S3 deployment is added.
+Everything remains under root-owned `/volume1/@athena-acme`, outside the writable Docker share. Keep directories `0700` and private/configuration files `0600`; the Lego executable is `0700`. No container, cluster service, DSM account, listener, DNS exposure or S3 deployment is added.
 
 | Path | Role |
 |---|---|
-| `client/acme.sh`, `client/dnsapi/dns_cf.sh` | Stock pinned client and Cloudflare plugin |
-| `state/`, `certs/` | Existing ACME account, domain key, configuration and renewal metadata |
-| `issued/{key,cert,chain,fullchain}.pem` | Files installed by acme.sh |
+| `bin/lego` | Stock pinned Linux amd64 executable for Athena's Ryzen CPU |
+| `lego.yml` | Single-host configuration and local deploy command, containing no token |
+| `lego-state/` | New Lego account, domain key, certificates and renewal metadata |
+| `lego-state/certificates/athena.home.kelch.io.{key,crt,issuer.crt}` | Files read by the local import hook |
 | `deploy-athena-dsm.py` | Local same-ID DSM import hook |
-| `cloudflare-token` | Existing protected token file; preserve for recovery |
+| `cloudflare-token` | Existing protected token file, read directly by Lego |
+| Existing `client/`, `state/`, `certs/`, `issued/` and runner | Retained current installation and recovery material |
 
-[Preparation](../../scripts/synology/prepare-athena-acme.sh) downloads only public files from acme.sh source commit `807da6498377ee5e0cf43a78091f46f12dc59a89` and verifies their SHA-256 hashes. It also copies the local hook. It does not run the upstream installer or contact Athena.
+[Preparation](../../scripts/synology/prepare-athena-acme.sh) downloads the public `lego_v5.6.0_linux_amd64.tar.gz` release and verifies SHA-256 `f02fc11b6f56b97e387fa7caa0268f86f5a336953b22458e6430e4651fea439a` before extracting only `lego`. It copies the configuration and local hook into the staging directory. It does not run an installer or contact Athena.
 
 ## Proposed migration
 
-These are draft operator steps, not completed work or authorization to execute. Reuse the existing Let's Encrypt account, domain key and certificate. No forced order is needed to register and test the import hook.
+These are draft operator steps, not completed work or authorization to execute. Lego uses separate state rather than converting acme.sh's private configuration. The first approved run will register a new Let's Encrypt account, generate a new domain key and obtain one certificate before importing it into the existing DSM certificate object. This is an initial order, not a forced renewal. Keep the old account, key and client intact for recovery.
 
-1. Resolve the credential tradeoff above. Disable task `7` and ensure the old job is idle. Retain a private backup of the existing runtime and task command for recovery. Check the current DSM certificate and unrelated bindings, management SSH and S3 health.
-2. Run `bash scripts/synology/prepare-athena-acme.sh <new-local-directory>`. After the source is approved, transfer the prepared public client files and hook into the existing protected runtime. Preserve `state/`, `certs/`, `issued/`, keys and token. Do not run the old wrapper against the modified client tree: its hash/file-list guard deliberately rejects it.
-3. In `certs/athena.home.kelch.io_ecc/athena.home.kelch.io.conf`, change only `Le_Webroot='dns_athena'` to `Le_Webroot='dns_cf'`. Provision `SAVED_CF_Token` in protected `state/account.conf` from the existing token file locally, without printing or passing its value in arguments. Preserve the account, key, CA, renewal timestamps and remaining settings. Review those private edits on the NAS, not in a transcript.
-4. As root on Athena, register the standard installation and local reload command below. This imports the existing issued certificate and can briefly reload DSM's web service; it does not request a new order. Require success before enabling the task, including the installation-success timestamp needed by upstream retry handling.
-
-```sh
-umask 077
-/bin/sh /volume1/@athena-acme/client/acme.sh \
-  --home /volume1/@athena-acme/client \
-  --config-home /volume1/@athena-acme/state \
-  --cert-home /volume1/@athena-acme/certs \
-  --install-cert -d athena.home.kelch.io --ecc \
-  --key-file /volume1/@athena-acme/issued/key.pem \
-  --cert-file /volume1/@athena-acme/issued/cert.pem \
-  --ca-file /volume1/@athena-acme/issued/chain.pem \
-  --fullchain-file /volume1/@athena-acme/issued/fullchain.pem \
-  --reloadcmd '/usr/bin/python3 /volume1/@athena-acme/deploy-athena-dsm.py'
-```
-
-5. Verify trusted access on 443 and 5001, the retained certificate ID/default/DSM-only assignment, unchanged unrelated assignments and S3. The [DNS-independent checks](#recovery) retain the canonical hostname. If the hook fails, leave the task disabled and inspect it; repeat the installation command after correction, without forcing issuance.
-6. Change the existing task's command to the following, retaining its root owner, daily 00:17 schedule and email-off setting. Run once, inspect its result and private log, then enable it. A normal not-due result is sufficient for cutover; record the first natural renewal when it occurs.
+1. Disable task `7` and ensure the old job is idle. Retain a private backup of the existing runtime and task command. Check the current DSM certificate, unrelated bindings, management SSH and S3 health.
+2. Run `bash scripts/synology/prepare-athena-acme.sh <new-local-directory>`. After source approval, transfer only the staged `bin/lego`, `lego.yml` and `deploy-athena-dsm.py` to the corresponding paths under the protected runtime. Preserve the old client and all private state. Confirm `uname -m` is `x86_64`, the binary reports version `5.6.0`, the existing token file is root-owned `0600`, and `/volume1/@athena-acme` is root-owned `0700`. Create `bin/` and `lego-state/` as root `0700` if absent.
+3. Run the task command below once as root, while the schedule remains disabled. This is the approved credential use, DNS-01 order and same-ID import. Require exit zero, inspect the private log, and verify the new files are private. If issuance or import fails, follow [recovery](#recovery); do not repeatedly force orders.
+4. Verify trusted access on 443 and 5001, the served leaf matches Lego's `.crt`, and the certificate retains `N2RhLk`, its description, default status and DSM-only assignment. Confirm unrelated assignments and S3 health. The [DNS-independent checks](#recovery) retain the canonical hostname.
+5. Set the existing task's command to the command below, retaining its root owner, daily 00:17 schedule and email-off setting. Enable it and verify its next ordinary execution. Record the first later natural renewal when it occurs; a not-due run is sufficient for initial scheduled-path acceptance.
 
 ```sh
 umask 077
-/bin/sh /volume1/@athena-acme/client/acme.sh --cron \
-  --home /volume1/@athena-acme/client \
-  --config-home /volume1/@athena-acme/state \
-  --cert-home /volume1/@athena-acme/certs \
+unset CF_API_KEY CLOUDFLARE_API_KEY CF_DNS_API_TOKEN CLOUDFLARE_DNS_API_TOKEN CF_ZONE_API_TOKEN CLOUDFLARE_ZONE_API_TOKEN
+export CF_DNS_API_TOKEN_FILE=/volume1/@athena-acme/cloudflare-token
+/volume1/@athena-acme/bin/lego --config /volume1/@athena-acme/lego.yml \
   > /volume1/@athena-acme/renewal.log 2>&1
 ```
+
+Lego saves an issued certificate before running its deploy hook. A failed hook causes an error, but a later not-due run does **not** retry that hook automatically. Fix the cause and retry the saved files directly, without another DNS request or order:
+
+```sh
+/usr/bin/python3 /volume1/@athena-acme/deploy-athena-dsm.py
+```
+
+This retry needs no Cloudflare credential. Successful import recovery is manual; the existing served-TLS expiry warning remains the notification path. No new job-status alert or local retry ledger is introduced.
 
 ## A legitimate later DSM binding change
 
@@ -81,7 +76,7 @@ The draft hook has no dependency on the old `ALK0dn` object or unrelated certifi
 
 ## Recovery
 
-Disable the task if the new path fails. The retained pre-migration runtime and original task command restore the previous setup; the old runner needs its original client files and configuration, not only its Python file. Keep ACME account/key material and recovery bundles private. After any new issuance, review newer renewal/account state before restoring an older copy. Do not revoke the shared Cloudflare token, delete certificate objects or reboot the NAS.
+Disable the task if the new path fails. The retained current runtime and original task command restore the previous setup. Lego's new files and state are separate; keep both sets of account/key material and recovery bundles private. Re-enabling the old task alone does not replace the leaf already imported by Lego; use the manual certificate recovery path below if that leaf also needs replacing. Do not revoke the shared Cloudflare token, delete certificate objects or reboot the NAS.
 
 For certificate recovery, DSM's Certificate Settings can import a retained private key/certificate/intermediate bundle into the same managed object. That is the manual recovery path; the draft adds no automatic certificate rollback system. Verify DSM and S3 after recovery.
 
@@ -94,9 +89,9 @@ curl --resolve athena.home.kelch.io:5001:10.32.20.5 https://athena.home.kelch.io
 
 ## Sources and draft checks
 
-- [Pinned acme.sh core](https://github.com/acmesh-official/acme.sh/blob/807da6498377ee5e0cf43a78091f46f12dc59a89/acme.sh), especially `renew`, `_ensure_install` and `_installcert`.
-- [Stock Cloudflare DNS plugin](https://github.com/acmesh-official/acme.sh/blob/807da6498377ee5e0cf43a78091f46f12dc59a89/dnsapi/dns_cf.sh).
-- [acme.sh Synology guide](https://github.com/acmesh-official/acme.sh/wiki/Synology-NAS-Guide); its HTTP-login deployment hook is replaced here by the local root command.
-- [Tailscale's local Synology importer](https://github.com/tailscale/tailscale/blob/bd2a2d53d3a4d632c9fae7c1b6426c3b5ef34010/cmd/tailscale/cli/configure-synology-cert.go), which uses the same local API route.
+- [Pinned Lego 5.6.0 release](https://github.com/go-acme/lego/releases/tag/v5.6.0) and [configuration reference](https://go-acme.github.io/lego/references/ref-file/).
+- [File-based credential loading](https://github.com/go-acme/lego/blob/v5.6.0/platform/env/env.go) and [in-process Cloudflare HTTP client](https://github.com/go-acme/lego/blob/v5.6.0/providers/dns/cloudflare/internal/client.go).
+- [Renewal path](https://github.com/go-acme/lego/blob/v5.6.0/cmd/internal/root/process_renew.go), especially the not-due return and save-before-deploy ordering.
+- [Community local Synology hook](https://github.com/zaxbux/syno-acme) and [Tailscale's local importer](https://github.com/tailscale/tailscale/blob/bd2a2d53d3a4d632c9fae7c1b6426c3b5ef34010/cmd/tailscale/cli/configure-synology-cert.go), which use the same native API route. The alternative [lego-based Synology project](https://github.com/JessThrysoee/synology-letsencrypt) writes DSM archive files directly; this draft keeps the existing native import approach instead.
 
-Run `python3 scripts/ci/test-athena-acme.py` for the small mocked import checks and ShellCheck on the preparation script. The tests establish argument handling, target refusal and API-failure propagation; they do not establish live DSM import or migration. DNS-01, stock-plugin credential handling, ordinary due renewal and recovery on Athena remain untested for this draft.
+Run `python3 scripts/ci/test-athena-acme.py` for the three small mocked import checks and ShellCheck on the preparation script. Preparation passed with the actual pinned Linux archive and private staging modes. The native Mac 5.6.0 build accepted this configuration and synthetic `_FILE` credentials against a local HTTPS fixture, failed before an order when the file was missing, and skipped both network calls and deployment for a not-due synthetic certificate with ARI disabled. The synthetic token appeared in neither output nor saved state. These checks do not establish Linux/DSM compatibility, production log behavior, live DNS-01, issuance or installation on Athena.

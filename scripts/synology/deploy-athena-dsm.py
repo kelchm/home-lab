@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""acme.sh reload command: import Athena's installed files through DSM locally.
+"""Lego deploy hook: import Athena's issued files through DSM locally.
 
-Run as root. acme.sh owns issuance, files and retry bookkeeping; this hook owns
-only the same-ID import. No DSM login or certificate creation is performed.
+Run as root. Lego owns issuance and renewal; this hook owns the same-ID import.
+It can also be run directly to retry installation without requesting a new leaf.
 """
 
 import json
@@ -45,17 +45,19 @@ def deploy():
     if os.geteuid() != 0:
         raise RuntimeError("Run the DSM import hook as root")
     os.umask(0o077)
-    issued = ROOT / "issued"
+    issued = ROOT / "lego-state" / "certificates"
+    cert = issued / (HOST + ".crt")
+    chain = issued / (HOST + ".issuer.crt")
     subprocess.run(["/usr/bin/openssl", "verify", "-purpose", "sslserver", "-verify_hostname", HOST,
-                    "-untrusted", str(issued / "chain.pem"), str(issued / "cert.pem")],
+                    "-untrusted", str(chain), str(cert)],
                    check=True, capture_output=True, timeout=30)
     check_target()
-    # DSM can consume/move these paths. Leave acme.sh's installed files intact.
+    # DSM can consume/move these paths. Leave Lego's certificate files intact.
     with tempfile.TemporaryDirectory(prefix="dsm-import-", dir=str(ROOT)) as stage:
         parameters = {"id": CERT_ID, "desc": DESCRIPTION, "as_default": "true"}
-        for field, name in (("key_tmp", "key.pem"), ("cert_tmp", "cert.pem"), ("inter_cert_tmp", "chain.pem")):
-            target = Path(stage) / name
-            shutil.copyfile(issued / name, target)
+        for field, source in (("key_tmp", issued / (HOST + ".key")), ("cert_tmp", cert), ("inter_cert_tmp", chain)):
+            target = Path(stage) / source.name
+            shutil.copyfile(source, target)
             parameters[field] = str(target)
         dsm("import", **parameters)
     check_target()

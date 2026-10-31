@@ -29,7 +29,7 @@ or fixing.
 | Runbook | Use when |
 |---|---|
 | [alerting](runbooks/alerting.md) | Receiving, silencing, testing, and troubleshooting Alertmanager notifications and control-plane coverage. |
-| [athena-acme](runbooks/athena-acme.md) | Current Athena certificates and draft stock ACME renewal with a local DSM import hook. |
+| [athena-acme](runbooks/athena-acme.md) | Current Athena certificates and draft Lego renewal with file-based credentials and a local DSM import hook. |
 | [netbird-remote-access](runbooks/netbird-remote-access.md) | NetBird remote access: current configuration, Cloud read-back, client upgrades, the admin HTTPS extension and VM 103 management. |
 | [logging](runbooks/logging.md) | Querying Kubernetes, Talos node and UniFi console logs, rolling out Talos log delivery, the UniFi log alerts, and diagnosing the Fluent Bit-to-VictoriaLogs ingestion path. |
 | [local-ntp](runbooks/local-ntp.md) | Connecting Talos and DHCP clients to the UPS Pi time servers, the current UniFi change, client acceptance and rollback. |
