@@ -14,9 +14,11 @@ The Pi's DSM probe and the DSM-only **less than 14 days, held for one hour** Pus
 
 [#1131](https://github.com/kelchm/home-lab/issues/1131) proposes stock **Lego 5.6.0** for Cloudflare DNS validation and renewal timing, plus one [local DSM import hook](../../scripts/synology/deploy-athena-dsm.py). No NAS access, credential use, issuance or deployment was performed to prepare this draft. Merge does not deploy it; migration needs a separate decision.
 
+The goal is to reduce the code maintained here. Lego and stock acme.sh can both handle renewal; Lego's separate state makes this migration independent of the existing client configuration, and file-based credentials fit the existing token file. The brief local exposure of a token in stock acme.sh's curl arguments is a tradeoff, not by itself a reason to migrate. Keeping the working runner remains an option if the maintenance benefit does not justify the cutover.
+
 The hook runs as root and calls `/usr/syno/bin/synowebapi --exec`. This uses local privilege, without a DSM password, HTTP login, temporary administrator or OTP-policy change. It refuses a different certificate ID, duplicate description, broken target or changed DSM-only/default binding. It checks the candidate's chain and hostname, stages private copies because DSM can consume import files, then replaces `N2RhLk` using the already-tested native API and string `as_default="true"`.
 
-The [Lego configuration](../../scripts/synology/athena-lego.yml) covers only `athena.home.kelch.io`, uses Let's Encrypt, and invokes the hook after successful issuance or renewal. `noBundle: true` keeps the leaf and issuer chain separate for DSM. Lego uses its default ARI/renewal timing, retains the certificate key on renewal and writes its own account and certificate state; no local renewal scheduler or success-marker framework is added.
+The [Lego configuration](../../scripts/synology/athena-lego.yml) covers only `athena.home.kelch.io`, uses Let's Encrypt, and invokes the hook after successful issuance or renewal. Its DNS checks use `1.1.1.1:53` and `1.0.0.1:53`, matching S3's resolver choice on Athena: the LAN resolver serves the split-horizon `home.kelch.io` zone and may not see the public challenge record. `noBundle: true` keeps the leaf and issuer chain separate for DSM. Lego uses its default ARI/renewal timing, retains the certificate key on renewal and writes its own account and certificate state; no local renewal scheduler or success-marker framework is added.
 
 There is no local inventory snapshot, rebaseline command or automatic rollback. Unrelated certificate objects are not a standing invariant. The same-ID import is expected to retain their assignments; verify them during migration. The hook checks the managed DSM binding before and after import, while the existing TLS probe observes the served certificate. It does not maintain a transaction journal or independently verify every unrelated binding across process failures.
 
@@ -59,8 +61,10 @@ umask 077
 unset CF_API_KEY CLOUDFLARE_API_KEY CF_DNS_API_TOKEN CLOUDFLARE_DNS_API_TOKEN CF_ZONE_API_TOKEN CLOUDFLARE_ZONE_API_TOKEN
 export CF_DNS_API_TOKEN_FILE=/volume1/@athena-acme/cloudflare-token
 /volume1/@athena-acme/bin/lego --config /volume1/@athena-acme/lego.yml \
-  > /volume1/@athena-acme/renewal.log 2>&1
+  >> /volume1/@athena-acme/renewal.log 2>&1
 ```
+
+The task appends to the private log so a later successful or not-due run does not erase an earlier error.
 
 Lego saves an issued certificate before running its deploy hook. A failed hook causes an error, but a later not-due run does **not** retry that hook automatically. Fix the cause and retry the saved files directly, without another DNS request or order:
 
@@ -76,7 +80,9 @@ The draft hook has no dependency on the old `ALK0dn` object or unrelated certifi
 
 ## Recovery
 
-Disable the task if the new path fails. The retained current runtime and original task command restore the previous setup. Lego's new files and state are separate; keep both sets of account/key material and recovery bundles private. Re-enabling the old task alone does not replace the leaf already imported by Lego; use the manual certificate recovery path below if that leaf also needs replacing. Do not revoke the shared Cloudflare token, delete certificate objects or reboot the NAS.
+Disable the task and ensure the job is idle if the new path fails. Before restoring the original task command, run `chmod 0600 /volume1/@athena-acme/bin/lego`: the old runner recursively requires every file under its runtime to be `0600` and refuses an executable at `0700`. Retain the other private file/directory modes. Lego's new files and state are separate; keep both sets of account/key material and recovery bundles private.
+
+Once its checks pass, the old runner's ordinary `run` re-imports its own retained or renewed leaf if DSM serves a different certificate. Returning to the old task can therefore replace Lego's served leaf. Verify the actual served certificate, assignments and S3 after recovery. Do not revoke the shared Cloudflare token, delete certificate objects or reboot the NAS. If returning to Lego later, restore `bin/lego` to `0700` before using it.
 
 For certificate recovery, DSM's Certificate Settings can import a retained private key/certificate/intermediate bundle into the same managed object. That is the manual recovery path; the draft adds no automatic certificate rollback system. Verify DSM and S3 after recovery.
 

@@ -10,6 +10,10 @@ challenges:
   cloudflare:
     dns:
       provider: cloudflare
+      # The LAN resolver answers home.kelch.io itself; validate public DNS.
+      resolvers:
+        - 1.1.1.1:53
+        - 1.0.0.1:53
 
 certificates:
   athena.home.kelch.io:
