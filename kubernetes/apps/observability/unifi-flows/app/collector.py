@@ -44,7 +44,7 @@ PAGE_SIZE = 100
 MAX_BODY_BYTES = 4 * 1024 * 1024
 MAX_BATCH_BYTES = 1024 * 1024
 MAX_LOGIN_BACKOFF_S = 3600
-RESULTS = ('ok', 'no_rows', 'backlog', 'incomplete', 'auth_failed', 'access_denied', 'session_expired', 'rate_limited', 'read_failed', 'ingest_failed', 'state_unavailable')
+RESULTS = ('ok', 'no_rows', 'backlog', 'incomplete', 'auth_failed', 'access_denied', 'rate_limited', 'read_failed', 'ingest_failed', 'state_unavailable')
 
 
 @dataclasses.dataclass
@@ -96,10 +96,6 @@ class AccessDenied(CycleError):
     result = 'access_denied'
 
 
-class SessionExpired(CycleError):
-    result = 'session_expired'
-
-
 class RateLimited(CycleError):
     result = 'rate_limited'
 
@@ -131,7 +127,7 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 class Console:
-    """One process-local session on the UniFi console. Never retries a request."""
+    """One process-local session on the UniFi console. Retries only a read its ended session refused."""
 
     def __init__(self, config, clock=time.time):
         self.config = config
@@ -217,13 +213,14 @@ class Console:
         body = {**{name: [] for name in FILTERS}, 'timestampFrom': start_ms, 'timestampTo': end_ms, 'pageNumber': page, 'search_text': '', 'pageSize': PAGE_SIZE, 'skip_count': False}
         status, headers, raw = self._post(FLOWS_PATH.format(site=self.config.site), body, {'X-CSRF-Token': self.csrf})
         if status in (401, 403):
-            denied = self.fresh
+            reused = not self.fresh
             self.drop_session()
-            if denied:
-                # A session made this cycle was refused, so logging in again cannot help.
-                self._refuse(AccessDenied)
-                raise AccessDenied(f'http_{status}')
-            raise SessionExpired(f'http_{status}')
+            if reused:
+                # The console ends a session after about two hours, however busy it is.
+                return self.flows(start_ms, end_ms, page)
+            # A session made this cycle was refused, so logging in again cannot help.
+            self._refuse(AccessDenied)
+            raise AccessDenied(f'http_{status}')
         if status == 429:
             self._rate_limited(headers)
         if status != 200:

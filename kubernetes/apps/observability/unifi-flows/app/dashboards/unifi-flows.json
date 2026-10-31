@@ -264,7 +264,7 @@
           "range": false
         }
       ],
-      "description": "no_rows means the console answered and had nothing; a failure shows here by name: auth_failed, access_denied, session_expired, read_failed, incomplete, ingest_failed.",
+      "description": "no_rows means the console answered and had nothing; a failure shows here by name: auth_failed, access_denied, read_failed, incomplete, ingest_failed.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -276,7 +276,7 @@
           {
             "matcher": {
               "id": "byRegexp",
-              "options": "auth_failed|access_denied|session_expired|rate_limited|read_failed|ingest_failed|state_unavailable|incomplete"
+              "options": "auth_failed|access_denied|rate_limited|read_failed|ingest_failed|state_unavailable|incomplete"
             },
             "properties": [
               {
@@ -338,7 +338,8 @@
         "defaults": {
           "unit": "short",
           "color": {
-            "mode": "thresholds"
+            "mode": "fixed",
+            "fixedColor": "text"
           }
         },
         "overrides": []
@@ -673,7 +674,7 @@
             "uid": "victorialogs"
           },
           "editorMode": "code",
-          "expr": "{service.name=\"unifi-flows\",record.type=\"flow\"} flow.scope:~\"$scope\" source.network:~\"$source_network\" destination.network:~\"$destination_network\" network.transport:~\"$protocol\" destination.port:~\"$port\" | stats by (source.network, destination.network) count_uniq(flow.id) as flows",
+          "expr": "{service.name=\"unifi-flows\",record.type=\"flow\"} flow.scope:~\"^($scope)$\" source.network:~\"^($source_network)$\" destination.network:~\"^($destination_network)$\" network.transport:~\"^($protocol)$\" destination.port:~\"^($port)$\" | stats by (source.network, destination.network) count_uniq(flow.id) as flows",
           "queryType": "statsRange",
           "refId": "A",
           "legendFormat": "{{source.network}} \u2192 {{destination.network}}"
@@ -733,13 +734,13 @@
             "uid": "victorialogs"
           },
           "editorMode": "code",
-          "expr": "{service.name=\"unifi-flows\",record.type=\"flow\"} flow.scope:~\"$scope\" source.network:~\"$source_network\" destination.network:~\"$destination_network\" network.transport:~\"$protocol\" destination.port:~\"$port\" | stats by (source.network, destination.network, network.transport, destination.port, flow.service, flow.action) count_uniq(flow.id) as flows, max(_time) as last_seen | sort by (flows desc) | limit 200",
+          "expr": "{service.name=\"unifi-flows\",record.type=\"flow\"} flow.scope:~\"^($scope)$\" source.network:~\"^($source_network)$\" destination.network:~\"^($destination_network)$\" network.transport:~\"^($protocol)$\" destination.port:~\"^($port)$\" | stats by (source.network, destination.network, network.transport, destination.port, flow.service, flow.action) count_uniq(flow.id) as flows, max(_time) as last_seen | sort by (flows desc) | limit 200",
           "queryType": "instant",
           "refId": "A",
           "maxLines": 200
         }
       ],
-      "description": "One row per source network, destination network, protocol, port and action, busiest first. Flow counts deduplicate replayed IDs; aggregate bytes are omitted because stored copies can repeat.",
+      "description": "One row per source network, destination network, protocol, port and action, busiest first, up to 200 rows. Filters match the whole value, as a regular expression. Flow counts deduplicate replayed IDs; aggregate bytes are omitted because stored copies can repeat.",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -854,7 +855,7 @@
             "uid": "victorialogs"
           },
           "editorMode": "code",
-          "expr": "{service.name=\"unifi-flows\",record.type=\"flow\"} flow.scope:~\"$scope\" source.network:~\"$source_network\" destination.network:~\"$destination_network\" network.transport:~\"$protocol\" destination.port:~\"$port\" | fields _time, flow.id, source.network, source.address, source.name, destination.network, destination.address, destination.name, destination.domain, destination.port, network.transport, flow.action, network.bytes | sort by (_time desc) | limit 200",
+          "expr": "{service.name=\"unifi-flows\",record.type=\"flow\"} flow.scope:~\"^($scope)$\" source.network:~\"^($source_network)$\" destination.network:~\"^($destination_network)$\" network.transport:~\"^($protocol)$\" destination.port:~\"^($port)$\" | fields _time, flow.id, source.network, source.address, source.name, destination.network, destination.address, destination.name, destination.domain, destination.port, network.transport, flow.action, network.bytes | sort by (_time desc) | limit 200",
           "queryType": "instant",
           "refId": "A",
           "maxLines": 200

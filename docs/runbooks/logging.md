@@ -161,9 +161,9 @@ Every five minutes a stdlib Python Deployment, in the stock image, reads fixed t
 | --- | --- |
 | `service.name`, `record.type` | `unifi-flows` and `flow`, `checkpoint` or `gap`. These are the only stream fields. |
 | `_time` | The flow's end, from the console. |
-| `flow.id`, `flow.scope` | The console's row ID, and `inter_network`, `same_network`, `gateway` or `internet`. |
+| `flow.id`, `flow.scope` | The console's row ID, and `inter_network`, `same_network`, `gateway` or `internet`. `same_network` rows so far all start at the gateway; they are not client-to-client traffic. |
 | `flow.action`, `flow.service`, `flow.direction`, `flow.risk`, `flow.policies` | As the console reports them. |
-| `source.*`, `destination.*` | `network`, `zone`, `address`, `port` and `name`, plus `destination.domain`. `source.network` is the network a flow entered the gateway on and `destination.network` the one it left by, so a service VIP appears under the network that routes it. |
+| `source.*`, `destination.*` | `network`, `zone`, `address`, `port` and `name`, plus `destination.domain`. `source.network` is the network a flow entered the gateway on and `destination.network` the one it left by, so a service VIP appears under the network that routes it. In `gateway` scope, `destination.network` can name another network or a WAN although the flow ended at the gateway. |
 | `network.transport`, `network.bytes`, `network.bytes_sent`, `network.bytes_received`, `network.packets` | Protocol and counters. |
 
 Use `count_uniq(flow.id)` rather than `count()`: delivery is at-least-once, and a restart can replay every window since the last visible checkpoint. Aggregate byte totals are omitted because replayed copies would inflate them.
@@ -171,7 +171,7 @@ Use `count_uniq(flow.id)` rather than `count()`: delivery is at-least-once, and 
 - Cross-network pairs: `{service.name="unifi-flows",record.type="flow"} flow.scope:=inter_network | stats by (source.network, destination.network) count_uniq(flow.id) as flows`
 - Coverage gaps: `{service.name="unifi-flows",record.type="gap"} | fields _time, gap.start, gap.end, gap.reason`
 
-**What it cannot show.** Rows are completed sessions, so a long-lived connection appears only when it ends, and an absent flow is not evidence that nothing depends on it. Traffic within a network never reaches the gateway. Most rows report `CONNTRACK` rather than the rule that allowed them. A row is proof that a flow happened, not that a policy would permit it again.
+**What it cannot show.** Rows are completed sessions, so a long-lived connection appears only when it ends, and an absent flow is not evidence that nothing depends on it. Traffic within a network never reaches the gateway. Every row so far reports `CONNTRACK`, blocked ones included, rather than the matching rule. Blocked rows are rare and no row has an external source, so this does not show what the firewall refuses. A row is proof that a flow happened, not that a policy would permit it again.
 
 **The private API.** A Network update can change it, and the collector has not been tested on Network 11. It does not guess: a response that does not add up ends the cycle as `incomplete`, holds the watermark and names the reason in `unifi_flows_incomplete_windows_total`. Check that metric after any Network update.
 
@@ -181,11 +181,12 @@ Use `count_uniq(flow.id)` rather than `count()`: delivery is at-least-once, and 
 | --- | --- | --- |
 | `ok`, `no_rows` | Read in full. `no_rows` means the console answered with nothing. | None. |
 | `backlog` | Page budget spent while catching up. | None; it clears as later cycles finish. |
-| `session_expired` | The console session ended. The next cycle logs in. | None unless it repeats. |
 | `auth_failed`, `access_denied` | The login or the read was refused. Refused logins back off up to an hour, reducing authentication pressure; this does not guarantee against lockout and restarts reset the delay. | Check `unpoller-sa`, and whether it still has View Only. |
 | `read_failed`, `rate_limited` | The console did not answer usefully. The window is retried at the next poll. | Check the console if it persists. |
 | `incomplete` | A response did not add up. | See the reason in the metric. |
 | `ingest_failed`, `state_unavailable` | VictoriaLogs refused rows or could not be read. | See [Pipeline failures](#pipeline-failures). |
+
+The console ends a session after about two hours, however busy it is, so the collector logs in again and repeats that read within the cycle, about 12 logins a day. A session refused again straight after logging in is `access_denied`.
 
 Time that cannot be recovered is recorded as a `gap` row rather than hidden: `beyond_catchup` when an outage passes 20 hours, and `query_cap` when one 30-second window holds more than the query cap.
 
