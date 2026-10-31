@@ -1,7 +1,8 @@
 ---
 # The stock streaming_replicas metric counts all WAL senders, regardless of state.
 # Use CNPG's existing exporter, on the primary only, to count physical standbys
-# from this cluster that have actually reached streaming state.
+# from this cluster that have actually reached streaming state. Also detect
+# invalidated HA slots independently of the sender state (notably on PostgreSQL 17).
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -25,3 +26,16 @@ data:
         - streaming_replicas:
             usage: GAUGE
             description: Physical standbys of this cluster in streaming state on this primary
+    ha_slots:
+      primary: true
+      query: |
+        SELECT count(*) AS invalidated
+        FROM pg_catalog.pg_replication_slots
+        WHERE slot_type = 'physical'
+          AND NOT temporary
+          AND slot_name LIKE '\_cnpg\_bambuddy\_db\_%' ESCAPE '\'
+          AND invalidation_reason IS NOT NULL
+      metrics:
+        - invalidated:
+            usage: GAUGE
+            description: Invalidated permanent physical HA slots of this cluster on this primary
