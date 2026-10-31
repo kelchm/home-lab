@@ -690,7 +690,7 @@ jobs:
           docker run --rm
           --entrypoint vtysh
           --volume "${GITHUB_WORKSPACE}:/workspace:ro"
-          quay.io/frrouting/frr:10.3.4@sha256:5a3a646db8bc911a996e48d67fc6dfed4c49f8d893c76cc6ef52a620a9ec6312
+          quay.io/frrouting/frr:10.7.1@sha256:9aeb1c4947207a3d405674c4de06451d8b7e0d00e6f7d1f8e61e7354273efc63
           -C -f /workspace/network/unifi/frr.conf
 
       - name: No network changes
