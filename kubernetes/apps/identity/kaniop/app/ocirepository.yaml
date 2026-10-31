@@ -10,4 +10,5 @@ spec:
     operation: copy
   ref:
     tag: 0.19.1
+    digest: sha256:4feccd0b47176c044a6fe1b99a6264cab6447630cb5a9ce3927fe636324623db
   url: oci://ghcr.io/pando85/helm-charts/kaniop

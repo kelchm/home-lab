@@ -10,4 +10,5 @@ spec:
     operation: copy
   ref:
     tag: 3.10.1
+    digest: sha256:5bda959777d3f1cddc747fe0c344c7ecd3b7340a8f2db4978781cbe2f3405108
   url: oci://ghcr.io/seerr-team/seerr/seerr-chart

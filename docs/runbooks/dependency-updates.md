@@ -17,6 +17,7 @@ Use a constraint when some updates remain acceptable, approval when updates need
 ## Write references
 
 - **Default:** `name:tag@sha256:digest`. The digest makes the pull reproducible and the tag tells Renovate what to follow. Renovate can update the digest while retaining the tag, or propose a newer tag with its matching digest. An exact version tag alone, such as `26.07-py3`, is not a content lock, because the registry can repoint it.
+- **OCI Helm charts:** `spec.ref.tag` plus `spec.ref.digest` on the `OCIRepository`. See [OCI chart digests](#oci-chart-digests).
 - **Dockerfile content lock:** `FROM name@sha256:digest` with no tag. A rule in `.renovaterc.json5` disables the Dockerfile manager's Docker dependencies that have a digest and no tag, so Renovate neither proposes updates for them nor reports a failed lookup. Without the rule it looks for `latest`, which images such as NVIDIA PyTorch don't publish. Tagged references in the same file stay managed. The rule reads the form, not the intent, so write a digest-only `FROM` only as a recorded lock.
 - **Other managers:** the digest-only convention covers only the Dockerfile manager's Docker dependencies. Lock anything else, such as a Kubernetes image, a workflow image or an annotated custom-manager value, with an `enabled: false` rule scoped to the package, manager and files that need the lock. Record the reason in its comment. A package-wide rule is appropriate only when every use has the same restriction, as with Visionect.
 - **Existing locks:** a tagged reference that is already intentionally locked keeps its form and gets a narrowly scoped rule. Don't rewrite frozen or checksummed files to adopt the digest-only form.
@@ -74,15 +75,25 @@ The remaining #221 slice here is workload image digest coverage (inventory first
 
 ## OCI chart digests
 
-helm-controller tracks the content of a chart that comes from an `OCIRepository`. It appends the first 12 digest characters to the chart version, so a release reports `5.3.0+0e13b1456564` in `status.lastAttemptedRevision` and `helm history`, and `helm.sh/chart` labels show it with `_`. With tag-only sources, a registry re-push makes Flux upgrade the release at the source's next check, 15 minutes for nearly all of them, without a Renovate PR. Renovate still proposes new `spec.ref.tag` versions. Releases from a `HelmRepository` keep plain versions. For reviewed content changes, use tag-plus-digest references: `spec.ref.digest` holds exact bytes and Renovate can propose digest updates. Record any deliberate hold with a [lock record](#record-a-lock).
+Chart versions and chart content change through Renovate PRs, and the exact bytes in use stay in place until a PR is merged. Each `OCIRepository` sets `spec.ref.tag` and `spec.ref.digest`. Flux pulls the digest and never reads the tag, so a publisher replacing a version's content cannot change what the cluster runs. This describes the intended state once #1192 is activated.
 
-A digest change upgrades the release even when the chart files match, and it restarts any workload that carries the version in its pod template. A chart that writes `.Chart.Version` to a label without replacing `+` fails its upgrade with an invalid label. All current OCI charts render valid labels, but the `flux-instance` healthcheck Job has this flaw, so keep `healthcheck.enabled` off. Check any new chart's use of `.Chart.Version` when adopting it.
+| Upstream change | What Renovate proposes |
+| --- | --- |
+| New version | One PR replacing `tag` and `digest` together |
+| Same version re-pushed | One PR replacing only `digest`, so review sees a content change with no version change |
+| New source committed with only a tag | A pin PR adding `digest` |
+
+None of these merge automatically, and Renovate runs on weekends, so a re-push can wait up to a week for its PR. Existing holds still apply: external-dns stays behind dashboard approval, including its digest updates. `scripts/ci/test-renovate-oci-charts.mjs` fails any chart source missing either field.
+
+helm-controller appends the first 12 digest characters to the chart version, so a release reports `5.3.0+0e13b1456564` in `status.lastAttemptedRevision` and `helm history`, and `helm.sh/chart` labels show it with `_`. The 13 releases from a `HelmRepository` keep plain versions and follow versions only. `bootstrap/helmfile.d` also stays tag-only: it runs at cluster bootstrap and Flux takes over from the pinned sources.
+
+Merging a digest change upgrades the release even when the chart files match, and it restarts any workload that carries the version in its pod template. A chart that writes `.Chart.Version` to a label without replacing `+` fails its upgrade with an invalid label. All current OCI charts render valid labels, but the `flux-instance` healthcheck Job has this flaw, so keep `healthcheck.enabled` off. Check any new chart's use of `.Chart.Version` when adopting it.
 
 ### First activation
 
-Status: not yet activated. The scope below comes from an offline render of the 42 OCI-sourced releases on 2026-10-30, with chart bytes matching the deployed digests. `coredns` is the one exception: its 1.49.0 tag was re-pushed on 2026-10-26 with identical chart files.
+Status: not yet activated. The scope below comes from an offline render of the 42 OCI-sourced releases at `main` `95c8300a` on 2026-10-31, with every source pinned to the digest its release has deployed. No chart content changes. `coredns` keeps its deployed 1.49.0 archive, which its publisher re-pushed on 2026-10-26 with identical files, so Renovate will propose that digest as an ordinary PR after activation; merging it restarts CoreDNS once more.
 
-Removing `DisableChartDigestTracking` restarts helm-controller, which then runs one Helm upgrade for each of those releases, with up to ten reconciliations in progress concurrently. This is a concurrency limit, not an ordered batch rollout. The checked renders change no images, values, chart defaults, selectors or volume claim templates; refresh the inventory before activation.
+Merging moves each source to its pinned digest, which stores the same chart under a `sha256:` revision and does nothing on its own. Removing `DisableChartDigestTracking` restarts helm-controller, which then runs one Helm upgrade for each of those releases, with up to ten reconciliations in progress concurrently. This is a concurrency limit, not an ordered batch rollout. The checked renders change no images, values, chart defaults, selectors or volume claim templates; refresh the inventory and pins if any chart has moved before activation.
 
 | Effect on upgrade | Releases |
 | --- | --- |
@@ -96,8 +107,8 @@ Hold the network plane until the rest has proved the change:
 
 1. Finish in-flight dependency upgrades, refresh the chart and workload inventory, confirm HelmReleases, nodes, Longhorn volumes and CNPG clusters are healthy, and hold Renovate merges for the window. Include Kaniop's hooks in the approved scope after checking identity health and its completed migration marker; otherwise suspend Kaniop separately.
 2. Run `flux suspend hr cilium -n kube-system` and `flux suspend hr coredns -n kube-system`. Before merging, confirm both suspensions are observed and remain set after Git reconciliation. Their Kustomization health checks pass once the healthy suspended releases have been observed.
-3. Merge. Confirm helm-controller restarted without the gate. For each unsuspended OCI release, require `Ready=True`, current `status.observedGeneration`, no `Stalled=True`, and a successful deployed Helm history entry for the expected digest-suffixed chart version, as well as Ready workloads. `lastAttemptedRevision` alone proves only an attempt; existing workloads can remain healthy after failed hooks.
-4. Run `flux resume hr coredns -n kube-system`, then check both replicas and cluster DNS.
+3. Merge. Confirm helm-controller restarted without the gate and every `OCIRepository` reports its pinned digest as `status.artifact.revision`. For each unsuspended OCI release, require `Ready=True`, current `status.observedGeneration`, no `Stalled=True`, and a successful deployed Helm history entry for the expected digest-suffixed chart version, as well as Ready workloads. `lastAttemptedRevision` alone proves only an attempt; existing workloads can remain healthy after failed hooks.
+4. Confirm the `coredns` source reports its pinned `sha256:f5eb…` revision, run `flux resume hr coredns -n kube-system`, then check both replicas and cluster DNS.
 5. Run `flux resume hr cilium -n kube-system --timeout 10m`. Agents restart one node at a time. The 120-second BGP graceful-restart setting bounds route retention; verify connectivity rather than assuming it. Confirm the DaemonSet is Ready, BGP sessions are back, and the Longhorn checks in [AGENTS.md](../../AGENTS.md#talos-operations) still pass. Apply the same HelmRelease success checks after each resume, and release any separate Kaniop suspension within its approved scope.
 
 ### Recovery

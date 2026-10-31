@@ -796,7 +796,8 @@ jobs:
             -c "renovate-config-validator --no-global .renovaterc.json5 &&
             node scripts/ci/test-renovate-workflow-images.mjs &&
             node scripts/ci/test-renovate-caddy.mjs &&
-            node scripts/ci/test-renovate-cni.mjs"
+            node scripts/ci/test-renovate-cni.mjs &&
+            node scripts/ci/test-renovate-oci-charts.mjs"
 
   labels:
     name: Label Catalog Validation
