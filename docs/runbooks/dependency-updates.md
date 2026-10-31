@@ -70,7 +70,39 @@ Verify all three Flux Kustomizations and DaemonSets are updated and Ready, CRDs 
 
 If acceptance fails, revert through Git and verify Flux restores the previous templates and healthy DaemonSets. This restores the old version skew and tag-only references, so recheck registry identities. A revert does not undo host installer writes; the reviewed images contain the same binaries. Do not delete CRDs or reset IP pools as rollback.
 
-The remaining #221 slices are workload image digest coverage (inventory first, preserving deliberate locks and database rollout boundaries), and Flux/OCI chart digest behavior, including the explicit `DisableChartDigestTracking=true`. This source alignment does not change either policy.
+The remaining #221 slice here is workload image digest coverage (inventory first, preserving deliberate locks and database rollout boundaries). This source alignment does not change that policy. [OCI chart digests](#oci-chart-digests) covers chart content.
+
+## OCI chart digests
+
+helm-controller tracks the content of a chart that comes from an `OCIRepository`. It appends the first 12 digest characters to the chart version, so a release reports `5.3.0+0e13b1456564` in `status.lastAttemptedRevision` and `helm history`, and `helm.sh/chart` labels show it with `_`. When a registry re-pushes a tag, the new digest makes Flux upgrade the release at the source's next check, 15 minutes for nearly all of them. No Renovate PR is involved, because these sources stay tag-only. Renovate still proposes new `spec.ref.tag` versions. Releases from a `HelmRepository` keep plain versions. To hold a chart at exact bytes, use `spec.ref.digest` with a [lock record](#record-a-lock).
+
+A digest change upgrades the release even when the chart files match, and it restarts any workload that carries the version in its pod template. A chart that writes `.Chart.Version` to a label without replacing `+` fails its upgrade with an invalid label. All current OCI charts render valid labels, but the `flux-instance` healthcheck Job has this flaw, so keep `healthcheck.enabled` off. Check any new chart's use of `.Chart.Version` when adopting it.
+
+### First activation
+
+Status: not yet activated. The scope below comes from an offline render of the 42 OCI-sourced releases on 2026-10-30, with chart bytes matching the deployed digests. `coredns` is the one exception: its 1.49.0 tag was re-pushed on 2026-10-26 with identical chart files.
+
+Removing `DisableChartDigestTracking` restarts helm-controller, which then runs one Helm upgrade for each of those releases, ten at a time. No images, values, chart defaults, selectors or volume claim templates change.
+
+| Effect on upgrade | Releases |
+| --- | --- |
+| Labels only, no restart | The other 31, including all `app-template` releases except `visionect` |
+| Chart version in the pod template | `cilium` (agents and operator), `cert-manager` (three Deployments), `flux-operator`, `flux-operator-mcp`, `k8s-gateway`, `reloader`, `seerr` |
+| Checksum over rendered labels | `coredns`, `cnpg-operator`; database pods stay untouched |
+| Restores Git's `restartedAt` over a manual rollout | `visionect`, a `Recreate` Deployment |
+| Upgrade hooks | `kaniop` runs its CRD apply, migrate and verify Jobs; its Deployments stay untouched |
+
+Hold the network plane until the rest has proved the change:
+
+1. Confirm all HelmReleases, nodes, Longhorn volumes and CNPG clusters are healthy, and hold Renovate merges for the window.
+2. Run `flux suspend hr cilium -n kube-system` and `flux suspend hr coredns -n kube-system`. Their Kustomization health checks still pass while they are suspended.
+3. Merge. Confirm helm-controller restarted without the gate, and the other 40 releases report a `+<digest>` version with their workloads Ready.
+4. Run `flux resume hr coredns -n kube-system`, then check both replicas and cluster DNS.
+5. Run `flux resume hr cilium -n kube-system --timeout 10m`. Agents restart one node at a time; BGP graceful restart holds routes for 120 seconds. Confirm the DaemonSet is Ready, BGP sessions are back, and the Longhorn checks in [AGENTS.md](../../AGENTS.md#talos-operations) still pass.
+
+### Recovery
+
+A failed upgrade rolls back through the release's own remediation, with two retries, and leaves that release's previous workloads running. Fix the cause, then run `flux reconcile hr <name> -n <namespace> --force`. Restoring the gate is not a per-release fix. It changes every chart version again, so the 42 upgrades and the chart-label and checksum restarts all repeat. Use it only if digest tracking itself proves unworkable, and resume any suspended release afterwards.
 
 ## Record a lock
 
