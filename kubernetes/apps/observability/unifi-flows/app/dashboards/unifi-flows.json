@@ -19,6 +19,18 @@
   "templating": {
     "list": [
       {
+        "name": "datasource",
+        "label": "Metrics datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "refresh": 1,
+        "current": {
+          "text": "VictoriaMetrics",
+          "value": "victoriametrics"
+        },
+        "options": []
+      },
+      {
         "name": "scope",
         "label": "Scope",
         "type": "custom",
@@ -166,13 +178,13 @@
       },
       "datasource": {
         "type": "prometheus",
-        "uid": "victoriametrics"
+        "uid": "${datasource}"
       },
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "victoriametrics"
+            "uid": "${datasource}"
           },
           "expr": "time() - max(unifi_flows_watermark_timestamp_seconds{job=\"unifi-flows\"})",
           "legendFormat": "",
@@ -236,13 +248,13 @@
       },
       "datasource": {
         "type": "prometheus",
-        "uid": "victoriametrics"
+        "uid": "${datasource}"
       },
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "victoriametrics"
+            "uid": "${datasource}"
           },
           "expr": "max by (result) (unifi_flows_last_cycle_result{job=\"unifi-flows\"}) == 1",
           "legendFormat": "{{result}}",
@@ -256,10 +268,27 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "thresholds"
+            "mode": "fixed",
+            "fixedColor": "green"
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "auth_failed|access_denied|session_expired|rate_limited|read_failed|ingest_failed|state_unavailable|incomplete"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "reduceOptions": {
@@ -288,13 +317,13 @@
       },
       "datasource": {
         "type": "prometheus",
-        "uid": "victoriametrics"
+        "uid": "${datasource}"
       },
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "victoriametrics"
+            "uid": "${datasource}"
           },
           "expr": "sum(increase(unifi_flows_rows_written_total{job=\"unifi-flows\"}[$__range]))",
           "legendFormat": "",
@@ -332,7 +361,7 @@
     {
       "id": 5,
       "type": "stat",
-      "title": "Time lost to gaps",
+      "title": "Last gap detected",
       "gridPos": {
         "x": 14,
         "y": 1,
@@ -341,15 +370,15 @@
       },
       "datasource": {
         "type": "prometheus",
-        "uid": "victoriametrics"
+        "uid": "${datasource}"
       },
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "victoriametrics"
+            "uid": "${datasource}"
           },
-          "expr": "sum(increase(unifi_flows_gap_seconds_total{job=\"unifi-flows\"}[$__range]))",
+          "expr": "max(unifi_flows_last_gap_timestamp_seconds{job=\"unifi-flows\"}) * 1000",
           "legendFormat": "",
           "refId": "A",
           "editorMode": "code",
@@ -357,26 +386,20 @@
           "range": false
         }
       ],
-      "description": "Time the collector gave up on over the dashboard range. Anything above zero means the flows below are not the whole picture.",
+      "description": "Latest gap detected in this collector process, including before its first scrape. The persisted Coverage gaps table below retains earlier gaps across restarts.",
       "fieldConfig": {
         "defaults": {
-          "unit": "s",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 1
+          "unit": "dateTimeAsIso",
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "None observed in this process"
+                }
               }
-            ]
-          },
-          "color": {
-            "mode": "thresholds"
-          }
+            }
+          ]
         },
         "overrides": []
       },
@@ -407,13 +430,13 @@
       },
       "datasource": {
         "type": "prometheus",
-        "uid": "victoriametrics"
+        "uid": "${datasource}"
       },
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "victoriametrics"
+            "uid": "${datasource}"
           },
           "expr": "sum(increase(unifi_flows_incomplete_windows_total{job=\"unifi-flows\"}[$__range]))",
           "legendFormat": "",
@@ -473,13 +496,13 @@
       },
       "datasource": {
         "type": "prometheus",
-        "uid": "victoriametrics"
+        "uid": "${datasource}"
       },
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "victoriametrics"
+            "uid": "${datasource}"
           },
           "expr": "sum by (result) (increase(unifi_flows_cycles_total{job=\"unifi-flows\"}[$__rate_interval]))",
           "legendFormat": "{{result}}",
@@ -653,7 +676,7 @@
           "expr": "{service.name=\"unifi-flows\",record.type=\"flow\"} flow.scope:~\"$scope\" source.network:~\"$source_network\" destination.network:~\"$destination_network\" network.transport:~\"$protocol\" destination.port:~\"$port\" | stats by (source.network, destination.network) count_uniq(flow.id) as flows",
           "queryType": "statsRange",
           "refId": "A",
-          "legendFormat": "{{source.network}} → {{destination.network}}"
+          "legendFormat": "{{source.network}} \u2192 {{destination.network}}"
         }
       ],
       "description": "Distinct completed flows per interval. Long-lived connections count only when they end.",
@@ -710,33 +733,20 @@
             "uid": "victorialogs"
           },
           "editorMode": "code",
-          "expr": "{service.name=\"unifi-flows\",record.type=\"flow\"} flow.scope:~\"$scope\" source.network:~\"$source_network\" destination.network:~\"$destination_network\" network.transport:~\"$protocol\" destination.port:~\"$port\" | stats by (source.network, destination.network, network.transport, destination.port, flow.service, flow.action) count_uniq(flow.id) as flows, sum(network.bytes) as bytes, max(_time) as last_seen | sort by (flows desc) | limit 200",
+          "expr": "{service.name=\"unifi-flows\",record.type=\"flow\"} flow.scope:~\"$scope\" source.network:~\"$source_network\" destination.network:~\"$destination_network\" network.transport:~\"$protocol\" destination.port:~\"$port\" | stats by (source.network, destination.network, network.transport, destination.port, flow.service, flow.action) count_uniq(flow.id) as flows, max(_time) as last_seen | sort by (flows desc) | limit 200",
           "queryType": "instant",
           "refId": "A",
           "maxLines": 200
         }
       ],
-      "description": "One row per source network, destination network, protocol, port and action, busiest first.",
+      "description": "One row per source network, destination network, protocol, port and action, busiest first. Flow counts deduplicate replayed IDs; aggregate bytes are omitted because stored copies can repeat.",
       "fieldConfig": {
         "defaults": {
           "custom": {
             "filterable": true
           }
         },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "bytes"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "decbytes"
-              }
-            ]
-          }
-        ]
+        "overrides": []
       },
       "options": {
         "showHeader": true,
@@ -765,10 +775,6 @@
                 "destinationType": "number"
               },
               {
-                "targetField": "bytes",
-                "destinationType": "number"
-              },
-              {
                 "targetField": "last_seen",
                 "destinationType": "time"
               }
@@ -788,7 +794,6 @@
               "flow.service": true,
               "flow.action": true,
               "flows": true,
-              "bytes": true,
               "last_seen": true
             },
             "indexByName": {
@@ -799,8 +804,7 @@
               "flow.service": 4,
               "flow.action": 5,
               "flows": 6,
-              "bytes": 7,
-              "last_seen": 8
+              "last_seen": 7
             },
             "renameByName": {
               "source.network": "Source",
@@ -810,7 +814,6 @@
               "flow.service": "Service",
               "flow.action": "Action",
               "flows": "Flows",
-              "bytes": "Bytes",
               "last_seen": "Last seen"
             }
           }

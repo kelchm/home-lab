@@ -153,9 +153,9 @@ Rows from direct ingestion keep that schema until retention removes them, about 
 
 ## UniFi flow records
 
-[`unifi-flows`](../../kubernetes/apps/observability/unifi-flows/app/) copies the console's Flow View rows into VictoriaLogs, which holds them for the normal retention. The console itself keeps about 480,000 rows, roughly 27 hours here, and each query stops at 10,000. Ubiquiti offers no flow API, syslog carries no flow records, and enabling NetFlow disables Hardware Acceleration, so this reads the private endpoint the Flow View uses. [Dashboard: UniFi / Flows](https://grafana.home.kelch.io/d/unifi-flows).
+[`unifi-flows`](../../kubernetes/apps/observability/unifi-flows/app/) copies the console's Flow View rows into VictoriaLogs, which holds them for the normal retention. The console itself keeps about 480,000 rows, roughly 27 hours here, and each query stops at 10,000. Manual CSV export is available; the Integration API has no documented flow endpoint, syslog carries no flow records, and enabling NetFlow disables Hardware Acceleration, so this reads the private endpoint the Flow View uses. [Dashboard: UniFi / Flows](https://grafana.home.kelch.io/d/unifi-flows).
 
-Every five minutes a stdlib Python Deployment, in the stock image, reads fixed time windows of at most 10 minutes as the View Only `unpoller-sa` account, then posts rows to VictoriaLogs' JSON lines endpoint. The watermark moves only when a window was read in full and VictoriaLogs accepted it. Each read goes back two minutes for flows that appear late, and rows already sent are skipped by `flow.id`. The watermark is stored as a `record.type=checkpoint` row, so a restart needs no volume and resumes where it stopped.
+Every five minutes a stdlib Python Deployment, in the stock image, reads fixed time windows of at most 10 minutes as the View Only `unpoller-sa` account, then posts rows to VictoriaLogs' JSON lines endpoint. The watermark moves only when a window was read in full and VictoriaLogs accepted it. Each read goes back two minutes for flows that appear late, and rows already sent are skipped by `flow.id`. The watermark is stored as a `record.type=checkpoint` row, so a restart needs no volume and resumes from the latest visible checkpoint. Arrivals outside the overlap can be missed; row ID stability and completed-row immutability require live acceptance.
 
 | Field | Content |
 | --- | --- |
@@ -166,7 +166,7 @@ Every five minutes a stdlib Python Deployment, in the stock image, reads fixed t
 | `source.*`, `destination.*` | `network`, `zone`, `address`, `port` and `name`, plus `destination.domain`. `source.network` is the network a flow entered the gateway on and `destination.network` the one it left by, so a service VIP appears under the network that routes it. |
 | `network.transport`, `network.bytes`, `network.bytes_sent`, `network.bytes_received`, `network.packets` | Protocol and counters. |
 
-Use `count_uniq(flow.id)` rather than `count()`: delivery is at-least-once, and a restart can repeat up to one overlap of rows.
+Use `count_uniq(flow.id)` rather than `count()`: delivery is at-least-once, and a restart can replay every window since the last visible checkpoint. Aggregate byte totals are omitted because replayed copies would inflate them.
 
 - Cross-network pairs: `{service.name="unifi-flows",record.type="flow"} flow.scope:=inter_network | stats by (source.network, destination.network) count_uniq(flow.id) as flows`
 - Coverage gaps: `{service.name="unifi-flows",record.type="gap"} | fields _time, gap.start, gap.end, gap.reason`
@@ -182,12 +182,16 @@ Use `count_uniq(flow.id)` rather than `count()`: delivery is at-least-once, and 
 | `ok`, `no_rows` | Read in full. `no_rows` means the console answered with nothing. | None. |
 | `backlog` | Page budget spent while catching up. | None; it clears as later cycles finish. |
 | `session_expired` | The console session ended. The next cycle logs in. | None unless it repeats. |
-| `auth_failed`, `access_denied` | The login or the read was refused. Logins back off, up to an hour, so the account is not locked out. | Check `unpoller-sa`, and whether it still has View Only. |
+| `auth_failed`, `access_denied` | The login or the read was refused. Refused logins back off up to an hour, reducing authentication pressure; this does not guarantee against lockout and restarts reset the delay. | Check `unpoller-sa`, and whether it still has View Only. |
 | `read_failed`, `rate_limited` | The console did not answer usefully. The window is retried at the next poll. | Check the console if it persists. |
 | `incomplete` | A response did not add up. | See the reason in the metric. |
 | `ingest_failed`, `state_unavailable` | VictoriaLogs refused rows or could not be read. | See [Pipeline failures](#pipeline-failures). |
 
 Time that cannot be recovered is recorded as a `gap` row rather than hidden: `beyond_catchup` when an outage passes 20 hours, and `query_cap` when one 30-second window holds more than the query cap.
+
+**Coverage acceptance.** Compare an identical closed UTC hour in a private CSV export and the stored JSON rows. CSV Session Ids are blank, so first verify that `UTC Date / Time` matches JSON `time` at the CSV's actual precision, and that CSV `In`/`Out` and `Action` match the collector's network/action fields. Stop if these mappings cannot be established. Collapse identical JSON replay copies by `flow.id`, retaining conflicts for the revision check. Form a key from that UTC time, normalized protocol, source/destination IP and port, ingress/egress network and action. Compare key multiplicities, reporting missing, extra and ambiguous matches separately; grouped totals are only a cross-check. Keep ambiguous matches unresolved rather than declaring coverage complete.
+
+Separately compare two JSON reads of the same settled window, including page 1+, to check stable IDs, ID reuse and changed payloads. The collector skips a previously sent ID, so revised completed rows block acceptance until a revision policy is chosen. Keep the CSV series until the comparison passes. Polling changes no forwarding/offload setting, but console load and real dashboard panels still need checking during activation.
 
 To stop collection, remove `./unifi-flows/ks.yaml` from the observability [`kustomization.yaml`](../../kubernetes/apps/observability/kustomization.yaml). Flux prunes the collector, its policy, scrape, alerts and dashboard. Stored rows stay until retention removes them, and the `unpoller-credentials` Secret stays with Unpoller.
 

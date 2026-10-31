@@ -109,7 +109,7 @@ def check(base):
     assert default[('Default', 'tcp', '80')]['flows'] == '1', 'the repeated row counts once'
     assert default[('Default', 'icmp', '')]['flows'] == '1', 'a row with no port still matches the default filter'
     assert default[('IoT', 'tcp', '22')]['flow.action'] == 'blocked'
-    assert default[('Workloads', 'tcp', '443')]['bytes'] == '5000'
+    assert all('bytes' not in record for record in table), 'replay copies must not inflate aggregate bytes'
     assert default[('Workloads', 'tcp', '443')]['last_seen'].startswith('2026-08-01T00:01:00'), default[('Workloads', 'tcp', '443')]
 
     for overrides, expected in (

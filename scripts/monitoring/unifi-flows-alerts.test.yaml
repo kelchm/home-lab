@@ -99,8 +99,8 @@ tests:
   - name: Time abandoned raises a gap once, and it clears
     interval: 1m
     input_series:
-      - series: unifi_flows_gap_seconds_total{job="unifi-flows",instance="unifi-flows"}
-        values: 0x10 3600x120
+      - series: unifi_flows_last_gap_timestamp_seconds{job="unifi-flows",instance="unifi-flows"}
+        values: 0x10 660x120
     alert_rule_test:
       - eval_time: 20m
         alertname: UniFiFlowCoverageGap
@@ -112,8 +112,33 @@ tests:
             exp_annotations:
               summary: UniFi flow records have a coverage gap
               description: >-
-                The collector gave up on 1h 0m 0s of flows
-                in the last hour, because they had aged out or could not be read
+                The collector recorded a coverage gap
+                in the last hour, because some time had aged out or could not be read
+                below the query cap. The UniFi / Flows dashboard lists each gap.
+      - eval_time: 100m
+        alertname: UniFiFlowCoverageGap
+        exp_alerts: []
+
+  - name: A gap before the first scrape raises a warning without a counter increase
+    interval: 1m
+    input_series:
+      - series: unifi_flows_gap_seconds_total{job="unifi-flows",instance="unifi-flows"}
+        values: 3600x120
+      - series: unifi_flows_last_gap_timestamp_seconds{job="unifi-flows",instance="unifi-flows"}
+        values: 1x120
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: UniFiFlowCoverageGap
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: unifi-flows
+              instance: unifi-flows
+            exp_annotations:
+              summary: UniFi flow records have a coverage gap
+              description: >-
+                The collector recorded a coverage gap
+                in the last hour, because some time had aged out or could not be read
                 below the query cap. The UniFi / Flows dashboard lists each gap.
       - eval_time: 100m
         alertname: UniFiFlowCoverageGap

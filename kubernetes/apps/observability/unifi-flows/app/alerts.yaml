@@ -40,12 +40,14 @@ spec:
               private; unifi_flows_incomplete_windows_total gives the reason.
 
         - alert: UniFiFlowCoverageGap
-          expr: increase(unifi_flows_gap_seconds_total{job="unifi-flows"}[1h]) > 0
+          expr: |
+            time() - unifi_flows_last_gap_timestamp_seconds{job="unifi-flows"} < 3600
+            and unifi_flows_last_gap_timestamp_seconds{job="unifi-flows"} > 0
           labels:
             severity: warning
           annotations:
             summary: UniFi flow records have a coverage gap
             description: >-
-              The collector gave up on {{ $value | humanizeDuration }} of flows
-              in the last hour, because they had aged out or could not be read
+              The collector recorded a coverage gap
+              in the last hour, because some time had aged out or could not be read
               below the query cap. The UniFi / Flows dashboard lists each gap.

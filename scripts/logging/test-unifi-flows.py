@@ -15,6 +15,7 @@ import ssl
 import tempfile
 import threading
 import unittest
+from unittest import mock
 import urllib.parse
 from pathlib import Path
 
@@ -198,6 +199,13 @@ class Harness(unittest.TestCase):
 
 
 class Reads(Harness):
+    def test_gap_before_first_scrape_has_a_timestamp(self):
+        instance = self.collector()
+        with contextlib.redirect_stdout(self.out):
+            instance.gap(self.edge() - 3600000, self.edge(), 'beyond_catchup')
+        self.assertIn(f'unifi_flows_last_gap_timestamp_seconds {self.now}', instance.metrics())
+        self.assertEqual(instance.counters['gap_seconds'], 3600)
+
     def test_multipage_read_stores_each_row_once_and_advances(self):
         self.console.rows = self.recent(250, age_s=500)
         instance = self.collector()
@@ -227,6 +235,40 @@ class Reads(Harness):
         self.assertEqual(self.cycle(instance), 'no_rows')
         self.assertEqual(instance.watermark, self.edge())
         self.assertIn('unifi_flows_last_cycle_result{result="no_rows"} 1', instance.metrics())
+
+    def test_contradictory_empty_page_metadata_holds_the_watermark(self):
+        patches = [
+            {'total_element_count': -1}, {'total_element_count': True},
+            {'total_page_count': 5}, {'total_page_count': -1},
+            {'has_next': True}, {'has_next': 0}, {'or_more': True},
+            {'page_number': False},
+        ]
+        original = self.console.page
+        for changes in patches:
+            with self.subTest(changes=changes):
+                with mock.patch.object(self.console, 'page', side_effect=lambda body: {**original(body), **changes}):
+                    instance = self.collector()
+                    self.assertEqual(self.cycle(instance), 'incomplete')
+                    self.assertEqual(instance.problems, {'invalid_pagination': 1})
+                    self.assertEqual(instance.watermark, int((self.now - self.config.initial_lookback_s) * 1000))
+        self.assertEqual(self.logs.flow_ids(), [])
+
+    def test_decreasing_total_cannot_hide_an_unread_row(self):
+        self.config.initial_lookback_s = 300
+        self.console.rows = self.recent(101, age_s=250)
+        original = self.console.page
+
+        def disappearing_row(body):
+            document = original(body)
+            if body['pageNumber'] == 1:
+                document.update(data=[], total_element_count=100, total_page_count=1, has_next=False)
+            return document
+
+        with mock.patch.object(self.console, 'page', side_effect=disappearing_row):
+            instance = self.collector()
+            self.assertEqual(self.cycle(instance), 'incomplete')
+            self.assertEqual(instance.watermark, int((self.now - self.config.initial_lookback_s) * 1000))
+            self.assertEqual(len(self.logs.flow_ids()), 100)
 
     def test_window_over_the_query_cap_is_narrowed_not_truncated(self):
         self.config.max_window_s = 600
@@ -286,7 +328,7 @@ class Reads(Harness):
         self.console.understate_pages = True
         instance = self.collector()
         self.assertEqual(self.cycle(instance), 'incomplete')
-        self.assertEqual(instance.problems, {'short_count': 1})
+        self.assertEqual(instance.problems, {'invalid_pagination': 1})
         self.assertLess(instance.watermark, self.edge())
 
     def test_unusable_row_is_incomplete_not_a_crash(self):
@@ -299,7 +341,7 @@ class Reads(Harness):
         self.assertEqual(instance.problems, {'unexpected_row': 1})
         self.assertLess(instance.watermark, self.edge())
 
-    def test_row_arriving_mid_read_loses_nothing_and_overlap_collects_it(self):
+    def test_changing_total_holds_the_watermark_until_a_stable_read(self):
         self.config.initial_lookback_s = 300
         rows = list(self.recent(250, age_s=200))
         self.console.rows = rows
@@ -307,11 +349,13 @@ class Reads(Harness):
         self.console.insert_during_page = (1, extra)
         originals = {r['id'] for r in rows}
         instance = self.collector()
-        self.assertEqual(self.cycle(instance), 'ok')
-        self.assertTrue(originals <= set(self.logs.flow_ids()))
+        self.assertEqual(self.cycle(instance), 'incomplete')
+        self.assertEqual(instance.problems, {'changing_total': 1})
+        self.assertLess(instance.watermark, self.edge())
         self.assertEqual(instance.counters['windows_shifted'], 1)
         self.now += 300
         self.assertEqual(self.cycle(instance), 'ok')
+        self.assertTrue(originals <= set(self.logs.flow_ids()))
         self.assertEqual(self.logs.flow_ids().count(extra['id']), 1)
         self.assertEqual(len(self.logs.flow_ids()), len(set(self.logs.flow_ids())))
 

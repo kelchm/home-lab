@@ -1,13 +1,13 @@
 """Copy UniFi Flow View rows into VictoriaLogs.
 
-The console keeps about a day of flow rows and has no supported export for
-them, so this reads the private endpoint its Flow View uses, with the request
+The console keeps about a day of flow rows and provides a manual CSV export.
+This reads the private endpoint its Flow View uses, with the request
 the UI sends. Each read covers a fixed time window. The watermark moves only
 when every page of a window has been read and VictoriaLogs has accepted the
-rows, so delivery is at-least-once: a restart can repeat up to one overlap of
-rows, which share a flow.id. Overlap re-reads recent time to pick up flows that
-appear late. Anything this cannot account for is recorded as a coverage gap or
-a failed cycle, never as complete.
+rows, so delivery is at-least-once: a restart can replay rows since the last
+visible checkpoint, which share a flow.id. Overlap re-reads recent time to pick
+up late flows, but arrivals outside it can be missed. Detected pagination
+failures hold the watermark; time deliberately abandoned is recorded as a gap.
 
 Stdlib only. Row contents, credentials, cookies and tokens are never logged.
 Operations: docs/runbooks/logging.md.
@@ -166,7 +166,7 @@ class Console:
             raise ReadFailed(type(error).__name__) from None
 
     def _refuse(self, refusal):
-        """Space out attempts that are refused, so a bad password cannot lock the account."""
+        """Space out refused attempts to reduce authentication pressure."""
         self.refusal = refusal
         self.backoff_s = min(max(self.backoff_s * 2, self.config.poll_s), MAX_LOGIN_BACKOFF_S)
         self.login_after = self.clock() + self.backoff_s
@@ -385,6 +385,7 @@ class Collector:
         self.problems = {}
         self.last_result = None
         self.last_success = 0
+        self.last_gap = 0
 
     def count(self, name, amount=1):
         with self.lock:
@@ -396,6 +397,8 @@ class Collector:
     def gap(self, start_ms, end_ms, reason):
         seconds = max(end_ms - start_ms, 0) / 1000
         self.count('gap_seconds', seconds)
+        with self.lock:
+            self.last_gap = self.clock()
         self.pending.append(json.dumps({'_time': iso(self.clock() * 1000), '_msg': f'coverage gap {reason}', 'service.name': SERVICE, 'record.type': 'gap', 'gap.start': iso(start_ms), 'gap.end': iso(end_ms), 'gap.seconds': seconds, 'gap.reason': reason}))
         log('warning', 'coverage gap', reason=reason, start=iso(start_ms), end=iso(end_ms), seconds=seconds)
 
@@ -403,7 +406,7 @@ class Collector:
         """Read one window page by page, and say exactly how the read fell short."""
         window = Window({})
         previous = None
-        first_total = total = None
+        first_total = None
         page = 0
         while True:
             if budget.spent(self.clock) or self.stop.is_set():
@@ -413,15 +416,31 @@ class Collector:
             budget.pages -= 1
             self.count('pages_read')
             data = document.get('data') if isinstance(document, dict) else None
-            if not isinstance(data, list) or not isinstance(document.get('total_element_count'), int):
+            if not isinstance(data, list):
                 window.problem = 'unexpected_shape'
+                return window
+            if (any(type(document.get(key)) is not int for key in ('total_element_count', 'total_page_count', 'page_number'))
+                    or any(type(document.get(key)) is not bool for key in ('has_next', 'or_more'))):
+                window.problem = 'invalid_pagination'
                 return window
             if document.get('page_number') != page:
                 window.problem = 'ignored_page'
                 return window
             total = document['total_element_count']
-            first_total = total if first_total is None else first_total
-            window.shifted = window.shifted or total != first_total
+            pages = document['total_page_count']
+            if (total < 0 or pages < 0
+                    or (total == 0 and (data or page != 0 or pages not in (0, 1) or document['has_next'] or document['or_more']))
+                    or (total > 0 and (pages != (total + PAGE_SIZE - 1) // PAGE_SIZE
+                        or page >= pages or document['has_next'] != (page + 1 < pages)
+                        or len(data) != min(PAGE_SIZE, total - page * PAGE_SIZE)))
+                    or (document['or_more'] and total < self.config.query_cap_rows)):
+                window.problem = 'invalid_pagination'
+                return window
+            if first_total is not None and total != first_total:
+                window.shifted = True
+                window.problem = 'changing_total'
+                return window
+            first_total = total
             if page == 0 and (document.get('or_more') or total >= self.config.query_cap_rows):
                 window.capped = True
                 if not accept_cap:
@@ -451,10 +470,7 @@ class Collector:
                 break
             if self.config.page_delay_s:
                 self.wait(self.config.page_delay_s)
-        # Newest rows come first, so a row arriving mid-read pushes others later
-        # and repeats them rather than losing them. Only rows present at the
-        # first page must be accounted for; overlap collects the newcomer.
-        if not window.capped and len(window.rows) < min(first_total, total):
+        if not window.capped and len(window.rows) != first_total:
             window.problem = 'short_count'
         return window
 
@@ -570,7 +586,7 @@ class Collector:
     def metrics(self):
         with self.lock:
             counters, cycles, problems = dict(self.counters), dict(self.cycles), dict(self.problems)
-            last, success, watermark = self.last_result, self.last_success, self.watermark
+            last, success, watermark, last_gap = self.last_result, self.last_success, self.watermark, self.last_gap
         logins = self.console.logins
         lines = []
         for name, kind, help_text, samples in (
@@ -585,6 +601,7 @@ class Collector:
             ('unifi_flows_rows_late_total', 'counter', 'New rows older than the watermark, found by overlap.', [('', counters['rows_late'])]),
             ('unifi_flows_windows_shifted_total', 'counter', 'Windows whose row count changed between pages.', [('', counters['windows_shifted'])]),
             ('unifi_flows_gap_seconds_total', 'counter', 'Time abandoned as a coverage gap.', [('', counters['gap_seconds'])]),
+            ('unifi_flows_last_gap_timestamp_seconds', 'gauge', 'Time of the latest gap detected by this process, or zero.', [('', last_gap)]),
             ('unifi_flows_ingest_failures_total', 'counter', 'Cycles VictoriaLogs did not accept.', [('', counters['ingest_failures'])]),
             ('unifi_flows_watermark_timestamp_seconds', 'gauge', 'Newest time read in full and accepted.', [('', (watermark or 0) / 1000)]),
             ('unifi_flows_last_success_timestamp_seconds', 'gauge', 'End of the latest ok or no_rows cycle.', [('', success)]),
