@@ -14,8 +14,14 @@ Then runs PVE's task log overlay, which includes that configuration, on a volume
 /var/log/pve/tasks: a first start with old history and index files, a task written while it runs,
 a restart with tasks written while it was stopped, a reused inode, an aged file that resumes and an
 overlong line. Every stored record is compared with what should have arrived, once each.
+
+Finally runs Athena's collector from synology/monitoring/compose.yaml, with its hardening and mounts,
+on a journal systemd 219 writes, whose files only DSM's log group can read here: publication, a
+first start at the end of the journal, a compressed record and a restart that resumes from the
+cursor. `test-host-logs.py nas` runs this part alone; it needs only Docker.
 """
 from collections import Counter
+import hashlib
 import json
 import os
 import re
@@ -31,8 +37,18 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 LOGS = ROOT / 'proxmox/monitoring/logs'
 TASKS = ROOT / 'proxmox/monitoring/task-logs'
+SYNOLOGY = ROOT / 'synology/monitoring'
 VMUSERS = ROOT / 'kubernetes/apps/observability/metrics-ingest/app/vmusers.yaml'
 ALPINE_IMAGE = 'alpine:3.22@sha256:2e0b81d60597f449baa56dc25d355367869d2dca4cd57e866f1e2b52af3eb55f'
+# DSM 7.4 runs systemd 219, as this image's journald does.
+JOURNALD_IMAGE = 'centos:7@sha256:be65f488b7764ad3638f236b7b515b3678369a5124c47b8d32916d6487418ea4'
+# journald 219 exits unless PID 1 is in a v1 name=systemd cgroup, which a cgroup v2 host lacks.
+JOURNALD = """
+mkdir -p /run/systemd/journal
+echo 1:name=systemd:/ > /tmp/cgroup
+mount --bind /tmp/cgroup /proc/1/cgroup
+exec /usr/lib/systemd/systemd-journald
+"""
 LOG_PATH = '/insert/opentelemetry/v1/logs'
 # journald's native protocol: KEY=value lines, or KEY, a little-endian length and raw bytes.
 NATIVE = r'''
@@ -389,6 +405,168 @@ def test_task_logs(routes, fb_image, vl_image, memory, base):
     print(f'PVE task logs: {sum(check.want.values())} records stored once each.')
 
 
+def binds(service, root):
+    """A service's mounts, with each host path moved under root and repository files left in place."""
+    args = []
+    for volume in service['volumes']:
+        source = volume['source']
+        if not source.startswith(str(ROOT)):
+            source = f'{root}{source}'
+        args += ['-v', f"{source}:{volume['target']}" + (':ro' if volume.get('read_only') else '')]
+    return args
+
+
+def nas_collector_args(net, service, root):
+    """The collector as compose.yaml runs it, on a test network instead of the host's."""
+    if service['network_mode'] != 'host' or not service['read_only']:
+        sys.exit('The NAS collector should be read-only on the host network')
+    if service['depends_on']['publish']['condition'] != 'service_completed_successfully':
+        sys.exit('The NAS collector should wait for publish to succeed')
+    args = ['--name', f'{net}-fb', '--network', net, '--user', service['user'], '--memory', str(service['mem_limit']), '--read-only']
+    for cap in service['cap_drop']:
+        args += ['--cap-drop', cap]
+    for option in service['security_opt']:
+        args += ['--security-opt', option]
+    return args + binds(service, root)
+
+
+def wait_for(port, logsql, what, seconds=60):
+    deadline = time.time() + seconds
+    while time.time() < deadline:
+        try:
+            rows = query(port, logsql)
+            if rows:
+                return rows
+        except OSError:
+            pass
+        time.sleep(2)
+    sys.exit(f'{what} never arrived')
+
+
+def nas_scenario(run, net, port, write, service, root):
+    """First start, mapping, then a restart. Returns the messages that should each be stored once."""
+    write(f'{run} before the first start')
+    docker('run', '-d', *nas_collector_args(net, service, root), service['image'], *service['command'])
+    deadline = time.time() + 90
+    while True:
+        write(f'{run} ready')
+        time.sleep(3)
+        if query(port, f'"{run} ready"'):
+            break
+        if time.time() > deadline:
+            sys.exit('The NAS collector delivered nothing')
+    compressed = f'{run} compressed ' + 'x ' * 3000
+    write(f'{run} warning', 'daemon.warning')
+    write(f'{run} error', 'user.err')
+    docker('exec', '-i', f'{net}-journald', 'systemd-cat', '-t', 'nas-logs-test', '-p', 'err', input=compressed + '\n')
+    wait_for(port, f'"{run} compressed"', 'The compressed record')
+    docker('stop', '-t', '40', f'{net}-fb')
+    write(f'{run} while stopped')
+    docker('start', f'{net}-fb')
+    write(f'{run} after the restart')
+    wait_for(port, f'"{run} after the restart"', 'The line after the restart')
+    wait_for(port, f'"{run} while stopped"', 'The line written while stopped')
+    return {f'{run} warning': ('13', 'warning', 'daemon'), f'{run} error': ('17', 'err', 'user'), compressed.rstrip(): ('17', 'err', None),
+            f'{run} while stopped': ('9', 'info', 'user'), f'{run} after the restart': ('9', 'info', 'user')}
+
+
+def check_nas_rows(run, port, want):
+    failures = []
+    rows = [r for r in query(port, f'"{run}"') if r['_msg'] != f'{run} ready']
+    counts = Counter(r['_msg'] for r in rows)
+    if set(counts) != set(want) or set(counts.values()) != {1}:
+        failures.append(f'stored {dict(Counter({m[:60]: c for m, c in counts.items()}))}')
+    for row in rows:
+        fields = {'host.name': 'nas', 'service.namespace': 'synology', 'service.name': 'nas-logs-test',
+                  '_stream': '{host.name="nas",service.name="nas-logs-test"}'}
+        if row['_msg'] in want:
+            severity, text, facility = want[row['_msg']]
+            fields |= {'severity_number': severity, 'severity_text': text}
+            fields |= {'syslog.facility': facility} if facility else {}
+        for key, value in fields.items():
+            if row.get(key) != value:
+                failures.append(f"{row['_msg'][:60]}: {key} should be {value!r}, got {row.get(key)!r}")
+        for key in ('pipeline.normalize_error', 'pipeline.severity_unmapped'):
+            if key in row:
+                failures.append(f"{row['_msg'][:60]}: {key}={row[key]}")
+    return failures
+
+
+def test_nas(routes, vl_image):
+    services = json.loads(subprocess.run(['docker', 'compose', '-f', str(SYNOLOGY / 'compose.yaml'), 'config', '--format', 'json'],
+                                         check=True, capture_output=True, text=True).stdout)['services']
+    publish, collector = services['publish'], services['fluent-bit']
+    run = uuid.uuid4().hex[:8]
+    net = f'naslogs-{run}'
+    # On the Docker host's own disk, so ownership is as on Athena whatever shares a client's files.
+    root = f'/var/tmp/{net}'
+    config = f'{root}/volume1/docker/monitoring/config'
+    machine = uuid.uuid4().hex
+
+    def host(script, data=None):
+        return docker('run', '--rm', '-i', '-v', '/var/tmp:/var/tmp', ALPINE_IMAGE, 'sh', '-ec', script, input=data).stdout
+
+    def write(message, priority='user.info'):
+        docker('exec', f'{net}-journald', 'logger', '-t', 'nas-logs-test', '-p', priority, message)
+
+    docker('run', '--rm', '--network', 'none', '-v', f'{SYNOLOGY}/scrape.yaml:/scrape.yaml:ro', services['vmagent']['image'],
+           '-promscrape.config=/scrape.yaml', '-promscrape.config.dryRun')
+    try:
+        host(f"""
+            mkdir -p {root}/etc {config} {root}/run/log {root}/var/log
+            install -d -m 0700 {root}/volume1/docker/monitoring/logs
+            install -d -o 0 -g 19 -m 0755 {root}/run/log/journal
+            install -d -o 0 -g 19 -m 2755 {root}/var/log/journal
+            echo {machine} > {root}/etc/machine-id
+            install -m 0600 /dev/stdin {root}/volume1/docker/monitoring/token
+        """, 'test-token\n')
+        docker('run', '--rm', *binds(publish, root), publish['image'], *publish['command'])
+        for name, source in (('scrape.yaml', SYNOLOGY / 'scrape.yaml'), ('snmp.yml', SYNOLOGY / 'snmp.yml'),
+                             ('fluent-bit.yaml', SYNOLOGY / 'logs/fluent-bit.yaml'), ('host.lua', SYNOLOGY / 'logs/host.lua')):
+            published = host(f'sha256sum {config}/{name}').split()[0]
+            if published != hashlib.sha256(source.read_bytes()).hexdigest():
+                sys.exit(f'publish did not copy {name}')
+        host(f'cat > {config}/fluent-bit.yaml', test_config(urllib.parse.urlencode(routes['nas'], doseq=True), SYNOLOGY / 'logs/fluent-bit.yaml'))
+
+        docker('run', '-d', '--name', f'{net}-journald', '--cap-add', 'SYS_ADMIN', '--security-opt', 'apparmor=unconfined',
+               '-v', f'{root}/etc/machine-id:/etc/machine-id:ro', '-v', f'{root}/run/log/journal:/run/log/journal',
+               JOURNALD_IMAGE, 'sh', '-ec', JOURNALD)
+        journal = f'{root}/run/log/journal/{machine}/system.journal'
+        host(f'for i in $(seq 50); do [ -f {journal} ] && break; sleep 0.2; done; chown 65534:19 {journal}; chmod 0640 {journal}')
+        header = docker('exec', f'{net}-journald', 'journalctl', '-D', f'/run/log/journal/{machine}', '--header').stdout
+        if 'COMPRESSED-XZ' not in header:
+            sys.exit(f'The fixture is not a compressed journal:\n{header}')
+
+        # Without capabilities, the journal opens only through the group compose.yaml gives.
+        magic = [subprocess.run(['docker', 'run', '--rm', '--user', user, '--cap-drop', 'ALL', '-v', f'{journal}:/journal:ro',
+                                 ALPINE_IMAGE, 'head', '-c', '8', '/journal'], capture_output=True, text=True).stdout
+                 for user in (collector['user'], '0:0')]
+        if magic != ['LPKSHHRH', '']:
+            sys.exit(f"Group access to the journal should decide this test: read {magic} as {collector['user']} and 0:0")
+
+        docker('network', 'create', net)
+        docker('run', '-d', '--name', f'{net}-vl', '--network', net, '--network-alias', 'vl', '-p', '127.0.0.1::9428', vl_image)
+        port = docker('port', f'{net}-vl', '9428/tcp').stdout.split(':')[-1].strip()
+        time.sleep(2)
+        try:
+            want = nas_scenario(run, net, port, write, collector, root)
+            failures = check_nas_rows(run, port, want)
+            state = host(f'ls {root}/volume1/docker/monitoring/logs').split()
+            if 'journal.db' not in state or 'storage' not in state:
+                failures.append(f'state volume holds {state}')
+        except SystemExit as error:
+            failures = [str(error)]
+            want = {}
+        if failures:
+            print(docker('logs', f'{net}-fb').stderr[-3000:], file=sys.stderr)
+            sys.exit('\n'.join(failures))
+    finally:
+        subprocess.run(['docker', 'rm', '-f', f'{net}-fb', f'{net}-vl', f'{net}-journald'], capture_output=True)
+        subprocess.run(['docker', 'network', 'rm', net], capture_output=True)
+        subprocess.run(['docker', 'run', '--rm', '-v', '/var/tmp:/var/tmp', ALPINE_IMAGE, 'rm', '-rf', root], capture_output=True)
+    print(f'NAS journal: {len(want)} records from a systemd 219 journal stored once each.')
+
+
 def main():
     routes, failures = log_routes()
     if 'pve-sbx-1' not in routes:
@@ -464,7 +642,11 @@ def main():
             subprocess.run(['docker', 'network', 'rm', net], capture_output=True)
     print(f'Host logs: {len(routes)} log routes and {len(want)} journal records passed.')
     test_task_logs(routes, fb_image, vl_image, memory, base)
+    test_nas(routes, vl_image)
 
 
 if __name__ == '__main__':
-    main()
+    if sys.argv[1:] == ['nas']:
+        test_nas(log_routes()[0], pinned(ROOT / 'scripts/logging/test-logsql-rules.py', r"VL_IMAGE = '([^']+)'"))
+    else:
+        main()

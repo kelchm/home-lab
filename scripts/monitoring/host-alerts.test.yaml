@@ -276,6 +276,8 @@ tests:
     input_series:
       - series: fluentbit_output_retries_total{instance="pve-sbx-1",platform="pve",job="pve-fluent-bit",name="ingest"}
         values: 0+1x60
+      - series: fluentbit_output_retries_total{instance="nas",platform="synology",job="synology-fluent-bit",name="ingest"}
+        values: 0+1x60
       # Five minutes of retries, then delivered.
       - series: fluentbit_output_retries_total{instance="spark-1",platform="spark",job="spark-fluent-bit",name="ingest"}
         values: 0x10 1+1x5 6x45
@@ -294,7 +296,16 @@ tests:
               severity: warning
             exp_annotations:
               summary: pve-sbx-1 cannot deliver its logs
-              description: "Its Fluent Bit has been retrying for 10 minutes and is buffering the journal. Check the ingestion endpoint and the collector's log: the fluent-bit container on a PVE node or Spark, `journalctl -u fluent-bit` on a Pi."
+              description: "Its Fluent Bit has been retrying for 10 minutes and is buffering the journal. Check the ingestion endpoint and the collector's log: the fluent-bit container on a PVE node, Spark or the NAS, `journalctl -u fluent-bit` on a Pi."
+          - exp_labels:
+              instance: nas
+              platform: synology
+              job: synology-fluent-bit
+              name: ingest
+              severity: warning
+            exp_annotations:
+              summary: nas cannot deliver its logs
+              description: "Its Fluent Bit has been retrying for 10 minutes and is buffering the journal. Check the ingestion endpoint and the collector's log: the fluent-bit container on a PVE node, Spark or the NAS, `journalctl -u fluent-bit` on a Pi."
 
   - name: Dropped log records alert until fifteen minutes pass without more
     interval: 1m
@@ -303,6 +314,8 @@ tests:
         values: 0x20 5x30
       - series: fluentbit_output_dropped_records_total{instance="spark-1",platform="spark",job="spark-fluent-bit",name="ingest"}
         values: 0x50
+      - series: fluentbit_output_dropped_records_total{instance="nas",platform="synology",job="synology-fluent-bit",name="ingest"}
+        values: 0x20 5x30
       - series: fluentbit_output_dropped_records_total{instance="ups-office",platform="pi",job="pi-fluent-bit",name="ingest"}
         values: 0x20 5x30
     alert_rule_test:
@@ -317,7 +330,7 @@ tests:
               severity: warning
             exp_annotations:
               summary: pve-sbx-1 discarded log records
-              description: "Its Fluent Bit dropped records it could not deliver, which happens when its buffer is full or the endpoint answers with an error other than 429, 502, 503 or 504. Check the collector's log: the fluent-bit container on a PVE node or Spark, `journalctl -u fluent-bit` on a Pi."
+              description: "Its Fluent Bit dropped records it could not deliver, which happens when its buffer is full or the endpoint answers with an error other than 429, 502, 503 or 504. Check the collector's log: the fluent-bit container on a PVE node, Spark or the NAS, `journalctl -u fluent-bit` on a Pi."
           - exp_labels:
               instance: ups-office
               platform: pi
@@ -326,7 +339,16 @@ tests:
               severity: warning
             exp_annotations:
               summary: ups-office discarded log records
-              description: "Its Fluent Bit dropped records it could not deliver, which happens when its buffer is full or the endpoint answers with an error other than 429, 502, 503 or 504. Check the collector's log: the fluent-bit container on a PVE node or Spark, `journalctl -u fluent-bit` on a Pi."
+              description: "Its Fluent Bit dropped records it could not deliver, which happens when its buffer is full or the endpoint answers with an error other than 429, 502, 503 or 504. Check the collector's log: the fluent-bit container on a PVE node, Spark or the NAS, `journalctl -u fluent-bit` on a Pi."
+          - exp_labels:
+              instance: nas
+              platform: synology
+              job: synology-fluent-bit
+              name: ingest
+              severity: warning
+            exp_annotations:
+              summary: nas discarded log records
+              description: "Its Fluent Bit dropped records it could not deliver, which happens when its buffer is full or the endpoint answers with an error other than 429, 502, 503 or 504. Check the collector's log: the fluent-bit container on a PVE node, Spark or the NAS, `journalctl -u fluent-bit` on a Pi."
       - eval_time: 40m
         alertname: NodeLogsDropped
         exp_alerts: []
@@ -338,6 +360,9 @@ tests:
         values: 0+10x200
       # Stops reading at one hour.
       - series: fluentbit_input_records_total{instance="spark-1",platform="spark",job="spark-fluent-bit",name="journal"}
+        values: 0+10x60 600x140
+      # Stops reading at one hour.
+      - series: fluentbit_input_records_total{instance="nas",platform="synology",job="synology-fluent-bit",name="journal"}
         values: 0+10x60 600x140
       # The quietest Pi: three lines on the hour.
       - series: fluentbit_input_records_total{instance="ups-office",platform="pi",job="pi-fluent-bit",name="journal"}
@@ -357,7 +382,16 @@ tests:
               severity: warning
             exp_annotations:
               summary: spark-1 has read nothing from its journal for two hours
-              description: "A running host writes to its journal at least every hour, so its Fluent Bit has likely lost the journal. On a PVE node or Spark, check the fluent-bit container's log and journal mounts; on a Pi, `journalctl -u fluent-bit`, and whether the host imports the debug profile, which moves its journal out of /run/log/journal."
+              description: "A running host writes to its journal at least every hour, so its Fluent Bit has likely lost the journal. On a PVE node, Spark or the NAS, check the fluent-bit container's log and journal mounts; on a Pi, `journalctl -u fluent-bit`, and whether the host imports the debug profile, which moves its journal out of /run/log/journal."
+          - exp_labels:
+              instance: nas
+              platform: synology
+              job: synology-fluent-bit
+              name: journal
+              severity: warning
+            exp_annotations:
+              summary: nas has read nothing from its journal for two hours
+              description: "A running host writes to its journal at least every hour, so its Fluent Bit has likely lost the journal. On a PVE node, Spark or the NAS, check the fluent-bit container's log and journal mounts; on a Pi, `journalctl -u fluent-bit`, and whether the host imports the debug profile, which moves its journal out of /run/log/journal."
 
   # Local time service from the two existing UPS Pis.
 

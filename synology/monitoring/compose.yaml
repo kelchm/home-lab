@@ -1,5 +1,5 @@
-# Host, disk, RAID and UPS metrics for Athena. Identity comes from the ingestion
-# token, not from this file. Every listener binds 127.0.0.1; SNMP is DSM's own
+# Host, disk, RAID and UPS metrics for Athena, and its journal. Identity comes from
+# the ingestion token, not from this file. Every listener binds 127.0.0.1; SNMP is DSM's own
 # snmpd, which DSM always runs on loopback with a built-in read-only community.
 name: monitoring
 
@@ -68,13 +68,34 @@ services:
     mem_limit: 256m
     stop_grace_period: 30s
 
+  # Sends this host's journal to VictoriaLogs; see logs/fluent-bit.yaml. config/ is mounted
+  # whole because publish replaces its files, which a bind of one file would not follow.
+  fluent-bit:
+    <<: [*service, *after-publish]
+    image: docker.io/fluent/fluent-bit:5.1.5@sha256:2740f387f6e68fab66d28e4fa6a853387b9cab6ffb4cb78958f69bba4eb0e7b4
+    # Root without capabilities reads the root-only token as its owner, and the journal as
+    # its owner or through DSM's log group.
+    user: "0:19"
+    command: ["-c", "/fluent-bit/etc/fluent-bit.yaml"]
+    volumes:
+      - /volume1/docker/monitoring/config:/fluent-bit/etc:ro
+      - /var/log/journal:/var/log/journal:ro
+      - /run/log/journal:/run/log/journal:ro
+      - /etc/machine-id:/etc/machine-id:ro
+      - /volume1/docker/monitoring/token:/etc/monitoring/token:ro
+      - /volume1/docker/monitoring/logs:/state
+    mem_limit: 128m
+    stop_grace_period: 40s
+
   publish:
     image: docker.io/library/busybox:1.38.0@sha256:a46257e06c82ad85242d0d38077d0a52d9896389ca60a1a59d3463db586e5fa4
-    command: ["install", "-m", "0644", "/source/scrape.yaml", "/source/snmp.yml", "/config/"]
+    command: ["install", "-m", "0644", "/source/scrape.yaml", "/source/snmp.yml", "/source/fluent-bit.yaml", "/source/host.lua", "/config/"]
     labels:
       cd.doco.deployment.one_shot: "true"
     volumes:
       - ./scrape.yaml:/source/scrape.yaml:ro
       - ./snmp.yml:/source/snmp.yml:ro
+      - ./logs/fluent-bit.yaml:/source/fluent-bit.yaml:ro
+      - ./logs/host.lua:/source/host.lua:ro
       - /volume1/docker/monitoring/config:/config
     restart: "no"
