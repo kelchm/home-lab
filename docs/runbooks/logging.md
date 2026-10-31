@@ -305,14 +305,16 @@ The journal has only a task's start and end; a task's output is in its own file 
 
 `host.name` and `service.namespace` come from the host's token as for the journal; the node in the UPID is not used. Other delivery behaviour:
 
-- **First start:** files last written in the past day are read from their start, so a rollout sends up to a day of tasks, stamped with the rollout's time. Older files are skipped.
-- **Restart and redeploy:** the collector resumes each file from its position in `pve-tasks.db` in the `logs` volume, and reads tasks written while it was stopped, unless the file was last written more than a day ago. A task silent for longer than that continues from its position when it writes again. Without the `logs` volume, it reads the past day again.
+- **First start:** files modified within the past day are read from their start, including any older output they contain. Lines are stamped with the time they are read. Files last modified more than a day ago are skipped.
+- **Restart and redeploy:** the collector resumes each file from its position in `pve-tasks.db` in the `logs` volume, and reads tasks written while it was stopped, unless the file was last written more than a day ago. A task silent for longer than that continues from its position when it writes again. Cursors match both inode and filename so a new UPID cannot inherit another task's position. Without the `logs` volume, every eligible file is read from its start again.
 - **Partial lines:** a line is sent once it ends. Proxmox ends every finished task with a whole status line, so only a worker killed mid-line leaves an end that is never sent.
 - **Long lines:** a line over 1 MiB is skipped and counted by `fluentbit_input_long_line_skipped_total`; the rest of the file is still read.
 
 A node can run no task for days, so `NodeLogsSilent` watches only the journal input. The delivery and drop alerts cover this output as they do the journal's.
 
-To roll out, merge: every PVE node's log route is already live, and each node applies the change on its next poll, recreating only its `fluent-bit` container. After a deploy, on each node, `fluentbit_input_records_total{job="pve-fluent-bit",name="pve-tasks"}` exists, `docker logs monitoring-fluent-bit-1` has no `cannot open`, and [Verify a host](#verify-a-host) passes. A task's arrival is the final check: `service.name:=pve-task | stats by (host.name, pve.task.type) count()` lists it after the node's next task. To roll back, revert the change: the collector returns to the journal alone, with its cursor intact, and stored task records stay until retention removes them. A later redeploy resumes from `pve-tasks.db`.
+To roll out, merge: every PVE node's log route is already live, and each node applies the change on its next poll. A successful deployment recreates only `fluent-bit`. If deployment fails, doco-cd's retry can recreate the whole monitoring project and interrupt metrics too; promptly revert or fix the change, then verify both metrics and logs.
+
+After a deploy, on each node, `fluentbit_input_records_total{job="pve-fluent-bit",name="pve-tasks"}` exists, `docker logs monitoring-fluent-bit-1` has no `cannot open`, and [Verify a host](#verify-a-host) passes. A task's arrival is the final check: `service.name:=pve-task | stats by (host.name, pve.task.type) count()` lists it after the node's next task. To roll back, revert the change: the collector returns to the journal alone, with its cursor intact, and stored task records stay until retention removes them. A later redeploy resumes from `pve-tasks.db`.
 
 ### Query host logs
 

@@ -240,7 +240,7 @@ def output_parity():
 
 
 def scenario(tasks, check, collector):
-    # First start: one day of history, not the old task, the index files or anything else there.
+    # First start: recently modified files, not the old task, index files or anything else there.
     tasks.age(tasks.create('vzdump', '101', b'too old to read\nTASK OK\n'))
     tasks.create('vzdump', '102', FAILED_BACKUP)
     check.expect(FAILED_BACKUP)
@@ -286,6 +286,20 @@ def scenario(tasks, check, collector):
     check.expect(lines)
     docker('start', collector)
     check.settle('reused inode')
+
+    # Identical contents must not hide a new UPID that reuses a finished task's inode.
+    finished = tasks.create('qmstart', '112', b'TASK OK\n')
+    check.expect(b'TASK OK\n')
+    check.settle('identical task to delete')
+    docker('stop', '-t', '40', collector)
+    reused = tasks.path('qmstart', '113')
+    tasks.sh(f"mv '{finished}' '{reused}'")
+    check.expect(b'TASK OK\n')
+    docker('start', collector)
+    check.settle('same-content inode reuse')
+    upid = reused.rsplit('/', 1)[-1]
+    if [r['_msg'] for r in check.rows() if r.get('pve.task.upid') == upid] != ['TASK OK']:
+        sys.exit('same-content inode reuse: new UPID was not stored exactly once')
 
     # A task can sit silent past ignore_older, and then continue from where it was.
     quiet = tasks.create('qmigrate', '109', b'before the silence\n')

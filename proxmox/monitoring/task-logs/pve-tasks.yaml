@@ -10,8 +10,7 @@ pipeline:
     # Each task writes one file, named for its UPID, in a directory named for the
     # last hex digit of its start time. The path leaves out what sits beside those
     # directories: index, active and the lock. Files last written over a day ago are
-    # skipped, so a first start reads one day of tasks, and a stopped collector
-    # catches up on one day.
+    # skipped; eligible files are read from the start and may contain older output.
     - name: tail
       alias: pve-tasks
       tag: pve-task
@@ -21,6 +20,7 @@ pipeline:
       ignore_older: 1d
       db: /state/pve-tasks.db
       db.sync: full
+      db.compare_filename: true
       refresh_interval: 5
       buffer_chunk_size: 64k
       buffer_max_size: 1M
