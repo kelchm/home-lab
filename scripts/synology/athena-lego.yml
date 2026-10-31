@@ -1,4 +1,4 @@
-# Draft only. The token's path is supplied through CF_DNS_API_TOKEN_FILE.
+# The token's path is supplied through CF_DNS_API_TOKEN_FILE.
 storage: /volume1/@athena-acme/lego-state
 
 accounts:
