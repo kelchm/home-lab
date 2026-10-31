@@ -87,6 +87,16 @@ sops decrypt --extract '["stringData"]["NAS_TOKEN"]' kubernetes/apps/observabili
 
 Once the `NAS_TOKEN` `VMUser` is live, merge the project's entry in [`synology/.doco-cd.yml`](../../synology/.doco-cd.yml); doco-cd deploys it within three minutes. The `publish` service exits after copying the config, which is expected. DSM needs no setting: SNMP comes from the `snmpd` DSM already runs on loopback.
 
+The `nas` `VMUser` also routes logs. Before starting a collector, prove that route with the NAS's own token. This empty request stores nothing: `200` means the route accepts the token, and `400` means the route is missing, as a pinned VMAuth and VictoriaLogs answered in a local test.
+
+```sh
+ssh kelchm@10.32.20.5 sudo sh -s <<'EOF'
+printf 'Authorization: Bearer %s\n' "$(cat /volume1/docker/monitoring/token)" \
+  | curl -sS -o /dev/null -w '%{http_code}\n' -H @- -H 'Content-Type: application/x-protobuf' --data-binary '' \
+    https://metrics-ingest.home.kelch.io/insert/opentelemetry/v1/logs
+EOF
+```
+
 Rotate the token as for any host, writing `/volume1/docker/monitoring/token`. To remove the NAS, delete its target from `synology/.doco-cd.yml`, run `docker compose -p monitoring down` on Athena, and delete its `VMUser`.
 
 ## Pi
