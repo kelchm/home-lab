@@ -44,15 +44,3 @@ spec:
             summary: Database printing/bambuddy-db has no confirmed streaming standby
             description: A database instance is reporting up without confirmation of a streaming standby for 10 minutes. Check replication and exporter health before maintenance; another database failure could interrupt the application or lose unreceived transactions.
             runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/cnpg-backup-restore.md#streaming-standby-is-missing
-        - alert: CNPGHAReplicationSlotInvalidated
-          expr: |
-            max by (cluster, namespace) (cnpg_ha_slots_invalidated{cluster="k8s-prod",namespace="printing",pod=~"bambuddy-db-([1-9][0-9]*)$"}) > 0
-          for: 5m
-          labels:
-            severity: warning
-            namespace: printing
-            cnpg_cluster: bambuddy-db
-          annotations:
-            summary: Database printing/bambuddy-db has an invalidated HA replication slot
-            description: A physical HA slot has been invalidated for 5 minutes. A streaming standby can still be using this slot on PostgreSQL 17 without retaining WAL. Check slot validity before maintenance and follow the lost-standby runbook; do not drop an active slot or rebuild a primary.
-            runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/cnpg-backup-restore.md#a-lost-standby

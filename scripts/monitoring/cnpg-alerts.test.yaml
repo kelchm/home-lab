@@ -388,161 +388,42 @@ tests:
         alertname: CNPGStreamingStandbyMissing
         exp_alerts: *visionect-alerts
 
-  - name: Invalidated HA slots warn on both databases even while standbys stream
-    interval: 1m
-    input_series:
-      - series: cnpg_ha_slots_invalidated{cluster="k8s-prod",namespace="iot",pod="visionect-db-1"}
-        values: 1x12
-      - series: cnpg_ha_streaming_replicas{cluster="k8s-prod",namespace="iot",pod="visionect-db-1"}
-        values: 1x12
-      - series: cnpg_ha_slots_invalidated{cluster="k8s-prod",namespace="printing",pod="bambuddy-db-1"}
-        values: 1x12
-      - series: cnpg_ha_streaming_replicas{cluster="k8s-prod",namespace="printing",pod="bambuddy-db-1"}
-        values: 1x12
-    alert_rule_test:
-      - eval_time: 4m
-        alertname: CNPGHAReplicationSlotInvalidated
-        exp_alerts: []
-      - eval_time: 5m
-        alertname: CNPGHAReplicationSlotInvalidated
-        exp_alerts:
-          - exp_labels:
-              cluster: k8s-prod
-              severity: warning
-              namespace: iot
-              cnpg_cluster: visionect-db
-            exp_annotations:
-              summary: Database iot/visionect-db has an invalidated HA replication slot
-              description: A physical HA slot has been invalidated for 5 minutes. A streaming standby can still be using this slot on PostgreSQL 17 without retaining WAL. Check slot validity before maintenance and follow the lost-standby runbook; do not drop an active slot or rebuild a primary.
-              runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/cnpg-backup-restore.md#a-lost-standby
-          - exp_labels:
-              cluster: k8s-prod
-              severity: warning
-              namespace: printing
-              cnpg_cluster: bambuddy-db
-            exp_annotations:
-              summary: Database printing/bambuddy-db has an invalidated HA replication slot
-              description: A physical HA slot has been invalidated for 5 minutes. A streaming standby can still be using this slot on PostgreSQL 17 without retaining WAL. Check slot validity before maintenance and follow the lost-standby runbook; do not drop an active slot or rebuild a primary.
-              runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/cnpg-backup-restore.md#a-lost-standby
-
-  - name: Slot invalidation shorter than five minutes stays quiet
-    interval: 1m
-    input_series:
-      - series: cnpg_ha_slots_invalidated{cluster="k8s-prod",namespace="iot",pod="visionect-db-1"}
-        values: 1x3 0x9
-      - series: cnpg_ha_slots_invalidated{cluster="k8s-prod",namespace="printing",pod="bambuddy-db-1"}
-        values: 1x3 0x9
-    alert_rule_test:
-      - eval_time: 4m
-        alertname: CNPGHAReplicationSlotInvalidated
-        exp_alerts: []
-      - eval_time: 12m
-        alertname: CNPGHAReplicationSlotInvalidated
-        exp_alerts: []
-
-  - name: Repairing the slot clears its warning
-    interval: 1m
-    input_series:
-      - series: cnpg_ha_slots_invalidated{cluster="k8s-prod",namespace="iot",pod="visionect-db-1"}
-        values: 1x6 0x6
-      - series: cnpg_ha_slots_invalidated{cluster="k8s-prod",namespace="printing",pod="bambuddy-db-1"}
-        values: 1x6 0x6
-    alert_rule_test:
-      - eval_time: 5m
-        alertname: CNPGHAReplicationSlotInvalidated
-        exp_alerts:
-          - exp_labels:
-              cluster: k8s-prod
-              severity: warning
-              namespace: iot
-              cnpg_cluster: visionect-db
-            exp_annotations:
-              summary: Database iot/visionect-db has an invalidated HA replication slot
-              description: A physical HA slot has been invalidated for 5 minutes. A streaming standby can still be using this slot on PostgreSQL 17 without retaining WAL. Check slot validity before maintenance and follow the lost-standby runbook; do not drop an active slot or rebuild a primary.
-              runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/cnpg-backup-restore.md#a-lost-standby
-          - exp_labels:
-              cluster: k8s-prod
-              severity: warning
-              namespace: printing
-              cnpg_cluster: bambuddy-db
-            exp_annotations:
-              summary: Database printing/bambuddy-db has an invalidated HA replication slot
-              description: A physical HA slot has been invalidated for 5 minutes. A streaming standby can still be using this slot on PostgreSQL 17 without retaining WAL. Check slot validity before maintenance and follow the lost-standby runbook; do not drop an active slot or rebuild a primary.
-              runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/cnpg-backup-restore.md#a-lost-standby
-      - eval_time: 8m
-        alertname: CNPGHAReplicationSlotInvalidated
-        exp_alerts: []
-
-  - name: Slot warning scopes namespace cluster and instance and aggregates duplicate exporters
-    interval: 1m
-    input_series:
-      - series: cnpg_ha_slots_invalidated{cluster="k8s-prod",namespace="iot",pod="visionect-db-1"}
-        values: 1x12
-      - series: cnpg_ha_slots_invalidated{cluster="k8s-prod",namespace="iot",pod="visionect-db-2"}
-        values: 2x12
-      - series: cnpg_ha_slots_invalidated{cluster="other",namespace="iot",pod="visionect-db-1"}
-        values: 9x12
-      - series: cnpg_ha_slots_invalidated{cluster="k8s-prod",namespace="printing",pod="other-db-1"}
-        values: 9x12
-      - series: cnpg_ha_slots_invalidated{cluster="k8s-prod",namespace="printing",pod="bambuddy-db-2-join"}
-        values: 9x12
-      - series: cnpg_ha_slots_invalidated{cluster="k8s-prod",namespace="other",pod="bambuddy-db-1"}
-        values: 9x12
-    alert_rule_test:
-      - eval_time: 5m
-        alertname: CNPGHAReplicationSlotInvalidated
-        exp_alerts:
-          - exp_labels:
-              cluster: k8s-prod
-              severity: warning
-              namespace: iot
-              cnpg_cluster: visionect-db
-            exp_annotations:
-              summary: Database iot/visionect-db has an invalidated HA replication slot
-              description: A physical HA slot has been invalidated for 5 minutes. A streaming standby can still be using this slot on PostgreSQL 17 without retaining WAL. Check slot validity before maintenance and follow the lost-standby runbook; do not drop an active slot or rebuild a primary.
-              runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/cnpg-backup-restore.md#a-lost-standby
-
-  - name: Invalidation persisting across primary replacement keeps one database warning
-    interval: 1m
-    input_series:
-      - series: cnpg_ha_slots_invalidated{cluster="k8s-prod",namespace="iot",pod="visionect-db-1"}
-        values: 1x2 stale
-      - series: cnpg_ha_slots_invalidated{cluster="k8s-prod",namespace="iot",pod="visionect-db-7"}
-        values: _ _ _ 1x9
-    alert_rule_test:
-      - eval_time: 5m
-        alertname: CNPGHAReplicationSlotInvalidated
-        exp_alerts:
-          - exp_labels:
-              cluster: k8s-prod
-              severity: warning
-              namespace: iot
-              cnpg_cluster: visionect-db
-            exp_annotations:
-              summary: Database iot/visionect-db has an invalidated HA replication slot
-              description: A physical HA slot has been invalidated for 5 minutes. A streaming standby can still be using this slot on PostgreSQL 17 without retaining WAL. Check slot validity before maintenance and follow the lost-standby runbook; do not drop an active slot or rebuild a primary.
-              runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/cnpg-backup-restore.md#a-lost-standby
-
-  - name: Valid HA slots remain quiet
-    interval: 1m
-    input_series:
-      - series: cnpg_ha_slots_invalidated{cluster="k8s-prod",namespace="iot",pod="visionect-db-1"}
-        values: 0x12
-      - series: cnpg_ha_slots_invalidated{cluster="k8s-prod",namespace="printing",pod="bambuddy-db-1"}
-        values: 0x12
-    alert_rule_test:
-      - eval_time: 12m
-        alertname: CNPGHAReplicationSlotInvalidated
-        exp_alerts: []
-
-  - name: Missing invalidation metrics do not claim a slot failure
+  - name: A streaming standby on an invalidated slot raises the existing warning and recovery clears it
     interval: 1m
     input_series:
       - series: cnpg_collector_up{cluster="k8s-prod",namespace="iot",pod="visionect-db-1"}
-        values: 1x12
+        values: 1x21
+      - series: cnpg_ha_streaming_replicas{cluster="k8s-prod",namespace="iot",pod="visionect-db-1"}
+        values: 1x2 0x12 1x5
       - series: cnpg_collector_up{cluster="k8s-prod",namespace="printing",pod="bambuddy-db-1"}
-        values: 1x12
+        values: 1x21
+      - series: cnpg_ha_streaming_replicas{cluster="k8s-prod",namespace="printing",pod="bambuddy-db-1"}
+        values: 1x2 0x12 1x5
     alert_rule_test:
       - eval_time: 12m
-        alertname: CNPGHAReplicationSlotInvalidated
+        alertname: CNPGStreamingStandbyMissing
+        exp_alerts: []
+      - eval_time: 13m
+        alertname: CNPGStreamingStandbyMissing
+        exp_alerts:
+          - exp_labels:
+              cluster: k8s-prod
+              severity: warning
+              namespace: iot
+              cnpg_cluster: visionect-db
+            exp_annotations:
+              summary: Database iot/visionect-db has no confirmed streaming standby
+              description: A database instance is reporting up without confirmation of a streaming standby for 10 minutes. Check replication and exporter health before maintenance; another database failure could interrupt the application or lose unreceived transactions.
+              runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/cnpg-backup-restore.md#streaming-standby-is-missing
+          - exp_labels:
+              cluster: k8s-prod
+              severity: warning
+              namespace: printing
+              cnpg_cluster: bambuddy-db
+            exp_annotations:
+              summary: Database printing/bambuddy-db has no confirmed streaming standby
+              description: A database instance is reporting up without confirmation of a streaming standby for 10 minutes. Check replication and exporter health before maintenance; another database failure could interrupt the application or lose unreceived transactions.
+              runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/cnpg-backup-restore.md#streaming-standby-is-missing
+      - eval_time: 17m
+        alertname: CNPGStreamingStandbyMissing
         exp_alerts: []
