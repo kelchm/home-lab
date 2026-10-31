@@ -121,7 +121,7 @@ def check(base):
         ({'scope': '.*', 'port': '443'}, {'Workloads', 'Main'}),
         ({'port': '44'}, set()),
         ({'source_network': 'Work'}, set()),
-        ({'port': '22|443'}, {'IoT', 'Workloads'}),
+        ({'port': '2|443'}, {'Workloads'}),  # Ungrouped, ^2 would also match port 22.
     ):
         found = {r['source.network'] for r in run(base, panels['Network dependencies'], **overrides)}
         assert found == expected, (overrides, found)
