@@ -53,7 +53,7 @@ The desired topology is two instances per database, on distinct Kubernetes nodes
 
 **Last live baseline, 2026-10-30 UTC:** both databases still had one Ready instance, healthy archiving and completed backups. Both primaries were named `*-db-2` on node 2. Visionect's current claim is `visionect-db-2` (30 GiB, `longhorn-3replica`); Bambuddy's is `bambuddy-db-2` (20 GiB, `longhorn`). Both underlying volumes have three replicas. This is a dated baseline, not rollout acceptance. Follow #782 for the accepted revision and operational outcome.
 
-Replication is not a backup. An abrupt primary loss can lose transactions not yet received by the standby. Both database instances and their storage still share the three nodes, NAS, network and power. `max_slot_wal_keep_size` limits slot-retained WAL to 10 GB for Visionect and 2 GB for Bambuddy at checkpoints; it does not cap total WAL or replace archiving/space alerts. A standby offline beyond that budget may need re-cloning. See [CNPG's HA-slot behavior](https://github.com/cloudnative-pg/cloudnative-pg/blob/v1.30.1/docs/src/replication.md#replication-slots-for-high-availability).
+Replication is not a backup. An abrupt primary loss can lose transactions not yet received by the standby. Both database instances and their storage still share the three nodes, NAS, network and power. `max_slot_wal_keep_size` limits slot-retained WAL to 10 GB for Visionect and 2 GB for Bambuddy at checkpoints; it does not cap total WAL or replace archiving/space alerts. A standby needs [rebuilding](#a-lost-standby) if its required WAL is unavailable from both the primary and archive. An invalidated slot still needs repair even if archive replay lets the standby catch up. See [CNPG's HA-slot behavior](https://github.com/cloudnative-pg/cloudnative-pg/blob/v1.30.1/docs/src/replication.md#replication-slots-for-high-availability).
 
 ### Before the approved merge
 
@@ -93,11 +93,88 @@ Only after both clusters and backups pass, reduce the two captured original Long
 
 Final acceptance requires two Ready, streaming instances per database on distinct nodes; all four volumes attached/healthy with two storage replicas each; healthy archiving and backup metrics; successful standby backups and application recovery; enabled PDBs; Ready, unsuspended Flux Kustomizations; and no failed join Jobs or unexpected consumers. Record system IDs, the actual primary/timeline changes, interruptions and volume identities in #782. A promotion changes timelines normally. Initial update/switchover acceptance does not establish an abrupt-node-loss RPO/RTO; observe planned-drain behavior during the next authorized maintenance.
 
-### Rollback and a lost standby
+### Rollback
 
 If scale-up fails before a switchover, the existing primary remains the recovery starting point. If a switchover has happened, preserve the current primary and its writes; do not force the old primary back. Before returning to one instance, restore **the current primary's** Longhorn volume to three replicas and wait for all three healthy copies. CNPG 1.30.1 scale-down deletes the removed non-primary instance's PVC; the `Delete` reclaim policy then removes its Longhorn volume. After the expected switchover, this is the original `*-db-2` copy. If that copy must be retained, resolve its PVC/PV/CSI ownership chain and change that PV's reclaim policy to `Retain` before reverting, using a JSON patch that tests its UID and existing policy. Then revert the HA change. Reverting the Pod-spec settings also restarts the remaining primary, so expect an interruption. Verify one Ready primary, its write endpoint, archiving, application recovery and PDB protection. A failed join or not-Ready standby can prevent scale-down; inspect and deliberately remove only the confirmed non-primary instance with the matching CNPG tooling. Inventory leftover PVCs, retained PVs/volumes and inactive slots; never delete the current primary's claim or clear finalizers. Do not leave Flux suspended.
 
-If an offline standby's slot becomes `lost`, leave the healthy primary alone. Check archive reachability and disk space, then re-clone only the identified standby with the matching CNPG plugin's [instance destroy operation](https://github.com/cloudnative-pg/cloudnative-pg/blob/v1.30.1/docs/src/kubectl-plugin.md#destroy), which deletes that instance's PVCs. Verify the selected instance is not current primary immediately before the operation. Allow CNPG to provision its replacement and require streaming/healthy storage again, with its replacement slot active and `wal_status` not `lost`; never disable HA replication slots or remove their WAL cap to hide a failed standby.
+### A lost standby
+
+This procedure rebuilds a standby whose physical slot has been invalidated. Leave the healthy primary alone: no switchover, no restart and no change to the WAL cap or HA replication slots. Don't trust the Cluster's state to find or clear this. In the [drill](#lost-slot-drill-2026-10-31), a standby stuck on its invalidated slot left the Cluster `healthy` with every instance Ready. Query the slot on the current primary; the stale standby's log wording differs by PostgreSQL major, and on PostgreSQL 17 a standby can stream on an invalidated slot that reserves no WAL. A failover in this state could promote a stale standby, so treat it as lost redundancy and finish the rebuild.
+
+Set the identity first and repeat this check before each mutating step. `kubectl cnpg destroy` has no primary guard:
+
+```bash
+set -euo pipefail
+# Choose the database and the one standby being rebuilt.
+NS=iot
+CLUSTER=visionect-db
+STANDBY=visionect-db-2
+SLOT="_cnpg_${STANDBY//-/_}"
+PRIMARY=$(kubectl -n "$NS" get cluster "$CLUSTER" -o jsonpath='{.status.currentPrimary}')
+TARGET=$(kubectl -n "$NS" get cluster "$CLUSTER" -o jsonpath='{.status.targetPrimary}')
+test -n "$PRIMARY"
+test "$PRIMARY" = "$TARGET"
+test "$STANDBY" != "$PRIMARY"
+test "$(kubectl -n "$NS" get pod "$PRIMARY" -o jsonpath='{.metadata.labels.cnpg\.io/instanceRole}')" = primary
+kubectl -n "$NS" exec "$PRIMARY" -c postgres -- psql -X -qAt -v ON_ERROR_STOP=1 -c \
+  "SELECT slot_name,active,active_pid,restart_lsn,wal_status,safe_wal_size,invalidation_reason FROM pg_replication_slots;"
+kubectl -n "$NS" get pvc -l "cnpg.io/instanceName=$STANDBY" -o name
+```
+
+Require exactly the slot named `$SLOT` with `invalidation_reason = wal_removed`, and that the listed claims belong to `$STANDBY` alone. A slot for any other instance, or a slot without that reason, is outside this procedure. Then:
+
+1. Require [healthy archiving, a fresh completed backup](#no-completed-backup) and spare volume space. Rebuilding streams a full base backup from the primary.
+2. Rebuild only the identified standby. This deletes that instance's PVCs:
+
+   ```bash
+   kubectl cnpg destroy "$CLUSTER" "$STANDBY" -n "$NS"
+   ```
+
+   CNPG 1.30.1 recreates the same instance and slot name on a new volume. Exit 0 only means the deletions were requested. If the standby's node is unreachable, the old Pod's termination cannot be confirmed and no replacement appears until it can; restore the node rather than force-deleting. A forced delete was not tested.
+3. Wait for the replacement Pod to be Ready, then run the [acceptance query](#accept-the-replacement). It normally passes without further action.
+4. Only if `$SLOT` still has `invalidation_reason` set, reset that one slot. `pg_drop_replication_slot` refuses an active slot and the predicates refuse any other state. Require exactly one dropped slot. If a command fails or the count is not `1`, leave the standby fenced and inspect; refresh the identity check before continuing, and unfence only after confirming a fresh slot. Use `reload` to trigger reconciliation promptly rather than waiting for a later Cluster event.
+
+   ```bash
+   kubectl cnpg fencing on "$CLUSTER" "$STANDBY" -n "$NS"
+   # Wait until the slot reports active = f, then rerun the identity check.
+   DROPPED=$(kubectl -n "$NS" exec "$PRIMARY" -c postgres -- psql -X -qAt -v ON_ERROR_STOP=1 -c \
+     "SELECT count(pg_drop_replication_slot(slot_name)) FROM pg_replication_slots WHERE slot_name = '$SLOT' AND slot_type = 'physical' AND NOT active AND wal_status = 'lost' AND invalidation_reason = 'wal_removed' AND NOT pg_is_in_recovery();")
+   test "$DROPPED" = 1
+   kubectl cnpg reload "$CLUSTER" -n "$NS"
+   # Wait until $SLOT exists again with invalidation_reason empty.
+   kubectl cnpg fencing off "$CLUSTER" "$STANDBY" -n "$NS"
+   ```
+
+   The standby may need WAL from the archive to reach the primary; if it cannot, it stays out of streaming and needs the rebuild in step 2 again, now against a valid slot.
+
+#### Accept the replacement
+
+```bash
+kubectl -n "$NS" exec "$PRIMARY" -c postgres -- psql -X -qAt -v ON_ERROR_STOP=1 -c \
+  "SELECT s.slot_name, s.active_pid = r.pid, r.state, r.replay_lsn = r.sent_lsn, s.wal_status, s.safe_wal_size IS NOT NULL, s.invalidation_reason IS NULL, current_setting('max_slot_wal_keep_size') FROM pg_replication_slots s JOIN pg_stat_replication r ON r.application_name = '$STANDBY' WHERE s.slot_name = '$SLOT';"
+kubectl -n "$NS" exec "$STANDBY" -c postgres -- psql -X -qAt -v ON_ERROR_STOP=1 -c \
+  "SELECT pg_is_in_recovery(); SELECT status, slot_name FROM pg_stat_wal_receiver;"
+```
+
+Require one row: the slot's sender matched, `streaming`, replay caught up (repeat if the primary is busy), `wal_status` `reserved` or `extended`, a bounded `safe_wal_size`, no invalidation and the deployed cap. The standby must be in recovery with its receiver `streaming` on `$SLOT`. `active` alone proves nothing, and on PostgreSQL 17 neither does `wal_status <> 'lost'`: an invalidated slot held by a sender reports `unreserved` and a positive `safe_wal_size`. Also require healthy storage for the new claim, the unchanged primary, system ID and timeline, and advancing archiving.
+
+### Lost-slot drill, 2026-10-31
+
+[`scripts/cnpg/lost-slot-drill.sh`](../../scripts/cnpg/lost-slot-drill.sh) reproduces this on a disposable kind cluster with synthetic rows. It uses the pinned chart `0.29.1` (operator 1.30.1, `sha256:923c267e…`), `kubectl-cnpg` 1.30.1 and production's exact image indexes: PostgreSQL 17.11 `sha256:ecaa3950…` at the 10 GB cap and 18.6 `sha256:f7e00138…` at the 2 GB cap, both unlike the digests those tags resolve to today. Real checkpoints invalidated the slot on both majors, with `wal_removed`, so each major has its own operator-path evidence rather than sharing one. The final script passed end to end on both, stock path and repair.
+
+| Question | Result |
+|---|---|
+| Does CNPG reset a lost slot? | Not directly. The primary keeps any slot it still expects, whatever its `wal_status`. `destroy` removes the instance from `status.instanceNames`, so the primary's reconciler drops the slot as unexpected, then recreates it when the lowest free serial brings the same name back. Stock runs dropped it 0.2–0.3 s after the name left, inside gaps of 1.6–3.3 s. |
+| Is that guaranteed? | No. A 4–6 s TCP reset of the primary Pod's API-server traffic across `destroy`, with its status port up, made the instance manager miss the gap and keep the slot in 7 of 12 runs (3 of 4 on 18.6, 4 of 8 on 17.11). In the others it replayed the status and dropped the slot late, so the outcome is a race. |
+| What does a surviving slot do? | 18.6 refuses it: the replacement never streams and the slot stays `lost`. 17.11 accepts it: the replacement streams, caught up, as `Standby (async)` on a slot showing `active`, `unreserved`, a roughly 10 GB `safe_wal_size` and `invalidation_reason = wal_removed`. Both left the Cluster healthy. Neither healed during observation of up to 2 minutes. |
+| Does the 17.11 slot work? | No. Fencing that standby and writing 1.6 GB of WAL, far under the cap, removed its restart segment and stranded it. The same test on a valid slot kept the segment and streamed again in 4 s, on both majors. |
+| Does a bare drop repair it? | No. The slot stayed absent for 3 minutes until a Cluster event reconciled, so `kubectl cnpg reload` is part of the repair. |
+| Do the gates refuse the wrong slot? | Yes. The reset dropped nothing for an active slot, an inactive slot that was not lost, a wrong name or a query on the standby. |
+| Dead standby node? | Run once on 18.6: `destroy` exited 0 at once and the slot went in about 0.2 s, but no replacement appeared for the 2 minutes the node was down. It completed when the node returned. |
+
+Across every run the primary kept its Pod, zero restarts, postmaster start, system ID and timeline 1. The 100,000-row hash matched on primary and replacement, and a marker written afterwards reached the standby.
+
+**Limits:** kind on arm64 with local-path volumes and no Barman plugin, Longhorn, Multus, Cilium or real application load. WAL was generated synthetically and the data was small, so nothing here measures rebuild duration or Longhorn detach timing, and archive-fed catch-up is untested: the repair ran with WAL still on the primary. The race was forced with an injected partition, so how often it occurs naturally is unknown. Fencing stood in for an outage except in the dead-node run. Forced Pod deletion was not tested. None of this ran in production, and a CNPG or PostgreSQL major change invalidates these results until the script passes again.
 
 ## How it works
 
@@ -163,7 +240,7 @@ Rules are in [`alerts.yaml`](../../kubernetes/apps/cnpg-system/plugin-barman-clo
 
 `CNPGStreamingStandbyMissing` warns after **10 minutes** with a database instance reporting up but no primary exporter confirming the required streaming standby. Visionect and Bambuddy each desire two instances and require one standby; CI checks the rule against `spec.instances - 1`. Other singletons are outside these selectors. For a planned return to one instance, remove that Cluster's standby-loss rule.
 
-The stock sender-count metric includes `catchup`. The custom `ha` query in each Cluster's `monitoring.yaml` counts physical-slot senders in `streaming` state using CNPG's replication identity. It excludes `*-join` base-backup streams, which are not usable standbys. `primary: true` stops emission after demotion; failed queries drop the metric and failed scrapes mark series stale. A streaming connection does not prove replay progress or zero-loss failover; Longhorn replica counts are separate.
+The stock sender-count metric includes `catchup`. The custom `ha` query in each Cluster's `monitoring.yaml` counts physical-slot senders in `streaming` state using CNPG's replication identity. It excludes `*-join` base-backup streams, which are not usable standbys. `primary: true` stops emission after demotion; failed queries drop the metric and failed scrapes mark series stale. A streaming connection does not prove replay progress, zero-loss failover or a usable slot: on PostgreSQL 17 a standby streaming on an [invalidated slot](#a-lost-standby) counts here, so this alert stays quiet. Longhorn replica counts are separate.
 
 Check the current primary and standby, their exporter health and `cnpg_ha_streaming_replicas`. Zero means no qualifying sender; missing data needs a collection/scrape check. Inspect `cnpg_last_error` and `cnpg_collector_last_collection_error` before concluding replication has failed. Primary scrape loss with a standby still answering warns, and may coexist with `TargetDown`. Standby exporter loss stays quiet while the primary confirms streaming. Total telemetry loss remains with existing availability alerts.
 
@@ -418,4 +495,5 @@ Scratch database drills used PostgreSQL 17.11 clusters holding 270 to 400 MB in 
 | Existing Cluster bootstrap admission | Both server-side dry runs passed, then Flux reconciled `bootstrap.recovery` on both live Clusters during activation. Their existing data directories were retained; a rebuild using that stanza remains **undrilled** |
 | The real databases: sidecar injection, storage interface, WAL and base backups | **Drilled** on 2026-10-29 for Visionect 17.11 and Bambuddy 18.6, with the exact backups recorded above; this does not verify restored data |
 | A real-database restore, including Visionect’s 2.3 GB database | **Drilled** for Visionect 17.11 and Bambuddy 18.6 from live Athena on 2026-10-29: inclusive 02:30 physical recovery, matching public schema/two fixed cohorts each, single-worker amcheck exit 0 and complete cleanup. See the [dated result and limits](#real-data-alongside-restores-2026-10-29); HA rollout approval and live acceptance remain separate under #782 |
+| [Lost standby slot rebuild](#a-lost-standby) | **Drilled** in isolation on 2026-10-31 for 17.11 and 18.6 on CNPG 1.30.1; see the [limits](#lost-slot-drill-2026-10-31). Production and Longhorn **undrilled** |
 | Kopia snapshot and restore of the object-storage source | First normal snapshot and selected base/WAL catalog entries **verified** on 2026-10-29; see the [dated record](#first-normal-object-storage-snapshot-2026-10-29). Payload readability, complete required WAL continuity and restore remain **unverified** |
