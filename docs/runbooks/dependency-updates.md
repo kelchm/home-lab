@@ -74,7 +74,7 @@ The remaining #221 slice here is workload image digest coverage (inventory first
 
 ## OCI chart digests
 
-helm-controller tracks the content of a chart that comes from an `OCIRepository`. It appends the first 12 digest characters to the chart version, so a release reports `5.3.0+0e13b1456564` in `status.lastAttemptedRevision` and `helm history`, and `helm.sh/chart` labels show it with `_`. When a registry re-pushes a tag, the new digest makes Flux upgrade the release at the source's next check, 15 minutes for nearly all of them. No Renovate PR is involved, because these sources stay tag-only. Renovate still proposes new `spec.ref.tag` versions. Releases from a `HelmRepository` keep plain versions. To hold a chart at exact bytes, use `spec.ref.digest` with a [lock record](#record-a-lock).
+helm-controller tracks the content of a chart that comes from an `OCIRepository`. It appends the first 12 digest characters to the chart version, so a release reports `5.3.0+0e13b1456564` in `status.lastAttemptedRevision` and `helm history`, and `helm.sh/chart` labels show it with `_`. With tag-only sources, a registry re-push makes Flux upgrade the release at the source's next check, 15 minutes for nearly all of them, without a Renovate PR. Renovate still proposes new `spec.ref.tag` versions. Releases from a `HelmRepository` keep plain versions. For reviewed content changes, use tag-plus-digest references: `spec.ref.digest` holds exact bytes and Renovate can propose digest updates. Record any deliberate hold with a [lock record](#record-a-lock).
 
 A digest change upgrades the release even when the chart files match, and it restarts any workload that carries the version in its pod template. A chart that writes `.Chart.Version` to a label without replacing `+` fails its upgrade with an invalid label. All current OCI charts render valid labels, but the `flux-instance` healthcheck Job has this flaw, so keep `healthcheck.enabled` off. Check any new chart's use of `.Chart.Version` when adopting it.
 
@@ -82,7 +82,7 @@ A digest change upgrades the release even when the chart files match, and it res
 
 Status: not yet activated. The scope below comes from an offline render of the 42 OCI-sourced releases on 2026-10-30, with chart bytes matching the deployed digests. `coredns` is the one exception: its 1.49.0 tag was re-pushed on 2026-10-26 with identical chart files.
 
-Removing `DisableChartDigestTracking` restarts helm-controller, which then runs one Helm upgrade for each of those releases, ten at a time. No images, values, chart defaults, selectors or volume claim templates change.
+Removing `DisableChartDigestTracking` restarts helm-controller, which then runs one Helm upgrade for each of those releases, with up to ten reconciliations in progress concurrently. This is a concurrency limit, not an ordered batch rollout. The checked renders change no images, values, chart defaults, selectors or volume claim templates; refresh the inventory before activation.
 
 | Effect on upgrade | Releases |
 | --- | --- |
@@ -94,15 +94,19 @@ Removing `DisableChartDigestTracking` restarts helm-controller, which then runs 
 
 Hold the network plane until the rest has proved the change:
 
-1. Confirm all HelmReleases, nodes, Longhorn volumes and CNPG clusters are healthy, and hold Renovate merges for the window.
-2. Run `flux suspend hr cilium -n kube-system` and `flux suspend hr coredns -n kube-system`. Their Kustomization health checks still pass while they are suspended.
-3. Merge. Confirm helm-controller restarted without the gate, and the other 40 releases report a `+<digest>` version with their workloads Ready.
+1. Finish in-flight dependency upgrades, refresh the chart and workload inventory, confirm HelmReleases, nodes, Longhorn volumes and CNPG clusters are healthy, and hold Renovate merges for the window. Include Kaniop's hooks in the approved scope after checking identity health and its completed migration marker; otherwise suspend Kaniop separately.
+2. Run `flux suspend hr cilium -n kube-system` and `flux suspend hr coredns -n kube-system`. Before merging, confirm both suspensions are observed and remain set after Git reconciliation. Their Kustomization health checks pass once the healthy suspended releases have been observed.
+3. Merge. Confirm helm-controller restarted without the gate. For each unsuspended OCI release, require `Ready=True`, current `status.observedGeneration`, no `Stalled=True`, and a successful deployed Helm history entry for the expected digest-suffixed chart version, as well as Ready workloads. `lastAttemptedRevision` alone proves only an attempt; existing workloads can remain healthy after failed hooks.
 4. Run `flux resume hr coredns -n kube-system`, then check both replicas and cluster DNS.
-5. Run `flux resume hr cilium -n kube-system --timeout 10m`. Agents restart one node at a time; BGP graceful restart holds routes for 120 seconds. Confirm the DaemonSet is Ready, BGP sessions are back, and the Longhorn checks in [AGENTS.md](../../AGENTS.md#talos-operations) still pass.
+5. Run `flux resume hr cilium -n kube-system --timeout 10m`. Agents restart one node at a time. The 120-second BGP graceful-restart setting bounds route retention; verify connectivity rather than assuming it. Confirm the DaemonSet is Ready, BGP sessions are back, and the Longhorn checks in [AGENTS.md](../../AGENTS.md#talos-operations) still pass. Apply the same HelmRelease success checks after each resume, and release any separate Kaniop suspension within its approved scope.
 
 ### Recovery
 
-A failed upgrade rolls back through the release's own remediation, with two retries, and leaves that release's previous workloads running. Fix the cause, then run `flux reconcile hr <name> -n <namespace> --force`. Restoring the gate is not a per-release fix. It changes every chart version again, so the 42 upgrades and the chart-label and checksum restarts all repeat. Use it only if digest tracking itself proves unworkable, and resume any suspended release afterwards.
+A failed upgrade attempts rollback through the release's remediation, currently with two retries. Rollback can fail and cannot undo arbitrary hook effects, CRD changes or forward-only migrations. Check the actual release, hooks and workloads before choosing recovery.
+
+After fixing the cause, `flux reconcile hr <name> -n <namespace> --force` permits a one-off upgrade despite exhausted retries; it does not reset the counters. Add `--reset` to clear them. Suspend/resume is a fallback when a release remains stalled: its generation change also resets failures.
+
+Restoring the gate is not a per-release fix. Releases already converted to digest-suffixed versions can upgrade and restart again; a partial activation need not repeat all 42 upgrades. Use it only if digest tracking itself proves unworkable, and resume any suspended release afterwards.
 
 ## Record a lock
 
