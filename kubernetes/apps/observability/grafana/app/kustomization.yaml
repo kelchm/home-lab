@@ -82,6 +82,15 @@ configMapGenerator:
         grafana_dashboard: "1"
       annotations:
         grafana_folder: Platforms/Kubernetes
+  - name: grafana-dashboard-ntp
+    files:
+      - ntp.json=./ntp-dashboard.json
+    options:
+      labels:
+        grafana_dashboard: "1"
+      annotations:
+        grafana_folder: Services/Network
+        kustomize.toolkit.fluxcd.io/substitute: disabled
   - name: grafana-dashboard-observability-pipeline
     files:
       - observability-pipeline.json=./observability-pipeline-dashboard.json
