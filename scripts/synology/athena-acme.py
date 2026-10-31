@@ -362,8 +362,11 @@ class Runner:
         mapping = accepted.get("mapping")
         require(isinstance(mapping, dict) and current[cert_id] == mapping.get(cert_id),
                 "Managed DSM certificate metadata or service assignments drifted")
-        # Unrelated objects may change between runs. Return the current full map
-        # so each import can still prove it preserved the bindings it found.
+        # Keep the pre-import map across retries, including a live leaf whose
+        # import succeeded but whose binding verification did not finish.
+        if self.path("import-pending.json").exists():
+            require(current == self.load("import-pending.json").get("mapping"),
+                    "DSM certificate assignments changed during import")
         return {"cert_id": cert_id, "mapping": current}
 
     def standing_identity(self, current, cert_id):
@@ -599,6 +602,9 @@ class Runner:
                 shutil.rmtree(str(directory))
         self.sync_directory(self.path("bundles"))
         self.save("last-verified-success.json", {"at": int(time.time()), "sha256": fingerprint})
+        if self.path("import-pending.json").exists():
+            self.path("import-pending.json").unlink()
+            self.sync_directory(self.root)
 
     def inspect(self):
         current = self.snapshot()
@@ -713,6 +719,7 @@ class Runner:
 
     def replace(self, bundle, fingerprint, minimum=MIN_VALIDITY):
         accepted = self.current_accepted()
+        self.save("import-pending.json", {"mapping": accepted["mapping"]})
         self.import_bundle(bundle, accepted["cert_id"], accepted["mapping"][accepted["cert_id"]]["is_default"])
         deadline = time.monotonic() + 60
         while True:

@@ -637,7 +637,45 @@ class RuntimeTests(unittest.TestCase):
                         self.runner.replace(self.runner.bundle("issued"), NEW)
                         verified.assert_called_once_with(self.runner.bundle("issued"), NEW, minimum=acme.MIN_VALIDITY)
                     native_import.assert_called_once_with(self.runner.bundle("issued"), "newDSM", True)
+                    if drift:
+                        with self.assertRaisesRegex(acme.Failure, "during import"):
+                            self.runner.current_accepted()
+                # verified is mocked above; its successful cleanup is tested below.
+                (self.root / "import-pending.json").unlink()
                 self.assertEqual(self.runtime_files(), before)
+
+    def test_failed_import_binding_drift_survives_retry_until_restored(self):
+        self.accepted()
+        fingerprint = hashlib.sha256(b"leaf").hexdigest()
+        current = accepted_map()
+        served = {"sha256": OLD}
+        marker = self.runner.read(self.root / "last-verified-success.json")
+
+        def imported(*args):
+            served["sha256"] = fingerprint
+            current["S3existing"]["services"].extend(current[acme.ORIGINAL_ID]["services"])
+            current[acme.ORIGINAL_ID]["services"] = []
+
+        with patch.object(self.runner, "api", side_effect=lambda *args: list_response(current)), \
+                self.mock_validation(), patch.object(self.runner, "saved_bundle"), \
+                patch.object(self.runner, "live", side_effect=lambda *args, **kwargs: served["sha256"]), \
+                patch.object(self.runner, "acme", return_value=self.runner.bundle("issued")) as client, \
+                patch.object(self.runner, "import_bundle", side_effect=imported) as native_import:
+            for attempt in range(2):
+                with self.subTest(attempt=attempt), self.assertRaisesRegex(acme.Failure, "during import"):
+                    self.runner.run()
+                self.assertEqual(self.runner.load("good.json"), {"sha256": OLD})
+                self.assertEqual(self.runner.read(self.root / "last-verified-success.json"), marker)
+            client.assert_called_once_with()
+            native_import.assert_called_once()
+            self.assertEqual(self.runner.load("import-pending.json"), {"mapping": accepted_map()})
+            current = accepted_map()
+            self.runner.run()
+            self.assertEqual(self.runner.load("good.json"), {"sha256": fingerprint})
+            self.assertFalse((self.root / "import-pending.json").exists())
+            del current[acme.ORIGINAL_ID]
+            self.runner.run()
+            native_import.assert_called_once()
 
     def test_failed_import_retries_same_issued_bundle_and_retains_rollback(self):
         self.accepted()
