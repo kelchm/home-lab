@@ -75,7 +75,8 @@ def check(base):
     assert sink.last_watermark() is None, 'no checkpoint yet; a local instance must start empty'
     instance.watermark = 1785542640000
     instance.gap(1785542000000, 1785542060000, 'query_cap')
-    sink.write(fixture_lines() + instance.pending)
+    flows = fixture_lines()
+    sink.write(flows + instance.pending)
     # Checkpoints carry the time they were written, inside the collector's look-back.
     now = time.time()
     instance.clock = lambda: now - 60
@@ -83,9 +84,17 @@ def check(base):
     instance.clock = lambda: now
     instance.watermark = 1785542700000
     sink.write([instance.checkpoint('ok')])
-    deadline = time.time() + 20
-    while sink.last_watermark() != 1785542700000:
-        assert time.time() < deadline, f'newest checkpoint never returned: {sink.last_watermark()}'
+    # Separate ingestion buffers can expose the checkpoints before the older flows/gap.
+    # Wait on raw record counts, leaving dashboard query assertions below unretried.
+    expected = {'flow': len(flows), 'gap': len(instance.pending), 'checkpoint': 2}
+    deadline = time.monotonic() + 20
+    while True:
+        text = post(base, '/select/logsql/query', query='{service.name="unifi-flows"} | stats by (record.type) count() as rows', start=START)
+        counts = {row['record.type']: int(row['rows']) for row in map(json.loads, text.splitlines())}
+        watermark = sink.last_watermark()
+        if counts == expected and watermark == 1785542700000:
+            break
+        assert time.monotonic() < deadline, f'fixtures not searchable: expected {expected}, got {counts}; newest checkpoint watermark: {watermark}'
         time.sleep(0.5)
 
     panels = {}
