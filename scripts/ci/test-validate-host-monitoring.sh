@@ -12,13 +12,15 @@ trap 'rm -rf -- "${TEMP_DIR}"' EXIT
 # Self targets only: these tests render Compose without starting containers.
 function write_fixture() {
     local platform
-    rm -rf -- "${TEMP_DIR}/proxmox" "${TEMP_DIR}/sparks"
+    rm -rf -- "${TEMP_DIR}/proxmox" "${TEMP_DIR}/sparks" "${TEMP_DIR}/synology"
     for platform in proxmox sparks; do
         mkdir -p "${TEMP_DIR}/${platform}/monitoring" "${TEMP_DIR}/${platform}/platform/doco-cd"
         cp "${ROOT_DIR}/${platform}/platform/doco-cd/compose.yaml" "${TEMP_DIR}/${platform}/platform/doco-cd/"
         cp "${ROOT_DIR}/${platform}/monitoring/apt-metrics.sh" "${TEMP_DIR}/${platform}/monitoring/"
         cp -R "${ROOT_DIR}/${platform}/monitoring/logs" "${TEMP_DIR}/${platform}/monitoring/"
     done
+    mkdir -p "${TEMP_DIR}/synology/monitoring"
+    cp -R "${ROOT_DIR}/synology/monitoring/logs" "${TEMP_DIR}/synology/monitoring/"
     printf 'name: doco-cd\nworking_dir: proxmox/platform/doco-cd\n' >"${TEMP_DIR}/proxmox/monitoring/.doco-cd.yml"
     printf 'name: doco-cd\nworking_dir: sparks/platform/doco-cd\nenvironment:\n  SPARK_HOST: spark-1\n' >"${TEMP_DIR}/sparks/monitoring/.doco-cd.spark-1.yml"
     printf 'name: doco-cd\nworking_dir: sparks/platform/doco-cd\nenvironment:\n  SPARK_HOST: spark-2\n' >"${TEMP_DIR}/sparks/monitoring/.doco-cd.spark-2.yml"

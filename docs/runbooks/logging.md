@@ -298,7 +298,7 @@ Each event's line names the reason and object, so a word such as `BackOff` or a 
 
 ## Host logs
 
-Each PVE node, Spark and Pi sends its systemd journal, kernel messages included, to VictoriaLogs, and each PVE node also sends its [task logs](#pve-task-logs). On a PVE node or Spark, a `fluent-bit` container in the host's monitoring stack reads the journal read-only and sends OTLP to `https://metrics-ingest.home.kelch.io/insert/opentelemetry/v1/logs` with the host's metrics token. Its configuration is [`proxmox/monitoring/logs/`](../../proxmox/monitoring/logs/), kept identical in [`sparks/monitoring/logs/`](../../sparks/monitoring/logs/). The host's VMUser routes that path to VictoriaLogs and adds `host.name`, `service.namespace` and the stream fields as query arguments, so, as with metrics, the configuration carries no identity and a host cannot give itself another: VMAuth drops a client's own `extra_fields` and `_stream_fields`, VictoriaLogs reads those arguments before its `VL-Extra-Fields` and `VL-Stream-Fields` headers, and `extra_fields` override the same fields in a record. The route also sets the `AccountID` and `ProjectID` headers to 0, so every record lands in the default tenant the datasource reads. A host does choose its own `service.name`, a stream field, so a host's token could create streams at will; `VictoriaLogsStreamChurnHigh` would show it. The NAS's log route is live ahead of its collector, so it stores nothing yet, and the GLKVM doesn't send logs ([#914](https://github.com/kelchm/home-lab/issues/914)).
+Each PVE node, Spark and Pi sends its systemd journal, kernel messages included, to VictoriaLogs, and each PVE node also sends its [task logs](#pve-task-logs). On a PVE node or Spark, a `fluent-bit` container in the host's monitoring stack reads the journal read-only and sends OTLP to `https://metrics-ingest.home.kelch.io/insert/opentelemetry/v1/logs` with the host's metrics token. Its configuration is [`proxmox/monitoring/logs/`](../../proxmox/monitoring/logs/), kept identical in [`sparks/monitoring/logs/`](../../sparks/monitoring/logs/) and [`synology/monitoring/logs/`](../../synology/monitoring/logs/). The host's VMUser routes that path to VictoriaLogs and adds `host.name`, `service.namespace` and the stream fields as query arguments, so, as with metrics, the configuration carries no identity and a host cannot give itself another: VMAuth drops a client's own `extra_fields` and `_stream_fields`, VictoriaLogs reads those arguments before its `VL-Extra-Fields` and `VL-Stream-Fields` headers, and `extra_fields` override the same fields in a record. The route also sets the `AccountID` and `ProjectID` headers to 0, so every record lands in the default tenant the datasource reads. A host does choose its own `service.name`, a stream field, so a host's token could create streams at will; `VictoriaLogsStreamChurnHigh` would show it. [Athena's journal](#athena-journal) takes the same path, and the GLKVM doesn't send logs ([#914](https://github.com/kelchm/home-lab/issues/914)).
 
 Each Pi runs the same configuration as a NixOS `fluent-bit` service from rpi-nixos's [`modules/profiles/logs`](https://github.com/kelchm/rpi-nixos/tree/main/modules/profiles/logs), with the same `host.lua` byte for byte, so a change to the mapping needs the same change there. A Pi keeps its journal in RAM (`/run/log/journal`, at most 16 MB), so its collector keeps its cursor and a 16 MiB buffer in RAM as well.
 
@@ -310,7 +310,7 @@ The mapping is [`host.lua`](../../proxmox/monitoring/logs/host.lua). The `pipeli
 
 | Field | Content |
 | --- | --- |
-| `host.name`, `service.namespace` | The host (`pve-sbx-1`, `spark-2`, `ups-office`) and its platform (`pve`, `spark`, `pi`), from its token: the same values as its metrics' `instance` and `platform`. `host.name` is a stream field. |
+| `host.name`, `service.namespace` | The host (`pve-sbx-1`, `spark-2`, `nas`, `ups-office`) and its platform (`pve`, `spark`, `synology`, `pi`), from its token: the same values as its metrics' `instance` and `platform`. `host.name` is a stream field. |
 | `service.name` | `kernel` for kernel messages; a service's systemd unit without `.service`, such as `pveproxy`, `ssh` or `docker`; otherwise the syslog identifier or program, such as `sudo` in a login session; or a container's name for a container on the `journald` driver. Stream field. |
 | `severity_number`, `severity_text` | The journal priority, mapped as for [UniFi syslog](#fields): `err` 17, `warning` 13, `info` 9. Container lines have none (0), because Docker's driver writes stdout as `info` and stderr as `err` whatever the line says. |
 | `_msg` | The journal's `MESSAGE`. An entry that repeats `MESSAGE` keeps every value, one per line, and a NUL byte in a binary message is written as `\0`, because OTLP strings end at one. |
@@ -325,11 +325,11 @@ The mapping is [`host.lua`](../../proxmox/monitoring/logs/host.lua). The `pipeli
 - **Restart and redeploy:** it saves its journal cursor, in the stack's `logs` volume or under a Pi's `/run`, and resumes from it, so entries written while it was stopped are sent when it returns, provided the journal still holds them. The cursor is saved as each batch is read, so a crash can lose the batch in hand.
 - **Missing route:** VMAuth refuses a host whose ingest user has no log route, and Fluent Bit drops what it refuses rather than retrying. Make a new host's route live before its collector starts. At rollout the Sparks' collectors started about 30 seconds before their routes, and about 165 lines from each were lost.
 - **Token rotation:** Fluent Bit reads the token only when it starts, and drops records the endpoint rejects. Stop it before rotating the token; see [Rotate a token](host-monitoring.md#change-pause-rotate-remove).
-- **Endpoint outage:** records wait in the buffer, 256 MiB on disk on a PVE node or Spark and 16 MiB in RAM on a Pi, and arrive with their original timestamps once the endpoint answers; when the buffer is full, the collector drops records. In a local test before rollout, lines written while the endpoint was down, and while the collector was stopped, all arrived once it returned, with no duplicates.
+- **Endpoint outage:** records wait in the buffer, 256 MiB on disk on a PVE node, Spark or the NAS and 16 MiB in RAM on a Pi, and arrive with their original timestamps once the endpoint answers; when the buffer is full, the collector drops records. In a local test before rollout, lines written while the endpoint was down, and while the collector was stopped, all arrived once it returned, with no duplicates.
 - **Error responses:** Fluent Bit retries a refused connection and HTTP 429, 502, 503 and 504. Any other error status, such as a 500 from VictoriaLogs or VMAuth's 400 for a missing route, drops the batch, and `NodeLogsDropped` reports it. The cluster's collectors use the same output and behave the same way.
 - **Shutdown:** the collector stops before the host finishes shutting down. With a persistent journal, the last records should go out after the next boot, from the saved cursor; this hasn't been checked on a host yet. On a Pi, whatever wasn't sent before shutdown is gone with the RAM journal.
 
-`NodeLogDeliveryFailing` warns after 10 minutes of retries, `NodeLogsDropped` when records are dropped, and `NodeLogsSilent` when a host's collector has read nothing from its journal for two hours; `NodeCollectorDown` covers its scrape target (`pve-fluent-bit`, `spark-fluent-bit`, `pi-fluent-bit`). The quietest host, `ups-office`, writes three lines every hour, so two hours of silence means the collector has lost the journal. See [Alerts](host-monitoring.md#alerts) for host rules.
+`NodeLogDeliveryFailing` warns after 10 minutes of retries, `NodeLogsDropped` when records are dropped, and `NodeLogsSilent` when a host's collector has read nothing from its journal for two hours; `NodeCollectorDown` covers its scrape target (`pve-fluent-bit`, `spark-fluent-bit`, `synology-fluent-bit`, `pi-fluent-bit`). The quietest host, `ups-office`, writes three lines every hour, so two hours of silence means the collector has lost the journal. See [Alerts](host-monitoring.md#alerts) for host rules.
 
 ### PVE task logs
 
@@ -360,6 +360,43 @@ To roll out, merge: every PVE node's log route is already live, and each node ap
 
 After a deploy, on each node, `fluentbit_input_records_total{job="pve-fluent-bit",name="pve-tasks"}` exists, `docker logs monitoring-fluent-bit-1` has no `cannot open`, and [Verify a host](#verify-a-host) passes. A task's arrival is the final check: `service.name:=pve-task | stats by (host.name, pve.task.type) count()` lists it after the node's next task. To roll back, revert the change: the collector returns to the journal alone, with its cursor intact, and stored task records stay until retention removes them. A later redeploy resumes from `pve-tasks.db`.
 
+### Athena journal
+
+Athena's `fluent-bit` runs in the [`monitoring`](../../synology/monitoring/) project, with the pipeline, mapping and image a PVE node or Spark runs, and reads only the journal. DSM's text logs repeat it, because syslog-ng reads `systemd-journal()`, so nothing tails `/var/log`. Direct package logs and Docker's `json-file` output stay out. It is one container of at most 128 MiB, a buffer of at most 256 MiB on `/volume1` and no new token or account. The journal held about 8 MiB and 63 minutes on October 30, 2026, so it sends at most about 180 MiB a day before VictoriaLogs compresses it.
+
+- **Configuration:** `publish` copies `fluent-bit.yaml` and `host.lua` into `/volume1/docker/monitoring/config`, and the collector starts only after `publish` succeeds. doco-cd's checkouts can't be mounted by a long-running service; see the [project contract](../../synology/README.md#project-contract).
+- **Access:** it runs as UID 0 and GID 19, DSM's `log` group, with no capabilities. It reads the root-only token as owner, and the journal as owner or through the group. Host files are not changed.
+- **State:** the cursor and buffer are in `/volume1/docker/monitoring/logs`. The first start follows new records with no backfill. A restart resumes from the cursor, but only within what the journal still holds, so a collector stopped for about an hour or more loses what rotated out.
+
+`python3 scripts/logging/test-host-logs.py nas` runs this project's rendered service on a journal written by systemd 219 from the CentOS 7 image, with an XZ-compressed record, files only group 19 can read, a first start and a restart, and checks that each record reaches a pinned VictoriaLogs once under `nas`. That image's journal format matches DSM's systemd version. DSM's own journal files, compression and modes have not been read by this collector.
+
+To deploy, in this order:
+
+1. Merge the `nas` log route, and wait for Flux to apply it. The [route check](host-monitoring.md#nas) must answer `200`. VMAuth refuses records for a missing route and they are lost, so do not merge the collector on `400`.
+2. Run these read-only gates on Athena:
+
+   ```sh
+   ssh kelchm@10.32.20.5 sudo sh -s <<'EOF'
+   cat /etc/machine-id
+   ls -lnR /run/log/journal /var/log/journal
+   journalctl --header | grep -E 'File Path|Incompatible Flags'
+   netstat -ltn | grep -w 2020 || echo 'port 2020 free'
+   EOF
+   ```
+
+   Continue only if the journal is in a directory named after the machine ID, every `.journal` file is owned by UID 0 or readable by group 19, the flags list nothing beyond `COMPRESSED-XZ` and `COMPRESSED-LZ4`, and port 2020 is free. Do not change a host file's mode to pass. An unreadable journal does not fail the deployment; `NodeLogsSilent` fires about two hours later.
+3. Create the state directory, because DSM's Docker refuses a missing bind source: `ssh kelchm@10.32.20.5 'sudo install -d -m 0700 /volume1/docker/monitoring/logs'`.
+4. Merge the collector, and follow `sudo /usr/local/bin/docker logs --since 10m doco-cd` until it deploys, within three minutes. A successful deployment reruns `publish` and creates `fluent-bit`; the other services keep their definitions and should stay up. A failed one is retried on each poll and can recreate the whole project, interrupting metrics, with samples queued on disk meanwhile. doco-cd on Athena publishes no metrics, so no alert reports it. Fix or revert promptly.
+5. Run [Verify a host](#verify-a-host) with `host.name:=nas`, and confirm that `monitoring-publish-1` exited `0`.
+
+To roll back, keep the route and remove only the collector:
+
+1. Revert the collector on `main`. doco-cd's next poll republishes the old scrape file, and vmagent stops scraping within a minute.
+2. A revert can leave the removed service running as an orphan. If `monitoring-fluent-bit-1` still exists, run `sudo /usr/local/bin/docker stop -t 40 monitoring-fluent-bit-1` and then `sudo /usr/local/bin/docker rm monitoring-fluent-bit-1`.
+3. Keep `/volume1/docker/monitoring/logs`, so a later deployment resumes from its cursor and sends its buffer. The published files stay unused in `config/`. Rollback needs no NAS reboot or Docker daemon restart.
+
+To stop the collector before the revert lands, stop doco-cd first and start it after the merge, because a poll redeploys a project with a stopped service.
+
 ### Query host logs
 
 On Home, **Logs from** on a machine in the PVE, Spark or devices tab's **Machines** table opens that host's records in Explore, and **Go deeper** has **PVE logs**, **Spark logs** and **Pi logs** for all of them. Each tab's **Recent warnings and errors** lists its hosts' journal lines at warning and above.
@@ -371,16 +408,16 @@ Host records carry no Kubernetes namespace, so filter on `host.name` or `service
 - GPU Xid errors on a Spark: `service.namespace:=spark service.name:=kernel "Xid"`
 - Undervoltage on the Pis: `service.namespace:=pi service.name:=kernel "Undervoltage"`
 - AirPlay sessions on the streamer, each start, stop and its playing time: `host.name:=streamer-basement-workbench service.name:=shairport-sync "Connection"`
-- SSH logins: `service.namespace:in(pve, spark, pi) "Accepted"`
-- Errors on every host: `service.namespace:in(pve, spark, pi) severity_number:>=17`
+- SSH logins: `service.namespace:in(pve, spark, synology, pi) "Accepted"`
+- Errors on every host: `service.namespace:in(pve, spark, synology, pi) severity_number:>=17`
 - Failed PVE tasks: `service.name:=pve-task "TASK ERROR"`
 - A whole task, from a UPID in the journal or a line above: `pve.task.upid:="UPID:..."`
 
-`python3 scripts/logging/test-host-logs.py` runs the host configuration on the machine's own journal and checks what a pinned VictoriaLogs stores: a syslog line at two levels, a container's stdout and stderr through the `journald` driver, a kernel message, and a client header that tries to rename the host. It also checks that every host's log route stamps the identity its metrics route does, and runs the [task log](#pve-task-logs) overlay on synthetic task files through a first start with old history and index files, a running task with a half-written line, a restart, a reused inode, a silent task that resumes and an overlong line, checking that each record is stored once. It needs a Docker daemon that logs to journald, such as a GitHub runner or Colima's VM. CI runs it with the host monitoring checks.
+`python3 scripts/logging/test-host-logs.py` runs the host configuration on the machine's own journal and checks what a pinned VictoriaLogs stores: a syslog line at two levels, a container's stdout and stderr through the `journald` driver, a kernel message, and a client header that tries to rename the host. It also checks that every host's log route stamps the identity its metrics route does, and runs the [task log](#pve-task-logs) overlay on synthetic task files through a first start with old history and index files, a running task with a half-written line, a restart, a reused inode, a silent task that resumes and an overlong line, checking that each record is stored once. It needs a Docker daemon that logs to journald, such as a GitHub runner or Colima's VM. CI runs it with the host monitoring checks. It ends with the [NAS journal test](#athena-journal), which `python3 scripts/logging/test-host-logs.py nas` runs alone on any Docker daemon.
 
 ### Verify a host
 
-After a deploy, on each host: `up{job=~"(pve|spark|pi)-fluent-bit"}` is 1, `fluentbit_output_retries_total` stays flat, `host.name:=<host> | stats by (service.name) count()` lists services written since it started, and `host.name:=<host> (pipeline.normalize_error:* OR pipeline.severity_unmapped:*)` is empty.
+After a deploy, on each host: `up{job=~"(pve|spark|synology|pi)-fluent-bit"}` is 1, `fluentbit_output_retries_total` stays flat, `host.name:=<host> | stats by (service.name) count()` lists services written since it started, and `host.name:=<host> (pipeline.normalize_error:* OR pipeline.severity_unmapped:*)` is empty.
 
 ## Source inventory
 

@@ -1,6 +1,6 @@
 # Host monitoring
 
-Metrics from the three PVE nodes, the two DGX Sparks, the NAS, the UniFi network devices, the two WAN devices and the NixOS Pis. The lab's metrics backend runs in `k8s-prod`; these hosts push to it. Each host runs ordinary exporters and a `vmagent` in Docker Compose, deployed from `main` by a host-local doco-cd as on the [NAS](../../synology/README.md); a [Pi](#pi) runs them as NixOS services instead. `vmagent` scrapes the exporters over loopback and pushes to `https://metrics-ingest.home.kelch.io`, queueing up to 1 GiB on disk while the endpoint is unreachable. On the PVE nodes and Sparks, a `fluent-bit` container sends the journal to VictoriaLogs through the same endpoint and token; see [Host logs](logging.md#host-logs). Nothing on a host listens beyond loopback except doco-cd on PVE (see [PVE](#pve-node)) and the sparkDash dashboard on `spark-1`, at `10.32.21.31:5555` behind an access token. The Proxmox API, the UniFi console, the Starlink dish and the T-Mobile gateway are read separately by in-cluster exporters. As on the NAS, doco-cd holds the host's Docker socket, so whoever can merge to `main` controls every enrolled host.
+Metrics from the three PVE nodes, the two DGX Sparks, the NAS, the UniFi network devices, the two WAN devices and the NixOS Pis. The lab's metrics backend runs in `k8s-prod`; these hosts push to it. Each host runs ordinary exporters and a `vmagent` in Docker Compose, deployed from `main` by a host-local doco-cd as on the [NAS](../../synology/README.md); a [Pi](#pi) runs them as NixOS services instead. `vmagent` scrapes the exporters over loopback and pushes to `https://metrics-ingest.home.kelch.io`, queueing up to 1 GiB on disk while the endpoint is unreachable. On the PVE nodes, Sparks and NAS, a `fluent-bit` container sends the journal to VictoriaLogs through the same endpoint and token; see [Host logs](logging.md#host-logs). Nothing on a host listens beyond loopback except doco-cd on PVE (see [PVE](#pve-node)) and the sparkDash dashboard on `spark-1`, at `10.32.21.31:5555` behind an access token. The Proxmox API, the UniFi console, the Starlink dish and the T-Mobile gateway are read separately by in-cluster exporters. As on the NAS, doco-cd holds the host's Docker socket, so whoever can merge to `main` controls every enrolled host.
 
 ## State
 
@@ -77,10 +77,10 @@ The Talos nodes' BIOS offers the same interface, but Talos builds its kernel wit
 
 ## NAS
 
-Athena runs the [NAS monitoring](../../synology/monitoring/README.md) project from its existing doco-cd, so enrollment is the host state the project expects, then a merge. Its instance is `nas`, from the address registry, and its jobs are `synology-node`, `synology-snmp` and `synology-vmagent`.
+Athena runs the [NAS monitoring](../../synology/monitoring/README.md) project from its existing doco-cd, so enrollment is the host state the project expects, then a merge. Its instance is `nas`, from the address registry, and its jobs are `synology-node`, `synology-snmp`, `synology-vmagent` and `synology-fluent-bit`.
 
 ```sh
-ssh kelchm@10.32.20.5 'sudo install -d -m 0755 /volume1/docker/monitoring /volume1/docker/monitoring/config && sudo install -d -m 0700 /volume1/docker/monitoring/queue'
+ssh kelchm@10.32.20.5 'sudo install -d -m 0755 /volume1/docker/monitoring /volume1/docker/monitoring/config && sudo install -d -m 0700 /volume1/docker/monitoring/queue /volume1/docker/monitoring/logs'
 sops decrypt --extract '["stringData"]["NAS_TOKEN"]' kubernetes/apps/observability/metrics-ingest/app/tokens.sops.yaml \
   | ssh kelchm@10.32.20.5 'sudo install -m 0600 /dev/stdin /volume1/docker/monitoring/token'
 ```
@@ -97,7 +97,7 @@ printf 'Authorization: Bearer %s\n' "$(cat /volume1/docker/monitoring/token)" \
 EOF
 ```
 
-Rotate the token as for any host, writing `/volume1/docker/monitoring/token`. To remove the NAS, delete its target from `synology/.doco-cd.yml`, run `docker compose -p monitoring down` on Athena, and delete its `VMUser`.
+Rotate the token as for any host, writing `/volume1/docker/monitoring/token`. Stop doco-cd before stopping `monitoring-fluent-bit-1` and start it after the collector, because a poll redeploys a project with a stopped service. To remove the NAS, delete its target from `synology/.doco-cd.yml`, run `docker compose -p monitoring down` on Athena, and delete its `VMUser`.
 
 ## Pi
 
@@ -146,7 +146,7 @@ time() - tlast_over_time(up{instance="spark-1"}[1h])
 count by (job) (up{instance="spark-1"} == 1)
 ```
 
-The first is a few seconds on a healthy host. The second lists `spark-node`, `spark-gpu`, `spark-smartctl`, `spark-vmagent` and `spark-deployer`, plus `spark-inference` on the node serving the head rank. On the NAS it lists `synology-node`, `synology-snmp` and `synology-vmagent`, and on a Pi `pi-node` and `pi-vmagent`, plus `pi-nut` on a UPS monitor. On the host, `curl -s 127.0.0.1:8429/targets` shows each scrape target. `docker logs doco-cd` shows deployments on a Compose host, and `journalctl -u vmagent -u prometheus-node-exporter -u prometheus-nut-exporter` shows the collectors' logs on a Pi.
+The first is a few seconds on a healthy host. The second lists `spark-node`, `spark-gpu`, `spark-smartctl`, `spark-vmagent` and `spark-deployer`, plus `spark-inference` on the node serving the head rank. On the NAS it lists `synology-node`, `synology-snmp`, `synology-vmagent` and `synology-fluent-bit`, and on a Pi `pi-node` and `pi-vmagent`, plus `pi-nut` on a UPS monitor. On the host, `curl -s 127.0.0.1:8429/targets` shows each scrape target. `docker logs doco-cd` shows deployments on a Compose host, and `journalctl -u vmagent -u prometheus-node-exporter -u prometheus-nut-exporter` shows the collectors' logs on a Pi.
 
 Check memory with `docker stats --no-stream`, which matters on a Spark where a loaded model leaves little free. Every container keeps at most 30 MB of logs and has a memory limit: 256 MiB each for doco-cd and vmagent, 128 MiB each for node-exporter, smartctl-exporter and the GPU exporter, so 896 MiB at most on a Spark and 768 MiB on a PVE node. These are configured limits; measure actual SMART collector use after deployment. sparkDash adds a 512 MiB limit on `spark-1`. Measured on 2026-10-04: a Spark used 90 to 110 MiB in total (doco-cd 35 to 44, vmagent 23 to 46, GPU exporter 10 to 17, node-exporter 10), leaving its available memory within 0.1 GiB of where it started; a PVE node used about 55 MiB.
 
@@ -244,7 +244,7 @@ Limits:
 
 - **Change:** merge to `main`. Each host applies it on its next poll; only the service whose files changed is recreated, and the queue survives. A commit whose images cannot be pulled leaves the running containers in place. A service that starts and then keeps failing makes doco-cd recreate its whole project on every poll until it is fixed. Either case raises `NodeDeployFailing`. `scripts/ci/validate-host-monitoring.sh` renders every deployment and has the pinned vmagent parse its scrape files; run it before merging a change.
 - **Pause:** `docker stop doco-cd` on the host. Collection continues.
-- **Rotate a token:** on a PVE node or Spark, first run `docker stop monitoring-fluent-bit-1`. Replace the value with `sops`, merge, then rewrite `/etc/monitoring/token` as above. `vmagent` rereads the file; samples queue in between. Then run `docker start monitoring-fluent-bit-1`: Fluent Bit reads the token only when it starts and drops records the endpoint rejects, so left running it would lose the journal until restarted. Stopped, it resumes from its journal cursor when started.
+- **Rotate a token:** on a PVE node, Spark or the [NAS](#nas), first run `docker stop monitoring-fluent-bit-1`. Replace the value with `sops`, merge, then rewrite `/etc/monitoring/token` as above. `vmagent` rereads the file; samples queue in between. Then run `docker start monitoring-fluent-bit-1`: Fluent Bit reads the token only when it starts and drops records the endpoint rejects, so left running it would lose the journal until restarted. Stopped, it resumes from its journal cursor when started.
 - **Remove a host:** on the host run `docker compose -p doco-cd down` and `docker compose -p monitoring down -v`, plus `docker compose -p monitoring-gpu down` on a Spark and `docker compose -p sparkdash down` on `spark-1`, then delete its `VMUser`. `-p` selects the project by name, so the commands work from any directory. `NodeMetricsMissing` fires for a host that stops reporting until it has been silent for seven days; silence it for a planned removal.
 - **Add a host:** add a key to the token Secret and a `VMUser`, then enroll it.
 

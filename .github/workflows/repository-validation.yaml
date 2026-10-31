@@ -149,6 +149,7 @@ jobs:
               - 'proxmox/platform/**'
               - 'sparks/monitoring/**'
               - 'sparks/platform/**'
+              - 'synology/monitoring/**'
               - 'scripts/ci/validate-host-monitoring.sh'
               - 'scripts/ci/test-validate-host-monitoring.sh'
               - 'scripts/logging/test-host-logs.py'

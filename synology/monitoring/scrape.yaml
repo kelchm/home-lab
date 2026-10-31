@@ -26,3 +26,7 @@ scrape_configs:
   - job_name: synology-vmagent
     static_configs:
       - targets: ["127.0.0.1:8429"]
+  - job_name: synology-fluent-bit
+    metrics_path: /api/v2/metrics/prometheus
+    static_configs:
+      - targets: ["127.0.0.1:2020"]
