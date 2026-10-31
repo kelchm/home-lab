@@ -33,6 +33,16 @@
   },
   packageRules: [
     {
+      // Flux pulls spec.ref.digest and never reads the tag, so a re-pushed
+      // version reaches the cluster only through a reviewed digest PR.
+      description: "OCI Helm charts: pin content and review all updates",
+      matchManagers: ["flux"],
+      matchDatasources: ["docker"],
+      matchDepTypes: ["HelmChart"],
+      pinDigests: true,
+      automerge: false,
+    },
+    {
       description: "CNI and device plugin: pin images and review all updates",
       matchFileNames: ["kubernetes/apps/kube-system/{multus,whereabouts,generic-device-plugin}/app/kustomization.yaml"],
       matchManagers: ["kustomize", "custom.regex"],
@@ -203,10 +213,13 @@
       overrideDepName: "{{packageName}}",
     },
     {
+      // Group release changes only: a same-version digest change stands alone
+      // and must not be withheld by the group minimum.
       description: "Flux Operator Group",
       groupName: "flux-operator",
       matchDatasources: ["docker"],
       matchPackageNames: ["/flux-operator/", "/flux-instance/", "/flux-operator-manifests/"],
+      matchUpdateTypes: ["major", "minor", "patch"],
       group: {
         commitMessageTopic: "{{{groupName}}} group",
       },
