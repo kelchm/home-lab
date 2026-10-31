@@ -1,6 +1,6 @@
 # S3 storage on Athena
 
-The lab's S3 object store. Its first buckets are for the CloudNativePG backups from `k8s-prod`. [versitygw](https://github.com/versity/versitygw) 1.8.0 stores each object as a plain file on the `object-storage` share, and a Traefik container in front of it terminates HTTPS with a Let's Encrypt certificate. The decisions are recorded in [home-lab#224](https://github.com/kelchm/home-lab/issues/224), and the database side is in the [CloudNativePG backup runbook](../../docs/runbooks/cnpg-backup-restore.md). The database layer adds this share to the daily [off-site job](../offsite-backup/README.md); only a verified completed Kopia snapshot establishes the Backblaze B2 copy.
+The lab's S3 object store. Its first buckets are for the CloudNativePG backups from `k8s-prod`. [versitygw](https://github.com/versity/versitygw) stores each object as a plain file on the `object-storage` share, and a Traefik container in front of it terminates HTTPS with a Let's Encrypt certificate. The decisions are recorded in [home-lab#224](https://github.com/kelchm/home-lab/issues/224), and the database side is in the [CloudNativePG backup runbook](../../docs/runbooks/cnpg-backup-restore.md). The database layer adds this share to the daily [off-site job](../offsite-backup/README.md); only a verified completed Kopia snapshot establishes the Backblaze B2 copy.
 
 doco-cd deploys this project from `main`; the [Synology README](../README.md) describes the deployment model, rollback, and break-glass apply.
 
@@ -13,6 +13,8 @@ The database layer (#816, merged as `653afc37`) is now active. Visionect passed 
 No completed Kopia snapshot of `/sources/object-storage` was observed at database sign-off on 2026-10-29. The subsequent normal run completed at 10:32:48 UTC, with both accepted base archives and selected WAL objects verified in its immutable catalog; the [dated runbook record](../../docs/runbooks/cnpg-backup-restore.md#first-normal-object-storage-snapshot-2026-10-29) gives the exact snapshot and limits. Snapshot payload readability/checksums, complete required WAL continuity and a CNPG restore from B2 remain unverified. [First deployment](#first-deployment) remains the NAS rebuild procedure and acceptance checklist.
 
 Later on 2026-10-29, sequential CNPG-native real-data restores from the live Athena archive passed for Visionect 17.11 and Bambuddy 18.6 at the inclusive 02:30 UTC target. Each matched the source reference’s public schema and two fixed 1,000-row cohorts, passed single-worker amcheck and completed cleanup; final production health passed at 18:12:26 UTC. The [dated restore result](../../docs/runbooks/cnpg-backup-restore.md#real-data-alongside-restores-2026-10-29) records the physical proof, timings and limits, including partial lifetime/peak sizing evidence. #224’s database-restore criterion is met; broader full-cluster/B2 recovery remains unverified and #224 stays open. #782’s backup/restore prerequisite is met, but the stale HA candidate remains held pending refresh, review and separate approval.
+
+On 2026-10-31 UTC the store moved to versitygw 1.10.0 and Traefik 3.7.17 (#1181, #1151). A disposable rehearsal with this project's `posix --sidecar` layout wrote multipart and metadata-bearing objects with 1.8.0, read and rewrote them with 1.10.0, and read the results back on 1.8.0 with matching ETags, metadata and SHA-256. Live, both clusters' first WAL uploads through 1.10.0 returned 200, their failed-archive counts did not change, and Traefik kept its certificate. No restore has run through 1.10.0 yet.
 
 ## What is where
 
@@ -137,7 +139,7 @@ Any machine can serve a copy of the share, which is how a restore works when Ath
 
 ```sh
 docker run --rm -p 7070:7070 -v /path/to/restored/object-storage:/share:ro \
-  ghcr.io/versity/versitygw:v1.8.0 --readonly --access restore --secret '<any secret>' posix --nometa /share/data
+  ghcr.io/versity/versitygw:v1.10.0 --readonly --access restore --secret '<any secret>' posix --nometa /share/data
 ```
 
 `--nometa` ignores the metadata directory, so it works on a read-only copy. A restore only reads. Verified on 2026-10-12: a `Cluster` bootstrapped from a plain copy of the scratch store's files served this way, and from one served with `--sidecar /share/meta`, each returned the source's 320,006 rows with a matching checksum.
