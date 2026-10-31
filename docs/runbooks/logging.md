@@ -403,7 +403,7 @@ To stop the collector before the revert lands, stop doco-cd first and start it a
 
 ### Query host logs
 
-On Home, **Logs from** on a machine in the PVE, Spark, Athena or devices tab's **Machines** table opens that host's records in Explore, and **Go deeper** has **PVE logs**, **Spark logs**, **Athena logs** and **Pi logs** for all of them. Each tab's **Recent warnings and errors** lists its hosts' journal lines at warning and above. Athena's leaves out `scemd`'s `Failed to get ovs_bond0.20 info`, which repeats every six seconds and would fill the panel's 200 lines within 20 minutes.
+On Home, **Logs from** on a machine in the PVE, Spark, Athena or devices tab's **Machines** table opens that host's records in Explore, and **Go deeper** has **PVE logs**, **Spark logs**, **Athena logs** and **Pi logs** for all of them. Each tab's **Recent warnings and errors** lists its hosts' journal lines at warning and above.
 
 Host records carry no Kubernetes namespace, so filter on `host.name` or `service.namespace`. Explore and VMUI take LogsQL such as:
 
