@@ -221,6 +221,20 @@ spec:
           values:
             - instance=nas
             - platform=synology
+    - static:
+        url: http://victoria-logs-single-server.observability.svc:9428
+      paths:
+        - /insert/opentelemetry/v1/logs
+      query_args:
+        - name: extra_fields
+          values:
+            - host.name=nas,service.namespace=synology
+        - name: _stream_fields
+          values:
+            - host.name,service.name
+      headers:
+        - "AccountID: 0"
+        - "ProjectID: 0"
 ---
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMUser
