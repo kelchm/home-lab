@@ -1,0 +1,54 @@
+# Adds Proxmox task output to the journal configuration in ../logs, which stays
+# identical to the Sparks'; see "PVE task logs" in docs/runbooks/logging.md. Its
+# output repeats the shared one, which takes only the journal, with a buffer of
+# its own; test-host-logs.py checks the two match.
+includes:
+  - fluent-bit.yaml
+
+pipeline:
+  inputs:
+    # Each task writes one file, named for its UPID, in a directory named for the
+    # last hex digit of its start time. The path leaves out what sits beside those
+    # directories: index, active and the lock. Files last written over a day ago are
+    # skipped; eligible files are read from the start and may contain older output.
+    - name: tail
+      alias: pve-tasks
+      tag: pve-task
+      path: /var/log/pve/tasks/[0-9A-F]/UPID:*
+      path_key: task_file
+      read_from_head: on
+      ignore_older: 1d
+      db: /state/pve-tasks.db
+      db.sync: full
+      db.compare_filename: true
+      refresh_interval: 5
+      buffer_chunk_size: 64k
+      buffer_max_size: 1M
+      skip_long_lines: on
+      skip_empty_lines: on
+      storage.type: filesystem
+
+  filters:
+    - name: lua
+      match: pve-task
+      script: /fluent-bit/etc/pve-tasks.lua
+      call: normalize_task
+      type_int_key: severity_number process.pid
+
+  outputs:
+    - name: opentelemetry
+      alias: ingest-tasks
+      match: pve-task
+      host: metrics-ingest.home.kelch.io
+      port: 443
+      tls: on
+      tls.verify: on
+      tls.verify_hostname: on
+      logs_uri: /insert/opentelemetry/v1/logs
+      header:
+        - Authorization Bearer ${INGEST_TOKEN}
+        - VL-Ignore-Fields scope.name,scope.version
+      logs_body_key: $body
+      logs_body_key_attributes: off
+      retry_limit: no_limits
+      storage.total_limit_size: 256M

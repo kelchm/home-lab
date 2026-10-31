@@ -6,6 +6,7 @@ Host metrics for the PVE nodes. Enrollment, verification and removal are in the 
 |---|---|
 | [compose.yaml](compose.yaml) | node-exporter, smartctl-exporter, apt-metrics, vmagent and fluent-bit. Identical on every node. |
 | [logs/](logs/) | fluent-bit's configuration and journal mapping; see [Host logs](../../docs/runbooks/logging.md#host-logs). Identical to the Sparks'. |
+| [task-logs/](task-logs/) | Adds Proxmox task output to that configuration, on PVE only; see [PVE task logs](../../docs/runbooks/logging.md#pve-task-logs). |
 | [backup-metrics/](backup-metrics/) | Backup completion samples from PVE's notification webhook, their alerts and the manual install. Installed; rollout and operator receipt evidence are tracked in #720. |
 | [scrape.yaml](scrape.yaml) | Host, SMART, vmagent, deployer and log collector scrape jobs. |
 | [.doco-cd.yml](.doco-cd.yml) | The deployment every node's doco-cd applies. |

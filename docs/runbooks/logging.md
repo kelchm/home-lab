@@ -254,7 +254,7 @@ Each event's line names the reason and object, so a word such as `BackOff` or a 
 
 ## Host logs
 
-Each PVE node, Spark and Pi sends its systemd journal, kernel messages included, to VictoriaLogs. On a PVE node or Spark, a `fluent-bit` container in the host's monitoring stack reads the journal read-only and sends OTLP to `https://metrics-ingest.home.kelch.io/insert/opentelemetry/v1/logs` with the host's metrics token. Its configuration is [`proxmox/monitoring/logs/`](../../proxmox/monitoring/logs/), kept identical in [`sparks/monitoring/logs/`](../../sparks/monitoring/logs/). The host's VMUser routes that path to VictoriaLogs and adds `host.name`, `service.namespace` and the stream fields as query arguments, so, as with metrics, the configuration carries no identity and a host cannot give itself another: VMAuth drops a client's own `extra_fields` and `_stream_fields`, VictoriaLogs reads those arguments before its `VL-Extra-Fields` and `VL-Stream-Fields` headers, and `extra_fields` override the same fields in a record. The route also sets the `AccountID` and `ProjectID` headers to 0, so every record lands in the default tenant the datasource reads. A host does choose its own `service.name`, a stream field, so a host's token could create streams at will; `VictoriaLogsStreamChurnHigh` would show it. The NAS and the GLKVM don't send logs yet ([#914](https://github.com/kelchm/home-lab/issues/914)).
+Each PVE node, Spark and Pi sends its systemd journal, kernel messages included, to VictoriaLogs, and each PVE node also sends its [task logs](#pve-task-logs). On a PVE node or Spark, a `fluent-bit` container in the host's monitoring stack reads the journal read-only and sends OTLP to `https://metrics-ingest.home.kelch.io/insert/opentelemetry/v1/logs` with the host's metrics token. Its configuration is [`proxmox/monitoring/logs/`](../../proxmox/monitoring/logs/), kept identical in [`sparks/monitoring/logs/`](../../sparks/monitoring/logs/). The host's VMUser routes that path to VictoriaLogs and adds `host.name`, `service.namespace` and the stream fields as query arguments, so, as with metrics, the configuration carries no identity and a host cannot give itself another: VMAuth drops a client's own `extra_fields` and `_stream_fields`, VictoriaLogs reads those arguments before its `VL-Extra-Fields` and `VL-Stream-Fields` headers, and `extra_fields` override the same fields in a record. The route also sets the `AccountID` and `ProjectID` headers to 0, so every record lands in the default tenant the datasource reads. A host does choose its own `service.name`, a stream field, so a host's token could create streams at will; `VictoriaLogsStreamChurnHigh` would show it. The NAS and the GLKVM don't send logs yet ([#914](https://github.com/kelchm/home-lab/issues/914)).
 
 Each Pi runs the same configuration as a NixOS `fluent-bit` service from rpi-nixos's [`modules/profiles/logs`](https://github.com/kelchm/rpi-nixos/tree/main/modules/profiles/logs), with the same `host.lua` byte for byte, so a change to the mapping needs the same change there. A Pi keeps its journal in RAM (`/run/log/journal`, at most 16 MB), so its collector keeps its cursor and a 16 MiB buffer in RAM as well.
 
@@ -287,6 +287,35 @@ The mapping is [`host.lua`](../../proxmox/monitoring/logs/host.lua). The `pipeli
 
 `NodeLogDeliveryFailing` warns after 10 minutes of retries, `NodeLogsDropped` when records are dropped, and `NodeLogsSilent` when a host's collector has read nothing from its journal for two hours; `NodeCollectorDown` covers its scrape target (`pve-fluent-bit`, `spark-fluent-bit`, `pi-fluent-bit`). The quietest host, `ups-office`, writes three lines every hour, so two hours of silence means the collector has lost the journal. See [Alerts](host-monitoring.md#alerts) for host rules.
 
+### PVE task logs
+
+The journal has only a task's start and end; a task's output is in its own file under `/var/log/pve/tasks/`. [`proxmox/monitoring/task-logs/`](../../proxmox/monitoring/task-logs/) adds a `tail` input for those files to the node's collector. It includes the shared configuration unchanged, so the journal input, the Sparks and the Pis are untouched, and sends through the same token and log route with an output and 256 MiB buffer of its own.
+
+- **Files:** each task writes `<last hex digit of its start time>/UPID:...`. The input reads only that shape, so `index`, `active` and `.active.lock` beside those directories are left out.
+- **Access:** task files are `www-data:root 0640` under `root:root 0755` directories, so the collector reads them through its root group, with no capability or host change. A task file in another group, none of 166 on pve-sbx-3 on October 30, 2026, stays unread, and `docker logs` shows `cannot open` at every scan until it ages out.
+- **Replication:** a replication run writes to `/var/log/pve/replicate/<job>`, which each run overwrites, not to a task file, so its output is not collected.
+
+| Field | Content |
+| --- | --- |
+| `service.name` | `pve-task`, one stream per host. |
+| `pve.task.upid`, `pve.task.type`, `pve.task.id` | The task's UPID, its type, such as `vzdump` or `qmigrate`, and the guest or other object it worked on. Not stream fields. The journal's start and end lines carry the same UPID. |
+| `severity_number`, `severity_text` | From a level at the start of a line, after a migration's timestamp: `TASK ERROR:` and `ERROR:` are `err` 17, `TASK WARNINGS:`, `WARN:` and `WARNING:` are `warning` 13, `TASK OK` and `INFO:` are `info` 9. Any other line has none (0). |
+| `_msg` | The line, mapped by `host.lua` as a journal message. Blank lines are dropped. |
+| `_time` | When the collector read the line, because most task lines have no timestamp of their own. |
+
+`host.name` and `service.namespace` come from the host's token as for the journal; the node in the UPID is not used. Other delivery behaviour:
+
+- **First start:** files modified within the past day are read from their start, including any older output they contain. Lines are stamped with the time they are read. Files last modified more than a day ago are skipped.
+- **Restart and redeploy:** the collector resumes each file from its position in `pve-tasks.db` in the `logs` volume, and reads tasks written while it was stopped, unless the file was last written more than a day ago. A task silent for longer than that continues from its position when it writes again. Cursors match both inode and filename so a new UPID cannot inherit another task's position. Without the `logs` volume, every eligible file is read from its start again.
+- **Partial lines:** a line is sent once it ends. Proxmox ends every finished task with a whole status line, so only a worker killed mid-line leaves an end that is never sent.
+- **Long lines:** a line over 1 MiB is skipped and counted by `fluentbit_input_long_line_skipped_total`; the rest of the file is still read.
+
+A node can run no task for days, so `NodeLogsSilent` watches only the journal input. The delivery and drop alerts cover this output as they do the journal's.
+
+To roll out, merge: every PVE node's log route is already live, and each node applies the change on its next poll. A successful deployment recreates only `fluent-bit`. If deployment fails, doco-cd's retry can recreate the whole monitoring project and interrupt metrics too; promptly revert or fix the change, then verify both metrics and logs.
+
+After a deploy, on each node, `fluentbit_input_records_total{job="pve-fluent-bit",name="pve-tasks"}` exists, `docker logs monitoring-fluent-bit-1` has no `cannot open`, and [Verify a host](#verify-a-host) passes. A task's arrival is the final check: `service.name:=pve-task | stats by (host.name, pve.task.type) count()` lists it after the node's next task. To roll back, revert the change: the collector returns to the journal alone, with its cursor intact, and stored task records stay until retention removes them. A later redeploy resumes from `pve-tasks.db`.
+
 ### Query host logs
 
 On Home, **Logs from** on a machine in the PVE, Spark or devices tab's **Machines** table opens that host's records in Explore, and **Go deeper** has **PVE logs**, **Spark logs** and **Pi logs** for all of them. Each tab's **Recent warnings and errors** lists its hosts' journal lines at warning and above.
@@ -300,8 +329,10 @@ Host records carry no Kubernetes namespace, so filter on `host.name` or `service
 - AirPlay sessions on the streamer, each start, stop and its playing time: `host.name:=streamer-basement-workbench service.name:=shairport-sync "Connection"`
 - SSH logins: `service.namespace:in(pve, spark, pi) "Accepted"`
 - Errors on every host: `service.namespace:in(pve, spark, pi) severity_number:>=17`
+- Failed PVE tasks: `service.name:=pve-task "TASK ERROR"`
+- A whole task, from a UPID in the journal or a line above: `pve.task.upid:="UPID:..."`
 
-`python3 scripts/logging/test-host-logs.py` runs the host configuration on the machine's own journal and checks what a pinned VictoriaLogs stores: a syslog line at two levels, a container's stdout and stderr through the `journald` driver, a kernel message, and a client header that tries to rename the host. It also checks that every host's log route stamps the identity its metrics route does. It needs a Docker daemon that logs to journald, such as a GitHub runner or Colima's VM. CI runs it with the host monitoring checks.
+`python3 scripts/logging/test-host-logs.py` runs the host configuration on the machine's own journal and checks what a pinned VictoriaLogs stores: a syslog line at two levels, a container's stdout and stderr through the `journald` driver, a kernel message, and a client header that tries to rename the host. It also checks that every host's log route stamps the identity its metrics route does, and runs the [task log](#pve-task-logs) overlay on synthetic task files through a first start with old history and index files, a running task with a half-written line, a restart, a reused inode, a silent task that resumes and an overlong line, checking that each record is stored once. It needs a Docker daemon that logs to journald, such as a GitHub runner or Colima's VM. CI runs it with the host monitoring checks.
 
 ### Verify a host
 
