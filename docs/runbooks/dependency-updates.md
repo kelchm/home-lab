@@ -75,7 +75,7 @@ The remaining #221 slice here is workload image digest coverage (inventory first
 
 ## OCI chart digests
 
-Chart versions and chart content change through Renovate PRs, and the exact bytes in use stay in place until a PR is merged. Each `OCIRepository` sets `spec.ref.tag` and `spec.ref.digest`. Flux pulls the digest and never reads the tag, so a publisher replacing a version's content cannot change what the cluster runs. This describes the intended state once #1192 is activated.
+Chart versions and chart content change through Renovate PRs, and the exact bytes in use stay in place until a PR is merged. Each `OCIRepository` sets `spec.ref.tag` and `spec.ref.digest`. Flux pulls the digest and never reads the tag, so a publisher replacing a version's content cannot change what the cluster runs.
 
 | Upstream change | What Renovate proposes |
 | --- | --- |
@@ -91,7 +91,7 @@ Merging a digest change upgrades the release even when the chart files match, an
 
 ### First activation
 
-Status: not yet activated. The activation inventory was refreshed on 2026-10-31 against the prospective merge of `main@ca446b06` and #1192 after the monitoring and Visionect maintenance. All 42 pins still match successfully deployed chart versions and digests; monitoring remains at chart 0.97.0 and Visionect's cache at Valkey 7.2.15. No chart content changes. `coredns` keeps its deployed 1.49.0 archive, which its publisher re-pushed on 2026-10-26 with identical files, so Renovate will propose that digest as an ordinary PR after activation; merging it restarts CoreDNS once more.
+Activated on 2026-10-31 through #1192 (`b136c80b`). All 42 source pins were verified before releases resumed; 41 releases converted successfully in 42 upgrades, including the initial `flux-instance` configuration upgrade. No upgrade failed or required rollback. `identity/kaniop` remains deliberately suspended at 0.19.1: its source is pinned, but its conversion and CRD apply/migrate/verify hooks wait for the separate identity maintenance in #1180/#1160. CoreDNS keeps its deployed `f5eb6389e7ec…` archive; #1195 proposes the publisher's replacement as a digest PR, which remains unmerged. #221 tracks the remaining conversion and live acceptance of a reviewed content update.
 
 Establish all source pins before enabling digest tracking: merging both changes without pausing releases leaves a race in which helm-controller can consume a newer, still-unpinned source. The initial `flux-instance` configuration upgrade removes `DisableChartDigestTracking` and restarts helm-controller. Its restart then causes 42 digest-conversion upgrades, including a second upgrade of `flux-instance`: normally 43 successful Helm upgrades in total, with remediation potentially adding attempts. If Kaniop stays held for a separate identity window, budget 42 successful upgrades now and defer its conversion; all 42 source pins must still be verified. Up to ten reconciliations can run concurrently; this is not an ordered batch rollout. The checked renders change no images, values, chart defaults, selectors or volume claim templates; refresh the inventory and pins if any chart has moved before activation.
 
@@ -102,9 +102,9 @@ Establish all source pins before enabling digest tracking: merging both changes 
 | Checksum over rendered labels | `coredns`, `cnpg-operator`; database pods stay untouched |
 | Upgrade hooks | `kaniop` runs its CRD apply, migrate and verify Jobs; its Deployments stay untouched |
 
-The predicted digest-conversion scope is 12 workloads and 16 replacement Pods, plus one helm-controller Pod for the configuration change. Visionect's live `restartedAt` already matches Git after #1155, so it adds no replacement. Seerr retains its singleton interruption, and Cilium's singleton operator permits full unavailability while it is replaced.
+The activation replaced 16 Pods across 12 workloads plus helm-controller, matching the render prediction. Database Pods, Visionect, selectors and PVCs were unchanged. Seerr was unavailable for about 70 seconds; DNS checks passed during the CoreDNS and Cilium rolls, and BGP, storage and database health passed afterward. Cilium's singleton operator permits full unavailability while it is replaced.
 
-Use native Flux suspensions to establish the pins, then keep the network plane held until the rest has proved the change:
+When enabling tracking on an unconverted cluster, use native Flux suspensions to establish the pins, then keep the network plane held until the rest has proved the change:
 
 1. Finish in-flight dependency upgrades, refresh the chart and workload inventory, confirm HelmReleases, nodes, Longhorn volumes and CNPG clusters are healthy, and hold Renovate merges for the window. Include Kaniop's hooks in the approved scope after checking identity health and its completed migration marker; otherwise keep Kaniop held.
 2. Record existing suspensions, then use `flux suspend hr <name> -n <namespace>` for each of the 42 OCI-sourced releases, including `flux-instance`. Before merging, confirm all suspensions are observed and remain set after Git reconciliation. Their Kustomization health checks pass once the healthy suspended releases have been observed; pausing reconciliation does not stop their running workloads.
