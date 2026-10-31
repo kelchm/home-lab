@@ -9,26 +9,25 @@ if [[ $# != 1 || -e $1 || -L $1 ]]; then
 fi
 
 stage=$1
-commit=807da6498377ee5e0cf43a78091f46f12dc59a89
-mkdir -p "$stage/client/dnsapi"
+mkdir -p "$stage/bin"
 curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
-    "https://raw.githubusercontent.com/acmesh-official/acme.sh/$commit/acme.sh" \
-    --output "$stage/client/acme.sh"
-cp "$(dirname "${BASH_SOURCE[0]}")/dns_athena.sh" "$stage/client/dnsapi/dns_athena.sh"
+    'https://github.com/go-acme/lego/releases/download/v5.6.0/lego_v5.6.0_linux_amd64.tar.gz' \
+    --output "$stage/lego.tar.gz"
 python3 - "$stage" <<'PY'
 import hashlib
 import pathlib
 import sys
 
 stage = pathlib.Path(sys.argv[1])
-expected = {
-    "client/acme.sh": "c7d68b021cfd6380ea83a82962abde5b484779fee0b97d38681dfa1396bbc8d7",
-    "client/dnsapi/dns_athena.sh": "789ba78a2020ebe20ea4d8b8de6bd7fb09bda123acae29aaf7cef085d8fa6c5e",
-}
-for name, digest in expected.items():
-    target = stage / name
-    if hashlib.sha256(target.read_bytes()).hexdigest() != digest:
-        raise SystemExit("Pinned client checksum mismatch: " + name)
-    target.chmod(0o600)
+digest = "f02fc11b6f56b97e387fa7caa0268f86f5a336953b22458e6430e4651fea439a"
+if hashlib.sha256((stage / "lego.tar.gz").read_bytes()).hexdigest() != digest:
+    raise SystemExit("Pinned Lego archive checksum mismatch")
 PY
-echo "Prepared pinned acme.sh 3.1.6 core and native Athena DNS adapter."
+tar -xzf "$stage/lego.tar.gz" -C "$stage/bin" lego
+chmod 0700 "$stage/bin/lego"
+rm "$stage/lego.tar.gz"
+source_dir=$(dirname "${BASH_SOURCE[0]}")
+cp "$source_dir/deploy-athena-dsm.py" "$stage/"
+cp "$source_dir/athena-lego.yml" "$stage/lego.yml"
+chmod 0600 "$stage/deploy-athena-dsm.py" "$stage/lego.yml"
+echo "Prepared stock Lego 5.6.0 for Athena (linux/amd64), its configuration and the local DSM import hook."

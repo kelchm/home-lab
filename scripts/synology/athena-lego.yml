@@ -1,0 +1,35 @@
+# Draft only. The token's path is supplied through CF_DNS_API_TOKEN_FILE.
+storage: /volume1/@athena-acme/lego-state
+
+accounts:
+  athena:
+    server: letsencrypt
+    acceptsTermsOfService: true
+
+challenges:
+  cloudflare:
+    dns:
+      provider: cloudflare
+      # The LAN resolver answers home.kelch.io itself; validate public DNS.
+      resolvers:
+        - 1.1.1.1:53
+        - 1.0.0.1:53
+
+certificates:
+  athena.home.kelch.io:
+    account: athena
+    challenge: cloudflare
+    domains:
+      - athena.home.kelch.io
+    keyType: EC256
+    noBundle: true
+    renew:
+      reuseKey: true
+
+hooks:
+  deploy:
+    command: /usr/bin/python3 /volume1/@athena-acme/deploy-athena-dsm.py
+
+log:
+  level: info
+  format: text
