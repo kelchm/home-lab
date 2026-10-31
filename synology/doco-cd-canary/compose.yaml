@@ -5,7 +5,7 @@ name: doco-cd-canary
 
 services:
   canary:
-    image: docker.io/library/busybox:1.38.0@sha256:fd7dc98638c8e305f4dc34e979f1c0fdfdcaeb0fbf8fcff77ae834b6da3d7e6e
+    image: docker.io/library/busybox:1.38.0@sha256:a46257e06c82ad85242d0d38077d0a52d9896389ca60a1a59d3463db586e5fa4
     command: ["sh", "-c", "date >> /state/starts.log && exec sleep 2147483647"]
     volumes:
       - /volume1/docker/doco-cd-canary:/state
@@ -18,7 +18,7 @@ services:
     restart: unless-stopped
 
   publish:
-    image: docker.io/library/busybox:1.38.0@sha256:fd7dc98638c8e305f4dc34e979f1c0fdfdcaeb0fbf8fcff77ae834b6da3d7e6e
+    image: docker.io/library/busybox:1.38.0@sha256:a46257e06c82ad85242d0d38077d0a52d9896389ca60a1a59d3463db586e5fa4
     command: ["cp", "/source/message.txt", "/state/message.txt"]
     labels:
       cd.doco.deployment.one_shot: "true"
