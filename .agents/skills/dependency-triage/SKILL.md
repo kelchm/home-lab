@@ -70,7 +70,7 @@ Rate a PR by what changes on the running system, not by its semver label.
   - A release that exhausts its retries stalls. After fixing the cause, suspend and resume it; a forced reconcile has failed to clear one.
 - Confirm the pods run the new version; the HelmRelease recording it isn't enough.
 - Check output, not just readiness: DNS records exist and none were deleted, OIDC redirects, an MCP tool call succeeds, replicas converge. Read the whole log window and confirm the selector matched pods; an empty result is not health.
-- After every live merge, confirm no warning or critical alert is firing, because those page the user. Query `ALERTS{alertstate="firing",severity=~"warning|critical",evaluator="vmalert"}` in VictoriaMetrics; the Grafana MCP can run it. Alternatively, read `/api/v2/alerts` from `pod/vmalertmanager-victoria-metrics-k8s-stack-0` on port 9093. `docs/runbooks/alerting.md` covers routing and first response. Judge a startup error by whether it recurs.
+- After every live merge, confirm no warning or critical alert is firing, because those page the user. Query `ALERTS{alertstate="firing",severity=~"warning|critical"}` in VictoriaMetrics; the Grafana MCP can run it. Alternatively, read `/api/v2/alerts` from `pod/vmalertmanager-victoria-metrics-k8s-stack-0` on port 9093. `docs/runbooks/alerting.md` covers routing and first response. Judge a startup error by whether it recurs.
 - Name any check only the user can make, such as an SSO login.
 
 ## Hold, close, roll back

@@ -50,7 +50,7 @@ services:
   # the host does.
   apt-metrics:
     <<: *service
-    image: docker.io/library/ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac
+    image: docker.io/library/ubuntu:24.04@sha256:fe81560990fae86dc4743202b2cb4d3df98d0bcf949173cecef15ce1127ef852
     # Root without capabilities, to write the root-owned textfile volume.
     user: "0:0"
     entrypoint: ["/bin/sh", "/usr/local/bin/apt-metrics"]
@@ -71,7 +71,7 @@ services:
   # by hand if this service is retired.
   apt-list-refresh:
     <<: *service
-    image: docker.io/library/ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac
+    image: docker.io/library/ubuntu:24.04@sha256:fe81560990fae86dc4743202b2cb4d3df98d0bcf949173cecef15ce1127ef852
     user: "0:0"
     restart: "no"
     labels:
@@ -83,7 +83,7 @@ services:
 
   vmagent:
     <<: *service
-    image: docker.io/victoriametrics/vmagent:v1.154.1@sha256:970ba603235839655e03501311c683d2269b882f7bcf0ac98892ae422603cb61
+    image: docker.io/victoriametrics/vmagent:v1.155.0@sha256:8e3c03905be15bba8312d4868e8ae6f9fc2fefee0a41d544472034249ca42bb4
     command:
       - -httpListenAddr=127.0.0.1:8429
       - -promscrape.config=/etc/vmagent/scrape.yaml
