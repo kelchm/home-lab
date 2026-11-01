@@ -170,9 +170,6 @@ spec:
             - {port: "2300", protocol: TCP}
             - {port: "3000", protocol: TCP}
             - {port: "8080", protocol: TCP}
-            - {port: "4000", protocol: TCP}
-            - {port: "4567", protocol: TCP}
-            - {port: "8000", protocol: TCP}
     # Homepage backend.
     - toEndpoints:
         - matchLabels:

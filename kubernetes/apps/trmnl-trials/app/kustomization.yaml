@@ -9,10 +9,6 @@ resources:
 - ./larapaper.yaml
 - ./inker.yaml
 - ./byos-next.yaml
-- ./byos-fastapi.yaml
-- ./byos-django.yaml
-- ./byos-phoenix.yaml
-- ./node-lite.yaml
 configMapGenerator:
 - name: trmnl-trial-guards
   files:

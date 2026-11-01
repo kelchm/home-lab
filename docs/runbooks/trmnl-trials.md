@@ -1,6 +1,6 @@
 # TRMNL server trials
 
-These are temporary, independent deployments for choosing a self-hosted TRMNL server. Trial lifecycle and the eventual selection/removal are tracked in [#1219](https://github.com/kelchm/home-lab/issues/1219). The existing Visionect and Broadsheet services continue separately.
+These are four temporary, independent deployments for choosing a self-hosted TRMNL server: Terminus, LaraPaper, Inker and BYOS Next.js. Trial lifecycle and the eventual selection/removal are tracked in [#1219](https://github.com/kelchm/home-lab/issues/1219). The existing Visionect and Broadsheet services continue separately.
 
 ## Open a trial
 
@@ -12,25 +12,14 @@ Use the home LAN or a VPN route to the admin network. Each URL uses the private 
 | LaraPaper | <https://larapaper.home.kelch.io> | Register an account; production mode does not seed the development admin account. |
 | Inker | <https://inker.home.kelch.io> | Sign in with the generated trial PIN, retrieved below. |
 | BYOS Next.js | <https://byos-next.home.kelch.io/setup> | Create the first administrator; the trial database is initialized. |
-| FastAPI | <https://byos-fastapi.home.kelch.io> | Lightweight dashboard; no application login. |
-| Django | <https://byos-django.home.kelch.io/admin/> | Sign in as `trial` using the generated password below. |
-| Phoenix | <https://byos-phoenix.home.kelch.io> | Device management and code-defined screens; no application login. |
-| Node Lite | <https://node-lite.home.kelch.io> | The root is intentionally empty. Use the image/API commands below. |
 
-Retrieve the Inker PIN and Django password from the cluster; it is also stored encrypted in the trial Secret manifest:
+Retrieve the Inker PIN from the cluster; it is also stored encrypted in the trial Secret manifest:
 
 ```sh
 kubectl -n trmnl-trials get secret inker-trial -o jsonpath='{.data.ADMIN_PIN}' | base64 --decode
-kubectl -n trmnl-trials get secret byos-django-trial -o jsonpath='{.data.DJANGO_SUPERUSER_PASSWORD}' | base64 --decode
 ```
 
-`DJANGO_SUPERUSER_PASSWORD` applies only when the `trial` account is first created. Rotating that Secret and restarting the pod does not change an existing account's password. Reset the existing password interactively, then update the encrypted Secret to match if it should also be used after rebuilding an empty database:
-
-```sh
-kubectl -n trmnl-trials exec -it deployment/byos-django -- python manage.py changepassword trial
-```
-
-The stateful applications use separate Longhorn volumes; Node Lite is stateless and its screen/template implementation lives in its pinned source image. Terminus and Next.js each have a dedicated PostgreSQL container within their own pod; Terminus also has its own worker and persistent Valkey queue. There are no shared application accounts, databases, API keys or playlists. Credentials and application encryption keys are SOPS encrypted in Git. RWO volumes use one replica and `Recreate` updates. PVCs are retained when a release is removed, so removing a trial does not silently erase its data.
+The applications use separate Longhorn volumes. Terminus and Next.js each have a dedicated PostgreSQL container within their own pod; Terminus also has its own worker and persistent Valkey queue. There are no shared application accounts, databases, API keys or playlists. Credentials and application encryption keys are SOPS encrypted in Git. RWO volumes use one replica and `Recreate` updates. PVCs are retained when a release is removed, so removing a trial does not silently erase its data.
 
 ## Compare with the same task
 
@@ -58,31 +47,25 @@ A device must resolve the private hostnames and reach `10.32.130.1:443`. An IoT 
 - **LaraPaper:** register the first user, then enable Permit Auto-Join or create the device manually. Configure its model and dimensions before using the display endpoint.
 - **Inker:** `/api/setup` auto-provisions the MAC and recognizes model/width/height headers. Use the returned API key as `Access-Token`.
 - **Next.js:** the deployed trial has its database initialized and built-in recipes seeded. Create the first administrator at `/setup`, then add/claim the device through the authenticated UI. For a fresh empty database, initialize it at `/setup` and restart the pod once before adding devices. An unauthenticated device cannot become an owned device by itself.
-- **FastAPI:** `/api/setup` returns its configured setup key, and the minimal UI manages device/playlist state. Some example plugins target the upstream author's private services and need configuration; public example outputs are available without those services.
-- **Django:** `/api/setup` auto-registers a new MAC. Assign that device to the `trial` user in the admin UI and add a Screen before expecting custom content. Upstream setup returns 404 once a device already has a user, so preserve the initial API key for reconfiguration. The trial wrapper normalizes the slashless setup/display paths internally, avoiding a 301 that firmware may not follow.
-- **Phoenix:** create the device in the UI first using its exact MAC, API key and friendly ID. Then call `/api/setup`; an unregistered MAC returns 404. Rendering starts after device creation, so test a generated BMP as well as the management page.
-- **Node Lite:** configure the one permitted MAC in its encrypted Secret, then use its setup/display API and authenticated image endpoint. Its root page is intentionally blank.
 
-## Candidate coverage
+## Candidate selection
 
-The [TRMNL BYOS matrix](https://docs.trmnl.com/go/diy/byos) and [ecosystem](https://trmnl.com/ecosystem) identify the implementations. The requested scope is all eight, including the experimental implementations, using physical custom devices. Terminus, LaraPaper, Inker and BYOS Next.js use upstream images. Their upstream images were inspected and pinned on 2026-10-31; the image pins are in [the manifests](../../kubernetes/apps/trmnl-trials/app). The published Next.js image is built from `7d6615d15925f710b6b3d57f2978839e61d14c40`, rather than assuming the latest source tree matches the released container.
+The [TRMNL BYOS matrix](https://docs.trmnl.com/go/diy/byos) lists Terminus, LaraPaper, Inker and BYOS Next.js as maintained implementations. These four trials use upstream images pinned in [the manifests](../../kubernetes/apps/trmnl-trials/app), with no local image builder or vendored application dependency locks. The published Next.js image is built from `7d6615d15925f710b6b3d57f2978839e61d14c40`; its released image must not be assumed to match the latest source tree.
 
-FastAPI, Django, Phoenix and Node Lite use locally built amd64 trial images from verified upstream commit archives. [Build inputs](../../tools/trmnl-trials/sources.json) pin each archive and its SHA-256; [the packaging](../../tools/trmnl-trials/images) pins base images and Python/npm dependencies. Build a candidate with `python3 tools/trmnl-trials/build.py fastapi --docker-context <context>` (substitute `django`, `phoenix`, or `node-lite`). Registry image digests are pinned in the HelmReleases after publication. The OSS trial images are publicly pullable GHCR packages. Application pods need no registry credential and do not mount a Kubernetes API token. [The build record](../../tools/trmnl-trials/images.lock.json) identifies the exact published digests.
+The initial evaluation also included BYOS FastAPI, BYOS Django, BYOS Phoenix and Node Lite. The owner chose to drop those four on 2026-11-01. The first three are marked unmaintained in the upstream matrix. [Node Lite](https://github.com/usetrmnl/byos_node_lite#readme) is a code-driven image-server starter with basic BYOS support for one device and no dashboard, rather than a comparable ready-to-use management server. Their custom packaging and dependency locks have been removed from the repository; Renovate policy is unchanged.
 
-Add `--push` to publish the build. Publication alone changes neither the build record nor the deployed image. Set `trial_image` to the `image` field in the script's final JSON output, then obtain its registry digest:
+### Retained data from retired trials
 
-```sh
-trial_image='ghcr.io/kelchm/trmnl-trial-fastapi:<tag from build output>'
-docker buildx imagetools inspect "$trial_image" --format '{{.Manifest.Digest}}'
-```
+Retirement removes the four HelmReleases and their workloads, Services and HTTPRoutes. It preserves the four PVCs below, whose `helm.sh/resource-policy: keep` annotations were verified before retirement, and their corresponding encrypted application Secrets. Node Lite has no persistent volume.
 
-Update that server's entry in `tools/trmnl-trials/images.lock.json`: copy `image` and `upstream` from the build output, and set `reference` to `<image repository>@<digest>`. The digest output already includes the `sha256:` prefix. Update `controllers.main.containers.app.image.tag` under the corresponding HelmRelease's `spec.values` to `<published tag>@<digest>`. Keep these edits together in the deployment change; Flux uses the HelmRelease pin after it reaches `main`. Verify the package remains anonymously pullable before deploying.
+| Retired server | Retained PVCs | Retained Secret |
+|---|---|---|
+| BYOS FastAPI | `byos-fastapi` | `byos-fastapi-trial` |
+| BYOS Django | `byos-django` | `byos-django-trial` |
+| BYOS Phoenix | `byos-phoenix-data`, `byos-phoenix-generated` | `byos-phoenix-trial` |
+| Node Lite | None | `node-lite-trial` |
 
-These implementations differ substantially. Django uses its native admin interface and upstream renders at 800×480. Phoenix stores devices in SQLite and generates screens from Elixir modules; the packaging supplies browser/image tools, renders its screen URL through loopback, and leaves its external image URLs on HTTPS. The upstream application runs its migrations on startup. FastAPI has a minimal UI and plugin-driven image generation. Neither FastAPI nor Phoenix adds an application login, so private network access is the access boundary.
-
-Node Lite has no management UI, playlists or database. Upstream ships BYOS disabled as a source constant; the trial packaging enables the existing BYOS code through an environment variable, sets the timezone from `TZ`, and disables cloud firmware updates. It still permits only one MAC address and uses a single rendered screen. The configured MAC is the synthetic test address `02:00:00:00:00:08`; replace `BYOS_DEVICE_MAC` in the encrypted Node Lite Secret with the physical device's actual `ID` header before enrollment. Node Lite is limited to 800×480: upstream hardcodes the layout and BMP conversion dimensions, so changing only the browser viewport is insufficient. The trial also removes its startup log of the authenticated image URL. Its authenticated image endpoint is `/image?secret_key=<SECRET_KEY>`; the custom-device endpoints are `/api/setup` and `/api/display` with the configured `ID` and `Access-Token` headers. Retrieve `SECRET_KEY`, `BYOS_DEVICE_ACCESS_TOKEN` or `BYOS_DEVICE_MAC` with the same exact-key Secret command used above; avoid putting authenticated URLs into shared logs.
-
-The FastAPI, Django and Phoenix implementations are marked unmaintained in the upstream BYOS matrix. They remain included for this trial so their actual behavior and limitations can inform the choice. Custom firmware and panel dimensions are still needed before claiming hardware compatibility.
+The removed manifests, builder and image digests remain available in Git at [the initial deployment revision](https://github.com/kelchm/home-lab/tree/f8687927e4f648ae818ce9b9f035a2dcda676d0b). Restoring a retired server requires restoring its configuration and checking compatibility with its retained data. Deleting retained PVCs or Secrets is a separate decision; retirement does not erase trial data.
 
 ## Check and stop trials
 
@@ -101,10 +84,8 @@ After the owner chooses a winner, export useful settings/images, then remove unw
 
 ## Verification record
 
-On 2026-11-01, all eight HelmReleases and Deployments became Ready in `trmnl-trials`; all eight HTTPRoutes were accepted with resolved backend references. Every trial URL in the table served its expected page over HTTPS (Node Lite serves an intentionally empty root). Deployment was initially staged from this branch for live acceptance; the PR records the GitOps adoption revision.
+The initial eight-server deployment was adopted by Flux on 2026-11-01 at `f8687927e4f648ae818ce9b9f035a2dcda676d0b`. All eight releases and private routes were healthy. Synthetic device setup/display/image requests succeeded through HTTPS for Terminus and Inker (800×480 PNG) and the four subsequently retired experimental servers (800×480 BMP). Those results established basic protocol and rendering behavior, rather than project maturity or physical-board compatibility.
 
-Synthetic device setup/display/image requests succeeded through HTTPS for Terminus and Inker (800×480 PNG) and FastAPI, Django, Phoenix and Node Lite (800×480 BMP). Node Lite returned a 1-bit BMP. Django generated a screen through Firefox/ImageMagick and served it through the slashless firmware API; Phoenix generated its Hello World screen through Chromium/ImageMagick and served it through its device API. Synthetic device MACs use `02:00:00:00:00:01`, `:03`, `:05`, `:06`, `:07`, and `:08`, respectively; these are trial data, not registered physical boards.
+For the remaining candidates, Terminus and Inker have synthetic devices at `02:00:00:00:00:01` and `02:00:00:00:00:03`. Next.js initialized all 21 migrations and seeded 11 built-in recipes. Its first administrator and LaraPaper's first user are left for the owner to register; their owned-device flows still need acceptance after account setup. The stock-firmware guard was checked in the Next.js container, and Terminus setup/display returned firmware update/reset flags false. Private-LAN and shared admin Gateway HTTPS connection attempts from a trial pod were blocked.
 
-Next.js initialized all 21 migrations through its own setup action, restarted with the database wait, and seeded 11 built-in recipes. Its first administrator and LaraPaper's first user are left for the owner to register. Those two owned-device flows still need acceptance after account setup. The stock-firmware guard was checked in the Next.js container, and Terminus setup/display returned firmware update/reset flags false. Private-LAN and shared admin Gateway HTTPS connection attempts from a trial pod were blocked. All four custom image digests were anonymously pullable, and no registry pull credential remains in the manifests or namespace.
-
-The eight charts passed rendering and Kubernetes API dry-run validation; Flate passed all 185 resources, and local documentation links and SOPS encryption checks passed. Physical-board acceptance, custom panel/firmware compatibility, and any necessary IoT VLAN access remain open in #1219. The completed server rollout does not imply that a physical board has been enrolled.
+Physical-board acceptance, custom panel/firmware compatibility, and any necessary IoT VLAN access remain open in #1219. The completed server rollout does not imply that a physical board has been enrolled.
