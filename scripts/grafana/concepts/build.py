@@ -77,7 +77,7 @@ CONCEPTS = {
     # Round three: palettes built as sets. Cool colours mean fine and warm ones need attention; the second is the owner's editor theme without its purple; the third is
     # one complementary pair at matched lightness and strength.
     # Round four: Apple's dark-mode system colours, a set designed to stay vivid together on dark surfaces, at full strength.
-    "system": dict(family("System colours", "#0A84FF", "#FF9F0A", "#30D158", "#FFD60A", "#FF453A", "#64D2FF", "#0A5BB5"), fill=32, bars=90, ribbon=True, tile_calm="#0A84FF"),
+    "system": dict(family("System colours", "#0A84FF", "#FF9F0A", "#30D158", "#FFD60A", "#FF453A", "#64D2FF", "#0A5BB5"), fill=32, bars=90, ribbon=True, tile_calm="#0A84FF", transparent=False),
     "cool-warm": family("Cool and warm", "#4DA6FF", "#5EEAD4", "#2DD4BF", "#FFB454", "#FF6B5E", "#9CCBFF", "#1E5FA3"),
     "editor": family("Your editor", "#61AFEF", "#E5C07B", "#98C379", "#D19A66", "#E06C75", "#A6D2F5", "#2F5F8A"),
     "complement": family("Blue and orange", "#58A8F8", "#F5A35C", "#5AD29A", "#F2D264", "#F2757A", "#A3CFFB", "#27629C"),

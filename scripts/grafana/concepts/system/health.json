@@ -912,8 +912,7 @@
      "mode": "multi",
      "sort": "desc"
     }
-   },
-   "transparent": true
+   }
   },
   {
    "id": 8,
@@ -1151,8 +1150,7 @@
      "mode": "multi",
      "sort": "desc"
     }
-   },
-   "transparent": true
+   }
   },
   {
    "id": 15,
@@ -1410,8 +1408,7 @@
      "mode": "multi",
      "sort": "desc"
     }
-   },
-   "transparent": true
+   }
   },
   {
    "id": 102,
@@ -1709,8 +1706,7 @@
      "mode": "multi",
      "sort": "desc"
     }
-   },
-   "transparent": true
+   }
   },
   {
    "id": 17,
@@ -1922,8 +1918,7 @@
      "mode": "multi",
      "sort": "desc"
     }
-   },
-   "transparent": true
+   }
   },
   {
    "id": 12,
@@ -2097,8 +2092,7 @@
      "mode": "multi",
      "sort": "desc"
     }
-   },
-   "transparent": true
+   }
   },
   {
    "id": 103,
@@ -2318,8 +2312,7 @@
      "mode": "multi",
      "sort": "desc"
     }
-   },
-   "transparent": true
+   }
   },
   {
    "id": 9,
@@ -2459,8 +2452,7 @@
      "mode": "multi",
      "sort": "desc"
     }
-   },
-   "transparent": true
+   }
   }
  ],
  "templating": {
