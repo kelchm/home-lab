@@ -213,14 +213,14 @@ spec:
             summary: The inference engine on {{ $labels.instance }} has stopped serving {{ $labels.model }}
             description: 'The engine reports a fault that stops it serving. Read the first cause from /health on port 8888 of {{ $labels.instance }}, then restart the model with SparkRun.'
 
-        # Tokens stop arriving only if every decoding stream has stopped: a long prefill
-        # holds no stream in the decoding state.
+        # Three minutes of unbroken decoding with no new token. The window sits in the
+        # expression, not in `for`, so a stream that has only just started does not count.
+        # A long prefill holds no stream in the decoding state.
         - alert: InferenceEngineStalled
           expr: |
-            sum by (instance, platform, model) (tensorfold_health:streams{job="spark-inference", state="decoding"}) > 0
+            min_over_time((sum by (instance, platform, model) (tensorfold_health:streams{job="spark-inference", state="decoding"}))[3m:15s]) > 0
             and
-            sum by (instance, platform, model) (increase(tensorfold_health:completion_tokens_total{job="spark-inference"}[2m])) == 0
-          for: 1m
+            sum by (instance, platform, model) (increase(tensorfold_health:completion_tokens_total{job="spark-inference"}[3m])) == 0
           labels:
             severity: warning
           annotations:

@@ -769,6 +769,41 @@ tests:
           summary: The inference engine on spark-1 has stopped writing tokens
           description: A stream has been decoding GLM-5.3-Flash for three minutes with no new tokens. Check iteration_s in /health on port 8888 of spark-1 and the RoCE link, then restart the model with SparkRun if it does not recover.
 
+  - name: A stream that has only just started decoding is given three minutes
+    interval: 1m
+    input_series:
+    - series: tensorfold_health:streams{instance="spark-1",platform="spark",job="spark-inference",model="GLM-5.3-Flash",state="decoding"}
+      values: 0x5 1x10
+    - series: tensorfold_health:completion_tokens_total{instance="spark-1",platform="spark",job="spark-inference",model="GLM-5.3-Flash"}
+      values: 500x15
+    alert_rule_test:
+    - eval_time: 8m
+      alertname: InferenceEngineStalled
+      exp_alerts: []
+    - eval_time: 10m
+      alertname: InferenceEngineStalled
+      exp_alerts:
+      - exp_labels:
+          instance: spark-1
+          platform: spark
+          model: GLM-5.3-Flash
+          severity: warning
+        exp_annotations:
+          summary: The inference engine on spark-1 has stopped writing tokens
+          description: A stream has been decoding GLM-5.3-Flash for three minutes with no new tokens. Check iteration_s in /health on port 8888 of spark-1 and the RoCE link, then restart the model with SparkRun if it does not recover.
+
+  - name: A pause restarts the three minutes
+    interval: 1m
+    input_series:
+    - series: tensorfold_health:streams{instance="spark-1",platform="spark",job="spark-inference",model="GLM-5.3-Flash",state="decoding"}
+      values: 1x5 0 1x10
+    - series: tensorfold_health:completion_tokens_total{instance="spark-1",platform="spark",job="spark-inference",model="GLM-5.3-Flash"}
+      values: 500x16
+    alert_rule_test:
+    - eval_time: 8m
+      alertname: InferenceEngineStalled
+      exp_alerts: []
+
   - name: A long prefill with nothing decoding is not a stall
     interval: 1m
     input_series:
