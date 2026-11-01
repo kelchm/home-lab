@@ -226,9 +226,9 @@ setuptools==80.0.0 ; python_version >= '3.9' \
 sqlparse==0.5.3 ; python_version >= '3.8' \
     --hash=sha256:09f67787f56a0b16ecdbde1bfc7f5d9c3371ca683cfeaa8e6ff60b4807ec9272 \
     --hash=sha256:cf2196ed3418f3ba5de6af7e82c694a9fbdbfecccdfc72e281548517081f16ca
-twisted==24.11.0 ; python_full_version >= '3.8.0' \
-    --hash=sha256:695d0556d5ec579dcc464d2856b634880ed1319f45b10d19043f2b57eb0115b5 \
-    --hash=sha256:fe403076c71f04d5d2d789a755b687c5637ec3bcd3b2b8252d76f2ba65f54261
+Twisted==26.10.0; python_full_version >= '3.8.0' \
+    --hash=sha256:3732f42af218925a0fe78d6668db55853f7fb532245a89a2669babe7d3000fa8 \
+    --hash=sha256:5f0355403e507fc23ceea85e9dbb4bc59335aabde41dd324e8b8cea180dd38de
 txaio==23.1.1 ; python_version >= '3.7' \
     --hash=sha256:aaea42f8aad50e0ecfb976130ada140797e9dcb85fad2cf72b0f37f8cefcb490 \
     --hash=sha256:f9a9216e976e5e3246dfd112ad7ad55ca915606b60b84a757ac769bd404ff704
