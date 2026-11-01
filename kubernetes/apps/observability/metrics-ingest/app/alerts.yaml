@@ -191,6 +191,42 @@ spec:
             summary: GPU on {{ $labels.instance }} is thermally throttled
             description: 'The GPU on {{ $labels.instance }} has been slowing its clocks for heat for five minutes. Check the Spark''s airflow and its workload.'
 
+        # node-exporter does not report trip points: every ACPI thermal zone on a Spark
+        # has a critical trip point of 104.8 °C, and this is 5 °C under it.
+        - alert: NodeBoardTemperatureCritical
+          expr: max by (instance, platform) (node_thermal_zone_temp{job="spark-node"}) > 99.8
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: The board in {{ $labels.instance }} is at {{ $value | humanize }} °C
+            description: 'The hottest thermal zone on {{ $labels.instance }} has been within 5 °C of its 104.8 °C critical trip point for five minutes. Check the Spark''s airflow and the cabinet temperature, and reduce its workload.'
+
+        # Inference is started by hand and nothing depends on it overnight, so these two
+        # warn. Neither fires while a model loads, when the engine reports nothing.
+        - alert: InferenceEngineBroken
+          expr: max by (instance, platform, model) (tensorfold_health:ok{job="spark-inference"}) == 0
+          for: 1m
+          labels:
+            severity: warning
+          annotations:
+            summary: The inference engine on {{ $labels.instance }} has stopped serving {{ $labels.model }}
+            description: 'The engine reports a fault that stops it serving. Read the first cause from /health on port 8888 of {{ $labels.instance }}, then restart the model with SparkRun.'
+
+        # Tokens stop arriving only if every decoding stream has stopped: a long prefill
+        # holds no stream in the decoding state.
+        - alert: InferenceEngineStalled
+          expr: |
+            sum by (instance, platform, model) (tensorfold_health:streams{job="spark-inference", state="decoding"}) > 0
+            and
+            sum by (instance, platform, model) (increase(tensorfold_health:completion_tokens_total{job="spark-inference"}[2m])) == 0
+          for: 1m
+          labels:
+            severity: warning
+          annotations:
+            summary: The inference engine on {{ $labels.instance }} has stopped writing tokens
+            description: 'A stream has been decoding {{ $labels.model }} for three minutes with no new tokens. Check iteration_s in /health on port 8888 of {{ $labels.instance }} and the RoCE link, then restart the model with SparkRun if it does not recover.'
+
         - alert: NodeMetricsDropped
           expr: increase(vm_persistentqueue_bytes_dropped_total{job=~"(pve|spark|synology|pi)-vmagent"}[15m]) > 0
           labels:
