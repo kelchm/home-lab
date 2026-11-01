@@ -73,7 +73,7 @@
        },
        {
         "value": 4294967296,
-        "color": "#3ECF8E"
+        "color": "#6CA6E0"
        }
       ]
      },
@@ -193,7 +193,7 @@
     ]
    },
    "options": {
-    "colorMode": "value",
+    "colorMode": "none",
     "graphMode": "area",
     "justifyMode": "auto",
     "orientation": "auto",
@@ -260,7 +260,7 @@
       "steps": [
        {
         "value": null,
-        "color": "#3ECF8E"
+        "color": "#6CA6E0"
        },
        {
         "value": 95,
@@ -388,7 +388,7 @@
     ]
    },
    "options": {
-    "colorMode": "value",
+    "colorMode": "none",
     "graphMode": "area",
     "justifyMode": "auto",
     "orientation": "auto",
@@ -454,7 +454,7 @@
       "mode": "absolute",
       "steps": [
        {
-        "color": "text",
+        "color": "#6CA6E0",
         "value": null
        },
        {
@@ -467,13 +467,15 @@
        }
       ]
      },
-     "displayName": "Disk · ${__field.labels.instance}"
+     "displayName": "Disk · ${__field.labels.instance}",
+     "min": 0,
+     "max": 1.6
     },
     "overrides": []
    },
    "options": {
-    "colorMode": "value",
-    "graphMode": "none",
+    "colorMode": "none",
+    "graphMode": "area",
     "justifyMode": "auto",
     "orientation": "auto",
     "percentChangeColorMode": "standard",
@@ -548,7 +550,7 @@
       "mode": "absolute",
       "steps": [
        {
-        "color": "text",
+        "color": "#6CA6E0",
         "value": null
        },
        {
@@ -562,8 +564,8 @@
     "overrides": []
    },
    "options": {
-    "colorMode": "value",
-    "graphMode": "none",
+    "colorMode": "none",
+    "graphMode": "area",
     "justifyMode": "auto",
     "orientation": "auto",
     "percentChangeColorMode": "standard",
@@ -638,7 +640,7 @@
       "mode": "absolute",
       "steps": [
        {
-        "color": "text",
+        "color": "#6CA6E0",
         "value": null
        },
        {
@@ -652,8 +654,8 @@
     "overrides": []
    },
    "options": {
-    "colorMode": "value",
-    "graphMode": "none",
+    "colorMode": "none",
+    "graphMode": "area",
     "justifyMode": "auto",
     "orientation": "auto",
     "percentChangeColorMode": "standard",
@@ -721,7 +723,7 @@
    "fieldConfig": {
     "defaults": {
      "color": {
-      "mode": "thresholds"
+      "mode": "palette-classic"
      },
      "unit": "celsius",
      "noValue": "No data",
@@ -730,16 +732,8 @@
       "mode": "absolute",
       "steps": [
        {
-        "value": null,
-        "color": "#3ECF8E"
-       },
-       {
-        "value": 75,
-        "color": "#F5A524"
-       },
-       {
-        "value": 85,
-        "color": "#FF6B6B"
+        "color": "green",
+        "value": null
        }
       ]
      },
@@ -755,7 +749,7 @@
       "axisLabel": "",
       "axisPlacement": "auto",
       "barAlignment": 0,
-      "gradientMode": "scheme",
+      "gradientMode": "opacity",
       "hideFrom": {
        "legend": false,
        "tooltip": false,
@@ -785,27 +779,8 @@
        {
         "id": "color",
         "value": {
-         "mode": "thresholds"
-        }
-       },
-       {
-        "id": "thresholds",
-        "value": {
-         "mode": "absolute",
-         "steps": [
-          {
-           "value": null,
-           "color": "#2DD4BF"
-          },
-          {
-           "value": 75,
-           "color": "#F5A524"
-          },
-          {
-           "value": 85,
-           "color": "#FF6B6B"
-          }
-         ]
+         "fixedColor": "#2DD4BF",
+         "mode": "fixed"
         }
        }
       ]
@@ -819,27 +794,8 @@
        {
         "id": "color",
         "value": {
-         "mode": "thresholds"
-        }
-       },
-       {
-        "id": "thresholds",
-        "value": {
-         "mode": "absolute",
-         "steps": [
-          {
-           "value": null,
-           "color": "#A78BFA"
-          },
-          {
-           "value": 75,
-           "color": "#F5A524"
-          },
-          {
-           "value": 85,
-           "color": "#FF6B6B"
-          }
-         ]
+         "fixedColor": "#A78BFA",
+         "mode": "fixed"
         }
        }
       ]
@@ -892,10 +848,6 @@
        {
         "id": "custom.spanNulls",
         "value": true
-       },
-       {
-        "id": "custom.gradientMode",
-        "value": "none"
        }
       ]
      },
@@ -948,6 +900,57 @@
         "value": false
        }
       ]
+     },
+     {
+      "matcher": {
+       "id": "byFrameRefID",
+       "options": "W"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "Over 75 °C"
+       },
+       {
+        "id": "unit",
+        "value": "bool_on_off"
+       },
+       {
+        "id": "min",
+        "value": 0
+       },
+       {
+        "id": "max",
+        "value": 1
+       },
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#F5A524",
+         "mode": "fixed"
+        }
+       },
+       {
+        "id": "custom.axisPlacement",
+        "value": "hidden"
+       },
+       {
+        "id": "custom.lineInterpolation",
+        "value": "stepAfter"
+       },
+       {
+        "id": "custom.lineWidth",
+        "value": 0
+       },
+       {
+        "id": "custom.fillOpacity",
+        "value": 14
+       },
+       {
+        "id": "custom.spanNulls",
+        "value": true
+       }
+      ]
      }
     ]
    },
@@ -976,6 +979,19 @@
      "expr": "max(max_over_time({__name__=~\"nvidia_smi_clocks_event_reasons_(hw|sw)_thermal_slowdown\",job=\"spark-gpu\",platform=\"spark\",instance=~\"$node\"}[$__rate_interval]))",
      "legendFormat": "Slowed for heat",
      "refId": "B",
+     "range": true,
+     "instant": false,
+     "interval": "5s"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "max(max by (instance) (max_over_time(nvidia_smi_temperature_gpu{job=\"spark-gpu\",platform=\"spark\",instance=~\"$node\"}[$__rate_interval]))) > bool 75",
+     "legendFormat": "Over 75 °C",
+     "refId": "W",
      "range": true,
      "instant": false,
      "interval": "5s"
@@ -1409,6 +1425,22 @@
         "value": false
        }
       ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/ · max$/"
+      },
+      "properties": [
+       {
+        "id": "custom.hideFrom",
+        "value": {
+         "tooltip": true,
+         "viz": true,
+         "legend": true
+        }
+       }
+      ]
      }
     ]
    },
@@ -1500,7 +1532,8 @@
    "fieldConfig": {
     "defaults": {
      "color": {
-      "mode": "thresholds"
+      "fixedColor": "#6CA6E0",
+      "mode": "fixed"
      },
      "unit": "bytes",
      "noValue": "No data",
@@ -1509,16 +1542,16 @@
       "mode": "absolute",
       "steps": [
        {
-        "value": null,
-        "color": "#FF6B6B"
+        "color": "green",
+        "value": null
        },
        {
-        "value": 2147483648,
-        "color": "#F5A524"
+        "color": "#FF6B6B",
+        "value": 2147483648
        },
        {
-        "value": 4294967296,
-        "color": "#3ECF8E"
+        "color": "#F5A524",
+        "value": 8589934592
        }
       ]
      },
@@ -1534,7 +1567,7 @@
       "axisLabel": "",
       "axisPlacement": "auto",
       "barAlignment": 0,
-      "gradientMode": "scheme",
+      "gradientMode": "opacity",
       "hideFrom": {
        "legend": false,
        "tooltip": false,
@@ -1565,27 +1598,8 @@
        {
         "id": "color",
         "value": {
-         "mode": "thresholds"
-        }
-       },
-       {
-        "id": "thresholds",
-        "value": {
-         "mode": "absolute",
-         "steps": [
-          {
-           "value": null,
-           "color": "#FF6B6B"
-          },
-          {
-           "value": 2147483648,
-           "color": "#F5A524"
-          },
-          {
-           "value": 4294967296,
-           "color": "#2DD4BF"
-          }
-         ]
+         "fixedColor": "#2DD4BF",
+         "mode": "fixed"
         }
        }
       ]
@@ -1599,27 +1613,8 @@
        {
         "id": "color",
         "value": {
-         "mode": "thresholds"
-        }
-       },
-       {
-        "id": "thresholds",
-        "value": {
-         "mode": "absolute",
-         "steps": [
-          {
-           "value": null,
-           "color": "#FF6B6B"
-          },
-          {
-           "value": 2147483648,
-           "color": "#F5A524"
-          },
-          {
-           "value": 4294967296,
-           "color": "#A78BFA"
-          }
-         ]
+         "fixedColor": "#A78BFA",
+         "mode": "fixed"
         }
        }
       ]
@@ -1672,10 +1667,6 @@
        {
         "id": "custom.spanNulls",
         "value": true
-       },
-       {
-        "id": "custom.gradientMode",
-        "value": "none"
        }
       ]
      },
@@ -1688,6 +1679,57 @@
        {
         "id": "custom.axisGridShow",
         "value": false
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byFrameRefID",
+       "options": "W"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "Under 4 GiB"
+       },
+       {
+        "id": "unit",
+        "value": "bool_on_off"
+       },
+       {
+        "id": "min",
+        "value": 0
+       },
+       {
+        "id": "max",
+        "value": 1
+       },
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#F5A524",
+         "mode": "fixed"
+        }
+       },
+       {
+        "id": "custom.axisPlacement",
+        "value": "hidden"
+       },
+       {
+        "id": "custom.lineInterpolation",
+        "value": "stepAfter"
+       },
+       {
+        "id": "custom.lineWidth",
+        "value": 0
+       },
+       {
+        "id": "custom.fillOpacity",
+        "value": 14
+       },
+       {
+        "id": "custom.spanNulls",
+        "value": true
        }
       ]
      }
@@ -1718,6 +1760,19 @@
      "expr": "max(rate(node_pressure_memory_stalled_seconds_total{job=\"spark-node\",platform=\"spark\",instance=~\"$node\"}[5m])) > bool 0.10",
      "legendFormat": "Memory stalled",
      "refId": "B",
+     "range": true,
+     "instant": false,
+     "interval": "15s"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "min(node_memory_MemAvailable_bytes{job=\"spark-node\",platform=\"spark\",instance=~\"$node\"}) < bool 4294967296",
+     "legendFormat": "Under 4 GiB",
+     "refId": "W",
      "range": true,
      "instant": false,
      "interval": "15s"
@@ -1755,7 +1810,7 @@
    "fieldConfig": {
     "defaults": {
      "color": {
-      "mode": "thresholds"
+      "mode": "palette-classic"
      },
      "unit": "celsius",
      "noValue": "No data",
@@ -1764,16 +1819,12 @@
       "mode": "absolute",
       "steps": [
        {
-        "value": null,
-        "color": "#3ECF8E"
+        "color": "green",
+        "value": null
        },
        {
-        "value": 95,
-        "color": "#F5A524"
-       },
-       {
-        "value": 99.8,
-        "color": "#FF6B6B"
+        "color": "#FF6B6B",
+        "value": 104.8
        }
       ]
      },
@@ -1789,7 +1840,7 @@
       "axisLabel": "",
       "axisPlacement": "auto",
       "barAlignment": 0,
-      "gradientMode": "scheme",
+      "gradientMode": "opacity",
       "hideFrom": {
        "legend": false,
        "tooltip": false,
@@ -1808,8 +1859,7 @@
       "axisBorderShow": false
      },
      "decimals": 0,
-     "min": 30,
-     "max": 110
+     "min": 30
     },
     "overrides": [
      {
@@ -1821,27 +1871,8 @@
        {
         "id": "color",
         "value": {
-         "mode": "thresholds"
-        }
-       },
-       {
-        "id": "thresholds",
-        "value": {
-         "mode": "absolute",
-         "steps": [
-          {
-           "value": null,
-           "color": "#2DD4BF"
-          },
-          {
-           "value": 95,
-           "color": "#F5A524"
-          },
-          {
-           "value": 99.8,
-           "color": "#FF6B6B"
-          }
-         ]
+         "fixedColor": "#2DD4BF",
+         "mode": "fixed"
         }
        }
       ]
@@ -1855,27 +1886,8 @@
        {
         "id": "color",
         "value": {
-         "mode": "thresholds"
-        }
-       },
-       {
-        "id": "thresholds",
-        "value": {
-         "mode": "absolute",
-         "steps": [
-          {
-           "value": null,
-           "color": "#A78BFA"
-          },
-          {
-           "value": 95,
-           "color": "#F5A524"
-          },
-          {
-           "value": 99.8,
-           "color": "#FF6B6B"
-          }
-         ]
+         "fixedColor": "#A78BFA",
+         "mode": "fixed"
         }
        }
       ]
@@ -1889,6 +1901,57 @@
        {
         "id": "custom.axisGridShow",
         "value": false
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byFrameRefID",
+       "options": "W"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "Over 95 °C"
+       },
+       {
+        "id": "unit",
+        "value": "bool_on_off"
+       },
+       {
+        "id": "min",
+        "value": 0
+       },
+       {
+        "id": "max",
+        "value": 1
+       },
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#F5A524",
+         "mode": "fixed"
+        }
+       },
+       {
+        "id": "custom.axisPlacement",
+        "value": "hidden"
+       },
+       {
+        "id": "custom.lineInterpolation",
+        "value": "stepAfter"
+       },
+       {
+        "id": "custom.lineWidth",
+        "value": 0
+       },
+       {
+        "id": "custom.fillOpacity",
+        "value": 14
+       },
+       {
+        "id": "custom.spanNulls",
+        "value": true
        }
       ]
      }
@@ -1906,6 +1969,19 @@
      "expr": "max by (instance) (max_over_time(node_thermal_zone_temp{job=\"spark-node\",platform=\"spark\",instance=~\"$node\"}[$__rate_interval]))",
      "legendFormat": "{{instance}}",
      "refId": "A",
+     "range": true,
+     "instant": false,
+     "interval": "15s"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "max(max by (instance) (max_over_time(node_thermal_zone_temp{job=\"spark-node\",platform=\"spark\",instance=~\"$node\"}[$__rate_interval]))) > bool 95",
+     "legendFormat": "Over 95 °C",
+     "refId": "W",
      "range": true,
      "instant": false,
      "interval": "15s"
@@ -1943,7 +2019,7 @@
    "fieldConfig": {
     "defaults": {
      "color": {
-      "mode": "thresholds"
+      "mode": "palette-classic"
      },
      "unit": "celsius",
      "noValue": "No data",
@@ -1952,16 +2028,8 @@
       "mode": "absolute",
       "steps": [
        {
-        "value": null,
-        "color": "#3ECF8E"
-       },
-       {
-        "value": 75,
-        "color": "#F5A524"
-       },
-       {
-        "value": 85,
-        "color": "#FF6B6B"
+        "color": "green",
+        "value": null
        }
       ]
      },
@@ -1977,7 +2045,7 @@
       "axisLabel": "",
       "axisPlacement": "auto",
       "barAlignment": 0,
-      "gradientMode": "scheme",
+      "gradientMode": "opacity",
       "hideFrom": {
        "legend": false,
        "tooltip": false,
@@ -2007,27 +2075,8 @@
        {
         "id": "color",
         "value": {
-         "mode": "thresholds"
-        }
-       },
-       {
-        "id": "thresholds",
-        "value": {
-         "mode": "absolute",
-         "steps": [
-          {
-           "value": null,
-           "color": "#2DD4BF"
-          },
-          {
-           "value": 75,
-           "color": "#F5A524"
-          },
-          {
-           "value": 85,
-           "color": "#FF6B6B"
-          }
-         ]
+         "fixedColor": "#2DD4BF",
+         "mode": "fixed"
         }
        }
       ]
@@ -2041,27 +2090,8 @@
        {
         "id": "color",
         "value": {
-         "mode": "thresholds"
-        }
-       },
-       {
-        "id": "thresholds",
-        "value": {
-         "mode": "absolute",
-         "steps": [
-          {
-           "value": null,
-           "color": "#A78BFA"
-          },
-          {
-           "value": 75,
-           "color": "#F5A524"
-          },
-          {
-           "value": 85,
-           "color": "#FF6B6B"
-          }
-         ]
+         "fixedColor": "#A78BFA",
+         "mode": "fixed"
         }
        }
       ]
@@ -2426,8 +2456,7 @@
       "axisBorderShow": false
      },
      "decimals": 0,
-     "min": 0,
-     "max": 1
+     "min": 0
     },
     "overrides": [
      {

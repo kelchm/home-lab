@@ -64,7 +64,7 @@ CONCEPTS = {
     # Quantities have no good or bad, so they take the information blue. A judged value has a limit, some from the alert rules and some still placeholders, and its line changes colour as it crosses one.
     "colour-judges": dict(RULE, title="Colour judges", calm=INFO, calm1="#9CC4F0", calm2="#5B86BC", spark1="#9CC4F0", spark2="#5B86BC"),
     "traffic-light": dict(RULE, title="Traffic light", calm="#3ECF8E", calm1="#3ECF8E", calm2="#A7F3D0", spark1="#9CC4F0", spark2="#5B86BC"),
-    "machines": dict(RULE, title="Machines and condition", calm="#3ECF8E", calm1="#2DD4BF", calm2="#A78BFA", spark1="#2DD4BF", spark2="#A78BFA"),
+    "machines": dict(RULE, title="Machines and condition", refined=True, calm=INFO, calm1="#2DD4BF", calm2="#A78BFA", spark1="#2DD4BF", spark2="#A78BFA"),
 }
 
 INFERENCE = {4: "load", 3: "speed", 34: "speed", 26: "cache", 21: "memory", 35: "context"}
@@ -204,6 +204,48 @@ def judge(p, c, spec):
     by_series(fc, c, spec, unit)
 
 
+# Two reviews of the machines concept: a line keeps its machine's colour, so a limit crossed by either machine is a band, as a state already is. Green is left to
+# plain statements of health, and every tile takes the same form.
+WATCH = {7: ("Over 75 °C", "max({a}) > bool 75"), 17: ("Over 95 °C", "max({a}) > bool 95"), 10: ("Under 4 GiB", f"min({{a}}) < bool {4 * GIB}")}
+
+
+def refine(d, c, kind):
+    panels = {p["id"]: p for p in d["panels"]}
+    if kind == "inference":
+        chart = panels[33]
+        shrink, chart["gridPos"]["h"] = chart["gridPos"]["h"] - 6, 6
+        for p in d["panels"]:
+            if p["gridPos"]["y"] > chart["gridPos"]["y"]:
+                p["gridPos"]["y"] -= shrink
+        for id_, name in ((34, "Reply speed · 5m"), (26, "Cache hits · 15m")):
+            panels[id_]["fieldConfig"]["defaults"]["displayName"] = name
+        panels[20]["options"]["graphMode"] = "area"
+        panels[20]["fieldConfig"]["defaults"].update(min=0, max=4)
+    else:
+        band = next(o for o in panels[7]["fieldConfig"]["overrides"] if o["matcher"] == {"id": "byFrameRefID", "options": "B"})
+        for id_, (name, expr) in WATCH.items():
+            p = panels[id_]
+            a = p["targets"][0]
+            p["targets"].append({**a, "refId": "W", "legendFormat": name, "expr": expr.format(a=a["expr"])})
+            o = json.loads(json.dumps(band).replace("Slowed for heat", name))
+            o["matcher"]["options"] = "W"
+            next(x for x in o["properties"] if x["id"] == "color")["value"] = fixed(c["warn"])
+            p["fieldConfig"]["overrides"].append(o)
+            p["fieldConfig"]["defaults"].pop("max", None)
+            p["fieldConfig"]["defaults"]["custom"]["thresholdsStyle"] = {"mode": "off"}
+        panels[9]["fieldConfig"]["defaults"].pop("max", None)
+        panels[15]["fieldConfig"]["overrides"].append({"matcher": {"id": "byRegexp", "options": "/ · max$/"}, "properties": [{"id": "custom.hideFrom", "value": {"tooltip": True, "viz": True, "legend": True}}]})
+        panels[3]["fieldConfig"]["defaults"].update(min=0, max=1.6)
+        for id_ in (3, 4, 6):
+            panels[id_]["options"].update(graphMode="area", colorMode="none")
+            for step in panels[id_]["fieldConfig"]["defaults"]["thresholds"]["steps"]:
+                if step["color"] == "text":
+                    step["color"] = INFO
+    for p in d["panels"]:
+        if p["type"] == "stat" and p["id"] in (JUDGED_TILES[kind] | INFERENCE if kind == "inference" else JUDGED_TILES[kind]):
+            p["options"]["colorMode"] = "none"
+
+
 TWO_MACHINES = (7, 8, 15, 10, 17, 12, 30, 9)
 BARS = (23, 10)
 
@@ -217,7 +259,7 @@ def drawn(p, c, health):
     if health and p["id"] in TWO_MACHINES:
         custom["fillOpacity"] = 0
     if not health and p["id"] in BARS:
-        custom.update(drawStyle="bars", barAlignment=0, barWidthFactor=0.8, lineWidth=0, fillOpacity=30, gradientMode="none")
+        custom.update(drawStyle="bars", barAlignment=0, barWidthFactor=0.8, lineWidth=0, fillOpacity=18 if c.get("refined") else 30, gradientMode="none")
         fc["defaults"]["color"] = fixed(c["speed"] if p["id"] == 23 else c["load"])
     if not health and p["id"] == 7:
         for o in fc["overrides"]:
@@ -288,6 +330,8 @@ def concept(file, roles, c, uid, title):
         kind = "inference" if file.startswith("spark-tensorfold") else "health"
         for p in d["panels"]:
             spec = JUDGED_TILES[kind].get(p["id"]) if p["type"] == "stat" else JUDGED[kind].get(p["id"]) if p["type"] == "timeseries" else None
+            if c.get("refined") and kind == "health" and p["type"] == "timeseries":
+                spec = None
             if spec:
                 judge(p, c, spec)
         if kind == "health":   # a power-cap flag is ordinary operation here, so it is a fact rather than a warning
@@ -295,6 +339,8 @@ def concept(file, roles, c, uid, title):
                 for x in o["properties"]:
                     if x["id"] == "color" and x["value"].get("fixedColor") == c["warn"]:
                         x["value"] = fixed(c["info"])
+        if c.get("refined"):
+            refine(d, c, kind)
     d.update(uid=uid, title=f"Concept · {c['title']} · {title}", id=None, version=0, editable=True, tags=["concept"], links=[])
     return d
 

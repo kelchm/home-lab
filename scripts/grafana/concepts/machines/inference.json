@@ -156,13 +156,15 @@
        }
       ]
      },
-     "displayName": "Engine"
+     "displayName": "Engine",
+     "min": 0,
+     "max": 4
     },
     "overrides": []
    },
    "options": {
     "colorMode": "value",
-    "graphMode": "none",
+    "graphMode": "area",
     "justifyMode": "auto",
     "orientation": "auto",
     "percentChangeColorMode": "standard",
@@ -422,18 +424,18 @@
        },
        {
         "value": 15,
-        "color": "#3ECF8E"
+        "color": "#6CA6E0"
        }
       ]
      },
-     "displayName": "Reply speed",
+     "displayName": "Reply speed · 5m",
      "min": 0,
      "max": 130
     },
     "overrides": []
    },
    "options": {
-    "colorMode": "value",
+    "colorMode": "none",
     "graphMode": "area",
     "justifyMode": "auto",
     "orientation": "auto",
@@ -510,7 +512,7 @@
       "steps": [
        {
         "value": null,
-        "color": "#3ECF8E"
+        "color": "#6CA6E0"
        },
        {
         "value": 75,
@@ -529,7 +531,7 @@
     "overrides": []
    },
    "options": {
-    "colorMode": "value",
+    "colorMode": "none",
     "graphMode": "area",
     "justifyMode": "auto",
     "orientation": "auto",
@@ -604,18 +606,18 @@
        },
        {
         "value": 0.8,
-        "color": "#3ECF8E"
+        "color": "#6CA6E0"
        }
       ]
      },
-     "displayName": "Cache hits",
+     "displayName": "Cache hits · 15m",
      "min": 0,
      "max": 1.3
     },
     "overrides": []
    },
    "options": {
-    "colorMode": "value",
+    "colorMode": "none",
     "graphMode": "area",
     "justifyMode": "auto",
     "orientation": "auto",
@@ -682,7 +684,7 @@
       "steps": [
        {
         "value": null,
-        "color": "#3ECF8E"
+        "color": "#6CA6E0"
        },
        {
         "value": 0.9,
@@ -701,7 +703,7 @@
     "overrides": []
    },
    "options": {
-    "colorMode": "value",
+    "colorMode": "none",
     "graphMode": "area",
     "justifyMode": "auto",
     "orientation": "auto",
@@ -765,7 +767,7 @@
     "x": 0,
     "y": 7,
     "w": 24,
-    "h": 8
+    "h": 6
    },
    "fieldConfig": {
     "defaults": {
@@ -781,7 +783,7 @@
       "steps": [
        {
         "value": null,
-        "color": "#3ECF8E"
+        "color": "#6CA6E0"
        },
        {
         "value": 750000,
@@ -879,7 +881,7 @@
    "collapsed": false,
    "gridPos": {
     "x": 0,
-    "y": 15,
+    "y": 13,
     "w": 24,
     "h": 1
    },
@@ -896,7 +898,7 @@
    },
    "gridPos": {
     "x": 0,
-    "y": 16,
+    "y": 14,
     "w": 8,
     "h": 8
    },
@@ -1217,7 +1219,7 @@
    },
    "gridPos": {
     "x": 8,
-    "y": 16,
+    "y": 14,
     "w": 8,
     "h": 8
    },
@@ -1242,7 +1244,7 @@
        },
        {
         "value": 15,
-        "color": "#3ECF8E"
+        "color": "#6CA6E0"
        }
       ]
      },
@@ -1472,7 +1474,7 @@
    },
    "gridPos": {
     "x": 16,
-    "y": 16,
+    "y": 14,
     "w": 8,
     "h": 8
    },
@@ -1498,7 +1500,7 @@
       "drawStyle": "bars",
       "lineInterpolation": "smooth",
       "lineWidth": 0,
-      "fillOpacity": 30,
+      "fillOpacity": 18,
       "showPoints": "never",
       "spanNulls": false,
       "axisCenteredZero": false,
@@ -1580,7 +1582,7 @@
    "collapsed": false,
    "gridPos": {
     "x": 0,
-    "y": 24,
+    "y": 22,
     "w": 24,
     "h": 1
    },
@@ -1597,7 +1599,7 @@
    },
    "gridPos": {
     "x": 0,
-    "y": 25,
+    "y": 23,
     "w": 8,
     "h": 8
    },
@@ -1684,7 +1686,7 @@
    },
    "gridPos": {
     "x": 8,
-    "y": 25,
+    "y": 23,
     "w": 8,
     "h": 8
    },
@@ -1771,7 +1773,7 @@
    },
    "gridPos": {
     "x": 16,
-    "y": 25,
+    "y": 23,
     "w": 8,
     "h": 8
    },
@@ -1788,7 +1790,7 @@
       "steps": [
        {
         "value": null,
-        "color": "#3ECF8E"
+        "color": "#6CA6E0"
        },
        {
         "value": 60,
@@ -1927,7 +1929,7 @@
    "collapsed": false,
    "gridPos": {
     "x": 0,
-    "y": 33,
+    "y": 31,
     "w": 24,
     "h": 1
    },
@@ -1944,7 +1946,7 @@
    },
    "gridPos": {
     "x": 0,
-    "y": 34,
+    "y": 32,
     "w": 12,
     "h": 7
    },
@@ -2188,7 +2190,7 @@
    },
    "gridPos": {
     "x": 12,
-    "y": 34,
+    "y": 32,
     "w": 12,
     "h": 7
    },
@@ -2214,7 +2216,7 @@
       "drawStyle": "bars",
       "lineInterpolation": "smooth",
       "lineWidth": 0,
-      "fillOpacity": 30,
+      "fillOpacity": 18,
       "showPoints": "never",
       "spanNulls": false,
       "axisCenteredZero": false,
@@ -2297,7 +2299,7 @@
    "collapsed": false,
    "gridPos": {
     "x": 0,
-    "y": 41,
+    "y": 39,
     "w": 24,
     "h": 1
    },
@@ -2314,7 +2316,7 @@
    },
    "gridPos": {
     "x": 0,
-    "y": 42,
+    "y": 40,
     "w": 12,
     "h": 7
    },
@@ -2495,7 +2497,7 @@
    },
    "gridPos": {
     "x": 12,
-    "y": 42,
+    "y": 40,
     "w": 12,
     "h": 7
    },
@@ -2512,7 +2514,7 @@
       "steps": [
        {
         "value": null,
-        "color": "#3ECF8E"
+        "color": "#6CA6E0"
        },
        {
         "value": 0.9,
@@ -2611,7 +2613,7 @@
    "collapsed": false,
    "gridPos": {
     "x": 0,
-    "y": 49,
+    "y": 47,
     "w": 24,
     "h": 1
    },
@@ -2628,7 +2630,7 @@
    },
    "gridPos": {
     "x": 0,
-    "y": 50,
+    "y": 48,
     "w": 9,
     "h": 7
    },
@@ -2740,7 +2742,7 @@
    },
    "gridPos": {
     "x": 9,
-    "y": 50,
+    "y": 48,
     "w": 9,
     "h": 7
    },
@@ -2848,7 +2850,7 @@
    "title": "Reading this page",
    "gridPos": {
     "x": 18,
-    "y": 50,
+    "y": 48,
     "w": 6,
     "h": 7
    },
