@@ -67,8 +67,10 @@ workload: **host memory is**. Three sessions leave roughly 6 GB available of
 
 ## Monitoring
 
-There is no continuous collection today; these are one-off artifacts. Wiring the Sparks into the cluster's metrics stack would make them the **first out-of-cluster scrape target in this repo** — no `additionalScrapeConfigs`, `ScrapeConfig`, or `Probe` precedent exists. Two things make it straightforward when it is wanted: vmagent runs `selectAllByDefault: true`, so a `VMStaticScrape` is picked up with no chart edit, and the `observability` namespace has no NetworkPolicy restricting egress.
+GPU, board, NVMe and adapter temperatures are collected continuously and shown on **Sparks / GPU and host health**. Board temperature is the hottest ACPI thermal zone (`node_thermal_zone_temp`). Every zone on both Sparks has a critical trip point of 104.8 °C, which node-exporter does not report, so the dashboards hold it as a constant.
 
-Alertmanager now delivers `warning` and `critical` alerts externally. Follow [alerting](runbooks/alerting.md) when adding Spark metrics and rules so the new signal is included in the end-to-end delivery test.
+Real inference has passed the synthetic worst case on the board: 96.7 °C on `spark-1` and 94.8 °C on `spark-2` in the 30 days to 2026-10-31, against about 48 °C idle and 94.8 °C under the August matmul. GPU thermal slowdown stayed at zero on `spark-1`.
 
-The Sparks expose no fan tachometer and no BMC, so anything built has to run on the hosts: `node_exporter` for hwmon and thermal zones, plus something for `nvidia-smi`.
+Alertmanager delivers `warning` and `critical` alerts externally. Follow [alerting](runbooks/alerting.md) when adding Spark metrics and rules so the new signal is included in the end-to-end delivery test.
+
+The Sparks expose no fan tachometer and no BMC, so anything built has to run on the hosts.

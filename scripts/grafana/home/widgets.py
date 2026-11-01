@@ -7,7 +7,7 @@ import json
 import re
 import urllib.parse
 
-from .schema import (BROKEN, FINE, GAUGE, HEADROOM, LOAD, LOOK, NEUTRAL, NODASH, NOTICE, PROBLEM, QUIET, ROOM_TILE, RUNS_OUT, TEXT, TILE_LOAD,
+from .schema import (BROKEN, CLOCK_HUE, FINE, GAUGE, HEADROOM, LOAD, LOAD_HUE, LOOK, NEUTRAL, NODASH, NOTICE, PROBLEM, QUIET, ROOM_TILE, RUNS_OUT, SPEED_HUE, TEXT, TILE_LOAD,
                      ALL, RED, Panels, add_links, fixed, lq, ls, match, q, qvar, th, union, words, yes, zero)
 
 K = 'cluster="k8s-prod"'
@@ -83,16 +83,36 @@ def chip(p, name):
     return f'max by (instance) (node_hwmon_temp_celsius{{platform="{p}"}} * on (instance, chip) group_left node_hwmon_chip_names{{platform="{p}",chip_name="{name}"}})'
 
 
-def machine_cpu(p):
-    return f'100 * (1 - avg by (instance) (rate(node_cpu_seconds_total{{{HOSTS},platform="{p}",mode="idle"}}[5m])))'
+def machine_cpu(p, window="5m"):
+    return f'100 * (1 - avg by (instance) (rate(node_cpu_seconds_total{{{HOSTS},platform="{p}",mode="idle"}}[{window}])))'
+
+
+# A Spark's board usually runs hotter than its GPU, and at its limit the firmware shuts it down rather than slowing it, so its table takes the worse of the two.
+BOARD_CRITICAL = 104.8
+
+
+def board(p):
+    return f'max by (instance) (node_thermal_zone_temp{{platform="{p}",job="spark-node"}})'
+
+
+def spark_gpu(p, metric):
+    return f'max by (instance) ({metric}{{platform="{p}"}})'
+
+
+def spark_hottest(p):
+    return f'max by (instance) ({ls(board(p), source="board")} or {ls(spark_gpu(p, "nvidia_smi_temperature_gpu"), source="gpu")})'
+
+
+def spark_room(p):
+    return f'min by (instance) ({ls(f"{BOARD_CRITICAL} - {board(p)}", source="board")} or {ls(spark_gpu(p, "nvidia_smi_temperature_gpu_tlimit"), source="gpu")})'
 
 
 def machines(p):
     hs = f'{HOSTS},platform="{p}"'
-    temp = f'{sensor(p, "Tctl")} or {sensor(p, "Package id 0")} or max by (instance) (nvidia_smi_temperature_gpu{{platform="{p}"}}) or {chip(p, "k10temp")} or {chip(p, "cpu_thermal")}'
+    temp = f'{sensor(p, "Tctl")} or {sensor(p, "Package id 0")} or {spark_hottest(p)} or {chip(p, "k10temp")} or {chip(p, "cpu_thermal")}'
     # The AMD machines publish no limit, so 95 °C is assumed for them, and 85 °C, where a Pi 5 throttles, for the Pis; the Intel hosts and the Sparks publish their own.
     room = (f'(95 - {sensor(p, "Tctl")}) or ({sensor(p, "Package id 0", "node_hwmon_temp_crit_celsius")} - {sensor(p, "Package id 0")})'
-            f' or max by (instance) (nvidia_smi_temperature_gpu_tlimit{{platform="{p}"}}) or (95 - {chip(p, "k10temp")}) or (85 - {chip(p, "cpu_thermal")})')
+            f' or {spark_room(p)} or (95 - {chip(p, "k10temp")}) or (85 - {chip(p, "cpu_thermal")})')
     P = Panels()
     P.table("machines", "Machines", "instance", "Machine", [
         ("CPU", machine_cpu(p), LOADBAR),
@@ -120,7 +140,7 @@ MACHINE_LINKS = {"k8s": [to("${__value.text} in Node Exporter Full", "/d/rYdddlP
 
 def machine_cpu_trend(p):
     P = Panels()
-    P.trend("machine-cpu", "CPU", [("{{instance}}", machine_cpu(p))], "percent", hi=100, desc="CPU in use on each machine of one platform.")
+    P.trend("machine-cpu", "CPU", [("{{instance}}", machine_cpu(p, "$__rate_interval"))], "percent", hi=100, interval="15s", desc="CPU in use on each machine of one platform.")
     return P.elements["machine-cpu"]
 
 
@@ -236,25 +256,51 @@ def nv(metric):
 
 
 W.tiles("gpu", "GPU · $gpu", [
-    ("In use", f'100 * {nv("utilization_gpu_ratio")}', dict(unit="percent", thresholds=TILE_LOAD)),
-    ("Temperature", nv("temperature_gpu"), dict(unit="celsius")),
-    ("To its limit", nv("temperature_gpu_tlimit"), dict(unit="celsius", thresholds=ROOM_TILE)),
-    ("Power", nv("power_draw_watts"), dict(unit="watt"))],
-    desc="A GPU at full use is doing its job, so use is coloured as load and never as a problem. Heat is judged by how far the GPU is from the limit it reports itself.")
+    ("In use", f'100 * {nv("utilization_gpu_ratio")}', dict(unit="percent", hue=LOAD_HUE)),
+    ("Temperature", nv("temperature_gpu"), dict(unit="celsius", thresholds=th([{"value": None, "color": SPEED_HUE}, {"value": 75, "color": "orange"}, {"value": 85, "color": "red"}]))),
+    ("Clock", nv("clocks_current_sm_clock_hz"), dict(unit="hertz", decimals=2, hue=CLOCK_HUE)),
+    ("Power", nv("power_draw_watts"), dict(unit="watt", hue=LOAD_HUE))], trend=True,
+    desc="A GPU at full use is doing its job, so use is coloured as load and never as a problem. Temperature turns orange at 75 °C and red at 85 °C. A busy GPU at a low clock is doing less than its use suggests. Each tile draws its recent history behind its value.")
+# Thin, unfilled lines, because a busy GPU fills a thicker line's whole width.
+CRISP = dict(lineInterpolation="linear", lineWidth=1, fillOpacity=0, gradientMode="none")
+RATE = "$__rate_interval"
+GENERATED, PROMPT, CACHED = "tensorfold:generation_tokens_total", "tensorfold:prompt_tokens_total", "tensorfold_health:cached_tokens_total"
+# GLM reports reply tokens as they are written; earlier TensorFold recipes report finished and running tokens apart.
+WRITTEN = f"(tensorfold_health:completion_tokens_total or ({GENERATED} + tensorfold:generation_tokens_running))"
+# The label on tensorfold:kv_cache_usage_ratio is a stream's place in the list of live streams, which shifts as streams finish, so a stream cannot be followed by it.
+# Ranking by size at each moment orders the bars, which are read one moment at a time. The engine runs at most eight.
+KV = "tensorfold:kv_cache_usage_ratio"
+
+
+def ranked(top):
+    """Each live stream's value, largest first, as #1 to #8. A rank with no stream behind it reads zero, and is dropped."""
+    def nth(k):
+        return f"sum(topk({k}, {top}))" + (f" - sum(topk({k - 1}, {top}))" if k > 1 else "")
+    return "sort_by_label(" + " or ".join(f'label_set(({nth(k)}) > 0, "rank", "#{k}")' for k in range(1, 9)) + ', "rank")'
+
+
 W.tiles("inference", "Inference · $model", [
-    ("Requests running", zero("sum(tensorfold:requests_running)"), {}),
-    ("Requests waiting", zero("sum(tensorfold:requests_waiting)"), dict(thresholds=th(QUIET + [{"value": 4, "color": "orange"}]))),
-    ("Tokens per second", zero("sum(rate(tensorfold:generation_tokens_total[5m]))"), dict(decimals=1)),
-    ("Tokens in 24 hours", zero("sum(increase(tensorfold:generation_tokens_total[24h]))"), dict(unit="short", decimals=0)),
-    ("Context cache in use", zero("100 * max(tensorfold:kv_cache_usage_ratio)"), dict(unit="percent", thresholds=TILE_LOAD))],
-    desc="What the model is doing: work in hand, work queued, and how fast it is writing. Empty while no model is loaded.")
+    ("Requests running", zero("sum(tensorfold:requests_running)"), dict(hue=LOAD_HUE)),
+    ("Requests waiting", zero("sum(tensorfold:requests_waiting)"), dict(thresholds=th([{"value": None, "color": LOAD_HUE}, {"value": 4, "color": "orange"}]))),
+    ("Decode speed per reply", f"sum(rate({GENERATED}[5m])) / (sum(rate(tensorfold_health:decode_seconds_total[5m])) > 0)", dict(unit="suffix: tok/s", decimals=1, noValue="–", hue=SPEED_HUE)),
+    ("Prompt cache hits", f"100 * sum(rate({CACHED}[15m])) / (sum(rate({PROMPT}[15m])) > 0)", dict(unit="percent", noValue="–", hue=CLOCK_HUE)),
+    ("Pool used", "100 * (1 - sum(tensorfold_health:pool_free_tokens) / (sum(tensorfold_health:pool_tokens) > 0))", dict(unit="percent", noValue="–", hue=LOAD_HUE))], trend=True,
+    desc="What the model is doing: work in hand, work queued, how fast each reply is writing, how much of its prompts it found cached and how full its shared pool is, each with its recent history behind it. A dash means idle, or a recipe that does not report it.")
 W.add("inference-idle", "Inference", "stat", [q("count(tensorfold:kv_cache_usage_ratio)")],
       {"colorMode": "none", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": RED, "textMode": "value", "text": {"valueSize": 16}},
       {"noValue": "No model is being served", "color": fixed("text")},
       desc="Shown while no model reports to the inference scrape; the model's own widgets appear in its place once one is loaded.")
-W.trend("gpu-use", "GPU in use", [("{{instance}}", "100 * max by (instance) (nvidia_smi_utilization_gpu_ratio)")], "percent", hi=100, desc="How hard each GPU has been working.")
-W.trend("tokens", "Tokens per second · $model", [("written", "sum(rate(tensorfold:generation_tokens_total[5m]))"), ("read", "sum(rate(tensorfold:prompt_tokens_total[5m]))")], "short",
-        desc="Tokens read from prompts and written in answers.")
+W.bars("stream-share", "Context per request · $model", ranked(f"100 * {KV}"), "{{rank}}",
+       desc="How much of its context window each running request holds, largest first. A bar appears as a request starts and goes as it ends.")
+W.trend("stream-tokens", "Tokens held by each running request · $model", [("request", f"{KV} * on (instance, recipe) group_left tensorfold_health:context_length")], "short",
+        names=["request"], interval="1s", legend=False, style=dict(CRISP, drawStyle="points", pointSize=3, showPoints="always"),
+        desc="Tokens in each running request's cache. Each track is usually one conversation growing turn by turn, and a gap is a request between turns. All one colour because the metrics carry no request id, so a colour could not follow a request. Hover for exact values. A recipe that reports no window size shows nothing here.")
+W.trend("gpu-use", "GPU in use", [("{{instance}}", f"100 * max by (instance) (avg_over_time(nvidia_smi_utilization_gpu_ratio[{RATE}]))")], "percent", hi=100, interval="5s", style=CRISP,
+        desc="How hard each GPU has been working, averaged over each step of the chart.")
+W.trend("output", "Output · $model", [("tokens written", f"sum(clamp_min(deriv({WRITTEN}[{RATE}:1s]), 0))")], "suffix: tok/s", interval="1s", style=CRISP,
+        desc="Tokens written per second across all streams, counted as they are written.")
+W.trend("prompt-new", "New prompt tokens · $model", [("tokens read", f"(sum(rate({PROMPT}[{RATE}])) - sum(rate({CACHED}[{RATE}]))) or sum(rate({PROMPT}[{RATE}]))")], "suffix: tok/s", interval="30s", style=CRISP,
+        desc="Prompt tokens not found in cache, per second, booked when each request finishes. Cached tokens are left out because they cost no prefill. A recipe that reports no cache shows every prompt token.")
 
 # ================================================================== NAS
 SYN = 'job="synology-snmp"'
