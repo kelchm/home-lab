@@ -194,7 +194,7 @@ class Panels:
         opts = dict(BG, displayMode="basic", valueMode="text", sizing="manual", minVizHeight=12, maxVizHeight=18, text={"titleSize": 13, "valueSize": 14})
         return self.add(key, title, "bargauge", [q(expr, legend)], opts, {"unit": unit, "decimals": 0, "min": 0, "max": 100, "color": {"mode": "thresholds"}, "thresholds": thresholds}, **kw)
 
-    def trend(self, key, title, series, unit, lo=0, hi=None, names=None, interval=None, style=None, **kw):
+    def trend(self, key, title, series, unit, lo=0, hi=None, names=None, interval=None, style=None, legend=True, **kw):
         """interval is the shortest step a query can use: the scrape interval, or wider for a counter that moves when a request finishes."""
         d = {"unit": unit, "min": lo, "color": fixed(OTHER), "custom": ts_custom(**(style or {}))}
         if hi is not None:
@@ -202,7 +202,7 @@ class Panels:
         named = names or [leg for leg, _ in series if "{{" not in leg]
         ov = [by_name(leg, color=fixed(c)) for leg, c in zip(named, SERIES)] or [by_re(f"/-{i}$/", color=fixed(c)) for i, c in enumerate(SERIES, 1)]
         qopts = {"maxDataPoints": 2000, "interval": interval} if interval else None
-        return self.add(key, title, "timeseries", [q(e, leg, r, instant=False, interval=interval) for (leg, e), r in zip(series, "ABCD")], TS, d, ov, qopts=qopts, **kw)
+        return self.add(key, title, "timeseries", [q(e, leg, r, instant=False, interval=interval) for (leg, e), r in zip(series, "ABCD")], TS if legend else {**TS, "legend": {**TS["legend"], "showLegend": False}}, d, ov, qopts=qopts, **kw)
 
     def note(self, key, content):
         self.add(key, "", "text", [], {"mode": "markdown", "content": content}, {})

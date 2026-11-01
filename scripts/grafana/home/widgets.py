@@ -268,7 +268,7 @@ GENERATED, PROMPT, CACHED = "tensorfold:generation_tokens_total", "tensorfold:pr
 # GLM reports reply tokens as they are written; earlier TensorFold recipes report finished and running tokens apart.
 WRITTEN = f"(tensorfold_health:completion_tokens_total or ({GENERATED} + tensorfold:generation_tokens_running))"
 # The label on tensorfold:kv_cache_usage_ratio is a stream's place in the list of live streams, which shifts as streams finish, so a stream cannot be followed by it.
-# Ranking by size at each moment keeps each line on one stream for as long as the order holds. The engine runs at most eight.
+# Ranking by size at each moment orders the bars, which are read one moment at a time. The engine runs at most eight.
 KV = "tensorfold:kv_cache_usage_ratio"
 
 
@@ -292,9 +292,9 @@ W.add("inference-idle", "Inference", "stat", [q("count(tensorfold:kv_cache_usage
       desc="Shown while no model reports to the inference scrape; the model's own widgets appear in its place once one is loaded.")
 W.bars("stream-share", "Context per request · $model", ranked(f"100 * {KV}"), "{{rank}}",
        desc="How much of its context window each running request holds, largest first. A bar appears as a request starts and goes as it ends.")
-W.trend("stream-tokens", "Tokens held by each running request · $model", [("{{rank}}", ranked(f"{KV} * on (instance, recipe) group_left tensorfold_health:context_length"))], "short",
-        names=["#1", "#2", "#3"], interval="1s", style=dict(CRISP, drawStyle="points", pointSize=3, showPoints="always"),
-        desc="Tokens in each running request's cache, largest first. The ranks are positions by size, not request ids, so a colour changes hands when two requests swap places. Points rather than lines, because each request drops out between turns. A recipe that reports no window size shows nothing here.")
+W.trend("stream-tokens", "Tokens held by each running request · $model", [("request", f"{KV} * on (instance, recipe) group_left tensorfold_health:context_length")], "short",
+        names=["request"], interval="1s", legend=False, style=dict(CRISP, drawStyle="points", pointSize=3, showPoints="always"),
+        desc="Tokens in each running request's cache. Each track is usually one conversation growing turn by turn, and a gap is a request between turns. All one colour because the metrics carry no request id, so a colour could not follow a request. Hover for exact values. A recipe that reports no window size shows nothing here.")
 W.trend("gpu-use", "GPU in use", [("{{instance}}", f"100 * max by (instance) (avg_over_time(nvidia_smi_utilization_gpu_ratio[{RATE}]))")], "percent", hi=100, interval="5s", style=CRISP,
         desc="How hard each GPU has been working, averaged over each step of the chart.")
 W.trend("output", "Output · $model", [("tokens written", f"sum(clamp_min(deriv({WRITTEN}[{RATE}:1s]), 0))")], "suffix: tok/s", interval="1s", style=CRISP,

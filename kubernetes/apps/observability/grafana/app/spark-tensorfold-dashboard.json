@@ -646,7 +646,7 @@
       "id": 33,
       "type": "timeseries",
       "title": "Tokens held by each running request",
-      "description": "Tokens in each running request's cache, largest first. The ranks are positions by size, not request ids, so a colour changes hands when two requests swap places. Points rather than lines, because each request drops out between turns. A recipe that reports no window size shows nothing here.",
+      "description": "Tokens in each running request's cache. Each track is usually one conversation growing turn by turn, and a gap is a request between turns. All one colour because the metrics carry no request id, so a colour could not follow a request. Hover for exact values. A recipe that reports no window size shows nothing here.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -660,7 +660,8 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "palette-classic"
+            "mode": "fixed",
+            "fixedColor": "#73A650"
           },
           "unit": "short",
           "decimals": 0,
@@ -710,11 +711,10 @@
       },
       "options": {
         "legend": {
+          "showLegend": false,
           "displayMode": "list",
           "placement": "bottom",
-          "calcs": [
-            "lastNotNull"
-          ]
+          "calcs": []
         },
         "tooltip": {
           "mode": "multi",
@@ -730,8 +730,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(sort_by_label(label_set((sum by (job,instance,model,recipe,runtime) (topk(1, tensorfold:kv_cache_usage_ratio{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} * on (instance, recipe) group_left tensorfold_health:context_length{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}))) > 0, \"rank\", \"#1\") or label_set((sum by (job,instance,model,recipe,runtime) (topk(2, tensorfold:kv_cache_usage_ratio{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} * on (instance, recipe) group_left tensorfold_health:context_length{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"})) - sum by (job,instance,model,recipe,runtime) (topk(1, tensorfold:kv_cache_usage_ratio{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} * on (instance, recipe) group_left tensorfold_health:context_length{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}))) > 0, \"rank\", \"#2\") or label_set((sum by (job,instance,model,recipe,runtime) (topk(3, tensorfold:kv_cache_usage_ratio{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} * on (instance, recipe) group_left tensorfold_health:context_length{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"})) - sum by (job,instance,model,recipe,runtime) (topk(2, tensorfold:kv_cache_usage_ratio{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} * on (instance, recipe) group_left tensorfold_health:context_length{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}))) > 0, \"rank\", \"#3\") or label_set((sum by (job,instance,model,recipe,runtime) (topk(4, tensorfold:kv_cache_usage_ratio{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} * on (instance, recipe) group_left tensorfold_health:context_length{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"})) - sum by (job,instance,model,recipe,runtime) (topk(3, tensorfold:kv_cache_usage_ratio{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} * on (instance, recipe) group_left tensorfold_health:context_length{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}))) > 0, \"rank\", \"#4\") or label_set((sum by (job,instance,model,recipe,runtime) (topk(5, tensorfold:kv_cache_usage_ratio{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} * on (instance, recipe) group_left tensorfold_health:context_length{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"})) - sum by (job,instance,model,recipe,runtime) (topk(4, tensorfold:kv_cache_usage_ratio{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} * on (instance, recipe) group_left tensorfold_health:context_length{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}))) > 0, \"rank\", \"#5\") or label_set((sum by (job,instance,model,recipe,runtime) (topk(6, tensorfold:kv_cache_usage_ratio{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} * on (instance, recipe) group_left tensorfold_health:context_length{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"})) - sum by (job,instance,model,recipe,runtime) (topk(5, tensorfold:kv_cache_usage_ratio{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} * on (instance, recipe) group_left tensorfold_health:context_length{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}))) > 0, \"rank\", \"#6\") or label_set((sum by (job,instance,model,recipe,runtime) (topk(7, tensorfold:kv_cache_usage_ratio{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} * on (instance, recipe) group_left tensorfold_health:context_length{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"})) - sum by (job,instance,model,recipe,runtime) (topk(6, tensorfold:kv_cache_usage_ratio{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} * on (instance, recipe) group_left tensorfold_health:context_length{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}))) > 0, \"rank\", \"#7\") or label_set((sum by (job,instance,model,recipe,runtime) (topk(8, tensorfold:kv_cache_usage_ratio{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} * on (instance, recipe) group_left tensorfold_health:context_length{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"})) - sum by (job,instance,model,recipe,runtime) (topk(7, tensorfold:kv_cache_usage_ratio{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} * on (instance, recipe) group_left tensorfold_health:context_length{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}))) > 0, \"rank\", \"#8\"), \"rank\")) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
-          "legendFormat": "{{rank}}",
+          "expr": "(tensorfold:kv_cache_usage_ratio{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} * on (instance, recipe) group_left tensorfold_health:context_length{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
+          "legendFormat": "Request",
           "refId": "A",
           "range": true,
           "instant": false,
