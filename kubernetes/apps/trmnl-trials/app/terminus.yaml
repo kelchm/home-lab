@@ -1,0 +1,255 @@
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: terminus
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: trmnl-trials
+  interval: 1h
+  values:
+    controllers:
+      main:
+        replicas: 1
+        strategy: Recreate
+        annotations:
+          secret.reloader.stakater.com/reload: terminus-trial
+          configmap.reloader.stakater.com/reload: trmnl-trial-guards
+        containers:
+          app:
+            image:
+              repository: ghcr.io/usetrmnl/terminus
+              tag: latest@sha256:af35903b5b718dab2c18b651840aca0db1a3ffbcd7f5f02e3d6098bf5d806fac
+            env:
+              TZ: America/New_York
+              HANAMI_PORT: '2300'
+              API_URI: https://terminus.home.kelch.io
+              APP_SETUP: 'true'
+              FIRMWARE_SYNCHRONIZER: 'false'
+            envFrom:
+            - secretRef:
+                name: terminus-trial
+            probes:
+              readiness:
+                enabled: true
+                custom: true
+                spec:
+                  periodSeconds: 10
+                  timeoutSeconds: 3
+                  failureThreshold: 3
+                  httpGet:
+                    path: /up
+                    port: 2300
+              liveness:
+                enabled: true
+                custom: true
+                spec:
+                  periodSeconds: 10
+                  timeoutSeconds: 3
+                  failureThreshold: 3
+                  httpGet:
+                    path: /up
+                    port: 2300
+              startup:
+                enabled: true
+                custom: true
+                spec:
+                  periodSeconds: 10
+                  timeoutSeconds: 3
+                  failureThreshold: 60
+                  tcpSocket:
+                    port: 2300
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities: &id001
+                drop:
+                - ALL
+            resources:
+              requests:
+                cpu: 100m
+                memory: 256Mi
+              limits:
+                memory: 1536Mi
+            command:
+            - /bin/bash
+            - -ec
+            args:
+            - until pg_isready -h 127.0.0.1 -p 5432; do sleep 2; done; exec scripts/docker/entrypoint bundle exec puma --config
+              ./config/puma.rb
+          database:
+            image:
+              repository: docker.io/library/postgres
+              tag: 18.6-alpine@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5
+            env:
+              PGDATA: /var/lib/postgresql/data/pgdata
+            envFrom:
+            - secretRef:
+                name: terminus-trial
+            securityContext:
+              runAsUser: 999
+              runAsGroup: 999
+              runAsNonRoot: true
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop:
+                - ALL
+            probes:
+              readiness:
+                enabled: true
+                custom: true
+                spec:
+                  exec:
+                    command:
+                    - sh
+                    - -c
+                    - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+                  periodSeconds: 5
+            resources:
+              requests:
+                cpu: 50m
+                memory: 128Mi
+              limits:
+                memory: 512Mi
+          worker:
+            image:
+              repository: ghcr.io/usetrmnl/terminus
+              tag: latest@sha256:af35903b5b718dab2c18b651840aca0db1a3ffbcd7f5f02e3d6098bf5d806fac
+            env:
+              HANAMI_PORT: '2300'
+              API_URI: https://terminus.home.kelch.io
+              FIRMWARE_SYNCHRONIZER: 'false'
+            envFrom:
+            - secretRef:
+                name: terminus-trial
+            command:
+            - /bin/bash
+            - -ec
+            args:
+            - until curl --fail --silent http://127.0.0.1:2300/up; do sleep 2; done; exec bundle exec sidekiq -r ./config/sidekiq.rb
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities: *id001
+            resources:
+              requests:
+                cpu: 100m
+                memory: 256Mi
+              limits:
+                memory: 1536Mi
+          keyvalue:
+            image:
+              repository: docker.io/valkey/valkey
+              tag: 9.1-alpine@sha256:bf09d58e96d6b4524a15396b65b242bbe18beebbcc15a04d8ee75ddac62fae0b
+            command:
+            - valkey-server
+            args:
+            - --bind
+            - 127.0.0.1
+            - --maxmemory
+            - 128mb
+            - --maxmemory-policy
+            - noeviction
+            - --appendonly
+            - 'yes'
+            securityContext:
+              runAsUser: 1000
+              runAsGroup: 1000
+              runAsNonRoot: true
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop:
+                - ALL
+            resources:
+              requests:
+                cpu: 10m
+                memory: 32Mi
+              limits:
+                memory: 192Mi
+    defaultPodOptions:
+      automountServiceAccountToken: false
+      securityContext:
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+    service:
+      app:
+        controller: main
+        ports:
+          http:
+            port: 2300
+    route:
+      app:
+        hostnames:
+        - terminus.home.kelch.io
+        parentRefs:
+        - name: gateway-admin
+          namespace: network
+          sectionName: https
+        rules:
+        - backendRefs:
+          - identifier: app
+            port: 2300
+    persistence:
+      database:
+        type: persistentVolumeClaim
+        accessMode: ReadWriteOnce
+        size: 2Gi
+        storageClass: longhorn
+        retain: true
+        advancedMounts:
+          main:
+            database:
+            - path: /var/lib/postgresql/data
+      queue:
+        type: persistentVolumeClaim
+        accessMode: ReadWriteOnce
+        size: 1Gi
+        storageClass: longhorn
+        retain: true
+        advancedMounts:
+          main:
+            keyvalue:
+            - path: /data
+      uploads:
+        type: persistentVolumeClaim
+        accessMode: ReadWriteOnce
+        size: 2Gi
+        storageClass: longhorn
+        retain: true
+        advancedMounts:
+          main:
+            app:
+            - path: /app/public/uploads
+            worker:
+            - path: /app/public/uploads
+      fonts:
+        type: persistentVolumeClaim
+        accessMode: ReadWriteOnce
+        size: 1Gi
+        storageClass: longhorn
+        retain: true
+        advancedMounts:
+          main:
+            app:
+            - path: /app/public/fonts
+            - path: /usr/share/fonts/terminus
+            worker:
+            - path: /app/public/fonts
+            - path: /usr/share/fonts/terminus
+      trial-guards:
+        type: configMap
+        name: trmnl-trial-guards
+        advancedMounts:
+          main:
+            app:
+            - path: /app/app/aspects/devices/defaulter.rb
+              subPath: terminus-device-defaults.rb
+              readOnly: true
+            worker:
+            - path: /app/app/aspects/devices/defaulter.rb
+              subPath: terminus-device-defaults.rb
+              readOnly: true

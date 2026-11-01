@@ -1,0 +1,26 @@
+[
+  {
+    "server": "fastapi",
+    "image": "ghcr.io/kelchm/trmnl-trial-fastapi:source-10d16d73f696-build-5c33a6bc26cd",
+    "upstream": "10d16d73f696a26cc9843456adbd558fb4699d91",
+    "reference": "ghcr.io/kelchm/trmnl-trial-fastapi@sha256:4bcdf569e36844666e6881c5e86ec75b25ce601c9fe574fcd1dae990aecde7a0"
+  },
+  {
+    "server": "django",
+    "image": "ghcr.io/kelchm/trmnl-trial-django:source-50352c865cc4-build-cb24bf9875e3",
+    "upstream": "50352c865cc453496fd76fb4eee1af17204ed3bc",
+    "reference": "ghcr.io/kelchm/trmnl-trial-django@sha256:1dda70d1e31743561cfe6f4fbb0b3a5dbb87df08a6dbb8fc90fc961dc55b1f83"
+  },
+  {
+    "server": "node-lite",
+    "image": "ghcr.io/kelchm/trmnl-trial-node-lite:source-840262d6cd1d-build-0e6eba6df603",
+    "upstream": "840262d6cd1d31a04b96910f2e0db1473fd98d82",
+    "reference": "ghcr.io/kelchm/trmnl-trial-node-lite@sha256:b289fb664f3d27123dab6248dfa12686fdf80ce2572c2847f7c2ebc6042aef66"
+  },
+  {
+    "server": "phoenix",
+    "image": "ghcr.io/kelchm/trmnl-trial-phoenix:source-c7cbc5af947c-build-39680f0ce24a",
+    "upstream": "c7cbc5af947cffe640f4637d781cfbae5e78b0e4",
+    "reference": "ghcr.io/kelchm/trmnl-trial-phoenix@sha256:ebe6cf7a038392c1f24205bb77defb378e341857cde2f903dddca1f6a2d69639"
+  }
+]
