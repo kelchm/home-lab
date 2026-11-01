@@ -411,6 +411,7 @@ Host records carry no Kubernetes namespace, so filter on `host.name` or `service
 - One host's services: `host.name:=pve-sbx-1 | stats by (service.name) count()`
 - Kernel warnings and worse on the Sparks: `service.namespace:=spark service.name:=kernel severity_number:>=13`
 - GPU Xid errors on a Spark: `service.namespace:=spark service.name:=kernel "Xid"`
+- GPU memory failures on a Spark: `service.namespace:=spark service.name:=kernel "NV_ERR_NO_MEMORY"`
 - Undervoltage on the Pis: `service.namespace:=pi service.name:=kernel "Undervoltage"`
 - AirPlay sessions on the streamer, each start, stop and its playing time: `host.name:=streamer-basement-workbench service.name:=shairport-sync "Connection"`
 - SSH logins: `service.namespace:in(pve, spark, synology, pi) "Accepted"`
@@ -462,6 +463,8 @@ Log content pages only where the log is the only evidence of a failure. Crash lo
 For `KanidmReplicationFailing`, read the pod's errors with `{k8s.namespace.name="identity", service.name="kanidm"} severity_number:>=17 _msg:~"(?i)supplier|consumer|replica|RUV"`. "Unable to connect to supplier" while every pod is Ready points at the replication path on port 8444, including the kanidm CiliumNetworkPolicy. "Consumer is out of date and must be refreshed" follows a replica that was offline for more than 7 days; refresh that consumer as kanidm's [replication administration](https://kanidm.github.io/kanidm/stable/repl/administration.html) describes.
 
 For `KanidmSignInsRejected`, `{k8s.namespace.name="identity", service.name="kanidm"} ("Result::Denied" OR "Auth result: Denied" OR "Auth result: NoMatchingEntries")` lists the rejections. Each line starts with its request ID; the request line with the same ID gives the client address, which is Traefik for browser sign-ins, so match the time in Traefik's access log for `auth.home.kelch.io`.
+
+`NodeGPUMemoryExhausted` warns when a Spark's kernel logs `NV_ERR_NO_MEMORY` in the last 15 minutes, because the engine may report nothing. None were stored in the 30 days to October 31, 2026. Other pairs have logged one or two isolated lines with no harm; repeats mean the engine is failing. List them with `service.namespace:=spark service.name:=kernel "NV_ERR_NO_MEMORY"`.
 
 To add a log alert, put a VMRule labelled `alerting.home.kelch.io/datasource: victorialogs` in the VictoriaLogs app, which `vmalert-victoria-logs` reads, using `type: vlogs`, a `_time` window in the expression, a stream filter on `service.name` and `k8s.namespace.name`, `k8s.cluster.name:=k8s-prod` and the group label `cluster: k8s-prod`. Rename dotted fields in the result (`| rename k8s.pod.name as pod`), because alert labels cannot contain dots. Add cases to [logsql-rules-fixtures.json](../../scripts/logging/logsql-rules-fixtures.json): `python3 scripts/logging/test-logsql-rules.py`, run in CI by `scripts/ci/validate-logging.sh`, fails when a rule has no cases. It has vmalert parse the rules, evaluates each expression in VictoriaLogs at each case's time less vmalert's 30-second evaluation delay and checks the result labels, the values and the labels the annotations use. It does not exercise `for`, so express persistence in the expression, as `KanidmReplicationFailing` counts minutes with errors.
 
