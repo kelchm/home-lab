@@ -123,9 +123,9 @@ cryptography==44.0.2 ; python_version >= '3.7' and python_full_version not in '3
 daphne==4.1.2 ; python_version >= '3.8' \
     --hash=sha256:618d1322bb4d875342b99dd2a10da2d9aae7ee3645f765965fdc1e658ea5290a \
     --hash=sha256:fcbcace38eb86624ae247c7ffdc8ac12f155d7d19eafac4247381896d6f33761
-django==5.2 ; python_version >= '3.10' \
-    --hash=sha256:1a47f7a7a3d43ce64570d350e008d2949abe8c7e21737b351b6a1611277c6d89 \
-    --hash=sha256:91ceed4e3a6db5aedced65e3c8f963118ea9ba753fc620831c77074e620e7d83
+Django==6.1.2; python_version >= '3.10' \
+    --hash=sha256:141efee6ec64d1db6db90683bf734c550102450f444fb099063b0be1bd27d991 \
+    --hash=sha256:a1e92451ccb8b514e91bbb3b6d186d20b4030558f116b5d9de6535455ff210b7
 greenlet==3.2.1 ; python_version >= '3.9' \
     --hash=sha256:04b4ec7f65f0e4a1500ac475c9343f6cc022b2363ebfb6e94f416085e40dea15 \
     --hash=sha256:05a7490f74e8aabc5f29256765a99577ffde979920a2db1f3676d265a3adba41 \
