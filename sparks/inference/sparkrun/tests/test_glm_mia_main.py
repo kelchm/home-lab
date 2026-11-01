@@ -28,6 +28,7 @@ from sparkrun.orchestration.executors.docker import DockerExecutor  # noqa: E402
 from sparkrun.runtimes._cluster_ops import ClusterContext  # noqa: E402
 
 RECIPE = ROOT / "mia-tensorfold-glm53-exl3-tp2/glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m.yaml"
+EXPANDABLE = RECIPE.with_name("glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-expandable.yaml")
 MOD = ROOT / "mods/mia-tensorfold-glm53-bf5f9452"
 SERVED = "GLM-5.3-Flash"
 HEAD = "172.16.21.31"
@@ -80,6 +81,23 @@ def test_recipe_pins_the_kit_and_states_its_launcher_defaults():
     assert not [key for key in recipe.env if "KV_SHARD" in key or key == "TF_GLM_EXIT_ON_BROKEN"]
     assert (recipe.env["TENSORFOLD_MEMORY_RESERVE_GIB"], recipe.env["TF_GLM_CACHE_GIB"]) == ("14.5", "12.5")
     assert recipe.metadata["site_backports"] == "exact-tool-turn-reasoning, strict-concurrent-health, models-discovery"
+
+
+def test_expandable_profile_changes_only_the_allocator_mode():
+    base, expandable = yaml.safe_load(RECIPE.read_text()), yaml.safe_load(EXPANDABLE.read_text())
+    assert expandable["env"].pop("PYTORCH_CUDA_ALLOC_CONF") == "expandable_segments:True"
+    for key in ("profile", "serving_profile", "description"):
+        expandable["metadata"].pop(key), base["metadata"].pop(key)
+    assert expandable == base
+
+
+def test_expandable_allocator_mode_reaches_the_rank_container():
+    recipe = Recipe(yaml.safe_load(EXPANDABLE.read_text()), source_path=str(EXPANDABLE))
+    ctx = ClusterContext.build(TensorFoldRuntime(), [HEAD, "172.16.21.32"], recipe.container, "tf-profile-test",
+                               recipe.env, None, None, dry_run=True, recipe=recipe)
+    script = DockerExecutor().generate_launch_script(image=recipe.container, container_name="tf-profile-test",
+                                                     command="sleep infinity", env=ctx.all_env, volumes=ctx.volumes)
+    assert "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True" in shlex.split(script)
 
 
 def test_recipe_uses_the_shared_gate_with_glms_own_levels():

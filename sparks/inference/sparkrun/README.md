@@ -22,6 +22,7 @@ Every profile follows the contract in [#943](https://github.com/kelchm/home-lab/
 | Profile | Kit | Image | Served name |
 | --- | --- | --- | --- |
 | `glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m` | `main` at [`bf5f9452`](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold/commit/bf5f94523a8251029cedae86bf61f8ce37fac218), October 25, 123 patches | `99fe7496…`, config `b925352f…` | `GLM-5.3-Flash` |
+| `glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-expandable` | The same kit, image, pool and reserve, with `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`. Prepared for long multi-agent use and not yet launched. | `99fe7496…`, config `b925352f…` | `GLM-5.3-Flash` |
 
 The kit patches engine commit `c4646171` and has no numbered release after v1.10. The image is ARM64 and labelled with the kit's patch hash, `tf.patches=789e8f3bdfa2`. All 426 of its engine source files match a reconstruction of the engine plus the kit's patches byte for byte.
 
@@ -89,6 +90,8 @@ sparkrun stop "$glm" --cluster sparks
 
 After a boot, run the shared checks in [Validate](#validate) and three for GLM: the [cut-call probe](tests/mia_tensorfold_cut_calls.py), which cuts a real tool call at its output limit and needs `--model`, `--output` and the pinned `tokenizer.json` as `--tokenizer`. It imports `tokenizers`, which the head's Python lacks, so run it from the workstation with `--url http://10.32.21.31:8888/v1`; a `/v1/messages` tool turn; and a request with a chunked body. The repository has no script for the last two.
 
+To launch the expandable profile, point `glm` at its recipe. Stop the running instance with the recipe that started it, and expect every kept prompt to go with it: each conversation prefills in full on its next turn. Both profiles share a native cache, so the switch recompiles nothing.
+
 To roll back, stop it with its own recipe and launch the profile that served before, as [Operate and roll back](#operate-and-roll-back) describes.
 
 ### Known limits
@@ -98,6 +101,9 @@ To roll back, stop it with its own recipe and launch the profile that served bef
 - **NCCL sockets on the management network:** SparkRun sets NCCL's socket interface to the management network, so some of NCCL's socket traffic crosses the worker's management link, which has dropped for seconds at a time ([#649](https://github.com/kelchm/home-lab/issues/649)).
 - **Open kit reports** of memory growth and hangs under long multi-agent load: [#143](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold/issues/143), [#154](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold/issues/154) and [#163](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold/issues/163).
 - **Kept prompt states** hold device memory outside the pool with no byte cap, the kit's default `TF_GLM_KEPT_BYTES_GIB=0`, and nothing returns it until a restart. In one report a 1 GiB cap left about 4 GiB more `MemAvailable` on each Spark, at the cost of a full prefill when a dropped conversation returns ([#197](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold/issues/197)).
+- **GPU memory under long multi-agent use:** on October 31 the head's `MemAvailable` fell from 8.3 to 2.4 GiB in two hours, then held, with the pool only 60% used. `nvidia-smi --query-compute-apps=pid,used_memory --format=csv` showed 104 GiB against a 102.92 GiB budget, and the engine's CPU memory took another 10.6 GiB of the 14.5 GiB reserve. The pool is allocated at startup, so filling it does not move these numbers. The likely cause is the caching allocator's ratchet in [kit issue #143](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold/issues/143), where exhaustion ends in `NV_ERR_NO_MEMORY`. GLM has no check of host memory, and a failed allocation latches the engine broken until both ranks restart.
+- **The expandable profile** is the fix three operators report in that issue, the longest for 7.75 days at this pool and reserve, and [kit PR #189](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold/pull/189) proposes as a default. They saw decode unchanged and no NCCL or CUDA graph trouble. It flattens growth; it does not return memory when idle or change the head's 4-5 GiB floor. Another operator with the spill tier on saw GPU memory hold flat while rank 0's host memory kept growing, and this profile leaves spill off. It has not run here.
+- **Other limits on this memory:** setting `TF_GLM_KEPT_BYTES_GIB` to any value makes dropped states return unused allocator blocks, and values below the 2.71 GiB that 32 full states hold also evict them. The kit's `TF_GLM_DISPLAY_KV_MIB=1792` does not apply: Display Reserved Memory is already 0.5 GB in [UEFI](../../../docs/runbooks/dgx-spark-bringup.md).
 - **Admission:** requests past the four streams queue without limit, because `TF_GLM_MAX_QUEUED` is empty.
 - **Access and memory:** the endpoint has no API key, and no memory watchdog runs ([#944](https://github.com/kelchm/home-lab/issues/944)).
 
