@@ -235,9 +235,9 @@ txaio==23.1.1 ; python_version >= '3.7' \
 typing-extensions==4.13.2 ; python_version >= '3.8' \
     --hash=sha256:a439e7c04b49fec3e5d3e2beaa21755cadbbdc391694e28ccdd36ca4a1408f8c \
     --hash=sha256:e6c81219bd689f51865d9e372991c540bda33a0379d5573cddb9a3a23f7caaef
-wand==0.6.13 \
-    --hash=sha256:e5dda0ac2204a40c29ef5c4cb310770c95d3d05c37b1379e69c94ea79d7d19c0 \
-    --hash=sha256:f5013484eaf7a20eb22d1821aaefe60b50cc329722372b5f8565d46d4aaafcca
+Wand==0.7.2 \
+    --hash=sha256:0387fd08848d00cadd1d885fcb19a17dd4250df2029e5338b6b668b7fed64b5b \
+    --hash=sha256:7db97c5e51862fdd5e58866dbf34e2dcae295245511147367690a3e17f459984
 zope-interface==7.2 ; python_version >= '3.8' \
     --hash=sha256:033b3923b63474800b04cba480b70f6e6243a62208071fc148354f3f89cc01b7 \
     --hash=sha256:05b910a5afe03256b58ab2ba6288960a2892dfeef01336dc4be6f1b9ed02ab0a \
