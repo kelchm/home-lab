@@ -1,4 +1,4 @@
-FROM elixir:1.18-otp-27-slim@sha256:2c226386b099c8ff2c423a2ebb3e1e53d243338a743226e79df1453479019ad6
+FROM elixir:1.20-otp-27-slim@sha256:e33ed7f7bf98fcc1db795bf5eb5bd8c1ccb4c5332fc2c69ee8197a0053d010df
 RUN apt-get update && apt-get install -y --no-install-recommends build-essential git ca-certificates curl nodejs npm chromium imagemagick fonts-dejavu-core && rm -rf /var/lib/apt/lists/*
 ENV MIX_ENV=prod PUPPETEER_SKIP_DOWNLOAD=true PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium ERL_FLAGS="+S 4:4 +JMsingle true"
 WORKDIR /app
