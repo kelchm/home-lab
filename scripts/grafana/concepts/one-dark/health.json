@@ -77,7 +77,9 @@
        }
       ]
      },
-     "displayName": "Memory · ${__field.labels.instance}"
+     "displayName": "Memory · ${__field.labels.instance}",
+     "min": 0,
+     "max": 17200000000.0
     },
     "overrides": []
    },
@@ -161,7 +163,9 @@
        }
       ]
      },
-     "displayName": "Hottest · ${__field.labels.instance}"
+     "displayName": "Hottest · ${__field.labels.instance}",
+     "min": 30,
+     "max": 165
     },
     "overrides": []
    },
