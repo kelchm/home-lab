@@ -76,6 +76,8 @@ CONCEPTS = {
     "traffic-light": dict(RULE, title="Traffic light", calm="#3ECF8E", calm1="#3ECF8E", calm2="#A7F3D0", spark1="#9CC4F0", spark2="#5B86BC"),
     # Round three: palettes built as sets. Cool colours mean fine and warm ones need attention; the second is the owner's editor theme without its purple; the third is
     # one complementary pair at matched lightness and strength.
+    # Round four: Apple's dark-mode system colours, a set designed to stay vivid together on dark surfaces, at full strength.
+    "system": dict(family("System colours", "#0A84FF", "#FF9F0A", "#30D158", "#FFD60A", "#FF453A", "#64D2FF", "#0A5BB5"), fill=32, bars=90, ribbon=True, tile_calm="#0A84FF"),
     "cool-warm": family("Cool and warm", "#4DA6FF", "#5EEAD4", "#2DD4BF", "#FFB454", "#FF6B5E", "#9CCBFF", "#1E5FA3"),
     "editor": family("Your editor", "#61AFEF", "#E5C07B", "#98C379", "#D19A66", "#E06C75", "#A6D2F5", "#2F5F8A"),
     "complement": family("Blue and orange", "#58A8F8", "#F5A35C", "#5AD29A", "#F2D264", "#F2757A", "#A3CFFB", "#27629C"),
@@ -217,8 +219,9 @@ def judge(p, c, spec):
         fc.setdefault("overrides", [])
         for machine, calm in (("spark-1", c["calm1"]), ("spark-2", c["calm2"])):
             if "instance" in p["targets"][0].get("legendFormat", ""):
-                fc["overrides"].append({"matcher": {"id": "byRegexp", "options": f"/{machine}/"}, "properties": [{"id": "thresholds", "value": steps(spec, c, calm, unit)}]})
-    by_series(fc, c, spec, unit)
+                fc["overrides"].append({"matcher": {"id": "byRegexp", "options": f"/{machine}/"}, "properties": [{"id": "thresholds", "value": steps(spec, c, c.get("tile_calm", calm), unit)}]})
+    if p["type"] == "timeseries":
+        by_series(fc, c, spec, unit)
 
 
 # Two reviews of the machines concept: a line keeps its machine's colour, so a limit crossed by either machine is a band, as a state already is. Green is left to
@@ -265,6 +268,14 @@ def refine(d, c, kind):
     for p in d["panels"]:
         if p["type"] == "stat" and p["id"] in (JUDGED_TILES[kind] | INFERENCE if kind == "inference" else JUDGED_TILES[kind]):
             p["options"]["colorMode"] = "none"
+        if c.get("ribbon") and p["type"] == "timeseries":   # a warm colour at low opacity on near-black turns brown, so a state is a thick line along the top edge
+            for o in p["fieldConfig"]["overrides"]:
+                if any(x["id"] == "custom.lineWidth" and x["value"] == 0 for x in o["properties"]) and o["matcher"]["id"] == "byFrameRefID":
+                    drop = ("min", "max", "custom.fillOpacity", "custom.gradientMode", "custom.lineWidth")
+                    o["properties"] = [x for x in o["properties"] if x["id"] not in drop]
+                    o["properties"] += [{"id": "min", "value": 0}, {"id": "max", "value": 1.02}, {"id": "custom.fillOpacity", "value": 0}, {"id": "custom.lineWidth", "value": 5}, {"id": "custom.spanNulls", "value": False}]
+                    target = next(t for t in p["targets"] if t["refId"] == o["matcher"]["options"])
+                    target["expr"] = f'({target["expr"]}) > 0'
 
 
 TWO_MACHINES = (7, 8, 15, 10, 17, 12, 30, 9)
@@ -280,7 +291,7 @@ def drawn(p, c, health):
     if health and p["id"] in TWO_MACHINES:
         custom["fillOpacity"] = 0
     if not health and p["id"] in BARS:
-        custom.update(drawStyle="bars", barAlignment=0, barWidthFactor=0.8, lineWidth=0, fillOpacity=75 if c.get("refined") else 30, gradientMode="opacity" if c.get("refined") else "none")
+        custom.update(drawStyle="bars", barAlignment=0, barWidthFactor=0.8, lineWidth=0, fillOpacity=c.get("bars", 75) if c.get("refined") else 30, gradientMode="opacity" if c.get("refined") else "none")
         fc["defaults"]["color"] = fixed(c["speed"] if p["id"] == 23 else c["load"])
     if not health and p["id"] == 7:
         for o in fc["overrides"]:
