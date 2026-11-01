@@ -379,8 +379,9 @@ spec:
         KubeClientCertificateExpiration:
           spec:
             for: 1h
-        # A single cancelled client query, such as an overlapping Grafana
-        # refresh, trips both, so neither shows that the store itself is failing.
+        # Repeated cancelled client queries, such as overlapping Grafana
+        # refreshes, trip both. TooManyErrorLogs, ServiceDown and TooManyRestarts
+        # still notify for a failing component.
         RequestErrorsToAPI:
           spec:
             labels:
