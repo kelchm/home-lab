@@ -22,7 +22,7 @@ Every profile follows the contract in [#943](https://github.com/kelchm/home-lab/
 | Profile | Kit | Image | Served name |
 | --- | --- | --- | --- |
 | `glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m` | `main` at [`bf5f9452`](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold/commit/bf5f94523a8251029cedae86bf61f8ce37fac218), October 25, 123 patches | `99fe7496…`, config `b925352f…` | `GLM-5.3-Flash` |
-| `glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable` | The same kit, image, pool and reserve, with `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` and the spill tier. Prepared for long multi-agent use and not yet launched. | `99fe7496…`, config `b925352f…` | `GLM-5.3-Flash` |
+| `glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable` | The same kit, image, pool and reserve, with `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` and the spill tier. Serving since October 31, for long multi-agent use. From stop to ready took 2 minutes 46 seconds, with acceptance, agent acceptance, the cut-call probe, a `/v1/messages` tool turn and a chunked body passing. Restoring from the tier after a restart has not been run here. | `99fe7496…`, config `b925352f…` | `GLM-5.3-Flash` |
 
 The kit patches engine commit `c4646171` and has no numbered release after v1.10. The image is ARM64 and labelled with the kit's patch hash, `tf.patches=789e8f3bdfa2`. All 426 of its engine source files match a reconstruction of the engine plus the kit's patches byte for byte.
 
