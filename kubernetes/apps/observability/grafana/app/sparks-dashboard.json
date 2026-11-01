@@ -647,7 +647,7 @@
       "id": 17,
       "type": "timeseries",
       "title": "Board temperature",
-      "description": "Hottest of the machine's ACPI thermal zones in each step. The firmware's critical trip point is 104.8 °C, drawn in red; the board runs hotter than the GPU.",
+      "description": "Hottest of the machine's ACPI thermal zones in each step. The firmware's critical trip point is 104.8 °C, drawn in red. It usually runs hotter than the GPU.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"

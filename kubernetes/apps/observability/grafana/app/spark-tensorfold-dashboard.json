@@ -1631,7 +1631,7 @@
       "id": 13,
       "type": "timeseries",
       "title": "Prompt tokens read",
-      "description": "Prompt tokens of finished requests, stacked. Only the new ones take prefill time, and all are booked at completion rather than while prefill runs.",
+      "description": "Prompt tokens of finished requests, stacked. Only the new ones take prefill time, and all are booked at completion rather than while prefill runs. A recipe that reports no cache shows one unsplit total.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -1649,7 +1649,7 @@
           },
           "unit": "suffix:tok/s",
           "decimals": 1,
-          "noValue": "Not reported on this recipe",
+          "noValue": "Unavailable",
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
@@ -1730,6 +1730,19 @@
           "expr": "(rate(tensorfold_health:cached_tokens_total{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[$__rate_interval])) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
           "legendFormat": "From cache · {{recipe}}",
           "refId": "B",
+          "range": true,
+          "instant": false,
+          "interval": "30s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "(rate(tensorfold:prompt_tokens_total{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[$__rate_interval]) unless on(job,instance,model,recipe,runtime) tensorfold_health:cached_tokens_total{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
+          "legendFormat": "All tokens, no cache split · {{recipe}}",
+          "refId": "C",
           "range": true,
           "instant": false,
           "interval": "30s"

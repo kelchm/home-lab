@@ -87,7 +87,7 @@ def machine_cpu(p, window="5m"):
     return f'100 * (1 - avg by (instance) (rate(node_cpu_seconds_total{{{HOSTS},platform="{p}",mode="idle"}}[{window}])))'
 
 
-# A Spark's board runs hotter than its GPU and is shut down by its firmware rather than slowed, so its table shows whichever limit is closer.
+# A Spark's board usually runs hotter than its GPU, and at its limit the firmware shuts it down rather than slowing it, so its table takes the worse of the two.
 BOARD_CRITICAL = 104.8
 
 
@@ -95,13 +95,21 @@ def board(p):
     return f'max by (instance) (node_thermal_zone_temp{{platform="{p}",job="spark-node"}})'
 
 
+def spark_gpu(p, metric):
+    return f'max by (instance) ({metric}{{platform="{p}"}})'
+
+
+def spark_hottest(p):
+    return f'max by (instance) ({ls(board(p), source="board")} or {ls(spark_gpu(p, "nvidia_smi_temperature_gpu"), source="gpu")})'
+
+
 def spark_room(p):
-    return f'min by (instance) ({ls(f"{BOARD_CRITICAL} - {board(p)}", source="board")} or {ls(f"""max by (instance) (nvidia_smi_temperature_gpu_tlimit{{platform="{p}"}})""", source="gpu")})'
+    return f'min by (instance) ({ls(f"{BOARD_CRITICAL} - {board(p)}", source="board")} or {ls(spark_gpu(p, "nvidia_smi_temperature_gpu_tlimit"), source="gpu")})'
 
 
 def machines(p):
     hs = f'{HOSTS},platform="{p}"'
-    temp = f'{sensor(p, "Tctl")} or {sensor(p, "Package id 0")} or {board(p)} or max by (instance) (nvidia_smi_temperature_gpu{{platform="{p}"}}) or {chip(p, "k10temp")} or {chip(p, "cpu_thermal")}'
+    temp = f'{sensor(p, "Tctl")} or {sensor(p, "Package id 0")} or {spark_hottest(p)} or {chip(p, "k10temp")} or {chip(p, "cpu_thermal")}'
     # The AMD machines publish no limit, so 95 °C is assumed for them, and 85 °C, where a Pi 5 throttles, for the Pis; the Intel hosts and the Sparks publish their own.
     room = (f'(95 - {sensor(p, "Tctl")}) or ({sensor(p, "Package id 0", "node_hwmon_temp_crit_celsius")} - {sensor(p, "Package id 0")})'
             f' or {spark_room(p)} or (95 - {chip(p, "k10temp")}) or (85 - {chip(p, "cpu_thermal")})')
