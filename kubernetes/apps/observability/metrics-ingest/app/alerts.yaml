@@ -164,7 +164,8 @@ spec:
             and min_over_time(apt_security_upgrades_pending{job=~"(pve|spark)-node"}[3d]) > 0
             and apt_security_upgrades_pending{job=~"(pve|spark)-node"} offset 3d > 0
           labels:
-            severity: warning
+            # New updates soak for a couple of weeks before they are installed.
+            severity: info
           annotations:
             summary: "{{ $labels.instance }} has had security updates waiting for three days"
             description: 'Packages from a security archive have had upgrades available on {{ $labels.instance }} for three days; {{ $value }} are waiting now. Install them, then reboot the host if they need it.'
