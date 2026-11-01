@@ -15,10 +15,10 @@ HERE = Path(__file__).resolve().parent
 LAB = Path("/tmp/spark-lab/dash")
 WINDOW = ("2026-10-31T23:00:00.000Z", "2026-11-01T01:30:00.000Z")
 
-NEUTRAL = "#F4F4F5"
-RULE = {"ok": "#3ECF8E", "drawn": True, "speed": NEUTRAL, "load": NEUTRAL, "cache": NEUTRAL, "memory": NEUTRAL, "heat": NEUTRAL, "context": NEUTRAL, "fine": "#8B95A5",
+INFO = "#6CA6E0"      # a plain quantity: information, with no good or bad in it
+RULE = {"ok": "#3ECF8E", "drawn": True, "speed": INFO, "load": INFO, "cache": INFO, "memory": INFO, "heat": INFO, "context": INFO, "fine": "#5F7690",
         "muted": "#52525B", "warn": "#F5A524", "bad": "#FF6B6B", "info": "#71717A", "band": 14, "quiet": "#1C1F24", "good": "#17402F", "warm": "#4A3A12", "hot": "#4F2020",
-        "heatmap": {"mode": "opacity", "fill": NEUTRAL, "scale": "exponential", "exponent": 0.5}, "line": 1.5, "fill": 8, "gradient": "opacity", "transparent": True}
+        "heatmap": {"mode": "opacity", "fill": INFO, "scale": "exponential", "exponent": 0.5}, "line": 1.5, "fill": 8, "gradient": "opacity", "transparent": True}
 GIB = 1 << 30
 
 # Roles: spark1/spark2 are the machines. speed, load, cache, memory, heat and context are what a tile or single-series chart measures. fine is a second series beside
@@ -61,9 +61,9 @@ CONCEPTS = {
         "line": 2, "fill": 8, "gradient": "opacity", "transparent": True,
     },
     # Round two: each concept is one rule for what colour means. Bars draw activity, thin lines draw levels, and nothing is filled behind two machines.
-    # Quantities have no good or bad, so they stay neutral. A judged value has a limit, from the alert rules and runbooks, and its line changes colour as it crosses one.
-    "colour-judges": dict(RULE, title="Colour judges", calm="#F4F4F5", calm1="#F4F4F5", calm2="#8B95A5", spark1="#F4F4F5", spark2="#8B95A5"),
-    "traffic-light": dict(RULE, title="Traffic light", calm="#3ECF8E", calm1="#3ECF8E", calm2="#A7F3D0", spark1="#F4F4F5", spark2="#8B95A5"),
+    # Quantities have no good or bad, so they take the information blue. A judged value has a limit, some from the alert rules and some still placeholders, and its line changes colour as it crosses one.
+    "colour-judges": dict(RULE, title="Colour judges", calm=INFO, calm1="#9CC4F0", calm2="#5B86BC", spark1="#9CC4F0", spark2="#5B86BC"),
+    "traffic-light": dict(RULE, title="Traffic light", calm="#3ECF8E", calm1="#3ECF8E", calm2="#A7F3D0", spark1="#9CC4F0", spark2="#5B86BC"),
     "machines": dict(RULE, title="Machines and condition", calm="#3ECF8E", calm1="#2DD4BF", calm2="#A78BFA", spark1="#2DD4BF", spark2="#A78BFA"),
 }
 
@@ -217,7 +217,7 @@ def drawn(p, c, health):
     if health and p["id"] in TWO_MACHINES:
         custom["fillOpacity"] = 0
     if not health and p["id"] in BARS:
-        custom.update(drawStyle="bars", barAlignment=0, barWidthFactor=0.8, lineWidth=0, fillOpacity=45, gradientMode="none")
+        custom.update(drawStyle="bars", barAlignment=0, barWidthFactor=0.8, lineWidth=0, fillOpacity=30, gradientMode="none")
         fc["defaults"]["color"] = fixed(c["speed"] if p["id"] == 23 else c["load"])
     if not health and p["id"] == 7:
         for o in fc["overrides"]:

@@ -217,7 +217,7 @@
    "fieldConfig": {
     "defaults": {
      "color": {
-      "fixedColor": "#F4F4F5",
+      "fixedColor": "#6CA6E0",
       "mode": "fixed"
      },
      "unit": "short",
@@ -324,7 +324,7 @@
    "fieldConfig": {
     "defaults": {
      "color": {
-      "fixedColor": "#F4F4F5",
+      "fixedColor": "#6CA6E0",
       "mode": "fixed"
      },
      "unit": "suffix: tok/s",
@@ -960,7 +960,7 @@
        {
         "id": "color",
         "value": {
-         "fixedColor": "#F4F4F5",
+         "fixedColor": "#9CC4F0",
          "mode": "fixed"
         }
        },
@@ -1116,7 +1116,7 @@
        {
         "id": "color",
         "value": {
-         "fixedColor": "#F4F4F5",
+         "fixedColor": "#6CA6E0",
          "mode": "fixed"
         }
        }
@@ -1479,7 +1479,7 @@
    "fieldConfig": {
     "defaults": {
      "color": {
-      "fixedColor": "#F4F4F5",
+      "fixedColor": "#6CA6E0",
       "mode": "fixed"
      },
      "unit": "short",
@@ -1498,7 +1498,7 @@
       "drawStyle": "bars",
       "lineInterpolation": "smooth",
       "lineWidth": 0,
-      "fillOpacity": 45,
+      "fillOpacity": 30,
       "showPoints": "never",
       "spanNulls": false,
       "axisCenteredZero": false,
@@ -1626,7 +1626,7 @@
      "reverse": false,
      "steps": 64,
      "mode": "opacity",
-     "fill": "#F4F4F5",
+     "fill": "#6CA6E0",
      "scale": "exponential",
      "exponent": 0.5
     },
@@ -1713,7 +1713,7 @@
      "reverse": false,
      "steps": 64,
      "mode": "opacity",
-     "fill": "#F4F4F5",
+     "fill": "#6CA6E0",
      "scale": "exponential",
      "exponent": 0.5
     },
@@ -1859,7 +1859,7 @@
          "steps": [
           {
            "value": null,
-           "color": "#8B95A5"
+           "color": "#5F7690"
           },
           {
            "value": 60,
@@ -2042,7 +2042,7 @@
        {
         "id": "color",
         "value": {
-         "fixedColor": "#F4F4F5",
+         "fixedColor": "#6CA6E0",
          "mode": "fixed"
         }
        }
@@ -2195,7 +2195,7 @@
    "fieldConfig": {
     "defaults": {
      "color": {
-      "fixedColor": "#F4F4F5",
+      "fixedColor": "#6CA6E0",
       "mode": "fixed"
      },
      "unit": "short",
@@ -2214,7 +2214,7 @@
       "drawStyle": "bars",
       "lineInterpolation": "smooth",
       "lineWidth": 0,
-      "fillOpacity": 45,
+      "fillOpacity": 30,
       "showPoints": "never",
       "spanNulls": false,
       "axisCenteredZero": false,
@@ -2377,7 +2377,7 @@
        {
         "id": "color",
         "value": {
-         "fixedColor": "#F4F4F5",
+         "fixedColor": "#6CA6E0",
          "mode": "fixed"
         }
        }
@@ -2392,7 +2392,7 @@
        {
         "id": "color",
         "value": {
-         "fixedColor": "#F4F4F5",
+         "fixedColor": "#6CA6E0",
          "mode": "fixed"
         }
        }
@@ -2635,7 +2635,7 @@
    "fieldConfig": {
     "defaults": {
      "color": {
-      "fixedColor": "#F4F4F5",
+      "fixedColor": "#6CA6E0",
       "mode": "fixed"
      },
      "unit": "ms",
@@ -2747,7 +2747,7 @@
    "fieldConfig": {
     "defaults": {
      "color": {
-      "fixedColor": "#F4F4F5",
+      "fixedColor": "#6CA6E0",
       "mode": "fixed"
      },
      "unit": "percentunit",

@@ -73,7 +73,7 @@
        },
        {
         "value": 4294967296,
-        "color": "#F4F4F5"
+        "color": "#6CA6E0"
        }
       ]
      },
@@ -103,7 +103,7 @@
           },
           {
            "value": 4294967296,
-           "color": "#F4F4F5"
+           "color": "#9CC4F0"
           }
          ]
         }
@@ -129,7 +129,7 @@
           },
           {
            "value": 4294967296,
-           "color": "#F4F4F5"
+           "color": "#9CC4F0"
           }
          ]
         }
@@ -157,7 +157,7 @@
           },
           {
            "value": 4294967296,
-           "color": "#8B95A5"
+           "color": "#5B86BC"
           }
          ]
         }
@@ -183,7 +183,7 @@
           },
           {
            "value": 4294967296,
-           "color": "#8B95A5"
+           "color": "#5B86BC"
           }
          ]
         }
@@ -260,7 +260,7 @@
       "steps": [
        {
         "value": null,
-        "color": "#F4F4F5"
+        "color": "#6CA6E0"
        },
        {
         "value": 95,
@@ -290,7 +290,7 @@
          "steps": [
           {
            "value": null,
-           "color": "#F4F4F5"
+           "color": "#9CC4F0"
           },
           {
            "value": 95,
@@ -316,7 +316,7 @@
          "steps": [
           {
            "value": null,
-           "color": "#F4F4F5"
+           "color": "#9CC4F0"
           },
           {
            "value": 95,
@@ -344,7 +344,7 @@
          "steps": [
           {
            "value": null,
-           "color": "#8B95A5"
+           "color": "#5B86BC"
           },
           {
            "value": 95,
@@ -370,7 +370,7 @@
          "steps": [
           {
            "value": null,
-           "color": "#8B95A5"
+           "color": "#5B86BC"
           },
           {
            "value": 95,
@@ -731,7 +731,7 @@
       "steps": [
        {
         "value": null,
-        "color": "#F4F4F5"
+        "color": "#6CA6E0"
        },
        {
         "value": 75,
@@ -795,7 +795,7 @@
          "steps": [
           {
            "value": null,
-           "color": "#F4F4F5"
+           "color": "#9CC4F0"
           },
           {
            "value": 75,
@@ -829,7 +829,7 @@
          "steps": [
           {
            "value": null,
-           "color": "#8B95A5"
+           "color": "#5B86BC"
           },
           {
            "value": 75,
@@ -931,7 +931,7 @@
        {
         "id": "color",
         "value": {
-         "fixedColor": "#F4F4F5",
+         "fixedColor": "#6CA6E0",
          "mode": "fixed"
         }
        }
@@ -1070,7 +1070,7 @@
        {
         "id": "color",
         "value": {
-         "fixedColor": "#F4F4F5",
+         "fixedColor": "#9CC4F0",
          "mode": "fixed"
         }
        }
@@ -1085,7 +1085,7 @@
        {
         "id": "color",
         "value": {
-         "fixedColor": "#8B95A5",
+         "fixedColor": "#5B86BC",
          "mode": "fixed"
         }
        }
@@ -1151,7 +1151,7 @@
        {
         "id": "color",
         "value": {
-         "fixedColor": "#F4F4F5",
+         "fixedColor": "#6CA6E0",
          "mode": "fixed"
         }
        }
@@ -1166,7 +1166,7 @@
        {
         "id": "color",
         "value": {
-         "fixedColor": "#F4F4F5",
+         "fixedColor": "#6CA6E0",
          "mode": "fixed"
         }
        }
@@ -1304,7 +1304,7 @@
        {
         "id": "color",
         "value": {
-         "fixedColor": "#F4F4F5",
+         "fixedColor": "#9CC4F0",
          "mode": "fixed"
         }
        }
@@ -1319,7 +1319,7 @@
        {
         "id": "color",
         "value": {
-         "fixedColor": "#8B95A5",
+         "fixedColor": "#5B86BC",
          "mode": "fixed"
         }
        }
@@ -1518,7 +1518,7 @@
        },
        {
         "value": 4294967296,
-        "color": "#F4F4F5"
+        "color": "#6CA6E0"
        }
       ]
      },
@@ -1583,7 +1583,7 @@
           },
           {
            "value": 4294967296,
-           "color": "#F4F4F5"
+           "color": "#9CC4F0"
           }
          ]
         }
@@ -1617,7 +1617,7 @@
           },
           {
            "value": 4294967296,
-           "color": "#8B95A5"
+           "color": "#5B86BC"
           }
          ]
         }
@@ -1765,7 +1765,7 @@
       "steps": [
        {
         "value": null,
-        "color": "#F4F4F5"
+        "color": "#6CA6E0"
        },
        {
         "value": 95,
@@ -1831,7 +1831,7 @@
          "steps": [
           {
            "value": null,
-           "color": "#F4F4F5"
+           "color": "#9CC4F0"
           },
           {
            "value": 95,
@@ -1865,7 +1865,7 @@
          "steps": [
           {
            "value": null,
-           "color": "#8B95A5"
+           "color": "#5B86BC"
           },
           {
            "value": 95,
@@ -1953,7 +1953,7 @@
       "steps": [
        {
         "value": null,
-        "color": "#F4F4F5"
+        "color": "#6CA6E0"
        },
        {
         "value": 75,
@@ -2017,7 +2017,7 @@
          "steps": [
           {
            "value": null,
-           "color": "#F4F4F5"
+           "color": "#9CC4F0"
           },
           {
            "value": 75,
@@ -2051,7 +2051,7 @@
          "steps": [
           {
            "value": null,
-           "color": "#8B95A5"
+           "color": "#5B86BC"
           },
           {
            "value": 75,
@@ -2233,7 +2233,7 @@
        {
         "id": "color",
         "value": {
-         "fixedColor": "#F4F4F5",
+         "fixedColor": "#9CC4F0",
          "mode": "fixed"
         }
        }
@@ -2248,7 +2248,7 @@
        {
         "id": "color",
         "value": {
-         "fixedColor": "#8B95A5",
+         "fixedColor": "#5B86BC",
          "mode": "fixed"
         }
        }
@@ -2439,7 +2439,7 @@
        {
         "id": "color",
         "value": {
-         "fixedColor": "#F4F4F5",
+         "fixedColor": "#9CC4F0",
          "mode": "fixed"
         }
        }
@@ -2454,7 +2454,7 @@
        {
         "id": "color",
         "value": {
-         "fixedColor": "#8B95A5",
+         "fixedColor": "#5B86BC",
          "mode": "fixed"
         }
        }
