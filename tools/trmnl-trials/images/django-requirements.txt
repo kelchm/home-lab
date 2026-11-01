@@ -120,9 +120,9 @@ cryptography==44.0.2 ; python_version >= '3.7' and python_full_version not in '3
     --hash=sha256:d1c3572526997b36f245a96a2b1713bf79ce99b271bbcf084beb6b9b075f29ea \
     --hash=sha256:efcfe97d1b3c79e486554efddeb8f6f53a4cdd4cf6086642784fa31fc384e1d7 \
     --hash=sha256:f514ef4cd14bb6fb484b4a60203e912cfcb64f2ab139e88c2274511514bf7308
-daphne==4.1.2 ; python_version >= '3.8' \
-    --hash=sha256:618d1322bb4d875342b99dd2a10da2d9aae7ee3645f765965fdc1e658ea5290a \
-    --hash=sha256:fcbcace38eb86624ae247c7ffdc8ac12f155d7d19eafac4247381896d6f33761
+daphne==4.2.3; python_version >= '3.8' \
+    --hash=sha256:1c458f81926b37301cadc8ec1b6316d9a5db53fba061fc4826610395fe5d5c81 \
+    --hash=sha256:34442c539a98111f4d8cac98a7204aeeb53811229bd96063e6fbe740e97078c9
 django==5.2 ; python_version >= '3.10' \
     --hash=sha256:1a47f7a7a3d43ce64570d350e008d2949abe8c7e21737b351b6a1611277c6d89 \
     --hash=sha256:91ceed4e3a6db5aedced65e3c8f963118ea9ba753fc620831c77074e620e7d83
