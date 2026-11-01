@@ -21,12 +21,6 @@ spec:
         protocol: TCP
       - port: '8080'
         protocol: TCP
-      - port: '4000'
-        protocol: TCP
-      - port: '4567'
-        protocol: TCP
-      - port: '8000'
-        protocol: TCP
   egress:
   - toEndpoints:
     - matchLabels:
