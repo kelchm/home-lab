@@ -23,7 +23,7 @@
   "timezone": "browser",
   "uid": "spark-tensorfold-performance",
   "title": "AI / Inference serving",
-  "description": "How fast the served model is running, what it is holding and how close it is to a limit. Opens on the last 15 minutes at one-second detail and refreshes every five seconds.",
+  "description": "How fast the served model is running, what each request holds and how close it is to a limit. Opens on the last 15 minutes at one-second detail and refreshes every five seconds.",
   "editable": false,
   "version": 4,
   "refresh": "5s",
@@ -548,13 +548,205 @@
       ]
     },
     {
+      "id": 106,
+      "type": "row",
+      "title": "Context held by running requests",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 7,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 32,
+      "type": "bargauge",
+      "title": "Share of each request's window",
+      "description": "How much of its context window each running request holds, largest first. A bar appears as a request starts and goes as it ends.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 8,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "unit": "percentunit",
+          "decimals": 1,
+          "min": 0,
+          "max": 1,
+          "noValue": "No requests running",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.8
+              },
+              {
+                "color": "red",
+                "value": 0.95
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "displayMode": "basic",
+        "minVizHeight": 16,
+        "minVizWidth": 8,
+        "namePlacement": "left",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true,
+        "sizing": "manual",
+        "valueMode": "text",
+        "maxVizHeight": 28
+      },
+      "interval": "1s",
+      "maxDataPoints": 2000,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "(sort_by_label(label_set((sum by (job,instance,model,recipe,runtime) (topk(1, tensorfold:kv_cache_usage_ratio{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}))) > 0, \"rank\", \"#1\") or label_set((sum by (job,instance,model,recipe,runtime) (topk(2, tensorfold:kv_cache_usage_ratio{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"})) - sum by (job,instance,model,recipe,runtime) (topk(1, tensorfold:kv_cache_usage_ratio{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}))) > 0, \"rank\", \"#2\") or label_set((sum by (job,instance,model,recipe,runtime) (topk(3, tensorfold:kv_cache_usage_ratio{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"})) - sum by (job,instance,model,recipe,runtime) (topk(2, tensorfold:kv_cache_usage_ratio{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}))) > 0, \"rank\", \"#3\") or label_set((sum by (job,instance,model,recipe,runtime) (topk(4, tensorfold:kv_cache_usage_ratio{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"})) - sum by (job,instance,model,recipe,runtime) (topk(3, tensorfold:kv_cache_usage_ratio{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}))) > 0, \"rank\", \"#4\") or label_set((sum by (job,instance,model,recipe,runtime) (topk(5, tensorfold:kv_cache_usage_ratio{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"})) - sum by (job,instance,model,recipe,runtime) (topk(4, tensorfold:kv_cache_usage_ratio{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}))) > 0, \"rank\", \"#5\") or label_set((sum by (job,instance,model,recipe,runtime) (topk(6, tensorfold:kv_cache_usage_ratio{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"})) - sum by (job,instance,model,recipe,runtime) (topk(5, tensorfold:kv_cache_usage_ratio{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}))) > 0, \"rank\", \"#6\") or label_set((sum by (job,instance,model,recipe,runtime) (topk(7, tensorfold:kv_cache_usage_ratio{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"})) - sum by (job,instance,model,recipe,runtime) (topk(6, tensorfold:kv_cache_usage_ratio{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}))) > 0, \"rank\", \"#7\") or label_set((sum by (job,instance,model,recipe,runtime) (topk(8, tensorfold:kv_cache_usage_ratio{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"})) - sum by (job,instance,model,recipe,runtime) (topk(7, tensorfold:kv_cache_usage_ratio{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}))) > 0, \"rank\", \"#8\"), \"rank\")) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
+          "legendFormat": "{{rank}}",
+          "refId": "A",
+          "range": false,
+          "instant": true,
+          "interval": "1s"
+        }
+      ]
+    },
+    {
+      "id": 33,
+      "type": "timeseries",
+      "title": "Tokens held by each running request",
+      "description": "Tokens in each running request's cache, largest first. The ranks are positions by size, not request ids, so a colour changes hands when two requests swap places. Points rather than lines, because each request drops out between turns. A recipe that reports no window size shows nothing here.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 8,
+        "w": 16,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short",
+          "decimals": 0,
+          "noValue": "No requests running",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "drawStyle": "points",
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "showPoints": "always",
+            "spanNulls": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            },
+            "pointSize": 4
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "interval": "1s",
+      "maxDataPoints": 2000,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "(sort_by_label(label_set((sum by (job,instance,model,recipe,runtime) (topk(1, tensorfold:kv_cache_usage_ratio{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} * on (instance, recipe) group_left tensorfold_health:context_length{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}))) > 0, \"rank\", \"#1\") or label_set((sum by (job,instance,model,recipe,runtime) (topk(2, tensorfold:kv_cache_usage_ratio{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} * on (instance, recipe) group_left tensorfold_health:context_length{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"})) - sum by (job,instance,model,recipe,runtime) (topk(1, tensorfold:kv_cache_usage_ratio{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} * on (instance, recipe) group_left tensorfold_health:context_length{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}))) > 0, \"rank\", \"#2\") or label_set((sum by (job,instance,model,recipe,runtime) (topk(3, tensorfold:kv_cache_usage_ratio{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} * on (instance, recipe) group_left tensorfold_health:context_length{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"})) - sum by (job,instance,model,recipe,runtime) (topk(2, tensorfold:kv_cache_usage_ratio{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} * on (instance, recipe) group_left tensorfold_health:context_length{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}))) > 0, \"rank\", \"#3\") or label_set((sum by (job,instance,model,recipe,runtime) (topk(4, tensorfold:kv_cache_usage_ratio{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} * on (instance, recipe) group_left tensorfold_health:context_length{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"})) - sum by (job,instance,model,recipe,runtime) (topk(3, tensorfold:kv_cache_usage_ratio{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} * on (instance, recipe) group_left tensorfold_health:context_length{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}))) > 0, \"rank\", \"#4\") or label_set((sum by (job,instance,model,recipe,runtime) (topk(5, tensorfold:kv_cache_usage_ratio{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} * on (instance, recipe) group_left tensorfold_health:context_length{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"})) - sum by (job,instance,model,recipe,runtime) (topk(4, tensorfold:kv_cache_usage_ratio{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} * on (instance, recipe) group_left tensorfold_health:context_length{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}))) > 0, \"rank\", \"#5\") or label_set((sum by (job,instance,model,recipe,runtime) (topk(6, tensorfold:kv_cache_usage_ratio{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} * on (instance, recipe) group_left tensorfold_health:context_length{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"})) - sum by (job,instance,model,recipe,runtime) (topk(5, tensorfold:kv_cache_usage_ratio{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} * on (instance, recipe) group_left tensorfold_health:context_length{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}))) > 0, \"rank\", \"#6\") or label_set((sum by (job,instance,model,recipe,runtime) (topk(7, tensorfold:kv_cache_usage_ratio{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} * on (instance, recipe) group_left tensorfold_health:context_length{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"})) - sum by (job,instance,model,recipe,runtime) (topk(6, tensorfold:kv_cache_usage_ratio{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} * on (instance, recipe) group_left tensorfold_health:context_length{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}))) > 0, \"rank\", \"#7\") or label_set((sum by (job,instance,model,recipe,runtime) (topk(8, tensorfold:kv_cache_usage_ratio{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} * on (instance, recipe) group_left tensorfold_health:context_length{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"})) - sum by (job,instance,model,recipe,runtime) (topk(7, tensorfold:kv_cache_usage_ratio{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} * on (instance, recipe) group_left tensorfold_health:context_length{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}))) > 0, \"rank\", \"#8\"), \"rank\")) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
+          "legendFormat": "{{rank}}",
+          "refId": "A",
+          "range": true,
+          "instant": false,
+          "interval": "1s"
+        }
+      ]
+    },
+    {
       "id": 101,
       "type": "row",
       "title": "Speed",
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 7,
+        "y": 16,
         "w": 24,
         "h": 1
       },
@@ -571,7 +763,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 8,
+        "y": 17,
         "w": 8,
         "h": 8
       },
@@ -680,7 +872,7 @@
       },
       "gridPos": {
         "x": 8,
-        "y": 8,
+        "y": 17,
         "w": 8,
         "h": 8
       },
@@ -776,7 +968,7 @@
       },
       "gridPos": {
         "x": 16,
-        "y": 8,
+        "y": 17,
         "w": 8,
         "h": 8
       },
@@ -868,7 +1060,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 16,
+        "y": 25,
         "w": 24,
         "h": 1
       },
@@ -885,7 +1077,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 17,
+        "y": 26,
         "w": 8,
         "h": 8
       },
@@ -972,7 +1164,7 @@
       },
       "gridPos": {
         "x": 8,
-        "y": 17,
+        "y": 26,
         "w": 8,
         "h": 8
       },
@@ -1059,7 +1251,7 @@
       },
       "gridPos": {
         "x": 16,
-        "y": 17,
+        "y": 26,
         "w": 8,
         "h": 8
       },
@@ -1164,7 +1356,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 25,
+        "y": 34,
         "w": 24,
         "h": 1
       },
@@ -1181,7 +1373,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 26,
+        "y": 35,
         "w": 12,
         "h": 7
       },
@@ -1322,7 +1514,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 26,
+        "y": 35,
         "w": 12,
         "h": 7
       },
@@ -1414,7 +1606,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 33,
+        "y": 42,
         "w": 24,
         "h": 1
       },
@@ -1431,7 +1623,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 34,
+        "y": 43,
         "w": 8,
         "h": 7
       },
@@ -1528,7 +1720,7 @@
       },
       "gridPos": {
         "x": 8,
-        "y": 34,
+        "y": 43,
         "w": 8,
         "h": 7
       },
@@ -1638,7 +1830,7 @@
       },
       "gridPos": {
         "x": 16,
-        "y": 34,
+        "y": 43,
         "w": 8,
         "h": 7
       },
@@ -1756,7 +1948,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 41,
+        "y": 50,
         "w": 24,
         "h": 1
       },
@@ -1773,7 +1965,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 42,
+        "y": 51,
         "w": 8,
         "h": 7
       },
@@ -1869,7 +2061,7 @@
       },
       "gridPos": {
         "x": 8,
-        "y": 42,
+        "y": 51,
         "w": 8,
         "h": 7
       },
@@ -1966,7 +2158,7 @@
       },
       "gridPos": {
         "x": 16,
-        "y": 42,
+        "y": 51,
         "w": 8,
         "h": 3
       },
@@ -2028,7 +2220,7 @@
       "title": "Measurement limits",
       "gridPos": {
         "x": 16,
-        "y": 45,
+        "y": 54,
         "w": 8,
         "h": 4
       },

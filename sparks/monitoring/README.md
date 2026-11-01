@@ -71,7 +71,8 @@ Bootstrap or migrate `spark-1` using the [shared definition with `SPARK_HOST=spa
 | Running / waiting | Native current request gauges against `tensorfold_health:streams_max`. TP ranks are not extra requests. Queue-wait duration is not measured. |
 | Prompt cache hits | `tensorfold_health:cached_tokens_total` over `tensorfold:prompt_tokens_total`, by tokens rather than requests. |
 | Pool used | Share of the shared context pool held by streams and kept prompts, from `tensorfold_health:pool_tokens` and `pool_free_tokens`. It is not unified-memory use. |
-| Fullest stream | The fullest live stream's cache divided by its context window, `tensorfold:kv_cache_usage_ratio`; zero while idle. |
+| Context held by running requests | `tensorfold:kv_cache_usage_ratio` for each live stream, multiplied by `tensorfold_health:context_length` for tokens. Its `pool` label is a place in the list of live streams and shifts when an earlier stream finishes, so the dashboards rank streams by size at each moment. `#1` is the largest request then, not a fixed request. Requests have no id in the metrics; the kept conversations are in `/health` as `kept_mix`. |
+| Fullest stream | The largest of those shares; zero while idle. |
 | Prompt tokens read | Full prompt accounting booked on completion, split into new and cached. It does not measure live prefill speed. |
 | Speculative acceptance | Accepted / drafted tokens over completed requests. The `mtp` metric prefix does not identify the actual drafter or prove MTP is enabled. |
 | Engine | `tensorfold_health:ok`, which the engine sets to 0 on a fault that stops it serving; `/health` gives the first cause. |

@@ -267,6 +267,18 @@ RATE = "$__rate_interval"
 GENERATED, PROMPT, CACHED = "tensorfold:generation_tokens_total", "tensorfold:prompt_tokens_total", "tensorfold_health:cached_tokens_total"
 # GLM reports reply tokens as they are written; earlier TensorFold recipes report finished and running tokens apart.
 WRITTEN = f"(tensorfold_health:completion_tokens_total or ({GENERATED} + tensorfold:generation_tokens_running))"
+# The label on tensorfold:kv_cache_usage_ratio is a stream's place in the list of live streams, which shifts as streams finish, so a stream cannot be followed by it.
+# Ranking by size at each moment keeps each line on one stream for as long as the order holds. The engine runs at most eight.
+KV = "tensorfold:kv_cache_usage_ratio"
+
+
+def ranked(top):
+    """Each live stream's value, largest first, as #1 to #8. A rank with no stream behind it reads zero, and is dropped."""
+    def nth(k):
+        return f"sum(topk({k}, {top}))" + (f" - sum(topk({k - 1}, {top}))" if k > 1 else "")
+    return "sort_by_label(" + " or ".join(f'label_set(({nth(k)}) > 0, "rank", "#{k}")' for k in range(1, 9)) + ', "rank")'
+
+
 W.tiles("inference", "Inference · $model", [
     ("Requests running", zero("sum(tensorfold:requests_running)"), {}),
     ("Requests waiting", zero("sum(tensorfold:requests_waiting)"), dict(thresholds=th(QUIET + [{"value": 4, "color": "orange"}]))),
@@ -278,6 +290,11 @@ W.add("inference-idle", "Inference", "stat", [q("count(tensorfold:kv_cache_usage
       {"colorMode": "none", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": RED, "textMode": "value", "text": {"valueSize": 16}},
       {"noValue": "No model is being served", "color": fixed("text")},
       desc="Shown while no model reports to the inference scrape; the model's own widgets appear in its place once one is loaded.")
+W.bars("stream-share", "Context per request · $model", ranked(f"100 * {KV}"), "{{rank}}",
+       desc="How much of its context window each running request holds, largest first. A bar appears as a request starts and goes as it ends.")
+W.trend("stream-tokens", "Tokens held by each running request · $model", [("{{rank}}", ranked(f"{KV} * on (instance, recipe) group_left tensorfold_health:context_length"))], "short",
+        names=["#1", "#2", "#3"], interval="1s", style=dict(CRISP, drawStyle="points", pointSize=3, showPoints="always"),
+        desc="Tokens in each running request's cache, largest first. The ranks are positions by size, not request ids, so a colour changes hands when two requests swap places. Points rather than lines, because each request drops out between turns. A recipe that reports no window size shows nothing here.")
 W.trend("gpu-use", "GPU in use", [("{{instance}}", f"100 * max by (instance) (avg_over_time(nvidia_smi_utilization_gpu_ratio[{RATE}]))")], "percent", hi=100, interval="5s", style=CRISP,
         desc="How hard each GPU has been working, averaged over each step of the chart.")
 W.trend("output", "Output · $model", [("tokens written", f"sum(clamp_min(deriv({WRITTEN}[{RATE}:1s]), 0))")], "suffix: tok/s", interval="1s", style=CRISP,
