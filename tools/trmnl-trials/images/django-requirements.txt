@@ -214,9 +214,9 @@ pyee==12.1.1 ; python_version >= '3.8' \
 pyopenssl==25.0.0 ; python_version >= '3.7' \
     --hash=sha256:424c247065e46e76a37411b9ab1782541c23bb658bf003772c3405fbaa128e90 \
     --hash=sha256:cd2cef799efa3936bb08e8ccb9433a575722b9dd986023f1cabc4ae64e9dac16
-python-dotenv==1.1.0 ; python_version >= '3.9' \
-    --hash=sha256:41f90bc6f5f177fb41f53e87666db362025010eb28f60a01c9143bfa33a2b2d5 \
-    --hash=sha256:d7c01d9e2293916c18baf562d95698754b0dbbb5e74d457c45d4f6561fb9d55d
+python-dotenv==1.1.1; python_version >= '3.9' \
+    --hash=sha256:31f23644fe2602f88ff55e1f5c79ba497e01224ee7737937930c448e4d0e24dc \
+    --hash=sha256:a8a6399716257f45be6a007360200409fce5cda2661e3dec71d23dc15f6189ab
 service-identity==24.2.0 ; python_version >= '3.8' \
     --hash=sha256:6b047fbd8a84fd0bb0d55ebce4031e400562b9196e1e0d3e0fe2b8a59f6d4a85 \
     --hash=sha256:b8683ba13f0d39c6cd5d625d2c5f65421d6d707b013b375c355751557cbe8e09
