@@ -92,6 +92,8 @@ def test_durable_profile_changes_only_the_allocator_and_the_spill_tier():
     assert durable["env"].pop("PYTORCH_CUDA_ALLOC_CONF") == "expandable_segments:True"
     assert durable["env"].pop("TF_GLM_SPILL_READ_BLOCKS") == "9", "more read-ahead takes rows from the pool"
     assert "--spill-gib 64" in durable["defaults"].pop("extra_args")
+    assert durable["post_exec"][0] == base["post_exec"][0].replace("--min-pool-tokens 1200000", "--min-pool-tokens 2582528")
+    durable["post_exec"] = base["post_exec"]
     for key in ("profile", "serving_profile", "description"):
         durable["metadata"].pop(key), base["metadata"].pop(key)
     assert durable == base

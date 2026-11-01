@@ -92,17 +92,21 @@ After a boot, run the shared checks in [Validate](#validate) and three for GLM: 
 
 To launch the durable profile, point `glm` at its recipe and stop the running instance with the recipe that started it. Both profiles share a native cache, so the switch recompiles nothing. The first switch loses every kept prompt, because a running engine without the tier has written nothing to disk. Each conversation prefills in full on its next turn.
 
-Once the durable profile is running, stop it cleanly so a restart keeps what it holds. `sparkrun stop` removes containers with `docker rm -f`, and `docker stop` signals the container's `sleep infinity` rather than the engine, so neither runs the flush. Signal the engine first, on both Sparks, and give it the 60 s the flush can take:
+The launch fails unless the pool holds at least 2,582,528 tokens, so a smaller pool cannot pass unnoticed. After it passes, confirm the tier is on: `/health` must carry a `spill` block, because readiness does not check it, and a second engine on the folder would turn the tier off.
+
+Once the durable profile is running, stop it cleanly so a restart keeps what it holds. `sparkrun stop` removes containers with `docker rm -f`, and `docker stop` signals the container's `sleep infinity` rather than the engine, so neither runs the flush. With no request running, signal rank 0 only. It tells rank 1 to flush, and rank 1 has no handler of its own, so a signal there kills it mid-write. SparkRun stops each container when its engine exits, so read the logs with `docker cp`:
 
 ```sh
-for host in 10.32.21.31 10.32.21.32; do
-  ssh "kelchm@$host" 'rank=$(docker ps --filter label=sparkrun.rank --format "{{.ID}}" | head -1); docker exec "$rank" pkill -TERM -f "tensorfold serve"'
-done
-sleep 75
+head=$(docker ps --filter label=sparkrun.rank=0 --format '{{.ID}}')
+worker=$(ssh kelchm@10.32.21.32 "docker ps --filter label=sparkrun.rank=1 --format '{{.ID}}'")
+docker exec "$head" pkill -TERM -f "tensorfold serve"
+for i in $(seq 90); do docker exec "$head" pgrep -f "tensorfold serve" >/dev/null 2>&1 || break; sleep 1; done
+docker cp "$head:/tmp/sparkrun_serve.log" - | tar -xO | grep 'spill' | tail -3
+ssh kelchm@10.32.21.32 "docker cp $worker:/tmp/sparkrun_serve.log - | tar -xO | grep 'spill rank 1' | tail -2"
 sparkrun stop "$glm" --cluster sparks
 ```
 
-States written before a `kill -9` also survive, so a crash loses only the newest rows waiting for their write.
+Expect `spill: shutdown flush done` from rank 0 and `spill rank 1: wrote the <n> kept prompts` from rank 1. This procedure comes from the source and has not been run here. States written before a `kill -9` also survive, so a crash loses only the newest rows waiting for their write.
 
 To roll back, stop it with its own recipe and launch the profile that served before, as [Operate and roll back](#operate-and-roll-back) describes.
 
@@ -115,7 +119,7 @@ To roll back, stop it with its own recipe and launch the profile that served bef
 - **Kept prompt states** hold device memory outside the pool with no byte cap, the kit's default `TF_GLM_KEPT_BYTES_GIB=0`, and nothing returns it until a restart. In one report a 1 GiB cap left about 4 GiB more `MemAvailable` on each Spark, at the cost of a full prefill when a dropped conversation returns ([#197](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold/issues/197)).
 - **GPU memory under long multi-agent use:** on October 31 the head's `MemAvailable` fell from 8.3 to 2.4 GiB in two hours, then held, with the pool only 60% used. `nvidia-smi --query-compute-apps=pid,used_memory --format=csv` showed 104 GiB against a 102.92 GiB budget, and the engine's CPU memory took another 10.6 GiB of the 14.5 GiB reserve. The pool is allocated at startup, so filling it does not move these numbers. The likely cause is the caching allocator's ratchet in [kit issue #143](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold/issues/143), where exhaustion ends in `NV_ERR_NO_MEMORY`. GLM has no check of host memory, and a failed allocation latches the engine broken until both ranks restart.
 - **The durable profile's allocator mode** is the fix three operators report in that issue, the longest for 7.75 days at this pool and reserve, and [kit PR #189](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold/pull/189) proposes as a default. They saw decode unchanged and no NCCL or CUDA graph trouble. It flattens growth; it does not return memory when idle or change the head's 4-5 GiB floor. It has not run here.
-- **The durable profile's spill tier** keeps prompt states under `/opt/spark-cache/huggingface/tensorfold-spill` on each Spark, up to 64 GiB at about 6.2 MB per 1,000 tokens, and a conversation resumes from them after an eviction, a restart or a crash. States are tied to the code, weights, driver and runtime, so a settings change keeps them, and a new image or driver starts empty. Rows waiting for a write can hold up to 1.8 GiB of host memory. An operator in the same issue, running this allocator mode with spill on an older store than this kit's, saw GPU memory stay flat while the head's host memory grew to 1.6 GiB available after a day, cause unproven. Watch the head's `MemAvailable` after the first launch.
+- **The durable profile's spill tier** keeps prompt states under `/opt/spark-cache/huggingface/tensorfold-spill` on each Spark, up to 64 GiB at about 6.2 MB per 1,000 tokens, and a conversation resumes from them after an eviction, a restart or a crash. States are tied to the cache layout and to the code, weights, driver and runtime: a new image or driver starts empty, as does a change to KV precision or the window, while an environment setting like the allocator mode keeps them. Rows waiting for a write can hold up to 1.8 GiB of host memory, and the tier pins 384 MiB at start, which today's 14.18 GiB of startup slack absorbs without shrinking the pool. An operator in the same issue, running this allocator mode with spill on an older store than this kit's, saw GPU memory stay flat while the head's host memory grew to 1.6 GiB available after a day, cause unproven. Watch the head's `MemAvailable` after the first launch.
 - **Other limits on this memory:** setting `TF_GLM_KEPT_BYTES_GIB` to any value makes dropped states return unused allocator blocks, and values below the 2.71 GiB that 32 full states hold also evict them. The kit's `TF_GLM_DISPLAY_KV_MIB=1792` does not apply: Display Reserved Memory is already 0.5 GB in [UEFI](../../../docs/runbooks/dgx-spark-bringup.md).
 - **Admission:** requests past the four streams queue without limit, because `TF_GLM_MAX_QUEUED` is empty.
 - **Access and memory:** the endpoint has no API key, and no memory watchdog runs ([#944](https://github.com/kelchm/home-lab/issues/944)).

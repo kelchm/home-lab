@@ -32,7 +32,7 @@ defaults:
   drafter_revision: bf582e4eacc1810f76656d1811693ff6c6737d2a
   entrypoint: /usr/local/bin/tensorfold-entrypoint
   # The kit's spill values. /cache/huggingface is already a writable NVMe mount on both ranks; the engine makes the folder.
-  extra_args: --spill-gib 64 --snapshot-dir /cache/huggingface/tensorfold-spill --spill-highwater 0.70 --spill-min-tokens 8192 --spill-min-free-gib 50
+  extra_args: --spill-gib 64 --snapshot-dir /cache/huggingface/tensorfold-spill --spill-min-tokens 8192 --spill-min-free-gib 50
 env:
   NCCL_PASSTHROUGH: '1'
   NCCL_MIN_NCHANNELS: '4'
@@ -127,8 +127,9 @@ runtime_cache:
 mods:
 - ../mods/tensorfold-readiness
 - ../mods/mia-tensorfold-glm53-bf5f9452
+# The published floor is 1.2M. This profile must not cost the pool anything, so a smaller pool fails the launch.
 post_exec:
-- python3 /opt/tensorfold-readiness/readiness.py --model GLM-5.3-Flash --context 1048576 --lanes 4 --efforts max,high,low,none --min-pool-tokens 1200000 --warmup-words 128,4096,16384
+- python3 /opt/tensorfold-readiness/readiness.py --model GLM-5.3-Flash --context 1048576 --lanes 4 --efforts max,high,low,none --min-pool-tokens 2582528 --warmup-words 128,4096,16384
 distribution_config:
   models:
     entries:
