@@ -229,9 +229,9 @@ sqlparse==0.5.3 ; python_version >= '3.8' \
 twisted==24.11.0 ; python_full_version >= '3.8.0' \
     --hash=sha256:695d0556d5ec579dcc464d2856b634880ed1319f45b10d19043f2b57eb0115b5 \
     --hash=sha256:fe403076c71f04d5d2d789a755b687c5637ec3bcd3b2b8252d76f2ba65f54261
-txaio==23.1.1 ; python_version >= '3.7' \
-    --hash=sha256:aaea42f8aad50e0ecfb976130ada140797e9dcb85fad2cf72b0f37f8cefcb490 \
-    --hash=sha256:f9a9216e976e5e3246dfd112ad7ad55ca915606b60b84a757ac769bd404ff704
+txaio==23.6.1; python_version >= '3.7' \
+    --hash=sha256:2e040bc849cb57a0abd2ec3dec78d540c474bcf6de0634e788764741c04aab93 \
+    --hash=sha256:ed993341154a20e38787fce8fcbd0297c2efd3ff90942e06475a299f354c40b6
 typing-extensions==4.13.2 ; python_version >= '3.8' \
     --hash=sha256:a439e7c04b49fec3e5d3e2beaa21755cadbbdc391694e28ccdd36ca4a1408f8c \
     --hash=sha256:e6c81219bd689f51865d9e372991c540bda33a0379d5573cddb9a3a23f7caaef
