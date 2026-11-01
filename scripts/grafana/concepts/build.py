@@ -78,6 +78,14 @@ CONCEPTS = {
     # one complementary pair at matched lightness and strength.
     # Round four: Apple's dark-mode system colours, a set designed to stay vivid together on dark surfaces, at full strength.
     "system": dict(family("System colours", "#0A84FF", "#FF9F0A", "#30D158", "#FFD60A", "#FF453A", "#64D2FF", "#0A5BB5"), fill=32, bars=90, ribbon=True, tile_calm="#0A84FF", transparent=False),
+    # Round five: established palettes side by side on the grey cards, for picking from.
+    **{key: dict(family(title, *colours), fill=14, bars=55, flat_bars=True, ribbon=True, tile_calm=colours[0], transparent=False) for key, title, colours in (
+        ("github", "GitHub", ("#58A6FF", "#FFA657", "#3FB950", "#D29922", "#F85149", "#A5D6FF", "#2F6FB5")),
+        ("grafana", "Grafana", ("#5794F2", "#FF9830", "#73BF69", "#FADE2A", "#F2495C", "#8AB8FF", "#3274D9")),
+        ("sky", "One hue", ("#33C3FF", "#B5E6FF", "#34D399", "#FBBF24", "#FB7185", "#B5E6FF", "#1C7FB0")),
+        ("tailwind", "Cyan and coral", ("#22D3EE", "#FB7185", "#34D399", "#FBBF24", "#EF4444", "#A5F3FC", "#0E7490")),
+        ("fresh", "Green and blue", ("#38BDF8", "#4ADE80", "#4ADE80", "#FBBF24", "#F87171", "#BAE6FD", "#0369A1")),
+        ("sunrise", "Gold and coral", ("#FACC15", "#FB7185", "#4ADE80", "#FB923C", "#EF4444", "#FDE68A", "#A16207")))},
     "cool-warm": family("Cool and warm", "#4DA6FF", "#5EEAD4", "#2DD4BF", "#FFB454", "#FF6B5E", "#9CCBFF", "#1E5FA3"),
     "editor": family("Your editor", "#61AFEF", "#E5C07B", "#98C379", "#D19A66", "#E06C75", "#A6D2F5", "#2F5F8A"),
     "complement": family("Blue and orange", "#58A8F8", "#F5A35C", "#5AD29A", "#F2D264", "#F2757A", "#A3CFFB", "#27629C"),
@@ -291,7 +299,7 @@ def drawn(p, c, health):
     if health and p["id"] in TWO_MACHINES:
         custom["fillOpacity"] = 0
     if not health and p["id"] in BARS:
-        custom.update(drawStyle="bars", barAlignment=0, barWidthFactor=0.8, lineWidth=0, fillOpacity=c.get("bars", 75) if c.get("refined") else 30, gradientMode="opacity" if c.get("refined") else "none")
+        custom.update(drawStyle="bars", barAlignment=0, barWidthFactor=0.8, lineWidth=0, fillOpacity=c.get("bars", 75) if c.get("refined") else 30, gradientMode="opacity" if c.get("refined") and not c.get("flat_bars") else "none")
         fc["defaults"]["color"] = fixed(c["speed"] if p["id"] == 23 else c["load"])
     if not health and p["id"] == 7:
         for o in fc["overrides"]:

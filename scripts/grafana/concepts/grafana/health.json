@@ -1,0 +1,2511 @@
+{
+ "annotations": {
+  "list": [
+   {
+    "builtIn": 1,
+    "datasource": {
+     "type": "grafana",
+     "uid": "-- Grafana --"
+    },
+    "enable": true,
+    "hide": true,
+    "iconColor": "rgba(0, 211, 255, 1)",
+    "name": "Annotations & Alerts",
+    "type": "dashboard"
+   }
+  ]
+ },
+ "fiscalYearStartMonth": 0,
+ "graphTooltip": 1,
+ "id": null,
+ "liveNow": false,
+ "schemaVersion": 40,
+ "timezone": "browser",
+ "uid": "concept-grafana-health",
+ "title": "Concept · Grafana · Sparks",
+ "description": "GPU, heat, memory and interconnect health for the Spark machines, so a slow or failing model can be traced to its cause. Shared CPU/GPU memory usage is host memory usage, not GPU allocation.",
+ "editable": true,
+ "version": 0,
+ "refresh": "30s",
+ "time": {
+  "from": "now-1h",
+  "to": "now"
+ },
+ "tags": [
+  "concept"
+ ],
+ "links": [],
+ "panels": [
+  {
+   "id": 1,
+   "type": "stat",
+   "title": "",
+   "description": "Memory left. Orange is under 4 GiB and red is under the 2 GiB stop line.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 0,
+    "w": 6,
+    "h": 4
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "thresholds"
+     },
+     "unit": "bytes",
+     "decimals": 1,
+     "noValue": "–",
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "value": null,
+        "color": "#F2495C"
+       },
+       {
+        "value": 2147483648,
+        "color": "#FADE2A"
+       },
+       {
+        "value": 4294967296,
+        "color": "#73BF69"
+       }
+      ]
+     },
+     "displayName": "Memory · ${__field.labels.instance}",
+     "min": 0,
+     "max": 17200000000.0
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/spark-1/"
+      },
+      "properties": [
+       {
+        "id": "thresholds",
+        "value": {
+         "mode": "absolute",
+         "steps": [
+          {
+           "value": null,
+           "color": "#F2495C"
+          },
+          {
+           "value": 2147483648,
+           "color": "#FADE2A"
+          },
+          {
+           "value": 4294967296,
+           "color": "#5794F2"
+          }
+         ]
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/spark-2/"
+      },
+      "properties": [
+       {
+        "id": "thresholds",
+        "value": {
+         "mode": "absolute",
+         "steps": [
+          {
+           "value": null,
+           "color": "#F2495C"
+          },
+          {
+           "value": 2147483648,
+           "color": "#FADE2A"
+          },
+          {
+           "value": 4294967296,
+           "color": "#5794F2"
+          }
+         ]
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "colorMode": "none",
+    "graphMode": "area",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "percentChangeColorMode": "standard",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "showPercentChange": false,
+    "text": {
+     "titleSize": 13,
+     "valueSize": 26
+    },
+    "textMode": "value_and_name",
+    "wideLayout": true
+   },
+   "interval": "15s",
+   "maxDataPoints": 120,
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "node_memory_MemAvailable_bytes{job=\"spark-node\",platform=\"spark\",instance=~\"$node\"}",
+     "legendFormat": "{{instance}}",
+     "refId": "A",
+     "range": true,
+     "instant": false,
+     "interval": "15s"
+    }
+   ]
+  },
+  {
+   "id": 2,
+   "type": "stat",
+   "title": "",
+   "description": "The hotter of the board and the GPU. The board's critical trip point is 104.8 °C; orange is the 95 °C it reaches under heavy load and red is the 99.8 °C alert.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "gridPos": {
+    "x": 6,
+    "y": 0,
+    "w": 6,
+    "h": 4
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "thresholds"
+     },
+     "unit": "celsius",
+     "decimals": 0,
+     "noValue": "–",
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "value": null,
+        "color": "#73BF69"
+       },
+       {
+        "value": 95,
+        "color": "#FADE2A"
+       },
+       {
+        "value": 99.8,
+        "color": "#F2495C"
+       }
+      ]
+     },
+     "displayName": "Hottest · ${__field.labels.instance}",
+     "min": 30,
+     "max": 165
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/spark-1/"
+      },
+      "properties": [
+       {
+        "id": "thresholds",
+        "value": {
+         "mode": "absolute",
+         "steps": [
+          {
+           "value": null,
+           "color": "#5794F2"
+          },
+          {
+           "value": 95,
+           "color": "#FADE2A"
+          },
+          {
+           "value": 99.8,
+           "color": "#F2495C"
+          }
+         ]
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/spark-2/"
+      },
+      "properties": [
+       {
+        "id": "thresholds",
+        "value": {
+         "mode": "absolute",
+         "steps": [
+          {
+           "value": null,
+           "color": "#5794F2"
+          },
+          {
+           "value": 95,
+           "color": "#FADE2A"
+          },
+          {
+           "value": 99.8,
+           "color": "#F2495C"
+          }
+         ]
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "colorMode": "none",
+    "graphMode": "area",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "percentChangeColorMode": "standard",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "showPercentChange": false,
+    "text": {
+     "titleSize": 13,
+     "valueSize": 26
+    },
+    "textMode": "value_and_name",
+    "wideLayout": true
+   },
+   "interval": "15s",
+   "maxDataPoints": 120,
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "max by (instance) (label_set(max by (instance) (max_over_time(node_thermal_zone_temp{job=\"spark-node\",platform=\"spark\",instance=~\"$node\"}[$__rate_interval])), \"source\", \"board\") or label_set(max by (instance) (max_over_time(nvidia_smi_temperature_gpu{job=\"spark-gpu\",platform=\"spark\",instance=~\"$node\"}[$__rate_interval])), \"source\", \"gpu\"))",
+     "legendFormat": "{{instance}}",
+     "refId": "A",
+     "range": true,
+     "instant": false,
+     "interval": "15s"
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "type": "stat",
+   "title": "",
+   "description": "The fullest persistent filesystem on each Spark. The low-space alert fires at 90%.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 0,
+    "w": 4,
+    "h": 4
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "thresholds"
+     },
+     "unit": "percentunit",
+     "decimals": 0,
+     "noValue": "–",
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#5794F2",
+        "value": null
+       },
+       {
+        "color": "#FADE2A",
+        "value": 0.8
+       },
+       {
+        "color": "#F2495C",
+        "value": 0.9
+       }
+      ]
+     },
+     "displayName": "Disk · ${__field.labels.instance}",
+     "min": 0,
+     "max": 1.6
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "none",
+    "graphMode": "area",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "percentChangeColorMode": "standard",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "showPercentChange": false,
+    "text": {
+     "titleSize": 13,
+     "valueSize": 26
+    },
+    "textMode": "value_and_name",
+    "wideLayout": true
+   },
+   "interval": "15s",
+   "maxDataPoints": 120,
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "max by (instance) (1 - node_filesystem_avail_bytes{job=\"spark-node\",platform=\"spark\",instance=~\"$node\",mountpoint!=\"/boot/efi\",fstype!~\"tmpfs|overlay|squashfs|ramfs|efivarfs|nfs.*|cifs|fuse.*\"} / node_filesystem_size_bytes{job=\"spark-node\",platform=\"spark\",instance=~\"$node\",mountpoint!=\"/boot/efi\",fstype!~\"tmpfs|overlay|squashfs|ramfs|efivarfs|nfs.*|cifs|fuse.*\"})",
+     "legendFormat": "{{instance}}",
+     "refId": "A",
+     "range": true,
+     "instant": false,
+     "interval": "15s"
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "type": "stat",
+   "title": "",
+   "description": "Seconds the GPUs spent in hardware thermal slowdown in the last hour.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "gridPos": {
+    "x": 16,
+    "y": 0,
+    "w": 4,
+    "h": 4
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "thresholds"
+     },
+     "unit": "s",
+     "decimals": 0,
+     "noValue": "–",
+     "mappings": [
+      {
+       "type": "value",
+       "options": {
+        "0": {
+         "text": "None",
+         "index": 0
+        }
+       }
+      }
+     ],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#5794F2",
+        "value": null
+       },
+       {
+        "color": "#FADE2A",
+        "value": 1
+       }
+      ]
+     },
+     "displayName": "Heat slowdown"
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "none",
+    "graphMode": "area",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "percentChangeColorMode": "standard",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "showPercentChange": false,
+    "text": {
+     "titleSize": 13,
+     "valueSize": 26
+    },
+    "textMode": "value_and_name",
+    "wideLayout": true
+   },
+   "interval": "1m",
+   "maxDataPoints": 120,
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "sum(increase(nvidia_smi_clocks_event_reasons_counters_hw_thermal_slowdown_seconds{job=\"spark-gpu\",platform=\"spark\",instance=~\"$node\"}[1h]))",
+     "legendFormat": "",
+     "refId": "A",
+     "range": true,
+     "instant": false,
+     "interval": "1m"
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "type": "stat",
+   "title": "",
+   "description": "RoCE errors on the ports linking the two Sparks in the last hour.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "gridPos": {
+    "x": 20,
+    "y": 0,
+    "w": 4,
+    "h": 4
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "thresholds"
+     },
+     "unit": "short",
+     "decimals": 0,
+     "noValue": "–",
+     "mappings": [
+      {
+       "type": "value",
+       "options": {
+        "0": {
+         "text": "None",
+         "index": 0
+        }
+       }
+      }
+     ],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#5794F2",
+        "value": null
+       },
+       {
+        "color": "#FADE2A",
+        "value": 1
+       }
+      ]
+     },
+     "displayName": "Link errors"
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "none",
+    "graphMode": "area",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "percentChangeColorMode": "standard",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "showPercentChange": false,
+    "text": {
+     "titleSize": 13,
+     "valueSize": 26
+    },
+    "textMode": "value_and_name",
+    "wideLayout": true
+   },
+   "interval": "1m",
+   "maxDataPoints": 120,
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "sum(increase({__name__=~\"node_infiniband_(link_downed|local_ack_timeout_errors|out_of_sequence_packets_received|packet_sequence_errors|port_errors_received|roce_adp_retransmits)_total\",job=\"spark-node\",platform=\"spark\",instance=~\"$node\",device=~\".*s0f0\"}[1h]))",
+     "legendFormat": "",
+     "refId": "A",
+     "range": true,
+     "instant": false,
+     "interval": "1m"
+    }
+   ]
+  },
+  {
+   "id": 101,
+   "type": "row",
+   "title": "GPU",
+   "collapsed": false,
+   "gridPos": {
+    "x": 0,
+    "y": 4,
+    "w": 24,
+    "h": 1
+   },
+   "panels": []
+  },
+  {
+   "id": 7,
+   "type": "timeseries",
+   "title": "GPU temperature",
+   "description": "Highest temperature in each step. Red bands are when the GPU slowed itself for heat.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 5,
+    "w": 8,
+    "h": 8
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "palette-classic"
+     },
+     "unit": "celsius",
+     "noValue": "No data",
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "custom": {
+      "drawStyle": "line",
+      "lineInterpolation": "smooth",
+      "lineWidth": 2,
+      "fillOpacity": 0,
+      "showPoints": "never",
+      "spanNulls": false,
+      "axisCenteredZero": false,
+      "axisColorMode": "text",
+      "axisLabel": "",
+      "axisPlacement": "auto",
+      "barAlignment": 0,
+      "gradientMode": "opacity",
+      "hideFrom": {
+       "legend": false,
+       "tooltip": false,
+       "viz": false
+      },
+      "scaleDistribution": {
+       "type": "linear"
+      },
+      "stacking": {
+       "group": "A",
+       "mode": "none"
+      },
+      "thresholdsStyle": {
+       "mode": "off"
+      },
+      "axisBorderShow": false
+     },
+     "decimals": 0
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^spark-1/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#5794F2",
+         "mode": "fixed"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^spark-2/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#FF9830",
+         "mode": "fixed"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byFrameRefID",
+       "options": "B"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "Slowed for heat"
+       },
+       {
+        "id": "unit",
+        "value": "bool_on_off"
+       },
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#F2495C",
+         "mode": "fixed"
+        }
+       },
+       {
+        "id": "custom.axisPlacement",
+        "value": "hidden"
+       },
+       {
+        "id": "custom.lineInterpolation",
+        "value": "stepAfter"
+       },
+       {
+        "id": "custom.spanNulls",
+        "value": true
+       },
+       {
+        "id": "min",
+        "value": 0
+       },
+       {
+        "id": "max",
+        "value": 1.02
+       },
+       {
+        "id": "custom.fillOpacity",
+        "value": 0
+       },
+       {
+        "id": "custom.lineWidth",
+        "value": 5
+       },
+       {
+        "id": "custom.spanNulls",
+        "value": false
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Live"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#3274D9",
+         "mode": "fixed"
+        }
+       },
+       {
+        "id": "custom.lineWidth",
+        "value": 1
+       },
+       {
+        "id": "custom.fillOpacity",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "One-minute trend"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#5794F2",
+         "mode": "fixed"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byType",
+       "options": "time"
+      },
+      "properties": [
+       {
+        "id": "custom.axisGridShow",
+        "value": false
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byFrameRefID",
+       "options": "W"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "Over 75 °C"
+       },
+       {
+        "id": "unit",
+        "value": "bool_on_off"
+       },
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#FADE2A",
+         "mode": "fixed"
+        }
+       },
+       {
+        "id": "custom.axisPlacement",
+        "value": "hidden"
+       },
+       {
+        "id": "custom.lineInterpolation",
+        "value": "stepAfter"
+       },
+       {
+        "id": "custom.spanNulls",
+        "value": true
+       },
+       {
+        "id": "min",
+        "value": 0
+       },
+       {
+        "id": "max",
+        "value": 1.02
+       },
+       {
+        "id": "custom.fillOpacity",
+        "value": 0
+       },
+       {
+        "id": "custom.lineWidth",
+        "value": 5
+       },
+       {
+        "id": "custom.spanNulls",
+        "value": false
+       }
+      ]
+     }
+    ]
+   },
+   "interval": "5s",
+   "maxDataPoints": 2000,
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "max by (instance) (max_over_time(nvidia_smi_temperature_gpu{job=\"spark-gpu\",platform=\"spark\",instance=~\"$node\"}[$__rate_interval]))",
+     "legendFormat": "{{instance}}",
+     "refId": "A",
+     "range": true,
+     "instant": false,
+     "interval": "5s"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "(max(max_over_time({__name__=~\"nvidia_smi_clocks_event_reasons_(hw|sw)_thermal_slowdown\",job=\"spark-gpu\",platform=\"spark\",instance=~\"$node\"}[$__rate_interval]))) > 0",
+     "legendFormat": "Slowed for heat",
+     "refId": "B",
+     "range": true,
+     "instant": false,
+     "interval": "5s"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "(max(max by (instance) (max_over_time(nvidia_smi_temperature_gpu{job=\"spark-gpu\",platform=\"spark\",instance=~\"$node\"}[$__rate_interval]))) > bool 75) > 0",
+     "legendFormat": "Over 75 °C",
+     "refId": "W",
+     "range": true,
+     "instant": false,
+     "interval": "5s"
+    }
+   ],
+   "options": {
+    "legend": {
+     "showLegend": true,
+     "displayMode": "list",
+     "placement": "bottom",
+     "calcs": []
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
+  },
+  {
+   "id": 8,
+   "type": "timeseries",
+   "title": "GPU power",
+   "description": "Highest draw in each step, for the GPU alone. The CPU, network card and drive are not included. Amber bands are the power cap, which is ordinary operation.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "gridPos": {
+    "x": 8,
+    "y": 5,
+    "w": 8,
+    "h": 8
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "palette-classic"
+     },
+     "unit": "watt",
+     "noValue": "No data",
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "custom": {
+      "drawStyle": "line",
+      "lineInterpolation": "smooth",
+      "lineWidth": 2,
+      "fillOpacity": 0,
+      "showPoints": "never",
+      "spanNulls": false,
+      "axisCenteredZero": false,
+      "axisColorMode": "text",
+      "axisLabel": "",
+      "axisPlacement": "auto",
+      "barAlignment": 0,
+      "gradientMode": "opacity",
+      "hideFrom": {
+       "legend": false,
+       "tooltip": false,
+       "viz": false
+      },
+      "scaleDistribution": {
+       "type": "linear"
+      },
+      "stacking": {
+       "group": "A",
+       "mode": "none"
+      },
+      "thresholdsStyle": {
+       "mode": "off"
+      },
+      "axisBorderShow": false
+     },
+     "decimals": 0,
+     "min": 0
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^spark-1/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#5794F2",
+         "mode": "fixed"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^spark-2/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#FF9830",
+         "mode": "fixed"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byFrameRefID",
+       "options": "B"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "Power cap"
+       },
+       {
+        "id": "unit",
+        "value": "bool_on_off"
+       },
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#71717A",
+         "mode": "fixed"
+        }
+       },
+       {
+        "id": "custom.axisPlacement",
+        "value": "hidden"
+       },
+       {
+        "id": "custom.lineInterpolation",
+        "value": "stepAfter"
+       },
+       {
+        "id": "custom.spanNulls",
+        "value": true
+       },
+       {
+        "id": "min",
+        "value": 0
+       },
+       {
+        "id": "max",
+        "value": 1.02
+       },
+       {
+        "id": "custom.fillOpacity",
+        "value": 0
+       },
+       {
+        "id": "custom.lineWidth",
+        "value": 5
+       },
+       {
+        "id": "custom.spanNulls",
+        "value": false
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "First token"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#5794F2",
+         "mode": "fixed"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Whole request"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#5794F2",
+         "mode": "fixed"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byType",
+       "options": "time"
+      },
+      "properties": [
+       {
+        "id": "custom.axisGridShow",
+        "value": false
+       }
+      ]
+     }
+    ]
+   },
+   "interval": "5s",
+   "maxDataPoints": 2000,
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "max by (instance) (max_over_time(nvidia_smi_power_draw_watts{job=\"spark-gpu\",platform=\"spark\",instance=~\"$node\"}[$__rate_interval]))",
+     "legendFormat": "{{instance}}",
+     "refId": "A",
+     "range": true,
+     "instant": false,
+     "interval": "5s"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "(max(max_over_time(nvidia_smi_clocks_event_reasons_sw_power_cap{job=\"spark-gpu\",platform=\"spark\",instance=~\"$node\"}[$__rate_interval]))) > 0",
+     "legendFormat": "Power cap",
+     "refId": "B",
+     "range": true,
+     "instant": false,
+     "interval": "5s"
+    }
+   ],
+   "options": {
+    "legend": {
+     "showLegend": true,
+     "displayMode": "list",
+     "placement": "bottom",
+     "calcs": []
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
+  },
+  {
+   "id": 15,
+   "type": "timeseries",
+   "title": "GPU clock",
+   "description": "Average shader clock against the device's maximum. Grey bands are when the GPU is busy, the only time a clock means anything. A busy clock far below its usual level with no slowdown is worth a look.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "gridPos": {
+    "x": 16,
+    "y": 5,
+    "w": 8,
+    "h": 8
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "palette-classic"
+     },
+     "unit": "hertz",
+     "noValue": "No data",
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "custom": {
+      "drawStyle": "line",
+      "lineInterpolation": "smooth",
+      "lineWidth": 2,
+      "fillOpacity": 0,
+      "showPoints": "never",
+      "spanNulls": false,
+      "axisCenteredZero": false,
+      "axisColorMode": "text",
+      "axisLabel": "",
+      "axisPlacement": "auto",
+      "barAlignment": 0,
+      "gradientMode": "opacity",
+      "hideFrom": {
+       "legend": false,
+       "tooltip": false,
+       "viz": false
+      },
+      "scaleDistribution": {
+       "type": "linear"
+      },
+      "stacking": {
+       "group": "A",
+       "mode": "none"
+      },
+      "thresholdsStyle": {
+       "mode": "off"
+      },
+      "axisBorderShow": false
+     },
+     "decimals": 2
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^spark-1/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#5794F2",
+         "mode": "fixed"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^spark-2/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#FF9830",
+         "mode": "fixed"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/ · max$/"
+      },
+      "properties": [
+       {
+        "id": "custom.lineStyle",
+        "value": {
+         "fill": "dash",
+         "dash": [
+          6,
+          4
+         ]
+        }
+       },
+       {
+        "id": "custom.fillOpacity",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byFrameRefID",
+       "options": "C"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "Busy"
+       },
+       {
+        "id": "unit",
+        "value": "bool_on_off"
+       },
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#71717A",
+         "mode": "fixed"
+        }
+       },
+       {
+        "id": "custom.axisPlacement",
+        "value": "hidden"
+       },
+       {
+        "id": "custom.lineInterpolation",
+        "value": "stepAfter"
+       },
+       {
+        "id": "custom.spanNulls",
+        "value": true
+       },
+       {
+        "id": "min",
+        "value": 0
+       },
+       {
+        "id": "max",
+        "value": 1.02
+       },
+       {
+        "id": "custom.fillOpacity",
+        "value": 0
+       },
+       {
+        "id": "custom.lineWidth",
+        "value": 5
+       },
+       {
+        "id": "custom.spanNulls",
+        "value": false
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byType",
+       "options": "time"
+      },
+      "properties": [
+       {
+        "id": "custom.axisGridShow",
+        "value": false
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/ · max$/"
+      },
+      "properties": [
+       {
+        "id": "custom.hideFrom",
+        "value": {
+         "tooltip": true,
+         "viz": true,
+         "legend": true
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "interval": "5s",
+   "maxDataPoints": 2000,
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "max by (instance) (avg_over_time(nvidia_smi_clocks_current_sm_clock_hz{job=\"spark-gpu\",platform=\"spark\",instance=~\"$node\"}[$__rate_interval]))",
+     "legendFormat": "{{instance}}",
+     "refId": "A",
+     "range": true,
+     "instant": false,
+     "interval": "5s"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "max by (instance) (nvidia_smi_clocks_max_sm_clock_hz{job=\"spark-gpu\",platform=\"spark\",instance=~\"$node\"})",
+     "legendFormat": "{{instance}} · max",
+     "refId": "B",
+     "range": true,
+     "instant": false,
+     "interval": "5s"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "(max(avg_over_time(nvidia_smi_utilization_gpu_ratio{job=\"spark-gpu\",platform=\"spark\",instance=~\"$node\"}[$__rate_interval])) > bool 0.5) > 0",
+     "legendFormat": "Busy",
+     "refId": "C",
+     "range": true,
+     "instant": false,
+     "interval": "5s"
+    }
+   ],
+   "options": {
+    "legend": {
+     "showLegend": true,
+     "displayMode": "list",
+     "placement": "bottom",
+     "calcs": []
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
+  },
+  {
+   "id": 102,
+   "type": "row",
+   "title": "Host",
+   "collapsed": false,
+   "gridPos": {
+    "x": 0,
+    "y": 13,
+    "w": 24,
+    "h": 1
+   },
+   "panels": []
+  },
+  {
+   "id": 10,
+   "type": "timeseries",
+   "title": "Memory available",
+   "description": "Memory left. CPU and GPU share one pool, so a loaded model keeps this low by design. The orange line is the 8 GiB goal and the red line the 2 GiB stop line. Red bands are memory stalls above 10%.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 14,
+    "w": 8,
+    "h": 8
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "fixedColor": "#5794F2",
+      "mode": "fixed"
+     },
+     "unit": "bytes",
+     "noValue": "No data",
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "#F2495C",
+        "value": 2147483648
+       },
+       {
+        "color": "#FADE2A",
+        "value": 8589934592
+       }
+      ]
+     },
+     "custom": {
+      "drawStyle": "line",
+      "lineInterpolation": "smooth",
+      "lineWidth": 2,
+      "fillOpacity": 0,
+      "showPoints": "never",
+      "spanNulls": false,
+      "axisCenteredZero": false,
+      "axisColorMode": "text",
+      "axisLabel": "",
+      "axisPlacement": "auto",
+      "barAlignment": 0,
+      "gradientMode": "opacity",
+      "hideFrom": {
+       "legend": false,
+       "tooltip": false,
+       "viz": false
+      },
+      "scaleDistribution": {
+       "type": "linear"
+      },
+      "stacking": {
+       "group": "A",
+       "mode": "none"
+      },
+      "thresholdsStyle": {
+       "mode": "off"
+      },
+      "axisBorderShow": false
+     },
+     "decimals": 1,
+     "min": 0
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^spark-1/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#5794F2",
+         "mode": "fixed"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^spark-2/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#FF9830",
+         "mode": "fixed"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byFrameRefID",
+       "options": "B"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "Memory stalled"
+       },
+       {
+        "id": "unit",
+        "value": "bool_on_off"
+       },
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#F2495C",
+         "mode": "fixed"
+        }
+       },
+       {
+        "id": "custom.axisPlacement",
+        "value": "hidden"
+       },
+       {
+        "id": "custom.lineInterpolation",
+        "value": "stepAfter"
+       },
+       {
+        "id": "custom.spanNulls",
+        "value": true
+       },
+       {
+        "id": "min",
+        "value": 0
+       },
+       {
+        "id": "max",
+        "value": 1.02
+       },
+       {
+        "id": "custom.fillOpacity",
+        "value": 0
+       },
+       {
+        "id": "custom.lineWidth",
+        "value": 5
+       },
+       {
+        "id": "custom.spanNulls",
+        "value": false
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byType",
+       "options": "time"
+      },
+      "properties": [
+       {
+        "id": "custom.axisGridShow",
+        "value": false
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byFrameRefID",
+       "options": "W"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "Under 4 GiB"
+       },
+       {
+        "id": "unit",
+        "value": "bool_on_off"
+       },
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#FADE2A",
+         "mode": "fixed"
+        }
+       },
+       {
+        "id": "custom.axisPlacement",
+        "value": "hidden"
+       },
+       {
+        "id": "custom.lineInterpolation",
+        "value": "stepAfter"
+       },
+       {
+        "id": "custom.spanNulls",
+        "value": true
+       },
+       {
+        "id": "min",
+        "value": 0
+       },
+       {
+        "id": "max",
+        "value": 1.02
+       },
+       {
+        "id": "custom.fillOpacity",
+        "value": 0
+       },
+       {
+        "id": "custom.lineWidth",
+        "value": 5
+       },
+       {
+        "id": "custom.spanNulls",
+        "value": false
+       }
+      ]
+     }
+    ]
+   },
+   "interval": "15s",
+   "maxDataPoints": 2000,
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "node_memory_MemAvailable_bytes{job=\"spark-node\",platform=\"spark\",instance=~\"$node\"}",
+     "legendFormat": "{{instance}}",
+     "refId": "A",
+     "range": true,
+     "instant": false,
+     "interval": "15s"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "(max(rate(node_pressure_memory_stalled_seconds_total{job=\"spark-node\",platform=\"spark\",instance=~\"$node\"}[5m])) > bool 0.10) > 0",
+     "legendFormat": "Memory stalled",
+     "refId": "B",
+     "range": true,
+     "instant": false,
+     "interval": "15s"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "(min(node_memory_MemAvailable_bytes{job=\"spark-node\",platform=\"spark\",instance=~\"$node\"}) < bool 4294967296) > 0",
+     "legendFormat": "Under 4 GiB",
+     "refId": "W",
+     "range": true,
+     "instant": false,
+     "interval": "15s"
+    }
+   ],
+   "options": {
+    "legend": {
+     "showLegend": true,
+     "displayMode": "list",
+     "placement": "bottom",
+     "calcs": []
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
+  },
+  {
+   "id": 17,
+   "type": "timeseries",
+   "title": "Board temperature",
+   "description": "Hottest ACPI thermal zone in each step. It usually runs hotter than the GPU. The red line is the firmware's critical trip point, 104.8 °C.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "gridPos": {
+    "x": 8,
+    "y": 14,
+    "w": 8,
+    "h": 8
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "palette-classic"
+     },
+     "unit": "celsius",
+     "noValue": "No data",
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "#F2495C",
+        "value": 104.8
+       }
+      ]
+     },
+     "custom": {
+      "drawStyle": "line",
+      "lineInterpolation": "smooth",
+      "lineWidth": 2,
+      "fillOpacity": 0,
+      "showPoints": "never",
+      "spanNulls": false,
+      "axisCenteredZero": false,
+      "axisColorMode": "text",
+      "axisLabel": "",
+      "axisPlacement": "auto",
+      "barAlignment": 0,
+      "gradientMode": "opacity",
+      "hideFrom": {
+       "legend": false,
+       "tooltip": false,
+       "viz": false
+      },
+      "scaleDistribution": {
+       "type": "linear"
+      },
+      "stacking": {
+       "group": "A",
+       "mode": "none"
+      },
+      "thresholdsStyle": {
+       "mode": "off"
+      },
+      "axisBorderShow": false
+     },
+     "decimals": 0,
+     "min": 30
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^spark-1/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#5794F2",
+         "mode": "fixed"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^spark-2/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#FF9830",
+         "mode": "fixed"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byType",
+       "options": "time"
+      },
+      "properties": [
+       {
+        "id": "custom.axisGridShow",
+        "value": false
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byFrameRefID",
+       "options": "W"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "Over 95 °C"
+       },
+       {
+        "id": "unit",
+        "value": "bool_on_off"
+       },
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#FADE2A",
+         "mode": "fixed"
+        }
+       },
+       {
+        "id": "custom.axisPlacement",
+        "value": "hidden"
+       },
+       {
+        "id": "custom.lineInterpolation",
+        "value": "stepAfter"
+       },
+       {
+        "id": "custom.spanNulls",
+        "value": true
+       },
+       {
+        "id": "min",
+        "value": 0
+       },
+       {
+        "id": "max",
+        "value": 1.02
+       },
+       {
+        "id": "custom.fillOpacity",
+        "value": 0
+       },
+       {
+        "id": "custom.lineWidth",
+        "value": 5
+       },
+       {
+        "id": "custom.spanNulls",
+        "value": false
+       }
+      ]
+     }
+    ]
+   },
+   "interval": "15s",
+   "maxDataPoints": 2000,
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "max by (instance) (max_over_time(node_thermal_zone_temp{job=\"spark-node\",platform=\"spark\",instance=~\"$node\"}[$__rate_interval]))",
+     "legendFormat": "{{instance}}",
+     "refId": "A",
+     "range": true,
+     "instant": false,
+     "interval": "15s"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "(max(max by (instance) (max_over_time(node_thermal_zone_temp{job=\"spark-node\",platform=\"spark\",instance=~\"$node\"}[$__rate_interval]))) > bool 95) > 0",
+     "legendFormat": "Over 95 °C",
+     "refId": "W",
+     "range": true,
+     "instant": false,
+     "interval": "15s"
+    }
+   ],
+   "options": {
+    "legend": {
+     "showLegend": false,
+     "displayMode": "list",
+     "placement": "bottom",
+     "calcs": []
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
+  },
+  {
+   "id": 12,
+   "type": "timeseries",
+   "title": "Drives and network",
+   "description": "NVMe composite temperature, with the ConnectX adapters dashed. Tensor-parallel work adds RDMA load to a card that already runs warm.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "gridPos": {
+    "x": 16,
+    "y": 14,
+    "w": 8,
+    "h": 8
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "palette-classic"
+     },
+     "unit": "celsius",
+     "noValue": "No data",
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "custom": {
+      "drawStyle": "line",
+      "lineInterpolation": "smooth",
+      "lineWidth": 2,
+      "fillOpacity": 0,
+      "showPoints": "never",
+      "spanNulls": false,
+      "axisCenteredZero": false,
+      "axisColorMode": "text",
+      "axisLabel": "",
+      "axisPlacement": "auto",
+      "barAlignment": 0,
+      "gradientMode": "opacity",
+      "hideFrom": {
+       "legend": false,
+       "tooltip": false,
+       "viz": false
+      },
+      "scaleDistribution": {
+       "type": "linear"
+      },
+      "stacking": {
+       "group": "A",
+       "mode": "none"
+      },
+      "thresholdsStyle": {
+       "mode": "off"
+      },
+      "axisBorderShow": false
+     },
+     "decimals": 0
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^spark-1/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#5794F2",
+         "mode": "fixed"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^spark-2/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#FF9830",
+         "mode": "fixed"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/ConnectX$/"
+      },
+      "properties": [
+       {
+        "id": "custom.lineStyle",
+        "value": {
+         "fill": "dash",
+         "dash": [
+          6,
+          4
+         ]
+        }
+       },
+       {
+        "id": "custom.fillOpacity",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byType",
+       "options": "time"
+      },
+      "properties": [
+       {
+        "id": "custom.axisGridShow",
+        "value": false
+       }
+      ]
+     }
+    ]
+   },
+   "interval": "15s",
+   "maxDataPoints": 2000,
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "max by (instance) (node_hwmon_temp_celsius{job=\"spark-node\",platform=\"spark\",instance=~\"$node\",chip=~\"nvme.*\"} * on(job,instance,platform,chip,sensor) group_left(label) node_hwmon_sensor_label{job=\"spark-node\",platform=\"spark\",instance=~\"$node\",chip=~\"nvme.*\",label=\"Composite\"})",
+     "legendFormat": "{{instance}} · NVMe",
+     "refId": "A",
+     "range": true,
+     "instant": false,
+     "interval": "15s"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "max by (instance) (max_over_time(node_hwmon_temp_celsius{job=\"spark-node\",platform=\"spark\",instance=~\"$node\",chip=~\"0.*\"}[$__rate_interval]))",
+     "legendFormat": "{{instance}} · ConnectX",
+     "refId": "B",
+     "range": true,
+     "instant": false,
+     "interval": "15s"
+    }
+   ],
+   "options": {
+    "legend": {
+     "showLegend": true,
+     "displayMode": "list",
+     "placement": "bottom",
+     "calcs": []
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
+  },
+  {
+   "id": 103,
+   "type": "row",
+   "title": "Interconnect",
+   "collapsed": false,
+   "gridPos": {
+    "x": 0,
+    "y": 22,
+    "w": 24,
+    "h": 1
+   },
+   "panels": []
+  },
+  {
+   "id": 30,
+   "type": "timeseries",
+   "title": "RoCE traffic",
+   "description": "Data sent over the adapter ports that link the two Sparks. The second port pair carries none. Red bands are link-downs, timeouts, sequence errors, receive errors or retransmits.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 23,
+    "w": 16,
+    "h": 7
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "palette-classic"
+     },
+     "unit": "Bps",
+     "noValue": "No data",
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "custom": {
+      "drawStyle": "line",
+      "lineInterpolation": "smooth",
+      "lineWidth": 2,
+      "fillOpacity": 0,
+      "showPoints": "never",
+      "spanNulls": false,
+      "axisCenteredZero": false,
+      "axisColorMode": "text",
+      "axisLabel": "",
+      "axisPlacement": "auto",
+      "barAlignment": 0,
+      "gradientMode": "opacity",
+      "hideFrom": {
+       "legend": false,
+       "tooltip": false,
+       "viz": false
+      },
+      "scaleDistribution": {
+       "type": "linear"
+      },
+      "stacking": {
+       "group": "A",
+       "mode": "none"
+      },
+      "thresholdsStyle": {
+       "mode": "off"
+      },
+      "axisBorderShow": false
+     },
+     "min": 0
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^spark-1/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#5794F2",
+         "mode": "fixed"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^spark-2/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#FF9830",
+         "mode": "fixed"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byFrameRefID",
+       "options": "B"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "RoCE errors"
+       },
+       {
+        "id": "unit",
+        "value": "bool_on_off"
+       },
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#F2495C",
+         "mode": "fixed"
+        }
+       },
+       {
+        "id": "custom.axisPlacement",
+        "value": "hidden"
+       },
+       {
+        "id": "custom.lineInterpolation",
+        "value": "stepAfter"
+       },
+       {
+        "id": "custom.spanNulls",
+        "value": true
+       },
+       {
+        "id": "min",
+        "value": 0
+       },
+       {
+        "id": "max",
+        "value": 1.02
+       },
+       {
+        "id": "custom.fillOpacity",
+        "value": 0
+       },
+       {
+        "id": "custom.lineWidth",
+        "value": 5
+       },
+       {
+        "id": "custom.spanNulls",
+        "value": false
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byType",
+       "options": "time"
+      },
+      "properties": [
+       {
+        "id": "custom.axisGridShow",
+        "value": false
+       }
+      ]
+     }
+    ]
+   },
+   "interval": "15s",
+   "maxDataPoints": 2000,
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "sum by (instance) (rate(node_infiniband_port_data_transmitted_bytes_total{job=\"spark-node\",platform=\"spark\",instance=~\"$node\",device=~\".*s0f0\"}[$__rate_interval]))",
+     "legendFormat": "{{instance}}",
+     "refId": "A",
+     "range": true,
+     "instant": false,
+     "interval": "15s"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "(clamp_max(sum(increase({__name__=~\"node_infiniband_(link_downed|local_ack_timeout_errors|out_of_sequence_packets_received|packet_sequence_errors|port_errors_received|roce_adp_retransmits)_total\",job=\"spark-node\",platform=\"spark\",instance=~\"$node\",device=~\".*s0f0\"}[$__rate_interval])), 1)) > 0",
+     "legendFormat": "RoCE errors",
+     "refId": "B",
+     "range": true,
+     "instant": false,
+     "interval": "15s"
+    }
+   ],
+   "options": {
+    "legend": {
+     "showLegend": true,
+     "displayMode": "list",
+     "placement": "bottom",
+     "calcs": []
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
+  },
+  {
+   "id": 9,
+   "type": "timeseries",
+   "title": "Host CPU use",
+   "description": "CPU time spent outside idle.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "gridPos": {
+    "x": 16,
+    "y": 23,
+    "w": 8,
+    "h": 7
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "palette-classic"
+     },
+     "unit": "percentunit",
+     "noValue": "No data",
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "custom": {
+      "drawStyle": "line",
+      "lineInterpolation": "smooth",
+      "lineWidth": 2,
+      "fillOpacity": 0,
+      "showPoints": "never",
+      "spanNulls": false,
+      "axisCenteredZero": false,
+      "axisColorMode": "text",
+      "axisLabel": "",
+      "axisPlacement": "auto",
+      "barAlignment": 0,
+      "gradientMode": "opacity",
+      "hideFrom": {
+       "legend": false,
+       "tooltip": false,
+       "viz": false
+      },
+      "scaleDistribution": {
+       "type": "linear"
+      },
+      "stacking": {
+       "group": "A",
+       "mode": "none"
+      },
+      "thresholdsStyle": {
+       "mode": "off"
+      },
+      "axisBorderShow": false
+     },
+     "decimals": 0,
+     "min": 0
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^spark-1/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#5794F2",
+         "mode": "fixed"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^spark-2/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#FF9830",
+         "mode": "fixed"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byType",
+       "options": "time"
+      },
+      "properties": [
+       {
+        "id": "custom.axisGridShow",
+        "value": false
+       }
+      ]
+     }
+    ]
+   },
+   "interval": "15s",
+   "maxDataPoints": 2000,
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "1 - avg by (instance) (rate(node_cpu_seconds_total{job=\"spark-node\",platform=\"spark\",instance=~\"$node\",mode=\"idle\"}[$__rate_interval]))",
+     "legendFormat": "{{instance}}",
+     "refId": "A",
+     "range": true,
+     "instant": false,
+     "interval": "15s"
+    }
+   ],
+   "options": {
+    "legend": {
+     "showLegend": false,
+     "displayMode": "list",
+     "placement": "bottom",
+     "calcs": []
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
+  }
+ ],
+ "templating": {
+  "list": [
+   {
+    "current": {
+     "text": "VictoriaMetrics",
+     "value": "victoriametrics"
+    },
+    "includeAll": false,
+    "name": "datasource",
+    "options": [],
+    "query": "prometheus",
+    "refresh": 1,
+    "regex": "",
+    "type": "datasource"
+   },
+   {
+    "name": "node",
+    "label": "Node",
+    "type": "query",
+    "datasource": {
+     "type": "prometheus",
+     "uid": "${datasource}"
+    },
+    "definition": "label_values(up{job=\"spark-node\",platform=\"spark\"}, instance)",
+    "query": {
+     "query": "label_values(up{job=\"spark-node\",platform=\"spark\"}, instance)",
+     "refId": "node"
+    },
+    "includeAll": true,
+    "allValue": ".*",
+    "multi": true,
+    "refresh": 2,
+    "sort": 1,
+    "current": {
+     "text": "All",
+     "value": "$__all"
+    }
+   }
+  ]
+ },
+ "timepicker": {
+  "refresh_intervals": [
+   "1s",
+   "5s",
+   "10s",
+   "30s",
+   "1m",
+   "5m",
+   "15m",
+   "30m",
+   "1h"
+  ]
+ }
+}
