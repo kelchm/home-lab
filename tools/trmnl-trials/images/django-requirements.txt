@@ -78,9 +78,9 @@ cffi==1.17.1 ; python_version >= '3.8' \
     --hash=sha256:f79fc4fc25f1c8698ff97788206bb3c2598949bfe0fef03d299eb1b5356ada99 \
     --hash=sha256:f7f5baafcc48261359e14bcd6d9bff6d4b28d9103847c9e136694cb0501aef87 \
     --hash=sha256:fc48c783f9c87e60831201f2cce7f3b2e4846bf4d8728eabe54d60700b318a0b
-channels==4.2.2 ; python_version >= '3.8' \
-    --hash=sha256:8d7208e48ab8fdb972aaeae8311ce920637d97656ffc7ae5eca4f93f84bcd9a0 \
-    --hash=sha256:ff36a6e1576cacf40bcdc615fa7aece7a709fc4fdd2dc87f2971f4061ffdaa81
+channels==4.3.2; python_version >= '3.8' \
+    --hash=sha256:f2bb6bfb73ad7fb4705041d07613c7b4e69528f01ef8cb9fb6c21d9295f15667 \
+    --hash=sha256:fef47e9055a603900cf16cef85f050d522d9ac4b3daccf24835bd9580705c176
 constantly==23.10.4 ; python_version >= '3.8' \
     --hash=sha256:3fd9b4d1c3dc1ec9757f3c52aef7e53ad9323dbe39f51dfd4c43853b68dfa3f9 \
     --hash=sha256:aa92b70a33e2ac0bb33cd745eb61776594dc48764b06c35e0efd050b7f1c7cbd
