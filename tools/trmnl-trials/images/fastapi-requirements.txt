@@ -159,7 +159,7 @@ pypickle==2.0.2
     # via distfit
 pytest==9.2.0
     # via -r upstream requirements.txt
-python-dateutil==3.0.0
+python-dateutil==4.0.0
     # via
     #   matplotlib
     #   pandas
