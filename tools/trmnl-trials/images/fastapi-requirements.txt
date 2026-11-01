@@ -127,7 +127,7 @@ packaging==26.3
     #   patsy
     #   pytest
     #   statsmodels
-pandas==2.3.3
+pandas==3.1.0
     # via
     #   -r upstream requirements.txt
     #   d3blocks
