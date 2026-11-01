@@ -65,6 +65,8 @@ Alertmanager groups alerts by name, cluster and namespace, not by machine: two m
 
 A problem that only affects what can be seen of a device is `info` when every notifying rule it blinds is covered by another notifying alert, and notifies otherwise. `TMobileMetricsMissing` is info: no notifying rule reads the T-Mobile gateway, because `UniFiWANDown` reports a WAN1 outage. `StarlinkMetricsMissing` notifies, because `StarlinkObstructed` and `StarlinkPingDropSustained` have no other cover; so do `UniFiMetricsMissing`, `PVEMetricsMissing`, `NodeCollectorDown` and the Longhorn, Flux and cert-manager `MetricsMissing` alerts.
 
+The bundled `RequestErrorsToAPI` and `TooManyLogs` are `info`: a single cancelled client query, such as an overlapping Grafana refresh, trips them, so neither shows that a VictoriaMetrics component is failing.
+
 ## First response
 
 1. Open `https://alertmanager.home.kelch.io` and inspect the complete label and annotation set. Pushover is a prompt to investigate, not the full source of truth.

@@ -242,7 +242,7 @@ tests:
               instance: pve-sbx-1
               platform: pve
               job: pve-node
-              severity: warning
+              severity: info
             exp_annotations:
               summary: pve-sbx-1 has had security updates waiting for three days
               description: 'Packages from a security archive have had upgrades available on pve-sbx-1 for three days; 30 are waiting now. Install them, then reboot the host if they need it.'
