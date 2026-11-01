@@ -24,9 +24,9 @@ Nothing here names a model. vmagent asks Docker for running containers that carr
 
 Two things are still fixed. Port 8888 is the serving port every recipe uses; a recipe on another port shows as a down target. Reading container labels requires the Docker socket, so on a Spark vmagent can reach the Docker API like the deployer can.
 
-All metrics the endpoint exposes are kept, whatever the runtime. The TensorFold dashboard reads the `tensorfold:*` families; another runtime's metrics are collected the same way but need their own dashboard.
+All metrics the endpoint exposes are kept, whatever the runtime. The TensorFold dashboard reads the `tensorfold:*` and `tensorfold_health:*` families; another runtime's metrics are collected the same way but need their own dashboard.
 
-doco-cd recreates every container of a project on each poll while one of its services cannot start. The GPU exporter depends on the driver and CDI, so it is a separate project: if it cannot start after a driver or OS update, host and inference collection keep running. It runs `nvidia-smi` through NVIDIA CDI; its NVML build is AMD64-only. GB10 has no dedicated framebuffer, so GPU memory is not reported: read host memory and memory pressure instead. A power-cap flag is ordinary operation; thermal slowdown is not.
+doco-cd recreates every container of a project on each poll while one of its services cannot start. The GPU exporter depends on the driver and CDI, so it is a separate project: if it cannot start after a driver or OS update, host and inference collection keep running. It runs `nvidia-smi` through NVIDIA CDI; its NVML build is AMD64-only. GB10 has no dedicated framebuffer, so GPU memory is not reported: read host memory and memory pressure instead. A power-cap flag is ordinary operation; thermal slowdown is not. `nvidia-smi` power is the GPU alone, not the machine. Board temperature comes from the ACPI thermal zones; the firmware's critical trip point on both Sparks is 104.8 °C.
 
 ## sparkDash
 
@@ -63,15 +63,21 @@ Bootstrap or migrate `spark-1` using the [shared definition with `SPARK_HOST=spa
 
 | Signal | Interpretation |
 |---|---|
-| Live output tokens/s | The ten-second slope of finished plus in-flight generated tokens, `tensorfold:generation_tokens_total + tensorfold:generation_tokens_running`, clamped at zero. Aggregate across active streams, including idle time; not a per-request decode measurement. The slope does not correct counter resets, so after a server restart the one-minute trend reads low for up to a minute. |
-| Output throughput chart | The ten-second live trace shows bursts; one-minute traces compare live output with output booked only when a request finishes. A long reply can produce a completion-accounting spike without a real decode-speed increase. |
-| TTFT and request latency | Native server histograms are updated on request completion. TTFT ends at the first generated token, not necessarily the first client-visible text. Mean uses the last five minutes. |
-| Latency percentiles | Coarse histogram estimates, hidden with fewer than 20 completed samples in five minutes or any observations above the largest finite bucket (300 seconds). The mean still includes those observations. |
-| Running / waiting | Native current request gauges. TP ranks are not extra requests. Queue-wait duration is not measured. |
-| Fullest stream | The fullest live stream's cache divided by its context window, `tensorfold:kv_cache_usage_ratio`; zero while idle. It is not unified-memory utilization. |
-| Prompt throughput | Full prompt accounting booked on completion, cached prompt tokens included. It does not measure live prefill speed. |
+| Live output tokens/s | The slope of tokens written, finished and in flight, clamped at zero. GLM recipes report it as `tensorfold_health:completion_tokens_total`; earlier recipes as `tensorfold:generation_tokens_total + tensorfold:generation_tokens_running`. Aggregate across active streams, including idle time. The slope does not correct counter resets, so after a server restart the one-minute trend reads low for up to a minute. |
+| Decode speed per reply | Finished-request tokens over `tensorfold_health:decode_seconds_total`. Each reply's decode time is counted separately, so it falls as concurrent replies share the GPU; the machine's total is Live output. |
+| Prefill speed | Prompt tokens not found in cache over `tensorfold_health:prefill_seconds_total`. Averages finished requests, so it does not show a prefill in progress. |
+| Decode round time | Decode seconds over `tensorfold_health:rounds_total`. It rises with concurrent replies and, unlike tokens per second, does not move with draft acceptance. |
+| TTFT and request latency | Native server histograms updated on request completion, shown as heatmaps because quantiles need more requests than a Spark usually finishes in five minutes. Buckets are coarse above ten seconds: 30, 60, 120 and 300. TTFT ends at the first generated token, not necessarily the first client-visible text. |
+| Running / waiting | Native current request gauges against `tensorfold_health:streams_max`. TP ranks are not extra requests. Queue-wait duration is not measured. |
+| Prompt cache hits | `tensorfold_health:cached_tokens_total` over `tensorfold:prompt_tokens_total`, by tokens rather than requests. |
+| Pool used | Share of the shared context pool held by streams and kept prompts, from `tensorfold_health:pool_tokens` and `pool_free_tokens`. It is not unified-memory use. |
+| Fullest stream | The fullest live stream's cache divided by its context window, `tensorfold:kv_cache_usage_ratio`; zero while idle. |
+| Prompt tokens read | Full prompt accounting booked on completion, split into new and cached. It does not measure live prefill speed. |
 | Speculative acceptance | Accepted / drafted tokens over completed requests. The `mtp` metric prefix does not identify the actual drafter or prove MTP is enabled. |
+| Engine | `tensorfold_health:ok`, which the engine sets to 0 on a fault that stops it serving; `/health` gives the first cause. |
 | Scrape status | Fresh successful metrics retrieval. It does not prove end-to-end inference readiness or detect a stalled generation. |
+
+The `tensorfold_health:*` families come from the GLM kit's `/health`, so other recipes show those panels as not reported. Decode, prefill and cache figures are booked when a request finishes and lag a running reply. Their charts therefore keep a window of at least two minutes, while live series follow the zoom down to one-second detail.
 
 Idle counters produce zero throughput while fresh. Missing families, failed scrapes and stale collection remain absent. Rates handle ordinary counter resets; do not compare raw totals across restarts. One-second sampling does not provide per-token timing.
 
