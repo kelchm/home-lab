@@ -14,6 +14,9 @@ NEUTRAL = "#2E333B"
 LOOK = "#E0B400"
 FINE = "#7B8494"   # the fill of a bar that is nowhere near its limit
 OTHER = "#9DA5B4"
+# A tile's history, by what the metric is: load, speed or a clock. Grafana draws it as a thin line over a faint fill, so a white value stays readable. These
+# pass the colour-vision checks in this order.
+LOAD_HUE, SPEED_HUE, CLOCK_HUE = "#5399E2", "#3F9E4D", "#A45FC8"
 # Line colours by entity, checked for colour-blind separation on the dark panel; none is a status colour.
 SERIES = ["#73A650", "#5399E2", "#A24F88"]
 LOAD = [{"value": None, "color": "#5C6370"}, {"value": 30, "color": "#7B8494"}, {"value": 60, "color": "#9DA5B4"}, {"value": 85, "color": "#C7CDD8"}]
@@ -148,13 +151,21 @@ class Panels:
             "vizConfig": {"kind": "VizConfig", "group": group, "version": "", "spec": {"options": options, "fieldConfig": {"defaults": defaults, "overrides": overrides or []}}}}}
         return key
 
-    def tiles(self, key, title, items, links=None, wide=False, **kw):
+    def tiles(self, key, title, items, links=None, wide=False, trend=False, **kw):
         """State tiles under one title, each item (name, expr, field properties) its own untitled panel, so a narrow screen can wrap them onto more lines.
-        wide is for a group whose names or values are long words, which need two tiles to a line on a phone rather than three."""
+        wide is for a group whose names or values are long words, which need two tiles to a line on a phone rather than three.
+        trend draws each tile's recent history behind its value, in the hue its properties name, or in its thresholds' colours where the level
+        itself matters."""
         members = []
         for n, (name, expr, p) in enumerate(items, 1):
             defaults = {"color": {"mode": "thresholds"}, "thresholds": th(QUIET), "decimals": 0, "links": links or []}
-            members.append(self.add(f"{key}-{n}", "", "stat", [q(expr, name)], {**TILE}, defaults, [by_ref("A", **p)] if p else [], **kw))
+            opts, qopts, instant = TILE, None, True
+            if trend:
+                opts, qopts, instant = {**TILE, "colorMode": "none", "graphMode": "area"}, {"maxDataPoints": 120}, False
+                if "hue" in p:
+                    p = dict(p)
+                    defaults["color"] = fixed(p.pop("hue"))
+            members.append(self.add(f"{key}-{n}", "", "stat", [q(expr, name, instant=instant)], {**opts}, defaults, [by_ref("A", **p)] if p else [], qopts=qopts, **kw))
         self.groups[key] = (title, members, None, wide)
         return key
 
@@ -261,13 +272,15 @@ def repeated(r, variable):
 
 # A tile is at least this wide, so a phone fits three to a line and a desktop keeps a group on one line; a group of long words fits two to a line.
 TILE_PX, TILE_WIDTH, TILE_WIDE = 76, 100, 130
+# Grafana leaves out a stat's trend when the panel is too short to hold it beside the value.
+TILE_TREND_PX = 112
 
 
-def tile_row(group, repeat=None):
+def tile_row(group, repeat=None, px=TILE_PX):
     """A tile group: its title over its tiles, which wrap onto more lines on a narrow screen. repeat makes one group per value of a variable."""
     title, members, each, wide = group
     # A group whose one tile repeats per value has as many tiles as values; 12 caps how many share a line.
-    r = row(autogrid([item(m, each) for m in members], cols=12 if each else len(members), px=TILE_PX, width=TILE_WIDE if wide else TILE_WIDTH), title)
+    r = row(autogrid([item(m, each) for m in members], cols=12 if each else len(members), px=px, width=TILE_WIDE if wide else TILE_WIDTH), title)
     return repeated(r, repeat) if repeat else r
 
 

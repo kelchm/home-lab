@@ -72,11 +72,11 @@ Bootstrap or migrate `spark-1` using the [shared definition with `SPARK_HOST=spa
 | Prompt cache hits | `tensorfold_health:cached_tokens_total` over `tensorfold:prompt_tokens_total`, by tokens rather than requests. |
 | Pool used | Share of the shared context pool held by streams and kept prompts, from `tensorfold_health:pool_tokens` and `pool_free_tokens`. It is not unified-memory use. |
 | Context held by running requests | `tensorfold:kv_cache_usage_ratio` for each live stream, multiplied by `tensorfold_health:context_length` for tokens. Its `pool` label is a place in the list of live streams and shifts when an earlier stream finishes, and requests have no id in the metrics. So the bars rank streams by size at that moment, `#1` being the largest then, and the tokens chart draws every stream in one colour. The kept conversations are in `/health` as `kept_mix`. |
-| Fullest stream | The largest of those shares; zero while idle. |
 | Prompt tokens read | Full prompt accounting booked on completion, split into new and cached. It does not measure live prefill speed. |
 | Speculative acceptance | Accepted / drafted tokens over completed requests. The `mtp` metric prefix does not identify the actual drafter or prove MTP is enabled. |
-| Engine | `tensorfold_health:ok`, which the engine sets to 0 on a fault that stops it serving; `/health` gives the first cause. |
-| Scrape status | Fresh successful metrics retrieval. It does not prove end-to-end inference readiness or detect a stalled generation. |
+| Engine | `tensorfold_health:ok`, which the engine sets to 0 on a fault that stops it serving; `/health` gives the first cause. "No metrics" means no fresh scrape, and a healthy scrape does not prove a request can complete or detect a stalled generation. |
+
+Shaded bands behind a chart are states, not values. On the inference dashboard amber is every stream busy and red is requests waiting. On the health dashboard red is thermal slowdown, memory stalls or RoCE errors, amber is the power cap and grey is a busy GPU.
 
 The `tensorfold_health:*` families come from the GLM kit's `/health`, so other recipes show those panels as not reported. Decode, prefill and cache figures are booked when a request finishes and lag a running reply. Their charts therefore keep a window of at least two minutes, while live series follow the zoom down to one-second detail.
 

@@ -7,7 +7,7 @@ import json
 import re
 import urllib.parse
 
-from .schema import (BROKEN, FINE, GAUGE, HEADROOM, LOAD, LOOK, NEUTRAL, NODASH, NOTICE, PROBLEM, QUIET, ROOM_TILE, RUNS_OUT, TEXT, TILE_LOAD,
+from .schema import (BROKEN, CLOCK_HUE, FINE, GAUGE, HEADROOM, LOAD, LOAD_HUE, LOOK, NEUTRAL, NODASH, NOTICE, PROBLEM, QUIET, ROOM_TILE, RUNS_OUT, SPEED_HUE, TEXT, TILE_LOAD,
                      ALL, RED, Panels, add_links, fixed, lq, ls, match, q, qvar, th, union, words, yes, zero)
 
 K = 'cluster="k8s-prod"'
@@ -256,11 +256,11 @@ def nv(metric):
 
 
 W.tiles("gpu", "GPU · $gpu", [
-    ("In use", f'100 * {nv("utilization_gpu_ratio")}', dict(unit="percent", thresholds=TILE_LOAD)),
-    ("Temperature", nv("temperature_gpu"), dict(unit="celsius")),
-    ("To its limit", nv("temperature_gpu_tlimit"), dict(unit="celsius", thresholds=ROOM_TILE)),
-    ("Power", nv("power_draw_watts"), dict(unit="watt"))],
-    desc="A GPU at full use is doing its job, so use is coloured as load and never as a problem. Heat is judged by how far the GPU is from the limit it reports itself.")
+    ("In use", f'100 * {nv("utilization_gpu_ratio")}', dict(unit="percent", hue=LOAD_HUE)),
+    ("Temperature", nv("temperature_gpu"), dict(unit="celsius", thresholds=th([{"value": None, "color": SPEED_HUE}, {"value": 75, "color": "orange"}, {"value": 85, "color": "red"}]))),
+    ("Clock", nv("clocks_current_sm_clock_hz"), dict(unit="hertz", decimals=2, hue=CLOCK_HUE)),
+    ("Power", nv("power_draw_watts"), dict(unit="watt", hue=LOAD_HUE))], trend=True,
+    desc="A GPU at full use is doing its job, so use is coloured as load and never as a problem. Temperature turns orange at 75 °C and red at 85 °C. A busy GPU at a low clock is doing less than its use suggests. Each tile draws its recent history behind its value.")
 # Thin, unfilled lines, because a busy GPU fills a thicker line's whole width.
 CRISP = dict(lineInterpolation="linear", lineWidth=1, fillOpacity=0, gradientMode="none")
 RATE = "$__rate_interval"
@@ -280,12 +280,12 @@ def ranked(top):
 
 
 W.tiles("inference", "Inference · $model", [
-    ("Requests running", zero("sum(tensorfold:requests_running)"), {}),
-    ("Requests waiting", zero("sum(tensorfold:requests_waiting)"), dict(thresholds=th(QUIET + [{"value": 4, "color": "orange"}]))),
-    ("Decode speed per reply", f"sum(rate({GENERATED}[5m])) / (sum(rate(tensorfold_health:decode_seconds_total[5m])) > 0)", dict(unit="suffix: tok/s", decimals=1, noValue="–")),
-    ("Prompt cache hits", f"100 * sum(rate({CACHED}[15m])) / (sum(rate({PROMPT}[15m])) > 0)", dict(unit="percent", noValue="–")),
-    ("Pool used", "100 * (1 - sum(tensorfold_health:pool_free_tokens) / (sum(tensorfold_health:pool_tokens) > 0))", dict(unit="percent", noValue="–", thresholds=TILE_LOAD))],
-    desc="What the model is doing: work in hand, work queued, how fast each reply is writing, how much of its prompts it found cached and how full its shared pool is. A dash means idle, or a recipe that does not report it.")
+    ("Requests running", zero("sum(tensorfold:requests_running)"), dict(hue=LOAD_HUE)),
+    ("Requests waiting", zero("sum(tensorfold:requests_waiting)"), dict(thresholds=th([{"value": None, "color": LOAD_HUE}, {"value": 4, "color": "orange"}]))),
+    ("Decode speed per reply", f"sum(rate({GENERATED}[5m])) / (sum(rate(tensorfold_health:decode_seconds_total[5m])) > 0)", dict(unit="suffix: tok/s", decimals=1, noValue="–", hue=SPEED_HUE)),
+    ("Prompt cache hits", f"100 * sum(rate({CACHED}[15m])) / (sum(rate({PROMPT}[15m])) > 0)", dict(unit="percent", noValue="–", hue=CLOCK_HUE)),
+    ("Pool used", "100 * (1 - sum(tensorfold_health:pool_free_tokens) / (sum(tensorfold_health:pool_tokens) > 0))", dict(unit="percent", noValue="–", hue=LOAD_HUE))], trend=True,
+    desc="What the model is doing: work in hand, work queued, how fast each reply is writing, how much of its prompts it found cached and how full its shared pool is, each with its recent history behind it. A dash means idle, or a recipe that does not report it.")
 W.add("inference-idle", "Inference", "stat", [q("count(tensorfold:kv_cache_usage_ratio)")],
       {"colorMode": "none", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": RED, "textMode": "value", "text": {"valueSize": 16}},
       {"noValue": "No model is being served", "color": fixed("text")},
