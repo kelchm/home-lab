@@ -1,0 +1,2963 @@
+{
+ "annotations": {
+  "list": [
+   {
+    "builtIn": 1,
+    "datasource": {
+     "type": "grafana",
+     "uid": "-- Grafana --"
+    },
+    "enable": true,
+    "hide": true,
+    "iconColor": "rgba(0, 211, 255, 1)",
+    "name": "Annotations & Alerts",
+    "type": "dashboard"
+   }
+  ]
+ },
+ "fiscalYearStartMonth": 0,
+ "graphTooltip": 1,
+ "id": null,
+ "liveNow": false,
+ "schemaVersion": 40,
+ "timezone": "browser",
+ "uid": "concept-cool-warm-inference",
+ "title": "Concept · Cool and warm · Inference",
+ "description": "How fast the served model is running, what each request holds and how close it is to a limit. Opens on the last 15 minutes at one-second detail and refreshes every five seconds.",
+ "editable": true,
+ "version": 0,
+ "refresh": "5s",
+ "time": {
+  "from": "now-15m",
+  "to": "now"
+ },
+ "tags": [
+  "concept"
+ ],
+ "links": [],
+ "panels": [
+  {
+   "id": 1,
+   "type": "stat",
+   "title": "",
+   "description": "The model, recipe, runtime and host on each successful scrape younger than ten seconds.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 0,
+    "w": 24,
+    "h": 2
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "thresholds"
+     },
+     "unit": "short",
+     "decimals": 0,
+     "noValue": "Unavailable",
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "text",
+        "value": null
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "justifyMode": "center",
+    "orientation": "horizontal",
+    "reduceOptions": {
+     "calcs": [
+      "last"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "text": {
+     "valueSize": 15
+    },
+    "textMode": "name",
+    "wideLayout": true
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1) and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10)",
+     "legendFormat": "{{model}} · {{recipe}} · {{runtime}} · {{instance}}",
+     "refId": "A",
+     "range": false,
+     "instant": true,
+     "interval": "1s"
+    }
+   ],
+   "transparent": true
+  },
+  {
+   "id": 20,
+   "type": "stat",
+   "title": "",
+   "description": "The engine's own health flag, on a scrape younger than ten seconds. Broken means a fault has stopped it serving; /health gives the first cause.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 2,
+    "w": 3,
+    "h": 4
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "thresholds"
+     },
+     "unit": "short",
+     "decimals": 0,
+     "noValue": "No metrics",
+     "mappings": [
+      {
+       "type": "value",
+       "options": {
+        "0": {
+         "text": "Broken",
+         "color": "#FF6B5E",
+         "index": 0
+        },
+        "1": {
+         "text": "Healthy",
+         "color": "#2DD4BF",
+         "index": 1
+        }
+       }
+      }
+     ],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "text",
+        "value": null
+       }
+      ]
+     },
+     "displayName": "Engine",
+     "min": 0,
+     "max": 4
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "value",
+    "graphMode": "area",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "percentChangeColorMode": "standard",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "showPercentChange": false,
+    "text": {
+     "titleSize": 13,
+     "valueSize": 26
+    },
+    "textMode": "value_and_name",
+    "wideLayout": true
+   },
+   "interval": "1s",
+   "maxDataPoints": 120,
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "(tensorfold_health:ok{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
+     "legendFormat": "",
+     "refId": "A",
+     "range": true,
+     "instant": false,
+     "interval": "1s"
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "type": "stat",
+   "title": "",
+   "description": "Requests in prefill or decode, out of the four streams the engine runs at once, and requests queued until a stream is free.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "gridPos": {
+    "x": 3,
+    "y": 2,
+    "w": 3,
+    "h": 4
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "fixedColor": "#4DA6FF",
+      "mode": "fixed"
+     },
+     "unit": "short",
+     "decimals": 0,
+     "noValue": "–",
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#1C1F24",
+        "value": null
+       }
+      ]
+     },
+     "min": 0,
+     "max": 6.5
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Waiting"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#FFB454",
+         "mode": "fixed"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "colorMode": "none",
+    "graphMode": "area",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "percentChangeColorMode": "standard",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "showPercentChange": false,
+    "text": {
+     "titleSize": 13,
+     "valueSize": 26
+    },
+    "textMode": "value_and_name",
+    "wideLayout": true
+   },
+   "interval": "1s",
+   "maxDataPoints": 120,
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "(tensorfold:requests_running{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
+     "legendFormat": "Running",
+     "refId": "A",
+     "range": true,
+     "instant": false,
+     "interval": "1s"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "(tensorfold:requests_waiting{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
+     "legendFormat": "Waiting",
+     "refId": "B",
+     "range": true,
+     "instant": false,
+     "interval": "1s"
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "type": "stat",
+   "title": "",
+   "description": "Tokens per second across all streams, finished and in flight, over the last ten seconds.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "gridPos": {
+    "x": 6,
+    "y": 2,
+    "w": 4,
+    "h": 4
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "fixedColor": "#4DA6FF",
+      "mode": "fixed"
+     },
+     "unit": "suffix: tok/s",
+     "decimals": 0,
+     "noValue": "–",
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#1C1F24",
+        "value": null
+       }
+      ]
+     },
+     "displayName": "Live output",
+     "min": 0,
+     "max": 160
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "none",
+    "graphMode": "area",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "percentChangeColorMode": "standard",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "showPercentChange": false,
+    "text": {
+     "titleSize": 13,
+     "valueSize": 26
+    },
+    "textMode": "value_and_name",
+    "wideLayout": true
+   },
+   "interval": "1s",
+   "maxDataPoints": 120,
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "(clamp_min(deriv((tensorfold_health:completion_tokens_total{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} or (tensorfold:generation_tokens_total{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} + tensorfold:generation_tokens_running{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}))[10s:1s]), 0)) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
+     "legendFormat": "",
+     "refId": "A",
+     "range": true,
+     "instant": false,
+     "interval": "1s"
+    }
+   ]
+  },
+  {
+   "id": 34,
+   "type": "stat",
+   "title": "",
+   "description": "Decode speed of one reply, averaged over finished requests in the last five minutes.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "gridPos": {
+    "x": 10,
+    "y": 2,
+    "w": 4,
+    "h": 4
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "thresholds"
+     },
+     "unit": "suffix: tok/s",
+     "decimals": 0,
+     "noValue": "Not reported on this recipe",
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "value": null,
+        "color": "#FF6B5E"
+       },
+       {
+        "value": 8,
+        "color": "#FFB454"
+       },
+       {
+        "value": 15,
+        "color": "#2DD4BF"
+       }
+      ]
+     },
+     "displayName": "Reply speed · 5m",
+     "min": 0,
+     "max": 130
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "none",
+    "graphMode": "area",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "percentChangeColorMode": "standard",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "showPercentChange": false,
+    "text": {
+     "titleSize": 13,
+     "valueSize": 26
+    },
+    "textMode": "value_and_name",
+    "wideLayout": true
+   },
+   "interval": "15s",
+   "maxDataPoints": 120,
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "(rate(tensorfold:generation_tokens_total{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[5m]) / (rate(tensorfold_health:decode_seconds_total{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[5m]) > 0)) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
+     "legendFormat": "",
+     "refId": "A",
+     "range": true,
+     "instant": false,
+     "interval": "15s"
+    }
+   ]
+  },
+  {
+   "id": 35,
+   "type": "stat",
+   "title": "",
+   "description": "The largest running request's share of its context window. Idle when nothing is running.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "gridPos": {
+    "x": 14,
+    "y": 2,
+    "w": 4,
+    "h": 4
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "thresholds"
+     },
+     "unit": "percent",
+     "decimals": 0,
+     "noValue": "Not reported on this recipe",
+     "mappings": [
+      {
+       "type": "value",
+       "options": {
+        "0": {
+         "text": "Idle",
+         "index": 0
+        }
+       }
+      }
+     ],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "value": null,
+        "color": "#2DD4BF"
+       },
+       {
+        "value": 75,
+        "color": "#FFB454"
+       },
+       {
+        "value": 90,
+        "color": "#FF6B5E"
+       }
+      ]
+     },
+     "displayName": "Largest request",
+     "min": 0,
+     "max": 100
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "none",
+    "graphMode": "area",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "percentChangeColorMode": "standard",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "showPercentChange": false,
+    "text": {
+     "titleSize": 13,
+     "valueSize": 26
+    },
+    "textMode": "value_and_name",
+    "wideLayout": true
+   },
+   "interval": "1s",
+   "maxDataPoints": 120,
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "100 * max(tensorfold:kv_cache_usage_ratio{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) or on() vector(0)",
+     "legendFormat": "",
+     "refId": "A",
+     "range": true,
+     "instant": false,
+     "interval": "1s"
+    }
+   ]
+  },
+  {
+   "id": 26,
+   "type": "stat",
+   "title": "",
+   "description": "Share of prompt tokens found cached, over finished requests in the last 15 minutes.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "gridPos": {
+    "x": 18,
+    "y": 2,
+    "w": 3,
+    "h": 4
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "thresholds"
+     },
+     "unit": "percentunit",
+     "decimals": 0,
+     "noValue": "Not reported on this recipe",
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "value": null,
+        "color": "#FF6B5E"
+       },
+       {
+        "value": 0.5,
+        "color": "#FFB454"
+       },
+       {
+        "value": 0.8,
+        "color": "#2DD4BF"
+       }
+      ]
+     },
+     "displayName": "Cache hits · 15m",
+     "min": 0,
+     "max": 1.3
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "none",
+    "graphMode": "area",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "percentChangeColorMode": "standard",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "showPercentChange": false,
+    "text": {
+     "titleSize": 13,
+     "valueSize": 26
+    },
+    "textMode": "value_and_name",
+    "wideLayout": true
+   },
+   "interval": "15s",
+   "maxDataPoints": 120,
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "(rate(tensorfold_health:cached_tokens_total{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[15m]) / (rate(tensorfold:prompt_tokens_total{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[15m]) > 0)) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
+     "legendFormat": "",
+     "refId": "A",
+     "range": true,
+     "instant": false,
+     "interval": "15s"
+    }
+   ]
+  },
+  {
+   "id": 21,
+   "type": "stat",
+   "title": "",
+   "description": "Share of the shared context pool held by streams and kept prompts. It is allocated at startup, so a full pool evicts kept prompts rather than costing memory.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "gridPos": {
+    "x": 21,
+    "y": 2,
+    "w": 3,
+    "h": 4
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "thresholds"
+     },
+     "unit": "percentunit",
+     "decimals": 0,
+     "noValue": "Not reported on this recipe",
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "value": null,
+        "color": "#2DD4BF"
+       },
+       {
+        "value": 0.9,
+        "color": "#FFB454"
+       },
+       {
+        "value": 0.98,
+        "color": "#FF6B5E"
+       }
+      ]
+     },
+     "displayName": "Pool used",
+     "min": 0,
+     "max": 1.3
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "none",
+    "graphMode": "area",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "percentChangeColorMode": "standard",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "showPercentChange": false,
+    "text": {
+     "titleSize": 13,
+     "valueSize": 26
+    },
+    "textMode": "value_and_name",
+    "wideLayout": true
+   },
+   "interval": "1s",
+   "maxDataPoints": 120,
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "(1 - tensorfold_health:pool_free_tokens{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} / (tensorfold_health:pool_tokens{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} > 0)) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
+     "legendFormat": "",
+     "refId": "A",
+     "range": true,
+     "instant": false,
+     "interval": "1s"
+    }
+   ]
+  },
+  {
+   "id": 106,
+   "type": "row",
+   "title": "Context held by running requests",
+   "collapsed": false,
+   "gridPos": {
+    "x": 0,
+    "y": 6,
+    "w": 24,
+    "h": 1
+   },
+   "panels": []
+  },
+  {
+   "id": 33,
+   "type": "timeseries",
+   "title": "Tokens held by each running request",
+   "description": "Tokens in each running request's cache. Each track is usually one conversation growing turn by turn, and a gap is a request between turns. All one colour because the metrics carry no request id, so a colour could not follow a request. Hover for exact values. A recipe that reports no window size shows nothing here.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 7,
+    "w": 24,
+    "h": 6
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "thresholds"
+     },
+     "unit": "short",
+     "decimals": 0,
+     "noValue": "No requests running",
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "value": null,
+        "color": "#2DD4BF"
+       },
+       {
+        "value": 750000,
+        "color": "#FFB454"
+       },
+       {
+        "value": 900000,
+        "color": "#FF6B5E"
+       }
+      ]
+     },
+     "custom": {
+      "drawStyle": "points",
+      "lineInterpolation": "smooth",
+      "lineWidth": 1,
+      "fillOpacity": 0,
+      "showPoints": "always",
+      "spanNulls": false,
+      "axisCenteredZero": false,
+      "axisColorMode": "text",
+      "axisLabel": "",
+      "axisPlacement": "auto",
+      "barAlignment": 0,
+      "hideFrom": {
+       "legend": false,
+       "tooltip": false,
+       "viz": false
+      },
+      "scaleDistribution": {
+       "type": "linear"
+      },
+      "stacking": {
+       "group": "A",
+       "mode": "none"
+      },
+      "thresholdsStyle": {
+       "mode": "off"
+      },
+      "pointSize": 4,
+      "axisBorderShow": false,
+      "gradientMode": "scheme"
+     },
+     "min": 0
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byType",
+       "options": "time"
+      },
+      "properties": [
+       {
+        "id": "custom.axisGridShow",
+        "value": false
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "legend": {
+     "showLegend": false,
+     "displayMode": "list",
+     "placement": "bottom",
+     "calcs": []
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "interval": "1s",
+   "maxDataPoints": 2000,
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "(tensorfold:kv_cache_usage_ratio{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} * on (instance, recipe) group_left tensorfold_health:context_length{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
+     "legendFormat": "Request",
+     "refId": "A",
+     "range": true,
+     "instant": false,
+     "interval": "1s"
+    }
+   ],
+   "transparent": true
+  },
+  {
+   "id": 101,
+   "type": "row",
+   "title": "Speed",
+   "collapsed": false,
+   "gridPos": {
+    "x": 0,
+    "y": 13,
+    "w": 24,
+    "h": 1
+   },
+   "panels": []
+  },
+  {
+   "id": 7,
+   "type": "timeseries",
+   "title": "Output · tok/s",
+   "description": "Tokens written across all streams, as they are written. Includes idle time. Amber is every stream busy and red is requests waiting.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 14,
+    "w": 8,
+    "h": 8
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "palette-classic"
+     },
+     "unit": "short",
+     "noValue": "No data",
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "custom": {
+      "drawStyle": "line",
+      "lineInterpolation": "smooth",
+      "lineWidth": 2,
+      "fillOpacity": 20,
+      "showPoints": "never",
+      "spanNulls": false,
+      "axisCenteredZero": false,
+      "axisColorMode": "text",
+      "axisLabel": "",
+      "axisPlacement": "auto",
+      "barAlignment": 0,
+      "gradientMode": "opacity",
+      "hideFrom": {
+       "legend": false,
+       "tooltip": false,
+       "viz": false
+      },
+      "scaleDistribution": {
+       "type": "linear"
+      },
+      "stacking": {
+       "group": "A",
+       "mode": "none"
+      },
+      "thresholdsStyle": {
+       "mode": "off"
+      },
+      "axisBorderShow": false
+     },
+     "decimals": 0,
+     "min": 0
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "One-minute trend"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#4DA6FF",
+         "mode": "fixed"
+        }
+       },
+       {
+        "id": "custom.lineWidth",
+        "value": 2
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byFrameRefID",
+       "options": "C"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "All streams busy"
+       },
+       {
+        "id": "unit",
+        "value": "bool_on_off"
+       },
+       {
+        "id": "min",
+        "value": 0
+       },
+       {
+        "id": "max",
+        "value": 1
+       },
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#FFB454",
+         "mode": "fixed"
+        }
+       },
+       {
+        "id": "custom.axisPlacement",
+        "value": "hidden"
+       },
+       {
+        "id": "custom.lineInterpolation",
+        "value": "stepAfter"
+       },
+       {
+        "id": "custom.lineWidth",
+        "value": 0
+       },
+       {
+        "id": "custom.fillOpacity",
+        "value": 20
+       },
+       {
+        "id": "custom.spanNulls",
+        "value": true
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byFrameRefID",
+       "options": "D"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "Requests waiting"
+       },
+       {
+        "id": "unit",
+        "value": "bool_on_off"
+       },
+       {
+        "id": "min",
+        "value": 0
+       },
+       {
+        "id": "max",
+        "value": 1
+       },
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#FF6B5E",
+         "mode": "fixed"
+        }
+       },
+       {
+        "id": "custom.axisPlacement",
+        "value": "hidden"
+       },
+       {
+        "id": "custom.lineInterpolation",
+        "value": "stepAfter"
+       },
+       {
+        "id": "custom.lineWidth",
+        "value": 0
+       },
+       {
+        "id": "custom.fillOpacity",
+        "value": 20
+       },
+       {
+        "id": "custom.spanNulls",
+        "value": true
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Live"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#1E5FA3",
+         "mode": "fixed"
+        }
+       },
+       {
+        "id": "custom.drawStyle",
+        "value": "bars"
+       },
+       {
+        "id": "custom.fillOpacity",
+        "value": 55
+       },
+       {
+        "id": "custom.lineWidth",
+        "value": 0
+       },
+       {
+        "id": "custom.barWidthFactor",
+        "value": 0.8
+       },
+       {
+        "id": "custom.gradientMode",
+        "value": "none"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "One-minute trend"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#4DA6FF",
+         "mode": "fixed"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byType",
+       "options": "time"
+      },
+      "properties": [
+       {
+        "id": "custom.axisGridShow",
+        "value": false
+       }
+      ]
+     }
+    ]
+   },
+   "interval": "1s",
+   "maxDataPoints": 2000,
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "(clamp_min(deriv((tensorfold_health:completion_tokens_total{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} or (tensorfold:generation_tokens_total{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} + tensorfold:generation_tokens_running{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}))[$__rate_interval:1s]), 0)) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
+     "legendFormat": "Live",
+     "refId": "A",
+     "range": true,
+     "instant": false,
+     "interval": "1s"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "(clamp_min(deriv((tensorfold_health:completion_tokens_total{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} or (tensorfold:generation_tokens_total{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} + tensorfold:generation_tokens_running{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}))[1m:1s]), 0)) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
+     "legendFormat": "One-minute trend",
+     "refId": "B",
+     "range": true,
+     "instant": false,
+     "interval": "1s"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "max(max_over_time(tensorfold:requests_running{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[$__rate_interval])) >= bool max(tensorfold_health:streams_max{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"})",
+     "legendFormat": "All streams busy",
+     "refId": "C",
+     "range": true,
+     "instant": false,
+     "interval": "1s"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "max(max_over_time(tensorfold:requests_waiting{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[$__rate_interval])) > bool 0",
+     "legendFormat": "Requests waiting",
+     "refId": "D",
+     "range": true,
+     "instant": false,
+     "interval": "1s"
+    }
+   ],
+   "options": {
+    "legend": {
+     "showLegend": true,
+     "displayMode": "list",
+     "placement": "bottom",
+     "calcs": []
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "transparent": true
+  },
+  {
+   "id": 22,
+   "type": "timeseries",
+   "title": "Decode per reply · tok/s",
+   "description": "Tokens per second of each reply's own decode time, over finished requests. Concurrent replies share the GPU, so this falls as more run, which the bands show.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "gridPos": {
+    "x": 8,
+    "y": 14,
+    "w": 8,
+    "h": 8
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "thresholds"
+     },
+     "unit": "short",
+     "noValue": "Not reported on this recipe",
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "value": null,
+        "color": "#FF6B5E"
+       },
+       {
+        "value": 8,
+        "color": "#FFB454"
+       },
+       {
+        "value": 15,
+        "color": "#2DD4BF"
+       }
+      ]
+     },
+     "custom": {
+      "drawStyle": "line",
+      "lineInterpolation": "smooth",
+      "lineWidth": 2,
+      "fillOpacity": 0,
+      "showPoints": "never",
+      "spanNulls": false,
+      "axisCenteredZero": false,
+      "axisColorMode": "text",
+      "axisLabel": "",
+      "axisPlacement": "auto",
+      "barAlignment": 0,
+      "gradientMode": "scheme",
+      "hideFrom": {
+       "legend": false,
+       "tooltip": false,
+       "viz": false
+      },
+      "scaleDistribution": {
+       "type": "linear"
+      },
+      "stacking": {
+       "group": "A",
+       "mode": "none"
+      },
+      "thresholdsStyle": {
+       "mode": "off"
+      },
+      "axisBorderShow": false
+     },
+     "decimals": 0,
+     "min": 0
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byFrameRefID",
+       "options": "B"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "All streams busy"
+       },
+       {
+        "id": "unit",
+        "value": "bool_on_off"
+       },
+       {
+        "id": "min",
+        "value": 0
+       },
+       {
+        "id": "max",
+        "value": 1
+       },
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#FFB454",
+         "mode": "fixed"
+        }
+       },
+       {
+        "id": "custom.axisPlacement",
+        "value": "hidden"
+       },
+       {
+        "id": "custom.lineInterpolation",
+        "value": "stepAfter"
+       },
+       {
+        "id": "custom.lineWidth",
+        "value": 0
+       },
+       {
+        "id": "custom.fillOpacity",
+        "value": 20
+       },
+       {
+        "id": "custom.spanNulls",
+        "value": true
+       },
+       {
+        "id": "custom.gradientMode",
+        "value": "none"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byFrameRefID",
+       "options": "C"
+      },
+      "properties": [
+       {
+        "id": "displayName",
+        "value": "Requests waiting"
+       },
+       {
+        "id": "unit",
+        "value": "bool_on_off"
+       },
+       {
+        "id": "min",
+        "value": 0
+       },
+       {
+        "id": "max",
+        "value": 1
+       },
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#FF6B5E",
+         "mode": "fixed"
+        }
+       },
+       {
+        "id": "custom.axisPlacement",
+        "value": "hidden"
+       },
+       {
+        "id": "custom.lineInterpolation",
+        "value": "stepAfter"
+       },
+       {
+        "id": "custom.lineWidth",
+        "value": 0
+       },
+       {
+        "id": "custom.fillOpacity",
+        "value": 20
+       },
+       {
+        "id": "custom.spanNulls",
+        "value": true
+       },
+       {
+        "id": "custom.gradientMode",
+        "value": "none"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byType",
+       "options": "time"
+      },
+      "properties": [
+       {
+        "id": "custom.axisGridShow",
+        "value": false
+       }
+      ]
+     }
+    ]
+   },
+   "interval": "30s",
+   "maxDataPoints": 2000,
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "(rate(tensorfold:generation_tokens_total{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[$__rate_interval]) / (rate(tensorfold_health:decode_seconds_total{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[$__rate_interval]) > 0)) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
+     "legendFormat": "Decode",
+     "refId": "A",
+     "range": true,
+     "instant": false,
+     "interval": "30s"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "max(max_over_time(tensorfold:requests_running{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[$__rate_interval])) >= bool max(tensorfold_health:streams_max{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"})",
+     "legendFormat": "All streams busy",
+     "refId": "B",
+     "range": true,
+     "instant": false,
+     "interval": "30s"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "max(max_over_time(tensorfold:requests_waiting{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[$__rate_interval])) > bool 0",
+     "legendFormat": "Requests waiting",
+     "refId": "C",
+     "range": true,
+     "instant": false,
+     "interval": "30s"
+    }
+   ],
+   "options": {
+    "legend": {
+     "showLegend": true,
+     "displayMode": "list",
+     "placement": "bottom",
+     "calcs": []
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "transparent": true
+  },
+  {
+   "id": 23,
+   "type": "timeseries",
+   "title": "Prefill · new tok/s",
+   "description": "Prompt tokens not found in cache, per second of prefill time, over finished requests. Cached tokens take no prefill.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "gridPos": {
+    "x": 16,
+    "y": 14,
+    "w": 8,
+    "h": 8
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "fixedColor": "#4DA6FF",
+      "mode": "fixed"
+     },
+     "unit": "short",
+     "noValue": "Not reported on this recipe",
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "custom": {
+      "drawStyle": "bars",
+      "lineInterpolation": "smooth",
+      "lineWidth": 0,
+      "fillOpacity": 75,
+      "showPoints": "never",
+      "spanNulls": false,
+      "axisCenteredZero": false,
+      "axisColorMode": "text",
+      "axisLabel": "",
+      "axisPlacement": "auto",
+      "barAlignment": 0,
+      "gradientMode": "opacity",
+      "hideFrom": {
+       "legend": false,
+       "tooltip": false,
+       "viz": false
+      },
+      "scaleDistribution": {
+       "type": "linear"
+      },
+      "stacking": {
+       "group": "A",
+       "mode": "none"
+      },
+      "thresholdsStyle": {
+       "mode": "off"
+      },
+      "axisBorderShow": false,
+      "barWidthFactor": 0.8
+     },
+     "min": 0
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byType",
+       "options": "time"
+      },
+      "properties": [
+       {
+        "id": "custom.axisGridShow",
+        "value": false
+       }
+      ]
+     }
+    ]
+   },
+   "interval": "30s",
+   "maxDataPoints": 2000,
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "((rate(tensorfold:prompt_tokens_total{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[$__rate_interval]) - rate(tensorfold_health:cached_tokens_total{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[$__rate_interval])) / (rate(tensorfold_health:prefill_seconds_total{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[$__rate_interval]) > 0)) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
+     "legendFormat": "Prefill",
+     "refId": "A",
+     "range": true,
+     "instant": false,
+     "interval": "30s"
+    }
+   ],
+   "options": {
+    "legend": {
+     "showLegend": false,
+     "displayMode": "list",
+     "placement": "bottom",
+     "calcs": []
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "transparent": true
+  },
+  {
+   "id": 102,
+   "type": "row",
+   "title": "Latency",
+   "collapsed": false,
+   "gridPos": {
+    "x": 0,
+    "y": 22,
+    "w": 24,
+    "h": 1
+   },
+   "panels": []
+  },
+  {
+   "id": 24,
+   "type": "heatmap",
+   "title": "Time to first token",
+   "description": "Server arrival to first generated token. Counts of finished requests in each latency bucket, one column per step of at least a minute. Buckets above ten seconds are wide: 30, 60, 120 and 300 s.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 23,
+    "w": 8,
+    "h": 8
+   },
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "hideFrom": {
+       "legend": false,
+       "tooltip": false,
+       "viz": false
+      },
+      "scaleDistribution": {
+       "type": "linear"
+      }
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "calculate": false,
+    "cellGap": 1,
+    "cellValues": {
+     "unit": "short"
+    },
+    "color": {
+     "reverse": false,
+     "steps": 64,
+     "mode": "opacity",
+     "fill": "#4DA6FF",
+     "scale": "exponential",
+     "exponent": 0.35
+    },
+    "exemplars": {
+     "color": "rgba(255,0,255,0.7)"
+    },
+    "filterValues": {
+     "le": 1e-09
+    },
+    "legend": {
+     "show": true
+    },
+    "rowsFrame": {
+     "layout": "auto"
+    },
+    "tooltip": {
+     "mode": "single",
+     "showColorScale": false,
+     "yHistogram": false
+    },
+    "yAxis": {
+     "axisPlacement": "left",
+     "reverse": false,
+     "unit": "s"
+    }
+   },
+   "interval": "1m",
+   "maxDataPoints": 2000,
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "sum by (le) (increase(tensorfold:time_to_first_token_seconds_bucket{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[$__interval]))",
+     "legendFormat": "{{le}}",
+     "refId": "A",
+     "range": true,
+     "instant": false,
+     "interval": "1m",
+     "format": "heatmap"
+    }
+   ],
+   "transparent": true
+  },
+  {
+   "id": 25,
+   "type": "heatmap",
+   "title": "Request latency",
+   "description": "Server arrival to reply completion. Counts of finished requests in each latency bucket, one column per step of at least a minute. Buckets above ten seconds are wide: 30, 60, 120 and 300 s.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "gridPos": {
+    "x": 8,
+    "y": 23,
+    "w": 8,
+    "h": 8
+   },
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "hideFrom": {
+       "legend": false,
+       "tooltip": false,
+       "viz": false
+      },
+      "scaleDistribution": {
+       "type": "linear"
+      }
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "calculate": false,
+    "cellGap": 1,
+    "cellValues": {
+     "unit": "short"
+    },
+    "color": {
+     "reverse": false,
+     "steps": 64,
+     "mode": "opacity",
+     "fill": "#4DA6FF",
+     "scale": "exponential",
+     "exponent": 0.35
+    },
+    "exemplars": {
+     "color": "rgba(255,0,255,0.7)"
+    },
+    "filterValues": {
+     "le": 1e-09
+    },
+    "legend": {
+     "show": true
+    },
+    "rowsFrame": {
+     "layout": "auto"
+    },
+    "tooltip": {
+     "mode": "single",
+     "showColorScale": false,
+     "yHistogram": false
+    },
+    "yAxis": {
+     "axisPlacement": "left",
+     "reverse": false,
+     "unit": "s"
+    }
+   },
+   "interval": "1m",
+   "maxDataPoints": 2000,
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "sum by (le) (increase(tensorfold:request_latency_seconds_bucket{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[$__interval]))",
+     "legendFormat": "{{le}}",
+     "refId": "A",
+     "range": true,
+     "instant": false,
+     "interval": "1m",
+     "format": "heatmap"
+    }
+   ],
+   "transparent": true
+  },
+  {
+   "id": 8,
+   "type": "timeseries",
+   "title": "Mean latency",
+   "description": "Mean over finished requests, recorded at completion. First token ends at the first generated token, not necessarily the first text a client sees.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "gridPos": {
+    "x": 16,
+    "y": 23,
+    "w": 8,
+    "h": 8
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "thresholds"
+     },
+     "unit": "s",
+     "noValue": "No recent requests",
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "value": null,
+        "color": "#2DD4BF"
+       },
+       {
+        "value": 60,
+        "color": "#FFB454"
+       },
+       {
+        "value": 300,
+        "color": "#FF6B5E"
+       }
+      ]
+     },
+     "custom": {
+      "drawStyle": "line",
+      "lineInterpolation": "smooth",
+      "lineWidth": 2,
+      "fillOpacity": 0,
+      "showPoints": "never",
+      "spanNulls": false,
+      "axisCenteredZero": false,
+      "axisColorMode": "text",
+      "axisLabel": "",
+      "axisPlacement": "auto",
+      "barAlignment": 0,
+      "gradientMode": "scheme",
+      "hideFrom": {
+       "legend": false,
+       "tooltip": false,
+       "viz": false
+      },
+      "scaleDistribution": {
+       "type": "linear"
+      },
+      "stacking": {
+       "group": "A",
+       "mode": "none"
+      },
+      "thresholdsStyle": {
+       "mode": "off"
+      },
+      "axisBorderShow": false
+     },
+     "decimals": 1,
+     "min": 0
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byType",
+       "options": "time"
+      },
+      "properties": [
+       {
+        "id": "custom.axisGridShow",
+        "value": false
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Whole request"
+      },
+      "properties": [
+       {
+        "id": "thresholds",
+        "value": {
+         "mode": "absolute",
+         "steps": [
+          {
+           "value": null,
+           "color": "#9CCBFF"
+          },
+          {
+           "value": 60,
+           "color": "#FFB454"
+          },
+          {
+           "value": 300,
+           "color": "#FF6B5E"
+          }
+         ]
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "interval": "30s",
+   "maxDataPoints": 2000,
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "(rate(tensorfold:time_to_first_token_seconds_sum{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[$__rate_interval]) / (rate(tensorfold:time_to_first_token_seconds_count{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[$__rate_interval]) > 0)) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
+     "legendFormat": "First token",
+     "refId": "A",
+     "range": true,
+     "instant": false,
+     "interval": "30s"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "(rate(tensorfold:request_latency_seconds_sum{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[$__rate_interval]) / (rate(tensorfold:request_latency_seconds_count{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[$__rate_interval]) > 0)) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
+     "legendFormat": "Whole request",
+     "refId": "B",
+     "range": true,
+     "instant": false,
+     "interval": "30s"
+    }
+   ],
+   "options": {
+    "legend": {
+     "showLegend": true,
+     "displayMode": "list",
+     "placement": "bottom",
+     "calcs": []
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "transparent": true
+  },
+  {
+   "id": 103,
+   "type": "row",
+   "title": "Load",
+   "collapsed": false,
+   "gridPos": {
+    "x": 0,
+    "y": 31,
+    "w": 24,
+    "h": 1
+   },
+   "panels": []
+  },
+  {
+   "id": 11,
+   "type": "timeseries",
+   "title": "Requests",
+   "description": "The most requests running and waiting in each step, against the streams the engine runs at once.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 32,
+    "w": 12,
+    "h": 7
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "palette-classic"
+     },
+     "unit": "short",
+     "noValue": "No data",
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "custom": {
+      "drawStyle": "line",
+      "lineInterpolation": "smooth",
+      "lineWidth": 2,
+      "fillOpacity": 20,
+      "showPoints": "never",
+      "spanNulls": false,
+      "axisCenteredZero": false,
+      "axisColorMode": "text",
+      "axisLabel": "",
+      "axisPlacement": "auto",
+      "barAlignment": 0,
+      "gradientMode": "opacity",
+      "hideFrom": {
+       "legend": false,
+       "tooltip": false,
+       "viz": false
+      },
+      "scaleDistribution": {
+       "type": "linear"
+      },
+      "stacking": {
+       "group": "A",
+       "mode": "none"
+      },
+      "thresholdsStyle": {
+       "mode": "off"
+      },
+      "axisBorderShow": false
+     },
+     "decimals": 0,
+     "min": 0
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^Capacity/"
+      },
+      "properties": [
+       {
+        "id": "custom.lineStyle",
+        "value": {
+         "fill": "dash",
+         "dash": [
+          6,
+          4
+         ]
+        }
+       },
+       {
+        "id": "custom.fillOpacity",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Running"
+      },
+      "properties": [
+       {
+        "id": "custom.fillOpacity",
+        "value": 20
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Running"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#4DA6FF",
+         "mode": "fixed"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Waiting"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#FFB454",
+         "mode": "fixed"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Capacity"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#1E5FA3",
+         "mode": "fixed"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byType",
+       "options": "time"
+      },
+      "properties": [
+       {
+        "id": "custom.axisGridShow",
+        "value": false
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Running"
+      },
+      "properties": [
+       {
+        "id": "custom.drawStyle",
+        "value": "bars"
+       },
+       {
+        "id": "custom.fillOpacity",
+        "value": 45
+       },
+       {
+        "id": "custom.lineWidth",
+        "value": 0
+       },
+       {
+        "id": "custom.barWidthFactor",
+        "value": 0.8
+       },
+       {
+        "id": "custom.gradientMode",
+        "value": "none"
+       }
+      ]
+     }
+    ]
+   },
+   "interval": "30s",
+   "maxDataPoints": 2000,
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "(max_over_time(tensorfold:requests_running{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[$__interval])) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
+     "legendFormat": "Running",
+     "refId": "A",
+     "range": true,
+     "instant": false,
+     "interval": "30s"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "(max_over_time(tensorfold:requests_waiting{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[$__interval])) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
+     "legendFormat": "Waiting",
+     "refId": "B",
+     "range": true,
+     "instant": false,
+     "interval": "30s"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "(tensorfold_health:streams_max{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
+     "legendFormat": "Capacity",
+     "refId": "C",
+     "range": true,
+     "instant": false,
+     "interval": "30s"
+    }
+   ],
+   "options": {
+    "legend": {
+     "showLegend": true,
+     "displayMode": "list",
+     "placement": "bottom",
+     "calcs": []
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "transparent": true
+  },
+  {
+   "id": 10,
+   "type": "timeseries",
+   "title": "Completed requests",
+   "description": "Requests finished in each step of at least a minute. The step grows with the range, so compare heights within one view.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 32,
+    "w": 12,
+    "h": 7
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "fixedColor": "#4DA6FF",
+      "mode": "fixed"
+     },
+     "unit": "short",
+     "noValue": "No data",
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "custom": {
+      "drawStyle": "bars",
+      "lineInterpolation": "smooth",
+      "lineWidth": 0,
+      "fillOpacity": 75,
+      "showPoints": "never",
+      "spanNulls": false,
+      "axisCenteredZero": false,
+      "axisColorMode": "text",
+      "axisLabel": "",
+      "axisPlacement": "auto",
+      "barAlignment": 0,
+      "gradientMode": "opacity",
+      "hideFrom": {
+       "legend": false,
+       "tooltip": false,
+       "viz": false
+      },
+      "scaleDistribution": {
+       "type": "linear"
+      },
+      "stacking": {
+       "group": "A",
+       "mode": "none"
+      },
+      "thresholdsStyle": {
+       "mode": "off"
+      },
+      "axisBorderShow": false,
+      "barWidthFactor": 0.8
+     },
+     "decimals": 0,
+     "min": 0
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byType",
+       "options": "time"
+      },
+      "properties": [
+       {
+        "id": "custom.axisGridShow",
+        "value": false
+       }
+      ]
+     }
+    ]
+   },
+   "interval": "1m",
+   "maxDataPoints": 2000,
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "(increase(tensorfold:request_latency_seconds_count{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[$__interval])) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
+     "legendFormat": "Completed",
+     "refId": "A",
+     "range": true,
+     "instant": false,
+     "interval": "1m"
+    }
+   ],
+   "options": {
+    "legend": {
+     "showLegend": false,
+     "displayMode": "list",
+     "placement": "bottom",
+     "calcs": []
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "transparent": true
+  },
+  {
+   "id": 104,
+   "type": "row",
+   "title": "Cache and pool",
+   "collapsed": false,
+   "gridPos": {
+    "x": 0,
+    "y": 39,
+    "w": 24,
+    "h": 1
+   },
+   "panels": []
+  },
+  {
+   "id": 13,
+   "type": "timeseries",
+   "title": "Prompt tokens read · tok/s",
+   "description": "Prompt tokens of finished requests, booked at completion. Only the new ones take prefill time. A recipe that reports no cache shows one total.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 40,
+    "w": 12,
+    "h": 7
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "palette-classic"
+     },
+     "unit": "short",
+     "noValue": "No data",
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "custom": {
+      "drawStyle": "line",
+      "lineInterpolation": "smooth",
+      "lineWidth": 2,
+      "fillOpacity": 30,
+      "showPoints": "never",
+      "spanNulls": false,
+      "axisCenteredZero": false,
+      "axisColorMode": "text",
+      "axisLabel": "",
+      "axisPlacement": "auto",
+      "barAlignment": 0,
+      "gradientMode": "opacity",
+      "hideFrom": {
+       "legend": false,
+       "tooltip": false,
+       "viz": false
+      },
+      "scaleDistribution": {
+       "type": "linear"
+      },
+      "stacking": {
+       "group": "A",
+       "mode": "normal"
+      },
+      "thresholdsStyle": {
+       "mode": "off"
+      },
+      "axisBorderShow": false
+     },
+     "min": 0
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "New"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#4DA6FF",
+         "mode": "fixed"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "From cache"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#4DA6FF",
+         "mode": "fixed"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "All tokens"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#1E5FA3",
+         "mode": "fixed"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byType",
+       "options": "time"
+      },
+      "properties": [
+       {
+        "id": "custom.axisGridShow",
+        "value": false
+       }
+      ]
+     }
+    ]
+   },
+   "interval": "30s",
+   "maxDataPoints": 2000,
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "(rate(tensorfold:prompt_tokens_total{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[$__rate_interval]) - rate(tensorfold_health:cached_tokens_total{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[$__rate_interval])) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
+     "legendFormat": "New",
+     "refId": "A",
+     "range": true,
+     "instant": false,
+     "interval": "30s"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "(rate(tensorfold_health:cached_tokens_total{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[$__rate_interval])) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
+     "legendFormat": "From cache",
+     "refId": "B",
+     "range": true,
+     "instant": false,
+     "interval": "30s"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "(rate(tensorfold:prompt_tokens_total{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[$__rate_interval]) unless on(job,instance,model,recipe,runtime) tensorfold_health:cached_tokens_total{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
+     "legendFormat": "All tokens",
+     "refId": "C",
+     "range": true,
+     "instant": false,
+     "interval": "30s"
+    }
+   ],
+   "options": {
+    "legend": {
+     "showLegend": true,
+     "displayMode": "list",
+     "placement": "bottom",
+     "calcs": []
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "transparent": true
+  },
+  {
+   "id": 27,
+   "type": "timeseries",
+   "title": "Pool used",
+   "description": "Share of the shared pool held by streams and kept prompts, not host memory.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 40,
+    "w": 12,
+    "h": 7
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "thresholds"
+     },
+     "unit": "percentunit",
+     "noValue": "Not reported on this recipe",
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "value": null,
+        "color": "#2DD4BF"
+       },
+       {
+        "value": 0.9,
+        "color": "#FFB454"
+       },
+       {
+        "value": 0.98,
+        "color": "#FF6B5E"
+       }
+      ]
+     },
+     "custom": {
+      "drawStyle": "line",
+      "lineInterpolation": "smooth",
+      "lineWidth": 2,
+      "fillOpacity": 0,
+      "showPoints": "never",
+      "spanNulls": false,
+      "axisCenteredZero": false,
+      "axisColorMode": "text",
+      "axisLabel": "",
+      "axisPlacement": "auto",
+      "barAlignment": 0,
+      "gradientMode": "scheme",
+      "hideFrom": {
+       "legend": false,
+       "tooltip": false,
+       "viz": false
+      },
+      "scaleDistribution": {
+       "type": "linear"
+      },
+      "stacking": {
+       "group": "A",
+       "mode": "none"
+      },
+      "thresholdsStyle": {
+       "mode": "off"
+      },
+      "axisBorderShow": false
+     },
+     "decimals": 0,
+     "min": 0,
+     "max": 1
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byType",
+       "options": "time"
+      },
+      "properties": [
+       {
+        "id": "custom.axisGridShow",
+        "value": false
+       }
+      ]
+     }
+    ]
+   },
+   "interval": "1s",
+   "maxDataPoints": 2000,
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "(1 - tensorfold_health:pool_free_tokens{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} / (tensorfold_health:pool_tokens{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} > 0)) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
+     "legendFormat": "Pool used",
+     "refId": "A",
+     "range": true,
+     "instant": false,
+     "interval": "1s"
+    }
+   ],
+   "options": {
+    "legend": {
+     "showLegend": false,
+     "displayMode": "list",
+     "placement": "bottom",
+     "calcs": []
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "transparent": true
+  },
+  {
+   "id": 105,
+   "type": "row",
+   "title": "Engine",
+   "collapsed": false,
+   "gridPos": {
+    "x": 0,
+    "y": 47,
+    "w": 24,
+    "h": 1
+   },
+   "panels": []
+  },
+  {
+   "id": 29,
+   "type": "timeseries",
+   "title": "Decode round time",
+   "description": "Milliseconds of decode per round, averaged over finished requests. It rises as more replies run at once, and unlike tokens per second it does not move with draft acceptance.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 48,
+    "w": 9,
+    "h": 7
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "fixedColor": "#4DA6FF",
+      "mode": "fixed"
+     },
+     "unit": "ms",
+     "noValue": "Not reported on this recipe",
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "custom": {
+      "drawStyle": "line",
+      "lineInterpolation": "smooth",
+      "lineWidth": 2,
+      "fillOpacity": 20,
+      "showPoints": "never",
+      "spanNulls": false,
+      "axisCenteredZero": false,
+      "axisColorMode": "text",
+      "axisLabel": "",
+      "axisPlacement": "auto",
+      "barAlignment": 0,
+      "gradientMode": "opacity",
+      "hideFrom": {
+       "legend": false,
+       "tooltip": false,
+       "viz": false
+      },
+      "scaleDistribution": {
+       "type": "linear"
+      },
+      "stacking": {
+       "group": "A",
+       "mode": "none"
+      },
+      "thresholdsStyle": {
+       "mode": "off"
+      },
+      "axisBorderShow": false
+     },
+     "decimals": 0,
+     "min": 0
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byType",
+       "options": "time"
+      },
+      "properties": [
+       {
+        "id": "custom.axisGridShow",
+        "value": false
+       }
+      ]
+     }
+    ]
+   },
+   "interval": "30s",
+   "maxDataPoints": 2000,
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "(1000 * rate(tensorfold_health:decode_seconds_total{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[$__rate_interval]) / (rate(tensorfold_health:rounds_total{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[$__rate_interval]) > 0)) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
+     "legendFormat": "Round",
+     "refId": "A",
+     "range": true,
+     "instant": false,
+     "interval": "30s"
+    }
+   ],
+   "options": {
+    "legend": {
+     "showLegend": false,
+     "displayMode": "list",
+     "placement": "bottom",
+     "calcs": []
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "transparent": true
+  },
+  {
+   "id": 14,
+   "type": "timeseries",
+   "title": "Speculative acceptance",
+   "description": "Accepted divided by drafted tokens across finished requests.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${datasource}"
+   },
+   "gridPos": {
+    "x": 9,
+    "y": 48,
+    "w": 9,
+    "h": 7
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "fixedColor": "#4DA6FF",
+      "mode": "fixed"
+     },
+     "unit": "percentunit",
+     "noValue": "No recent drafts",
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "custom": {
+      "drawStyle": "line",
+      "lineInterpolation": "smooth",
+      "lineWidth": 2,
+      "fillOpacity": 20,
+      "showPoints": "never",
+      "spanNulls": false,
+      "axisCenteredZero": false,
+      "axisColorMode": "text",
+      "axisLabel": "",
+      "axisPlacement": "auto",
+      "barAlignment": 0,
+      "gradientMode": "opacity",
+      "hideFrom": {
+       "legend": false,
+       "tooltip": false,
+       "viz": false
+      },
+      "scaleDistribution": {
+       "type": "linear"
+      },
+      "stacking": {
+       "group": "A",
+       "mode": "none"
+      },
+      "thresholdsStyle": {
+       "mode": "off"
+      },
+      "axisBorderShow": false
+     },
+     "decimals": 0,
+     "min": 0,
+     "max": 1
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byType",
+       "options": "time"
+      },
+      "properties": [
+       {
+        "id": "custom.axisGridShow",
+        "value": false
+       }
+      ]
+     }
+    ]
+   },
+   "interval": "30s",
+   "maxDataPoints": 2000,
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "editorMode": "code",
+     "expr": "(rate(tensorfold:mtp_accepted_total{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[$__rate_interval]) / (rate(tensorfold:mtp_drafted_total{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[$__rate_interval]) > 0)) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}) < 10))",
+     "legendFormat": "Accepted",
+     "refId": "A",
+     "range": true,
+     "instant": false,
+     "interval": "30s"
+    }
+   ],
+   "options": {
+    "legend": {
+     "showLegend": false,
+     "displayMode": "list",
+     "placement": "bottom",
+     "calcs": []
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "transparent": true
+  },
+  {
+   "id": 19,
+   "type": "text",
+   "title": "Reading this page",
+   "gridPos": {
+    "x": 18,
+    "y": 48,
+    "w": 6,
+    "h": 7
+   },
+   "options": {
+    "mode": "markdown",
+    "content": "Decode, prefill and cache figures average finished requests, so they lag a running reply. Client-visible latency, queue-wait duration and error counts are not measured. [Monitoring notes](https://github.com/kelchm/home-lab/blob/main/sparks/monitoring/README.md)."
+   },
+   "transparent": true
+  }
+ ],
+ "templating": {
+  "list": [
+   {
+    "current": {
+     "text": "VictoriaMetrics",
+     "value": "victoriametrics"
+    },
+    "includeAll": false,
+    "name": "datasource",
+    "options": [],
+    "query": "prometheus",
+    "refresh": 1,
+    "regex": "",
+    "type": "datasource"
+   },
+   {
+    "name": "model",
+    "label": "Model",
+    "type": "query",
+    "datasource": {
+     "type": "prometheus",
+     "uid": "${datasource}"
+    },
+    "definition": "label_values(up{job=\"spark-inference\",platform=\"spark\"}, model)",
+    "query": {
+     "query": "label_values(up{job=\"spark-inference\",platform=\"spark\"}, model)",
+     "refId": "model"
+    },
+    "includeAll": true,
+    "allValue": ".*",
+    "multi": true,
+    "refresh": 2,
+    "sort": 1,
+    "current": {
+     "text": "All",
+     "value": "$__all"
+    }
+   },
+   {
+    "name": "recipe",
+    "label": "Recipe",
+    "type": "query",
+    "datasource": {
+     "type": "prometheus",
+     "uid": "${datasource}"
+    },
+    "definition": "label_values(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\"}, recipe)",
+    "query": {
+     "query": "label_values(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\"}, recipe)",
+     "refId": "recipe"
+    },
+    "includeAll": true,
+    "allValue": ".*",
+    "multi": true,
+    "refresh": 2,
+    "sort": 1,
+    "current": {
+     "text": "All",
+     "value": "$__all"
+    }
+   },
+   {
+    "name": "serving_host",
+    "label": "Serving host",
+    "type": "query",
+    "datasource": {
+     "type": "prometheus",
+     "uid": "${datasource}"
+    },
+    "definition": "label_values(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\"}, instance)",
+    "query": {
+     "query": "label_values(up{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\"}, instance)",
+     "refId": "serving_host"
+    },
+    "includeAll": true,
+    "allValue": ".*",
+    "multi": true,
+    "refresh": 2,
+    "sort": 1,
+    "current": {
+     "text": "All",
+     "value": "$__all"
+    }
+   }
+  ]
+ },
+ "timepicker": {
+  "refresh_intervals": [
+   "1s",
+   "5s",
+   "10s",
+   "30s",
+   "1m",
+   "5m",
+   "15m",
+   "30m",
+   "1h"
+  ]
+ }
+}
