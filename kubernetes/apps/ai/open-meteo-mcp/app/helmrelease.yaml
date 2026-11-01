@@ -20,7 +20,7 @@ spec:
           app:
             image:
               repository: ghcr.io/cmer81/open-meteo-mcp
-              tag: "2.5.5@sha256:72f9c43fab33601ff8b2f9e0ec5fedbc69ef221ac8a57e1fe5d8e7bc4e35d8dd"
+              tag: "2.5.6@sha256:f2e2a4f12cead38204ec5a51d2d52e5d26f292c8e55ba26e51fbf97ac2340336"
             env:
               TRANSPORT: http
               PORT: "3000"
