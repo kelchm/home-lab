@@ -47,6 +47,7 @@ or fixing.
 | [metamcp-bootstrap](runbooks/metamcp-bootstrap.md) | Retirement notice and pointer to the current MCPHub gateway. |
 | [ai-mcp-reliability-and-containment](runbooks/ai-mcp-reliability-and-containment.md) | Post-deploy checks for MCPHub/backend connectivity and Grafana MCP functional monitoring. |
 | [bambuddy-bootstrap](runbooks/bambuddy-bootstrap.md) | Bringing up Bambuddy, validating printer containment and OIDC, and exercising backup recovery. |
+| [trmnl-trials](runbooks/trmnl-trials.md) | Opening, comparing, validating and retiring the isolated TRMNL server trials. |
 | [visionect-migration](runbooks/visionect-migration.md) | Staging, cutting over, validating, and rolling back the Synology-to-k8s Visionect migration. |
 | [host-monitoring](runbooks/host-monitoring.md) | Enrolling, verifying, and removing PVE and DGX Spark hosts in metrics collection; the Proxmox API exporter. |
 | [dependency-updates](runbooks/dependency-updates.md) | Holding a dependency back with a version constraint, review approval or exact-content lock, recording why, reading a failed Renovate lookup, and responding to a Renovate problems alert. |

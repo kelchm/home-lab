@@ -1,0 +1,11 @@
+{
+  "name": "trmnl-phoenix-trial-renderer",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "puppeteer-img": "1.0.4"
+  },
+  "overrides": {
+    "puppeteer": "24.34.0"
+  }
+}

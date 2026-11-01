@@ -1,0 +1,127 @@
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: larapaper
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: trmnl-trials
+  interval: 1h
+  values:
+    controllers:
+      main:
+        replicas: 1
+        strategy: Recreate
+        annotations:
+          secret.reloader.stakater.com/reload: larapaper-trial
+        containers:
+          app:
+            image:
+              repository: ghcr.io/usetrmnl/larapaper
+              tag: 0.45.1@sha256:cde6a1f47f181260a0dc0d5d0c5fa3ad9cad2a225cb5cd242d5c369afba34785
+            env:
+              TZ: America/New_York
+              APP_URL: https://larapaper.home.kelch.io
+              APP_ENV: production
+              APP_DEBUG: 'false'
+              FORCE_HTTPS: 'true'
+              APP_TIMEZONE: America/New_York
+              PHP_OPCACHE_ENABLE: '1'
+              DB_CONNECTION: sqlite
+              DB_DATABASE: /var/www/html/database/storage/database.sqlite
+              REGISTRATION_ENABLED: '1'
+              LOG_CHANNEL: stderr
+              LOG_LEVEL: warning
+            envFrom:
+            - secretRef:
+                name: larapaper-trial
+            probes:
+              readiness:
+                enabled: true
+                custom: true
+                spec:
+                  periodSeconds: 10
+                  timeoutSeconds: 3
+                  failureThreshold: 3
+                  httpGet:
+                    path: /up
+                    port: 8080
+              liveness:
+                enabled: true
+                custom: true
+                spec:
+                  periodSeconds: 10
+                  timeoutSeconds: 3
+                  failureThreshold: 3
+                  tcpSocket:
+                    port: 8080
+              startup:
+                enabled: true
+                custom: true
+                spec:
+                  periodSeconds: 10
+                  timeoutSeconds: 3
+                  failureThreshold: 60
+                  tcpSocket:
+                    port: 8080
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop:
+                - ALL
+            resources:
+              requests:
+                cpu: 100m
+                memory: 256Mi
+              limits:
+                memory: 1Gi
+    defaultPodOptions:
+      automountServiceAccountToken: false
+      securityContext:
+        fsGroup: 82
+        fsGroupChangePolicy: OnRootMismatch
+        runAsNonRoot: true
+        runAsUser: 82
+        runAsGroup: 82
+        seccompProfile:
+          type: RuntimeDefault
+    service:
+      app:
+        controller: main
+        ports:
+          http:
+            port: 8080
+    route:
+      app:
+        hostnames:
+        - larapaper.home.kelch.io
+        parentRefs:
+        - name: gateway-admin
+          namespace: network
+          sectionName: https
+        rules:
+        - backendRefs:
+          - identifier: app
+            port: 8080
+    persistence:
+      database:
+        type: persistentVolumeClaim
+        accessMode: ReadWriteOnce
+        size: 1Gi
+        storageClass: longhorn
+        retain: true
+        advancedMounts:
+          main:
+            app:
+            - path: /var/www/html/database/storage
+      images:
+        type: persistentVolumeClaim
+        accessMode: ReadWriteOnce
+        size: 2Gi
+        storageClass: longhorn
+        retain: true
+        advancedMounts:
+          main:
+            app:
+            - path: /var/www/html/storage/app/public/images/generated

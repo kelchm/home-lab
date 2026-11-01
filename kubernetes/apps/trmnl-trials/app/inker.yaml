@@ -1,0 +1,110 @@
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: inker
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: trmnl-trials
+  interval: 1h
+  values:
+    controllers:
+      main:
+        replicas: 1
+        strategy: Recreate
+        annotations:
+          secret.reloader.stakater.com/reload: inker-trial
+        containers:
+          app:
+            image:
+              repository: docker.io/wojooo/inker
+              tag: latest@sha256:7174e13390aceee8afb14c1b1c3a952ade4e387607b41b646c78b5e8af7286e9
+            env:
+              TZ: America/New_York
+              CORS_ORIGINS: https://inker.home.kelch.io
+              DEFAULT_TIMEZONE: America/New_York
+            envFrom:
+            - secretRef:
+                name: inker-trial
+            probes:
+              readiness:
+                enabled: true
+                custom: true
+                spec:
+                  periodSeconds: 10
+                  timeoutSeconds: 3
+                  failureThreshold: 3
+                  httpGet:
+                    path: /health
+                    port: 80
+              liveness:
+                enabled: true
+                custom: true
+                spec:
+                  periodSeconds: 10
+                  timeoutSeconds: 3
+                  failureThreshold: 3
+                  tcpSocket:
+                    port: 80
+              startup:
+                enabled: true
+                custom: true
+                spec:
+                  periodSeconds: 10
+                  timeoutSeconds: 3
+                  failureThreshold: 60
+                  tcpSocket:
+                    port: 80
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop:
+                - ALL
+                add:
+                - CHOWN
+                - SETUID
+                - SETGID
+                - DAC_OVERRIDE
+            resources:
+              requests:
+                cpu: 100m
+                memory: 256Mi
+              limits:
+                memory: 1Gi
+    defaultPodOptions:
+      automountServiceAccountToken: false
+      securityContext:
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+    service:
+      app:
+        controller: main
+        ports:
+          http:
+            port: 80
+    route:
+      app:
+        hostnames:
+        - inker.home.kelch.io
+        parentRefs:
+        - name: gateway-admin
+          namespace: network
+          sectionName: https
+        rules:
+        - backendRefs:
+          - identifier: app
+            port: 80
+    persistence:
+      uploads:
+        type: persistentVolumeClaim
+        accessMode: ReadWriteOnce
+        size: 2Gi
+        storageClass: longhorn
+        retain: true
+        advancedMounts:
+          main:
+            app:
+            - path: /app/uploads

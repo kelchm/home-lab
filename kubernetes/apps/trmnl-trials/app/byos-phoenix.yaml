@@ -1,0 +1,119 @@
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: byos-phoenix
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: trmnl-trials
+  interval: 1h
+  values:
+    controllers:
+      main:
+        replicas: 1
+        strategy: Recreate
+        annotations:
+          secret.reloader.stakater.com/reload: byos-phoenix-trial
+        containers:
+          app:
+            image:
+              repository: ghcr.io/kelchm/trmnl-trial-phoenix
+              tag: source-c7cbc5af947c-build-ceafdbb7605d@sha256:8c5425eff6e107330d730219d594fd7bddc574b509d347bf189b677046ed72d5
+            env:
+              TZ: America/New_York
+              PHX_HOST: byos-phoenix.home.kelch.io
+              DATABASE_PATH: /data/trmnl.db
+              PORT: '4000'
+              ERL_FLAGS: +S 2:2
+            envFrom:
+            - secretRef:
+                name: byos-phoenix-trial
+            probes:
+              readiness:
+                enabled: true
+                custom: true
+                spec:
+                  tcpSocket:
+                    port: 4000
+                  periodSeconds: 10
+                  timeoutSeconds: 3
+                  failureThreshold: 3
+              liveness:
+                enabled: true
+                custom: true
+                spec:
+                  tcpSocket:
+                    port: 4000
+                  periodSeconds: 10
+                  timeoutSeconds: 3
+                  failureThreshold: 3
+              startup:
+                enabled: true
+                custom: true
+                spec:
+                  tcpSocket:
+                    port: 4000
+                  periodSeconds: 10
+                  timeoutSeconds: 3
+                  failureThreshold: 90
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop:
+                - ALL
+            resources:
+              requests:
+                cpu: 100m
+                memory: 256Mi
+              limits:
+                memory: 1536Mi
+    defaultPodOptions:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+    service:
+      app:
+        controller: main
+        ports:
+          http:
+            port: 4000
+    route:
+      app:
+        hostnames:
+        - byos-phoenix.home.kelch.io
+        parentRefs:
+        - name: gateway-admin
+          namespace: network
+          sectionName: https
+        rules:
+        - backendRefs:
+          - identifier: app
+            port: 4000
+    persistence:
+      data:
+        type: persistentVolumeClaim
+        accessMode: ReadWriteOnce
+        size: 2Gi
+        storageClass: longhorn
+        retain: true
+        advancedMounts:
+          main:
+            app:
+            - path: /data
+      generated:
+        type: persistentVolumeClaim
+        accessMode: ReadWriteOnce
+        size: 1Gi
+        storageClass: longhorn
+        retain: true
+        advancedMounts:
+          main:
+            app:
+            - path: /app/priv/static/generated

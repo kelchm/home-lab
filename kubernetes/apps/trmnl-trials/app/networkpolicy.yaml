@@ -1,0 +1,73 @@
+---
+# Public web access excludes LAN and other non-public IPv4 destinations.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: trmnl-trials
+spec:
+  endpointSelector: {}
+  ingress:
+  - fromEndpoints:
+    - matchLabels:
+        k8s:io.kubernetes.pod.namespace: network
+        app.kubernetes.io/instance: traefik-admin-network
+    toPorts:
+    - ports:
+      - port: '80'
+        protocol: TCP
+      - port: '2300'
+        protocol: TCP
+      - port: '3000'
+        protocol: TCP
+      - port: '8080'
+        protocol: TCP
+      - port: '4000'
+        protocol: TCP
+      - port: '4567'
+        protocol: TCP
+      - port: '8000'
+        protocol: TCP
+  egress:
+  - toEndpoints:
+    - matchLabels:
+        k8s:io.kubernetes.pod.namespace: kube-system
+        k8s-app: kube-dns
+    toPorts:
+    - ports:
+      - port: '53'
+        protocol: UDP
+      - port: '53'
+        protocol: TCP
+  - toPorts:
+    - ports:
+      - port: '80'
+        protocol: TCP
+      - port: '443'
+        protocol: TCP
+    toCIDRSet:
+    - cidr: 0.0.0.0/0
+      except:
+      - 0.0.0.0/8
+      - 10.0.0.0/8
+      - 100.64.0.0/10
+      - 127.0.0.0/8
+      - 169.254.0.0/16
+      - 172.16.0.0/12
+      - 192.0.0.0/24
+      - 192.0.2.0/24
+      - 192.168.0.0/16
+      - 198.18.0.0/15
+      - 198.51.100.0/24
+      - 203.0.113.0/24
+      - 224.0.0.0/4
+      - 240.0.0.0/4
+  - toEndpoints:
+    - matchLabels:
+        k8s:io.kubernetes.pod.namespace: network
+        app.kubernetes.io/instance: traefik-admin-network
+    toPorts:
+    - ports:
+      - port: '443'
+        protocol: TCP
+      - port: '8443'
+        protocol: TCP

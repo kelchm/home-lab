@@ -1,0 +1,22 @@
+[
+  {
+    "repo": "byos_fastapi",
+    "sha": "10d16d73f696a26cc9843456adbd558fb4699d91",
+    "sha256": "bd4e2b8d9f3d5f298e123e90d8bb40789b17a5d0c94bc1532e24a6f7cf99a2a2"
+  },
+  {
+    "repo": "byos_django",
+    "sha": "50352c865cc453496fd76fb4eee1af17204ed3bc",
+    "sha256": "f56937b2f6b97d3af714aa9221eac01503db5249db0819341a785640b173dca9"
+  },
+  {
+    "repo": "byos_phoenix",
+    "sha": "c7cbc5af947cffe640f4637d781cfbae5e78b0e4",
+    "sha256": "66eeabc4863a9685a78b16a887d6e5f27772c4caf327d2ae14baa40b66f4dc98"
+  },
+  {
+    "repo": "byos_node_lite",
+    "sha": "840262d6cd1d31a04b96910f2e0db1473fd98d82",
+    "sha256": "e152124736ed6d02275aeeddc6dbbfa46275a5261ee6f37f09dfb27d8723cce8"
+  }
+]

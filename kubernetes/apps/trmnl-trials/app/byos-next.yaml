@@ -1,0 +1,160 @@
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: byos-next
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: trmnl-trials
+  interval: 1h
+  values:
+    controllers:
+      main:
+        replicas: 1
+        strategy: Recreate
+        annotations:
+          secret.reloader.stakater.com/reload: byos-next-trial
+          configmap.reloader.stakater.com/reload: trmnl-trial-guards
+        containers:
+          app:
+            image:
+              repository: ghcr.io/usetrmnl/byos_next
+              tag: latest@sha256:fbd7d9ae70f028868a5bc5a297fe39bc4b793614f75670025249ccbedb718853
+            env:
+              TZ: America/New_York
+              AUTH_ENABLED: 'true'
+              BETTER_AUTH_URL: https://byos-next.home.kelch.io
+              ENABLE_EXTERNAL_CATALOG: 'true'
+              NEXT_TELEMETRY_DISABLED: '1'
+              NODE_OPTIONS: --require=/config/next-firmware-guard.cjs
+            envFrom:
+            - secretRef:
+                name: byos-next-trial
+            probes:
+              readiness:
+                enabled: true
+                custom: true
+                spec:
+                  periodSeconds: 10
+                  timeoutSeconds: 3
+                  failureThreshold: 3
+                  tcpSocket:
+                    port: 3000
+              liveness:
+                enabled: true
+                custom: true
+                spec:
+                  periodSeconds: 10
+                  timeoutSeconds: 3
+                  failureThreshold: 3
+                  tcpSocket:
+                    port: 3000
+              startup:
+                enabled: true
+                custom: true
+                spec:
+                  periodSeconds: 10
+                  timeoutSeconds: 3
+                  failureThreshold: 60
+                  tcpSocket:
+                    port: 3000
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop:
+                - ALL
+            resources:
+              requests:
+                cpu: 100m
+                memory: 256Mi
+              limits:
+                memory: 1Gi
+            command:
+            - /bin/sh
+            - -ec
+            args:
+            - until node -e 'const s=require("net").connect(5432,"127.0.0.1");s.on("connect",()=>{s.end();process.exit(0)});s.on("error",()=>process.exit(1));s.setTimeout(2000,()=>process.exit(1));';
+              do sleep 2; done; exec node server.js
+          database:
+            image:
+              repository: docker.io/library/postgres
+              tag: 18.6-alpine@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5
+            env:
+              PGDATA: /var/lib/postgresql/data/pgdata
+            envFrom:
+            - secretRef:
+                name: byos-next-trial
+            securityContext:
+              runAsUser: 999
+              runAsGroup: 999
+              runAsNonRoot: true
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop:
+                - ALL
+            probes:
+              readiness:
+                enabled: true
+                custom: true
+                spec:
+                  exec:
+                    command:
+                    - sh
+                    - -c
+                    - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+                  periodSeconds: 5
+            resources:
+              requests:
+                cpu: 50m
+                memory: 128Mi
+              limits:
+                memory: 512Mi
+    defaultPodOptions:
+      automountServiceAccountToken: false
+      securityContext:
+        fsGroup: 1001
+        fsGroupChangePolicy: OnRootMismatch
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+    service:
+      app:
+        controller: main
+        ports:
+          http:
+            port: 3000
+    route:
+      app:
+        hostnames:
+        - byos-next.home.kelch.io
+        parentRefs:
+        - name: gateway-admin
+          namespace: network
+          sectionName: https
+        rules:
+        - backendRefs:
+          - identifier: app
+            port: 3000
+    persistence:
+      database:
+        type: persistentVolumeClaim
+        accessMode: ReadWriteOnce
+        size: 2Gi
+        storageClass: longhorn
+        retain: true
+        advancedMounts:
+          main:
+            database:
+            - path: /var/lib/postgresql/data
+      trial-guards:
+        type: configMap
+        name: trmnl-trial-guards
+        advancedMounts:
+          main:
+            app:
+            - path: /config/next-firmware-guard.cjs
+              subPath: next-firmware-guard.cjs
+              readOnly: true
