@@ -15,6 +15,7 @@ HERE = Path(__file__).resolve().parent
 LAB = Path("/tmp/spark-lab/dash")
 WINDOW = ("2026-10-31T23:00:00.000Z", "2026-11-01T01:30:00.000Z")
 
+AZURE, LIME = "#1EA7FF", "#B6F23C"
 INFO = "#6CA6E0"      # a plain quantity: information, with no good or bad in it
 RULE = {"ok": "#3ECF8E", "drawn": True, "speed": INFO, "load": INFO, "cache": INFO, "memory": INFO, "heat": INFO, "context": INFO, "fine": "#5F7690",
         "muted": "#52525B", "warn": "#F5A524", "bad": "#FF6B6B", "info": "#71717A", "band": 14, "quiet": "#1C1F24", "good": "#17402F", "warm": "#4A3A12", "hot": "#4F2020",
@@ -64,7 +65,9 @@ CONCEPTS = {
     # Quantities have no good or bad, so they take the information blue. A judged value has a limit, some from the alert rules and some still placeholders, and its line changes colour as it crosses one.
     "colour-judges": dict(RULE, title="Colour judges", calm=INFO, calm1="#9CC4F0", calm2="#5B86BC", spark1="#9CC4F0", spark2="#5B86BC"),
     "traffic-light": dict(RULE, title="Traffic light", calm="#3ECF8E", calm1="#3ECF8E", calm2="#A7F3D0", spark1="#9CC4F0", spark2="#5B86BC"),
-    "machines": dict(RULE, title="Machines and condition", refined=True, calm=INFO, calm1="#2DD4BF", calm2="#A78BFA", spark1="#2DD4BF", spark2="#A78BFA"),
+    "machines": dict(RULE, title="Machines and condition", refined=True, calm="#22E08A", calm1=AZURE, calm2=LIME, spark1=AZURE, spark2=LIME, ok="#22E08A",
+                     speed=AZURE, load=AZURE, cache=AZURE, memory=AZURE, heat=AZURE, context=AZURE, fine="#7FC4FF", muted="#1F6FB8", warn="#FFAB1F", bad="#FF4D5E", band=20, line=2, fill=20,
+                     heatmap={"mode": "opacity", "fill": AZURE, "scale": "exponential", "exponent": 0.35}),
 }
 
 INFERENCE = {4: "load", 3: "speed", 34: "speed", 26: "cache", 21: "memory", 35: "context"}
@@ -235,12 +238,16 @@ def refine(d, c, kind):
             p["fieldConfig"]["defaults"]["custom"]["thresholdsStyle"] = {"mode": "off"}
         panels[9]["fieldConfig"]["defaults"].pop("max", None)
         panels[15]["fieldConfig"]["overrides"].append({"matcher": {"id": "byRegexp", "options": "/ · max$/"}, "properties": [{"id": "custom.hideFrom", "value": {"tooltip": True, "viz": True, "legend": True}}]})
+        for o in panels[15]["fieldConfig"]["overrides"]:     # busy is a fact, like the power cap, so it stays grey
+            for x in o["properties"]:
+                if x["id"] == "color" and x["value"].get("fixedColor") == c["muted"]:
+                    x["value"] = fixed(c["info"])
         panels[3]["fieldConfig"]["defaults"].update(min=0, max=1.6)
         for id_ in (3, 4, 6):
             panels[id_]["options"].update(graphMode="area", colorMode="none")
             for step in panels[id_]["fieldConfig"]["defaults"]["thresholds"]["steps"]:
                 if step["color"] == "text":
-                    step["color"] = INFO
+                    step["color"] = c["speed"]
     for p in d["panels"]:
         if p["type"] == "stat" and p["id"] in (JUDGED_TILES[kind] | INFERENCE if kind == "inference" else JUDGED_TILES[kind]):
             p["options"]["colorMode"] = "none"
@@ -259,7 +266,7 @@ def drawn(p, c, health):
     if health and p["id"] in TWO_MACHINES:
         custom["fillOpacity"] = 0
     if not health and p["id"] in BARS:
-        custom.update(drawStyle="bars", barAlignment=0, barWidthFactor=0.8, lineWidth=0, fillOpacity=18 if c.get("refined") else 30, gradientMode="none")
+        custom.update(drawStyle="bars", barAlignment=0, barWidthFactor=0.8, lineWidth=0, fillOpacity=75 if c.get("refined") else 30, gradientMode="opacity" if c.get("refined") else "none")
         fc["defaults"]["color"] = fixed(c["speed"] if p["id"] == 23 else c["load"])
     if not health and p["id"] == 7:
         for o in fc["overrides"]:
