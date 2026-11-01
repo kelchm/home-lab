@@ -282,8 +282,8 @@ def test_prepare_distributes_declared_drafter(runtime):
     assert DRAFT not in before
 
 
-def test_recipes_have_separate_native_cache_namespaces(runtime):
-    leaves = []
+def test_each_image_and_model_has_its_own_native_cache_namespace(runtime):
+    leaves, builds = [], set()
     for path in RECIPES:
         recipe = Recipe.from_dict(yaml.safe_load(path.read_text()))
         mounts = build_runtime_cache_mounts(
@@ -292,7 +292,9 @@ def test_recipes_have_separate_native_cache_namespaces(runtime):
             root="/opt/spark-cache/huggingface/runtime-cache", image=recipe.container,
         )
         leaves.append(mounts.leaf)
-    assert len(set(leaves)) == len(RECIPES)
+        builds.add((recipe.container, recipe.model, recipe.model_revision))
+    # Profiles of one image and model compile the same kernels, so they share a namespace.
+    assert len(set(leaves)) == len(builds)
 
 
 @pytest.mark.parametrize("path", RECIPES, ids=lambda path: path.stem)
