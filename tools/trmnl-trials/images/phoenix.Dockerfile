@@ -5,7 +5,11 @@ WORKDIR /app
 COPY mix.exs mix.lock ./
 RUN mix local.hex --force && mix local.rebar --force && mix deps.get --only prod && mix deps.compile
 COPY . .
-RUN mix assets.setup && mix assets.deploy && mix compile
+# Render this pod's screen through loopback instead of the shared admin Gateway.
+# Keep Endpoint.url() unchanged for the HTTPS image URLs returned to devices.
+RUN grep -Fq '#{TrmnlWeb.Endpoint.url()}/screens/' lib/trmnl/screen.ex && \
+    sed -i 's|#{TrmnlWeb.Endpoint.url()}/screens/|http://127.0.0.1:#{System.get_env("PORT", "4000")}/screens/|' lib/trmnl/screen.ex && \
+    mix assets.setup && mix assets.deploy && mix compile
 COPY .trial/phoenix-package.json /opt/puppeteer/package.json
 COPY .trial/phoenix-package-lock.json /opt/puppeteer/package-lock.json
 RUN cd /opt/puppeteer && npm ci --omit=dev --no-audit && ln -s /opt/puppeteer/node_modules/.bin/puppeteer-img /usr/local/bin/puppeteer-img

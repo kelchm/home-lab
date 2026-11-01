@@ -24,6 +24,12 @@ kubectl -n trmnl-trials get secret inker-trial -o jsonpath='{.data.ADMIN_PIN}' |
 kubectl -n trmnl-trials get secret byos-django-trial -o jsonpath='{.data.DJANGO_SUPERUSER_PASSWORD}' | base64 --decode
 ```
 
+`DJANGO_SUPERUSER_PASSWORD` applies only when the `trial` account is first created. Rotating that Secret and restarting the pod does not change an existing account's password. Reset the existing password interactively, then update the encrypted Secret to match if it should also be used after rebuilding an empty database:
+
+```sh
+kubectl -n trmnl-trials exec -it deployment/byos-django -- python manage.py changepassword trial
+```
+
 The stateful applications use separate Longhorn volumes; Node Lite is stateless and its screen/template implementation lives in its pinned source image. Terminus and Next.js each have a dedicated PostgreSQL container within their own pod; Terminus also has its own worker and persistent Valkey queue. There are no shared application accounts, databases, API keys or playlists. Credentials and application encryption keys are SOPS encrypted in Git. RWO volumes use one replica and `Recreate` updates. PVCs are retained when a release is removed, so removing a trial does not silently erase its data.
 
 ## Compare with the same task
@@ -36,7 +42,7 @@ Start in Terminus, then repeat the workflow in each candidate where it has the c
 4. If testing hardware, point one physical device at one server at a time. Verify that it receives the image, advances the playlist and reports its battery/Wi-Fi status. Browser previews alone do not prove device compatibility.
 5. Record the preferred server and anything worth exporting in #1219. Selection is based on the workflows you use, rather than the implementation language.
 
-The servers can fetch public HTTP/HTTPS recipes and pages. Their network policy blocks direct connections to other private homelab services, and their database/cache ports have no Service. Rendering a private Grafana dashboard or another internal page needs an explicit additional egress decision.
+The servers can fetch public HTTP/HTTPS recipes and pages. Their network policy blocks connections to private homelab services, including the shared admin Gateway, and their database/cache ports have no Service. Rendering a private Grafana dashboard or another internal page needs an explicit additional egress decision.
 
 ## Physical device
 
@@ -63,7 +69,16 @@ The [TRMNL BYOS matrix](https://docs.trmnl.com/go/diy/byos) and [ecosystem](http
 
 FastAPI, Django, Phoenix and Node Lite use locally built amd64 trial images from verified upstream commit archives. [Build inputs](../../tools/trmnl-trials/sources.json) pin each archive and its SHA-256; [the packaging](../../tools/trmnl-trials/images) pins base images and Python/npm dependencies. Build a candidate with `python3 tools/trmnl-trials/build.py fastapi --docker-context <context>` (substitute `django`, `phoenix`, or `node-lite`). Registry image digests are pinned in the HelmReleases after publication. The OSS trial images are publicly pullable GHCR packages. Application pods need no registry credential and do not mount a Kubernetes API token. [The build record](../../tools/trmnl-trials/images.lock.json) identifies the exact published digests.
 
-These implementations differ substantially. Django uses its native admin interface and upstream renders at 800×480. Phoenix stores devices in SQLite and generates screens from Elixir modules; the packaging supplies browser/image tools and the upstream application runs its migrations on startup. FastAPI has a minimal UI and plugin-driven image generation. Neither FastAPI nor Phoenix adds an application login, so private network access is the access boundary.
+Add `--push` to publish the build. Publication alone changes neither the build record nor the deployed image. Set `trial_image` to the `image` field in the script's final JSON output, then obtain its registry digest:
+
+```sh
+trial_image='ghcr.io/kelchm/trmnl-trial-fastapi:<tag from build output>'
+docker buildx imagetools inspect "$trial_image" --format '{{.Manifest.Digest}}'
+```
+
+Update that server's entry in `tools/trmnl-trials/images.lock.json`: copy `image` and `upstream` from the build output, and set `reference` to `<image repository>@<digest>`. The digest output already includes the `sha256:` prefix. Update `controllers.main.containers.app.image.tag` under the corresponding HelmRelease's `spec.values` to `<published tag>@<digest>`. Keep these edits together in the deployment change; Flux uses the HelmRelease pin after it reaches `main`. Verify the package remains anonymously pullable before deploying.
+
+These implementations differ substantially. Django uses its native admin interface and upstream renders at 800×480. Phoenix stores devices in SQLite and generates screens from Elixir modules; the packaging supplies browser/image tools, renders its screen URL through loopback, and leaves its external image URLs on HTTPS. The upstream application runs its migrations on startup. FastAPI has a minimal UI and plugin-driven image generation. Neither FastAPI nor Phoenix adds an application login, so private network access is the access boundary.
 
 Node Lite has no management UI, playlists or database. Upstream ships BYOS disabled as a source constant; the trial packaging enables the existing BYOS code through an environment variable, sets the timezone from `TZ`, and disables cloud firmware updates. It still permits only one MAC address and uses a single rendered screen. The configured MAC is the synthetic test address `02:00:00:00:00:08`; replace `BYOS_DEVICE_MAC` in the encrypted Node Lite Secret with the physical device's actual `ID` header before enrollment. Node Lite is limited to 800×480: upstream hardcodes the layout and BMP conversion dimensions, so changing only the browser viewport is insufficient. The trial also removes its startup log of the authenticated image URL. Its authenticated image endpoint is `/image?secret_key=<SECRET_KEY>`; the custom-device endpoints are `/api/setup` and `/api/display` with the configured `ID` and `Access-Token` headers. Retrieve `SECRET_KEY`, `BYOS_DEVICE_ACCESS_TOKEN` or `BYOS_DEVICE_MAC` with the same exact-key Secret command used above; avoid putting authenticated URLs into shared logs.
 
@@ -90,6 +105,6 @@ On 2026-11-01, all eight HelmReleases and Deployments became Ready in `trmnl-tri
 
 Synthetic device setup/display/image requests succeeded through HTTPS for Terminus and Inker (800×480 PNG) and FastAPI, Django, Phoenix and Node Lite (800×480 BMP). Node Lite returned a 1-bit BMP. Django generated a screen through Firefox/ImageMagick and served it through the slashless firmware API; Phoenix generated its Hello World screen through Chromium/ImageMagick and served it through its device API. Synthetic device MACs use `02:00:00:00:00:01`, `:03`, `:05`, `:06`, `:07`, and `:08`, respectively; these are trial data, not registered physical boards.
 
-Next.js initialized all 21 migrations through its own setup action, restarted with the database wait, and seeded 11 built-in recipes. Its first administrator and LaraPaper's first user are left for the owner to register. Those two owned-device flows still need acceptance after account setup. The stock-firmware guard was checked in the Next.js container, and Terminus setup/display returned firmware update/reset flags false. A private-LAN HTTPS connection attempt from a trial pod was blocked. All four custom image digests were anonymously pullable, and no registry pull credential remains in the manifests or namespace.
+Next.js initialized all 21 migrations through its own setup action, restarted with the database wait, and seeded 11 built-in recipes. Its first administrator and LaraPaper's first user are left for the owner to register. Those two owned-device flows still need acceptance after account setup. The stock-firmware guard was checked in the Next.js container, and Terminus setup/display returned firmware update/reset flags false. Private-LAN and shared admin Gateway HTTPS connection attempts from a trial pod were blocked. All four custom image digests were anonymously pullable, and no registry pull credential remains in the manifests or namespace.
 
 The eight charts passed rendering and Kubernetes API dry-run validation; Flate passed all 185 resources, and local documentation links and SOPS encryption checks passed. Physical-board acceptance, custom panel/firmware compatibility, and any necessary IoT VLAN access remain open in #1219. The completed server rollout does not imply that a physical board has been enrolled.
