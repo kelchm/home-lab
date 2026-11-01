@@ -1,4 +1,4 @@
-# glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-expandable: the bf5f9452 profile with PyTorch's expandable segments, for long multi-agent use; SparkRun owns both ranks and lifecycle operations.
+# glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable: the bf5f9452 profile with PyTorch's expandable segments and the spill tier, for long multi-agent use; SparkRun owns both ranks and lifecycle operations.
 recipe_version: '2'
 model: Mia-AiLab/GLM-5.3-Flash-EXL3-4bpw-TensorFold
 model_revision: 078455ffe6472f9a52fbc1139f58b9db2881b25c
@@ -7,12 +7,12 @@ container: ghcr.io/miaai-lab/glm-5.3-flash-exl3-2x-dgx-sparks-tensorfold@sha256:
 min_nodes: 2
 max_nodes: 2
 metadata:
-  profile: glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-expandable
+  profile: glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable
   upstream_release: main bf5f9452
   weights: mia
   weights_variant: 4bpw-tensorfold
-  serving_profile: expandable
-  description: Mia's kit at main bf5f9452, standard Mia weights and published TP2 limits, with expandable allocator segments, site guards and /v1/models discovery
+  serving_profile: durable
+  description: Mia's kit at main bf5f9452, standard Mia weights and published TP2 limits, with expandable allocator segments, the spill tier, site guards and /v1/models discovery
   kit_revision: bf5f94523a8251029cedae86bf61f8ce37fac218
   engine_revision: c4646171139ee8a3c38103eaa1699dad226ec12b
   upstream_patch_count: 123
@@ -31,6 +31,8 @@ defaults:
   drafter: incoai/GLM-5.3-Flash-DFlash2
   drafter_revision: bf582e4eacc1810f76656d1811693ff6c6737d2a
   entrypoint: /usr/local/bin/tensorfold-entrypoint
+  # The kit's spill values. /cache/huggingface is already a writable NVMe mount on both ranks; the engine makes the folder.
+  extra_args: --spill-gib 64 --snapshot-dir /cache/huggingface/tensorfold-spill --spill-highwater 0.70 --spill-min-tokens 8192 --spill-min-free-gib 50
 env:
   NCCL_PASSTHROUGH: '1'
   NCCL_MIN_NCHANNELS: '4'
@@ -87,9 +89,11 @@ env:
   TF_GLM_STREAM_SMOOTH_MS: '400'
   # A streamed reply sends an SSE comment after 15 s without data.
   TENSORFOLD_SSE_KEEPALIVE_S: '15'
-  # Spill tier off; the launcher's turn count stated for audit.
+  # Spill tier on through extra_args; the launcher's quota and turn count stated for audit.
   TF_GLM_SPILL_QUOTA: '0'
   TF_GLM_SPILL_TURNS: '4'
+  # Nine read-ahead blocks fit the buffers pinned at start, so the tier takes nothing from the pool; the default of 16 costs about 14k tokens.
+  TF_GLM_SPILL_READ_BLOCKS: '9'
   TF_GLM_PREFIX_WAIT: '0'
   # Picture budget MAX_IMAGES x IMAGE_TOKENS, so a new picture never resizes earlier ones; the workspace holds its rows.
   TENSORFOLD_GLM_REQUEST_IMAGE_TOKENS: '102400'
