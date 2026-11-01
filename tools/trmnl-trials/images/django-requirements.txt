@@ -188,9 +188,9 @@ hyperlink==21.0.0 \
 idna==3.10 ; python_version >= '3.6' \
     --hash=sha256:12f65c9b470abda6dc35cf8e63cc574b1c52b11df2c86030af0ac09b01b13ea9 \
     --hash=sha256:946d195a0d259cbba61165e88e65941f16e9b36ea6ddb97f00452bae8b1287d3
-incremental==24.7.2 ; python_version >= '3.8' \
-    --hash=sha256:8cb2c3431530bec48ad70513931a760f446ad6c25e8333ca5d95e24b0ed7b8fe \
-    --hash=sha256:fb4f1d47ee60efe87d4f6f0ebb5f70b9760db2b2574c59c8e8912be4ebd464c9
+Incremental==24.11.0; python_version >= '3.8' \
+    --hash=sha256:87d3480dbb083c1d736222511a8cf380012a8176c2456d01ef483242abbbcf8c \
+    --hash=sha256:a34450716b1c4341fe6676a0598e88a39e04189f4dce5dc96f656e040baa10b3
 playwright==1.51.0 ; python_version >= '3.9' \
     --hash=sha256:2e0ae6eb44297b24738e1a6d9c580ca4243b4e21b7e65cf936a71492c08dd0d4 \
     --hash=sha256:4cef804991867ea27f608b70fa288ee52a57651e22d02ab287f98f8620b9408c \
