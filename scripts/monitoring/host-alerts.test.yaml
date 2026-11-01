@@ -815,3 +815,62 @@ tests:
     - eval_time: 15m
       alertname: InferenceEngineStalled
       exp_alerts: []
+
+  - name: A Spark under 2 GiB for ten minutes warns; tonight's 2.4 GiB and other hosts stay quiet
+    interval: 1m
+    input_series:
+    - series: node_memory_MemAvailable_bytes{instance="spark-1",platform="spark",job="spark-node"}
+      values: 3221225472x5 1610612736x20
+    - series: node_memory_MemAvailable_bytes{instance="spark-2",platform="spark",job="spark-node"}
+      values: 2566914048x25
+    - series: node_memory_MemAvailable_bytes{instance="pve-sbx-1",platform="pve",job="pve-node"}
+      values: 1073741824x25
+    alert_rule_test:
+    - eval_time: 12m
+      alertname: NodeMemoryAvailableLow
+      exp_alerts: []
+    - eval_time: 18m
+      alertname: NodeMemoryAvailableLow
+      exp_alerts:
+      - exp_labels:
+          instance: spark-1
+          platform: spark
+          job: spark-node
+          severity: warning
+        exp_annotations:
+          summary: spark-1 has 1.5GiB of memory available
+          description: Available memory on spark-1 has been under the 2 GiB stop line for ten minutes, and GPU allocations share it. The engine is likely holding memory it will not return. Finish what is running, then restart the model with the clean stop in sparks/inference/sparkrun/README.md, which keeps its prompt states.
+
+  - name: A dip under 2 GiB that recovers within ten minutes stays quiet
+    interval: 1m
+    input_series:
+    - series: node_memory_MemAvailable_bytes{instance="spark-1",platform="spark",job="spark-node"}
+      values: 3221225472x5 1610612736x8 3221225472x12
+    alert_rule_test:
+    - eval_time: 13m
+      alertname: NodeMemoryAvailableLow
+      exp_alerts: []
+    - eval_time: 20m
+      alertname: NodeMemoryAvailableLow
+      exp_alerts: []
+
+  - name: A Spark under 1.25 GiB for two minutes is critical
+    interval: 1m
+    input_series:
+    - series: node_memory_MemAvailable_bytes{instance="spark-1",platform="spark",job="spark-node"}
+      values: 3221225472x5 1073741824x10
+    alert_rule_test:
+    - eval_time: 7m
+      alertname: NodeMemoryAvailableCritical
+      exp_alerts: []
+    - eval_time: 9m
+      alertname: NodeMemoryAvailableCritical
+      exp_alerts:
+      - exp_labels:
+          instance: spark-1
+          platform: spark
+          job: spark-node
+          severity: critical
+        exp_annotations:
+          summary: spark-1 is nearly out of memory, with 1GiB available
+          description: Available memory on spark-1 has been under 1.25 GiB for two minutes. Restart the model now, with the clean stop in sparks/inference/sparkrun/README.md if the engine still answers, before an allocation fails or the Spark freezes.

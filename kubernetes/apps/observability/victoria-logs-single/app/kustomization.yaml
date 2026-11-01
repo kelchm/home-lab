@@ -10,3 +10,4 @@ resources:
   - ./vmalert.yaml
   - ./unifi-alerts.yaml
   - ./kanidm-alerts.yaml
+  - ./spark-alerts.yaml

@@ -86,7 +86,8 @@ spec:
             description: 'Less than 10% of {{ $labels.mountpoint }} on {{ $labels.instance }} has been free for 30 minutes. Find what is growing before the filesystem fills.'
 
         # Available memory is low by design on a Spark with a model loaded, so
-        # this uses stall time rather than a free-memory threshold.
+        # this uses stall time rather than a free-memory threshold. The two
+        # NodeMemoryAvailable rules below sit under that normal range.
         - alert: NodeMemoryStalled
           expr: rate(node_pressure_memory_stalled_seconds_total{job=~"(pve|spark|pi)-node"}[5m]) > 0.10
           for: 15m
@@ -95,6 +96,31 @@ spec:
           annotations:
             summary: "{{ $labels.instance }} is stalled on memory {{ $value | humanizePercentage }} of the time"
             description: 'Tasks on {{ $labels.instance }} spent over 10% of the last five minutes waiting for memory, by pressure stall information; memory use alone is not the signal. Check which processes are reclaiming or swapping.'
+
+        # A loaded Spark rests above 2 GiB: the lowest in the 30 days to 2026-10-31
+        # was 2.39 GiB, under 3 GiB for 49 minutes in all. GPU memory is host memory
+        # here, and the engine runs no check of its own, so this is the only warning
+        # before an allocation fails. The hold ignores a long prefill's dip.
+        - alert: NodeMemoryAvailableLow
+          expr: node_memory_MemAvailable_bytes{job="spark-node"} < 2 * 2^30
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: '{{ $labels.instance }} has {{ $value | humanize1024 }}B of memory available'
+            description: 'Available memory on {{ $labels.instance }} has been under the 2 GiB stop line for ten minutes, and GPU allocations share it. The engine is likely holding memory it will not return. Finish what is running, then restart the model with the clean stop in sparks/inference/sparkrun/README.md, which keeps its prompt states.'
+
+        # Allocations are failing or about to, and a failed one latches the engine
+        # broken until both ranks restart. Running out can also freeze a Spark
+        # until it is power-cycled.
+        - alert: NodeMemoryAvailableCritical
+          expr: node_memory_MemAvailable_bytes{job="spark-node"} < 1.25 * 2^30
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: '{{ $labels.instance }} is nearly out of memory, with {{ $value | humanize1024 }}B available'
+            description: 'Available memory on {{ $labels.instance }} has been under 1.25 GiB for two minutes. Restart the model now, with the clean stop in sparks/inference/sparkrun/README.md if the engine still answers, before an allocation fails or the Spark freezes.'
 
         # Headroom to the drive's own warning temperature, above which it throttles.
         - alert: NodeNVMeCompositeTemperatureCritical
