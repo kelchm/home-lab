@@ -14,7 +14,7 @@ permissions:
 jobs:
   scope:
     name: Caddy Input Scope
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     outputs:
       selected: ${{ steps.scope.outputs.selected }}
       publish_selected: ${{ steps.scope.outputs.publish_selected }}
@@ -47,7 +47,7 @@ jobs:
     name: Caddy Native amd64 PR Qualification
     needs: scope
     if: github.event_name == 'pull_request' && needs.scope.outputs.selected == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
     concurrency:
       group: hermes-caddy-pr-${{ github.event.number }}
@@ -93,7 +93,7 @@ jobs:
     if: >-
       needs.scope.outputs.publish_selected == 'true' && github.ref == 'refs/heads/main' &&
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
     permissions:
       contents: read
