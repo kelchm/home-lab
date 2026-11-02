@@ -1,0 +1,3 @@
+#!/bin/sh
+set -eu
+exec node /work/grafana/.yarn/releases/yarn-4.18.1.cjs "$@"

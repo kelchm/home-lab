@@ -1,0 +1,36 @@
+---
+name: Grafana Theme Image
+
+on:
+  pull_request:
+    paths:
+      - kubernetes/apps/observability/grafana/image/**
+      - .github/workflows/grafana-theme-*.yaml
+  push:
+    branches: [main]
+    paths:
+      - kubernetes/apps/observability/grafana/image/**
+      - .github/workflows/grafana-theme-*.yaml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: grafana-theme-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  qualify:
+    if: github.event_name == 'pull_request' || github.ref != 'refs/heads/main'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/grafana-theme-build.yaml
+  publish:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/grafana-theme-build.yaml
+    with:
+      publish: true

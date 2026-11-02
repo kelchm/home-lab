@@ -67,6 +67,8 @@ The `monitoring.coreos.com` CRDs are owned independently by `prometheus-operator
 
 ### Dashboards
 
+Grafana still uses its stock Helm-selected image. A separately built Aurora theme candidate and its qualification/upgrade contract are described in the [theme runbook](runbooks/grafana-theme.md); publishing that image does not deploy it or replace Home.
+
 A dashboard has one home, chosen by its subject: the thing whose state it shows. The subject is never the tool used to show it, and a panel showing something the subject depends on does not change its home. The first match decides:
 
 1. **A service** goes in `Services/<service>`. A service is a capability that a person in the house, or a system on another platform, would name as something they use, wherever it runs. Its folder also holds the internals of the software that delivers it, and an operator that exists only for that service.

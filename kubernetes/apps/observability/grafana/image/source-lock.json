@@ -1,0 +1,16 @@
+{
+  "version": "13.3.0",
+  "commit": "752e3462ff71a43a5c1fb62d00a482fa2dc0ee6a",
+  "archiveSha256": "62ab6392c06d29430fe778fb00db0dd4b629ec71a4bda6c1b68a1ed03d337b8d",
+  "epoch": 1793099250,
+  "files": {
+    "packages/grafana-data/src/themes/registry.ts": "26ae6fba59c3f0bb84ecf1aa3f0bc70bc3020d09c4de5ab3103612d62d163c46",
+    "public/app/core/components/ThemeSelector/getSelectableThemes.ts": "cc440610c6f2f1f3e49ff66a6e9936fea6bbbfcf714b6e78acea3d1200b39cf8"
+  },
+  "stock": {
+    "image": "grafana/grafana:13.3.0-distroless@sha256:540b8afb775bf34aefce417e4329039daa5d44b6f2fbda6881397b1b247ca7df",
+    "commit": "6f8ce3c693b493043ebcd4787566d2b6b118b0f0",
+    "branch": "release-13.3.0#patched",
+    "buildstamp": 1793053600
+  }
+}
