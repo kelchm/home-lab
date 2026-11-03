@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 const source = fs.readFileSync(new URL('../../kubernetes/apps/observability/grafana/app/aurora/module.js', import.meta.url), 'utf8');
-function load(f) {
+function importModule(f) {
   let result;
   vm.runInNewContext(source, {
     define(dependencies, factory) { result = factory({ ...f.data, AppPlugin: class {} }, f.runtime); },
@@ -11,6 +11,11 @@ function load(f) {
     clearTimeout: f.options.cancel,
     console: { warn: f.options.warn },
   });
+  return result;
+}
+function load(f) {
+  const result = importModule(f);
+  result.plugin.init({ enabled: true });
   return result.aurora;
 }
 function fixture({ version = '13.3.0', initial = 'Dark', providerDelay = 0, throws = false, provider = true } = {}) {
@@ -31,9 +36,23 @@ test('the provider owns state; an event applies Aurora without any global assign
   const f = fixture(); const c = load(f); f.tick(4000);
   assert.equal(f.current(), 'Homelab Aurora'); assert.equal(c.state, 'applied'); assert.equal(f.queue.size, 0);
 });
+test('module import and disabled or unknown initialization are inert', () => {
+  const f = fixture(); const result = importModule(f);
+  result.plugin.init({ enabled: false }); result.plugin.init({}); f.tick(4000);
+  assert.equal(result.aurora, undefined); assert.equal(f.builds(), 0);
+  assert.equal(f.queue.size, 0); assert.deepEqual(f.requests, []);
+});
+test('repeated enabled initialization installs only once', () => {
+  const f = fixture(); const result = importModule(f);
+  result.plugin.init({ enabled: false }); result.plugin.init({ enabled: true });
+  const controller = result.aurora;
+  result.plugin.init({ enabled: true }); f.tick(4000);
+  assert.equal(result.aurora, controller); assert.equal(f.builds(), 1);
+  assert.equal(f.requests.length, 1); assert.equal(f.current(), 'Homelab Aurora');
+});
 test('missed startup events are retried, within a fixed window', () => {
   const f = fixture({ provider: false }); const c = load(f); f.tick(4000);
-  assert.equal(f.current(), 'Dark'); assert.equal(c.state, 'native fallback'); assert.equal(f.requests.length, 31); assert.equal(f.queue.size, 0); assert.equal(f.warnings.length, 1);
+  assert.equal(f.current(), 'Dark'); assert.equal(c.state, 'native fallback'); assert.equal(f.requests.length, 4); assert.equal(f.queue.size, 0); assert.equal(f.warnings.length, 1);
 });
 test('an unqualified version never constructs or requests a theme', () => {
   const f = fixture({ version: '13.4.0' }); load(f); f.tick(4000);

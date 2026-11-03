@@ -34,6 +34,7 @@ define(['@grafana/data', '@grafana/runtime'], function (data, runtime) {
       // A native event can precede its React update. An old Aurora value is
       // not evidence that this new Dark selection has already been handled.
       let observedDark = !expectDark;
+      let nextRequestAt = 0, retryDelay = 250;
       for (let ms = 0; ms <= 3000; ms += 100) later(() => {
         if (ticket !== generation) return;
         if (runtime.config?.theme2?.name === theme.name) {
@@ -46,6 +47,9 @@ define(['@grafana/data', '@grafana/runtime'], function (data, runtime) {
           controller.state = 'native theme selected'; clear(); return;
         }
         observedDark = true;
+        if (ms < nextRequestAt) return;
+        nextRequestAt = ms + retryDelay;
+        retryDelay = Math.min(retryDelay * 2, 1500);
         try {
           emitting = true;
           events.publish(new runtime.ThemeChangedEvent(theme));
@@ -74,7 +78,6 @@ define(['@grafana/data', '@grafana/runtime'], function (data, runtime) {
 
   const definition = {
     "name": "Homelab Aurora",
-    "id": "visual_refresh_dark",
     "colors": {
       "mode": "dark",
       "background": {
@@ -614,5 +617,12 @@ define(['@grafana/data', '@grafana/runtime'], function (data, runtime) {
     }
   };
 
-  return { plugin: new data.AppPlugin(), aurora: installAurora(data, runtime, definition) };
+  const plugin = new data.AppPlugin();
+  let controller;
+  // Grafana also imports app modules for disabled apps' administration pages.
+  // Initialization receives the real enabled state; mere import must be inert.
+  plugin.init = (meta) => {
+    if (meta?.enabled === true && !controller) controller = installAurora(data, runtime, definition);
+  };
+  return { plugin, get aurora() { return controller; } };
 });

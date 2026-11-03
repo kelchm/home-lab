@@ -9,7 +9,7 @@
       "name": "Homelab"
     },
     "description": "Optional Aurora adapter for stock Grafana; unqualified releases keep native styling.",
-    "version": "0.1.0-a9525bc48ad1",
+    "version": "0.1.0-addb48fba439",
     "updated": "2026-11-03",
     "logos": {
       "small": "",

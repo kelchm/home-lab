@@ -98,7 +98,10 @@ async function start(nextMode, image = current, fresh = false) {
   selected = projection(mode);
   run(['volume', 'create', '--label', 'research.homelab.aurora=true', volume]);
   run(['run', '-d', '--name', name, '--label', 'research.homelab.aurora=true', '--read-only', '--tmpfs', '/tmp:mode=1777', '--cap-drop', 'ALL', '--memory', '1g',
-    '-p', `127.0.0.1:${port ?? ''}:3000`, '-v', `${volume}:/var/lib/grafana`, '-v', `${provisioning}:/etc/grafana/provisioning:ro`, '-v', `${selected.dir}:/var/lib/grafana/plugins/homelab-aurora-app:ro`, '-v', `${iniFile}:/etc/grafana/grafana.ini:ro`,
+    '-p', `127.0.0.1:${port ?? ''}:3000`, '-v', `${volume}:/var/lib/grafana`,
+    '-v', `${path.join(provisioning, 'datasources/testdata.yaml')}:/etc/grafana/provisioning/datasources/testdata.yaml:ro`,
+    '-v', `${path.join(provisioning, 'plugins/apps.yaml')}:/etc/grafana/provisioning/plugins/aurora.yaml:ro`,
+    '-v', `${selected.dir}:/var/lib/grafana/plugins/homelab-aurora-app:ro`, '-v', `${iniFile}:/etc/grafana/grafana.ini:ro`,
     '-e', 'GF_PATHS_PLUGINS=/var/lib/grafana/plugins', '-e', nextMode === 'normal' && !fresh ? `GF_PLUGINS_PREINSTALL_SYNC=${chartConfig.plugins}` : 'GF_PLUGINS_PREINSTALL_DISABLED=true',
     '-e', 'GF_AUTH_ANONYMOUS_ENABLED=true', '-e', 'GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer', '-e', `GF_SECURITY_ADMIN_PASSWORD=${password}`,
     '-e', 'GF_USERS_DEFAULT_THEME=dark', '-e', 'GF_SECURITY_ASSET_SRI_CHECKS_ENABLED=true',
@@ -170,11 +173,31 @@ try {
   }, ['#4DB0FF', '#3FE6C4', '#C685FF']);
   assert.ok(Object.values(pixels).every((n) => n > 10), JSON.stringify(pixels)); check('Native chart pixels use all three Aurora colors', { pixels });
   await page.screenshot({ path: path.join(output, 'event-only-desktop.png') });
-  for (const id of ['light', 'dark', 'tron', 'dark']) { await select(id); check(`Runtime ${id} selection is respected`, { theme: await readTheme() }); }
+  for (const id of ['dark', 'light', 'dark', 'tron', 'dark']) { await select(id); check(`Runtime ${id} selection is respected`, { theme: await readTheme() }); }
+  // Exercise Grafana's actual toggleTheme/changeTheme service and CSS swap,
+  // in addition to the direct events above. c r is its runtime-only shortcut.
+  for (const expected of ['Light', 'Homelab Aurora']) {
+    await page.keyboard.press('Escape'); await page.keyboard.press('c'); await page.keyboard.press('r');
+    await page.waitForFunction(async (expected) => (await System.import('@grafana/runtime')).config.theme2.name.includes(expected), expected);
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(500);
+    assert.ok((await readTheme()).name.includes(expected));
+  }
+  check('Grafana keyboard shortcuts switch theme through the real service and CSS-loading path');
   const cdp = await page.context().newCDPSession(page); await cdp.send('Emulation.setCPUThrottlingRate', { rate: 6 });
   for (let i = 0; i < 5; i++) await open(true);
   await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 }); check('Five throttled stock-image reloads apply Aurora');
   await api('/api/plugins/homelab-aurora-app/settings', 'POST', { enabled: false, pinned: false }); check('Disabling the app restores native styling and a working chart', { theme: await open(false, false) });
+  const adminContext = await browser.newContext();
+  const login = await adminContext.request.post(base + '/login', { data: { user: 'admin', password } });
+  assert.ok(login.ok(), 'Temporary local administrator can sign in');
+  const adminPage = await adminContext.newPage();
+  await adminPage.goto(base + '/plugins/homelab-aurora-app', { waitUntil: 'networkidle' });
+  await adminPage.waitForFunction(() => performance.getEntriesByType('resource').some((r) => r.name.includes('homelab-aurora-app/module.js')));
+  await adminPage.waitForTimeout(3500);
+  assert.notEqual(await adminPage.evaluate(async () => (await System.import('@grafana/runtime')).config.theme2.name), 'Homelab Aurora');
+  check('Opening the disabled app administration page imports its module without applying Aurora');
+  await adminContext.close();
   await api('/api/plugins/homelab-aurora-app/settings', 'POST', { enabled: true, pinned: false }); await open(true); check('Re-enabling the app restores Aurora');
   await start('cache-probe'); await open(true);
   await start('restored'); await open(true);

@@ -13,6 +13,9 @@ spec:
   chart:
     spec:
       chart: grafana
+      # Aurora enables only qualified Grafana versions. On a chart/app bump,
+      # accept native styling until requalified; never hold a security update.
+      # See docs/runbooks/grafana-aurora.md.
       version: 14.3.0
       sourceRef:
         kind: HelmRepository
@@ -159,6 +162,8 @@ spec:
       plugins:
         allow_loading_unsigned_plugins: homelab-aurora-app
       feature_toggles:
+        # Hidden public preview; also restyles native Light for every user.
+        # Disabling Aurora alone does not disable this toggle.
         grafana.visualDesignRefresh: true
       dashboards:
         default_home_dashboard_path: /tmp/dashboards/Overview/home.json
