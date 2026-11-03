@@ -74,9 +74,9 @@ function projection(mode) {
   const pluginMount = mounts.find((m) => m.name === 'aurora-plugin');
   fs.mkdirSync(path.join(payload, pluginMount.subPath), { recursive: true });
   let module = config.data['module.js'];
-  if (mode === 'missing-api') module = module.replace('typeof data.createTheme', 'typeof data.missingThemeFactory');
+  if (mode.endsWith('missing-api')) module = module.replace('typeof data.createTheme', 'typeof data.missingThemeFactory');
   if (mode === 'bad-theme') module = module.replace('data.createTheme(definition)', 'data.createTheme({ ...definition, colors: null })');
-  if (mode === 'unsupported') module = module.replace("const supported = ['13.3.0'];", 'const supported = [];');
+  if (mode === 'unexpected-theme') module = module.replace('data.createTheme(definition)', "({ name: 'Unexpected theme', isDark: true })");
   if (mode === 'cache-probe') module += '\n// Cache-version qualification probe.\n';
   const manifest = JSON.parse(config.data['plugin.json']);
   manifest.info.version = '0.1.0-' + createHash('sha256').update(module).digest('hex').slice(0, 12);
@@ -202,9 +202,11 @@ try {
   await start('cache-probe'); await open(true);
   await start('restored'); await open(true);
   check('Changed-version module and original module both load in the same browser cache and database');
-  for (const next of ['missing-api', 'bad-theme', 'unsupported']) { await start(next); check(`${next} falls back with a working native chart`, { theme: await open(false) }); }
+  for (const next of ['missing-api', 'bad-theme', 'unexpected-theme']) { await start(next); check(`${next} falls back with a working native chart`, { theme: await open(false) }); }
   await start('adjacent', adjacent, true); await api('/api/dashboards/db', 'POST', { dashboard, overwrite: true });
-  check('Unqualified 13.2.5 stays on native styling with a working chart', { theme: await open(false) });
+  check('Official 13.2.5 also applies Aurora without a version-specific edit', { theme: await open(true) });
+  await start('adjacent-missing-api', adjacent);
+  check('Missing API on 13.2.5 retains a working native chart', { theme: await open(false) });
   assert.deepEqual(report.pageErrors, []); assert.ok(report.queryStatuses.length > 0 && report.queryStatuses.every((n) => n === 200)); report.status = 'passed';
 } catch (error) { report.status = 'failed'; report.error = String(error); await page?.screenshot({ path: path.join(output, 'failure.png') }).catch(() => {}); throw error;
 } finally {

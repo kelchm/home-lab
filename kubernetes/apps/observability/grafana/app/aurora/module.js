@@ -1,19 +1,16 @@
 // Optional Aurora styling for the official Grafana image. No dependency install or compile step.
-// createTheme is internal: exact-version qualification is deliberate. Never block a Grafana update.
+// createTheme is internal: try compatible APIs and retain native styling on failure.
 // Edit this file, then run scripts/grafana/render-aurora.py to update the cache version.
 define(['@grafana/data', '@grafana/runtime'], function (data, runtime) {
   'use strict';
 
   // Optional compatibility adapter. Grafana owns all theme state; this only publishes a request.
   function installAurora(data, runtime, definition) {
-    const supported = ['13.3.0'];
     const schedule = (fn, ms) => setTimeout(fn, ms);
     const cancel = (id) => clearTimeout(id);
     const warn = (message) => console.warn(message);
-    const version = runtime.config?.buildInfo?.version;
     const controller = { state: 'inactive', stop: () => {} };
     const skip = (reason) => { controller.state = reason; warn(`Aurora theme skipped: ${reason}`); return controller; };
-    if (!supported.includes(version)) return skip(`unqualified Grafana version ${version}`);
     if (typeof data.createTheme !== 'function' || typeof runtime.ThemeChangedEvent !== 'function' || typeof runtime.getAppEvents !== 'function') return skip('theme API unavailable');
     let theme, events;
     try { theme = data.createTheme(definition); events = runtime.getAppEvents(); }

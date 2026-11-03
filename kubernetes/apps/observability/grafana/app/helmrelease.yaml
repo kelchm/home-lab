@@ -13,9 +13,6 @@ spec:
   chart:
     spec:
       chart: grafana
-      # Aurora enables only qualified Grafana versions. On a chart/app bump,
-      # accept native styling until requalified; never hold a security update.
-      # See docs/runbooks/grafana-aurora.md.
       version: 14.3.0
       sourceRef:
         kind: HelmRepository

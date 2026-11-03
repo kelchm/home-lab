@@ -23,14 +23,14 @@ def main():
         "includes": [],
         "info": {
             "author": {"name": "Homelab"},
-            "description": "Optional Aurora adapter for stock Grafana; unqualified releases keep native styling.",
+            "description": "Optional Aurora adapter for stock Grafana; unavailable theme APIs retain native styling.",
             "version": "0.1.0-" + digest,
             "updated": "2026-11-03",
             "logos": {"small": "", "large": ""},
             "screenshots": [],
             "keywords": ["theme"],
         },
-        # Allow discovery after upgrades; the module's exact-version guard is stricter.
+        # Compatibility is checked from available APIs, rather than an exact-version allow-list.
         "dependencies": {"grafanaDependency": ">=13.0.0", "plugins": []},
     }
     expected = json.dumps(manifest, indent=2) + "\n"

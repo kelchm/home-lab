@@ -54,9 +54,13 @@ test('missed startup events are retried, within a fixed window', () => {
   const f = fixture({ provider: false }); const c = load(f); f.tick(4000);
   assert.equal(f.current(), 'Dark'); assert.equal(c.state, 'native fallback'); assert.equal(f.requests.length, 4); assert.equal(f.queue.size, 0); assert.equal(f.warnings.length, 1);
 });
-test('an unqualified version never constructs or requests a theme', () => {
-  const f = fixture({ version: '13.4.0' }); load(f); f.tick(4000);
-  assert.equal(f.builds(), 0); assert.deepEqual(f.requests, []); assert.equal(f.current(), 'Dark'); assert.equal(f.queue.size, 0);
+test('a new version with compatible APIs applies Aurora without an allow-list edit', () => {
+  const f = fixture({ version: '14.0.0' }); load(f); f.tick(4000);
+  assert.equal(f.builds(), 1); assert.equal(f.current(), 'Homelab Aurora'); assert.equal(f.queue.size, 0);
+});
+test('a new version with an incompatible factory retains native styling', () => {
+  const f = fixture({ version: '14.0.0', throws: true }); load(f); f.tick(4000);
+  assert.equal(f.builds(), 1); assert.deepEqual(f.requests, []); assert.equal(f.current(), 'Dark'); assert.equal(f.queue.size, 0);
 });
 test('factory failure leaves native styling and no timers or requests', () => {
   const f = fixture({ throws: true }); load(f); f.tick(4000);

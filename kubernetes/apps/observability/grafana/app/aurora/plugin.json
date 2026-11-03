@@ -8,8 +8,8 @@
     "author": {
       "name": "Homelab"
     },
-    "description": "Optional Aurora adapter for stock Grafana; unqualified releases keep native styling.",
-    "version": "0.1.0-addb48fba439",
+    "description": "Optional Aurora adapter for stock Grafana; unavailable theme APIs retain native styling.",
+    "version": "0.1.0-d8e6a28f724c",
     "updated": "2026-11-03",
     "logos": {
       "small": "",
