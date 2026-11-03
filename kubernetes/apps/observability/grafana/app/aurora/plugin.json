@@ -1,0 +1,27 @@
+{
+  "type": "app",
+  "id": "homelab-aurora-app",
+  "name": "Homelab Aurora theme",
+  "preload": true,
+  "includes": [],
+  "info": {
+    "author": {
+      "name": "Homelab"
+    },
+    "description": "Optional Aurora adapter for stock Grafana; unavailable theme APIs retain native styling.",
+    "version": "0.1.0-d8e6a28f724c",
+    "updated": "2026-11-03",
+    "logos": {
+      "small": "",
+      "large": ""
+    },
+    "screenshots": [],
+    "keywords": [
+      "theme"
+    ]
+  },
+  "dependencies": {
+    "grafanaDependency": ">=13.0.0",
+    "plugins": []
+  }
+}

@@ -1,0 +1,10 @@
+# A content change renames the ConfigMap and changes the Helm-rendered Pod
+# template. Grafana then discovers the new manifest at startup; no reloader or
+# plugin download is involved. Dashboard ConfigMaps retain their stable names.
+nameReference:
+  - kind: ConfigMap
+    version: v1
+    fieldSpecs:
+      - kind: HelmRelease
+        group: helm.toolkit.fluxcd.io
+        path: spec/values/extraConfigmapMounts/configMap

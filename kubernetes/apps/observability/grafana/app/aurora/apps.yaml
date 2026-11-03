@@ -1,0 +1,5 @@
+apiVersion: 1
+apps:
+  - type: homelab-aurora-app
+    org_id: 1
+    disabled: false

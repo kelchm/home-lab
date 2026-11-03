@@ -1,0 +1,625 @@
+// Optional Aurora styling for the official Grafana image. No dependency install or compile step.
+// createTheme is internal: try compatible APIs and retain native styling on failure.
+// Edit this file, then run scripts/grafana/render-aurora.py to update the cache version.
+define(['@grafana/data', '@grafana/runtime'], function (data, runtime) {
+  'use strict';
+
+  // Optional compatibility adapter. Grafana owns all theme state; this only publishes a request.
+  function installAurora(data, runtime, definition) {
+    const schedule = (fn, ms) => setTimeout(fn, ms);
+    const cancel = (id) => clearTimeout(id);
+    const warn = (message) => console.warn(message);
+    const controller = { state: 'inactive', stop: () => {} };
+    const skip = (reason) => { controller.state = reason; warn(`Aurora theme skipped: ${reason}`); return controller; };
+    if (typeof data.createTheme !== 'function' || typeof runtime.ThemeChangedEvent !== 'function' || typeof runtime.getAppEvents !== 'function') return skip('theme API unavailable');
+    let theme, events;
+    try { theme = data.createTheme(definition); events = runtime.getAppEvents(); }
+    catch { return skip('theme construction failed'); }
+    if (theme?.name !== definition.name || theme.isDark !== true) return skip('theme factory returned an unexpected result');
+    if (!events?.publish || !events?.subscribe) return skip('theme event API unavailable');
+
+    const dark = (value) => ['Dark', 'Visual Refresh (Dark)'].includes(value?.name);
+    let stopped = false, emitting = false, generation = 0;
+    const timers = new Set();
+    const clear = () => { generation++; for (const id of timers) cancel(id); timers.clear(); };
+    const later = (fn, ms) => {
+      const id = schedule(() => { timers.delete(id); if (!stopped) fn(); }, ms);
+      timers.add(id);
+    };
+    const burst = (expectDark = false) => {
+      clear(); const ticket = generation;
+      // A native event can precede its React update. An old Aurora value is
+      // not evidence that this new Dark selection has already been handled.
+      let observedDark = !expectDark;
+      let nextRequestAt = 0, retryDelay = 250;
+      for (let ms = 0; ms <= 3000; ms += 100) later(() => {
+        if (ticket !== generation) return;
+        if (runtime.config?.theme2?.name === theme.name) {
+          if (observedDark) { controller.state = 'applied'; clear(); }
+          return;
+        }
+        if (!runtime.config?.theme2) return;
+        if (!dark(runtime.config?.theme2)) {
+          if (expectDark) return; // Let Grafana finish processing the native selection first.
+          controller.state = 'native theme selected'; clear(); return;
+        }
+        observedDark = true;
+        if (ms < nextRequestAt) return;
+        nextRequestAt = ms + retryDelay;
+        retryDelay = Math.min(retryDelay * 2, 1500);
+        try {
+          emitting = true;
+          events.publish(new runtime.ThemeChangedEvent(theme));
+          controller.state = 'requested';
+        } catch { controller.state = 'theme request failed'; clear(); warn('Aurora theme request failed; retaining native styling'); }
+        finally { emitting = false; }
+      }, ms);
+      later(() => {
+        if (ticket === generation && runtime.config?.theme2?.name !== theme.name) {
+          controller.state = 'native fallback'; clear(); warn('Aurora theme was not applied; retaining native styling');
+        }
+      }, 3100);
+    };
+    let subscription;
+    try {
+      subscription = events.subscribe(runtime.ThemeChangedEvent, (event) => {
+        if (emitting) return;
+        clear();
+        if (dark(event.payload)) later(() => burst(true), 50);
+        else controller.state = 'native theme selected';
+      });
+    } catch { return skip('theme subscription failed'); }
+    controller.stop = () => { stopped = true; clear(); subscription?.unsubscribe(); controller.state = 'stopped'; };
+    burst(); return controller;
+  }
+
+  const definition = {
+    "name": "Homelab Aurora",
+    "colors": {
+      "mode": "dark",
+      "background": {
+        "canvas": "#060B11",
+        "page": "#070D14",
+        "primary": "#0B151F",
+        "secondary": "#142332",
+        "elevated": "#101D2A"
+      },
+      "primary": {
+        "main": "#4DB0FF",
+        "background": "#4DB0FF",
+        "subtleBackground": "#142332",
+        "border": "#4DB0FF",
+        "shade": "#8CCBFF",
+        "mainEmphasis": "#8CCBFF",
+        "backgroundEmphasis": "#8CCBFF",
+        "contrastText": "#060B11"
+      },
+      "secondary": {
+        "main": "#1B2733",
+        "background": "#1B2733",
+        "shade": "#24303C",
+        "backgroundEmphasis": "#24303C",
+        "border": "#384655",
+        "borderEmphasis": "#465666",
+        "subtleBackground": "#142332",
+        "subtleBorder": "#24303C",
+        "text": "#C4D2DE",
+        "contrastText": "#E9F1F7"
+      },
+      "tertiary": {
+        "main": "#C685FF",
+        "mainEmphasis": "#C685FF",
+        "text": "#DDB3FF",
+        "textEmphasis": "#E5C6FD",
+        "background": "#914BBE",
+        "backgroundEmphasis": "#C685FF",
+        "border": "#C685FF",
+        "borderEmphasis": "#C685FF",
+        "subtleBackground": "#250E33",
+        "subtleBorder": "#391B4C"
+      },
+      "accent": {
+        "main": "#4DB0FF",
+        "mainEmphasis": "#8CCBFF",
+        "text": "#E9F1F7",
+        "textEmphasis": "#FFFFFF",
+        "background": "#055A9B",
+        "backgroundEmphasis": "#0F74C5",
+        "subtleBackground": "#142332",
+        "border": "#094171",
+        "borderEmphasis": "#055A9B"
+      },
+      "error": {
+        "main": "#FF4B6E",
+        "mainEmphasis": "#FF6684",
+        "text": "#FF6684",
+        "textEmphasis": "#FFB3C2",
+        "background": "#D20049",
+        "backgroundEmphasis": "#FF4B6E",
+        "border": "#FF4B6E",
+        "borderEmphasis": "#FF6684",
+        "subtleBackground": "#39000E",
+        "subtleBorder": "#55051A"
+      },
+      "warning": {
+        "main": "#FFAE1F",
+        "mainEmphasis": "#FFAE1F",
+        "text": "#FFAE1F",
+        "textEmphasis": "#FAE4C8",
+        "background": "#996500",
+        "backgroundEmphasis": "#FFAE1F",
+        "border": "#FFAE1F",
+        "borderEmphasis": "#FFAE1F",
+        "subtleBackground": "#291600",
+        "subtleBorder": "#3E2600"
+      },
+      "success": {
+        "main": "#4ADE80",
+        "mainEmphasis": "#4ADE80",
+        "text": "#4ADE80",
+        "textEmphasis": "#D2F1D8",
+        "background": "#00893D",
+        "backgroundEmphasis": "#4ADE80",
+        "border": "#4ADE80",
+        "borderEmphasis": "#4ADE80",
+        "subtleBackground": "#002208",
+        "subtleBorder": "#003613"
+      },
+      "info": {
+        "main": "#4DB0FF",
+        "mainEmphasis": "#4DB0FF",
+        "text": "#4DB0FF",
+        "textEmphasis": "#D8EAFE",
+        "background": "#0F74C5",
+        "backgroundEmphasis": "#4DB0FF",
+        "border": "#4DB0FF",
+        "borderEmphasis": "#4DB0FF",
+        "subtleBackground": "#011B35",
+        "subtleBorder": "#062D4F"
+      },
+      "text": {
+        "primary": "#E9F1F7",
+        "secondary": "#9FB1C1",
+        "disabled": "#7A8DA0",
+        "link": "#4DB0FF"
+      },
+      "border": {
+        "weak": "#141F2A",
+        "medium": "#1B2733",
+        "strong": "#2D3A47"
+      },
+      "gradients": {
+        "brandHorizontal": "linear-gradient(270deg, #4DB0FF 0%, #C685FF 100%)",
+        "brandVertical": "linear-gradient(0.01deg, #4DB0FF 0.01%, #C685FF 99.99%)"
+      },
+      "contrastThreshold": 3,
+      "action": {
+        "selected": "rgba(77,176,255,0.1)",
+        "hover": "rgba(233,241,247,0.06)",
+        "focus": "rgba(233,241,247,0.06)",
+        "selectedBorder": "#4DB0FF"
+      }
+    },
+    "shape": {
+      "borderRadiusSm": 4,
+      "borderRadius": 8,
+      "borderRadiusLg": 14
+    },
+    "shadows": {
+      "z1": "0px 1px 2px rgba(6,11,17,0.75)",
+      "z2": "0px 4px 12px rgba(6,11,17,0.75)",
+      "z3": "0px 12px 32px rgba(0,0,0,0.55)"
+    },
+    "components": {
+      "height": {
+        "md": 3.5,
+        "lg": 4.5
+      },
+      "table": {
+        "headerBackground": "#142332",
+        "border": "#1B2733",
+        "rowStripedBackground": "#0B151F",
+        "rowHoverBackground": "#142332",
+        "rowSelectedBackground": "#060B11"
+      },
+      "card": {
+        "background": "#112131",
+        "borderColor": "#1B2733"
+      },
+      "checkbox": {
+        "activeBackground": "#055A9B",
+        "activeBackgroundHover": "#0F74C5"
+      },
+      "drawer": {
+        "background": "#070D14",
+        "borderColor": "#1B2733"
+      },
+      "modal": {
+        "background": "#070D14",
+        "borderColor": "#1B2733"
+      },
+      "overlay": {
+        "background": "rgba(3,7,12,0.65)"
+      },
+      "dropdown": {
+        "borderColor": "#24303C"
+      },
+      "switch": {
+        "activeBackground": "#055A9B",
+        "activeBackgroundHover": "#0F74C5"
+      },
+      "tooltip": {
+        "borderColor": "#24303C"
+      },
+      "input": {
+        "background": "#112131"
+      },
+      "codeEditor": {
+        "keyword": "#8CCBFF",
+        "controlKeyword": "#DDB3FF",
+        "variable": "#89C3FF",
+        "type": "#78D1BE",
+        "function": "#FFC75C",
+        "number": "#FBA76A",
+        "string": "#86EFAC",
+        "operator": "#BCCAD6",
+        "regexp": "#FF9EA7",
+        "comment": "#8DA0B1",
+        "heading": "#8CCBFF",
+        "link": "#8CCBFF",
+        "invalid": "#FF8AA1"
+      },
+      "tag": {
+        "colors": [
+          {
+            "background": "#39000E",
+            "text": "#FF8AA1"
+          },
+          {
+            "background": "#2F1100",
+            "text": "#FBA76A"
+          },
+          {
+            "background": "#291600",
+            "text": "#FFC75C"
+          },
+          {
+            "background": "#00211B",
+            "text": "#71D3BE"
+          },
+          {
+            "background": "#002208",
+            "text": "#86EFAC"
+          },
+          {
+            "background": "#00211B",
+            "text": "#78D1BE"
+          },
+          {
+            "background": "#011B35",
+            "text": "#89C3FF"
+          },
+          {
+            "background": "#011B35",
+            "text": "#8CCBFF"
+          },
+          {
+            "background": "#250E33",
+            "text": "#DDB3FF"
+          },
+          {
+            "background": "#250E33",
+            "text": "#D7A6FA"
+          },
+          {
+            "background": "#39000E",
+            "text": "#FF9EA7"
+          }
+        ]
+      },
+      "textHighlight": {
+        "background": "#996500"
+      },
+      "home": {
+        "background": {
+          "fade": "#391B4C",
+          "highlight": "#52296D",
+          "right": "#633000",
+          "left": "#094171"
+        }
+      },
+      "badge": {
+        "blue": {
+          "text": "#8CCBFF",
+          "background": "#011B35",
+          "border": "#094171"
+        },
+        "red": {
+          "text": "#FF8AA1",
+          "background": "#39000E",
+          "border": "#790628"
+        },
+        "green": {
+          "text": "#86EFAC",
+          "background": "#002208",
+          "border": "#004E1F"
+        },
+        "orange": {
+          "text": "#FBA76A",
+          "background": "#2F1100",
+          "border": "#633000"
+        },
+        "purple": {
+          "text": "#DDB3FF",
+          "background": "#250E33",
+          "border": "#52296D"
+        },
+        "darkgrey": {
+          "text": "#9FB1C1",
+          "background": "#060B11",
+          "border": "#101B27"
+        }
+      }
+    },
+    "typography": {
+      "fontWeightBold": 600,
+      "xxl": {
+        "fontWeight": 600,
+        "fontSize": 24,
+        "lineHeight": 34,
+        "letterSpacing": 0.3
+      },
+      "xl": {
+        "fontWeight": 600,
+        "fontSize": 22,
+        "lineHeight": 30,
+        "letterSpacing": -0.2
+      },
+      "lg": {
+        "fontWeight": 500,
+        "fontSize": 20,
+        "lineHeight": 26,
+        "letterSpacing": 0
+      },
+      "md": {
+        "fontWeight": 500,
+        "fontSize": 16,
+        "lineHeight": 22,
+        "letterSpacing": 0
+      },
+      "base": {
+        "fontWeight": 400,
+        "fontSize": 14,
+        "lineHeight": 22,
+        "letterSpacing": 0
+      },
+      "sm": {
+        "fontWeight": 500,
+        "fontSize": 12,
+        "lineHeight": 18,
+        "letterSpacing": 0.2
+      },
+      "h1": {
+        "fontWeight": 600,
+        "fontSize": 24,
+        "lineHeight": 34,
+        "letterSpacing": 0.3
+      },
+      "h2": {
+        "fontWeight": 600,
+        "fontSize": 22,
+        "lineHeight": 30,
+        "letterSpacing": -0.2
+      },
+      "h3": {
+        "fontWeight": 500,
+        "fontSize": 20,
+        "lineHeight": 26,
+        "letterSpacing": 0
+      },
+      "h4": {
+        "fontWeight": 500,
+        "fontSize": 16,
+        "lineHeight": 22,
+        "letterSpacing": 0
+      },
+      "h5": {
+        "fontWeight": 400,
+        "fontSize": 14,
+        "lineHeight": 22,
+        "letterSpacing": 0
+      },
+      "h6": {
+        "fontWeight": 500,
+        "fontSize": 12,
+        "lineHeight": 18,
+        "letterSpacing": 0.2
+      },
+      "body": {
+        "fontWeight": 400,
+        "fontSize": 14,
+        "lineHeight": 22,
+        "letterSpacing": 0
+      },
+      "bodySmall": {
+        "fontWeight": 400,
+        "fontSize": 12,
+        "lineHeight": 18,
+        "letterSpacing": 0.2
+      }
+    },
+    "visualization": {
+      "hues": [
+        {
+          "name": "red",
+          "shades": [
+            {
+              "name": "super-light-red",
+              "color": "#FFB3C2"
+            },
+            {
+              "name": "light-red",
+              "color": "#FF6684"
+            },
+            {
+              "name": "red",
+              "color": "#FF4B6E"
+            },
+            {
+              "name": "semi-dark-red",
+              "color": "#D20049"
+            },
+            {
+              "name": "dark-red",
+              "color": "#A60037"
+            }
+          ]
+        },
+        {
+          "name": "orange",
+          "shades": [
+            {
+              "name": "super-light-orange",
+              "color": "#FEC7A1"
+            },
+            {
+              "name": "light-orange",
+              "color": "#FBA76A"
+            },
+            {
+              "name": "orange",
+              "color": "#EF8528"
+            },
+            {
+              "name": "semi-dark-orange",
+              "color": "#D16E02"
+            },
+            {
+              "name": "dark-orange",
+              "color": "#AB5902"
+            }
+          ]
+        },
+        {
+          "name": "yellow",
+          "shades": [
+            {
+              "name": "super-light-yellow",
+              "color": "#F4CD9B"
+            },
+            {
+              "name": "light-yellow",
+              "color": "#FFC75C"
+            },
+            {
+              "name": "yellow",
+              "color": "#FFAE1F"
+            },
+            {
+              "name": "semi-dark-yellow",
+              "color": "#996500"
+            },
+            {
+              "name": "dark-yellow",
+              "color": "#784E00"
+            }
+          ]
+        },
+        {
+          "name": "green",
+          "shades": [
+            {
+              "name": "super-light-green",
+              "color": "#ACE5B7"
+            },
+            {
+              "name": "light-green",
+              "color": "#86EFAC"
+            },
+            {
+              "name": "green",
+              "color": "#4ADE80"
+            },
+            {
+              "name": "semi-dark-green",
+              "color": "#00893D"
+            },
+            {
+              "name": "dark-green",
+              "color": "#006B2E"
+            }
+          ]
+        },
+        {
+          "name": "blue",
+          "shades": [
+            {
+              "name": "super-light-blue",
+              "color": "#B4D8FE"
+            },
+            {
+              "name": "light-blue",
+              "color": "#8CCBFF"
+            },
+            {
+              "name": "blue",
+              "color": "#4DB0FF"
+            },
+            {
+              "name": "semi-dark-blue",
+              "color": "#0F74C5"
+            },
+            {
+              "name": "dark-blue",
+              "color": "#055A9B"
+            }
+          ]
+        },
+        {
+          "name": "purple",
+          "shades": [
+            {
+              "name": "super-light-purple",
+              "color": "#E5C6FD"
+            },
+            {
+              "name": "light-purple",
+              "color": "#DDB3FF"
+            },
+            {
+              "name": "purple",
+              "color": "#C685FF"
+            },
+            {
+              "name": "semi-dark-purple",
+              "color": "#914BBE"
+            },
+            {
+              "name": "dark-purple",
+              "color": "#723896"
+            }
+          ]
+        }
+      ],
+      "palette": [
+        "#4DB0FF",
+        "#3FE6C4",
+        "#C685FF",
+        "#71D3BE",
+        "#DDB3FF",
+        "#0F74C5",
+        "#8CCBFF",
+        "#068472"
+      ]
+    }
+  };
+
+  const plugin = new data.AppPlugin();
+  let controller;
+  // Grafana also imports app modules for disabled apps' administration pages.
+  // Initialization receives the real enabled state; mere import must be inert.
+  plugin.init = (meta) => {
+    if (meta?.enabled === true && !controller) controller = installAurora(data, runtime, definition);
+  };
+  return { plugin, get aurora() { return controller; } };
+});
