@@ -100,12 +100,15 @@ spec:
       - name: aurora-plugin
         configMap: grafana-aurora-plugin
         mountPath: /var/lib/grafana/plugins/homelab-aurora-app
+        # Expose only this subdirectory. Scanning a projected-volume root
+        # discovers plugin.json twice (its public symlink and timestamp tree).
+        subPath: plugin
         readOnly: true
         items:
           - key: module.js
-            path: module.js
+            path: plugin/module.js
           - key: plugin.json
-            path: plugin.json
+            path: plugin/plugin.json
       - name: aurora-provisioning
         configMap: grafana-aurora-plugin
         mountPath: /etc/grafana/provisioning/plugins/aurora.yaml

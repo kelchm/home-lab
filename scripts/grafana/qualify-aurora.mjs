@@ -39,6 +39,7 @@ for (const mount of mounts) {
   const actual = container.volumeMounts.find((m) => m.name === mount.name);
   assert.equal(volume.configMap.name, config.metadata.name);
   assert.equal(actual.mountPath, mount.mountPath);
+  assert.equal(actual.subPath, mount.subPath);
   assert.equal(actual.readOnly, true);
 }
 const chartConfig = rendered.find((r) => r.kind === 'ConfigMap' && r.data?.['grafana.ini']).data;
@@ -70,7 +71,8 @@ function projection(mode) {
   // Kubelet's projected-volume symlinks, with only the two plugin keys exposed.
   const dir = path.join(work, mode);
   const payload = path.join(dir, '..2026_11_03');
-  fs.mkdirSync(payload, { recursive: true });
+  const pluginMount = mounts.find((m) => m.name === 'aurora-plugin');
+  fs.mkdirSync(path.join(payload, pluginMount.subPath), { recursive: true });
   let module = config.data['module.js'];
   if (mode === 'missing-api') module = module.replace('typeof data.createTheme', 'typeof data.missingThemeFactory');
   if (mode === 'bad-theme') module = module.replace('data.createTheme(definition)', 'data.createTheme({ ...definition, colors: null })');
@@ -78,11 +80,12 @@ function projection(mode) {
   if (mode === 'cache-probe') module += '\n// Cache-version qualification probe.\n';
   const manifest = JSON.parse(config.data['plugin.json']);
   manifest.info.version = '0.1.0-' + createHash('sha256').update(module).digest('hex').slice(0, 12);
-  fs.writeFileSync(path.join(payload, 'module.js'), module);
-  fs.writeFileSync(path.join(payload, 'plugin.json'), JSON.stringify(manifest));
+  for (const item of pluginMount.items) {
+    fs.writeFileSync(path.join(payload, item.path), item.key === 'module.js' ? module : JSON.stringify(manifest));
+  }
   fs.symlinkSync('..2026_11_03', path.join(dir, '..data'));
-  for (const file of ['module.js', 'plugin.json']) fs.symlinkSync('..data/' + file, path.join(dir, file));
-  return { dir, module, version: manifest.info.version };
+  fs.symlinkSync('..data/' + pluginMount.subPath, path.join(dir, pluginMount.subPath));
+  return { dir: path.join(dir, pluginMount.subPath), module, version: manifest.info.version };
 }
 let selected;
 
@@ -140,6 +143,8 @@ const dashboard = { uid: 'stock-theme-proof', title: 'Stock Grafana theme proof'
 try {
   check('Kustomize and the deployed Helm chart resolve read-only hashed mounts');
   await start('normal');
+  const startupLog = run(['logs', name]);
+  assert.doesNotMatch(startupLog, /Could not (?:register|initialize) plugin.*homelab-aurora-app/);
   const installed = await api('/api/plugins');
   const datasourcePlugins = installed.filter((p) => ['victoriametrics-metrics-datasource', 'victoriametrics-logs-datasource'].includes(p.id));
   assert.equal(datasourcePlugins.length, 2);
