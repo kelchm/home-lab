@@ -135,6 +135,9 @@ spec:
           foldersFromFilesStructure: true
 
     grafana.ini:
+      # Native visual refresh (public preview).
+      feature_toggles:
+        grafana.visualDesignRefresh: true
       dashboards:
         default_home_dashboard_path: /tmp/dashboards/Overview/home.json
       server:
