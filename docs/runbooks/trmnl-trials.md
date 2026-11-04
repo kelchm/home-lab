@@ -56,16 +56,16 @@ The initial evaluation also included BYOS FastAPI, BYOS Django, BYOS Phoenix and
 
 ### Retained data from retired trials
 
-Retirement removes the four HelmReleases and their workloads, Services and HTTPRoutes. It preserves the four PVCs below, whose `helm.sh/resource-policy: keep` annotations were verified before retirement, and their corresponding encrypted application Secrets. Node Lite has no persistent volume.
+Retirement removed the four HelmReleases and their workloads, Services and HTTPRoutes, and kept their PVCs and encrypted application Secrets. Once detached, the retained volumes were skipped by Longhorn's recurring backups and raised `LonghornVolumeBackupStale`, so on 2026-11-04 the owner deleted the four PVCs (`byos-fastapi`, `byos-django`, `byos-phoenix-data`, `byos-phoenix-generated`), their Longhorn volumes and their backups on the NAS. That data is gone. The Secrets remain:
 
-| Retired server | Retained PVCs | Retained Secret |
-|---|---|---|
-| BYOS FastAPI | `byos-fastapi` | `byos-fastapi-trial` |
-| BYOS Django | `byos-django` | `byos-django-trial` |
-| BYOS Phoenix | `byos-phoenix-data`, `byos-phoenix-generated` | `byos-phoenix-trial` |
-| Node Lite | None | `node-lite-trial` |
+| Retired server | Retained Secret |
+|---|---|
+| BYOS FastAPI | `byos-fastapi-trial` |
+| BYOS Django | `byos-django-trial` |
+| BYOS Phoenix | `byos-phoenix-trial` |
+| Node Lite | `node-lite-trial` |
 
-The removed manifests, builder and image digests remain available in Git at [the initial deployment revision](https://github.com/kelchm/home-lab/tree/f8687927e4f648ae818ce9b9f035a2dcda676d0b). Restoring a retired server requires restoring its configuration and checking compatibility with its retained data. Deleting retained PVCs or Secrets is a separate decision; retirement does not erase trial data.
+The removed manifests, builder and image digests remain available in Git at [the initial deployment revision](https://github.com/kelchm/home-lab/tree/f8687927e4f648ae818ce9b9f035a2dcda676d0b). Restoring a retired server means redeploying it from that revision with empty volumes. Removing the remaining Secrets is a separate decision.
 
 ## Check and stop trials
 
