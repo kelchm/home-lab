@@ -174,7 +174,7 @@ New date-based kit profiles use `YYYYMMDD` as the readable upstream recipe refer
 | Reserve / scheduling | 14.5 GiB reserve, Python prefill policy | 12 GiB default reserve, 9.5 measured; 4,096-row prompt chunks, prefill share 0.68 | Start at 12 GiB and share 0.68; pool/cache receipt and host headroom must pass before promotion |
 | Prompt storage | Device cache plus 64 GiB NVMe spill per rank | Device cache; pinned-host tier off by default | Device cache only, `TF_GLM_HOST_CACHE_GIB=0`; no NVMe spill or reuse of the Python spill directory |
 | Vision | 50 images, 102,400 image tokens per request | 50 images, native default of 4,096 image tokens per request | Explicit 4,096-token budget initially; image-history behavior is an adoption blocker until evaluated |
-| Memory guard | None | Launcher samples both hosts, then runs its own stop script | Each rank's SparkRun entrypoint watches its own host, stops only its child process group below 2.5 GiB for 4 s, and escalates after 10 s; TP peer loss ends the other rank |
+| Memory guard | None | Launcher samples both hosts, then runs its own stop script | Each rank's SparkRun entrypoint counts MemAvailable plus free per-CPU pages above their resting level, capped at MemTotal; stops only its child process group below 2.5 GiB for 4 s, and escalates after 10 s; TP peer loss ends the other rank |
 
 The unchanged EXL3 shards are repacked by a different runtime. q8 dense/head can use more resident memory than the running Python choices; they do not change the expert checkpoint's 4 bpw. The newer Hugging Face revision changes documentation/license files; all 83 shard payloads and model/tokenizer/template files match the snapshot we already have.
 
@@ -194,9 +194,11 @@ bash sparks/inference/sparkrun/mods/mia-tensorfold-glm53-20261104/build/build.sh
 
 A normal rebuild exports the candidate's immutable daemon ID, compares its config digest with the lock, and changes the locked local tag only on a match. A mismatch retains a uniquely named candidate and leaves the locked tag alone. `--candidate` deliberately builds and retains an artifact without tagging or editing any lock, for a new version's review. Review and record that artifact's config digest in the new lock and owning recipe, and tag its inspected immutable daemon ID using the lock's `image` name. Do not rewrite a retained qualified bundle to accept drift. APT dependencies can change on rebuild even with immutable base images.
 
-The November 4 workstation build produced ARM64 image config `9f8a5221…` (about 2.0 GiB), with all 106 patches recorded in `BUILD-INFO`. The build, frozen-file checks, lock validation and 226 local tests passed (five platform-specific skips). Python and the pinned JPEG/WebP libraries load off-host. The Spark CPU binary has compiled but has not been run on a Spark; these checks do not establish GPU behavior.
+The November 4 workstation build produced ARM64 image config `9f8a5221…` (about 2.0 GiB), with all 106 patches recorded in `BUILD-INFO`. The build, frozen-file checks, lock validation and 230 local tests passed (five platform-specific skips). Python and the pinned JPEG/WebP libraries load off-host. The Spark CPU binary has compiled but has not been run on a Spark; these checks do not establish GPU behavior.
 
 ### Launch, stop and roll back
+
+The native TP watch line uses SparkRun's `MASTER_PORT` (25000 by default), and NCCL bootstrap uses `MASTER_PORT - 1` (24999). The watch line must listen first so SparkRun can start rank 1; NCCL opens only after rank 1 joins. SparkRun checks only the gate port for collisions, so check **both** ports on the head before launching (`ss -tln 'sport = :24999 or sport = :25000'` for the defaults); neither may have a listener.
 
 No candidate launch is authorized or performed by this change. An owner-approved idle window, the [before-launch checks](#before-a-launch), and full-size pings on both CX7 rails are required. The scoped memory guard is part of the new rank entrypoint; the existing full-size rail check remains a manual gate. Neither Mia's `start.sh` nor `stop.sh` runs under SparkRun, and this does not install a host-wide guard or complete [#944](https://github.com/kelchm/home-lab/issues/944).
 
@@ -222,6 +224,8 @@ The capacity hook reads the engine's startup pool and agreed per-rank cache rece
 Roll back by stopping this candidate and relaunching `glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable.yaml`. The native candidate never opens the Python spill directory. The current spill restart-restore path itself remains unverified here.
 
 ### Qualification still required
+
+Track the evaluation and adoption decisions in [#1280](https://github.com/kelchm/home-lab/issues/1280), a child of #938. The next step is an owner-approved idle window and recovery procedure.
 
 Before promoting this profile, record the build/image identity and driver compatibility on the Sparks; confirm the full 1M window, four streams, both RoCE rails, pool/cache sizes and memory floor on **both** ranks. Verify the scoped guard and TP peer-stop behavior without inducing host memory exhaustion. Its local supervisor tests do not establish recovery on real Sparks or solve the wider freeze-recovery question in #944.
 

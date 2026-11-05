@@ -42,7 +42,10 @@ def env_for(rank):
 def test_adapter_launches_the_native_rank_and_preserves_detected_fabric(rank):
     serve = load('serve')
     args, env = serve.launch(env_for(rank))
-    assert env['NCCL_COMM_ID'] == '198.18.0.1:25000'
+    assert env['NCCL_COMM_ID'] == '198.18.0.1:24999'
+    recipe = Recipe(yaml.safe_load(RECIPE.read_text()), source_path=str(RECIPE))
+    gate = TensorFoldRuntime().native_rendezvous_port(recipe, num_nodes=2)
+    assert int(env['NCCL_COMM_ID'].rsplit(':', 1)[1]) + 1 == gate == int(env['MASTER_PORT'])
     assert env['TF_GLM_RANK'] == str(rank) and env['TF_GLM_WORLD'] == '2'
     assert env['NCCL_IB_HCA'] == 'rail0,rail1' and env['NCCL_IB_GID_INDEX'] == '3'
     assert args[:2] == [serve.BINARY, 'serve']
@@ -61,7 +64,7 @@ def test_adapter_launches_the_native_rank_and_preserves_detected_fabric(rank):
 
 
 @pytest.mark.parametrize('change', [{'RANK': '2'}, {'FABRIC_MASTER': ''}, {'FABRIC_MASTER': '::1'},
-                                   {'NCCL_IB_HCA': ''}, {'MASTER_PORT': '65535'}])
+                                   {'NCCL_IB_HCA': ''}, {'MASTER_PORT': '1'}, {'MASTER_PORT': '65536'}])
 def test_bad_rank_or_missing_fabric_refuses_before_start(change):
     with pytest.raises(ValueError):
         load('serve').launch({**env_for(0), **change})
@@ -71,7 +74,7 @@ def test_guard_uses_elapsed_time_resets_on_recovery_and_reads_memavailable(tmp_p
     serve = load('serve')
     meminfo = tmp_path / 'meminfo'
     meminfo.write_text('MemFree: 1 kB\nMemAvailable: 3145728 kB\n')
-    assert serve.available_gib(meminfo) == 3
+    assert serve.available_gib(meminfo, tmp_path / 'missing-zoneinfo') == 3
     since = serve.low_since(None, 10, 2.49, 2.5)
     assert since == 10
     assert serve.low_since(since, 12, 2, 2.5) == 10
@@ -79,7 +82,33 @@ def test_guard_uses_elapsed_time_resets_on_recovery_and_reads_memavailable(tmp_p
     assert serve.low_since(None, 14, 2, 2.5) == 14
     meminfo.write_text('MemFree: 1 kB\n')
     with pytest.raises(ValueError, match='MemAvailable'):
-        serve.available_gib(meminfo)
+        serve.available_gib(meminfo, tmp_path / 'missing-zoneinfo')
+
+
+@pytest.mark.parametrize('port', ['2', '65535'])
+def test_gate_port_boundaries_leave_a_valid_nccl_bootstrap_port(port):
+    _, env = load('serve').launch({**env_for(0), 'MASTER_PORT': port})
+    assert int(env['NCCL_COMM_ID'].rsplit(':', 1)[1]) == int(port) - 1
+
+
+def test_memory_budget_includes_only_parked_pages_above_the_resting_level(tmp_path):
+    serve = load('serve')
+    meminfo, zones = tmp_path / 'meminfo', tmp_path / 'zoneinfo'
+    meminfo.write_text('MemTotal: 8388608 kB\nMemAvailable: 2097152 kB\n')
+    text = ('Node 0, zone Normal\n  pagesets\n    cpu: 0\n      count: 524288\n      high_min: 262144\n'
+            '  vm stats threshold: 1\n    cpu: 1\n      count: 524288\n      high_min: 262144\n'
+            '  next_zone_field\n      count: 999999999\n')
+    zones.write_text(text)
+    assert serve.parked_bytes(text, 4096) == 2 * 1024**3
+    assert serve.available_gib(meminfo, zones, 4096) == 4
+    meminfo.write_text('MemTotal: 3145728 kB\nMemAvailable: 2097152 kB\n')
+    assert serve.available_gib(meminfo, zones, 4096) == 3  # never exceed MemTotal
+    old = '  pagesets\n    cpu: 0\n      count: 262144\n'
+    assert serve.parked_bytes(old, 4096) == 512 * 1024**2
+    for bad in (text.replace('count: 524288', 'count: -1'), text.replace('high_min: 262144', 'high_min: nope'),
+                text.replace('count: 524288', 'count:'), text.replace('count: 524288', f'count: {2**64}')):
+        assert serve.parked_bytes(bad, 4096) == 0
+    assert serve.parked_bytes(text.replace('count: 524288', 'count: 1'), 4096) == 0
 
 
 def test_guard_kills_only_its_child_group_even_if_term_is_ignored():

@@ -32,6 +32,6 @@
     "chat_template.jinja": "15ff929998c3dd126addaa1448f7f811bb3724fe835f448ac889d8f558d034c8",
     "prepare.py": "831091b852595ab4c63fcc4a573103ce19bc7820f9f4e5d5d476253fd0fffd2a",
     "run.sh": "5f0ed574cb348d190f836d0352df69034e4216b13fd669bdf04d664527f5007b",
-    "serve.py": "04bbfd0d916c7e35aee97f26cf9ee1b18ce4cbbd9a393fbdabb709caebe5d0f1"
+    "serve.py": "0f29b08f9bda8251d3f139da47bc83186356e551068cc89974a1b21e3f777d01"
   }
 }
