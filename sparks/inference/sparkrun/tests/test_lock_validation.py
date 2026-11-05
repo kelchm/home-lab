@@ -22,7 +22,7 @@ MODS = {
     "qwen1": "mia-tensorfold-qwen38fn-tp1-656879fd",
     "qwen2": "mia-tensorfold-qwen38fn-v1.1-discovery",
     "glm": "mia-tensorfold-glm53-bf5f9452",
-    "glm-native": "mia-tensorfold-glm53-20261104",
+    "glm-native": "mia-tensorfold-glm53-1104",
     "deepseek": "bertholomus-tensorfold-dsv41-2970bcd-mia-fixes",
     "readiness": "tensorfold-readiness",
 }

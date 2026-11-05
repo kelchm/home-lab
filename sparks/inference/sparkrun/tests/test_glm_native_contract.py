@@ -17,8 +17,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'plugins'))
 from tensorfold import TensorFoldRuntime  # noqa: E402
 
-MOD = ROOT / 'mods/mia-tensorfold-glm53-20261104'
-RECIPE = ROOT / 'mia-tensorfold-glm53-exl3-tp2/glm53-exl3-tp2-mia-20261104-agent-1m.yaml'
+MOD = ROOT / 'mods/mia-tensorfold-glm53-1104'
+RECIPE = ROOT / 'mia-tensorfold-glm53-exl3-tp2/glm53-exl3-tp2-mia-1104-agent-1m.yaml'
 
 
 def load(name):
@@ -204,5 +204,5 @@ def test_recipe_retains_existing_weight_snapshots_and_has_both_readiness_gates()
     assert recipe['container'] == lock['image_id']
     assert recipe['metadata']['profile'] == RECIPE.stem
     assert recipe['metadata']['status'] == 'candidate'
-    assert recipe['post_exec'][0] == 'python3 /opt/glm53-20261104/capacity.py'
+    assert recipe['post_exec'][0] == 'python3 /opt/glm53-1104/capacity.py'
     assert recipe['post_exec'][1].endswith('--lanes 4 --efforts max,high,low,none')

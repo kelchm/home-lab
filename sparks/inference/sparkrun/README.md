@@ -159,9 +159,9 @@ To roll back, stop it with its own recipe and launch the profile that served bef
 
 ### Candidate profile
 
-[`glm53-exl3-tp2-mia-20261104-agent-1m`](mia-tensorfold-glm53-exl3-tp2/glm53-exl3-tp2-mia-20261104-agent-1m.yaml) is a candidate for the same endpoint and served name. It has not run on the Sparks. It uses [Mia's 1104 kit](https://github.com/MiaAI-Lab/GLM-5.3-Flash-DGX-Sparks-1104/tree/138123c6f7f7ad6563382fec7b7af8d7e8825ebe) at `138123c6`, the native Zig/CUDA engine at `f350cd3e` (1.1.9), and all 106 engine patches, including warm turns (`0104`) and the tool-parser fixes (`0103`, `0105`). This does not switch the running Python durable profile or qualify its replacement.
+[`glm53-exl3-tp2-mia-1104-agent-1m`](mia-tensorfold-glm53-exl3-tp2/glm53-exl3-tp2-mia-1104-agent-1m.yaml) is a candidate for the same endpoint and served name. It has not run on the Sparks. It uses [Mia's 1104 kit](https://github.com/MiaAI-Lab/GLM-5.3-Flash-DGX-Sparks-1104/tree/138123c6f7f7ad6563382fec7b7af8d7e8825ebe) at `138123c6`, the native Zig/CUDA engine at `f350cd3e` (1.1.9), and all 106 engine patches, including warm turns (`0104`) and the tool-parser fixes (`0103`, `0105`). This does not switch the running Python durable profile or qualify its replacement.
 
-New date-based kit profiles use `YYYYMMDD` as the readable upstream recipe reference, followed by the local behavior and window: `glm53-exl3-tp2-mia-20261104-agent-1m`. The date means the kit's published recipe date, not the day we built it. The versioned mod is `mia-tensorfold-glm53-20261104`; its lock retains the full kit/engine commits, patch digest, build inputs and image config digest. Another upstream revision on the same date gets a distinct revision suffix on its profile/mod rather than replacing a retained bundle. Existing profile names and SparkRun instance identities stay as they are for rollback.
+New date-based kit profiles use Mia’s published `MMDD` reference (`1104` here), followed by the local behavior and window: `glm53-exl3-tp2-mia-1104-agent-1m`. The reference follows Mia’s recipe name; the lock’s `kit_date` retains the full publication date (`20261104`). The versioned mod is `mia-tensorfold-glm53-1104`; its lock retains the full kit/engine commits, patch digest, build inputs and image config digest. Another kit revision with the same reference gets a distinct revision suffix on its profile/mod rather than replacing a retained bundle. Existing profile names and SparkRun instance identities stay as they are for rollback.
 
 | Setting | Running Python durable profile | Mia 1104 | This native candidate |
 | --- | --- | --- | --- |
@@ -182,14 +182,14 @@ The unchanged EXL3 shards are repacked by a different runtime. q8 dense/head can
 
 ### Inputs outside SparkRun
 
-The [dated mod](mods/mia-tensorfold-glm53-20261104/) builds a local ARM64 image, never a mutable upstream tag. SparkRun distributes that image and the two pinned Hugging Face snapshots. Both snapshots are already present for the running profile. The mod carries Mia's unchanged vision template and its upstream notices. Python spill snapshots are not portable to this native engine; keeping `HOST_CACHE_GIB=0` does not provide persistence or disk spill. Restoring durable caching is separate implementation work if it is required for adoption.
+The [dated mod](mods/mia-tensorfold-glm53-1104/) builds a local ARM64 image, never a mutable upstream tag. SparkRun distributes that image and the two pinned Hugging Face snapshots. Both snapshots are already present for the running profile. The mod carries Mia's unchanged vision template and its upstream notices. Python spill snapshots are not portable to this native engine; keeping `HOST_CACHE_GIB=0` does not provide persistence or disk spill. Restoring durable caching is separate implementation work if it is required for adoption.
 
 ### Build
 
 Build only on the workstation's Colima `tf-build` profile. The helper fixes that Docker context, checks the frozen mod, verifies the kit's exact patch count/digest and template, and builds the pinned engine for the Spark CPU and sm_121. The Dockerfile adapts Mia's native image with digest-pinned CUDA 13.3.1 ARM64 bases and Python for SparkRun mods; xgrammar and JPEG/WebP sources retain Mia's checked pins. The target binaries are not executed on the Mac's CPU.
 
 ```sh
-bash sparks/inference/sparkrun/mods/mia-tensorfold-glm53-20261104/build/build.sh
+bash sparks/inference/sparkrun/mods/mia-tensorfold-glm53-1104/build/build.sh
 ```
 
 A normal rebuild exports the candidate's immutable daemon ID, compares its config digest with the lock, and changes the locked local tag only on a match. A mismatch retains a uniquely named candidate and leaves the locked tag alone. `--candidate` deliberately builds and retains an artifact without tagging or editing any lock, for a new version's review. Review and record that artifact's config digest in the new lock and owning recipe, and tag its inspected immutable daemon ID using the lock's `image` name. Do not rewrite a retained qualified bundle to accept drift. APT dependencies can change on rebuild even with immutable base images.
@@ -205,13 +205,13 @@ No candidate launch is authorized or performed by this change. An owner-approved
 After syncing the recipes/mods and passing those checks, stop the current **durable** instance using its own [flush and stop procedure](#launch-stop-and-roll-back). Load the local image on the head only after both GPUs are idle; SparkRun copies it to the worker. From the workstation:
 
 ```sh
-DOCKER_CONTEXT=colima-tf-build docker save glm53-tf:20261104-138123c-9233337d9b14 | ssh kelchm@10.32.21.31 docker load
+DOCKER_CONTEXT=colima-tf-build docker save glm53-tf:1104-138123c-9233337d9b14 | ssh kelchm@10.32.21.31 docker load
 ```
 
 From `~/sparkrun/recipes/glm53` on the head:
 
 ```sh
-candidate="$PWD/mia-tensorfold-glm53-exl3-tp2/glm53-exl3-tp2-mia-20261104-agent-1m.yaml"
+candidate="$PWD/mia-tensorfold-glm53-exl3-tp2/glm53-exl3-tp2-mia-1104-agent-1m.yaml"
 python3 validate_locks.py
 sparkrun run "$candidate" --cluster sparks --dry-run
 sparkrun run "$candidate" --cluster sparks --no-follow

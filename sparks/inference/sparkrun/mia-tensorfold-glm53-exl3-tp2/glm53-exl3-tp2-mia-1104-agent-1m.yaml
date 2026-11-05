@@ -7,7 +7,7 @@ container: sha256:9f8a522109d27c70bef3207bd520c31b73fa50d1406dc687294f5ac4b208f3
 min_nodes: 2
 max_nodes: 2
 metadata:
-  profile: glm53-exl3-tp2-mia-20261104-agent-1m
+  profile: glm53-exl3-tp2-mia-1104-agent-1m
   weights: mia
   serving_profile: agent
   status: candidate
@@ -63,9 +63,9 @@ runtime_cache:
   key_by_image: true
 mods:
 - ../mods/tensorfold-readiness
-- ../mods/mia-tensorfold-glm53-20261104
+- ../mods/mia-tensorfold-glm53-1104
 post_exec:
-- python3 /opt/glm53-20261104/capacity.py
+- python3 /opt/glm53-1104/capacity.py
 - python3 /opt/tensorfold-readiness/readiness.py --model GLM-5.3-Flash --context 1048576
   --lanes 4 --efforts max,high,low,none
 distribution_config:

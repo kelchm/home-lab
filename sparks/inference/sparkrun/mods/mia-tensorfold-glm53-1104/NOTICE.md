@@ -7,7 +7,7 @@ Copyright 2026 Mia's AI Lab (MiaAI-Lab). Licensed under the Apache License, Vers
 
 This recipe builds on third-party work that keeps its own licence. If you redistribute it or a modified version, keep this
 notice and the notices below, and state what you changed (Apache-2.0, section 4). People and projects are credited in
-[CREDITS.md](CREDITS.md).
+[upstream CREDITS.md](https://github.com/MiaAI-Lab/GLM-5.3-Flash-DGX-Sparks-1104/blob/138123c6f7f7ad6563382fec7b7af8d7e8825ebe/CREDITS.md).
 
 ## What is in this repository, and what is not
 
@@ -60,11 +60,11 @@ TensorFold's MIT notice, for its code written before 0.6.0:
 ## Patches by other authors
 
 Patches 0013, 0026-0029 and 0049-0056 are upstream TensorFold pull requests, carried with their authors' names in each patch's `From:`
-line (see [CREDITS.md](CREDITS.md)). Those names must stay on them. Some were rebased to apply on this stack.
+line (see [upstream CREDITS.md](https://github.com/MiaAI-Lab/GLM-5.3-Flash-DGX-Sparks-1104/blob/138123c6f7f7ad6563382fec7b7af8d7e8825ebe/CREDITS.md)). Those names must stay on them. Some were rebased to apply on this stack.
 
 ## DeepSeek-V4.1-Flash-1017-4x-DGX-Sparks-TensorFold
 
-Pull requests #22, #24, #28 and #31 on that repository, by their authors (see [CREDITS.md](CREDITS.md)). Licensed under the Apache
+Pull requests #22, #24, #28 and #31 on that repository, by their authors (see [upstream CREDITS.md](https://github.com/MiaAI-Lab/GLM-5.3-Flash-DGX-Sparks-1104/blob/138123c6f7f7ad6563382fec7b7af8d7e8825ebe/CREDITS.md)). Licensed under the Apache
 License, Version 2.0.
 
 **Changes:** patches 0092 and 0093 adapt its patches 0042 and 0039 to this repository's engine commit; the names in their `From:` lines

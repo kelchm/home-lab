@@ -203,7 +203,7 @@ def validate_lock(lock, mod):
         hash_value(build["zig_sha256"], 64, "build.zig_sha256")
         pattern(build["zig_version"], r"[0-9]+\.[0-9]+\.[0-9]+", "build.zig_version", "expected a release version")
         text(build["zig_cpu"], "build.zig_cpu")
-        pattern(lock["image"].rsplit(":", 1)[1], rf"{lock['kit_date']}-{lock['kit_revision'][:7]}-{lock['kit_patches_sha256'][:12]}",
+        pattern(lock["image"].rsplit(":", 1)[1], rf"{lock['kit_date'][4:]}-{lock['kit_revision'][:7]}-{lock['kit_patches_sha256'][:12]}",
                 "image", "tag must agree with recipe date, kit revision and patch identifier")
     elif kind == "glm":
         pattern(lock["engine_version"], r"[0-9]+\.[0-9]+\.[0-9]+", "engine_version", "expected a release version")

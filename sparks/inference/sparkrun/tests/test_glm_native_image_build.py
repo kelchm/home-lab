@@ -10,7 +10,7 @@ import sys
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-MOD = ROOT / 'mods/mia-tensorfold-glm53-20261104'
+MOD = ROOT / 'mods/mia-tensorfold-glm53-1104'
 DAEMON = 'sha256:' + 'a' * 64
 CONFIG = 'sha256:' + 'b' * 64
 

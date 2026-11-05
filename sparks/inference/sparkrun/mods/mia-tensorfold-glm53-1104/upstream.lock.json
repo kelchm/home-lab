@@ -6,7 +6,7 @@
   "kit_patches_sha256": "9233337d9b141f14df1bda5f820436cc950488b0fb00dec3e5ee653e77db6663",
   "engine_repository": "ashhart/TensorFold",
   "engine_revision": "f350cd3ea253a042e205746928271f9d8f71a82d",
-  "image": "glm53-tf:20261104-138123c-9233337d9b14",
+  "image": "glm53-tf:1104-138123c-9233337d9b14",
   "image_id": "sha256:9f8a522109d27c70bef3207bd520c31b73fa50d1406dc687294f5ac4b208f339",
   "weights": {
     "repository": "Mia-AiLab/GLM-5.3-Flash-EXL3-4bpw-TensorFold",
@@ -25,13 +25,13 @@
   },
   "mod_files": {
     "LICENSE": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
-    "NOTICE.md": "238c1d6b94dcfb37534a93ff73e541d406fd6d8f9194f65dfcca870ce5368092",
+    "NOTICE.md": "0cef65c58d32ac4b3bc57ed47505faab073c674cf5ffc4f3905f47168b522cc0",
     "build/Dockerfile": "80c66effd74144eb6047c7604443603d2e53cd15bfcee7327fd242386b59ef11",
     "build/build.sh": "c3db88a87e4d457568695b23ad92203d8aa772d81675b7890a7a6a213cd30b6f",
     "capacity.py": "b68d86d3be708c62656c2daa4ca8dce743bacda4ab4859ef01a1746f2281e0db",
     "chat_template.jinja": "15ff929998c3dd126addaa1448f7f811bb3724fe835f448ac889d8f558d034c8",
     "prepare.py": "831091b852595ab4c63fcc4a573103ce19bc7820f9f4e5d5d476253fd0fffd2a",
-    "run.sh": "5f0ed574cb348d190f836d0352df69034e4216b13fd669bdf04d664527f5007b",
-    "serve.py": "0f29b08f9bda8251d3f139da47bc83186356e551068cc89974a1b21e3f777d01"
+    "run.sh": "119c3a6d95c3995371f91621bbce782eebe8f78de80ab1632a7bb0428c19431b",
+    "serve.py": "24bfb6fd8264beaa55d6c3d91ec482dfc484c5460c0dcd1ebd25415062b47bed"
   }
 }

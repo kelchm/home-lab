@@ -19,7 +19,7 @@ def launch(env):
     env = dict(env)
     rank = env.get('RANK')
     if rank not in ('0', '1'):
-        raise ValueError('GLM 20261104 requires SparkRun TP2 ranks 0 and 1')
+        raise ValueError('GLM 1104 requires SparkRun TP2 ranks 0 and 1')
     master = env.get('FABRIC_MASTER')
     if not master or not isinstance(ipaddress.ip_address(master), ipaddress.IPv4Address):
         raise ValueError('FABRIC_MASTER must be the head CX7 IPv4 address')
@@ -41,7 +41,7 @@ def launch(env):
             '--thinking', '--reasoning-effort', 'xhigh', '--no-update-check',
             '--vision', '--vision-max-images', '50',
             '--vision-image-tokens', '4096',
-            '--chat-template', '/opt/glm53-20261104/chat_template.jinja']
+            '--chat-template', '/opt/glm53-1104/chat_template.jinja']
     if env.get('NO_DRAFTS') == '1':
         args.append('--no-drafts')
     else:
