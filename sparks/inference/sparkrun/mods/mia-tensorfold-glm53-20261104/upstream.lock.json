@@ -1,0 +1,37 @@
+{
+  "kit_date": "20261104",
+  "kit_repository": "MiaAI-Lab/GLM-5.3-Flash-DGX-Sparks-1104",
+  "kit_revision": "138123c6f7f7ad6563382fec7b7af8d7e8825ebe",
+  "kit_patch_count": 106,
+  "kit_patches_sha256": "9233337d9b141f14df1bda5f820436cc950488b0fb00dec3e5ee653e77db6663",
+  "engine_repository": "ashhart/TensorFold",
+  "engine_revision": "f350cd3ea253a042e205746928271f9d8f71a82d",
+  "image": "glm53-tf:20261104-138123c-9233337d9b14",
+  "image_id": "sha256:9f8a522109d27c70bef3207bd520c31b73fa50d1406dc687294f5ac4b208f339",
+  "weights": {
+    "repository": "Mia-AiLab/GLM-5.3-Flash-EXL3-4bpw-TensorFold",
+    "revision": "078455ffe6472f9a52fbc1139f58b9db2881b25c"
+  },
+  "drafter": {
+    "repository": "incoai/GLM-5.3-Flash-DFlash2",
+    "revision": "bf582e4eacc1810f76656d1811693ff6c6737d2a"
+  },
+  "build": {
+    "base_image": "nvidia/cuda@sha256:afc92f9727f96346f2912934f11e5a43aa0581aca4a826bd5c8fd4ab6b152bcc",
+    "runtime_image": "nvidia/cuda@sha256:585155539dd4ff2ab653ee59d812aae81a9406a5804596d516c06e3a5719eb26",
+    "zig_version": "0.17.0",
+    "zig_sha256": "9e8d11661d4ae3bd57702a3832781e23ad151dde5798e16a5ccd503f65234ff8",
+    "zig_cpu": "cortex_a725+aes-mte-perfmon+sha2+sha3+sm4-spe"
+  },
+  "mod_files": {
+    "LICENSE": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+    "NOTICE.md": "238c1d6b94dcfb37534a93ff73e541d406fd6d8f9194f65dfcca870ce5368092",
+    "build/Dockerfile": "80c66effd74144eb6047c7604443603d2e53cd15bfcee7327fd242386b59ef11",
+    "build/build.sh": "c3db88a87e4d457568695b23ad92203d8aa772d81675b7890a7a6a213cd30b6f",
+    "capacity.py": "b68d86d3be708c62656c2daa4ca8dce743bacda4ab4859ef01a1746f2281e0db",
+    "chat_template.jinja": "15ff929998c3dd126addaa1448f7f811bb3724fe835f448ac889d8f558d034c8",
+    "prepare.py": "831091b852595ab4c63fcc4a573103ce19bc7820f9f4e5d5d476253fd0fffd2a",
+    "run.sh": "5f0ed574cb348d190f836d0352df69034e4216b13fd669bdf04d664527f5007b",
+    "serve.py": "04bbfd0d916c7e35aee97f26cf9ee1b18ce4cbbd9a393fbdabb709caebe5d0f1"
+  }
+}

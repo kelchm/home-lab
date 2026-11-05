@@ -1,0 +1,81 @@
+# Candidate only: native Zig/CUDA kit published as 1104; no host rollout is implied.
+recipe_version: '2'
+model: Mia-AiLab/GLM-5.3-Flash-EXL3-4bpw-TensorFold
+model_revision: 078455ffe6472f9a52fbc1139f58b9db2881b25c
+runtime: tensorfold
+container: sha256:9f8a522109d27c70bef3207bd520c31b73fa50d1406dc687294f5ac4b208f339
+min_nodes: 2
+max_nodes: 2
+metadata:
+  profile: glm53-exl3-tp2-mia-20261104-agent-1m
+  weights: mia
+  serving_profile: agent
+  status: candidate
+  description: Mia 1104 native Zig GLM kit, thinking retained, q8 dense/head, four
+    streams and FP8 shared KV pages; no NVMe prompt spill
+  kit_date: '20261104'
+  kit_revision: 138123c6f7f7ad6563382fec7b7af8d7e8825ebe
+  engine_revision: f350cd3ea253a042e205746928271f9d8f71a82d
+  upstream_patch_count: 106
+  target_model_revision: 078455ffe6472f9a52fbc1139f58b9db2881b25c
+  draft_model_revision: bf582e4eacc1810f76656d1811693ff6c6737d2a
+defaults:
+  tensor_parallel: 2
+  pipeline_parallel: 1
+  host: 0.0.0.0
+  port: 8888
+  served_model_name: GLM-5.3-Flash
+  context: 1048576
+  max_tokens: 32768
+  drafter: incoai/GLM-5.3-Flash-DFlash2
+  drafter_revision: bf582e4eacc1810f76656d1811693ff6c6737d2a
+  entrypoint: /usr/local/bin/tensorfold-entrypoint
+env:
+  TENSORFOLD_NO_UPDATE_CHECK: '1'
+  TENSORFOLD_NO_LIVE: '1'
+  TENSORFOLD_MEMORY_RESERVE_GIB: '12'
+  TENSORFOLD_PREFILL_SHARE: '0.68'
+  TF_GLM_DENSE_BITS: '8'
+  TF_GLM_HEAD_BITS: '8'
+  TF_GLM_CLEAR_THINKING: '0'
+  TF_KV_PAGES: 'on'
+  TF_GLM_CE_EXCHANGE: '0'
+  TF_GLM_ABSORB_MMA: '1'
+  TF_GLM_W8A8: '0'
+  TF_GLM_HOST_CACHE_GIB: '0'
+  TF_ROCE: '1'
+  TF_ROCE_MAX_KB: '4096'
+executor_config:
+  entrypoint: ''
+  user: root
+  ipc: host
+  shm_size: 16g
+  devices:
+  - /dev/infiniband
+  cap_add:
+  - IPC_LOCK
+  ulimit:
+  - memlock=-1:-1
+  - stack=67108864
+  - nofile=65535:65535
+  auto_remove: false
+runtime_cache:
+  key_by_image: true
+mods:
+- ../mods/tensorfold-readiness
+- ../mods/mia-tensorfold-glm53-20261104
+post_exec:
+- python3 /opt/glm53-20261104/capacity.py
+- python3 /opt/tensorfold-readiness/readiness.py --model GLM-5.3-Flash --context 1048576
+  --lanes 4 --efforts max,high,low,none
+distribution_config:
+  models:
+    entries:
+    - name: Mia-AiLab/GLM-5.3-Flash-EXL3-4bpw-TensorFold
+      revision: 078455ffe6472f9a52fbc1139f58b9db2881b25c
+      target:
+      - -1
+    - name: incoai/GLM-5.3-Flash-DFlash2
+      revision: bf582e4eacc1810f76656d1811693ff6c6737d2a
+      target:
+      - -1

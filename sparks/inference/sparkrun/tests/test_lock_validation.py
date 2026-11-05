@@ -22,6 +22,7 @@ MODS = {
     "qwen1": "mia-tensorfold-qwen38fn-tp1-656879fd",
     "qwen2": "mia-tensorfold-qwen38fn-v1.1-discovery",
     "glm": "mia-tensorfold-glm53-bf5f9452",
+    "glm-native": "mia-tensorfold-glm53-20261104",
     "deepseek": "bertholomus-tensorfold-dsv41-2970bcd-mia-fixes",
     "readiness": "tensorfold-readiness",
 }
@@ -71,6 +72,10 @@ def test_current_reviewed_sources_pass_and_cli_is_collectable_by_ci():
 # cross-file edits were already caught by profile tests; this shared layer adds
 # pin syntax/schema checks and applies agreement rules to every discovered owner.
 @pytest.mark.parametrize("kind,keys,value,error", [
+    ("glm-native", ("build", "runtime_image"), "nvidia/cuda:latest", "build.runtime_image"),
+    ("glm-native", ("kit_patches_sha256",), "0" * 64, "kit_patches_sha256.*zero"),
+    ("glm-native", ("kit_date",), "1104", "kit_date"),
+    ("glm-native", ("drafter", "revision"), "main", "drafter.revision"),
     ("qwen1", ("build", "base_image"), "nvcr.io/nvidia/pytorch:26.09-py3", "build.base_image"),
     ("qwen1", ("build", "pip_packages"), ["transformers", "av"], "exact-version"),
     ("qwen1", ("engine_revision",), "0" * 40, "engine_revision.*zero"),
