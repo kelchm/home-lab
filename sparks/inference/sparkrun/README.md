@@ -74,16 +74,13 @@ test "$failed" -eq 0
 
 ### Launch, stop and roll back
 
-From `~/sparkrun/recipes/glm53` on the head, after syncing this directory as in [Deploy](#deploy) and passing the [checks before a launch](#before-a-launch). Stop the running instance with its own recipe first:
+From `~/sparkrun/recipes/glm53` on the head, after syncing this directory as in [Deploy](#deploy) and passing the [checks before a launch](#before-a-launch). Prepare the target below without starting it. Stop the running instance with its own recipe before the later launch block:
 
 ```sh
 glm="$PWD/mia-tensorfold-glm53-exl3-tp2/glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable-readiness-v2.yaml"
 python3 mods/tensorfold-readiness-v2/prepare.py --check
 python3 mods/mia-tensorfold-glm53-bf5f9452/prepare.py --check
 sparkrun run "$glm" --cluster sparks --no-auto-detect --no-sync-tuning --no-follow --dry-run
-sparkrun run "$glm" --cluster sparks --no-auto-detect --no-sync-tuning --no-follow
-sparkrun logs "$glm" --cluster sparks --all-sources
-# For a planned stop, complete the rank-0 flush procedure below first.
 ```
 
 `run --no-follow` returns after the readiness hook passes: four streams, the window, at least 2,582,528 pool tokens, an active block spill tier, the C4 shape warmup, the discovery fields, the four levels and their renders, a reply on every stream and a tool call.
@@ -94,21 +91,53 @@ To launch the durable profile, point `glm` at its recipe and stop the running in
 
 The original durable recipe also fails unless the pool holds at least 2,582,528 tokens, so a smaller pool cannot pass unnoticed. When rolling back to it, confirm the tier is on after readiness: `/health` must carry a `spill` block, because the original bundle does not check it, and a second engine on the folder would turn the tier off.
 
-`glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable-readiness-v2.yaml` is the active durable profile; its readiness also checks the spill tier. It differs from the durable recipe only in its readiness bundle, `mods/tensorfold-readiness-v2`, and the `--require-spill` flag; the engine, weights, allocator, spill settings and pool floor are the same. With the flag, readiness fails unless `/health` reports `spill.format: blocks` with positive integer `cap_bytes` and `block_tokens`, both before the smoke replies and again at the end. Other profiles can use the v2 gate without requiring spill. HTTP failures remain fatal and retain the engine's diagnostic body. The launch command above selects it and checks the v2 bundle. The original durable recipe and `mods/tensorfold-readiness` stay unchanged for rollback. Passing readiness shows the engine opened the tier. The [November 6 live exercise](#november-6-bounded-live-exercise) separately verified restoration: the v2 profile resumed a conversation from disk after a clean stop, loading 19,200 tokens.
+`glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable-readiness-v2.yaml` is the active durable profile; its readiness also checks the spill tier. It differs from the durable recipe only in its readiness bundle, `mods/tensorfold-readiness-v2`, and the `--require-spill` flag; the engine, weights, allocator, spill settings and pool floor are the same. With the flag, readiness fails unless `/health` reports `spill.format: blocks` with positive integer `cap_bytes` and `block_tokens`, both before the smoke replies and again at the end. Other profiles can use the v2 gate without requiring spill. HTTP failures remain fatal and retain the engine's diagnostic body. The preparation block above selects it and checks the v2 bundle. The original durable recipe and `mods/tensorfold-readiness` stay unchanged for rollback. Passing readiness shows the engine opened the tier. The [November 6 live exercise](#november-6-bounded-live-exercise) separately verified restoration: the v2 profile resumed a conversation from disk after a clean stop, loading 19,200 tokens.
 
-Once the durable profile is running, stop it cleanly so a restart keeps what it holds. `sparkrun stop` removes containers with `docker rm -f`, and `docker stop` signals the container's `sleep infinity` rather than the engine, so neither runs the flush. With no request running, signal rank 0 only. It tells rank 1 to flush, and rank 1 has no handler of its own, so a signal there kills it mid-write. SparkRun stops each container when its engine exits, so read the logs with `docker cp`:
+Once the durable profile is running, stop it cleanly so a restart keeps what it holds. `sparkrun stop` removes containers with `docker rm -f`, and `docker stop` signals the container's `sleep infinity` rather than the engine, so neither runs the flush. For a running durable GLM instance, use the exact recipe that launched it as `running_glm`, then signal rank 0 only after the idle checks pass. For another model, use its own stop procedure; if no inference stack is running, skip this stop block. It tells rank 1 to flush, and rank 1 has no handler of its own, so a signal there kills it mid-write. SparkRun stops each container when its engine exits, so read the logs with `docker cp`:
 
 ```sh
-head=$(docker ps --filter label=sparkrun.rank=0 --format '{{.ID}}')
-worker=$(ssh kelchm@10.32.21.32 "docker ps --filter label=sparkrun.rank=1 --format '{{.ID}}'")
+set -euo pipefail
+running_glm="<absolute path to the preserved recipe that launched the current instance>"
+test -f "$running_glm"
+python3 - <<'PY_IDLE'
+import json, re, urllib.request
+health = json.load(urllib.request.urlopen("http://127.0.0.1:8888/health", timeout=3))
+assert health.get("ok") is True and health.get("busy") is False
+assert health.get("requests_running") == 0
+assert not any(health.get("streams", {}).get(key, 0) for key in ("decoding", "prefilling", "filling", "paused"))
+metrics = urllib.request.urlopen("http://127.0.0.1:8888/metrics", timeout=3).read().decode()
+for name in ("tensorfold:requests_running", "tensorfold:requests_waiting"):
+    values = re.findall(r"^" + name + r"(?:\{[^}]*\})?\s+(\S+)$", metrics, re.M)
+    assert len(values) == 1 and float(values[0]) == 0, (name, values)
+PY_IDLE
+head=$(docker ps --filter label=sparkrun.runtime=tensorfold --filter label=sparkrun.rank=0 --format '{{.ID}}')
+worker=$(ssh kelchm@10.32.21.32 "docker ps --filter label=sparkrun.runtime=tensorfold --filter label=sparkrun.rank=1 --format '{{.ID}}'")
+[[ "$head" =~ ^[0-9a-f]{12,64}$ && "$worker" =~ ^[0-9a-f]{12,64}$ ]]
 docker exec "$head" pkill -TERM -f "tensorfold serve"
 for i in $(seq 90); do docker exec "$head" pgrep -f "tensorfold serve" >/dev/null 2>&1 || break; sleep 1; done
-docker cp "$head:/tmp/sparkrun_serve.log" - | tar -xO | grep 'spill' | tail -3
-ssh kelchm@10.32.21.32 "docker cp $worker:/tmp/sparkrun_serve.log - | tar -xO | grep 'spill rank 1' | tail -2"
-sparkrun stop "$glm" --cluster sparks
+if docker exec "$head" pgrep -f "tensorfold serve" >/dev/null 2>&1; then echo "Engine did not finish its flush"; exit 1; fi
+docker cp "$head:/tmp/sparkrun_serve.log" - | tar -xO | grep -F 'spill: shutdown flush done'
+ssh kelchm@10.32.21.32 "docker cp $worker:/tmp/sparkrun_serve.log -" | tar -xO | grep -F 'spill rank 1: wrote the '
+sparkrun stop "$running_glm" --cluster sparks
 ```
 
 Expect `spill: shutdown flush done` from rank 0 and `spill rank 1: wrote the <n> kept prompts` from rank 1. This procedure was verified on November 6 before the preserved 0.3.10 workload was removed and during the isolated 0.4.2 trial; both ranks emitted their expected flush markers. States written before a `kill -9` also survive, so a crash loses only the newest rows waiting for their write.
+
+After stopping the old instance, complete [Before a launch](#before-a-launch), including GPU idle state, memory and the 60-second stable-link gate. The launch block also rejects surviving inference containers or GPU processes on either host, so it cannot overlap an existing stack:
+
+```sh
+set -euo pipefail
+head_containers=$(docker ps --filter label=sparkrun.runtime --format '{{.ID}}')
+worker_containers=$(ssh kelchm@10.32.21.32 "docker ps --filter label=sparkrun.runtime --format '{{.ID}}'")
+head_processes=$(nvidia-smi --query-compute-apps=pid --format=csv,noheader)
+worker_processes=$(ssh kelchm@10.32.21.32 'nvidia-smi --query-compute-apps=pid --format=csv,noheader')
+test -z "$head_containers"
+test -z "$worker_containers"
+test -z "$head_processes"
+test -z "$worker_processes"
+sparkrun run "$glm" --cluster sparks --no-auto-detect --no-sync-tuning --no-follow
+sparkrun logs "$glm" --cluster sparks --all-sources
+```
 
 To roll back, stop it with its own recipe and launch the profile that served before, as [Operate and roll back](#operate-and-roll-back) describes.
 
