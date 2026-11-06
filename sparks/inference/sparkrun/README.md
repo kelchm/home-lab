@@ -602,9 +602,7 @@ sparkrun cluster create sparks --hosts 10.32.21.31,10.32.21.32 --user kelchm --c
 
 Keep this venv on PATH for the commands here; the head's older SparkRun 0.3.9 in `~/.local/bin` stays untouched. A login shell puts `~/.local/bin` first, so export the venv's path and check that `sparkrun --version` reports 0.3.10 before a stop or launch. Benchmarks need `uvx` on PATH.
 
-### Qualify SparkRun 0.4.2
-
-#### November 6 hardening deployment
+### November 6 hardening deployment
 
 PRs [#1291](https://github.com/kelchm/home-lab/pull/1291) and [#1294](https://github.com/kelchm/home-lab/pull/1294) merged as `23506e03` and `01ce3011`. The merged adapter and v2 durable profile were deployed from `01ce3011` and are now selected for normal operation. The controller is still `~/.local/share/sparkrun-glm53-0310/bin/sparkrun` (0.3.10); 0.4.2 remains an isolated candidate with the qualification blockers below. The login-shell `~/.local/bin/sparkrun` remains 0.3.9. Global configuration points to the maintained `~/sparkrun/recipes/glm53/plugins`, explicitly retains `~/.cache/sparkrun/runtime-cache` and disables automatic runtime-cache pruning.
 
@@ -615,6 +613,8 @@ Acceptance passed images/short arrival, all 20 agent cases, tool-eval 100, strea
 An unintended stop occurred during preflight: `sparkrun stop --dry-run` on 0.3.10 removed both ranks because its CLI accepts the flag but does not forward it to `api.stop`. No active request was terminated: every healthy pre-stop sample had zero running requests and the request counter stayed at 89. The clean flush was bypassed, so this stop is not evidence of clean-stop persistence. The incident was retained, free GPUs and stable links were rechecked, and the staged profile was launched; the disk-restoration result above verifies the previously persisted conversation survived. Do not use 0.3.10 stop previews; planned stops still require the rank-0-only flush procedure.
 
 Private deployment receipts, the incident, telemetry and exact merged-file manifest are under `~/sparkrun/results/hardening-20261106T224925Z` on spark-1. The fresh working rollback tree, configuration, local metadata, package freezes and rank inspect records are under `~/sparkrun/rollback/hardening-20261106T224925Z`; the earlier qualification rollback remains intact. Restore only the preserved recipe/mod/adapter and configuration when needed; do not copy stale job metadata over a live workload. The earlier clean-stop/relaunch and rollback results below remain the qualification evidence; no additional inference restart was performed after deployment acceptance.
+
+### Qualify SparkRun 0.4.2
 
 #### November 6 bounded live exercise
 
@@ -707,7 +707,7 @@ sparkrun logs "$recipe" --cluster sparks --all-sources
 sparkrun stop "$recipe" --cluster sparks
 ```
 
-SparkRun 0.3.10's `stop --dry-run` is destructive: its CLI accepts the flag but does not forward it to `api.stop`, so it removes the workload. This was observed during the November 6 hardening deployment with both ranks idle. Use `status` and read-only container inspection to check the intended targets; perform the durable rank-0 flush before an actual stop. The isolated 0.4.2 stop previews in the qualification below were exercised separately.
+SparkRun 0.3.10's `stop --dry-run` is destructive: its CLI accepts the flag but does not forward it to `api.stop`, so it removes the workload. This was observed during the November 6 hardening deployment with both ranks idle. Use `status` and read-only container inspection to check the intended targets; perform the durable rank-0 flush before an actual stop. The isolated 0.4.2 stop previews in the qualification above were exercised separately.
 
 Without `--all-sources`, `logs` reads only rank 0. For a one-node profile, pass `--hosts` with the head's address instead of `--cluster sparks`, as [Enable TensorFold in SparkRun](#enable-tensorfold-in-sparkrun) explains. `run --no-follow` waits for readiness because every recipe has `post_exec`. A failed hook makes the command fail but does not stop the server; read the logs and stop the failed instance before rolling back. Containers need an explicit SparkRun launch after a host reboot.
 
