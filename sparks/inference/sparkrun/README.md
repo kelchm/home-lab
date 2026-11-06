@@ -202,7 +202,14 @@ The native TP watch line uses SparkRun's `MASTER_PORT` (25000 by default), and N
 
 No candidate launch is authorized or performed by this change. An owner-approved idle window, the [before-launch checks](#before-a-launch), and full-size pings on both CX7 rails are required. The scoped memory guard is part of the new rank entrypoint; the existing full-size rail check remains a manual gate. Neither Mia's `start.sh` nor `stop.sh` runs under SparkRun, and this does not install a host-wide guard or complete [#944](https://github.com/kelchm/home-lab/issues/944).
 
-After syncing the recipes/mods and passing those checks, stop the current **durable** instance using its own [flush and stop procedure](#launch-stop-and-roll-back). Load the local image on the head only after both GPUs are idle; SparkRun copies it to the worker. From the workstation:
+After syncing the recipes/mods, validate the staged tree on the head while the current service is still running:
+
+```sh
+cd ~/sparkrun/recipes/glm53 &&
+  python3 validate_locks.py
+```
+
+Resolve every validation failure before stopping the current service. A sync can leave retired recipes behind, so validating only the workstation checkout is insufficient. After this validation and the before-launch checks pass, stop the current **durable** instance using its own [flush and stop procedure](#launch-stop-and-roll-back). Load the local image on the head only after both GPUs are idle; SparkRun copies it to the worker. From the workstation:
 
 ```sh
 DOCKER_CONTEXT=colima-tf-build docker save glm53-tf:1104-138123c-9233337d9b14 | ssh kelchm@10.32.21.31 docker load
