@@ -139,8 +139,10 @@ def tool_call(url, model):
 
 
 def render(url, model, effort):
-    body = fetch(url + "/tokenize", {"model": model, "messages": PROMPT, "reasoning_effort": effort,
-                                     "add_generation_prompt": True})
+    request = {"model": model, "messages": PROMPT, "add_generation_prompt": True}
+    if effort is not None:
+        request["reasoning_effort"] = effort
+    body = fetch(url + "/tokenize", request)
     tokens = body.get("tokens")
     if not isinstance(tokens, list) or not tokens:
         raise RuntimeError(f"/tokenize returned no tokens for {effort!r}: {body!r}")
@@ -166,8 +168,15 @@ def check_renders(url, model, efforts):
             if error.code != 404:
                 raise
             missing.append(effort)
-    if missing and not rendered:   # no /tokenize route at all
-        return None
+    if missing and not rendered:
+        # A successful default render proves the route exists even when every named level gets a 404.
+        try:
+            render(url, model, None)
+        except urllib.error.HTTPError as error:
+            if error.code == 404:
+                return None
+            raise
+        raise RuntimeError(f"/tokenize renders the default but refuses all advertised levels {missing}")
     if missing:
         raise RuntimeError(f"/tokenize refuses advertised levels {missing} and renders {sorted(rendered)}")
     if len(set(rendered.values())) != len(rendered):

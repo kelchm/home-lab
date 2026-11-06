@@ -66,9 +66,9 @@ class Fake(BaseHTTPRequestHandler):
         if self.path == "/tokenize":
             if not type(self).tokenize:
                 return self._send(404, {"error": "not found"})
-            if body["reasoning_effort"] in type(self).missing:
+            if body.get("reasoning_effort") in type(self).missing:
                 return self._send(404, {"error": "not found"})
-            effort = NEAREST.get(body["reasoning_effort"], body["reasoning_effort"])
+            effort = NEAREST.get(body.get("reasoning_effort", "max"), body.get("reasoning_effort", "max"))
             return self._send(200, {"count": 3, "tokens": [1, 2, type(self).levels[effort]]})
         if body.get("tools"):
             call = {"id": "c1", "type": "function", "function": {"name": "get_weather", "arguments": '{"city": "Oslo, Norway"}'}}
@@ -189,6 +189,20 @@ def test_v2_handles_a_none_only_reasoning_contract(server):
     result = gate(url, "none", bundle=V2_MOD)
     assert result.returncode == 0, result.stderr
     assert '"max": "none"' in result.stdout
+
+
+def test_v2_rejects_all_named_render_404s_when_the_default_render_works(server):
+    handler, url = server
+    handler.missing = tuple(LEVELS)
+    result = gate(url, bundle=V2_MOD)
+    assert result.returncode != 0 and "renders the default but refuses all advertised levels" in result.stderr
+
+
+def test_v2_preserves_compatibility_with_a_missing_tokenize_route(server):
+    handler, url = server
+    handler.tokenize = False
+    result = gate(url, bundle=V2_MOD)
+    assert result.returncode == 0 and "no /tokenize route" in result.stdout
 
 
 @pytest.mark.parametrize("option", ["--check", "--record"])
