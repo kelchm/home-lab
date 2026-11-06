@@ -230,6 +230,8 @@ Roll back with the retained inputs for `glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-du
 
 ### Qualification still required
 
+Use the [GLM qualification harness](qualification/README.md) to generate reproducible fixtures, run the bounded four-agent tool workload and validate retained evidence. It requires explicit endpoints, never switches profiles or runs large capacity/restart probes automatically, and leaves unmeasured capabilities and adoption status unknown. A single timing pair cannot qualify an improvement.
+
 Track the evaluation and adoption decisions in [#1280](https://github.com/kelchm/home-lab/issues/1280), a child of #938. The next step is off-host implementation of the no-regression qualification contract, memory accounting, API/media parity and durable native checkpoints. Hardware qualification follows only after those prerequisites are met and an owner-approved idle window and recovery procedure are agreed.
 
 Before promoting this profile, record the build/image identity and driver compatibility on the Sparks; confirm the full 1M window, four streams, both RoCE rails, pool/cache sizes and memory floor on **both** ranks. Verify the scoped guard and TP peer-stop behavior without inducing host memory exhaustion. Its local supervisor tests do not establish recovery on real Sparks or solve the wider freeze-recovery question in #944.
