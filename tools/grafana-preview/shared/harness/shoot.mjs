@@ -3,9 +3,12 @@ import { build } from 'esbuild';
 import fs from 'node:fs';
 import { chromium, launchOptions } from '../../checks/playwright.mjs';
 import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const here = path.dirname(new URL(import.meta.url).pathname);
+const here = path.dirname(fileURLToPath(import.meta.url));
 
+const specs = process.argv.slice(2);
+if (!specs.length) throw new Error('Provide at least one capture spec: name|query|width|height|full');
 const site = path.join(here, 'out');
 fs.mkdirSync(site, { recursive: true });
 await build({ entryPoints: [path.join(here, 'harness.tsx')], bundle: true, outfile: path.join(site, 'bundle.js'), format: 'iife', platform: 'browser', target: 'es2022', jsx: 'automatic', define: { 'process.env.NODE_ENV': '"development"' }, loader: { '.json': 'json' } });
@@ -15,17 +18,27 @@ const out = process.env.OUT ?? path.join(here, '../evidence');
 fs.mkdirSync(out, { recursive: true });
 const browser = await chromium.launch(launchOptions);
 const problems = [];
-for (const spec of process.argv.slice(2)) {
-  const [name, query, width = '1440', height = '900', full = 'full'] = spec.split('|');
-  const page = await browser.newPage({ viewport: { width: Number(width), height: Number(height) }, deviceScaleFactor: 1 });
-  page.on('pageerror', (e) => problems.push(`${name}: ${e.message}`));
-  page.on('console', (m) => m.type() === 'error' && problems.push(`${name}: ${m.text()}`));
-  await page.goto(`file://${site}/index.html?${query}`);
-  await page.waitForTimeout(350);
-  await page.screenshot({ path: path.join(out, `${name}.png`), fullPage: full === 'full' });
-  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
-  if (overflow > 0) problems.push(`${name}: page overflows sideways by ${overflow}px`);
-  await page.close();
+try {
+  for (const spec of specs) {
+    const [name, query, width = '1440', height = '900', full = 'full'] = spec.split('|');
+    const page = await browser.newPage({ viewport: { width: Number(width), height: Number(height) }, deviceScaleFactor: 1 });
+    page.on('pageerror', (e) => problems.push(`${name}: ${e.message}`));
+    page.on('console', (m) => m.type() === 'error' && problems.push(`${name}: ${m.text()}`));
+    const target = pathToFileURL(path.join(site, 'index.html'));
+    target.search = query ?? '';
+    await page.goto(target.href);
+    await page.waitForSelector('[data-view]');
+    await page.screenshot({ path: path.join(out, `${name}.png`), fullPage: full === 'full' });
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    if (overflow > 0) problems.push(`${name}: page overflows sideways by ${overflow}px`);
+    await page.close();
+  }
+} finally {
+  await browser.close();
 }
-await browser.close();
-console.log(problems.length ? problems.join('\n') : 'no page errors, console errors or sideways overflow');
+if (problems.length) {
+  console.error(problems.join('\n'));
+  process.exitCode = 1;
+} else {
+  console.log('no page errors, console errors or sideways overflow');
+}

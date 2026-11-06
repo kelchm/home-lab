@@ -34,6 +34,7 @@ test('updated common expressions retain original capture provenance and failure 
   const entries = assemble([query('D_test_up', { expr, capture: { kind: 'catalog', key: 'H_up' } })], { common: [query('H_up', { expr })] });
   assert.equal(entries.length, 1);
   assert.deepEqual(entries[0].aliases, ['H_up', 'D_test_up']);
+  assert.equal(entries[0].provenance.length, 2);
   assert(entries[0].provenance.every((p) => p.executedExpr === 'sum(up)' && p.aliasDiffers));
   const compiled = compileCatalog(entries);
   assert.equal(findEntry(compiled, expr, false), findEntry(compiled, 'sum(up)', false));
@@ -122,4 +123,55 @@ test('two HTTP lanes isolate failure/empty/delay/cancel controls and scope reque
   await control(0, {});
   assert.equal((await (await q(0)).json()).data.result.length, 1);
   assert.equal((await control(0, { failRefs: '[' })).status, 400);
+  for (const endpoint of ['/api/v1/typo?match[]=up', '/oops/query?query=sum(up)', '/api/v1/seriez']) {
+    const response = await fetch(urls[0] + endpoint);
+    assert.equal(response.status, 404);
+    assert.equal((await response.json()).status, 'error');
+  }
+  assert.deepEqual((await (await fetch(urls[0] + '/api/v1/series?match[]=up')).json()).data, []);
+  assert.deepEqual((await (await fetch(urls[0] + '/api/v1/labels?match[]=up')).json()).data, []);
+});
+
+test('inference responses retain disjoint segments and default gaps clip each response locally', () => {
+  const expr = 'captured_metric';
+  const response = (from, to, times, values) => ({
+    request: { from, to, queries: [{ refId: 'A', expr, range: true }] },
+    results: { A: { status: 200, frames: [{ schema: { fields: [{ type: 'time', config: { interval: 1000 } }, { type: 'number', labels: { instance: 'node' } }] }, data: { values: [times, values] } }] } },
+  });
+  const inference = [response(1000, 5000, [0, 1000, 2000, 3000, 4000, 5000], [9, 0, 1, 2, 3, 4]), response(101000, 105000, [101000, 102000, 103000, 104000, 105000, 106000], [5, 6, 7, 8, 9, 10])];
+  const entry = assemble([query('D_history', { expr, range: true, instant: false, capture: { kind: 'inference', key: `expr:${expressionHash(expr)}` } })], { inference })[1];
+  assert.equal(entry.segments.length, 2);
+  assert.equal(entry.provenance.length, 2);
+  assert.deepEqual(entry.segments.map((segment) => segment.window), [{ from: 1000, to: 5000 }, { from: 101000, to: 105000 }]);
+  assert.deepEqual(entry.series[0].t, [1000, 2000, 3000, 4000, 5000, 101000, 102000, 103000, 104000, 105000]);
+  const result = replay(entry, { range: true, start: 0, end: 200000, state: { gapRefs: 'D_history' } });
+  assert.deepEqual(result[0].values, [[1, '0'], [2, '1'], [4, '3'], [5, '4'], [101, '5'], [102, '6'], [104, '8'], [105, '9']]);
+  const explicit = replay(entry, { range: true, start: 0, end: 200000, state: { gapRefs: 'D_history', gapWindow: { from: 102000, to: 104000 } } });
+  assert(explicit[0].values.some(([t]) => t === 3));
+  assert(!explicit[0].values.some(([t]) => t >= 102 && t <= 104));
+});
+
+test('a later errored inference segment cannot erase earlier evidence or borrow its instant answer', () => {
+  const expr = 'instant_metric';
+  const inference = [
+    { request: { from: 1000, to: 2000, queries: [{ refId: 'A', expr, range: false }] }, results: { A: { status: 200, frames: [{ schema: { fields: [{ type: 'time' }, { type: 'number' }] }, data: { values: [[2000], [0]] } }] } } },
+    { request: { from: 8000, to: 9000, queries: [{ refId: 'A', expr, range: false }] }, results: { A: { status: 503, error: 'captured failure' } } },
+  ];
+  const entry = assemble([query('D_instant', { expr, capture: { kind: 'inference', key: `expr:${expressionHash(expr)}` } })], { inference })[1];
+  assert.equal(entry.segments[1].error, 'captured failure');
+  assert.equal(entry.provenance[1].error, 'captured failure');
+  assert.deepEqual(replay(entry, { time: 2000, range: false })[0].value, [2, '0']);
+  assert.deepEqual(replay(entry, { time: 9000, range: false }), []);
+});
+
+test('real instant captures answer only at their captured window end', () => {
+  const entries = assembleCatalog({ base: read('runtime/catalog.json'), commonWindow: read('runtime/queries.json').window, bounded: read('fixtures/bounded.json'), inference: read('fixtures/inference.json'), domains: [] });
+  const instant = entries.filter((entry) => !entry.range && entry.series.length);
+  assert(instant.length > 0);
+  for (const entry of instant) {
+    assert(entry.segments.every((segment) => segment.series.every((series) => series.t.every((t) => t === segment.window.to))));
+    assert.deepEqual(replay(entry, { range: false, time: entry.window.to - 1 }), []);
+    assert.deepEqual(replay(entry, { range: false, time: entry.window.to + 1 }), []);
+    assert(replay(entry, { range: false, time: entry.window.to }).length > 0);
+  }
 });

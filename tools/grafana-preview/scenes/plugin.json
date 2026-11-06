@@ -30,7 +30,7 @@
     }
   ],
   "dependencies": {
-    "grafanaDependency": ">=13.2.0",
+    "grafanaDependency": ">=13.3.0",
     "plugins": []
   }
 }

@@ -52,7 +52,7 @@ try {
   await shot(a, 'home-failure');
   const unchanged = await load(b, 'test-b');
   check('lane-a failure leaves lane-b state unchanged', unchanged.state === healthyB.state && unchanged.freshness === healthyB.freshness && !unchanged.errored, unchanged);
-  const bErrors = await (await fetch(lanes['test-b'].fixture + '/logs?phase=error')).json();
+  const bErrors = await (await fetch(lanes['test-b'].fixture + `/logs?phase=error&since=${startedAt}`)).json();
   check('lane-b upstream logs contain no injected error', bErrors.length === 0);
 
   await control('test-a', { emptyRefs: '^(H_|M_|R_)' });
@@ -87,10 +87,20 @@ try {
   const v2Queries = requests.slice(v2Offset).flatMap((r) => r.queries ?? []);
   check('native v2 copy actually queries the selected live datasource after reload', v2Queries.length > 0 && v2Queries.every((q) => q.datasource?.uid === 'comparison-live'), { count: v2Queries.length, datasources: [...new Set(v2Queries.map((q) => q.datasource?.uid))] });
   check('no JavaScript exceptions', errors.length === 0, errors);
+} catch (error) {
+  check('smoke completed', false, { message: error.message, stack: error.stack });
 } finally {
-  await control('test-a', {}); await control('test-b', {});
-  await browser.close();
-  for (const lane of ['test-a', 'test-b']) fs.writeFileSync(path.join(out, `${lane}-requests.json`), JSON.stringify(await (await fetch(lanes[lane].fixture + `/logs?since=${startedAt}`)).json(), null, 2));
+  const resets = await Promise.allSettled(['test-a', 'test-b'].map((lane) => control(lane, {})));
+  resets.forEach((result, i) => { if (result.status === 'rejected') check(`${['test-a', 'test-b'][i]} controls reset`, false, result.reason.message); });
+  try { await browser.close(); }
+  catch (error) { check('browser closes', false, error.message); }
+  for (const lane of ['test-a', 'test-b']) {
+    try {
+      const response = await fetch(lanes[lane].fixture + `/logs?since=${startedAt}`);
+      if (!response.ok) throw new Error(`Logs returned HTTP ${response.status}`);
+      fs.writeFileSync(path.join(out, `${lane}-requests.json`), JSON.stringify(await response.json(), null, 2));
+    } catch (error) { check(`${lane} request evidence saved`, false, error.message); }
+  }
   fs.writeFileSync(path.join(out, 'smoke.json'), JSON.stringify({ checks, errors, requests }, null, 2));
 }
 if (checks.some((c) => !c.ok)) process.exitCode = 1;

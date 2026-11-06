@@ -2,8 +2,9 @@
 import assert from 'node:assert/strict';
 import { chromium, launchOptions } from '../../checks/playwright.mjs';
 import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const here = path.dirname(new URL(import.meta.url).pathname);
+const here = path.dirname(fileURLToPath(import.meta.url));
 const browser = await chromium.launch(launchOptions);
 
 const measure = () => {
@@ -40,21 +41,28 @@ const measure = () => {
 };
 
 const failures = [];
-for (const width of [390, 728, 1100, 1440]) {
-  for (const layout of ['native', 'scenes']) {
-    for (const focus of ['Overview', 'Network']) {
-      for (const fail of ['', '%5EH_', '.']) {
-        const page = await browser.newPage({ viewport: { width, height: 900 } });
-        await page.goto(`file://${here}/out/index.html?layout=${layout}&focus=${focus}&fail=${fail}`);
-        await page.waitForTimeout(250);
-        const { problems, fits } = await page.evaluate(measure);
-        console.log(`${width} ${layout} ${focus} fail=${fail || 'none'}: ${problems.length ? problems.join('; ') : 'ok'}${fits.length ? ` [${fits.join(', ')}]` : ''}`);
-        failures.push(...problems);
-        await page.close();
+try {
+  for (const width of [390, 728, 1100, 1440]) {
+    for (const layout of ['native', 'scenes']) {
+      for (const focus of ['Overview', 'Network']) {
+        for (const fail of ['', '%5EH_', '.']) {
+          const page = await browser.newPage({ viewport: { width, height: 900 } });
+          const target = pathToFileURL(path.join(here, 'out/index.html'));
+          target.search = `layout=${layout}&focus=${focus}&fail=${fail}`;
+          await page.goto(target.href);
+          await page.waitForSelector('[data-view] .fit');
+          await page.evaluate(() => document.fonts.ready);
+          const { problems, fits } = await page.evaluate(measure);
+          assert(fits.length > 0, `${width} ${layout} ${focus}: no layout surfaces measured`);
+          console.log(`${width} ${layout} ${focus} fail=${fail || 'none'}: ${problems.length ? problems.join('; ') : 'ok'}${fits.length ? ` [${fits.join(', ')}]` : ''}`);
+          failures.push(...problems);
+          await page.close();
+        }
       }
     }
   }
+} finally {
+  await browser.close();
 }
-await browser.close();
 assert.equal(failures.length, 0, `${failures.length} layout problems`);
 console.log('layout check passed');

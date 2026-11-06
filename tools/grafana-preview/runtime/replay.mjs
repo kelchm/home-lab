@@ -53,7 +53,15 @@ export function inferenceCaptures(responses) {
       const mapKey = `${key}:${Boolean(range)}`;
       const previous = captures.get(mapKey);
       const evidence = { file: 'fixtures/inference.json', responseIndex, ref, executedExpr, executedExprHash: expressionHash(executedExpr), requestExpr: query?.expr ?? null, window };
-      captures.set(mapKey, { expr: executedExpr, range: Boolean(range), window, series: mergeSeries([previous?.series ?? [], clipSeries(series, window)]), provenance: [...(previous?.provenance ?? []), evidence], error: result.error ?? (result.status >= 400 ? `Captured HTTP ${result.status}` : null) });
+      const error = result.error ?? (result.status >= 400 ? `Captured HTTP ${result.status}` : null);
+      const segments = [...(previous?.segments ?? []), { window, series: error ? [] : clipSeries(series, window), ...(error ? { error } : {}) }];
+      captures.set(mapKey, {
+        expr: executedExpr, range: Boolean(range),
+        window: { from: Math.min(...segments.map((s) => s.window.from)), to: Math.max(...segments.map((s) => s.window.to)) },
+        series: mergeSeries(segments.map((s) => s.series)), segments,
+        provenance: [...(previous?.provenance ?? []), { ...evidence, ...(error ? { error } : {}) }],
+        error: segments.every((s) => s.error) ? error : null,
+      });
     }
   }
   return captures;
@@ -84,10 +92,11 @@ export function assembleCatalog({ base, commonWindow, bounded, inference, domain
         capture = { ...e, window, provenance: [{ file: 'fixtures/bounded.json', key: locator.key, kind, fetchedAt: bounded.fetchedAt, executedExpr: e.expr, executedExprHash: expressionHash(e.expr), window }] };
       }
     } else if (locator.kind === 'inference') capture = inferred.get(`${locator.key}:${q.range}`);
-    const series = capture && !capture.error ? clipSeries(capture.series ?? [], capture.window) : [];
+    const segments = !capture ? [] : capture.segments ?? [{ window: capture.window, series: capture.error ? [] : clipSeries(capture.series ?? [], capture.window), ...(capture.error ? { error: capture.error } : {}) }];
+    const series = mergeSeries(segments.map((segment) => segment.series));
     return {
       ...q, aliases: [q.refId], expressions: [...new Set([q.expr, capture?.expr].filter(Boolean))], series, window: capture?.window ?? null,
-      segments: capture ? [{ window: capture.window, series }] : [],
+      segments,
       captureStatus: !capture ? 'missing' : capture.error ? 'captured-error' : series.length ? 'captured' : 'captured-empty',
       provenance: (capture?.provenance ?? []).map((e) => ({ ...e, aliasDiffers: canonical(q.expr) !== canonical(e.executedExpr), locator })),
       ...(capture?.error ? { captureError: capture.error } : {}),
@@ -117,13 +126,18 @@ export function replay(entry, { range, start, end, time, state = {} }) {
   if (!entry || matchesRef(entry, state.emptyRefs)) return [];
   // Never turn old captured samples into current facts.
   if (!range && entry.window && (time < entry.window.from || time > entry.window.to)) return [];
-  const gap = state.gapWindow ?? (entry.window && { from: entry.window.from + (entry.window.to - entry.window.from) * .4, to: entry.window.from + (entry.window.to - entry.window.from) * .6 });
-  // Equal expressions may have captures from disjoint dates. An instant answer cannot borrow the earlier window's labels or values.
-  const series = !range && entry.segments ? mergeSeries(entry.segments.filter((s) => time >= s.window.from && time <= s.window.to).map((s) => s.series)) : entry.series;
+  // Gap injection is local to each dated capture, including aliases with widely separated windows.
+  const segments = entry.segments ?? [{ window: entry.window, series: entry.series }];
+  const series = mergeSeries(segments.filter((segment) => !segment.error && (range || !segment.window || time >= segment.window.from && time <= segment.window.to)).map((segment) => {
+    const gap = state.gapWindow ?? (segment.window && { from: segment.window.from + (segment.window.to - segment.window.from) * .4, to: segment.window.from + (segment.window.to - segment.window.from) * .6 });
+    return segment.series.map((s) => {
+      const points = s.t.map((t, i) => [t, s.v[i]]).filter(([t]) => !matchesRef(entry, state.gapRefs) || !gap || t < gap.from || t > gap.to);
+      return { ...s, t: points.map(([t]) => t), v: points.map(([, v]) => v) };
+    });
+  }));
   return series.filter((s) => !state.missingEntity || !Object.values(s.labels).includes(state.missingEntity)).map((s) => {
     const points = s.t.map((t, i) => [t, s.v[i]])
-      .filter(([t, v]) => v != null && Number.isFinite(v) && (range ? t >= start && t <= end : t <= time))
-      .filter(([t]) => !matchesRef(entry, state.gapRefs) || !gap || t < gap.from || t > gap.to);
+      .filter(([t, v]) => v != null && Number.isFinite(v) && (range ? t >= start && t <= end : t <= time));
     if (!points.length) return null;
     return range ? { metric: s.labels, values: points.map(([t, v]) => [t / 1000, String(v)]) } : { metric: s.labels, value: [points.at(-1)[0] / 1000, String(points.at(-1)[1])] };
   }).filter(Boolean);

@@ -32,18 +32,21 @@ export function createReplayServer({ catalog, stateDir, logDir = stateDir, lane 
         const events = fs.existsSync(logFile) ? fs.readFileSync(logFile, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse) : [];
         return send(res, 200, events.filter((e) => (!url.searchParams.has('since') || e.at >= Number(url.searchParams.get('since'))) && (!url.searchParams.has('ref') || e.aliases?.includes(url.searchParams.get('ref'))) && (!url.searchParams.has('phase') || e.phase === url.searchParams.get('phase'))).slice(-1000));
       }
-      if (url.pathname.endsWith('/status/buildinfo')) return ok(res, { version: '2.55.0', application: 'dated-observability-replay' });
+      if (url.pathname === '/api/v1/status/buildinfo') return ok(res, { version: '2.55.0', application: 'dated-observability-replay' });
       const p = new URLSearchParams(url.search); new URLSearchParams(body).forEach((v, k) => p.set(k, v));
-      if (url.pathname.endsWith('/metadata')) return ok(res, {});
-      const range = url.pathname.endsWith('/query_range');
-      if (!range && !url.pathname.endsWith('/query')) {
-        const label = url.pathname.match(/\/label\/([^/]+)\/values$/)?.[1];
+      if (url.pathname === '/api/v1/metadata') return ok(res, {});
+      const range = url.pathname === '/api/v1/query_range';
+      if (!range && url.pathname !== '/api/v1/query') {
+        const label = url.pathname.match(/^\/api\/v1\/label\/([^/]+)\/values$/)?.[1];
         const all = compiled.flatMap((e) => e.series);
         // An unimplemented matcher must not return inventory from other systems.
-        if (p.has('match[]')) return ok(res, []);
+        const labels = url.pathname === '/api/v1/labels';
+        const series = url.pathname === '/api/v1/series';
+        if ((label || labels || series) && p.has('match[]')) return ok(res, []);
+        if (series) return ok(res, []);
         if (label) return ok(res, [...new Set(all.map((s) => s.labels[decodeURIComponent(label)]).filter((v) => v != null))].sort());
-        if (url.pathname.endsWith('/labels')) return ok(res, [...new Set(all.flatMap((s) => Object.keys(s.labels)))].sort());
-        return ok(res, []);
+        if (labels) return ok(res, [...new Set(all.flatMap((s) => Object.keys(s.labels)))].sort());
+        return send(res, 404, { status: 'error', errorType: 'not_found', error: `Unsupported replay endpoint: ${url.pathname}` });
       }
       const expr = p.get('query') ?? '', entry = findEntry(compiled, expr, range), s = state();
       const event = { rid: randomUUID(), ref: entry?.refId ?? null, aliases: entry?.aliases ?? [], range, expr, captureStatus: entry?.captureStatus ?? 'unmatched', start: p.get('start'), end: p.get('end'), time: p.get('time') };

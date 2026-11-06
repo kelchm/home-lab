@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { observeDatasource } from './datasource.mjs';
 import { chromium, launchOptions } from './playwright.mjs';
 
 const base = new URL(process.env.BASE ?? 'http://127.0.0.1:3431/a/homelab-observability-app/explore');
@@ -9,27 +10,14 @@ assert(['localhost', '127.0.0.1'].includes(base.hostname), 'Only use the isolate
 base.search = '?source=live&from=now-24h&to=now';
 const out = path.resolve(process.env.EVIDENCE ?? 'evidence/live');
 fs.mkdirSync(out, { recursive: true });
-const started = Date.now(), responses = [], errors = [], views = [], requests = [];
+const started = Date.now(), errors = [], views = [], requests = [];
 const browser = await chromium.launch(launchOptions);
 const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
 page.on('pageerror', (error) => errors.push(error.message));
 page.on('request', (request) => {
   if (request.url().includes('/api/ds/query')) requests.push(...(request.postDataJSON()?.queries ?? []).map(({ refId, datasource }) => ({ refId, datasource: datasource?.uid })));
 });
-page.on('response', async (response) => {
-  if (!response.url().includes('/api/ds/query')) return;
-  try {
-    const body = await response.json();
-    responses.push({ status: response.status(), results: Object.entries(body.results ?? {}).map(([ref, result]) => ({
-      ref, status: result.status, error: result.error, frames: result.frames?.length ?? 0,
-      rows: (result.frames ?? []).reduce((sum, frame) => sum + (frame.data?.values?.[0]?.length ?? 0), 0),
-      latest: Math.max(0, ...(result.frames ?? []).flatMap((frame) => {
-        const i = frame.schema?.fields?.findIndex((field) => field.type === 'time');
-        return i >= 0 ? (frame.data?.values?.[i] ?? []) : [];
-      })),
-    })) });
-  } catch (error) { errors.push(`Query response: ${error.message}`); }
-});
+const datasource = observeDatasource(page);
 
 try {
   await page.goto(base.href, { waitUntil: 'domcontentloaded' });
@@ -37,6 +25,7 @@ try {
     if (focus !== 'Overview') await page.locator(`a[data-system="${focus}"]`).click();
     await page.waitForSelector(`[data-host="scenes"][data-focus="${focus}"]`);
     await page.waitForLoadState('networkidle');
+    await datasource.drain();
     if (focus !== 'Overview') await page.waitForFunction(() => document.querySelector('.lab-domain')?.getAttribute('data-freshness') !== 'loading');
     const params = new URL(page.url()).searchParams;
     assert.equal(params.get('source'), 'live');
@@ -46,17 +35,21 @@ try {
     console.log(`Visited ${focus} with live datasource`);
   }
 } catch (error) { errors.push(error.message); }
-finally { await browser.close(); }
+finally {
+  await datasource.drain();
+  try { await browser.close(); } catch (error) { errors.push(`Browser cleanup: ${error.message}`); }
+}
+const responses = datasource.responses;
 
 const results = responses.flatMap((response) => response.results);
 const checks = {
   allViews: views.length === 8,
   allQueriesLive: requests.length > 0 && requests.every((query) => query.datasource === 'comparison-live'),
-  transport: responses.length > 0 && responses.every((response) => response.status === 200),
-  evaluation: results.every((result) => !result.error && (result.status == null || result.status === 200)),
+  transport: datasource.transportOk,
+  evaluation: datasource.evaluationOk,
   currentEvidence: results.some((result) => result.latest >= started - 300000),
   noExceptions: errors.length === 0,
 };
-fs.writeFileSync(path.join(out, 'live.json'), JSON.stringify({ started, checks, views, requests, responses, errors }, null, 2));
+fs.writeFileSync(path.join(out, 'live.json'), JSON.stringify({ started, checks, views, requests, responses, errors, transportFailures: datasource.failures, inFlight: datasource.inFlight, abortedNavigations: datasource.abortedNavigations }, null, 2));
 console.log(JSON.stringify({ checks, requests: requests.length, populated: results.filter((result) => result.rows > 0).length, empty: results.filter((result) => result.rows === 0).length, errors }, null, 2));
 if (Object.values(checks).some((ok) => !ok)) process.exitCode = 1;

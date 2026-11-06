@@ -89,6 +89,7 @@ function App() {
           ) : (
             <>
               {stack(19, view('activity', true))}
+              {stack(13, view('checks', true))}
               {stack(19, view('review', true))}
               {stack(18, view('machines', true))}
             </>

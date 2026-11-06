@@ -2,10 +2,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { observeDatasource } from '../../../checks/datasource.mjs';
 import { chromium, launchOptions } from '../../../checks/playwright.mjs';
 
 const LANE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const OUT = path.join(LANE, 'evidence');
+const OUT = path.resolve(process.env.EVIDENCE ?? path.join(LANE, 'evidence'));
 const BASE = process.env.BASE;
 if (!BASE || !['127.0.0.1', 'localhost'].includes(new URL(BASE).hostname)) throw new Error('Set BASE to the isolated localhost preview URL.');
 const commonQueries = JSON.parse(fs.readFileSync(path.join(LANE, '../runtime/queries.json'), 'utf8')).common;
@@ -20,18 +21,22 @@ const check = (name, ok, detail) => {
   console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}${detail === undefined ? '' : ` :: ${JSON.stringify(detail)}`}`);
 };
 
+const monitors = new Map();
+const browsers = new Set();
 const offset = () => requestedRefs.length;
 const upstream = (from) => requestedRefs.slice(from);
 
 async function open(width, height) {
   const browser = await chromium.launch(launchOptions);
+  browsers.add(browser);
   const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 1 });
   await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: BASE });
   const page = await context.newPage();
-  const log = { errors: [], queries: 0 };
+  const log = { errors: [], queries: 0, datasource: observeDatasource(page) };
+  monitors.set(page, log.datasource);
   page.on('pageerror', (error) => log.errors.push(`pageerror: ${error.message}`));
   page.on('console', (message) => {
-    if (message.type() === 'error' && !/favicon|Failed to load resource/.test(message.text())) {
+    if (message.type() === 'error') {
       log.errors.push(`console: ${message.text().slice(0, 240)}`);
     }
   });
@@ -48,10 +53,11 @@ async function open(width, height) {
 const settle = async (page) => {
   await page.waitForLoadState('networkidle').catch(() => {});
   await page.waitForTimeout(500);
+  await monitors.get(page)?.drain();
 };
 
 const goto = async (page, query = '') => {
-  await page.goto(`${BASE}${HOME}${query}`, { waitUntil: 'domcontentloaded' });
+  await monitors.get(page).navigate(() => page.goto(`${BASE}${HOME}${query}`, { waitUntil: 'domcontentloaded' }));
   await page.waitForSelector('[data-host="scenes"]', { timeout: 30000 });
   await settle(page);
 };
@@ -107,15 +113,15 @@ async function desktop() {
   check('first Network visit runs only its declared queries, with no common re-run', network.length === networkQueries.length && network.every((ref) => networkQueries.some((query) => query.refId === ref)), { upstream: network.length });
 
   from = offset();
-  await page.goBack();
+  await monitors.get(page).navigate(() => page.goBack());
   await page.waitForSelector('[data-host="scenes"][data-focus="Overview"]');
-  await page.goForward();
+  await monitors.get(page).navigate(() => page.goForward());
   await page.waitForSelector('[data-host="scenes"][data-focus="Network"]');
   await settle(page);
   check('Back and Forward restore focus without running a query', upstream(from).length === 0, { upstream: upstream(from).length });
 
   from = offset();
-  await page.reload({ waitUntil: 'domcontentloaded' });
+  await monitors.get(page).navigate(() => page.reload({ waitUntil: 'domcontentloaded' }));
   await page.waitForSelector('[data-host="scenes"][data-focus="Network"]');
   await settle(page);
   check('reload restores Network and runs both sources once', upstream(from).length === commonQueries.length + networkQueries.length, { upstream: upstream(from).length });
@@ -155,9 +161,9 @@ async function desktop() {
   await page.waitForSelector('text=Your role is read-only');
   await shot(page, 'tools-change-viewer');
   check('the editing workflow tells a Viewer what is true', (await page.getByRole('link', { name: /Grafana's editor/ }).count()) === 0, undefined);
-  await page.goBack();
-  await page.goBack();
-  await page.goBack();
+  await monitors.get(page).navigate(() => page.goBack());
+  await monitors.get(page).navigate(() => page.goBack());
+  await monitors.get(page).navigate(() => page.goBack());
   await page.waitForFunction(() => !new URL(location.href).searchParams.has('inspect'));
   check('Back closes the inspector step by step', (await page.locator('[data-testid="compare-inspector"]').count()) === 0, undefined);
 
@@ -167,10 +173,12 @@ async function desktop() {
   check('Share is labelled custom', (await page.getByText("Custom tool, not Grafana's Share").count()) === 1, link);
   const shared = await open(1440, 1000);
   from = offset();
-  await shared.page.goto(link, { waitUntil: 'domcontentloaded' });
+  await shared.log.datasource.navigate(() => shared.page.goto(link, { waitUntil: 'domcontentloaded' }));
   await shared.page.waitForSelector('[data-host="scenes"][data-focus="Network"]');
   await settle(shared.page);
   check('a shared link reproduces focus and range in a clean session', query(shared.page).get('from') === new URL(link).searchParams.get('from') && upstream(from).length === commonQueries.length + networkQueries.length, Object.fromEntries(query(shared.page)));
+  await shared.log.datasource.drain();
+  check('shared link has no page or console errors in a clean session', shared.log.errors.length === 0, shared.log.errors);
   await shared.browser.close();
 
   for (const focus of FOCUSES.slice(1)) {
@@ -184,7 +192,7 @@ async function desktop() {
       await views.nth(1).click();
       await settle(page);
       check(`${focus} subpage keeps time`, query(page).get('from') === beforeTime, Object.fromEntries(query(page)));
-      await page.goBack();
+      await monitors.get(page).navigate(() => page.goBack());
       await settle(page);
       check(`${focus} Back restores subpage`, query(page).get('view') === beforePage, undefined);
     }
@@ -193,7 +201,7 @@ async function desktop() {
       await resource.click();
       await settle(page);
       check(`${focus} drills into a resource`, Boolean(query(page).get('entity')), Object.fromEntries(query(page)));
-      await page.reload({ waitUntil: 'domcontentloaded' });
+      await monitors.get(page).navigate(() => page.reload({ waitUntil: 'domcontentloaded' }));
       await settle(page);
       check(`${focus} resource survives reload`, Boolean(await page.locator('.lab-domain[data-entity]').count()), undefined);
     }
@@ -212,6 +220,8 @@ async function desktop() {
     check('live source survives focus changes', query(page).get('source') === 'live', undefined);
   }
 
+  await log.datasource.drain();
+  check('datasource responses and transport are valid', log.datasource.transportOk && log.datasource.evaluationOk, { responses: log.datasource.responses, failures: log.datasource.failures, inFlight: log.datasource.inFlight });
   check('no page or console errors', log.errors.length === 0, log.errors.slice(0, 5));
   await browser.close();
 }
@@ -237,20 +247,33 @@ async function narrow(width, height, name) {
     check(`${focus} at ${width}: no sideways overflow, all eight systems reachable, band stays pinned`, layout.overflow <= 0 && layout.items >= 8 && layout.top <= 110, layout);
     check(`${focus} at ${width}: pinned band leaves most of the screen`, layout.share < 0.3, { share: Number(layout.share.toFixed(2)) });
   }
+  await log.datasource.drain();
+  check(`datasource responses and transport are valid at ${width}`, log.datasource.transportOk && log.datasource.evaluationOk, { responses: log.datasource.responses, failures: log.datasource.failures, inFlight: log.datasource.inFlight });
   check(`no page or console errors at ${width}`, log.errors.length === 0, log.errors.slice(0, 5));
   await browser.close();
 }
 
-fs.mkdirSync(OUT, { recursive: true });
 const run = process.argv[2] ?? 'all';
-if (run === 'all' || run === 'desktop') {
-  await desktop();
+if (!['all', 'desktop', 'narrow'].includes(run)) throw new Error(`Unknown proof mode: ${run}. Use all, desktop, or narrow.`);
+fs.mkdirSync(OUT, { recursive: true });
+fs.rmSync(path.join(OUT, 'browser-proof.json'), { force: true });
+try {
+  if (run === 'all' || run === 'desktop') await desktop();
+  if (run === 'all' || run === 'narrow') {
+    await narrow(728, 1000, '728');
+    await narrow(390, 844, '390');
+  }
+} catch (error) {
+  check('browser proof completed', false, { message: error.message, stack: error.stack });
+} finally {
+  for (const datasource of monitors.values()) {
+    await datasource.drain();
+    check('all opened pages have valid datasource responses', datasource.transportOk && datasource.evaluationOk, { responses: datasource.responses, failures: datasource.failures, inFlight: datasource.inFlight, abortedNavigations: datasource.abortedNavigations });
+  }
+  const cleanup = await Promise.allSettled([...browsers].map((browser) => browser.close()));
+  cleanup.forEach((result) => { if (result.status === 'rejected') check('browser closes', false, result.reason.message); });
+  fs.writeFileSync(path.join(OUT, 'browser-proof.json'), JSON.stringify({ base: BASE, at: new Date().toISOString(), results }, null, 2));
 }
-if (run === 'all' || run === 'narrow') {
-  await narrow(728, 1000, '728');
-  await narrow(390, 844, '390');
-}
-fs.writeFileSync(path.join(OUT, 'browser-proof.json'), JSON.stringify({ base: BASE, at: new Date().toISOString(), results }, null, 2));
 const failed = results.filter((result) => !result.ok);
 console.log(`\n${results.length - failed.length} of ${results.length} passed`);
-process.exit(failed.length ? 1 : 0);
+process.exitCode = failed.length || !results.length ? 1 : 0;

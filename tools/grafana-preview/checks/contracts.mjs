@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { hasDashboardVariable, isFixturePath } from './guards.mjs';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -24,10 +25,12 @@ try {
     metafile: true,
     logLevel: 'silent',
   });
-  assert(!Object.keys(result.metafile.inputs).some((input) => input.includes('/fixtures/')), 'Recorded samples must not be bundled into the application');
+  assert(!Object.keys(result.metafile.inputs).some((input) => isFixturePath(input)), 'Recorded samples must not be bundled into the application');
   const { domains } = await import(pathToFileURL(path.join(temp, 'domains.mjs')));
   const focuses = new Set(domains.map((domain) => domain.focus));
   const byFocus = new Map(domains.map((domain) => [domain.focus, domain]));
+  const common = JSON.parse(await fs.readFile(path.join(root, 'runtime/queries.json'), 'utf8'));
+  const commonRefs = new Set(common.common.map((query) => query.refId));
   const globalRefs = new Set();
   const checks = [];
   const timeRange = { from: new Date(1793496424636), to: new Date(1793582824636), raw: { from: 1793496424636, to: 1793582824636 } };
@@ -40,7 +43,7 @@ try {
     assert.equal(refs.size, domain.queries.length, `${domain.focus}: duplicate query references`);
     for (const query of domain.queries) {
       assert(query.expr.trim(), `${domain.focus}/${query.refId}: empty expression`);
-      assert(!/\$(?!__)[a-zA-Z]/.test(query.expr), `${domain.focus}/${query.refId}: unresolved dashboard variable in a standalone query`);
+      assert(!hasDashboardVariable(query.expr), `${domain.focus}/${query.refId}: unresolved dashboard variable in a standalone query`);
       assert(!globalRefs.has(query.refId), `Query ref ${query.refId} is shared across independent domains`);
       globalRefs.add(query.refId);
       assert(query.instant !== query.range, `${query.refId}: declare exactly one query mode`);
@@ -57,7 +60,7 @@ try {
     };
     for (const page of domain.pages) {
       assert(page.title && page.question, `${domain.focus}/${page.id}: state its operational question`);
-      for (const ref of page.required) assert(refs.has(ref) || /^[HMR]_/.test(ref), `${domain.focus}/${page.id}: undeclared required ref ${ref}`);
+      for (const ref of page.required) assert(refs.has(ref) || commonRefs.has(ref), `${domain.focus}/${page.id}: undeclared required ref ${ref}`);
       for (const entity of [null, 'not-a-real-entity', 'spark-1 / + ? &']) {
         const sections = page.sections({
           series: [], timeRange, mode: 'recorded', timeZone: 'America/New_York', entity,
@@ -67,7 +70,7 @@ try {
         assert(sections.length, `${domain.focus}/${page.id}: empty composition`);
         assert.equal(new Set(sections.map((section) => section.id)).size, sections.length, `${domain.focus}/${page.id}: duplicate section ids`);
         for (const section of sections) {
-          if (section.kind === 'chart') for (const ref of section.refs) assert(refs.has(ref) || /^[HMR]_/.test(ref), `${domain.focus}/${page.id}: chart uses undeclared ref ${ref}`);
+          if (section.kind === 'chart') for (const ref of section.refs) assert(refs.has(ref) || commonRefs.has(ref), `${domain.focus}/${page.id}: chart uses undeclared ref ${ref}`);
           if (section.kind === 'table') {
             assert(section.empty, `${domain.focus}/${page.id}: table needs an honest empty state`);
             for (const row of section.rows) assert.equal(row.cells.length, section.columns.length, `${domain.focus}/${page.id}: table cell count mismatch`);

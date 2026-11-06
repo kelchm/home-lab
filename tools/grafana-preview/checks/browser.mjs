@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { observeDatasource } from './datasource.mjs';
 import { chromium, launchOptions } from './playwright.mjs';
 
 const base = process.env.BASE ?? 'http://127.0.0.1:3431/a/homelab-observability-app/explore';
@@ -8,7 +9,7 @@ assert(['localhost', '127.0.0.1'].includes(new URL(base).hostname), 'Acceptance 
 const out = path.resolve(process.env.EVIDENCE ?? 'evidence/acceptance');
 fs.mkdirSync(out, { recursive: true });
 const browser = await chromium.launch(launchOptions);
-const checks = [], errors = [], responses = [];
+const checks = [], errors = [];
 const check = (name, ok, detail) => { checks.push({ name, ok: Boolean(ok), detail }); console.log(`${ok ? 'PASS' : 'FAIL'} ${name}`); };
 const routes = {
   Overview: [''], Kubernetes: ['overview', 'workloads', 'storage', 'resource'], Proxmox: ['overview', 'guests', 'backups', 'guest', 'node'],
@@ -22,12 +23,7 @@ const url = (focus, view, extras = {}) => {
 };
 const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
 page.on('pageerror', (error) => errors.push({ url: page.url(), message: error.message }));
-page.on('response', async (response) => {
-  if (!response.url().includes('/api/ds/query')) return;
-  let results;
-  try { const body = await response.json(); results = Object.entries(body.results ?? {}).map(([ref, result]) => ({ ref, status: result.status, frames: result.frames?.length ?? 0, error: result.error })); } catch { /* status below still records transport failures */ }
-  responses.push({ status: response.status(), results });
-});
+const datasource = observeDatasource(page);
 const settle = async (focus) => {
   await page.waitForSelector(`[data-host="scenes"][data-focus="${focus}"]`, { timeout: 45000 });
   if (focus !== 'Overview') {
@@ -35,12 +31,13 @@ const settle = async (focus) => {
     await page.waitForFunction(() => document.querySelector('.lab-domain')?.getAttribute('data-freshness') !== 'loading', undefined, { timeout: 30000 });
   }
   await page.waitForLoadState('networkidle', { timeout: 30000 });
+  await datasource.drain();
 };
 
 try {
   for (const [focus, pages] of Object.entries(routes)) {
     for (const view of pages) {
-      await page.goto(url(focus, view), { waitUntil: 'domcontentloaded' });
+      await datasource.navigate(() => page.goto(url(focus, view), { waitUntil: 'domcontentloaded' }));
       await settle(focus);
       const state = await page.evaluate(() => ({
         focus: document.querySelector('[data-host="scenes"]')?.getAttribute('data-focus'),
@@ -77,10 +74,10 @@ try {
     }
     // Exercise a real, encoded resource identity from the rendered dashboard, rather than guessing label formats.
     if (focus !== 'Overview') {
-      await page.goto(url(focus, pages[0]), { waitUntil: 'domcontentloaded' }); await settle(focus);
+      await datasource.navigate(() => page.goto(url(focus, pages[0]), { waitUntil: 'domcontentloaded' })); await settle(focus);
       const resource = await page.locator('.lab-domain a').evaluateAll((links) => links.map((link) => link.href).find((href) => { const parsed = new URL(href); return parsed.pathname.includes('/a/homelab-observability-app/') && parsed.searchParams.get('entity'); }));
       if (resource) {
-        await page.goto(resource, { waitUntil: 'domcontentloaded' }); await settle(focus);
+        await datasource.navigate(() => page.goto(resource, { waitUntil: 'domcontentloaded' })); await settle(focus);
         const expected = new URL(resource).searchParams;
         check(`${focus} opens an observed resource identity`, await page.locator('.lab-domain').getAttribute('data-entity') === expected.get('entity') && await page.locator('.lab-domain').getAttribute('data-page') === expected.get('view'));
         if (focus === 'Sparks') check('selected Spark charts exclude the other host', !(await page.locator('[data-chart]').allInnerTexts()).join(' ').includes('spark-2'));
@@ -89,39 +86,41 @@ try {
     }
   }
 
-  await page.goto(url('Overview', ''), { waitUntil: 'domcontentloaded' }); await settle('Overview');
+  await datasource.navigate(() => page.goto(url('Overview', ''), { waitUntil: 'domcontentloaded' })); await settle('Overview');
   const incident = page.locator('[data-item="probe/athena-dsm"]');
   if (await incident.count()) {
     const before = new URL(page.url()).searchParams;
     await incident.click(); await settle('Athena');
     const after = new URL(page.url()).searchParams;
     check('Home resolved incident opens Athena evidence with the same window', after.get('view') === 'incident' && after.get('entity') === 'athena-dsm' && before.get('from') === after.get('from') && before.get('to') === after.get('to'));
-    await page.goBack(); await settle('Overview');
+    await datasource.navigate(() => page.goBack()); await settle('Overview');
     check('Back returns from incident evidence to the overview', new URL(page.url()).searchParams.get('focus') === 'Overview');
-    await page.goForward(); await settle('Athena');
+    await datasource.navigate(() => page.goForward()); await settle('Athena');
     check('Forward restores the incident resource', new URL(page.url()).searchParams.get('entity') === 'athena-dsm');
   } else check('recorded incident is available in the review list', false);
 
-  await page.goto(url('Sparks', 'inference', { from: '1793487600000', to: '1793491500000' }), { waitUntil: 'domcontentloaded' }); await settle('Sparks');
+  await datasource.navigate(() => page.goto(url('Sparks', 'inference', { from: '1793487600000', to: '1793491500000' }), { waitUntil: 'domcontentloaded' })); await settle('Sparks');
   const historicalText = await page.locator('.lab-domain').innerText();
-  check('historical inference is a dated separate observation window', /Historical inference/.test(historicalText) && /GLM/.test(historicalText), historicalText.slice(0, 1800));
+  check('historical inference is a dated separate observation window', /Historical inference · Oct 31, 2026 23:00 – Nov 1, 2026 00:05 UTC/.test(historicalText) && /GLM/.test(historicalText), historicalText.slice(0, 1800));
   await page.screenshot({ path: path.join(out, 'sparks-historical-inference.png'), fullPage: true });
 
   await page.setViewportSize({ width: 390, height: 844 });
   for (const [focus, pages] of Object.entries(routes)) {
-    await page.goto(url(focus, pages[0]), { waitUntil: 'domcontentloaded' }); await settle(focus);
-    const layout = await page.evaluate(() => ({ overflow: document.documentElement.scrollWidth > innerWidth, nav: [...document.querySelectorAll('.sys')].map((el) => ({ text: el.innerText, left: el.getBoundingClientRect().left, right: el.getBoundingClientRect().right })) }));
-    check(`${focus} phone layout keeps all navigation reachable`, !layout.overflow && layout.nav.length === 8 && layout.nav.every((item) => item.left >= 0 && item.right <= 391), layout);
+    await datasource.navigate(() => page.goto(url(focus, pages[0]), { waitUntil: 'domcontentloaded' })); await settle(focus);
+    const layout = await page.evaluate(() => ({ overflow: document.documentElement.scrollWidth > innerWidth, viewportWidth: innerWidth, nav: [...document.querySelectorAll('.sys')].map((el) => ({ text: el.innerText, left: el.getBoundingClientRect().left, right: el.getBoundingClientRect().right })) }));
+    check(`${focus} phone layout keeps all navigation reachable`, !layout.overflow && layout.nav.length === 8 && layout.nav.every((item) => item.left >= 0 && item.right <= layout.viewportWidth), layout);
     await page.screenshot({ path: path.join(out, `${focus.toLowerCase()}-phone.png`), fullPage: true });
   }
   check('no JavaScript exceptions across the investigation paths', errors.length === 0, errors);
-  check('Grafana datasource requests have no transport failures', responses.length > 0 && responses.every((response) => response.status === 200), { requests: responses.length });
-  check('replay queries have no evaluation errors', responses.flatMap((response) => response.results ?? []).every((result) => !result.error && (result.status == null || result.status === 200)));
+  await datasource.drain();
+  check('Grafana datasource requests have no transport failures', datasource.transportOk, { requests: datasource.responses.length, failures: datasource.failures, inFlight: datasource.inFlight, abortedNavigations: datasource.abortedNavigations });
+  check('replay queries have no evaluation errors', datasource.evaluationOk, datasource.responses.filter((response) => response.error || response.results.some((result) => result.error || result.status >= 400)));
 } catch (error) {
   check('acceptance completed', false, { message: error.message, stack: error.stack, url: page.url() });
   await page.screenshot({ path: path.join(out, 'failure.png'), fullPage: true }).catch(() => {});
 } finally {
-  fs.writeFileSync(path.join(out, 'acceptance.json'), JSON.stringify({ checks, errors, responses }, null, 2));
+  await datasource.drain();
+  fs.writeFileSync(path.join(out, 'acceptance.json'), JSON.stringify({ checks, errors, responses: datasource.responses, transportFailures: datasource.failures, inFlight: datasource.inFlight, abortedNavigations: datasource.abortedNavigations }, null, 2));
   await browser.close();
 }
 if (checks.some((item) => !item.ok)) process.exitCode = 1;

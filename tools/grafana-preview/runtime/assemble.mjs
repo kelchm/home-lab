@@ -8,7 +8,10 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const out = path.resolve(process.argv[2] ?? path.join(root, 'runtime/generated/replay'));
 const read = (name) => JSON.parse(fs.readFileSync(path.join(root, name), 'utf8'));
 const queries = read('runtime/queries.json');
-const names = ['kubernetes', 'proxmox', 'sparks', 'athena', 'network', 'power', 'devices'];
+const expected = ['kubernetes', 'proxmox', 'sparks', 'athena', 'network', 'power', 'devices'];
+const domainRoot = path.join(root, 'shared/src/domains');
+const discovered = fs.readdirSync(domainRoot, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name);
+const names = [...new Set([...expected, ...discovered])].sort();
 const groups = {}, missingDomains = [];
 for (const name of names) {
   const file = `shared/src/domains/${name}/queries.json`;

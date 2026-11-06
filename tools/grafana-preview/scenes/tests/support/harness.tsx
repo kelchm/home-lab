@@ -162,8 +162,8 @@ export async function mountRoot(search: string) {
   return view;
 }
 
-export const setRole = (orgRole: 'Viewer' | 'Admin') => {
-  const canWrite = orgRole === 'Admin';
+export const setRole = (orgRole: 'Viewer' | 'Editor' | 'Admin') => {
+  const canWrite = orgRole === 'Admin' || orgRole === 'Editor';
   config.bootData = { user: { orgRole, permissions: { 'datasources:explore': canWrite, 'dashboards:write': canWrite } } } as never;
 };
 

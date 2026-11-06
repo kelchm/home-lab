@@ -33,7 +33,9 @@ const respond = (request: DataQueryRequest): PanelData => {
 const datasource = (uid: string) => ({ uid, type: 'prometheus', name: uid, getRef: () => ({ uid, type: 'prometheus' }), query: () => new Observable() });
 
 config.theme2 = createTheme({ colors: { mode: 'dark' } });
-config.bootData = { user: { orgRole: new URLSearchParams(window.location.search).get('role') ?? 'Viewer', permissions: {}, timezone: 'browser', weekStart: 'browser' } } as never;
+const orgRole = new URLSearchParams(window.location.search).get('role') ?? 'Viewer';
+const canWrite = orgRole === 'Editor' || orgRole === 'Admin';
+config.bootData = { user: { orgRole, permissions: { 'datasources:explore': canWrite, 'dashboards:write': canWrite }, timezone: 'browser', weekStart: 'browser' } } as never;
 config.exploreEnabled = true;
 setChromeHeaderHeightHook(() => 48);
 setReturnToPreviousHook(() => () => {});
@@ -83,15 +85,17 @@ function Home() {
   return <app.Component key={source} model={app} />;
 }
 
-// Grafana core turns same-origin link clicks into history pushes. Without this every link here would be a full page load.
+// Only the app route exists in this harness; native-dashboard and external links use browser navigation.
 document.addEventListener('click', (event) => {
   const anchor = event.target instanceof Element ? event.target.closest('a') : null;
   const href = anchor?.getAttribute('href');
-  if (!href || anchor?.target || event.defaultPrevented || event.ctrlKey || event.metaKey || !href.startsWith('/')) {
+  if (!anchor || !href || anchor.target || event.defaultPrevented || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button !== 0 || anchor.hasAttribute('download')) {
     return;
   }
+  const target = new URL(href, location.href);
+  if (target.origin !== location.origin || !target.pathname.startsWith('/a/homelab-observability-app/')) return;
   event.preventDefault();
-  locationService.push(href);
+  locationService.push(target.pathname + target.search + target.hash);
 });
 
 if (window.location.pathname !== HOME_URL) {
