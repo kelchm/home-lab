@@ -38,7 +38,7 @@ The kit patches engine commit `c4646171` and has no numbered release after v1.10
   - `/v1/models` reports `owned_by: tensorfold`, the window as `context_length` and `max_model_len`, and `reasoning` with the thinking default and the levels `max`, `high`, `low` and `none`. The template defines `low` and `high` and renders anything else as `max`; the server maps `minimal` to `low`, `medium` to `high` and `xhigh` to `max`, and `none` turns thinking off.
 
   The mod checks every guarded file's upstream hash before changing it, so it refuses files that differ from the ones it was written for. That is not an image check: the recipe's image pin pairs the recipe with its image.
-- **Mod:** the rank launcher installs as `/usr/local/bin/tensorfold-entrypoint` and gives the engine `oom_score_adj` 1000. Readiness is the [shared gate](#enable-tensorfold-in-sparkrun), with the 1.2M pool floor and a C4 shape warmup at 128, 4,096 and 16,384 words.
+- **Mod:** the rank launcher installs as `/usr/local/bin/tensorfold-entrypoint` and gives the engine `oom_score_adj` 1000. Readiness is the [shared gate](#enable-tensorfold-in-sparkrun), with a pool floor of 1.2M tokens for the original non-durable profile and 2,582,528 tokens for both durable profiles, and a C4 shape warmup at 128, 4,096 and 16,384 words.
 
 How the profile differs from the kit's own launch:
 
@@ -629,6 +629,8 @@ export PATH="$HOME/.local/share/sparkrun-glm53-0310/bin:$PATH"
 sparkrun cluster create sparks --hosts 10.32.21.31,10.32.21.32 --user kelchm --cache-dir /opt/spark-cache/huggingface --transfer-mode auto --transfer-interface mgmt --scheduler greedy
 ```
 
+For a fresh controller, also apply the [TensorFold configuration below](#enable-tensorfold-in-sparkrun), including the explicit runtime-cache root and disabled automatic pruning, so switching models retains their compiled kernels.
+
 Keep this venv on PATH for the commands here; the head's older SparkRun 0.3.9 in `~/.local/bin` stays untouched. A login shell puts `~/.local/bin` first, so export the venv's path and check that `sparkrun --version` reports 0.3.10 before a stop or launch. Benchmarks need `uvx` on PATH.
 
 ### November 6 hardening deployment
@@ -714,6 +716,10 @@ features:
 plugins:
   paths:
     - /home/kelchm/sparkrun/recipes/glm53/plugins
+runtime_cache:
+  dir: /home/kelchm/.cache/sparkrun/runtime-cache
+  prune:
+    enabled: false
 ```
 
 The [adapter](plugins/tensorfold/__init__.py) takes two shapes: one node with TP1, which SparkRun runs on its solo path, or two TP2 ranks on its native launcher and rendezvous gate. Both use SparkRun's cache mounts, log sources and stop operation. Only pipeline, data, expert and context parallelism of 1 are implemented. Validation rejects unsupported values in all four dimensions ([#1291](https://github.com/kelchm/home-lab/pull/1291)). A one-node recipe sets `min_nodes` and `max_nodes` to 1, and with the saved `sparks` cluster's greedy scheduler it lands on the head, the cluster's first host. A launch must match the recipe's declared nodes, so a `--tp` override cannot move a recipe to the other shape. On the 0.3.10 operating baseline, `logs` with a recipe and `--cluster sparks` looks for a two-rank container even when the workload is solo, reports it gone and deletes the job's metadata; read a one-node workload's logs with `--hosts` and the head's address, or by the cluster ID `sparkrun status` prints. The November 6 live trial found that 0.4.2 still fails recipe-plus-`--cluster sparks` log reads for solo workloads: its resolved target hosts remain the two-host discovery scope, so it chooses ranked container names. The failed read preserves job metadata. Both the explicit-head workaround and a cluster-ID read pass, so retain the workaround on 0.4.2 too. Native TP2 recipe/cluster log reads pass. The adapter names no model or engine: a recipe that leaves out `defaults.entrypoint`, `served_model_name` or `context` fails validation. The engine gets `MODEL_PATH` (the immutable HF snapshot under `/cache/huggingface/hub`), `CONTEXT`, `SERVED_NAME`, `HOST`, `PORT` and, when set, `DRAFTER`, `MAX_TOKENS`, `EXTRA_ARGS`, `MTP_DRAFTS` and `NO_DRAFTS`. Each of two ranks also gets `RANK`, `MASTER` and `MASTER_PORT`, and rank 0 must listen on `MASTER_PORT`, which SparkRun waits on before it starts rank 1; a one-node launch gets none of them. When SparkRun reaches the head over a CX7 address, `FABRIC_MASTER` carries that address, for engines whose ranks link over the fabric rather than the rendezvous network. CUDA, Triton and Torch kernel caches go to SparkRun's persistent `/cache/runtime`; anything engine-specific is set by its own recipe and mod. No upstream two-host launcher or watchdog is installed.
