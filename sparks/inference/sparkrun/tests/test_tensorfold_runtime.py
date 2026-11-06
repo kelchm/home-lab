@@ -229,6 +229,25 @@ def _one_node_recipe(defaults=None):
     return _recipe(min_nodes=1, max_nodes=1, defaults={"tensor_parallel": 1, **(defaults or {})})
 
 
+@pytest.mark.parametrize("dimension", ["expert_parallel", "context_parallel"])
+@pytest.mark.parametrize("nodes", [1, 2])
+def test_unimplemented_parallelism_is_rejected_before_launch(runtime, dimension, nodes):
+    make = _one_node_recipe if nodes == 1 else _recipe
+    bad = make(defaults={dimension: 2})
+    errors = [issue.message for issue in runtime.validate_recipe(bad) if issue.severity == ERROR]
+    assert any(f"{dimension}=2 is unsupported; use {dimension}=1" in message for message in errors)
+
+    def command(recipe, overrides):
+        if nodes == 1:
+            return runtime.generate_command(recipe, overrides, is_cluster=False, num_nodes=1)
+        return runtime.generate_node_command(recipe, overrides, head_ip=FABRIC_HEAD, num_nodes=2, node_rank=0)
+
+    for recipe, overrides in ((bad, {}), (make(), {dimension: 2})):
+        with pytest.raises(ValueError, match=f"{dimension}=2 is unsupported"):
+            command(recipe, overrides)
+    assert command(make(defaults={dimension: 1}), {})
+
+
 def test_one_node_launch_gets_the_engine_env_and_no_rendezvous(runtime):
     recipe = _one_node_recipe()
     assert recipe.mode == "solo"

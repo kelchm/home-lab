@@ -306,6 +306,11 @@ class TensorFoldRuntime(RuntimePlugin):
             issues.append(self.recipe_error(self._topology_message("pipeline_parallel=%s" % parallelism.pipeline_parallel)))
         if parallelism.data_parallel != 1:
             issues.append(self.recipe_error(self._topology_message("data_parallel=%s" % parallelism.data_parallel)))
+        for dimension in ("expert_parallel", "context_parallel"):
+            value = getattr(parallelism, dimension)
+            if value != 1:
+                issues.append(self.recipe_error(self._topology_message(
+                    "%s=%s is unsupported; use %s=1" % (dimension, value, dimension))))
         return issues
 
     def _topology_message(self, detail: str) -> str:
