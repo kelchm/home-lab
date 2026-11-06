@@ -8,17 +8,17 @@ import { Alert, Badge, Button, ClipboardButton, Combobox, Drawer, LinkButton, Ta
 import { useMemo, useState } from 'react';
 
 import { access } from './access';
+import { HomeCard } from './home-card';
 import { type CardSpec, cardById, refIdsOf } from './cards';
 import { DATASOURCES, type Focus, type Source } from './contract';
-import { chartData, ianaZone } from './domain-scene';
+import { chartData, type DomainBody } from './domain-scene';
 import { domainForFocus } from '@shared/domains/registry';
-import { coverage, rangeKey, resolve } from '@shared/lifecycle';
-import type { DomainContext } from '@shared/domains/contract';
-import type { FrameLike } from '@shared/model/semantics';
+import { coverage, type Coverage } from '@shared/lifecycle';
+import { coverageMessage } from '@shared/domains/DomainView';
 import { useAppLocation, useElementWidth } from './hooks';
 import { exploreHref } from './tools';
 import { CompareShell } from './shell';
-import { deeperHref, inspectHref, nativeEditHref, routeHref } from './urls';
+import { inspectHref, nativeEditHref } from './urls';
 
 const TABS = [
   { id: 'data', label: 'Data' },
@@ -63,32 +63,59 @@ function InspectorRenderer({ model }: SceneComponentProps<CompareInspector>) {
   const group = basic?.sourceGroup ?? target?.split(':')[0];
   const domain = domainForFocus(focus);
   if (!target || !group || !sources[group] || (group !== 'common' && group !== domain?.id)) return null;
-  return <InspectorScope key={`${target}:${focus}`} model={model} target={target} tab={TABS.some((item) => item.id === tab) ? tab! : 'data'} provider={sources[group]} />;
+  return <InspectorScope key={`${target}:${focus}`} model={model} target={target} tab={TABS.some((item) => item.id === tab) ? tab! : 'data'} />;
 }
 
-function InspectorScope({ model, target, tab, provider }: { model: CompareInspector; target: string; tab: string; provider: SceneObjectRef<SceneDataProvider> }) {
+function InspectorScope({ model, target, tab }: { model: CompareInspector; target: string; tab: string }) {
+  const shell = sceneGraph.getAncestor(model, CompareShell);
+  const { focus, domains } = shell.useState();
+  const body = domains.find((item) => item.state.domain.focus === focus);
+  if (cardById(target)?.sourceGroup === 'common') {
+    const card = sceneGraph.findObject(shell, (object) => object instanceof HomeCard && object.state.spec.id === target) as HomeCard | undefined;
+    return card ? <CommonInspector model={model} target={target} tab={tab} card={card} /> : null;
+  }
+  return body ? <DomainInspector model={model} target={target} tab={tab} body={body} /> : null;
+}
+
+function EvidenceUnavailable({ current, message, onClose }: { current: boolean; message: string; onClose: () => void }) {
+  return <Drawer title="Inspect" onClose={onClose}><p role="status">{current ? message : 'Waiting for the selected page evidence.'}</p></Drawer>;
+}
+
+function CommonInspector({ model, target, tab, card }: { model: CompareInspector; target: string; tab: string; card: HomeCard }) {
+  const { focus, source } = sceneGraph.getAncestor(model, CompareShell).useState();
+  const { evidence } = card.useState();
+  const { data } = sceneGraph.getData(card).useState();
+  const { value: timeRange } = sceneGraph.getTimeRange(model).useState();
+  const spec = cardById(target)!;
+  if (spec.focus && spec.focus !== focus) return null;
+  const current = evidence && evidence.input === data && evidence.timeRange === timeRange && evidence.mode === (source === 'replay' ? 'recorded' : 'live');
+  if (!current) return <EvidenceUnavailable current={false} message="" onClose={() => locationService.partial({ inspect: null, inspectTab: null })} />;
+  const refs = [...refIdsOf(spec)];
+  const scoped = chartData(evidence.data, refs, null);
+  return <InspectorDrawer model={model} spec={spec} tab={tab} focus={focus} source={source} data={scoped} coverage={coverage(evidence.resolved, refs)} />;
+}
+
+function DomainInspector({ model, target, tab, body }: { model: CompareInspector; target: string; tab: string; body: DomainBody }) {
   const { focus, view, entity, source } = sceneGraph.getAncestor(model, CompareShell).useState();
-  const { data } = provider.resolve().useState();
-  const location = useAppLocation();
-  const range = sceneGraph.getTimeRange(model);
-  const { value: timeRange } = range.useState();
-  const domain = domainForFocus(focus);
-  const expected = domain?.queries.map((query) => query.refId) ?? [];
-  const resolved = data && resolve(data, new Map(), { expected, source, range: rangeKey(timeRange), now: Date.now() });
-  const context: DomainContext = {
-    series: (resolved?.series ?? []) as unknown as FrameLike[], timeRange, mode: source === 'replay' ? 'recorded' : 'live', timeZone: ianaZone(range.getTimeZone()), entity,
-    coverage: resolved ? coverage(resolved, expected) : { freshness: 'loading', missing: 0, retained: 0, retainedAt: null, unanswered: true },
-    href: (route) => routeHref(location, route), deeper: (uid, variables) => deeperHref(location, uid, variables),
-  };
-  const spec = cardById(target, context);
-  if (!spec || (spec.focus && spec.focus !== focus) || (spec.page && spec.page !== view)) return null;
-  const scoped = data && chartData(data, [...refIdsOf(spec)], entity, spec.entityLabels);
-  return <InspectorDrawer model={model} spec={spec} tab={tab} focus={focus} source={source} data={scoped} />;
+  const { evidence } = body.useState();
+  const { data } = body.state.$data.useState();
+  const { value: timeRange } = sceneGraph.getTimeRange(model).useState();
+  // A route/range update can render before the page publishes its next evidence. Never expose that previous scope.
+  const current = evidence && evidence.input === data && evidence.page === view && evidence.context.entity === entity
+    && evidence.context.mode === (source === 'replay' ? 'recorded' : 'live') && evidence.context.timeRange === timeRange;
+  const spec = current ? cardById(target, evidence.context) : undefined;
+  if (!evidence || !spec || (spec.focus && spec.focus !== focus) || (spec.page && spec.page !== view)) {
+    return <EvidenceUnavailable current={Boolean(current)} message="This chart has no definition in the selected page evidence. Choose a chart available in this scope." onClose={() => locationService.partial({ inspect: null, inspectTab: null })} />;
+  }
+  const refs = [...refIdsOf(spec)];
+  const scoped = chartData(evidence.data, refs, spec.entity ?? entity, spec.entityLabels);
+  return <InspectorDrawer model={model} spec={spec} tab={tab} focus={focus} source={source} data={scoped} coverage={coverage(evidence.resolved, refs)} />;
 }
 
-function InspectorDrawer({ model, spec, tab, focus, source, data }: { model: CompareInspector; spec: CardSpec; tab: string; focus: Focus; source: Source; data?: PanelData }) {
+function InspectorDrawer({ model, spec, tab, focus, source, data, coverage: own }: { model: CompareInspector; spec: CardSpec; tab: string; focus: Focus; source: Source; data?: PanelData; coverage: Coverage }) {
   const styles = useStyles2(getStyles);
   const location = useAppLocation();
+  const message = coverageMessage(own, 'UTC');
   return (
     <Drawer
       title={`Inspect: ${spec.title}`}
@@ -104,6 +131,7 @@ function InspectorDrawer({ model, spec, tab, focus, source, data }: { model: Com
       }
     >
       <div className={styles.body} data-testid="compare-inspector">
+        {message && <p role="status">{message}</p>}
         {tab === 'data' && <DataTab key={spec.id} data={data} />}
         {tab === 'query' && <QueryTab model={model} spec={spec} data={data} source={source} />}
         {tab === 'change' && <ChangeTab model={model} spec={spec} focus={focus} source={source} />}

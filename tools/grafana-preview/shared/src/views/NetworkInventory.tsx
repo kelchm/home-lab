@@ -8,12 +8,15 @@ export function NetworkInventory({ ctx }: { ctx: ViewContext }) {
   const { network, constrained, tag, coverage, clock, timeRange } = ctx;
   const devices = network?.devices ?? [];
   const radios = network?.radios ?? [];
+  const answered = (refs: string[]) => refs.every((ref) => ['current', 'empty'].includes(ctx.resolved.refs.get(ref)?.state ?? ''));
+  const deviceCount = answered(['I_net_deviceInfo']) ? `${devices.length} devices` : 'Device count unknown';
+  const radioCount = answered(['I_net_radioChannel', 'I_net_radioBusy', 'I_net_radioClients']) ? `${radios.length} radios` : 'Radio count unknown';
   const system = SYSTEM.net;
   return (
     <Fit constrained={constrained} label="Network inventory">
       <Status coverage={coverage} clock={clock} />
       <div className="g" style={{ '--a': `var(--${system.accent})` } as CSSProperties}>
-        <Card eye="UniFi" when="window end" tag={tag} title="Network devices" pill={`${devices.length} devices`} className="c8">
+        <Card eye="UniFi" when="window end" tag={tag} title="Network devices" pill={deviceCount} className="c8">
           <div className="tbl-wrap">
             <table className="tbl">
               <thead>
@@ -46,7 +49,7 @@ export function NetworkInventory({ ctx }: { ctx: ViewContext }) {
             </table>
           </div>
         </Card>
-        <Card eye="Wi-Fi" when="window end" tag={tag} title="Channel busy" pill={`${radios.length} radios`} className="c4" note="Includes neighbours’ traffic.">
+        <Card eye="Wi-Fi" when="window end" tag={tag} title="Channel busy" pill={radioCount} className="c4" note="Includes neighbours’ traffic.">
           <div className="bars radios">
             {radios.map((radio) => (
               <Bar

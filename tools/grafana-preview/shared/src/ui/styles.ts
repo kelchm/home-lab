@@ -178,7 +178,7 @@ const CSS = `
   .ex b{display:block;font-size:12.5px;line-height:17px;font-weight:600;overflow-wrap:anywhere}
   .ex small{display:block;font-size:11px;line-height:15px;color:var(--muted);overflow-wrap:anywhere}
   .ex .w{font-size:11px;line-height:17px;color:var(--muted);white-space:nowrap}
-  .quiet{margin:8px 0 12px;font-size:13px;color:var(--soft)}
+  .ex-list>.quiet{margin:8px 0 12px;font-size:13px;color:var(--soft)}
 
   /* Machines */
   .mtable{width:100%;margin-top:10px;border-collapse:collapse;table-layout:fixed}

@@ -56,6 +56,14 @@ describe('scopeData', () => {
     expect(general.errors).toHaveLength(1);
   });
 
+  it('preserves an explicit legacy error beside an empty errors array', () => {
+    const failed = panelData(['A', 'B'], { state: LoadingState.Error, errors: [], error: { message: 'a failed', refId: 'A' } });
+    expect(scopeData(failed, new Set(['A'])).errors).toEqual([failed.error]);
+    expect(scopeData(failed, new Set(['A'])).state).toBe(LoadingState.Error);
+    expect(scopeData(failed, new Set(['B'])).state).toBe(LoadingState.Done);
+    expect(mergeData([failed, panelData(['C'])])?.errors).toEqual([failed.error]);
+  });
+
   it('leaves unscoped data untouched', () => {
     const data = panelData(['A']);
     expect(scopeData(data)).toBe(data);
@@ -107,7 +115,9 @@ describe('SharedFrames', () => {
     const consumer = new SharedFrames({ sources: [stream.getRef()], refIds: new Set(['H_A']) });
     const result = firstValueFrom(consumer.getResultsStream());
     source.setState({ data: panelData(['H_A', 'B']) });
-    expect((await result).origin).toBe(consumer);
+    const emitted = await result;
+    expect(emitted.origin).toBe(consumer);
+    expect(emitted.data.series.map((item) => item.refId)).toEqual(['H_A']);
   });
 });
 

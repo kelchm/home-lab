@@ -24,6 +24,6 @@ describe('captured model parity and coverage', () => {
  });
  it('does not call incomplete review coverage quiet', () => {
   const m = buildHome(frames, snapshot.from, snapshot.to, { missing: 1, retained: 0, total: 40 });
-  expect(briefingOf(m, false, false, '').state).toBe('Coverage incomplete');expect(statusOf(m.review, 'net', false, false).text).not.toBe('Nothing flagged');
+  expect(briefingOf(m, true, false, '').state).toBe('Coverage incomplete');expect(statusOf(m.review, 'net', true, false).text).not.toBe('Nothing flagged');
  });
 });

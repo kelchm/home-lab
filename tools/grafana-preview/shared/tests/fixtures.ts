@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { URL as NodeURL } from 'node:url';
 import type { DataFrame, PanelData, TimeRange } from '@grafana/data';
 
 export const FROM = 1793496424636;
@@ -14,9 +15,9 @@ interface Entry {
   series: Array<{ labels: Record<string, string>; t: number[]; v: Array<number | null> }>;
 }
 
-// Read-only inputs, relative to shared/, where the tests run.
-export const catalog: Entry[] = JSON.parse(readFileSync('../runtime/catalog.json', 'utf8'));
-export const snapshot = JSON.parse(readFileSync('../fixtures/reference/overview-snapshot.json', 'utf8'));
+// Read-only inputs resolved from this module, independently of the runner's working directory.
+export const catalog: Entry[] = JSON.parse(readFileSync(new NodeURL('../../runtime/catalog.json', import.meta.url), 'utf8'));
+export const snapshot = JSON.parse(readFileSync(new NodeURL('../../fixtures/reference/overview-snapshot.json', import.meta.url), 'utf8'));
 
 export const frame = (refId: string, values: number[], labels: Record<string, string> = {}, times = values.map((_, i) => TO - (values.length - 1 - i) * 60000), interval = REQUESTED_STEP) =>
   ({

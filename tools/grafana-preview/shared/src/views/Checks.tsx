@@ -76,15 +76,14 @@ export function Checks({ ctx }: { ctx: ViewContext }) {
   // In a fixed grid the host's collapsible row is the disclosure. In natural height this view is its own.
   if (!constrained) {
     return (
-      <section className="card checks-card">
-        <Status coverage={coverage} clock={clock} />
+      <Card eye="Reachability" when={span} tag={tag} className="checks-card" status={<Status coverage={coverage} clock={clock} />}>
         <details className="checks solo">
           <summary>
             <Rollup bands={model.rollup} summary={summary} hint={`open all ${summary.total}`} ctx={ctx} />
           </summary>
           {rows}
         </details>
-      </section>
+      </Card>
     );
   }
   return (

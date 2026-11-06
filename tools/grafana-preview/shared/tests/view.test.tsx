@@ -2,11 +2,12 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, describe, expect, test } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import type { PanelData } from '@grafana/data';
 import { HomeView, modeOfDatasource, VIEWS } from '../src/HomeView';
 import { rememberQueries } from '../src/lifecycle';
 import type { HomeViewProps, View } from '../src/types';
+import { useHighlight } from '../src/ui/highlight';
 import { overflowOf } from '../src/ui/parts';
 import { catalog, emptyFrame, frame, FROM, panelData, range, sharedRequest, TO } from './fixtures';
 
@@ -18,7 +19,10 @@ globalThis.ResizeObserver ??= class {
   disconnect() {}
 } as unknown as typeof ResizeObserver;
 
+const mountedRoots = new Set<Root>();
 afterEach(() => {
+  act(() => { for (const root of mountedRoots) root.unmount(); });
+  mountedRoots.clear();
   document.body.innerHTML = '';
 });
 
@@ -28,9 +32,10 @@ const props = (view: View, over: Partial<HomeViewProps> = {}): HomeViewProps => 
 function mount(node: ReactNode) {
   const host = document.body.appendChild(document.createElement('div'));
   const root: Root = createRoot(host);
+  mountedRoots.add(root);
   const render = (next: ReactNode) => act(() => root.render(next));
   render(node);
-  return { host, render, unmount: () => act(() => root.unmount()) };
+  return { host, render, unmount: () => { act(() => root.unmount()); mountedRoots.delete(root); } };
 }
 const show = (view: View, over: Partial<HomeViewProps> = {}) => mount(<HomeView {...props(view, over)} />).host;
 const root = (host: Element) => host.querySelector('.hlc') as HTMLElement;
@@ -55,7 +60,8 @@ describe('the hooks hosts and evidence rely on', () => {
 });
 
 describe('navigation stays honest about what exists here', () => {
-  const nav = show('navigation', { focus: 'Network' });
+  let nav: HTMLElement;
+  beforeEach(() => { nav = show('navigation', { focus: 'Network' }); });
   const item = (name: string) => nav.querySelector(`[data-system="${name}"]`) as HTMLAnchorElement;
 
   test('Overview and Network use the host\'s links and open in place', () => {
@@ -163,14 +169,16 @@ describe('failure, through the real view', () => {
   });
 
   test('an edited source query is noticed by a consumer of that source', () => {
-    const base = { ...panelData(), request: sharedRequest };
-    rememberQueries(panelData().request);
+    const request = { ...sharedRequest!, dashboardUID: 'test-dashboard', panelId: 2 };
+    const sourceRequest = { ...panelData().request!, dashboardUID: 'test-dashboard', panelId: 1 };
+    const base = { ...panelData(), request };
+    rememberQueries(sourceRequest);
     const view = mount(<HomeView {...props('machines', { data: base })} />);
-    const edited = panelData().request!;
+    const edited = sourceRequest;
     rememberQueries({ ...edited, targets: edited.targets.map((t) => (t.refId === 'M_A' ? { ...t, expr: 'edited' } : t)) } as PanelData['request']);
-    view.render(<HomeView {...props('machines', { data: { ...failing(/^M_A$/, base), request: sharedRequest } })} />);
+    view.render(<HomeView {...props('machines', { data: { ...failing(/^M_A$/, base), request } })} />);
     expect(root(view.host).dataset.freshness).toBe('partial');
-    rememberQueries(panelData().request);
+    rememberQueries(sourceRequest);
   });
 
   test('a first-load failure shows nothing current and invents no zeros', () => {
@@ -255,7 +263,7 @@ describe('constrained panels and natural pages', () => {
     expect(text('gateway-services')).toContain('TCP / 443');
   });
 
-  test('no surface renders the four retired headline cards', () => {
+  test('no surface renders the three named retired headline cards', () => {
     const text = VIEWS.map((view) => show(view).textContent).join(' ');
     expect(text).not.toMatch(/Tokens written|Backup freshness|Controller availability/);
   });
@@ -278,5 +286,91 @@ describe('what ships', () => {
     expect(recorded.length).toBeGreaterThan(10);
     expect([...new Set(recorded)].filter((value) => source.includes(value))).toEqual([]);
     expect(source).not.toContain(String(TO));
+  });
+});
+
+
+describe('reviewed evidence boundaries', () => {
+  test.each([0, 2])('registration value %s is unknown, not negative evidence', (value) => {
+    const base = panelData();
+    const data = { ...base, series: [...base.series.filter((item) => item.refId !== 'I_net_tmobileRegistered'), frame('I_net_tmobileRegistered', [value])] };
+    const host = show('network-summary', { data });
+    expect(host.textContent).toContain('registration unknown');
+    expect(host.textContent).not.toContain('not registered');
+  });
+
+  test('natural-height checks keep their selected window and recorded source', () => {
+    const host = show('checks', { constrained: false });
+    expect(host.querySelector('.eye')?.textContent).toMatch(/Reachability.*24 h.*Recorded/);
+  });
+
+  test.each(['missing', 'failed', 'loading'])('unavailable inventory counts stay unknown when %s', (state) => {
+    const base = panelData();
+    const inventory = /^I_net_(deviceInfo|radioChannel|radioBusy|radioClients)$/;
+    const data = state === 'failed' ? failing(inventory, base) : { ...base, state: state === 'loading' ? 'Loading' : 'Done', series: base.series.filter((item) => !inventory.test(item.refId ?? '')) } as PanelData;
+    const host = show('network-inventory', { data });
+    expect(host.textContent).toContain('Device count unknown');
+    expect(host.textContent).toContain('Radio count unknown');
+    expect(host.textContent).not.toMatch(/0 devices|0 radios/);
+  });
+
+  test('successful empty inventories can report zero', () => {
+    const base = panelData();
+    const inventory = /^I_net_(deviceInfo|radioChannel|radioBusy|radioClients)$/;
+    const host = show('network-inventory', { data: { ...base, series: base.series.map((item) => inventory.test(item.refId ?? '') ? emptyFrame(item.refId!) : item) } });
+    expect(host.textContent).toContain('0 devices');
+    expect(host.textContent).toContain('0 radios');
+  });
+
+  test.each([true, false])('refreshes label retained data with its receipt time (old rows present: %s)', (rows) => {
+    const initial = panelData();
+    const view = mount(<HomeView {...props('machines', { data: initial })} />);
+    view.render(<HomeView {...props('machines', { data: { ...initial, state: 'Loading', series: rows ? initial.series : [] } as PanelData })} />);
+    expect(root(view.host).dataset.freshness).toBe('loading');
+    expect(view.host.textContent).toMatch(/Updating · showing data received \d\d:\d\d:\d\d/);
+    expect(view.host.querySelectorAll('[data-host]')).toHaveLength(13);
+    expect(view.host.textContent).not.toContain('Query failed');
+  });
+
+  test('a single observed CPU history sample renders a visible mark', () => {
+    const base = panelData();
+    const history = base.series.find((item) => item.refId === 'M_E')!;
+    const single = { ...history, length: 1, fields: history.fields.map((field) => ({ ...field, values: field.values.slice(-1) })) };
+    const host = show('machines', { data: { ...base, series: [...base.series.filter((item) => item.refId !== 'M_E'), single] } });
+    expect(host.querySelectorAll('.msp circle')).toHaveLength(1);
+  });
+});
+
+
+describe('small view state boundaries', () => {
+  test.each(['constructor', 'toString', '__proto__', 'not-a-datasource'])('does not recognize inherited datasource key %s', (uid) => {
+    expect(modeOfDatasource(uid)).toBeUndefined();
+  });
+  test('monitoring follows historical versus current window wording', () => {
+    expect(show('machines').querySelector('.mon strong')?.textContent).toBe('Monitoring at window end');
+    const timeRange = range('now-24h', 'now', [Date.now() - 86400000, Date.now()]);
+    expect(show('machines', { mode: 'live', timeRange, data: panelData({ timeRange }) }).querySelector('.mon strong')?.textContent).toBe('Monitoring');
+  });
+  test('removing the highlighted review row clears its cross-panel highlight', () => {
+    const ReadHighlight = () => <output>{useHighlight()?.system ?? 'none'}</output>;
+    const output = mount(<ReadHighlight />);
+    const view = mount(<HomeView {...props('review')} />);
+    const row = view.host.querySelector<HTMLAnchorElement>('a.ex')!;
+    act(() => row.focus());
+    expect(output.host.textContent).not.toBe('none');
+    view.render(null);
+    expect(output.host.textContent).toBe('none');
+  });
+  test('unmounting an older row cannot clear another row highlight', () => {
+    const ReadHighlight = () => <output>{useHighlight()?.system ?? 'none'}</output>;
+    const output = mount(<ReadHighlight />);
+    const first = mount(<HomeView {...props('review')} />);
+    const second = mount(<HomeView {...props('review')} />);
+    act(() => first.host.querySelector<HTMLAnchorElement>('a.ex')!.dispatchEvent(new MouseEvent('pointerover', { bubbles: true })));
+    act(() => second.host.querySelector<HTMLAnchorElement>('a.ex')!.dispatchEvent(new MouseEvent('pointerover', { bubbles: true })));
+    first.render(null);
+    expect(output.host.textContent).not.toBe('none');
+    second.render(null);
+    expect(output.host.textContent).toBe('none');
   });
 });

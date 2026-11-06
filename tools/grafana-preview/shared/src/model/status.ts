@@ -19,7 +19,7 @@ export function statusOf(review: ReviewModel | null, system: SystemId, trusted: 
   if (system === 'overview') {
     const needing = known(review.action);
     const critical = needing.some((row) => row.level >= 3);
-    return { mark: critical ? 'crit' : needing.length ? 'warn' : '', text: needing.length ? `${needing.length} need action` : trusted && review.confirmed ? '0 need action' : 'Coverage incomplete' };
+    return { mark: critical ? 'crit' : review.action.length ? 'warn' : '', text: needing.length ? `${needing.length} need action` : trusted && review.confirmed ? '0 need action' : 'Coverage incomplete' };
   }
   const mine = (rows: Row[]) => rows.filter((row) => row.system === system);
   const [action, recovered, observe, maintenance] = [review.action, review.recovered, review.observe, review.maintenance].map(mine);

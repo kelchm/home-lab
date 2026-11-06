@@ -1,5 +1,7 @@
 vi.mock('@shared/domains/registry', () => import('./support/domains'));
-import { locationService } from '@grafana/runtime';
+import { config, locationService } from '@grafana/runtime';
+import { LoadingState } from '@grafana/data';
+import { access } from '../src/access';
 import { domainForFocus } from '@shared/domains/registry';
 import { sceneGraph, VizPanel, VizPanelExploreButton, VizPanelMenu } from '@grafana/scenes';
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
@@ -36,6 +38,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
 });
 
 describe('panel menu', () => {
@@ -48,7 +51,7 @@ describe('panel menu', () => {
 
   it('gives a Viewer read-only tools and no Explore', async () => {
     const { app } = await mountAt('?focus=Network');
-    expect(await open(menuOf(app, 'latency'))).toEqual(['Inspect data (custom)', 'Inspect query (custom)', 'Share view (custom)', 'Edit…']);
+    expect(await open(menuOf(app, 'latency'))).toEqual(['Inspect data (custom)', 'Inspect query (custom)', 'Share view (custom)', 'Edit (custom)…']);
     expect(exploreButton()).toBeUndefined();
   });
 
@@ -69,6 +72,21 @@ describe('panel menu', () => {
     const { app } = await mountAt('');
     const labels = await open(menuOf(app, 'machines'));
     expect(labels.filter((label) => /Inspect|Share/.test(label)).every((label) => label.endsWith('(custom)'))).toBe(true);
+  });
+});
+
+describe('permission evidence', () => {
+  it.each(['Editor', 'Admin'])('treats an existing empty permission map as authoritative for %s', (orgRole) => {
+    config.bootData = { user: { orgRole, permissions: {} } } as never;
+    config.viewersCanEdit = true;
+    expect(access()).toEqual({ canExplore: false, canEdit: false });
+    config.viewersCanEdit = false;
+  });
+  it('uses role compatibility only when the permissions map is absent', () => {
+    config.bootData = { user: { orgRole: 'Editor' } } as never;
+    expect(access()).toEqual({ canExplore: true, canEdit: true });
+    config.bootData = { user: { orgRole: 'Editor', permissions: { 'datasources:explore': false, 'dashboards:write': true } } } as never;
+    expect(access()).toEqual({ canExplore: false, canEdit: true });
   });
 });
 
@@ -118,6 +136,42 @@ describe('inspector', () => {
     } finally {
       page.requiredFor = original;
     }
+  });
+
+  it.each([LoadingState.Loading, LoadingState.Error])('opens a dynamic chart from the page retained evidence during %s', async (state) => {
+    const page = domainForFocus('Network')!.pages[0];
+    const sections = page.sections;
+    page.sections = (ctx) => ctx.series.some((frame) => frame.refId === 'D_net_latency') ? sections(ctx) : [];
+    try {
+      await mountAt('?focus=Network');
+      const run = runs.find((run) => run.refIds.includes('D_net_latency'))!;
+      await act(async () => run.respond({ state, series: [], errors: state === LoadingState.Error ? [{ refId: 'D_net_latency', message: 'Failed refresh' }] : undefined }));
+      expect(document.querySelector('[data-chart=latency]')).not.toBeNull();
+      await navigate('?focus=Network&inspect=net:summary:latency&inspectTab=data');
+      expect(await screen.findByText('Inspect: Synthetic latency')).toBeTruthy();
+      expect(await screen.findByText(/1 frames in this scope/)).toBeTruthy();
+      expect(screen.getByTestId('compare-inspector').textContent).toContain('Retained values were received');
+    } finally { page.sections = sections; }
+  });
+
+  it('does not expose old frames after selecting a different range while a query is pending', async () => {
+    await mountAt('?focus=Network&inspect=net:summary:latency&inspectTab=data');
+    expect(await screen.findByText(/1 frames in this scope/)).toBeTruthy();
+    holdResponses();
+    await navigate('?focus=Network&inspect=net:summary:latency&inspectTab=data&from=2026-11-01T02:00:00.000Z&to=2026-11-01T03:00:00.000Z');
+    expect(screen.queryByText(/1 frames in this scope/)).toBeNull();
+    expect(screen.getByText('Inspect: Synthetic latency')).toBeTruthy();
+  });
+
+  it('keeps an explicit unavailable drawer when a dynamic definition no longer exists', async () => {
+    const page = domainForFocus('Network')!.pages[0];
+    const sections = page.sections;
+    page.sections = (ctx) => ctx.series.length ? sections(ctx) : [];
+    try {
+      holdResponses();
+      await mountAt('?focus=Network&inspect=net:summary:latency');
+      expect(await screen.findByText(/This chart has no definition in the selected page evidence/)).toBeTruthy();
+    } finally { page.sections = sections; }
   });
 
   it('opens from a link, identifies itself and shows only the scope queries', async () => {
@@ -215,6 +269,13 @@ describe('share', () => {
     expect(url.searchParams.get('focus')).toBe('Network');
     expect(url.searchParams.get('source')).toBe('live');
     expect(url.searchParams.get('from')).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+
+  it('recognizes a moving end even when the start is absolute', async () => {
+    const { app } = await mountAt('?source=live&from=2026-11-01T00:00:00.000Z&to=now', 'live');
+    await openShare(app);
+    expect(screen.getByText('This range moves with now. Locking keeps the recipient on the same window.')).toBeTruthy();
+    expect(screen.queryByText(/already absolute/)).toBeNull();
   });
 
   it('can keep a moving range moving', async () => {

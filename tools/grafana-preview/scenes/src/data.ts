@@ -7,7 +7,7 @@ export function scopeData(data: PanelData, refIds?: ReadonlySet<string>): PanelD
   if (!refIds) {
     return data;
   }
-  const errors = (data.errors ?? (data.error ? [data.error] : []))?.filter((error) => !error.refId || refIds.has(error.refId));
+  const errors = (data.errors?.length ? data.errors : (data.error ? [data.error] : []))?.filter((error) => !error.refId || refIds.has(error.refId));
   const hasErrors = Boolean(errors?.length);
   return {
     ...data,
@@ -25,7 +25,7 @@ export function mergeData(parts: Array<PanelData | undefined>): PanelData | unde
   if (present.length < 2) {
     return present[0];
   }
-  const errors = present.flatMap((part) => part.errors ?? (part.error ? [part.error] : []));
+  const errors = present.flatMap((part) => part.errors?.length ? part.errors : (part.error ? [part.error] : []));
   const states = present.map((part) => part.state);
   const first = present[0];
   return {

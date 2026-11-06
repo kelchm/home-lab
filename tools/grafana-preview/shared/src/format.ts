@@ -6,8 +6,10 @@ export const num = (v: number | null | undefined, decimals = 0) =>
 
 export const pct = (v: number | null | undefined) => (v == null ? '–' : `${num(v, 1)} %`);
 
-export const dur = (ms: number) =>
-  ms >= HOUR ? `${Math.floor(ms / HOUR)} h ${Math.round((ms % HOUR) / 60_000)} min` : `${Math.max(1, Math.round(ms / 60_000))} min`;
+export const dur = (ms: number) => {
+  const minutes = Math.max(1, Math.round(ms / 60_000));
+  return minutes >= 60 ? `${Math.floor(minutes / 60)} h ${minutes % 60} min` : `${minutes} min`;
+};
 
 export const days = (s: number | null | undefined) => (s == null ? '–' : s >= 86_400 ? `${num(s / 86_400)} d` : s >= 3600 ? `${num(s / 3600)} h` : `${num(s / 60)} min`);
 

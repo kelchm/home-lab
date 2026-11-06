@@ -12,7 +12,11 @@ import { parseSource } from './urls';
 function Root(_: AppRootProps) {
   const [ready, setReady] = useState(false);
   useEffect(() => {
-    void initPluginTranslations(APP_ID).then(() => setReady(true));
+    let mounted = true;
+    void initPluginTranslations(APP_ID).catch((error: unknown) => {
+      console.warn('Lab translations could not be loaded; using default text.', error);
+    }).then(() => { if (mounted) setReady(true); });
+    return () => { mounted = false; };
   }, []);
   return ready ? <Loaded /> : <LoadingPlaceholder text="Loading Lab" />;
 }

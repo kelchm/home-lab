@@ -1,9 +1,11 @@
 vi.mock('@shared/domains/registry', () => import('./support/domains'));
 // The other suites stub the renderer. This one proves the host against the real shared HomeView.
-import { cleanup } from '@testing-library/react';
+import { cleanup, screen } from '@testing-library/react';
+import { act } from 'react';
+import { LoadingState } from '@grafana/data';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { installFakes, mountAt, navigate, useRecordedData } from './support/harness';
+import { installFakes, mountAt, navigate, runs, useRecordedData } from './support/harness';
 
 vi.mock('@shared/HomeView', () => import('@real-shared/HomeView'));
 
@@ -23,6 +25,17 @@ describe('with the real shared renderer', () => {
       expect(view(name)?.dataset.mode).toBe('recorded');
     }
     expect(view('network-summary')).toBeNull();
+  });
+
+  it('opens the Home inspector with the visible card retained evidence after failure', async () => {
+    await mountAt('');
+    await act(async () => runs[0].respond({ state: LoadingState.Error, series: [], errors: [{ refId: 'M_E', message: 'Refresh failed' }] }));
+    expect(view('machines')?.dataset.freshness).toBe('stale');
+    await navigate('?inspect=machines&inspectTab=data');
+    expect(await screen.findByText('Inspect: Machines')).toBeTruthy();
+    const inspector = screen.getByTestId('compare-inspector');
+    expect(inspector.textContent).toMatch(/\d+ frames in this scope/);
+    expect(inspector.textContent).toContain('Retained values were received');
   });
 
   it('derives the accepted briefing from recorded frames', async () => {

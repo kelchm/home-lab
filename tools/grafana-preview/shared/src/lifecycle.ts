@@ -89,7 +89,9 @@ export function scopeKey(request?: DataQueryRequest) {
 
 function identity(ref: string, data: PanelData, context: ResolveContext, scope: string) {
   const target = targetsOf(data.request).find((t) => t.refId === ref);
-  return [target?.expr ?? context.queries?.get(ref) ?? '?', target?.datasource?.uid ?? '', context.source, scope, context.range].join('\u0000');
+  const sharedSources = targetsOf(data.request).filter((t) => t.panelId !== undefined && !t.expr)
+    .map((t) => [data.request?.dashboardUID ?? '', t.panelId]);
+  return [target?.expr ?? context.queries?.get(ref) ?? '?', target?.datasource?.uid ?? '', context.source, JSON.stringify(sharedSources), scope, context.range].join('\u0000');
 }
 
 /**
@@ -130,13 +132,8 @@ export function resolve(data: PanelData, retained: RetainedByRef, context: Resol
     const gap = (state: 'failed' | 'unanswered') => (usable ? standIn('retained', state) : refs.set(ref, { state, at: null }));
 
     if (!settled) {
-      // Grafana keeps showing the previous run's frames while loading, so they count only under the same identity.
-      if (rows.length && usable) {
-        series.push(...rows);
-        refs.set(ref, { state: 'current', at: null });
-      } else {
-        standIn('pending');
-      }
+      // A refresh has no current answer yet, even when Grafana leaves the previous arrays in place.
+      standIn('pending');
     } else if (!matchesRange) {
       gap('unanswered');
     } else if (failedRefs.has(ref) || wholeRequest) {
@@ -210,14 +207,36 @@ export function coverage(resolved: Resolved, refs: readonly string[]): Coverage 
  * A Dashboard-datasource consumer's request names only its source panel, so it can't see what a source panel is running. Source
  * panels record their query text here, which lets a consumer notice an edited query under an unchanged refId.
  */
-const known = new Map<string, string>();
+const known = new Map<string, ReadonlyMap<string, string>>();
+
+// Grafana enriches source requests with dashboardUID/panelId. A Dashboard target's panelId names that source,
+// not the consumer's request.panelId. Requests without that identity must not enter a global refId namespace.
+const panelKey = (request: DataQueryRequest | undefined, panelId = request?.panelId) =>
+  request?.dashboardUID && panelId !== undefined ? JSON.stringify([request.dashboardUID, panelId]) : undefined;
 
 export function rememberQueries(request?: DataQueryRequest) {
-  for (const target of targetsOf(request)) {
-    if (target.refId && target.expr) {
-      known.set(target.refId, target.expr);
+  const key = panelKey(request);
+  if (key) {
+    known.set(key, new Map(targetsOf(request).flatMap((target) => target.refId && target.expr
+      ? [[target.refId, JSON.stringify([target.expr, target.datasource?.uid ?? ''])]] : [])));
+  }
+}
+
+export function sourceQueries(request?: DataQueryRequest): ReadonlyMap<string, string> | undefined {
+  const sources = targetsOf(request).filter((target) => target.panelId !== undefined && !target.expr);
+  if (!sources.length) return undefined;
+  const queries = new Map<string, string>();
+  const ambiguous = new Set<string>();
+  for (const target of sources) {
+    const key = panelKey(request, target.panelId);
+    if (!key) continue;
+    for (const [ref, query] of known.get(key) ?? []) {
+      if (queries.has(ref)) ambiguous.add(ref);
+      queries.set(ref, JSON.stringify([key, query]));
     }
   }
+  for (const ref of ambiguous) queries.delete(ref);
+  return queries;
 }
 
 /** Derives state from the previous render, the pattern React documents for this, so nothing reads a ref while rendering. */
@@ -228,7 +247,7 @@ export function useResolvedData(data: PanelData, expected: readonly string[], so
   }
   rememberQueries(data.request);
   const origins = state?.origins ?? new WeakMap<object, string>();
-  const resolved = resolve(data, state?.resolved.next ?? new Map(), { expected, source, range, queries: known, now: Date.now(), origins });
+  const resolved = resolve(data, state?.resolved.next ?? new Map(), { expected, source, range, queries: sourceQueries(data.request), now: Date.now(), origins });
   setState({ data, expected, source, range, resolved, origins });
   return resolved;
 }

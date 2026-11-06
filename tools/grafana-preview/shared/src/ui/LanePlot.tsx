@@ -30,6 +30,9 @@ export function linePath(run: Array<[number, number]>, x: (t: number) => number,
   return run.map(([t, v], i) => `${i ? 'L' : 'M'}${x(t).toFixed(1)} ${y(v).toFixed(1)}`).join('');
 }
 
+export const visibleSpans = (spans: Span[], from: number, to: number): Span[] =>
+  spans.filter(([a, z]) => z > from && a < to && z > a).map(([a, z]) => [Math.max(a, from), Math.min(z, to)]);
+
 export interface LanePlotProps {
   lane: Lane;
   from: number;
@@ -79,9 +82,10 @@ export const LanePlot = memo(function LanePlot({ lane, from, to, ticks, cursor, 
   };
 
   const strip = (spans: Span[], fill: string, opacity: number, rectY: number, rectH: number): ReactNode =>
-    spans.map(([a, z]) => <rect key={a} x={x(a).toFixed(1)} y={rectY} width={Math.max(2, x(z) - x(a)).toFixed(1)} height={rectH} fill={fill} fillOpacity={opacity} />);
+    visibleSpans(spans, from, to).map(([a, z]) => <rect key={a} x={x(a).toFixed(1)} y={rectY} width={Math.max(2, x(z) - x(a)).toFixed(1)} height={rectH} fill={fill} fillOpacity={opacity} />);
 
-  const critical = lane.marks.crit[0];
+  const criticalSpans = visibleSpans(lane.marks.crit, from, to);
+  const critical = criticalSpans[0];
   const room = critical ? x(critical[1]) - x(critical[0]) : 0;
   const atCursor = cursor == null ? null : lane.points.find(([t]) => Math.abs(t - cursor) <= lane.step / 2)?.[1];
 
@@ -110,7 +114,7 @@ export const LanePlot = memo(function LanePlot({ lane, from, to, ticks, cursor, 
           {ticks.map((t) => (
             <line key={t} x1={x(t).toFixed(1)} x2={x(t).toFixed(1)} y1={0} y2={height - MARGIN.b} stroke="rgba(150,205,245,.06)" />
           ))}
-          {lane.marks.crit.map(([a, z]) => (
+          {criticalSpans.map(([a, z]) => (
             <rect key={a} x={Math.max(MARGIN.l, x(a)).toFixed(1)} y={0} width={Math.max(2, Math.min(width - MARGIN.r, x(z)) - Math.max(MARGIN.l, x(a))).toFixed(1)} height={height - MARGIN.b} fill="rgba(255,75,110,.17)" />
           ))}
           {paths}
@@ -123,7 +127,7 @@ export const LanePlot = memo(function LanePlot({ lane, from, to, ticks, cursor, 
               {lane.label}
             </text>
           )}
-          {highlight.map(([a, z]) => (
+          {visibleSpans(highlight, from, to).map(([a, z]) => (
             <rect key={a} x={x(a).toFixed(1)} y={0} width={Math.max(2, x(z) - x(a)).toFixed(1)} height={height} fill="rgba(233,241,247,.14)" />
           ))}
           {cursor != null && (

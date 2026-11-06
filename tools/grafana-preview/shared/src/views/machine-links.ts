@@ -16,11 +16,10 @@ export function machineTarget(host: Pick<HostRow, 'instance' | 'platform'>, ctx:
   }
   if (FOCUSES.every((focus) => Boolean(ctx.links[focus])) && ctx.mode !== 'unknown') {
     const overview = new URL(ctx.links.Overview, 'https://preview.invalid');
-    const params = new URLSearchParams({
-      from: String(ctx.timeRange.raw.from), to: String(ctx.timeRange.raw.to),
-      'var-platform': host.platform, 'var-node': host.instance,
-      'var-datasource': ctx.mode === 'live' ? 'comparison-live' : 'comparison',
-    });
+    const params = new URLSearchParams(timeQuery(ctx.timeRange));
+    params.set('var-platform', host.platform);
+    params.set('var-node', host.instance);
+    params.set('var-datasource', ctx.mode === 'live' ? 'comparison-live' : 'comparison');
     const zone = overview.searchParams.get('timezone');
     if (zone) params.set('timezone', zone);
     return { href: `/d/hosts?${params}`, outside: false };

@@ -17,11 +17,13 @@ function Spark({ host, ctx, top, gradient }: { host: HostRow; ctx: ViewContext; 
   }
   const x = (t: number) => (1000 * (t - from)) / (to - from);
   const y = (v: number) => 96 - (92 * v) / top;
-  const runs = runsOf(host.history).filter((run) => run.length > 1);
+  const allRuns = runsOf(host.history);
+  const runs = allRuns.filter((run) => run.length > 1);
   const line = runs.map((run) => linePath(run, x, y)).join('');
   const area = runs.map((run) => `${linePath(run, x, y)}L${x(run[run.length - 1][0]).toFixed(1)} 100L${x(run[0][0]).toFixed(1)} 100Z`).join('');
   return (
     <svg className="msp" viewBox="0 0 1000 100" preserveAspectRatio="none" role="img" aria-label={`${host.instance} CPU over ${span}: ${pct(Math.min(...values))} to ${pct(Math.max(...values))}`}>
+      {allRuns.filter((run) => run.length === 1).map(([[t, v]]) => <circle key={t} cx={x(t)} cy={y(v)} r={2} fill="#4DB0FF" />)}
       <path d={area} fill={`url(#${gradient})`} />
       <path d={line} fill="none" stroke="#4DB0FF" strokeWidth={1.6} vectorEffect="non-scaling-stroke" />
     </svg>
@@ -45,7 +47,7 @@ function Monitoring({ ctx }: { ctx: ViewContext }) {
   const delivery = heartbeat == null ? 'Heartbeat unknown' : heartbeat > 0 ? 'Heartbeat acknowledged' : 'Heartbeat not delivered';
   return (
     <div className="card mon">
-      <strong>Monitoring at window end</strong>
+      <strong>Monitoring{ctx.atEnd}</strong>
       <span className={rulesEvaluating ? '' : 'unknown'}>{rulesEvaluating ? 'Rules evaluating' : 'Rule coverage unknown'}</span>
       <span>{num(down)} targets failing</span>
       <span>{num(notifyFailures)} notification failures / 24 h</span>

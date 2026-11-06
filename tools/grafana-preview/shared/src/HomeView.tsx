@@ -1,7 +1,7 @@
-import { useMemo, type ComponentType, type CSSProperties } from 'react';
-import type { DataQueryRequest } from '@grafana/data';
+import { useLayoutEffect, useMemo, type ComponentType, type CSSProperties } from 'react';
+import type { DataQueryRequest, PanelData, TimeRange } from '@grafana/data';
 import { clockFor, spanLabel } from './format';
-import { coverage, rangeKey, useResolvedData } from './lifecycle';
+import { coverage, rangeKey, useResolvedData, type Resolved } from './lifecycle';
 import { NEEDS, QUERIES, REVIEW_REFS } from './model/catalog';
 import { buildHome } from './model/home';
 import { buildNetwork } from './model/network';
@@ -25,6 +25,13 @@ import { useDomainStyles } from './domains/styles';
 
 export type { Focus, Freshness, HomeViewProps, Mode, PanelOptions, View } from './types';
 export { VIEWS } from './types';
+
+export interface HomeEvidence {
+  data: PanelData;
+  resolved: Resolved;
+  mode: Mode | 'unknown';
+  timeRange: TimeRange;
+}
 
 const DEFAULT_ZONE = 'America/New_York';
 /** How close a live window's end must be to now for its figures to read as current. */
@@ -53,7 +60,7 @@ function InternalNavigation({ ctx }: { ctx: ViewContext }) {
 
 const MODES: Record<string, Mode> = { comparison: 'recorded', 'comparison-live': 'live' };
 
-export const modeOfDatasource = (uid?: string): Mode | undefined => (uid ? MODES[uid] : undefined);
+export const modeOfDatasource = (uid?: string): Mode | undefined => (uid && Object.hasOwn(MODES, uid) ? MODES[uid] : undefined);
 
 /** Consumers of a shared source name only that source here, so a host that knows better passes `mode`. */
 function detectMode(request?: DataQueryRequest): Mode | undefined {
@@ -71,12 +78,14 @@ function describeMode(mode: Mode | 'unknown', current: boolean, span: string) {
   return { modeLabel: 'Source unknown', modeTitle: 'This view can’t tell whether its data is recorded or live.', tag: 'Source unknown' };
 }
 
-export function HomeView({ data, timeRange, view, focus, links, constrained = false, width, mode, timeZone = DEFAULT_ZONE }: HomeViewProps) {
+export function HomeView({ data, timeRange, view, focus, links, constrained = false, width, mode, timeZone = DEFAULT_ZONE, onEvidence }: HomeViewProps & { onEvidence?: (evidence: HomeEvidence) => void }) {
   useStyles();
   useDomainStyles();
   const internal = SYSTEMS.every((system) => Boolean(links[system.name]));
   const source = mode ?? detectMode(data.request) ?? 'unknown';
   const resolved = useResolvedData(data, QUERIES[view], source, rangeKey(timeRange));
+  const evidence = useMemo<HomeEvidence>(() => ({ data: { ...data, timeRange, series: resolved.series }, resolved, mode: source, timeRange }), [data, timeRange, resolved, source]);
+  useLayoutEffect(() => { onEvidence?.(evidence); }, [onEvidence, evidence]);
   const from = timeRange.from.valueOf();
   const to = timeRange.to.valueOf();
   const own = coverage(resolved, NEEDS[view]);

@@ -89,6 +89,8 @@ export function Card({ eye, when, tag, title, pill, tone = '', className = '', a
 export function statusText(coverage: Coverage, clock: Clock) {
   const { freshness, missing, retainedAt, unanswered } = coverage;
   switch (freshness) {
+    case 'loading':
+      return retainedAt == null ? null : `Updating · showing data received ${clock.stamp(retainedAt)}`;
     case 'failed':
       return 'Query failed · no data loaded';
     case 'unavailable':

@@ -15,6 +15,7 @@ export interface CardSpec {
   queries: QueryDef[];
   nativePanelId?: number;
   entityLabels?: readonly string[];
+  entity?: string;
 }
 
 const needs = (view: View) => COMMON_QUERIES.filter((query) => NEEDS[view].includes(query.refId));
@@ -39,7 +40,7 @@ export function pageCard(domain: DomainDefinition, page: DomainPage, scope?: Dom
 }
 
 export function chartCard(domain: DomainDefinition, page: DomainPage, section: ChartSection): CardSpec {
-  return { ...pageCard(domain, page), id: `${domain.id}:${page.id}:${section.id}`, title: section.title, entityLabels: section.entityLabels, queries: domain.queries.filter((query) => section.refs.includes(query.refId)) };
+  return { ...pageCard(domain, page), id: `${domain.id}:${page.id}:${section.id}`, title: section.title, entityLabels: section.entityLabels, entity: section.entity, queries: domain.queries.filter((query) => section.refs.includes(query.refId)) };
 }
 
 /** Chart definitions are evaluated with the current page context, including direct entity entries. */

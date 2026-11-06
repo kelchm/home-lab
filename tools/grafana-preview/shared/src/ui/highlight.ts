@@ -16,6 +16,11 @@ export function setHighlight(next: Highlight | null) {
   listeners.forEach((listener) => listener());
 }
 
+/** A disappearing or blurred row can clear only the highlight it published, not another row's newer one. */
+export function clearHighlight(owned: Highlight) {
+  if (current === owned) setHighlight(null);
+}
+
 const subscribe = (listener: () => void) => {
   listeners.add(listener);
   return () => listeners.delete(listener);

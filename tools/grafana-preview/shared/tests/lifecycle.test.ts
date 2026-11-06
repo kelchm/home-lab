@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { DataFrame, PanelData, TimeRange } from '@grafana/data';
-import { coverage, rangeKey, resolve, type ResolveContext } from '../src/lifecycle';
+import { coverage, rangeKey, rememberQueries, resolve, sourceQueries, type ResolveContext } from '../src/lifecycle';
 
 const timeRange = (from = '2026-11-01T01:27:04.636Z', to = '2026-11-02T01:27:04.636Z') => ({ raw: { from, to } } as TimeRange);
 const range = timeRange();
@@ -108,4 +108,38 @@ describe('query identity and honest state', () => {
   expect(rangeKey(timeRange(String(Date.parse(range.raw.from as string)), String(Date.parse(range.raw.to as string))))).toBe(rangeKey(range));
   expect(rangeKey(range)).toBe(rangeKey({ raw: { from: { valueOf: () => Date.parse(range.raw.from as string) }, to: { valueOf: () => Date.parse(range.raw.to as string) } } } as unknown as TimeRange));
  });
+});
+
+
+describe('Dashboard source query identities', () => {
+  const source = (dashboardUID: string, panelId: number, expr: string, uid = 'comparison') => ({ ...data().request!, dashboardUID, panelId, targets: [{ refId: 'A', expr, datasource: { uid } }] });
+  const consumer = (dashboardUID: string, panelId: number) => ({ ...data().request!, dashboardUID, panelId: 99, targets: [{ refId: 'Shared', panelId, datasource: { uid: '-- Dashboard --' } }] });
+  it('isolates reused refs by dashboard and the target source panel, not the consumer panel', () => {
+    rememberQueries(source('one', 1, 'first'));
+    const first = sourceQueries(consumer('one', 1))!.get('A');
+    rememberQueries(source('one', 2, 'second'));
+    rememberQueries(source('two', 1, 'third'));
+    expect(sourceQueries(consumer('one', 1))!.get('A')).toBe(first);
+    expect(sourceQueries(consumer('one', 2))!.get('A')).not.toBe(first);
+    expect(sourceQueries(consumer('two', 1))!.get('A')).not.toBe(first);
+    rememberQueries(source('one', 1, 'edited'));
+    expect(sourceQueries(consumer('one', 1))!.get('A')).not.toBe(first);
+  });
+  it('tracks a source datasource change and forgets removed query definitions', () => {
+    rememberQueries(source('ds', 1, 'up'));
+    const first = sourceQueries(consumer('ds', 1))!.get('A');
+    rememberQueries(source('ds', 1, 'up', 'comparison-live'));
+    expect(sourceQueries(consumer('ds', 1))!.get('A')).not.toBe(first);
+    rememberQueries({ ...source('ds', 1, 'up'), targets: [] });
+    expect(sourceQueries(consumer('ds', 1))!.has('A')).toBe(false);
+  });
+  it('does not guess a global source for requests missing dashboard identity', () => {
+    rememberQueries(data().request);
+    expect(sourceQueries({ ...consumer('one', 1), dashboardUID: undefined })?.size).toBe(0);
+  });
+  it('invalidates retained data when a Dashboard consumer switches source panels', () => {
+    const first = resolve(data({ request: consumer('switch', 1) }), new Map(), context());
+    const next = resolve(failed({ request: consumer('switch', 2) }), first.next, context());
+    expect(next.series).toEqual([]);
+  });
 });

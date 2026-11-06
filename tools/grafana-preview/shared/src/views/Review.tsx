@@ -1,8 +1,9 @@
+import { useEffect, useMemo } from 'react';
 import { dur, type Clock } from '../format';
 import type { Row } from '../model/home';
 import type { MarkKind } from '../model/status';
 import { SYSTEM } from '../model/systems';
-import { setHighlight } from '../ui/highlight';
+import { clearHighlight, setHighlight } from '../ui/highlight';
 import { Card, Fit, Mark, Status } from '../ui/parts';
 import { targetOf, type ViewContext } from './context';
 
@@ -40,6 +41,8 @@ export function reviewTarget(row: Row, ctx: Pick<ViewContext, 'links' | 'timeRan
 }
 
 function ReviewRow({ row, tier, ctx }: { row: Row; tier: Tier; ctx: ViewContext }) {
+  const highlight = useMemo(() => ({ system: row.system, spans: row.spans }), [row.system, row.spans]);
+  useEffect(() => () => clearHighlight(highlight), [highlight]);
   const system = SYSTEM[row.system];
   const target = reviewTarget(row, ctx);
   const detail = [row.detail?.replace('//', '/'), timing(row, ctx.clock)].filter(Boolean).join(' · ');
@@ -62,8 +65,8 @@ function ReviewRow({ row, tier, ctx }: { row: Row; tier: Tier; ctx: ViewContext 
       </div>
     );
   }
-  const light = () => setHighlight({ system: row.system, spans: row.spans });
-  const dim = () => setHighlight(null);
+  const light = () => setHighlight(highlight);
+  const dim = () => clearHighlight(highlight);
   return (
     <a className="ex" href={target.href} data-item={row.id} data-row aria-label={about} onPointerEnter={light} onPointerLeave={dim} onFocus={light} onBlur={dim} {...(target.outside ? { target: '_blank', rel: 'noopener' } : {})}>
       {inner}

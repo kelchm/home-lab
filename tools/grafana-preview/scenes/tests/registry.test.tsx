@@ -1,7 +1,7 @@
 // This suite uses the real domain registry; lifecycle suites use explicitly synthetic domains.
 import { dateTime, type TimeRange } from '@grafana/data';
 import { DOMAINS, domainForFocus } from '@shared/domains/registry';
-import type { DomainContext } from '@shared/domains/contract';
+import { pageRequiredRefs, type DomainContext } from '@shared/domains/contract';
 import { cleanup } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { COMMON_QUERIES, FOCUSES, HOME_URL } from '../src/contract';
@@ -36,12 +36,13 @@ describe('real domain integration contract', () => {
   it('can build every real page with missing telemetry and unknown resource identities', () => {
     for (const domain of DOMAINS) {
       expect(new Set(domain.pages.map((page) => page.id)).size).toBe(domain.pages.length);
-      for (const page of domain.pages) for (const entity of [null, 'missing-resource']) {
-        const sections = page.sections(context(domain.focus, page.id, entity));
+      for (const page of domain.pages) for (const entity of [null, 'missing-resource']) for (const mode of ['recorded', 'live'] as const) {
+        const scope = { ...context(domain.focus, page.id, entity), mode };
+        const sections = page.sections(scope);
         expect(sections.length).toBeGreaterThan(0);
         expect(new Set(sections.map((section) => section.id)).size).toBe(sections.length);
         const refs = new Set(domain.queries.map((query) => query.refId));
-        for (const ref of page.required) expect(refs.has(ref), `${domain.focus}/${page.id}: undeclared required ref ${ref}`).toBe(true);
+        for (const ref of pageRequiredRefs(page, scope)) expect(refs.has(ref), `${domain.focus}/${page.id}: undeclared required ref ${ref}`).toBe(true);
         for (const section of sections) if (section.kind === 'chart') {
           expect(section.refs.length).toBeGreaterThan(0);
           for (const ref of section.refs) expect(refs.has(ref), `${domain.focus}/${page.id}: undeclared chart ref ${ref}`).toBe(true);

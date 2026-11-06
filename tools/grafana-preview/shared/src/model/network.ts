@@ -57,7 +57,7 @@ export function buildNetwork(series: readonly FrameLike[], wans: Wan[]): Network
     .sort((a, b) => (b.clients ?? -1) - (a.clients ?? -1) || a.name.localeCompare(b.name));
 
   const [channel, busy, radioClients] = ['radioChannel', 'radioBusy', 'radioClients'].map((name) => metric(name, 'ap_radio'));
-  const radios = [...busy.keys()]
+  const radios = [...new Set([...channel.keys(), ...busy.keys(), ...radioClients.keys()])]
     .map((radio) => ({ radio, channel: channel.get(radio) ?? null, busy: busy.get(radio) ?? null, clients: radioClients.get(radio) ?? null }))
     .sort((a, b) => (b.busy ?? -1) - (a.busy ?? -1));
 

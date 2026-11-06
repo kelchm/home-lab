@@ -27,7 +27,7 @@ export function toolItems(spec: CardSpec, share: SceneObjectRef<ShareControl>): 
     { text: 'Inspect data (custom)', iconClassName: 'table', href: inspectHref(location, spec.id, 'data') },
     { text: 'Inspect query (custom)', iconClassName: 'info-circle', href: inspectHref(location, spec.id, 'query') },
     { text: 'Share view (custom)', iconClassName: 'share-alt', onClick: () => share.resolve().setState({ isOpen: true }) },
-    { text: 'Edit…', iconClassName: 'edit', href: inspectHref(location, spec.id, 'change') },
+    { text: 'Edit (custom)…', iconClassName: 'edit', href: inspectHref(location, spec.id, 'change') },
   ];
 }
 

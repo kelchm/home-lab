@@ -55,7 +55,7 @@ export function NetworkSummary({ ctx }: { ctx: ViewContext }) {
   const parts = [lead, devices ? `${devices} UniFi devices` : 'UniFi devices unknown', statusOf(model.review, 'net', trusted, loading).text];
   const tmobile = network?.tmobile;
   const dish = network?.dish;
-  const registered = tmobile?.registered == null ? 'registration unknown' : tmobile.registered === 1 ? 'registered' : 'not registered';
+  const registered = tmobile?.registered === 1 ? 'registered' : 'registration unknown';
   const accents: Record<string, { accent: Accent; facts: ReactNode }> = {
     'T-Mobile': {
       accent: 'azure',

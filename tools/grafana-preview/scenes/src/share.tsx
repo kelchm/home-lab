@@ -38,7 +38,7 @@ function ShareModal({ model, onDismiss }: { model: ShareControl; onDismiss: () =
   const timeRange = sceneGraph.getTimeRange(model).useState();
   const href = shareHref(location, timeRange.value, lockRange);
   const url = `${window.location.origin}${locationUtil.assureBaseUrl(href)}`;
-  const relative = typeof timeRange.from === 'string' && timeRange.from.startsWith('now');
+  const relative = [timeRange.from, timeRange.to].some((bound) => typeof bound === 'string' && bound.startsWith('now'));
   return (
     <Modal isOpen title="Share this view" onDismiss={onDismiss}>
       <div className={styles.stack}>

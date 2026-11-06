@@ -154,9 +154,9 @@ describe('retention is keyed by query, datasource, scope and range', () => {
 });
 
 describe('while a run is in flight', () => {
-  test('an ordinary refresh keeps current frames with no failure state', () => {
+  test('an ordinary refresh keeps dated retained frames while pending', () => {
     const r = resolve(data('Loading', [frame('A', [1]), frame('B', [2])]), good(), context());
-    expect(coverage(r, ['A', 'B']).freshness).toBe('fresh');
+    expect(coverage(r, ['A', 'B'])).toMatchObject({ freshness: 'loading', retained: 2, retainedAt: 1000 });
   });
 
   test('frames from another range or source are not shown under the new identity', () => {
@@ -171,7 +171,10 @@ describe('while a run is in flight', () => {
   });
 
   test('values cleared in place mid-run fall back to the copy without reporting a failure', () => {
-    const r = resolve(data('Loading', [emptyFrame('A'), emptyFrame('B')]), good(), context());
+    const original = [frame('A', [1]), frame('B', [2])];
+    const kept = resolve(data('Done', original), none, context()).next;
+    for (const item of original) for (const field of item.fields) field.values.length = 0;
+    const r = resolve(data('Loading', original), kept, context());
     expect(shown(r, 'A')).toEqual([1]);
     expect(coverage(r, ['A', 'B']).freshness).toBe('loading');
   });

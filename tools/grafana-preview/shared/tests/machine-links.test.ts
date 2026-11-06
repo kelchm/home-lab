@@ -29,6 +29,13 @@ describe('Machines investigation links', () => {
     expect(url.searchParams.get('var-platform')).toBe('k8s');
   });
 
+  test('absolute DateTime bounds become epoch milliseconds in the local Hosts link', () => {
+    const timeRange = { ...ctx.timeRange, raw: { from: { valueOf: () => 100, toString: () => 'a text date' }, to: { valueOf: () => 200, toString: () => 'another text date' } } } as unknown as typeof ctx.timeRange;
+    const target = machineTarget({ platform: 'k8s', instance: 'k8s-prod-1' }, { ...ctx, timeRange });
+    const params = new URL(target.href, 'https://preview.invalid').searchParams;
+    expect([params.get('from'), params.get('to')]).toEqual(['100', '200']);
+  });
+
   test('a standalone panel without internal navigation preserves its explicit external fallback', () => {
     const target = machineTarget({ platform: 'spark', instance: 'spark-1' }, { ...ctx, links: {} });
     expect(target.outside).toBe(true);

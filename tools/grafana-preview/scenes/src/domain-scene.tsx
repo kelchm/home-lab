@@ -1,7 +1,7 @@
 import { FieldColorModeId, FieldType, LoadingState, type DataFrame, type Field, type PanelData } from '@grafana/data';
 import { SceneDataNode, sceneGraph, SceneObjectBase, type SceneComponentProps, type SceneObjectRef, type SceneObjectState, type SceneQueryRunner, VizPanel } from '@grafana/scenes';
 import { useCallback, useLayoutEffect, useMemo } from 'react';
-import { DomainView, type DomainChartProps } from '@shared/domains/DomainView';
+import { DomainView, type DomainChartProps, type DomainEvidence } from '@shared/domains/DomainView';
 import type { DomainDefinition, DomainPage, DomainRoute } from '@shared/domains/contract';
 import { pageForDomain } from '@shared/domains/registry';
 import { chartCard, pageCard } from './cards';
@@ -43,6 +43,7 @@ interface DomainBodyState extends SceneObjectState {
   domain: DomainDefinition;
   share: SceneObjectRef<ShareControl>;
   charts?: NativeChartScene[];
+  evidence?: DomainEvidence & { page: string; input?: PanelData };
 }
 
 /** The runner is owned here, so a focus issues queries only while its body is mounted. */
@@ -62,7 +63,8 @@ function DomainBodyRenderer({ model }: SceneComponentProps<DomainBody>) {
   const deeper = useCallback((uid: string, variables?: Record<string, string | undefined>) => deeperHref(location, uid, variables), [location]);
   const page = pageForDomain(domain, view);
   const panelData = useMemo(() => data ?? { state: LoadingState.Loading, series: [], timeRange }, [data, timeRange]);
-  return <DomainView key={`${domain.id}:${page.id}:${entity ?? ''}`} domain={domain} page={page} data={panelData} timeRange={timeRange} mode={source === 'replay' ? 'recorded' : 'live'} timeZone={timeZone} entity={entity} href={href} deeper={deeper} inspectHref={inspectHref(location, pageCard(domain, page).id, 'query')} renderChart={(props) => <NativeDomainChart key={`${props.section.id}:${entity ?? ''}`} {...props} domain={domain} page={page} owner={model} share={share} />} />;
+  const onEvidence = useCallback((evidence: DomainEvidence) => model.setState({ evidence: { ...evidence, page: page.id, input: data } }), [model, page.id, data]);
+  return <DomainView key={`${domain.id}:${page.id}:${entity ?? ''}`} domain={domain} page={page} data={panelData} timeRange={timeRange} mode={source === 'replay' ? 'recorded' : 'live'} timeZone={timeZone} entity={entity} href={href} deeper={deeper} onEvidence={onEvidence} inspectHref={inspectHref(location, pageCard(domain, page).id, 'query')} renderChart={(props) => <NativeDomainChart key={`${props.section.id}:${entity ?? ''}`} {...props} domain={domain} page={page} owner={model} share={share} />} />;
 }
 
 /** Keep entity filtering at the frame boundary; missing labels never become an all-resource fallback. */

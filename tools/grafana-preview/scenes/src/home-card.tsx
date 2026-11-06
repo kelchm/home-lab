@@ -1,8 +1,9 @@
 import { css } from '@emotion/css';
-import { type GrafanaTheme2, LoadingState } from '@grafana/data';
+import { type GrafanaTheme2, LoadingState, type PanelData } from '@grafana/data';
 import { type SceneComponentProps, sceneGraph, SceneObjectBase, type SceneObjectState, type VizPanelMenu } from '@grafana/scenes';
 import { Dropdown, IconButton, useStyles2 } from '@grafana/ui';
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
+import type { HomeEvidence } from '@shared/HomeView';
 
 import { type CardSpec } from './cards';
 import { type Source } from './contract';
@@ -10,17 +11,16 @@ import { HomeView, type Mode, type View } from './home-view';
 import { useAppLocation, useElementWidth } from './hooks';
 import { CompareShell } from './shell';
 import { focusLinks } from './urls';
+import { ianaZone } from './domain-scene';
 
 export type ViewSpec = CardSpec & { view: View };
 
 const MODES: Record<Source, Mode> = { replay: 'recorded', live: 'live' };
 
-/** Grafana's zone setting can be a keyword, and the shared renderer takes an IANA zone. */
-const ianaZone = (zone: string) => (zone === 'browser' ? Intl.DateTimeFormat().resolvedOptions().timeZone : zone === 'utc' ? 'UTC' : zone);
-
 interface HomeCardState extends SceneObjectState {
   spec: ViewSpec;
   menu?: VizPanelMenu;
+  evidence?: HomeEvidence & { input?: PanelData };
 }
 
 /**
@@ -42,6 +42,7 @@ function HomeCardRenderer({ model }: SceneComponentProps<HomeCard>) {
   const links = useMemo(() => focusLinks(location), [location]);
   const [ref, width] = useElementWidth<HTMLElement>();
   const panelData = useMemo(() => data ?? { state: LoadingState.Loading, series: [], timeRange }, [data, timeRange]);
+  const onEvidence = useCallback((evidence: HomeEvidence) => model.setState({ evidence: { ...evidence, input: data } }), [model, data]);
   return (
     <section ref={ref} className={styles.card} data-card={spec.id} aria-label={spec.title}>
       <HomeView
@@ -54,6 +55,7 @@ function HomeCardRenderer({ model }: SceneComponentProps<HomeCard>) {
         width={width}
         mode={MODES[source]}
         timeZone={ianaZone(range.getTimeZone())}
+        onEvidence={onEvidence}
       />
       {menu && (
         <div className={styles.tools}>

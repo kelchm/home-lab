@@ -99,8 +99,9 @@ function systemOf(item: ReviewItem): SystemId {
   if (item.tab && TABS[item.tab]) {
     return TABS[item.tab];
   }
-  if (item.labels?.instance?.startsWith('spark')) {
-    return 'spark';
+  if (item.labels) {
+    const system = alertSystem(item.labels);
+    if (system !== 'lab') return system;
   }
   if (item.kind === 'wan') {
     return 'net';
@@ -108,10 +109,22 @@ function systemOf(item: ReviewItem): SystemId {
   return item.kind === 'monitor' || item.kind === 'probe' ? 'overview' : SERVICES_DEFAULT;
 }
 
+const ALERT_JOBS = new Map<string, SystemId>([
+  ['pve-node', 'pve'], ['pve-api', 'pve'], ['spark-node', 'spark'],
+  ['synology-node', 'nas'], ['synology-snmp', 'nas'],
+  ['unifi-api', 'net'], ['starlink-api', 'net'], ['pi-node', 'dev'], ['pi-chrony', 'dev'],
+]);
+const ALERT_PLATFORMS = new Map<string, SystemId>([['pve', 'pve'], ['spark', 'spark'], ['synology', 'nas'], ['unifi', 'net'], ['pi', 'dev']]);
+
+/** Exact source labels from the scrape/alert definitions; an unknown family remains unassigned. */
 function alertSystem(labels: Record<string, string>): SystemId | 'lab' {
   if (labels.probe) {
     return PROBES[labels.probe] ?? SERVICES_DEFAULT;
   }
+  if (labels.job === 'pi-nut' || (labels.job === 'synology-snmp' && ['UPSOnBattery', 'UPSBatteryLow'].includes(labels.alertname))) return 'power';
+  const identified = ALERT_JOBS.get(labels.job) ?? ALERT_PLATFORMS.get(labels.platform);
+  if (identified) return identified;
+  if (labels.cluster === 'pve-sbx') return 'pve';
   if (labels.cluster === 'k8s-prod') {
     return 'k8s';
   }
@@ -286,13 +299,8 @@ export function buildHome(series: readonly FrameLike[], from: number, to: number
 
 /** The last sample, but only if it reaches the window's end. A series that stopped earlier has no value at window end. */
 export function valueAtEnd(lane: Lane, to: number) {
-  for (let i = lane.points.length - 1; i >= 0; i--) {
-    const [t, v] = lane.points[i];
-    if (v != null) {
-      return to - t <= lane.step * 1.5 ? v : null;
-    }
-  }
-  return null;
+  const last = lane.points.at(-1);
+  return last && last[0] <= to && to - last[0] <= lane.step * 1.5 ? last[1] : null;
 }
 
 /** The sample at a moment, or null inside a gap: a cursor never borrows a neighbouring value. */
