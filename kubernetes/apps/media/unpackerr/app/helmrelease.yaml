@@ -1,8 +1,8 @@
 ---
 # Unpackerr — polls *arr APIs for completed downloads, extracts RAR/7z
-# archives in-place inside the downloads tree. No Web UI or HTTPRoute; its
-# web server serves only metrics.
-# Watches the downloads dir; *arr does the library import after extract.
+# archives in-place inside the downloads tree. No HTTPRoute; v1 also serves
+# a password-protected UI/API on the cluster-only metrics listener.
+# Polls *arr queues; *arr does the library import after extract.
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
@@ -27,6 +27,21 @@ spec:
               UN_LOG_LEVEL: info
               UN_WEBSERVER_METRICS: "true"
               UN_WEBSERVER_LISTEN_ADDR: 0.0.0.0:5656
+              # Env-only: no config file, persistent history, or UI-managed settings.
+              # Setting the password prevents a temporary one appearing in logs.
+              UN_WEBSERVER_UI_PASSWORD:
+                valueFrom:
+                  secretKeyRef:
+                    name: unpackerr-auth
+                    key: UI_PASSWORD
+              UN_WEBSERVER_API_KEYS_0_NAME: metrics
+              UN_WEBSERVER_API_KEYS_0_KEY:
+                valueFrom:
+                  secretKeyRef:
+                    name: unpackerr-auth
+                    key: METRICS_API_KEY
+              UN_WEBSERVER_API_KEYS_0_ROLES_0: metrics
+              UN_WEBSERVER_ROLES_metrics_PERMISSIONS_0: system:metrics:read
               UN_SONARR_0_URL: http://sonarr.media.svc.cluster.local:8989
               UN_SONARR_0_PATHS_0: /data/.downloads
               UN_RADARR_0_URL: http://radarr.media.svc.cluster.local:7878
@@ -53,11 +68,14 @@ spec:
                 enabled: true
                 custom: true
                 spec:
-                  # /metrics gathers application stats; timing out catches an
-                  # unresponsive process or HTTP server while the port stays open.
-                  httpGet:
-                    path: /metrics
-                    port: 5656
+                  # No dedicated health endpoint in v1. curl ships in the image;
+                  # use the metrics-only key without embedding it in the manifest.
+                  # Gathering stats still detects an unresponsive application loop.
+                  exec:
+                    command:
+                      - /bin/sh
+                      - -ec
+                      - 'curl --fail --silent --show-error --max-time 9 --header "Authorization: Bearer $UN_WEBSERVER_API_KEYS_0_KEY" http://127.0.0.1:5656/metrics >/dev/null'
                   initialDelaySeconds: 60
                   periodSeconds: 30
                   timeoutSeconds: 10
@@ -91,6 +109,11 @@ spec:
           - port: metrics
             path: /metrics
             interval: 30s
+            authorization:
+              type: Bearer
+              credentials:
+                name: unpackerr-auth
+                key: METRICS_API_KEY
     persistence:
       media:
         type: persistentVolumeClaim

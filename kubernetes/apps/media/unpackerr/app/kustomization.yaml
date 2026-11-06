@@ -4,6 +4,7 @@ kind: Kustomization
 resources:
   - ./ocirepository.yaml
   - ./helmrelease.yaml
+  - ./secret.sops.yaml
 
 configMapGenerator:
   # grafana.com 18817 revision 1; remove __inputs and add the datasource variable its panels reference; regex matchers for the URL variables, whose values Grafana escapes; "Files Extracted" title.
