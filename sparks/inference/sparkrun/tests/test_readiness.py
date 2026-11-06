@@ -14,6 +14,7 @@ from unittest import mock
 import pytest
 
 MOD = Path(__file__).resolve().parents[1] / "mods/tensorfold-readiness"
+V2_MOD = MOD.with_name("tensorfold-readiness-v2")
 MODEL = "Test-Model"
 CONTEXT = 524288
 LANES = 4
@@ -39,6 +40,7 @@ def models():
 
 class Fake(BaseHTTPRequestHandler):
     health = staticmethod(zig_health)
+    health_status = 200
     models = staticmethod(models)
     tokenize = True
     levels = dict(LEVELS)
@@ -54,7 +56,7 @@ class Fake(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == "/health":
-            return self._send(200, type(self).health())
+            return self._send(type(self).health_status, type(self).health())
         if self.path == "/v1/models":
             return self._send(200, type(self).models())
         self._send(404, {"error": "not found"})
@@ -64,9 +66,9 @@ class Fake(BaseHTTPRequestHandler):
         if self.path == "/tokenize":
             if not type(self).tokenize:
                 return self._send(404, {"error": "not found"})
-            if body["reasoning_effort"] in type(self).missing:
+            if body.get("reasoning_effort") in type(self).missing:
                 return self._send(404, {"error": "not found"})
-            effort = NEAREST.get(body["reasoning_effort"], body["reasoning_effort"])
+            effort = NEAREST.get(body.get("reasoning_effort", "max"), body.get("reasoning_effort", "max"))
             return self._send(200, {"count": 3, "tokens": [1, 2, type(self).levels[effort]]})
         if body.get("tools"):
             call = {"id": "c1", "type": "function", "function": {"name": "get_weather", "arguments": '{"city": "Oslo, Norway"}'}}
@@ -89,9 +91,9 @@ def server():
     httpd.server_close()
 
 
-def gate(url, efforts=",".join(LEVELS), *extra):
+def gate(url, efforts=",".join(LEVELS), *extra, bundle=MOD):
     return subprocess.run(
-        [sys.executable, str(MOD / "readiness.py"), "--url", url + "/v1", "--model", MODEL, "--context", str(CONTEXT),
+        [sys.executable, str(bundle / "readiness.py"), "--url", url + "/v1", "--model", MODEL, "--context", str(CONTEXT),
          "--lanes", str(LANES), "--efforts", efforts, *extra], capture_output=True, text=True)
 
 
@@ -112,15 +114,118 @@ def test_python_server_passes_without_a_tokenize_route(server):
     assert gate(url, ",".join(LEVELS), "--min-pool-tokens", "3000000").returncode != 0
 
 
+@pytest.mark.parametrize("spill", [None, {}, {"format": "off"},
+    {"format": "blocks", "cap_bytes": 0, "block_tokens": 2048},
+    {"format": "blocks", "cap_bytes": True, "block_tokens": 2048},
+    {"format": "blocks", "cap_bytes": 68719476736},
+    {"format": "blocks", "cap_bytes": 68719476736, "block_tokens": 0},
+    {"format": "blocks", "cap_bytes": 68719476736, "block_tokens": -1},
+    {"format": "blocks", "cap_bytes": 68719476736, "block_tokens": "2048"}])
+def test_v2_rejects_inactive_or_malformed_spill_when_required(server, spill):
+    handler, url = server
+    handler.health = staticmethod(lambda: {**python_health(), "spill": spill})
+    result = gate(url, ",".join(LEVELS), "--require-spill", bundle=V2_MOD)
+    assert result.returncode != 0 and "spill tier" in result.stderr
+    assert "TensorFold smoke" not in result.stdout
+
+
+def test_v2_requires_spill_at_both_health_checks(server):
+    handler, url = server
+    active = {"format": "blocks", "cap_bytes": 68719476736, "block_tokens": 2048}
+    handler.health = staticmethod(lambda: {**python_health(), "spill": active})
+    assert gate(url, ",".join(LEVELS), "--require-spill", bundle=V2_MOD).returncode == 0
+    calls = []
+
+    def loses_spill():
+        calls.append(None)
+        return {**python_health(), **({"spill": active} if len(calls) == 1 else {})}
+
+    handler.health = staticmethod(loses_spill)
+    result = gate(url, ",".join(LEVELS), "--require-spill", bundle=V2_MOD)
+    assert len(calls) == 2 and result.returncode != 0
+    assert "Expected an active block spill tier" in result.stderr
+
+
+@pytest.mark.parametrize("health", [python_health, zig_health])
+def test_v2_keeps_spill_optional_for_other_profiles(server, health):
+    handler, url = server
+    handler.health = staticmethod(health)
+    result = gate(url, bundle=V2_MOD)
+    assert result.returncode == 0, result.stderr
+
+
+def test_v2_bundle_is_frozen(tmp_path):
+    bundle = tmp_path / V2_MOD.name
+    shutil.copytree(V2_MOD, bundle, ignore=shutil.ignore_patterns("__pycache__"))
+    check = [sys.executable, str(bundle / "prepare.py"), "--check"]
+    subprocess.run(check, check=True, capture_output=True)
+    (bundle / "readiness.py").write_text("# changed\n")
+    assert subprocess.run(check, capture_output=True).returncode != 0
+
+
+@pytest.mark.parametrize("when", ["initial", "final"])
+def test_v2_http_health_failure_keeps_the_reason_and_cannot_pass(server, when):
+    handler, url = server
+    handler.health = staticmethod(lambda: {**python_health(), "fatal": "decoder stopped"})
+    if when == "initial":
+        handler.health_status = 503
+    else:
+        def post(self):
+            Fake.do_POST(self)
+            type(self).health_status = 503
+        handler.do_POST = post
+    result = gate(url, bundle=V2_MOD)
+    assert result.returncode != 0 and "Health HTTP 503" in result.stderr
+    assert "decoder stopped" in result.stderr
+
+
+def test_v2_handles_a_none_only_reasoning_contract(server):
+    handler, url = server
+    body = models()
+    body["data"][0]["reasoning"]["supported_efforts"] = ["none"]
+    body["data"][0]["reasoning"]["default_enabled"] = False
+    handler.models = staticmethod(lambda: body)
+    handler.levels = {effort: 0 for effort in ("none", "minimal", "low", "medium", "high", "xhigh", "max")}
+    result = gate(url, "none", bundle=V2_MOD)
+    assert result.returncode == 0, result.stderr
+    assert '"max": "none"' in result.stdout
+
+
+def test_v2_rejects_all_named_render_404s_when_the_default_render_works(server):
+    handler, url = server
+    handler.missing = tuple(LEVELS)
+    result = gate(url, bundle=V2_MOD)
+    assert result.returncode != 0 and "renders the default but refuses all advertised levels" in result.stderr
+
+
+def test_v2_preserves_compatibility_with_a_missing_tokenize_route(server):
+    handler, url = server
+    handler.tokenize = False
+    result = gate(url, bundle=V2_MOD)
+    assert result.returncode == 0 and "no /tokenize route" in result.stdout
+
+
+@pytest.mark.parametrize("option", ["--check", "--record"])
+def test_v2_never_recreates_a_missing_lock(tmp_path, option):
+    bundle = tmp_path / V2_MOD.name
+    shutil.copytree(V2_MOD, bundle, ignore=shutil.ignore_patterns("__pycache__"))
+    lock = bundle / "upstream.lock.json"
+    lock.unlink()
+    result = subprocess.run([sys.executable, str(bundle / "prepare.py"), option], capture_output=True, text=True)
+    assert result.returncode != 0 and "Missing or linked" in result.stderr
+    assert not lock.exists()
+
+
 @pytest.mark.parametrize("change,message", [
     (lambda h: {**h, "warming": True}, "warming"),
     (lambda h: {**h, "max_batch_size": 2}, "lanes"),
     (lambda h: {**h, "model": "other"}, "names model"),
 ])
-def test_unready_health_fails(server, change, message):
+@pytest.mark.parametrize("bundle", [MOD, V2_MOD], ids=["v1", "v2"])
+def test_unready_health_fails(server, change, message, bundle):
     handler, url = server
     handler.health = staticmethod(lambda: change(zig_health()))
-    result = gate(url)
+    result = gate(url, bundle=bundle)
     assert result.returncode != 0 and message in result.stderr
 
 

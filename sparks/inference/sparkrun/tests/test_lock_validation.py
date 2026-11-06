@@ -254,6 +254,41 @@ def test_a_new_checksum_only_mod_needs_an_explicit_supported_shape(source):
         validator.validate_repository(source)
 
 
+def test_a_recipe_cannot_install_both_readiness_versions(source):
+    path = recipe_for(source, "glm")
+    recipe = yaml.safe_load(path.read_text())
+    recipe["mods"].append("../mods/tensorfold-readiness-v2")
+    path.write_text(yaml.safe_dump(recipe))
+    with pytest.raises(validator.InvalidManifest, match="exactly one shared readiness mod"):
+        validator.validate_repository(source)
+
+
+def test_v2_durable_cannot_drop_its_required_spill_check(source):
+    path = next(source.glob("*/*durable-readiness-v2.yaml"))
+    recipe = yaml.safe_load(path.read_text())
+    recipe["post_exec"][0] = recipe["post_exec"][0].replace(" --require-spill", "")
+    path.write_text(yaml.safe_dump(recipe))
+    with pytest.raises(validator.InvalidManifest, match="v2 durable profile requires --require-spill"):
+        validator.validate_repository(source)
+
+
+def test_original_bundle_cannot_be_given_the_v2_only_flag(source):
+    path = source / "mia-tensorfold-glm53-exl3-tp2/glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m.yaml"
+    recipe = yaml.safe_load(path.read_text())
+    recipe["post_exec"][0] += " --require-spill"
+    path.write_text(yaml.safe_dump(recipe))
+    with pytest.raises(validator.InvalidManifest, match="--require-spill needs the v2"):
+        validator.validate_repository(source)
+
+
+def test_a_non_durable_profile_can_use_v2_without_requiring_spill(source):
+    path = source / "mia-tensorfold-glm53-exl3-tp2/glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m.yaml"
+    recipe = yaml.safe_load(path.read_text())
+    recipe["mods"][0] = "../mods/tensorfold-readiness-v2"
+    path.write_text(yaml.safe_dump(recipe))
+    assert all(validator.validate_repository(source))
+
+
 def test_missing_new_lock_and_missing_owning_recipe_are_reported(source):
     other = source / "mods" / "unknown"
     other.mkdir()

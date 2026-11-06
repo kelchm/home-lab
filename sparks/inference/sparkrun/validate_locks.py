@@ -137,9 +137,12 @@ def validate_dockerfile(mod, lock):
         require(all(base == lock["build"]["base_image"] for base in bases), "build/Dockerfile", "FROM base disagrees with build.base_image")
 
 
+READINESS_MODS = frozenset({"tensorfold-readiness", "tensorfold-readiness-v2"})
+
+
 def shape(lock, mod):
     require(isinstance(lock, dict), "lock", "expected an object")
-    if mod.name == "tensorfold-readiness":
+    if mod.name in READINESS_MODS:
         kind = "readiness"
     elif set(lock) & {"launcher_env", "installed_files", "engine_version"}:
         kind = "glm"
@@ -289,7 +292,8 @@ def validate_recipe(recipe, path, locks):
         if kind != "readiness":
             owners.append((lock, kind))
     require(len(owners) == 1, "mods", "expected exactly one engine lock")
-    require(any((path.parent / ref).name == "tensorfold-readiness" for ref in mods), "mods", "missing shared readiness mod")
+    readiness = [(path.parent / ref).name for ref in mods if (path.parent / ref).name in READINESS_MODS]
+    require(len(readiness) == 1, "mods", "expected exactly one shared readiness mod")
     lock, kind = owners[0]
     metadata, defaults = recipe.get("metadata"), recipe.get("defaults")
     require(isinstance(metadata, dict) and isinstance(defaults, dict), "recipe", "metadata and defaults are required")
@@ -338,6 +342,10 @@ def validate_recipe(recipe, path, locks):
     gates = [shlex.split(hook) for hook in hooks if isinstance(hook, str)]
     gates = [argv for argv in gates if argv[:2] == ["python3", "/opt/tensorfold-readiness/readiness.py"]]
     require(len(gates) == 1, "post_exec", "expected exactly one shared readiness hook")
+    spill_required = "--require-spill" in gates[0]
+    require(not spill_required or readiness[0] == "tensorfold-readiness-v2", "post_exec", "--require-spill needs the v2 readiness bundle")
+    if readiness[0] == "tensorfold-readiness-v2" and metadata.get("serving_profile") == "durable":
+        require(spill_required, "post_exec", "a v2 durable profile requires --require-spill")
     for flag, value in (("--context", str(defaults["context"])), ("--model", defaults["served_model_name"])):
         argv = gates[0]
         require(argv.count(flag) == 1 and argv.index(flag) + 1 < len(argv), "post_exec", f"expected one {flag} value")

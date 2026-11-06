@@ -2,8 +2,10 @@
 
 from contextlib import contextmanager
 import importlib.util
+from http.client import HTTPResponse
 import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from io import BytesIO
 from pathlib import Path
 import socket
 import sys
@@ -18,8 +20,9 @@ from unittest import mock
 BENCHMARK = Path(__file__).resolve().parents[1] / "benchmarks/long_sessions.py"
 MARKER = "synthetic-marker"
 PARTIAL = {"choices": [{"delta": {"content": MARKER + " café"}}]}
-FINISH = {"choices": [{"finish_reason": "stop"}],
-          "usage": {"prompt_tokens": 5, "completion_tokens": 3}, "tensorfold": {"synthetic": True}}
+FINISH = {"choices": [{"finish_reason": "stop"}]}
+USAGE = {"choices": [], "usage": {"prompt_tokens": 5, "completion_tokens": 3},
+         "tensorfold": {"synthetic": True}}
 
 
 class SyntheticTokenizer:
@@ -57,9 +60,13 @@ def sse_server(parts, *, chunked=False):
                 self.send_header("Transfer-Encoding", "chunked")
             self.send_header("Connection", "close")
             self.end_headers()
-            for part in parts:
-                self.wfile.write(part)
-                self.wfile.flush()
+            try:
+                for part in parts:
+                    self.wfile.write(part)
+                    self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError):
+                self.server.disconnected.set()
+                return
             self.server.sent.set()
             # Keep the connection silent and open until the client closes or test cleanup runs.
             self.connection.settimeout(0.05)
@@ -198,20 +205,48 @@ class LongSessionStreams(unittest.TestCase):
     def test_cancel_in_chunk_body_before_first_line(self):
         self.cancel_silent_read(b"", b"100\r\ndata:", chunked=True)
 
+    def test_write_side_reset_marks_disconnected_and_returns(self):
+        with sse_server([event(PARTIAL), event(FINISH)]) as server:
+            for operation in ("write", "flush"):
+                with self.subTest(operation=operation):
+                    server.disconnected.clear()
+                    writer = mock.Mock()
+                    getattr(writer, operation).side_effect = ConnectionResetError("synthetic reset")
+                    handler = SimpleNamespace(
+                        server=server, rfile=BytesIO(b"{}"), headers={"Content-Length": "2"},
+                        wfile=writer, send_response=mock.Mock(), send_header=mock.Mock(),
+                        end_headers=mock.Mock())
+                    # Invoke the real handler synchronously: falling through after the reset fails.
+                    server.RequestHandlerClass.do_POST(handler)
+                    self.assertTrue(server.disconnected.is_set())
+                    self.assertFalse(server.sent.is_set())
+                    self.assertEqual(writer.write.call_count, 1)
+                    self.assertEqual(writer.flush.call_count, int(operation == "flush"))
+
     def test_normal_chunked_stream_preserves_outcome(self):
-        data = b": heartbeat\r\n\r\n" + event(PARTIAL) + event(FINISH) + b"data: [DONE]\r\n\r\n"
+        done_read = threading.Event()
+        readline = HTTPResponse.readline
+
+        def observe_readline(response, *args):
+            line = readline(response, *args)
+            if line.strip() == b"data: [DONE]":
+                done_read.set()
+            return line
+
+        data = b": heartbeat\r\n\r\n" + event(PARTIAL) + event(FINISH) + event(USAGE) + b"data: [DONE]\r\n\r\n"
         # One-byte HTTP chunks split JSON, CRLF, and UTF-8; the server stays open even after DONE.
         parts = [b"1\r\n" + bytes([byte]) + b"\r\n" for byte in data]
-        with sse_server(parts, chunked=True) as server:
+        with sse_server(parts, chunked=True) as server, mock.patch.object(HTTPResponse, "readline", observe_readline):
             campaign = self.campaign(server.url)
             with request_worker(campaign, server, expected=MARKER + " café", min_completion=3) as (thread, result):
                 thread.join(3)
                 self.assertFalse(thread.is_alive())
                 self.assertIsNone(result.error)
                 self.assertEqual(result.row["text"], MARKER + " café")
-                self.assertEqual(result.row["usage"], FINISH["usage"])
-                self.assertEqual(result.row["engine_stats"], FINISH["tensorfold"])
+                self.assertEqual(result.row["usage"], USAGE["usage"])
+                self.assertEqual(result.row["engine_stats"], USAGE["tensorfold"])
                 self.assertEqual(result.row["finish_reason"], "stop")
+                self.assertTrue(done_read.is_set(), "client did not read [DONE]")
                 self.assertGreaterEqual(result.row["ttft_s"], 0)
                 self.assertFalse(campaign.failed_responses.exists())
                 self.assertTrue(server.disconnected.wait(1))
