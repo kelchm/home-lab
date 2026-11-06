@@ -70,6 +70,7 @@ elif args[:2]!=['image','rm']:
         recorded = [json.loads(line) for line in calls.read_text().splitlines()] if calls.exists() else []
         return result, recorded
 
+    run.kit = kit
     return run, lock
 
 
@@ -81,6 +82,23 @@ def test_build_publishes_only_the_matching_immutable_daemon_id(builder):
     assert calls[2] == ['save', DAEMON]  # config digest comes from the inspected object, not its mutable tag
     assert calls[3] == ['tag', DAEMON, lock['image']]
     assert calls[4][:2] == ['image', 'rm']
+    candidate = calls[0][calls[0].index('-t') + 1]
+    assert candidate.startswith('home-lab-glm53-candidate:')
+    assert calls[4] == ['image', 'rm', candidate]
+
+
+@pytest.mark.parametrize('drift', ['count', 'bytes', 'template'])
+def test_optimized_python_cannot_skip_kit_verification(builder, drift):
+    run, _ = builder
+    if drift == 'count':
+        (run.kit / 'patches/engine/0002-extra.patch').write_text('extra')
+    elif drift == 'bytes':
+        (run.kit / 'patches/engine/0001-fixture.patch').write_text('changed')
+    else:
+        (run.kit / 'templates/glm-5.3-flash-vision.jinja').write_text('changed')
+    result, calls = run(PYTHONOPTIMIZE='1')
+    assert result.returncode != 0
+    assert calls == []
 
 
 @pytest.mark.parametrize('changes', [{'FAKE_CONFIG': 'sha256:' + 'c' * 64}, {'FAKE_DAEMON': 'invalid'}, {'FAIL_BUILD': '1'}])

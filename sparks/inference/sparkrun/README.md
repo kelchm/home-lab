@@ -178,11 +178,11 @@ New date-based kit profiles use Mia’s published `MMDD` reference (`1104` here)
 
 The unchanged EXL3 shards are repacked by a different runtime. q8 dense/head can use more resident memory than the running Python choices; they do not change the expert checkpoint's 4 bpw. The newer Hugging Face revision changes documentation/license files; all 83 shard payloads and model/tokenizer/template files match the snapshot we already have.
 
-`CLEAR_THINKING=0` follows [Z.ai’s preserved-thinking guidance for agent use](https://docs.z.ai/guides/capabilities/thinking-mode). Warm turns precompute a reusable prefix after a reply when the engine is quiet; under load they yield or are dropped. They do not establish that clearing reasoning improves agent quality. The native server does not restore reasoning that a client omits as the Python mod does: pi/Hermes must replay it. OpenAI/Responses request overrides exist; the Anthropic route validates but ignores `context_management`'s keep-all edit. The global keep policy avoids clearing in image-tool loops that inject a user message. Long-session reasoning loops, `--loop-guard`, and any thinking budget still need workload evaluation; neither guard nor a global thinking budget is enabled here.
+`TF_GLM_CLEAR_THINKING=0` follows [Z.ai’s preserved-thinking guidance for agent use](https://docs.z.ai/guides/capabilities/thinking-mode). Warm turns precompute a reusable prefix after a reply when the engine is quiet; under load they yield or are dropped. They do not establish that clearing reasoning improves agent quality. The native server does not restore reasoning that a client omits as the Python mod does: pi/Hermes must replay it. OpenAI/Responses request overrides exist; the Anthropic route validates but ignores `context_management`'s keep-all edit. The global keep policy avoids clearing in image-tool loops that inject a user message. Long-session reasoning loops, `--loop-guard`, and any thinking budget still need workload evaluation; neither guard nor a global thinking budget is enabled here.
 
 ### Inputs outside SparkRun
 
-The [dated mod](mods/mia-tensorfold-glm53-1104/) builds a local ARM64 image, never a mutable upstream tag. SparkRun distributes that image and the two pinned Hugging Face snapshots. Both snapshots are already present for the running profile. The mod carries Mia's unchanged vision template and its upstream notices. Python spill snapshots are not portable to this native engine; keeping `HOST_CACHE_GIB=0` does not provide persistence or disk spill. Restoring durable caching is separate implementation work if it is required for adoption.
+The [dated mod](mods/mia-tensorfold-glm53-1104/) builds a local ARM64 image, never a mutable upstream tag. SparkRun distributes that image and the two pinned Hugging Face snapshots. Both snapshots are already present for the running profile. The mod carries Mia's unchanged vision template and its upstream notices. Python spill snapshots are not portable to this native engine; keeping `TF_GLM_HOST_CACHE_GIB=0` does not provide persistence or disk spill. Restoring durable caching is required before this profile can replace the Python durable profile under the no-regression objective in [#1280](https://github.com/kelchm/home-lab/issues/1280).
 
 ### Build
 
@@ -212,24 +212,22 @@ From `~/sparkrun/recipes/glm53` on the head:
 
 ```sh
 candidate="$PWD/mia-tensorfold-glm53-exl3-tp2/glm53-exl3-tp2-mia-1104-agent-1m.yaml"
-python3 validate_locks.py
-sparkrun run "$candidate" --cluster sparks --dry-run
-sparkrun run "$candidate" --cluster sparks --no-follow
-# Stop a failed gate explicitly; SparkRun does not stop it for you.
-sparkrun stop "$candidate" --cluster sparks
+python3 validate_locks.py &&
+  sparkrun run "$candidate" --cluster sparks --dry-run &&
+  sparkrun run "$candidate" --cluster sparks --no-follow
 ```
 
-The capacity hook reads the engine's startup pool and agreed per-rank cache receipts before the shared readiness hook checks strict native health, discovery, four concurrent replies, a tool call and effort renders. Missing receipts, a pool below 1,179,648 tokens (four 262,144-token prompts plus four reply budgets), or a zero device prompt cache fail the launch command. That pool floor is not four simultaneous 1M windows. The native health route lacks those capacity fields, so passing HTTP health alone is insufficient. A failed capacity/readiness hook still needs an explicit stop.
+The capacity hook reads the engine's startup pool and agreed per-rank cache receipts before the shared readiness hook checks strict native health, discovery, four concurrent replies, a tool call and effort renders. Missing receipts, a pool below 1,179,648 tokens (four 262,144-token prompts plus four reply budgets), or a zero device prompt cache fail the launch command. That pool floor is not four simultaneous 1M windows. The native health route lacks those capacity fields, so passing HTTP health alone is insufficient. A failed capacity/readiness hook still needs an explicit stop: `sparkrun stop "$candidate" --cluster sparks`. After a successful launch, leave the candidate running for the approved qualification checks; stop it explicitly when those checks finish.
 
 Roll back by stopping this candidate and relaunching `glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable.yaml`. The native candidate never opens the Python spill directory. The current spill restart-restore path itself remains unverified here.
 
 ### Qualification still required
 
-Track the evaluation and adoption decisions in [#1280](https://github.com/kelchm/home-lab/issues/1280), a child of #938. The next step is an owner-approved idle window and recovery procedure.
+Track the evaluation and adoption decisions in [#1280](https://github.com/kelchm/home-lab/issues/1280), a child of #938. The next step is off-host implementation of the no-regression qualification contract, memory accounting, API/media parity and durable native checkpoints. Hardware qualification follows only after those prerequisites are met and an owner-approved idle window and recovery procedure are agreed.
 
 Before promoting this profile, record the build/image identity and driver compatibility on the Sparks; confirm the full 1M window, four streams, both RoCE rails, pool/cache sizes and memory floor on **both** ranks. Verify the scoped guard and TP peer-stop behavior without inducing host memory exhaustion. Its local supervisor tests do not establish recovery on real Sparks or solve the wider freeze-recovery question in #944.
 
-Run the [shared validation](#validate), agent and interrupted-tool probes, OpenAI and Anthropic tool turns, reasoning replay, warm-prefix cache accounting, and a long pi/Hermes session with images. Compare against today's durable profile on fixed prompts. Evaluate the 4,096 image-token budget against our prior picture-history checks; increase it and remeasure capacity/headroom or explicitly accept the smaller budget before adoption. Measure TTFT/decode fairness under simultaneous prefill, context growth with kept reasoning and long-session looping. Decide whether losing NVMe prompt persistence is acceptable or requires implementation first. Eight streams, a smaller reserve, loop guards and thinking budgets are later tuning choices, not established benefits of this candidate.
+Run the [shared validation](#validate), agent and interrupted-tool probes, OpenAI and Anthropic tool turns, reasoning replay, warm-prefix cache accounting, and a long pi/Hermes session with images. Compare against today's durable profile on fixed prompts. Preserve the production policy of 50 image occurrences at a fixed 2,048-token cap per image and a 102,400-token request ceiling, plus the existing video capability. The candidate's 4,096-token total budget is a blocker, not an adoption concession; increasing the total alone does not make earlier image grids stable. Measure TTFT/decode fairness under simultaneous prefill, context growth with kept reasoning and long-session looping. Require bounded native NVMe checkpoint save/restore, including images and DFlash2 state, before adoption. Preserve at least the production profile's observed 2,582,528-token aggregate live capacity; this candidate's smaller startup smoke floor does not satisfy that requirement. Eight streams, a smaller reserve, loop guards and thinking budgets are later tuning choices, not established benefits of this candidate.
 
 ## Qwen3.8-Flash-Next on Mia's Zig-engine kits
 

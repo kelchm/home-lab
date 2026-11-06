@@ -3,6 +3,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import selectors
 import shlex
 import shutil
 import signal
@@ -128,6 +129,31 @@ def test_guard_kills_only_its_child_group_even_if_term_is_ignored():
         child.wait()
         unrelated.terminate()
         unrelated.wait()
+
+
+@pytest.mark.parametrize('leader_ignores_term', [False, True])
+def test_guard_reaps_descendants_when_the_leader_exits_first(leader_ignores_term):
+    serve = load('serve')
+    descendant = 'import signal,time; signal.signal(signal.SIGTERM,signal.SIG_IGN); print("descendant",flush=True); time.sleep(60)'
+    code = ('import signal,subprocess,sys,time; '
+            + ('signal.signal(signal.SIGTERM,signal.SIG_IGN); ' if leader_ignores_term else '')
+            + f'subprocess.Popen([sys.executable,"-u","-c",{descendant!r}],stdout=sys.stdout); '
+            + 'print("leader",flush=True); time.sleep(60)')
+    child = subprocess.Popen([sys.executable, '-u', '-c', code], start_new_session=True,
+                             stdout=subprocess.PIPE, text=True)
+    try:
+        assert {child.stdout.readline().strip(), child.stdout.readline().strip()} == {'leader', 'descendant'}
+        serve.stop(child, grace=0.05)
+        with selectors.DefaultSelector() as selector:
+            selector.register(child.stdout, selectors.EVENT_READ)
+            assert selector.select(timeout=2), 'a descendant still holds the output pipe open'
+            assert child.stdout.read() == ''
+    finally:
+        try:
+            os.killpg(child.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        child.wait()
 
 
 @pytest.mark.parametrize('sample', [OSError('unreadable'), ValueError('no MemAvailable')])

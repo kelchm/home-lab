@@ -20,9 +20,12 @@ import hashlib, json, sys
 from pathlib import Path
 kit, lock = Path(sys.argv[1]), json.load(open(sys.argv[2]))
 patches = sorted((kit / 'patches/engine').glob('*.patch'))
-assert len(patches) == lock['kit_patch_count'], 'Kit patch count differs'
-assert hashlib.sha256(b''.join(p.read_bytes() for p in patches)).hexdigest() == lock['kit_patches_sha256'], 'Kit patch bytes differ'
-assert (kit / 'templates/glm-5.3-flash-vision.jinja').read_bytes() == (Path(sys.argv[2]).parent / 'chat_template.jinja').read_bytes(), 'Kit template differs'
+if len(patches) != lock['kit_patch_count']:
+    raise SystemExit('Kit patch count differs')
+if hashlib.sha256(b''.join(p.read_bytes() for p in patches)).hexdigest() != lock['kit_patches_sha256']:
+    raise SystemExit('Kit patch bytes differ')
+if (kit / 'templates/glm-5.3-flash-vision.jinja').read_bytes() != (Path(sys.argv[2]).parent / 'chat_template.jinja').read_bytes():
+    raise SystemExit('Kit template differs')
 PY
 candidate="home-lab-glm53-candidate:$(python3 -c 'import uuid; print(uuid.uuid4().hex)')"
 docker build --platform linux/arm64 -t "$candidate" -f "$here/Dockerfile" \
@@ -37,9 +40,11 @@ id=$(docker image inspect --format '{{.Id}}' "$candidate")
 config_id=$(docker save "$id" | tar -xOf - manifest.json | python3 -c '
 import json,re,sys
 m=json.load(sys.stdin)
-assert len(m)==1, "Expected one exported image"
+if len(m)!=1:
+    raise SystemExit("Expected one exported image")
 p=re.fullmatch(r"(?:blobs/sha256/)?([0-9a-f]{64})(?:\.json)?",m[0]["Config"])
-assert p, "Invalid image config path"
+if not p:
+    raise SystemExit("Invalid image config path")
 print("sha256:"+p[1])')
 echo "Candidate $candidate: config $config_id, daemon $id"
 if (( candidate_only )); then exit 0; fi

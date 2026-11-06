@@ -27,11 +27,11 @@
     "LICENSE": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
     "NOTICE.md": "0cef65c58d32ac4b3bc57ed47505faab073c674cf5ffc4f3905f47168b522cc0",
     "build/Dockerfile": "80c66effd74144eb6047c7604443603d2e53cd15bfcee7327fd242386b59ef11",
-    "build/build.sh": "c3db88a87e4d457568695b23ad92203d8aa772d81675b7890a7a6a213cd30b6f",
+    "build/build.sh": "e54e4e68dd46dd788deb2b7d09fd460dba22982d8a6dff482bfe5d0dabdb4988",
     "capacity.py": "b68d86d3be708c62656c2daa4ca8dce743bacda4ab4859ef01a1746f2281e0db",
     "chat_template.jinja": "15ff929998c3dd126addaa1448f7f811bb3724fe835f448ac889d8f558d034c8",
     "prepare.py": "831091b852595ab4c63fcc4a573103ce19bc7820f9f4e5d5d476253fd0fffd2a",
     "run.sh": "119c3a6d95c3995371f91621bbce782eebe8f78de80ab1632a7bb0428c19431b",
-    "serve.py": "24bfb6fd8264beaa55d6c3d91ec482dfc484c5460c0dcd1ebd25415062b47bed"
+    "serve.py": "d5c9049aaad3769f64591296d63782b31fbb34f2edd35355fa10ca5a60bb410c"
   }
 }

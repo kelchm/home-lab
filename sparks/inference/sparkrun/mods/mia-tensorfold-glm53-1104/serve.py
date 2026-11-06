@@ -98,8 +98,6 @@ def low_since(previous, now, available, floor):
 
 
 def stop(child, grace=10):
-    if child.poll() is not None:
-        return
     try:
         os.killpg(child.pid, signal.SIGTERM)
     except ProcessLookupError:
@@ -108,6 +106,10 @@ def stop(child, grace=10):
     try:
         child.wait(timeout=grace)
     except subprocess.TimeoutExpired:
+        pass
+    finally:
+        # A leader may exit on TERM while an engine descendant ignores it. The
+        # private group still belongs to this launch, so reap its remaining work.
         try:
             os.killpg(child.pid, signal.SIGKILL)
         except ProcessLookupError:
