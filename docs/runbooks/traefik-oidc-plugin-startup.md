@@ -56,6 +56,16 @@ Version 0.21 keeps the PKCE verifier in a cookie; 0.22 reads it from encrypted O
 
 Version 0.22 deployed on 2026-11-06 through [#1040](https://github.com/kelchm/home-lab/pull/1040). Both new replicas logged `Plugins loaded.`, became Ready with zero restarts and redirected all 15 protected hosts to Kanidm when tested individually with browser-style requests. VictoriaLogs was tested at its protected `/select` path; its root redirects to the UI before authentication. The complete startup log window contained no plugin or router errors.
 
+The owner confirmed fresh Sonarr and Longhorn login/re-login. The observed browser callback used one replica; forced cross-replica login/callback and authenticated-session handoffs remain unverified and are tracked in [#1293](https://github.com/kelchm/home-lab/issues/1293).
+
+## Logout and revocation
+
+Signing out of Kanidm does not immediately end each host's gateway session. Our middleware defaults to validating its saved ID token locally, without a per-request Kanidm lookup. `CheckOnEveryRequest` reasserts authorization against that token's claims; it does not fetch current group membership or revocation state. The cookie's configured `MaxAge: 43200` is 12 hours from creation or renewal, not an absolute session lifetime. Token validation or failed refresh can end access earlier. Each host has its own cookie because `SessionCookie.Domain` is unset; sharing an OIDC client and cookie-name prefix does not share host-only cookies.
+
+The plugin's default logout path is `/logout`, but the current Kanidm discovery document has no `end_session_endpoint`. The plugin expects that endpoint and clears its cookie only after a Logout-state callback. Do not advertise this path as a verified logout procedure. The same limitation exists in 0.21. To clear browser access manually, sign out of Kanidm and remove the protected host's site cookies, or close all windows of the private session used for the test. Leaving the Kanidm session active can immediately sign the browser back in through SSO.
+
+[#1293](https://github.com/kelchm/home-lab/issues/1293) tracks a compatible logout procedure, actual refresh/revocation timing and the required owner decision about central sign-out. No immediate-revocation guarantee has been established. See the upstream [validation and refresh logic](https://github.com/sevensolutions/traefik-oidc-auth/blob/v0.22.0/src/session.go#L104-L239) and [logout handler](https://github.com/sevensolutions/traefik-oidc-auth/blob/v0.22.0/src/main.go#L487-L539).
+
 ## Recovery
 
 Recovery is normally automatic. If the pods remain in `CrashLoopBackOff`,

@@ -1,7 +1,7 @@
 ---
 # Single shared OIDC client for the *arr admin UI suite. Each gated app
-# registers its callback URL here; SSO across subdomains via shared
-# session cookie on .home.kelch.io.
+# registers its callback URL here; Kanidm provides SSO between hosts.
+# Gateway cookies are host-only unless SessionCookie.Domain is configured.
 #
 # kaniop emits the client_secret into `arr-suite-kanidm-oauth2-credentials`
 # Secret in this same namespace (network), which traefik-admin mounts as
