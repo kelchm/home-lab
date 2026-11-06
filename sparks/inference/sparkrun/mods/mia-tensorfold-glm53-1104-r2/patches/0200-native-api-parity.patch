@@ -1,0 +1,641 @@
+diff --git a/zig/src/server/anthropic.zig b/zig/src/server/anthropic.zig
+--- a/zig/src/server/anthropic.zig
++++ b/zig/src/server/anthropic.zig
+@@ -52,7 +52,8 @@
+     const on = thinking.enable orelse srv.config.enable_thinking;
+     cx.clear_thinking = thinking.clear;
+     const tools = try tool_specs.active(cx, chat.get("tools"), chat.get("tool_choice"));
+-    const msgs = try messages_mod.normalizeWith(cx, chat.get("messages"), "system", srv.needs_user_after_tool, .of(srv.info.vision));
++    const normalized = try messages_mod.normalizeWith(cx, chat.get("messages"), "system", srv.needs_user_after_tool, .of(srv.info.vision));
++    const msgs = try srv.reasoning.restore(srv.io, cx.a, normalized);
+     const ids_ = prompt.renderIds(srv, cx, msgs, tools, on, srv.effortFor(thinking.effort), true) catch |e| switch (e) {
+         error.Refused => return cx.other(cx.message),
+         else => |x| return x,
+@@ -85,33 +86,18 @@
+     reply.init() catch return;
+     var wire: Wire = .{ .reply = &reply };
+     openai.run(srv, a, wire.out(), .{ .conn = conn }, true, prepared[0]);
+-    if (wire.opened or wire.status == null or conn.broken) return;
+-    const payload = wire.payload;
+-    if (wire.status.? != 200) {
+-        const problem = payload.get("error") orelse Value.null;
+-        const message = if (problem == .object) (if (problem.get("message")) |m| (if (m == .string) m.string else "request failed") else "request failed") else (if (problem == .string) problem.string else "request failed");
+-        return sendError(conn, a, message, wire.status.?);
+-    }
+-    const whole = reply.completion(payload) catch |e| {
+-        const message = std.fmt.allocPrint(a, "invalid model response: {s}", .{reply.problem orelse @errorName(e)}) catch return;
+-        return sendError(conn, a, message, 500);
+-    };
+-    routes.sendValue(conn, a, 200, whole);
+ }
+ 
+ const Wire = struct {
+     reply: *Reply,
+-    opened: bool = false,
+-    status: ?u16 = null,
+-    payload: Value = .null,
++    sent: bool = false,
+ 
+     fn out(w: *Wire) openai.Out {
+-        return .{ .ctx = w, .vt = &.{ .open = open, .event = event, .reply = whole, .keepalive = ping } };
++        return .{ .ctx = w, .vt = &.{ .open = open, .event = event, .reply = whole, .delivered = delivered, .keepalive = ping } };
+     }
+ 
+     fn open(ctx: *anyopaque, prompt_len: usize) error{Closed}!void {
+         const w: *Wire = @ptrCast(@alignCast(ctx));
+-        w.opened = true;
+         // the head counts the whole prompt; message_delta's usage splits it into input and cache_read
+         if (prompt_len > 0) {
+             const n = json.intValue(w.reply.a, prompt_len) catch return error.Closed;
+@@ -128,8 +114,26 @@
+ 
+     fn whole(ctx: *anyopaque, status: u16, payload: Value) void {
+         const w: *Wire = @ptrCast(@alignCast(ctx));
+-        w.status = status;
+-        w.payload = payload;
++        const conn = w.reply.conn;
++        const a = w.reply.a;
++        const reply = w.reply;
++        if (conn.broken) return;
++        if (status != 200) {
++            const problem = payload.get("error") orelse Value.null;
++            const message = if (problem == .object) (if (problem.get("message")) |m| (if (m == .string) m.string else "request failed") else "request failed") else (if (problem == .string) problem.string else "request failed");
++            return sendError(conn, a, message, status);
++        }
++        const body = reply.completion(payload) catch |e| {
++            const message = std.fmt.allocPrint(a, "invalid model response: {s}", .{reply.problem orelse @errorName(e)}) catch return;
++            return sendError(conn, a, message, 500);
++        };
++        routes.sendValue(conn, a, 200, body);
++        w.sent = conn.response_complete and !conn.broken;
++    }
++
++    fn delivered(ctx: *anyopaque) bool {
++        const w: *Wire = @ptrCast(@alignCast(ctx));
++        return w.sent;
+     }
+     fn ping(ctx: *anyopaque) error{Closed}!void {
+         const w: *Wire = @ptrCast(@alignCast(ctx));
+diff --git a/zig/src/server/chat.zig b/zig/src/server/chat.zig
+--- a/zig/src/server/chat.zig
++++ b/zig/src/server/chat.zig
+@@ -56,6 +56,8 @@
+     reasoning: ?[]const u8,
+     tool_calls_streamed: bool,
+     finish_reason: []const u8,
++    // The engine stopped normally and no incomplete tool call needed a synthetic closing suffix.
++    complete: bool = false,
+     prompt_tokens: usize,
+     cached_tokens: usize,
+     completion_tokens: usize,
+@@ -576,6 +578,7 @@
+             .reasoning = reasoning,
+             .tool_calls_streamed = g.calls != null and g.calls.?.streamed,
+             .finish_reason = reason,
++            .complete = m.reason == .stop and std.mem.eql(u8, reason, "stop") and close.len == 0,
+             .prompt_tokens = prompt_len,
+             .cached_tokens = m.cached orelse 0,
+             .completion_tokens = g.collected.items.len,
+diff --git a/zig/src/server/delivered_calls.zig b/zig/src/server/delivered_calls.zig
+new file mode 100644
+--- /dev/null
++++ b/zig/src/server/delivered_calls.zig
+@@ -0,0 +1,67 @@
++//! Track the call IDs and arguments actually emitted, not IDs regenerated by the final parser.
++const std = @import("std");
++const json = @import("json");
++const Value = json.Value;
++const Allocator = std.mem.Allocator;
++const max_calls = @import("reasoning_cache.zig").max_calls;
++
++pub const Delivered = struct {
++    calls: std.ArrayList(Call) = .empty,
++    bytes: usize = 0,
++    valid: bool = true,
++    const Call = struct { id: []const u8, name: []const u8, arguments: std.ArrayList(u8) = .empty };
++    const max_bytes = 32 << 20;
++
++    /// After a successful event write; failure to track disables caching without changing the response.
++    pub fn note(d: *Delivered, a: Allocator, delta: Value) void {
++        if (!d.valid) return;
++        d.track(a, delta) catch {
++            d.valid = false;
++        };
++    }
++
++    fn track(d: *Delivered, a: Allocator, delta: Value) !void {
++        const calls = delta.get("tool_calls") orelse return;
++        if (calls != .array) return error.Invalid;
++        for (calls.array) |call| {
++            const index = (call.get("index") orelse return error.Invalid).int64() orelse return error.Invalid;
++            if (index < 0 or index >= max_calls) return error.Invalid;
++            const at: usize = @intCast(index);
++            const function = call.get("function") orelse return error.Invalid;
++            if (at == d.calls.items.len) {
++                const id = call.strField("id") orelse return error.Invalid;
++                const name = function.strField("name") orelse return error.Invalid;
++                if (id.len == 0 or id.len > 256 or name.len == 0 or name.len > 4096) return error.Invalid;
++                try d.calls.append(a, .{ .id = try a.dupe(u8, id), .name = try a.dupe(u8, name) });
++            } else if (at > d.calls.items.len or call.has("id") or function.has("name")) return error.Invalid;
++            const piece = function.strField("arguments") orelse "";
++            if (piece.len > max_bytes -| d.bytes) return error.Invalid;
++            try d.calls.items[at].arguments.appendSlice(a, piece);
++            d.bytes += piece.len;
++        }
++    }
++
++    /// Only accept the same complete calls in order; no name/argument search or identity inference.
++    pub fn ids(d: *const Delivered, a: Allocator, parsed: []const Value) Allocator.Error!?[][]const u8 {
++        if (!d.valid or d.calls.items.len == 0 or parsed.len != d.calls.items.len) return null;
++        const out = try a.alloc([]const u8, parsed.len);
++        for (d.calls.items, parsed, out) |sent, call, *id| {
++            const function = call.get("function") orelse return null;
++            if (!std.mem.eql(u8, sent.name, function.strField("name") orelse "")) return null;
++            const args = function.strField("arguments") orelse return null;
++            const expected = try json.parseText(a, args);
++            const delivered = try json.parseText(a, sent.arguments.items);
++            if (expected != .ok or delivered != .ok or expected.ok != .object or delivered.ok != .object or
++                !json.equal(expected.ok, delivered.ok)) return null;
++            id.* = sent.id;
++        }
++        return out;
++    }
++};
++
++pub fn idsOf(a: Allocator, calls: []const Value) Allocator.Error!?[][]const u8 {
++    if (calls.len == 0 or calls.len > max_calls) return null;
++    const out = try a.alloc([]const u8, calls.len);
++    for (calls, out) |call, *id| id.* = call.strField("id") orelse return null;
++    return out;
++}
+diff --git a/zig/src/server/history_contract.zig b/zig/src/server/history_contract.zig
+new file mode 100644
+--- /dev/null
++++ b/zig/src/server/history_contract.zig
+@@ -0,0 +1,52 @@
++//! Preserve caller reasoning and refuse tool-result identities a sorting template would silently omit.
++const std = @import("std");
++const json = @import("json");
++const errors = @import("errors.zig");
++const strip = @import("reply_text.zig").pyStrip;
++const Value = json.Value;
++
++pub fn reasoningAlias(cx: *errors.Cx, item: *json.Object) std.mem.Allocator.Error!*json.Object {
++    const value: Value = .{ .object = item };
++    if (!std.mem.eql(u8, value.strField("role") orelse "", "assistant")) return item;
++    if (strip(value.strField("reasoning_content") orelse "").len > 0) return item;
++    const alias = value.strField("reasoning") orelse return item;
++    if (strip(alias).len == 0) return item;
++    const copy = try json.copyObject(cx.a, item);
++    try copy.put(cx.a, "reasoning_content", .{ .string = alias });
++    return copy;
++}
++
++fn idOf(value: Value) ?Value {
++    const tool_id = value.get("tool_call_id");
++    if (tool_id != null and tool_id.?.truthy()) return tool_id;
++    return value.get("id");
++}
++
++pub fn toolResults(cx: *errors.Cx, messages: []const Value) errors.Refused!void {
++    var preceding: ?[]const Value = null;
++    for (messages, 0..) |message, index| {
++        const role = message.strField("role") orelse "";
++        if (!std.mem.eql(u8, role, "tool")) {
++            preceding = null;
++            if (std.mem.eql(u8, role, "assistant")) if (message.get("tool_calls")) |calls| {
++                if (calls == .array and calls.array.len > 0) preceding = calls.array;
++            };
++            continue;
++        }
++        const value = idOf(message) orelse continue;
++        if (value == .null or (value == .string and value.string.len == 0)) continue;
++        if (value != .string) return cx.fail(.request, "messages[{d}].tool_call_id must be a string", .{index});
++        // With no preceding call list, the template renders this block in its original order.
++        const calls = preceding orelse continue;
++        // A call without an ID disables sorting; leave that lossless fallback intact.
++        const identified = for (calls) |call| {
++            const id = idOf(call) orelse break false;
++            if (!id.truthy()) break false;
++        } else true;
++        if (!identified) continue;
++        for (calls) |call| {
++            const id = idOf(call) orelse continue;
++            if (id == .string and std.mem.eql(u8, id.string, value.string)) break;
++        } else return cx.fail(.request, "messages[{d}].tool_call_id does not match the preceding assistant tool_calls", .{index});
++    }
++}
+diff --git a/zig/src/server/idle_unload_test.zig b/zig/src/server/idle_unload_test.zig
+--- a/zig/src/server/idle_unload_test.zig
++++ b/zig/src/server/idle_unload_test.zig
+@@ -97,6 +97,7 @@
+             .keys = null,
+             .metrics = .{ .gpa = gpa },
+             .store = .{ .gpa = gpa },
++            .reasoning = .{ .gpa = gpa },
+             .arena = .init(gpa),
+             .slide = .init(gpa, self.io, null),
+             .teacher = .init(gpa),
+diff --git a/zig/src/server/messages.zig b/zig/src/server/messages.zig
+--- a/zig/src/server/messages.zig
++++ b/zig/src/server/messages.zig
+@@ -128,6 +128,7 @@
+         } else if (content.? != .string) {
+             return cx.refuse("message content must be text or an array of text parts");
+         }
++        item = try @import("history_contract.zig").reasoningAlias(cx, item);
+         const r = role.?.string;
+         if (std.mem.eql(u8, r, "system") or std.mem.eql(u8, r, "developer")) {
+             if (out.items.len == 0) {
+@@ -172,6 +173,7 @@
+             try out.insert(cx.a, at, .{ .object = turn });
+         }
+     }
++    try @import("history_contract.zig").toolResults(cx, out.items);
+     return .{ .array = out.items };
+ }
+ 
+@@ -255,7 +257,7 @@
+     defer arena.deinit();
+     var cx: Cx = .{ .a = arena.allocator() };
+     const messages = (try json.parse(cx.a,
+-        \\[{"role": "assistant", "content": "", "tool_calls": [{"id": "t1", "type": "function", "function": {"name": "f", "arguments": {}}}]}, {"role": "tool", "tool_call_id": "t1", "content": "42 rows"}, {"role": "tool", "tool_call_id": "t2", "content": "ok"}]
++        \\[{"role": "assistant", "content": "", "tool_calls": [{"id": "t1", "type": "function", "function": {"name": "f", "arguments": {}}}, {"id": "t2", "type": "function", "function": {"name": "g", "arguments": {}}}]}, {"role": "tool", "tool_call_id": "t1", "content": "42 rows"}, {"role": "tool", "tool_call_id": "t2", "content": "ok"}]
+     )).ok;
+     const out = try normalize(&cx, messages, "system", true);
+     try std.testing.expectEqual(@as(usize, 4), out.array.len);
+diff --git a/zig/src/server/openai.zig b/zig/src/server/openai.zig
+--- a/zig/src/server/openai.zig
++++ b/zig/src/server/openai.zig
+@@ -7,6 +7,7 @@
+ const compact = @import("compact.zig");
+ const grammar = @import("grammar.zig");
+ const messages = @import("messages.zig");
++const delivered_calls = @import("delivered_calls.zig");
+ const tool_specs = @import("tool_specs.zig");
+ const tool_parse = @import("tool_parse.zig");
+ const tool_stream = @import("tool_stream.zig");
+@@ -36,6 +37,8 @@
+         event: *const fn (ctx: *anyopaque, payload: ?Value) error{Closed}!void,
+         /// A whole JSON reply.
+         reply: *const fn (ctx: *anyopaque, status: u16, payload: Value) void,
++        /// True only after a whole reply was successfully translated and written to its client.
++        delivered: ?*const fn (ctx: *anyopaque) bool = null,
+         /// Bytes that keep a silent stream alive (an SSE comment, or the API's ping); null: none.
+         keepalive: ?*const fn (ctx: *anyopaque) error{Closed}!void = null,
+     };
+@@ -58,7 +61,7 @@
+     a: Allocator,
+ 
+     fn out(c: *ClientOut) Out {
+-        return .{ .ctx = c, .vt = &.{ .open = open, .event = event, .reply = reply, .keepalive = keepalive } };
++        return .{ .ctx = c, .vt = &.{ .open = open, .event = event, .reply = reply, .delivered = delivered, .keepalive = keepalive } };
+     }
+ 
+     fn open(ctx: *anyopaque, _: usize) error{Closed}!void {
+@@ -74,6 +77,11 @@
+     fn reply(ctx: *anyopaque, status: u16, payload: Value) void {
+         const c: *ClientOut = @ptrCast(@alignCast(ctx));
+         routes.sendValue(c.conn, c.a, status, payload);
++    }
++
++    fn delivered(ctx: *anyopaque) bool {
++        const c: *ClientOut = @ptrCast(@alignCast(ctx));
++        return c.conn.response_complete and !c.conn.broken;
+     }
+ 
+     fn keepalive(ctx: *anyopaque) error{Closed}!void {
+@@ -139,6 +147,7 @@
+     } else if (body.get("messages")) |m| if (m == .array and m.array.len > 0) {
+         input.messages = try messages.normalizeWith(cx, m, "system", srv.needs_user_after_tool, .of(srv.info.vision));
+     };
++    input.messages = try srv.reasoning.restore(srv.io, cx.a, input.messages);
+     if (!is_chat and input.messages.array.len == 0) input.prompt = try legacyPrompt(srv, cx, body.get("prompt"));
+     // ``body.get("max_tokens") or body.get("max_completion_tokens")``: both are ints or None by now
+     const first = body.get("max_tokens");
+@@ -268,6 +277,7 @@
+     id: []const u8,
+     created: i64,
+     streamed_prose: bool = false,
++    delivered: delivered_calls.Delivered = .{},
+     prose_sent: std.ArrayList(u8) = .empty, // the content a tool stream sent
+     text_offset: usize = 0, // characters a completion stream's logprob rows have covered
+     turn: ?*cortheon.Turn = null, // --cortheon's work on this request
+@@ -301,7 +311,10 @@
+     }
+ 
+     fn emit(r: *Run, payload: Value) error{Closed}!void {
+-        return r.out.vt.event(r.out.ctx, payload);
++        try r.out.vt.event(r.out.ctx, payload);
++        if (r.is_chat) if (payload.get("choices")) |choices| if (choices == .array) {
++            for (choices.array) |choice| if (choice.get("delta")) |delta| r.delivered.note(r.a, delta);
++        };
+     }
+ 
+     fn usage(r: *Run, reply: *const chat.Reply) Allocator.Error!Value {
+@@ -387,11 +400,24 @@
+         const a = r.a;
+         var cx: Cx = .{ .a = a };
+         var reply = (if (r.turn) |t| cortheon.loop.whole(t, r.srv, &cx, &r.plan.input, gone) else chat.run(r.srv, &cx, r.plan.input, null, gone)) catch |e| return r.unsent(&cx, e, field);
++        const completed = normallyCompleted(&reply);
+         const calls = r.attachCalls(&reply) catch return;
+         const o = json.newObject(a) catch return;
+         r.wholeBody(o, &reply, calls) catch return;
+         r.out.vt.reply(r.out.ctx, 200, .{ .object = o });
++        if (r.out.vt.delivered) |delivered| if (delivered(r.out.ctx)) r.remember(&reply, calls, completed);
+         r.warmNext(&reply, calls);
++    }
++
++    fn normallyCompleted(reply: *const chat.Reply) bool {
++        return reply.complete and std.mem.eql(u8, reply.finish_reason, "stop") and reply.loop_stop == null and reply.stop_sequence == null;
++    }
++
++    fn remember(r: *Run, reply: *const chat.Reply, calls: ?[]Value, completed: bool) void {
++        if (!r.is_chat or !completed or !std.mem.eql(u8, reply.finish_reason, "tool_calls")) return;
++        const parsed = calls orelse return;
++        const exposed = (if (r.plan.stream) r.delivered.ids(r.a, parsed) else delivered_calls.idsOf(r.a, parsed)) catch return;
++        r.srv.reasoning.remember(r.srv.io, exposed orelse return, reply.reasoning) catch {};
+     }
+ 
+     /// The next turn's prompt prefilled in the background, from the reply as its client got it (warm.zig).
+@@ -557,6 +583,7 @@
+             r.out.vt.event(r.out.ctx, null) catch {};
+             return;
+         };
++        const completed = normallyCompleted(&reply);
+         var calls: ?[]Value = null;
+         if (tools) {
+             calls = r.attachCalls(&reply) catch return;
+@@ -592,7 +619,8 @@
+             r.emit(u) catch return;
+         }
+         if (reply.loop_stop) |period| r.emit(wrapError(a, @import("loop_stop.zig").errorBody(a, period) catch return) catch return) catch return;
+-        r.out.vt.event(r.out.ctx, null) catch {};
++        r.out.vt.event(r.out.ctx, null) catch return;
++        r.remember(&reply, calls, completed);
+         r.warmNext(&reply, calls);
+     }
+ };
+diff --git a/zig/src/server/prompt.zig b/zig/src/server/prompt.zig
+--- a/zig/src/server/prompt.zig
++++ b/zig/src/server/prompt.zig
+@@ -54,6 +54,19 @@
+         }
+     }
+     return ids;
++}
++
++/// Probe the actual prompt wrapper: a fixed thinking suffix is switchable when off appends its close token.
++pub fn canCloseThinking(srv: *Server) bool {
++    if (srv.text.tokenId("</think>") == null) return false;
++    var arena: std.heap.ArenaAllocator = .init(srv.gpa);
++    defer arena.deinit();
++    var cx: Cx = .{ .a = arena.allocator() };
++    const on = generationPrompt(srv, &cx, true) catch return false;
++    const off = generationPrompt(srv, &cx, false) catch return false;
++    if (on.len == 0 or off.len != on.len + 1 or !std.mem.eql(u32, on, off[0..on.len])) return false;
++    const tail = srv.text.decode(cx.a, off[on.len..]) catch return false;
++    return std.mem.eql(u8, tail, "</think>");
+ }
+ 
+ /// The template's ids for `messages`; with image input, a marker the text spells is ordinary text (images.zig).
+diff --git a/zig/src/server/reasoning_cache.zig b/zig/src/server/reasoning_cache.zig
+new file mode 100644
+--- /dev/null
++++ b/zig/src/server/reasoning_cache.zig
+@@ -0,0 +1,132 @@
++//! Completed replies' reasoning, addressed only by the exact call IDs delivered to their clients.
++const std = @import("std");
++const json = @import("json");
++const strip = @import("reply_text.zig").pyStrip;
++const Value = json.Value;
++const Allocator = std.mem.Allocator;
++
++pub const max_calls = 128;
++
++pub const Cache = struct {
++    gpa: Allocator,
++    mutex: std.Io.Mutex = .init,
++    by_id: std.StringHashMapUnmanaged(*Entry) = .empty,
++    oldest: ?*Entry = null,
++    newest: ?*Entry = null,
++    count: usize = 0,
++    bytes: usize = 0,
++    limit: usize = 1024,
++    // UTF-8 bytes, including IDs and entry storage: stricter than the Python cache's 32 Mi characters.
++    max_bytes: usize = 32 << 20,
++
++    const Entry = struct {
++        previous: ?*Entry = null,
++        next: ?*Entry = null,
++        storage: []u8,
++        ids: [][]const u8,
++        reasoning: []const u8,
++        size: usize,
++    };
++
++    /// Server shutdown joins its connections before destroying this cache.
++    pub fn deinit(c: *Cache) void {
++        while (c.oldest) |e| c.remove(e);
++        c.by_id.deinit(c.gpa);
++    }
++
++    fn unlink(c: *Cache, e: *Entry) void {
++        if (e.previous) |p| p.next = e.next else c.oldest = e.next;
++        if (e.next) |n| n.previous = e.previous else c.newest = e.previous;
++    }
++
++    fn append(c: *Cache, e: *Entry) void {
++        e.previous = c.newest;
++        e.next = null;
++        if (c.newest) |n| n.next = e else c.oldest = e;
++        c.newest = e;
++    }
++
++    fn remove(c: *Cache, e: *Entry) void {
++        c.unlink(e);
++        for (e.ids) |id| _ = c.by_id.remove(id);
++        c.count -= 1;
++        c.bytes -= e.size;
++        c.gpa.free(e.storage);
++        c.gpa.free(e.ids);
++        c.gpa.destroy(e);
++    }
++
++    /// Called only after successful delivery of a normally completed, parsed tool-calling reply.
++    pub fn remember(c: *Cache, io: std.Io, call_ids: []const []const u8, reasoning: ?[]const u8) Allocator.Error!void {
++        const text = reasoning orelse return;
++        if (call_ids.len == 0 or call_ids.len > max_calls or strip(text).len == 0) return;
++        c.mutex.lockUncancelable(io);
++        defer c.mutex.unlock(io);
++        if (c.limit == 0 or text.len > c.max_bytes) return;
++        var size = text.len;
++        for (call_ids, 0..) |id, i| {
++            if (id.len == 0 or id.len > 256 or id.len > c.max_bytes -| size) return;
++            for (call_ids[0..i]) |earlier| if (std.mem.eql(u8, earlier, id)) return;
++            size += id.len;
++            // An ID must never select a different reply, even on an accidental collision.
++            if (c.by_id.contains(id)) return;
++        }
++        const overhead = @sizeOf(Entry) + call_ids.len * @sizeOf([]const u8);
++        if (overhead > c.max_bytes -| size) return;
++        const e = try c.gpa.create(Entry);
++        errdefer c.gpa.destroy(e);
++        const storage = try c.gpa.alloc(u8, size);
++        errdefer c.gpa.free(storage);
++        const copied_ids = try c.gpa.alloc([]const u8, call_ids.len);
++        errdefer c.gpa.free(copied_ids);
++        // Bound index metadata as well: at most 1024 * 128 keys (capacity retained after eviction).
++        const entry_limit: usize = @min(c.limit, 1024);
++        const key_limit = entry_limit * @as(usize, max_calls);
++        try c.by_id.ensureTotalCapacity(c.gpa, @intCast(@min(c.by_id.count() + call_ids.len, key_limit)));
++        @memcpy(storage[0..text.len], text);
++        var offset = text.len;
++        for (call_ids, copied_ids) |id, *copy| {
++            @memcpy(storage[offset..][0..id.len], id);
++            copy.* = storage[offset..][0..id.len];
++            offset += id.len;
++        }
++        e.* = .{ .storage = storage, .ids = copied_ids, .reasoning = storage[0..text.len], .size = size + overhead };
++        while (c.count >= @min(c.limit, 1024) or c.bytes > c.max_bytes - e.size) c.remove(c.oldest.?);
++        for (e.ids) |id| c.by_id.putAssumeCapacity(id, e);
++        c.append(e);
++        c.count += 1;
++        c.bytes += e.size;
++    }
++
++    /// Copy under the lock: eviction cannot invalidate strings borrowed by an in-flight request.
++    pub fn restore(c: *Cache, io: std.Io, a: Allocator, messages: Value) Allocator.Error!Value {
++        if (messages != .array) return messages;
++        c.mutex.lockUncancelable(io);
++        defer c.mutex.unlock(io);
++        if (c.count == 0) return messages;
++        var result: ?[]Value = null;
++        for (messages.array, 0..) |m, i| {
++            if (!std.mem.eql(u8, m.strField("role") orelse "", "assistant")) continue;
++            if (strip(m.strField("reasoning_content") orelse "").len > 0 or
++                strip(m.strField("reasoning") orelse "").len > 0 or
++                std.mem.indexOf(u8, m.strField("content") orelse "", "</think>") != null) continue;
++            const calls = m.get("tool_calls") orelse continue;
++            if (calls != .array or calls.array.len == 0 or calls.array.len > max_calls) continue;
++            var found: ?*Entry = null;
++            const e = for (calls.array) |call| {
++                const id = call.strField("id") orelse break null;
++                const entry = c.by_id.get(id) orelse break null;
++                if (found != null and found.? != entry) break null;
++                found = entry;
++            } else found;
++            const entry = e orelse continue;
++            const copy = try json.copyObject(a, m.object);
++            try copy.put(a, "reasoning_content", .{ .string = try a.dupe(u8, entry.reasoning) });
++            if (result == null) result = try a.dupe(Value, messages.array);
++            result.?[i] = .{ .object = copy };
++            c.unlink(entry);
++            c.append(entry);
++        }
++        return if (result) |out| .{ .array = out } else messages;
++    }
++};
+diff --git a/zig/src/server/responses.zig b/zig/src/server/responses.zig
+--- a/zig/src/server/responses.zig
++++ b/zig/src/server/responses.zig
+@@ -191,27 +191,19 @@
+     var reply: Reply = .{ .srv = srv, .a = a, .conn = conn, .base = base, .streaming = t.stream, .keep = t.store, .added = t.added, .cx = &cx };
+     var out: Wire = .{ .reply = &reply };
+     openai.run(srv, a, out.out(), .{ .conn = conn }, true, t.chat);
+-    if (out.opened or conn.broken) return;
+-    const status = out.status orelse return;
+-    if (status != 200) return routes.sendValue(conn, a, status, out.payload);
+-    const final = reply.completion(out.payload) catch return;
+-    routes.sendValue(conn, a, 200, final);
+ }
+ 
+ /// The chat handler's output, translated as Python's Wire reads it.
+ const Wire = struct {
+     reply: *Reply,
+-    opened: bool = false,
+-    status: ?u16 = null,
+-    payload: Value = .null,
++    sent: bool = false,
+ 
+     fn out(w: *Wire) openai.Out {
+-        return .{ .ctx = w, .vt = &.{ .open = open, .event = event, .reply = whole, .keepalive = keepalive } };
++        return .{ .ctx = w, .vt = &.{ .open = open, .event = event, .reply = whole, .delivered = delivered, .keepalive = keepalive } };
+     }
+ 
+     fn open(ctx: *anyopaque, _: usize) error{Closed}!void {
+         const w: *Wire = @ptrCast(@alignCast(ctx));
+-        w.opened = true;
+         try sse.open(w.reply.conn);
+         try w.reply.start();
+     }
+@@ -228,8 +220,18 @@
+ 
+     fn whole(ctx: *anyopaque, status: u16, payload: Value) void {
+         const w: *Wire = @ptrCast(@alignCast(ctx));
+-        w.status = status;
+-        w.payload = payload;
++        const conn = w.reply.conn;
++        const a = w.reply.a;
++        if (conn.broken) return;
++        if (status != 200) return routes.sendValue(conn, a, status, payload);
++        const final = w.reply.completion(payload) catch return;
++        routes.sendValue(conn, a, 200, final);
++        w.sent = conn.response_complete and !conn.broken;
++    }
++
++    fn delivered(ctx: *anyopaque) bool {
++        const w: *Wire = @ptrCast(@alignCast(ctx));
++        return w.sent;
+     }
+ };
+ 
+diff --git a/zig/src/server/server.zig b/zig/src/server/server.zig
+--- a/zig/src/server/server.zig
++++ b/zig/src/server/server.zig
+@@ -134,6 +134,7 @@
+     think_close_end: ?u32 = null,
+     metrics: metrics.Metrics,
+     store: responses.Store,
++    reasoning: @import("reasoning_cache.zig").Cache,
+     next_id: std.atomic.Value(u64) = .init(1),
+     /// Connections open now; a stop waits for them before freeing what they read.
+     open_connections: std.atomic.Value(u32) = .init(0),
+@@ -166,7 +167,7 @@
+     /// Reads what the template and tokenizer decide once: late system role, think markers, efforts, the forced close.
+     pub fn init(gpa: Allocator, io: std.Io, engine: api.Engine, text: model_text.Text, config: Config, keys: ?*auth.Store) !*Server {
+         const srv = try gpa.create(Server);
+-        srv.* = .{ .gpa = gpa, .io = io, .engine = engine, .info = engine.info(), .text = text, .config = config, .keys = keys, .metrics = .{ .gpa = gpa }, .store = .{ .gpa = gpa }, .arena = .init(gpa), .slide = .init(gpa, io, config.slide_graph), .teacher = .init(gpa) };
++        srv.* = .{ .gpa = gpa, .io = io, .engine = engine, .info = engine.info(), .text = text, .config = config, .keys = keys, .metrics = .{ .gpa = gpa }, .store = .{ .gpa = gpa }, .reasoning = .{ .gpa = gpa }, .arena = .init(gpa), .slide = .init(gpa, io, config.slide_graph), .teacher = .init(gpa) };
+         errdefer srv.deinit(); // a later step's failure stops the keepalive before the caller closes the engine
+         if (srv.info.embeddings != null and srv.info.text_generation) return error.InvalidEmbeddingCapabilities;
+         if (srv.info.vision) |vision| if (@import("vision_markers.zig").firstUnsafe(text, vision)) |id| {
+@@ -199,6 +200,7 @@
+             std.mem.indexOf(u8, source, "thinking_mode") != null;
+         srv.late_system = try lateSystem(a, text);
+         srv.needs_user_after_tool = needsUserAfterTool(source);
++        if (!srv.thinking_switch) srv.thinking_switch = @import("prompt.zig").canCloseThinking(srv);
+         if (srv.info.vision != null) {
+             const template_images = templateImages(srv);
+             if (!template_images) log.line("warning: --vision: the chat template writes no image placeholder for an image part, so image requests will fail; serve with --chat-template naming a template that has an image path", .{});
+@@ -228,6 +230,7 @@
+         srv.metrics.deinit();
+         srv.arena.deinit();
+         srv.store.deinit();
++        srv.reasoning.deinit();
+         srv.slide.deinit();
+         srv.teacher.deinit();
+         if (srv.cortheon) |c| c.deinit();
+diff --git a/zig/src/server/tokens.zig b/zig/src/server/tokens.zig
+--- a/zig/src/server/tokens.zig
++++ b/zig/src/server/tokens.zig
+@@ -30,7 +30,8 @@
+     var ids: []const u32 = undefined;
+     if (body.has("messages")) {
+         const generation = try flag(cx, body, "add_generation_prompt", true);
+-        const msgs = try messages.normalizeWith(cx, body.get("messages"), "system", srv.needs_user_after_tool, .of(srv.info.vision));
++        const normalized = try messages.normalizeWith(cx, body.get("messages"), "system", srv.needs_user_after_tool, .of(srv.info.vision));
++        const msgs = try srv.reasoning.restore(srv.io, cx.a, normalized);
+         const tools = tool_specs.active(cx, body.get("tools"), body.get("tool_choice")) catch |e| switch (e) {
+             error.Refused => return cx.refuse(cx.message), // a ValueError here is a RequestError
+             else => |x| return x,

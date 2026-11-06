@@ -1,0 +1,1468 @@
+diff --git a/zig/build/glm_contracts.zig b/zig/build/glm_contracts.zig
+--- a/zig/build/glm_contracts.zig
++++ b/zig/build/glm_contracts.zig
+@@ -2,6 +2,13 @@
+ const std = @import("std");
+ pub fn tests(b: *std.Build, glm: *std.Build.Module, lanes: *std.Build.Module, cuda: *std.Build.Module, core: *std.Build.Module) void {
+     const host = b.graph.host;
++    const checkpoint = b.step("test-checkpoint-bounded-host", "Bounded native checkpoint ownership, GLM geometry and streaming credits");
++    checkpoint.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = core, .filters = &.{"checkpoint bounded:"} })).step);
++    checkpoint.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = b.createModule(.{ .root_source_file = b.path("zig/src/core/kv_pool.zig"), .target = host, .optimize = .debug, .link_libc = true }) })).step);
++    checkpoint.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = b.createModule(.{ .root_source_file = b.path("zig/src/core/checkpoint_file_test.zig"), .target = host, .optimize = .debug, .link_libc = true }), .filters = &.{"checkpoint bounded:"} })).step);
++    const checkpoint_host = b.createModule(.{ .root_source_file = b.path("zig/glm_checkpoint_host.zig"), .target = host, .optimize = .debug, .link_libc = true, .imports = &.{ .{ .name = "glm", .module = glm }, .{ .name = "cuda", .module = cuda }, .{ .name = "core", .module = core } } });
++    checkpoint.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = checkpoint_host })).step);
++
+     const prompt_arena = b.createModule(.{ .root_source_file = b.path("zig/glm_prompt_arena_host.zig"), .target = host, .optimize = .debug, .link_libc = true, .imports = &.{ .{ .name = "glm", .module = glm }, .{ .name = "cuda", .module = cuda } } });
+     b.step("test-glm-prompt-arena-host", "Actual sequence arenas retain and account prompt rows").dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = prompt_arena })).step);
+     const prompt_owner = b.createModule(.{ .root_source_file = b.path("zig/glm_prompt_host.zig"), .target = host, .optimize = .debug, .link_libc = true, .imports = &.{.{ .name = "glm", .module = glm }} });
+diff --git a/zig/glm_checkpoint_host.zig b/zig/glm_checkpoint_host.zig
+new file mode 100644
+--- /dev/null
++++ b/zig/glm_checkpoint_host.zig
+@@ -0,0 +1,223 @@
++//! Actual GLM Plan, State, pool and capsule copies under a recording CUDA ABI, without a GPU.
++const std = @import("std");
++const core = @import("core");
++const glm = @import("glm");
++const cuda = @import("cuda");
++const cp = glm.checkpoint;
++const rec = @import("test_support/glm_snap_driver.zig").Driver;
++const t = std.testing;
++
++fn weights(layers: []glm.weights.Layer, kv8: bool) !glm.weights.Weights {
++    var w: glm.weights.Weights = undefined;
++    w.config = .{ .layers = 2, .kda_heads = 64, .kv_lora = if (kv8) 512 else 16, .i_dim = 8, .hidden = 64 };
++    w.share = try glm.shard.Share.of(&w.config, 0, 2);
++    layers[0].mixer = .{ .mla = undefined };
++    layers[1].mixer = .{ .kda = undefined };
++    w.layers = layers;
++    return w;
++}
++
++test "checkpoint GLM: actual Plan streams FP8 scales, pooled lookahead, KDA and ring bases after live mutation" {
++    for ([_]bool{ false, true }) |kv8| for ([_][2]usize{ .{ 1024, 1027 }, .{ 1025, 1028 }, .{ 1025, 1023 } }) |mark| {
++        var d = rec.init();
++        var layers: [2]glm.weights.Layer = undefined;
++        var w = try weights(&layers, kv8);
++        const page_bytes = glm.state.pageBytesOf(&w, kv8, true);
++        var device = try cuda.DeviceBuffer.alloc(&d, page_bytes * 6);
++        defer device.free();
++        var pool = try core.kv_pool.Pool.init(t.allocator, 6, page_bytes);
++        defer pool.deinit();
++        var live: core.kv_pool.Lease = .{};
++        defer pool.finish(&live);
++        try pool.promise(&live, 5);
++        try pool.cover(&live, 3, null);
++        // Deliberately noncontiguous order; a linear-prefix copy cannot pass this case.
++        std.mem.swap(u32, &live.ids.items[0], &live.ids.items[2]);
++        var st = try glm.forward.State.initPagedFormat(t.allocator, &d, &w, 2048, .{ .kv = device.ptr, .pages = 6, .page_bytes = page_bytes }, kv8, true);
++        defer st.deinit();
++        st.capacity = 1536;
++        st.pages = live.ids.items;
++        const stream: cuda.Stream = .{ .d = &d, .handle = null };
++        for (rec.bytes(device.ptr, device.len), 0..) |*b, i| b.* = @truncate(i *% 137 +% i / 59);
++        for (rec.bytes(st.arena.buf.ptr, st.arena.buf.len), 0..) |*b, i| b.* = @truncate(i *% 71 +% i / 131);
++        try st.restoreHost(stream, mark[0], mark[1], &.{1}, .{ 512, 516 });
++        const plan = try glm.snapshots.layout.Plan.init(&st, &w.config, st.pos, st.mtp_len);
++        // Small fixture oracle only: the implementation never allocates this whole-prefix byte array.
++        const expected = try t.allocator.alloc(u8, plan.len);
++        defer t.allocator.free(expected);
++        var off: usize = 0;
++        for (plan.parts[0..plan.count]) |part| {
++            var done: usize = 0;
++            while (done < part.len) {
++                const p = plan.piece(part, done);
++                @memcpy(expected[off..][0..p.len], rec.bytes(p.live, p.len));
++                off += p.len;
++                done += p.len;
++            }
++        }
++        var budget: core.checkpoint_capture.Budget = .{ .pool = &pool, .limits = .{ .descriptors = 1, .unique_pages = 2, .pages_per_descriptor = 2, .capsule_bytes = 64 << 20 } };
++        var freezer: glm.checkpoint_freeze.Device = .{ .gpa = t.allocator, .d = &d, .stream = stream };
++        try t.expectError(error.UnsupportedMutableCapture, cp.Capture.create(&budget, &live, &st, &w.config, .none, null));
++        var saved = try cp.Capture.create(&budget, &live, &st, &w.config, .none, freezer.adapter());
++        defer saved.close() catch unreachable;
++        try t.expectEqual(@min(mark[0], mark[1]) / 512, pool.npinned);
++        try t.expectEqual(@as(usize, 2), pool.promised);
++        try t.expectEqualSlices(usize, &.{ 512, 516 }, &saved.bases);
++        // Every mutable byte changes while the completed page bytes remain owned by the descriptor.
++        @memset(rec.bytes(st.arena.buf.ptr, st.arena.buf.len), 0xee);
++        for (live.ids.items[saved.pages.ids.len..]) |id| @memset(rec.bytes(device.ptr + @as(u64, id) * page_bytes, page_bytes), 0xdd);
++        st.cur[0] = 0;
++        pool.finish(&live);
++        try t.expectEqual(@as(usize, 0), pool.reclaimable());
++        var cursor: cp.Cursor = .{ .capture = &saved };
++        var slots: [2]core.checkpoint_stream.Slot = undefined;
++        var storage: [8192]u8 = undefined;
++        var ring = try core.checkpoint_stream.Ring.init(cursor.source(), &storage, &slots, 4096);
++        while (ring.emitted < plan.len) {
++            const ticket = try ring.acquire();
++            try d.check(d.api.cuMemcpyDtoHAsync_v2(ticket.target.ptr, ticket.chunk.location.device, ticket.chunk.len, null), "test checkpoint transfer");
++            try ring.dmaDone(ticket.key, true);
++            const bytes = try ring.beginWrite(ticket.key);
++            try t.expectEqualSlices(u8, expected[ticket.chunk.offset..][0..bytes.len], bytes);
++            try ring.ioDone(ticket.key, true);
++            try ring.retire(ticket.key);
++        }
++        try t.expect(ring.readyToSeal());
++        try ring.close();
++        try t.expectEqual(@as(u1, 1), saved.cur[0]);
++        try t.expectEqual(mark[0], saved.pos);
++    };
++}
++
++const Sizing = struct {
++    var next: u64 = 1 << 30;
++    var largest: usize = 0;
++    var copied: usize = 0;
++    fn alloc(out: *u64, n: usize) callconv(.c) cuda.abi.Result {
++        largest = @max(largest, n);
++        out.* = next;
++        next += std.mem.alignForward(usize, n, 256);
++        return 0;
++    }
++    fn free(_: u64) callconv(.c) cuda.abi.Result {
++        return 0;
++    }
++    fn zero(_: u64, _: u8, _: usize) callconv(.c) cuda.abi.Result {
++        return 0;
++    }
++    fn copy(_: u64, _: u64, n: usize, _: cuda.abi.Stream) callconv(.c) cuda.abi.Result {
++        copied += n;
++        return 0;
++    }
++    fn sync(_: cuda.abi.Stream) callconv(.c) cuda.abi.Result {
++        return 0;
++    }
++};
++
++test "checkpoint GLM: near 1M first save freezes a bounded capsule including 40 MiB DFlash2, not the prefix" {
++    var d: cuda.Driver = undefined;
++    d.api.cuMemAlloc_v2 = Sizing.alloc;
++    d.api.cuMemFree_v2 = Sizing.free;
++    d.api.cuMemsetD8_v2 = Sizing.zero;
++    d.api.cuMemcpyDtoDAsync_v2 = Sizing.copy;
++    d.api.cuStreamSynchronize = Sizing.sync;
++    var w: glm.weights.Weights = undefined;
++    w.config = .{};
++    w.share = try glm.shard.Share.of(&w.config, 0, 2);
++    var layers: [glm.config.max_layers]glm.weights.Layer = undefined;
++    w.layers = layers[0..w.config.layers];
++    for (w.layers, 0..) |*l, i| l.mixer = if (w.config.kind(@intCast(i)) == .mla) .{ .mla = undefined } else .{ .kda = undefined };
++    const page_bytes = glm.state.pageBytesOf(&w, true, false);
++    const at = 1_000_001;
++    const pages = (at + 511) / 512 + 1;
++    var pool = try core.kv_pool.Pool.init(t.allocator, pages + 8, page_bytes);
++    defer pool.deinit();
++    var live: core.kv_pool.Lease = .{};
++    defer pool.finish(&live);
++    try pool.promise(&live, pages + 8);
++    try pool.cover(&live, pages, null);
++    var st = try glm.forward.State.initPagedFormat(t.allocator, &d, &w, 1 << 20, .{ .kv = 64 << 30, .pages = pages + 8, .page_bytes = page_bytes }, true, false);
++    defer st.deinit();
++    st.capacity = pages * 512;
++    st.pages = live.ids.items;
++    st.pos = at;
++    st.base = at - 8192;
++    var budget: core.checkpoint_capture.Budget = .{ .pool = &pool, .limits = .{ .descriptors = 1, .unique_pages = pages, .pages_per_descriptor = pages, .capsule_bytes = 512 << 20 } };
++    var freezer: glm.checkpoint_freeze.Device = .{ .gpa = t.allocator, .d = &d, .stream = .{ .d = &d, .handle = null } };
++    const draft: cp.Draft = .{ .dflash2 = .{ .live = 96 << 30, .from = at - 2048, .through = at } };
++    Sizing.largest = 0;
++    Sizing.copied = 0;
++    var saved = try cp.Capture.create(&budget, &live, &st, &w.config, draft, freezer.adapter());
++    defer if (!saved.pages.closed) saved.close() catch unreachable;
++    try t.expectEqual(@as(u64, 40 << 20), glm.dflash.ring_bytes);
++    try t.expectEqual(saved.frozen.len, Sizing.largest);
++    try t.expectEqual(saved.frozen.len, Sizing.copied);
++    try t.expect(saved.frozen.len < 512 << 20);
++    try t.expect(saved.frozen.len > 40 << 20);
++    try t.expect(saved.plan.len > 5 * @as(usize, 1 << 30));
++    try t.expectEqual(@as(usize, at / 512), saved.pages.ids.len);
++    try t.expectEqual(@as(usize, 8), pool.promised);
++    try t.expectEqual(@as(?i64, at - 2048), saved.ring_from);
++    var cursor: cp.Cursor = .{ .capture = &saved };
++    const source = cursor.source();
++    var total: u64 = 0;
++    while (try source.next(source.ctx, 2 << 20)) |chunk| {
++        try t.expect(chunk.len <= 2 << 20);
++        try t.expectEqual(total, chunk.offset);
++        total += chunk.len;
++    }
++    try t.expectEqual(saved.plan.len, total);
++    try saved.close();
++    st.pos = 8192 + at % 512;
++    const small_draft: cp.Draft = .{ .dflash2 = .{ .live = 96 << 30, .from = @intCast(st.pos - 2048), .through = st.pos } };
++    var small = try cp.Capture.create(&budget, &live, &st, &w.config, small_draft, freezer.adapter());
++    defer small.close() catch unreachable;
++    try t.expectEqual(saved.frozen.len, small.frozen.len);
++}
++
++test "checkpoint GLM: failed native freeze drains before releasing admission and page owners" {
++    var d = rec.init();
++    var layers: [2]glm.weights.Layer = undefined;
++    var w = try weights(&layers, false);
++    const page_bytes = glm.state.pageBytesOf(&w, false, false);
++    var device = try cuda.DeviceBuffer.alloc(&d, page_bytes * 3);
++    defer device.free();
++    var pool = try core.kv_pool.Pool.init(t.allocator, 3, page_bytes);
++    defer pool.deinit();
++    var live: core.kv_pool.Lease = .{};
++    defer pool.finish(&live);
++    try pool.promise(&live, 3);
++    try pool.cover(&live, 3, null);
++    var st = try glm.forward.State.initPagedFormat(t.allocator, &d, &w, 1024, .{ .kv = device.ptr, .pages = 3, .page_bytes = page_bytes }, false, false);
++    defer st.deinit();
++    st.capacity = 1536;
++    st.pages = live.ids.items;
++    st.pos = 512;
++    var b: core.checkpoint_capture.Budget = .{ .pool = &pool, .limits = .{ .descriptors = 1, .unique_pages = 3, .pages_per_descriptor = 3, .capsule_bytes = 1 } };
++    var freezer: glm.checkpoint_freeze.Device = .{ .gpa = t.allocator, .d = &d, .stream = .{ .d = &d, .handle = null } };
++    const allocs = rec.allocs;
++    st.pending = 1;
++    try t.expectError(error.NotAtMark, cp.Capture.create(&b, &live, &st, &w.config, .none, freezer.adapter()));
++    st.pending = 0;
++    const table = st.table;
++    st.table = 0;
++    try t.expectError(error.UnsupportedUnpagedCapture, cp.Capture.create(&b, &live, &st, &w.config, .none, freezer.adapter()));
++    st.table = table;
++    st.head = true;
++    st.pos = 1536;
++    try t.expectError(error.UnsupportedHeadLag, cp.Capture.create(&b, &live, &st, &w.config, .none, freezer.adapter()));
++    st.head = false;
++    st.pos = 512;
++    try t.expectError(error.CheckpointBackpressure, cp.Capture.create(&b, &live, &st, &w.config, .none, freezer.adapter()));
++    try t.expectEqual(allocs, rec.allocs);
++    b.limits.capsule_bytes = 64 << 20;
++    rec.fail_copy = 2;
++    if (cp.Capture.create(&b, &live, &st, &w.config, .none, freezer.adapter())) |value| {
++        var unexpected = value;
++        try unexpected.close();
++        return error.ExpectedFailure;
++    } else |_| {}
++    try t.expect(rec.syncs > 0);
++    try t.expectEqual(@as(usize, 0), pool.npinned + b.active + b.capsule_used);
++    try t.expectEqual(@as(u32, 1), pool.holders(0));
++}
+diff --git a/zig/src/core/checkpoint_capture.zig b/zig/src/core/checkpoint_capture.zig
+new file mode 100644
+--- /dev/null
++++ b/zig/src/core/checkpoint_capture.zig
+@@ -0,0 +1,93 @@
++//! Bounded checkpoint ownership, separate from RAM-cache admission. Calls run on the pool's owning thread.
++const std = @import("std");
++const kv = @import("kv_pool.zig");
++
++pub const Limits = struct { descriptors: usize, unique_pages: usize, pages_per_descriptor: usize, capsule_bytes: usize };
++
++/// One admission domain per pool. Capsule capacity is reserved before any freezer allocates or copies bytes.
++pub const Budget = struct {
++    pool: *kv.Pool,
++    limits: Limits,
++    active: usize = 0,
++    capsule_used: usize = 0,
++
++    /// The family proves these leading pages immutable at a committed mark, including every cache in each page.
++    pub fn acquire(b: *Budget, live: *const kv.Lease, completed: usize, capsule_bytes: usize) !Lease {
++        if (completed > live.ids.items.len) return error.InvalidPages;
++        if (b.active >= b.limits.descriptors or completed > b.limits.pages_per_descriptor or
++            capsule_bytes > b.limits.capsule_bytes - b.capsule_used) return error.CheckpointBackpressure;
++        const ids = live.ids.items[0..completed];
++        var added: usize = 0;
++        for (ids, 0..) |id, i| {
++            if (id >= b.pool.total() or b.pool.leased[id] == 0) return error.InvalidPages;
++            if (b.pool.refs[id] == std.math.maxInt(u32)) return error.HolderLimit;
++            // A lease maps a physical page once. Reject malformed tables before changing any owner.
++            if (std.mem.indexOfScalar(u32, ids[0..i], id) != null) return error.InvalidPages;
++            added += @intFromBool(b.pool.pins[id] == 0);
++        }
++        if (added > b.limits.unique_pages -| b.pool.npinned) return error.CheckpointBackpressure;
++        const owned = try b.pool.gpa.dupe(u32, ids);
++        for (owned) |id| b.pool.pinCheckpoint(id);
++        b.active += 1;
++        b.capsule_used += capsule_bytes;
++        return .{ .budget = b, .ids = owned, .capsule_bytes = capsule_bytes };
++    }
++};
++
++/// Move-only owner. A stream borrows it until all submitted DMA and I/O have actually completed or drained.
++pub const Lease = struct {
++    budget: *Budget,
++    ids: []const u32,
++    capsule_bytes: usize,
++    readers: usize = 0,
++    closed: bool = false,
++
++    pub fn borrow(l: *Lease) !void {
++        if (l.closed) return error.Closed;
++        l.readers = try std.math.add(usize, l.readers, 1);
++    }
++
++    pub fn unborrow(l: *Lease) void {
++        std.debug.assert(l.readers > 0);
++        l.readers -= 1;
++    }
++
++    pub fn close(l: *Lease) !void {
++        if (l.closed) return error.Closed;
++        if (l.readers != 0) return error.CheckpointBusy;
++        const b = l.budget;
++        for (l.ids) |id| b.pool.unpinCheckpoint(id);
++        b.pool.gpa.free(l.ids);
++        l.ids = &.{};
++        b.active -= 1;
++        b.capsule_used -= l.capsule_bytes;
++        l.closed = true;
++    }
++};
++
++/// Immutable backing storage, either device pages or an independently owned frozen capsule.
++pub const Location = union(enum) {
++    device: u64,
++    host: []const u8,
++
++    pub fn slice(s: Location, off: usize, len: usize) !Location {
++        return switch (s) {
++            .device => |p| .{ .device = try std.math.add(u64, p, off) },
++            .host => |b| if (off > b.len or len > b.len - off) error.InvalidChunk else .{ .host = b[off..][0..len] },
++        };
++    }
++};
++
++pub const Chunk = struct { location: Location, offset: u64, len: usize };
++
++/// A cursor over one owned descriptor. No full-prefix buffer or per-chunk allocation is required.
++pub const Source = struct {
++    owner: *Lease,
++    ctx: *anyopaque,
++    len: u64,
++    next: *const fn (*anyopaque, usize) anyerror!?Chunk,
++};
++
++test {
++    _ = @import("checkpoint_capture_test.zig");
++}
+diff --git a/zig/src/core/checkpoint_capture_test.zig b/zig/src/core/checkpoint_capture_test.zig
+new file mode 100644
+--- /dev/null
++++ b/zig/src/core/checkpoint_capture_test.zig
+@@ -0,0 +1,103 @@
++const std = @import("std");
++const kv = @import("kv_pool.zig");
++const cap = @import("checkpoint_capture.zig");
++const t = std.testing;
++
++test "checkpoint bounded: four growing leases keep every promised page while checkpoints are undurable" {
++    var pool = try kv.Pool.init(t.allocator, 20, 4096);
++    defer pool.deinit();
++    var live: [4]kv.Lease = @splat(.{});
++    defer for (&live) |*l| pool.finish(l);
++    for (&live) |*l| {
++        try pool.promise(l, 5);
++        try pool.cover(l, 2, null);
++    }
++    var budget: cap.Budget = .{ .pool = &pool, .limits = .{ .descriptors = 4, .unique_pages = 8, .pages_per_descriptor = 5, .capsule_bytes = 64 } };
++    var saved: [4]cap.Lease = undefined;
++    for (&live, &saved) |*l, *s| s.* = try budget.acquire(l, 2, 16);
++    try t.expectEqual(@as(usize, 8), pool.npinned);
++    try t.expectEqual(@as(usize, 12), pool.promised);
++    try t.expectError(error.CheckpointBackpressure, budget.acquire(&live[0], 1, 1));
++    for (&live) |*l| try pool.cover(l, 5, null);
++    try t.expectEqual(@as(usize, 0), pool.nfree);
++    for (&live) |*l| pool.finish(l);
++    try t.expectEqual(@as(usize, 12), pool.available());
++    try t.expectEqual(@as(usize, 0), pool.reclaimable());
++    var next: kv.Lease = .{};
++    defer pool.finish(&next);
++    try t.expectError(error.LaneMemory, pool.promise(&next, 13));
++    for (&saved) |*s| try s.close();
++    try t.expectEqual(@as(usize, 20), pool.available());
++    try t.expectEqual(@as(usize, 0), budget.active + budget.capsule_used + pool.npinned);
++}
++
++test "checkpoint bounded: forks count shared physical pages once and pins are not cache refs" {
++    var pool = try kv.Pool.init(t.allocator, 6, 4096);
++    defer pool.deinit();
++    var parent: kv.Lease = .{};
++    defer pool.finish(&parent);
++    var fork: kv.Lease = .{};
++    defer pool.finish(&fork);
++    try pool.promise(&parent, 3);
++    try pool.cover(&parent, 3, null);
++    for (parent.ids.items[0..2]) |id| pool.retain(id);
++    try pool.adopt(&fork, parent.ids.items[0..2]);
++    var b: cap.Budget = .{ .pool = &pool, .limits = .{ .descriptors = 3, .unique_pages = 2, .pages_per_descriptor = 3, .capsule_bytes = 8 } };
++    var a = try b.acquire(&parent, 2, 4);
++    var f = try b.acquire(&fork, 2, 4);
++    try t.expectEqual(@as(usize, 2), pool.npinned);
++    try t.expectEqual(@as(u32, 2), pool.pins[0]);
++    try t.expectError(error.NotHeld, pool.drop(0));
++    try t.expectError(error.CheckpointBackpressure, b.acquire(&parent, 3, 0));
++    pool.finish(&parent);
++    pool.finish(&fork);
++    try t.expectEqual(@as(usize, 0), pool.reclaimable());
++    try a.close();
++    try t.expectEqual(@as(usize, 0), pool.reclaimable());
++    pool.retain(0); // an independent RAM-cache holder can release only its own reference
++    try pool.drop(0);
++    try t.expectError(error.NotHeld, pool.drop(0));
++    try f.close();
++    try t.expectEqual(@as(usize, 6), pool.available());
++}
++
++test "checkpoint bounded: admission rejects malformed and excess metadata without leaking credits" {
++    var pool = try kv.Pool.init(t.allocator, 4, 4096);
++    defer pool.deinit();
++    var live: kv.Lease = .{};
++    defer pool.finish(&live);
++    try pool.promise(&live, 3);
++    try pool.cover(&live, 2, null);
++    var b: cap.Budget = .{ .pool = &pool, .limits = .{ .descriptors = 1, .unique_pages = 3, .pages_per_descriptor = 2, .capsule_bytes = 8 } };
++    try t.expectError(error.InvalidPages, b.acquire(&live, 3, 0));
++    try t.expectError(error.CheckpointBackpressure, b.acquire(&live, 1, 9));
++    const id = live.ids.items[1];
++    live.ids.items[1] = live.ids.items[0];
++    try t.expectError(error.InvalidPages, b.acquire(&live, 2, 0));
++    live.ids.items[1] = id;
++    var saved = try b.acquire(&live, 2, 8);
++    try saved.borrow();
++    try t.expectError(error.CheckpointBusy, saved.close());
++    saved.unborrow();
++    try saved.close();
++    try t.expectEqual(@as(usize, 0), pool.npinned + b.active + b.capsule_used);
++    try t.expectEqual(@as(usize, 1), pool.promised);
++}
++
++fn allocationFailures(a: std.mem.Allocator) !void {
++    var pool = try kv.Pool.init(a, 8, 4096);
++    defer pool.deinit();
++    var live: kv.Lease = .{};
++    defer pool.finish(&live);
++    try pool.promise(&live, 4);
++    try pool.cover(&live, 2, null);
++    var b: cap.Budget = .{ .pool = &pool, .limits = .{ .descriptors = 1, .unique_pages = 2, .pages_per_descriptor = 2, .capsule_bytes = 16 } };
++    var saved = try b.acquire(&live, 2, 16);
++    try saved.close();
++    try t.expectEqual(@as(usize, 0), pool.npinned + b.active + b.capsule_used);
++    try t.expectEqual(@as(usize, 2), pool.promised);
++}
++
++test "checkpoint bounded: every descriptor and pool allocation failure preserves ownership" {
++    try t.checkAllAllocationFailures(t.allocator, allocationFailures, .{});
++}
+diff --git a/zig/src/core/checkpoint_file.zig b/zig/src/core/checkpoint_file.zig
+new file mode 100644
+--- /dev/null
++++ b/zig/src/core/checkpoint_file.zig
+@@ -0,0 +1,127 @@
++//! Rank-local chunks: exclusive temporary, file fsync, no-replace link, directory fsync; no all-rank commit.
++const std = @import("std");
++const platform = @import("sys");
++const transfer = @import("checkpoint_stream.zig");
++
++pub const Identity = struct {
++    block: [32]u8, // rows_chain.Name, supplied by the row store owning that module
++    rank: u32,
++    epoch: u64,
++
++    /// The caller's existing rows/block identity, domain separated by the rank and checkpoint epoch.
++    pub fn name(id: Identity) [32]u8 {
++        var h = std.crypto.hash.sha2.Sha256.init(.{});
++        h.update("tensorfold checkpoint rank 1");
++        h.update(&id.block);
++        var words: [12]u8 = undefined;
++        std.mem.writeInt(u32, words[0..4], id.rank, .little);
++        std.mem.writeInt(u64, words[4..12], id.epoch, .little);
++        h.update(&words);
++        return h.finalResult();
++    }
++};
++
++/// Publication hooks allow deterministic filesystem-failure tests without global fault switches.
++pub const Publication = struct {
++    ctx: ?*anyopaque = null,
++    link: *const fn (?*anyopaque, [:0]const u8, [:0]const u8) anyerror!void = linkDefault,
++    sync_dir: *const fn (?*anyopaque, c_int) anyerror!void = syncDefault,
++
++    fn linkDefault(_: ?*anyopaque, from: [:0]const u8, to: [:0]const u8) !void {
++        if (std.c.link(from, to) != 0) return error.CheckpointPublish;
++    }
++    fn syncDefault(_: ?*anyopaque, fd: c_int) !void {
++        if (platform.c.fsync(fd) != 0) return error.CheckpointDirectorySync;
++    }
++};
++
++pub const Local = struct { identity: Identity, bytes: u64 };
++const Phase = enum { writing, sealed, published, failed, closed };
++
++/// Instantiate with the existing row store's file module, preserving its single module owner.
++pub fn Writer(comptime rows: type) type {
++    return struct {
++        const Self = @This();
++        file: rows.Writer,
++        dir_fd: c_int,
++        identity: Identity,
++        expected: u64,
++        metadata_limit: usize,
++        publication: Publication = .{},
++        phase: Phase = .writing,
++        linked: bool = false,
++        bytes: u64 = 0,
++
++        /// The directory already exists and belongs to this store. Rank files are invisible to the serving index.
++        pub fn open(dir: [:0]const u8, identity: Identity, nonce: u64, payload_bytes: u64, metadata_limit: usize) !Self {
++            if (@import("builtin").os.tag != .linux and @import("builtin").os.tag != .macos) return error.UnsupportedCheckpointFilesystem;
++            const fd = platform.c.open(dir, .{ .ACCMODE = .RDONLY, .DIRECTORY = true, .NOFOLLOW = true, .CLOEXEC = true }, @as(platform.c.mode_t, 0));
++            if (fd < 0) return error.CheckpointDirectory;
++            errdefer _ = platform.c.close(fd);
++            const stem = std.fmt.bytesToHex(identity.name(), .lower);
++            const file = try rows.Writer.openUnique(dir, &stem, ".rank", nonce);
++            return .{ .file = file, .dir_fd = fd, .identity = identity, .expected = payload_bytes, .metadata_limit = metadata_limit };
++        }
++
++        pub fn append(w: *Self, offset: u64, bytes: []const u8) !void {
++            if (w.phase != .writing) return error.CheckpointFileState;
++            if (offset != w.file.payload) return error.CheckpointSinkBackpressure;
++            if (bytes.len > w.expected - w.file.payload) return error.CheckpointFileSize;
++            w.file.append(bytes) catch |err| {
++                w.phase = .failed;
++                return err;
++            };
++        }
++
++        /// Sequential sink for ready ring slots; an out-of-order completion waits without borrowing its buffer.
++        pub fn consume(w: *Self, ring: *transfer.Ring, key: transfer.Key) !void {
++            const part = try ring.inspect(key);
++            if (part.offset != w.file.payload) return error.CheckpointSinkBackpressure;
++            const bytes = try ring.beginWrite(key);
++            w.append(part.offset, bytes) catch |err| {
++                try ring.ioDone(key, false);
++                return err;
++            };
++            try ring.ioDone(key, true);
++        }
++
++        /// Every chunk is drained before metadata/trailer and file fsync; no complete-payload staging buffer exists.
++        pub fn seal(w: *Self, ring: *const transfer.Ring, at: u32, metadata: []const []const u8) !void {
++            if (w.phase != .writing) return error.CheckpointFileState;
++            if (!ring.readyToSeal() or ring.written != w.expected or w.file.payload != w.expected) return error.CheckpointBusy;
++            var n: usize = 0;
++            for (metadata) |m| {
++                if (m.len > w.metadata_limit - n) return error.CheckpointMetadataLimit;
++                n += m.len;
++            }
++            w.bytes = w.file.seal(.{ .kind = @backingInt(rows.Kind.state), .payload = 0, .payload_hash = 0, .name = w.identity.name(), .at = at }, metadata, true) catch |err| {
++                w.phase = .failed;
++                return err;
++            };
++            w.phase = .sealed;
++        }
++
++        /// Hard-link publication never overwrites an existing epoch file; no receipt escapes a failed directory sync.
++        pub fn publish(w: *Self) !Local {
++            if (w.phase != .sealed) return error.CheckpointFileState;
++            errdefer w.phase = .failed;
++            try w.publication.link(w.publication.ctx, w.file.tmp[0..w.file.tmp_len :0], w.file.dest[0..w.file.dest_len :0]);
++            w.linked = true;
++            if (platform.c.unlink(w.file.tmp[0..w.file.tmp_len :0]) != 0) return error.CheckpointPublish;
++            try w.publication.sync_dir(w.publication.ctx, w.dir_fd);
++            w.phase = .published;
++            return .{ .identity = w.identity, .bytes = w.bytes };
++        }
++
++        /// A failed writer still requires the ring to drain before capture ownership can end.
++        pub fn close(w: *Self) void {
++            if (w.phase == .closed) return;
++            if (w.phase != .published) {
++                w.file.abort();
++                if (w.linked) _ = platform.c.unlink(w.file.dest[0..w.file.dest_len :0]);
++            }
++            _ = platform.c.close(w.dir_fd);
++            w.phase = .closed;
++        }
++    };
++}
+diff --git a/zig/src/core/checkpoint_file_test.zig b/zig/src/core/checkpoint_file_test.zig
+new file mode 100644
+--- /dev/null
++++ b/zig/src/core/checkpoint_file_test.zig
+@@ -0,0 +1,171 @@
++const std = @import("std");
++const platform = @import("sys");
++const file = @import("checkpoint_file.zig");
++const rows = @import("rows_file.zig");
++const Writer = file.Writer(rows);
++const stream = @import("checkpoint_stream.zig");
++const cap = @import("checkpoint_capture.zig");
++const kv = @import("kv_pool.zig");
++const t = std.testing;
++
++const Source = struct {
++    at: usize = 0,
++    data: []const u8 = "checkpoint payload with a short last chunk",
++    fn next(ptr: *anyopaque, n: usize) !?cap.Chunk {
++        const s: *Source = @ptrCast(@alignCast(ptr));
++        if (s.at == s.data.len) return null;
++        const len = @min(n, s.data.len - s.at);
++        const c: cap.Chunk = .{ .location = .{ .host = s.data[s.at..][0..len] }, .offset = s.at, .len = len };
++        s.at += len;
++        return c;
++    }
++};
++
++const Fault = struct {
++    mode: enum { ok, write, sync_file, link, sync_dir } = .ok,
++    phase: u8 = 0,
++    writes: usize = 0,
++
++    fn ctx(ptr: ?*anyopaque) *Fault {
++        return @ptrCast(@alignCast(ptr.?));
++    }
++    fn write(ptr: ?*anyopaque, fd: c_int, bytes: []const u8) !usize {
++        const f = ctx(ptr);
++        if (f.mode == .write and f.writes > 1) return error.InjectedWrite;
++        f.writes += 1;
++        const n = platform.c.write(fd, bytes.ptr, @min(bytes.len, 3));
++        if (n <= 0) return error.RowsWrite;
++        return @intCast(n);
++    }
++    fn syncFile(ptr: ?*anyopaque, fd: c_int) !void {
++        const f = ctx(ptr);
++        try t.expectEqual(@as(u8, 0), f.phase);
++        if (f.mode == .sync_file) return error.InjectedFileSync;
++        if (platform.c.fsync(fd) != 0) return error.RowsWrite;
++        f.phase = 1;
++    }
++    fn link(ptr: ?*anyopaque, from: [:0]const u8, to: [:0]const u8) !void {
++        const f = ctx(ptr);
++        try t.expectEqual(@as(u8, 1), f.phase);
++        if (f.mode == .link) return error.InjectedLink;
++        if (std.c.link(from, to) != 0) return error.CheckpointPublish;
++        f.phase = 2;
++    }
++    fn syncDir(ptr: ?*anyopaque, fd: c_int) !void {
++        const f = ctx(ptr);
++        try t.expectEqual(@as(u8, 2), f.phase);
++        if (f.mode == .sync_dir) return error.InjectedDirectorySync;
++        if (platform.c.fsync(fd) != 0) return error.RowsWrite;
++        f.phase = 3;
++    }
++};
++
++fn run(mode: @FieldType(Fault, "mode")) !void {
++    var dir_buf: [128]u8 = undefined;
++    const dir = try std.fmt.bufPrintSentinel(&dir_buf, "/tmp/tf-checkpoint-050-{d}-{s}", .{ platform.c.getpid(), @tagName(mode) }, 0);
++    try t.expectEqual(@as(c_int, 0), platform.c.mkdir(dir, 0o700));
++    defer _ = platform.c.rmdir(dir);
++    var pool = try kv.Pool.init(t.allocator, 0, 4096);
++    defer pool.deinit();
++    const live: kv.Lease = .{};
++    var budget: cap.Budget = .{ .pool = &pool, .limits = .{ .descriptors = 1, .unique_pages = 0, .pages_per_descriptor = 0, .capsule_bytes = 0 } };
++    var owner = try budget.acquire(&live, 0, 0);
++    defer owner.close() catch unreachable;
++    var s: Source = .{};
++    var slots: [2]stream.Slot = undefined;
++    var storage: [16]u8 = undefined;
++    var ring = try stream.Ring.init(.{ .owner = &owner, .ctx = &s, .len = s.data.len, .next = Source.next }, &storage, &slots, 8);
++    const identity: file.Identity = .{ .block = @splat(3), .rank = 1, .epoch = 12 };
++    var w = try Writer.open(dir, identity, 123, s.data.len, 32);
++    defer w.close();
++    try t.expectError(error.RowsWrite, Writer.open(dir, identity, 123, s.data.len, 32));
++    var fault: Fault = .{ .mode = mode };
++    w.file.io = .{ .ctx = &fault, .write = Fault.write, .sync = Fault.syncFile };
++    w.publication = .{ .ctx = &fault, .link = Fault.link, .sync_dir = Fault.syncDir };
++    const dest = w.file.dest[0..w.file.dest_len :0];
++    defer _ = platform.c.unlink(dest);
++    if (mode == .ok) {
++        const first = try ring.acquire();
++        const second = try ring.acquire();
++        @memcpy(second.target, second.chunk.location.host);
++        try ring.dmaDone(second.key, true);
++        try t.expectError(error.CheckpointSinkBackpressure, w.consume(&ring, second.key));
++        @memcpy(first.target, first.chunk.location.host);
++        try ring.dmaDone(first.key, true);
++        try w.consume(&ring, first.key);
++        try ring.retire(first.key);
++        try w.consume(&ring, second.key);
++        try ring.retire(second.key);
++    }
++    while (ring.emitted < s.data.len) {
++        const ticket = try ring.acquire();
++        @memcpy(ticket.target, ticket.chunk.location.host);
++        try ring.dmaDone(ticket.key, true);
++        if (mode == .write) {
++            try t.expectError(error.InjectedWrite, w.consume(&ring, ticket.key));
++            try ring.retire(ticket.key);
++            try ring.close();
++            try t.expectError(error.CheckpointFileState, w.seal(&ring, 2, &.{}));
++            w.close();
++            try t.expectError(error.RowsMissing, rows.open(dest, .state, null));
++            return;
++        }
++        try w.consume(&ring, ticket.key);
++        try t.expectError(error.CheckpointBusy, w.seal(&ring, 2, &.{})); // the slot is not retired yet
++        try ring.retire(ticket.key);
++    }
++    try t.expectError(error.CheckpointMetadataLimit, w.seal(&ring, 2, &.{"this metadata is deliberately more than thirty two bytes"}));
++    if (mode == .sync_file) {
++        try t.expectError(error.InjectedFileSync, w.seal(&ring, 2, &.{"metadata"}));
++    } else {
++        try w.seal(&ring, 2, &.{"metadata"});
++        try t.expectError(error.RowsMissing, rows.open(dest, .state, null));
++        if (mode == .link) {
++            try t.expectError(error.InjectedLink, w.publish());
++        } else if (mode == .sync_dir) {
++            try t.expectError(error.InjectedDirectorySync, w.publish());
++        } else {
++            const local = try w.publish();
++            try t.expectEqual(@as(u64, s.data.len + 8 + 96), local.bytes);
++            try t.expectEqual(@as(u8, 3), fault.phase);
++            var opened = try rows.open(dest, .state, identity.name());
++            defer opened.close();
++            const stage = try rows.stage(t.allocator, s.data.len);
++            defer t.allocator.free(stage);
++            try t.expectEqualSlices(u8, s.data, try rows.payload(&opened, stage));
++            const meta = try rows.meta(&opened, t.allocator);
++            defer t.allocator.free(meta);
++            try t.expectEqualStrings("metadata", meta);
++            // Another nonce cannot replace an existing immutable rank/epoch file.
++            var other = try Writer.open(dir, identity, 124, s.data.len, 32);
++            defer other.close();
++            try other.append(0, s.data);
++            try other.seal(&ring, 2, &.{"changed"});
++            try t.expectError(error.CheckpointPublish, other.publish());
++            try t.expectEqualSlices(u8, s.data, try rows.payload(&opened, stage));
++        }
++    }
++    try ring.close();
++    w.close();
++    if (mode != .ok) try t.expectError(error.RowsMissing, rows.open(dest, .state, null));
++    const tmp = w.file.tmp[0..w.file.tmp_len :0];
++    try t.expectError(error.RowsMissing, rows.open(tmp, .state, null));
++}
++
++test "checkpoint bounded: rank chunk writer streams short writes and orders fsync before exclusive publication" {
++    try run(.ok);
++}
++
++test "checkpoint bounded: write, file fsync, link and directory fsync failures never return local publication" {
++    for ([_]@FieldType(Fault, "mode"){ .write, .sync_file, .link, .sync_dir }) |mode| try run(mode);
++}
++
++test "checkpoint bounded: rank and epoch domain separate an existing rows identity" {
++    const a: file.Identity = .{ .block = @splat(7), .rank = 1, .epoch = 19 };
++    var b = a;
++    b.rank = 2;
++    var c = a;
++    c.epoch = 20;
++    try t.expect(!std.mem.eql(u8, &a.name(), &b.name()));
++    try t.expect(!std.mem.eql(u8, &a.name(), &c.name()));
++}
+diff --git a/zig/src/core/checkpoint_stream.zig b/zig/src/core/checkpoint_stream.zig
+new file mode 100644
+--- /dev/null
++++ b/zig/src/core/checkpoint_stream.zig
+@@ -0,0 +1,140 @@
++//! Caller-owned transfer credits. DMA completion and file-write completion are independent lifetime gates.
++const std = @import("std");
++const capture = @import("checkpoint_capture.zig");
++
++pub const Key = struct { slot: usize, generation: u64 };
++const DMA = enum { pending, good, failed };
++const IO = enum { waiting, pending, done, skipped };
++pub const Slot = struct {
++    generation: u64 = 0,
++    chunk: ?capture.Chunk = null,
++    dma: DMA = .pending,
++    io: IO = .waiting,
++};
++pub const Ticket = struct { key: Key, chunk: capture.Chunk, target: []u8 };
++
++/// Single-owner state machine; workers return tagged completions to that owner, including after cancellation.
++pub const Ring = struct {
++    source: capture.Source,
++    storage: []u8,
++    slots: []Slot,
++    slot_bytes: usize,
++    emitted: u64 = 0,
++    written: u64 = 0,
++    active: usize = 0,
++    stopped: bool = false,
++    closed: bool = false,
++
++    /// Storage must be pinned for an asynchronous CUDA driver; its allocator outlives close().
++    pub fn init(source: capture.Source, storage: []u8, slots: []Slot, slot_bytes: usize) !Ring {
++        if (slots.len == 0 or slot_bytes == 0 or storage.len / slot_bytes < slots.len) return error.InvalidRing;
++        try source.owner.borrow();
++        @memset(slots, .{});
++        return .{ .source = source, .storage = storage, .slots = slots, .slot_bytes = slot_bytes };
++    }
++
++    /// Success hands the driver one credit; even a failed submission must report when its work is drained.
++    pub fn acquire(r: *Ring) !Ticket {
++        if (r.closed) return error.Closed;
++        if (r.stopped) return error.CheckpointStopped;
++        if (r.emitted == r.source.len) return error.EndOfCheckpoint;
++        const i = for (r.slots, 0..) |s, i| {
++            if (s.chunk == null and s.generation < std.math.maxInt(u64)) break i;
++        } else return error.CheckpointBackpressure;
++        const chunk = (r.source.next(r.source.ctx, r.slot_bytes) catch |err| {
++            r.cancel();
++            return err;
++        }) orelse {
++            r.cancel();
++            return error.ShortSource;
++        };
++        if (chunk.len == 0 or chunk.len > r.slot_bytes or chunk.offset != r.emitted or
++            chunk.len > r.source.len - r.emitted)
++        {
++            r.cancel();
++            return error.InvalidChunk;
++        }
++        const valid = switch (chunk.location) {
++            .host => |bytes| bytes.len == chunk.len,
++            .device => |address| address != 0 and address <= std.math.maxInt(u64) - chunk.len,
++        };
++        if (!valid) {
++            r.cancel();
++            return error.InvalidChunk;
++        }
++        const s = &r.slots[i];
++        s.* = .{ .generation = s.generation + 1, .chunk = chunk };
++        r.active += 1;
++        r.emitted += chunk.len;
++        return .{ .key = .{ .slot = i, .generation = s.generation }, .chunk = chunk, .target = r.storage[i * r.slot_bytes ..][0..chunk.len] };
++    }
++
++    fn slot(r: *Ring, key: Key) !*Slot {
++        if (r.closed) return error.Closed;
++        if (key.slot >= r.slots.len) return error.StaleCompletion;
++        const s = &r.slots[key.slot];
++        if (s.chunk == null or s.generation != key.generation) return error.StaleCompletion;
++        return s;
++    }
++
++    pub fn inspect(r: *Ring, key: Key) !capture.Chunk {
++        return (try r.slot(key)).chunk.?;
++    }
++
++    /// Called only after the event completes or the failing stream has drained; submission is not completion.
++    pub fn dmaDone(r: *Ring, key: Key, success: bool) !void {
++        const s = try r.slot(key);
++        if (s.dma != .pending) return error.InvalidTransition;
++        s.dma = if (success) .good else .failed;
++        if (!success) r.cancel();
++    }
++
++    /// A sink can borrow the buffer only after DMA succeeded; its tagged completion ends that borrow.
++    pub fn beginWrite(r: *Ring, key: Key) ![]const u8 {
++        const s = try r.slot(key);
++        if (r.stopped) return error.CheckpointStopped;
++        if (s.dma != .good or s.io != .waiting) return error.InvalidTransition;
++        s.io = .pending;
++        return r.storage[key.slot * r.slot_bytes ..][0..s.chunk.?.len];
++    }
++
++    pub fn ioDone(r: *Ring, key: Key, success: bool) !void {
++        const s = try r.slot(key);
++        if (s.io != .pending) return error.InvalidTransition;
++        s.io = .done;
++        if (success) r.written += s.chunk.?.len else r.cancel();
++    }
++
++    /// Credits return only when both consumers are done. Cancellation never substitutes for either completion.
++    pub fn retire(r: *Ring, key: Key) !void {
++        const s = try r.slot(key);
++        if (s.dma == .pending or (s.io != .done and s.io != .skipped)) return error.CheckpointBusy;
++        s.chunk = null;
++        r.active -= 1;
++    }
++
++    pub fn cancel(r: *Ring) void {
++        if (r.closed) return;
++        r.stopped = true;
++        for (r.slots) |*s| if (s.chunk != null and s.io == .waiting) {
++            s.io = .skipped;
++        };
++    }
++
++    /// Ready for the rank writer's sealing step, not a claim of filesystem or all-rank durability.
++    pub fn readyToSeal(r: *const Ring) bool {
++        return !r.closed and !r.stopped and r.active == 0 and r.written == r.source.len;
++    }
++
++    pub fn close(r: *Ring) !void {
++        if (r.closed) return error.Closed;
++        if (r.active != 0) return error.CheckpointBusy;
++        if (!r.stopped and !r.readyToSeal()) return error.CheckpointBusy;
++        r.source.owner.unborrow();
++        r.closed = true;
++    }
++};
++
++test {
++    _ = @import("checkpoint_stream_test.zig");
++}
+diff --git a/zig/src/core/checkpoint_stream_test.zig b/zig/src/core/checkpoint_stream_test.zig
+new file mode 100644
+--- /dev/null
++++ b/zig/src/core/checkpoint_stream_test.zig
+@@ -0,0 +1,156 @@
++const std = @import("std");
++const cap = @import("checkpoint_capture.zig");
++const stream = @import("checkpoint_stream.zig");
++const kv = @import("kv_pool.zig");
++const t = std.testing;
++
++const Source = struct {
++    at: u64 = 0,
++    len: u64 = 64,
++
++    fn next(ptr: *anyopaque, limit: usize) !?cap.Chunk {
++        const s: *Source = @ptrCast(@alignCast(ptr));
++        if (s.at == s.len) return null;
++        const n = @min(s.len - s.at, limit);
++        const chunk: cap.Chunk = .{ .offset = s.at, .location = .{ .device = 4096 + s.at }, .len = @intCast(n) };
++        s.at += n;
++        return chunk;
++    }
++    fn source(s: *Source, owner: *cap.Lease) cap.Source {
++        return .{ .owner = owner, .ctx = s, .len = s.len, .next = next };
++    }
++};
++
++test "checkpoint bounded: delayed DMA and delayed I/O cannot recycle a transfer slot" {
++    var pool = try kv.Pool.init(t.allocator, 0, 4096);
++    defer pool.deinit();
++    const live: kv.Lease = .{};
++    var b: cap.Budget = .{ .pool = &pool, .limits = .{ .descriptors = 1, .unique_pages = 0, .pages_per_descriptor = 0, .capsule_bytes = 0 } };
++    var owner = try b.acquire(&live, 0, 0);
++    defer owner.close() catch unreachable;
++    var source: Source = .{};
++    var slots: [2]stream.Slot = undefined;
++    var storage: [32]u8 = undefined;
++    var r = try stream.Ring.init(source.source(&owner), &storage, &slots, 16);
++    const a = try r.acquire();
++    const z = try r.acquire();
++    try t.expectError(error.CheckpointBackpressure, r.acquire());
++    try t.expectError(error.InvalidTransition, r.beginWrite(a.key));
++    try t.expectError(error.CheckpointBusy, r.retire(a.key));
++    try t.expectError(error.CheckpointBusy, owner.close());
++    try r.dmaDone(z.key, true); // second DMA completes first
++    const out = try r.beginWrite(z.key);
++    try t.expectEqual(z.target.ptr, out.ptr);
++    try t.expectError(error.CheckpointBusy, r.retire(z.key));
++    try t.expectError(error.CheckpointBackpressure, r.acquire());
++    try r.ioDone(z.key, true);
++    try r.retire(z.key);
++    const c = try r.acquire();
++    try t.expectEqual(z.key.slot, c.key.slot);
++    try t.expect(c.key.generation != z.key.generation);
++    try t.expectError(error.StaleCompletion, r.ioDone(z.key, true));
++    for ([_]stream.Ticket{ a, c }) |ticket| {
++        try r.dmaDone(ticket.key, true);
++        _ = try r.beginWrite(ticket.key);
++        try r.ioDone(ticket.key, true);
++        try r.retire(ticket.key);
++    }
++    const last = try r.acquire();
++    try r.dmaDone(last.key, true);
++    _ = try r.beginWrite(last.key);
++    try r.ioDone(last.key, true);
++    try r.retire(last.key);
++    try t.expect(r.readyToSeal());
++    try t.expectError(error.EndOfCheckpoint, r.acquire());
++    try r.close();
++}
++
++test "checkpoint bounded: cancel and either worker failure drain both owners before freeing buffers" {
++    for (0..3) |mode| {
++        var pool = try kv.Pool.init(t.allocator, 0, 4096);
++        defer pool.deinit();
++        const live: kv.Lease = .{};
++        var b: cap.Budget = .{ .pool = &pool, .limits = .{ .descriptors = 1, .unique_pages = 0, .pages_per_descriptor = 0, .capsule_bytes = 0 } };
++        var owner = try b.acquire(&live, 0, 0);
++        defer owner.close() catch unreachable;
++        var source: Source = .{};
++        var slots: [2]stream.Slot = undefined;
++        var storage: [32]u8 = undefined;
++        var r = try stream.Ring.init(source.source(&owner), &storage, &slots, 16);
++        const dma = try r.acquire();
++        const io = try r.acquire();
++        try r.dmaDone(io.key, true);
++        _ = try r.beginWrite(io.key);
++        switch (mode) {
++            0 => r.cancel(),
++            1 => try r.dmaDone(dma.key, false),
++            2 => try r.ioDone(io.key, false),
++            else => unreachable,
++        }
++        try t.expectError(error.CheckpointStopped, r.acquire());
++        try t.expectError(error.CheckpointBusy, r.close());
++        try t.expectError(error.CheckpointBusy, owner.close());
++        if (mode != 1) {
++            try t.expectError(error.CheckpointBusy, r.retire(dma.key));
++            try r.dmaDone(dma.key, true);
++        }
++        if (mode != 2) {
++            try t.expectError(error.CheckpointBusy, r.retire(io.key));
++            try r.ioDone(io.key, true);
++        }
++        try r.retire(dma.key);
++        try r.retire(io.key);
++        try t.expect(!r.readyToSeal());
++        try r.close();
++    }
++}
++
++test "checkpoint bounded: a multi GiB source uses only a fixed credit ring" {
++    var pool = try kv.Pool.init(t.allocator, 0, 4096);
++    defer pool.deinit();
++    const live: kv.Lease = .{};
++    var b: cap.Budget = .{ .pool = &pool, .limits = .{ .descriptors = 1, .unique_pages = 0, .pages_per_descriptor = 0, .capsule_bytes = 0 } };
++    var owner = try b.acquire(&live, 0, 0);
++    defer owner.close() catch unreachable;
++    var source: Source = .{ .len = (12 << 30) + 7 };
++    var slots: [2]stream.Slot = undefined;
++    const storage = try t.allocator.alloc(u8, 2 << 20);
++    defer t.allocator.free(storage);
++    var r = try stream.Ring.init(source.source(&owner), storage, &slots, 1 << 20);
++    while (r.emitted < source.len) {
++        const a = try r.acquire();
++        try r.dmaDone(a.key, true);
++        _ = try r.beginWrite(a.key);
++        try r.ioDone(a.key, true);
++        try r.retire(a.key);
++    }
++    try t.expectEqual(source.len, r.written);
++    try t.expectEqual(@as(usize, 2 << 20), r.storage.len);
++    try t.expect(r.readyToSeal());
++    try r.close();
++}
++
++test "checkpoint bounded: malformed source addresses stop before submitting DMA" {
++    const Invalid = struct {
++        location: cap.Location,
++        fn next(ptr: *anyopaque, _: usize) !?cap.Chunk {
++            const s: *@This() = @ptrCast(@alignCast(ptr));
++            return .{ .location = s.location, .offset = 0, .len = 8 };
++        }
++    };
++    var pool = try kv.Pool.init(t.allocator, 0, 4096);
++    defer pool.deinit();
++    const live: kv.Lease = .{};
++    var b: cap.Budget = .{ .pool = &pool, .limits = .{ .descriptors = 1, .unique_pages = 0, .pages_per_descriptor = 0, .capsule_bytes = 0 } };
++    var owner = try b.acquire(&live, 0, 0);
++    defer owner.close() catch unreachable;
++    for ([_]cap.Location{ .{ .host = "short" }, .{ .device = std.math.maxInt(u64) - 3 } }) |location| {
++        var s: Invalid = .{ .location = location };
++        var slots: [1]stream.Slot = undefined;
++        var storage: [8]u8 = undefined;
++        var r = try stream.Ring.init(.{ .owner = &owner, .ctx = &s, .len = 8, .next = Invalid.next }, &storage, &slots, 8);
++        try t.expectError(error.InvalidChunk, r.acquire());
++        try t.expectEqual(@as(usize, 0), r.active);
++        try r.close();
++    }
++}
+diff --git a/zig/src/core/kv_pool.zig b/zig/src/core/kv_pool.zig
+--- a/zig/src/core/kv_pool.zig
++++ b/zig/src/core/kv_pool.zig
+@@ -142,6 +142,8 @@
+     gpa: Allocator,
+     refs: []u32, // holders a page: each lease that maps it once, the store once
+     leased: []u32, // of those, the leases'
++    pins: []u32, // checkpoint readers: never evictable, even after their live lease ends
++    npinned: usize = 0, // unique physical pages, not the number of checkpoint readers
+     free: []u32, // a stack of free ids, `nfree` deep
+     nfree: usize,
+     promised: usize = 0,
+@@ -156,16 +158,21 @@
+         errdefer gpa.free(refs);
+         const leased = try gpa.alloc(u32, count);
+         errdefer gpa.free(leased);
++        const pins = try gpa.alloc(u32, count);
++        errdefer gpa.free(pins);
+         const free = try gpa.alloc(u32, count);
+         @memset(refs, 0);
+         @memset(leased, 0);
++        @memset(pins, 0);
+         for (free, 0..) |*f, i| f.* = @intCast(count - 1 - i); // page 0 taken first
+-        return .{ .gpa = gpa, .refs = refs, .leased = leased, .free = free, .nfree = count, .page_bytes = page_bytes };
++        return .{ .gpa = gpa, .refs = refs, .leased = leased, .pins = pins, .free = free, .nfree = count, .page_bytes = page_bytes };
+     }
+ 
+     pub fn deinit(p: *Pool) void {
++        std.debug.assert(p.npinned == 0);
+         p.gpa.free(p.refs);
+         p.gpa.free(p.leased);
++        p.gpa.free(p.pins);
+         p.gpa.free(p.free);
+         p.* = undefined;
+     }
+@@ -195,10 +202,12 @@
+     }
+ 
+     /// Ownership changes update page classes once; holders and leases remain the authoritative per-page state.
+-    fn ownership(p: *Pool, id: usize, refs: u32, leased: u32) void {
++    fn ownership(p: *Pool, id: usize, refs: u32, leased: u32, pins: u32) void {
+         const r = p.refs[id];
+         const l = p.leased[id];
+-        p.nreclaimable = p.nreclaimable - @intFromBool(r == 1 and l == 0) + @intFromBool(refs == 1 and leased == 0);
++        p.nreclaimable = p.nreclaimable - @intFromBool(r == 1 and l == 0 and p.pins[id] == 0) + @intFromBool(refs == 1 and leased == 0 and pins == 0);
++        p.npinned = p.npinned - @intFromBool(p.pins[id] > 0) + @intFromBool(pins > 0);
++        p.pins[id] = pins;
+         p.nkept = p.nkept - @intFromBool(r > l) + @intFromBool(refs > leased);
+         p.nleased = p.nleased - @intFromBool(l > 0) + @intFromBool(leased > 0);
+         p.refs[id] = refs;
+@@ -208,7 +217,7 @@
+     /// A lease gives back its reference; its last reference returns the page to the same free stack.
+     fn unlease(p: *Pool, id: u32) void {
+         if (p.leased[id] == 0 or p.refs[id] < p.leased[id]) std.debug.panic("kv pool: page {d} released with no holder", .{id});
+-        p.ownership(id, p.refs[id] - 1, p.leased[id] - 1);
++        p.ownership(id, p.refs[id] - 1, p.leased[id] - 1, p.pins[id]);
+         if (p.refs[id] > 0) return;
+         p.free[p.nfree] = id;
+         p.nfree += 1;
+@@ -216,7 +225,7 @@
+ 
+     pub fn idle(p: *const Pool) bool {
+         const c = p.census();
+-        return c.promised == 0 and c.leased == 0 and c.free + c.kept == c.total;
++        return c.promised == 0 and c.leased == 0 and p.npinned == 0 and c.free + c.kept == c.total;
+     }
+ 
+     /// How many hold the page: each lease that maps it, and the store.
+@@ -227,7 +236,7 @@
+     /// One more holder of a held page; a free page is never retained, only taken.
+     pub fn retain(p: *Pool, id: u32) void {
+         if (p.refs[id] == 0) std.debug.panic("kv pool: page {d} retained while free", .{id});
+-        p.ownership(id, p.refs[id] + 1, p.leased[id]);
++        p.ownership(id, p.refs[id] + 1, p.leased[id], p.pins[id]);
+     }
+ 
+     /// One holder fewer; the last one's release frees the page. Releasing a page nobody holds panics.
+@@ -237,9 +246,24 @@
+ 
+     /// `release`, as an error when no holder but the leases' holds the page (the store's release of a page it lacks).
+     pub fn drop(p: *Pool, id: u32) error{NotHeld}!void {
+-        if (p.refs[id] <= p.leased[id]) return error.NotHeld; // no holder past the leases' (callers drop theirs first)
+-        p.ownership(id, p.refs[id] - 1, p.leased[id]);
++        if (p.refs[id] <= p.leased[id] + p.pins[id]) return error.NotHeld; // no holder past the leases' (callers drop theirs first)
++        p.ownership(id, p.refs[id] - 1, p.leased[id], p.pins[id]);
+         if (p.refs[id] > 0) return;
++        p.free[p.nfree] = id;
++        p.nfree += 1;
++    }
++
++    /// A checkpoint reader of a completed, immutable page; admission validates the owning lease first.
++    pub fn pinCheckpoint(p: *Pool, id: u32) void {
++        std.debug.assert(p.leased[id] > 0 and p.refs[id] < std.math.maxInt(u32));
++        p.ownership(id, p.refs[id] + 1, p.leased[id], p.pins[id] + 1);
++    }
++
++    /// A drained checkpoint releases its own reader, never a cache or live-lease reference.
++    pub fn unpinCheckpoint(p: *Pool, id: u32) void {
++        std.debug.assert(p.pins[id] > 0);
++        p.ownership(id, p.refs[id] - 1, p.leased[id], p.pins[id] - 1);
++        if (p.refs[id] != 0) return;
+         p.free[p.nfree] = id;
+         p.nfree += 1;
+     }
+@@ -266,7 +290,7 @@
+         try l.ids.ensureUnusedCapacity(p.gpa, 1);
+         p.nfree -= 1;
+         const id = p.free[p.nfree];
+-        p.ownership(id, 1, 1);
++        p.ownership(id, 1, 1, 0);
+         l.promised -= 1;
+         p.promised -= 1;
+         l.ids.appendAssumeCapacity(id);
+@@ -279,7 +303,7 @@
+             for (ids) |id| p.release(id);
+             return e;
+         };
+-        for (ids) |id| p.ownership(id, p.refs[id], p.leased[id] + 1);
++        for (ids) |id| p.ownership(id, p.refs[id], p.leased[id] + 1, p.pins[id]);
+     }
+ 
+     /// The stream's page `i` swapped for the store's copy `id` of the same tokens (a keep's Kept.shared).
+@@ -287,7 +311,7 @@
+         const old = l.ids.items[i];
+         if (old == id) return;
+         p.retain(id);
+-        p.ownership(id, p.refs[id], p.leased[id] + 1);
++        p.ownership(id, p.refs[id], p.leased[id] + 1, p.pins[id]);
+         l.ids.items[i] = id;
+         p.unlease(old);
+     }
+@@ -373,7 +397,7 @@
+     pub fn releaseRun(p: *Pool, start: u32, k: usize) void {
+         for (start..start + k) |id| {
+             if (p.refs[id] != 1 or p.leased[id] != 1) std.debug.panic("kv pool: run page {d} released while not a run's", .{id});
+-            p.ownership(id, 0, 0);
++            p.ownership(id, 0, 0, 0);
+             p.free[p.nfree] = @intCast(id);
+             p.nfree += 1;
+         }
+diff --git a/zig/src/core/root.zig b/zig/src/core/root.zig
+--- a/zig/src/core/root.zig
++++ b/zig/src/core/root.zig
+@@ -56,6 +56,9 @@
+ 
+ pub const checkpoint_weights = @import("checkpoint_weights.zig");
+ pub const kv_pool = @import("kv_pool.zig");
++pub const checkpoint_capture = @import("checkpoint_capture.zig");
++pub const checkpoint_stream = @import("checkpoint_stream.zig");
++pub const checkpoint_file = @import("checkpoint_file.zig");
+ 
+ test {
+     _ = checkpoint_weights;
+@@ -108,6 +111,9 @@
+     _ = @import("nvfp4_fixture_test.zig");
+     _ = @import("drafter_release_test.zig");
+     _ = kv_pool;
++    _ = checkpoint_capture;
++    _ = checkpoint_stream;
++    _ = checkpoint_file;
+ }
+ 
+ pub const frame_rounds = @import("frame_rounds.zig");
+diff --git a/zig/src/families/glm/cuda.zig b/zig/src/families/glm/cuda.zig
+--- a/zig/src/families/glm/cuda.zig
++++ b/zig/src/families/glm/cuda.zig
+@@ -39,6 +39,8 @@
+ pub const lanes = @import("cuda_lanes.zig");
+ pub const native = @import("cuda_native.zig");
+ pub const snapshots = @import("cuda_snapshots.zig");
++pub const checkpoint = @import("cuda_checkpoint.zig");
++pub const checkpoint_freeze = @import("cuda_checkpoint_freeze.zig");
+ 
+ test {
+     _ = @import("cuda_tile.zig");
+diff --git a/zig/src/families/glm/cuda_checkpoint.zig b/zig/src/families/glm/cuda_checkpoint.zig
+new file mode 100644
+--- /dev/null
++++ b/zig/src/families/glm/cuda_checkpoint.zig
+@@ -0,0 +1,178 @@
++//! GLM's actual snapshot Plan as a bounded immutable source. No server path is enabled by this module.
++const std = @import("std");
++const core = @import("core");
++const cap = core.checkpoint_capture;
++const layout = @import("cuda_snapshot_layout.zig");
++const state = @import("cuda_state.zig");
++const Config = @import("config.zig").Config;
++const max_parts = @typeInfo(@FieldType(layout.Plan, "parts")).array.len;
++const max_layers = @import("config.zig").max_layers;
++
++pub const Draft = union(enum) {
++    none,
++    dflash2: struct { live: u64, from: i64, through: usize },
++};
++
++pub const Frozen = struct {
++    storage: cap.Location,
++    len: usize,
++    ctx: *anyopaque,
++    release: *const fn (*anyopaque) void,
++};
++
++/// Owns frozen bytes on success; drains partial work on failure. The caller holds the sequence paused until return.
++pub const Freezer = struct {
++    ctx: *anyopaque,
++    freeze: *const fn (*anyopaque, *Mutable, usize) anyerror!Frozen,
++};
++
++/// Only mutable ranges, packed into the capsule in Plan order. No array proportional to the prefix is built.
++pub const Mutable = struct {
++    plan: *const layout.Plan,
++    immutable: *const [max_parts]usize,
++    part: usize = 0,
++    done: usize = 0,
++    offset: usize = 0,
++
++    pub fn next(m: *Mutable, limit: usize) !?cap.Chunk {
++        if (limit == 0) return error.InvalidChunk;
++        while (m.part < m.plan.count) {
++            const p = m.plan.parts[m.part];
++            m.done = @max(m.done, m.immutable[m.part]);
++            if (m.done == p.len) {
++                m.part += 1;
++                m.done = 0;
++                continue;
++            }
++            const piece = m.plan.piece(p, m.done);
++            const n = @min(piece.len, limit);
++            const chunk: cap.Chunk = .{ .location = .{ .device = piece.live }, .offset = m.offset, .len = n };
++            m.done += n;
++            m.offset += n;
++            return chunk;
++        }
++        return null;
++    }
++};
++
++/// Move-only descriptor; its host metadata and ids never borrow the sequence's mutable tables.
++pub const Capture = struct {
++    pages: cap.Lease,
++    frozen: Frozen,
++    plan: layout.Plan,
++    immutable: [max_parts]usize,
++    capsule_offsets: [max_parts]usize,
++    pos: usize,
++    mtp_len: usize,
++    bases: [2]usize,
++    cur: [max_layers]u1,
++    cur_len: usize,
++    ring_from: ?i64,
++
++    /// All nonpaged state, tails and pooled lookahead require an explicit freezer, even at a page boundary.
++    pub fn create(budget: *cap.Budget, live: *const core.kv_pool.Lease, st: *const state.State, c: *const Config, draft: Draft, freezer: ?Freezer) !Capture {
++        if (st.pending != 0 or st.mtp_len > st.pos +| state.window_rows) return error.NotAtMark;
++        if (st.table == 0) return error.UnsupportedUnpagedCapture;
++        // A lagging head must not turn the bounded tail capsule into a copy of the target prefix.
++        if (st.head and st.pos / state.page_rows > st.mtp_len / state.page_rows + 1) return error.UnsupportedHeadLag;
++        for (st.caches) |x| if (x.pt != st.table) return error.UnsupportedUnpagedCapture;
++        if (st.head and st.mtp_caches.pt != st.table) return error.UnsupportedUnpagedCapture;
++        if (st.cur.len > max_layers or !std.mem.eql(u32, st.pages, live.ids.items)) return error.SnapshotShape;
++        var plan = try layout.Plan.init(st, c, st.pos, if (st.head) st.mtp_len else null);
++        const ring_from: ?i64 = switch (draft) {
++            .none => null,
++            .dflash2 => |d| blk: {
++                if (d.from < 0 or d.through != st.pos or @as(u64, @intCast(d.from)) >= st.pos or
++                    st.pos - @as(usize, @intCast(d.from)) > @import("dflash.zig").WIN) return error.InvalidDraftContext;
++                try plan.outside(d.live, @import("dflash.zig").ring_bytes);
++                break :blk d.from;
++            },
++        };
++        // A physical page includes the head cache too. Tentative head rows cannot be leased as immutable.
++        const completed = @min(st.pos, if (st.head) st.mtp_len else st.pos) / state.page_rows;
++        var immutable: [max_parts]usize = @splat(0);
++        var offsets: [max_parts]usize = @splat(0);
++        var bytes: usize = 0;
++        for (plan.parts[0..plan.count], 0..) |p, i| {
++            if (p.span != 0) {
++                if (p.page != budget.pool.page_bytes or p.span > p.page) return error.SnapshotShape;
++                immutable[i] = @min(p.len, try std.math.mul(usize, completed, p.span));
++            }
++            offsets[i] = bytes;
++            bytes = try std.math.add(usize, bytes, p.len - immutable[i]);
++        }
++        const f = freezer orelse return error.UnsupportedMutableCapture;
++        var pages = try budget.acquire(live, completed, bytes);
++        errdefer pages.close() catch unreachable;
++        var mutable: Mutable = .{ .plan = &plan, .immutable = &immutable };
++        const frozen = try f.freeze(f.ctx, &mutable, bytes);
++        errdefer frozen.release(frozen.ctx);
++        if (frozen.len != bytes or mutable.offset != bytes) return error.IncompleteFreeze;
++        switch (frozen.storage) {
++            .host => |h| if (h.len != bytes) return error.IncompleteFreeze,
++            .device => |p| if (p == 0 or p > std.math.maxInt(u64) - bytes) return error.IncompleteFreeze,
++        }
++        // Only immutable pieces use Plan.piece after capture. The tail ids are no longer borrowed.
++        plan.ids = pages.ids;
++        var result: Capture = .{
++            .pages = pages,
++            .frozen = frozen,
++            .plan = plan,
++            .immutable = immutable,
++            .capsule_offsets = offsets,
++            .pos = st.pos,
++            .mtp_len = st.mtp_len,
++            .bases = .{ st.base, st.mtp_base },
++            .cur = @splat(0),
++            .cur_len = st.cur.len,
++            .ring_from = ring_from,
++        };
++        @memcpy(result.cur[0..st.cur.len], st.cur);
++        return result;
++    }
++
++    pub fn close(s: *Capture) !void {
++        try s.pages.close();
++        s.frozen.release(s.frozen.ctx);
++    }
++};
++
++/// A streaming read cursor. The descriptor's page pins and capsule survive every borrowed ring.
++pub const Cursor = struct {
++    capture: *Capture,
++    part: usize = 0,
++    done: usize = 0,
++    offset: usize = 0,
++
++    pub fn source(c: *Cursor) cap.Source {
++        return .{ .owner = &c.capture.pages, .ctx = c, .len = c.capture.plan.len, .next = next };
++    }
++
++    fn next(ptr: *anyopaque, limit: usize) !?cap.Chunk {
++        const c: *Cursor = @ptrCast(@alignCast(ptr));
++        const s = c.capture;
++        if (s.pages.closed) return error.Closed;
++        if (limit == 0) return error.InvalidChunk;
++        while (c.part < s.plan.count) {
++            const p = s.plan.parts[c.part];
++            if (c.done == p.len) {
++                c.part += 1;
++                c.done = 0;
++                continue;
++            }
++            const imm = s.immutable[c.part];
++            var chunk: cap.Chunk = undefined;
++            if (c.done < imm) {
++                const piece = s.plan.piece(p, c.done);
++                chunk = .{ .location = .{ .device = piece.live }, .offset = c.offset, .len = @min(limit, piece.len, imm - c.done) };
++            } else {
++                const n = @min(limit, p.len - c.done);
++                chunk = .{ .location = try s.frozen.storage.slice(s.capsule_offsets[c.part] + c.done - imm, n), .offset = c.offset, .len = n };
++            }
++            c.done += chunk.len;
++            c.offset += chunk.len;
++            return chunk;
++        }
++        return null;
++    }
++};
+diff --git a/zig/src/families/glm/cuda_checkpoint_freeze.zig b/zig/src/families/glm/cuda_checkpoint_freeze.zig
+new file mode 100644
+--- /dev/null
++++ b/zig/src/families/glm/cuda_checkpoint_freeze.zig
+@@ -0,0 +1,40 @@
++//! A real device capsule freezer. The sequence stays paused through its completion fence.
++const std = @import("std");
++const cuda = @import("cuda");
++const checkpoint = @import("cuda_checkpoint.zig");
++
++pub const Device = struct {
++    gpa: std.mem.Allocator,
++    d: *const cuda.Driver,
++    stream: cuda.Stream,
++
++    pub fn adapter(d: *Device) checkpoint.Freezer {
++        return .{ .ctx = d, .freeze = freeze };
++    }
++
++    const Owned = struct {
++        gpa: std.mem.Allocator,
++        buffer: cuda.DeviceBuffer,
++
++        fn release(ptr: *anyopaque) void {
++            const o: *Owned = @ptrCast(@alignCast(ptr));
++            o.buffer.free();
++            o.gpa.destroy(o);
++        }
++    };
++
++    fn freeze(ptr: *anyopaque, mutable: *checkpoint.Mutable, bytes: usize) !checkpoint.Frozen {
++        const d: *Device = @ptrCast(@alignCast(ptr));
++        const o = try d.gpa.create(Owned);
++        errdefer d.gpa.destroy(o);
++        o.* = .{ .gpa = d.gpa, .buffer = try cuda.DeviceBuffer.alloc(d.d, bytes) };
++        errdefer o.buffer.free();
++        // This defer runs before freeing the destination on any failed enqueue, event or stream operation.
++        errdefer cuda.completion.drain(d.d, d.stream, "a failed checkpoint capsule freeze did not drain");
++        while (try mutable.next(2 << 20)) |chunk| {
++            try d.d.check(d.d.api.cuMemcpyDtoDAsync_v2(o.buffer.ptr + chunk.offset, chunk.location.device, chunk.len, d.stream.handle), "cuMemcpyDtoDAsync checkpoint capsule");
++        }
++        try d.stream.synchronize();
++        return .{ .storage = .{ .device = o.buffer.ptr }, .len = bytes, .ctx = o, .release = Owned.release };
++    }
++};

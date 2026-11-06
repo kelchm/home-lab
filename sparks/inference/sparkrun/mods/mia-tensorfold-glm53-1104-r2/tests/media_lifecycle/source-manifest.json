@@ -1,0 +1,74 @@
+{
+  "schema": 1,
+  "base_description": "Read-only Mia108 f350cd3ea253a042e205746928271f9d8f71a82d with local020,030,040,050,060 already composed",
+  "input_root": "/tmp/glm1104-r2-integrated",
+  "patch": "0700-native-glm-media-lifecycle.patch",
+  "patch_sha256": "7ec3abae73ba3f3268c7e6768a58cd1e01525d57069f2b8d0f418cb680cd1aa4",
+  "files": [
+    {
+      "path": "zig/src/core/engine_vision.zig",
+      "before_sha256": "f010eaaa799bf796f54472eb487d1e3e41470da71434be217e40025463642b01",
+      "after_sha256": "e8d55350947175316265c22be41b7d60707696f362ee2558a2dcb11d9b02cece"
+    },
+    {
+      "path": "zig/src/core/lanes/stream.zig",
+      "before_sha256": "b997ab73b765ef72efd831ed5ca5b15dbdfffd6039788faa58277bda5a442a8f",
+      "after_sha256": "eeca6c59c62e1f2a09bd73d66d094aaca4953b8ba0b9ec9152c49ad307fc0966"
+    },
+    {
+      "path": "zig/src/families/glm/cuda_images.zig",
+      "before_sha256": "95bef38c3ba405b1a008260dd325875f1559fd8482d767d8021c8d6408823eaf",
+      "after_sha256": "a6ab24cef178010a4b7cdb686a3deaffdfab37e2d713edb8590c7be933cd7258"
+    },
+    {
+      "path": "zig/src/families/glm/cuda_images_interleave_test.zig",
+      "before_sha256": "b14100c6b2f3681ce3a37dc94267c86ae6d5304458e68af054b69770b1d0c212",
+      "after_sha256": "454ad813c22ebe9a716e2e308cbc604703cac2aaf01b0a9609219b5f791562dc"
+    },
+    {
+      "path": "zig/src/families/glm/cuda_follow.zig",
+      "before_sha256": "39ed92f5156de8d18ca3855ebabf2a45466debe841773816a4be3f8c64a58f04",
+      "after_sha256": "2f8d5ce4daae38f5b7d27cab0888a661243fc80d6c586d4676e95fb3f877c90b"
+    },
+    {
+      "path": "zig/src/families/glm/cuda_lanes.zig",
+      "before_sha256": "8dd14967ff5237a270dfb986df1f715dfd347bae3ad0fc19d200c0347209d4fe",
+      "after_sha256": "4598ef02c9cb8f1a4b09dc298d0bf40f07444bb1212362b5aa3303777e1ae481"
+    },
+    {
+      "path": "zig/src/families/glm/cuda_vision.zig",
+      "before_sha256": "e95b9d63118ff0b445308fbdf342d51b8da7ef4dbb19989900f66bbb8519c3eb",
+      "after_sha256": "58db7866d4e6b7deb4cd98e6b6e53720c4bb57655efd9af73a792dd67aeca370"
+    },
+    {
+      "path": "zig/src/families/glm/image_core.zig",
+      "before_sha256": "e5bc9fea3761bba506712ae6861c16d80a38163c52ce7def78453b623cc91f51",
+      "after_sha256": "08e0f56f9973ca3a7d1f59458557457ba20a3c9b793c1a22152da83ccba3ed01"
+    },
+    {
+      "path": "zig/src/families/glm/video_core.zig",
+      "before_sha256": "14880b5574ccec60fb8e9636d4c7e40bd4ce74899a4199ccd8054e7e55d71259",
+      "after_sha256": "13f2f5bb76293258ddac22f3cbe517aa267f44148e20102da6f1203f87c41968"
+    },
+    {
+      "path": "zig/src/native/cuda_vision_offer.zig",
+      "before_sha256": "95a7199d8b3300486f37045e3b970c2b9f775ae50b5ecff94db7ba5c3344db82",
+      "after_sha256": "07fa9102ab49458cdb66b3322bdeedda86db013bc2829d0823e74de328237e33"
+    },
+    {
+      "path": "zig/src/native/glm_host.zig",
+      "before_sha256": "54fb01cb2a227fd858dba7ce513f15b04bad548279c13cd3b41ea522d5bd0fd0",
+      "after_sha256": "c02bfdf3ae7fb1ff3add9ca02942e73b45e5dbd9afc4082a14a9ddd5116505d8"
+    },
+    {
+      "path": "zig/src/server/images.zig",
+      "before_sha256": "028c3e51006534263338d43704fe73f890ffd79a4d62afadbb6a28b6c4806fae",
+      "after_sha256": "7bc732de01aa81a916e94dd6f7327f3f2e52ff744bd0ffde950725374b2121f0"
+    },
+    {
+      "path": "zig/src/server/videos.zig",
+      "before_sha256": "a5ad22eea8bec1d06e9914e7f88ddf8f86bdb595737d6dc09e56a46375caabaf",
+      "after_sha256": "4719f05e1d4de5b56211f558bd57abb5b48ead6411d5f39af89156c40acc5cd3"
+    }
+  ]
+}

@@ -1,0 +1,609 @@
+diff --git a/zig/src/core/engine_vision.zig b/zig/src/core/engine_vision.zig
+--- a/zig/src/core/engine_vision.zig
++++ b/zig/src/core/engine_vision.zig
+@@ -9,6 +9,8 @@
+     gw: u32,
+     tokens: u32,
+     hash: u64,
++    source_pixels: u64 = 0,
++    deferred: ?@import("lanes").stream.Image.Deferred = null,
+     /// The image as tower inputs in order, each image tokens between `before` and `after`; empty: `pixels` alone.
+     pieces: []const Piece = &.{},
+ };
+@@ -31,6 +33,15 @@
+     /// Image tokens one request may hold in all, and images.
+     image_tokens: u32,
+     max_images: u32,
++    /// A family may keep every image at a fixed budget and impose its own request-wide limits.
++    image_limits: ?struct {
++        io: std.Io,
++        per_image_tokens: u32,
++        max_request_bytes: usize,
++        max_request_pixels: u64,
++        prepare_seconds: u32,
++        render_order: bool = false,
++    } = null,
+     /// Video input, when the engine's family reads it.
+     video: ?VideoOffer = null,
+     /// The engine's words for a prepare error the server cannot word (a decoder library it lacks); null: the server's.
+@@ -74,6 +85,8 @@
+     markers: []const u32 = &.{},
+     /// Video tokens one request may hold in all, videos, and frames sampled a video.
+     video_tokens: u32,
++    /// A family may fix the per-clip ceiling independently of the request total.
++    per_video_tokens: ?u32 = null,
+     max_videos: u32,
+     max_frames: u32,
+ };
+diff --git a/zig/src/core/lanes/stream.zig b/zig/src/core/lanes/stream.zig
+--- a/zig/src/core/lanes/stream.zig
++++ b/zig/src/core/lanes/stream.zig
+@@ -103,12 +103,24 @@
+ 
+ /// One image of a prompt: tower input (patches [gh * gw, width]) for the `tokens` placeholder rows from `at`.
+ pub const Image = struct {
++    pub const Deferred = struct {
++        ctx: *const anyopaque,
++        prepare: *const fn (ctx: *const anyopaque, a: Allocator) anyerror![]const f32,
++    };
++
+     pixels: []const f32,
++    deferred: ?Deferred = null,
++
+     gh: u32,
+     gw: u32,
+     at: u32,
+     tokens: u32,
+     hash: u64 = 0, // core/picture/identity.zig's: the bytes and the grid, as the prompt cache's key names the image
++
++    /// Patches live only in the caller's scoped allocator; encoded input lives with the request.
++    pub fn materialize(img: Image, a: Allocator) ![]const f32 {
++        return if (img.deferred) |d| try d.prepare(d.ctx, a) else img.pixels;
++    }
+ };
+ 
+ pub const Spec = struct {
+diff --git a/zig/src/server/images.zig b/zig/src/server/images.zig
+--- a/zig/src/server/images.zig
++++ b/zig/src/server/images.zig
+@@ -68,7 +68,7 @@
+ pub fn sourceBytes(cx: *Cx, fetch: ?Fetch, url: []const u8, limit: usize, deadline: std.Io.Timestamp) errors.Refused![]const u8 {
+     if (std.ascii.startsWithIgnoreCase(url, "data:")) {
+         const bytes = try dataBytes(cx, url);
+-        if (bytes.len > limit) return cx.refuse("the request's images exceed 20 MB encoded");
++        if (bytes.len > limit) return cx.refuse("the request's images exceed the configured encoded byte limit");
+         return bytes;
+     }
+     if (!std.mem.startsWith(u8, url, "https://")) return cx.refuse("images require data URLs or public HTTPS URLs");
+@@ -79,7 +79,7 @@
+         error.OutOfMemory => return error.OutOfMemory,
+         error.Media => return cx.refuse(failure.text),
+     };
+-    if (bytes.len == 0) return cx.refuse("image is empty or exceeds the encoded byte limit");
++    if (bytes.len == 0 or bytes.len > limit) return cx.refuse("image is empty or exceeds the encoded byte limit");
+     return bytes;
+ }
+ 
+@@ -112,6 +112,7 @@
+     var out: std.ArrayList(u8) = .empty;
+     var i: usize = 0;
+     while (i < payload.len) : (i += 1) {
++        if (out.items.len == max) return cx.refuse(noun ++ " exceeds the encoded byte limit");
+         if (payload[i] == '%' and i + 2 < payload.len) {
+             const b = std.fmt.parseInt(u8, payload[i + 1 .. i + 3], 16) catch return cx.refuse("invalid " ++ noun ++ " data URL encoding");
+             try out.append(cx.a, b);
+@@ -166,26 +167,35 @@
+     if (ps.len == 0) return null;
+     if (n_images > v.max_images) return cx.refuse(try std.fmt.allocPrint(cx.a, "a request may hold at most {d} images (--vision-max-images); it has {d}", .{ v.max_images, n_images }));
+     if (v.video) |o| if (n_videos > o.max_videos) return cx.refuse(try std.fmt.allocPrint(cx.a, "a request supports at most {d} videos", .{o.max_videos}));
+-    const budget: u32 = if (n_images > 0) v.image_tokens / @as(u32, @intCast(n_images)) else 0;
++    const budget: u32 = if (v.image_limits) |l| l.per_image_tokens else if (n_images > 0) v.image_tokens / @as(u32, @intCast(n_images)) else 0;
++    const request_bytes = if (v.image_limits) |l| l.max_request_bytes else max_request_bytes;
++    const io: ?std.Io = if (v.image_limits) |l| l.io else if (fetch) |f| f.io else null;
++    const started: std.Io.Timestamp = if (io) |i| std.Io.Clock.awake.now(i) else .{ .nanoseconds = 0 };
++    var pixels_total: u64 = 0;
++    var tokens_total: u64 = 0;
+     if (n_images > 0 and budget < 1) return cx.refuse("the image count exceeds the visual-token budget");
+     const prepared = try cx.a.alloc(api.PreparedImage, n_images);
+     const clips = try cx.a.alloc(api.PreparedVideo, n_videos);
+     var bytes_total: usize = 0;
+     // every URL's download inside one request's seconds (images.py total_timeout_seconds, videos.py's)
+-    const deadline: std.Io.Timestamp = if (fetch) |f| std.Io.Clock.awake.now(f.io).addDuration(.fromSeconds(media_fetch.total_s)) else .{ .nanoseconds = 0 };
++    const deadline: std.Io.Timestamp = if (io) |i| std.Io.Clock.awake.now(i).addDuration(.fromSeconds(if (v.image_limits) |l| l.prepare_seconds else media_fetch.total_s)) else .{ .nanoseconds = 0 };
+     var video_budget: videos.Budget = .{ .deadline = if (fetch) |f| std.Io.Clock.awake.now(f.io).addDuration(.fromSeconds(videos.total_s)) else .{ .nanoseconds = 0 } };
+     var ii: usize = 0;
+     var vi: usize = 0;
++    var video_tokens_total: u64 = 0;
+     for (ps) |p| {
+         if (p.video) {
+             const o = v.video.?;
+-            clips[vi] = try videos.prepare(cx, o, v.ctx, fetch, p.url, vi, o.video_tokens / @as(u32, @intCast(n_videos)), &video_budget);
++            const cap = videoTokenBudget(o, n_videos);
++            clips[vi] = try videos.prepare(cx, o, v.ctx, fetch, p.url, vi, cap, &video_budget);
++            try accountVideo(cx, o, clips[vi], cap, &video_tokens_total);
+             vi += 1;
+             continue;
+         }
++        if (v.image_limits) |l| if (started.durationTo(std.Io.Clock.awake.now(l.io)).nanoseconds > @as(i96, l.prepare_seconds) * std.time.ns_per_s) return cx.refuse("image preparation exceeded the configured time limit");
+         const i = ii;
+         ii += 1;
+-        const bytes = try sourceBytes(cx, fetch, p.url, @min(max_image_bytes, max_request_bytes - bytes_total), deadline);
++        const bytes = try sourceBytes(cx, fetch, p.url, @min(max_image_bytes, request_bytes - bytes_total), deadline);
+         bytes_total += bytes.len;
+         switch (sniff(bytes)) { // the Python frontend's formats (images.py: JPEG, PNG, WebP)
+             .png, .jpeg, .webp => {},
+@@ -194,6 +204,13 @@
+         const cap = if (p.low) @min(budget, low_detail_tokens) else budget;
+         prepared[i] = v.prepare(v.ctx, cx.a, bytes, cap) catch |e| return refusal(cx, v, i, e);
+         if (prepared[i].tokens == 0 or prepared[i].tokens > cap) return cx.refuse("the image processor exceeded the per-image visual-token budget");
++        tokens_total += prepared[i].tokens;
++        if (tokens_total > v.image_tokens) return cx.refuse("the request's images exceed the configured total visual-token budget");
++        if (v.image_limits) |l| {
++            pixels_total += prepared[i].source_pixels;
++            if (pixels_total > l.max_request_pixels) return cx.refuse("the request's images exceed the configured decoded pixel limit");
++            if (started.durationTo(std.Io.Clock.awake.now(l.io)).nanoseconds > @as(i96, l.prepare_seconds) * std.time.ns_per_s) return cx.refuse("image preparation exceeded the configured time limit");
++        }
+     }
+     var out_ids: std.ArrayList(u32) = .empty;
+     var key: std.ArrayList(u32) = .empty;
+@@ -246,6 +263,20 @@
+     return .{ .ids = out_ids.items, .history_len = hist, .images = imgs.items, .cache_key = key.items };
+ }
+ 
++/// GLM fixes each clip's ceiling; families without that policy keep their existing shared-budget behavior.
++pub fn videoTokenBudget(o: api.VideoOffer, count: usize) u32 {
++    return o.per_video_tokens orelse (o.video_tokens / @as(u32, @intCast(count)));
++}
++
++/// Count actual prepared rows, rejecting any per-clip or request excess rather than reducing earlier media.
++pub fn accountVideo(cx: *Cx, o: api.VideoOffer, clip: api.PreparedVideo, cap: u32, total: *u64) errors.Refused!void {
++    var tokens: u64 = 0;
++    for (clip.groups) |g| tokens += g.tokens;
++    if (tokens == 0 or tokens > cap) return cx.refuse("the video processor exceeded the per-video visual-token budget");
++    total.* += tokens;
++    if (total.* > o.video_tokens) return cx.refuse("the request's videos exceed the configured total visual-token budget");
++}
++
+ /// A video group's time as text at the end of `ids`; Qwen's "<X.Y seconds>" when `angle`.
+ fn appendTime(cx: *Cx, text: model_text.Text, ids: *std.ArrayList(u32), key: *std.ArrayList(u32), secs: f64, angle: bool) errors.Refused!void {
+     var buf: [64]u8 = undefined;
+@@ -266,7 +297,7 @@
+ /// Appends one image's rows, its engine entry and its cache words; `named`: the word before them is its marker's.
+ fn placeImage(a: std.mem.Allocator, ids: *std.ArrayList(u32), key: *std.ArrayList(u32), imgs: *std.ArrayList(api.Image), token: u32, img: api.PreparedImage, named: bool) !void {
+     if (named) key.items[key.items.len - 1] = image_key.open(img.hash);
+-    try imgs.append(a, .{ .pixels = img.pixels, .gh = img.gh, .gw = img.gw, .at = @intCast(ids.items.len), .tokens = img.tokens, .hash = img.hash });
++    try imgs.append(a, .{ .pixels = img.pixels, .deferred = img.deferred, .gh = img.gh, .gw = img.gw, .at = @intCast(ids.items.len), .tokens = img.tokens, .hash = img.hash });
+     for (0..img.tokens) |j| {
+         try ids.append(a, token);
+         try key.append(a, image_key.row(img.hash, j));
+diff --git a/zig/src/server/prompt.zig b/zig/src/server/prompt.zig
+--- a/zig/src/server/prompt.zig
++++ b/zig/src/server/prompt.zig
+@@ -7,6 +7,7 @@
+ const model_text = @import("model_text.zig");
+ const chat = @import("chat.zig");
+ const images = @import("images.zig");
++const media_order = @import("media_order.zig");
+ const Server = @import("server.zig").Server;
+ const Value = json.Value;
+ const Cx = errors.Cx;
+@@ -30,6 +31,10 @@
+ 
+ /// ``render_prompt_ids``: messages normalized for this template, rendered, and a dangling ``<think>`` closed.
+ pub fn renderIds(srv: *Server, cx: *Cx, messages: Value, tools: []const Value, thinking: bool, effort: ?[]const u8, generation: bool) errors.Refused![]const u32 {
++    return renderIdsMedia(srv, cx, messages, tools, thinking, effort, generation, null);
++}
++
++fn renderIdsMedia(srv: *Server, cx: *Cx, messages: Value, tools: []const Value, thinking: bool, effort: ?[]const u8, generation: bool, ordered: ?*Value) errors.Refused![]const u32 {
+     const normalized = try messages_mod.toolArguments(cx, try messages_mod.normalizeWith(cx, messages, srv.late_system, srv.needs_user_after_tool, .of(srv.info.vision)));
+     var problem: []const u8 = "";
+     const options: model_text.RenderOptions = .{
+@@ -39,7 +44,7 @@
+         .reasoning_effort = if (thinking) effort else null,
+         .clear_thinking = cx.clear_thinking,
+     };
+-    var ids = render(srv, cx.a, normalized, options, &problem) catch |e| switch (e) {
++    var ids = render(srv, cx, normalized, options, &problem, ordered) catch |e| switch (e) {
+         error.OutOfMemory => return error.OutOfMemory,
+         error.Template => return cx.fail(.request, "{s}", .{problem}),
+     };
+@@ -57,8 +62,31 @@
+ }
+ 
+ /// The template's ids for `messages`; with image input, a marker the text spells is ordinary text (images.zig).
+-fn render(srv: *Server, a: std.mem.Allocator, messages: Value, options: model_text.RenderOptions, problem: *[]const u8) model_text.Error![]u32 {
++fn render(srv: *Server, cx: *Cx, messages: Value, options: model_text.RenderOptions, problem: *[]const u8, ordered: ?*Value) model_text.Error![]u32 {
++    const a = cx.a;
+     var rendered = try srv.text.render(a, messages, options, problem);
++    if (ordered) |out| if (srv.info.vision) |v| if (v.image_limits) |limits| if (limits.render_order) {
++        const tagged = media_order.tag(cx, messages, v.part_type) catch |e| {
++            if (e == error.OutOfMemory) return error.OutOfMemory;
++            problem.* = cx.message;
++            return error.Template;
++        };
++        if (tagged.media.len > 0) {
++            const trace = try srv.text.render(a, tagged.messages, options, problem);
++            const resolved = media_order.resolve(cx, tagged, trace) catch |e| {
++                if (e == error.OutOfMemory) return error.OutOfMemory;
++                problem.* = cx.message;
++                return error.Template;
++            };
++            if (!std.mem.eql(u8, rendered.text, resolved.rendered.text)) {
++                problem.* = "the chat template cannot preserve media occurrence order without changing its text";
++                return error.Template;
++            }
++            rendered = resolved.rendered;
++            out.* = resolved.messages;
++        }
++    };
++
+     if (srv.info.vision) |v| if (v.video) |o| if (o.video_text.len > 0) {
+         const word = try srv.text.tokenString(a, o.video_token);
+         rendered = try rendered.replaceTemplate(a, o.video_text, word);
+@@ -110,14 +138,15 @@
+         } },
+         .ids => |ids| return .{ .ids = ids },
+     };
+-    const prompt = try renderIds(srv, cx, input.messages, input.tools, thinking, effort, true);
++    var media_messages = input.messages;
++    const prompt = try renderIdsMedia(srv, cx, input.messages, input.tools, thinking, effort, true, &media_messages);
+     const history = try renderIds(srv, cx, input.messages, input.tools, thinking, effort, false);
+     var history_len: usize = 0;
+     if (history.len > 0 and history.len < prompt.len and std.mem.eql(u32, prompt[0..history.len], history)) history_len = history.len;
+     if (history_len == 0 and prompt.len > 1 and std.mem.eql(u32, history, prompt)) history_len = prompt.len - 1; // a template with no generation suffix
+     if (history_len > 0) history_len = continuedLen(srv, cx, input.messages, input.tools, thinking, effort, history, history_len);
+     // --vision: placeholders expanded to image tokens before the window, chunks and cache see it; no rewind kept
+-    if (try images.expand(srv.info.vision, if (srv.config.vision_urls) images.Fetch.network(srv.io) else null, srv.text, cx, input.messages, prompt, history_len)) |x| return .{ .ids = x.ids, .history_len = x.history_len, .images = x.images, .cache_key = x.cache_key };
++    if (try images.expand(srv.info.vision, if (srv.config.vision_urls) images.Fetch.network(srv.io) else null, srv.text, cx, media_messages, prompt, history_len)) |x| return .{ .ids = x.ids, .history_len = x.history_len, .images = x.images, .cache_key = x.cache_key };
+     const count = if (input.messages == .array) input.messages.array.len else 0;
+     const rewind_len = if (srv.info.prompt_cache) rewindLen(srv, cx, input.messages, count, input.tools, prompt, thinking, effort) else 0; // one more render
+     return .{ .ids = prompt, .history_len = history_len, .rewind_len = rewind_len, .user_end = userEnd(input.messages, history_len) };
+diff --git a/zig/src/server/media_order.zig b/zig/src/server/media_order.zig
+new file mode 100644
+--- /dev/null
++++ b/zig/src/server/media_order.zig
+@@ -0,0 +1,110 @@
++//! GLM's template may reorder tool outputs: request-owned occurrence labels travel with their media parts.
++const std = @import("std");
++const json = @import("json");
++const model_text = @import("model_text.zig");
++const errors = @import("errors.zig");
++const Value = json.Value;
++const Cx = errors.Cx;
++
++pub const Tagged = struct {
++    messages: Value,
++    labels: []const []const u8,
++    media: []const Value,
++};
++
++fn contains(value: Value, needle: []const u8) bool {
++    return switch (value) {
++        .string => |s| std.mem.indexOf(u8, s, needle) != null,
++        .array => |items| for (items) |v| {
++            if (contains(v, needle)) break true;
++        } else false,
++        .object => |o| blk: {
++            var it = o.iterator();
++            while (it.next()) |e| if (std.mem.indexOf(u8, e.key_ptr.*, needle) != null or contains(e.value_ptr.*, needle)) break :blk true;
++            break :blk false;
++        },
++        else => false,
++    };
++}
++
++/// Copy normalized content, keeping a distinct label next to each occurrence, including repeated URLs.
++pub fn tag(cx: *Cx, messages: Value, image_type: []const u8) errors.Refused!Tagged {
++    if (messages != .array) return .{ .messages = messages, .labels = &.{}, .media = &.{} };
++    var serial: usize = 0;
++    const prefix = while (true) : (serial += 1) {
++        const candidate = try std.fmt.allocPrint(cx.a, "\x00tf-media-{d}:", .{serial});
++        if (!contains(messages, candidate)) break candidate;
++    };
++    const list = try cx.a.dupe(Value, messages.array);
++    var labels: std.ArrayList([]const u8) = .empty;
++    var media: std.ArrayList(Value) = .empty;
++    for (list) |*m| {
++        const content = m.get("content") orelse continue;
++        if (content != .array) continue;
++        var parts: std.ArrayList(Value) = .empty;
++        for (content.array) |p| {
++            const kind = p.strField("type") orelse "";
++            if (std.mem.eql(u8, kind, "image_url") or std.mem.eql(u8, kind, image_type) or std.mem.eql(u8, kind, "video_url")) {
++                const label = try std.fmt.allocPrint(cx.a, "{s}{d}\x00", .{ prefix, media.items.len });
++                const text = try json.newObject(cx.a);
++                try text.put(cx.a, "type", .{ .string = "text" });
++                try text.put(cx.a, "text", .{ .string = label });
++                try parts.append(cx.a, .{ .object = text });
++                try labels.append(cx.a, label);
++                try media.append(cx.a, p);
++            }
++            try parts.append(cx.a, p);
++        }
++        const copy = try json.copyObject(cx.a, m.object);
++        try copy.put(cx.a, "content", .{ .array = parts.items });
++        m.* = .{ .object = copy };
++    }
++    return .{ .messages = .{ .array = list }, .labels = labels.items, .media = media.items };
++}
++
++pub const Resolved = struct { rendered: model_text.Rendered, messages: Value };
++
++/// Remove only the injected request ranges, retain text provenance, and extract actual rendered occurrence order.
++pub fn resolve(cx: *Cx, tagged: Tagged, rendered: model_text.Rendered) errors.Refused!Resolved {
++    const Hit = struct { at: usize, index: usize };
++    const hits = try cx.a.alloc(Hit, tagged.labels.len);
++    for (tagged.labels, 0..) |label, i| {
++        const at = std.mem.indexOf(u8, rendered.text, label) orelse return cx.refuse("the chat template dropped a media occurrence");
++        if (std.mem.indexOfPos(u8, rendered.text, at + label.len, label) != null) return cx.refuse("the chat template duplicated a media occurrence");
++        const owned = for (rendered.spans) |span| {
++            if (span[0] <= at and span[1] >= at + label.len) break true;
++        } else false;
++        if (!owned) return cx.refuse("the chat template lost media occurrence provenance");
++        hits[i] = .{ .at = at, .index = i };
++    }
++    std.mem.sort(Hit, hits, {}, struct {
++        fn less(_: void, a: Hit, b: Hit) bool {
++            return a.at < b.at;
++        }
++    }.less);
++    var text: std.ArrayList(u8) = .empty;
++    var spans: std.ArrayList(model_text.Span) = .empty;
++    const media = try cx.a.alloc(Value, hits.len);
++    var done: usize = 0;
++    for (hits, 0..) |hit, i| {
++        try append(cx, rendered, done, hit.at, &text, &spans);
++        done = hit.at + tagged.labels[hit.index].len;
++        media[i] = tagged.media[hit.index];
++    }
++    try append(cx, rendered, done, rendered.text.len, &text, &spans);
++    const message = try json.newObject(cx.a);
++    try message.put(cx.a, "role", .{ .string = "user" });
++    try message.put(cx.a, "content", .{ .array = media });
++    const list = try cx.a.alloc(Value, 1);
++    list[0] = .{ .object = message };
++    return .{ .rendered = .{ .text = text.items, .spans = spans.items }, .messages = .{ .array = list } };
++}
++
++fn append(cx: *Cx, rendered: model_text.Rendered, lo: usize, hi: usize, text: *std.ArrayList(u8), spans: *std.ArrayList(model_text.Span)) !void {
++    const offset = text.items.len;
++    try text.appendSlice(cx.a, rendered.text[lo..hi]);
++    for (rendered.spans) |span| {
++        if (span[0] >= hi) break;
++        if (span[1] > lo) try spans.append(cx.a, .{ offset + @max(lo, span[0]) - lo, offset + @min(hi, span[1]) - lo });
++    }
++}
+diff --git a/zig/src/families/glm/image_core.zig b/zig/src/families/glm/image_core.zig
+--- a/zig/src/families/glm/image_core.zig
++++ b/zig/src/families/glm/image_core.zig
+@@ -1,14 +1,21 @@
+-//! An image's bytes to GLM5-Next vision patches as TensorFold 0.6.6's --vision made them, over the caller's decoder.
++//! GLM5-Next image geometry, Torch uint8 resizing and patch inputs over the caller's decoder.
+ const std = @import("std");
+ const vision = @import("vision_config.zig");
+ 
+ /// One image ready for the tower: its patches, its patch grid and its tokens (gh * gw / 4).
++pub const Deferred = struct {
++    ctx: *const anyopaque,
++    prepare: *const fn (ctx: *const anyopaque, a: std.mem.Allocator) anyerror![]const f32,
++};
++
+ pub const Prepared = struct {
+     pixels: []f32, // [gh * gw, 1176]
++    source_pixels: u64 = 0,
++    deferred: ?Deferred = null,
+     gh: u32,
+     gw: u32,
+     tokens: u32,
+-    hash: u64, // its identity (core/picture/identity.zig): bytes and grid, so another budget is another image
++    hash: u64, // processor revision, encoded bytes, normalization, fitted content and grid
+ };
+ 
+ // ---- the processor's geometry ----
+@@ -95,22 +102,58 @@
+             return out;
+         }
+ 
+-        /// Bytes to patches: decoded as 0.6.6 decoded them, sized for `max_tokens`, resized, padded and cut.
++        const Lazy = struct {
++            io: std.Io,
++            bytes: []const u8,
++            config: vision.Config,
++            max_tokens: u32,
++
++            fn materialize(ctx: *const anyopaque, a: std.mem.Allocator) anyerror![]const f32 {
++                const self: *const Lazy = @ptrCast(@alignCast(ctx));
++                return (try prepare(self.io, a, self.bytes, self.config, self.max_tokens)).pixels;
++            }
++        };
++
++        /// Validate in temporary memory, retaining encoded bytes and geometry rather than all float patches.
++        pub fn plan(io: std.Io, a: std.mem.Allocator, bytes: []const u8, c: vision.Config, max_tokens: u32) Error!Prepared {
++            if (bytes.len > 10 << 20) return error.Oversized;
++            var scratch: std.heap.ArenaAllocator = .init(std.heap.page_allocator);
++            defer scratch.deinit();
++            const img = try picture.decode(io, scratch.allocator(), bytes);
++            const g = try geometry(@intCast(img.height), @intCast(img.width), @min(c.min_tokens, max_tokens), max_tokens);
++            const grid = [2]u32{ g.target_h / vision.patch, g.target_w / vision.patch };
++            const lazy = try a.create(Lazy);
++            lazy.* = .{ .io = io, .bytes = bytes, .config = c, .max_tokens = max_tokens };
++            return .{ .pixels = &.{}, .source_pixels = @as(u64, img.width) * img.height, .gh = grid[0], .gw = grid[1], .tokens = grid[0] * grid[1] / vision.patches_per_token, .hash = preparedHash(picture.identity.ofBytes(0x1a6e, bytes), c, g), .deferred = .{ .ctx = lazy, .prepare = Lazy.materialize } };
++        }
++
++        /// Bytes to patches: decoded, fitted with Torch's uint8 bicubic resize, padded and cut.
+         pub fn prepare(io: std.Io, gpa: std.mem.Allocator, bytes: []const u8, c: vision.Config, max_tokens: u32) Error!Prepared {
++            if (bytes.len > 10 << 20) return error.Oversized;
+             var img = try picture.decode(io, gpa, bytes);
+             defer img.deinit(gpa);
+             return prepareRgb(gpa, img, picture.identity.ofBytes(0x1a6e, bytes), c, max_tokens);
+         }
+ 
+-        /// RGB to patches (Pillow's bicubic resize, the padded canvas cut); the hash covers the bytes and the grid.
++        fn preparedHash(bytes_hash: u64, c: vision.Config, g: Geometry) u64 {
++            var identity: [40]u8 = undefined;
++            @memcpy(identity[0..8], std.mem.asBytes(&bytes_hash));
++            @memcpy(identity[8..20], std.mem.asBytes(&c.mean));
++            @memcpy(identity[20..32], std.mem.asBytes(&c.std));
++            @memcpy(identity[32..36], std.mem.asBytes(&g.content_h));
++            @memcpy(identity[36..40], std.mem.asBytes(&g.content_w));
++            return picture.identity.withGrid(picture.identity.ofBytes(0x746f72636802, &identity), .{ g.target_h / vision.patch, g.target_w / vision.patch });
++        }
++
++        /// RGB to patches; identity includes processor revision, normalization, fitted size, encoded bytes and grid.
+         pub fn prepareRgb(gpa: std.mem.Allocator, img: picture.Rgb, bytes_hash: u64, c: vision.Config, max_tokens: u32) Error!Prepared {
+             const g = try geometry(@intCast(img.height), @intCast(img.width), @min(c.min_tokens, max_tokens), max_tokens);
+-            const resized = try picture.resample.resize(gpa, .pillow, .of(img.pixels, img.width, img.height), g.content_w, g.content_h);
++            const resized = try picture.resample.resize(gpa, .torch, .of(img.pixels, img.width, img.height), g.content_w, g.content_h);
+             defer gpa.free(resized);
+             const content: picture.Rgb = .{ .width = g.content_w, .height = g.content_h, .pixels = resized };
+             const pixels = try patchify(gpa, content, g, c.mean, c.std);
+             const grid = [2]u32{ g.target_h / vision.patch, g.target_w / vision.patch };
+-            return .{ .pixels = pixels, .gh = grid[0], .gw = grid[1], .tokens = grid[0] * grid[1] / vision.patches_per_token, .hash = picture.identity.withGrid(bytes_hash, grid) };
++            return .{ .pixels = pixels, .gh = grid[0], .gw = grid[1], .tokens = grid[0] * grid[1] / vision.patches_per_token, .source_pixels = @as(u64, img.width) * img.height, .hash = preparedHash(bytes_hash, c, g) };
+         }
+     };
+ }
+diff --git a/zig/src/families/glm/image.zig b/zig/src/families/glm/image.zig
+--- a/zig/src/families/glm/image.zig
++++ b/zig/src/families/glm/image.zig
+@@ -1,4 +1,4 @@
+-//! An image's bytes to GLM5-Next vision patches as TensorFold 0.6.6's --vision made them (Pillow, then mlx-vlm).
++//! GLM5-Next image decode, geometry, Torch uint8 resizing and scoped patch preparation.
+ const std = @import("std");
+ const picture = @import("../../core/picture/picture.zig");
+ const vision = @import("vision_config.zig");
+@@ -12,6 +12,7 @@
+ pub const decoderProblem = steps.decoderProblem;
+ pub const patchify = steps.patchify;
+ pub const prepare = steps.prepare;
++pub const plan = steps.plan;
+ pub const prepareRgb = steps.prepareRgb;
+ 
+ test "geometry follows smart_resize" {
+diff --git a/zig/src/families/glm/cuda_images.zig b/zig/src/families/glm/cuda_images.zig
+--- a/zig/src/families/glm/cuda_images.zig
++++ b/zig/src/families/glm/cuda_images.zig
+@@ -44,6 +44,7 @@
+ 
+     /// The chat template writes each image's begin and end itself (the server only expands the image token).
+     pub const template_wraps = true;
++    pub const fixed_image_tokens: u32 = 2048;
+     /// A video's frames to patch pairs (Glm5NextVideoProcessor), over core's decoder: each pair goes in as an image.
+     pub const video = video_mod;
+ 
+@@ -159,7 +160,10 @@
+             if (img.gh * img.gw != img.tokens * vcfg.patches_per_token) return error.ImageOutOfStep;
+             if (img.at + img.tokens <= from) continue; // in the kept state already
+             if (img.tokens > (try v.rowLimit()) -| row) return error.ImageRows; // the server holds a request to its limits
+-            try t.encode(&v.run, img.pixels, .{ 1, img.gh, img.gw }, v.rows.ptr + @as(u64, row) * vcfg.out_hidden * 2);
++            var scratch: std.heap.ArenaAllocator = .init(v.gpa);
++            defer scratch.deinit();
++            const pixels = try img.materialize(scratch.allocator());
++            try t.encode(&v.run, pixels, .{ 1, img.gh, img.gw }, v.rows.ptr + @as(u64, row) * vcfg.out_hidden * 2);
+             try v.spans.append(v.gpa, .{ .at = img.at, .n = img.tokens, .row = row });
+             row += img.tokens;
+         }
+@@ -219,12 +223,12 @@
+ 
+     /// A video's sampled frames as patch pairs within `max_tokens` and `max_frames` (the server's prepare).
+     pub fn prepareVideo(v: *const Images, a: std.mem.Allocator, s: video.Source, max_tokens: u32, max_frames: u32) !video.Prepared {
+-        return video.prepare(a, s, v.cfg.?, max_tokens, max_frames);
++        return video.prepare(a, s, v.cfg.?, @min(max_tokens, 16384), @min(max_frames, 128));
+     }
+ 
+     /// An image's bytes as the tower reads them, at most `max_tokens` tokens (the server's prepare).
+     pub fn prepare(v: *const Images, a: std.mem.Allocator, data: []const u8, max_tokens: u32) !image_core.Prepared {
+-        return image.prepare(v.io, a, data, v.cfg.?, max_tokens);
++        return image.plan(v.io, a, data, v.cfg.?, max_tokens);
+     }
+ };
+ 
+diff --git a/zig/src/families/glm/slot_images.zig b/zig/src/families/glm/slot_images.zig
+--- a/zig/src/families/glm/slot_images.zig
++++ b/zig/src/families/glm/slot_images.zig
+@@ -18,10 +18,13 @@
+     for (imgs) |img| {
+         if (row + img.tokens > e.vision_limits.image_tokens or img.gh * img.gw != img.tokens * vision_mod.patches_per_token) return error.ImageTooLarge;
+         if (img.at + img.tokens > sl.slots[i].prompt_len) return error.ImageOutOfPrompt;
++        var scratch: std.heap.ArenaAllocator = .init(v.gpa);
++        defer scratch.deinit();
++        const pixels = try img.materialize(scratch.allocator());
+         const pool = mtl.objc.Pool.push();
+         defer pool.pop();
+         const b = e.begin();
+-        try v.encode(b.enc, img.pixels, img.gh, img.gw, e.vision_rows.at(@as(usize, row) * e.c.hidden * 2), null);
++        try v.encode(b.enc, pixels, img.gh, img.gw, e.vision_rows.at(@as(usize, row) * e.c.hidden * 2), null);
+         try e.finish(b.cb, b.enc);
+         try v.spans.append(v.gpa, .{ .at = img.at, .n = img.tokens, .row = row });
+         row += img.tokens;
+diff --git a/zig/src/native/cuda_vision_offer.zig b/zig/src/native/cuda_vision_offer.zig
+--- a/zig/src/native/cuda_vision_offer.zig
++++ b/zig/src/native/cuda_vision_offer.zig
+@@ -13,7 +13,12 @@
+         fn f(ctx: *anyopaque, a: Allocator, bytes: []const u8, max_tokens: u32) anyerror!api.PreparedImage {
+             const t: *T = @ptrCast(@alignCast(ctx));
+             const p = try t.prepare(a, bytes, max_tokens);
+-            return .{ .pixels = p.pixels, .gh = p.gh, .gw = p.gw, .tokens = p.tokens, .hash = p.hash };
++            var out: api.PreparedImage = .{ .pixels = p.pixels, .gh = p.gh, .gw = p.gw, .tokens = p.tokens, .hash = p.hash };
++            if (comptime @hasField(@TypeOf(p), "source_pixels")) out.source_pixels = p.source_pixels;
++            if (comptime @hasField(@TypeOf(p), "deferred")) if (p.deferred) |lazy| {
++                out.deferred = .{ .ctx = lazy.ctx, .prepare = lazy.prepare };
++            };
++            return out;
+         }
+     }.f;
+     if (comptime T == qwen35.native.vision.Vision) {
+@@ -24,6 +29,7 @@
+     // a template that writes each image's begin and end itself: the server expands the image token alone
+     const wrap: ?[2]u32 = if (@hasDecl(T, "template_wraps")) null else .{ x.marks.open, x.marks.close };
+     var out: api.Vision = .{ .ctx = x, .prepare = prepare, .image_token = x.marks.image, .markers = &x.mark_ids, .wrap = wrap, .image_tokens = x.limits.image_tokens, .max_images = x.limits.max_images, .explain = T.explain };
++    if (comptime @hasDecl(T, "fixed_image_tokens")) out.image_limits = .{ .io = x.io, .per_image_tokens = T.fixed_image_tokens, .max_request_bytes = 64 << 20, .max_request_pixels = 400 << 20, .prepare_seconds = 100, .render_order = true };
+     if (comptime @hasDecl(T, "part_type")) out.part_type = T.part_type; // the template's name for an image part
+     if (comptime T == nemotron.native.vision.Vision) {
+         // video: the checkpoint's temporal projection, and a reserved token for the template's `<video>`
+@@ -44,6 +50,10 @@
+     }
+     if (comptime @hasDecl(T, "prepareVideo")) if (x.video_ids) |*vm| {
+         out.video = .{ .prepare = Video(T).prepare, .video_token = vm[1], .group_open = x.marks.open, .group_close = x.marks.close, .markers = vm, .video_tokens = x.limits.video_tokens, .max_videos = x.limits.max_videos, .max_frames = x.limits.max_frames };
++    };
++    if (comptime @hasDecl(T, "fixed_image_tokens")) if (out.video) |*video| {
++        video.per_video_tokens = 16384;
++        video.max_frames = @min(video.max_frames, 128);
+     };
+     return out;
+ }
+diff --git a/zig/src/native/glm_host.zig b/zig/src/native/glm_host.zig
+--- a/zig/src/native/glm_host.zig
++++ b/zig/src/native/glm_host.zig
+@@ -118,9 +118,10 @@
+         h.markers = .{ v.c.image_start, v.c.image_token, v.c.image_end };
+         h.video_open = o;
+         offer = .{ .ctx = h, .prepare = prepareImage, .image_token = v.c.image_token, .markers = &h.markers, .image_tokens = o.image_tokens, .max_images = o.max_images, .explain = glm.image.decoderProblem };
++        offer.?.image_limits = .{ .io = io, .per_image_tokens = 2048, .max_request_bytes = 64 << 20, .max_request_pixels = 400 << 20, .prepare_seconds = 100, .render_order = true };
+         if (v.c.video) |vm| {
+             h.video_markers = vm;
+-            offer.?.video = .{ .prepare = prepareVideo, .video_token = vm[1], .group_open = v.c.image_start, .group_close = v.c.image_end, .markers = &h.video_markers, .video_tokens = o.video_tokens, .max_videos = o.max_videos, .max_frames = o.max_frames };
++            offer.?.video = .{ .per_video_tokens = 16384, .prepare = prepareVideo, .video_token = vm[1], .group_open = v.c.image_start, .group_close = v.c.image_end, .markers = &h.video_markers, .video_tokens = o.video_tokens, .max_videos = o.max_videos, .max_frames = @min(o.max_frames, 128) };
+         }
+     }
+     // sampled draws on one Mac (the pair refuses them per request)
+@@ -188,8 +189,8 @@
+ /// Info.vision's prepare: an image's bytes to the tower's patches (families/glm/image.zig), on the HTTP thread.
+ fn prepareImage(ctx: *anyopaque, a: Allocator, bytes: []const u8, max_tokens: u32) anyerror!api.PreparedImage {
+     const h: *Host = @ptrCast(@alignCast(ctx));
+-    const p = try glm.image.prepare(h.wall.io, a, bytes, h.eng.vision.?.c, max_tokens);
+-    return .{ .pixels = p.pixels, .gh = p.gh, .gw = p.gw, .tokens = p.tokens, .hash = p.hash };
++    const p = try glm.image.plan(h.wall.io, a, bytes, h.eng.vision.?.c, max_tokens);
++    return .{ .pixels = p.pixels, .gh = p.gh, .gw = p.gw, .tokens = p.tokens, .hash = p.hash, .source_pixels = p.source_pixels, .deferred = if (p.deferred) |d| .{ .ctx = d.ctx, .prepare = d.prepare } else null };
+ }
+ 
+ /// Info.vision's video offer: a decoded video's frames to the tower's frame groups (glm/video.zig), on the HTTP thread.
+@@ -210,7 +211,7 @@
+     };
+     var ad: Adapter = .{ .src = src };
+     const s: glm.video.Source = .{ .frames = src.frames, .rate_num = src.rate_num, .rate_den = src.rate_den, .width = src.width, .height = src.height, .ctx = &ad, .decode = Adapter.decode };
+-    const p = try glm.video.prepare(a, s, h.eng.vision.?.c, max_tokens, max_frames);
++    const p = try glm.video.prepare(a, s, h.eng.vision.?.c, @min(max_tokens, 16384), @min(max_frames, 128));
+     const groups = try a.alloc(api.PreparedImage, p.groups.len);
+     for (groups, p.groups) |*g, q| g.* = .{ .pixels = q.pixels, .gh = q.gh, .gw = q.gw, .tokens = q.tokens, .hash = q.hash };
+     return .{ .groups = groups, .times = p.times };

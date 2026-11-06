@@ -1,0 +1,18 @@
+test-glm-prompts-host
++- run test 6 pass, 1 fail (7 total)
+error: 'glm_prompt_host.test.GLM prompt workflow: context window cut preserves sequence positions independently of tap offsets' failed:
+       expected error.DrafterContextTooWide, found .{ .ring = 0, .taps = 83722240, .n = 5, .pos0 = 0 }
+       /Users/kelchm/.cache/zig-0.17.0-macos/lib/std/testing.zig:634:9: 0x1027f4d47 in expectError__func_1057 (test)
+               return error.TestExpectedError;
+               ^
+       /private/var/folders/fk/1vypmf5s0t3d4900vppfhfx00000gn/T/glm070-baseline-71wfuk6y/zig/glm_prompt_host.zig:228:5: 0x1027f56a7 in test.GLM prompt workflow: context window cut preserves sequence positions independently of tap offsets (test)
+           try t.expectError(error.DrafterContextTooWide, dr.promptRun(0, 0, 0, 5, 5, 2044));
+           ^
+failed command: ./.zig-cache/o/ac55a45814801bfb0fbbad4104727fa9/test --cache-dir=./.zig-cache --seed=0xacd5d97f --listen=-
+
+Build Summary: 2/4 steps succeeded (1 failed); 6/7 tests passed (1 failed)
+test-glm-prompts-host transitive failure
++- run test 6 pass, 1 fail (7 total)
+   +- compile test debug native success 1s MaxRSS:349M
+      +- options success
+

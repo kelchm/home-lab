@@ -1,0 +1,291 @@
+Preserve the production GLM media policy through lazy preparation. Charge only
+active fetch/decode/resize/patchification time, excluding admission and text-prefill
+waits. Match the Python kit clip allocation before planning (16K ceiling, 32K
+request total), and retain GLM image detail even with a low hint.
+
+Python policy: Mia kit bf5f9452, patches/0050-glm-many-media.patch.
+
+diff --git a/zig/src/core/lanes/stream.zig b/zig/src/core/lanes/stream.zig
+index edc479ee..3da66c2d 100644
+--- a/zig/src/core/lanes/stream.zig
++++ b/zig/src/core/lanes/stream.zig
+@@ -112,6 +112,7 @@ pub const Image = struct {
+     pixels: []const f32,
+     deferred: ?Deferred = null,
+     deadline: ?struct { io: std.Io, at: std.Io.Timestamp } = null,
++    preparation_budget: ?*PreparationBudget = null,
+ 
+     gh: u32,
+     gw: u32,
+@@ -126,21 +127,51 @@ pub const Image = struct {
+ 
+     pub const Cancel = struct { ptr: ?*anyopaque, check: *const fn (?*anyopaque) bool };
+ 
++    /// Request-owned, owner-thread accounting for active preparation time only.
++    /// Queue waits, text prefill, and GPU tower execution do not consume this CPU/fetch budget.
++    pub const PreparationBudget = struct {
++        io: std.Io,
++        remaining_ns: i96,
++        clock: ?struct { ctx: *anyopaque, read: *const fn (*anyopaque) i96 } = null,
++
++        pub fn now(b: *const PreparationBudget) i96 {
++            return if (b.clock) |c| c.read(c.ctx) else std.Io.Clock.awake.now(b.io).nanoseconds;
++        }
++        pub fn begin(b: *const PreparationBudget) error{MediaDeadline}!i96 {
++            if (b.remaining_ns <= 0) return error.MediaDeadline;
++            return b.now();
++        }
++        pub fn check(b: *const PreparationBudget, start: i96) error{MediaDeadline}!void {
++            if (@max(0, b.now() - start) >= b.remaining_ns) return error.MediaDeadline;
++        }
++        pub fn finish(b: *PreparationBudget, start: i96) void {
++            b.remaining_ns = @max(0, b.remaining_ns - @max(0, b.now() - start));
++        }
++        pub fn deadline(b: *const PreparationBudget) std.Io.Timestamp {
++            return .{ .nanoseconds = b.now() + @max(0, b.remaining_ns) };
++        }
++    };
++
+     pub fn checkWork(img: Image, cancel: ?Cancel) !void {
+         if (cancel) |c| if (c.check(c.ptr)) return error.Cancelled;
+         if (img.deadline) |d| if (std.Io.Clock.awake.now(d.io).nanoseconds >= d.at.nanoseconds) return error.MediaDeadline;
++        if (img.preparation_budget) |b| if (b.remaining_ns <= 0) return error.MediaDeadline;
+     }
+ 
+     pub fn materializeChecked(img: Image, a: Allocator, cancel: ?Cancel) ![]const f32 {
+         const Check = struct {
+             image: Image,
+             cancel: ?Cancel,
++            started: ?i96,
+             fn run(ptr: ?*anyopaque) anyerror!void {
+                 const c: *@This() = @ptrCast(@alignCast(ptr.?));
+                 try c.image.checkWork(c.cancel);
++                if (c.image.preparation_budget) |b| try b.check(c.started.?);
+             }
+         };
+-        var c: Check = .{ .image = img, .cancel = cancel };
++        const start = if (img.preparation_budget) |b| try b.begin() else null;
++        defer if (img.preparation_budget) |b| b.finish(start.?);
++        var c: Check = .{ .image = img, .cancel = cancel, .started = start };
+         try Check.run(&c);
+         const pixels = if (img.deferred) |d|
+             if (d.checked) |f| try f(d.ctx, a, &c, Check.run) else try d.prepare(d.ctx, a)
+@@ -151,6 +182,52 @@ pub const Image = struct {
+     }
+ };
+ 
++test "media compatibility: lazy preparation charges active work across images without queue or prefill time" {
++    const t = std.testing;
++    const Clock = struct {
++        ns: i96 = 0,
++        calls: usize = 0,
++        cost: i96 = 3,
++        fail: bool = false,
++        fn now(ptr: *anyopaque) i96 {
++            return @as(*@This(), @ptrCast(@alignCast(ptr))).ns;
++        }
++        fn prepare(_: *const anyopaque, _: Allocator) anyerror![]const f32 {
++            return error.ExpectedCheckedPath;
++        }
++        fn checked(ptr: *const anyopaque, _: Allocator, ctx: ?*anyopaque, check: *const fn (?*anyopaque) anyerror!void) anyerror![]const f32 {
++            const c: *@This() = @ptrCast(@alignCast(@constCast(ptr)));
++            c.calls += 1;
++            try check(ctx);
++            c.ns += c.cost;
++            try check(ctx);
++            if (c.fail) return error.RecordedDecodeFailure;
++            return &.{};
++        }
++    };
++    var clock: Clock = .{};
++    var budget: Image.PreparationBudget = .{ .io = t.io, .remaining_ns = 10, .clock = .{ .ctx = &clock, .read = Clock.now } };
++    var img: Image = .{ .pixels = &.{}, .gh = 2, .gw = 2, .at = 0, .tokens = 1, .preparation_budget = &budget, .deferred = .{ .ctx = &clock, .prepare = Clock.prepare, .checked = Clock.checked } };
++    clock.ns += 1000 * std.time.ns_per_s; // a long admission wait before any lazy decode
++    _ = try img.materializeChecked(t.allocator, null);
++    try t.expectEqual(@as(i96, 7), budget.remaining_ns);
++    clock.ns += 1000 * std.time.ns_per_s; // text prefill or another stream between two images
++    try img.checkWork(null);
++    img.hash = 2;
++    _ = try img.materializeChecked(t.allocator, null);
++    try t.expectEqual(@as(i96, 4), budget.remaining_ns);
++    clock.cost = 2;
++    clock.fail = true;
++    try t.expectError(error.RecordedDecodeFailure, img.materializeChecked(t.allocator, null));
++    try t.expectEqual(@as(i96, 2), budget.remaining_ns);
++    clock.cost = 3;
++    clock.fail = false;
++    try t.expectError(error.MediaDeadline, img.materializeChecked(t.allocator, null));
++    try t.expectEqual(@as(i96, 0), budget.remaining_ns);
++    try t.expectError(error.MediaDeadline, img.materializeChecked(t.allocator, null));
++    try t.expectEqual(@as(usize, 4), clock.calls);
++}
++
+ pub const Spec = struct {
+     id: []const u8,
+     prompt: []const u32,
+diff --git a/zig/src/core/engine_vision.zig b/zig/src/core/engine_vision.zig
+index 5c4defb5..f85c7cb1 100644
+--- a/zig/src/core/engine_vision.zig
++++ b/zig/src/core/engine_vision.zig
+@@ -12,6 +12,7 @@ pub const PreparedImage = struct {
+     source_pixels: u64 = 0,
+     deferred: ?@import("lanes").stream.Image.Deferred = null,
+     deadline: @FieldType(@import("lanes").stream.Image, "deadline") = null,
++    preparation_budget: @FieldType(@import("lanes").stream.Image, "preparation_budget") = null,
+     /// The image as tower inputs in order, each image tokens between `before` and `after`; empty: `pixels` alone.
+     pieces: []const Piece = &.{},
+ };
+@@ -42,6 +43,7 @@ pub const Vision = struct {
+         max_request_pixels: u64,
+         prepare_seconds: u32,
+         render_order: bool = false,
++        honor_low_detail: bool = true,
+     } = null,
+     /// Video input, when the engine's family reads it.
+     video: ?VideoOffer = null,
+diff --git a/zig/src/server/images.zig b/zig/src/server/images.zig
+index 2e5bec4e..ab09114b 100644
+--- a/zig/src/server/images.zig
++++ b/zig/src/server/images.zig
+@@ -176,6 +176,16 @@ pub fn expand(vision: ?api.Vision, fetch: ?Fetch, text: model_text.Text, cx: *Cx
+     if (n_images > 0 and budget < 1) return cx.refuse("the image count exceeds the visual-token budget");
+     const prepared = try cx.a.alloc(api.PreparedImage, n_images);
+     const clips = try cx.a.alloc(api.PreparedVideo, n_videos);
++    const image_work: ?*api.Image.PreparationBudget = if (v.image_limits) |l| if (n_images > 0) blk: {
++        const b = try cx.a.create(api.Image.PreparationBudget);
++        b.* = .{ .io = l.io, .remaining_ns = @as(i96, l.prepare_seconds) * std.time.ns_per_s };
++        break :blk b;
++    } else null else null;
++    const video_work: ?*api.Image.PreparationBudget = if (n_videos > 0 and v.video.?.lazy and io != null) blk: {
++        const b = try cx.a.create(api.Image.PreparationBudget);
++        b.* = .{ .io = io.?, .remaining_ns = @as(i96, videos.total_s) * std.time.ns_per_s };
++        break :blk b;
++    } else null;
+     var bytes_total: usize = 0;
+     // every URL's download inside one request's seconds (images.py total_timeout_seconds, videos.py's)
+     const deadline: std.Io.Timestamp = if (io) |i| std.Io.Clock.awake.now(i).addDuration(.fromSeconds(if (v.image_limits) |l| l.prepare_seconds else media_fetch.total_s)) else .{ .nanoseconds = 0 };
+@@ -186,34 +196,40 @@ pub fn expand(vision: ?api.Vision, fetch: ?Fetch, text: model_text.Text, cx: *Cx
+     for (ps) |p| {
+         if (p.video) {
+             const o = v.video.?;
++            const phase = if (video_work) |b| b.begin() catch return cx.refuse("video preparation exceeded the configured time limit") else null;
++            defer if (video_work) |b| b.finish(phase.?);
++            if (video_work) |b| video_budget.deadline = b.deadline();
+             const cap = videoTokenBudget(o, n_videos);
+             clips[vi] = try videos.prepare(cx, o, v.ctx, fetch, p.url, vi, cap, &video_budget);
+             try accountVideo(cx, o, clips[vi], cap, &video_tokens_total);
+-            if (o.lazy) if (io) |video_io| for (clips[vi].groups) |*g| {
+-                g.deadline = .{ .io = video_io, .at = video_budget.deadline };
+-            };
++            if (video_work) |b| {
++                b.check(phase.?) catch return cx.refuse("video preparation exceeded the configured time limit");
++                for (clips[vi].groups) |*g| g.preparation_budget = b;
++            }
+             vi += 1;
+             continue;
+         }
+-        if (v.image_limits) |l| if (started.durationTo(std.Io.Clock.awake.now(l.io)).nanoseconds > @as(i96, l.prepare_seconds) * std.time.ns_per_s) return cx.refuse("image preparation exceeded the configured time limit");
++        const phase = if (image_work) |b| b.begin() catch return cx.refuse("image preparation exceeded the configured time limit") else null;
++        defer if (image_work) |b| b.finish(phase.?);
+         const i = ii;
+         ii += 1;
+-        const bytes = try sourceBytes(cx, fetch, p.url, @min(max_image_bytes, request_bytes - bytes_total), deadline);
++        const bytes = try sourceBytes(cx, fetch, p.url, @min(max_image_bytes, request_bytes - bytes_total), if (image_work) |b| b.deadline() else deadline);
+         bytes_total += bytes.len;
+         switch (sniff(bytes)) { // the Python frontend's formats (images.py: JPEG, PNG, WebP)
+             .png, .jpeg, .webp => {},
+             .gif, .other => return cx.refuse(try std.fmt.allocPrint(cx.a, "image {d} is not PNG, JPEG or WebP; send one of those", .{i + 1})),
+         }
+-        const cap = if (p.low) @min(budget, low_detail_tokens) else budget;
++        const honor_low = if (v.image_limits) |l| l.honor_low_detail else true;
++        const cap = if (p.low and honor_low) @min(budget, low_detail_tokens) else budget;
+         prepared[i] = v.prepare(v.ctx, cx.a, bytes, cap) catch |e| return refusal(cx, v, i, e);
+         if (prepared[i].tokens == 0 or prepared[i].tokens > cap) return cx.refuse("the image processor exceeded the per-image visual-token budget");
+         tokens_total += prepared[i].tokens;
+         if (tokens_total > v.image_tokens) return cx.refuse("the request's images exceed the configured total visual-token budget");
+         if (v.image_limits) |l| {
+-            prepared[i].deadline = .{ .io = l.io, .at = deadline };
++            prepared[i].preparation_budget = image_work;
+             pixels_total += prepared[i].source_pixels;
+             if (pixels_total > l.max_request_pixels) return cx.refuse("the request's images exceed the configured decoded pixel limit");
+-            if (started.durationTo(std.Io.Clock.awake.now(l.io)).nanoseconds > @as(i96, l.prepare_seconds) * std.time.ns_per_s) return cx.refuse("image preparation exceeded the configured time limit");
++            if (image_work) |b| b.check(phase.?) catch return cx.refuse("image preparation exceeded the configured time limit");
+         }
+     }
+     var out_ids: std.ArrayList(u32) = .empty;
+@@ -267,9 +283,38 @@ pub fn expand(vision: ?api.Vision, fetch: ?Fetch, text: model_text.Text, cx: *Cx
+     return .{ .ids = out_ids.items, .history_len = hist, .images = imgs.items, .cache_key = key.items };
+ }
+ 
+-/// GLM fixes each clip's ceiling; families without that policy keep their existing shared-budget behavior.
++/// Preserve GLM's Python policy: each clip has a ceiling and shares the request total.
+ pub fn videoTokenBudget(o: api.VideoOffer, count: usize) u32 {
+-    return o.per_video_tokens orelse (o.video_tokens / @as(u32, @intCast(count)));
++    const share = o.video_tokens / @as(u32, @intCast(@max(1, count)));
++    return if (o.per_video_tokens) |cap| @min(cap, share) else share;
++}
++
++test "media compatibility: GLM preserves its fixed detail while other image offers retain low detail" {
++    const t = std.testing;
++    const Fake = struct {
++        cap: u32 = 0,
++        fn prepare(ptr: *anyopaque, _: std.mem.Allocator, _: []const u8, cap: u32) anyerror!api.PreparedImage {
++            const self: *@This() = @ptrCast(@alignCast(ptr));
++            self.cap = cap;
++            return .{ .pixels = &.{}, .gh = 2, .gw = 2 * cap, .tokens = cap, .hash = 1, .source_pixels = 1 };
++        }
++    };
++    for ([_]bool{ false, true }) |honor_low| {
++        var arena: std.heap.ArenaAllocator = .init(t.allocator);
++        defer arena.deinit();
++        const a = arena.allocator();
++        var cx: Cx = .{ .a = a };
++        var fake: Fake = .{};
++        var v: api.Vision = .{ .ctx = &fake, .prepare = Fake.prepare, .image_token = 9, .image_tokens = 102400, .max_images = 50 };
++        v.image_limits = .{ .io = t.io, .per_image_tokens = 2048, .max_request_bytes = 64 << 20, .max_request_pixels = 400 << 20, .prepare_seconds = 100, .honor_low_detail = honor_low };
++        const messages = (try json.parse(a,
++            \\[{"role":"user","content":[{"type":"image_url","image_url":{"url":"data:,%FF%D8%FFab","detail":"low"}}]}]
++        )).ok;
++        const out = (try expand(v, null, MarkText.text(), &cx, messages, &.{9}, 0)).?;
++        const expected: u32 = if (honor_low) 256 else 2048;
++        try t.expectEqual(expected, fake.cap);
++        try t.expectEqual(expected, out.images[0].tokens);
++    }
+ }
+ 
+ /// Count actual prepared rows, rejecting any per-clip or request excess rather than reducing earlier media.
+@@ -301,7 +346,7 @@ pub fn both(a: std.mem.Allocator, ids: *std.ArrayList(u32), key: *std.ArrayList(
+ /// Appends one image's rows, its engine entry and its cache words; `named`: the word before them is its marker's.
+ fn placeImage(a: std.mem.Allocator, ids: *std.ArrayList(u32), key: *std.ArrayList(u32), imgs: *std.ArrayList(api.Image), token: u32, img: api.PreparedImage, named: bool) !void {
+     if (named) key.items[key.items.len - 1] = image_key.open(img.hash);
+-    try imgs.append(a, .{ .pixels = img.pixels, .deferred = img.deferred, .deadline = img.deadline, .gh = img.gh, .gw = img.gw, .at = @intCast(ids.items.len), .tokens = img.tokens, .hash = img.hash });
++    try imgs.append(a, .{ .pixels = img.pixels, .deferred = img.deferred, .deadline = img.deadline, .preparation_budget = img.preparation_budget, .gh = img.gh, .gw = img.gw, .at = @intCast(ids.items.len), .tokens = img.tokens, .hash = img.hash });
+     for (0..img.tokens) |j| {
+         try ids.append(a, token);
+         try key.append(a, image_key.row(img.hash, j));
+diff --git a/zig/src/native/cuda_vision_offer.zig b/zig/src/native/cuda_vision_offer.zig
+index a8721d46..17265745 100644
+--- a/zig/src/native/cuda_vision_offer.zig
++++ b/zig/src/native/cuda_vision_offer.zig
+@@ -29,7 +29,7 @@ pub fn offer(v: anytype, open: ?api.VisionOpen) ?api.Vision {
+     // a template that writes each image's begin and end itself: the server expands the image token alone
+     const wrap: ?[2]u32 = if (@hasDecl(T, "template_wraps")) null else .{ x.marks.open, x.marks.close };
+     var out: api.Vision = .{ .ctx = x, .prepare = prepare, .image_token = x.marks.image, .markers = &x.mark_ids, .wrap = wrap, .image_tokens = x.limits.image_tokens, .max_images = x.limits.max_images, .explain = T.explain };
+-    if (comptime @hasDecl(T, "fixed_image_tokens")) out.image_limits = .{ .io = x.io, .per_image_tokens = T.fixed_image_tokens, .max_request_bytes = 64 << 20, .max_request_pixels = 400 << 20, .prepare_seconds = 100, .render_order = true };
++    if (comptime @hasDecl(T, "fixed_image_tokens")) out.image_limits = .{ .io = x.io, .per_image_tokens = T.fixed_image_tokens, .max_request_bytes = 64 << 20, .max_request_pixels = 400 << 20, .prepare_seconds = 100, .render_order = true, .honor_low_detail = false };
+     if (comptime @hasDecl(T, "part_type")) out.part_type = T.part_type; // the template's name for an image part
+     if (comptime T == nemotron.native.vision.Vision) {
+         // video: the checkpoint's temporal projection, and a reserved token for the template's `<video>`
+diff --git a/zig/src/native/glm_host.zig b/zig/src/native/glm_host.zig
+index f4f46700..4b005792 100644
+--- a/zig/src/native/glm_host.zig
++++ b/zig/src/native/glm_host.zig
+@@ -118,7 +118,7 @@ pub fn open(gpa: Allocator, io: std.Io, dir: []const u8, window: u32, speed_up:
+         h.markers = .{ v.c.image_start, v.c.image_token, v.c.image_end };
+         h.video_open = o;
+         offer = .{ .ctx = h, .prepare = prepareImage, .image_token = v.c.image_token, .markers = &h.markers, .image_tokens = o.image_tokens, .max_images = o.max_images, .explain = glm.image.decoderProblem };
+-        offer.?.image_limits = .{ .io = io, .per_image_tokens = 2048, .max_request_bytes = 64 << 20, .max_request_pixels = 400 << 20, .prepare_seconds = 100, .render_order = true };
++        offer.?.image_limits = .{ .io = io, .per_image_tokens = 2048, .max_request_bytes = 64 << 20, .max_request_pixels = 400 << 20, .prepare_seconds = 100, .render_order = true, .honor_low_detail = false };
+         if (v.c.video) |vm| {
+             h.video_markers = vm;
+             offer.?.video = .{ .per_video_tokens = 16384, .prepare = prepareVideo, .video_token = vm[1], .group_open = v.c.image_start, .group_close = v.c.image_end, .markers = &h.video_markers, .video_tokens = o.video_tokens, .max_videos = o.max_videos, .max_frames = @min(o.max_frames, 128) };

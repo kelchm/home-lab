@@ -15,10 +15,10 @@ DAEMON = 'sha256:' + 'a' * 64
 CONFIG = 'sha256:' + 'b' * 64
 
 
-@pytest.fixture
-def builder(tmp_path):
+@pytest.fixture(params=['mia-tensorfold-glm53-1104', 'mia-tensorfold-glm53-1104-r2'])
+def builder(tmp_path, request):
     mod = tmp_path / 'mod'
-    shutil.copytree(MOD, mod, ignore=shutil.ignore_patterns('__pycache__'))
+    shutil.copytree(ROOT / 'mods' / request.param, mod, ignore=shutil.ignore_patterns('__pycache__'))
     kit = tmp_path / 'kit'
     (kit / 'patches/engine').mkdir(parents=True)
     (kit / 'templates').mkdir()

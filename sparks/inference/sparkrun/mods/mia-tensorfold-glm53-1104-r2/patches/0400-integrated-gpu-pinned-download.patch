@@ -1,0 +1,496 @@
+Backport: TensorFold #2103, merge 1d891001b989172be772e6e14f6a63ce596d387d.
+Source: https://github.com/ashhart/TensorFold/pull/2103
+Use the upstream bounded pinned download path on integrated GPUs. Adapt the
+quant_ref_host_tests fake to this kit's older comparison-test signature.
+
+diff --git a/zig/src/cuda/download_stage.zig b/zig/src/cuda/download_stage.zig
+new file mode 100644
+--- /dev/null
++++ b/zig/src/cuda/download_stage.zig
+@@ -0,0 +1,54 @@
++//! A thread's page-locked bounce for synchronous downloads on integrated GPUs.
++const std = @import("std");
++const abi = @import("abi.zig");
++const Driver = @import("driver.zig").Driver;
++const Error = @import("driver.zig").Error;
++const memory = @import("memory.zig");
++
++/// The largest piece one copy takes; larger downloads go through in pieces.
++pub const most: usize = 4 << 20;
++
++const Held = struct { d: *const Driver, bytes: []align(16) u8 };
++const Device = struct { d: *const Driver, integrated: bool };
++threadlocal var held: ?Held = null;
++threadlocal var device: ?Device = null;
++
++/// Whether this thread's current device shares memory with the host; read once per driver.
++pub fn integrated(d: *const Driver) Error!bool {
++    if (device) |one| if (one.d == d) return one.integrated;
++    var dev: abi.Device = 0;
++    try d.check(d.api.cuCtxGetDevice(&dev), "cuCtxGetDevice");
++    var v: c_int = 0;
++    try d.check(d.api.cuDeviceGetAttribute(&v, .integrated, dev), "cuDeviceGetAttribute");
++    device = .{ .d = d, .integrated = v != 0 };
++    return v != 0;
++}
++
++/// This thread's page-locked buffer of at least `len` bytes; it counts in `memory.usage`.
++pub fn take(d: *const Driver, len: usize) Error![]align(16) u8 {
++    if (held) |h| {
++        if (h.d == d and h.bytes.len >= len) return h.bytes[0..len];
++        drop();
++    }
++    const size = @min(most, std.math.ceilPowerOfTwoAssert(usize, @max(len, 64 << 10)));
++    var p: ?*anyopaque = null;
++    try d.check(d.api.cuMemHostAlloc(&p, size, abi.host_alloc_portable), "cuMemHostAlloc");
++    const base: [*]align(16) u8 = @ptrCast(@alignCast(p.?));
++    held = .{ .d = d, .bytes = base[0..size] };
++    memory.retainHost(size);
++    return held.?.bytes[0..len];
++}
++
++/// Frees this thread's buffer, if one is held.
++pub fn drop() void {
++    if (held) |h| {
++        _ = h.d.api.cuMemFreeHost(h.bytes.ptr);
++        memory.releaseRetainedHost(h.bytes.len);
++        held = null;
++    }
++}
++
++/// Forgets the cached device reading (tests use distinct drivers, but a fake may reuse one).
++pub fn forget() void {
++    device = null;
++}
+diff --git a/zig/src/cuda/download_stage_test.zig b/zig/src/cuda/download_stage_test.zig
+new file mode 100644
+--- /dev/null
++++ b/zig/src/cuda/download_stage_test.zig
+@@ -0,0 +1,88 @@
++//! The download staging path, with a fake driver that writes only pinned destinations.
++const std = @import("std");
++const abi = @import("abi.zig");
++const Driver = @import("driver.zig").Driver;
++const memory = @import("memory.zig");
++const stage = @import("download_stage.zig");
++
++var pinned: [64 << 10]u8 align(16) = undefined;
++var destination: usize = 0;
++var allocations: usize = 0;
++var integrated_flag: c_int = 1;
++
++fn pinnedRange(ptr: usize) bool {
++    const base = @intFromPtr(&pinned[0]);
++    return ptr >= base and ptr < base + pinned.len;
++}
++
++fn hostAlloc(out: ?*?*anyopaque, len: usize, _: c_uint) callconv(.c) abi.Result {
++    if (len > pinned.len) return 1;
++    allocations += 1;
++    out.?.* = &pinned[0];
++    return 0;
++}
++
++fn hostFree(_: ?*anyopaque) callconv(.c) abi.Result {
++    return 0;
++}
++
++fn contextDevice(out: *abi.Device) callconv(.c) abi.Result {
++    out.* = 0;
++    return 0;
++}
++
++fn deviceAttribute(out: *c_int, attribute: abi.DeviceAttribute, _: abi.Device) callconv(.c) abi.Result {
++    out.* = if (attribute == .integrated) integrated_flag else 0;
++    return 0;
++}
++
++fn copyToHost(dst: ?*anyopaque, _: abi.DevicePtr, len: usize) callconv(.c) abi.Result {
++    destination = @intFromPtr(dst.?);
++    if (pinnedRange(destination) or integrated_flag == 0) @memset(@as([*]u8, @ptrCast(dst.?))[0..len], 0x5a);
++    return 0;
++}
++
++fn driver() Driver {
++    var d: Driver = undefined;
++    d.api.cuMemHostAlloc = hostAlloc;
++    d.api.cuMemFreeHost = hostFree;
++    d.api.cuCtxGetDevice = contextDevice;
++    d.api.cuDeviceGetAttribute = deviceAttribute;
++    d.api.cuMemcpyDtoH_v2 = copyToHost;
++    return d;
++}
++
++test "an integrated GPU's download lands in pinned memory, not the caller's pageable slice" {
++    integrated_flag = 1;
++    allocations = 0;
++    stage.forget();
++    stage.drop();
++    defer stage.forget();
++    defer stage.drop();
++    const before = memory.usage(false).host;
++    var d = driver();
++    var out: [64]u8 = @splat(0xaa);
++    const src: memory.DeviceBuffer = .{ .d = &d, .ptr = 0x1000, .len = out.len, .borrowed = true };
++    try src.download(0, &out);
++    try std.testing.expect(std.mem.allEqual(u8, &out, 0x5a));
++    try std.testing.expect(pinnedRange(destination));
++    try std.testing.expect(destination != @intFromPtr(&out));
++    try std.testing.expectEqual(@as(usize, 1), allocations);
++    try std.testing.expect(memory.usage(false).host >= before + (64 << 10));
++}
++
++test "a discrete GPU's download copies straight into the caller's slice" {
++    integrated_flag = 0;
++    allocations = 0;
++    stage.forget();
++    stage.drop();
++    defer stage.forget();
++    defer stage.drop();
++    var d = driver();
++    var out: [64]u8 = @splat(0xaa);
++    const src: memory.DeviceBuffer = .{ .d = &d, .ptr = 0x1000, .len = out.len, .borrowed = true };
++    try src.download(0, &out);
++    try std.testing.expect(std.mem.allEqual(u8, &out, 0x5a));
++    try std.testing.expectEqual(@intFromPtr(&out), destination);
++    try std.testing.expectEqual(@as(usize, 0), allocations);
++}
+diff --git a/zig/src/cuda/memory.zig b/zig/src/cuda/memory.zig
+--- a/zig/src/cuda/memory.zig
++++ b/zig/src/cuda/memory.zig
+@@ -190,10 +190,23 @@
+         try @import("copy_source.zig").synchronousCopy(self.d, dst, bytes, std.heap.page_allocator);
+     }
+ 
++    /// Returns once the bytes have landed; an integrated GPU stages through this thread's pinned bounce.
+     pub fn download(self: DeviceBuffer, offset: usize, out: []u8) Error!void {
+         const src = try self.span(offset, out.len);
+         if (out.len == 0) return;
+-        try self.d.check(self.d.api.cuMemcpyDtoH_v2(out.ptr, src, out.len), "cuMemcpyDtoH");
++        const stage = @import("download_stage.zig");
++        if (!try stage.integrated(self.d)) {
++            try self.d.check(self.d.api.cuMemcpyDtoH_v2(out.ptr, src, out.len), "cuMemcpyDtoH");
++            return;
++        }
++        var done: usize = 0;
++        while (done < out.len) {
++            const n = @min(out.len - done, stage.most);
++            const bounce = try stage.take(self.d, n);
++            try self.d.check(self.d.api.cuMemcpyDtoH_v2(bounce.ptr, src + done, n), "cuMemcpyDtoH");
++            @memcpy(out[done..][0..n], bounce[0..n]);
++            done += n;
++        }
+     }
+ 
+     /// Owns a pinned source copy until completion. Captured uploads must use copy_source.Stage or Buffer.
+@@ -544,6 +557,11 @@
+     freed(&host_bytes, bytes);
+ }
+ 
++/// Counts pinned bytes the driver allocated directly (a download's bounce), so `usage` and the limit see them.
++pub fn retainHost(bytes: usize) void {
++    held(&host_bytes, bytes);
++}
++
+ test "Failure boundaries: a buffer keeps its allocation hook when the installed hook changes" {
+     const Owner = struct {
+         freed: usize = 0,
+diff --git a/zig/src/cuda/root.zig b/zig/src/cuda/root.zig
+--- a/zig/src/cuda/root.zig
++++ b/zig/src/cuda/root.zig
+@@ -87,6 +87,7 @@
+     _ = train_q4;
+     _ = train_attn;
+     _ = @import("memory.zig");
++    _ = @import("download_stage_test.zig");
+     _ = memory_receipt;
+     _ = @import("grouped.zig");
+     _ = @import("qlinear.zig");
+diff --git a/zig/src/families/deepseek_v41/load_mock.zig b/zig/src/families/deepseek_v41/load_mock.zig
+--- a/zig/src/families/deepseek_v41/load_mock.zig
++++ b/zig/src/families/deepseek_v41/load_mock.zig
+@@ -20,6 +20,14 @@
+ pub var live: [1024]bool = @splat(false);
+ pub var memory: [1024][1024]u8 = @splat(@splat(0));
+ pub var pinned: ?[]align(16) u8 = null;
++fn contextDevice(out: *abi.Device) callconv(.c) abi.Result {
++    out.* = 0;
++    return 0;
++}
++fn deviceAttribute(out: *c_int, _: abi.DeviceAttribute, _: abi.Device) callconv(.c) abi.Result {
++    out.* = 0;
++    return 0;
++}
+ pub fn init() cuda.Driver {
+     shared_calls = 0;
+     shared_bytes = 0;
+@@ -37,6 +45,8 @@
+     fail_record = false;
+     @memset(&live, false);
+     var d: cuda.Driver = undefined;
++    d.api.cuCtxGetDevice = contextDevice;
++    d.api.cuDeviceGetAttribute = deviceAttribute;
+     d.api.cuModuleLoadData = moduleLoad;
+     d.api.cuModuleUnload = moduleUnload;
+     d.api.cuModuleGetFunction = moduleFunction;
+diff --git a/zig/src/families/flashnext/cuda_pocket_test.zig b/zig/src/families/flashnext/cuda_pocket_test.zig
+--- a/zig/src/families/flashnext/cuda_pocket_test.zig
++++ b/zig/src/families/flashnext/cuda_pocket_test.zig
+@@ -55,8 +55,18 @@
+ fn sync(_: abi.Stream) callconv(.c) abi.Result {
+     return if (fail_sync) abi.error_not_ready else 0;
+ }
++fn contextDevice(out: *abi.Device) callconv(.c) abi.Result {
++    out.* = 0;
++    return 0;
++}
++fn deviceAttribute(out: *c_int, _: abi.DeviceAttribute, _: abi.Device) callconv(.c) abi.Result {
++    out.* = 0;
++    return 0;
++}
+ fn driver() cuda.Driver {
+     var d: cuda.Driver = .{ .lib = undefined, .api = undefined };
++    d.api.cuCtxGetDevice = contextDevice;
++    d.api.cuDeviceGetAttribute = deviceAttribute;
+     d.api.cuMemAlloc_v2 = alloc;
+     d.api.cuMemFree_v2 = free;
+     d.api.cuMemHostAlloc = hostAlloc;
+diff --git a/zig/src/families/h3/cuda_runtime_fake.zig b/zig/src/families/h3/cuda_runtime_fake.zig
+--- a/zig/src/families/h3/cuda_runtime_fake.zig
++++ b/zig/src/families/h3/cuda_runtime_fake.zig
+@@ -25,6 +25,14 @@
+ }
+ fn streamSync(_: abi.Stream) callconv(.c) c_int {
+     return sync();
++}
++fn contextDevice(out: *abi.Device) callconv(.c) c_int {
++    out.* = 0;
++    return 0;
++}
++fn deviceAttribute(out: *c_int, _: abi.DeviceAttribute, _: abi.Device) callconv(.c) c_int {
++    out.* = 0;
++    return 0;
+ }
+ fn alloc(out: *u64, n: usize) callconv(.c) c_int {
+     if (alloc_fail) return abi.error_not_ready;
+@@ -103,6 +111,8 @@
+     m.gpa = std.testing.allocator;
+     m.driver.lib = try std.DynLib.open(if (@import("builtin").os.tag == .macos) "/usr/lib/libSystem.B.dylib" else "libc.so.6");
+     m.driver.api.cuCtxSetCurrent = current;
++    m.driver.api.cuCtxGetDevice = contextDevice;
++    m.driver.api.cuDeviceGetAttribute = deviceAttribute;
+     m.driver.api.cuCtxSynchronize = sync;
+     m.driver.api.cuStreamSynchronize = streamSync;
+     m.driver.api.cuMemAlloc_v2 = alloc;
+diff --git a/zig/src/families/qwen3_5/cuda_pocket_test.zig b/zig/src/families/qwen3_5/cuda_pocket_test.zig
+--- a/zig/src/families/qwen3_5/cuda_pocket_test.zig
++++ b/zig/src/families/qwen3_5/cuda_pocket_test.zig
+@@ -55,8 +55,18 @@
+ fn sync(_: abi.Stream) callconv(.c) abi.Result {
+     return if (fail_sync) abi.error_not_ready else 0;
+ }
++fn contextDevice(out: *abi.Device) callconv(.c) abi.Result {
++    out.* = 0;
++    return 0;
++}
++fn deviceAttribute(out: *c_int, _: abi.DeviceAttribute, _: abi.Device) callconv(.c) abi.Result {
++    out.* = 0;
++    return 0;
++}
+ fn driver() cuda.Driver {
+     var d: cuda.Driver = .{ .lib = undefined, .api = undefined };
++    d.api.cuCtxGetDevice = contextDevice;
++    d.api.cuDeviceGetAttribute = deviceAttribute;
+     d.api.cuMemAlloc_v2 = alloc;
+     d.api.cuMemFree_v2 = free;
+     d.api.cuMemHostAlloc = hostAlloc;
+diff --git a/zig/tests/cuda/contract_q35_attn_host.zig b/zig/tests/cuda/contract_q35_attn_host.zig
+--- a/zig/tests/cuda/contract_q35_attn_host.zig
++++ b/zig/tests/cuda/contract_q35_attn_host.zig
+@@ -68,8 +68,18 @@
+         return @as(*const V, @ptrCast(@alignCast(a.?[i].?))).*;
+     }
+ };
++fn contextDevice(out: *cuda.abi.Device) callconv(.c) cuda.abi.Result {
++    out.* = 0;
++    return 0;
++}
++fn deviceAttribute(out: *c_int, _: cuda.abi.DeviceAttribute, _: cuda.abi.Device) callconv(.c) cuda.abi.Result {
++    out.* = 0;
++    return 0;
++}
+ fn driver() cuda.Driver {
+     var d: cuda.Driver = .{ .lib = undefined, .api = undefined };
++    d.api.cuCtxGetDevice = contextDevice;
++    d.api.cuDeviceGetAttribute = deviceAttribute;
+     d.api.cuModuleGetFunction = Trace.function;
+     d.api.cuFuncSetAttribute = Trace.attribute;
+     d.api.cuLaunchKernel = Trace.launch;
+diff --git a/zig/tests/cuda/contract_rows_host.zig b/zig/tests/cuda/contract_rows_host.zig
+--- a/zig/tests/cuda/contract_rows_host.zig
++++ b/zig/tests/cuda/contract_rows_host.zig
+@@ -25,7 +25,17 @@
+     @memcpy(out[0..n], bytes[0..n]);
+     return 0;
+ }
++fn contextDevice(out: *cuda.abi.Device) callconv(.c) cuda.abi.Result {
++    out.* = 0;
++    return 0;
++}
++fn deviceAttribute(out: *c_int, _: cuda.abi.DeviceAttribute, _: cuda.abi.Device) callconv(.c) cuda.abi.Result {
++    out.* = 0;
++    return 0;
++}
+ fn output(d: *cuda.Driver, bytes: []u8) !rig.Rig {
++    d.api.cuCtxGetDevice = contextDevice;
++    d.api.cuDeviceGetAttribute = deviceAttribute;
+     d.api.cuStreamSynchronize = sync;
+     d.api.cuMemcpyDtoH_v2 = copy;
+     var r: rig.Rig = .{ .gpu = .{ .d = d, .ctx = undefined, .gpa = std.testing.allocator, .io = undefined }, .s = .{ .d = d, .handle = null } };
+diff --git a/zig/tests/cuda/contract_verify_host.zig b/zig/tests/cuda/contract_verify_host.zig
+--- a/zig/tests/cuda/contract_verify_host.zig
++++ b/zig/tests/cuda/contract_verify_host.zig
+@@ -165,10 +165,20 @@
+         @memcpy(out[0..len], p[0..len]);
+         return 0;
+     }
++    fn contextDevice(out: *cuda.abi.Device) callconv(.c) cuda.abi.Result {
++        out.* = 0;
++        return 0;
++    }
++    fn deviceAttribute(out: *c_int, _: cuda.abi.DeviceAttribute, _: cuda.abi.Device) callconv(.c) cuda.abi.Result {
++        out.* = 0;
++        return 0;
++    }
+ };
+ 
+ test "verify contract: the actual replacement producer really runs 32 separate original one-row calls" {
+     var d: cuda.Driver = undefined;
++    d.api.cuCtxGetDevice = Baseline.contextDevice;
++    d.api.cuDeviceGetAttribute = Baseline.deviceAttribute;
+     d.api.cuLaunchKernel = Baseline.launch;
+     d.api.cuStreamSynchronize = Baseline.sync;
+     d.api.cuMemcpyDtoH_v2 = Baseline.copy;
+diff --git a/zig/tests/cuda/projection_f32_host_tests.zig b/zig/tests/cuda/projection_f32_host_tests.zig
+--- a/zig/tests/cuda/projection_f32_host_tests.zig
++++ b/zig/tests/cuda/projection_f32_host_tests.zig
+@@ -43,11 +43,23 @@
+         @memcpy(out[0..n], in[0..n]);
+         return cuda.abi.success;
+     }
++
++    fn contextDevice(out: *cuda.abi.Device) callconv(.c) cuda.abi.Result {
++        out.* = 0;
++        return cuda.abi.success;
++    }
++
++    fn deviceAttribute(out: *c_int, _: cuda.abi.DeviceAttribute, _: cuda.abi.Device) callconv(.c) cuda.abi.Result {
++        out.* = 0;
++        return cuda.abi.success;
++    }
+ };
+ 
+ test "every F32 and BF16 fixture dispatch rejects a no-op after a valid stale prefix" {
+     const a = std.testing.allocator;
+     var driver: cuda.Driver = undefined;
++    driver.api.cuCtxGetDevice = Mock.contextDevice;
++    driver.api.cuDeviceGetAttribute = Mock.deviceAttribute;
+     driver.api.cuMemsetD8Async = Mock.fill;
+     driver.api.cuLaunchKernel = Mock.plain;
+     driver.api.cuLaunchKernelEx = Mock.extended;
+diff --git a/zig/tests/cuda/quant_ref_host_tests.zig b/zig/tests/cuda/quant_ref_host_tests.zig
+--- a/zig/tests/cuda/quant_ref_host_tests.zig
++++ b/zig/tests/cuda/quant_ref_host_tests.zig
+@@ -19,10 +19,22 @@
+         copies += 1;
+         return cuda.abi.success;
+     }
++
++    fn contextDevice(out: *cuda.abi.Device) callconv(.c) cuda.abi.Result {
++        out.* = 0;
++        return cuda.abi.success;
++    }
++
++    fn deviceAttribute(out: *c_int, _: cuda.abi.DeviceAttribute, _: cuda.abi.Device) callconv(.c) cuda.abi.Result {
++        out.* = 0;
++        return cuda.abi.success;
++    }
+ };
+ 
+ fn close(comptime T: type, got: []const T, want: []const f64, tol: []const f64) !void {
+     var d: cuda.Driver = undefined;
++    d.api.cuCtxGetDevice = Readback.contextDevice;
++    d.api.cuDeviceGetAttribute = Readback.deviceAttribute;
+     d.api.cuStreamSynchronize = Readback.sync;
+     d.api.cuMemcpyDtoH_v2 = Readback.copy;
+     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+diff --git a/zig/tests/cuda/runtime_tests.zig b/zig/tests/cuda/runtime_tests.zig
+--- a/zig/tests/cuda/runtime_tests.zig
++++ b/zig/tests/cuda/runtime_tests.zig
+@@ -24,6 +24,16 @@
+     defer gpu.gpa.free(back);
+     try check.sameBytes("H2D, D2D, D2H round trip (1 MiB)", back, pattern);
+     check.pass("blocking copies: 1 MiB host -> device -> device -> host equal", .{});
++
++    // Larger than one staged piece: the copy goes through in pieces and still lands whole.
++    const big_n: usize = 6 << 20;
++    var big = try cuda.DeviceBuffer.alloc(d, big_n);
++    defer big.free();
++    try big.fill8(0x3c, null);
++    const big_back = try check.download(gpu, big);
++    defer gpu.gpa.free(big_back);
++    try expect(std.mem.allEqual(u8, big_back, 0x3c), "6 MiB download", .{});
++    check.pass("blocking copies: a 6 MiB download through staged pieces equal", .{});
+ 
+     var stream = try cuda.Stream.init(d, true);
+     defer stream.deinit();
+diff --git a/zig/tests/cuda/w4a8_exception_gate_host.zig b/zig/tests/cuda/w4a8_exception_gate_host.zig
+--- a/zig/tests/cuda/w4a8_exception_gate_host.zig
++++ b/zig/tests/cuda/w4a8_exception_gate_host.zig
+@@ -41,6 +41,14 @@
+     fn sync(_: abi.Stream) callconv(.c) abi.Result {
+         return 0;
+     }
++    fn contextDevice(out: *abi.Device) callconv(.c) abi.Result {
++        out.* = 0;
++        return 0;
++    }
++    fn deviceAttribute(out: *c_int, _: abi.DeviceAttribute, _: abi.Device) callconv(.c) abi.Result {
++        out.* = 0;
++        return 0;
++    }
+     fn read(comptime T: type, args: ?[*]?*anyopaque, i: usize) T {
+         return @as(*const T, @ptrCast(@alignCast(args.?[i].?))).*;
+     }
+@@ -59,6 +67,8 @@
+     }
+     fn driver() cuda.Driver {
+         var d: cuda.Driver = .{ .lib = undefined, .api = undefined };
++        d.api.cuCtxGetDevice = contextDevice;
++        d.api.cuDeviceGetAttribute = deviceAttribute;
+         d.api.cuMemAlloc_v2 = alloc;
+         d.api.cuMemFree_v2 = free;
+         d.api.cuMemcpyHtoD_v2 = upload;
+diff --git a/zig/tests/qwen4/cuda_draw_launch_test.zig b/zig/tests/qwen4/cuda_draw_launch_test.zig
+--- a/zig/tests/qwen4/cuda_draw_launch_test.zig
++++ b/zig/tests/qwen4/cuda_draw_launch_test.zig
+@@ -71,9 +71,19 @@
+     fn synchronize(_: C.abi.Stream) callconv(.c) c_int {
+         return 0;
+     }
++    fn contextDevice(out: *C.abi.Device) callconv(.c) c_int {
++        out.* = 0;
++        return 0;
++    }
++    fn deviceAttribute(out: *c_int, _: C.abi.DeviceAttribute, _: C.abi.Device) callconv(.c) c_int {
++        out.* = 0;
++        return 0;
++    }
+ };
+ fn driver() C.Driver {
+     var d: C.Driver = .{ .api = undefined, .lib = undefined };
++    d.api.cuCtxGetDevice = Trace.contextDevice;
++    d.api.cuDeviceGetAttribute = Trace.deviceAttribute;
+     d.api.cuModuleLoadData = Trace.load;
+     d.api.cuModuleUnload = Trace.unload;
+     d.api.cuModuleGetFunction = Trace.function;

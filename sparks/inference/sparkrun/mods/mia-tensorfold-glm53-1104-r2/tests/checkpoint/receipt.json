@@ -1,0 +1,49 @@
+{
+  "date": "2026-11-06",
+  "zig_version": "0.17.0",
+  "platform": "macOS arm64 host; recording CUDA ABI; no hardware operations",
+  "patch_sha256": "421c2ad63e66029d463c1139122e0c7f678028cd45a7514d10deb933ab2370cf",
+  "affected_native_files": 13,
+  "application": "fresh scratch copy, git apply --check, git apply, all patched-file hashes verified",
+  "format": "zig fmt --check: pass",
+  "command": "zig build test-checkpoint-bounded-host --summary all",
+  "exit_code": 0,
+  "build_steps_passed": 10,
+  "test_executions_passed": 77,
+  "test_binaries": {
+    "core_filtered": 37,
+    "existing_kv_pool": 23,
+    "rank_writer_and_imported_core": 14,
+    "actual_glm_state_plan": 3
+  },
+  "near_1m": {
+    "tokens": 1000001,
+    "payload_bytes": 6649248044,
+    "capsule_bytes": 269656364,
+    "dflash_context_bytes": 41943040,
+    "unique_page_ids": 1953,
+    "page_id_bytes": 7812,
+    "same_capsule_at_tokens": 8257
+  },
+  "lean": {
+    "before_affected_file_findings": 3,
+    "after_affected_file_findings": 3,
+    "new_file_findings": 0
+  },
+  "existing_snapshot_regression": {
+    "base_pass": 22,
+    "base_fail": 4,
+    "patched_pass": 22,
+    "patched_fail": 4,
+    "failures": [
+      "glm_snapshot_host.test.GLM snapshots: a short prefix fits 4 GiB even with a 524288-token configured window",
+      "glm_snapshot_host.test.GLM snapshots: actual store charges held plus spare pages, evicts and protects a borrowed state",
+      "glm_snapshot_host.test.GLM snapshots: 0.3 GiB fits the first default TP2 prefix at 256K but not a longer prefix",
+      "glm_snapshot_host.test.GLM snapshots: the actual store's budget spans the host tier, keeps past the card's pages and evicts within both"
+    ]
+  },
+  "server_storage_enabled": false,
+  "tp_capture_restore_integrated": false,
+  "all_rank_epoch_commit_integrated": false,
+  "hardware_qualified": false
+}
