@@ -27,6 +27,7 @@ from sparkrun.core.external_plugins import load_external_plugins  # noqa: E402
 from sparkrun.core.log_source import MODE_FILE, SCOPE_ALL  # noqa: E402
 from sparkrun.core.mods import resolve_and_inject_mods  # noqa: E402
 from sparkrun.core.recipe import Recipe  # noqa: E402
+from sparkrun.core.scheduler import RankAssignment, RankSlot  # noqa: E402
 from sparkrun.core.runtime_cache import (  # noqa: E402
     RUNTIME_CACHE_CONTAINER_PATH,
     build_runtime_cache_mounts,
@@ -253,21 +254,32 @@ def test_one_node_launch_takes_sparkruns_solo_path(runtime, monkeypatch):
     monkeypatch.setattr(runtime, "_run_solo", lambda **kwargs: seen.update(kwargs) or 0)
     monkeypatch.setattr(runtime, "_run_native_cluster", lambda **kwargs: pytest.fail("ranked launch"))
     command = runtime.generate_command(recipe, {}, is_cluster=False, num_nodes=1)
-    assert runtime.run(["h1"], "img", command, recipe, {}) == 0
+    placement = RankAssignment(by_rank=(RankSlot("h1", 0),), hosts_used=("h1",))
+    assert runtime.run(["h1"], "img", command, recipe, {}, placement=placement) == 0
     assert seen["host"] == "h1" and seen["serve_command"] == command
+    assert seen["placement"] is placement
     assert runtime.get_head_container_name("cid", is_solo=True) == "cid_solo"
     sources = runtime.log_sources("cid", ["h1"], is_solo=True, scope=SCOPE_ALL)
     assert [source.container for source in sources] == ["cid_solo"]
 
 
 
-def test_one_node_recipe_lands_on_the_clusters_first_host(runtime):
+def test_greedy_one_node_placement_retains_the_heads_gpu(runtime, monkeypatch):
+    import sparkrun.api as api
     from sparkrun.api._hosts import resolve_effective_hosts
+    from sparkrun.core.cluster_status import empty_status
 
-    hosts, solo, _, placement = resolve_effective_hosts(["h1", "h2"], _one_node_recipe(), {}, runtime=runtime)
-    assert (hosts, solo, placement) == (["h1"], True, None)
+    monkeypatch.setattr(api, "status", lambda hosts, **kwargs: empty_status(hosts))
+    hosts, solo, _, placement = resolve_effective_hosts(
+        ["h1", "h2"], _one_node_recipe(), {}, runtime=runtime, scheduler="greedy")
+    assert (hosts, solo) == (["h1"], True)
+    assert placement.hosts_used == ("h1",)
+    assert placement.total_ranks == 1
+    assert placement.host_for_rank(0) == "h1"
+    assert placement.local_gpu_for_rank(0) == 0
     # SparkRun places a two-node recipe on one host when tensor_parallel is overridden to 1; the adapter refuses it.
-    hosts, solo, _, _ = resolve_effective_hosts(["h1", "h2"], _recipe(), {"tensor_parallel": 1}, runtime=runtime)
+    hosts, solo, _, _ = resolve_effective_hosts(
+        ["h1", "h2"], _recipe(), {"tensor_parallel": 1}, runtime=runtime, scheduler="greedy")
     assert (hosts, solo) == (["h1"], True)
     with pytest.raises(ValueError, match="min_nodes=2"):
         runtime.generate_command(_recipe(), {"tensor_parallel": 1}, is_cluster=not solo, num_nodes=len(hosts))
@@ -280,6 +292,49 @@ def test_prepare_distributes_declared_drafter(runtime):
     assert DRAFT in names
     assert names[DRAFT] == DRAFT_REV
     assert DRAFT not in before
+
+
+@pytest.mark.parametrize("path", RECIPES, ids=lambda path: path.stem)
+@pytest.mark.parametrize("gate_succeeds", [True, False], ids=["ready", "rejected"])
+def test_each_profile_keeps_its_readiness_gate_in_the_sdk_lifecycle(runtime, monkeypatch, tmp_path, path, gate_succeeds):
+    from sparkrun.core.config import SparkrunConfig
+    from sparkrun.core.launcher import LaunchResult, ServeReadiness, complete_post_launch
+
+    recipe = Recipe(yaml.safe_load(path.read_text()), source_path=str(path))
+    assert not [issue for issue in runtime.validate_recipe(recipe) if issue.severity == ERROR]
+    assert runtime.resolve_container(recipe) == recipe.container
+    nodes = recipe.min_nodes
+    hosts = ["h1", "h2"][:nodes]
+    container = runtime.get_head_container_name("cid", is_solo=nodes == 1)
+    result = LaunchResult(
+        rc=0, cluster_id="cid", host_list=hosts, is_solo=nodes == 1,
+        runtime=runtime, recipe=recipe, overrides={}, container_image=recipe.container,
+        effective_cache_dir=str(tmp_path), serve_port=8888,
+        config=SparkrunConfig(tmp_path / "config.yaml"), recipe_trusted=True,
+    )
+    called = []
+
+    def post_exec(host, head_container, commands, context, **kwargs):
+        called.append(commands)
+        assert (host, head_container) == ("h1", container)
+        # The real post_exec runner receives the original model-specific gate.
+        gate = next(command for command in commands if "/opt/tensorfold-readiness/readiness.py" in command)
+        argv = shlex.split(gate)
+        assert argv[argv.index("--model") + 1] == recipe.defaults["served_model_name"]
+        assert int(argv[argv.index("--context") + 1]) == recipe.defaults["context"]
+        assert kwargs["trust"] is True and kwargs["dry_run"] is False
+        if not gate_succeeds:
+            raise RuntimeError("engine-specific readiness rejected")
+
+    monkeypatch.setattr("sparkrun.orchestration.hooks.run_post_exec", post_exec)
+    monkeypatch.setattr(runtime, "stop", lambda **kwargs: pytest.fail("a failed gate must leave cleanup explicit"))
+    readiness = ServeReadiness(True, "h1", FABRIC_HEAD, 8888, container)
+    if gate_succeeds:
+        assert complete_post_launch(result, str(tmp_path), readiness=readiness) is False
+    else:
+        with pytest.raises(RuntimeError, match="Post-launch readiness or hooks failed"):
+            complete_post_launch(result, str(tmp_path), readiness=readiness)
+    assert called == [recipe.post_exec]
 
 
 def test_each_image_and_model_has_its_own_native_cache_namespace(runtime):
@@ -390,7 +445,8 @@ def test_a_nested_launch_leaves_the_outer_launchs_fabric_master(runtime, monkeyp
     assert seen == ["198.18.0.1", "198.18.1.1", "198.18.1.1", "198.18.0.1"]
 
 
-def test_native_lifecycle_gates_tcpstore_then_starts_rank1(runtime, monkeypatch):
+@pytest.mark.parametrize("rendezvous_ready", [True, False], ids=["ready", "failed-head"])
+def test_native_lifecycle_gates_tcpstore_then_starts_rank1(runtime, monkeypatch, rendezvous_ready):
     from sparkrun.orchestration.comm_env import ClusterCommEnv
 
     order: list[str] = []
@@ -403,11 +459,13 @@ def test_native_lifecycle_gates_tcpstore_then_starts_rank1(runtime, monkeypatch)
     monkeypatch.setattr(_cluster_ops, "launch_containers_parallel", lambda *a, **k: order.append("containers") or 0)
     monkeypatch.setattr(_cluster_ops, "run_pre_serve_hooks", lambda *a, **k: order.append("pre_serve"))
     monkeypatch.setattr(_cluster_ops, "cleanup_ranked_containers", lambda *a, **k: None)
+    monkeypatch.setattr(_cluster_ops, "cleanup_after_failure", lambda *a, **k: order.append("cleanup"))
+    monkeypatch.setattr(_cluster_ops, "dump_serve_log", lambda *a, **k: order.append("dump_log"))
     monkeypatch.setattr(_cluster_ops, "find_port", lambda ctx, host, port: port)
 
     def fake_wait(host, port, **kwargs):
         order.append("wait:%s:%s" % (host, port))
-        return True
+        return rendezvous_ready
 
     monkeypatch.setattr("sparkrun.orchestration.primitives.wait_for_port", fake_wait)
 
@@ -446,6 +504,7 @@ def test_native_lifecycle_gates_tcpstore_then_starts_rank1(runtime, monkeypatch)
         image="glm53-tensorfold:dev",
         dry_run=False,
         config=None,
+        placement=RankAssignment(by_rank=(RankSlot("h1", 0), RankSlot("h2", 0)), hosts_used=("h1", "h2")),
     )
     rc = _cluster_ops.run_native_cluster(
         runtime=runtime,
@@ -455,7 +514,13 @@ def test_native_lifecycle_gates_tcpstore_then_starts_rank1(runtime, monkeypatch)
         init_port=29511,
         follow=False,
     )
+    if not rendezvous_ready:
+        assert rc == 1
+        assert order.index("exec:h1") < order.index("wait:h1:29511") < order.index("dump_log") < order.index("cleanup")
+        assert "exec:h2" not in order and set(captured) == {0}
+        return
     assert rc == 0
+    assert order.index("containers") < order.index("pre_serve") < order.index("exec:h1")
     assert order.index("exec:h1") < order.index("wait:h1:29511") < order.index("exec:h2")
     rank0, _ = _parse_env_command(captured[0])
     rank1, _ = _parse_env_command(captured[1])

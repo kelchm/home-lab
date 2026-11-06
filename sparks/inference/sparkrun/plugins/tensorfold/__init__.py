@@ -1,13 +1,13 @@
-"""SparkRun 0.3.10 external TensorFold runtime (runtime_name=\"tensorfold\").
+"""SparkRun external TensorFold runtime (runtime_name=\"tensorfold\", plugin API 1).
 
 Engine/rank adapter for any TensorFold build served on one node, or on two
 ranks across two nodes. Cluster lifecycle, fabric detection, image/model
 distribution, caches, start/status/log/stop and the rendezvous gate stay on
 SparkRun's solo and native RuntimePlugin paths. The adapter names no model or
 engine: each recipe sets its entrypoint, served name and window, and its mod
-owns the launch. A one-node launch gets no rendezvous variables. SparkRun
-0.3.10 treats HTTP 200 as ready, so each recipe's post_exec gate checks the
-engine's own health.
+owns the launch. A one-node launch gets no rendezvous variables. Each recipe's
+post_exec gate checks engine-specific health and discovery beyond SparkRun's
+built-in readiness.
 """
 
 from __future__ import annotations
@@ -21,6 +21,10 @@ from sparkrun.core.readiness import OPENAI_CHAT_STREAM
 from sparkrun.core.runtime_cache import CachePath
 from sparkrun.runtimes._util import default_env_hf_offline
 from sparkrun.runtimes.base import RuntimePlugin
+
+# SparkRun 0.4 requires an explicit module-level compatibility declaration.
+# The 0.3.10 control environment ignores it and can still load this adapter.
+SPARKRUN_PLUGIN_API_VERSION = 1
 
 HF_HUB_ROOT = "/cache/huggingface/hub"
 # Node count -> tensor_parallel: one rank on one node, or one rank on each of two nodes.
