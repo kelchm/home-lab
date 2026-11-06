@@ -48,6 +48,14 @@ catalog outage, corrupt artifact, or incompatible plugin release keeps the
 admin gateway unavailable. Plugin updates remain pinned, manually reviewed,
 and never auto-merged.
 
+This option covers plugin installation and build failures. A middleware configuration rejected after the plugin loads can still disable its routers while the process and pod remain healthy. Version 0.22 validates `TokenValidation` and header templates during middleware construction, so inspect router errors and test protected hosts through each replica after an upgrade. A browser-style unauthenticated request (`Accept: text/html`) should redirect to Kanidm; a plain Traefik `404` indicates a missing router. Pod readiness alone does not establish that these routes work.
+
+## Version 0.22 login transition
+
+Version 0.21 keeps the PKCE verifier in a cookie; 0.22 reads it from encrypted OIDC state. A login started on one version and returned to the other fails during a mixed rollout and must be restarted. Existing authenticated sessions remain valid. Use a quiet identity window, wait until both replicas run 0.22, then test fresh arr-suite and ops-suite logins, logout/re-login, and login callbacks crossing replicas. Keep the session-encryption key shared between replicas.
+
+Version 0.22 deployed on 2026-11-06 through [#1040](https://github.com/kelchm/home-lab/pull/1040). Both new replicas logged `Plugins loaded.`, became Ready with zero restarts and redirected all 15 protected hosts to Kanidm when tested individually with browser-style requests. VictoriaLogs was tested at its protected `/select` path; its root redirects to the UI before authentication. The complete startup log window contained no plugin or router errors.
+
 ## Recovery
 
 Recovery is normally automatic. If the pods remain in `CrashLoopBackOff`,
