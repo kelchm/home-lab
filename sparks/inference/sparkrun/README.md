@@ -22,14 +22,15 @@ Every profile follows the contract in [#943](https://github.com/kelchm/home-lab/
 | Profile | Kit | Image | Served name |
 | --- | --- | --- | --- |
 | `glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m` | `main` at [`bf5f9452`](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold/commit/bf5f94523a8251029cedae86bf61f8ce37fac218), October 25, 123 patches | `99fe7496…`, config `b925352f…` | `GLM-5.3-Flash` |
-| `glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable` | The same kit, image, pool and reserve, with `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` and the spill tier. Serving since October 31, for long multi-agent use. From stop to ready took 2 minutes 46 seconds, with acceptance, agent acceptance, the cut-call probe, a `/v1/messages` tool turn and a chunked body passing. Clean-stop restoration was verified under 0.4.2 on November 6: the resumed bounded conversation loaded 19,200 tokens from disk and reported them as cached input. | `99fe7496…`, config `b925352f…` | `GLM-5.3-Flash` |
+| `glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable` | The same kit, image, pool and reserve, with `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` and the spill tier. Served from October 31 until the November 6 v2 deployment; retained for rollback. From stop to ready took 2 minutes 46 seconds, with acceptance, agent acceptance, the cut-call probe, a `/v1/messages` tool turn and a chunked body passing. Clean-stop restoration was verified under 0.4.2 on November 6: the resumed bounded conversation loaded 19,200 tokens from disk and reported them as cached input. | `99fe7496…`, config `b925352f…` | `GLM-5.3-Flash` |
+| `glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable-readiness-v2` | Active since November 6, through SparkRun 0.3.10. The same engine, allocator, spill store and full pool, with the separately frozen v2 readiness bundle requiring an active spill tier. The [deployment record](#november-6-hardening-deployment) has the receipts and acceptance results. | `99fe7496…`, config `b925352f…` | `GLM-5.3-Flash` |
 
 The kit patches engine commit `c4646171` and has no numbered release after v1.10. The image is ARM64 and labelled with the kit's patch hash, `tf.patches=789e8f3bdfa2`. All 426 of its engine source files match a reconstruction of the engine plus the kit's patches byte for byte.
 
 - **Weights:** [Mia's 4 bpw TensorFold checkpoint](https://huggingface.co/Mia-AiLab/GLM-5.3-Flash-EXL3-4bpw-TensorFold/tree/078455ffe6472f9a52fbc1139f58b9db2881b25c) at `078455ff`, 83 shards and 175,642,267,944 bytes, and the DFlash2 drafter `incoai/GLM-5.3-Flash-DFlash2` at `bf582e4e`, 2,342,169,800 bytes.
-- **Serving:** a 1,048,576-token window per request and a 32,768-token reply budget, four streams sharing one FP8 KV pool, and thinking and vision on. The engine sizes the pool from the memory free at startup, inside the kit's 14.5 GiB memory reserve and 12.5 GiB kept-prompt cap; on October 27 it loaded 2,582,528 tokens, with the larger picture workspace below. Readiness requires at least 1.2M, room for four 262,144-token prompts plus their replies. `TF_GLM_FILL_ROWS=2048` makes a fill's chunk the whole prompt chunk. Several of the kit's CUDA attention changes target three Sparks; the kit keeps the two-Spark 32-head path on Triton.
+- **Serving:** a 1,048,576-token window per request and a 32,768-token reply budget, four streams sharing one FP8 KV pool, and thinking and vision on. The engine sizes the pool from the memory free at startup, inside the kit's 14.5 GiB memory reserve and 12.5 GiB kept-prompt cap; on October 27 it loaded 2,582,528 tokens, with the larger picture workspace below. The original non-durable readiness requires at least 1.2M tokens, room for four 262,144-token prompts plus their replies; both durable profiles require the full 2,582,528-token pool. `TF_GLM_FILL_ROWS=2048` makes a fill's chunk the whole prompt chunk. Several of the kit's CUDA attention changes target three Sparks; the kit keeps the two-Spark 32-head path on Triton.
 - **Pictures:** a request's pictures share a budget of 102,400 tokens, 50 pictures at 2,048, so a new picture never shrinks the earlier ones and a chat with more than eight still resumes from its kept prompt state. The vision workspace on rank 0 grows from 768 to 1,440 MiB to hold their rows. Setting `TENSORFOLD_GLM_REQUEST_IMAGE_TOKENS` to 16,384 restores the former eight-picture budget, where a ninth picture shrinks every earlier one; 768 MiB of workspace is then enough.
-- **Off in the current profile:** the kit's spill tier, which needs `--spill-gib` and `--snapshot-dir` rather than `TF_GLM_SPILL_QUOTA`, KV sharding (`TF_GLM_KV_SHARD`, in testing upstream) and the process exit on a broken engine (`TF_GLM_EXIT_ON_BROKEN`), as the kit ships them.
+- **Off in the original non-durable profile:** the kit's spill tier, which needs `--spill-gib` and `--snapshot-dir` rather than `TF_GLM_SPILL_QUOTA`, KV sharding (`TF_GLM_KV_SHARD`, in testing upstream) and the process exit on a broken engine (`TF_GLM_EXIT_ON_BROKEN`), as the kit ships them.
 - **Launcher settings:** SparkRun never runs the kit's `start.sh`, and the engine's built-in defaults differ from it, so the recipe states all 45 variables the kit's [`scripts/config.sh`](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold/blob/bf5f94523a8251029cedae86bf61f8ce37fac218/scripts/config.sh) exports in a clean environment. The mod's lock records them as `launcher_env`, and the tests compare recipe and lock.
 - **Site guards:** the mod patches three behaviours into the installed engine.
   - Reasoning is restored only by the server's original call IDs. Clients that renumber or omit call IDs must keep their own reasoning.
@@ -37,7 +38,7 @@ The kit patches engine commit `c4646171` and has no numbered release after v1.10
   - `/v1/models` reports `owned_by: tensorfold`, the window as `context_length` and `max_model_len`, and `reasoning` with the thinking default and the levels `max`, `high`, `low` and `none`. The template defines `low` and `high` and renders anything else as `max`; the server maps `minimal` to `low`, `medium` to `high` and `xhigh` to `max`, and `none` turns thinking off.
 
   The mod checks every guarded file's upstream hash before changing it, so it refuses files that differ from the ones it was written for. That is not an image check: the recipe's image pin pairs the recipe with its image.
-- **Mod:** the rank launcher installs as `/usr/local/bin/tensorfold-entrypoint` and gives the engine `oom_score_adj` 1000. Readiness is the [shared gate](#enable-tensorfold-in-sparkrun), with the 1.2M pool floor and a C4 shape warmup at 128, 4,096 and 16,384 words.
+- **Mod:** the rank launcher installs as `/usr/local/bin/tensorfold-entrypoint` and gives the engine `oom_score_adj` 1000. Readiness is the [shared gate](#enable-tensorfold-in-sparkrun), with a pool floor of 1.2M tokens for the original non-durable profile and 2,582,528 tokens for both durable profiles, and a C4 shape warmup at 128, 4,096 and 16,384 words.
 
 How the profile differs from the kit's own launch:
 
@@ -73,42 +74,70 @@ test "$failed" -eq 0
 
 ### Launch, stop and roll back
 
-From `~/sparkrun/recipes/glm53` on the head, after syncing this directory as in [Deploy](#deploy) and passing the [checks before a launch](#before-a-launch). Stop the running instance with its own recipe first:
+From `~/sparkrun/recipes/glm53` on the head, after syncing this directory as in [Deploy](#deploy) and passing the [checks before a launch](#before-a-launch). Prepare the target below without starting it. Stop the running instance with its own recipe before the later launch block:
 
 ```sh
-glm="$PWD/mia-tensorfold-glm53-exl3-tp2/glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m.yaml"
-python3 mods/tensorfold-readiness/prepare.py --check
+glm="$PWD/mia-tensorfold-glm53-exl3-tp2/glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable-readiness-v2.yaml"
+python3 mods/tensorfold-readiness-v2/prepare.py --check
 python3 mods/mia-tensorfold-glm53-bf5f9452/prepare.py --check
 sparkrun run "$glm" --cluster sparks --no-auto-detect --no-sync-tuning --no-follow --dry-run
-sparkrun run "$glm" --cluster sparks --no-auto-detect --no-sync-tuning --no-follow
-sparkrun logs "$glm" --cluster sparks --all-sources
-# When stopping or replacing the workload:
-sparkrun stop "$glm" --cluster sparks
 ```
 
-`run --no-follow` returns after the readiness hook passes: four streams, the window, at least 1.2M pool tokens, the C4 shape warmup, the discovery fields, the four levels and their renders, a reply on every stream and a tool call.
+`run --no-follow` returns after the readiness hook passes: four streams, the window, at least 2,582,528 pool tokens, an active block spill tier, the C4 shape warmup, the discovery fields, the four levels and their renders, a reply on every stream and a tool call.
 
 After a boot, run the shared checks in [Validate](#validate) and three for GLM: the [cut-call probe](tests/mia_tensorfold_cut_calls.py), which cuts a real tool call at its output limit and needs `--model`, `--output` and the pinned `tokenizer.json` as `--tokenizer`. It imports `tokenizers`, which the head's Python lacks, so run it from the workstation with `--url http://10.32.21.31:8888/v1`; a `/v1/messages` tool turn; and a request with a chunked body. The repository has no script for the last two.
 
-To launch the durable profile, point `glm` at its recipe and stop the running instance with the recipe that started it. Both profiles share a native cache, so the switch recompiles nothing. The first switch loses every kept prompt, because a running engine without the tier has written nothing to disk. Each conversation prefills in full on its next turn.
+To launch the durable profile, point `glm` at its recipe and stop the running instance with the recipe that started it. All three GLM profiles share a native cache, so the switch recompiles nothing. The first switch loses every kept prompt, because a running engine without the tier has written nothing to disk. Each conversation prefills in full on its next turn.
 
-The launch fails unless the pool holds at least 2,582,528 tokens, so a smaller pool cannot pass unnoticed. After it passes, confirm the tier is on: `/health` must carry a `spill` block, because this recipe's readiness does not check it (the v2 candidate below does), and a second engine on the folder would turn the tier off.
+The original durable recipe also fails unless the pool holds at least 2,582,528 tokens, so a smaller pool cannot pass unnoticed. When rolling back to it, confirm the tier is on after readiness: `/health` must carry a `spill` block, because the original bundle does not check it, and a second engine on the folder would turn the tier off.
 
-`glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable-readiness-v2.yaml` is a candidate durable profile whose readiness also checks the spill tier. It differs from the durable recipe only in its readiness bundle, `mods/tensorfold-readiness-v2`, and the `--require-spill` flag; the engine, weights, allocator, spill settings and pool floor are the same. With the flag, readiness fails unless `/health` reports `spill.format: blocks` with positive integer `cap_bytes` and `block_tokens`, both before the smoke replies and again at the end. Other profiles can use the v2 gate without requiring spill. HTTP failures remain fatal and retain the engine's diagnostic body. To launch it, point `glm` at it and run `python3 mods/tensorfold-readiness-v2/prepare.py --check` instead of the original bundle's check. The original durable recipe and `mods/tensorfold-readiness` stay unchanged for rollback. Passing readiness shows the engine opened the tier. The [November 6 live exercise](#november-6-bounded-live-exercise) separately verified restoration: the v2 profile resumed a conversation from disk after a clean stop, loading 19,200 tokens.
+`glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable-readiness-v2.yaml` is the active durable profile; its readiness also checks the spill tier. It differs from the durable recipe only in its readiness bundle, `mods/tensorfold-readiness-v2`, and the `--require-spill` flag; the engine, weights, allocator, spill settings and pool floor are the same. With the flag, readiness fails unless `/health` reports `spill.format: blocks` with positive integer `cap_bytes` and `block_tokens`, both before the smoke replies and again at the end. Other profiles can use the v2 gate without requiring spill. HTTP failures remain fatal and retain the engine's diagnostic body. The preparation block above selects it and checks the v2 bundle. The original durable recipe and `mods/tensorfold-readiness` stay unchanged for rollback. Passing readiness shows the engine opened the tier. The [November 6 live exercise](#november-6-bounded-live-exercise) separately verified restoration: the v2 profile resumed a conversation from disk after a clean stop, loading 19,200 tokens.
 
-Once the durable profile is running, stop it cleanly so a restart keeps what it holds. `sparkrun stop` removes containers with `docker rm -f`, and `docker stop` signals the container's `sleep infinity` rather than the engine, so neither runs the flush. With no request running, signal rank 0 only. It tells rank 1 to flush, and rank 1 has no handler of its own, so a signal there kills it mid-write. SparkRun stops each container when its engine exits, so read the logs with `docker cp`:
+Once the durable profile is running, stop it cleanly so a restart keeps what it holds. `sparkrun stop` removes containers with `docker rm -f`, and `docker stop` signals the container's `sleep infinity` rather than the engine, so neither runs the flush. For a running durable GLM instance, use the exact recipe that launched it as `running_glm`, then signal rank 0 only after the idle checks pass. For another model, use its own stop procedure; if no inference stack is running, skip this stop block. It tells rank 1 to flush, and rank 1 has no handler of its own, so a signal there kills it mid-write. SparkRun stops each container when its engine exits, so read the logs with `docker cp`:
 
 ```sh
-head=$(docker ps --filter label=sparkrun.rank=0 --format '{{.ID}}')
-worker=$(ssh kelchm@10.32.21.32 "docker ps --filter label=sparkrun.rank=1 --format '{{.ID}}'")
+set -euo pipefail
+running_glm="<absolute path to the preserved recipe that launched the current instance>"
+test -f "$running_glm"
+python3 - <<'PY_IDLE'
+import json, re, urllib.request
+health = json.load(urllib.request.urlopen("http://127.0.0.1:8888/health", timeout=3))
+assert health.get("ok") is True and health.get("busy") is False
+assert health.get("requests_running") == 0
+assert not any(health.get("streams", {}).get(key, 0) for key in ("decoding", "prefilling", "filling", "paused"))
+metrics = urllib.request.urlopen("http://127.0.0.1:8888/metrics", timeout=3).read().decode()
+for name in ("tensorfold:requests_running", "tensorfold:requests_waiting"):
+    values = re.findall(r"^" + name + r"(?:\{[^}]*\})?\s+(\S+)$", metrics, re.M)
+    assert len(values) == 1 and float(values[0]) == 0, (name, values)
+PY_IDLE
+head=$(docker ps --filter label=sparkrun.runtime=tensorfold --filter label=sparkrun.rank=0 --format '{{.ID}}')
+worker=$(ssh kelchm@10.32.21.32 "docker ps --filter label=sparkrun.runtime=tensorfold --filter label=sparkrun.rank=1 --format '{{.ID}}'")
+[[ "$head" =~ ^[0-9a-f]{12,64}$ && "$worker" =~ ^[0-9a-f]{12,64}$ ]]
 docker exec "$head" pkill -TERM -f "tensorfold serve"
 for i in $(seq 90); do docker exec "$head" pgrep -f "tensorfold serve" >/dev/null 2>&1 || break; sleep 1; done
-docker cp "$head:/tmp/sparkrun_serve.log" - | tar -xO | grep 'spill' | tail -3
-ssh kelchm@10.32.21.32 "docker cp $worker:/tmp/sparkrun_serve.log - | tar -xO | grep 'spill rank 1' | tail -2"
-sparkrun stop "$glm" --cluster sparks
+if docker exec "$head" pgrep -f "tensorfold serve" >/dev/null 2>&1; then echo "Engine did not finish its flush"; exit 1; fi
+docker cp "$head:/tmp/sparkrun_serve.log" - | tar -xO | grep -F 'spill: shutdown flush done'
+ssh kelchm@10.32.21.32 "docker cp $worker:/tmp/sparkrun_serve.log -" | tar -xO | grep -F 'spill rank 1: wrote the '
+sparkrun stop "$running_glm" --cluster sparks
 ```
 
 Expect `spill: shutdown flush done` from rank 0 and `spill rank 1: wrote the <n> kept prompts` from rank 1. This procedure was verified on November 6 before the preserved 0.3.10 workload was removed and during the isolated 0.4.2 trial; both ranks emitted their expected flush markers. States written before a `kill -9` also survive, so a crash loses only the newest rows waiting for their write.
+
+After stopping the old instance, complete [Before a launch](#before-a-launch), including GPU idle state, memory and the 60-second stable-link gate. The launch block also rejects surviving inference containers or GPU processes on either host, so it cannot overlap an existing stack:
+
+```sh
+set -euo pipefail
+head_containers=$(docker ps --filter label=sparkrun.runtime --format '{{.ID}}')
+worker_containers=$(ssh kelchm@10.32.21.32 "docker ps --filter label=sparkrun.runtime --format '{{.ID}}'")
+head_processes=$(nvidia-smi --query-compute-apps=pid --format=csv,noheader)
+worker_processes=$(ssh kelchm@10.32.21.32 'nvidia-smi --query-compute-apps=pid --format=csv,noheader')
+test -z "$head_containers"
+test -z "$worker_containers"
+test -z "$head_processes"
+test -z "$worker_processes"
+sparkrun run "$glm" --cluster sparks --no-auto-detect --no-sync-tuning --no-follow
+sparkrun logs "$glm" --cluster sparks --all-sources
+```
 
 To roll back, stop it with its own recipe and launch the profile that served before, as [Operate and roll back](#operate-and-roll-back) describes.
 
@@ -600,7 +629,21 @@ export PATH="$HOME/.local/share/sparkrun-glm53-0310/bin:$PATH"
 sparkrun cluster create sparks --hosts 10.32.21.31,10.32.21.32 --user kelchm --cache-dir /opt/spark-cache/huggingface --transfer-mode auto --transfer-interface mgmt --scheduler greedy
 ```
 
+For a fresh controller, also apply the [TensorFold configuration below](#enable-tensorfold-in-sparkrun), including the explicit runtime-cache root and disabled automatic pruning, so switching models retains their compiled kernels.
+
 Keep this venv on PATH for the commands here; the head's older SparkRun 0.3.9 in `~/.local/bin` stays untouched. A login shell puts `~/.local/bin` first, so export the venv's path and check that `sparkrun --version` reports 0.3.10 before a stop or launch. Benchmarks need `uvx` on PATH.
+
+### November 6 hardening deployment
+
+PRs [#1291](https://github.com/kelchm/home-lab/pull/1291) and [#1294](https://github.com/kelchm/home-lab/pull/1294) merged as `23506e03` and `01ce3011`. The merged adapter and v2 durable profile were deployed from `01ce3011` and are now selected for normal operation. The controller is still `~/.local/share/sparkrun-glm53-0310/bin/sparkrun` (0.3.10); 0.4.2 remains an isolated candidate with the qualification blockers below. The login-shell `~/.local/bin/sparkrun` remains 0.3.9. Global configuration points to the maintained `~/sparkrun/recipes/glm53/plugins`, explicitly retains `~/.cache/sparkrun/runtime-cache` and disables automatic runtime-cache pruning.
+
+The v2 profile passed its actual launch hook in 144 seconds with the full 2,582,528-token pool and active block spill. Its ranks are `8b885f75c2ef` on spark-1 and `cbb308b1a689` on spark-2, on the unchanged config image `b925352f…`. Both installed readiness files match the reviewed `4d3b14cb…` digest. The controller's fresh job metadata records 0.3.10 and the v2 recipe. The image, complete container environment, entrypoint, cache mounts and executor settings matched the prior service; the preserved 0.3.9 and 0.3.10 package sets and every non-inference container ID were unchanged.
+
+Acceptance passed images/short arrival, all 20 agent cases, tool-eval 100, streamed/non-streamed cut-call probes, an Anthropic tool/result turn and a chunked request body. One bounded conversation resumed from disk with the correct key, one load, 19,200 loaded tokens and 19,200 cached input tokens, with exactly one request between its health receipts. Pi completed streamed replies and recorded 3,968 cache reads on replay; the Hermes guest completed a fixed-`spark`-alias HTTP tool/result turn. Rank-0 vmagent discovery and sparkDash followed the v2 profile. The Main/Hermes/loopback boundary and denied spark-2 probe passed before launch. The deployment sampler recorded no new kernel, link or memory failures during the launch and acceptance.
+
+An unintended stop occurred during preflight: `sparkrun stop --dry-run` on 0.3.10 removed both ranks because its CLI accepts the flag but does not forward it to `api.stop`. No active request was terminated: every healthy pre-stop sample had zero running requests and the request counter stayed at 89. The clean flush was bypassed, so this stop is not evidence of clean-stop persistence. The incident was retained, free GPUs and stable links were rechecked, and the staged profile was launched; the disk-restoration result above verifies the previously persisted conversation survived. Do not use 0.3.10 stop previews; planned stops still require the rank-0-only flush procedure.
+
+Private deployment receipts, the incident, telemetry and exact merged-file manifest are under `~/sparkrun/results/hardening-20261106T224925Z` on spark-1. The fresh working rollback tree, configuration, local metadata, package freezes and rank inspect records are under `~/sparkrun/rollback/hardening-20261106T224925Z`; the earlier qualification rollback remains intact. Restore only the preserved recipe/mod/adapter and configuration when needed; do not copy stale job metadata over a live workload. The earlier clean-stop/relaunch and rollback results below remain the qualification evidence; no additional inference restart was performed after deployment acceptance.
 
 ### Qualify SparkRun 0.4.2
 
@@ -673,11 +716,15 @@ features:
 plugins:
   paths:
     - /home/kelchm/sparkrun/recipes/glm53/plugins
+runtime_cache:
+  dir: /home/kelchm/.cache/sparkrun/runtime-cache
+  prune:
+    enabled: false
 ```
 
-The [adapter](plugins/tensorfold/__init__.py) takes two shapes: one node with TP1, which SparkRun runs on its solo path, or two TP2 ranks on its native launcher and rendezvous gate. Both use SparkRun's cache mounts, log sources and stop operation. Only pipeline, data, expert and context parallelism of 1 are implemented. Validation rejects unsupported pipeline and data values; [#1291](https://github.com/kelchm/home-lab/pull/1291) adds equivalent checks for expert and context parallelism. A one-node recipe sets `min_nodes` and `max_nodes` to 1, and with the saved `sparks` cluster's greedy scheduler it lands on the head, the cluster's first host. A launch must match the recipe's declared nodes, so a `--tp` override cannot move a recipe to the other shape. On the 0.3.10 operating baseline, `logs` with a recipe and `--cluster sparks` looks for a two-rank container even when the workload is solo, reports it gone and deletes the job's metadata; read a one-node workload's logs with `--hosts` and the head's address, or by the cluster ID `sparkrun status` prints. The November 6 live trial found that 0.4.2 still fails recipe-plus-`--cluster sparks` log reads for solo workloads: its resolved target hosts remain the two-host discovery scope, so it chooses ranked container names. The failed read preserves job metadata. Both the explicit-head workaround and a cluster-ID read pass, so retain the workaround on 0.4.2 too. Native TP2 recipe/cluster log reads pass. The adapter names no model or engine: a recipe that leaves out `defaults.entrypoint`, `served_model_name` or `context` fails validation. The engine gets `MODEL_PATH` (the immutable HF snapshot under `/cache/huggingface/hub`), `CONTEXT`, `SERVED_NAME`, `HOST`, `PORT` and, when set, `DRAFTER`, `MAX_TOKENS`, `EXTRA_ARGS`, `MTP_DRAFTS` and `NO_DRAFTS`. Each of two ranks also gets `RANK`, `MASTER` and `MASTER_PORT`, and rank 0 must listen on `MASTER_PORT`, which SparkRun waits on before it starts rank 1; a one-node launch gets none of them. When SparkRun reaches the head over a CX7 address, `FABRIC_MASTER` carries that address, for engines whose ranks link over the fabric rather than the rendezvous network. CUDA, Triton and Torch kernel caches go to SparkRun's persistent `/cache/runtime`; anything engine-specific is set by its own recipe and mod. No upstream two-host launcher or watchdog is installed.
+The [adapter](plugins/tensorfold/__init__.py) takes two shapes: one node with TP1, which SparkRun runs on its solo path, or two TP2 ranks on its native launcher and rendezvous gate. Both use SparkRun's cache mounts, log sources and stop operation. Only pipeline, data, expert and context parallelism of 1 are implemented. Validation rejects unsupported values in all four dimensions ([#1291](https://github.com/kelchm/home-lab/pull/1291)). A one-node recipe sets `min_nodes` and `max_nodes` to 1, and with the saved `sparks` cluster's greedy scheduler it lands on the head, the cluster's first host. A launch must match the recipe's declared nodes, so a `--tp` override cannot move a recipe to the other shape. On the 0.3.10 operating baseline, `logs` with a recipe and `--cluster sparks` looks for a two-rank container even when the workload is solo, reports it gone and deletes the job's metadata; read a one-node workload's logs with `--hosts` and the head's address, or by the cluster ID `sparkrun status` prints. The November 6 live trial found that 0.4.2 still fails recipe-plus-`--cluster sparks` log reads for solo workloads: its resolved target hosts remain the two-host discovery scope, so it chooses ranked container names. The failed read preserves job metadata. Both the explicit-head workaround and a cluster-ID read pass, so retain the workaround on 0.4.2 too. Native TP2 recipe/cluster log reads pass. The adapter names no model or engine: a recipe that leaves out `defaults.entrypoint`, `served_model_name` or `context` fails validation. The engine gets `MODEL_PATH` (the immutable HF snapshot under `/cache/huggingface/hub`), `CONTEXT`, `SERVED_NAME`, `HOST`, `PORT` and, when set, `DRAFTER`, `MAX_TOKENS`, `EXTRA_ARGS`, `MTP_DRAFTS` and `NO_DRAFTS`. Each of two ranks also gets `RANK`, `MASTER` and `MASTER_PORT`, and rank 0 must listen on `MASTER_PORT`, which SparkRun waits on before it starts rank 1; a one-node launch gets none of them. When SparkRun reaches the head over a CX7 address, `FABRIC_MASTER` carries that address, for engines whose ranks link over the fabric rather than the rendezvous network. CUDA, Triton and Torch kernel caches go to SparkRun's persistent `/cache/runtime`; anything engine-specific is set by its own recipe and mod. No upstream two-host launcher or watchdog is installed.
 
-The [`tensorfold-readiness-v2` mod](mods/tensorfold-readiness-v2/) adds the opt-in `--require-spill` check for an active block spill tier in `/health`; only the v2 durable candidate uses it.
+The [`tensorfold-readiness-v2` mod](mods/tensorfold-readiness-v2/) adds the opt-in `--require-spill` check for an active block spill tier in `/health`; the active v2 durable profile uses it.
 
 Each mod pins its image, weights and inputs in `upstream.lock.json`, and its `run.sh` starts with `prepare.py --check`, which refuses a changed, missing or linked file. The contract also sets a common layout, which every profile follows: the rank launcher at `/usr/local/bin/tensorfold-entrypoint`, static files under `/opt/tensorfold-mod/`, the engine's `oom_score_adj` at 1000, and no lab addresses, host names or paths in recipes or mods. The one exception is DeepSeek's recipe, which names its dedicated runtime-cache root under `/opt/spark-cache` until [#932](https://github.com/kelchm/home-lab/issues/932) settles the host layout.
 
@@ -691,9 +738,11 @@ From `~/sparkrun/recipes/glm53` on the head:
 recipe="$PWD/<family>/<profile>.yaml"  # The recipe that launched the running instance.
 sparkrun status --cluster sparks
 sparkrun logs "$recipe" --cluster sparks --all-sources
-# When stopping or replacing the workload:
+# When stopping or replacing the workload, flush durable profiles as above first:
 sparkrun stop "$recipe" --cluster sparks
 ```
+
+SparkRun 0.3.10's targeted `stop RECIPE --dry-run` is destructive: its CLI accepts the flag but does not forward it to `api.stop`, so it removes the workload. This was observed during the November 6 hardening deployment with both ranks idle. Use `status` and read-only container inspection to check the intended targets; perform the durable rank-0 flush before an actual stop. The isolated 0.4.2 stop previews in the qualification above were exercised separately.
 
 Without `--all-sources`, `logs` reads only rank 0. For a one-node profile, pass `--hosts` with the head's address instead of `--cluster sparks`, as [Enable TensorFold in SparkRun](#enable-tensorfold-in-sparkrun) explains. `run --no-follow` waits for readiness because every recipe has `post_exec`. A failed hook makes the command fail but does not stop the server; read the logs and stop the failed instance before rolling back. Containers need an explicit SparkRun launch after a host reboot.
 
