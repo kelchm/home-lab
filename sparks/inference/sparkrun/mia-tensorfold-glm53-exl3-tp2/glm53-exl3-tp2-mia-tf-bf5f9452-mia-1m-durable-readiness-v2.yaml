@@ -1,4 +1,4 @@
-# glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable: the bf5f9452 profile with PyTorch's expandable segments and the spill tier, for long multi-agent use; SparkRun owns both ranks and lifecycle operations.
+# glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable-readiness-v2: the bf5f9452 profile with PyTorch's expandable segments and the spill tier, for long multi-agent use; SparkRun owns both ranks and lifecycle operations.
 recipe_version: '2'
 model: Mia-AiLab/GLM-5.3-Flash-EXL3-4bpw-TensorFold
 model_revision: 078455ffe6472f9a52fbc1139f58b9db2881b25c
