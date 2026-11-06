@@ -68,6 +68,68 @@ def test_current_reviewed_sources_pass_and_cli_is_collectable_by_ci():
     assert "Verified dependency pins and agreement" in result.stdout
 
 
+def site_bundle(root):
+    path = manifest(root, "glm-native")
+    mod = path.parent
+    (mod / "patches").mkdir()
+    patch = mod / "patches/0200-site.patch"
+    patch.write_bytes(b"reviewed native site patch\n")
+    pin = hashlib.sha256(patch.read_bytes()).hexdigest()
+    lock = json.loads(path.read_text())
+    lock.update(site_patch_count=1, site_patches_sha256=pin)
+    lock["mod_files"]["patches/0200-site.patch"] = pin
+    lock["image"] += "-s" + pin[:12]
+    path.write_text(json.dumps(lock))
+    recipe = recipe_for(root, "glm-native")
+    data = yaml.safe_load(recipe.read_text())
+    data["metadata"].update(site_patch_count=1, site_patches_sha256=pin)
+    recipe.write_text(yaml.safe_dump(data, sort_keys=False))
+    return path, lock, patch, recipe
+
+
+def test_native_site_patch_identity_is_validated_across_lock_files_and_recipe(source):
+    site_bundle(source)
+    assert all(validator.validate_repository(source))
+
+
+@pytest.mark.parametrize("change,error", [
+    ("missing-count", "missing.*site_patch_count"),
+    ("missing-digest", "missing.*site_patches_sha256"),
+    ("count", "site_patch_count"),
+    ("digest", "site_patches_sha256.*disagrees"),
+    ("unfrozen", "patches/0200-site.patch.*disagrees"),
+    ("linked-directory", "site patches.*ordinary patch directory"),
+    ("tag", "tag must agree"),
+    ("recipe", "metadata.site_patches_sha256.*disagrees"),
+])
+def test_native_site_patch_identity_cannot_drift(source, change, error):
+    path, lock, patch, recipe = site_bundle(source)
+    if change == "missing-count":
+        del lock["site_patch_count"]
+    elif change == "missing-digest":
+        del lock["site_patches_sha256"]
+    elif change == "count":
+        lock["site_patch_count"] = 2
+    elif change == "digest":
+        lock["site_patches_sha256"] = "a" * 64
+    elif change == "unfrozen":
+        del lock["mod_files"][str(patch.relative_to(path.parent))]
+    elif change == "tag":
+        lock["image"] = lock["image"].rsplit("-s", 1)[0]
+    elif change == "linked-directory":
+        directory = path.parent / "patches"
+        destination = path.parent / "linked-patches"
+        directory.rename(destination)
+        directory.symlink_to(destination)
+    else:
+        data = yaml.safe_load(recipe.read_text())
+        data["metadata"]["site_patches_sha256"] = "a" * 64
+        recipe.write_text(yaml.safe_dump(data, sort_keys=False))
+    path.write_text(json.dumps(lock))
+    with pytest.raises(validator.InvalidManifest, match=error):
+        validator.validate_repository(source)
+
+
 # The audit's manifest-only edits still pass their frozen-file checker. Several
 # cross-file edits were already caught by profile tests; this shared layer adds
 # pin syntax/schema checks and applies agreement rules to every discovered owner.
