@@ -1,0 +1,7 @@
+# GitHub-hosted label missing from actionlint 1.7.12's built-in list:
+# https://github.com/actions/runner-images#available-images
+# This extends lint recognition only; jobs still run on GitHub-hosted runners.
+# Remove when the pinned actionlint includes https://github.com/rhysd/actionlint/pull/743.
+self-hosted-runner:
+  labels:
+    - ubuntu-26.04
