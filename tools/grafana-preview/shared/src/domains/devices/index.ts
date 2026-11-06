@@ -1,6 +1,6 @@
 import type { DomainCell, DomainContext, DomainDefinition, DomainSection } from '../contract';
 import { format } from '../data';
-import { hosts, queries, recovery, ref, timeService, timeServices, timeSources, type SyncState } from './model';
+import { hosts, PIS, queries, recovery, ref, timeService, timeServices, timeSources, type SyncState } from './model';
 
 const hostHref = (ctx: DomainContext, entity: string) => ctx.href({ focus: 'Devices', view: 'host', entity });
 const scrape = (state: string): DomainCell => ({ text: state, tone: state === 'Scrape failed' ? 'warning' : state === 'Unknown' ? 'unknown' : 'neutral' });
@@ -79,11 +79,14 @@ function timePage(ctx: DomainContext): DomainSection[] {
   ];
 }
 
+const hostRequired = ['inventory', 'hostUp', 'cpu', 'memory', 'piTemp', 'kvmUp', 'kvmCpu', 'kvmMem', 'kvmTemp'].map(ref);
+const timeRequired = ['ntpUp', 'chronyUp', 'ntpScrapeAge', 'stratum', 'referenceAge'].map(ref);
+
 export const domain: DomainDefinition = {
   id: 'dev', focus: 'Devices', title: 'Devices', accent: 'azure', queries,
   pages: [
     { id: 'overview', title: 'Supporting services', question: 'Are supporting Pis, time service and the recovery metrics endpoint observable?', required: ['inventory', 'hostUp', 'cpu', 'memory', 'piTemp', 'kvmUp', 'kvmCpu', 'kvmMem', 'kvmTemp'].map(ref), sections: overview },
-    { id: 'host', title: 'Device inventory & detail', question: 'Which host and resource observations explain this device?', required: ['inventory', 'hostUp', 'cpu', 'memory', 'piTemp', 'kvmUp', 'kvmCpu', 'kvmMem', 'kvmTemp'].map(ref), sections: hostPage },
-    { id: 'time', title: 'Time sources', question: 'Which NTP servers and upstream observations support synchronized tracking?', required: ['ntpUp', 'chronyUp', 'ntpScrapeAge', 'stratum', 'referenceAge'].map(ref), sections: timePage },
+    { id: 'host', title: 'Device inventory & detail', question: 'Which host and resource observations explain this device?', required: [...hostRequired, ...timeRequired], requiredFor: ({ entity }) => PIS.some((host) => host.id === entity && host.timeServer) ? [...hostRequired, ...timeRequired] : hostRequired, sections: hostPage },
+    { id: 'time', title: 'Time sources', question: 'Which NTP servers and upstream observations support synchronized tracking?', required: timeRequired, sections: timePage },
   ],
 };

@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { TimeRange } from '@grafana/data';
 import type { DomainContext } from '../contract';
+import { pageRequiredRefs } from '../contract';
 import type { FrameLike } from '../../model/semantics';
 import { domain } from './index';
 import { hosts, queries, recovery, ref, timeService, timeSources } from './model';
@@ -72,6 +73,21 @@ describe('Supporting devices evidence', () => {
     expect(timeService(context([frame('stratum', 2), frame('referenceAge', 1)]), host).state).toBe('Unknown');
     expect(timeService(context(tracking().filter((item) => item.refId !== ref('ntpScrapeAge'))), host).state).toBe('Unknown');
     expect(timeService(context([...tracking().filter((item) => item.refId !== ref('chronyUp')), frame('chronyUp', 0)]), host).state).toBe('Partial collection');
+  });
+  it('requires the tracking inputs on configured time-server detail pages only', () => {
+    const page = domain.pages.find((item) => item.id === 'host')!;
+    const ntpRefs = ['ntpUp', 'chronyUp', 'ntpScrapeAge', 'stratum', 'referenceAge'].map(ref);
+    for (const entity of ['ups-office', 'ups-compute-rack']) {
+      for (const mode of ['live', 'recorded'] as const) {
+        const scope = context([], { entity, mode });
+        expect(pageRequiredRefs(page, scope)).toEqual(expect.arrayContaining(ntpRefs));
+        const time = sections('host', scope).find((section) => section.id === 'host-time');
+        expect(time?.kind === 'metrics' && time.items.find((item) => item.label === 'Tracking state')?.value).toBe('Unknown');
+      }
+    }
+    for (const entity of [null, 'glkvm', 'adsb-office', 'streamer-basement-workbench']) {
+      expect(pageRequiredRefs(page, context([], { entity }))).not.toEqual(expect.arrayContaining(ntpRefs));
+    }
   });
   it('follows the repository NTP rules for stale scrape, unsync and holdover', () => {
     expect(timeService(context(tracking(0)), host).state).toBe('Unsynchronized');

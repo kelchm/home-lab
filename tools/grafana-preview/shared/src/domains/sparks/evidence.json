@@ -11,27 +11,27 @@
   ],
   "queries": {
     "D_spark_gpuUtil": {
-      "meaning": "Per-host window-end observation; disk is fullest filesystem fraction without mountpoint identity.",
+      "meaning": "Per-host window-end GPU utilization percent from nvidia-smi; maximum across observed GPUs.",
       "recorded": true,
       "capturedExpression": "100 * max by (instance) (nvidia_smi_utilization_gpu_ratio)"
     },
     "D_spark_gpuTemp": {
-      "meaning": "Per-host window-end observation; disk is fullest filesystem fraction without mountpoint identity.",
+      "meaning": "Per-host window-end GPU temperature in degrees Celsius; maximum across observed GPUs.",
       "recorded": true,
       "capturedExpression": "max by (instance) (nvidia_smi_temperature_gpu)"
     },
     "D_spark_gpuMargin": {
-      "meaning": "Per-host window-end observation; disk is fullest filesystem fraction without mountpoint identity.",
+      "meaning": "Per-host window-end reported GPU thermal margin in degrees Celsius from nvidia_smi_temperature_gpu_tlimit; maximum across observed GPUs.",
       "recorded": true,
       "capturedExpression": "max by (instance) (nvidia_smi_temperature_gpu_tlimit)"
     },
     "D_spark_gpuPower": {
-      "meaning": "Per-host window-end observation; disk is fullest filesystem fraction without mountpoint identity.",
+      "meaning": "Per-host window-end GPU power draw in watts; maximum across observed GPUs.",
       "recorded": true,
       "capturedExpression": "max by (instance) (nvidia_smi_power_draw_watts)"
     },
     "D_spark_memoryAvailable": {
-      "meaning": "Per-host window-end observation; disk is fullest filesystem fraction without mountpoint identity.",
+      "meaning": "Per-host window-end available host memory in bytes from node_memory_MemAvailable_bytes.",
       "recorded": true
     },
     "D_spark_diskUsed": {
@@ -39,34 +39,34 @@
       "recorded": true
     },
     "D_spark_gpuUtilHistory": {
-      "meaning": "Per-host history. Board is a trailing 6-minute maximum, clock a trailing 6-minute mean, RoCE a trailing 6-minute byte rate. Preserve capture units.",
+      "meaning": "Per-host history of GPU utilization percent from nvidia-smi; maximum across observed GPUs at each sample, with no trailing window in the captured expression.",
       "recorded": true,
       "capturedExpression": "100 * max by (instance) (nvidia_smi_utilization_gpu_ratio)"
     },
     "D_spark_gpuTempHistory": {
-      "meaning": "Per-host history. Board is a trailing 6-minute maximum, clock a trailing 6-minute mean, RoCE a trailing 6-minute byte rate. Preserve capture units.",
+      "meaning": "Per-host history of GPU temperature in degrees Celsius; maximum across observed GPUs at each sample, with no trailing window in the captured expression.",
       "recorded": true,
       "capturedExpression": "max by (instance) (nvidia_smi_temperature_gpu)"
     },
     "D_spark_gpuPowerHistory": {
-      "meaning": "Per-host history. Board is a trailing 6-minute maximum, clock a trailing 6-minute mean, RoCE a trailing 6-minute byte rate. Preserve capture units.",
+      "meaning": "Per-host history of GPU power draw in watts; maximum across observed GPUs at each sample, with no trailing window in the captured expression.",
       "recorded": true,
       "capturedExpression": "max by (instance) (nvidia_smi_power_draw_watts)"
     },
     "D_spark_memoryHistory": {
-      "meaning": "Per-host history. Board is a trailing 6-minute maximum, clock a trailing 6-minute mean, RoCE a trailing 6-minute byte rate. Preserve capture units.",
+      "meaning": "Per-host history of available host memory in bytes from node_memory_MemAvailable_bytes, with no trailing window in the captured expression.",
       "recorded": true
     },
     "D_spark_boardHistory": {
-      "meaning": "Per-host history. Board is a trailing 6-minute maximum, clock a trailing 6-minute mean, RoCE a trailing 6-minute byte rate. Preserve capture units.",
+      "meaning": "Per-host history of the highest board thermal-zone temperature in degrees Celsius over each trailing 6-minute window.",
       "recorded": true
     },
     "D_spark_roceTraffic": {
-      "meaning": "Per-host history. Board is a trailing 6-minute maximum, clock a trailing 6-minute mean, RoCE a trailing 6-minute byte rate. Preserve capture units.",
+      "meaning": "Per-host history of transmitted RoCE bytes per second over each trailing 6-minute window, summed across matching .*s0f0 devices.",
       "recorded": true
     },
     "D_spark_clockHistory": {
-      "meaning": "Per-host history. Board is a trailing 6-minute maximum, clock a trailing 6-minute mean, RoCE a trailing 6-minute byte rate. Preserve capture units.",
+      "meaning": "Per-host history of the maximum reported GPU SM clock in hertz after a trailing 6-minute mean per observed GPU. Preserve captured units.",
       "recorded": true
     },
     "D_spark_hostUp": {
@@ -112,12 +112,12 @@
       "recorded": true
     },
     "D_spark_runningTotal": {
-      "meaning": "Captured zero-filled aggregates: accept zero only with direct-family corroboration. Maximum request-window percent is NOT context-pool occupancy or unified memory.",
+      "meaning": "Captured aggregate running request count, without deployment identity. Its unconditional zero fallback requires corroboration from the unfilled running-count history before accepting a recorded zero.",
       "recorded": true,
       "capturedExpression": "(sum(tensorfold:requests_running)) or vector(0)"
     },
     "D_spark_waitingTotal": {
-      "meaning": "Captured zero-filled aggregates: accept zero only with direct-family corroboration. Maximum request-window percent is NOT context-pool occupancy or unified memory.",
+      "meaning": "Captured aggregate waiting request count, without deployment identity. Its unconditional zero fallback requires corroboration from the unfilled waiting-count history before accepting a recorded zero; this is not queue-wait duration.",
       "recorded": true,
       "capturedExpression": "(sum(tensorfold:requests_waiting)) or vector(0)"
     },

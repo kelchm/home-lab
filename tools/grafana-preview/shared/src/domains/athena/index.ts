@@ -10,7 +10,10 @@ const route = (ctx: DomainContext, view: string, entity: string | null = null) =
 const driveLink = (ctx: DomainContext, drive: string) => route(ctx, 'drive', drive);
 const incidentLink = (ctx: DomainContext) => route(ctx, 'incident', PROBE);
 const stamp = (ctx: DomainContext, at: number) => new Intl.DateTimeFormat('en-US', { timeZone: ctx.timeZone, month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(at);
-const duration = (ms: number) => `${Math.floor(ms / 3600000)}h ${Math.round((ms % 3600000) / 60000)}m`;
+const duration = (ms: number) => {
+  const minutes = Math.round(ms / 60000);
+  return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+};
 const chart = (id: string, title: string, keys: string[], unit: string, description: string, entityLabels?: string[]): Extract<DomainSection, { kind: 'chart' }> => ({
   kind: 'chart', id, title, refs: keys.map(ref), unit, description, height: 225, ...(entityLabels ? { entityLabels } : {}),
 });

@@ -52,8 +52,9 @@ export interface Drive {
   uncorrectable: number | null;
 }
 const driveKeys = ['diskInfo', 'diskHealth', 'diskStatus', 'diskTemp', 'diskReallocated', 'diskPending', 'diskUncorrectable'];
+const observedInWindow = (ctx: Context, series: Series) => series.points.some(([at, value]) => at >= ctx.timeRange.from.valueOf() && at <= ctx.timeRange.to.valueOf() && value != null);
 export function drives(ctx: Context): Drive[] {
-  const ids = [...new Set(driveKeys.flatMap((key) => records(ctx.series, ref(key)).map((s) => s.labels.disk).filter(Boolean)))];
+  const ids = [...new Set(driveKeys.flatMap((key) => records(ctx.series, ref(key)).filter((s) => observedInWindow(ctx, s)).map((s) => s.labels.disk).filter(Boolean)))];
   return ids.sort((a, b) => a.localeCompare(b, 'en', { numeric: true })).map((id) => {
     const labels = { disk: id };
     const info = records(ctx.series, ref('diskInfo')).filter((s) => s.labels.disk === id && atEnd(s, ctx) != null);
@@ -68,8 +69,8 @@ export function drives(ctx: Context): Drive[] {
 
 export interface Volume { id: string; usedPercent: number | null; total: number | null; free: number | null }
 export function volumes(ctx: Context): Volume[] {
-  const ids = [...new Set(['volumes', 'volumeTotal', 'volumeFree'].flatMap((key) => records(ctx.series, ref(key)).map((s) => s.labels.raidName).filter(Boolean)))];
-  return ids.sort().map((id) => {
+  const ids = [...new Set(['volumes', 'volumeTotal', 'volumeFree'].flatMap((key) => records(ctx.series, ref(key)).filter((s) => observedInWindow(ctx, s)).map((s) => s.labels.raidName).filter(Boolean)))];
+  return ids.sort((a, b) => a.localeCompare(b, 'en', { numeric: true })).map((id) => {
     const total = signal(ctx, 'volumeTotal', { raidName: id });
     const free = signal(ctx, 'volumeFree', { raidName: id });
     const percent = signal(ctx, 'volumes', { raidName: id });
@@ -91,8 +92,11 @@ export function points(ctx: Context, key: string, labels: Record<string, string>
 export function continuous(series: Series | undefined, from: number, to: number, accepts: (value: number) => boolean): boolean {
   if (!series?.step || to <= from) return false;
   const step = series.step;
-  const found = series.points.filter(([t]) => t >= from - step && t <= to + step);
-  return found.length > 1 && found[0][0] <= from && found.at(-1)![0] >= to
+  const found = series.points.filter(([t]) => t >= from && t <= to).sort((a, b) => a[0] - b[0]);
+  const start = series.points.filter(([t]) => t >= from - step && t <= from).sort((a, b) => a[0] - b[0]).at(-1);
+  const end = series.points.filter(([t]) => t >= to && t <= to + step).sort((a, b) => a[0] - b[0])[0];
+  return found.length > 0 && start != null && end != null
+    && found[0][0] - start[0] <= step * 1.5 && end[0] - found.at(-1)![0] <= step * 1.5
     && found.every(([t, v], i) => v != null && accepts(v) && (!i || t - found[i - 1][0] <= step * 1.5));
 }
 

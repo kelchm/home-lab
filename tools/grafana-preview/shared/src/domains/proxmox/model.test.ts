@@ -91,7 +91,9 @@ describe('Proxmox backup evidence boundaries', () => {
   it('never infers inclusion from absent per-guest telemetry or recorded zero totals', () => {
     expect(guests(ctx([guestInfo()]))[0].membership).toBe('unknown');
     expect(guests(ctx([guestInfo(), frame('backupInventory', [0])], { mode: 'recorded' }))[0].membership).toBe('unknown');
-    expect(queries.some((query) => query.capture?.key === 'pve.notBackedUp')).toBe(false);
+    const inventory = queries.find((query) => query.key === 'backupInventory');
+    expect(inventory).toBeDefined();
+    expect(inventory?.capture).toBeUndefined();
   });
   it('requires live capability corroboration or explicit guest evidence for membership', () => {
     expect(guests(ctx([guestInfo(), frame('backupInventory', [0])]))[0].membership).toBe('included');

@@ -195,6 +195,15 @@ export function fluxResources(ctx: DomainContext) {
   }).sort((a, b) => a.namespace.localeCompare(b.namespace) || a.name.localeCompare(b.name));
 }
 
+/** Historical zero fallbacks need evidence that the Flux family was actually observed. */
+export function fluxCounts(ctx: DomainContext) {
+  const values = { ready: at(ctx, 'fluxReady'), failing: at(ctx, 'fluxFailing'), suspended: at(ctx, 'fluxSuspended') };
+  const sourceObserved = Object.values(values).some((value) => count(value) && value > 0)
+    || list(ctx, 'fluxInventory').some((row) => observed(ctx, row) === 1);
+  const supported = (value: number | null) => count(value) && (value > 0 || sourceObserved) ? value : null;
+  return { ready: supported(values.ready), failing: supported(values.failing), suspended: supported(values.suspended) };
+}
+
 export interface Attention {
   key: string; resource: string; finding: string; next: string; state: 'warning' | 'unknown' | 'neutral';
 }

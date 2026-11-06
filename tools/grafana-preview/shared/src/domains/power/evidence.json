@@ -3,5 +3,6 @@
   "capture": "fixtures/bounded.json ups.*. Instant readings and range histories are separate refs. Load and runtime have captured histories; charge and input voltage histories are live-only.",
   "status": "The captured onBattery expression reports OB or zero while a status family is present. In particular, the Synology branch zeroes other status strings. A zero is only OB not asserted; it does not establish OL, successful transfer, or battery health. Explicit OL and collector queries have no capture.",
   "units": "Runtime expression divides seconds by 60. Load is reported percent, including possible overload values above 100; it is not watts. Runtime estimates are not additive across UPS units.",
-  "missing": "No battery condition, transfer test, shutdown coordination, protection topology or recovery acceptance observations were captured. No alert or runtime threshold is introduced."
+  "missing": "No battery condition, transfer test, shutdown coordination, protection topology or recovery acceptance observations were captured. No alert or runtime threshold is introduced.",
+  "freshness": "The reader bounds query evaluation timestamps within the selected window, allowing a one-minute floor or 1.5 times the observed result cadence. Instant values follow datasource lookback semantics. No independent per-measurement source timestamps were captured or queried, so this is not proof of source sample freshness."
 }

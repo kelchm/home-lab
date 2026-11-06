@@ -1,11 +1,17 @@
-import { useMemo, type ReactNode } from 'react';
+import { useLayoutEffect, useMemo, type ReactNode } from 'react';
 import type { PanelData, TimeRange } from '@grafana/data';
-import { coverage, rangeKey, useResolvedData, type Coverage } from '../lifecycle';
+import { coverage, rangeKey, useResolvedData, type Coverage, type Resolved } from '../lifecycle';
 import type { FrameLike } from '../model/semantics';
 import { pageRequiredRefs, type DomainCell, type DomainContext, type DomainDefinition, type DomainPage, type DomainSection } from './contract';
 import { useDomainStyles } from './styles';
 
 export type ChartSection = Extract<DomainSection, { kind: 'chart' }>;
+
+export interface DomainEvidence {
+  context: DomainContext;
+  data: PanelData;
+  resolved: Resolved;
+}
 
 export interface DomainChartProps {
   section: ChartSection;
@@ -21,6 +27,7 @@ export interface DomainViewProps extends Omit<DomainContext, 'series' | 'coverag
   /** The Scenes host supplies real Grafana timeseries panels; this renderer does not simulate a chart. */
   renderChart: (props: DomainChartProps) => ReactNode;
   inspectHref?: string;
+  onEvidence?: (evidence: DomainEvidence) => void;
 }
 
 const stamp = (at: number, zone: string) => new Intl.DateTimeFormat('en-US', { timeZone: zone, dateStyle: 'medium', timeStyle: 'medium' }).format(at);
@@ -58,7 +65,7 @@ export function DomainView(props: DomainViewProps) {
   return <ResolvedDomainView key={`${props.domain.id}:${props.page.id}:${props.entity ?? ''}`} {...props} />;
 }
 
-function ResolvedDomainView({ domain, page, data, timeRange, mode, timeZone, entity, href, deeper, renderChart, inspectHref }: DomainViewProps) {
+function ResolvedDomainView({ domain, page, data, timeRange, mode, timeZone, entity, href, deeper, renderChart, inspectHref, onEvidence }: DomainViewProps) {
   useDomainStyles();
   const expected = useMemo(() => domain.queries.map((query) => query.refId), [domain]);
   const resolved = useResolvedData(data, expected, `${mode}:${domain.id}`, rangeKey(timeRange));
@@ -72,6 +79,9 @@ function ResolvedDomainView({ domain, page, data, timeRange, mode, timeZone, ent
   }), [resolved, required, timeRange, mode, timeZone, entity, own, href, deeper]);
   const sections = useMemo(() => page.sections(ctx), [page, ctx]);
   const chartPanelData = useMemo(() => ({ ...data, timeRange, series: resolved.series }), [data, timeRange, resolved.series]);
+  useLayoutEffect(() => {
+    onEvidence?.({ context: ctx, data: chartPanelData, resolved });
+  }, [onEvidence, ctx, chartPanelData, resolved]);
   const message = coverageMessage(own, timeZone);
   const retained = own.retained > 0;
   return (

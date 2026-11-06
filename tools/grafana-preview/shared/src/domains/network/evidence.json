@@ -12,5 +12,5 @@
     "kubernetes/apps/observability/unpoller/app/dashboards/stock-unifi-clients.json",
     "kubernetes/apps/observability/unifi-flows/app/dashboards/unifi-flows.json"
   ],
-  "liveAdaptation": "Native stock queries are scoped to job=unifi-api and use a fixed 6-minute rate window to match captured gateway rates. The detail renderer filters name/wan/port labels; queries preserve port_id, port_num, port_name and radio labels. Raw radio utilization uses the same metric family as the captured instant radioBusy query. No production queries were issued."
+  "liveAdaptation": "The preview rate expressions adapted in queries.json use job=unifi-api and a fixed 6-minute window to match captured gateway rates. The native stock dashboards retain their original selectors and $__interval windows. The detail renderer filters name/wan/port labels; preview queries preserve port_id, port_num, port_name and radio labels. Raw radio utilization uses the same metric family as the captured instant radioBusy query. No production queries were issued."
 }

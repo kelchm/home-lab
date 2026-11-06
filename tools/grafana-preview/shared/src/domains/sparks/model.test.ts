@@ -77,7 +77,7 @@ describe('Sparks semantic failure scenarios', () => {
     expect(deployment.poolFraction.value).toBe(0.75);
     expect(deployment.latency).toEqual({ value: null, state: 'no-observations' });
     expect(deployment.decodeSpeed.value).toBeNull();
-    expect(metricValues(page('deployment', { ...data, entity: deployment.key }))).not.toContain('Ready');
+    expect(metricValues(page('deployment', { ...data, entity: deployment.key }))).toContain('No observations at window end');
   });
 
   it('a failing GPU exporter masks old GPU values while keeping host memory and board evidence', () => {

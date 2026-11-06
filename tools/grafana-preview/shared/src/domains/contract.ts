@@ -2,6 +2,7 @@ import type { TimeRange } from '@grafana/data';
 import type { Coverage } from '../lifecycle';
 import type { FrameLike } from '../model/semantics';
 import type { Accent, SystemId } from '../model/systems';
+import type { Focus } from '../types';
 
 /** Query definitions contain expressions and capture locators, never recorded samples. */
 export interface DomainQuery {
@@ -74,7 +75,7 @@ export function pageRequiredRefs(page: DomainPage, scope: DomainScope): readonly
 
 export interface DomainDefinition {
   id: Exclude<SystemId, 'overview'>;
-  focus: string;
+  focus: Focus;
   title: string;
   accent: Accent;
   queries: DomainQuery[];

@@ -38,12 +38,20 @@ describe('Power operating evidence', () => {
   it('full charge never fills a missing runtime or establishes mains', () => {
     const unit = units(context([frame('charge', 100)]))[0];
     expect(unit.charge).toBe(100); expect(unit.runtime).toBeNull(); expect(unit.inputState).toBe('unknown');
-    expect(JSON.stringify(sections('unit', context([frame('charge', 100)], { entity: 'compute-rack' })))).toContain('Unknown');
+    const metrics = sections('unit', context([frame('charge', 100)], { entity: 'compute-rack' })).find((section) => section.id === 'unit-observations');
+    expect(metrics?.kind === 'metrics' && metrics.items.find((item) => item.label === 'Estimated runtime')?.value).toBe('Unknown');
   });
   it('does not call a zero OB flag confirmation of mains', () => {
     expect(inputState(0, null)).toBe('not-asserted'); expect(inputState(0, 1)).toBe('mains');
     expect(inputState(1, 0)).toBe('battery'); expect(inputState(1, 1)).toBe('conflicting');
     expect(inputState(null, 1)).toBe('unknown'); expect(inputState(2, null)).toBe('unknown');
+  });
+  it('describes unasserted battery operation truthfully for absent and explicitly zero online flags', () => {
+    for (const mode of ['live', 'recorded'] as const) for (const online of [[], [frame('online', 0)]]) {
+      const page = sections('unit', context([frame('onBattery', 0), ...online], { mode, entity: 'compute-rack' }));
+      const metrics = page.find((section) => section.id === 'unit-observations');
+      expect(metrics?.kind === 'metrics' && metrics.items.find((item) => item.label === 'Input state')).toMatchObject({ value: 'OB flag not asserted', detail: 'This is not confirmation of mains.' });
+    }
   });
   it('preserves directly measured zero load and zero runtime without inferring health', () => {
     const unit = units(context([frame('load', 0), frame('runtimeMin', 0), frame('onBattery', 1)]))[0];

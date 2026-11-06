@@ -5,14 +5,14 @@ import { queries, ref, units, type InputState, type Unit } from './model';
 const status = (state: InputState): DomainCell => ({
   text: { battery: 'On battery', mains: 'Mains reported', 'not-asserted': 'OB flag not asserted', conflicting: 'Conflicting flags', unknown: 'Unknown' }[state],
   tone: state === 'battery' || state === 'conflicting' ? 'warning' : state === 'unknown' ? 'unknown' : 'neutral',
-  detail: state === 'not-asserted' ? 'Online flag not captured; this is not confirmation of mains.' : undefined,
+  detail: state === 'not-asserted' ? 'This is not confirmation of mains.' : undefined,
 });
 const detailHref = (ctx: DomainContext, unit: string) => ctx.href({ focus: 'Power', view: 'unit', entity: unit });
 
 function inventory(ctx: DomainContext): DomainSection {
   return {
     kind: 'table', id: 'ups-inventory', title: 'Three independent UPS units',
-    description: 'Window-end measurements. Runtime is the UPS estimate at its reported load; these units are not a combined runtime pool.',
+    description: 'Window-end query results follow the datasource lookback; source sample age is not established. Runtime is the UPS estimate at its reported load; these units are not a combined runtime pool.',
     columns: ['UPS / detail', 'Input status', 'Load', 'Estimated runtime', 'Charge', 'Input voltage'],
     rows: units(ctx).map((unit) => ({ id: unit.id, cells: [
       { text: unit.name, href: detailHref(ctx, unit.id), detail: unit.source }, status(unit.inputState),
@@ -37,7 +37,7 @@ function charts(ctx: DomainContext, selected = false): DomainSection[] {
 }
 
 function limits(): DomainSection {
-  return { kind: 'text', id: 'power-evidence', title: 'What establishes operating margin?', text: 'Read runtime alongside load and the input-state flags. A full battery is not a resilience test. Battery condition, successful transfer, connected equipment, shutdown coordination and recovery after an outage are not established by these measurements. Missing runtime remains unknown even when charge is 100%.' };
+  return { kind: 'text', id: 'power-evidence', title: 'What establishes operating margin?', text: 'Read runtime alongside load and the input-state flags. Instant query timestamps describe evaluation time; values follow the datasource lookback, and their source sample age is not established here. A full battery is not a resilience test. Battery condition, successful transfer, connected equipment, shutdown coordination and recovery after an outage are not established by these measurements. Missing runtime remains unknown even when charge is 100%.' };
 }
 
 function tools(ctx: DomainContext, unit?: Unit): DomainSection {

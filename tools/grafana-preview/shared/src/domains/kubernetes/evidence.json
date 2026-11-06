@@ -40,6 +40,19 @@
     "dbBackends": "sum by (pod) (cnpg_backends_total)",
     "certLeft": "min by (name) (certmanager_certificate_expiration_timestamp_seconds{cluster=\"k8s-prod\"} - time())",
     "certLife": "100 * min by (name) ((certmanager_certificate_expiration_timestamp_seconds{cluster=\"k8s-prod\"} - time()) / (certmanager_certificate_not_after_timestamp_seconds{cluster=\"k8s-prod\"} - certmanager_certificate_not_before_timestamp_seconds{cluster=\"k8s-prod\"}))",
-    "backupRecent": "sum((time() - ((longhorn_volume_last_backup_at{cluster=\"k8s-prod\",pvc_namespace=~\".*\",pvc=~\".*\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}) > 0)) <= bool 108000) or (0 * count((longhorn_volume_last_backup_at{cluster=\"k8s-prod\",pvc_namespace=~\".*\",pvc=~\".*\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}))) or ((count((longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\".*\",pvc=~\".*\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"})) or (0 * count(longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\".*\",pvc=~\".*\"}))) == 0)"
+    "backupRecent": "sum((time() - ((longhorn_volume_last_backup_at{cluster=\"k8s-prod\",pvc_namespace=~\".*\",pvc=~\".*\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}) > 0)) <= bool 108000) or (0 * count((longhorn_volume_last_backup_at{cluster=\"k8s-prod\",pvc_namespace=~\".*\",pvc=~\".*\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}))) or ((count((longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\".*\",pvc=~\".*\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"})) or (0 * count(longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\".*\",pvc=~\".*\"}))) == 0)",
+    "fluxFailing": "(count(flux_resource_info{ready!=\"True\",suspended!=\"True\",cluster=\"k8s-prod\"})) or vector(0)",
+    "fluxSuspended": "(count(flux_resource_info{suspended=\"True\",cluster=\"k8s-prod\"})) or vector(0)",
+    "volHealthy": "(sum(longhorn_volume_robustness{state=\"healthy\",cluster=\"k8s-prod\"})) or vector(0)",
+    "volDegraded": "(sum(longhorn_volume_robustness{state=\"degraded\",cluster=\"k8s-prod\"})) or vector(0)",
+    "volFaulted": "(sum(longhorn_volume_robustness{state=\"faulted\",cluster=\"k8s-prod\"})) or vector(0)"
+  },
+  "backupScope": {
+    "meaning": "All observed Longhorn volumes minus explicit no-backup PVC exemptions, matching the existing Longhorn Operations all-selector and backup alerts. Empty or absent PVC labels do not remove a raw or unbound volume from this expected set. The preview does not establish physical inventory completeness or restorability.",
+    "sources": [
+      "kubernetes/apps/observability/grafana/app/longhorn-dashboard.json",
+      "kubernetes/apps/longhorn-system/longhorn/app/alerts.yaml",
+      "docs/runbooks/longhorn-backup-restore.md"
+    ]
   }
 }

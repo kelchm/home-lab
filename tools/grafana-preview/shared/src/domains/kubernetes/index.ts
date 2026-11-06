@@ -1,7 +1,7 @@
 import type { DomainCell, DomainContext, DomainDefinition, DomainRow, DomainSection } from '../contract';
 import { format } from '../data';
 import {
-  at, attention, certificates, controllerGroups, controllers, databases, fluxResources, ksmObserved,
+  at, attention, certificates, controllerGroups, controllers, databases, fluxCounts, fluxResources, ksmObserved,
   longhornObserved, longhornSummary, namespaces, queries, ref, resourceIdentity, services, volumes,
   type Backup,
 } from './model';
@@ -46,7 +46,7 @@ function controllerTable(ctx: DomainContext, rows = controllers(ctx)): DomainSec
 function namespaceTable(ctx: DomainContext, rows = namespaces(ctx)): DomainSection {
   return table('k8s-namespaces', 'Namespaces and workload context', ['Namespace', 'Running pods', 'CPU · 5m', 'Working memory', 'Restarts · 24h', 'Controllers needing inspection'], rows.map((row) => ({ id: row.key, cells: [
     linked(ctx, row.name, row.key), n(row.running), f(row.cpu, ' cores', 2), f(scaled(row.memory, 1024 ** 3), ' GiB', 2), n(row.restarts),
-    row.controllers.length ? `${row.controllers.filter((item) => item.state === 'below-desired').length} below desired · ${row.controllers.filter((item) => item.state === 'unknown').length} unknown` : status('Controller inventory unavailable', 'unknown'),
+    row.controllers.length ? `${row.controllers.filter((item) => item.state === 'below-desired').length} below desired · ${row.controllers.filter((item) => item.state === 'unknown').length} unknown` : status(ksmObserved(ctx) ? 'No named controller observations' : 'Controller inventory unavailable', 'unknown', 'No Deployment, StatefulSet or DaemonSet observations for this namespace; this does not establish that none are configured.'),
   ] })), 'No namespace observations. Missing namespaces are not empty namespaces.', 'CPU and working memory are measurements, not requests. A missing restart series stays unknown; running pod count is not a readiness assertion.');
 }
 
@@ -124,6 +124,7 @@ function overview(ctx: DomainContext): DomainSection[] {
 }
 
 function workloads(ctx: DomainContext): DomainSection[] {
+  const flux = fluxCounts(ctx);
   return [
     namespaceTable(ctx), serviceTable(ctx),
     ...(ctx.mode === 'live' ? [
@@ -137,7 +138,7 @@ function workloads(ctx: DomainContext): DomainSection[] {
       chart('k8s-capacity-commitment', 'Requested capacity', ['cpuCommitHistory', 'memoryCommitHistory'], 'percent', 'CPU and memory requests / allocatable capacity; no new saturation threshold is applied.'),
     ] : [{ kind: 'text' as const, id: 'k8s-workload-history-gap', title: 'History coverage', tone: 'unknown' as const, text: 'Per-route traffic and errors, namespace CPU and capacity-request histories were not captured. The window-end tables remain independent observations; these native histories are available with the live source when the underlying metric families are present.' }]),
     fluxTable(ctx),
-    { kind: 'text', id: 'k8s-flux-counts', title: 'Flux aggregate capture', text: `${n(at(ctx, 'fluxReady'))} resources reported ready; ${n(at(ctx, 'fluxFailing'))} reported failing; ${n(at(ctx, 'fluxSuspended'))} reported suspended. The older failure query contains an unconditional zero fallback. Without named inventory, these counts cannot establish complete reconciliation.` },
+    { kind: 'text', id: 'k8s-flux-counts', title: 'Flux aggregate observations', text: `${n(flux.ready)} resources reported ready; ${n(flux.failing)} reported failing; ${n(flux.suspended)} reported suspended. A zero requires corroborating Flux-family observations because the recording used unconditional zero fallbacks. Without named inventory, these counts cannot establish complete reconciliation.` },
     certificateTable(ctx),
     { kind: 'links', id: 'k8s-workload-tools', title: 'Native investigation', items: [
       { label: 'Kubernetes / Views / Global', href: ctx.deeper('k8s_views_global') },

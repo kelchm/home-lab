@@ -115,17 +115,61 @@ describe('DSM incident semantics', () => {
     expect(continuous({ labels: {}, step: 60000, points: [[0, 1], [120000, 1]] }, 0, 120000, (n) => n === 1)).toBe(false);
     expect(continuous(undefined, 0, 120000, (n) => n === 1)).toBe(false);
   });
+  it('does not extend collector acceptance checks outside a fully covered incident', () => {
+    for (const outside of [0, null]) {
+      const points: Array<[number, number | null]> = [[-60000, outside], [0, 1], [60000, 1], [120000, 1], [180000, outside]];
+      expect(continuous({ labels: {}, step: 60000, points }, 0, 120000, (n) => n === 1)).toBe(true);
+    }
+    expect(continuous({ labels: {}, step: 60000, points: [[60000, 1], [120000, 1]] }, 0, 120000, (n) => n === 1)).toBe(false);
+    expect(continuous({ labels: {}, step: 60000, points: [[0, 1], [60000, 1]] }, 0, 120000, (n) => n === 1)).toBe(false);
+    expect(continuous({ labels: {}, step: 60000, points: [[-60000, 1], [60000, 1], [180000, 1]] }, 0, 120000, (n) => n === 1)).toBe(false);
+  });
+  it.each([[59.9, '1h 0m'], [119.9, '2h 0m'], [120.4, '2h 0m'], [120.6, '2h 1m']])('rounds a %s-minute episode before splitting hours and minutes', (minutes, expected) => {
+    const span = Number(minutes) * 60000;
+    const step = span / 120;
+    const start = TO - span;
+    const times = Array.from({ length: 122 }, (_, i) => start + (i - 1) * step);
+    const values = times.map((_, i) => i === 0 || i === 121 ? 1 : 0);
+    const ctx = context([frame('assertionHistory', values, { probe: PROBE }, times, step)], {}, times[0], TO);
+    const table = tables(page('incident', { ...ctx, entity: PROBE })).find((section) => section.id === 'dsm-incidents')!;
+    expect(table.rows[0].cells[2]).toBe(expected);
+  });
   it('keeps an ambiguous duplicate probe history unknown', () => {
     expect(incidents(context([frame('assertionHistory', [1, 0, 1], { probe: PROBE }), frame('assertionHistory', [1, 1, 1], { probe: PROBE })]))).toEqual([]);
   });
 });
 
 describe('Storage and per-bay evidence', () => {
+  it('does not import later captured identities into an earlier replay window', () => {
+    const ctx = context(captured, {}, FROM, TO - 60000);
+    expect(drives(ctx)).toEqual([]);
+    expect(volumes(ctx)).toEqual([]);
+    expect(page('drive', { ...ctx, entity: 'Disk 1' })[0].id).toBe('drive-unavailable');
+  });
+  it('requires a non-null identity observation inside the selected window, retaining observed zeros', () => {
+    const ctx = context([
+      frame('diskHealth', [0], { disk: 'Disk 1' }),
+      frame('diskInfo', [1], { disk: 'Past disk' }, [FROM - 1]),
+      frame('diskTemp', [30], { disk: 'Future disk' }, [TO + 1]),
+      frame('diskPending', [null], { disk: 'Null disk' }),
+      frame('volumes', [0], { raidName: 'Volume 1' }),
+      frame('volumeTotal', [100], { raidName: 'Past volume' }, [FROM - 1]),
+      frame('volumeFree', [100], { raidName: 'Future volume' }, [TO + 1]),
+      frame('volumes', [null], { raidName: 'Null volume' }),
+    ]);
+    expect(drives(ctx).map((drive) => drive.id)).toEqual(['Disk 1']);
+    expect(drives(ctx)[0].health.text).toBe('Reported failure');
+    expect(volumes(ctx)).toEqual([{ id: 'Volume 1', usedPercent: 0, total: null, free: null }]);
+  });
   it('joins eight captured bays by identity, retaining real zero counters', () => {
     const rows = drives(context(captured)); expect(rows).toHaveLength(8);
     expect(rows[0]).toMatchObject({ id: 'Disk 1', model: 'ST14000NM001G-2KJ103', temperature: 36, reallocated: 0, pending: 0, uncorrectable: 0, capacity: null });
     expect(rows.every((drive) => drive.health.text === 'Reported healthy')).toBe(true);
     expect(volumes(context(captured))[0]).toMatchObject({ id: 'Volume 1', usedPercent: 32.86969245587245, total: null, free: null });
+  });
+  it('orders numbered volumes naturally while retaining their own observations', () => {
+    const rows = volumes(context([frame('volumes', [10], { raidName: 'Volume 10' }), frame('volumes', [2], { raidName: 'Volume 2' }), frame('volumes', [1], { raidName: 'Volume 1' })]));
+    expect(rows.map((row) => [row.id, row.usedPercent])).toEqual([['Volume 1', 1], ['Volume 2', 2], ['Volume 10', 10]]);
   });
   it('does not borrow health, temperature or model from another bay', () => {
     const rows = drives(context([frame('diskInfo', [1], { disk: 'Disk 1', model_name: 'one' }), frame('diskHealth', [0], { disk: 'Disk 2' })]));

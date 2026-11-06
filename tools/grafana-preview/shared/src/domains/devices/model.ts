@@ -1,5 +1,5 @@
 import type { DomainContext, DomainQuery } from '../contract';
-import { records } from '../data';
+import { current, records } from '../data';
 import type { Series } from '../../model/semantics';
 import manifest from './queries.json';
 
@@ -11,13 +11,6 @@ export const PIS = [
   { id: 'ups-compute-rack', role: 'UPS collector · compute rack', timeServer: true },
   { id: 'ups-office', role: 'UPS collector · office', timeServer: true },
 ] as const;
-
-export function current(ctx: DomainContext, series: Series | undefined): number | null {
-  if (!series) return null;
-  const from = ctx.timeRange.from.valueOf(), to = ctx.timeRange.to.valueOf();
-  const point = series.points.filter(([at]) => at >= from && at <= to).sort((a, b) => a[0] - b[0]).at(-1);
-  return point && to - point[0] <= Math.max(60000, (series.step ?? 0) * 1.5) && point[1] != null && Number.isFinite(point[1]) ? point[1] : null;
-}
 
 function observations(ctx: DomainContext, key: string): Series[] {
   if (ctx.mode === 'recorded' && !queries.find((query) => query.key === key)?.capture) return [];

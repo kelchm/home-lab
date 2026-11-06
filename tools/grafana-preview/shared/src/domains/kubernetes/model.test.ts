@@ -5,7 +5,7 @@ import type { DomainContext, DomainSection } from '../contract';
 import type { FrameLike } from '../../model/semantics';
 import { domain } from './index';
 import {
-  at, attention, backupState, certificates, CNPG_STALE_SECONDS, controllers, databases, fluxResources,
+  at, attention, backupState, certificates, CNPG_STALE_SECONDS, controllers, databases, fluxCounts, fluxResources,
   longhornSummary, namespaces, queries, ref, resourceIdentity, resourceKey, services, volumes,
 } from './model';
 import evidence from './evidence.json';
@@ -93,6 +93,16 @@ describe('Kubernetes domain replay and query contract', () => {
     expect(namespaces(ctx(replay)).find((row) => row.name === 'iot')).toMatchObject({ running: 4, restarts: 0 });
     expect(services(ctx(replay))).toHaveLength(13);
     expect(certificates(ctx(replay))).toHaveLength(9);
+  });
+  it('separates missing collection from an observed namespace with no named controller rows', () => {
+    const namespace = scalar('nsPods', 1, { namespace: 'standalone-pods' });
+    const cell = (frames: FrameLike[]) => {
+      const table = page('workloads', ctx(frames)).find((section) => section.id === 'k8s-namespaces');
+      if (table?.kind !== 'table') throw new Error('Missing namespace table');
+      return table.rows[0].cells[5];
+    };
+    expect(cell([namespace])).toMatchObject({ text: 'Controller inventory unavailable', tone: 'unknown' });
+    expect(cell([...source, namespace])).toMatchObject({ text: 'No named controller observations', tone: 'unknown', detail: expect.stringContaining('does not establish that none are configured') });
   });
 
   it('keeps current CNPG recovery unknown beside fully accounted Longhorn backup counts', () => {
@@ -271,6 +281,32 @@ describe('Kubernetes semantic failure cases', () => {
     expect(attention(context)).toEqual([]);
     expect(attention(ctx([scalar('fluxInventory', 1, { ...a, ready: 'False', suspended: 'False' })]))[0].finding).toBe('Flux ready=False');
   });
+  it('keeps raw or unbound Longhorn volumes in the observed policy set', () => {
+    const labels = { volume: 'raw-volume' };
+    const data = ctx([...longhorn, scalar('volumeInventory', 1, labels), scalar('volumeBackupTimestamp', 0, labels), scalar('volumeExempt', 1, { pvc_namespace: 'iot', pvc: 'cache' })]);
+    expect(volumes(data)[0]).toMatchObject({ volume: 'raw-volume', namespace: null, pvc: null, backup: { state: 'never' } });
+    expect(evidence.backupScope.sources).toContain('kubernetes/apps/longhorn-system/longhorn/app/alerts.yaml');
+  });
+  it('distinguishes unsupported Flux fallback zeros from an observed zero count', () => {
+    const zeros = [scalar('fluxFailing', 0), scalar('fluxSuspended', 0)];
+    expect(fluxCounts(ctx(zeros))).toEqual({ ready: null, failing: null, suspended: null });
+    expect(fluxCounts(ctx([]))).toEqual({ ready: null, failing: null, suspended: null });
+    expect(fluxCounts(ctx([...zeros, scalar('fluxReady', 3)]))).toEqual({ ready: 3, failing: 0, suspended: 0 });
+    expect(fluxCounts(ctx([scalar('fluxReady', 3)]))).toEqual({ ready: 3, failing: null, suspended: null });
+    const counts = page('workloads', ctx(zeros)).find((section) => section.id === 'k8s-flux-counts');
+    expect(counts?.kind === 'text' && counts.text).toContain('Unknown reported failing');
+    const labels = { namespace: 'iot', name: 'broadsheet', kind: 'HelmRelease', ready: 'True', suspended: 'False' };
+    expect(fluxCounts(ctx([...zeros, scalar('fluxInventory', 1, labels)]))).toEqual({ ready: null, failing: 0, suspended: 0 });
+  });
+  it('uses source-dependent zero fallbacks for live Flux and Longhorn totals', () => {
+    for (const key of ['fluxFailing', 'fluxSuspended', 'volHealthy', 'volDegraded', 'volFaulted']) {
+      const query = queries.find((query) => query.key === key)!;
+      expect(query.expr).not.toContain('vector(0)');
+      expect(query.expr).toContain(`0 * count(${key.startsWith('flux') ? 'flux_resource_info' : 'longhorn_volume_robustness'}{cluster="k8s-prod"})`);
+    }
+    const rows = volumes(ctx([scalar('volHealthy', 0), scalar('volDegraded', 0), scalar('volFaulted', 0), scalar('volumeInventory', 1, { volume: 'one' })]));
+    expect(rows[0]).toMatchObject({ robustness: null, backup: { state: 'unknown' } });
+  });
 });
 
 function controllerDetail(entity: string, series: FrameLike[]) { return page('resource', ctx(series, { entity })); }
@@ -308,7 +344,9 @@ describe('Kubernetes navigation and entity isolation', () => {
     expect(filter.test('iot-something-else@kubernetes')).toBe(false);
     const literal = 'route.with+regex';
     const other = linksOf(page('resource', ctx([scalar('routeRate', 1, { svc: literal })], { entity: resourceKey('service', literal) }))).map((href) => new URL(href)).find((url) => url.pathname.includes('/d/n5bu_kv4k'))!;
-    expect(new RegExp(`^${other.searchParams.get('var-service')}$`).test('routexwithhhhregex')).toBe(false);
+    const literalFilter = new RegExp(`^${other.searchParams.get('var-service')}$`);
+    expect(literalFilter.test(literal)).toBe(true);
+    expect(literalFilter.test('routexwithhhhregex')).toBe(false);
   });
 
   it('resource keys survive delimiter characters and an unknown key never falls back to aggregate values', () => {

@@ -24,5 +24,5 @@ export interface DomainSourceGroup {
 }
 
 export const DOMAIN_SOURCE_GROUPS: DomainSourceGroup[] = DOMAINS.map((domain) => ({
-  id: domain.id, title: `${domain.title} query source`, focus: domain.focus as Focus, queries: domain.queries,
+  id: domain.id, title: `${domain.title} query source`, focus: domain.focus, queries: domain.queries,
 }));

@@ -1,5 +1,5 @@
 import type { DomainContext, DomainQuery } from '../contract';
-import { records } from '../data';
+import { current, records } from '../data';
 import manifest from './queries.json';
 
 export const queries = manifest as DomainQuery[];
@@ -10,16 +10,14 @@ export const UNITS = [
   { id: 'office', name: 'Office', collector: 'ups-office', source: 'NUT · supporting Pi' },
 ] as const;
 
-/** A unique current observation is required; never fill a missing end sample from history. */
+/** Requires a unique window-end query result; its evaluation timestamp does not establish source sample freshness. */
 export function reading(ctx: DomainContext, key: string, ups: string): number | null {
   const query = queries.find((item) => item.key === key);
   if (ctx.mode === 'recorded' && !query?.capture) return null;
   const list = records(ctx.series, ref(key)).filter((item) => item.labels.ups === ups);
   if (list.length !== 1) return null;
-  const from = ctx.timeRange.from.valueOf(), to = ctx.timeRange.to.valueOf();
-  const series = list[0];
-  const point = series.points.filter(([at]) => at >= from && at <= to).sort((a, b) => a[0] - b[0]).at(-1);
-  return point && to - point[0] <= Math.max(60000, (series.step ?? 0) * 1.5) && point[1] != null && Number.isFinite(point[1]) && point[1] >= 0 ? point[1] : null;
+  const value = current(ctx, list[0]);
+  return value != null && value >= 0 ? value : null;
 }
 
 export type InputState = 'battery' | 'mains' | 'not-asserted' | 'conflicting' | 'unknown';
