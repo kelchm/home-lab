@@ -1,0 +1,92 @@
+test-fairness-safety
++- run test 0 pass, 7 fail (7 total)
+error: 'glm_fairness_host.test.fairness safety: cancellation restores the preceding committed prefix' failed:
+       slices differ. first difference occurs at index 0 (0x0)
+       
+       ============ expected this output: =============  len: 2 (0x2)
+       
+       [0]: 0
+       [1]: 0
+       
+       ============= instead found this: ==============  len: 2 (0x2)
+       
+       [0]: 1
+       [1]: 0
+       
+       ================================================
+       
+       <zig-root>/lib/std/testing.zig:346:5: 0x10491495b in expectEqualSlices__func_1608 (test)
+           return error.TestExpectedEqual;
+           ^
+       <work>/donor/zig/glm_fairness_host.zig:311:5: 0x104914c5f in test.fairness safety: cancellation restores the preceding committed prefix (test)
+           try t.expectEqualSlices(u1, &.{ 0, 0 }, &b.parity);
+           ^
+error: 'glm_fairness_host.test.fairness safety: retry after cancellation consumes the original layer input' failed:
+       expected 2097152, found 2228224
+       <zig-root>/lib/std/testing.zig:93:17: 0x1049123c3 in expectEqualInner__func_1596 (test)
+                       return error.TestExpectedEqual;
+                       ^
+       <zig-root>/lib/std/testing.zig:57:5: 0x104912617 in expectEqual (test)
+           return expectEqualInner(T, expected, actual);
+           ^
+       <work>/donor/zig/glm_fairness_host.zig:335:5: 0x1049126bb in test.fairness safety: retry after cancellation consumes the original layer input (test)
+           try t.expectEqual(Record.inputs[0], Record.inputs[1]);
+           ^
+error: 'glm_fairness_host.test.fairness safety: repeated twice-baseline observations converge to two' failed:
+       WITNESS EWMA scale=8
+       actual 8, not within absolute tolerance 0.001 of expected 2
+       <zig-root>/lib/std/testing.zig:267:13: 0x104911037 in expectApproxEqAbsInner__func_1584 (test)
+                   return error.TestExpectedApproxEqAbs;
+                   ^
+       <zig-root>/lib/std/testing.zig:260:5: 0x104911227 in expectApproxEqAbs (test)
+           return expectApproxEqAbsInner(T, expected, actual, tolerance);
+           ^
+       <work>/donor/zig/glm_fairness_host.zig:367:5: 0x1049112bb in test.fairness safety: repeated twice-baseline observations converge to two (test)
+           try t.expectApproxEqAbs(@as(f64, 2), costs.scale, 0.001);
+           ^
+error: 'glm_fairness_host.test.fairness safety: the lane cancellation at cached zero drops its suspended chunk' failed:
+       <zig-root>/lib/std/testing.zig:584:14: 0x104876213 in expect (test)
+           if (!ok) return error.TestUnexpectedResult;
+                    ^
+       <work>/donor/zig/glm_fairness_host.zig:399:5: 0x10487671b in test.fairness safety: the lane cancellation at cached zero drops its suspended chunk (test)
+           try t.expect(b.e.partial == null);
+           ^
+error: 'glm_fairness_host.test.fairness safety: the first calibration call schedules one layer' failed:
+       expected 1, found 2
+       <zig-root>/lib/std/testing.zig:93:17: 0x10480b487 in expectEqualInner__func_1007 (test)
+                       return error.TestExpectedEqual;
+                       ^
+       <zig-root>/lib/std/testing.zig:57:5: 0x10480f7d3 in expectEqual (test)
+           return expectEqualInner(T, expected, actual);
+           ^
+       <work>/donor/zig/glm_fairness_host.zig:406:5: 0x10480f877 in test.fairness safety: the first calibration call schedules one layer (test)
+           try t.expectEqual(@as(usize, 1), try b.e.sliceHi(C, 0, 0.1));
+           ^
+error: 'glm_fairness_host.test.fairness safety: nonfinite calibration is refused' failed:
+       expected error.BadCosts, found void
+       <zig-root>/lib/std/testing.zig:634:9: 0x10480b317 in expectError__func_999 (test)
+               return error.TestExpectedError;
+               ^
+       <work>/donor/zig/glm_fairness_host.zig:412:5: 0x10480f1df in test.fairness safety: nonfinite calibration is refused (test)
+           try t.expectError(error.BadCosts, costs.calibrate(C, &.{ 1, std.math.inf(f64), 0 }));
+           ^
+error: 'glm_fairness_host.test.fairness safety: allocation failure followed by calibration retry retains no orphan scratch' failed:
+       WITNESS allocation retry: orphan bytes=24
+       expected 0, found 24
+       <zig-root>/lib/std/testing.zig:93:17: 0x10480b487 in expectEqualInner__func_1007 (test)
+                       return error.TestExpectedEqual;
+                       ^
+       <zig-root>/lib/std/testing.zig:57:5: 0x10480b7f3 in expectEqual (test)
+           return expectEqualInner(T, expected, actual);
+           ^
+       <work>/donor/zig/glm_fairness_host.zig:428:5: 0x10480b877 in test.fairness safety: allocation failure followed by calibration retry retains no orphan scratch (test)
+           try t.expectEqual(@as(usize, 0), leaked);
+           ^
+failed command: ./.zig-cache/o/cb4e145f7d1dca44015578273bd3c978/test --cache-dir=./.zig-cache --seed=0xd2b4e64e --listen=-
+
+Build Summary: 2/4 steps succeeded (1 failed); 0/7 tests passed (7 failed)
+test-fairness-safety transitive failure
++- run test 0 pass, 7 fail (7 total)
+   +- compile test debug native success 4s MaxRSS:415M
+      +- options cached
+

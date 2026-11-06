@@ -4,23 +4,23 @@
   "kit_revision": "02dac3879852b8c5713318d3d64a5a791002e954",
   "engine_revision": "f350cd3ea253a042e205746928271f9d8f71a82d",
   "kit_patch_count": 108,
-  "site_patch_count": 9,
-  "site_patches_sha256": "98ad4090a7bc8ca5bdcf3d37186abc632b49631f770c28caaa7b941277ad0fbd",
-  "image": "glm53-tf:1104-02dac38-f7680c9bcdf7-s98ad4090a7bc",
-  "image_config_id": "sha256:c1ba6934accba54d17a2af5958ca78a618b835a2c4b1e55bfc8986c1815639b9",
-  "image_daemon_id": "sha256:d05f4bc2ce90a419403f0b166d421c4b8454b9f31426a02f98b5da39a6b1b077",
-  "embedded_patch_files_verified": 117,
+  "site_patch_count": 13,
+  "site_patches_sha256": "fc4f6f91fe4f89dff230723021f42679a08985c978513add26d7e652f08b3bf3",
+  "image": "glm53-tf:1104-02dac38-f7680c9bcdf7-sfc4f6f91fe4f",
+  "image_config_id": "sha256:1d1c44ae8c87b866581c4978d78991570406d2da02a13954203cc3d69d68cc70",
+  "image_daemon_id": "sha256:51e6e81b97683347f6903a7bb48ca988369e573aa7e3638c9d87e29b62fed1b0",
+  "embedded_patch_files_verified": 121,
   "native_host": {
-    "build_steps_passed": 319,
-    "build_steps_total": 319,
-    "tests_passed": 4421,
+    "build_steps_passed": 328,
+    "build_steps_total": 328,
+    "tests_passed": 4501,
     "tests_skipped": 18,
     "exit_code": 0
   },
   "photo": {
     "macos_tests_passed": 29,
     "linux_tests_passed": 29,
-    "runtime_image": "sha256:d05f4bc2ce90a419403f0b166d421c4b8454b9f31426a02f98b5da39a6b1b077",
+    "runtime_image": "sha256:51e6e81b97683347f6903a7bb48ca988369e573aa7e3638c9d87e29b62fed1b0",
     "complete_pixel_arrays": 49,
     "matched_refusals": 10,
     "skipped": 0
@@ -40,32 +40,40 @@
   },
   "evidence": {
     "native_host": {
-      "local_path": "/tmp/glm1104-media-locked-host-gate.log",
-      "sha256": "afa9f297a23103f8d6b98908495d7efc4e54c7de9ff3aa2a8e06c48d3766e92e"
+      "local_path": "/tmp/glm1104-runtime13-host-gate.log",
+      "sha256": "8faf9a33045055b5ef53dc8cea45cb69d7fb36a23a7723ed7b0a4801f512998b"
     },
     "image_build": {
-      "local_path": "/tmp/glm1104-media-build-milestone.log",
-      "sha256": "9a54f492c44c820b7d04bf25307111eadff40a7158c3b5e4eabd3deeae03eb09"
+      "local_path": "/tmp/glm1104-runtime13-image-build-final.log",
+      "sha256": "96c310a37bc1da3ef161203d1dc98220b1bf0c1d651e56568b1c6e85cd038d00"
     },
     "photo": {
-      "local_path": "/tmp/glm1104-candidate9-photo.log",
-      "sha256": "63ed6e8148d2fdb56cd33e34b67d70cf3be921e062af42348657d64ebfb64daf"
+      "local_path": "/tmp/glm1104-candidate13-photo.log",
+      "sha256": "99515653a3bb5d40d241a265b2d735c00e3d0f7c794813dae743abc47ff8a583"
     },
     "video": {
-      "local_path": "/tmp/glm1104-candidate9-video-smoke.log",
+      "local_path": "/tmp/glm1104-candidate13-video-smoke.log",
       "sha256": "ba0c52dff27f1376fef5180edea079ddfb546e155cf51e381de13835e07ebaff"
     },
     "image_build_info": {
-      "local_path": "/Users/kelchm/.cache/glm1104-video-probe/candidate-9/BUILD-INFO",
-      "sha256": "262824b5e8cafaf6214754002e44eebb0fea6ac8e84d9377f30be0ec34f1f82a"
+      "local_path": "/Users/kelchm/.cache/glm1104-video-probe/candidate-13/BUILD-INFO",
+      "sha256": "76f37baf2dd2bf4a1cdc18a4a836bea80f0fe44ac0780a0645a58cfd69975c51"
     },
     "ffmpeg_build_info": {
-      "local_path": "/Users/kelchm/.cache/glm1104-video-probe/candidate-9/FFMPEG-BUILD-INFO",
+      "local_path": "/Users/kelchm/.cache/glm1104-video-probe/candidate-13/FFMPEG-BUILD-INFO",
       "sha256": "0b3025e36e0d69d0f5ea251bdf6f67e82b04755b69a6526e991269bdf79a4b9e"
     },
+    "image_source_verification": {
+      "local_path": "/Users/kelchm/.cache/glm1104-video-probe/candidate-13/verification.json",
+      "sha256": "297f395bd69caf8db60f9d083be10b5f5b9ef9c9eef01a17277752f361054aaf"
+    },
     "repository_tests": {
-      "local_path": "/tmp/glm1104-candidate9-repository-tests.log",
-      "sha256": "3b15409b9abcfe58d36b9ffe553fe5e7a6825299774d19ef2717d32ccb58eb23"
+      "local_path": "/tmp/glm1104-candidate13-repository-archive-tests.log",
+      "sha256": "90ef30c69c28fc9a7f5b06fae8b32c2833f42d4a0512beca6e5446ed49ca4e18"
+    },
+    "markdown_links": {
+      "local_path": "/tmp/glm1104-candidate13-markdown-links.log",
+      "sha256": "0970c6ec25a08d7d641c0371daeafd9dc589a9daffb65003d5ca1ef9416a5c19"
     }
   },
   "sparks_accessed": false,
@@ -77,5 +85,26 @@
     "skipped": 5,
     "subtests_passed": 57,
     "exit_code": 0
-  }
+  },
+  "checkpoint": {
+    "tests_passed": 103,
+    "metadata_version": 2,
+    "maximum_media_records": 306,
+    "largest_logical_payload_bytes": 6649248044,
+    "transfer_slab_bytes": 2097152,
+    "all_rank_filesystem_view_required": true,
+    "rank_local_tp_transport_enabled": false
+  },
+  "preparation_policy": {
+    "profile_residents": 4,
+    "profile_waiters": 32,
+    "native_default_enabled": false,
+    "rss_bound_claimed": false
+  },
+  "known_blockers": [
+    "Inherited repeated video decoding and late-error classification",
+    "Live all-rank capture/restore and separate-NVMe persistence",
+    "Safe sliced-prefill rollback and numerical/performance qualification",
+    "Measured GB10 memory, model quality and no-regression hardware campaign"
+  ]
 }

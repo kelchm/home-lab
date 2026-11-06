@@ -1,0 +1,21 @@
+test-fairness-cancel-control
++- run test 0 pass, 1 fail (1 total)
+error: 'glm_fairness_host.test.fairness safety: cancellation restores the preceding committed prefix' failed:
+       expected 4096, found 0
+       <zig-root>/lib/std/testing.zig:93:17: 0x1024c3d43 in expectEqualInner__func_1133 (test)
+                       return error.TestExpectedEqual;
+                       ^
+       <zig-root>/lib/std/testing.zig:57:5: 0x1024c4e3b in expectEqual (test)
+           return expectEqualInner(T, expected, actual);
+           ^
+       <work>/donor/zig/glm_fairness_host.zig:310:5: 0x1024c4ed7 in test.fairness safety: cancellation restores the preceding committed prefix (test)
+           try t.expectEqual(C, b.q.st.pos);
+           ^
+failed command: ./.zig-cache/o/fef5c6d7a3c8617b34fd8c9db56e3d4e/test --cache-dir=./.zig-cache --seed=0x3db990ad --listen=-
+
+Build Summary: 2/4 steps succeeded (1 failed); 0/1 tests passed (1 failed)
+test-fairness-cancel-control transitive failure
++- run test 0 pass, 1 fail (1 total)
+   +- compile test debug native success 3s MaxRSS:343M
+      +- options cached
+

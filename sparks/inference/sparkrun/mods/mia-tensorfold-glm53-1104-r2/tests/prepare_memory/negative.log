@@ -1,0 +1,17 @@
+test-prepare-negative
++- run test 17 pass, 1 fail (18 total)
+error: 'prepare_contract_test.test.prepare memory: four delayed consumers keep media alive while eight useful arrivals wait before allocation' failed:
+       gate waiting expected 8, actual 0
+       /private/tmp/glm090-receipt-run/candidate/zig/src/server/prepare_harness.zig:215:9: 0x102db61d3 in wait__func_1061 (test)
+               return error.Timeout;
+               ^
+       /private/tmp/glm090-receipt-run/candidate/zig/src/server/prepare_contract_test.zig:31:5: 0x102db7963 in test.prepare memory: four delayed consumers keep media alive while eight useful arrivals wait before allocation (test)
+           try srv.wait("waiting", 8);
+           ^
+failed command: ./.zig-cache/o/6c187ffb95fe5a3452d4d73d5b665dd2/test --cache-dir=./.zig-cache --seed=0x5ee84851 --listen=-
+
+Build Summary: 1/3 steps succeeded (1 failed); 17/18 tests passed (1 failed)
+test-prepare-negative transitive failure
++- run test 17 pass, 1 fail (18 total)
+   +- compile test debug native success 11s MaxRSS:1G
+

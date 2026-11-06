@@ -1,0 +1,11 @@
+test-fairness-ewma-control
++- run test w
+WITNESS EWMA scale=1.9999999997962972
+failed command: ./.zig-cache/o/5698844f5e68b863e7867d0635e2d8e4/test --cache-dir=./.zig-cache --seed=0xede05a05 --listen=-
+
+Build Summary: 4/4 steps succeeded; 1/1 tests passed
+test-fairness-ewma-control success
++- run test 1 pass (1 total) 253ms MaxRSS:2M
+   +- compile test debug native success 2s MaxRSS:247M
+      +- options cached
+

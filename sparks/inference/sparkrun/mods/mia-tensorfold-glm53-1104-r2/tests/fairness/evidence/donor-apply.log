@@ -1,0 +1,35 @@
+Checking patch zig/src/families/glm/cuda_engine.zig...
+Checking patch zig/src/families/glm/cuda_follow.zig...
+error: while searching for:
+        return .{ .first = first, .rows = @min(ids.len - start, n * engine.prompt_rows) };
+    }
+
+    /// `bits`: the rows' grammar words (structured output, with Engine.structured), else 0.
+    pub fn verify(x: Leader, ids: []const u32, out: []u32, bits: u64) !void {
+        try x.flush();
+
+error: patch failed: zig/src/families/glm/cuda_follow.zig:259
+Hunk #3 succeeded at 381 (offset 2 lines).
+Hunk #4 succeeded at 454 (offset 3 lines).
+Hunk #5 succeeded at 603 (offset 3 lines).
+Hunk #6 succeeded at 621 (offset 3 lines).
+Checking patch zig/src/families/glm/cuda_forward.zig...
+Checking patch zig/src/families/glm/cuda_lanes.zig...
+Checking patch zig/src/families/glm/cuda_native.zig...
+Checking patch zig/tests/cuda/glm_lanes_tests.zig...
+Checking patch zig/tests/cuda/glm_slice_tests.zig...
+Checking patch zig/tests/cuda/main.zig...
+Applied patch zig/src/families/glm/cuda_engine.zig cleanly.
+Applying patch zig/src/families/glm/cuda_follow.zig with 1 reject...
+Hunk #1 applied cleanly.
+Rejected hunk #2.
+Hunk #3 applied cleanly.
+Hunk #4 applied cleanly.
+Hunk #5 applied cleanly.
+Hunk #6 applied cleanly.
+Applied patch zig/src/families/glm/cuda_forward.zig cleanly.
+Applied patch zig/src/families/glm/cuda_lanes.zig cleanly.
+Applied patch zig/src/families/glm/cuda_native.zig cleanly.
+Applied patch zig/tests/cuda/glm_lanes_tests.zig cleanly.
+Applied patch zig/tests/cuda/glm_slice_tests.zig cleanly.
+Applied patch zig/tests/cuda/main.zig cleanly.

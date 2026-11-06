@@ -1,0 +1,116 @@
+{
+  "format_version": 1,
+  "patch": "0800-native-checkpoint-restore-epochs.patch",
+  "patch_sha256": "3ce9005ac7e5d28c774fad9ad71422f4a608bbacf6253acce7e089f75bea99f6",
+  "base": "Mia108 + 020/030/040/050/060; supplied /tmp/glm1104-r2-integrated",
+  "files": [
+    {
+      "path": "zig/build/checkpoint_restore.zig",
+      "before_sha256": null,
+      "after_sha256": "228159b43cbaf414084675d186139230316d369649a29bc64371405175002b6e"
+    },
+    {
+      "path": "zig/build/glm_contracts.zig",
+      "before_sha256": "08185f8642a16b54ef414d9f82d3d29931acab26723ec4a69192db91fde13e3b",
+      "after_sha256": "903b5560cb945b48ec167da6e52dd9a162537edc3a83efb1db8c89828b953d12"
+    },
+    {
+      "path": "zig/glm_checkpoint_restore_host.zig",
+      "before_sha256": null,
+      "after_sha256": "1d14b1ea687eaaab0529e99d24491e8f58d960ef20d338b408345ec81cc6f533"
+    },
+    {
+      "path": "zig/src/core/checkpoint_epoch.zig",
+      "before_sha256": null,
+      "after_sha256": "cf258dab7efe5658c39fa98460fa95eaa5362010bb618267e89d707d6226856d"
+    },
+    {
+      "path": "zig/src/core/checkpoint_epoch_test.zig",
+      "before_sha256": null,
+      "after_sha256": "723ddcba56b9ae1e96a424f8c7b10adf6e44b6dc641b903c360bc4bd1d10f8eb"
+    },
+    {
+      "path": "zig/src/core/checkpoint_wire.zig",
+      "before_sha256": null,
+      "after_sha256": "7c2479294030f723cda843c99fbf5e25eb0041846c1961bd6b494e36fac2ea2f"
+    },
+    {
+      "path": "zig/src/core/root.zig",
+      "before_sha256": "75f9f4898d6a294cd7fa50baaaefec7a6abbad91596177f80e27c3ab84c93149",
+      "after_sha256": "2478da4600e39acaa0e1cbebcbccc997452633d1135ceca2625d37596126b31b"
+    },
+    {
+      "path": "zig/src/core/rows_file.zig",
+      "before_sha256": "948d7629031d590bd74997338fe9ff6062226714921c19d148fceaa583930a77",
+      "after_sha256": "5cb3dcf410eb21e86c1ba1cbbcdd8ed5dd94b3599418c700f303f28881c3d8ea"
+    },
+    {
+      "path": "zig/src/families/glm/cuda.zig",
+      "before_sha256": "ee08436048b9505f3cf21122d8def1a2a1c3249b954bd73403c7e4c946d46fea",
+      "after_sha256": "21319db8afd483d3d1aa179515b447c5eb2be87c0e8b461bd479dfe311cc6b9c"
+    },
+    {
+      "path": "zig/src/families/glm/cuda_checkpoint_restore.zig",
+      "before_sha256": null,
+      "after_sha256": "60ea182f6e39f279ce188bfe48625ee4c09de05a249de077347d94f8204374b3"
+    }
+  ],
+  "required_inputs": [
+    {
+      "path": "zig/src/core/checkpoint_capture.zig",
+      "sha256": "7e258cfa4b22e82975ce2199470814f6e61b3429aa7f8e95e3143359b63f5dc1"
+    },
+    {
+      "path": "zig/src/core/checkpoint_stream.zig",
+      "sha256": "9929eaf09bb5c4ba11866e767621138a1e7082eaa760392eb4e3eff6246b205f"
+    },
+    {
+      "path": "zig/src/core/checkpoint_file.zig",
+      "sha256": "6f7c4bf607c9a7b5784edf333697e03abc1d4debf933a3266f7f4296b6d8024b"
+    },
+    {
+      "path": "zig/src/core/kv_pool.zig",
+      "sha256": "b328927b20817225cbd8e2feb8a7262fbcaf7d068d7b967dec86cda34ea25daa"
+    },
+    {
+      "path": "zig/src/families/glm/cuda_checkpoint.zig",
+      "sha256": "7287d4a8bc46a58283cfc350c31545cc39780a65ffabc44e4afc2e118fd95b93"
+    },
+    {
+      "path": "zig/src/families/glm/cuda_checkpoint_freeze.zig",
+      "sha256": "b31bae02a453bbe8dfdf34206b01b541bf27954ceaed6f7cd9ec723e794185c4"
+    },
+    {
+      "path": "zig/src/families/glm/cuda_snapshot_layout.zig",
+      "sha256": "926ecf438f7aa4e9e5e0b0b62d38b4c68862b1fec0054412101a4a40da3d56b6"
+    },
+    {
+      "path": "zig/src/families/glm/cuda_state.zig",
+      "sha256": "7fad9c1fc1f5cdc881409f4cd4a54546a65df2d6afd03a0a4fa2f4b2a4485c4d"
+    },
+    {
+      "path": "zig/src/families/glm/cuda_shard.zig",
+      "sha256": "4b64855bc18edfde1a91d8ccfcbbe9a71c91301e54d6a2227a5ada39f091b164"
+    },
+    {
+      "path": "zig/src/families/glm/config.zig",
+      "sha256": "f0eb29672e73893d6666bb9e3d7167922b2ac11bf92b3a80ec5496c01b797a20"
+    },
+    {
+      "path": "zig/src/families/glm/dflash.zig",
+      "sha256": "68c235997df94c442dbd5fe0b63e06d667c521a8e08671a46def263ccf8d8ff7"
+    },
+    {
+      "path": "zig/src/families/glm/vision_config.zig",
+      "sha256": "a7ea02c9d833c6fbecc5b3699be40b94f92541a96603926aa89ee49857535e72"
+    },
+    {
+      "path": "zig/test_support/glm_snap_driver.zig",
+      "sha256": "defb4ad99f37e4c5e6cbde96fac8595edf7a9a5dcb5b70aa2203c1828ee982b8"
+    },
+    {
+      "path": "zig/src/families/glm/cuda_native.zig",
+      "sha256": "4df2d8de9f6ac3ca3c94031fbc8e7d2a2f5873135b8b6e98ad9866d4da9eb61b"
+    }
+  ]
+}

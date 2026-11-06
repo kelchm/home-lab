@@ -1,0 +1,22 @@
+{
+  "patch": "0820-native-checkpoint-media-capacity.patch",
+  "patch_sha256": "4480227efc2392e7b2f88e9ab57650d6d4ce45d5a46896f3e5a2bba7eb84776d",
+  "base": "Mia108 +020/025/030/040/050/060/065/070/071/080",
+  "files": [
+    {
+      "path": "zig/src/families/glm/cuda_checkpoint_restore.zig",
+      "before_sha256": "60ea182f6e39f279ce188bfe48625ee4c09de05a249de077347d94f8204374b3",
+      "after_sha256": "ca948e7b957ab8ef34e38c717e8c3f4a2aa72b85e0d14fa14dd91222c3042cb4"
+    },
+    {
+      "path": "zig/src/core/checkpoint_epoch.zig",
+      "before_sha256": "cf258dab7efe5658c39fa98460fa95eaa5362010bb618267e89d707d6226856d",
+      "after_sha256": "3d431cc7450fc22ff275e94cb46924f1cbffda441232b51ad3938a16b7284e1b"
+    },
+    {
+      "path": "zig/glm_checkpoint_restore_host.zig",
+      "before_sha256": "1d14b1ea687eaaab0529e99d24491e8f58d960ef20d338b408345ec81cc6f533",
+      "after_sha256": "cae1541509e716bd1c00e4e11d3fad4315d8780f5381674be8acae63844a706a"
+    }
+  ]
+}

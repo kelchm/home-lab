@@ -1,0 +1,18 @@
+Build Summary: 16/16 steps succeeded; 102/102 tests passed
+test-checkpoint-bounded-host success
++- run test 37 pass (37 total) 386ms MaxRSS:4M
+|  +- compile test debug native success 3s MaxRSS:292M
++- run test 23 pass (23 total) 859ms MaxRSS:4M
+|  +- compile test debug native success 3s MaxRSS:279M
++- run test 14 pass (14 total) 1s MaxRSS:5M
+|  +- compile test debug native success 3s MaxRSS:296M
++- run test 3 pass (3 total) 1s MaxRSS:24M
+   +- compile test debug native success 3s MaxRSS:316M
+      +- options success
+test-checkpoint-restore-host success
++- run test 12 pass (12 total) 10s MaxRSS:151M
+|  +- compile test debug aarch64-macos success 3s MaxRSS:378M
+|     +- options cached
++- run test 13 pass (13 total) 830ms MaxRSS:3M
+   +- compile test debug aarch64-macos success 3s MaxRSS:299M
+

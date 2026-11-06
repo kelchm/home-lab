@@ -1,0 +1,107 @@
+From: Home Lab
+Subject: [PATCH] checkpoint: retain every accepted picture and video group
+
+Keep the persisted record bound aligned with the production 50-picture and
+four-clip/128-frame policy. Two sampled frames form one tower group, so the
+wire must hold 306 identities. Metadata version 2 and a bounded 32 KiB reader
+replace the smaller development format. Serving durability remains disabled.
+
+diff --git a/zig/src/families/glm/cuda_checkpoint_restore.zig b/zig/src/families/glm/cuda_checkpoint_restore.zig
+--- a/zig/src/families/glm/cuda_checkpoint_restore.zig
++++ b/zig/src/families/glm/cuda_checkpoint_restore.zig
+@@ -14,7 +14,9 @@
+ const sparse = @import("cuda_sparse.zig");
+ const Sha = std.crypto.hash.sha2.Sha256;
+ 
+-pub const max_images = 64;
++// Production permits 50 pictures plus four clips of 128 frames, grouped two frames per tower input.
++// Every accepted group needs its own persisted identity even when its pixel/token geometry is tiny.
++pub const max_images = 50 + 4 * ((128 + 1) / 2);
+ pub const Image = struct {
+     digest: [32]u8 = @splat(0), // canonical prepared-image identity; not a URL or a cache id
+     at: u32 = 0,
+@@ -86,8 +88,8 @@
+ };
+ 
+ pub const Metadata = struct {
+-    magic: u64 = 0x31534b4346474c4d,
+-    version: u32 = 1,
++    magic: u64 = 0x32534b4346474c4d,
++    version: u32 = 2,
+     shape: Shape,
+     mark: u64,
+     mtp_len: u64,
+@@ -110,7 +112,7 @@
+         return m;
+     }
+     pub fn validate(m: *const Metadata) !void {
+-        if (m.magic != 0x31534b4346474c4d or m.version != 1 or m.shape.version != 1 or m.shape.flags & ~@as(u32, 3) != 0 or m.cur_count > max_layers or m.cur_count != m.shape.kda_layers or m.mark > std.math.maxInt(i32) or m.mtp_len > std.math.maxInt(i32) or m.mtp_len > m.mark + state.window_rows) return error.CheckpointMetadata;
++        if (m.magic != 0x32534b4346474c4d or m.version != 2 or m.shape.version != 1 or m.shape.flags & ~@as(u32, 3) != 0 or m.cur_count > max_layers or m.cur_count != m.shape.kda_layers or m.mark > std.math.maxInt(i32) or m.mtp_len > std.math.maxInt(i32) or m.mtp_len > m.mark + state.window_rows) return error.CheckpointMetadata;
+         const head = m.shape.flags & 2 != 0;
+         if (!head and (m.mtp_len != 0 or m.bases[1] != 0)) return error.CheckpointMetadata;
+         if (head and m.mark / state.page_rows > m.mtp_len / state.page_rows + 1) return error.UnsupportedHeadLag;
+diff --git a/zig/src/core/checkpoint_epoch.zig b/zig/src/core/checkpoint_epoch.zig
+--- a/zig/src/core/checkpoint_epoch.zig
++++ b/zig/src/core/checkpoint_epoch.zig
+@@ -6,7 +6,7 @@
+ pub const wire = @import("checkpoint_wire.zig");
+ const Sha = std.crypto.hash.sha2.Sha256;
+ pub const max_ranks = 64;
+-pub const max_metadata = 8192;
++pub const max_metadata = 32 << 10;
+ pub const max_chunk = 2 << 20;
+ 
+ pub const Binding = struct {
+diff --git a/zig/glm_checkpoint_restore_host.zig b/zig/glm_checkpoint_restore_host.zig
+--- a/zig/glm_checkpoint_restore_host.zig
++++ b/zig/glm_checkpoint_restore_host.zig
+@@ -552,3 +552,49 @@
+     try t.expect(!std.meta.eql(a, b));
+     try t.expectEqualSlices(u8, &a.layoutIdentity(), &b.layoutIdentity());
+ }
++
++test "checkpoint restore: full 50-picture and four-clip group history survives bounded rank files" {
++    var f: Fixture = undefined;
++    try f.init(true, false, false, 1024);
++    defer f.deinit();
++    var media: restore.Media = .{ .processor = @splat(19), .count = 50 + 4 * 64 };
++    try t.expectEqual(@as(usize, 306), restore.max_images);
++    for (media.images[0..media.count], 0..) |*image, i| {
++        image.* = .{ .digest = @splat(20), .at = @intCast(i), .tokens = 1, .gh = 2, .gw = 2 };
++        std.mem.writeInt(u32, image.digest[0..4], @intCast(i + 1), .little);
++    }
++    f.metadata = try restore.Metadata.fromCapture(&f.saved.?, &f.st, &f.w.config, media);
++    f.agreement.binding = f.metadata.bind(f.agreement.binding);
++    var dir = try Directory.init("all-media");
++    defer dir.deinit();
++    _ = try f.persist(dir.name());
++    try f.finishCapture();
++    var target = try f.destination();
++    defer target.deinit();
++    var lease: core.kv_pool.Lease = .{};
++    defer f.pool.finish(&lease);
++    try f.pool.promise(&lease, 4);
++    var inactive = try restore.Inactive.init(&f.pool, &lease, &target, f.stream(), null);
++    defer inactive.release();
++    var slab = try cuda.HostBuffer.alloc(&f.d, 65537);
++    defer slab.free();
++    const store: Store = .{ .dir = dir.name(), .validate_detail = restore.validateEnvelope };
++    const recovered = (try store.recover(f.agreement.binding, 2, slab.slice(u8))).?;
++    var reader = try recovered.openRank(1);
++    defer reader.close();
++    const metadata = try epoch.wire.decode(restore.Metadata, reader.detail());
++    try t.expectEqual(@as(u32, 306), metadata.media.count);
++    try t.expectEqualDeep(media, metadata.media);
++    _ = try inactive.load(&reader, &f.w.config, slab.slice(u8));
++    try t.expectEqual(.ready, inactive.phase);
++    // Exact count and consumed-span checks remain enforced at the larger wire bound.
++    var invalid = media;
++    invalid.count = 307;
++    try t.expectError(error.CheckpointMedia, invalid.validate(1024));
++    invalid = media;
++    invalid.images[305].at = 1024;
++    try t.expectError(error.CheckpointMedia, invalid.validate(1024));
++    var old = f.metadata;
++    old.version = 1;
++    try t.expectError(error.CheckpointMetadata, old.validate());
++}

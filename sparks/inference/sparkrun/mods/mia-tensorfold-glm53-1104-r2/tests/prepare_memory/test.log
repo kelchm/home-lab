@@ -1,0 +1,78 @@
+test-prepare-media-lifecycle
++- run test w
+media receipt: shared feature peak=201326592 CPU arena peak=57803206 one image payload=38535168 calls=50
+media receipt: video groups=64 decoder inputs peak=2 CPU arena peak=81674 group payload=37632
+failed command: ./.zig-cache/o/eafaedad9621cf183860335c574d7be6/test --cache-dir=./.zig-cache --seed=0xfe748d54 --listen=-
+
+test-prepare-memory
++- run test w
+PREPARE_BURST residents_peak=4 queued_peak=8 retained_at_four=116670 consumed_images=24 consumer_peak=2904672
+PREPARE_HEADERS queue_peak=32 declared_body=100663296 body_allocated_while_queued=0 cancelled=1 drained=31
+PREPARE_LEDGER
+tensorfold_prepare_memory_live_bytes{kind="retained"} 0
+tensorfold_prepare_memory_peak_bytes{kind="retained"} 92264
+tensorfold_prepare_memory_allocated_bytes{kind="retained"} 1019116
+tensorfold_prepare_memory_freed_bytes{kind="retained"} 1019116
+tensorfold_prepare_memory_live_bytes{kind="render"} 0
+tensorfold_prepare_memory_peak_bytes{kind="render"} 50102
+tensorfold_prepare_memory_allocated_bytes{kind="render"} 2492750
+tensorfold_prepare_memory_freed_bytes{kind="render"} 2492750
+tensorfold_prepare_memory_live_bytes{kind="tokenize"} 0
+tensorfold_prepare_memory_peak_bytes{kind="tokenize"} 7368
+tensorfold_prepare_memory_allocated_bytes{kind="tokenize"} 423648
+tensorfold_prepare_memory_freed_bytes{kind="tokenize"} 423648
+tensorfold_prepare_memory_live_bytes{kind="media"} 0
+tensorfold_prepare_memory_peak_bytes{kind="media"} 862
+tensorfold_prepare_memory_allocated_bytes{kind="media"} 36204
+tensorfold_prepare_memory_freed_bytes{kind="media"} 36204
+tensorfold_prepare_memory_live_bytes{kind="prompt"} 0
+tensorfold_prepare_memory_peak_bytes{kind="prompt"} 13182
+tensorfold_prepare_memory_allocated_bytes{kind="prompt"} 554546
+tensorfold_prepare_memory_freed_bytes{kind="prompt"} 554546
+PREPARE_LONG text=32768 retained=382536 render_peak=367214 tokenizer_peak=2747998 prompt_peak=518068
+PREPARE_LONG text=32768 retained=382536 render_peak=367214 tokenizer_peak=2747998 prompt_peak=518068
+PREPARE_LONG text=32768 retained=382536 render_peak=367214 tokenizer_peak=2747998 prompt_peak=518068
+ARENA_RECEIPT case=0 retained=196818 peak=196818 ids=32792 sha=95117108e38f25057555bcc45768560e035c21eeabc1c8307e8def4344ff7a72 key=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 images=0
+ARENA_RECEIPT case=1 retained=30322 peak=30322 ids=220 sha=6ee4b22df58d55b8647134efe9c2c711fc81572b69b461223602cf3f6b3dfac7 key=eb660b7d9e7decbf84eda288c6f32d8ba42a25f7b4f4fb72b6c70e115d57ee28 images=2
+failed command: ./.zig-cache/o/fa07033334dc7c9d72498f072196cbae/test --cache-dir=./.zig-cache --seed=0xfe748d54 --listen=-
+
+Build Summary: 35/35 steps succeeded; 190/190 tests passed
+server-cpu success
++- install fake_serve success
+|  +- compile exe fake_serve fast native success 1m MaxRSS:2G
++- install tensorfold-native success
+   +- compile exe tensorfold-native fast native success 1m MaxRSS:2G
+      +- options success
+      +- WriteFile exlr8_alias.zig success
+compile-omni-video-host success
++- compile obj omni-video-native-compile debug aarch64-linux-gnu success 16s MaxRSS:1G
+   +- options success
+   +- WriteFile draft_ids.txt success
+compile-glm-native-open success
++- compile obj glm-open-check debug aarch64-linux-gnu success 5s MaxRSS:662M
+   +- options (reused)
+test-glm-kv-pages-host success
++- run test 25 pass (25 total) 299ms MaxRSS:3M
+   +- compile test debug native success 2s MaxRSS:433M
+      +- options cached
+test-glm-protocol-host success
++- run test 10 pass (10 total) 251ms MaxRSS:2M
+   +- compile test debug native success 1s MaxRSS:289M
+      +- options (reused)
+test-server-recovery-host success
++- run test 25 pass (25 total) 428ms MaxRSS:5M
+   +- compile test debug native success 8s MaxRSS:899M
+test-http-limits-host success
++- run test 26 pass (26 total) 224ms MaxRSS:3M
+   +- compile test debug native success 1s MaxRSS:310M
+test-admission-host success
++- run test 46 pass (46 total) 3s MaxRSS:24M
+   +- compile test debug native success 12s MaxRSS:1G
+test-prepare-media-lifecycle success
++- run test 21 pass (21 total) 513ms MaxRSS:41M
+   +- compile test debug native success 2s MaxRSS:338M
+      +- options (reused)
+test-prepare-memory success
++- run test 37 pass (37 total) 3s MaxRSS:29M
+   +- compile test debug native success 10s MaxRSS:1G
+

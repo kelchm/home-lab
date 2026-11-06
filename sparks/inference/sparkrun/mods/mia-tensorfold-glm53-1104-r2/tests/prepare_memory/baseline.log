@@ -1,0 +1,11 @@
+test-prepare-memory
++- run test w
+ARENA_RECEIPT case=0 retained=799426 peak=799426 ids=32792 sha=95117108e38f25057555bcc45768560e035c21eeabc1c8307e8def4344ff7a72 key=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 images=0
+ARENA_RECEIPT case=1 retained=105680 peak=105680 ids=220 sha=6ee4b22df58d55b8647134efe9c2c711fc81572b69b461223602cf3f6b3dfac7 key=eb660b7d9e7decbf84eda288c6f32d8ba42a25f7b4f4fb72b6c70e115d57ee28 images=2
+failed command: ./.zig-cache/o/2e83737dd1694f8744d6730b572262cb/test --cache-dir=./.zig-cache --seed=0x1752c632 --listen=-
+
+Build Summary: 3/3 steps succeeded; 16/16 tests passed
+test-prepare-memory success
++- run test 16 pass (16 total) 339ms MaxRSS:8M
+   +- compile test debug native success 5s MaxRSS:760M
+

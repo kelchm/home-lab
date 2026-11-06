@@ -1,0 +1,45 @@
+test-glm-prompts-host
++- run test 6 pass, 1 fail (7 total)
+error: 'glm_prompt_host.test.GLM prompt workflow: both ranks share exact packets and reject malformed batches' failed:
+       expected 12, found 13
+       <zig-root>/lib/std/testing.zig:93:17: 0x1026e2ea7 in expectEqualInner__func_1016 (test)
+                       return error.TestExpectedEqual;
+                       ^
+       <zig-root>/lib/std/testing.zig:57:5: 0x1026e4513 in expectEqual (test)
+           return expectEqualInner(T, expected, actual);
+           ^
+       <work>/donor/zig/glm_prompt_host.zig:243:5: 0x1026e458f in test.GLM prompt workflow: both ranks share exact packets and reject malformed batches (test)
+           try t.expectEqual(@as(u32, 12), @backingInt(glm.follow.Kind.block));
+           ^
+failed command: ./.zig-cache/o/fbfc2d3935d3b931240040a9139f80a5/test --cache-dir=./.zig-cache --seed=0xafc3410e --listen=-
+
+test-glm-snapshots-host
++- run test w
+GLM snapshot sizing rank=0 world=2 at=4096 bytes=260046848 arena=7077433856
+GLM snapshot sizing rank=0 world=2 at=34816 bytes=687865856 arena=7077433856
+GLM snapshot sizing rank=0 world=2 at=266240 bytes=3707764736 arena=7077433856
+GLM no-head sequence kv8=false cap=446528: 6061363712 -> 5571346432 bytes (-490017280)
+GLM no-head sequence kv8=true cap=446528: 3339329024 -> 3076147968 bytes (-263181056)
+failed command: ./.zig-cache/o/f136d435bc2db21e044dfa47f5175bd7/test --cache-dir=./.zig-cache --seed=0xafc3410e --listen=-
+
+Build Summary: 14/16 steps succeeded (1 failed); 49/50 tests passed (1 failed)
+test-glm-snapshots-host success
++- run test 26 pass (26 total) 10s MaxRSS:323M
+   +- compile test debug native success 3s MaxRSS:408M
+      +- options cached
+test-glm-logprobs-host success
++- run test 7 pass (7 total) 252ms MaxRSS:3M
+   +- compile test debug native success 2s MaxRSS:325M
+      +- options (reused)
+test-glm-protocol-host success
++- run test 10 pass (10 total) 308ms MaxRSS:2M
+   +- compile test debug native success 2s MaxRSS:291M
+      +- options (reused)
+test-glm-prompts-host transitive failure
++- run test 6 pass, 1 fail (7 total)
+   +- compile test debug native success 2s MaxRSS:308M
+      +- options (reused)
+compile-glm-native-open success
++- compile obj glm-open-check debug aarch64-linux-gnu success 8s MaxRSS:578M
+   +- options success
+
