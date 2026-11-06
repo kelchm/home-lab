@@ -45,6 +45,8 @@ test('unknown browser proof modes fail before replacing existing evidence', asyn
 
 test('a failed shared capture preserves page errors and continues with the next spec', async (t) => {
   const { temp, closed, env } = fixture(t);
+  fs.writeFileSync(path.join(temp, 'broken.png'), 'old broken capture');
+  fs.writeFileSync(path.join(temp, 'healthy.png'), 'old healthy capture');
   const module = path.join(temp, 'capture-playwright.mjs');
   fs.writeFileSync(module, `import fs from 'node:fs';
     let index = 0;
@@ -64,6 +66,7 @@ test('a failed shared capture preserves page errors and continues with the next 
   assert.notEqual(result.code, 0);
   assert.match(result.stderr, /broken: original render failure/);
   assert.match(result.stderr, /broken: capture failed: rendered selector absent/);
+  assert.equal(fs.existsSync(path.join(temp, 'broken.png')), false);
   assert.equal(fs.readFileSync(path.join(temp, 'healthy.png'), 'utf8'), 'captured');
   assert.equal(fs.readFileSync(closed + '.pages', 'utf8').trim().split('\n').length, 2);
   assert(fs.existsSync(closed));

@@ -23,6 +23,7 @@ try {
     const [name, query, width = '1440', height = '900', full = 'full'] = spec.split('|');
     let page;
     try {
+      fs.rmSync(path.join(out, `${name}.png`), { force: true });
       page = await browser.newPage({ viewport: { width: Number(width), height: Number(height) }, deviceScaleFactor: 1 });
       page.on('pageerror', (e) => problems.push(`${name}: ${e.message}`));
       page.on('console', (m) => m.type() === 'error' && problems.push(`${name}: ${m.text()}`));
