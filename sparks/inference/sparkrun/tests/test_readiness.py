@@ -14,6 +14,7 @@ from unittest import mock
 import pytest
 
 MOD = Path(__file__).resolve().parents[1] / "mods/tensorfold-readiness"
+V2_MOD = MOD.with_name("tensorfold-readiness-v2")
 MODEL = "Test-Model"
 CONTEXT = 524288
 LANES = 4
@@ -89,9 +90,9 @@ def server():
     httpd.server_close()
 
 
-def gate(url, efforts=",".join(LEVELS), *extra):
+def gate(url, efforts=",".join(LEVELS), *extra, bundle=MOD):
     return subprocess.run(
-        [sys.executable, str(MOD / "readiness.py"), "--url", url + "/v1", "--model", MODEL, "--context", str(CONTEXT),
+        [sys.executable, str(bundle / "readiness.py"), "--url", url + "/v1", "--model", MODEL, "--context", str(CONTEXT),
          "--lanes", str(LANES), "--efforts", efforts, *extra], capture_output=True, text=True)
 
 
@@ -112,15 +113,65 @@ def test_python_server_passes_without_a_tokenize_route(server):
     assert gate(url, ",".join(LEVELS), "--min-pool-tokens", "3000000").returncode != 0
 
 
+@pytest.mark.parametrize("spill", [None, {}, {"format": "off"},
+    {"format": "blocks", "cap_bytes": 0, "block_tokens": 2048},
+    {"format": "blocks", "cap_bytes": True, "block_tokens": 2048},
+    {"format": "blocks", "cap_bytes": 68719476736},
+    {"format": "blocks", "cap_bytes": 68719476736, "block_tokens": 0},
+    {"format": "blocks", "cap_bytes": 68719476736, "block_tokens": -1},
+    {"format": "blocks", "cap_bytes": 68719476736, "block_tokens": "2048"}])
+def test_v2_rejects_inactive_or_malformed_spill_when_required(server, spill):
+    handler, url = server
+    handler.health = staticmethod(lambda: {**python_health(), "spill": spill})
+    result = gate(url, ",".join(LEVELS), "--require-spill", bundle=V2_MOD)
+    assert result.returncode != 0 and "spill tier" in result.stderr
+    assert "TensorFold smoke" not in result.stdout
+
+
+def test_v2_requires_spill_at_both_health_checks(server):
+    handler, url = server
+    active = {"format": "blocks", "cap_bytes": 68719476736, "block_tokens": 2048}
+    handler.health = staticmethod(lambda: {**python_health(), "spill": active})
+    assert gate(url, ",".join(LEVELS), "--require-spill", bundle=V2_MOD).returncode == 0
+    calls = []
+
+    def loses_spill():
+        calls.append(None)
+        return {**python_health(), **({"spill": active} if len(calls) == 1 else {})}
+
+    handler.health = staticmethod(loses_spill)
+    result = gate(url, ",".join(LEVELS), "--require-spill", bundle=V2_MOD)
+    assert len(calls) == 2 and result.returncode != 0
+    assert "Expected an active block spill tier" in result.stderr
+
+
+@pytest.mark.parametrize("health", [python_health, zig_health])
+def test_v2_keeps_spill_optional_for_other_profiles(server, health):
+    handler, url = server
+    handler.health = staticmethod(health)
+    result = gate(url, bundle=V2_MOD)
+    assert result.returncode == 0, result.stderr
+
+
+def test_v2_bundle_is_frozen(tmp_path):
+    bundle = tmp_path / V2_MOD.name
+    shutil.copytree(V2_MOD, bundle, ignore=shutil.ignore_patterns("__pycache__"))
+    check = [sys.executable, str(bundle / "prepare.py"), "--check"]
+    subprocess.run(check, check=True, capture_output=True)
+    (bundle / "readiness.py").write_text("# changed\n")
+    assert subprocess.run(check, capture_output=True).returncode != 0
+
+
 @pytest.mark.parametrize("change,message", [
     (lambda h: {**h, "warming": True}, "warming"),
     (lambda h: {**h, "max_batch_size": 2}, "lanes"),
     (lambda h: {**h, "model": "other"}, "names model"),
 ])
-def test_unready_health_fails(server, change, message):
+@pytest.mark.parametrize("bundle", [MOD, V2_MOD], ids=["v1", "v2"])
+def test_unready_health_fails(server, change, message, bundle):
     handler, url = server
     handler.health = staticmethod(lambda: change(zig_health()))
-    result = gate(url)
+    result = gate(url, bundle=bundle)
     assert result.returncode != 0 and message in result.stderr
 
 

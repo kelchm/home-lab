@@ -137,9 +137,12 @@ def validate_dockerfile(mod, lock):
         require(all(base == lock["build"]["base_image"] for base in bases), "build/Dockerfile", "FROM base disagrees with build.base_image")
 
 
+READINESS_MODS = frozenset({"tensorfold-readiness", "tensorfold-readiness-v2"})
+
+
 def shape(lock, mod):
     require(isinstance(lock, dict), "lock", "expected an object")
-    if mod.name == "tensorfold-readiness":
+    if mod.name in READINESS_MODS:
         kind = "readiness"
     elif set(lock) & {"launcher_env", "installed_files", "engine_version"}:
         kind = "glm"
@@ -289,7 +292,7 @@ def validate_recipe(recipe, path, locks):
         if kind != "readiness":
             owners.append((lock, kind))
     require(len(owners) == 1, "mods", "expected exactly one engine lock")
-    require(any((path.parent / ref).name == "tensorfold-readiness" for ref in mods), "mods", "missing shared readiness mod")
+    require(sum((path.parent / ref).name in READINESS_MODS for ref in mods) == 1, "mods", "expected exactly one shared readiness mod")
     lock, kind = owners[0]
     metadata, defaults = recipe.get("metadata"), recipe.get("defaults")
     require(isinstance(metadata, dict) and isinstance(defaults, dict), "recipe", "metadata and defaults are required")

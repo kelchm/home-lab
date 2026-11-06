@@ -254,6 +254,15 @@ def test_a_new_checksum_only_mod_needs_an_explicit_supported_shape(source):
         validator.validate_repository(source)
 
 
+def test_a_recipe_cannot_install_both_readiness_versions(source):
+    path = recipe_for(source, "glm")
+    recipe = yaml.safe_load(path.read_text())
+    recipe["mods"].append("../mods/tensorfold-readiness-v2")
+    path.write_text(yaml.safe_dump(recipe))
+    with pytest.raises(validator.InvalidManifest, match="exactly one shared readiness mod"):
+        validator.validate_repository(source)
+
+
 def test_missing_new_lock_and_missing_owning_recipe_are_reported(source):
     other = source / "mods" / "unknown"
     other.mkdir()

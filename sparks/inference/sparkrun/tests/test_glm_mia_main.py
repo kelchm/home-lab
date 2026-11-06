@@ -305,3 +305,18 @@ def test_discovery_reports_the_window_and_the_templates_levels():
         "id": SERVED, "object": "model", "owned_by": "tensorfold", "context_length": 1048576, "max_model_len": 1048576,
         "reasoning": {"default_enabled": True, "supported_efforts": ["max", "high", "low", "none"]}}
     assert ns["_model_entry"](app(set(), window=None), SERVED) == {"id": SERVED, "object": "model", "owned_by": "tensorfold"}
+
+
+def test_spill_readiness_v2_preserves_the_frozen_durable_serving_inputs():
+    old = yaml.safe_load(DURABLE.read_text())
+    new_path = DURABLE.with_stem(DURABLE.stem + "-readiness-v2")
+    new = yaml.safe_load(new_path.read_text())
+    assert new["metadata"].pop("profile") == new_path.stem
+    old["metadata"].pop("profile")
+    new["metadata"].pop("description")
+    old["metadata"].pop("description")
+    assert new["mods"][0] == "../mods/tensorfold-readiness-v2"
+    new["mods"] = old["mods"]
+    assert new["post_exec"] == [old["post_exec"][0] + " --require-spill"]
+    new["post_exec"] = old["post_exec"]
+    assert new == old
