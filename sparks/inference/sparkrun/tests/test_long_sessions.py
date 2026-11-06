@@ -57,9 +57,13 @@ def sse_server(parts, *, chunked=False):
                 self.send_header("Transfer-Encoding", "chunked")
             self.send_header("Connection", "close")
             self.end_headers()
-            for part in parts:
-                self.wfile.write(part)
-                self.wfile.flush()
+            try:
+                for part in parts:
+                    self.wfile.write(part)
+                    self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError):
+                self.server.disconnected.set()
+                return
             self.server.sent.set()
             # Keep the connection silent and open until the client closes or test cleanup runs.
             self.connection.settimeout(0.05)
