@@ -1,7 +1,7 @@
 ---
 # Unpackerr — polls *arr APIs for completed downloads, extracts RAR/7z
 # archives in-place inside the downloads tree. No HTTPRoute; v1 also serves
-# a password-protected UI/API on the cluster-only metrics listener.
+# a UI shell and authenticated API on the metrics listener, restricted to vmagent.
 # Polls *arr queues; *arr does the library import after extract.
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
@@ -27,7 +27,7 @@ spec:
               UN_LOG_LEVEL: info
               UN_WEBSERVER_METRICS: "true"
               UN_WEBSERVER_LISTEN_ADDR: 0.0.0.0:5656
-              # Env-only: no config file, persistent history, or UI-managed settings.
+              # Env-only intended state; live UI changes are lost on restart.
               # Setting the password prevents a temporary one appearing in logs.
               UN_WEBSERVER_UI_PASSWORD:
                 valueFrom:
@@ -70,7 +70,7 @@ spec:
                 spec:
                   # No dedicated health endpoint in v1. curl ships in the image;
                   # use the metrics-only key without embedding it in the manifest.
-                  # Gathering stats still detects an unresponsive application loop.
+                  # Gathering stats checks application-state locks as well as HTTP.
                   exec:
                     command:
                       - /bin/sh

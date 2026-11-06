@@ -1,0 +1,20 @@
+---
+# The v1 metrics listener also serves an administrative UI/API. Only vmagent
+# needs network access; liveness fetches metrics locally inside the container.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: unpackerr
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: unpackerr
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: vmagent
+      toPorts:
+        - ports:
+            - port: "5656"
+              protocol: TCP
