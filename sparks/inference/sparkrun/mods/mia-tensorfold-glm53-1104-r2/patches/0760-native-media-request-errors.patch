@@ -1,0 +1,251 @@
+From: Home Lab
+Subject: [PATCH] glm: preserve request-error class for deferred media failures
+
+Only an explicit family classifier can refuse a known media input failure.
+Unknown CUDA, allocation and protocol failures keep their server-error class.
+An internal refused finish reason crosses the normal mailbox and all API routes.
+
+diff --git a/zig/src/core/engine_api.zig b/zig/src/core/engine_api.zig
+--- a/zig/src/core/engine_api.zig
++++ b/zig/src/core/engine_api.zig
+@@ -145,7 +145,7 @@
+ pub const SpeechInfo = @import("speech_api.zig").SpeechInfo;
+ pub const SpeechSubmitError = error{ Closed, Busy, InvalidRequest, Unsupported };
+ 
+-pub const Reason = enum { stop, length, cancelled, failed, silence };
++pub const Reason = enum { stop, length, cancelled, failed, silence, refused };
+ pub const speech_guard = @import("speech_guard.zig");
+ 
+ /// What a finished reply's rounds did, for its runtime fields and /metrics.
+@@ -386,6 +386,8 @@
+ pub const Explain = struct {
+     ctx: ?*anyopaque = null,
+     text: *const fn (ctx: ?*anyopaque, err: anyerror) ?[]const u8,
++    /// A known request-data failure during prefill; null leaves an ordinary server failure.
++    request: ?*const fn (ctx: ?*anyopaque, err: anyerror) ?[]const u8 = null,
+ };
+ 
+ /// A backend's own memory counts for LaneHost; read from HTTP threads, so it must not touch the GPU.
+diff --git a/zig/src/core/lane_host.zig b/zig/src/core/lane_host.zig
+--- a/zig/src/core/lane_host.zig
++++ b/zig/src/core/lane_host.zig
+@@ -368,7 +368,7 @@
+         return switch (e) {
+             error.Cancelled => h.cancel(job),
+             error.LaneMemory => h.requeue(job),
+-            else => h.drop(job, h.words(e)),
++            else => h.passFailure(job, e),
+         };
+     }
+ 
+@@ -384,7 +384,7 @@
+                     fill.unfill(h, job);
+                     break :blk h.requeue(job);
+                 },
+-                else => h.drop(job, h.words(e)),
++                else => h.passFailure(job, e),
+             };
+             return;
+         };
+@@ -444,7 +444,7 @@
+         const be = h.core.backend;
+         if (h.cache) |store| if (job.marks.len == 0 and (job.request.untaught or store.rules.lookahead > 0)) return h.cancel(job); // it would keep nothing
+         be.prefill(&job.stream) catch |e| { // a yield ends it like a cancel: what it prefilled is kept
+-            if (e != error.Cancelled and e != error.Yielded) return h.drop(job, h.words(e));
++            if (e != error.Cancelled and e != error.Yielded) return h.passFailure(job, e);
+             be.release(&job.stream);
+             return h.cancel(job);
+         };
+@@ -461,10 +461,21 @@
+         return x.text(x.ctx, e) orelse @errorName(e);
+     }
+ 
++    /// Only a backend's explicit request-data classifier can change a prefill failure into a refusal.
++    pub fn passFailure(h: *LaneHost, job: *Job, err: anyerror) bool {
++        if (h.explain) |x| if (x.request) |request| if (request(x.ctx, err)) |message|
++            return h.dropReason(job, .refused, message);
++        return h.drop(job, h.words(err));
++    }
++
+     pub fn drop(h: *LaneHost, job: *Job, message: []const u8) bool {
++        return h.dropReason(job, .failed, message);
++    }
++
++    fn dropReason(h: *LaneHost, job: *Job, reason: Reason, message: []const u8) bool {
+         h.remove(job);
+         if (job.started and !job.stream.finished) h.core.discard(&job.stream);
+-        h.finish(job, .failed, message);
++        h.finish(job, reason, message);
+         return true;
+     }
+ 
+@@ -601,4 +612,5 @@
+     _ = @import("lane_host_frame_test.zig");
+     _ = @import("lane_host_tests.zig");
+     _ = @import("lane_host_fetch.zig");
++    _ = @import("lane_host_media_test.zig");
+ }
+diff --git a/zig/src/core/lane_host_recall.zig b/zig/src/core/lane_host_recall.zig
+--- a/zig/src/core/lane_host_recall.zig
++++ b/zig/src/core/lane_host_recall.zig
+@@ -44,7 +44,7 @@
+ pub fn finished(h: *LaneHost, job: *Job, reason: api.Reason, stats: api.Stats) api.Stats {
+     var told = stats;
+     const store = h.recall orelse return told;
+-    if (reason != .failed and writes(job)) store.readReply(job.request.prompt, job.stream.emitted());
++    if (reason != .failed and reason != .refused and writes(job)) store.readReply(job.request.prompt, job.stream.emitted());
+     if (job.recall.reading) told.telemetry_json = job.recall.reader.telemetry(&job.recall.telemetry);
+     return told;
+ }
+diff --git a/zig/src/core/lane_host_media_test.zig b/zig/src/core/lane_host_media_test.zig
+new file mode 100644
+--- /dev/null
++++ b/zig/src/core/lane_host_media_test.zig
+@@ -0,0 +1,77 @@
++//! Host memory reporting and isolated request refusal through LaneHost.
++const std = @import("std");
++const lanes = @import("lanes");
++const api = @import("engine_api.zig");
++const LaneHost = @import("lane_host.zig").LaneHost;
++const Memory = api.Memory;
++const Reason = api.Reason;
++const Id = api.Id;
++const Event = api.Event;
++const Request = api.Request;
++const Engine = api.Engine;
++
++test "media request errors: classified whole, stepped and warm failures are isolated from another stream" {
++    for ([_]bool{ false, true }) |steps| for ([_]bool{ false, true }) |classify| for ([_]bool{ false, true }) |background|
++        try refusal(steps, classify, background);
++}
++
++fn refusal(steps: bool, classify: bool, background: bool) !void {
++    const gpa = std.testing.allocator;
++    var cfg = try lanes.Config.init(gpa, .{ .exact_width = 8, .gpu_tokens = true, .hidden_rows = true }, 8, 7);
++    defer cfg.deinit(gpa);
++    var target: lanes.fake.Fake = .{ .gpa = gpa, .refuse_sampled = true, .prefill_chunks = 3 };
++    defer target.deinit();
++    var clock: lanes.fake.FixedClock = .{};
++    var core = lanes.Engine.init(gpa, &cfg, if (steps) target.stepped() else target.backend(), clock.clock());
++    defer core.deinit();
++    var host = LaneHost.init(gpa, std.testing.io, &core, .{ .lanes = 2 });
++    const Words = struct {
++        fn text(_: ?*anyopaque, err: anyerror) ?[]const u8 {
++            return if (err == error.SamplingRefused) "send temperature 0" else null;
++        }
++    };
++    host.explain = .{ .text = Words.text, .request = if (classify) Words.text else null };
++    try host.start();
++    defer host.stop();
++    const Box = struct {
++        mutex: std.Io.Mutex = .init,
++        done: ?Reason = null,
++        message: []const u8 = "",
++        tokens: usize = 0,
++        fn event(ctx: *anyopaque, _: Id, e: *const Event) void {
++            const b: *@This() = @ptrCast(@alignCast(ctx));
++            b.mutex.lockUncancelable(std.testing.io);
++            defer b.mutex.unlock(std.testing.io);
++            switch (e.*) {
++                .tokens => |t| b.tokens += t.len,
++                .finished => |f| {
++                    b.done = f.reason;
++                    b.message = f.message;
++                },
++                else => {},
++            }
++        }
++        fn wait(b: *@This()) !Reason {
++            for (0..10000) |_| {
++                b.mutex.lockUncancelable(std.testing.io);
++                const d = b.done;
++                b.mutex.unlock(std.testing.io);
++                if (d) |r| return r;
++                std.Io.sleep(std.testing.io, .fromMilliseconds(1), .awake) catch {};
++            }
++            return error.Timeout;
++        }
++    };
++    const prompt = [_]u32{ 2, 7, 1, 8 };
++    var plain: Box = .{};
++    var sampled: Box = .{};
++    const greedy: Request = .{ .prompt = &prompt, .max_tokens = 64 };
++    const keyed: Request = .{ .prompt = &prompt, .background = background, .max_tokens = if (background) 0 else 64, .sampling = .{ .seed = 3, .temperature = 0.7, .top_k = 5 } };
++    const e = host.engine();
++    try e.submit(1, &greedy, .{ .ctx = &plain, .event = Box.event });
++    try e.submit(2, &keyed, .{ .ctx = &sampled, .event = Box.event });
++    try std.testing.expectEqual(if (classify) Reason.refused else Reason.failed, try sampled.wait());
++    try std.testing.expectEqualStrings("send temperature 0", sampled.message);
++    try std.testing.expectEqual(Reason.length, try plain.wait());
++    try std.testing.expectEqual(@as(usize, 64), plain.tokens);
++}
+diff --git a/zig/src/server/chat.zig b/zig/src/server/chat.zig
+--- a/zig/src/server/chat.zig
++++ b/zig/src/server/chat.zig
+@@ -483,6 +483,7 @@
+             .silence => return cx.other("the text engine returned a speech-only finish reason"),
+             .cancelled => "cancelled",
+             .failed => return cx.other(if (m.message.len > 0) try a.dupe(u8, m.message) else "the reply failed"),
++            .refused => return cx.refuse(if (m.message.len > 0) try a.dupe(u8, m.message) else "the request could not be prepared"),
+         };
+         const stopped: ?u32 = if (g.loop_stop) m.stats.loop_period else null;
+         const reason = if (stopped != null) @import("loop_stop.zig").finish_reason else ended;
+diff --git a/zig/src/server/speech_stream.zig b/zig/src/server/speech_stream.zig
+--- a/zig/src/server/speech_stream.zig
++++ b/zig/src/server/speech_stream.zig
+@@ -27,7 +27,7 @@
+     return switch (box.reason) {
+         .stop, .length, .silence => if (samples > capacity) "the engine wrote more audio than the reply holds" else null,
+         .cancelled => "speech synthesis was cancelled",
+-        .failed => if (box.message.len > 0) box.message else "speech synthesis failed",
++        .failed, .refused => if (box.message.len > 0) box.message else "speech synthesis failed",
+     };
+ }
+ 
+diff --git a/zig/src/native/cuda.zig b/zig/src/native/cuda.zig
+--- a/zig/src/native/cuda.zig
++++ b/zig/src/native/cuda.zig
+@@ -490,7 +490,7 @@
+         .vision = if (@hasField(@TypeOf(loaded), "vision")) vision_offer.offer(loaded.vision, o.vision) else null,
+         .admit = admit,
+         .slide_conversations = conversations,
+-    }, .{ .ctx = loaded.ctx, .text = F.explain });
++    }, .{ .ctx = loaded.ctx, .text = F.explain, .request = if (@hasDecl(F, "requestProblem")) F.requestProblem else null });
+     opened = true;
+     kv_pages.warnCapacity(cache_capacity, o.keep == 0 or o.prompt_cache_gib == 0, std.log);
+     if (@hasField(@TypeOf(loaded), "follow")) if (loaded.follow) |f| {
+diff --git a/zig/src/families/glm/cuda_native.zig b/zig/src/families/glm/cuda_native.zig
+--- a/zig/src/families/glm/cuda_native.zig
++++ b/zig/src/families/glm/cuda_native.zig
+@@ -440,8 +440,19 @@
+     own.gpa.destroy(own);
+ }
+ 
++/// Request-owned media can exceed its preparation budget after a queued pass begins.
++/// CUDA, allocation, rank/protocol and unknown errors deliberately keep server-failure semantics.
++pub fn requestProblem(_: ?*anyopaque, err: anyerror) ?[]const u8 {
++    return switch (err) {
++        error.MediaDeadline => "image or video preparation exceeded its time budget",
++        error.BadVideo, error.Short, error.Decode => "the video's bytes are invalid or unsupported; use MP4 or WebM (H.264, HEVC, VP8, VP9 or MPEG-4)",
++        else => null,
++    };
++}
++
+ /// The server's words for this family's refusals.
+ pub fn explain(_: ?*anyopaque, err: anyerror) ?[]const u8 {
++    if (requestProblem(null, err)) |message| return message;
+     return switch (err) {
+         error.BadRoceCap => "TF_ROCE_MAX_KB: give an integer from 1 through 4194303 KiB, or unset it for 4096 KiB",
+         error.BadHostCache => "TF_GLM_HOST_CACHE_GIB: give GiB of pinned host memory over all the ranks (0 turns the host tier off), or unset it or set auto for a quarter of what the host has available (at most 16 GiB)",
+@@ -529,3 +540,11 @@
+ test "a small text context still sizes the link for every offered media span" {
+     try std.testing.expectEqual(@as(usize, 792), try linkCapacity(64, .{ .image_tokens = 2048, .max_images = 8, .video_tokens = 4096, .max_videos = 2, .max_frames = 256 }));
+ }
++
++test "media request errors: GLM classifies only known media input failures" {
++    const t = std.testing;
++    for ([_]anyerror{ error.MediaDeadline, error.BadVideo, error.Short, error.Decode }) |err|
++        try t.expect(requestProblem(null, err) != null);
++    for ([_]anyerror{ error.OutOfMemory, error.CudaError, error.RankMismatch, error.BadStep, error.BadChunk }) |err|
++        try t.expect(requestProblem(null, err) == null);
++}

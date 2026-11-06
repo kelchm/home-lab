@@ -4,23 +4,22 @@
   "kit_revision": "02dac3879852b8c5713318d3d64a5a791002e954",
   "engine_revision": "f350cd3ea253a042e205746928271f9d8f71a82d",
   "kit_patch_count": 108,
-  "site_patch_count": 13,
-  "site_patches_sha256": "fc4f6f91fe4f89dff230723021f42679a08985c978513add26d7e652f08b3bf3",
-  "image": "glm53-tf:1104-02dac38-f7680c9bcdf7-sfc4f6f91fe4f",
-  "image_config_id": "sha256:1d1c44ae8c87b866581c4978d78991570406d2da02a13954203cc3d69d68cc70",
-  "image_daemon_id": "sha256:51e6e81b97683347f6903a7bb48ca988369e573aa7e3638c9d87e29b62fed1b0",
-  "embedded_patch_files_verified": 121,
+  "site_patch_count": 15,
+  "site_patches_sha256": "0c49ea55217be66da4c7adbbf70d36caf66f69b43b9e4ffde7f14faa11be0ebf",
+  "image": "glm53-tf:1104-02dac38-f7680c9bcdf7-s0c49ea55217b",
+  "image_config_id": "sha256:4f667f7aec1ef64da66c51c060231039661943af2b9a4da59732a1ab3653f4d0",
+  "image_daemon_id": "sha256:c9a61e94a37686ed30ca294b447d3ba8a942746012a2afc9892c4821db862148",
   "native_host": {
-    "build_steps_passed": 328,
-    "build_steps_total": 328,
-    "tests_passed": 4501,
-    "tests_skipped": 18,
+    "build_steps_passed": 338,
+    "build_steps_total": 338,
+    "tests_passed": 4586,
+    "tests_skipped": 28,
     "exit_code": 0
   },
   "photo": {
     "macos_tests_passed": 29,
     "linux_tests_passed": 29,
-    "runtime_image": "sha256:51e6e81b97683347f6903a7bb48ca988369e573aa7e3638c9d87e29b62fed1b0",
+    "runtime_image": "sha256:c9a61e94a37686ed30ca294b447d3ba8a942746012a2afc9892c4821db862148",
     "complete_pixel_arrays": 49,
     "matched_refusals": 10,
     "skipped": 0
@@ -36,44 +35,61 @@
     ],
     "portable_zig_linked_library_sha256": "d65657f8683696b23cabe7c97c2812f900ffba332f51dbc94dff0f8a204338b1",
     "functional_gate_exit_code": 0,
-    "pixel_parity_claimed": false
+    "pixel_parity_claimed": false,
+    "real_library_tests_passed": 32,
+    "skipped": 0,
+    "runtime_image": "sha256:c9a61e94a37686ed30ca294b447d3ba8a942746012a2afc9892c4821db862148",
+    "native_eager_float_comparisons": 153058752,
+    "native_eager_float_differences": 0,
+    "long_fixture_groups": 33,
+    "long_fixture_decode_calls": 1,
+    "long_fixture_repeat_decoded_bytes": 0,
+    "gpu_pixel_model_quality_qualified": false
   },
   "evidence": {
     "native_host": {
-      "local_path": "/tmp/glm1104-runtime13-host-gate.log",
-      "sha256": "8faf9a33045055b5ef53dc8cea45cb69d7fb36a23a7723ed7b0a4801f512998b"
+      "local_path": "/tmp/glm1104-video15-host-gate.log",
+      "sha256": "f58dece493640f914d588fc8af5cad62629131c8be2278400185e0f644fbdfd4"
     },
     "image_build": {
-      "local_path": "/tmp/glm1104-runtime13-image-build-final.log",
-      "sha256": "96c310a37bc1da3ef161203d1dc98220b1bf0c1d651e56568b1c6e85cd038d00"
+      "local_path": "/tmp/glm1104-video15-image-build.log",
+      "sha256": "e67aafdb82edb74facdef823739bbb4e52174a5db859d45ee343797a04334788"
     },
     "photo": {
-      "local_path": "/tmp/glm1104-candidate13-photo.log",
-      "sha256": "99515653a3bb5d40d241a265b2d735c00e3d0f7c794813dae743abc47ff8a583"
+      "local_path": "/tmp/glm1104-video15-photo.log",
+      "sha256": "abeccdc806416e2aa2482888f3db638ca4a17a387f61c43ff902622332e7ef85"
     },
     "video": {
-      "local_path": "/tmp/glm1104-candidate13-video-smoke.log",
-      "sha256": "ba0c52dff27f1376fef5180edea079ddfb546e155cf51e381de13835e07ebaff"
+      "local_path": "/tmp/glm1104-video15-portable-gate/portable-final.log",
+      "sha256": "0f7bd3c950af9461a769d269526af3a6062a342e638b3a9b9b55eb4578b8563a"
+    },
+    "video_receipt": {
+      "local_path": "/tmp/glm1104-video15-portable-gate/receipt-final.json",
+      "sha256": "cc7c6c86b8e4caa49793895f06cad064b6d82687bc9e4f86ee9a17dfa3de1e50"
+    },
+    "video_compile": {
+      "local_path": "/tmp/glm1104-video15-portable-gate/compile.log",
+      "sha256": "9ad938d5b07aec988af160d87087e234f0d557dab4b2c1cfd19e24ef75faadcb"
     },
     "image_build_info": {
-      "local_path": "/Users/kelchm/.cache/glm1104-video-probe/candidate-13/BUILD-INFO",
-      "sha256": "76f37baf2dd2bf4a1cdc18a4a836bea80f0fe44ac0780a0645a58cfd69975c51"
+      "local_path": "/Users/kelchm/.cache/glm1104-video-probe/candidate-15/BUILD-INFO",
+      "sha256": "76a029d1d1fd2182eabee53fc6018d2ca61bf2271399f3487589875baea85438"
     },
     "ffmpeg_build_info": {
-      "local_path": "/Users/kelchm/.cache/glm1104-video-probe/candidate-13/FFMPEG-BUILD-INFO",
+      "local_path": "/Users/kelchm/.cache/glm1104-video-probe/candidate-15/FFMPEG-BUILD-INFO",
       "sha256": "0b3025e36e0d69d0f5ea251bdf6f67e82b04755b69a6526e991269bdf79a4b9e"
     },
     "image_source_verification": {
-      "local_path": "/Users/kelchm/.cache/glm1104-video-probe/candidate-13/verification.json",
-      "sha256": "297f395bd69caf8db60f9d083be10b5f5b9ef9c9eef01a17277752f361054aaf"
+      "local_path": "/Users/kelchm/.cache/glm1104-video-probe/candidate-15/verification.json",
+      "sha256": "e693d2f9fa1d7cd4bb525c72e8ce3b19ce9613b36db38812bdd96f27ed5a831a"
     },
     "repository_tests": {
-      "local_path": "/tmp/glm1104-candidate13-repository-archive-tests.log",
-      "sha256": "90ef30c69c28fc9a7f5b06fae8b32c2833f42d4a0512beca6e5446ed49ca4e18"
+      "local_path": "/tmp/glm1104-candidate15-repository-pinned-tests.log",
+      "sha256": "d2c14c211390d502a874452b1fcd55e0c3d226a03d1325b76f1ab79c2f3b7066"
     },
     "markdown_links": {
-      "local_path": "/tmp/glm1104-candidate13-markdown-links.log",
-      "sha256": "0970c6ec25a08d7d641c0371daeafd9dc589a9daffb65003d5ca1ef9416a5c19"
+      "local_path": "/tmp/glm1104-candidate15-markdown-links.log",
+      "sha256": "b2cd3631d430c7eff366a51ddcffb9468b673f7d99baf55b4fb7ef383bbc3874"
     }
   },
   "sparks_accessed": false,
@@ -84,7 +100,9 @@
     "passed": 312,
     "skipped": 5,
     "subtests_passed": 57,
-    "exit_code": 0
+    "exit_code": 0,
+    "sdk_version": "0.3.10",
+    "source_boundary": "Before reconciliation with November 6 merged SparkRun changes"
   },
   "checkpoint": {
     "tests_passed": 103,
@@ -102,9 +120,9 @@
     "rss_bound_claimed": false
   },
   "known_blockers": [
-    "Inherited repeated video decoding and late-error classification",
     "Live all-rank capture/restore and separate-NVMe persistence",
     "Safe sliced-prefill rollback and numerical/performance qualification",
     "Measured GB10 memory, model quality and no-regression hardware campaign"
-  ]
+  ],
+  "build_info_patch_hashes_verified": 123
 }

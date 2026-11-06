@@ -1,0 +1,43 @@
+1/32 root.test_0...OK
+2/32 root.test_1...OK
+3/32 root.test_2...OK
+4/32 root.test_3...OK
+5/32 root.test_4...OK
+6/32 root.test_5...OK
+7/32 root.test_6...OK
+8/32 root.test_7...OK
+9/32 root.test_8...OK
+10/32 root.test_9...OK
+11/32 root.test_10...OK
+12/32 root.test_11...OK
+13/32 video_prepare_core_test.test.video prepare real: candidate library decodes each clip once and every patch equals frozen eager...VIDEO_REAL codec=h264.mp4 groups=2 calls=1 decoded_bytes=46080 repeat_decoded_bytes=0 retained_peak=169406 scratch_peak=225864 process_rss_peak=17539072
+VIDEO_REAL codec=hevc.mp4 groups=2 calls=1 decoded_bytes=46080 repeat_decoded_bytes=0 retained_peak=169406 scratch_peak=225864 process_rss_peak=18714624
+VIDEO_REAL codec=vp8.webm groups=2 calls=1 decoded_bytes=46080 repeat_decoded_bytes=0 retained_peak=169406 scratch_peak=225864 process_rss_peak=18911232
+VIDEO_REAL codec=vp9.webm groups=2 calls=1 decoded_bytes=46080 repeat_decoded_bytes=0 retained_peak=169406 scratch_peak=225864 process_rss_peak=19582976
+VIDEO_REAL codec=mpeg4.mp4 groups=2 calls=1 decoded_bytes=46080 repeat_decoded_bytes=0 retained_peak=169406 scratch_peak=225864 process_rss_peak=19173376
+OK
+14/32 video_prepare_core_test.test.video prepare real: truncated unsampled tail passes old eager sampling but fails full preparation...VIDEO_TRUNCATED old_sampled_pairs=2 preparation=Short engine_admissions=0
+OK
+15/32 video_prepare_core_test.test.video prepare real: frozen 070 control redecodes every pair and each repeat...VIDEO_070_CONTROL prepared_decode_calls=0 materialize_decode_calls=4 materialize_decoded_bytes=73728
+OK
+16/32 video_prepare_core_test.test.video prepare real: 33-second 1080p clip keeps one decode and exact eager floats...VIDEO_1080P encoded=11914890 groups=33 calls=1 decoded_bytes=416793600 repeat_decoded_bytes=0 compared_floats=153058752 prepare_ms=18082 retained_peak=109970846 prepare_scratch_peak=2753740 materialize_scratch_peak=9276360 prep_rss_peak=125034496
+OK
+17/32 video_prepare_http_test.test.video prepare real: native HTTP delays engine admission until four clips validate and releases all owners...VIDEO_HTTP clips=4 decode_calls=4 decoded_bytes=184320 engine_decoded_bytes=0 retained_peak=1044778 media_peak=31180
+OK
+18/32 video_prepare_http_test.test.video prepare real: bad short truncated frames and exhausted budgets return HTTP 400 before submit...OK
+19/32 video_prepare_http_test.test.video prepare real: data URL warm passes decode once on the parent thread and retain its admission...VIDEO_WARM parent_decode=1 warm_decode=1 engine_decode=0 retained_final=0 residents_final=0
+OK
+20/32 video_prepare_http_test.test.video prepare real: Messages and Responses keep explicit unsupported video refusals without engine admission...OK
+21/32 video_prepare_http_test.test.video prepare real: exact 16 MiB encoded boundary and short shared deadline release temporary bytes...OK
+22/32 video_prepare_http_test.test.video prepare real: disconnect and engine refusal release validated canvases without redecoding...OK
+23/32 video_prepare_http_test.test.video prepare real: deadline expiring inside a real frame callback refuses before admission...OK
+24/32 hf_text.test_0...OK
+25/32 auth.test_0...OK
+26/32 request_guard.test_0...OK
+27/32 drama_allow.test_0...OK
+28/32 idle_unload.test_0...OK
+29/32 cortheon.cortheon.test_0...OK
+30/32 tool_stream.test_0...OK
+31/32 speech.test_0...OK
+32/32 speech_plain.test_0...OK
+All 32 tests passed.

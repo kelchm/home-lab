@@ -1,0 +1,5 @@
+Build Summary: 3/3 steps succeeded
+compile-video-prepare-real success
++- install video-prepare-real success
+   +- compile test video-prepare-real debug aarch64-linux-gnu success 12s MaxRSS:1G
+

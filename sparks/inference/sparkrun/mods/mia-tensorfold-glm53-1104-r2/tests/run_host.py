@@ -6,6 +6,7 @@ test-only build-graph additions use a fresh disposable directory. No target engi
 Docker daemon, model endpoint, package installation or network is used.
 """
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -28,6 +29,8 @@ def install_tests(scratch, mod=MOD):
         ('media/native_media_test.zig', 'native_media_test.zig'),
     ):
         shutil.copy2(mod / 'tests' / source, server / target)
+    api_fixture = server / 'native_api_test.zig'
+    api_fixture.write_text(api_fixture.read_text() + '\n' + (mod / 'tests/media_errors/server_cases.zig').read_text())
     media = server / 'native_media_test.zig'
     content = media.read_text()
     adapter = '.ctx = d.ctx, .prepare = d.prepare } else null'
@@ -72,6 +75,8 @@ def install_tests(scratch, mod=MOD):
     b.step("test-native-bundle-contract", "Composed site API, media and body policies").dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = server_tests, .filters = &.{"native API parity:", "native media parity:", "HTTP body profile:", "media compatibility:", "media lifecycle:"} })).step);
     b.step("test-native-media-budget", "Active preparation time excludes queue and prefill waits").dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = mods.lanes, .filters = &.{"media compatibility:"} })).step);
     b.step("test-native-prepare-memory", "Request ownership, admission and actual allocator accounting").dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = server_tests, .filters = &.{"prepare memory:", "prepare arena receipt:"} })).step);
+    const media_errors = b.step("test-native-media-errors", "Typed late media refusals, isolated lanes and API errors");
+    for ([_]*std.Build.Module{ server_tests, mods.api }) |module| media_errors.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = module, .filters = &.{"media request errors:"} })).step);
 '''
     content = content.replace(needle, needle + addition)
     needle = '    @import("glm_contracts.zig").tests(b, glm, mods.lanes, cuda, mods.core);'
@@ -79,7 +84,55 @@ def install_tests(scratch, mod=MOD):
         raise ValueError('The native GLM host build graph changed')
     addition = '''
     b.step("test-native-media-lifecycle", "Bounded media rows and actual TP protocol").dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = glm, .filters = &.{"media lifecycle:", "a follower's failed image admission", "128 video pairs cross", "a row budget whose", "a request with images and a video", "a splice's map"} })).step);
+    media_errors.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = glm, .filters = &.{"media request errors:"} })).step);
 '''
+    build.write_text(content.replace(needle, needle + addition))
+    install_video_tests(scratch, mod)
+
+
+def install_video_tests(scratch, mod=MOD):
+    here = mod / 'tests/video_prepare'
+    relative = 'zig/src/families/glm/video_core.zig'
+    # Reconstruct the frozen eager oracle in a separate directory; native inputs stay intact.
+    with tempfile.TemporaryDirectory(prefix='glm-video-oracle-') as name:
+        reference = Path(name)
+        path = reference / relative
+        path.parent.mkdir(parents=True)
+        shutil.copy2(scratch / relative, path)
+        patch = str(mod / 'patches/0750-native-video-single-pass.patch')
+        subprocess.run(['git', 'apply', '--reverse', '--include=' + relative, patch], cwd=reference, check=True)
+        expected = json.loads((here / 'source-manifest.json').read_text())['input_files'][relative]
+        if hashlib.sha256(path.read_bytes()).hexdigest() != expected:
+            raise ValueError('The frozen eager video oracle changed')
+        shutil.copy2(path, scratch / 'zig/src/families/glm/video_eager_reference.zig')
+    server = scratch / 'zig/src/server'
+    for source, target in (
+        ('core_cases.zig', 'video_prepare_core_test.zig'),
+        ('server_cases.zig', 'video_prepare_http_test.zig'),
+        ('harness.zig', 'video_prepare_harness.zig'),
+    ):
+        content = (here / source).read_text()
+        if source != 'harness.zig':
+            # The required separate Linux gate runs the untouched fixtures with the exact portable library.
+            # The generic host suite has no required FFmpeg installation; report these as skipped when absent.
+            content = re.sub(r'(^test "video prepare real:[^\n]+\{\n)',
+                             r'\1    if (api.tfvideo.version() == null) return error.SkipZigTest;\n', content, flags=re.M)
+        (server / target).write_text(content)
+    shutil.copytree(here / 'fixtures', server / 'video-fixtures')
+    with (server / 'root.zig').open('a') as root:
+        root.write('\ntest { _ = @import("video_prepare_core_test.zig"); _ = @import("video_prepare_http_test.zig"); }\n')
+    with (scratch / 'zig/src/glm_media_cpu.zig').open('a') as media:
+        media.write('pub const eager = @import("families/glm/video_eager_reference.zig").For(picture);\n')
+    with (scratch / 'zig/src/families/glm/cuda_images_interleave_test.zig').open('a') as tests:
+        tests.write((here / 'window_case.zig').read_text())
+    build = scratch / 'zig/build/cuda.zig'
+    content = build.read_text()
+    needle = '    const server_json = @import("server.zig").addTo(b, server_tests, host, .debug);'
+    addition = '''
+    b.step("test-native-video-prepare", "Single-pass video canvases, allocator bounds and independent eager parity").dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = server_tests, .filters = &.{"video prepare:"} })).step);
+'''
+    if content.count(needle) != 1:
+        raise ValueError('The video host build graph changed')
     build.write_text(content.replace(needle, needle + addition))
 
 
@@ -108,6 +161,8 @@ def main():
     install_tests(scratch)
     command = [args.zig, 'build', 'test-native-bundle-contract', 'test-checkpoint-bounded-host',
                'test-checkpoint-restore-host', 'test-native-prepare-memory',
+               'test-native-media-errors',
+               'test-native-video-prepare',
                'test-native-media-budget', 'test-native-media-lifecycle', 'test-glm-prompts-host',
                'test-glm-protocol-host', 'test-glm-kv-pages-host', 'test-omni-video-host',
                'test-glm-snapshots-host', 'compile-glm-native-open', 'compile-omni-video-host']

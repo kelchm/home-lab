@@ -1,0 +1,12 @@
+{
+  "schema": "glm-video-decoder-smoke/v1",
+  "generator": "ffmpeg version 9.0.2 Copyright (c) 2000-2026 the FFmpeg developers",
+  "source_rgb_sha256": "c39e0e74c02194dd48abd140a6329589227194369f4167c597ee2c7893963cbd",
+  "files": {
+    "h264.mp4": "147604865a8c9b04e4df146277a1ef98780ba524434f926ad5d374f392a9597a",
+    "hevc.mp4": "666cd6e8ef4dbef0c627727220fbce30e582f1e0a398d8b1bea1f00d56ab8e6f",
+    "mpeg4.mp4": "ec2f1a074f7fe3a8f5b81b1a5607072a92113f0eeaf49596128c32c072f0018a",
+    "vp8.webm": "96bab965d5d132378b46a7717a29e1eb5076dbb44d10b67c5753355586660f2f",
+    "vp9.webm": "32d4f521c225ed45ac5de6bbb99d01b69f73f17b334aa31aeb27a0544770f1a1"
+  }
+}
