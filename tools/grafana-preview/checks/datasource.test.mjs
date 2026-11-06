@@ -2,7 +2,17 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { observeDatasource } from './datasource.mjs';
-import { hasDashboardVariable, isFixturePath } from './guards.mjs';
+import { hasDashboardVariable, isFixturePath, isAnonymousStarsError } from './guards.mjs';
+
+test('anonymous stars exception cannot hide other HTTP or console failures', () => {
+  const origin = 'http://127.0.0.1:3435';
+  const endpoint = '/apis/collections.grafana.app/v1alpha1/namespaces/default/stars?fieldSelector=metadata.name%3Duser-';
+  const text = 'Failed to load resource: the server responded with a status of 403 (Forbidden)';
+  const message = (url = origin + endpoint, value = text) => ({ text: () => value, location: () => ({ url }) });
+  assert(isAnonymousStarsError(message(), origin));
+  for (const url of [origin + '/api/ds/query', origin + endpoint.replace('user-', 'user-123'), 'https://example.com' + endpoint, origin + endpoint + '&other=1', '']) assert(!isAnonymousStarsError(message(url), origin));
+  assert(!isAnonymousStarsError(message(undefined, text.replace('403', '500')), origin));
+});
 
 const request = (errorText = 'net::ERR_CONNECTION_RESET') => ({ url: () => 'http://127.0.0.1/api/ds/query?ds_type=prometheus', failure: () => ({ errorText }), postDataJSON: () => ({ queries: [{ refId: 'A' }] }) });
 const response = (body, status = 200, req = request()) => ({ url: req.url, status: () => status, json: typeof body === 'function' ? body : async () => body, request: () => req });

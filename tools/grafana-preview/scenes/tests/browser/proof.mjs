@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { observeDatasource } from '../../../checks/datasource.mjs';
+import { isAnonymousStarsError } from '../../../checks/guards.mjs';
 import { chromium, launchOptions } from '../../../checks/playwright.mjs';
 
 const LANE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -32,11 +33,15 @@ async function open(width, height) {
   const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 1 });
   await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: BASE });
   const page = await context.newPage();
-  const log = { errors: [], queries: 0, datasource: observeDatasource(page) };
+  const log = { errors: [], anonymousStarsErrors: [], queries: 0, datasource: observeDatasource(page) };
   monitors.set(page, log.datasource);
   page.on('pageerror', (error) => log.errors.push(`pageerror: ${error.message}`));
   page.on('console', (message) => {
     if (message.type() === 'error') {
+      if (isAnonymousStarsError(message, new URL(BASE).origin)) {
+        log.anonymousStarsErrors.push(message.location().url);
+        return;
+      }
       log.errors.push(`console: ${message.text().slice(0, 240)}`);
     }
   });
@@ -178,7 +183,7 @@ async function desktop() {
   await settle(shared.page);
   check('a shared link reproduces focus and range in a clean session', query(shared.page).get('from') === new URL(link).searchParams.get('from') && upstream(from).length === commonQueries.length + networkQueries.length, Object.fromEntries(query(shared.page)));
   await shared.log.datasource.drain();
-  check('shared link has no page or console errors in a clean session', shared.log.errors.length === 0, shared.log.errors);
+  check('shared link has no unexpected page or console errors in a clean session', shared.log.errors.length === 0, { errors: shared.log.errors, anonymousStarsErrors: shared.log.anonymousStarsErrors });
   await shared.browser.close();
 
   for (const focus of FOCUSES.slice(1)) {
@@ -222,7 +227,7 @@ async function desktop() {
 
   await log.datasource.drain();
   check('datasource responses and transport are valid', log.datasource.transportOk && log.datasource.evaluationOk, { responses: log.datasource.responses, failures: log.datasource.failures, inFlight: log.datasource.inFlight });
-  check('no page or console errors', log.errors.length === 0, log.errors.slice(0, 5));
+  check('no unexpected page or console errors', log.errors.length === 0, { errors: log.errors, anonymousStarsErrors: log.anonymousStarsErrors });
   await browser.close();
 }
 
@@ -249,7 +254,7 @@ async function narrow(width, height, name) {
   }
   await log.datasource.drain();
   check(`datasource responses and transport are valid at ${width}`, log.datasource.transportOk && log.datasource.evaluationOk, { responses: log.datasource.responses, failures: log.datasource.failures, inFlight: log.datasource.inFlight });
-  check(`no page or console errors at ${width}`, log.errors.length === 0, log.errors.slice(0, 5));
+  check(`no unexpected page or console errors at ${width}`, log.errors.length === 0, { errors: log.errors, anonymousStarsErrors: log.anonymousStarsErrors });
   await browser.close();
 }
 

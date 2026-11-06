@@ -45,7 +45,7 @@ python3 tools/grafana-preview/preview.py smoke --dependencies frozen \
   --evidence-dir /tmp/grafana-preview-browser-evidence
 ```
 
-Browser checks reject malformed/missing datasource results and transport failures, and await response-body parsing before evaluating the run. Only aborted queries already in flight at an explicit harness navigation are classified as navigation cancellations. Resource/console errors are retained; the standalone Scenes harness excludes only the exact missing `grafanaBootData` initialization message from the installed Grafana runtime. There is no blanket resource or HTTP 403 exclusion. Expected anonymous Grafana failures must be justified and scoped to their exact endpoint/status before adding an exception.
+Browser checks reject malformed/missing datasource results and transport failures, and await response-body parsing before evaluating the run. Only aborted queries already in flight at an explicit harness navigation are classified as navigation cancellations. Resource/console errors are retained; the standalone Scenes harness excludes only the exact missing `grafanaBootData` initialization message from the installed Grafana runtime. The real-Grafana proof records and excludes the observed anonymous stars request: same-origin `GET /apis/collections.grafana.app/v1alpha1/namespaces/default/stars?fieldSelector=metadata.name%3Duser-`, with Chromium's exact HTTP 403 resource-error text. There is no blanket resource or HTTP 403 exclusion.
 
 Browser checks use separately installed Playwright and its bundled Chromium. Alternatively, set `PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs` and `CHROMIUM=/path/to/chromium`; neither needs installation in shared/scenes. The minimal smoke proves dated Home rendering, failure/empty unknown states, recovery, missing entity handling, test-a/test-b isolation, and effective live-source selection in both native dashboard formats. Live requests are intercepted locally in that smoke. Controls are restored in `finally`; screenshots, scoped requests and `smoke.json` go to the chosen evidence directory outside tracked source.
 
@@ -58,6 +58,8 @@ node checks/browser.mjs
 BASE=http://127.0.0.1:3435 node scenes/tests/browser/proof.mjs
 # Browser-local datasource-resolution failure through the real Scenes runner, then recovery.
 node checks/request-failure.mjs
+# Page/inspector CSV parity during pending and failed refreshes, plus range/resource guards.
+node checks/evidence.mjs
 # Opt-in real read-only telemetry, after independently establishing the VM forward.
 node checks/live.mjs
 ```
