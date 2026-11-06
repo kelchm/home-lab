@@ -46,14 +46,21 @@ cat "$report/inventory.json"
 chmod 755 "$scratch"
 mkdir -p "$scratch/data" "$scratch/config"
 sudo chown 1000:1000 "$scratch/data" "$scratch/config"
+# Python's strict TLS verifier requires signing usage and chain identifiers;
+# set them explicitly instead of relying on the runner's OpenSSL defaults.
 openssl req -x509 -newkey rsa:2048 -nodes -days 2 -subj /CN=Caddy-CI-CA \
+    -addext 'basicConstraints=critical,CA:TRUE' -addext 'keyUsage=critical,keyCertSign,cRLSign' \
+    -addext 'subjectKeyIdentifier=hash' \
     -keyout "$scratch/ca.key" -out "$scratch/ca.pem" 2>/dev/null
 openssl req -newkey rsa:2048 -nodes -subj /CN=caddy.test \
     -keyout "$scratch/leaf.key" -out "$scratch/leaf.csr" 2>/dev/null
-printf 'subjectAltName=DNS:caddy.test\nextendedKeyUsage=serverAuth\n' > "$scratch/extensions"
+printf '%s\n' 'subjectAltName=DNS:caddy.test' 'extendedKeyUsage=serverAuth' \
+    'authorityKeyIdentifier=keyid,issuer' > "$scratch/extensions"
 openssl x509 -req -days 1 -in "$scratch/leaf.csr" -CA "$scratch/ca.pem" -CAkey "$scratch/ca.key" \
     -CAcreateserial -extfile "$scratch/extensions" -out "$scratch/leaf.pem" 2>/dev/null
 openssl req -x509 -newkey rsa:2048 -nodes -days 2 -subj /CN=Wrong-CI-CA \
+    -addext 'basicConstraints=critical,CA:TRUE' -addext 'keyUsage=critical,keyCertSign,cRLSign' \
+    -addext 'subjectKeyIdentifier=hash' \
     -keyout "$scratch/wrong.key" -out "$scratch/wrong.pem" 2>/dev/null
 # Only a disposable fixture key; no real certificate, token or config is copied.
 chmod 644 "$scratch/leaf.key"
