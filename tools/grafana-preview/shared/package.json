@@ -1,0 +1,31 @@
+{
+  "name": "homelab-compare-panel",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@12.5.1",
+  "scripts": {
+    "vendor": "node tools/vendor-model.mjs",
+    "build": "node build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "check": "pnpm run typecheck && pnpm run test && pnpm run build"
+  },
+  "devDependencies": {
+    "@grafana/data": "13.3.0",
+    "@grafana/e2e-selectors": "13.3.0",
+    "@grafana/i18n": "13.3.0",
+    "@grafana/runtime": "13.3.0",
+    "@grafana/schema": "13.3.0",
+    "@grafana/ui": "13.3.0",
+    "@types/node": "24.10.1",
+    "@types/react": "19.2.2",
+    "@types/react-dom": "19.2.2",
+    "esbuild": "0.25.12",
+    "jsdom": "26.1.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "rxjs": "7.8.2",
+    "typescript": "5.9.3",
+    "vitest": "3.2.4"
+  }
+}

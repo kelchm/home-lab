@@ -1,0 +1,12 @@
+node_modules
+dist/
+runtime/generated/
+runtime/state/
+runtime/logs/
+__pycache__/
+*.pyc
+evidence/
+*.tmp
+shared/harness/out/
+scenes/tests/browser/harness/out/
+bundle-report.json

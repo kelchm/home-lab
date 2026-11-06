@@ -1,0 +1,314 @@
+[
+  {
+    "refId": "D_dev_inventory",
+    "key": "inventory",
+    "source": "dev",
+    "expr": "max by (instance, platform) (max_over_time(node_uname_info{platform!=\"\"}[24h]))",
+    "instant": true,
+    "range": false,
+    "scope": "dev",
+    "capture": {
+      "kind": "catalog",
+      "key": "M_A"
+    }
+  },
+  {
+    "refId": "D_dev_cpu",
+    "key": "cpu",
+    "source": "dev",
+    "expr": "100 * (1 - avg by (instance, platform) (rate(node_cpu_seconds_total{job=~\"node-exporter|(pve|spark|synology|pi)-node\",platform!=\"\",mode=\"idle\"}[5m])))",
+    "instant": true,
+    "range": false,
+    "scope": "dev",
+    "capture": {
+      "kind": "catalog",
+      "key": "M_B"
+    }
+  },
+  {
+    "refId": "D_dev_memory",
+    "key": "memory",
+    "source": "dev",
+    "expr": "100 * (1 - max by (instance, platform) (node_memory_MemAvailable_bytes{job=~\"node-exporter|(pve|spark|synology|pi)-node\",platform!=\"\"}) / max by (instance, platform) (node_memory_MemTotal_bytes{job=~\"node-exporter|(pve|spark|synology|pi)-node\",platform!=\"\"}))",
+    "instant": true,
+    "range": false,
+    "scope": "dev",
+    "capture": {
+      "kind": "catalog",
+      "key": "M_C"
+    }
+  },
+  {
+    "refId": "D_dev_hostUp",
+    "key": "hostUp",
+    "source": "dev",
+    "expr": "min by (instance, platform) (up{job=~\"node-exporter|(pve|spark|synology|pi)-node\",platform!=\"\"})",
+    "instant": true,
+    "range": false,
+    "scope": "dev",
+    "capture": {
+      "kind": "catalog",
+      "key": "M_D"
+    }
+  },
+  {
+    "refId": "D_dev_cpuHistory",
+    "key": "cpuHistory",
+    "source": "dev",
+    "expr": "100 * (1 - avg by (instance, platform) (rate(node_cpu_seconds_total{job=~\"node-exporter|(pve|spark|synology|pi)-node\",platform!=\"\",mode=\"idle\"}[5m])))",
+    "instant": false,
+    "range": true,
+    "scope": "dev",
+    "capture": {
+      "kind": "catalog",
+      "key": "M_E"
+    }
+  },
+  {
+    "refId": "D_dev_scrapeAge",
+    "key": "scrapeAge",
+    "source": "dev",
+    "expr": "time() - max by (instance, platform) (timestamp(up{job=~\"node-exporter|(pve|spark|synology|pi)-node\",platform!=\"\"}))",
+    "instant": true,
+    "range": false,
+    "scope": "dev",
+    "capture": {
+      "kind": "catalog",
+      "key": "M_F"
+    }
+  },
+  {
+    "refId": "D_dev_kvmUp",
+    "key": "kvmUp",
+    "source": "dev",
+    "expr": "max(up{job=\"glkvm-kvmd\"})",
+    "instant": true,
+    "range": false,
+    "scope": "dev",
+    "capture": {
+      "kind": "bounded",
+      "key": "dev.kvmUp",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_dev_kvmCpu",
+    "key": "kvmCpu",
+    "source": "dev",
+    "expr": "max(pikvm_hw_cpu_percent{job=\"glkvm-kvmd\"})",
+    "instant": true,
+    "range": false,
+    "scope": "dev",
+    "capture": {
+      "kind": "bounded",
+      "key": "dev.kvmCpu",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_dev_kvmMem",
+    "key": "kvmMem",
+    "source": "dev",
+    "expr": "max(pikvm_hw_mem_percent{job=\"glkvm-kvmd\"})",
+    "instant": true,
+    "range": false,
+    "scope": "dev",
+    "capture": {
+      "kind": "bounded",
+      "key": "dev.kvmMem",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_dev_kvmTemp",
+    "key": "kvmTemp",
+    "source": "dev",
+    "expr": "max(pikvm_hw_temp_cpu{job=\"glkvm-kvmd\"})",
+    "instant": true,
+    "range": false,
+    "scope": "dev",
+    "capture": {
+      "kind": "bounded",
+      "key": "dev.kvmTemp",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_dev_piTemp",
+    "key": "piTemp",
+    "source": "dev",
+    "expr": "max by (instance) (node_hwmon_temp_celsius{platform=\"pi\"} * on (instance, chip) group_left node_hwmon_chip_names{chip_name=\"cpu_thermal\"})",
+    "instant": true,
+    "range": false,
+    "scope": "dev",
+    "capture": {
+      "kind": "bounded",
+      "key": "dev.piTemp",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_dev_kvmTempHistory",
+    "key": "kvmTempHistory",
+    "source": "dev",
+    "expr": "max(pikvm_hw_temp_cpu{job=\"glkvm-kvmd\"})",
+    "instant": false,
+    "range": true,
+    "scope": "dev",
+    "capture": {
+      "kind": "bounded",
+      "key": "dev.kvmTemp",
+      "range": true
+    }
+  },
+  {
+    "refId": "D_dev_piTempHistory",
+    "key": "piTempHistory",
+    "source": "dev",
+    "expr": "max by (instance) (node_hwmon_temp_celsius{platform=\"pi\"} * on (instance, chip) group_left node_hwmon_chip_names{chip_name=\"cpu_thermal\"})",
+    "instant": false,
+    "range": true,
+    "scope": "dev",
+    "optional": true
+  },
+  {
+    "refId": "D_dev_memoryHistory",
+    "key": "memoryHistory",
+    "source": "dev",
+    "expr": "100 * (1 - max by (instance, platform) (node_memory_MemAvailable_bytes{job=~\"node-exporter|(pve|spark|synology|pi)-node\",platform!=\"\"}) / max by (instance, platform) (node_memory_MemTotal_bytes{job=~\"node-exporter|(pve|spark|synology|pi)-node\",platform!=\"\"}))",
+    "instant": false,
+    "range": true,
+    "scope": "dev",
+    "optional": true
+  },
+  {
+    "refId": "D_dev_kvmCpuHistory",
+    "key": "kvmCpuHistory",
+    "source": "dev",
+    "expr": "max(pikvm_hw_cpu_percent{job=\"glkvm-kvmd\"})",
+    "instant": false,
+    "range": true,
+    "scope": "dev",
+    "optional": true
+  },
+  {
+    "refId": "D_dev_kvmMemHistory",
+    "key": "kvmMemHistory",
+    "source": "dev",
+    "expr": "max(pikvm_hw_mem_percent{job=\"glkvm-kvmd\"})",
+    "instant": false,
+    "range": true,
+    "scope": "dev",
+    "optional": true
+  },
+  {
+    "refId": "D_dev_ntpUp",
+    "key": "ntpUp",
+    "source": "dev",
+    "expr": "min by (instance) (up{job=\"pi-chrony\"})",
+    "instant": true,
+    "range": false,
+    "scope": "dev",
+    "optional": true
+  },
+  {
+    "refId": "D_dev_chronyUp",
+    "key": "chronyUp",
+    "source": "dev",
+    "expr": "min by (instance) (chrony_up{job=\"pi-chrony\"})",
+    "instant": true,
+    "range": false,
+    "scope": "dev",
+    "optional": true
+  },
+  {
+    "refId": "D_dev_ntpScrapeAge",
+    "key": "ntpScrapeAge",
+    "source": "dev",
+    "expr": "time() - max by (instance) (tlast_over_time(up{job=\"pi-chrony\"}[1h]))",
+    "instant": true,
+    "range": false,
+    "scope": "dev",
+    "optional": true
+  },
+  {
+    "refId": "D_dev_stratum",
+    "key": "stratum",
+    "source": "dev",
+    "expr": "max by (instance) (chrony_tracking_stratum{job=\"pi-chrony\"})",
+    "instant": true,
+    "range": false,
+    "scope": "dev",
+    "optional": true
+  },
+  {
+    "refId": "D_dev_referenceAge",
+    "key": "referenceAge",
+    "source": "dev",
+    "expr": "max by (instance) (time() - chrony_tracking_reference_timestamp_seconds{job=\"pi-chrony\"})",
+    "instant": true,
+    "range": false,
+    "scope": "dev",
+    "optional": true
+  },
+  {
+    "refId": "D_dev_tracking",
+    "key": "tracking",
+    "source": "dev",
+    "expr": "chrony_tracking_info{job=\"pi-chrony\"}",
+    "instant": true,
+    "range": false,
+    "scope": "dev",
+    "optional": true
+  },
+  {
+    "refId": "D_dev_sourceState",
+    "key": "sourceState",
+    "source": "dev",
+    "expr": "chrony_sources_state_info{job=\"pi-chrony\"}",
+    "instant": true,
+    "range": false,
+    "scope": "dev",
+    "optional": true
+  },
+  {
+    "refId": "D_dev_sourceReach",
+    "key": "sourceReach",
+    "source": "dev",
+    "expr": "chrony_sources_reachability_ratio{job=\"pi-chrony\"}",
+    "instant": true,
+    "range": false,
+    "scope": "dev",
+    "optional": true
+  },
+  {
+    "refId": "D_dev_sourceAge",
+    "key": "sourceAge",
+    "source": "dev",
+    "expr": "chrony_sources_last_sample_age_seconds{job=\"pi-chrony\"}",
+    "instant": true,
+    "range": false,
+    "scope": "dev",
+    "optional": true
+  },
+  {
+    "refId": "D_dev_offsetHistory",
+    "key": "offsetHistory",
+    "source": "dev",
+    "expr": "chrony_tracking_last_offset_seconds{job=\"pi-chrony\"}",
+    "instant": false,
+    "range": true,
+    "scope": "dev",
+    "optional": true
+  },
+  {
+    "refId": "D_dev_sourceAgeHistory",
+    "key": "sourceAgeHistory",
+    "source": "dev",
+    "expr": "chrony_sources_last_sample_age_seconds{job=\"pi-chrony\"}",
+    "instant": false,
+    "range": true,
+    "scope": "dev",
+    "optional": true
+  }
+]

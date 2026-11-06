@@ -1,0 +1,428 @@
+[
+  {
+    "refId": "D_nas_system",
+    "key": "system",
+    "source": "nas",
+    "expr": "max(systemStatus{job=\"synology-snmp\"})",
+    "instant": true,
+    "range": false,
+    "scope": "nas",
+    "capture": {
+      "kind": "bounded",
+      "key": "nas.system",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_nas_power",
+    "key": "power",
+    "source": "nas",
+    "expr": "max(powerStatus{job=\"synology-snmp\"})",
+    "instant": true,
+    "range": false,
+    "scope": "nas",
+    "capture": {
+      "kind": "bounded",
+      "key": "nas.power",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_nas_fan",
+    "key": "fan",
+    "source": "nas",
+    "expr": "max(max(systemFanStatus{job=\"synology-snmp\"}) or max(cpuFanStatus{job=\"synology-snmp\"}))",
+    "instant": true,
+    "range": false,
+    "scope": "nas",
+    "capture": {
+      "kind": "bounded",
+      "key": "nas.fan",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_nas_raid",
+    "key": "raid",
+    "source": "nas",
+    "expr": "max(raidStatus{job=\"synology-snmp\",raidName=~\"Storage Pool.*\"})",
+    "instant": true,
+    "range": false,
+    "scope": "nas",
+    "capture": {
+      "kind": "bounded",
+      "key": "nas.raid",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_nas_temp",
+    "key": "temp",
+    "source": "nas",
+    "expr": "max(temperature{job=\"synology-snmp\"})",
+    "instant": true,
+    "range": false,
+    "scope": "nas",
+    "capture": {
+      "kind": "bounded",
+      "key": "nas.temp",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_nas_upgrade",
+    "key": "upgrade",
+    "source": "nas",
+    "expr": "max(upgradeAvailable{job=\"synology-snmp\"})",
+    "instant": true,
+    "range": false,
+    "scope": "nas",
+    "capture": {
+      "kind": "bounded",
+      "key": "nas.upgrade",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_nas_volumes",
+    "key": "volumes",
+    "source": "nas",
+    "expr": "100 * (1 - max by (raidName) (raidFreeSize{job=\"synology-snmp\",raidName=~\"Volume.*\"}) / max by (raidName) (raidTotalSize{job=\"synology-snmp\",raidName=~\"Volume.*\"}))",
+    "instant": true,
+    "range": false,
+    "scope": "nas",
+    "capture": {
+      "kind": "bounded",
+      "key": "nas.volumes",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_nas_diskInfo",
+    "key": "diskInfo",
+    "source": "nas",
+    "expr": "max by (disk, model_name) (label_replace(drive:info{platform=\"synology\"}, \"disk\", \"$1\", \"device\", \"(.*)\"))",
+    "instant": true,
+    "range": false,
+    "scope": "nas",
+    "capture": {
+      "kind": "bounded",
+      "key": "nas.diskInfo",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_nas_diskHealth",
+    "key": "diskHealth",
+    "source": "nas",
+    "expr": "max by (disk) (label_replace(drive:health_status{platform=\"synology\"}, \"disk\", \"$1\", \"device\", \"(.*)\"))",
+    "instant": true,
+    "range": false,
+    "scope": "nas",
+    "capture": {
+      "kind": "bounded",
+      "key": "nas.diskHealth",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_nas_diskStatus",
+    "key": "diskStatus",
+    "source": "nas",
+    "expr": "max by (disk) (label_replace(diskStatus{platform=\"synology\"}, \"disk\", \"$1\", \"diskID\", \"(.*)\"))",
+    "instant": true,
+    "range": false,
+    "scope": "nas",
+    "capture": {
+      "kind": "bounded",
+      "key": "nas.diskStatus",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_nas_diskTemp",
+    "key": "diskTemp",
+    "source": "nas",
+    "expr": "max by (disk) (label_replace(drive:temperature_celsius{platform=\"synology\"}, \"disk\", \"$1\", \"device\", \"(.*)\"))",
+    "instant": true,
+    "range": false,
+    "scope": "nas",
+    "capture": {
+      "kind": "bounded",
+      "key": "nas.diskTemp",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_nas_diskReallocated",
+    "key": "diskReallocated",
+    "source": "nas",
+    "expr": "max by (disk) (label_replace(drive:ata_reallocated_sectors{platform=\"synology\"}, \"disk\", \"$1\", \"device\", \"(.*)\"))",
+    "instant": true,
+    "range": false,
+    "scope": "nas",
+    "capture": {
+      "kind": "bounded",
+      "key": "nas.diskReallocated",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_nas_diskPending",
+    "key": "diskPending",
+    "source": "nas",
+    "expr": "max by (disk) (label_replace(drive:ata_pending_sectors{platform=\"synology\"}, \"disk\", \"$1\", \"device\", \"(.*)\"))",
+    "instant": true,
+    "range": false,
+    "scope": "nas",
+    "capture": {
+      "kind": "bounded",
+      "key": "nas.diskPending",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_nas_diskUncorrectable",
+    "key": "diskUncorrectable",
+    "source": "nas",
+    "expr": "max by (disk) (label_replace(drive:ata_uncorrectable_sectors{platform=\"synology\"}, \"disk\", \"$1\", \"device\", \"(.*)\"))",
+    "instant": true,
+    "range": false,
+    "scope": "nas",
+    "capture": {
+      "kind": "bounded",
+      "key": "nas.diskUncorrectable",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_nas_read",
+    "key": "read",
+    "source": "nas",
+    "expr": "sum(rate(node_disk_read_bytes_total{platform=\"synology\"}[6m]))",
+    "instant": false,
+    "range": true,
+    "scope": "nas",
+    "capture": {
+      "kind": "bounded",
+      "key": "nas.read",
+      "range": true
+    }
+  },
+  {
+    "refId": "D_nas_written",
+    "key": "written",
+    "source": "nas",
+    "expr": "sum(rate(node_disk_written_bytes_total{platform=\"synology\"}[6m]))",
+    "instant": false,
+    "range": true,
+    "scope": "nas",
+    "capture": {
+      "kind": "bounded",
+      "key": "nas.written",
+      "range": true
+    }
+  },
+  {
+    "refId": "D_nas_tempHistory",
+    "key": "tempHistory",
+    "source": "nas",
+    "expr": "max(temperature{job=\"synology-snmp\"})",
+    "instant": false,
+    "range": true,
+    "scope": "nas",
+    "capture": {
+      "kind": "bounded",
+      "key": "nas.temp",
+      "range": true
+    }
+  },
+  {
+    "refId": "D_nas_dsmStatus",
+    "key": "dsmStatus",
+    "source": "nas",
+    "expr": "max(probe_http_status_code{probe=\"athena-dsm\"})",
+    "instant": false,
+    "range": true,
+    "scope": "nas",
+    "capture": {
+      "kind": "bounded",
+      "key": "nas.dsmStatus",
+      "range": true
+    }
+  },
+  {
+    "refId": "D_nas_dsmSeconds",
+    "key": "dsmSeconds",
+    "source": "nas",
+    "expr": "max(probe_duration_seconds{probe=\"athena-dsm\"})",
+    "instant": false,
+    "range": true,
+    "scope": "nas",
+    "capture": {
+      "kind": "bounded",
+      "key": "nas.dsmSeconds",
+      "range": true
+    }
+  },
+  {
+    "refId": "D_nas_scrapes",
+    "key": "scrapes",
+    "source": "nas",
+    "expr": "min(up{platform=\"synology\"})",
+    "instant": false,
+    "range": true,
+    "scope": "nas",
+    "capture": {
+      "kind": "bounded",
+      "key": "nas.scrapes",
+      "range": true
+    }
+  },
+  {
+    "refId": "D_nas_assertion",
+    "key": "assertion",
+    "source": "nas",
+    "expr": "max by(probe)(probe_success{job=\"pi-blackbox\"}) and on(probe) ((time()-max by(probe)(timestamp(probe_success{job=\"pi-blackbox\"}))) <= 180)",
+    "instant": true,
+    "range": false,
+    "scope": "nas",
+    "capture": {
+      "kind": "catalog",
+      "key": "H_P",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_nas_assertionHistory",
+    "key": "assertionHistory",
+    "source": "nas",
+    "expr": "min by(probe)(min_over_time(probe_success{job=\"pi-blackbox\"}[$__interval])) and on(probe) ((time()-max by(probe)(timestamp(probe_success{job=\"pi-blackbox\"}))) <= 180)",
+    "instant": false,
+    "range": true,
+    "scope": "nas",
+    "capture": {
+      "kind": "catalog",
+      "key": "H_PH",
+      "range": true
+    }
+  },
+  {
+    "refId": "D_nas_durationMs",
+    "key": "durationMs",
+    "source": "nas",
+    "expr": "1000 * max by(probe)(probe_duration_seconds{job=\"pi-blackbox\"})",
+    "instant": true,
+    "range": false,
+    "scope": "nas",
+    "capture": {
+      "kind": "catalog",
+      "key": "H_PD",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_nas_httpCode",
+    "key": "httpCode",
+    "source": "nas",
+    "expr": "max by(probe)(probe_http_status_code{job=\"pi-blackbox\"})",
+    "instant": true,
+    "range": false,
+    "scope": "nas",
+    "capture": {
+      "kind": "catalog",
+      "key": "H_PC",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_nas_raidStates",
+    "key": "raidStates",
+    "source": "nas",
+    "expr": "raidStatus{job=\"synology-snmp\",platform=\"synology\"}",
+    "instant": true,
+    "range": false,
+    "scope": "nas",
+    "optional": true
+  },
+  {
+    "refId": "D_nas_volumeTotal",
+    "key": "volumeTotal",
+    "source": "nas",
+    "expr": "max by (raidName) (raidTotalSize{job=\"synology-snmp\",platform=\"synology\",raidName=~\"Volume.*\"})",
+    "instant": true,
+    "range": false,
+    "scope": "nas",
+    "optional": true
+  },
+  {
+    "refId": "D_nas_volumeFree",
+    "key": "volumeFree",
+    "source": "nas",
+    "expr": "max by (raidName) (raidFreeSize{job=\"synology-snmp\",platform=\"synology\",raidName=~\"Volume.*\"})",
+    "instant": true,
+    "range": false,
+    "scope": "nas",
+    "optional": true
+  },
+  {
+    "refId": "D_nas_volumeHistory",
+    "key": "volumeHistory",
+    "source": "nas",
+    "expr": "100 * (1 - max by (raidName) (raidFreeSize{job=\"synology-snmp\",raidName=~\"Volume.*\"}) / max by (raidName) (raidTotalSize{job=\"synology-snmp\",raidName=~\"Volume.*\"}))",
+    "instant": false,
+    "range": true,
+    "scope": "nas",
+    "optional": true
+  },
+  {
+    "refId": "D_nas_driveHealthHistory",
+    "key": "driveHealthHistory",
+    "source": "nas",
+    "expr": "max by (disk) (label_replace(drive:health_status{platform=\"synology\"}, \"disk\", \"$1\", \"device\", \"(.*)\"))",
+    "instant": false,
+    "range": true,
+    "scope": "nas",
+    "optional": true
+  },
+  {
+    "refId": "D_nas_driveTempHistory",
+    "key": "driveTempHistory",
+    "source": "nas",
+    "expr": "max by (disk) (label_replace(drive:temperature_celsius{platform=\"synology\"}, \"disk\", \"$1\", \"device\", \"(.*)\"))",
+    "instant": false,
+    "range": true,
+    "scope": "nas",
+    "optional": true
+  },
+  {
+    "refId": "D_nas_driveBusy",
+    "key": "driveBusy",
+    "source": "nas",
+    "expr": "max by (disk) (label_replace(rate(node_disk_io_time_seconds_total{job=\"synology-node\",platform=\"synology\",device=~\"sata[0-9]+\"}[5m]), \"disk\", \"Disk $1\", \"device\", \"sata([0-9]+)\"))",
+    "instant": false,
+    "range": true,
+    "scope": "nas",
+    "optional": true
+  },
+  {
+    "refId": "D_nas_driveRead",
+    "key": "driveRead",
+    "source": "nas",
+    "expr": "sum by (disk) (label_replace(rate(node_disk_read_bytes_total{job=\"synology-node\",platform=\"synology\",device=~\"sata[0-9]+\"}[5m]), \"disk\", \"Disk $1\", \"device\", \"sata([0-9]+)\"))",
+    "instant": false,
+    "range": true,
+    "scope": "nas",
+    "optional": true
+  },
+  {
+    "refId": "D_nas_driveWritten",
+    "key": "driveWritten",
+    "source": "nas",
+    "expr": "sum by (disk) (label_replace(rate(node_disk_written_bytes_total{job=\"synology-node\",platform=\"synology\",device=~\"sata[0-9]+\"}[5m]), \"disk\", \"Disk $1\", \"device\", \"sata([0-9]+)\"))",
+    "instant": false,
+    "range": true,
+    "scope": "nas",
+    "optional": true
+  }
+]

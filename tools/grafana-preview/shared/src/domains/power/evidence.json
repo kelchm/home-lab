@@ -1,0 +1,7 @@
+{
+  "identity": "Three configured UPS identities from the existing Home UPS variable and per-unit capture labels: compute-rack, network-rack and office. Collector paths follow the existing NUT and Synology configuration; protected equipment membership is not inferred.",
+  "capture": "fixtures/bounded.json ups.*. Instant readings and range histories are separate refs. Load and runtime have captured histories; charge and input voltage histories are live-only.",
+  "status": "The captured onBattery expression reports OB or zero while a status family is present. In particular, the Synology branch zeroes other status strings. A zero is only OB not asserted; it does not establish OL, successful transfer, or battery health. Explicit OL and collector queries have no capture.",
+  "units": "Runtime expression divides seconds by 60. Load is reported percent, including possible overload values above 100; it is not watts. Runtime estimates are not additive across UPS units.",
+  "missing": "No battery condition, transfer test, shutdown coordination, protection topology or recovery acceptance observations were captured. No alert or runtime threshold is introduced."
+}

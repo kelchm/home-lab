@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "noEmit": true,
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "baseUrl": ".",
+    "paths": {
+      "@shared/*": ["../shared/src/*"],
+      "@real-shared/*": ["../shared/src/*"],
+      "@emotion/css": ["./node_modules/@emotion/css"],
+      "@grafana/*": ["./node_modules/@grafana/*"],
+      "react": ["./node_modules/@types/react"],
+      "react/*": ["./node_modules/@types/react/*"],
+      "rxjs": ["./node_modules/rxjs"]
+    }
+  },
+  "include": ["src", "tests"]
+}

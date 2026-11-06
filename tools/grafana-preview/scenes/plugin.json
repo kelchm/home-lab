@@ -1,0 +1,36 @@
+{
+  "type": "app",
+  "name": "Lab observability",
+  "id": "homelab-observability-app",
+  "autoEnabled": true,
+  "info": {
+    "description": "A local preview of daily overview, domain dashboards and resource detail.",
+    "author": {
+      "name": "kelchm"
+    },
+    "keywords": [
+      "observability",
+      "homelab"
+    ],
+    "logos": {
+      "small": "",
+      "large": ""
+    },
+    "version": "0.1.0",
+    "updated": "2026-11-06"
+  },
+  "includes": [
+    {
+      "type": "page",
+      "name": "Lab",
+      "path": "/a/homelab-observability-app/explore",
+      "role": "Viewer",
+      "addToNav": true,
+      "defaultNav": true
+    }
+  ],
+  "dependencies": {
+    "grafanaDependency": ">=13.2.0",
+    "plugins": []
+  }
+}

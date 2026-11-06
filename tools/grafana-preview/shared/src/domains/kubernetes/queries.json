@@ -1,0 +1,824 @@
+[
+  {
+    "refId": "D_k8s_nodes",
+    "key": "nodes",
+    "source": "k8s",
+    "expr": "sum(kube_node_status_condition{condition=\"Ready\",status=\"true\",cluster=\"k8s-prod\"})",
+    "instant": true,
+    "range": false,
+    "scope": "k8s",
+    "capture": {
+      "kind": "bounded",
+      "key": "k8s.nodes",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_k8s_pods",
+    "key": "pods",
+    "source": "k8s",
+    "expr": "count(kube_pod_status_phase{phase=\"Running\",cluster=\"k8s-prod\"} == 1)",
+    "instant": true,
+    "range": false,
+    "scope": "k8s",
+    "capture": {
+      "kind": "bounded",
+      "key": "k8s.pods",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_k8s_podsNotReady",
+    "key": "podsNotReady",
+    "source": "k8s",
+    "expr": "(sum(kube_pod_status_ready{condition=\"false\",cluster=\"k8s-prod\"} * on (namespace, pod) group_left kube_pod_status_phase{phase=\"Running\",cluster=\"k8s-prod\"}) + (count(kube_pod_status_phase{phase=~\"Pending|Failed|Unknown\",cluster=\"k8s-prod\"} == 1) or vector(0))) or vector(0)",
+    "instant": true,
+    "range": false,
+    "scope": "k8s",
+    "capture": {
+      "kind": "bounded",
+      "key": "k8s.podsNotReady",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_k8s_restarts",
+    "key": "restarts",
+    "source": "k8s",
+    "expr": "(round(sum(increase(kube_pod_container_status_restarts_total{cluster=\"k8s-prod\"}[24h])))) or vector(0)",
+    "instant": true,
+    "range": false,
+    "scope": "k8s",
+    "capture": {
+      "kind": "bounded",
+      "key": "k8s.restarts",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_k8s_fluxFailing",
+    "key": "fluxFailing",
+    "source": "k8s",
+    "expr": "(count(flux_resource_info{ready!=\"True\",suspended!=\"True\",cluster=\"k8s-prod\"})) or vector(0)",
+    "instant": true,
+    "range": false,
+    "scope": "k8s",
+    "capture": {
+      "kind": "bounded",
+      "key": "k8s.fluxFailing",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_k8s_fluxReady",
+    "key": "fluxReady",
+    "source": "k8s",
+    "expr": "count(flux_resource_info{ready=\"True\",cluster=\"k8s-prod\"})",
+    "instant": true,
+    "range": false,
+    "scope": "k8s",
+    "capture": {
+      "kind": "bounded",
+      "key": "k8s.fluxReady",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_k8s_fluxSuspended",
+    "key": "fluxSuspended",
+    "source": "k8s",
+    "expr": "(count(flux_resource_info{suspended=\"True\",cluster=\"k8s-prod\"})) or vector(0)",
+    "instant": true,
+    "range": false,
+    "scope": "k8s",
+    "capture": {
+      "kind": "bounded",
+      "key": "k8s.fluxSuspended",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_k8s_volHealthy",
+    "key": "volHealthy",
+    "source": "k8s",
+    "expr": "(sum(longhorn_volume_robustness{state=\"healthy\",cluster=\"k8s-prod\"})) or vector(0)",
+    "instant": true,
+    "range": false,
+    "scope": "k8s",
+    "capture": {
+      "kind": "bounded",
+      "key": "k8s.volHealthy",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_k8s_volDegraded",
+    "key": "volDegraded",
+    "source": "k8s",
+    "expr": "(sum(longhorn_volume_robustness{state=\"degraded\",cluster=\"k8s-prod\"})) or vector(0)",
+    "instant": true,
+    "range": false,
+    "scope": "k8s",
+    "capture": {
+      "kind": "bounded",
+      "key": "k8s.volDegraded",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_k8s_volFaulted",
+    "key": "volFaulted",
+    "source": "k8s",
+    "expr": "(sum(longhorn_volume_robustness{state=\"faulted\",cluster=\"k8s-prod\"})) or vector(0)",
+    "instant": true,
+    "range": false,
+    "scope": "k8s",
+    "capture": {
+      "kind": "bounded",
+      "key": "k8s.volFaulted",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_k8s_capCpu",
+    "key": "capCpu",
+    "source": "k8s",
+    "expr": "100 * sum(kube_pod_container_resource_requests{resource=\"cpu\",cluster=\"k8s-prod\"}) / sum(kube_node_status_allocatable{resource=\"cpu\",cluster=\"k8s-prod\"})",
+    "instant": true,
+    "range": false,
+    "scope": "k8s",
+    "capture": {
+      "kind": "bounded",
+      "key": "k8s.capCpu",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_k8s_capMem",
+    "key": "capMem",
+    "source": "k8s",
+    "expr": "100 * sum(kube_pod_container_resource_requests{resource=\"memory\",cluster=\"k8s-prod\"}) / sum(kube_node_status_allocatable{resource=\"memory\",cluster=\"k8s-prod\"})",
+    "instant": true,
+    "range": false,
+    "scope": "k8s",
+    "capture": {
+      "kind": "bounded",
+      "key": "k8s.capMem",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_k8s_capPods",
+    "key": "capPods",
+    "source": "k8s",
+    "expr": "100 * sum(kube_pod_info{cluster=\"k8s-prod\"}) / sum(kube_node_status_allocatable{resource=\"pods\",cluster=\"k8s-prod\"})",
+    "instant": true,
+    "range": false,
+    "scope": "k8s",
+    "capture": {
+      "kind": "bounded",
+      "key": "k8s.capPods",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_k8s_nsPods",
+    "key": "nsPods",
+    "source": "k8s",
+    "expr": "count by (namespace) (kube_pod_status_phase{phase=\"Running\",cluster=\"k8s-prod\"} == 1)",
+    "instant": true,
+    "range": false,
+    "scope": "k8s",
+    "capture": {
+      "kind": "bounded",
+      "key": "k8s.nsPods",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_k8s_nsCpu",
+    "key": "nsCpu",
+    "source": "k8s",
+    "expr": "sum by (namespace) (rate(container_cpu_usage_seconds_total{container!=\"\",cluster=\"k8s-prod\"}[5m]))",
+    "instant": true,
+    "range": false,
+    "scope": "k8s",
+    "capture": {
+      "kind": "bounded",
+      "key": "k8s.nsCpu",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_k8s_nsMem",
+    "key": "nsMem",
+    "source": "k8s",
+    "expr": "sum by (namespace) (container_memory_working_set_bytes{container!=\"\",cluster=\"k8s-prod\"})",
+    "instant": true,
+    "range": false,
+    "scope": "k8s",
+    "capture": {
+      "kind": "bounded",
+      "key": "k8s.nsMem",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_k8s_nsRestarts",
+    "key": "nsRestarts",
+    "source": "k8s",
+    "expr": "round(sum by (namespace) (increase(kube_pod_container_status_restarts_total{cluster=\"k8s-prod\"}[24h])))",
+    "instant": true,
+    "range": false,
+    "scope": "k8s",
+    "capture": {
+      "kind": "bounded",
+      "key": "k8s.nsRestarts",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_k8s_dbUp",
+    "key": "dbUp",
+    "source": "k8s",
+    "expr": "max by (namespace, pod) (cnpg_collector_up{cluster=\"k8s-prod\"})",
+    "instant": true,
+    "range": false,
+    "scope": "k8s",
+    "capture": {
+      "kind": "bounded",
+      "key": "k8s.dbUp",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_k8s_dbSize",
+    "key": "dbSize",
+    "source": "k8s",
+    "expr": "sum by (namespace, pod) (cnpg_pg_database_size_bytes{cluster=\"k8s-prod\"})",
+    "instant": true,
+    "range": false,
+    "scope": "k8s",
+    "capture": {
+      "kind": "bounded",
+      "key": "k8s.dbSize",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_k8s_dbBackends",
+    "key": "dbBackends",
+    "source": "k8s",
+    "expr": "sum by (namespace, pod) (cnpg_backends_total{cluster=\"k8s-prod\"})",
+    "instant": true,
+    "range": false,
+    "scope": "k8s",
+    "capture": {
+      "kind": "bounded",
+      "key": "k8s.dbBackends",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_k8s_certLife",
+    "key": "certLife",
+    "source": "k8s",
+    "expr": "100 * min by (namespace, name) ((certmanager_certificate_expiration_timestamp_seconds{cluster=\"k8s-prod\"} - time()) / (certmanager_certificate_not_after_timestamp_seconds{cluster=\"k8s-prod\"} - certmanager_certificate_not_before_timestamp_seconds{cluster=\"k8s-prod\"}))",
+    "instant": true,
+    "range": false,
+    "scope": "k8s",
+    "capture": {
+      "kind": "bounded",
+      "key": "k8s.certLife",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_k8s_certLeft",
+    "key": "certLeft",
+    "source": "k8s",
+    "expr": "min by (namespace, name) (certmanager_certificate_expiration_timestamp_seconds{cluster=\"k8s-prod\"} - time())",
+    "instant": true,
+    "range": false,
+    "scope": "k8s",
+    "capture": {
+      "kind": "bounded",
+      "key": "k8s.certLeft",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_k8s_routeRate",
+    "key": "routeRate",
+    "source": "k8s",
+    "expr": "60 * sum by (svc) (label_replace(label_replace(label_replace(rate(traefik_service_requests_total{cluster=\"k8s-prod\"}[1h]), \"svc\", \"$1\", \"exported_service\", \"(.*)\"), \"svc\", \"$1\", \"exported_service\", \"(.+)@.*\"), \"svc\", \"$1\", \"exported_service\", \"httproute-(.+)-gw-network-gateway.*\"))",
+    "instant": true,
+    "range": false,
+    "scope": "k8s",
+    "capture": {
+      "kind": "bounded",
+      "key": "k8s.routeRate",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_k8s_probeTarget",
+    "key": "probeTarget",
+    "source": "k8s",
+    "expr": "max by (probe, target) (probe_success{job=\"pi-blackbox\"})",
+    "instant": true,
+    "range": false,
+    "scope": "k8s",
+    "capture": {
+      "kind": "bounded",
+      "key": "k8s.probeTarget",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_k8s_requests",
+    "key": "requests",
+    "source": "k8s",
+    "expr": "sum(rate(traefik_service_requests_total{cluster=\"k8s-prod\"}[6m]))",
+    "instant": false,
+    "range": true,
+    "scope": "k8s",
+    "capture": {
+      "kind": "bounded",
+      "key": "k8s.requests",
+      "range": true
+    }
+  },
+  {
+    "refId": "D_k8s_errors5xx",
+    "key": "errors5xx",
+    "source": "k8s",
+    "expr": "sum(rate(traefik_service_requests_total{code=~\"5..\",cluster=\"k8s-prod\"}[6m]))",
+    "instant": false,
+    "range": true,
+    "scope": "k8s",
+    "capture": {
+      "kind": "bounded",
+      "key": "k8s.errors5xx",
+      "range": true
+    }
+  },
+  {
+    "refId": "D_k8s_cores",
+    "key": "cores",
+    "source": "k8s",
+    "expr": "sum(rate(container_cpu_usage_seconds_total{container!=\"\",cluster=\"k8s-prod\"}[6m]))",
+    "instant": false,
+    "range": true,
+    "scope": "k8s",
+    "capture": {
+      "kind": "bounded",
+      "key": "k8s.cores",
+      "range": true
+    }
+  },
+  {
+    "refId": "D_k8s_controllerTotal",
+    "key": "controllerTotal",
+    "source": "k8s",
+    "expr": "label_set((count(max by(namespace,deployment)(kube_deployment_spec_replicas{cluster=\"k8s-prod\"}))),\"kind\",\"Deployments\") or label_set((count(max by(namespace,statefulset)(kube_statefulset_replicas{cluster=\"k8s-prod\"}))),\"kind\",\"StatefulSets\") or label_set((count(max by(namespace,daemonset)(kube_daemonset_status_desired_number_scheduled{cluster=\"k8s-prod\"}))),\"kind\",\"DaemonSets\")",
+    "instant": true,
+    "range": false,
+    "scope": "k8s",
+    "capture": {
+      "kind": "catalog",
+      "key": "H_WKA"
+    }
+  },
+  {
+    "refId": "D_k8s_controllerReady",
+    "key": "controllerReady",
+    "source": "k8s",
+    "expr": "label_set((count(max by(namespace,deployment)(kube_deployment_status_replicas_available{cluster=\"k8s-prod\"}) >= on(namespace,deployment) max by(namespace,deployment)(kube_deployment_spec_replicas{cluster=\"k8s-prod\"})) or (0 * count(max by(namespace,deployment)(kube_deployment_spec_replicas{cluster=\"k8s-prod\"})))),\"kind\",\"Deployments\") or label_set((count(max by(namespace,statefulset)(kube_statefulset_status_replicas_ready{cluster=\"k8s-prod\"}) >= on(namespace,statefulset) max by(namespace,statefulset)(kube_statefulset_replicas{cluster=\"k8s-prod\"})) or (0 * count(max by(namespace,statefulset)(kube_statefulset_replicas{cluster=\"k8s-prod\"})))),\"kind\",\"StatefulSets\") or label_set((count(max by(namespace,daemonset)(kube_daemonset_status_number_available{cluster=\"k8s-prod\"}) >= on(namespace,daemonset) max by(namespace,daemonset)(kube_daemonset_status_desired_number_scheduled{cluster=\"k8s-prod\"})) or (0 * count(max by(namespace,daemonset)(kube_daemonset_status_desired_number_scheduled{cluster=\"k8s-prod\"})))),\"kind\",\"DaemonSets\")",
+    "instant": true,
+    "range": false,
+    "scope": "k8s",
+    "capture": {
+      "kind": "catalog",
+      "key": "H_WKB"
+    }
+  },
+  {
+    "refId": "D_k8s_controllerMissing",
+    "key": "controllerMissing",
+    "source": "k8s",
+    "expr": "label_set((count(max by(namespace,deployment)(kube_deployment_spec_replicas{cluster=\"k8s-prod\"}) unless on(namespace,deployment) max by(namespace,deployment)(kube_deployment_status_replicas_available{cluster=\"k8s-prod\"})) or (0 * count(max by(namespace,deployment)(kube_deployment_spec_replicas{cluster=\"k8s-prod\"})))),\"kind\",\"Deployments\") or label_set((count(max by(namespace,statefulset)(kube_statefulset_replicas{cluster=\"k8s-prod\"}) unless on(namespace,statefulset) max by(namespace,statefulset)(kube_statefulset_status_replicas_ready{cluster=\"k8s-prod\"})) or (0 * count(max by(namespace,statefulset)(kube_statefulset_replicas{cluster=\"k8s-prod\"})))),\"kind\",\"StatefulSets\") or label_set((count(max by(namespace,daemonset)(kube_daemonset_status_desired_number_scheduled{cluster=\"k8s-prod\"}) unless on(namespace,daemonset) max by(namespace,daemonset)(kube_daemonset_status_number_available{cluster=\"k8s-prod\"})) or (0 * count(max by(namespace,daemonset)(kube_daemonset_status_desired_number_scheduled{cluster=\"k8s-prod\"})))),\"kind\",\"DaemonSets\")",
+    "instant": true,
+    "range": false,
+    "scope": "k8s",
+    "capture": {
+      "kind": "catalog",
+      "key": "H_WKC"
+    }
+  },
+  {
+    "refId": "D_k8s_ksmUp",
+    "key": "ksmUp",
+    "source": "k8s",
+    "expr": "min(up{job=\"kube-state-metrics\",cluster=\"k8s-prod\"})",
+    "instant": true,
+    "range": false,
+    "scope": "k8s",
+    "capture": {
+      "kind": "catalog",
+      "key": "H_WKF"
+    }
+  },
+  {
+    "refId": "D_k8s_ksmAge",
+    "key": "ksmAge",
+    "source": "k8s",
+    "expr": "time()-min(timestamp(up{job=\"kube-state-metrics\",cluster=\"k8s-prod\"}))",
+    "instant": true,
+    "range": false,
+    "scope": "k8s",
+    "capture": {
+      "kind": "catalog",
+      "key": "H_WKG"
+    }
+  },
+  {
+    "refId": "D_k8s_controllerDeficit",
+    "key": "controllerDeficit",
+    "source": "k8s",
+    "expr": "label_set(label_replace(((max by(namespace,deployment)(kube_deployment_spec_replicas{cluster=\"k8s-prod\"}) - on(namespace,deployment) max by(namespace,deployment)(kube_deployment_status_replicas_available{cluster=\"k8s-prod\"})) > 0),\"controller\",\"$1\",\"deployment\",\"(.*)\"),\"kind\",\"Deployments\") or label_set(label_replace(((max by(namespace,statefulset)(kube_statefulset_replicas{cluster=\"k8s-prod\"}) - on(namespace,statefulset) max by(namespace,statefulset)(kube_statefulset_status_replicas_ready{cluster=\"k8s-prod\"})) > 0),\"controller\",\"$1\",\"statefulset\",\"(.*)\"),\"kind\",\"StatefulSets\") or label_set(label_replace(((max by(namespace,daemonset)(kube_daemonset_status_desired_number_scheduled{cluster=\"k8s-prod\"}) - on(namespace,daemonset) max by(namespace,daemonset)(kube_daemonset_status_number_available{cluster=\"k8s-prod\"})) > 0),\"controller\",\"$1\",\"daemonset\",\"(.*)\"),\"kind\",\"DaemonSets\")",
+    "instant": true,
+    "range": false,
+    "scope": "k8s",
+    "capture": {
+      "kind": "catalog",
+      "key": "H_WKN"
+    }
+  },
+  {
+    "refId": "D_k8s_controllerInventory",
+    "key": "controllerInventory",
+    "source": "k8s",
+    "expr": "label_set(label_replace((max by(namespace,deployment)(kube_deployment_spec_replicas{cluster=\"k8s-prod\"})),\"controller\",\"$1\",\"deployment\",\"(.*)\"),\"kind\",\"Deployments\") or label_set(label_replace((max by(namespace,statefulset)(kube_statefulset_replicas{cluster=\"k8s-prod\"})),\"controller\",\"$1\",\"statefulset\",\"(.*)\"),\"kind\",\"StatefulSets\") or label_set(label_replace((max by(namespace,daemonset)(kube_daemonset_status_desired_number_scheduled{cluster=\"k8s-prod\"})),\"controller\",\"$1\",\"daemonset\",\"(.*)\"),\"kind\",\"DaemonSets\")",
+    "instant": true,
+    "range": false,
+    "scope": "k8s",
+    "capture": {
+      "kind": "catalog",
+      "key": "H_WKI"
+    }
+  },
+  {
+    "refId": "D_k8s_controllerUnknown",
+    "key": "controllerUnknown",
+    "source": "k8s",
+    "expr": "label_set(label_replace((max by(namespace,deployment)(kube_deployment_spec_replicas{cluster=\"k8s-prod\"}) unless on(namespace,deployment) max by(namespace,deployment)(kube_deployment_status_replicas_available{cluster=\"k8s-prod\"})),\"controller\",\"$1\",\"deployment\",\"(.*)\"),\"kind\",\"Deployments\") or label_set(label_replace((max by(namespace,statefulset)(kube_statefulset_replicas{cluster=\"k8s-prod\"}) unless on(namespace,statefulset) max by(namespace,statefulset)(kube_statefulset_status_replicas_ready{cluster=\"k8s-prod\"})),\"controller\",\"$1\",\"statefulset\",\"(.*)\"),\"kind\",\"StatefulSets\") or label_set(label_replace((max by(namespace,daemonset)(kube_daemonset_status_desired_number_scheduled{cluster=\"k8s-prod\"}) unless on(namespace,daemonset) max by(namespace,daemonset)(kube_daemonset_status_number_available{cluster=\"k8s-prod\"})),\"controller\",\"$1\",\"daemonset\",\"(.*)\"),\"kind\",\"DaemonSets\")",
+    "instant": true,
+    "range": false,
+    "scope": "k8s",
+    "capture": {
+      "kind": "catalog",
+      "key": "H_WKX"
+    }
+  },
+  {
+    "refId": "D_k8s_backupExpected",
+    "key": "backupExpected",
+    "source": "k8s",
+    "expr": "count((longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\".*\",pvc=~\".*\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"})) or (0 * count(longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\".*\",pvc=~\".*\"}))",
+    "instant": true,
+    "range": false,
+    "scope": "k8s",
+    "capture": {
+      "kind": "catalog",
+      "key": "H_BKA"
+    }
+  },
+  {
+    "refId": "D_k8s_backupRecent",
+    "key": "backupRecent",
+    "source": "k8s",
+    "expr": "sum((time() - ((longhorn_volume_last_backup_at{cluster=\"k8s-prod\",pvc_namespace=~\".*\",pvc=~\".*\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}) > 0)) <= bool 108000) or (0 * count((longhorn_volume_last_backup_at{cluster=\"k8s-prod\",pvc_namespace=~\".*\",pvc=~\".*\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}))) or ((count((longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\".*\",pvc=~\".*\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"})) or (0 * count(longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\".*\",pvc=~\".*\"}))) == 0)",
+    "instant": true,
+    "range": false,
+    "scope": "k8s",
+    "capture": {
+      "kind": "catalog",
+      "key": "H_BKB"
+    }
+  },
+  {
+    "refId": "D_k8s_backupStale",
+    "key": "backupStale",
+    "source": "k8s",
+    "expr": "sum((time() - ((longhorn_volume_last_backup_at{cluster=\"k8s-prod\",pvc_namespace=~\".*\",pvc=~\".*\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}) > 0)) > bool 108000) or (0 * count((longhorn_volume_last_backup_at{cluster=\"k8s-prod\",pvc_namespace=~\".*\",pvc=~\".*\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}))) or ((count((longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\".*\",pvc=~\".*\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"})) or (0 * count(longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\".*\",pvc=~\".*\"}))) == 0)",
+    "instant": true,
+    "range": false,
+    "scope": "k8s",
+    "capture": {
+      "kind": "catalog",
+      "key": "H_BKC"
+    }
+  },
+  {
+    "refId": "D_k8s_backupNever",
+    "key": "backupNever",
+    "source": "k8s",
+    "expr": "sum((longhorn_volume_last_backup_at{cluster=\"k8s-prod\",pvc_namespace=~\".*\",pvc=~\".*\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}) == bool 0) or ((count((longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\".*\",pvc=~\".*\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"})) or (0 * count(longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\".*\",pvc=~\".*\"}))) == 0)",
+    "instant": true,
+    "range": false,
+    "scope": "k8s",
+    "capture": {
+      "kind": "catalog",
+      "key": "H_BKD"
+    }
+  },
+  {
+    "refId": "D_k8s_backupMissing",
+    "key": "backupMissing",
+    "source": "k8s",
+    "expr": "count((longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\".*\",pvc=~\".*\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}) unless on (cluster,volume) longhorn_volume_last_backup_at{cluster=\"k8s-prod\"}) or (0 * count(longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\".*\",pvc=~\".*\"}))",
+    "instant": true,
+    "range": false,
+    "scope": "k8s",
+    "capture": {
+      "kind": "catalog",
+      "key": "H_BKE"
+    }
+  },
+  {
+    "refId": "D_k8s_longhornCoverage",
+    "key": "longhornCoverage",
+    "source": "k8s",
+    "expr": "100 * sum(up{cluster=\"k8s-prod\",job=\"longhorn-backend\"}) / max(kube_daemonset_status_desired_number_scheduled{cluster=\"k8s-prod\",namespace=\"longhorn-system\",daemonset=\"longhorn-manager\"})",
+    "instant": true,
+    "range": false,
+    "scope": "k8s",
+    "capture": {
+      "kind": "catalog",
+      "key": "H_BKF"
+    }
+  },
+  {
+    "refId": "D_k8s_backupTarget",
+    "key": "backupTarget",
+    "source": "k8s",
+    "expr": "min(longhorn_backup_target_available{cluster=\"k8s-prod\",backup_target=\"default\"})",
+    "instant": true,
+    "range": false,
+    "scope": "k8s",
+    "capture": {
+      "kind": "catalog",
+      "key": "H_BKG"
+    }
+  },
+  {
+    "refId": "D_k8s_longhornAge",
+    "key": "longhornAge",
+    "source": "k8s",
+    "expr": "time()-min(timestamp(up{cluster=\"k8s-prod\",job=\"longhorn-backend\"}))",
+    "instant": true,
+    "range": false,
+    "scope": "k8s",
+    "capture": {
+      "kind": "catalog",
+      "key": "H_BKI"
+    }
+  },
+  {
+    "refId": "D_k8s_backupExceptions",
+    "key": "backupExceptions",
+    "source": "k8s",
+    "expr": "label_set(((time() - (max by(cluster,volume,pvc_namespace,pvc)(longhorn_volume_last_backup_at{cluster=\"k8s-prod\"} unless on(cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}) > 0)) > 108000),\"problem\",\"stale\") or label_set((max by(cluster,volume,pvc_namespace,pvc)(longhorn_volume_last_backup_at{cluster=\"k8s-prod\"} unless on(cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}) == 0),\"problem\",\"never\") or label_set(((longhorn_volume_capacity_bytes{cluster=\"k8s-prod\"} unless on(cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}) unless on(cluster,volume) longhorn_volume_last_backup_at{cluster=\"k8s-prod\"}),\"problem\",\"missing\")",
+    "instant": true,
+    "range": false,
+    "scope": "k8s",
+    "capture": {
+      "kind": "catalog",
+      "key": "H_BKV"
+    }
+  },
+  {
+    "refId": "D_k8s_alerts",
+    "key": "alerts",
+    "source": "k8s",
+    "expr": "ALERTS{alertstate=\"firing\",alertname!~\"Watchdog|InfoInhibitor\"}",
+    "instant": true,
+    "range": false,
+    "scope": "k8s",
+    "capture": {
+      "kind": "catalog",
+      "key": "H_AL"
+    }
+  },
+  {
+    "refId": "D_k8s_nodeInventory",
+    "key": "nodeInventory",
+    "source": "k8s",
+    "expr": "count(kube_node_info{cluster=\"k8s-prod\"})",
+    "instant": true,
+    "range": false,
+    "scope": "k8s",
+    "optional": true
+  },
+  {
+    "refId": "D_k8s_fluxInventory",
+    "key": "fluxInventory",
+    "source": "k8s",
+    "expr": "flux_resource_info{cluster=\"k8s-prod\"}",
+    "instant": true,
+    "range": false,
+    "scope": "k8s",
+    "optional": true
+  },
+  {
+    "refId": "D_k8s_controllerAvailable",
+    "key": "controllerAvailable",
+    "source": "k8s",
+    "expr": "label_set(label_replace(max by(namespace,deployment)(kube_deployment_status_replicas_available{cluster=\"k8s-prod\"}),\"controller\",\"$1\",\"deployment\",\"(.*)\"),\"kind\",\"Deployments\") or label_set(label_replace(max by(namespace,statefulset)(kube_statefulset_status_replicas_ready{cluster=\"k8s-prod\"}),\"controller\",\"$1\",\"statefulset\",\"(.*)\"),\"kind\",\"StatefulSets\") or label_set(label_replace(max by(namespace,daemonset)(kube_daemonset_status_number_available{cluster=\"k8s-prod\"}),\"controller\",\"$1\",\"daemonset\",\"(.*)\"),\"kind\",\"DaemonSets\")",
+    "instant": true,
+    "range": false,
+    "scope": "k8s",
+    "optional": true
+  },
+  {
+    "refId": "D_k8s_routeErrors",
+    "key": "routeErrors",
+    "source": "k8s",
+    "expr": "100 * sum by (svc) (label_replace(label_replace(label_replace(rate(traefik_service_requests_total{cluster=\"k8s-prod\",code=~\"5..\"}[1h]), \"svc\", \"$1\", \"exported_service\", \"(.*)\"), \"svc\", \"$1\", \"exported_service\", \"(.+)@.*\"), \"svc\", \"$1\", \"exported_service\", \"httproute-(.+)-gw-network-gateway.*\")) / (sum by (svc) (label_replace(label_replace(label_replace(rate(traefik_service_requests_total{cluster=\"k8s-prod\"}[1h]), \"svc\", \"$1\", \"exported_service\", \"(.*)\"), \"svc\", \"$1\", \"exported_service\", \"(.+)@.*\"), \"svc\", \"$1\", \"exported_service\", \"httproute-(.+)-gw-network-gateway.*\")) > 0)",
+    "instant": true,
+    "range": false,
+    "scope": "k8s",
+    "optional": true
+  },
+  {
+    "refId": "D_k8s_routeP95",
+    "key": "routeP95",
+    "source": "k8s",
+    "expr": "histogram_quantile(0.95, sum by (svc, le) (label_replace(label_replace(label_replace(rate(traefik_service_request_duration_seconds_bucket{cluster=\"k8s-prod\"}[1h]), \"svc\", \"$1\", \"exported_service\", \"(.*)\"), \"svc\", \"$1\", \"exported_service\", \"(.+)@.*\"), \"svc\", \"$1\", \"exported_service\", \"httproute-(.+)-gw-network-gateway.*\")))",
+    "instant": true,
+    "range": false,
+    "scope": "k8s",
+    "optional": true
+  },
+  {
+    "refId": "D_k8s_dbExpected",
+    "key": "dbExpected",
+    "source": "k8s",
+    "expr": "count by (namespace, pod) (kube_pod_init_container_info{cluster=\"k8s-prod\",container=\"plugin-barman-cloud\"}) or count by (namespace, pod) (cnpg_collector_up{cluster=\"k8s-prod\"})",
+    "instant": true,
+    "range": false,
+    "scope": "k8s",
+    "optional": true
+  },
+  {
+    "refId": "D_k8s_dbBackupTimestamp",
+    "key": "dbBackupTimestamp",
+    "source": "k8s",
+    "expr": "max by (namespace, pod) (barman_cloud_cloudnative_pg_io_last_available_backup_timestamp{cluster=\"k8s-prod\"})",
+    "instant": true,
+    "range": false,
+    "scope": "k8s",
+    "optional": true
+  },
+  {
+    "refId": "D_k8s_dbWal",
+    "key": "dbWal",
+    "source": "k8s",
+    "expr": "max by (namespace, pod) (cnpg_collector_pg_wal_archive_status{cluster=\"k8s-prod\",value=\"ready\"})",
+    "instant": true,
+    "range": false,
+    "scope": "k8s",
+    "optional": true
+  },
+  {
+    "refId": "D_k8s_volumeInventory",
+    "key": "volumeInventory",
+    "source": "k8s",
+    "expr": "max by (volume, pvc_namespace, pvc) (longhorn_volume_capacity_bytes{cluster=\"k8s-prod\"})",
+    "instant": true,
+    "range": false,
+    "scope": "k8s",
+    "optional": true
+  },
+  {
+    "refId": "D_k8s_volumeState",
+    "key": "volumeState",
+    "source": "k8s",
+    "expr": "max by (volume, pvc_namespace, pvc, state) (longhorn_volume_robustness{cluster=\"k8s-prod\"})",
+    "instant": true,
+    "range": false,
+    "scope": "k8s",
+    "optional": true
+  },
+  {
+    "refId": "D_k8s_volumeBackupTimestamp",
+    "key": "volumeBackupTimestamp",
+    "source": "k8s",
+    "expr": "max by (volume, pvc_namespace, pvc) (longhorn_volume_last_backup_at{cluster=\"k8s-prod\"})",
+    "instant": true,
+    "range": false,
+    "scope": "k8s",
+    "optional": true
+  },
+  {
+    "refId": "D_k8s_volumeExempt",
+    "key": "volumeExempt",
+    "source": "k8s",
+    "expr": "longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}",
+    "instant": true,
+    "range": false,
+    "scope": "k8s",
+    "optional": true
+  },
+  {
+    "refId": "D_k8s_cpuCommitHistory",
+    "key": "cpuCommitHistory",
+    "source": "k8s",
+    "expr": "100 * sum(kube_pod_container_resource_requests{resource=\"cpu\",cluster=\"k8s-prod\"}) / sum(kube_node_status_allocatable{resource=\"cpu\",cluster=\"k8s-prod\"})",
+    "instant": false,
+    "range": true,
+    "scope": "k8s",
+    "optional": true
+  },
+  {
+    "refId": "D_k8s_memoryCommitHistory",
+    "key": "memoryCommitHistory",
+    "source": "k8s",
+    "expr": "100 * sum(kube_pod_container_resource_requests{resource=\"memory\",cluster=\"k8s-prod\"}) / sum(kube_node_status_allocatable{resource=\"memory\",cluster=\"k8s-prod\"})",
+    "instant": false,
+    "range": true,
+    "scope": "k8s",
+    "optional": true
+  },
+  {
+    "refId": "D_k8s_namespaceCpuHistory",
+    "key": "namespaceCpuHistory",
+    "source": "k8s",
+    "expr": "sum by (namespace) (rate(container_cpu_usage_seconds_total{container!=\"\",cluster=\"k8s-prod\"}[5m]))",
+    "instant": false,
+    "range": true,
+    "scope": "k8s",
+    "optional": true
+  },
+  {
+    "refId": "D_k8s_namespaceMemoryHistory",
+    "key": "namespaceMemoryHistory",
+    "source": "k8s",
+    "expr": "sum by (namespace) (container_memory_working_set_bytes{container!=\"\",cluster=\"k8s-prod\"})",
+    "instant": false,
+    "range": true,
+    "scope": "k8s",
+    "optional": true
+  },
+  {
+    "refId": "D_k8s_routeTrafficHistory",
+    "key": "routeTrafficHistory",
+    "source": "k8s",
+    "expr": "sum by (svc) (label_replace(label_replace(label_replace(rate(traefik_service_requests_total{cluster=\"k8s-prod\"}[6m]), \"svc\", \"$1\", \"exported_service\", \"(.*)\"), \"svc\", \"$1\", \"exported_service\", \"(.+)@.*\"), \"svc\", \"$1\", \"exported_service\", \"httproute-(.+)-gw-network-gateway.*\"))",
+    "instant": false,
+    "range": true,
+    "scope": "k8s",
+    "optional": true
+  },
+  {
+    "refId": "D_k8s_routeErrorHistory",
+    "key": "routeErrorHistory",
+    "source": "k8s",
+    "expr": "sum by (svc) (label_replace(label_replace(label_replace(rate(traefik_service_requests_total{cluster=\"k8s-prod\",code=~\"5..\"}[6m]), \"svc\", \"$1\", \"exported_service\", \"(.*)\"), \"svc\", \"$1\", \"exported_service\", \"(.+)@.*\"), \"svc\", \"$1\", \"exported_service\", \"httproute-(.+)-gw-network-gateway.*\"))",
+    "instant": false,
+    "range": true,
+    "scope": "k8s",
+    "optional": true
+  },
+  {
+    "refId": "D_k8s_dbBackupAgeHistory",
+    "key": "dbBackupAgeHistory",
+    "source": "k8s",
+    "expr": "time() - (max by (namespace, pod) (barman_cloud_cloudnative_pg_io_last_available_backup_timestamp{cluster=\"k8s-prod\"}) > 0)",
+    "instant": false,
+    "range": true,
+    "scope": "k8s",
+    "optional": true
+  },
+  {
+    "refId": "D_k8s_dbWalHistory",
+    "key": "dbWalHistory",
+    "source": "k8s",
+    "expr": "max by (namespace, pod) (cnpg_collector_pg_wal_archive_status{cluster=\"k8s-prod\",value=\"ready\"})",
+    "instant": false,
+    "range": true,
+    "scope": "k8s",
+    "optional": true
+  },
+  {
+    "refId": "D_k8s_volumeBackupAgeHistory",
+    "key": "volumeBackupAgeHistory",
+    "source": "k8s",
+    "expr": "time() - (max by (volume, pvc_namespace, pvc) (longhorn_volume_last_backup_at{cluster=\"k8s-prod\"} unless on (cluster, pvc_namespace, pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}) > 0)",
+    "instant": false,
+    "range": true,
+    "scope": "k8s",
+    "optional": true
+  }
+]

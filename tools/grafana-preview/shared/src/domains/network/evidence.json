@@ -1,0 +1,16 @@
+{
+  "capture": "runtime/catalog.json (base comparison recording; domain locators use original refIds)",
+  "inventory": "Device identities are the union of device info, resource and radio query labels. No captured device names or fixed fleet totals are embedded in the application. Independent query labels retain a device row when one source disappears. Complete absence cannot establish offline state or inventory completeness.",
+  "wanFreshness": "The 180-second metric-age guard matches H_WNG/H_WNH and the accepted Home WAN logic. It is collection freshness, not a new health or latency threshold.",
+  "registration": "I_net_tmobileRegistered includes or vector(0). The live expression is unchanged to match the recording. Only 1 supplies positive registration evidence; 0, absence, ambiguity and failed collection stay unknown.",
+  "portAttribution": "I_net_wanPorts retains WAN group only, while R_net_wanRx/R_net_wanTx retain port only. No captured evidence establishes an eth8/eth9-to-provider join. Rates sum by port across gateways, losing device identity as well.",
+  "uncaptured": "Collector up, per-device CPU/memory histories, device-labelled WAN rates, switch port RX/TX, radio utilization histories and VAP traffic are live-only optional queries. Recorded mode must not synthesize those samples from instant values or aggregate port rates.",
+  "nativeSources": [
+    "kubernetes/apps/observability/unpoller/app/dashboards/stock-unifi-usg.json",
+    "kubernetes/apps/observability/unpoller/app/dashboards/stock-unifi-usw.json",
+    "kubernetes/apps/observability/unpoller/app/dashboards/stock-unifi-uap.json",
+    "kubernetes/apps/observability/unpoller/app/dashboards/stock-unifi-clients.json",
+    "kubernetes/apps/observability/unifi-flows/app/dashboards/unifi-flows.json"
+  ],
+  "liveAdaptation": "Native stock queries are scoped to job=unifi-api and use a fixed 6-minute rate window to match captured gateway rates. The detail renderer filters name/wan/port labels; queries preserve port_id, port_num, port_name and radio labels. Raw radio utilization uses the same metric family as the captured instant radioBusy query. No production queries were issued."
+}

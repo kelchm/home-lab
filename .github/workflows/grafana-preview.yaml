@@ -1,0 +1,55 @@
+---
+name: Grafana Preview
+
+on:
+  pull_request:
+    paths:
+      - "tools/grafana-preview/**"
+      - ".github/workflows/grafana-preview.yaml"
+  push:
+    branches: ["main"]
+    paths:
+      - "tools/grafana-preview/**"
+      - ".github/workflows/grafana-preview.yaml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Grafana Preview Models and Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: tools/grafana-preview
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install preview tools
+        uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
+        with:
+          install_args: "node@24.22.1 pnpm@12.5.1"
+
+      - name: Check models, lifecycle, and frontend builds
+        run: |
+          for preview_package in shared scenes; do
+            mise exec node@24.22.1 pnpm@12.5.1 -- pnpm --dir "$preview_package" install --frozen-lockfile
+            mise exec node@24.22.1 pnpm@12.5.1 -- pnpm --dir "$preview_package" run typecheck
+            mise exec node@24.22.1 pnpm@12.5.1 -- pnpm --dir "$preview_package" exec vitest run --maxWorkers=2
+            mise exec node@24.22.1 pnpm@12.5.1 -- pnpm --dir "$preview_package" run build
+          done
+
+      - name: Check cross-domain contracts and recorded replay
+        run: |
+          mise exec node@24.22.1 -- node checks/contracts.mjs
+          mise exec node@24.22.1 -- node --test runtime/replay.test.mjs
+          python3 -m unittest discover -s runtime -p 'test_*.py'

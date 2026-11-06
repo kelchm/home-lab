@@ -1,0 +1,14 @@
+{
+  "type": "panel",
+  "name": "Home comparison views",
+  "id": "homelab-compare-panel",
+  "info": {
+    "description": "Overview and Network views for the isolated native-versus-Scenes comparison.",
+    "author": { "name": "homelab" },
+    "keywords": ["panel"],
+    "logos": { "small": "img/logo.svg", "large": "img/logo.svg" },
+    "version": "0.1.0",
+    "updated": "2026-11-02"
+  },
+  "dependencies": { "grafanaDependency": ">=13.3.0", "plugins": [] }
+}

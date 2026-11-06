@@ -1,0 +1,43 @@
+{
+  "boundedWindow": {
+    "from": 1793496424636,
+    "to": 1793582824636,
+    "fetchedAt": "2026-11-02T02:25:42Z"
+  },
+  "capturedExpressionsBeforeNamespaceScope": {
+    "dbUp": "max by (pod) (cnpg_collector_up)",
+    "dbSize": "sum by (pod) (cnpg_pg_database_size_bytes)",
+    "dbBackends": "sum by (pod) (cnpg_backends_total)",
+    "certLeft": "min by (name) (certmanager_certificate_expiration_timestamp_seconds{cluster=\"k8s-prod\"} - time())",
+    "certLife": "100 * min by (name) ((certmanager_certificate_expiration_timestamp_seconds{cluster=\"k8s-prod\"} - time()) / (certmanager_certificate_not_after_timestamp_seconds{cluster=\"k8s-prod\"} - certmanager_certificate_not_before_timestamp_seconds{cluster=\"k8s-prod\"}))"
+  },
+  "excludedLegacyBackup": {
+    "key": "k8s.dbBackupAge",
+    "expr": "(time() - (max by (pod) (cnpg_collector_last_available_backup_timestamp) > 0))",
+    "reason": "Empty legacy CNPG collector family does not establish current Barman backup state."
+  },
+  "policySources": [
+    {
+      "path": "kubernetes/apps/cnpg-system/plugin-barman-cloud/app/alerts.yaml",
+      "meaning": "Expected database pods include Barman init containers or CNPG collectors. Timestamp 0 means no completed backup recorded; >26h is the existing stale rule. Positive WAL backlog is an observation, not proof of the alert duration."
+    },
+    {
+      "path": "kubernetes/apps/observability/grafana/app/longhorn-dashboard.json",
+      "meaning": "Longhorn backup freshness is 30h, scoped to non-exempt volumes; this is independent of CNPG recovery and restore verification."
+    },
+    {
+      "path": "tools/grafana-preview/shared/src/model/semantics.js",
+      "meaning": "Reuse existing daily-check source freshness guard of 90 seconds for kube-state-metrics and Longhorn, rather than introducing a health threshold."
+    },
+    {
+      "path": "kubernetes/apps/observability/grafana/app/home-dashboard.json",
+      "meaning": "Route grouping and p95 source; omit the old error-percentage zero fallback because request traffic does not establish the error family."
+    }
+  ],
+  "recordedLimits": [
+    "Queries without capture locators remain unavailable in recorded mode.",
+    "Namespace-less certificate/database captures keep namespace unknown and never join by a guessed prefix.",
+    "Raw fallback-zero pod, Flux and volume totals do not prove no exceptions.",
+    "Inference recording is not used for Kubernetes."
+  ]
+}

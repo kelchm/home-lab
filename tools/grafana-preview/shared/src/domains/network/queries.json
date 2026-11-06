@@ -1,0 +1,610 @@
+[
+  {
+    "refId": "D_net_wanState",
+    "key": "net.wanState",
+    "source": "Network",
+    "expr": "min by (wan) (unpoller_device_wan_status{job=\"unifi-api\"} * on (wan_networkgroup) group_left (wan) (max by (wan_networkgroup, wan) (label_replace(unpoller_wan_interface_state{job=\"unifi-api\"}, \"wan\", \"$1\", \"wan_interface\", \"(.*)\")) * 0 + 1))",
+    "instant": true,
+    "range": false,
+    "scope": "net",
+    "capture": {
+      "kind": "catalog",
+      "key": "H_WNA"
+    }
+  },
+  {
+    "refId": "D_net_latency",
+    "key": "net.latency",
+    "source": "Network",
+    "expr": "avg by (wan) (unpoller_device_wan_monitor_latency_average_seconds{job=\"unifi-api\"} * on (wan_networkgroup) group_left (wan) (max by (wan_networkgroup, wan) (label_replace(unpoller_wan_interface_state{job=\"unifi-api\"}, \"wan\", \"$1\", \"wan_interface\", \"(.*)\")) * 0 + 1))",
+    "instant": true,
+    "range": false,
+    "scope": "net",
+    "capture": {
+      "kind": "catalog",
+      "key": "H_WNB"
+    }
+  },
+  {
+    "refId": "D_net_wanAge",
+    "key": "net.wanAge",
+    "source": "Network",
+    "expr": "max by(wan)((time()-timestamp(unpoller_device_wan_status{job=\"unifi-api\"})) * on(wan_networkgroup) group_left(wan) (max by(wan_networkgroup,wan)(label_replace(unpoller_wan_interface_state{job=\"unifi-api\"},\"wan\",\"$1\",\"wan_interface\",\"(.*)\"))*0+1))",
+    "instant": true,
+    "range": false,
+    "scope": "net",
+    "capture": {
+      "kind": "catalog",
+      "key": "H_WNG"
+    }
+  },
+  {
+    "refId": "D_net_wanStateHistory",
+    "key": "net.wanStateHistory",
+    "source": "Network",
+    "expr": "min by (wan) (min_over_time(unpoller_device_wan_status{job=\"unifi-api\"}[$__interval]) * on (wan_networkgroup) group_left (wan) (max by (wan_networkgroup, wan) (label_replace(unpoller_wan_interface_state{job=\"unifi-api\"}, \"wan\", \"$1\", \"wan_interface\", \"(.*)\")) * 0 + 1)) and on(wan) (max by(wan)((time()-timestamp(unpoller_device_wan_status{job=\"unifi-api\"})) * on(wan_networkgroup) group_left(wan) (max by(wan_networkgroup,wan)(label_replace(unpoller_wan_interface_state{job=\"unifi-api\"},\"wan\",\"$1\",\"wan_interface\",\"(.*)\"))*0+1)) <= 180)",
+    "instant": false,
+    "range": true,
+    "scope": "net",
+    "capture": {
+      "kind": "catalog",
+      "key": "H_WNH"
+    }
+  },
+  {
+    "refId": "D_net_wanRxHistory",
+    "key": "net.wanRxHistory",
+    "source": "Network",
+    "expr": "sum by (port) (rate(unpoller_device_wan_receive_bytes_total{job=\"unifi-api\"}[6m]))",
+    "instant": false,
+    "range": true,
+    "scope": "net",
+    "capture": {
+      "kind": "catalog",
+      "key": "R_net_wanRx"
+    }
+  },
+  {
+    "refId": "D_net_latencyHistory",
+    "key": "net.latencyHistory",
+    "source": "Network",
+    "expr": "avg by (wan) (unpoller_device_wan_monitor_latency_average_seconds{job=\"unifi-api\"} * on (wan_networkgroup) group_left (wan) (max by (wan_networkgroup, wan) (label_replace(unpoller_wan_interface_state{job=\"unifi-api\"}, \"wan\", \"$1\", \"wan_interface\", \"(.*)\")) * 0 + 1))",
+    "instant": false,
+    "range": true,
+    "scope": "net",
+    "capture": {
+      "kind": "catalog",
+      "key": "R_net_latency"
+    }
+  },
+  {
+    "refId": "D_net_dishDownHistory",
+    "key": "net.dishDownHistory",
+    "source": "Network",
+    "expr": "max(starlink_dish_downlink_throughput_bps{job=\"starlink-api\"})",
+    "instant": false,
+    "range": true,
+    "scope": "net",
+    "capture": {
+      "kind": "catalog",
+      "key": "R_net_dishDown"
+    }
+  },
+  {
+    "refId": "D_net_dishUpHistory",
+    "key": "net.dishUpHistory",
+    "source": "Network",
+    "expr": "max(starlink_dish_uplink_throughput_bps{job=\"starlink-api\"})",
+    "instant": false,
+    "range": true,
+    "scope": "net",
+    "capture": {
+      "kind": "catalog",
+      "key": "R_net_dishUp"
+    }
+  },
+  {
+    "refId": "D_net_dishPingHistory",
+    "key": "net.dishPingHistory",
+    "source": "Network",
+    "expr": "1000 * max(starlink_dish_pop_ping_latency_seconds{job=\"starlink-api\"})",
+    "instant": false,
+    "range": true,
+    "scope": "net",
+    "capture": {
+      "kind": "catalog",
+      "key": "R_net_dishPing"
+    }
+  },
+  {
+    "refId": "D_net_tmobileRsrpHistory",
+    "key": "net.tmobileRsrpHistory",
+    "source": "Network",
+    "expr": "max(tmobile_5g_rsrp_dbm{job=\"tmobile-api\"})",
+    "instant": false,
+    "range": true,
+    "scope": "net",
+    "capture": {
+      "kind": "catalog",
+      "key": "R_net_tmobileRsrp"
+    }
+  },
+  {
+    "refId": "D_net_tmobileSinrHistory",
+    "key": "net.tmobileSinrHistory",
+    "source": "Network",
+    "expr": "max(tmobile_5g_sinr_db{job=\"tmobile-api\"})",
+    "instant": false,
+    "range": true,
+    "scope": "net",
+    "capture": {
+      "kind": "catalog",
+      "key": "R_net_tmobileSinr"
+    }
+  },
+  {
+    "refId": "D_net_wanTxHistory",
+    "key": "net.wanTxHistory",
+    "source": "Network",
+    "expr": "sum by (port) (rate(unpoller_device_wan_transmit_bytes_total{job=\"unifi-api\"}[6m]))",
+    "instant": false,
+    "range": true,
+    "scope": "net",
+    "capture": {
+      "kind": "catalog",
+      "key": "R_net_wanTx"
+    }
+  },
+  {
+    "refId": "D_net_availability",
+    "key": "net.availability",
+    "source": "Network",
+    "expr": "min by (wan) (unpoller_device_wan_monitor_availability_percent{job=\"unifi-api\"} * on (wan_networkgroup) group_left (wan) (max by (wan_networkgroup, wan) (label_replace(unpoller_wan_interface_state{job=\"unifi-api\"}, \"wan\", \"$1\", \"wan_interface\", \"(.*)\")) * 0 + 1))",
+    "instant": true,
+    "range": false,
+    "scope": "net",
+    "capture": {
+      "kind": "catalog",
+      "key": "I_net_availability"
+    }
+  },
+  {
+    "refId": "D_net_linkDown",
+    "key": "net.linkDown",
+    "source": "Network",
+    "expr": "1000 * max by (wan) (label_replace(unpoller_wan_provider_download_kbps{job=\"unifi-api\"}, \"wan\", \"$1\", \"wan_name\", \"(.*)\"))",
+    "instant": true,
+    "range": false,
+    "scope": "net",
+    "capture": {
+      "kind": "catalog",
+      "key": "I_net_linkDown"
+    }
+  },
+  {
+    "refId": "D_net_linkUp",
+    "key": "net.linkUp",
+    "source": "Network",
+    "expr": "1000 * max by (wan) (label_replace(unpoller_wan_provider_upload_kbps{job=\"unifi-api\"}, \"wan\", \"$1\", \"wan_name\", \"(.*)\"))",
+    "instant": true,
+    "range": false,
+    "scope": "net",
+    "capture": {
+      "kind": "catalog",
+      "key": "I_net_linkUp"
+    }
+  },
+  {
+    "refId": "D_net_deviceInfo",
+    "key": "net.deviceInfo",
+    "source": "Network",
+    "expr": "max by (name, type, version) (unpoller_device_info{job=\"unifi-api\"})",
+    "instant": true,
+    "range": false,
+    "scope": "net",
+    "capture": {
+      "kind": "catalog",
+      "key": "I_net_deviceInfo"
+    }
+  },
+  {
+    "refId": "D_net_deviceClients",
+    "key": "net.deviceClients",
+    "source": "Network",
+    "expr": "sum by (name) (unpoller_device_stations{job=\"unifi-api\",station_type=\"user\"})",
+    "instant": true,
+    "range": false,
+    "scope": "net",
+    "capture": {
+      "kind": "catalog",
+      "key": "I_net_deviceClients"
+    }
+  },
+  {
+    "refId": "D_net_deviceCpu",
+    "key": "net.deviceCpu",
+    "source": "Network",
+    "expr": "100 * max by (name) (unpoller_device_cpu_utilization_ratio{job=\"unifi-api\"})",
+    "instant": true,
+    "range": false,
+    "scope": "net",
+    "capture": {
+      "kind": "catalog",
+      "key": "I_net_deviceCpu"
+    }
+  },
+  {
+    "refId": "D_net_deviceMem",
+    "key": "net.deviceMem",
+    "source": "Network",
+    "expr": "100 * max by (name) (unpoller_device_memory_utilization_ratio{job=\"unifi-api\"})",
+    "instant": true,
+    "range": false,
+    "scope": "net",
+    "capture": {
+      "kind": "catalog",
+      "key": "I_net_deviceMem"
+    }
+  },
+  {
+    "refId": "D_net_deviceTemp",
+    "key": "net.deviceTemp",
+    "source": "Network",
+    "expr": "max by (name) (unpoller_device_temperature_celsius{job=\"unifi-api\"})",
+    "instant": true,
+    "range": false,
+    "scope": "net",
+    "capture": {
+      "kind": "catalog",
+      "key": "I_net_deviceTemp"
+    }
+  },
+  {
+    "refId": "D_net_deviceUptime",
+    "key": "net.deviceUptime",
+    "source": "Network",
+    "expr": "max by (name) (unpoller_device_uptime_seconds{job=\"unifi-api\"})",
+    "instant": true,
+    "range": false,
+    "scope": "net",
+    "capture": {
+      "kind": "catalog",
+      "key": "I_net_deviceUptime"
+    }
+  },
+  {
+    "refId": "D_net_deviceUpgrade",
+    "key": "net.deviceUpgrade",
+    "source": "Network",
+    "expr": "max by (name) (unpoller_device_upgradable{job=\"unifi-api\"})",
+    "instant": true,
+    "range": false,
+    "scope": "net",
+    "capture": {
+      "kind": "catalog",
+      "key": "I_net_deviceUpgrade"
+    }
+  },
+  {
+    "refId": "D_net_radioChannel",
+    "key": "net.radioChannel",
+    "source": "Network",
+    "expr": "max by (ap_radio) (label_replace(label_join(unpoller_device_radio_channel{job=\"unifi-api\"}, \"ap_radio\", \" \u00b7 \", \"name\", \"band\"), \"ap_radio\", \"$1 GHz\", \"ap_radio\", \"(.*)\"))",
+    "instant": true,
+    "range": false,
+    "scope": "net",
+    "capture": {
+      "kind": "catalog",
+      "key": "I_net_radioChannel"
+    }
+  },
+  {
+    "refId": "D_net_radioBusy",
+    "key": "net.radioBusy",
+    "source": "Network",
+    "expr": "100 * max by (ap_radio) (label_replace(label_join(unpoller_device_radio_channel_utilization_total_ratio{job=\"unifi-api\"}, \"ap_radio\", \" \u00b7 \", \"name\", \"band\"), \"ap_radio\", \"$1 GHz\", \"ap_radio\", \"(.*)\"))",
+    "instant": true,
+    "range": false,
+    "scope": "net",
+    "capture": {
+      "kind": "catalog",
+      "key": "I_net_radioBusy"
+    }
+  },
+  {
+    "refId": "D_net_radioClients",
+    "key": "net.radioClients",
+    "source": "Network",
+    "expr": "max by (ap_radio) (label_replace(label_join(unpoller_device_radio_stations{job=\"unifi-api\",station_type=\"user\"}, \"ap_radio\", \" \u00b7 \", \"name\", \"band\"), \"ap_radio\", \"$1 GHz\", \"ap_radio\", \"(.*)\"))",
+    "instant": true,
+    "range": false,
+    "scope": "net",
+    "capture": {
+      "kind": "catalog",
+      "key": "I_net_radioClients"
+    }
+  },
+  {
+    "refId": "D_net_dishPing",
+    "key": "net.dishPing",
+    "source": "Network",
+    "expr": "1000 * max(starlink_dish_pop_ping_latency_seconds{job=\"starlink-api\"})",
+    "instant": true,
+    "range": false,
+    "scope": "net",
+    "capture": {
+      "kind": "catalog",
+      "key": "I_net_dishPing"
+    }
+  },
+  {
+    "refId": "D_net_dishDrop",
+    "key": "net.dishDrop",
+    "source": "Network",
+    "expr": "100 * max(avg_over_time(starlink_dish_pop_ping_drop_ratio{job=\"starlink-api\"}[15m]))",
+    "instant": true,
+    "range": false,
+    "scope": "net",
+    "capture": {
+      "kind": "catalog",
+      "key": "I_net_dishDrop"
+    }
+  },
+  {
+    "refId": "D_net_dishObstructed",
+    "key": "net.dishObstructed",
+    "source": "Network",
+    "expr": "100 * max(avg_over_time(starlink_dish_currently_obstructed{job=\"starlink-api\"}[1h]))",
+    "instant": true,
+    "range": false,
+    "scope": "net",
+    "capture": {
+      "kind": "catalog",
+      "key": "I_net_dishObstructed"
+    }
+  },
+  {
+    "refId": "D_net_dishUptime",
+    "key": "net.dishUptime",
+    "source": "Network",
+    "expr": "max(starlink_dish_uptime_seconds{job=\"starlink-api\"})",
+    "instant": true,
+    "range": false,
+    "scope": "net",
+    "capture": {
+      "kind": "catalog",
+      "key": "I_net_dishUptime"
+    }
+  },
+  {
+    "refId": "D_net_tmobileRegistered",
+    "key": "net.tmobileRegistered",
+    "source": "Network",
+    "expr": "(max(tmobile_registration_info{job=\"tmobile-api\",registration=\"registered\"})) or vector(0)",
+    "instant": true,
+    "range": false,
+    "scope": "net",
+    "capture": {
+      "kind": "catalog",
+      "key": "I_net_tmobileRegistered"
+    }
+  },
+  {
+    "refId": "D_net_tmobileBars",
+    "key": "net.tmobileBars",
+    "source": "Network",
+    "expr": "max(tmobile_5g_bars{job=\"tmobile-api\"})",
+    "instant": true,
+    "range": false,
+    "scope": "net",
+    "capture": {
+      "kind": "catalog",
+      "key": "I_net_tmobileBars"
+    }
+  },
+  {
+    "refId": "D_net_tmobileRsrp",
+    "key": "net.tmobileRsrp",
+    "source": "Network",
+    "expr": "max(tmobile_5g_rsrp_dbm{job=\"tmobile-api\"})",
+    "instant": true,
+    "range": false,
+    "scope": "net",
+    "capture": {
+      "kind": "catalog",
+      "key": "I_net_tmobileRsrp"
+    }
+  },
+  {
+    "refId": "D_net_tmobileSinr",
+    "key": "net.tmobileSinr",
+    "source": "Network",
+    "expr": "max(tmobile_5g_sinr_db{job=\"tmobile-api\"})",
+    "instant": true,
+    "range": false,
+    "scope": "net",
+    "capture": {
+      "kind": "catalog",
+      "key": "I_net_tmobileSinr"
+    }
+  },
+  {
+    "refId": "D_net_tmobileUptime",
+    "key": "net.tmobileUptime",
+    "source": "Network",
+    "expr": "max(tmobile_uptime_seconds{job=\"tmobile-api\"})",
+    "instant": true,
+    "range": false,
+    "scope": "net",
+    "capture": {
+      "kind": "catalog",
+      "key": "I_net_tmobileUptime"
+    }
+  },
+  {
+    "refId": "D_net_wanPorts",
+    "key": "net.wanPorts",
+    "source": "Network",
+    "expr": "max by (port, wan_interface, wan_networkgroup) (unpoller_device_wan_status{job=\"unifi-api\"})",
+    "instant": true,
+    "range": false,
+    "scope": "net",
+    "capture": {
+      "kind": "catalog",
+      "key": "I_net_wanPorts"
+    }
+  },
+  {
+    "refId": "D_net_wanMap",
+    "key": "net.wanMap",
+    "source": "Network",
+    "expr": "max by (wan_interface, wan_networkgroup) (unpoller_wan_interface_state{job=\"unifi-api\"})",
+    "instant": true,
+    "range": false,
+    "scope": "net",
+    "capture": {
+      "kind": "catalog",
+      "key": "I_net_wanMap"
+    }
+  },
+  {
+    "refId": "D_net_unifiCollector",
+    "key": "net.unifiCollector",
+    "source": "Network",
+    "expr": "min(up{job=\"unifi-api\"})",
+    "instant": true,
+    "range": false,
+    "scope": "net",
+    "optional": true
+  },
+  {
+    "refId": "D_net_dishCollector",
+    "key": "net.dishCollector",
+    "source": "Network",
+    "expr": "min(up{job=\"starlink-api\"})",
+    "instant": true,
+    "range": false,
+    "scope": "net",
+    "optional": true
+  },
+  {
+    "refId": "D_net_tmobileCollector",
+    "key": "net.tmobileCollector",
+    "source": "Network",
+    "expr": "min(up{job=\"tmobile-api\"})",
+    "instant": true,
+    "range": false,
+    "scope": "net",
+    "optional": true
+  },
+  {
+    "refId": "D_net_portRxHistory",
+    "key": "net.portRxHistory",
+    "source": "Network",
+    "expr": "rate(unpoller_device_port_receive_bytes_total{job=\"unifi-api\"}[6m])",
+    "instant": false,
+    "range": true,
+    "scope": "net",
+    "optional": true
+  },
+  {
+    "refId": "D_net_portTxHistory",
+    "key": "net.portTxHistory",
+    "source": "Network",
+    "expr": "rate(unpoller_device_port_transmit_bytes_total{job=\"unifi-api\"}[6m])",
+    "instant": false,
+    "range": true,
+    "scope": "net",
+    "optional": true
+  },
+  {
+    "refId": "D_net_deviceWanRxHistory",
+    "key": "net.deviceWanRxHistory",
+    "source": "Network",
+    "expr": "rate(unpoller_device_wan_receive_bytes_total{job=\"unifi-api\"}[6m])",
+    "instant": false,
+    "range": true,
+    "scope": "net",
+    "optional": true
+  },
+  {
+    "refId": "D_net_deviceWanTxHistory",
+    "key": "net.deviceWanTxHistory",
+    "source": "Network",
+    "expr": "rate(unpoller_device_wan_transmit_bytes_total{job=\"unifi-api\"}[6m])",
+    "instant": false,
+    "range": true,
+    "scope": "net",
+    "optional": true
+  },
+  {
+    "refId": "D_net_vapRxHistory",
+    "key": "net.vapRxHistory",
+    "source": "Network",
+    "expr": "sum by (name, radio, band) (rate(unpoller_device_vap_receive_bytes_total{job=\"unifi-api\"}[6m]))",
+    "instant": false,
+    "range": true,
+    "scope": "net",
+    "optional": true
+  },
+  {
+    "refId": "D_net_vapTxHistory",
+    "key": "net.vapTxHistory",
+    "source": "Network",
+    "expr": "sum by (name, radio, band) (rate(unpoller_device_vap_transmit_bytes_total{job=\"unifi-api\"}[6m]))",
+    "instant": false,
+    "range": true,
+    "scope": "net",
+    "optional": true
+  },
+  {
+    "refId": "D_net_radioBusyHistory",
+    "key": "net.radioBusyHistory",
+    "source": "Network",
+    "expr": "100 * unpoller_device_radio_channel_utilization_total_ratio{job=\"unifi-api\"}",
+    "instant": false,
+    "range": true,
+    "scope": "net",
+    "optional": true
+  },
+  {
+    "refId": "D_net_deviceCpuHistory",
+    "key": "net.deviceCpuHistory",
+    "source": "Network",
+    "expr": "100 * max by (name) (unpoller_device_cpu_utilization_ratio{job=\"unifi-api\"})",
+    "instant": false,
+    "range": true,
+    "scope": "net",
+    "optional": true
+  },
+  {
+    "refId": "D_net_deviceMemHistory",
+    "key": "net.deviceMemHistory",
+    "source": "Network",
+    "expr": "100 * max by (name) (unpoller_device_memory_utilization_ratio{job=\"unifi-api\"})",
+    "instant": false,
+    "range": true,
+    "scope": "net",
+    "optional": true
+  },
+  {
+    "refId": "D_net_radioReceiveHistory",
+    "key": "net.radioReceiveHistory",
+    "source": "Network",
+    "expr": "100 * unpoller_device_radio_channel_utilization_receive_ratio{job=\"unifi-api\"}",
+    "instant": false,
+    "range": true,
+    "scope": "net",
+    "optional": true
+  },
+  {
+    "refId": "D_net_radioTransmitHistory",
+    "key": "net.radioTransmitHistory",
+    "source": "Network",
+    "expr": "100 * unpoller_device_radio_channel_utilization_transmit_ratio{job=\"unifi-api\"}",
+    "instant": false,
+    "range": true,
+    "scope": "net",
+    "optional": true
+  }
+]
