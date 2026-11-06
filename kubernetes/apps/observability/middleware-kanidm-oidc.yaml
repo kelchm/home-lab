@@ -34,8 +34,8 @@ spec:
         - email
         - groups
       Authorization:
-        # Re-evaluate group membership on every request so revocations
-        # take effect without waiting for session expiry.
+        # Re-check authorization against the validated token's claims.
+        # This does not fetch current membership or revocation state.
         CheckOnEveryRequest: true
         AssertClaims:
           - Name: groups

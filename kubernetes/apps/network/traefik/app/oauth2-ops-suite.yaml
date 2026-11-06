@@ -1,7 +1,8 @@
 ---
 # Shared OIDC client for operator UIs gated at the Gateway via the
 # traefik-oidc-auth plugin. Each gated host registers its callback URL
-# here; SSO across subdomains via shared session cookie on .home.kelch.io.
+# here; Kanidm provides SSO between hosts. Gateway session cookies remain
+# host-only unless SessionCookie.Domain is explicitly configured.
 #
 # kaniop emits the client_secret into `ops-suite-kanidm-oauth2-credentials`
 # Secret in this same namespace (network), which traefik-admin mounts as
