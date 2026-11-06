@@ -102,6 +102,13 @@ spec:
               limits:
                 memory: 1Gi
     defaultPodOptions:
+      # Temporary PCBParts PDF-link workaround. This IP must match the explicit
+      # pcbparts-mcp Service clusterIP; only this pod overrides the public name.
+      # See ../README.md for the traffic boundary and removal trigger.
+      hostAliases:
+        - ip: 10.43.125.172
+          hostnames:
+            - pcbparts.dev
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000

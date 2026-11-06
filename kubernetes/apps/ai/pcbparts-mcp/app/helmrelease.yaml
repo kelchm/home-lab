@@ -1,6 +1,7 @@
 ---
-# In-cluster HTTP MCP server reached by MCPHub via Service DNS at
-# http://pcbparts-mcp.ai.svc.cluster.local:8080/mcp. Not on any Gateway.
+# In-cluster HTTP MCP server. MCPHub uses http://pcbparts.dev/mcp through its
+# pod-only alias to this Service. No Gateway. The original internal endpoint
+# http://pcbparts-mcp.ai.svc.cluster.local:8080/mcp remains available.
 #
 # Read-only component search: keyless JLCPCB in-stock DB + EasyEDA footprint
 # checks. Complements digikey-mcp with JLCPCB/LCSC pricing and assembly stock.
@@ -23,13 +24,15 @@ spec:
               # No semver tags published; pin the immutable main-<sha>-<date>
               # tag. amd64-only image — all k8s-prod nodes are amd64.
               repository: ghcr.io/averyy/pcbparts-mcp
-              tag: main-aaa4ebe-20261031@sha256:450f0ce31e85dae7ed19138ffa16e983920ea6e015ac6f0ae9cbe008e92ad018
+              tag: main-f5738b5-20261106@sha256:aa4a3b39067681d913808d4b0d7751ac95878794582927c005e813dae893de44
             env:
               # Every client arrives from the single MCPHub pod IP, so the
               # per-IP limiter is one global bucket; raise it from the default.
               RATE_LIMIT_REQUESTS: "500"
-              # Host headers the server accepts; the default is pcbparts.dev only.
-              MCP_ALLOWED_HOSTS: pcbparts-mcp.ai.svc.cluster.local
+              # MCPHub resolves pcbparts.dev to this private Service so short PDF
+              # links use upstream's public resolver. Keep the internal name too.
+              # Temporary workaround and removal trigger: ../../mcphub/README.md.
+              MCP_ALLOWED_HOSTS: pcbparts-mcp.ai.svc.cluster.local,pcbparts.dev
               # Light up the DigiKey cross-reference tools by reusing the
               # existing digikey-mcp client-credentials (2-legged, no refresh
               # token).
@@ -80,6 +83,13 @@ spec:
     service:
       app:
         controller: pcbparts-mcp
+        # Coupled to MCPHub's pod-only hostAliases; reserve the existing IP so
+        # a recreated Service cannot silently move. See ../../mcphub/README.md.
+        clusterIP: 10.43.125.172
         ports:
           http:
+            primary: true
             port: *port
+          http-alias:
+            port: 80
+            targetPort: *port
