@@ -142,12 +142,21 @@ export function databases(ctx: DomainContext) {
   }).sort((a, b) => (a.namespace ?? '').localeCompare(b.namespace ?? '') || a.pod.localeCompare(b.pod));
 }
 
+function volumeIsExempt(ctx: DomainContext, labels: Record<string, string>) {
+  return Boolean(labels.pvc_namespace && labels.pvc && list(ctx, 'volumeExempt').some((row) => row.labels.pvc_namespace === labels.pvc_namespace && row.labels.pvc === labels.pvc && observed(ctx, row) === 1));
+}
+
 export function longhornSummary(ctx: DomainContext) {
   const expected = at(ctx, 'backupExpected'); const recent = at(ctx, 'backupRecent');
   const stale = at(ctx, 'backupStale'); const never = at(ctx, 'backupNever'); const missing = at(ctx, 'backupMissing');
-  const observed = longhornObserved(ctx) && count(expected) && expected > 0 && count(missing);
-  const accounted = observed && count(recent) && count(stale) && count(never) && recent + stale + never + missing === expected;
-  return { expected, recent, stale, never, missing, observed, accounted, target: at(ctx, 'backupTarget') };
+  const observable = longhornObserved(ctx) && count(expected) && expected > 0 && count(missing);
+  // A named invalid timestamp contradicts a reassuring aggregate, including older recorded aggregate queries.
+  const invalidTimestamp = list(ctx, 'volumeBackupTimestamp').some((row) => {
+    const timestamp = observed(ctx, row);
+    return !volumeIsExempt(ctx, row.labels) && timestamp != null && (timestamp < 0 || timestamp > ctx.timeRange.to.valueOf() / 1000);
+  });
+  const accounted = observable && !invalidTimestamp && count(recent) && count(stale) && count(never) && recent + stale + never + missing === expected;
+  return { expected, recent, stale, never, missing, observed: observable, accounted, target: at(ctx, 'backupTarget') };
 }
 
 export function volumes(ctx: DomainContext) {
@@ -157,7 +166,7 @@ export function volumes(ctx: DomainContext) {
     const matches = (row: Series) => Object.entries(labels).every(([k, v]) => (row.labels[k] ?? '') === v);
     const states = list(ctx, 'volumeState').filter((row) => matches(row) && observed(ctx, row) === 1).map((row) => row.labels.state);
     const problems = list(ctx, 'backupExceptions').filter(matches).map((row) => row.labels.problem);
-    const exempt = list(ctx, 'volumeExempt').some((row) => row.labels.pvc_namespace === namespace && row.labels.pvc === pvc && namespace && pvc && observed(ctx, row) === 1);
+    const exempt = volumeIsExempt(ctx, labels);
     const backup = backupState(at(ctx, 'volumeBackupTimestamp', labels), ctx.timeRange.to.valueOf(), LONGHORN_STALE_SECONDS, longhornObserved(ctx));
     if (longhornObserved(ctx) && exempt) backup.state = 'exempt';
     // Captured exception lists preserve named problems even when the complete per-volume inventory was not captured.

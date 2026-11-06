@@ -31,7 +31,7 @@ Recorded replay is the default. Daily evidence is 2026-11-01T01:27:04.636Z–202
 
 Live datasource UID `comparison-live` points to `http://host.lima.internal:38428` by default (`--live-url` overrides it). It needs an independently established read-only VM forward. Recorded UID `comparison` points only to the lane's fixture. A live failure never falls back to recorded data. Source switches retain the selected range; direct live entry defaults to a moving 24-hour window.
 
-`assemble` regenerates a catalog from the unchanged base `runtime/catalog.json`, every available `shared/src/domains/*/queries.json`, and capture locators. Initially missing domains are reported in the generated manifest and do not prevent assembly. Named groups are written under `domains` in generated `queries.json`, preserving its original `common` and `network` groups; the app continues importing the original sample-free common/network definitions plus domain query definitions. Assembly rejects duplicate refIds, clips to the correct source windows, preserves result-level inference metadata for all frames, canonicalizes equal expressions, and records all refId aliases for controls/logs. Disjoint instant capture windows cannot lend one another labels or points. Original captured expressions/hashes remain recorded when a live expression is an alias. This is a bounded replay lookup, not a PromQL interpreter.
+`assemble` regenerates a catalog from the unchanged base `runtime/catalog.json`, current common/network query definitions, every available `shared/src/domains/*/queries.json`, and capture locators. Initially missing domains are reported in the generated manifest and do not prevent assembly. Named groups are written under `domains` in generated `queries.json`; the app imports sample-free common/network and domain query definitions. Assembly rejects duplicate refIds, clips to the correct source windows, preserves result-level inference metadata for all frames, canonicalizes equal expressions, and records all refId aliases for controls/logs. Disjoint instant capture windows cannot lend one another labels or points. Original captured expressions/hashes remain recorded when a live expression changes; replay does not re-execute the updated rule against old samples. This is a bounded replay lookup, not a PromQL interpreter.
 
 Native dashboard JSON from `kubernetes/apps/observability/grafana/app/` is copied locally, retaining dashboard UIDs. Both v1 and v2 Prometheus query sources use `${datasource}`. Their stable `datasource` variable defaults to `comparison` and accepts `comparison-live` through `var-datasource`; native-to-native links carry that variable. The Home copy is also available under `home-compare-native`. Original repository dashboards remain unchanged. `ctx.deeper(uid, variables)` must build a local `/d/<uid>` URL with `var-datasource=comparison` or `comparison-live`, preserve `from`, `to`, `timezone`, `source`, `focus`, `view`, `entity`, and encode resource variables as `var-*`. The core already supplies this contract.
 
@@ -54,6 +54,8 @@ From `tools/grafana-preview`, run the broader browser checks after `up`:
 node checks/browser.mjs
 # Sticky navigation, scoped queries, cache/history, inspector and sharing.
 BASE=http://127.0.0.1:3435 node scenes/tests/browser/proof.mjs
+# Browser-local datasource-resolution failure through the real Scenes runner, then recovery.
+node checks/request-failure.mjs
 # Opt-in real read-only telemetry, after establishing the VM forward.
 node checks/live.mjs
 ```

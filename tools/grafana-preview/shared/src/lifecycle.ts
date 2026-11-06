@@ -93,12 +93,12 @@ function identity(ref: string, data: PanelData, context: ResolveContext, scope: 
 }
 
 /**
- * Grafana keeps one empty frame per refId on a failed or empty run, so frame count says nothing: rows mean an answer, `errors`
- * separates failure from a successful empty answer, and a settled run with neither is unanswered. A retained copy stands in only
+ * Grafana may keep old nonempty frames after a failed run. Explicit errors take precedence over those rows; only a successful
+ * ref can supply a current answer. Empty frames separate a successful empty answer from silence. A retained copy stands in only
  * under the same query, datasource, scope and range, so changing any of them turns it into a plain unknown.
  */
 export function resolve(data: PanelData, retained: RetainedByRef, context: ResolveContext): Resolved {
-  const reported = data.errors ?? (data.error ? [data.error] : []);
+  const reported = data.errors?.length ? data.errors : data.error ? [data.error] : [];
   const failedRefs = new Set(reported.flatMap((error) => (error.refId ? [error.refId] : [])));
   // Dashboard-datasource errors can name their source target rather than an original metric ref, which could be any query.
   const wholeRequest = reported.some((error) => !error.refId || !(context.expected.includes(error.refId) || isCatalogRef(error.refId)));
@@ -139,13 +139,14 @@ export function resolve(data: PanelData, retained: RetainedByRef, context: Resol
       }
     } else if (!matchesRange) {
       gap('unanswered');
+    } else if (failedRefs.has(ref) || wholeRequest) {
+      // SceneQueryRunner can spread the last successful data into an error response. Do not re-date its rows.
+      gap('failed');
     } else if (rows.length) {
       series.push(...rows);
       refs.set(ref, { state: 'current', at: null });
       next.set(ref, { frames: rows.map(copyOf), at: context.now, key });
       for (const frame of rows) for (const values of valuesOf(frame)) context.origins?.set(values, key);
-    } else if (failedRefs.has(ref) || wholeRequest) {
-      gap('failed');
     } else if ((frames.some(hasRows) || sharedConsumer) && !MAY_BE_ABSENT.has(ref)) {
       // An old frame rejected by provenance, or an empty shared-source frame, does not prove a successful empty query.
       gap('unanswered');

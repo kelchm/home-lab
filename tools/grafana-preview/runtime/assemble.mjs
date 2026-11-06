@@ -15,7 +15,7 @@ for (const name of names) {
   if (fs.existsSync(path.join(root, file))) groups[name] = read(file);
   else missingDomains.push(name);
 }
-const catalog = assembleCatalog({ base: read('runtime/catalog.json'), commonWindow: queries.window, bounded: read('fixtures/bounded.json'), inference: read('fixtures/inference.json'), domains: Object.values(groups).flat() });
+const catalog = assembleCatalog({ base: read('runtime/catalog.json'), common: [...queries.common, ...queries.network], commonWindow: queries.window, bounded: read('fixtures/bounded.json'), inference: read('fixtures/inference.json'), domains: Object.values(groups).flat() });
 const encoded = JSON.stringify(catalog);
 const manifest = {
   schema: 1, catalogSha256: createHash('sha256').update(encoded).digest('hex'),

@@ -5,7 +5,7 @@ import { aggregate, deployments, hardware, historicalWindow, HISTORY, HISTORY_LA
 const DRIVE_HEALTH = 'f8f249a0-be78-41b1-97fe-8d0a92a71b93';
 const f = (value: number | null, suffix = '', digits = 1) => format(value, digits, suffix);
 const signal = (value: Signal, suffix = '', multiplier = 1) => value.value == null
-  ? ({ unsupported: 'Unsupported family', unavailable: 'Unavailable', 'no-observations': 'No observations at window end', ambiguous: 'Ambiguous series', observed: 'Unknown' }[value.state])
+  ? ({ 'not-observed': 'Family not observed', unavailable: 'Unavailable', 'no-observations': 'No observations at window end', ambiguous: 'Ambiguous series', observed: 'Unknown' }[value.state])
   : f(value.value * multiplier, suffix);
 const state = (collection: CollectorState): DomainCell => ({
   text: { observed: 'Scrape observed', failed: 'Scrape failed', 'metrics-only': 'Metrics observed', unknown: 'Unknown' }[collection],

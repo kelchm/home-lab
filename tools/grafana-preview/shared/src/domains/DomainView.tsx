@@ -96,7 +96,7 @@ function ResolvedDomainView({ domain, page, data, timeRange, mode, timeZone, ent
               {section.kind === 'metrics' && <dl className="domain-metrics">{section.items.map((item) => <div key={item.label}><dt>{item.label}</dt><dd data-tone={item.tone}>{item.href ? <a href={item.href}>{item.value}</a> : item.value}</dd>{item.detail && <small className="domain-detail">{item.detail}</small>}</div>)}</dl>}
               {section.kind === 'table' && <>{section.description && <p className="domain-description">{section.description}</p>}{section.rows.length ? <div className="domain-table-wrap" tabIndex={0} role="region" aria-label={`${section.title} table`}><table><thead><tr>{section.columns.map((column) => <th key={column} scope="col">{column}</th>)}</tr></thead><tbody>{section.rows.map((row) => <tr key={row.id}>{row.cells.map((value, index) => <td key={index}><Cell value={value} /></td>)}</tr>)}</tbody></table></div> : <p className="domain-empty">{section.empty}</p>}</>}
               {section.kind === 'links' && <ul className="domain-links">{section.items.map((item) => <li key={`${item.label}:${item.href}`}><a href={item.href}>{item.label}</a>{item.description && <span className="domain-detail">{item.description}</span>}</li>)}</ul>}
-              {section.kind === 'chart' && <>{renderChart({ section, data: chartPanelData, coverage: chartCoverage!, entity })}{chartStatus && <p className="domain-chart-state">{chartStatus}</p>}</>}
+              {section.kind === 'chart' && <>{renderChart({ section, data: chartPanelData, coverage: chartCoverage!, entity: section.entity ?? entity })}{chartStatus && <p className="domain-chart-state">{chartStatus}</p>}</>}
             </div>
           </section>;
         })}

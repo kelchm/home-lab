@@ -69,6 +69,10 @@ try {
         });
         check('native lines use the preview palette without a theme adapter', palette.reduce((a, b) => a + b, 0) > 300, palette);
       }
+      if (focus === 'Athena' && view === 'incident') {
+        const assertion = page.locator('[data-chart="dsm-assertion"]');
+        check('direct DSM incident entry includes only its own assertion history', await assertion.count() === 1 && /athena-dsm/.test(await assertion.innerText()) && !/unifi-gateway/.test(await assertion.innerText()));
+      }
       if (view === pages[0]) await page.screenshot({ path: path.join(out, `${focus.toLowerCase()}-desktop.png`), fullPage: true });
     }
     // Exercise a real, encoded resource identity from the rendered dashboard, rather than guessing label formats.

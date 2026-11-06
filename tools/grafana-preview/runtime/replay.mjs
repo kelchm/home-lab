@@ -59,9 +59,11 @@ export function inferenceCaptures(responses) {
   return captures;
 }
 
-export function assembleCatalog({ base, commonWindow, bounded, inference, domains }) {
+export function assembleCatalog({ base, commonWindow, bounded, inference, domains, common = [] }) {
   const inferred = inferenceCaptures(inference);
-  const definitions = [...base.map(({ series, ...query }) => query), ...domains];
+  const commonByRef = new Map(common.map((query) => [query.refId, query]));
+  if (commonByRef.size !== common.length || common.some((query) => !base.some((entry) => entry.refId === query.refId))) throw new Error('Invalid common query override');
+  const definitions = [...base.map(({ series, ...query }) => commonByRef.get(query.refId) ?? query), ...domains];
   const seen = new Set();
   for (const q of definitions) {
     if (seen.has(q.refId)) throw new Error(`Duplicate query reference ${q.refId}`);

@@ -54,7 +54,7 @@ export type DomainSection =
   | { kind: 'text'; id: string; title: string; text: string; tone?: 'warning' | 'bad' | 'unknown' | 'neutral'; links?: Array<{ label: string; href: string }> }
   | { kind: 'metrics'; id: string; title: string; items: Array<{ label: string; value: string; detail?: string; tone?: DomainCell['tone']; href?: string }> }
   | { kind: 'table'; id: string; title: string; description?: string; columns: string[]; rows: DomainRow[]; empty: string }
-  | { kind: 'chart'; id: string; title: string; description?: string; refs: string[]; unit: string; height?: number; entityLabels?: string[] }
+  | { kind: 'chart'; id: string; title: string; description?: string; refs: string[]; unit: string; height?: number; entityLabels?: string[]; entity?: string }
   | { kind: 'links'; id: string; title: string; items: Array<{ label: string; href: string; description?: string }> };
 
 export interface DomainPage {

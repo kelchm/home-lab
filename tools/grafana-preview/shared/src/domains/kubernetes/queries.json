@@ -498,7 +498,7 @@
     "refId": "D_k8s_backupRecent",
     "key": "backupRecent",
     "source": "k8s",
-    "expr": "sum((time() - ((longhorn_volume_last_backup_at{cluster=\"k8s-prod\",pvc_namespace=~\".*\",pvc=~\".*\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}) > 0)) <= bool 108000) or (0 * count((longhorn_volume_last_backup_at{cluster=\"k8s-prod\",pvc_namespace=~\".*\",pvc=~\".*\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}))) or ((count((longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\".*\",pvc=~\".*\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"})) or (0 * count(longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\".*\",pvc=~\".*\"}))) == 0)",
+    "expr": "sum(((time() - ((longhorn_volume_last_backup_at{cluster=\"k8s-prod\",pvc_namespace=~\".*\",pvc=~\".*\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}) > 0)) >= 0) <= bool 108000) or (0 * count((longhorn_volume_last_backup_at{cluster=\"k8s-prod\",pvc_namespace=~\".*\",pvc=~\".*\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}))) or ((count((longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\".*\",pvc=~\".*\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"})) or (0 * count(longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\".*\",pvc=~\".*\"}))) == 0)",
     "instant": true,
     "range": false,
     "scope": "k8s",

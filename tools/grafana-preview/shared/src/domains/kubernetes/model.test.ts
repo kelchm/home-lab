@@ -76,7 +76,7 @@ describe('Kubernetes domain replay and query contract', () => {
       const capture = query.capture!;
       const entry = capture.kind === 'bounded' ? bounded[capture.range ? 'range' : 'instant'][capture.key] : catalog.find((entry) => entry.refId === capture.key)!;
       expect(entry).toBeDefined();
-      if (query.expr !== entry.expr) expect(evidence.capturedExpressionsBeforeNamespaceScope).toHaveProperty(query.key, entry.expr);
+      if (query.expr !== entry.expr) expect(evidence.capturedExpressionsBeforeChanges).toHaveProperty(query.key, entry.expr);
     }
     expect(queries.some((query) => query.expr.includes('cnpg_collector_last_available_backup_timestamp'))).toBe(false);
     expect(queries.find((query) => query.key === 'dbBackupTimestamp')?.expr).toContain('barman_cloud_cloudnative_pg_io_last_available_backup_timestamp');
@@ -220,6 +220,20 @@ describe('Kubernetes semantic failure cases', () => {
     expect(longhornSummary(ctx([...longhorn, ...counts])).accounted).toBe(true);
     expect(longhornSummary(ctx([...longhorn, ...counts.filter((row) => row.refId !== ref('backupMissing')), scalar('backupMissing', 1)])).accounted).toBe(false);
     expect(longhornSummary(ctx([...longhorn, scalar('backupExpected', 0), scalar('backupRecent', 0), scalar('backupStale', 0), scalar('backupNever', 0), scalar('backupMissing', 0)])).accounted).toBe(false);
+  });
+  it.each([-1, TO / 1000 + 3600])('rejects aggregate reassurance contradicted by a named invalid timestamp %s', (timestamp) => {
+    const labels = { volume: 'pvc-clock', pvc_namespace: 'iot', pvc: 'clock' };
+    const counts = [scalar('backupExpected', 1), scalar('backupRecent', 1), scalar('backupStale', 0), scalar('backupNever', 0), scalar('backupMissing', 0)];
+    const context = ctx([...longhorn, ...counts, scalar('volumeBackupTimestamp', timestamp, labels)]);
+    expect(volumes(context)[0].backup.state).toBe('unknown');
+    expect(longhornSummary(context).accounted).toBe(false);
+    expect(textOf(page('overview', context))).not.toContain('1 / 1 within 30h');
+    expect(textOf(page('overview', context))).toContain('Coverage / accounting incomplete');
+  });
+  it('keeps exempt invalid timestamps outside the protected-volume aggregate', () => {
+    const labels = { volume: 'pvc-cache', pvc_namespace: 'iot', pvc: 'cache' };
+    const counts = [scalar('backupExpected', 1), scalar('backupRecent', 1), scalar('backupStale', 0), scalar('backupNever', 0), scalar('backupMissing', 0)];
+    expect(longhornSummary(ctx([...longhorn, ...counts, scalar('volumeBackupTimestamp', TO / 1000 + 3600, labels), scalar('volumeExempt', 1, labels)])).accounted).toBe(true);
   });
 
   it('a named volume exception remains actionable even when full per-volume inventory was not captured', () => {

@@ -4,13 +4,6 @@
     "to": 1793582824636,
     "fetchedAt": "2026-11-02T02:25:42Z"
   },
-  "capturedExpressionsBeforeNamespaceScope": {
-    "dbUp": "max by (pod) (cnpg_collector_up)",
-    "dbSize": "sum by (pod) (cnpg_pg_database_size_bytes)",
-    "dbBackends": "sum by (pod) (cnpg_backends_total)",
-    "certLeft": "min by (name) (certmanager_certificate_expiration_timestamp_seconds{cluster=\"k8s-prod\"} - time())",
-    "certLife": "100 * min by (name) ((certmanager_certificate_expiration_timestamp_seconds{cluster=\"k8s-prod\"} - time()) / (certmanager_certificate_not_after_timestamp_seconds{cluster=\"k8s-prod\"} - certmanager_certificate_not_before_timestamp_seconds{cluster=\"k8s-prod\"}))"
-  },
   "excludedLegacyBackup": {
     "key": "k8s.dbBackupAge",
     "expr": "(time() - (max by (pod) (cnpg_collector_last_available_backup_timestamp) > 0))",
@@ -38,6 +31,15 @@
     "Queries without capture locators remain unavailable in recorded mode.",
     "Namespace-less certificate/database captures keep namespace unknown and never join by a guessed prefix.",
     "Raw fallback-zero pod, Flux and volume totals do not prove no exceptions.",
-    "Inference recording is not used for Kubernetes."
-  ]
+    "Inference recording is not used for Kubernetes.",
+    "Recorded backup counts retain their original capture expression; live recent counts additionally reject future timestamps. Known invalid per-volume timestamps prevent aggregate reassurance."
+  ],
+  "capturedExpressionsBeforeChanges": {
+    "dbUp": "max by (pod) (cnpg_collector_up)",
+    "dbSize": "sum by (pod) (cnpg_pg_database_size_bytes)",
+    "dbBackends": "sum by (pod) (cnpg_backends_total)",
+    "certLeft": "min by (name) (certmanager_certificate_expiration_timestamp_seconds{cluster=\"k8s-prod\"} - time())",
+    "certLife": "100 * min by (name) ((certmanager_certificate_expiration_timestamp_seconds{cluster=\"k8s-prod\"} - time()) / (certmanager_certificate_not_after_timestamp_seconds{cluster=\"k8s-prod\"} - certmanager_certificate_not_before_timestamp_seconds{cluster=\"k8s-prod\"}))",
+    "backupRecent": "sum((time() - ((longhorn_volume_last_backup_at{cluster=\"k8s-prod\",pvc_namespace=~\".*\",pvc=~\".*\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}) > 0)) <= bool 108000) or (0 * count((longhorn_volume_last_backup_at{cluster=\"k8s-prod\",pvc_namespace=~\".*\",pvc=~\".*\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}))) or ((count((longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\".*\",pvc=~\".*\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"})) or (0 * count(longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\".*\",pvc=~\".*\"}))) == 0)"
+  }
 }

@@ -11,7 +11,7 @@ const driveLink = (ctx: DomainContext, drive: string) => route(ctx, 'drive', dri
 const incidentLink = (ctx: DomainContext) => route(ctx, 'incident', PROBE);
 const stamp = (ctx: DomainContext, at: number) => new Intl.DateTimeFormat('en-US', { timeZone: ctx.timeZone, month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(at);
 const duration = (ms: number) => `${Math.floor(ms / 3600000)}h ${Math.round((ms % 3600000) / 60000)}m`;
-const chart = (id: string, title: string, keys: string[], unit: string, description: string, entityLabels?: string[]): DomainSection => ({
+const chart = (id: string, title: string, keys: string[], unit: string, description: string, entityLabels?: string[]): Extract<DomainSection, { kind: 'chart' }> => ({
   kind: 'chart', id, title, refs: keys.map(ref), unit, description, height: 225, ...(entityLabels ? { entityLabels } : {}),
 });
 
@@ -56,9 +56,9 @@ function incidentTable(ctx: DomainContext): DomainSection {
 function activity(): DomainSection {
   return chart('nas-activity', 'NAS disk activity', ['read', 'written'], 'Bps', 'Aggregate read and written bytes/s over trailing 6-minute windows. This is activity, not proof of filesystem access or application availability.');
 }
-function alignedEvidence(ctx: DomainContext): DomainSection[] {
+function alignedEvidence(): DomainSection[] {
   return [
-    ...(ctx.entity === PROBE ? [chart('dsm-assertion', 'DSM login-page assertion', ['assertionHistory'], 'short', '1 = passing, 0 = assertion failed. Minute-scale history establishes episode boundaries; gaps remain unknown.', ['probe'])] : []),
+    { ...chart('dsm-assertion', 'DSM login-page assertion', ['assertionHistory'], 'short', '1 = passing, 0 = assertion failed. Minute-scale history establishes episode boundaries; gaps remain unknown.', ['probe']), entity: PROBE },
     chart('dsm-response', 'DSM HTTP response', ['dsmStatus'], 'short', 'Five-minute HTTP status observations. A 404 means an HTTP response was received; it does not explain why the login-page assertion failed.'),
     chart('nas-collectors', 'Synology collector continuity', ['scrapes'], 'short', 'Minimum observed collector up value. 1 = sampled scrapes succeeded, 0 = at least one observed scrape failed. An absent collector is not an observed zero.'),
     chart('dsm-duration', 'DSM probe duration', ['dsmSeconds'], 's', 'Five-minute duration observations, separate from the HTTP response and assertion result.'), activity(),
@@ -130,7 +130,7 @@ function incident(input: DomainContext): DomainSection[] {
   if (ctx.entity && ctx.entity !== PROBE) return [{ kind: 'text', id: 'incident-unavailable', title: 'Incident identity unavailable', tone: 'unknown', text: 'This resource is not the Athena DSM probe.', links: [{ label: 'Athena DSM investigation', href: incidentLink(ctx) }] }];
   return [
     { kind: 'text', id: 'incident-scope', title: 'Investigate the DSM assertion', text: 'The check asks whether the NAS login-page assertion passes. HTTP 404 responses show that an HTTP endpoint answered. They do not establish the cause of the assertion failure or a NAS outage. Compare collector and activity histories independently; window-end storage assessments cannot diagnose an earlier failure.', links: [{ label: 'Focus the Athena DSM assertion', href: incidentLink(ctx) }, { label: 'Home daily overview', href: ctx.href({ focus: 'Overview', view: undefined, entity: null }) }] },
-    serviceSummary(ctx), incidentTable(ctx), ...alignedEvidence(ctx),
+    serviceSummary(ctx), incidentTable(ctx), ...alignedEvidence(),
     { kind: 'text', id: 'incident-resolution', title: 'Evidence boundaries', text: 'Episode duration uses minute-scale assertion samples. HTTP and Synology collector captures are five-minute observations, so their transition times can differ. A passing sample establishes assertion recovery; a gap does not. Collector continuity does not prove filesystem availability, expected collector membership, or backup protection.' },
     nativeLinks(ctx), navigation(ctx),
   ];

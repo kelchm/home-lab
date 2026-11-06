@@ -62,8 +62,8 @@ describe('how far an error reaches', () => {
     expect(resolve(withError(undefined), none, context({ expected })).refs.get('H_WKN')?.state).toBe('failed');
   });
 
-  test('rows are still an answer whichever error arrives beside them', () => {
-    expect(resolve(withError('Source1'), none, context({ expected })).refs.get('H_P')?.state).toBe('current');
+  test('rows accompanying a failed source do not establish a successful first load', () => {
+    expect(resolve(withError('Source1'), none, context({ expected })).refs.get('H_P')?.state).toBe('failed');
   });
 });
 

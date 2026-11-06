@@ -94,6 +94,15 @@ describe('domain lifecycle', () => {
     expect(host.querySelector('dd')?.textContent).toBe('7');
     expect(host.querySelector('.domain-retained')).toBeNull();
   });
+  test('a datasource error with the previous nonempty frames dates and dims the old answer', () => {
+    const initial = panel();
+    const { host, render, page } = mount(<DomainView {...props({ data: initial })} />);
+    render(<DomainView {...props({ data: { ...initial, state: LoadingState.Error, errors: [{ message: 'Datasource resolution failed' }] } })} />);
+    expect(page().dataset.freshness).toBe('stale');
+    expect(host.querySelector('dd')?.textContent).toBe('42');
+    expect(host.querySelector('.domain-retained')).not.toBeNull();
+    expect(host.textContent).toContain('Retained values were received');
+  });
   test('an optional query failure does not poison page coverage or expose undated stale optional values', () => {
     const { host, render, page } = mount(<DomainView {...props()} />);
     render(<DomainView {...props({ data: panel({ state: LoadingState.Error, series: [frame()], errors: [{ refId: optional, message: 'synthetic optional failure' }] }) })} />);
@@ -114,6 +123,11 @@ describe('domain lifecycle', () => {
 });
 
 describe('natural-height domain content', () => {
+  test('a fixed chart resource reaches the native host without requiring a selected route entity', () => {
+    const page: DomainPage = { ...domain.pages[0], sections: () => [{ kind: 'chart', id: 'fixed', title: 'Known probe', refs: [ref], unit: 'short', entityLabels: ['probe'], entity: 'athena-dsm' }] };
+    const { host } = mount(<DomainView {...props({ page, renderChart: ({ entity }) => <div data-chart-entity={entity} /> })} />);
+    expect(host.querySelector('[data-chart-entity]')?.getAttribute('data-chart-entity')).toBe('athena-dsm');
+  });
   test('renders resource links, semantic tables, descriptions and chart data through the host seam', () => {
     const { host } = mount(<DomainView {...props({ entity: 'a' })} />);
     expect(host.querySelector('th')?.getAttribute('scope')).toBe('col');

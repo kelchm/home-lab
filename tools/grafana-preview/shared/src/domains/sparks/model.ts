@@ -125,7 +125,7 @@ const matches = (labels: Record<string, string>, id: Identity) => {
   return found != null && deploymentKey(found) === deploymentKey(id) && (rank == null || rank === '0');
 };
 
-export type SignalState = 'observed' | 'unsupported' | 'unavailable' | 'no-observations' | 'ambiguous';
+export type SignalState = 'observed' | 'not-observed' | 'unavailable' | 'no-observations' | 'ambiguous';
 export interface Signal { value: number | null; state: SignalState }
 const absent = (state: SignalState = 'unavailable'): Signal => ({ value: null, state });
 const observed = (value: number | null): Signal => value == null || !Number.isFinite(value) ? absent() : { value, state: 'observed' };
@@ -166,14 +166,15 @@ export function deployments(ctx: DomainContext): Deployment[] {
   }
   return [...identities.values()].map((id) => {
     const list = (key: string) => records(frames, ref(key)).filter((series) => matches(series.labels, id));
-    const read = (key: string, capability?: string): Signal => {
+    const read = (key: string, familyPresence?: string): Signal => {
       const found = list(key);
       if (found.length > 1) return absent('ambiguous');
-      const capabilityValue = capability ? one(list(capability), ctx) : null;
-      if (capabilityValue === 0) return absent('unsupported');
       const value = one(found, ctx);
       if (value != null && value >= 0) return observed(value);
-      return absent(capabilityValue != null && capabilityValue > 0 || found.length > 0 ? 'no-observations' : 'unavailable');
+      // These queries count observed families; they are not exporter capability declarations.
+      const presence = familyPresence ? one(list(familyPresence), ctx) : null;
+      if (presence === 0) return absent('not-observed');
+      return absent(presence != null && presence > 0 || found.length > 0 ? 'no-observations' : 'unavailable');
     };
     const reachable = one(list(daily ? 'serving' : 'identity'), ctx);
     const failed = one(list('serving'), ctx) === 0;

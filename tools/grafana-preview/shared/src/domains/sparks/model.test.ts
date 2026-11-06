@@ -136,19 +136,20 @@ describe('Sparks semantic failure scenarios', () => {
     expect(query.capture).toBeUndefined();
   });
 
-  it('unsupported context families and sparse completions stay explicit, without session tracks', () => {
+  it('unobserved context families and sparse completions stay explicit, without session tracks', () => {
     const data = ctx([
       frame('identity', [1], id), frame('capPool', [0], id), frame('capContext', [0], id), frame('capLatency', [1], id),
       frame('latencyHistory', [14], id, [TO - 120000], 15000),
       frame('ttftHistory', [1, null], id),
     ]);
     const [deployment] = deployments(data);
-    expect(deployment.poolFraction.state).toBe('unsupported');
-    expect(deployment.contextLength.state).toBe('unsupported');
+    expect(deployment.poolFraction.state).toBe('not-observed');
+    expect(deployment.contextLength.state).toBe('not-observed');
+    expect(deployments({ ...data, series: [...data.series, frame('contextLength', [8192], id)] })[0].contextLength).toEqual({ state: 'observed', value: 8192 });
     expect(deployment.latency).toEqual({ state: 'no-observations', value: null });
     expect(deployment.ttft.value).toBeNull();
     expect(deployment.contexts).toEqual([]);
-    expect(textOf(page('deployment', { ...data, entity: deployment.key }))).toContain('Unsupported family');
+    expect(textOf(page('deployment', { ...data, entity: deployment.key }))).toContain('Family not observed');
     expect(poolFraction(0, 0)).toBeNull();
     expect(poolFraction(100, 101)).toBeNull();
   });

@@ -184,10 +184,11 @@ describe('Athena investigation journeys', () => {
       expect(params.get('from')).toBe(String(FROM)); expect(params.get('to')).toBe(String(TO)); expect(params.get('var-source')).toBe('replay');
     }
   });
-  it('filters assertion history only on the selected probe detail', () => {
-    const selected = page('incident', context(captured, { entity: PROBE })).find((section) => section.id === 'dsm-assertion');
-    expect(selected).toMatchObject({ kind: 'chart', entityLabels: ['probe'] });
-    expect(page('incident').some((section) => section.id === 'dsm-assertion')).toBe(false);
+  it('always scopes the incident assertion history to DSM, including direct and tab entry', () => {
+    for (const entity of [null, PROBE]) {
+      const selected = page('incident', context(captured, { entity })).find((section) => section.id === 'dsm-assertion');
+      expect(selected).toMatchObject({ kind: 'chart', entityLabels: ['probe'], entity: PROBE });
+    }
     expect(page('incident', context(captured, { entity: 'other-probe' }))[0].id).toBe('incident-unavailable');
   });
   it('states the NAS backup evidence gap on both overview and storage', () => {

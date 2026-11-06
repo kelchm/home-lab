@@ -29,6 +29,16 @@ test('equal expressions retain aliases for failure control and clip out-of-windo
   assert.deepEqual(replay(entries[0], { time: 5000, range: false, state: { emptyRefs: '^D_test_up$' } }), []);
   assert.deepEqual(replay(entries[0], { time: Date.now(), range: false }), []);
 });
+test('updated common expressions retain original capture provenance and failure aliases', () => {
+  const expr = 'sum(up >= 0)';
+  const entries = assemble([query('D_test_up', { expr, capture: { kind: 'catalog', key: 'H_up' } })], { common: [query('H_up', { expr })] });
+  assert.equal(entries.length, 1);
+  assert.deepEqual(entries[0].aliases, ['H_up', 'D_test_up']);
+  assert(entries[0].provenance.every((p) => p.executedExpr === 'sum(up)' && p.aliasDiffers));
+  const compiled = compileCatalog(entries);
+  assert.equal(findEntry(compiled, expr, false), findEntry(compiled, 'sum(up)', false));
+  assert(matchesRef(entries[0], '^H_up$'));
+});
 
 test('uncaptured expressions, ambiguous query modes, and wrong-mode capture locators stay explicit', () => {
   const entries = assemble([query('D_test_missing', { expr: 'missing_metric', capture: { kind: 'bounded', key: 'absent' } })]);

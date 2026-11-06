@@ -22,6 +22,30 @@ describe('query identity and honest state', () => {
   const r = resolve(data(), new Map(), context());const next = resolve(failed(), r.next, context({ now: 3000 }));
   expect(coverage(next, ['A'])).toMatchObject({ freshness: 'stale', retainedAt: 1000 });
  });
+ it.each(['A', undefined, 'Source1'])('keeps old rows stale when the error names %s', (refId) => {
+  const initial = data();
+  const r = resolve(initial, new Map(), context());
+  const error = { ...initial, state: 'Error', errors: [{ refId, message: 'Refresh failed' }] } as PanelData;
+  const next = resolve(error, r.next, context({ now: 2000 }));
+  const repeated = resolve(error, next.next, context({ now: 3000 }));
+  expect(coverage(repeated, ['A'])).toMatchObject({ freshness: 'stale', retained: 1, retainedAt: 1000 });
+  expect(repeated.refs.get('A')).toEqual({ state: 'retained', at: 1000, because: 'failed' });
+  expect(repeated.next.get('A')?.at).toBe(1000);
+ });
+ it('accepts a successful sibling without trusting rows from the failed ref', () => {
+  const initial = data({ series: [frame('A', 2), frame('B', 3)] });
+  const c = context({ expected: ['A', 'B'] });
+  const first = resolve(initial, new Map(), c);
+  const next = resolve(failed({ series: [initial.series[0], frame('B', 4)] }), first.next, { ...c, now: 2000 });
+  expect(next.refs.get('A')).toMatchObject({ state: 'retained', at: 1000 });
+  expect(next.refs.get('B')?.state).toBe('current');
+  expect(next.next.get('B')?.at).toBe(2000);
+ });
+ it('honors a legacy request error beside an empty errors array and leftover rows', () => {
+  const first = resolve(data(), new Map(), context());
+  const next = resolve(data({ state: 'Error' as PanelData['state'], errors: [], error: { message: 'Datasource unavailable' } }), first.next, context({ now: 2000 }));
+  expect(coverage(next, ['A'])).toMatchObject({ freshness: 'stale', retainedAt: 1000 });
+ });
  it('drops retained values when the same ref names a different query', () => {
   const r = resolve(data(), new Map(), context());const d = failed();(d.request!.targets[0] as { refId: string; expr: string }).expr = 'different_metric';
   expect(resolve(d, r.next, context()).series).toHaveLength(0);
