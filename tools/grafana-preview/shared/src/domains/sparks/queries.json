@@ -31,7 +31,7 @@
     "refId": "D_spark_gpuMargin",
     "key": "gpuMargin",
     "source": "spark",
-    "expr": "max by (instance) (nvidia_smi_temperature_gpu_tlimit{job=\"spark-gpu\",platform=\"spark\"})",
+    "expr": "min by (instance) (nvidia_smi_temperature_gpu_tlimit{job=\"spark-gpu\",platform=\"spark\"})",
     "instant": true,
     "range": false,
     "scope": "spark",

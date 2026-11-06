@@ -18,6 +18,30 @@ const request = (errorText = 'net::ERR_CONNECTION_RESET') => ({ url: () => 'http
 const response = (body, status = 200, req = request()) => ({ url: req.url, status: () => status, json: typeof body === 'function' ? body : async () => body, request: () => req });
 const good = { results: { A: { status: 200, frames: [] } } };
 
+test('large valid time vectors do not overflow the JavaScript argument limit', async () => {
+  const page = new EventEmitter(), monitor = observeDatasource(page);
+  const values = Array.from({ length: 200_001 }, (_, i) => i);
+  page.emit('response', response({ results: { A: { frames: [{ schema: { fields: [{ type: 'time' }] }, data: { values: [values] } }] } } }));
+  assert.equal(await monitor.drain(), true);
+  assert.equal(monitor.evaluationOk, true);
+  assert.equal(monitor.responses[0].results[0].latest, 200_000);
+  assert.equal(monitor.responses[0].results[0].rows, 200_001);
+});
+
+test('a stalled response body produces failed evidence without blocking cleanup or later recovering as success', async () => {
+  const page = new EventEmitter(), monitor = observeDatasource(page);
+  let finish;
+  page.emit('response', response(() => new Promise((resolve) => { finish = resolve; })));
+  assert.equal(await monitor.drain(10), false);
+  assert.equal(monitor.responses[0].incompleteBody, true);
+  assert.match(monitor.responses[0].error, /did not finish within 10 ms/);
+  assert.equal(monitor.evaluationOk, false);
+  assert.equal(await monitor.drain(10), true);
+  finish(good);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(monitor.evaluationOk, false);
+});
+
 test('datasource acceptance waits for body parsing and accepts an explicit successful empty query', async () => {
   const page = new EventEmitter(), monitor = observeDatasource(page);
   let resolve;

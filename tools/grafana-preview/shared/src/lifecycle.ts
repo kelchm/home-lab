@@ -231,8 +231,9 @@ export function sourceQueries(request?: DataQueryRequest): ReadonlyMap<string, s
     const key = panelKey(request, target.panelId);
     if (!key) continue;
     for (const [ref, query] of known.get(key) ?? []) {
-      if (queries.has(ref)) ambiguous.add(ref);
-      queries.set(ref, JSON.stringify([key, query]));
+      const identity = JSON.stringify([key, query]);
+      if (queries.has(ref) && queries.get(ref) !== identity) ambiguous.add(ref);
+      queries.set(ref, identity);
     }
   }
   for (const ref of ambiguous) queries.delete(ref);

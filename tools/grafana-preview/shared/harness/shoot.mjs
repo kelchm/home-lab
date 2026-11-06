@@ -21,20 +21,26 @@ const problems = [];
 try {
   for (const spec of specs) {
     const [name, query, width = '1440', height = '900', full = 'full'] = spec.split('|');
-    const page = await browser.newPage({ viewport: { width: Number(width), height: Number(height) }, deviceScaleFactor: 1 });
-    page.on('pageerror', (e) => problems.push(`${name}: ${e.message}`));
-    page.on('console', (m) => m.type() === 'error' && problems.push(`${name}: ${m.text()}`));
-    const target = pathToFileURL(path.join(site, 'index.html'));
-    target.search = query ?? '';
-    await page.goto(target.href);
-    await page.waitForSelector('[data-view]');
-    await page.screenshot({ path: path.join(out, `${name}.png`), fullPage: full === 'full' });
-    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
-    if (overflow > 0) problems.push(`${name}: page overflows sideways by ${overflow}px`);
-    await page.close();
+    let page;
+    try {
+      page = await browser.newPage({ viewport: { width: Number(width), height: Number(height) }, deviceScaleFactor: 1 });
+      page.on('pageerror', (e) => problems.push(`${name}: ${e.message}`));
+      page.on('console', (m) => m.type() === 'error' && problems.push(`${name}: ${m.text()}`));
+      const target = pathToFileURL(path.join(site, 'index.html'));
+      target.search = query ?? '';
+      await page.goto(target.href);
+      await page.waitForSelector('[data-view]');
+      await page.screenshot({ path: path.join(out, `${name}.png`), fullPage: full === 'full' });
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      if (overflow > 0) problems.push(`${name}: page overflows sideways by ${overflow}px`);
+    } catch (error) {
+      problems.push(`${name}: capture failed: ${error.message}`);
+    } finally {
+      await page?.close().catch((error) => problems.push(`${name}: close failed: ${error.message}`));
+    }
   }
 } finally {
-  await browser.close();
+  await browser.close().catch((error) => problems.push(`Browser close failed: ${error.message}`));
 }
 if (problems.length) {
   console.error(problems.join('\n'));

@@ -137,6 +137,15 @@ describe('Dashboard source query identities', () => {
     rememberQueries(data().request);
     expect(sourceQueries({ ...consumer('one', 1), dashboardUID: undefined })?.size).toBe(0);
   });
+  it('accepts repeated targets for one source but rejects collisions across different source panels', () => {
+    rememberQueries(source('repeated', 1, 'up'));
+    rememberQueries(source('repeated', 2, 'up'));
+    const first = consumer('repeated', 1);
+    const same = { ...first, targets: [...first.targets, { ...first.targets[0], refId: 'SharedAgain' }] };
+    expect(sourceQueries(same)!.get('A')).toBe(sourceQueries(first)!.get('A'));
+    const different = { ...same, targets: [...same.targets, { ...same.targets[0], panelId: 2 }] };
+    expect(sourceQueries(different)!.has('A')).toBe(false);
+  });
   it('invalidates retained data when a Dashboard consumer switches source panels', () => {
     const first = resolve(data({ request: consumer('switch', 1) }), new Map(), context());
     const next = resolve(failed({ request: consumer('switch', 2) }), first.next, context());

@@ -1,4 +1,4 @@
-// Real Grafana acceptance guard. BASE must name the isolated preview; it writes only scenes/evidence. No live queries unless LIVE_SMOKE=1.
+// Real Grafana acceptance guard. BASE must name the isolated preview; evidence defaults to scenes/evidence and EVIDENCE overrides it. No live queries unless LIVE_SMOKE=1.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

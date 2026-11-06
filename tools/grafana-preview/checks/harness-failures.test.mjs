@@ -43,6 +43,32 @@ test('unknown browser proof modes fail before replacing existing evidence', asyn
   assert.equal(fs.existsSync(closed), false);
 });
 
+test('a failed shared capture preserves page errors and continues with the next spec', async (t) => {
+  const { temp, closed, env } = fixture(t);
+  const module = path.join(temp, 'capture-playwright.mjs');
+  fs.writeFileSync(module, `import fs from 'node:fs';
+    let index = 0;
+    export const chromium = { launch: async () => ({
+      newPage: async () => { const first = index++ === 0, handlers = {}; return {
+        on: (name, fn) => { handlers[name] = fn; },
+        goto: async () => { if (first) handlers.pageerror(new Error('original render failure')); },
+        waitForSelector: async () => { if (first) throw new Error('rendered selector absent'); },
+        screenshot: async ({path}) => { fs.writeFileSync(path, 'captured'); },
+        evaluate: async () => 0,
+        close: async () => fs.appendFileSync(process.env.CLOSED + '.pages', 'closed\\n'),
+      }; },
+      close: async () => { fs.writeFileSync(process.env.CLOSED, 'closed'); },
+    }) };
+  `);
+  const result = await run('shared/harness/shoot.mjs', ['broken|?view=briefing', 'healthy|?view=machines'], { ...env, PLAYWRIGHT_MODULE: module, OUT: temp });
+  assert.notEqual(result.code, 0);
+  assert.match(result.stderr, /broken: original render failure/);
+  assert.match(result.stderr, /broken: capture failed: rendered selector absent/);
+  assert.equal(fs.readFileSync(path.join(temp, 'healthy.png'), 'utf8'), 'captured');
+  assert.equal(fs.readFileSync(closed + '.pages', 'utf8').trim().split('\n').length, 2);
+  assert(fs.existsSync(closed));
+});
+
 test('layout failure closes the browser and an empty measured layout fails', async (t) => {
   for (const mode of ['missing', 'empty']) {
     const { closed, env } = fixture(t);

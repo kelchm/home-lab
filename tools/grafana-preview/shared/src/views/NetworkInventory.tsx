@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react';
 import { days, num } from '../format';
+import type { RefStatus } from '../lifecycle';
 import { SYSTEM } from '../model/systems';
 import { Bar, Card, Fit, Icon, Status } from '../ui/parts';
 import { deepHref, type ViewContext } from './context';
@@ -8,9 +9,18 @@ export function NetworkInventory({ ctx }: { ctx: ViewContext }) {
   const { network, constrained, tag, coverage, clock, timeRange } = ctx;
   const devices = network?.devices ?? [];
   const radios = network?.radios ?? [];
-  const answered = (refs: string[]) => refs.every((ref) => ['current', 'empty'].includes(ctx.resolved.refs.get(ref)?.state ?? ''));
-  const deviceCount = answered(['I_net_deviceInfo']) ? `${devices.length} devices` : 'Device count unknown';
-  const radioCount = answered(['I_net_radioChannel', 'I_net_radioBusy', 'I_net_radioClients']) ? `${radios.length} radios` : 'Radio count unknown';
+  const count = (refs: string[], value: number, label: string) => {
+    const states = refs.map((ref) => ctx.resolved.refs.get(ref));
+    const known = states.every((state) => state && (['current', 'empty'].includes(state.state) || state.at != null));
+    if (!known) return `${label === 'devices' ? 'Device' : 'Radio'} count unknown`;
+    const retained = states.filter((state): state is RefStatus => state?.at != null);
+    if (!retained.length) return `${value} ${label}`;
+    const at = Math.min(...retained.map((state) => state.at!));
+    const pending = retained.some((state) => state.state === 'pending');
+    return <span title={`Inventory received ${clock.md(at)} ${clock.stamp(at)}`}>{value} {label} · {pending ? 'updating' : 'retained'}</span>;
+  };
+  const deviceCount = count(['I_net_deviceInfo'], devices.length, 'devices');
+  const radioCount = count(['I_net_radioChannel', 'I_net_radioBusy', 'I_net_radioClients'], radios.length, 'radios');
   const system = SYSTEM.net;
   return (
     <Fit constrained={constrained} label="Network inventory">

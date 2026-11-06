@@ -2,7 +2,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import type { PanelData } from '@grafana/data';
 import { HomeView, modeOfDatasource, VIEWS } from '../src/HomeView';
 import { rememberQueries } from '../src/lifecycle';
@@ -320,6 +320,26 @@ describe('reviewed evidence boundaries', () => {
     const host = show('network-inventory', { data: { ...base, series: base.series.map((item) => inventory.test(item.refId ?? '') ? emptyFrame(item.refId!) : item) } });
     expect(host.textContent).toContain('0 devices');
     expect(host.textContent).toContain('0 radios');
+  });
+
+  test.each(['loading', 'failed'])('retained inventory counts keep their own receipt time while %s', (state) => {
+    const at = Date.UTC(2026, 10, 6, 12, 0, 0);
+    const now = vi.spyOn(Date, 'now').mockReturnValue(at);
+    try {
+      const initial = panelData();
+      const view = mount(<HomeView {...props('network-inventory', { data: initial })} />);
+      const counts = [...view.host.querySelectorAll('.pill')].map((pill) => pill.textContent);
+      now.mockReturnValue(at + 60_000);
+      view.render(<HomeView {...props('network-inventory', { data: failing(/^I_net_deviceInfo$/, initial) })} />);
+      now.mockReturnValue(at + 120_000);
+      const next = state === 'loading' ? { ...initial, state: 'Loading', series: [] } as PanelData : failing(/^I_net_(deviceInfo|radioChannel|radioBusy|radioClients)$/, initial);
+      view.render(<HomeView {...props('network-inventory', { data: next })} />);
+      const pills = [...view.host.querySelectorAll('.pill')];
+      expect(pills.map((pill) => pill.textContent)).toEqual(counts.map((text) => `${text} · ${state === 'loading' ? 'updating' : 'retained'}`));
+      expect(pills[0].querySelector('[title]')?.getAttribute('title')).toBe('Inventory received Nov 6 07:00:00');
+      expect(pills[1].querySelector('[title]')?.getAttribute('title')).toBe('Inventory received Nov 6 07:01:00');
+      expect(view.host.querySelectorAll('[data-device]').length).toBeGreaterThan(0);
+    } finally { now.mockRestore(); }
   });
 
   test.each([true, false])('refreshes label retained data with its receipt time (old rows present: %s)', (rows) => {

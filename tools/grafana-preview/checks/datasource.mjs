@@ -1,13 +1,13 @@
 // Track the complete datasource boundary, including asynchronous body parsing and requests with no response.
 export function observeDatasource(page) {
   const responses = [], failures = [], abortedNavigations = [];
-  const pending = new Set(), active = new Set(), navigationRequests = new Set(), records = new WeakMap();
+  const pending = new Map(), active = new Set(), navigationRequests = new Set(), records = new WeakMap();
   const isQuery = (url) => new URL(url).pathname === '/api/ds/query';
   page.on('request', (request) => { if (isQuery(request.url())) active.add(request); });
   page.on('response', (response) => {
     if (!isQuery(response.url())) return;
+    const record = { url: response.url(), status: response.status(), results: [] };
     const task = (async () => {
-      const record = { url: response.url(), status: response.status(), results: [] };
       const request = response.request();
       records.set(request, record);
       responses.push(record);
@@ -23,17 +23,18 @@ export function observeDatasource(page) {
           return {
             ref, status: result.status, frames: result.frames?.length ?? 0, error: result.error,
             rows: (result.frames ?? []).reduce((sum, frame) => sum + (frame.data?.values?.[0]?.length ?? 0), 0),
-            latest: Math.max(0, ...(result.frames ?? []).flatMap((frame) => {
+            latest: (result.frames ?? []).reduce((latest, frame) => {
               const time = frame.schema?.fields?.findIndex((field) => field.type === 'time');
-              return time >= 0 ? (frame.data?.values?.[time] ?? []) : [];
-            })),
+              const values = time >= 0 ? (frame.data?.values?.[time] ?? []) : [];
+              return values.reduce((peak, value) => Math.max(peak, value), latest);
+            }, 0),
           };
         });
       } catch (error) {
         record.error = error.message;
       }
     })();
-    pending.add(task);
+    pending.set(task, record);
     void task.finally(() => pending.delete(task));
   });
   page.on('requestfinished', (request) => { active.delete(request); navigationRequests.delete(request); });
@@ -48,7 +49,26 @@ export function observeDatasource(page) {
   });
   return {
     responses, failures, abortedNavigations,
-    async drain() { while (pending.size) await Promise.all([...pending]); },
+    async drain(timeoutMs = 30_000) {
+      const deadline = Date.now() + timeoutMs;
+      while (pending.size) {
+        let timer;
+        const finished = await Promise.race([
+          Promise.all(pending.keys()).then(() => true),
+          new Promise((resolve) => { timer = setTimeout(() => resolve(false), Math.max(0, deadline - Date.now())); }),
+        ]);
+        clearTimeout(timer);
+        if (!finished) {
+          for (const record of pending.values()) {
+            record.error = `Datasource response body did not finish within ${timeoutMs} ms`;
+            record.incompleteBody = true;
+          }
+          pending.clear();
+          return false;
+        }
+      }
+      return true;
+    },
     async navigate(action) {
       const interrupted = [...active];
       interrupted.forEach((request) => navigationRequests.add(request));

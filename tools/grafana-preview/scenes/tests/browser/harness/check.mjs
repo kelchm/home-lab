@@ -147,7 +147,6 @@ try {
     await page.waitForTimeout(600);
     const params = new URL(page.url()).searchParams;
     check('the Live link keeps focus and the selected window', params.get('source') === 'live' && params.get('focus') === 'Network' && params.get('from') === '2026-11-01T01:27:04.636Z', Object.fromEntries(params));
-    check('no page errors at 1440', errors.length === 0, errors.slice(0, 4));
     check('harness page has no resource or console errors', errors.length === 0, errors);
     await context.close();
   }

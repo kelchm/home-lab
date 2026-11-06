@@ -296,7 +296,8 @@ def main():
     # Installation mode is part of workspace identity, so clean installs never see a cached symlink.
     args.output_dir = args.output_dir / args.dependencies
     if args.action == 'test':
-        run([NODE, '--test', 'runtime/replay.test.mjs', 'runtime/assemble.test.mjs', 'checks/datasource.test.mjs', 'checks/harness-failures.test.mjs', 'checks/harness-server.test.mjs'])
+        tests = sorted(str(path.relative_to(ROOT)) for folder in ['runtime', 'checks'] for path in (ROOT / folder).glob('*.test.mjs'))
+        run([NODE, '--test', *tests])
         run(['python3', '-m', 'unittest', 'runtime/test_preview.py'])
         return
     if args.action == 'setup':

@@ -21,7 +21,7 @@
       "capturedExpression": "max by (instance) (nvidia_smi_temperature_gpu)"
     },
     "D_spark_gpuMargin": {
-      "meaning": "Per-host window-end reported GPU thermal margin in degrees Celsius from nvidia_smi_temperature_gpu_tlimit; maximum across observed GPUs.",
+      "meaning": "Per-host window-end reported GPU thermal margin in degrees Celsius from nvidia_smi_temperature_gpu_tlimit. Live queries take the minimum across observed GPUs; the original recording used the maximum and is preserved as captured.",
       "recorded": true,
       "capturedExpression": "max by (instance) (nvidia_smi_temperature_gpu_tlimit)"
     },
