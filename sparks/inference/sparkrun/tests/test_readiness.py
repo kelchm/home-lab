@@ -40,6 +40,7 @@ def models():
 
 class Fake(BaseHTTPRequestHandler):
     health = staticmethod(zig_health)
+    health_status = 200
     models = staticmethod(models)
     tokenize = True
     levels = dict(LEVELS)
@@ -55,7 +56,7 @@ class Fake(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == "/health":
-            return self._send(200, type(self).health())
+            return self._send(type(self).health_status, type(self).health())
         if self.path == "/v1/models":
             return self._send(200, type(self).models())
         self._send(404, {"error": "not found"})
@@ -160,6 +161,45 @@ def test_v2_bundle_is_frozen(tmp_path):
     subprocess.run(check, check=True, capture_output=True)
     (bundle / "readiness.py").write_text("# changed\n")
     assert subprocess.run(check, capture_output=True).returncode != 0
+
+
+@pytest.mark.parametrize("when", ["initial", "final"])
+def test_v2_http_health_failure_keeps_the_reason_and_cannot_pass(server, when):
+    handler, url = server
+    handler.health = staticmethod(lambda: {**python_health(), "fatal": "decoder stopped"})
+    if when == "initial":
+        handler.health_status = 503
+    else:
+        def post(self):
+            Fake.do_POST(self)
+            type(self).health_status = 503
+        handler.do_POST = post
+    result = gate(url, bundle=V2_MOD)
+    assert result.returncode != 0 and "Health HTTP 503" in result.stderr
+    assert "decoder stopped" in result.stderr
+
+
+def test_v2_handles_a_none_only_reasoning_contract(server):
+    handler, url = server
+    body = models()
+    body["data"][0]["reasoning"]["supported_efforts"] = ["none"]
+    body["data"][0]["reasoning"]["default_enabled"] = False
+    handler.models = staticmethod(lambda: body)
+    handler.levels = {effort: 0 for effort in ("none", "minimal", "low", "medium", "high", "xhigh", "max")}
+    result = gate(url, "none", bundle=V2_MOD)
+    assert result.returncode == 0, result.stderr
+    assert '"max": "none"' in result.stdout
+
+
+@pytest.mark.parametrize("option", ["--check", "--record"])
+def test_v2_never_recreates_a_missing_lock(tmp_path, option):
+    bundle = tmp_path / V2_MOD.name
+    shutil.copytree(V2_MOD, bundle, ignore=shutil.ignore_patterns("__pycache__"))
+    lock = bundle / "upstream.lock.json"
+    lock.unlink()
+    result = subprocess.run([sys.executable, str(bundle / "prepare.py"), option], capture_output=True, text=True)
+    assert result.returncode != 0 and "Missing or linked" in result.stderr
+    assert not lock.exists()
 
 
 @pytest.mark.parametrize("change,message", [

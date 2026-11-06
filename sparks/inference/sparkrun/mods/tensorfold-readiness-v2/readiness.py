@@ -25,6 +25,16 @@ def fetch(url, body=None, timeout=240):
         return json.load(response)
 
 
+def health(url, *args):
+    """Keep an HTTP failure fatal while retaining the engine's bounded diagnostic body."""
+    try:
+        body = fetch(url + "/health")
+    except urllib.error.HTTPError as error:
+        detail = error.read(4096).decode("utf-8", errors="replace")
+        raise RuntimeError(f"Health HTTP {error.code}: {detail}") from error
+    check_health(body, *args)
+
+
 def check_health(body, model, lanes, context, min_pool_tokens=0, require_spill=False):
     """Zig servers report status/warming/max_batch_size; Mia's Python server reports ok/mode/streams/pool_tokens."""
     if not isinstance(body, dict):
@@ -140,6 +150,8 @@ def render(url, model, effort):
 def nearest(effort, levels):
     """The advertised level an unlisted name should render as: nearest in EFFORT_ORDER, ties going higher."""
     named = [level for level in EFFORT_ORDER if level in levels]
+    if not named and "none" in levels:
+        return "none"
     at = EFFORT_ORDER.index(effort)
     return min(named, key=lambda level: (abs(EFFORT_ORDER.index(level) - at), EFFORT_ORDER.index(level)))
 
@@ -188,7 +200,7 @@ def main():
     if len(set(efforts)) != len(efforts) or not set(efforts) <= set(STANDARD_EFFORTS):
         parser.error(f"--efforts must name distinct standard levels: {args.efforts!r}")
 
-    check_health(fetch(url + "/health"), args.model, args.lanes, args.context, args.min_pool_tokens, args.require_spill)
+    health(url, args.model, args.lanes, args.context, args.min_pool_tokens, args.require_spill)
     check_models(fetch(url + "/v1/models"), args.model, args.context, efforts)
     print("TensorFold discovery:", json.dumps({"model": args.model, "context": args.context, "efforts": efforts}),
           flush=True)
@@ -202,7 +214,7 @@ def main():
     if efforts:
         mapped = check_renders(url, args.model, efforts)
         print("TensorFold levels:", "no /tokenize route" if mapped is None else json.dumps(mapped), flush=True)
-    check_health(fetch(url + "/health"), args.model, args.lanes, args.context, args.min_pool_tokens, args.require_spill)
+    health(url, args.model, args.lanes, args.context, args.min_pool_tokens, args.require_spill)
     print("TensorFold readiness passed", flush=True)
 
 

@@ -24,9 +24,9 @@ def main():
     parser.add_argument("--check", action="store_true", help="verify only, the default")
     parser.add_argument("--record", action="store_true", help="record the checksums of the files present")
     args = parser.parse_args()
-    if LOCK.is_symlink():
+    if LOCK.is_symlink() or not LOCK.is_file():
         raise SystemExit("Missing or linked readiness mod lock")
-    lock = json.loads(LOCK.read_text()) if LOCK.exists() else {}
+    lock = json.loads(LOCK.read_text())
     if args.record:
         if any((HERE / name).is_symlink() for name in files()):
             raise SystemExit("Cannot record a readiness mod containing linked files")

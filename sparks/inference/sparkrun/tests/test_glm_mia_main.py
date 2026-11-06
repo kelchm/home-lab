@@ -316,6 +316,7 @@ def test_spill_readiness_v2_preserves_the_frozen_durable_serving_inputs():
     new["metadata"].pop("description")
     old["metadata"].pop("description")
     assert new["mods"][0] == "../mods/tensorfold-readiness-v2"
+    assert new["mods"][1:] == old["mods"][1:]
     new["mods"] = old["mods"]
     assert new["post_exec"] == [old["post_exec"][0] + " --require-spill"]
     new["post_exec"] = old["post_exec"]
