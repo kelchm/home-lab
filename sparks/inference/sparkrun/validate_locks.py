@@ -25,6 +25,7 @@ SHAPES = {
     "qwen-tp2": f"{COMMON} {KIT} {QWEN} upstream_patch_count upstream_patch_hash site_patches binary_sha256",
     "deepseek": f"{COMMON} engine_branch inputs_branch inputs_revision patches kit engram",
     "readiness": "mod_files",
+    "glm-native": f"{COMMON} {KIT} release_manifest release_sha256 upstream_patch_count kit_patches_sha256",
 }
 # Repository names, image names and package specs are the literal forms consumed
 # by the current builders, not arbitrary URLs, shell expressions or pip options.
@@ -144,6 +145,8 @@ def shape(lock, mod):
     require(isinstance(lock, dict), "lock", "expected an object")
     if mod.name in READINESS_MODS:
         kind = "readiness"
+    elif "release_manifest" in lock:
+        kind = "glm-native"
     elif set(lock) & {"launcher_env", "installed_files", "engine_version"}:
         kind = "glm"
     elif set(lock) & {"kit", "engram", "inputs_revision", "inputs_branch"}:
@@ -177,6 +180,28 @@ def validate_lock(lock, mod):
     if "kit_repository" in lock:
         repository(lock["kit_repository"], "kit_repository")
     digest(lock["image_id"], "image_id")  # Config ID, not the registry manifest digest.
+    if kind == "glm-native":
+        fields(files, "prepare.py run.sh serve.py capacity.py chat_template.jinja upstream_chat_template.jinja release.json", "native mod_files")
+        image(lock["image"], "image")
+        positive(lock["upstream_patch_count"], "upstream_patch_count")
+        hash_value(lock["kit_patches_sha256"], 64, "kit_patches_sha256")
+        equal(lock["release_manifest"], "release.json", "release_manifest")
+        hash_value(lock["release_sha256"], 64, "release_sha256")
+        require(files.get("release.json") == lock["release_sha256"], "release_sha256", "must match frozen local release.json")
+        release_path = mod / "release.json"
+        require(release_path.is_file() and not release_path.is_symlink(), "release.json", "missing or linked local release")
+        equal(hashlib.sha256(release_path.read_bytes()).hexdigest(), lock["release_sha256"], "release.json checksum")
+        release = read_json(release_path)
+        for key, expected in {"engine_repository": release["engine"]["repository"], "engine_revision": release["engine"]["commit"],
+                              "kit_repository": release["kit"]["repository"], "kit_revision": release["kit"]["revision"],
+                              "upstream_patch_count": release["kit"]["patches"], "kit_patches_sha256": release["kit"]["patches_sha256"],
+                              "image": release["image"]}.items():
+            equal(lock[key], expected, key)
+        for name, pin in files.items():
+            path = mod / name
+            require(path.is_file() and not path.is_symlink() and hashlib.sha256(path.read_bytes()).hexdigest() == pin,
+                    "mod_files." + name, "missing, linked or changed frozen native input")
+        return kind
     if kind in ("glm", "qwen-tp2"):
         image(lock["image"], "image")
         positive(lock["upstream_patch_count"], "upstream_patch_count")
@@ -303,6 +328,12 @@ def validate_recipe(recipe, path, locks):
     for key in ("engine_revision", "kit_revision", "upstream_patch_count", "upstream_patch_hash"):
         if key in lock:
             equal(metadata.get(key), lock[key], f"metadata.{key}")
+    if kind == "glm-native":
+        owner = next((path.parent / ref).resolve() for ref in mods if locks[(path.parent / ref).resolve()][1] == kind)
+        release = read_json(owner / "release.json")
+        equal(metadata.get("release"), release["release"], "metadata.release")
+        equal({"repository": recipe.get("model"), "revision": recipe.get("model_revision")}, release["weights"], "native weights")
+        equal({"repository": defaults.get("drafter"), "revision": defaults.get("drafter_revision")}, release["drafter"], "native drafter")
     if kind == "qwen-tp1":
         equal(metadata.get("upstream_patch_count"), lock["kit_patch_count"], "metadata.upstream_patch_count")
     if kind.startswith("qwen"):
