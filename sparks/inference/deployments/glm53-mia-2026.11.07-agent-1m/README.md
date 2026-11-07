@@ -2,6 +2,34 @@
 
 The owner authorized the trial NOW on November 7 after confirming GLM is idle: capture the Python comparison first, launch native through the existing home-lab SparkRun recipe/mod/plugin/rsync flow, run matching measurements and qualification, then ask whether to keep native running or restore Python. Stop and report any unexpected launch, readiness, rail, memory-guard or thermal event. This authorization supersedes the earlier automatic rollback proposal.
 
+## November 7 result
+
+**Rejected as the production replacement.** Native is healthy on the main `agent-1m` trial profile pending the owner's keep-native/restore-Python decision. Python was stopped only after both flush receipts; its original image, recipe, controller, mods and spill remain available. The measured [qualification receipt](qualification.json) binds the release, tested inputs and 509 raw evidence files retained off-host.
+
+| Matched exploratory measurement | Python | Native |
+| --- | ---: | ---: |
+| One-stream end-to-end decode | 49.08 tok/s | 42.82 tok/s |
+| Four-stream aggregate end-to-end decode | 99.57 tok/s | 80.93 tok/s |
+| 111,919-token cold TTFT | 53.88 s | 62.02 s |
+| Same prompt repeated, TTFT | 0.36 s | 1.13 s |
+| Pi-shaped 10,456-token tool result, TTFT | 0.46 s | 1.49 s |
+| Reported reusable tool-result tokens | 10,368 | 8,192 |
+| Initial nominal live-pool positions | 2,582,528 | 3,900,416 |
+
+This is one matched batch with the same client/settings and rendered counts, comparing the intended production profiles. Python uses q4 dense/FP8 head and native q8 dense/q8 head, so the speed difference does not isolate engine implementation. Pi-shaped histories replay each engine's own delivered reasoning and call IDs. Bounded decode intentionally reaches its output limit and is not a completed quality task.
+
+All five retrieval checkpoints at 301,087, 450,822, 601,306, 801,258 and 990,494 prompt tokens answered correctly. The first four retained states in RAM, but their disk saves were skipped with `StagingFull`. A separate 110,592-token state had already hit the same limit. The near-window 987,136-token snapshot needed 6,264 MiB and was refused by the configured 6,144 MiB RAM cache. These are the decisive durability failures.
+
+The initial pool was two ownership parts of 3,809 pages × 512 tokens, each 1,950,208 tokens; the final launch reported 3,812 pages per part. This exceeds Python's nominal pool floor. Temporary twins borrow unpromised pages in the other part during prefill and return afterward; the source has an owner-computed fallback if borrowing fails. These counts do not establish four simultaneously resident 1M histories or qualify the concurrent long-history admission frontier.
+
+Published small text/tool states restored 4,096, 24,576 and 8,192 tokens with correct answers after restart and after a verified KILL during a new write. A small text state also restored from disk after observed RAM eviction. Both four-image variants, padded to 18,843 tokens, wrote and correctly restored 16,384-token prefixes after restart and process crash. This corrects the earlier source-only assumption that this kit could not persist images. It does not establish universal image-collision safety or power-loss safety. Short 406-token image and 223/252-token tool histories were not retained below the 4,096-row grid.
+
+The separate 1 GiB quota probe wrote three independent states and evicted the two older disk checkpoints, retaining 565,349,820 bytes and the newest 24,576-token state. It did not fill the actual 64 GiB store. Actual Pi CLI 1.3.0, using an unchanged copy of the Spark provider and isolated settings, passed text and image `read` loops; each tool-result step reported 12,288 cached tokens, about 96% of its prompt. Full 32K generation, four growing long sessions, a long soak and an actual Python relaunch remain unperformed. The sealed automated campaign reports failure; its separate 600K evictor was not run after the established large-save failure. Manual receipts cover the smaller real eviction, crash, quota and Pi checks.
+
+No observed memory guard, kernel, RoCE or thermal slowdown occurred. The owner reported network intrusion alerts from repeated short SSH polling connections; polling was stopped and remaining operations moved to one persistent ControlMaster connection per Spark with automatic fallback disabled. Native's `InferenceEngineBroken`/`InferenceEngineStalled` alert coverage is still missing because the dashboards use Python-only `tensorfold_health:*` metrics; that follow-up belongs to the dashboards work.
+
+At the owner's request, `--dashboard` is added to the frozen launcher and staged on the head for the next planned native relaunch. The final trial process had already started without it: `/stats` and `/dashboard` remain 404 in this run. Its original launch inputs are retained separately from the newly staged lock. Verify both endpoints and live prefill counters after the next authorized native launch; no extra relaunch was performed for this flag.
+
 ## Selected inputs
 
 Use [glm53-mia-2026.11.07-agent-1m](../../sparkrun/mia-tensorfold-glm53-native-tp2/glm53-mia-2026.11.07-agent-1m.yaml) and its frozen [native launcher mod](../../sparkrun/mods/mia-tensorfold-glm53-13f2464e/). The existing `tensorfold` plugin and `tensorfold-readiness-v2` stay unchanged. The mod contains a copy of the published release manifest and checksums; it installs the rank launcher/template/capacity check, with no engine patches or binary replacement. The image is pulled on the head by its published digest; SparkRun distributes it to the worker.
@@ -51,9 +79,9 @@ Repeat the baseline requests, client and settings. Keep per-stream and aggregate
 
 Use the off-host qualification client with the local home-lab recipe and copied release manifest. It performs requests and records evidence only; the operator owns lifecycle actions. Run at least a 300K measured first save and wait for its published-write receipt before another turn, then grow toward 1M with output/continuation room. Require correct planted facts and affirmative disk bytes/tokens for restart and eviction reuse. A cold prefill is not durable restoration. Record staging/cache admission refusals explicitly.
 
-Exercise divergent image histories with identical text/geometry and changed pixels before/after restart. Correct durable image conversations remain non-negotiable in [#1285](https://github.com/kelchm/home-lab/issues/1285); expected unsupported persistence fails that production gate. Do not reintroduce dropped video, fixed 50-image budgets, CMYK or body-size requirements.
+Exercise divergent image histories with identical text/geometry and changed pixels before/after restart. Correct durable image conversations remain non-negotiable in [#1285](https://github.com/kelchm/home-lab/issues/1285). Measure the actual kit: the November 7 trial wrote and correctly restored two padded image variants, despite earlier source-only concerns. Use affirmative chat disk-read logs and correct pixels; `/imprint/resume` reported no image state even when the subsequent chat restored it. Short histories below the 4,096-row cache grid need separate treatment. Do not reintroduce dropped video, fixed 50-image budgets, CMYK or body-size requirements.
 
-For a clean native restart, first wait for acknowledged writes and idle requests. Identify the exact rank-0 native PID by its `/proc/<pid>/cmdline` beginning `/opt/tensorfold/native/bin/tensorfold-native`, `serve`; validate the recorded candidate container/image and signal that PID with TERM. Do not signal the container's `sleep infinity`, an unverified `/tmp/sparkrun_serve.pid`, or rank 1. Require rank-0 `shutting down (SIGTERM)`, `shutting down: drained`, `shutting down: stopped`, both native processes gone, and both GPUs idle before SparkRun container cleanup and the same-profile relaunch. Missing evidence cannot be labeled a clean restart.
+For a clean native restart, first wait for acknowledged writes and idle requests. Identify the exact rank-0 native PID by its `/proc/<pid>/cmdline` beginning `/opt/tensorfold/native/bin/tensorfold-native`, `serve`; validate the recorded candidate container/image and signal that PID with TERM. Do not signal the container's `sleep infinity`, an unverified `/tmp/sparkrun_serve.pid`, or rank 1. Require rank-0 `shutting down (SIGTERM)` and `shutting down: drained`, followed by either `shutting down: stopped` or the documented zero-status exit for idle HTTP connections. The latter branch runs after `engine.drain()` in the pinned engine's `server/serve.zig`; the trial observed it with two idle connections. Verify both native processes are gone and both GPUs idle before SparkRun container cleanup and the same-profile relaunch. Missing drain or termination evidence cannot be labeled a clean restart.
 
 For the separate process-crash probe, preserve an older published checkpoint, observe and retain the identity/timing of a new `.part` write, then KILL only the recorded native rank-0 container. If no active write is observed, report mid-write recovery unknown. Verify peer termination, clean up only candidate containers, then relaunch the identical profile/store and require restoration of the older point. File fsync/rename/checksums do not establish power-loss safety; directory-fsync is not demonstrated.
 

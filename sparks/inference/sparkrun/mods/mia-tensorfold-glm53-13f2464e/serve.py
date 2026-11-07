@@ -44,7 +44,7 @@ def launch(env):
     args = [BINARY, 'serve', env['MODEL_PATH'], '--name', env['SERVED_NAME'],
             '--host', env['HOST'], '--port', env['PORT'], '--context', env['CONTEXT'],
             '--parallel', '4', '--max-tokens', env['MAX_TOKENS'], '--kv-cache', 'fp8',
-            '--thinking', '--reasoning-effort', 'xhigh', '--top-k', '20', '--no-update-check',
+            '--thinking', '--reasoning-effort', 'xhigh', '--top-k', '20', '--no-update-check', '--dashboard',
             '--vision', '--vision-max-images', '50',
             '--chat-template', '/opt/tensorfold-mod/chat_template.jinja',
             '--drafter', env['DRAFTER'], '--drafter-bits', '4', '--prompt-cache-gib', '6',

@@ -148,6 +148,7 @@ def test_actual_sdk042_profile_adjacent_mod_and_both_ranks(monkeypatch):
                         '--chat-template': '/opt/tensorfold-mod/chat_template.jinja'}.items():
         assert commands[0][commands[0].index(flag) + 1] == value
     assert '--learn-conversations' in commands[0] and '--vision' in commands[0]
+    assert '--dashboard' in commands[0]
     assert not any('video' in arg for arg in commands[0])
 
 
