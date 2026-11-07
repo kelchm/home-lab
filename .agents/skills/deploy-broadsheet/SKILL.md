@@ -24,8 +24,11 @@ The script does everything: resolves the target tag (default = latest
 `origin/main` of the broadsheet checkout), **waits for CI to publish that image
 to GHCR** (~15 min for a fresh merge), writes that tag with its published digest
 (`sha-<short>@sha256:<digest>`) to `tag:` in
-`kubernetes/apps/iot/broadsheet/app/helmrelease.yaml`, commits + pushes to
-`main`, forces a Flux reconcile, and waits for the rollout to go healthy.
+`kubernetes/apps/iot/broadsheet/app/helmrelease.yaml`, commits only that file,
+pushes it with `git push origin HEAD:main`, forces a Flux reconcile, and waits
+for the rollout to go healthy.
+
+It refuses to start unless the checkout is on `main`, level with `origin/main`, with nothing staged and no local edits to the HelmRelease. It checks again after the image wait, because `main` can move during it.
 
 ## How to run it (for the agent)
 
@@ -35,8 +38,10 @@ to GHCR** (~15 min for a fresh merge), writes that tag with its published digest
 2. Run a `--dry-run` first if you want to confirm the resolved old→new tags, then
    run for real.
 3. Report the old→new tag, that the image was found, and the final rollout
-   status. If it fails, the script says why (image never published, push failed,
-   rollout stuck) — relay that; don't retry blindly.
+   status. If it fails, the script says why (not on a clean `main` level with
+   `origin/main`, image never published, push failed, rollout stuck) — relay
+   that; don't retry blindly, and don't stash or discard the user's changes to
+   get past the guard.
 
 ## Good to know
 

@@ -11,8 +11,10 @@
 #
 # It resolves the tag, WAITS for that image to be published to GHCR (the
 # broadsheet CI builds multi-arch, ~15 min), bumps the tag@digest pin in
-# helmrelease.yaml, commits + pushes to main (direct-to-main: a single-app config
-# bump), forces a Flux reconcile, and waits for the rollout. The Longhorn data
+# helmrelease.yaml, commits that file alone and pushes it to main (direct-to-main:
+# a single-app config bump), forces a Flux reconcile, and waits for the rollout.
+# It refuses to run unless the checkout is on main, level with origin/main, and
+# has nothing staged, so the push can carry only the pin bump. The Longhorn data
 # volume is untouched — Recreate only swaps the pod, so expect a brief blip, not
 # data loss.
 #
@@ -53,6 +55,20 @@ fi
 for bin in flux kubectl git curl python3; do
     command -v "$bin" >/dev/null 2>&1 || { log error "missing required tool: $bin"; exit 1; }
 done
+
+# --- refuse unless the deploy commit can carry only the pin bump ------------
+# Checked up front and again after the image wait, since main can move meanwhile.
+require_clean_main() {
+    local branch
+    branch="$(git symbolic-ref --quiet --short HEAD || true)"
+    [[ "$branch" == main ]] || { log error "check out main first (on ${branch:-a detached HEAD})"; exit 1; }
+    git fetch -q origin main
+    [[ "$(git rev-parse HEAD)" == "$(git rev-parse origin/main)" ]] \
+        || { log error "main is not level with origin/main; pull or push first"; exit 1; }
+    git diff --cached --quiet || { log error "changes are staged; unstage them first"; exit 1; }
+    git diff --quiet -- "$HR_FILE" || { log error "${HR_FILE} has uncommitted edits; commit or discard them first"; exit 1; }
+}
+require_clean_main
 
 # --- resolve the target image tag -----------------------------------------
 if [[ -n "$ARG" ]]; then
@@ -95,13 +111,13 @@ else
     if $DRY_RUN; then
         log warn "[dry-run] would set ${HR_FILE} tag: ${CURRENT:-<none>} -> ${TARGET}, commit, and push to main."
     else
+        require_clean_main
         sed -i.bak -E "s/(^[[:space:]]*tag:[[:space:]]*)sha-[0-9a-f]+(@sha256:[0-9a-f]{64})?/\1${TARGET}/" "$HR_FILE"
         rm -f "${HR_FILE}.bak"
         grep -q "tag: ${TARGET}" "$HR_FILE" || { log error "failed to update tag in ${HR_FILE}"; exit 1; }
         log info "Updated ${HR_FILE}: ${CURRENT:-<none>} -> ${TARGET}"
-        git add "$HR_FILE"
-        git commit -q -m "feat(container): update image ${IMAGE} ( ${CURRENT:-none} -> ${TARGET} )"
-        git push -q
+        git commit -q -m "feat(container): update image ${IMAGE} ( ${CURRENT:-none} -> ${TARGET} )" -- "$HR_FILE"
+        git push -q origin HEAD:main
         log info "Committed + pushed to main ✓"
     fi
 fi
