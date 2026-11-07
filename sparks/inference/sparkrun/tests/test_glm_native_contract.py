@@ -63,6 +63,8 @@ def test_adapter_launches_the_native_rank_and_preserves_detected_fabric(rank):
     if MOD.name.endswith('-r2'):
         for key, value in {'--vision-max-videos': '4', '--vision-video-tokens': '32768', '--max-frames': '128', '--request-body-mib': '96'}.items():
             assert args[args.index(key) + 1] == value
+        assert env['TF_PREPARE_RESIDENTS'] == '4' and env['TF_PREPARE_WAITING'] == '32'
+        assert env['TF_PREPARE_WAIT_MS'] == '300000'
     assert '--thinking' in args and '--no-thinking' not in args
     assert env['TF_GLM_CLEAR_THINKING'] == '0'
     assert env['TF_GLM_DENSE_BITS'] == env['TF_GLM_HEAD_BITS'] == '8'

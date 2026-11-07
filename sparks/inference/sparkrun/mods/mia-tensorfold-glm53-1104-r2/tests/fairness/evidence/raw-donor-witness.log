@@ -1,0 +1,50 @@
+test-fairness-witness
++- run test 3 pass, 3 fail (6 total)
+WITNESS allocation: chunkpart announced, incomplete partial published, no KDA dispatch and no recovery header
+error: 'glm_fairness_host.test.fairness witness: partial KDA changes precede chunk commit and survive actual cancellation' failed:
+       <work>/donor/zig/src/families/glm/cuda_forward.zig:470:42: 0x100af5237 in runRange (test)
+               if (j0 >= j1 or j1 > layers.len) return error.BadRange;
+                                                ^
+       <work>/donor/zig/src/families/glm/cuda_engine.zig:835:9: 0x100b00dfb in prefillChunkSlice (test)
+               try f.runRange(as_i32, lo, hi);
+               ^
+       <work>/donor/zig/glm_fairness_host.zig:272:44: 0x100b66d73 in start (test)
+               try t.expectEqual(@as(?u32, null), try b.e.prefillChunkSlice(&b.ids, C, 3 * C, null, null, null, 1));
+                                                  ^
+       <work>/donor/zig/glm_fairness_host.zig:286:5: 0x100b69313 in test.fairness witness: partial KDA changes precede chunk commit and survive actual cancellation (test)
+           try b.start();
+           ^
+error: 'glm_fairness_host.test.fairness witness: retry after cancellation consumes the cancelled layer output' failed:
+       <work>/donor/zig/src/families/glm/cuda_forward.zig:470:42: 0x100af5237 in runRange (test)
+               if (j0 >= j1 or j1 > layers.len) return error.BadRange;
+                                                ^
+       <work>/donor/zig/src/families/glm/cuda_engine.zig:835:9: 0x100b00dfb in prefillChunkSlice (test)
+               try f.runRange(as_i32, lo, hi);
+               ^
+       <work>/donor/zig/glm_fairness_host.zig:272:44: 0x100b66d73 in start (test)
+               try t.expectEqual(@as(?u32, null), try b.e.prefillChunkSlice(&b.ids, C, 3 * C, null, null, null, 1));
+                                                  ^
+       <work>/donor/zig/glm_fairness_host.zig:319:5: 0x100b6864b in test.fairness witness: retry after cancellation consumes the cancelled layer output (test)
+           try b.start();
+           ^
+error: 'glm_fairness_host.test.fairness control: explicit new begin resets recurrence and permits a fresh request' failed:
+       <work>/donor/zig/src/families/glm/cuda_forward.zig:470:42: 0x100af5237 in runRange (test)
+               if (j0 >= j1 or j1 > layers.len) return error.BadRange;
+                                                ^
+       <work>/donor/zig/src/families/glm/cuda_engine.zig:835:9: 0x100b00dfb in prefillChunkSlice (test)
+               try f.runRange(as_i32, lo, hi);
+               ^
+       <work>/donor/zig/glm_fairness_host.zig:272:44: 0x100b66d73 in start (test)
+               try t.expectEqual(@as(?u32, null), try b.e.prefillChunkSlice(&b.ids, C, 3 * C, null, null, null, 1));
+                                                  ^
+       <work>/donor/zig/glm_fairness_host.zig:342:5: 0x100b67837 in test.fairness control: explicit new begin resets recurrence and permits a fresh request (test)
+           try b.start();
+           ^
+failed command: ./.zig-cache/o/583ee4df7bfa3aaf3e7a96e4cac4feac/test --cache-dir=./.zig-cache --seed=0x1b9cac45 --listen=-
+
+Build Summary: 2/4 steps succeeded (1 failed); 3/6 tests passed (3 failed)
+test-fairness-witness transitive failure
++- run test 3 pass, 3 fail (6 total)
+   +- compile test debug native success 3s MaxRSS:387M
+      +- options cached
+

@@ -1,0 +1,67 @@
+{
+  "status": "blocked-no-production-patch",
+  "origin": {
+    "engine_repository": "ashhart/TensorFold",
+    "engine_revision": "f350cd3ea253a042e205746928271f9d8f71a82d",
+    "kit_repository": "MiaAI-Lab/GLM-5.3-Flash-DGX-Sparks-1104",
+    "kit_revision": "02dac3879852b8c5713318d3d64a5a791002e954",
+    "kit_patch_count": 108,
+    "kit_patches_sha256": "f7680c9bcdf74536b3243535165ab61765bd661bba98a8f943781c980182a37b",
+    "site_patch_count": 9,
+    "site_patches_sha256": "98ad4090a7bc8ca5bdcf3d37186abc632b49631f770c28caaa7b941277ad0fbd"
+  },
+  "marker_sha256": "2efd0961dade7c57af35281d3ee54247e97943aa557c65a7257466673e54b207",
+  "input_tree_sha256": "dd3fb2bdac49cbdfb9a155d380d86023d10173d5cee76e2049d5642f755ae2c4",
+  "tree_hash_format": "SHA256 of UTF-8 sorted relative_path + NUL + file_sha256 + newline for SOURCE_PARTS; ignores build caches and __pycache__",
+  "source_parts": [
+    "zig",
+    "tools",
+    "build.zig",
+    "build.zig.zon",
+    ".zig-version",
+    "README.md",
+    "CHANGELOG.md",
+    "RUNBOOK.md"
+  ],
+  "source_file_count": 5265,
+  "donor": {
+    "repository": "MiaAI-Lab/GLM-5.3-Flash-DGX-Sparks-1104",
+    "pull_request": "https://github.com/MiaAI-Lab/GLM-5.3-Flash-DGX-Sparks-1104/pull/11",
+    "head": "63b235561e0df644b59567523b5982840f60cfc3",
+    "status_at_handoff": "open (supplied by parent; not independently refreshed)",
+    "path": "patches/engine/0108-glm-cuda-a-prompt-chunk-slices-between-decode-rounds.patch",
+    "git_blob": "e9acde50992fc0c61943a0e8e6df09103bc56c96",
+    "download_url": "https://raw.githubusercontent.com/MiaAI-Lab/GLM-5.3-Flash-DGX-Sparks-1104/63b235561e0df644b59567523b5982840f60cfc3/patches/engine/0108-glm-cuda-a-prompt-chunk-slices-between-decode-rounds.patch",
+    "sha256": "527b0b51de355cbc4886478073089b0fc7abf3d611e2d15c4500c050c1ca499c",
+    "metadata_sha256": "8f11391a2a95e4a7a89f5ad5677d87a8cac686e89340a796b5b2947b9ad24b23"
+  },
+  "base_files": {
+    "zig/src/families/glm/cuda_engine.zig": "dde03989af0d1dbbf7a6f6392c978e9661ed3422ee925852df5758e5ea8c4612",
+    "zig/src/families/glm/cuda_follow.zig": "2f8d5ce4daae38f5b7d27cab0888a661243fc80d6c586d4676e95fb3f877c90b",
+    "zig/src/families/glm/cuda_forward.zig": "746c9f3e2aa19bedfed78a8803721ef6936fdaf53721bf7825aae503edd8d187",
+    "zig/src/families/glm/cuda_lanes.zig": "4598ef02c9cb8f1a4b09dc298d0bf40f07444bb1212362b5aa3303777e1ae481",
+    "zig/src/families/glm/cuda_native.zig": "4df2d8de9f6ac3ca3c94031fbc8e7d2a2f5873135b8b6e98ad9866d4da9eb61b",
+    "zig/tests/cuda/glm_lanes_tests.zig": "908c8d44e0dcb4e11d3cd1baa799ffa8552a81b77607cb9ae9b243e80900f02c",
+    "zig/tests/cuda/glm_slice_tests.zig": null,
+    "zig/tests/cuda/main.zig": "3ff5ae88abf8d34e3d4655e6b7dbf34b886f091fdb3b9fecf6c9dd60addd9da9"
+  },
+  "resolved_donor_files": {
+    "zig/src/families/glm/cuda_engine.zig": "c14d72f349f5653f34ee39e6816fd240fcc79ef049eb6c7d9ee9b578472c80fb",
+    "zig/src/families/glm/cuda_follow.zig": "2073b79bd60df3867b3edf7a81d96408701ea3d00d87aea10574471bdae0b624",
+    "zig/src/families/glm/cuda_forward.zig": "4162d7139bfd4049b3456d001068300320fb26d084dcbed0e742947e90829de1",
+    "zig/src/families/glm/cuda_lanes.zig": "c3a74cd7bae0a2de75b3f61515d41f81d60326e8e63fd1f07ad47b9610cc5ca3",
+    "zig/src/families/glm/cuda_native.zig": "44556a8c0c746e707770e57b9994223b4a57fdbd079db58c6c1765473e1b628f",
+    "zig/tests/cuda/glm_lanes_tests.zig": "37df5070230f83eb9840a548068a0540158389a8e26025651dc128731024b136",
+    "zig/tests/cuda/glm_slice_tests.zig": "fef468bb55438e89d3e7b5fa8ca4d66ce2efb676144db41664cfe3385943d673",
+    "zig/tests/cuda/main.zig": "2a148cb484c4546d551cd7583f1c054c780cdfe39ef52eca491f1810c449137d"
+  },
+  "diagnostic_adjustments": [
+    "Insert only the rejected chunkSliced/cancelSlice addition immediately before Leader.cancelMedia.",
+    "For normalized probes only, initialize prefillChunkSlice lo to zero. Raw-donor failures are recorded separately.",
+    "Test-only build graph and driver fixture; external controls are reverted after each run."
+  ],
+  "test_inputs": {
+    "run.py": "dcaad744f3bea719d677270ed9cda9c7aabbcc24dc984b1059f1e077db0224fd",
+    "cancel_probe.zig": "33b069612684fda19a6e17fe15f130df469becfd9c5af2d210298a989e753221"
+  }
+}

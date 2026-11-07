@@ -207,6 +207,7 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 COPY --from=nccl /opt/nccl/ /opt/nccl/
 COPY --from=video ${PREFIX}/ ${PREFIX}/
+COPY patches/engine/HOME-LAB-NOTICE.md ${PREFIX}/HOME-LAB-NOTICE.md
 # A wheel's libnccl replaces the base image's; then check that whatever is installed meets the engine's minimum.
 RUN shopt -s nullglob \
  && if [[ -f /opt/nccl/libnccl.so.2 ]]; then \

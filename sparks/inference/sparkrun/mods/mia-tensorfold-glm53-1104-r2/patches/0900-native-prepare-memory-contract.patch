@@ -1,0 +1,914 @@
+# Native resident preparation contract over Mia108 + site020/025/030/040/050/060/065/070/071.
+# Policy is opt-in; no launcher/profile, media quality, context window, engine streams or maxqueued change.
+# Donor: DeepSeek 0007-server-prepare-memory.patch by Robert Wojciechowski, Apache-2.0.
+# This source already frees core tokenizer/template scratch; 090 adds pre-body FIFO admission,
+# measured allocator categories, prompt scratch release and explicit warm-turn ownership.
+diff --git a/zig/src/server/prepare_gate.zig b/zig/src/server/prepare_gate.zig
+new file mode 100644
+--- /dev/null
++++ b/zig/src/server/prepare_gate.zig
+@@ -0,0 +1,179 @@
++//! Optional FIFO admission before body allocation; a resident ticket lasts through every engine borrow.
++const std = @import("std");
++
++pub const Policy = struct {
++    residents: u32 = 0,
++    waiting: u32 = 32,
++    wait_ms: u32 = 300_000,
++    floor: u64 = 0,
++    reserve: u64 = 0,
++
++    pub fn render(p: Policy, w: *std.Io.Writer) !void {
++        inline for (comptime std.meta.fieldNames(Policy)) |field|
++            try w.print("tensorfold_prepare_policy_{s} {d}\n", .{ field, @field(p, field) });
++    }
++
++    pub fn fromEnv(env: ?*const std.process.Environ.Map) !Policy {
++        const p: Policy = .{
++            .residents = @intCast(try setting(env, "TF_PREPARE_RESIDENTS", 0, 128)),
++            .waiting = @intCast(try setting(env, "TF_PREPARE_WAITING", 32, 128)),
++            .wait_ms = @intCast(try setting(env, "TF_PREPARE_WAIT_MS", 300_000, 3_600_000)),
++            .floor = (try setting(env, "TF_PREPARE_FLOOR_MIB", 0, 1 << 30)) << 20,
++            .reserve = (try setting(env, "TF_PREPARE_RESERVE_MIB", 0, 1 << 30)) << 20,
++        };
++        if (p.wait_ms == 0 or (p.floor > 0 and (p.reserve == 0 or p.residents == 0)))
++            return error.BadPreparePolicy;
++        if (p.reserve > 0 and p.floor == 0) return error.BadPreparePolicy;
++        return p;
++    }
++};
++
++fn setting(env: ?*const std.process.Environ.Map, name: []const u8, default: u64, max: u64) !u64 {
++    const e = env orelse return default;
++    const raw = e.get(name) orelse return default;
++    const n = std.fmt.parseInt(u64, std.mem.trim(u8, raw, " \t\r\n"), 10) catch return error.BadPreparePolicy;
++    if (n > max) return error.BadPreparePolicy;
++    return n;
++}
++
++pub const Snapshot = struct {
++    residents: u32 = 0,
++    waiting: u32 = 0,
++    peak_residents: u32 = 0,
++    peak_waiting: u32 = 0,
++    admitted: u64 = 0,
++    waited: u64 = 0,
++    full: u64 = 0,
++    cancelled: u64 = 0,
++    timed_out: u64 = 0,
++    drained: u64 = 0,
++    telemetry_missing: u64 = 0,
++    reserved_bytes: u64 = 0,
++};
++const Waiter = struct { next: ?*Waiter = null };
++pub const Error = error{ Cancelled, Draining, PrepareQueueFull, PrepareTimeout };
++
++pub const Gate = struct {
++    mutex: std.Io.Mutex = .init,
++    head: ?*Waiter = null,
++    tail: ?*Waiter = null,
++    state: Snapshot = .{},
++    available: *const fn (std.Io) ?u64 = memAvailable,
++
++    pub fn enter(g: *Gate, io: std.Io, policy: Policy, draining: *const std.atomic.Value(bool), gone: anytype) Error!bool {
++        if (policy.residents == 0) return false;
++        const until = std.Io.Clock.awake.now(io).addDuration(.fromMilliseconds(policy.wait_ms));
++        var waiter: Waiter = .{};
++        var queued = false;
++        var missing = false;
++        defer if (queued) {
++            g.mutex.lockUncancelable(io);
++            g.remove(&waiter);
++            g.mutex.unlock(io);
++        };
++        while (true) {
++            const cancelled = gone.check();
++            const drain = draining.load(.seq_cst);
++            g.mutex.lockUncancelable(io);
++            if (cancelled or drain) {
++                if (cancelled) g.state.cancelled += 1 else g.state.drained += 1;
++                g.mutex.unlock(io);
++                return if (cancelled) error.Cancelled else error.Draining;
++            }
++            const first = if (queued) g.head == &waiter else g.head == null;
++            var fits = g.state.residents < policy.residents;
++            if (fits and first and policy.floor > 0) {
++                if (g.available(io)) |available| {
++                    fits = available >= policy.floor +| g.state.reserved_bytes +| policy.reserve;
++                } else {
++                    fits = false;
++                    if (!missing) g.state.telemetry_missing += 1;
++                    missing = true;
++                }
++            }
++            if (first and fits) {
++                if (queued) g.remove(&waiter);
++                queued = false;
++                g.state.residents += 1;
++                g.state.peak_residents = @max(g.state.peak_residents, g.state.residents);
++                g.state.reserved_bytes += policy.reserve;
++                g.state.admitted += 1;
++                g.mutex.unlock(io);
++                return true;
++            }
++            if (!queued) {
++                if (g.state.waiting >= policy.waiting) {
++                    g.state.full += 1;
++                    g.mutex.unlock(io);
++                    return error.PrepareQueueFull;
++                }
++                if (g.tail) |tail| tail.next = &waiter else g.head = &waiter;
++                g.tail = &waiter;
++                queued = true;
++                g.state.waiting += 1;
++                g.state.waited += 1;
++                g.state.peak_waiting = @max(g.state.peak_waiting, g.state.waiting);
++            }
++            if (std.Io.Clock.awake.now(io).nanoseconds >= until.nanoseconds) {
++                g.state.timed_out += 1;
++                g.mutex.unlock(io);
++                return error.PrepareTimeout;
++            }
++            g.mutex.unlock(io);
++            std.Io.sleep(io, .fromMilliseconds(10), .awake) catch return error.Cancelled;
++        }
++    }
++
++    fn remove(g: *Gate, waiter: *Waiter) void {
++        var previous: ?*Waiter = null;
++        var node = g.head;
++        while (node) |n| : (node = n.next) {
++            if (n == waiter) {
++                if (previous) |p| p.next = n.next else g.head = n.next;
++                if (g.tail == n) g.tail = previous;
++                g.state.waiting -= 1;
++                return;
++            }
++            previous = n;
++        }
++        unreachable;
++    }
++
++    pub fn leave(g: *Gate, io: std.Io, reserve: u64) void {
++        g.mutex.lockUncancelable(io);
++        defer g.mutex.unlock(io);
++        std.debug.assert(g.state.residents > 0 and g.state.reserved_bytes >= reserve);
++        g.state.residents -= 1;
++        g.state.reserved_bytes -= reserve;
++    }
++
++    pub fn snapshot(g: *Gate, io: std.Io) Snapshot {
++        g.mutex.lockUncancelable(io);
++        defer g.mutex.unlock(io);
++        return g.state;
++    }
++
++    pub fn render(g: *Gate, io: std.Io, w: *std.Io.Writer) !void {
++        const s = g.snapshot(io);
++        inline for (comptime std.meta.fieldNames(Snapshot)) |field|
++            try w.print("tensorfold_prepare_{s} {d}\n", .{ field, @field(s, field) });
++    }
++};
++
++/// Linux host headroom, not a GPU budget or a process RSS limit. Missing telemetry never opens a floor gate.
++pub fn memAvailable(io: std.Io) ?u64 {
++    var buf: [4096]u8 = undefined;
++    return parseAvailable(std.Io.Dir.cwd().readFile(io, "/proc/meminfo", &buf) catch return null);
++}
++
++pub fn parseAvailable(text: []const u8) ?u64 {
++    var lines = std.mem.splitScalar(u8, text, '\n');
++    while (lines.next()) |line| {
++        if (!std.mem.startsWith(u8, line, "MemAvailable:")) continue;
++        var it = std.mem.tokenizeAny(u8, line["MemAvailable:".len..], " \t");
++        const n = std.fmt.parseInt(u64, it.next() orelse return null, 10) catch return null;
++        if (!std.mem.eql(u8, it.next() orelse return null, "kB")) return null;
++        return std.math.mul(u64, n, 1024) catch null;
++    }
++    return null;
++}
+diff --git a/zig/src/server/prepare_memory.zig b/zig/src/server/prepare_memory.zig
+new file mode 100644
+--- /dev/null
++++ b/zig/src/server/prepare_memory.zig
+@@ -0,0 +1,113 @@
++//! Allocated arena capacity, not logical payload sizes or RSS; each allocation belongs to exactly one category.
++const std = @import("std");
++const gate = @import("prepare_gate.zig");
++const Allocator = std.mem.Allocator;
++pub const Kind = enum { retained, render, tokenize, media, prompt };
++
++pub const Counter = struct {
++    live: std.atomic.Value(usize) = .init(0),
++    peak: std.atomic.Value(usize) = .init(0),
++    allocated: std.atomic.Value(usize) = .init(0),
++    freed: std.atomic.Value(usize) = .init(0),
++
++    fn change(c: *Counter, old: usize, new: usize) void {
++        if (new > old) {
++            const add = new - old;
++            const now = c.live.fetchAdd(add, .monotonic) + add;
++            _ = c.peak.fetchMax(now, .monotonic);
++            _ = c.allocated.fetchAdd(add, .monotonic);
++        } else {
++            const sub = old - new;
++            std.debug.assert(c.live.fetchSub(sub, .monotonic) >= sub);
++            _ = c.freed.fetchAdd(sub, .monotonic);
++        }
++    }
++};
++
++pub const Tracked = struct {
++    child: Allocator,
++    count: Counter = .{},
++
++    pub fn allocator(c: *Tracked) Allocator {
++        return .{ .ptr = c, .vtable = &.{ .alloc = alloc, .resize = resize, .remap = remap, .free = free } };
++    }
++    fn self(ctx: *anyopaque) *Tracked {
++        return @ptrCast(@alignCast(ctx));
++    }
++    fn alloc(ctx: *anyopaque, len: usize, al: std.mem.Alignment, ra: usize) ?[*]u8 {
++        const c = self(ctx);
++        const p = c.child.rawAlloc(len, al, ra) orelse return null;
++        c.count.change(0, len);
++        return p;
++    }
++    fn resize(ctx: *anyopaque, mem: []u8, al: std.mem.Alignment, len: usize, ra: usize) bool {
++        const c = self(ctx);
++        if (!c.child.rawResize(mem, al, len, ra)) return false;
++        c.count.change(mem.len, len);
++        return true;
++    }
++    fn remap(ctx: *anyopaque, mem: []u8, al: std.mem.Alignment, len: usize, ra: usize) ?[*]u8 {
++        const c = self(ctx);
++        const p = c.child.rawRemap(mem, al, len, ra) orelse return null;
++        c.count.change(mem.len, len);
++        return p;
++    }
++    fn free(ctx: *anyopaque, mem: []u8, al: std.mem.Alignment, ra: usize) void {
++        const c = self(ctx);
++        c.child.rawFree(mem, al, ra);
++        c.count.change(mem.len, 0);
++    }
++};
++
++pub const Ledger = struct {
++    categories: [5]Tracked,
++
++    pub fn init(a: Allocator) Ledger {
++        return .{ .categories = @splat(.{ .child = a }) };
++    }
++    pub fn of(l: *Ledger, kind: Kind) *Tracked {
++        return &l.categories[@backingInt(kind)];
++    }
++    pub fn render(l: *Ledger, w: *std.Io.Writer) !void {
++        inline for (comptime std.meta.fieldNames(Kind), 0..) |kind, i| {
++            const c = &l.categories[i].count;
++            inline for (.{ "live", "peak", "allocated", "freed" }) |field|
++                try w.print("tensorfold_prepare_memory_{s}_bytes{{kind=\"{s}\"}} {d}\n", .{
++                    field, kind, @field(c, field).load(.monotonic),
++                });
++        }
++    }
++};
++
++/// Only synchronous frontend work uses this scope; async borrowers retain Request explicitly.
++pub threadlocal var current: ?*Request = null;
++
++pub fn scratch(kind: Kind) Allocator {
++    std.debug.assert(kind != .retained);
++    return if (current) |r| r.ledger.of(kind).allocator() else std.heap.page_allocator;
++}
++
++pub const Request = struct {
++    gpa: Allocator,
++    io: std.Io,
++    ledger: *Ledger,
++    gate: ?*gate.Gate,
++    reserve: u64,
++    refs: std.atomic.Value(u32) = .init(1),
++    arena: std.heap.ArenaAllocator,
++
++    pub fn create(a: Allocator, io: std.Io, ledger: *Ledger, held: ?*gate.Gate, reserve: u64) !*Request {
++        const r = try a.create(Request);
++        r.* = .{ .gpa = a, .io = io, .ledger = ledger, .gate = held, .reserve = reserve, .arena = .init(ledger.of(.retained).allocator()) };
++        return r;
++    }
++    pub fn retain(r: *Request) void {
++        std.debug.assert(r.refs.fetchAdd(1, .monotonic) > 0);
++    }
++    pub fn release(r: *Request) void {
++        if (r.refs.fetchSub(1, .acq_rel) != 1) return;
++        r.arena.deinit();
++        if (r.gate) |g| g.leave(r.io, r.reserve);
++        r.gpa.destroy(r);
++    }
++};
+diff --git a/zig/src/server/server.zig b/zig/src/server/server.zig
+--- a/zig/src/server/server.zig
++++ b/zig/src/server/server.zig
+@@ -99,6 +99,7 @@
+     max_connections: u32 = @import("http_admission.zig").default_limit,
+     /// --max-inflight, --max-inflight-per-key, --requests-per-second, --request-burst; all zero: no admission.
+     admission: @import("request_admission.zig").Limits = .{},
++    prepare_policy: @import("prepare_gate.zig").Policy = .{},
+     /// The open /health names these after its other keys; empty fields are left out.
+     identity: Identity = .{},
+     /// The process environment GET /v1/benchmark/manifest reads (rank count, revision, the hardware probe); null: none.
+@@ -150,6 +151,8 @@
+     /// The idle-unload manager (--idle-unload); null when off. Its thread parks the engine; a wake reloads it.
+     idle_manager: ?*idle_unload.Manager = null,
+     preparing: std.atomic.Value(i64) = .init(0),
++    prepare_gate: @import("prepare_gate.zig").Gate = .{},
++    prepare_memory: @import("prepare_memory.zig").Ledger,
+     speech_inflight: std.atomic.Value(u32) = .init(0),
+     arena: std.heap.ArenaAllocator,
+     /// Structured output's compiler, opened by the first structured request (Python's grammar.compiler).
+@@ -169,7 +172,7 @@
+     /// Reads what the template and tokenizer decide once: late system role, think markers, efforts, the forced close.
+     pub fn init(gpa: Allocator, io: std.Io, engine: api.Engine, text: model_text.Text, config: Config, keys: ?*auth.Store) !*Server {
+         const srv = try gpa.create(Server);
+-        srv.* = .{ .gpa = gpa, .io = io, .engine = engine, .info = engine.info(), .text = text, .config = config, .keys = keys, .metrics = .{ .gpa = gpa }, .store = .{ .gpa = gpa }, .reasoning = .{ .gpa = gpa }, .arena = .init(gpa), .slide = .init(gpa, io, config.slide_graph), .teacher = .init(gpa) };
++        srv.* = .{ .gpa = gpa, .io = io, .engine = engine, .info = engine.info(), .text = text, .config = config, .keys = keys, .metrics = .{ .gpa = gpa }, .store = .{ .gpa = gpa }, .reasoning = .{ .gpa = gpa }, .arena = .init(gpa), .slide = .init(gpa, io, config.slide_graph), .teacher = .init(gpa), .prepare_memory = .init(gpa) };
+         errdefer srv.deinit(); // a later step's failure stops the keepalive before the caller closes the engine
+         if (srv.info.embeddings != null and srv.info.text_generation) return error.InvalidEmbeddingCapabilities;
+         if (srv.info.vision) |vision| if (@import("vision_markers.zig").firstUnsafe(text, vision)) |id| {
+@@ -427,7 +430,6 @@
+             }
+             if (!request_guard.allow(&conn, browser, a)) break;
+             if (!srv.authenticate(&conn, a)) break;
+-            if (conn.header("Expect")) |expect| if (std.ascii.eqlIgnoreCase(expect, "100-continue") and std.mem.order(u8, conn.version, "HTTP/1.1") != .lt) conn.sendContinue();
+             srv.dispatch(&conn, a);
+             if (conn.close or conn.broken) break;
+         }
+diff --git a/zig/src/server/serve.zig b/zig/src/server/serve.zig
+--- a/zig/src/server/serve.zig
++++ b/zig/src/server/serve.zig
+@@ -180,6 +180,10 @@
+         .keep_warm_s = args.keep_warm,
+         .idle_unload_s = args.idle_unload,
+         .admission = args.admission,
++        .prepare_policy = @import("prepare_gate.zig").Policy.fromEnv(s.environ) catch {
++            log.line("invalid TF_PREPARE_* policy: residents/waiting 0..128, wait 1..3600000 ms; floor and reserve require residents", .{});
++            return 1;
++        },
+         .default_sampling = s.sampling,
+         .use_drafts = !args.no_drafts,
+         .vision_urls = args.vision_urls,
+diff --git a/zig/src/server/routes.zig b/zig/src/server/routes.zig
+--- a/zig/src/server/routes.zig
++++ b/zig/src/server/routes.zig
+@@ -30,6 +30,55 @@
+ const fact_path = "/v1/slide/fact/";
+ 
+ pub fn dispatch(srv: *Server, conn: *Conn, a: Allocator) void {
++    const memory_contract = @import("prepare_memory.zig");
++    const uses_body = std.mem.eql(u8, conn.method, "POST") or conn.header("Transfer-Encoding") != null or
++        (if (conn.header("Content-Length")) |len| !std.mem.eql(u8, len, "0") else false);
++    if (!uses_body) return dispatchReady(srv, conn, a);
++    // Count before the drain check, including tokenization, pre-body waiters and malformed/unknown body routes.
++    _ = srv.generating.fetchAdd(1, .seq_cst);
++    defer _ = srv.generating.fetchSub(1, .seq_cst);
++    if (@import("builtin").is_test) if (counted_hook) |h| h();
++    if (srv.draining.load(.seq_cst)) return draining(conn, anthropic.route(conn.path));
++    const policy = srv.config.prepare_policy;
++    const held = srv.prepare_gate.enter(srv.io, policy, &srv.draining, openai.Gone{ .conn = conn }) catch |err| {
++        conn.close = true;
++        return switch (err) {
++            error.Cancelled => {},
++            error.Draining => draining(conn, anthropic.route(conn.path)),
++            else => prepareRefused(conn, err == error.PrepareQueueFull),
++        };
++    };
++    const request = memory_contract.Request.create(srv.gpa, srv.io, &srv.prepare_memory, if (held) &srv.prepare_gate else null, policy.reserve) catch {
++        if (held) srv.prepare_gate.leave(srv.io, policy.reserve);
++        return prepareRefused(conn, false);
++    };
++    defer request.release();
++    const previous = memory_contract.current;
++    memory_contract.current = request;
++    defer memory_contract.current = previous;
++    dispatchReady(srv, conn, request.arena.allocator());
++}
++
++fn prepareRefused(conn: *Conn, full: bool) void {
++    const message = if (full) "frontend preparation queue is full; retry shortly" else "frontend preparation admission timed out or could not allocate; retry shortly";
++    var buf: [384]u8 = undefined;
++    const body = if (anthropic.route(conn.path))
++        std.fmt.bufPrint(&buf, "{{\"type\":\"error\",\"error\":{{\"type\":\"overloaded_error\",\"message\":\"{s}\"}}}}", .{message}) catch unreachable
++    else
++        std.fmt.bufPrint(&buf, "{{\"error\":{{\"type\":\"server_error\",\"code\":\"prepare_unavailable\",\"message\":\"{s}\"}}}}", .{message}) catch unreachable;
++    conn.close = true;
++    conn.startResponse(if (full) 429 else 503, null) catch return;
++    conn.addHeader("Content-Type", "application/json") catch return;
++    conn.addHeader("Retry-After", "1") catch return;
++    var len: [24]u8 = undefined;
++    conn.addHeader("Content-Length", std.fmt.bufPrint(&len, "{d}", .{body.len}) catch unreachable) catch return;
++    conn.addHeader("Connection", "close") catch return;
++    conn.finish(body) catch {};
++}
++
++fn dispatchReady(srv: *Server, conn: *Conn, a: Allocator) void {
++    if (conn.header("Expect")) |expect| if (std.ascii.eqlIgnoreCase(expect, "100-continue") and
++        std.mem.order(u8, conn.version, "HTTP/1.1") != .lt) conn.sendContinue();
+     const m = conn.method;
+     if (!std.mem.eql(u8, m, "POST") and !consumeBody(conn, a)) return;
+     if (std.mem.eql(u8, m, "GET")) return get(srv, conn, a);
+@@ -117,16 +166,8 @@
+         discardBody(conn, a);
+         return unknown(conn, a);
+     }
+-    // counted before the drain flag is read: a stop that sees no request in progress sees every later one refused
+-    _ = srv.generating.fetchAdd(1, .seq_cst);
+-    defer _ = srv.generating.fetchSub(1, .seq_cst);
+     if (srv.idle_manager) |m| m.begin(); // engine work starts: the idle window restarts at this route's end
+     defer if (srv.idle_manager) |m| m.end();
+-    if (@import("builtin").is_test) if (counted_hook) |h| h();
+-    if (srv.draining.load(.seq_cst)) {
+-        discardBody(conn, a);
+-        return draining(conn, is_anthropic);
+-    }
+     // --max-inflight and the rest, when set: a reservation for the whole reply, taken before the body is read
+     var lease: ?admission.Lease = null;
+     if (srv.config.admission.enabled()) switch (srv.admission.acquire(srv.io, srv.config.admission, conn.key_digest)) {
+diff --git a/zig/src/server/status_routes.zig b/zig/src/server/status_routes.zig
+--- a/zig/src/server/status_routes.zig
++++ b/zig/src/server/status_routes.zig
+@@ -144,6 +144,9 @@
+         srv.metrics.render(srv.io, &out.writer, status, streams[0..@min(status.streams, streams.len)], srv.info, srv.engine.memory(false), srv.info.context_window) catch return;
+     }
+     if (srv.config.admission.enabled()) @import("metrics.zig").renderAdmission(&out.writer, srv.admission.snapshot(srv.io)) catch return;
++    srv.config.prepare_policy.render(&out.writer) catch return;
++    srv.prepare_gate.render(srv.io, &out.writer) catch return;
++    srv.prepare_memory.render(&out.writer) catch return;
+     const body = out.written();
+     conn.startResponse(200, null) catch return;
+     conn.addHeader("Content-Type", "text/plain; version=0.0.4; charset=utf-8") catch return;
+diff --git a/zig/src/server/warm.zig b/zig/src/server/warm.zig
+--- a/zig/src/server/warm.zig
++++ b/zig/src/server/warm.zig
+@@ -15,6 +15,8 @@
+     gpa: std.mem.Allocator,
+     arena: std.heap.ArenaAllocator,
+     request: api.Request,
++    parent: ?*@import("prepare_memory.zig").Request,
++    srv: *Server,
+ 
+     fn event(ptr: *anyopaque, _: api.Id, e: *const api.Event) void {
+         if (e.* != .finished) return;
+@@ -26,9 +28,12 @@
+             .failed => "failed",
+             else => "ended",
+         }, if (f.message.len > 0) ": " else "", f.message, f.stats.queued_seconds });
+-        var arena = p.arena;
++        const parent = p.parent;
++        const srv = p.srv;
++        p.arena.deinit();
+         p.gpa.destroy(p);
+-        arena.deinit();
++        if (parent) |r| r.release();
++        _ = srv.generating.fetchSub(1, .seq_cst);
+     }
+ };
+ 
+@@ -40,12 +45,18 @@
+ 
+ fn start(srv: *Server, input: chat.Input, message: Value, thinking: bool, effort: ?[]const u8, prompt_len: usize) !void {
+     const p = try srv.gpa.create(Pass);
+-    p.* = .{ .gpa = srv.gpa, .arena = .init(srv.gpa), .request = undefined };
++    const parent = @import("prepare_memory.zig").current;
++    if (parent) |r| r.retain();
++    _ = srv.generating.fetchAdd(1, .seq_cst);
++    p.* = .{ .gpa = srv.gpa, .srv = srv, .parent = parent, .arena = .init(srv.prepare_memory.of(.retained).allocator()), .request = undefined };
+     var handed = false;
+     defer if (!handed) {
+         p.arena.deinit();
+         srv.gpa.destroy(p);
++        if (parent) |r| r.release();
++        _ = srv.generating.fetchSub(1, .seq_cst);
+     };
++    if (srv.draining.load(.seq_cst)) return;
+     const a = p.arena.allocator();
+     const clear = input.fields.get("clear_thinking");
+     var cx: errors.Cx = .{ .a = a, .clear_thinking = if (clear != null and clear.? == .bool) clear.?.bool else null };
+@@ -70,7 +81,7 @@
+ /// tool result, after an answer a user message: a template that clears earlier turns' reasoning (GLM's) renders the
+ /// loop's turns differently before each, and only the turn that comes next is worth prefilling.
+ fn shared(srv: *Server, cx: *errors.Cx, input: chat.Input, message: Value, thinking: bool, effort: ?[]const u8) !struct { ids: []const u32, messages: []Value } {
+-    const before = input.messages.array;
++    const before = (try json.deepCopy(cx.a, input.messages)).array;
+     const calls = message.get("tool_calls");
+     const called = calls != null and calls.? == .array and calls.?.array.len > 0;
+     var ids: [2][]const u32 = undefined;
+diff --git a/zig/src/server/hf_text.zig b/zig/src/server/hf_text.zig
+--- a/zig/src/server/hf_text.zig
++++ b/zig/src/server/hf_text.zig
+@@ -8,6 +8,7 @@
+ const dsv41 = if (@hasDecl(dsv41_chat, "template")) dsv41_chat.template else dsv41_chat;
+ const Value = json.Value;
+ const Allocator = std.mem.Allocator;
++const memory_contract = @import("prepare_memory.zig");
+ 
+ const clear_thinking_env = "TF_GLM_CLEAR_THINKING";
+ 
+@@ -271,19 +272,32 @@
+         return @ptrCast(@alignCast(ctx));
+     }
+ 
++    fn scratchTokenizer(t: *HfText) tokenizer.Tokenizer {
++        var view = t.tok;
++        view.scratch_allocator = memory_contract.scratch(.tokenize);
++        return view;
++    }
++
+     fn encodeFn(ctx: *anyopaque, a: Allocator, s: []const u8, add_special: bool) model_text.Error![]u32 {
+         const t = self(ctx);
+-        const ids = t.tok.encode(a, s) catch |e| return if (e == error.OutOfMemory) error.OutOfMemory else error.Template;
+-        if (!add_special or (t.prefix.len == 0 and t.suffix.len == 0)) return ids;
++        var scratch: std.heap.ArenaAllocator = .init(memory_contract.scratch(.tokenize));
++        defer scratch.deinit();
++        const ids = scratchTokenizer(t).encode(scratch.allocator(), s) catch |e| return if (e == error.OutOfMemory) error.OutOfMemory else error.Template;
++        if (!add_special or (t.prefix.len == 0 and t.suffix.len == 0)) return a.dupe(u32, ids);
+         return std.mem.concat(a, u32, &.{ t.prefix, ids, t.suffix });
+     }
+ 
+     fn encodePlainFn(ctx: *anyopaque, a: Allocator, s: []const u8) model_text.Error![]u32 {
+-        return self(ctx).tok.encodePlain(a, s) catch |e| if (e == error.OutOfMemory) error.OutOfMemory else error.Template;
++        var scratch: std.heap.ArenaAllocator = .init(memory_contract.scratch(.tokenize));
++        defer scratch.deinit();
++        return a.dupe(u32, scratchTokenizer(self(ctx)).encodePlain(scratch.allocator(), s) catch |e|
++            return if (e == error.OutOfMemory) error.OutOfMemory else error.Template);
+     }
+ 
+     fn encodeMaskedFn(ctx: *anyopaque, a: Allocator, s: []const u8, spans: []const model_text.Span, problem: *[]const u8) model_text.Error![]u32 {
+-        return self(ctx).tok.encodeMasked(a, s, spans) catch |err| {
++        var scratch: std.heap.ArenaAllocator = .init(memory_contract.scratch(.tokenize));
++        defer scratch.deinit();
++        const ids = scratchTokenizer(self(ctx)).encodeMasked(scratch.allocator(), s, spans) catch |err| {
+             if (err == error.OutOfMemory) return error.OutOfMemory;
+             problem.* = if (err == error.UnsafeNormalizedAddedTokenMask)
+                 "normalized added tokens cannot be matched safely through this normalizer with request text"
+@@ -293,10 +307,15 @@
+                 "the tokenizer cannot encode this prompt with request byte provenance";
+             return error.Template;
+         };
++        return a.dupe(u32, ids);
+     }
+ 
+     fn decodeFn(ctx: *anyopaque, a: Allocator, ids: []const u32) Allocator.Error![]u8 {
+-        return self(ctx).tok.decode(a, ids, false) catch |e| if (e == error.OutOfMemory) error.OutOfMemory else a.dupe(u8, "\u{fffd}");
++        var scratch: std.heap.ArenaAllocator = .init(memory_contract.scratch(.tokenize));
++        defer scratch.deinit();
++        const bytes = scratchTokenizer(self(ctx)).decode(scratch.allocator(), ids, false) catch |e|
++            return if (e == error.OutOfMemory) error.OutOfMemory else a.dupe(u8, "\u{fffd}");
++        return a.dupe(u8, bytes);
+     }
+ 
+     fn tokenIdFn(ctx: *anyopaque, piece: []const u8) ?u32 {
+@@ -309,7 +328,7 @@
+     }
+ 
+     fn tokenBytesFn(ctx: *anyopaque, a: Allocator, id: u32) Allocator.Error!?[]u8 {
+-        return self(ctx).tok.tokenBytes(a, id) catch |e| if (e == error.OutOfMemory) error.OutOfMemory else null;
++        return scratchTokenizer(self(ctx)).tokenBytes(a, id) catch |e| if (e == error.OutOfMemory) error.OutOfMemory else null;
+     }
+ 
+     fn vocabFn(ctx: *anyopaque) u32 {
+@@ -353,6 +372,18 @@
+     }
+ 
+     fn renderFn(ctx: *anyopaque, a: Allocator, messages: Value, options: model_text.RenderOptions, problem: *[]const u8) model_text.Error!model_text.Rendered {
++        var scratch: std.heap.ArenaAllocator = .init(memory_contract.scratch(.render));
++        defer scratch.deinit();
++        const out = renderScratch(ctx, scratch.allocator(), messages, options, problem) catch |err| {
++            problem.* = try a.dupe(u8, problem.*);
++            return err;
++        };
++        const rendered_text = try a.dupe(u8, out.text);
++        errdefer a.free(rendered_text);
++        return .{ .text = rendered_text, .spans = try a.dupe(model_text.Span, out.spans) };
++    }
++
++    fn renderScratch(ctx: *anyopaque, a: Allocator, messages: Value, options: model_text.RenderOptions, problem: *[]const u8) model_text.Error!model_text.Rendered {
+         const t = self(ctx);
+         const compiled = if (options.tools != null and t.tool_compiled != null) &t.tool_compiled.? else if (t.compiled) |*c| c else {
+             if (t.native_deepseek) return t.renderDeepseek(a, messages, options, problem);
+@@ -371,7 +402,7 @@
+         if (t.clear_thinking) |clear| try context.put(a, "clear_thinking", .{ .bool = options.clear_thinking orelse clear });
+         var diag: template.Diag = .{};
+         const tools: std.json.Value = if (options.tools) |tl| try toStd(a, tl) else .null;
+-        const out = template.renderProvenanceGlobals(a, compiled, try toStd(a, messages), tools, .{ .object = context }, .{ .object = globals }, options.add_generation_prompt, &diag) catch |e| {
++        const out = template.renderProvenanceGlobalsWithScratch(a, memory_contract.scratch(.render), compiled, try toStd(a, messages), tools, .{ .object = context }, .{ .object = globals }, options.add_generation_prompt, &diag) catch |e| {
+             if (e == error.OutOfMemory) return error.OutOfMemory;
+             problem.* = diag.msg;
+             return error.Template;
+diff --git a/zig/src/server/prompt.zig b/zig/src/server/prompt.zig
+--- a/zig/src/server/prompt.zig
++++ b/zig/src/server/prompt.zig
+@@ -35,6 +35,22 @@
+ }
+ 
+ fn renderIdsMedia(srv: *Server, cx: *Cx, messages: Value, tools: []const Value, thinking: bool, effort: ?[]const u8, generation: bool, ordered: ?*Value) errors.Refused![]const u32 {
++    var arena: std.heap.ArenaAllocator = .init(@import("prepare_memory.zig").scratch(.prompt));
++    defer arena.deinit();
++    var scratch: Cx = .{ .a = arena.allocator(), .clear_thinking = cx.clear_thinking };
++    var media: Value = .null;
++    const ids = renderIdsScratch(srv, &scratch, messages, tools, thinking, effort, generation, if (ordered != null) &media else null) catch |err| {
++        cx.kind = scratch.kind;
++        cx.message = try cx.a.dupe(u8, scratch.message);
++        return err;
++    };
++    if (ordered) |out| if (media != .null) {
++        out.* = try json.deepCopy(cx.a, media);
++    };
++    return cx.a.dupe(u32, ids);
++}
++
++fn renderIdsScratch(srv: *Server, cx: *Cx, messages: Value, tools: []const Value, thinking: bool, effort: ?[]const u8, generation: bool, ordered: ?*Value) errors.Refused![]const u32 {
+     const normalized = try messages_mod.toolArguments(cx, try messages_mod.normalizeWith(cx, messages, srv.late_system, srv.needs_user_after_tool, .of(srv.info.vision)));
+     var problem: []const u8 = "";
+     const options: model_text.RenderOptions = .{
+@@ -123,7 +139,9 @@
+ /// Earlier replies' decoded rows: from each turn's generation prompt end through its closing stop token.
+ pub fn replySpans(srv: *Server, cx: *Cx, prompt: []const u32) errors.Refused![]const [2]u32 {
+     if (srv.eos.len == 0) return &.{};
+-    var probe: Cx = .{ .a = cx.a, .clear_thinking = cx.clear_thinking }; // a template that refuses the probe leaves the request without spans, not failed
++    var arena: std.heap.ArenaAllocator = .init(@import("prepare_memory.zig").scratch(.prompt));
++    defer arena.deinit();
++    var probe: Cx = .{ .a = arena.allocator(), .clear_thinking = cx.clear_thinking };
+     const openers = [2][]const u32{ generationPrompt(srv, &probe, false) catch &.{}, generationPrompt(srv, &probe, true) catch &.{} };
+     var spans: std.ArrayList([2]u32) = .empty;
+     var i: usize = 0;
+@@ -153,11 +171,20 @@
+     };
+     var media_messages = input.messages;
+     const prompt = try renderIdsMedia(srv, cx, input.messages, input.tools, thinking, effort, true, &media_messages);
+-    const history = try renderIds(srv, cx, input.messages, input.tools, thinking, effort, false);
+-    var history_len: usize = 0;
+-    if (history.len > 0 and history.len < prompt.len and std.mem.eql(u32, prompt[0..history.len], history)) history_len = history.len;
+-    if (history_len == 0 and prompt.len > 1 and std.mem.eql(u32, history, prompt)) history_len = prompt.len - 1; // a template with no generation suffix
+-    if (history_len > 0) history_len = continuedLen(srv, cx, input.messages, input.tools, thinking, effort, history, history_len);
++    const history_len = blk: {
++        var arena: std.heap.ArenaAllocator = .init(@import("prepare_memory.zig").scratch(.prompt));
++        defer arena.deinit();
++        var scratch: Cx = .{ .a = arena.allocator(), .clear_thinking = cx.clear_thinking };
++        const history = renderIds(srv, &scratch, input.messages, input.tools, thinking, effort, false) catch |err| {
++            cx.kind = scratch.kind;
++            cx.message = try cx.a.dupe(u8, scratch.message);
++            return err;
++        };
++        var n: usize = 0;
++        if (history.len > 0 and history.len < prompt.len and std.mem.eql(u32, prompt[0..history.len], history)) n = history.len;
++        if (n == 0 and prompt.len > 1 and std.mem.eql(u32, history, prompt)) n = prompt.len - 1;
++        break :blk if (n > 0) continuedLen(srv, &scratch, input.messages, input.tools, thinking, effort, history, n) else n;
++    };
+     // --vision: placeholders expanded to image tokens before the window, chunks and cache see it; no rewind kept
+     if (try images.expand(srv.info.vision, if (srv.config.vision_urls) images.Fetch.network(srv.io) else null, srv.text, cx, media_messages, prompt, history_len)) |x| return .{ .ids = x.ids, .history_len = x.history_len, .images = x.images, .cache_key = x.cache_key };
+     const count = if (input.messages == .array) input.messages.array.len else 0;
+@@ -204,6 +231,13 @@
+ 
+ /// Where the latest user message's text starts (of the first `real_count`): the prompt and a probe there agree to it.
+ pub fn rewindLen(srv: *Server, cx: *Cx, messages: Value, real_count: usize, tools: []const Value, prompt: []const u32, thinking: bool, effort: ?[]const u8) usize {
++    var arena: std.heap.ArenaAllocator = .init(@import("prepare_memory.zig").scratch(.prompt));
++    defer arena.deinit();
++    var scratch: Cx = .{ .a = arena.allocator(), .clear_thinking = cx.clear_thinking };
++    return rewindLenScratch(srv, &scratch, messages, real_count, tools, prompt, thinking, effort);
++}
++
++fn rewindLenScratch(srv: *Server, cx: *Cx, messages: Value, real_count: usize, tools: []const Value, prompt: []const u32, thinking: bool, effort: ?[]const u8) usize {
+     if (messages != .array or real_count > messages.array.len) return 0;
+     const user_index = for (0..real_count) |n| {
+         const i = real_count - 1 - n;
+@@ -223,6 +257,13 @@
+ 
+ /// A reusable system prefix, found with a probe in place of the first user message; zero below 512 tokens.
+ pub fn systemPrefixLen(srv: *Server, cx: *Cx, messages: Value, tools: []const Value, prompt_ids: []const u32, thinking: bool, effort: ?[]const u8) usize {
++    var arena: std.heap.ArenaAllocator = .init(@import("prepare_memory.zig").scratch(.prompt));
++    defer arena.deinit();
++    var scratch: Cx = .{ .a = arena.allocator(), .clear_thinking = cx.clear_thinking };
++    return systemPrefixLenScratch(srv, &scratch, messages, tools, prompt_ids, thinking, effort);
++}
++
++fn systemPrefixLenScratch(srv: *Server, cx: *Cx, messages: Value, tools: []const Value, prompt_ids: []const u32, thinking: bool, effort: ?[]const u8) usize {
+     if (messages != .array) return 0;
+     const first_user = for (messages.array, 0..) |m, i| {
+         const role = m.get("role") orelse continue;
+diff --git a/zig/src/server/http_conn.zig b/zig/src/server/http_conn.zig
+--- a/zig/src/server/http_conn.zig
++++ b/zig/src/server/http_conn.zig
+@@ -142,6 +142,7 @@
+         var fds = [_]posix.pollfd{.{ .fd = c.fd, .events = posix.POLL.IN | posix.POLL.PRI, .revents = 0 }};
+         const ready = posix.poll(&fds, 0) catch return true;
+         if (ready == 0) return false;
++        if (fds[0].revents & (posix.POLL.HUP | posix.POLL.ERR | posix.POLL.NVAL) != 0) return true;
+         var probe: [1]u8 = undefined;
+         const rc = posix.system.recvfrom(c.fd, &probe, 1, posix.MSG.PEEK | posix.MSG.DONTWAIT, null, null);
+         return switch (posix.errno(rc)) {
+diff --git a/zig/src/server/images.zig b/zig/src/server/images.zig
+--- a/zig/src/server/images.zig
++++ b/zig/src/server/images.zig
+@@ -58,7 +58,13 @@
+     pub fn network(io: std.Io) Fetch {
+         return .{ .io = io, .get = struct {
+             fn get(_: ?*anyopaque, a: std.mem.Allocator, i: std.Io, url: []const u8, max_bytes: usize, deadline: std.Io.Timestamp, media: []const []const u8, f: *media_fetch.Failure) media_fetch.Error![]const u8 {
+-                return (try media_fetch.fetch(a, i, url, max_bytes, deadline, media, f)).data;
++                var arena: std.heap.ArenaAllocator = .init(@import("prepare_memory.zig").scratch(.media));
++                defer arena.deinit();
++                const body = media_fetch.fetch(arena.allocator(), i, url, max_bytes, deadline, media, f) catch |err| {
++                    f.text = try a.dupe(u8, f.text);
++                    return err;
++                };
++                return a.dupe(u8, body.data);
+             }
+         }.get };
+     }
+@@ -221,7 +227,10 @@
+         }
+         const honor_low = if (v.image_limits) |l| l.honor_low_detail else true;
+         const cap = if (p.low and honor_low) @min(budget, low_detail_tokens) else budget;
+-        prepared[i] = v.prepare(v.ctx, cx.a, bytes, cap) catch |e| return refusal(cx, v, i, e);
++        prepared[i] = (if (v.prepare_scratch) |prepare|
++            prepare(v.ctx, cx.a, @import("prepare_memory.zig").scratch(.media), bytes, cap)
++        else
++            v.prepare(v.ctx, cx.a, bytes, cap)) catch |e| return refusal(cx, v, i, e);
+         if (prepared[i].tokens == 0 or prepared[i].tokens > cap) return cx.refuse("the image processor exceeded the per-image visual-token budget");
+         tokens_total += prepared[i].tokens;
+         if (tokens_total > v.image_tokens) return cx.refuse("the request's images exceed the configured total visual-token budget");
+diff --git a/zig/src/core/tokenizer/tokenizer.zig b/zig/src/core/tokenizer/tokenizer.zig
+--- a/zig/src/core/tokenizer/tokenizer.zig
++++ b/zig/src/core/tokenizer/tokenizer.zig
+@@ -138,6 +138,7 @@
+     raw: Trie = .{},
+     normalized: Trie = .{},
+     specials: std.StringHashMapUnmanaged(void) = .empty,
++    scratch_allocator: ?Allocator = null, // per-call borrowed view; vocabulary and memo ownership are unchanged
+     memo: ?*Memo = null, // long segments' ids kept between encodes (null: each encode tokenizes everything)
+ 
+     pub fn deinit(t: *Tokenizer) void {
+@@ -165,7 +166,7 @@
+     /// Token ids for `text`, without post-processor tokens; invalid UTF-8 reads as U+FFFD. Caller frees with `a`.
+     pub fn encode(t: *const Tokenizer, a: Allocator, text: []const u8) Error![]u32 {
+         var stack: [scratch_stack_bytes]u8 = undefined;
+-        var fallback = std.heap.BufferFirstAllocator.init(&stack, t.allocator);
++        var fallback = std.heap.BufferFirstAllocator.init(&stack, t.scratch_allocator orelse t.allocator);
+         var arena = std.heap.ArenaAllocator.init(fallback.allocator());
+         defer arena.deinit();
+         var ctx = steps.Context{ .a = arena.allocator(), .matcher = .{ .a = arena.allocator() } };
+@@ -197,7 +198,7 @@
+             previous = p[1];
+         }
+         var stack: [scratch_stack_bytes]u8 = undefined;
+-        var fallback = std.heap.BufferFirstAllocator.init(&stack, t.allocator);
++        var fallback = std.heap.BufferFirstAllocator.init(&stack, t.scratch_allocator orelse t.allocator);
+         var arena = std.heap.ArenaAllocator.init(fallback.allocator());
+         defer arena.deinit();
+         var ctx = steps.Context{ .a = arena.allocator(), .matcher = .{ .a = arena.allocator() } };
+@@ -256,7 +257,7 @@
+     /// `encode` with no added token matched: text that spells one (a quoted marker) is ordinary text.
+     pub fn encodePlain(t: *const Tokenizer, a: Allocator, text: []const u8) Error![]u32 {
+         var stack: [scratch_stack_bytes]u8 = undefined;
+-        var fallback = std.heap.BufferFirstAllocator.init(&stack, t.allocator);
++        var fallback = std.heap.BufferFirstAllocator.init(&stack, t.scratch_allocator orelse t.allocator);
+         var arena = std.heap.ArenaAllocator.init(fallback.allocator());
+         defer arena.deinit();
+         var ctx = steps.Context{ .a = arena.allocator(), .matcher = .{ .a = arena.allocator() } };
+@@ -390,7 +391,7 @@
+     /// Text for `ids` through the decoder chain; unknown ids are skipped. Caller frees with `a`.
+     pub fn decode(t: *const Tokenizer, a: Allocator, ids: []const u32, skip_special_tokens: bool) Error![]u8 {
+         var stack: [scratch_stack_bytes]u8 = undefined;
+-        var fallback = std.heap.BufferFirstAllocator.init(&stack, t.allocator);
++        var fallback = std.heap.BufferFirstAllocator.init(&stack, t.scratch_allocator orelse t.allocator);
+         var arena = std.heap.ArenaAllocator.init(fallback.allocator());
+         defer arena.deinit();
+         var ctx = steps.Context{ .a = arena.allocator(), .matcher = .{ .a = arena.allocator() } };
+@@ -411,7 +412,7 @@
+         const piece = t.id_to_token.get(id) orelse return try a.dupe(u8, "");
+         if (t.specials.contains(piece)) return try a.dupe(u8, piece);
+         var stack: [scratch_stack_bytes]u8 = undefined;
+-        var fallback = std.heap.BufferFirstAllocator.init(&stack, t.allocator);
++        var fallback = std.heap.BufferFirstAllocator.init(&stack, t.scratch_allocator orelse t.allocator);
+         var arena = std.heap.ArenaAllocator.init(fallback.allocator());
+         defer arena.deinit();
+         var ctx = steps.Context{ .a = arena.allocator(), .matcher = .{ .a = arena.allocator() }, .raw_bytes = true };
+diff --git a/zig/src/core/template/template.zig b/zig/src/core/template/template.zig
+--- a/zig/src/core/template/template.zig
++++ b/zig/src/core/template/template.zig
+@@ -116,8 +116,12 @@
+ 
+ /// Checkpoint-owned globals are template data; request context overrides them and retains its provenance.
+ pub fn renderProvenanceGlobals(gpa: Allocator, t: *const Compiled, messages: std.json.Value, tools: std.json.Value, context: std.json.Value, template_globals: std.json.Value, add_generation_prompt: bool, diag: ?*Diag) Error!Str {
+-    // not on `gpa`: an arena there, such as a server request's, would keep the freed scratch until it is reset
+-    var arena = std.heap.ArenaAllocator.init(t.arena.child_allocator);
++    return renderProvenanceGlobalsWithScratch(gpa, t.arena.child_allocator, t, messages, tools, context, template_globals, add_generation_prompt, diag);
++}
++
++/// Separate scratch ownership permits serving to account for transient allocations without retaining them.
++pub fn renderProvenanceGlobalsWithScratch(gpa: Allocator, scratch: Allocator, t: *const Compiled, messages: std.json.Value, tools: std.json.Value, context: std.json.Value, template_globals: std.json.Value, add_generation_prompt: bool, diag: ?*Diag) Error!Str {
++    var arena = std.heap.ArenaAllocator.init(scratch);
+     defer arena.deinit();
+     const a = arena.allocator();
+     var out: v.Buffer = .{};
+diff --git a/zig/src/core/engine_vision.zig b/zig/src/core/engine_vision.zig
+--- a/zig/src/core/engine_vision.zig
++++ b/zig/src/core/engine_vision.zig
+@@ -25,6 +25,8 @@
+     ctx: *anyopaque,
+     /// The image's bytes (any format the platform decodes) at most ``max_tokens`` tokens; allocated in ``a``.
+     prepare: *const fn (ctx: *anyopaque, a: Allocator, bytes: []const u8, max_tokens: u32) anyerror!PreparedImage,
++    /// Optional separate transient allocator; encoded source and lazy contexts still belong to `a`.
++    prepare_scratch: ?*const fn (ctx: *anyopaque, a: Allocator, scratch: Allocator, bytes: []const u8, max_tokens: u32) anyerror!PreparedImage = null,
+     /// The token the chat template writes once per image, expanded to the image's tokens.
+     image_token: u32,
+     /// The tokens the template wraps an image in (the image token among them): text that spells one stays text.
+diff --git a/zig/src/families/glm/image_core.zig b/zig/src/families/glm/image_core.zig
+--- a/zig/src/families/glm/image_core.zig
++++ b/zig/src/families/glm/image_core.zig
+@@ -133,8 +133,12 @@
+ 
+         /// Validate in temporary memory, retaining encoded bytes and geometry rather than all float patches.
+         pub fn plan(io: std.Io, a: std.mem.Allocator, bytes: []const u8, c: vision.Config, max_tokens: u32) Error!Prepared {
++            return planWithScratch(io, a, std.heap.page_allocator, bytes, c, max_tokens);
++        }
++
++        pub fn planWithScratch(io: std.Io, a: std.mem.Allocator, temporary: std.mem.Allocator, bytes: []const u8, c: vision.Config, max_tokens: u32) Error!Prepared {
+             if (bytes.len > 10 << 20) return error.Oversized;
+-            var scratch: std.heap.ArenaAllocator = .init(std.heap.page_allocator);
++            var scratch: std.heap.ArenaAllocator = .init(temporary);
+             defer scratch.deinit();
+             const img = try picture.decode(io, scratch.allocator(), bytes);
+             const g = try geometry(@intCast(img.height), @intCast(img.width), @min(c.min_tokens, max_tokens), max_tokens);
+diff --git a/zig/src/families/glm/image.zig b/zig/src/families/glm/image.zig
+--- a/zig/src/families/glm/image.zig
++++ b/zig/src/families/glm/image.zig
+@@ -13,6 +13,7 @@
+ pub const patchify = steps.patchify;
+ pub const prepare = steps.prepare;
+ pub const plan = steps.plan;
++pub const planWithScratch = steps.planWithScratch;
+ pub const prepareRgb = steps.prepareRgb;
+ 
+ test "geometry follows smart_resize" {
+diff --git a/zig/src/families/glm/cuda_images.zig b/zig/src/families/glm/cuda_images.zig
+--- a/zig/src/families/glm/cuda_images.zig
++++ b/zig/src/families/glm/cuda_images.zig
+@@ -277,7 +277,11 @@
+ 
+     /// An image's bytes as the tower reads them, at most `max_tokens` tokens (the server's prepare).
+     pub fn prepare(v: *const Images, a: std.mem.Allocator, data: []const u8, max_tokens: u32) !image_core.Prepared {
+-        return image.plan(v.io, a, data, v.cfg.?, max_tokens);
++        return v.prepareWithScratch(a, std.heap.page_allocator, data, max_tokens);
++    }
++
++    pub fn prepareWithScratch(v: *const Images, a: std.mem.Allocator, scratch: std.mem.Allocator, data: []const u8, max_tokens: u32) !image_core.Prepared {
++        return image.planWithScratch(v.io, a, scratch, data, v.cfg.?, max_tokens);
+     }
+ };
+ 
+diff --git a/zig/src/native/cuda_vision_offer.zig b/zig/src/native/cuda_vision_offer.zig
+--- a/zig/src/native/cuda_vision_offer.zig
++++ b/zig/src/native/cuda_vision_offer.zig
+@@ -29,6 +29,16 @@
+     // a template that writes each image's begin and end itself: the server expands the image token alone
+     const wrap: ?[2]u32 = if (@hasDecl(T, "template_wraps")) null else .{ x.marks.open, x.marks.close };
+     var out: api.Vision = .{ .ctx = x, .prepare = prepare, .image_token = x.marks.image, .markers = &x.mark_ids, .wrap = wrap, .image_tokens = x.limits.image_tokens, .max_images = x.limits.max_images, .explain = T.explain };
++    if (comptime @hasDecl(T, "prepareWithScratch")) out.prepare_scratch = struct {
++        fn f(ctx: *anyopaque, a: Allocator, scratch: Allocator, bytes: []const u8, max_tokens: u32) anyerror!api.PreparedImage {
++            const t: *T = @ptrCast(@alignCast(ctx));
++            const p = try t.prepareWithScratch(a, scratch, bytes, max_tokens);
++            return .{ .pixels = p.pixels, .gh = p.gh, .gw = p.gw, .tokens = p.tokens, .hash = p.hash, .source_pixels = p.source_pixels, .deferred = if (p.deferred) |d|
++                .{ .ctx = d.ctx, .prepare = d.prepare, .checked = d.checked }
++            else
++                null };
++        }
++    }.f;
+     if (comptime @hasDecl(T, "fixed_image_tokens")) out.image_limits = .{ .io = x.io, .per_image_tokens = T.fixed_image_tokens, .max_request_bytes = 64 << 20, .max_request_pixels = 400 << 20, .prepare_seconds = 100, .render_order = true, .honor_low_detail = false };
+     if (comptime @hasDecl(T, "part_type")) out.part_type = T.part_type; // the template's name for an image part
+     if (comptime T == nemotron.native.vision.Vision) {
+diff --git a/zig/src/native/glm_host.zig b/zig/src/native/glm_host.zig
+--- a/zig/src/native/glm_host.zig
++++ b/zig/src/native/glm_host.zig
+@@ -117,7 +117,7 @@
+         const o = vision.?;
+         h.markers = .{ v.c.image_start, v.c.image_token, v.c.image_end };
+         h.video_open = o;
+-        offer = .{ .ctx = h, .prepare = prepareImage, .image_token = v.c.image_token, .markers = &h.markers, .image_tokens = o.image_tokens, .max_images = o.max_images, .explain = glm.image.decoderProblem };
++        offer = .{ .ctx = h, .prepare = prepareImage, .prepare_scratch = prepareImageScratch, .image_token = v.c.image_token, .markers = &h.markers, .image_tokens = o.image_tokens, .max_images = o.max_images, .explain = glm.image.decoderProblem };
+         offer.?.image_limits = .{ .io = io, .per_image_tokens = 2048, .max_request_bytes = 64 << 20, .max_request_pixels = 400 << 20, .prepare_seconds = 100, .render_order = true, .honor_low_detail = false };
+         if (v.c.video) |vm| {
+             h.video_markers = vm;
+@@ -188,8 +188,12 @@
+ 
+ /// Info.vision's prepare: an image's bytes to the tower's patches (families/glm/image.zig), on the HTTP thread.
+ fn prepareImage(ctx: *anyopaque, a: Allocator, bytes: []const u8, max_tokens: u32) anyerror!api.PreparedImage {
+-    const h: *Host = @ptrCast(@alignCast(ctx));
+-    const p = try glm.image.plan(h.wall.io, a, bytes, h.eng.vision.?.c, max_tokens);
++    return prepareImageScratch(ctx, a, std.heap.page_allocator, bytes, max_tokens);
++}
++
++fn prepareImageScratch(ctx: *anyopaque, a: Allocator, scratch: Allocator, bytes: []const u8, max_tokens: u32) anyerror!api.PreparedImage {
++    const h: *Host = @ptrCast(@alignCast(ctx));
++    const p = try glm.image.planWithScratch(h.wall.io, a, scratch, bytes, h.eng.vision.?.c, max_tokens);
+     return .{ .pixels = p.pixels, .gh = p.gh, .gw = p.gw, .tokens = p.tokens, .hash = p.hash, .source_pixels = p.source_pixels, .deferred = if (p.deferred) |d| .{ .ctx = d.ctx, .prepare = d.prepare, .checked = d.checked } else null };
+ }
+ 

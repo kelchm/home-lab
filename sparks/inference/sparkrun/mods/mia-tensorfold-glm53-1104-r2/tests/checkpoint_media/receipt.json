@@ -1,0 +1,16 @@
+{
+  "schema": "glm-checkpoint-media-host/v1",
+  "patch_sha256": "4480227efc2392e7b2f88e9ab57650d6d4ce45d5a46896f3e5a2bba7eb84776d",
+  "source_manifest_sha256": "6d50930344ac062de6b303873405604a087c6461c5fdaea8c582f56036120c3e",
+  "tests_passed": 103,
+  "build_steps_passed": 19,
+  "log": {
+    "local_path": "/tmp/glm1104-checkpoint082-test.log",
+    "sha256": "0f74544b31cbdf269c7c08138f07632d5f9d6387b77f881a119fe7e1017dfc7f"
+  },
+  "media_records": 306,
+  "maximum_metadata_bytes": 32768,
+  "metadata_version": 2,
+  "server_durable_storage_enabled": false,
+  "gpu_executed": false
+}

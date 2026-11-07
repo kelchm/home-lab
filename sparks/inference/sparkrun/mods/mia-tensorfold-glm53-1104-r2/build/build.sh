@@ -16,6 +16,7 @@ git -C "$work/kit" fetch -q --depth 1 "https://github.com/$(lock kit_repository)
 git -C "$work/kit" checkout -q --detach FETCH_HEAD
 test "$(git -C "$work/kit" rev-parse HEAD)" = "$(lock kit_revision)"
 python3 "$mod/inputs.py" "$work/kit" "$mod"
+cp "$mod/NOTICE.md" "$work/kit/patches/engine/HOME-LAB-NOTICE.md"
 candidate="home-lab-glm53-candidate:$(python3 -c 'import uuid; print(uuid.uuid4().hex)')"
 docker build --platform linux/arm64 -t "$candidate" -f "$here/Dockerfile" \
   --build-arg BASE_IMAGE="$(lock build base_image)" --build-arg RUNTIME_IMAGE="$(lock build runtime_image)" \

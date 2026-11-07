@@ -1,0 +1,1684 @@
+diff --git a/zig/build/checkpoint_restore.zig b/zig/build/checkpoint_restore.zig
+new file mode 100644
+--- /dev/null
++++ b/zig/build/checkpoint_restore.zig
+@@ -0,0 +1,21 @@
++//! Dedicated host modules: all new checkpoint tests use apple_m1 code generation on arm64 macOS.
++const std = @import("std");
++pub fn tests(b: *std.Build) void {
++    const host = b.graph.host;
++    const target = if (host.result.cpu.arch == .aarch64 and host.result.os.tag == .macos)
++        b.resolveTargetQuery(.{ .cpu_arch = .aarch64, .os_tag = .macos, .cpu_model = .{ .explicit = &std.Target.aarch64.cpu.apple_m1 } })
++    else
++        host;
++    const core = b.createModule(.{ .root_source_file = b.path("zig/src/core/root.zig"), .target = target, .optimize = .debug, .link_libc = true });
++    core.addImport("gpu_memory", @import("gpu_memory.zig").module(b, target));
++    core.addImport("tokenizer", b.createModule(.{ .root_source_file = b.path("zig/src/core/tokenizer/tokenizer.zig"), .target = target, .optimize = .debug, .link_libc = true }));
++    core.addImport("living", b.createModule(.{ .root_source_file = b.path("zig/src/living/living.zig"), .target = target, .optimize = .debug, .link_libc = true }));
++    const cuda = @import("cuda_runtime.zig").runtime(b, target, .debug, &.{});
++    const lanes = b.createModule(.{ .root_source_file = b.path("zig/src/core/lanes/lanes.zig"), .target = target, .optimize = .debug, .link_libc = true });
++    const heat = b.createModule(.{ .root_source_file = b.path("zig/src/core/heat.zig"), .target = target, .optimize = .debug, .link_libc = true });
++    const glm = @import("cuda_engines.zig").glmCuda(b, target, .debug, cuda, core, lanes, heat);
++    const step = b.step("test-checkpoint-restore-host", "Native inactive GLM restore and all-rank filesystem recovery");
++    const actual = b.createModule(.{ .root_source_file = b.path("zig/glm_checkpoint_restore_host.zig"), .target = target, .optimize = .debug, .link_libc = true, .imports = &.{ .{ .name = "glm", .module = glm }, .{ .name = "cuda", .module = cuda }, .{ .name = "core", .module = core } } });
++    step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = actual })).step);
++    step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = b.createModule(.{ .root_source_file = b.path("zig/src/core/checkpoint_epoch_test.zig"), .target = target, .optimize = .debug, .link_libc = true }), .filters = &.{"checkpoint restore:"} })).step);
++}
+diff --git a/zig/build/glm_contracts.zig b/zig/build/glm_contracts.zig
+--- a/zig/build/glm_contracts.zig
++++ b/zig/build/glm_contracts.zig
+@@ -2,6 +2,7 @@
+ const std = @import("std");
+ pub fn tests(b: *std.Build, glm: *std.Build.Module, lanes: *std.Build.Module, cuda: *std.Build.Module, core: *std.Build.Module) void {
+     const host = b.graph.host;
++    @import("checkpoint_restore.zig").tests(b);
+     const checkpoint = b.step("test-checkpoint-bounded-host", "Bounded native checkpoint ownership, GLM geometry and streaming credits");
+     checkpoint.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = core, .filters = &.{"checkpoint bounded:"} })).step);
+     checkpoint.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = b.createModule(.{ .root_source_file = b.path("zig/src/core/kv_pool.zig"), .target = host, .optimize = .debug, .link_libc = true }) })).step);
+diff --git a/zig/glm_checkpoint_restore_host.zig b/zig/glm_checkpoint_restore_host.zig
+new file mode 100644
+--- /dev/null
++++ b/zig/glm_checkpoint_restore_host.zig
+@@ -0,0 +1,554 @@
++//! Actual State, Plan, capture/capsule, rank writer and filesystem recovery under a recording CUDA ABI.
++const std = @import("std");
++const sys = @import("sys");
++const core = @import("core");
++const glm = @import("glm");
++const cuda = @import("cuda");
++const restore = glm.checkpoint_restore;
++const cp = glm.checkpoint;
++const epoch = core.checkpoint_epoch;
++const wire = epoch.wire;
++const rows = @import("src/core/rows_file.zig");
++const Store = epoch.Store(rows);
++const rec = @import("test_support/glm_snap_driver.zig").Driver;
++const t = std.testing;
++
++const Directory = struct {
++    path: [128]u8 = undefined,
++    len: usize,
++    fn init(label: []const u8) !Directory {
++        var d: Directory = .{ .len = 0 };
++        const p = try std.fmt.bufPrintSentinel(&d.path, "/tmp/tf-glm-restore-080-{d}-{s}", .{ sys.c.getpid(), label }, 0);
++        d.len = p.len;
++        if (sys.c.mkdir(p, 0o700) != 0) return error.TestDirectory;
++        return d;
++    }
++    fn name(d: *const Directory) [:0]const u8 {
++        return d.path[0..d.len :0];
++    }
++    fn deinit(d: *Directory) void {
++        const dir = sys.c.opendir(d.name()) orelse unreachable;
++        while (sys.c.readdir(dir)) |ent| {
++            const n = std.mem.sliceTo(&ent.name, 0);
++            if (std.mem.eql(u8, n, ".") or std.mem.eql(u8, n, "..")) continue;
++            var path: [1200]u8 = undefined;
++            _ = sys.c.unlink(std.fmt.bufPrintSentinel(&path, "{s}/{s}", .{ d.name(), n }, 0) catch unreachable);
++        }
++        _ = sys.c.closedir(dir);
++        _ = sys.c.rmdir(d.name());
++    }
++};
++
++fn weights(layers: []glm.weights.Layer, kv8: bool) !glm.weights.Weights {
++    var w: glm.weights.Weights = undefined;
++    w.config = .{ .layers = 2, .kda_heads = 64, .kv_lora = if (kv8) 512 else 16, .i_dim = 8, .hidden = 64 };
++    w.share = try glm.shard.Share.of(&w.config, 0, 2);
++    layers[0].mixer = .{ .mla = undefined };
++    layers[1].mixer = .{ .kda = undefined };
++    w.layers = layers;
++    return w;
++}
++
++const Fixture = struct {
++    d: cuda.Driver,
++    layers: [2]glm.weights.Layer,
++    w: glm.weights.Weights,
++    device: cuda.DeviceBuffer,
++    pool: core.kv_pool.Pool,
++    live: core.kv_pool.Lease,
++    st: glm.forward.State,
++    draft: ?cuda.DeviceBuffer,
++    saved: ?cp.Capture = null,
++    budget: core.checkpoint_capture.Budget,
++    metadata: restore.Metadata,
++    agreement: epoch.Agreement,
++
++    fn init(f: *Fixture, kv8: bool, head: bool, draft: bool, mark: usize) !void {
++        f.d = rec.init();
++        f.w = try weights(&f.layers, kv8);
++        const page_bytes = glm.state.pageBytesOf(&f.w, kv8, head);
++        f.device = try cuda.DeviceBuffer.alloc(&f.d, page_bytes * 12);
++        errdefer f.device.free();
++        f.pool = try core.kv_pool.Pool.init(t.allocator, 12, page_bytes);
++        errdefer f.pool.deinit();
++        f.live = .{};
++        errdefer f.pool.finish(&f.live);
++        try f.pool.promise(&f.live, 4);
++        try f.pool.cover(&f.live, 4, null);
++        std.mem.swap(u32, &f.live.ids.items[0], &f.live.ids.items[2]);
++        f.st = try glm.forward.State.initPagedFormat(t.allocator, &f.d, &f.w, 2048, .{ .kv = f.device.ptr, .pages = 12, .page_bytes = page_bytes }, kv8, head);
++        errdefer f.st.deinit();
++        f.st.pages = f.live.ids.items;
++        f.st.capacity = 2048;
++        fill(rec.bytes(f.device.ptr, f.device.len), 17);
++        fill(rec.bytes(f.st.arena.buf.ptr, f.st.arena.buf.len), 23);
++        try f.st.restoreHost(f.stream(), mark, if (head) mark + 3 else 0, &.{1}, .{ 512, if (head) 512 else 0 });
++        f.draft = if (draft) try cuda.DeviceBuffer.alloc(&f.d, glm.dflash.ring_bytes) else null;
++        errdefer if (f.draft) |*d| d.free();
++        if (f.draft) |d| fill(rec.bytes(d.ptr, d.len), 31);
++        f.budget = .{ .pool = &f.pool, .limits = .{ .descriptors = 1, .unique_pages = 4, .pages_per_descriptor = 4, .capsule_bytes = 128 << 20 } };
++        var freezer: glm.checkpoint_freeze.Device = .{ .gpa = t.allocator, .d = &f.d, .stream = f.stream() };
++        f.saved = try cp.Capture.create(&f.budget, &f.live, &f.st, &f.w.config, if (f.draft) |d| .{ .dflash2 = .{ .live = d.ptr, .from = @intCast(mark - 512), .through = mark } } else .none, freezer.adapter());
++        errdefer f.saved.?.close() catch unreachable;
++        var media: restore.Media = .{ .processor = @splat(42), .count = 1 };
++        media.images[0] = .{ .digest = @splat(43), .at = 10, .tokens = 4, .gh = 4, .gw = 4 };
++        f.metadata = try restore.Metadata.fromCapture(&f.saved.?, &f.st, &f.w.config, media);
++        const binding: epoch.Binding = .{ .model = @splat(1), .drafter = @splat(if (draft) @as(u8, 2) else 0), .arithmetic = @splat(3), .prefix = @splat(4), .media = undefined, .layout = undefined };
++        f.agreement = .{ .world = 2, .epoch = 1, .mark = mark, .binding = f.metadata.bind(binding) };
++    }
++    fn stream(f: *Fixture) cuda.Stream {
++        return .{ .d = &f.d, .handle = null };
++    }
++    fn finishCapture(f: *Fixture) !void {
++        if (f.saved) |*s| try s.close();
++        f.saved = null;
++    }
++    fn deinit(f: *Fixture) void {
++        f.finishCapture() catch unreachable;
++        if (f.draft) |*d| d.free();
++        f.st.deinit();
++        f.pool.finish(&f.live);
++        f.pool.deinit();
++        f.device.free();
++    }
++    fn destination(f: *Fixture) !glm.forward.State {
++        return glm.forward.State.initPagedFormat(t.allocator, &f.d, &f.w, 2048, .{ .kv = f.device.ptr, .pages = 12, .page_bytes = f.pool.page_bytes }, f.st.kv8, f.st.head);
++    }
++    fn persist(f: *Fixture, dir: [:0]const u8) !Store.Epoch {
++        var slab = try cuda.HostBuffer.alloc(&f.d, 64 * 1024);
++        defer slab.free();
++        var c = try Store.Coordinator.init(.{ .dir = dir, .validate_detail = restore.validateEnvelope }, f.agreement);
++        for (0..f.agreement.world) |rank_num| {
++            var cursor: cp.Cursor = .{ .capture = &f.saved.? };
++            var slots: [2]core.checkpoint_stream.Slot = undefined;
++            var ring = try core.checkpoint_stream.Ring.init(cursor.source(), slab.slice(u8), &slots, 32 * 1024);
++            defer ring.close() catch unreachable;
++            var w = try core.checkpoint_file.Writer(rows).open(dir, f.agreement.identity(@intCast(rank_num)), 1, f.metadata.payload, epoch.max_metadata);
++            defer w.close();
++            while (ring.emitted < f.metadata.payload) {
++                const ticket = try ring.acquire();
++                try f.d.check(f.d.api.cuMemcpyDtoHAsync_v2(ticket.target.ptr, ticket.chunk.location.device, ticket.chunk.len, null), "checkpoint test download");
++                try f.stream().synchronize();
++                try ring.dmaDone(ticket.key, true);
++                try w.consume(&ring, ticket.key);
++                try ring.retire(ticket.key);
++            }
++            var eb: [wire.size(epoch.Envelope)]u8 = undefined;
++            var mb: [wire.size(restore.Metadata)]u8 = undefined;
++            const env = try f.metadata.envelope(f.agreement, @intCast(rank_num));
++            try w.seal(&ring, @intCast(f.metadata.mark), &.{ try wire.encode(env, &eb), try wire.encode(f.metadata, &mb) });
++            try c.accept(try w.publish(), slab.slice(u8));
++        }
++        return c.commit(2, slab.slice(u8));
++    }
++};
++fn fill(bytes: []u8, salt: usize) void {
++    for (bytes, 0..) |*b, i| b.* = @truncate(i *% salt +% i / 59);
++}
++fn oracleBytes(f: *Fixture) ![]u8 {
++    const saved = &f.saved.?;
++    const result = try t.allocator.alloc(u8, saved.plan.len);
++    errdefer t.allocator.free(result);
++    var cursor: cp.Cursor = .{ .capture = saved };
++    const source = cursor.source();
++    while (try source.next(source.ctx, epoch.max_chunk)) |chunk| {
++        @memcpy(result[@intCast(chunk.offset)..][0..chunk.len], rec.bytes(chunk.location.device, chunk.len));
++    }
++    return result;
++}
++fn equalPlan(st: *glm.forward.State, c: *const glm.config.Config, draft: ?cuda.DeviceBuffer, expected: []const u8) !void {
++    var plan = try glm.snapshots.layout.Plan.init(st, c, st.pos, if (st.head) st.mtp_len else null);
++    if (draft) |d| try plan.outside(d.ptr, d.len);
++    var offset: usize = 0;
++    for (plan.parts[0..plan.count]) |p| {
++        var done: usize = 0;
++        while (done < p.len) {
++            const piece = plan.piece(p, done);
++            try t.expectEqualSlices(u8, expected[offset..][0..piece.len], rec.bytes(piece.live, piece.len));
++            done += piece.len;
++            offset += piece.len;
++        }
++    }
++    try t.expectEqual(expected.len, offset);
++}
++
++test "checkpoint restore: actual BF16 and FP8 Plan restores KDA, scales, rings, MTP and images onto different pages" {
++    for ([_]bool{ false, true }) |kv8| for ([_]usize{ 1024, 1025 }) |mark| {
++        var f: Fixture = undefined;
++        try f.init(kv8, true, false, mark);
++        defer f.deinit();
++        var dir = try Directory.init("roundtrip");
++        defer dir.deinit();
++        const expected = try oracleBytes(&f); // test oracle only; production restore never has this buffer
++        defer t.allocator.free(expected);
++        _ = try f.persist(dir.name());
++        try f.finishCapture();
++        @memset(rec.bytes(f.device.ptr, f.device.len), 0xee);
++        @memset(rec.bytes(f.st.arena.buf.ptr, f.st.arena.buf.len), 0xdd);
++        f.st.cur[0] = 0;
++        var target = try f.destination();
++        defer target.deinit();
++        var lease: core.kv_pool.Lease = .{};
++        defer f.pool.finish(&lease);
++        try f.pool.promise(&lease, 4);
++        var inactive = try restore.Inactive.init(&f.pool, &lease, &target, f.stream(), null);
++        defer inactive.release();
++        var slab = try cuda.HostBuffer.alloc(&f.d, 65537);
++        defer slab.free();
++        const store: Store = .{ .dir = dir.name(), .validate_detail = restore.validateEnvelope };
++        const recovered = (try store.recover(f.agreement.binding, 2, slab.slice(u8))).?;
++        var reader = try recovered.openRank(1);
++        defer reader.close();
++        const before = rec.allocs;
++        const ready = try inactive.load(&reader, &f.w.config, slab.slice(u8));
++        try t.expectEqual(before, rec.allocs); // no device snapshot allocation on restore
++        try t.expectEqual(mark, ready.mark);
++        try t.expectEqual(@as(?i64, null), ready.ring_from);
++        try t.expectEqual(.ready, inactive.phase);
++        try t.expectEqual(@as(u1, 1), target.cur[0]);
++        try t.expectEqual(@as(usize, 512), target.base);
++        try t.expectEqual(@as(usize, 512), target.mtp_base);
++        try t.expectEqual(mark + 3, target.mtp_len);
++        try t.expectEqualSlices(u8, std.mem.sliceAsBytes(lease.ids.items), rec.bytes(target.table, lease.ids.items.len * 4));
++        try t.expect(lease.ids.items[0] != f.live.ids.items[0]);
++        try equalPlan(&target, &f.w.config, null, expected);
++        try t.expectError(error.CheckpointRestoreState, inactive.load(&reader, &f.w.config, slab.slice(u8)));
++    };
++}
++
++test "checkpoint restore: real DFlash2 ring bytes and ring_from survive an FP8 no-head restart" {
++    var f: Fixture = undefined;
++    try f.init(true, false, true, 1025);
++    defer f.deinit();
++    var dir = try Directory.init("draft");
++    defer dir.deinit();
++    const expected = try oracleBytes(&f);
++    defer t.allocator.free(expected);
++    const saved = try f.persist(dir.name());
++    try f.finishCapture();
++    var target = try f.destination();
++    defer target.deinit();
++    var draft = try cuda.DeviceBuffer.alloc(&f.d, glm.dflash.ring_bytes);
++    defer draft.free();
++    var lease: core.kv_pool.Lease = .{};
++    defer f.pool.finish(&lease);
++    try f.pool.promise(&lease, 4);
++    var inactive = try restore.Inactive.init(&f.pool, &lease, &target, f.stream(), .{ .live = draft.ptr, .bytes = draft.len });
++    defer inactive.release();
++    var slab = try cuda.HostBuffer.alloc(&f.d, 2 << 20);
++    defer slab.free();
++    var reader = try saved.openRank(0);
++    defer reader.close();
++    const ready = try inactive.load(&reader, &f.w.config, slab.slice(u8));
++    try t.expectEqual(@as(?i64, 513), ready.ring_from);
++    try t.expectEqual(@as(usize, 0), target.mtp_len);
++    try equalPlan(&target, &f.w.config, draft, expected);
++}
++
++const Stop = struct {
++    checks: usize = 0,
++    fn check(ptr: ?*anyopaque) !void {
++        const s: *Stop = @ptrCast(@alignCast(ptr.?));
++        s.checks += 1;
++        if (s.checks == 4) return error.Cancelled;
++    }
++};
++
++test "checkpoint restore: failed allocation, mid-copy, cancellation and late corruption cannot activate or leak destination pages" {
++    var f: Fixture = undefined;
++    try f.init(true, true, false, 1025);
++    defer f.deinit();
++    var dir = try Directory.init("failures");
++    defer dir.deinit();
++    const saved = try f.persist(dir.name());
++    try f.finishCapture();
++    var slab = try cuda.HostBuffer.alloc(&f.d, 65537);
++    defer slab.free();
++    for (0..6) |mode| {
++        var target = try f.destination();
++        defer target.deinit();
++        var lease: core.kv_pool.Lease = .{};
++        defer f.pool.finish(&lease);
++        try f.pool.promise(&lease, 4);
++        var inactive = try restore.Inactive.init(&f.pool, &lease, &target, f.stream(), null);
++        defer inactive.release();
++        var reader = try saved.openRank(0);
++        defer reader.close();
++        var stop: Stop = .{};
++        if (mode == 0) rec.fail_copy = rec.copies + 3;
++        if (mode == 1) reader.control = .{ .ctx = &stop, .check_fn = Stop.check };
++        var failing = std.testing.FailingAllocator.init(t.allocator, .{ .fail_index = 0 });
++        const gpa = f.pool.gpa;
++        if (mode == 2) f.pool.gpa = failing.allocator();
++        defer f.pool.gpa = gpa;
++        if (mode == 3) {
++            // File was fully verified at recovery, then changed before/during its restore.
++            const stem = std.fmt.bytesToHex(f.agreement.identity(0).name(), .lower);
++            var path: [1200]u8 = undefined;
++            const fd = sys.c.open(try rows.path(&path, dir.name(), &stem, ".rank", false), .{ .ACCMODE = .WRONLY }, @as(sys.c.mode_t, 0));
++            try t.expect(fd >= 0);
++            defer _ = sys.c.close(fd);
++            try t.expectEqual(@as(isize, 1), sys.c.pwrite(fd, "!", 1, @intCast(f.metadata.payload - 1)));
++        }
++        if (mode == 5) {
++            const stem = std.fmt.bytesToHex(f.agreement.identity(0).name(), .lower);
++            var path: [1200]u8 = undefined;
++            const fd = sys.c.open(try rows.path(&path, dir.name(), &stem, ".rank", false), .{ .ACCMODE = .WRONLY }, @as(sys.c.mode_t, 0));
++            try t.expect(fd >= 0);
++            defer _ = sys.c.close(fd);
++            try t.expectEqual(@as(c_int, 0), sys.c.ftruncate(fd, @intCast(f.metadata.payload / 2)));
++        }
++        if (mode == 4) reader.expected = null; // a rank file without the all-rank proof is refused before writing
++        const syncs = rec.syncs;
++        if (inactive.load(&reader, &f.w.config, slab.slice(u8))) |_| return error.ExpectedFailure else |err| {
++            if (mode == 1) try t.expectEqual(error.Cancelled, err);
++            if (mode == 2) try t.expectEqual(error.OutOfMemory, err);
++            if (mode == 3) try t.expectEqual(error.RowsHash, err);
++            if (mode == 4) try t.expectEqual(error.CheckpointNotDurable, err);
++            if (mode == 5) try t.expectEqual(error.RowsRead, err);
++        }
++        rec.fail_copy = null;
++        try t.expectEqual(.poisoned, inactive.phase);
++        try t.expect(rec.syncs > syncs);
++        try t.expectEqual(@as(usize, 0), target.pos);
++        f.pool.gpa = gpa;
++        inactive.release();
++        try t.expectEqual(@as(usize, 0), lease.ids.items.len + lease.promised);
++        try t.expectEqual(@as(usize, 4), f.pool.nleased);
++    }
++    rec.fail_alloc = true;
++    if (f.destination()) |value| {
++        var unexpected = value;
++        unexpected.deinit();
++        return error.ExpectedFailure;
++    } else |_| {}
++    rec.fail_alloc = false;
++    const host_alloc = f.d.api.cuMemHostAlloc;
++    f.d.api.cuMemHostAlloc = failHost;
++    if (cuda.HostBuffer.alloc(&f.d, 1 << 20)) |value| {
++        var unexpected = value;
++        unexpected.free();
++        return error.ExpectedFailure;
++    } else |_| {}
++    f.d.api.cuMemHostAlloc = host_alloc;
++}
++
++test "checkpoint restore: version, parity, media geometry, ring origin and arithmetic metadata reject before writes" {
++    var f: Fixture = undefined;
++    try f.init(false, true, false, 1025);
++    defer f.deinit();
++    var dir = try Directory.init("metadata");
++    defer dir.deinit();
++    const saved = try f.persist(dir.name());
++    for (0..8) |kind| {
++        var m = f.metadata;
++        switch (kind) {
++            0 => m.version += 1,
++            1 => m.cur[0] = 2,
++            2 => m.media.images[0].gw += 2,
++            3 => m.media.images[0].digest[0] ^= 1,
++            4 => m.ring_from = 1,
++            5 => m.bases[0] = 3,
++            6 => m.shape.flags ^= 1,
++            7 => m.pages_required = std.math.maxInt(u64),
++            else => unreachable,
++        }
++        var target = try f.destination();
++        defer target.deinit();
++        var lease: core.kv_pool.Lease = .{};
++        defer f.pool.finish(&lease);
++        try f.pool.promise(&lease, 4);
++        var inactive = try restore.Inactive.init(&f.pool, &lease, &target, f.stream(), null);
++        defer inactive.release();
++        var reader = try saved.openRank(0);
++        defer reader.close();
++        _ = try wire.encode(m, reader.metadata[wire.size(epoch.Envelope)..]);
++        var slab: [4096]u8 = undefined;
++        const before = rec.copies;
++        if (inactive.load(&reader, &f.w.config, &slab)) |_| return error.ExpectedFailure else |_| {}
++        try t.expectEqual(before, rec.copies);
++        try t.expectEqual(@as(usize, 0), lease.ids.items.len);
++    }
++    var partial = f.metadata.media;
++    partial.images[0].at = 1024;
++    try t.expectError(error.CheckpointMedia, partial.validate(1025));
++}
++
++fn failHost(_: *?*anyopaque, _: usize, _: c_uint) callconv(.c) cuda.abi.Result {
++    return cuda.abi.error_not_ready;
++}
++
++const Logical = struct {
++    var next: u64 = 256 << 30;
++    var allocated: usize = 0;
++    var copied: u64 = 0;
++    var largest: usize = 0;
++    fn alloc(out: *u64, n: usize) callconv(.c) cuda.abi.Result {
++        allocated += n;
++        out.* = next;
++        next += std.mem.alignForward(usize, n, 256);
++        return 0;
++    }
++    fn free(_: u64) callconv(.c) cuda.abi.Result {
++        return 0;
++    }
++    fn zero(_: u64, _: u8, _: usize) callconv(.c) cuda.abi.Result {
++        return 0;
++    }
++    fn deviceCopy(_: u64, _: u64, _: usize, _: cuda.abi.Stream) callconv(.c) cuda.abi.Result {
++        return 0;
++    }
++    fn upload(_: u64, _: ?*const anyopaque, n: usize, _: cuda.abi.Stream) callconv(.c) cuda.abi.Result {
++        copied += n;
++        largest = @max(largest, n);
++        return 0;
++    }
++    fn set(_: u64, _: c_uint, _: usize, _: cuda.abi.Stream) callconv(.c) cuda.abi.Result {
++        return 0;
++    }
++    fn sync(_: cuda.abi.Stream) callconv(.c) cuda.abi.Result {
++        return 0;
++    }
++};
++
++// Only a logical geometry/budget probe. The real filesystem tests above exercise the verified Reader.
++const LogicalReader = struct {
++    metadata: [wire.size(restore.Metadata)]u8,
++    envelope: epoch.Envelope,
++    offset: u64 = 0,
++    largest: usize = 0,
++    pub fn check(_: *const LogicalReader) !void {}
++    pub fn durable(_: *const LogicalReader) bool {
++        return true;
++    }
++    pub fn detail(r: *const LogicalReader) []const u8 {
++        return &r.metadata;
++    }
++    pub fn read(r: *LogicalReader, into: []u8) !usize {
++        const n: usize = @intCast(@min(into.len, r.envelope.payload - r.offset));
++        r.largest = @max(r.largest, n);
++        r.offset += n;
++        return n;
++    }
++    pub fn finish(r: *LogicalReader) !void {
++        try t.expectEqual(r.envelope.payload, r.offset);
++    }
++};
++
++test "checkpoint restore: 1M actual GLM FP8 Plan restores over six GiB through two MiB with zero snapshot allocation" {
++    var d = rec.init();
++    d.api.cuMemAlloc_v2 = Logical.alloc;
++    d.api.cuMemFree_v2 = Logical.free;
++    d.api.cuMemsetD8_v2 = Logical.zero;
++    d.api.cuMemcpyDtoDAsync_v2 = Logical.deviceCopy;
++    d.api.cuMemcpyHtoDAsync_v2 = Logical.upload;
++    d.api.cuMemsetD32Async = Logical.set;
++    d.api.cuStreamSynchronize = Logical.sync;
++    var w: glm.weights.Weights = undefined;
++    w.config = .{};
++    w.share = try glm.shard.Share.of(&w.config, 0, 2);
++    var layers: [glm.config.max_layers]glm.weights.Layer = undefined;
++    w.layers = layers[0..w.config.layers];
++    for (w.layers, 0..) |*l, i| l.mixer = if (w.config.kind(@intCast(i)) == .mla) .{ .mla = undefined } else .{ .kda = undefined };
++    const page_bytes = glm.state.pageBytesOf(&w, true, false);
++    const at = 1_000_001;
++    const pages = (at + 511) / 512 + 1;
++    var pool = try core.kv_pool.Pool.init(t.allocator, 2 * pages + 8, page_bytes);
++    defer pool.deinit();
++    var source: core.kv_pool.Lease = .{};
++    defer pool.finish(&source);
++    try pool.promise(&source, pages);
++    try pool.cover(&source, pages, null);
++    const paged: glm.state.Paged = .{ .kv = 64 << 30, .pages = 2 * pages + 8, .page_bytes = page_bytes };
++    var st = try glm.forward.State.initPagedFormat(t.allocator, &d, &w, 1 << 20, paged, true, false);
++    defer st.deinit();
++    st.capacity = pages * 512;
++    st.pages = source.ids.items;
++    st.pos = at;
++    st.base = (at - 4096) / 4 * 4;
++    var budget: core.checkpoint_capture.Budget = .{ .pool = &pool, .limits = .{ .descriptors = 1, .unique_pages = pages, .pages_per_descriptor = pages, .capsule_bytes = 512 << 20 } };
++    const stream: cuda.Stream = .{ .d = &d, .handle = null };
++    var freezer: glm.checkpoint_freeze.Device = .{ .gpa = t.allocator, .d = &d, .stream = stream };
++    var captured = try cp.Capture.create(&budget, &source, &st, &w.config, .{ .dflash2 = .{ .live = 96 << 30, .from = at - 2048, .through = at } }, freezer.adapter());
++    defer captured.close() catch unreachable;
++    const m = try restore.Metadata.fromCapture(&captured, &st, &w.config, .{});
++    const binding: epoch.Binding = .{ .model = @splat(1), .drafter = @splat(2), .arithmetic = @splat(3), .layout = undefined, .media = undefined, .prefix = @splat(4) };
++    const a: epoch.Agreement = .{ .world = 2, .epoch = 1, .mark = at, .binding = m.bind(binding) };
++    var reader: LogicalReader = .{ .metadata = undefined, .envelope = try m.envelope(a, 0) };
++    _ = try wire.encode(m, &reader.metadata);
++    var target = try glm.forward.State.initPagedFormat(t.allocator, &d, &w, 1 << 20, paged, true, false);
++    defer target.deinit();
++    var lease: core.kv_pool.Lease = .{};
++    defer pool.finish(&lease);
++    try pool.promise(&lease, pages);
++    var inactive = try restore.Inactive.init(&pool, &lease, &target, stream, .{ .live = 128 << 30, .bytes = glm.dflash.ring_bytes });
++    defer inactive.release();
++    const slab = try t.allocator.alloc(u8, epoch.max_chunk);
++    defer t.allocator.free(slab);
++    @memset(slab, 0);
++    Logical.allocated = 0;
++    Logical.copied = 0;
++    Logical.largest = 0;
++    const ready = try inactive.load(&reader, &w.config, slab);
++    try t.expectEqual(@as(usize, at), ready.mark);
++    try t.expectEqual(@as(?i64, at - 2048), ready.ring_from);
++    try t.expectEqual(@as(usize, 0), Logical.allocated);
++    try t.expectEqual(@as(u64, 6_649_248_044), m.payload);
++    try t.expectEqual(m.payload + 4 * m.pages_required, Logical.copied);
++    try t.expect(Logical.largest <= epoch.max_chunk);
++    try t.expectEqual(@as(usize, epoch.max_chunk), reader.largest);
++    try t.expectEqual(m.pages_required, lease.ids.items.len);
++    try t.expectEqual(@as(usize, 0), pool.reclaimable());
++}
++
++fn failSet(_: u64, _: c_uint, _: usize, _: cuda.abi.Stream) callconv(.c) cuda.abi.Result {
++    return cuda.abi.error_not_ready;
++}
++
++test "checkpoint restore: a final host-position upload failure poisons the copied state until its lease is discarded" {
++    var f: Fixture = undefined;
++    try f.init(false, true, false, 1025);
++    defer f.deinit();
++    var dir = try Directory.init("finalize");
++    defer dir.deinit();
++    const saved = try f.persist(dir.name());
++    var target = try f.destination();
++    defer target.deinit();
++    var lease: core.kv_pool.Lease = .{};
++    defer f.pool.finish(&lease);
++    try f.pool.promise(&lease, 4);
++    var inactive = try restore.Inactive.init(&f.pool, &lease, &target, f.stream(), null);
++    defer inactive.release();
++    var reader = try saved.openRank(0);
++    defer reader.close();
++    var slab = try cuda.HostBuffer.alloc(&f.d, 65536);
++    defer slab.free();
++    f.d.api.cuMemsetD32Async = failSet;
++    try t.expectError(error.NotReady, inactive.load(&reader, &f.w.config, slab.slice(u8)));
++    try t.expect(reader.finished); // payload and hashes succeeded; host/device cursor publication did not
++    try t.expectEqual(.poisoned, inactive.phase);
++    try t.expectEqual(@as(usize, 1025), f.st.pos); // the source/active lease is untouched
++    inactive.release();
++    try t.expectEqual(@as(usize, 0), lease.ids.items.len + lease.promised);
++    try t.expectEqual(@as(usize, 4), f.pool.nleased);
++}
++
++test "checkpoint restore: uneven TP rank arenas bind one global layout while retaining exact local geometry" {
++    var d = rec.init();
++    var layers: [2]glm.weights.Layer = undefined;
++    var w = try weights(&layers, true);
++    w.share = try glm.shard.Share.of(&w.config, 0, 3);
++    const page_bytes = glm.state.pageBytesOf(&w, true, true);
++    var first = try glm.forward.State.initPagedFormat(t.allocator, &d, &w, 2048, .{ .kv = 64 << 30, .pages = 4, .page_bytes = page_bytes }, true, true);
++    defer first.deinit();
++    const a = try restore.Shape.of(&first, &w.config);
++    w.share = try glm.shard.Share.of(&w.config, 2, 3);
++    var last = try glm.forward.State.initPagedFormat(t.allocator, &d, &w, 2048, .{ .kv = 96 << 30, .pages = 4, .page_bytes = page_bytes }, true, true);
++    defer last.deinit();
++    const b = try restore.Shape.of(&last, &w.config);
++    try t.expectEqual(@as(u64, 22), a.heads);
++    try t.expectEqual(@as(u64, 21), b.heads);
++    try t.expect(a.arena_bytes != b.arena_bytes);
++    try t.expect(!std.meta.eql(a, b));
++    try t.expectEqualSlices(u8, &a.layoutIdentity(), &b.layoutIdentity());
++}
+diff --git a/zig/src/core/checkpoint_epoch.zig b/zig/src/core/checkpoint_epoch.zig
+new file mode 100644
+--- /dev/null
++++ b/zig/src/core/checkpoint_epoch.zig
+@@ -0,0 +1,284 @@
++//! All-rank checkpoint commit records. Rank files alone are never recovery candidates.
++//! Single coordinator per epoch; store-owned directories and immutable published files are required.
++const std = @import("std");
++const sys = @import("sys");
++const rank_file = @import("checkpoint_file.zig");
++pub const wire = @import("checkpoint_wire.zig");
++const Sha = std.crypto.hash.sha2.Sha256;
++pub const max_ranks = 64;
++pub const max_metadata = 8192;
++pub const max_chunk = 2 << 20;
++
++pub const Binding = struct {
++    model: [32]u8,
++    drafter: [32]u8,
++    arithmetic: [32]u8,
++    layout: [32]u8,
++    media: [32]u8,
++    prefix: [32]u8, // request/tokens identity supplied by the rows owner, not a pathname
++};
++
++pub const Agreement = struct {
++    version: u32 = 1,
++    world: u32,
++    epoch: u64,
++    mark: u64,
++    binding: Binding,
++
++    pub fn validate(a: Agreement) !void {
++        inline for (.{ "model", "arithmetic", "layout", "media", "prefix" }) |field| {
++            if (std.mem.allEqual(u8, &@field(a.binding, field), 0)) return error.CheckpointAgreement;
++        }
++        if (a.version != 1 or a.world == 0 or a.world > max_ranks or a.epoch == 0 or a.mark > std.math.maxInt(i32)) return error.CheckpointAgreement;
++    }
++    pub fn digest(a: Agreement) [32]u8 {
++        return wire.hash(a);
++    }
++    /// One publication slot per epoch and binding, even if a stale coordinator proposes another mark.
++    pub fn manifestName(a: Agreement) [32]u8 {
++        var key = a;
++        key.mark = 0;
++        return wire.hash(key);
++    }
++    pub fn identity(a: Agreement, rank: u32) rank_file.Identity {
++        return .{ .block = a.digest(), .rank = rank, .epoch = a.epoch };
++    }
++};
++
++pub const Envelope = struct {
++    magic: u64 = 0x31524b4346474c4d,
++    version: u32 = 1,
++    rank: u32,
++    agreement: Agreement,
++    payload: u64,
++    detail_bytes: u32,
++};
++
++pub const Record = struct { bytes: u64 = 0, digest: [32]u8 = @splat(0) };
++pub const Manifest = struct {
++    magic: u64 = 0x31454b4346474c4d,
++    version: u32 = 1,
++    agreement: Agreement,
++    ranks: [max_ranks]Record = @splat(.{}),
++};
++
++/// Checked between bounded I/O operations, including immediately before publication.
++pub const Control = struct {
++    ctx: ?*anyopaque = null,
++    check_fn: *const fn (?*anyopaque) anyerror!void = pass,
++    fn pass(_: ?*anyopaque) !void {}
++    pub fn check(c: Control) !void {
++        try c.check_fn(c.ctx);
++    }
++};
++
++pub fn Store(comptime rows: type) type {
++    return struct {
++        const Self = @This();
++        dir: [:0]const u8,
++        validate_detail: *const fn (Envelope, []const u8) anyerror!void,
++        control: Control = .{},
++        io: rows.IO = .{},
++        publication: rank_file.Publication = .{},
++
++        /// Metadata and one caller-owned transfer slab are the only host staging. The slab must be pinned for CUDA.
++        pub const Reader = struct {
++            opened: rows.Opened,
++            metadata: [max_metadata]u8 = undefined,
++            meta_len: usize,
++            envelope: Envelope,
++            expected: ?Record,
++            offset: u64 = 0,
++            hash: std.hash.Wyhash = .init(0),
++            sha: Sha = .init(.{}),
++            control: Control,
++            finished: bool = false,
++
++            pub fn check(r: *const Reader) !void {
++                try r.control.check();
++            }
++            pub fn durable(r: *const Reader) bool {
++                return r.expected != null;
++            }
++            pub fn detail(r: *const Reader) []const u8 {
++                return r.metadata[wire.size(Envelope)..r.meta_len];
++            }
++            pub fn close(r: *Reader) void {
++                if (r.opened.fd >= 0) r.opened.close();
++            }
++            pub fn read(r: *Reader, into: []u8) !usize {
++                try r.control.check();
++                if (r.finished or into.len == 0 or into.len > max_chunk) return error.CheckpointReadState;
++                const n: usize = @intCast(@min(into.len, r.envelope.payload - r.offset));
++                if (n == 0) return 0;
++                if (!rows.readUnaligned(r.opened.fd, into[0..n], r.offset)) return error.RowsRead;
++                r.hash.update(into[0..n]);
++                r.sha.update(into[0..n]);
++                r.offset += n;
++                return n;
++            }
++            pub fn finish(r: *Reader) !Record {
++                try r.control.check();
++                if (r.finished or r.offset != r.envelope.payload) return error.CheckpointReadState;
++                if (r.hash.final() != r.opened.trailer.payload_hash) return error.RowsHash;
++                r.sha.update(r.metadata[0..r.meta_len]);
++                r.sha.update(std.mem.asBytes(&r.opened.trailer));
++                const record: Record = .{ .bytes = r.envelope.payload + r.meta_len + @sizeOf(rows.Trailer), .digest = r.sha.finalResult() };
++                if (r.expected) |expected| if (!std.meta.eql(record, expected)) return error.CheckpointRankHash;
++                r.finished = true;
++                return record;
++            }
++            fn verify(r: *Reader, slab: []u8) !Record {
++                while (try r.read(slab) != 0) {}
++                return r.finish();
++            }
++        };
++
++        /// A proof returned only after every rank has been read and checked. Reopening a rank checks it again.
++        /// Borrowed directory/control outlive this proof. A scheduler still owes the all-rank restore activation barrier.
++        pub const Epoch = struct {
++            manifest: Manifest,
++            store: Self,
++            pub fn openRank(e: *const Epoch, rank: u32) !Reader {
++                if (rank >= e.manifest.agreement.world) return error.CheckpointRank;
++                return e.store.openRank(e.manifest.agreement, rank, e.manifest.ranks[rank]);
++            }
++        };
++
++        fn openRank(s: Self, agreement: Agreement, rank: u32, expected: ?Record) !Reader {
++            try agreement.validate();
++            if (rank >= agreement.world) return error.CheckpointRank;
++            var path: [1200]u8 = undefined;
++            const stem = std.fmt.bytesToHex(agreement.identity(rank).name(), .lower);
++            var opened = try rows.open(try rows.path(&path, s.dir, &stem, ".rank", false), .state, agreement.identity(rank).name());
++            errdefer opened.close();
++            const tr = opened.trailer;
++            if (tr.meta < wire.size(Envelope) or tr.meta > max_metadata or tr.at != agreement.mark or tr.flags != 0 or tr.block != 0 or tr.reserved != 0) return error.CheckpointMetadataSize;
++            var r: Reader = .{ .opened = opened, .meta_len = @intCast(tr.meta), .envelope = undefined, .expected = expected, .control = s.control };
++            if (!rows.readUnaligned(opened.fd, r.metadata[0..r.meta_len], tr.payload)) return error.RowsRead;
++            if (std.hash.Wyhash.hash(1, r.metadata[0..r.meta_len]) != tr.meta_hash) return error.RowsHash;
++            r.envelope = try wire.decode(Envelope, r.metadata[0..wire.size(Envelope)]);
++            const e = r.envelope;
++            if (e.magic != 0x31524b4346474c4d or e.version != 1 or e.rank != rank or !std.meta.eql(e.agreement, agreement) or e.payload != tr.payload or e.detail_bytes != r.meta_len - wire.size(Envelope)) return error.CheckpointRankIdentity;
++            if (expected) |record| if (record.bytes != tr.payload + tr.meta + @sizeOf(rows.Trailer)) return error.CheckpointRankHash;
++            try s.validate_detail(e, r.detail());
++            return r;
++        }
++
++        pub const Coordinator = struct {
++            store: Self,
++            manifest: Manifest,
++            seen: u64 = 0,
++            phase: enum { collecting, failed, committed } = .collecting,
++
++            pub fn init(store: Self, agreement: Agreement) !Coordinator {
++                try agreement.validate();
++                return .{ .store = store, .manifest = .{ .agreement = agreement } };
++            }
++            pub fn cancel(c: *Coordinator) void {
++                if (c.phase == .collecting) c.phase = .failed;
++            }
++            pub fn accept(c: *Coordinator, local: rank_file.Local, slab: []u8) !void {
++                if (c.phase != .collecting) return error.CheckpointEpochState;
++                errdefer c.phase = .failed;
++                try c.store.control.check();
++                const a = c.manifest.agreement;
++                const rank = local.identity.rank;
++                if (rank >= a.world or !std.meta.eql(local.identity, a.identity(rank))) return error.CheckpointRankIdentity;
++                const bit = @as(u64, 1) << @as(u6, @intCast(rank));
++                if (c.seen & bit != 0) return error.CheckpointDuplicateRank;
++                var r = try c.store.openRank(a, rank, null);
++                defer r.close();
++                const record = try r.verify(slab);
++                if (local.bytes != record.bytes) return error.CheckpointRankHash;
++                c.manifest.ranks[rank] = record;
++                c.seen |= bit;
++            }
++            pub fn commit(c: *Coordinator, nonce: u64, slab: []u8) !Epoch {
++                if (c.phase != .collecting) return error.CheckpointEpochState;
++                errdefer c.phase = .failed;
++                const a = c.manifest.agreement;
++                const all = @as(u64, std.math.maxInt(u64)) >> @as(u6, @intCast(max_ranks - a.world));
++                if (c.seen != all) return error.CheckpointMissingRank;
++                // Repeat verification and sync *each* file before the directory barrier and manifest publication.
++                for (0..a.world) |rank| {
++                    var r = try c.store.openRank(a, @intCast(rank), c.manifest.ranks[rank]);
++                    defer r.close();
++                    _ = try r.verify(slab);
++                    try c.store.io.sync(c.store.io.ctx, r.opened.fd);
++                }
++                const fd = sys.c.open(c.store.dir, .{ .ACCMODE = .RDONLY, .DIRECTORY = true, .NOFOLLOW = true, .CLOEXEC = true }, @as(sys.c.mode_t, 0));
++                if (fd < 0) return error.CheckpointDirectory;
++                defer _ = sys.c.close(fd);
++                try c.store.publication.sync_dir(c.store.publication.ctx, fd);
++                var data: [wire.size(Manifest)]u8 = undefined;
++                const bytes = try wire.encode(c.manifest, &data);
++                const stem = std.fmt.bytesToHex(a.manifestName(), .lower);
++                var w = try rows.Writer.openUnique(c.store.dir, &stem, ".epoch", nonce);
++                defer w.abort();
++                w.io = c.store.io;
++                try w.append(bytes);
++                _ = try w.seal(.{ .kind = @backingInt(rows.Kind.state), .payload = 0, .payload_hash = 0, .name = a.digest(), .at = @intCast(a.mark) }, &.{}, true);
++                try c.store.control.check();
++                const dest = w.dest[0..w.dest_len :0];
++                try c.store.publication.link(c.store.publication.ctx, w.tmp[0..w.tmp_len :0], dest);
++                errdefer {
++                    _ = sys.c.unlink(dest);
++                    // An uncertain failed publication never removes a previous epoch. Attempt to persist rollback.
++                    _ = sys.c.fsync(fd);
++                }
++                if (sys.c.unlink(w.tmp[0..w.tmp_len :0]) != 0) return error.CheckpointPublish;
++                try c.store.control.check();
++                try c.store.publication.sync_dir(c.store.publication.ctx, fd);
++                c.phase = .committed;
++                return .{ .manifest = c.manifest, .store = c.store };
++            }
++        };
++
++        fn candidate(s: Self, path: [:0]const u8, filename: []const u8, binding: Binding, world: u32, slab: []u8) !Epoch {
++            var f = try rows.open(path, .state, null);
++            defer f.close();
++            if (f.trailer.payload != wire.size(Manifest) or f.trailer.meta != 0 or f.trailer.flags != 0 or f.trailer.block != 0 or f.trailer.reserved != 0) return error.CheckpointManifest;
++            var bytes: [wire.size(Manifest)]u8 = undefined;
++            if (!rows.readUnaligned(f.fd, &bytes, 0)) return error.RowsRead;
++            if (std.hash.Wyhash.hash(0, &bytes) != f.trailer.payload_hash or f.trailer.meta_hash != std.hash.Wyhash.hash(1, "")) return error.RowsHash;
++            const m = try wire.decode(Manifest, &bytes);
++            if (m.magic != 0x31454b4346474c4d or m.version != 1) return error.CheckpointManifest;
++            try m.agreement.validate();
++            const a = m.agreement;
++            const stem = std.fmt.bytesToHex(a.manifestName(), .lower);
++            if (filename.len != 70 or !std.mem.eql(u8, filename[0..64], &stem) or !std.meta.eql(a.binding, binding) or a.world != world or a.mark != f.trailer.at or !std.mem.eql(u8, &a.digest(), &f.trailer.name)) return error.CheckpointRankIdentity;
++            for (m.ranks[a.world..]) |r| if (!std.meta.eql(r, Record{})) return error.CheckpointManifest;
++            for (0..a.world) |rank| {
++                var r = try s.openRank(a, @intCast(rank), m.ranks[rank]);
++                defer r.close();
++                _ = try r.verify(slab);
++            }
++            return .{ .manifest = m, .store = s };
++        }
++
++        /// Scan committed manifests, not rank receipts or temp files. Broken/newer epochs cannot mask older valid ones.
++        /// Memory is O(max_ranks + max_metadata + chunk), independent of epoch count and payload size.
++        pub fn recover(s: Self, binding: Binding, world: u32, slab: []u8) !?Epoch {
++            if (slab.len == 0 or slab.len > max_chunk or world == 0 or world > max_ranks) return error.CheckpointReadState;
++            const dir = sys.c.opendir(s.dir) orelse return error.CheckpointDirectory;
++            defer _ = sys.c.closedir(dir);
++            var best: ?Epoch = null;
++            while (true) {
++                try s.control.check();
++                const entry = sys.c.readdir(dir) orelse break;
++                const name = std.mem.sliceTo(&entry.name, 0);
++                if (name.len != 70 or !std.mem.endsWith(u8, name, ".epoch")) continue;
++                var path: [1200]u8 = undefined;
++                const p = try std.fmt.bufPrintSentinel(&path, "{s}/{s}", .{ s.dir, name }, 0);
++                const found = s.candidate(p, name, binding, world, slab) catch |err| {
++                    // Cancellation is not a corrupt file and must not silently select an older state.
++                    if (err == error.Cancelled) return err;
++                    continue;
++                };
++                if (best == null or found.manifest.agreement.epoch > best.?.manifest.agreement.epoch) best = found;
++            }
++            return best;
++        }
++    };
++}
+diff --git a/zig/src/core/checkpoint_epoch_test.zig b/zig/src/core/checkpoint_epoch_test.zig
+new file mode 100644
+--- /dev/null
++++ b/zig/src/core/checkpoint_epoch_test.zig
+@@ -0,0 +1,387 @@
++const std = @import("std");
++const sys = @import("sys");
++const epoch = @import("checkpoint_epoch.zig");
++const rows = @import("rows_file.zig");
++const rank = @import("checkpoint_file.zig");
++const stream = @import("checkpoint_stream.zig");
++const cap = @import("checkpoint_capture.zig");
++const kv = @import("kv_pool.zig");
++const Store = epoch.Store(rows);
++const t = std.testing;
++
++fn validateFixture(_: epoch.Envelope, detail: []const u8) !void {
++    if (!std.mem.eql(u8, detail, "state")) return error.CheckpointFixtureMetadata;
++}
++
++pub const binding: epoch.Binding = .{ .model = @splat(1), .drafter = @splat(2), .arithmetic = @splat(3), .layout = @splat(4), .media = @splat(5), .prefix = @splat(6) };
++fn agreement(n: u64) epoch.Agreement {
++    return .{ .world = 2, .epoch = n, .mark = 1025, .binding = binding };
++}
++
++const Directory = struct {
++    path: [128]u8 = undefined,
++    len: usize,
++    fn init(label: []const u8) !Directory {
++        var d: Directory = .{ .len = 0 };
++        const p = try std.fmt.bufPrintSentinel(&d.path, "/tmp/tf-checkpoint-080-{d}-{s}", .{ sys.c.getpid(), label }, 0);
++        d.len = p.len;
++        if (sys.c.mkdir(p, 0o700) != 0) return error.TestDirectory;
++        return d;
++    }
++    fn name(d: *const Directory) [:0]const u8 {
++        return d.path[0..d.len :0];
++    }
++    fn deinit(d: *Directory) void {
++        const fd = sys.c.opendir(d.name()) orelse unreachable;
++        while (sys.c.readdir(fd)) |ent| {
++            const n = std.mem.sliceTo(&ent.name, 0);
++            if (std.mem.eql(u8, n, ".") or std.mem.eql(u8, n, "..")) continue;
++            var path: [1200]u8 = undefined;
++            _ = sys.c.unlink(std.fmt.bufPrintSentinel(&path, "{s}/{s}", .{ d.name(), n }, 0) catch unreachable);
++        }
++        _ = sys.c.closedir(fd);
++        _ = sys.c.rmdir(d.name());
++    }
++};
++
++const Source = struct {
++    offset: usize = 0,
++    fn next(ptr: *anyopaque, limit: usize) !?cap.Chunk {
++        const s: *Source = @ptrCast(@alignCast(ptr));
++        const body = "native rank data, with bounded chunks and real files";
++        if (s.offset == body.len) return null;
++        const n = @min(limit, body.len - s.offset);
++        const result: cap.Chunk = .{ .offset = s.offset, .len = n, .location = .{ .host = body[s.offset..][0..n] } };
++        s.offset += n;
++        return result;
++    }
++};
++fn writeRank(dir: [:0]const u8, a: epoch.Agreement, number: u32) !rank.Local {
++    return writeEnvelopeRank(dir, a, number, a);
++}
++fn writeEnvelopeRank(dir: [:0]const u8, a: epoch.Agreement, number: u32, saved_agreement: epoch.Agreement) !rank.Local {
++    var pool = try kv.Pool.init(t.allocator, 0, 4096);
++    defer pool.deinit();
++    var budget: cap.Budget = .{ .pool = &pool, .limits = .{ .descriptors = 1, .unique_pages = 0, .pages_per_descriptor = 0, .capsule_bytes = 0 } };
++    var lease = try budget.acquire(&.{}, 0, 0);
++    defer lease.close() catch unreachable;
++    var source: Source = .{};
++    var slots: [2]stream.Slot = undefined;
++    var storage: [32]u8 = undefined;
++    const n = "native rank data, with bounded chunks and real files".len;
++    var ring = try stream.Ring.init(.{ .owner = &lease, .ctx = &source, .len = n, .next = Source.next }, &storage, &slots, 16);
++    defer ring.close() catch unreachable;
++    var w = try rank.Writer(rows).open(dir, a.identity(number), 10, n, epoch.max_metadata);
++    defer w.close();
++    while (ring.emitted < n) {
++        const ticket = try ring.acquire();
++        @memcpy(ticket.target, ticket.chunk.location.host);
++        try ring.dmaDone(ticket.key, true);
++        try w.consume(&ring, ticket.key);
++        try ring.retire(ticket.key);
++    }
++    const env: epoch.Envelope = .{ .rank = number, .agreement = saved_agreement, .payload = n, .detail_bytes = 5 };
++    var bytes: [epoch.wire.size(epoch.Envelope)]u8 = undefined;
++    try w.seal(&ring, @intCast(a.mark), &.{ try epoch.wire.encode(env, &bytes), "state" });
++    return w.publish();
++}
++fn committed(store: Store, a: epoch.Agreement, slab: []u8) !Store.Epoch {
++    var c = try Store.Coordinator.init(store, a);
++    for (0..a.world) |i| try c.accept(try writeRank(store.dir, a, @intCast(i)), slab);
++    return c.commit(22, slab);
++}
++fn pathFor(buf: []u8, dir: [:0]const u8, a: epoch.Agreement, number: ?u32) ![:0]const u8 {
++    const key = if (number) |i| a.identity(i).name() else a.manifestName();
++    const stem = std.fmt.bytesToHex(key, .lower);
++    return rows.path(buf, dir, &stem, if (number == null) ".epoch" else ".rank", false);
++}
++fn expectEpoch(store: Store, slab: []u8, n: ?u64) !void {
++    const found = try store.recover(binding, 2, slab);
++    try t.expectEqual(n, if (found) |e| e.manifest.agreement.epoch else null);
++}
++
++test "checkpoint restore: only complete all-rank manifests survive restart; rank-local receipt is not durable" {
++    var dir = try Directory.init("epochs");
++    defer dir.deinit();
++    var slab: [17]u8 = undefined; // deliberately unaligned payload cuts
++    const store: Store = .{ .dir = dir.name(), .validate_detail = validateFixture };
++    const local = try writeRank(dir.name(), agreement(1), 0);
++    try expectEpoch(store, &slab, null);
++    var c = try Store.Coordinator.init(store, agreement(1));
++    try c.accept(local, &slab);
++    try t.expectError(error.CheckpointMissingRank, c.commit(11, &slab));
++    try expectEpoch(store, &slab, null);
++    _ = try committed(store, agreement(2), &slab);
++    _ = try committed(store, agreement(3), &slab);
++    try expectEpoch(store, &slab, 3);
++    // No in-memory coordinator, receipt or pointer survives this read from a newly constructed store.
++    const restart: Store = .{ .dir = dir.name(), .validate_detail = validateFixture };
++    var path: [1200]u8 = undefined;
++    try t.expectEqual(@as(c_int, 0), sys.c.unlink(try pathFor(&path, dir.name(), agreement(3), 1)));
++    try expectEpoch(restart, &slab, 2);
++}
++
++test "checkpoint restore: stale, mismatched and duplicate ranks poison the epoch without touching old commit" {
++    var dir = try Directory.init("identity");
++    defer dir.deinit();
++    var slab: [31]u8 = undefined;
++    const store: Store = .{ .dir = dir.name(), .validate_detail = validateFixture };
++    _ = try committed(store, agreement(1), &slab);
++    for (0..9) |kind| {
++        const wanted = agreement(2 + kind);
++        var wrong = wanted;
++        switch (kind) {
++            0 => wrong.epoch += 99,
++            1 => wrong.mark += 1,
++            2 => wrong.binding.layout[0] ^= 1,
++            3 => wrong.binding.model[0] ^= 1,
++            4 => wrong.binding.drafter[0] ^= 1,
++            5 => wrong.binding.arithmetic[0] ^= 1,
++            6 => wrong.binding.media[0] ^= 1,
++            7 => wrong.binding.prefix[0] ^= 1,
++            8 => wrong.world = 3,
++            else => unreachable,
++        }
++        var c = try Store.Coordinator.init(store, wanted);
++        try t.expectError(error.CheckpointRankIdentity, c.accept(try writeRank(dir.name(), wrong, 0), &slab));
++        try t.expectError(error.CheckpointEpochState, c.commit(1, &slab));
++        try expectEpoch(store, &slab, 1);
++    }
++    const a = agreement(20);
++    var c = try Store.Coordinator.init(store, a);
++    const local = try writeRank(dir.name(), a, 0);
++    try c.accept(local, &slab);
++    try t.expectError(error.CheckpointDuplicateRank, c.accept(local, &slab));
++    var cancel = try Store.Coordinator.init(store, agreement(21));
++    cancel.cancel();
++    try t.expectError(error.CheckpointEpochState, cancel.commit(1, &slab));
++    try expectEpoch(store, &slab, 1);
++}
++
++test "checkpoint restore: corrupt payload, metadata, manifest and truncated or overflowing trailer choose old epoch" {
++    var dir = try Directory.init("corrupt");
++    defer dir.deinit();
++    var slab: [23]u8 = undefined;
++    const store: Store = .{ .dir = dir.name(), .validate_detail = validateFixture };
++    _ = try committed(store, agreement(1), &slab);
++    for (0..6) |kind| {
++        const a = agreement(2 + kind);
++        _ = try committed(store, a, &slab);
++        var path: [1200]u8 = undefined;
++        const p = try pathFor(&path, dir.name(), a, if (kind == 3) null else 1);
++        const fd = sys.c.open(p, .{ .ACCMODE = .RDWR }, @as(sys.c.mode_t, 0));
++        try t.expect(fd >= 0);
++        defer _ = sys.c.close(fd);
++        const end = sys.c.lseek(fd, 0, sys.c.SEEK.END);
++        if (kind == 2) {
++            try t.expectEqual(@as(c_int, 0), sys.c.ftruncate(fd, end - 1));
++        } else if (kind == 4) {
++            const huge: [16]u8 = @splat(0xff);
++            try t.expectEqual(@as(isize, 16), sys.c.pwrite(fd, &huge, huge.len, end - @sizeOf(rows.Trailer) + @offsetOf(rows.Trailer, "payload")));
++        } else if (kind == 5) {
++            try t.expectEqual(@as(c_int, 0), sys.c.ftruncate(fd, 0));
++        } else {
++            const offset: i64 = if (kind == 1) 60 else 0;
++            var b: [1]u8 = undefined;
++            try t.expectEqual(@as(isize, 1), sys.c.pread(fd, &b, 1, offset));
++            b[0] ^= 0x77;
++            try t.expectEqual(@as(isize, 1), sys.c.pwrite(fd, &b, 1, offset));
++        }
++        try expectEpoch(.{ .dir = dir.name(), .validate_detail = validateFixture }, &slab, 1);
++    }
++}
++
++const Fault = struct {
++    mode: enum { ok, nospace, rank_sync, manifest_sync, rank_dir, publish, publish_dir, cancel },
++    syncs: usize = 0,
++    dirs: usize = 0,
++    linked: bool = false,
++    fn of(ptr: ?*anyopaque) *Fault {
++        return @ptrCast(@alignCast(ptr.?));
++    }
++    fn write(ptr: ?*anyopaque, fd: c_int, data: []const u8) !usize {
++        if (of(ptr).mode == .nospace) return error.NoSpaceLeft;
++        const n = sys.c.write(fd, data.ptr, @min(data.len, 13));
++        if (n <= 0) return error.RowsWrite;
++        return @intCast(n);
++    }
++    fn sync(ptr: ?*anyopaque, fd: c_int) !void {
++        const f = of(ptr);
++        f.syncs += 1;
++        if ((f.mode == .rank_sync and f.syncs == 2) or (f.mode == .manifest_sync and f.syncs == 3)) return error.InjectedSync;
++        if (f.syncs == 3) try t.expectEqual(@as(usize, 1), f.dirs);
++        if (sys.c.fsync(fd) != 0) return error.RowsWrite;
++    }
++    fn directory(ptr: ?*anyopaque, fd: c_int) !void {
++        const f = of(ptr);
++        f.dirs += 1;
++        try t.expectEqual(if (f.dirs == 1) @as(usize, 2) else 3, f.syncs);
++        if ((f.mode == .rank_dir and f.dirs == 1) or (f.mode == .publish_dir and f.dirs == 2)) return error.InjectedDirectorySync;
++        if (f.dirs == 2) try t.expect(f.linked);
++        if (sys.c.fsync(fd) != 0) return error.RowsWrite;
++    }
++    fn link(ptr: ?*anyopaque, from: [:0]const u8, to: [:0]const u8) !void {
++        const f = of(ptr);
++        try t.expectEqual(@as(usize, 3), f.syncs);
++        if (f.mode == .publish) return error.InjectedPublish;
++        if (std.c.link(from, to) != 0) return error.CheckpointPublish;
++        f.linked = true;
++    }
++    fn check(ptr: ?*anyopaque) !void {
++        const f = of(ptr);
++        if (f.mode == .cancel and f.linked) return error.Cancelled;
++    }
++};
++
++test "checkpoint restore: ENOSPC, file and directory fsync, publication and cancel failures preserve old durable epoch" {
++    var dir = try Directory.init("faults");
++    defer dir.deinit();
++    var slab: [29]u8 = undefined;
++    const store: Store = .{ .dir = dir.name(), .validate_detail = validateFixture };
++    _ = try committed(store, agreement(1), &slab);
++    for ([_]@FieldType(Fault, "mode"){ .nospace, .rank_sync, .manifest_sync, .rank_dir, .publish, .publish_dir, .cancel, .ok }, 0..) |mode, i| {
++        var f: Fault = .{ .mode = mode };
++        var s = store;
++        s.io = .{ .ctx = &f, .write = Fault.write, .sync = Fault.sync };
++        s.publication = .{ .ctx = &f, .link = Fault.link, .sync_dir = Fault.directory };
++        s.control = .{ .ctx = &f, .check_fn = Fault.check };
++        const a = agreement(2 + i);
++        var c = try Store.Coordinator.init(s, a);
++        for (0..2) |rank_num| try c.accept(try writeRank(dir.name(), a, @intCast(rank_num)), &slab);
++        const result = c.commit(90, &slab);
++        if (mode == .ok) {
++            _ = try result;
++            try expectEpoch(store, &slab, a.epoch);
++        } else {
++            if (result) |_| return error.ExpectedFailure else |_| {}
++            try expectEpoch(.{ .dir = dir.name(), .validate_detail = validateFixture }, &slab, 1);
++        }
++    }
++}
++
++test "checkpoint restore: a rank changed after receipt and a changed expected binding cannot be committed or recovered" {
++    var dir = try Directory.init("race");
++    defer dir.deinit();
++    var slab: [19]u8 = undefined;
++    const s: Store = .{ .dir = dir.name(), .validate_detail = validateFixture };
++    _ = try committed(s, agreement(1), &slab);
++    const a = agreement(2);
++    var c = try Store.Coordinator.init(s, a);
++    for (0..2) |i| try c.accept(try writeRank(dir.name(), a, @intCast(i)), &slab);
++    var path: [1200]u8 = undefined;
++    const fd = sys.c.open(try pathFor(&path, dir.name(), a, 0), .{ .ACCMODE = .WRONLY }, @as(sys.c.mode_t, 0));
++    try t.expect(fd >= 0);
++    defer _ = sys.c.close(fd);
++    try t.expectEqual(@as(isize, 1), sys.c.pwrite(fd, "X", 1, 0));
++    try t.expectError(error.RowsHash, c.commit(1, &slab));
++    try expectEpoch(s, &slab, 1);
++    var wrong = binding;
++    wrong.arithmetic[0] ^= 1;
++    try t.expectEqual(@as(?Store.Epoch, null), try s.recover(wrong, 2, &slab));
++}
++
++test "checkpoint restore: a correctly named rank with stale envelope is rejected after reading its real metadata" {
++    var dir = try Directory.init("stale-envelope");
++    defer dir.deinit();
++    var slab: [37]u8 = undefined;
++    const s: Store = .{ .dir = dir.name(), .validate_detail = validateFixture };
++    _ = try committed(s, agreement(1), &slab);
++    const a = agreement(2);
++    const local = try writeEnvelopeRank(dir.name(), a, 0, agreement(1));
++    var c = try Store.Coordinator.init(s, a);
++    try t.expectError(error.CheckpointRankIdentity, c.accept(local, &slab));
++    try expectEpoch(s, &slab, 1);
++}
++
++test "checkpoint restore: payload with a recomputed rows checksum still fails the committed SHA256 rank digest" {
++    var dir = try Directory.init("rank-sha");
++    defer dir.deinit();
++    var slab: [37]u8 = undefined;
++    const s: Store = .{ .dir = dir.name(), .validate_detail = validateFixture };
++    _ = try committed(s, agreement(1), &slab);
++    const a = agreement(2);
++    _ = try committed(s, a, &slab);
++    var path: [1200]u8 = undefined;
++    const fd = sys.c.open(try pathFor(&path, dir.name(), a, 0), .{ .ACCMODE = .RDWR }, @as(sys.c.mode_t, 0));
++    try t.expect(fd >= 0);
++    defer _ = sys.c.close(fd);
++    const end = sys.c.lseek(fd, 0, sys.c.SEEK.END);
++    var trailer: rows.Trailer = undefined;
++    try t.expectEqual(@as(isize, @sizeOf(rows.Trailer)), sys.c.pread(fd, std.mem.asBytes(&trailer), @sizeOf(rows.Trailer), end - @sizeOf(rows.Trailer)));
++    var bytes: [128]u8 = undefined;
++    try t.expectEqual(@as(isize, @intCast(trailer.payload)), sys.c.pread(fd, &bytes, @intCast(trailer.payload), 0));
++    bytes[0] ^= 1;
++    trailer.payload_hash = std.hash.Wyhash.hash(0, bytes[0..@intCast(trailer.payload)]);
++    try t.expectEqual(@as(isize, @intCast(trailer.payload)), sys.c.pwrite(fd, &bytes, @intCast(trailer.payload), 0));
++    try t.expectEqual(@as(isize, @sizeOf(rows.Trailer)), sys.c.pwrite(fd, std.mem.asBytes(&trailer), @sizeOf(rows.Trailer), end - @sizeOf(rows.Trailer)));
++    try expectEpoch(.{ .dir = dir.name(), .validate_detail = validateFixture }, &slab, 1);
++}
++
++test "checkpoint restore: same epoch cannot publish two different marks under the same binding" {
++    var dir = try Directory.init("same-epoch");
++    defer dir.deinit();
++    var slab: [37]u8 = undefined;
++    const s: Store = .{ .dir = dir.name(), .validate_detail = validateFixture };
++    _ = try committed(s, agreement(1), &slab);
++    var wrong = agreement(1);
++    wrong.mark += 1;
++    try t.expectError(error.CheckpointPublish, committed(s, wrong, &slab));
++    const recovered = (try s.recover(binding, 2, &slab)).?;
++    try t.expectEqual(agreement(1).mark, recovered.manifest.agreement.mark);
++}
++
++const Crash = struct {
++    fn write(_: ?*anyopaque, fd: c_int, bytes: []const u8) !usize {
++        if (sys.c.write(fd, bytes.ptr, @min(bytes.len, 37)) <= 0) sys.c._exit(2);
++        sys.c._exit(86); // no defer runs: incomplete temp file actually survives this writer process
++    }
++};
++
++test "checkpoint restore: crashed manifest writer leaves real temp bytes and a new reader process recovers old epoch" {
++    var dir = try Directory.init("process-crash");
++    defer dir.deinit();
++    var slab: [37]u8 = undefined;
++    const s: Store = .{ .dir = dir.name(), .validate_detail = validateFixture };
++    _ = try committed(s, agreement(1), &slab);
++    const a = agreement(2);
++    var c = try Store.Coordinator.init(s, a);
++    for (0..2) |i| try c.accept(try writeRank(dir.name(), a, @intCast(i)), &slab);
++    const writer = sys.c.fork();
++    if (writer < 0) return error.ForkFailed;
++    if (writer == 0) {
++        c.store.io.write = Crash.write;
++        _ = c.commit(999, &slab) catch sys.c._exit(3);
++        sys.c._exit(4);
++    }
++    var status: c_int = 0;
++    try t.expectEqual(writer, sys.c.waitpid(writer, &status, 0));
++    try t.expectEqual(@as(c_int, 86 << 8), status);
++    var tmp_path: [1200]u8 = undefined;
++    const stem = std.fmt.bytesToHex(a.manifestName(), .lower);
++    const tmp = try std.fmt.bufPrintSentinel(&tmp_path, "{s}/{s}.epoch.3e7.part", .{ dir.name(), stem }, 0);
++    const fd = sys.c.open(tmp, .{ .ACCMODE = .RDONLY }, @as(sys.c.mode_t, 0));
++    try t.expect(fd >= 0);
++    defer _ = sys.c.close(fd);
++    try t.expectEqual(@as(i64, 37), sys.c.lseek(fd, 0, sys.c.SEEK.END));
++    const reader = sys.c.fork();
++    if (reader < 0) return error.ForkFailed;
++    if (reader == 0) {
++        const fresh: Store = .{ .dir = dir.name(), .validate_detail = validateFixture };
++        const recovered = fresh.recover(binding, 2, &slab) catch sys.c._exit(5);
++        if (recovered == null or recovered.?.manifest.agreement.epoch != 1) sys.c._exit(6);
++        sys.c._exit(0);
++    }
++    try t.expectEqual(reader, sys.c.waitpid(reader, &status, 0));
++    try t.expectEqual(@as(c_int, 0), status);
++}
++
++test "checkpoint restore: wire bytes use explicit little endian fields without padding or pointer representations" {
++    const Example = struct { tag: u8, word: u32, signed: i64, small: [2]u16 };
++    const value: Example = .{ .tag = 0xaa, .word = 0x12345678, .signed = -2, .small = .{ 0x1234, 0x5678 } };
++    const expected = [_]u8{ 0xaa, 0x78, 0x56, 0x34, 0x12, 0xfe, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x34, 0x12, 0x78, 0x56 };
++    var out: [17]u8 = undefined;
++    try t.expectEqualSlices(u8, &expected, try epoch.wire.encode(value, &out));
++    try t.expectEqualDeep(value, try epoch.wire.decode(Example, &expected));
++    try t.expectError(error.CheckpointMetadataSize, epoch.wire.decode(Example, expected[0..16]));
++    try t.expectError(error.CheckpointMetadataLimit, epoch.wire.encode(value, out[0..16]));
++}
+diff --git a/zig/src/core/checkpoint_wire.zig b/zig/src/core/checkpoint_wire.zig
+new file mode 100644
+--- /dev/null
++++ b/zig/src/core/checkpoint_wire.zig
+@@ -0,0 +1,75 @@
++//! Fixed-size, little-endian checkpoint records. Never persist ABI padding, pointers or enum ordinals.
++const std = @import("std");
++
++pub fn size(comptime T: type) usize {
++    return switch (@typeInfo(T)) {
++        .int => @sizeOf(T),
++        .array => |a| a.len * size(a.child),
++        .@"struct" => |s| blk: {
++            var n: usize = 0;
++            inline for (s.field_names) |name| n += size(@FieldType(T, name));
++            break :blk n;
++        },
++        else => @compileError("checkpoint wire type must contain only integers, arrays and records"),
++    };
++}
++
++pub fn encode(value: anytype, out: []u8) ![]const u8 {
++    const n = comptime size(@TypeOf(value));
++    if (out.len < n) return error.CheckpointMetadataLimit;
++    put(value, out[0..n]);
++    return out[0..n];
++}
++
++fn put(value: anytype, out: []u8) void {
++    const T = @TypeOf(value);
++    switch (@typeInfo(T)) {
++        .int => std.mem.writeInt(T, out[0..@sizeOf(T)], value, .little),
++        .array => |a| for (value, 0..) |v, i| put(v, out[i * size(a.child) ..][0..size(a.child)]),
++        .@"struct" => |s| {
++            var offset: usize = 0;
++            inline for (s.field_names) |name| {
++                const n = comptime size(@FieldType(T, name));
++                put(@field(value, name), out[offset..][0..n]);
++                offset += n;
++            }
++        },
++        else => unreachable,
++    }
++}
++
++pub fn decode(comptime T: type, bytes: []const u8) !T {
++    if (bytes.len != size(T)) return error.CheckpointMetadataSize;
++    return get(T, bytes);
++}
++
++fn get(comptime T: type, bytes: []const u8) T {
++    switch (@typeInfo(T)) {
++        .int => return std.mem.readInt(T, bytes[0..@sizeOf(T)], .little),
++        .array => |a| {
++            var result: T = undefined;
++            for (&result, 0..) |*v, i| v.* = get(a.child, bytes[i * size(a.child) ..][0..size(a.child)]);
++            return result;
++        },
++        .@"struct" => |s| {
++            var result: T = undefined;
++            var offset: usize = 0;
++            inline for (s.field_names) |name| {
++                const F = @FieldType(T, name);
++                const n = comptime size(F);
++                @field(result, name) = get(F, bytes[offset..][0..n]);
++                offset += n;
++            }
++            return result;
++        },
++        else => unreachable,
++    }
++}
++
++pub fn hash(value: anytype) [32]u8 {
++    var bytes: [size(@TypeOf(value))]u8 = undefined;
++    const data = encode(value, &bytes) catch unreachable;
++    var result: [32]u8 = undefined;
++    std.crypto.hash.sha2.Sha256.hash(data, &result, .{});
++    return result;
++}
+diff --git a/zig/src/core/root.zig b/zig/src/core/root.zig
+--- a/zig/src/core/root.zig
++++ b/zig/src/core/root.zig
+@@ -58,6 +58,7 @@
+ pub const kv_pool = @import("kv_pool.zig");
+ pub const checkpoint_capture = @import("checkpoint_capture.zig");
+ pub const checkpoint_stream = @import("checkpoint_stream.zig");
++pub const checkpoint_epoch = @import("checkpoint_epoch.zig");
+ pub const checkpoint_file = @import("checkpoint_file.zig");
+ 
+ test {
+diff --git a/zig/src/core/rows_file.zig b/zig/src/core/rows_file.zig
+--- a/zig/src/core/rows_file.zig
++++ b/zig/src/core/rows_file.zig
+@@ -199,7 +199,9 @@
+     if (n < @as(isize, @intCast(@as(u64, @intCast(end)) - lo))) return error.RowsRead;
+     @memcpy(std.mem.asBytes(&t), raw[@intCast(at - lo)..][0..@sizeOf(Trailer)]);
+     if (t.magic != MAGIC or t.version != VERSION or t.kind != @backingInt(kind)) return error.RowsRead;
+-    if (t.payload + t.meta + @sizeOf(Trailer) != @as(u64, @intCast(end))) return error.RowsRead;
++    const body = std.math.add(u64, t.payload, t.meta) catch return error.RowsRead;
++    const whole = std.math.add(u64, body, @sizeOf(Trailer)) catch return error.RowsRead;
++    if (whole != @as(u64, @intCast(end))) return error.RowsRead;
+     if (name) |want| if (!std.mem.eql(u8, &want, &t.name)) return error.RowsRead;
+     return .{ .fd = fd, .trailer = t };
+ }
+@@ -235,7 +237,7 @@
+ }
+ 
+ /// `dest.len` bytes at `at` of `fd`, through an aligned bounce buffer (O_DIRECT allows no other).
+-fn readUnaligned(fd: c_int, dest: []u8, at: u64) bool {
++pub fn readUnaligned(fd: c_int, dest: []u8, at: u64) bool {
+     var bounce: [64 * 1024]u8 align(4096) = undefined;
+     var done: usize = 0;
+     while (done < dest.len) {
+diff --git a/zig/src/families/glm/cuda.zig b/zig/src/families/glm/cuda.zig
+--- a/zig/src/families/glm/cuda.zig
++++ b/zig/src/families/glm/cuda.zig
+@@ -40,6 +40,7 @@
+ pub const native = @import("cuda_native.zig");
+ pub const snapshots = @import("cuda_snapshots.zig");
+ pub const checkpoint = @import("cuda_checkpoint.zig");
++pub const checkpoint_restore = @import("cuda_checkpoint_restore.zig");
+ pub const checkpoint_freeze = @import("cuda_checkpoint_freeze.zig");
+ 
+ test {
+diff --git a/zig/src/families/glm/cuda_checkpoint_restore.zig b/zig/src/families/glm/cuda_checkpoint_restore.zig
+new file mode 100644
+--- /dev/null
++++ b/zig/src/families/glm/cuda_checkpoint_restore.zig
+@@ -0,0 +1,277 @@
++//! Versioned GLM metadata and bounded restore into a newly admitted, inactive State/lease.
++//! This is not wired to the server: only the scheduler can prove inactivity and coordinate TP activation.
++const std = @import("std");
++const core = @import("core");
++const cuda = @import("cuda");
++const epoch = core.checkpoint_epoch;
++const wire = epoch.wire;
++const state = @import("cuda_state.zig");
++const layout = @import("cuda_snapshot_layout.zig");
++const cp = @import("cuda_checkpoint.zig");
++const Config = @import("config.zig").Config;
++const max_layers = @import("config.zig").max_layers;
++const df = @import("dflash.zig");
++const sparse = @import("cuda_sparse.zig");
++const Sha = std.crypto.hash.sha2.Sha256;
++
++pub const max_images = 64;
++pub const Image = struct {
++    digest: [32]u8 = @splat(0), // canonical prepared-image identity; not a URL or a cache id
++    at: u32 = 0,
++    tokens: u32 = 0,
++    gh: u32 = 0,
++    gw: u32 = 0,
++};
++pub const Media = struct {
++    processor: [32]u8 = @splat(0),
++    count: u32 = 0,
++    images: [max_images]Image = @splat(.{}),
++
++    pub fn validate(m: *const Media, mark: u64) !void {
++        if (m.count > max_images) return error.CheckpointMedia;
++        if (m.count > 0 and std.mem.allEqual(u8, &m.processor, 0)) return error.CheckpointMedia;
++        if (m.count == 0 and !std.mem.allEqual(u8, &m.processor, 0)) return error.CheckpointMedia;
++        var end: u64 = 0;
++        for (m.images[0..m.count]) |im| {
++            const next = @as(u64, im.at) + im.tokens;
++            if (std.mem.allEqual(u8, &im.digest, 0) or im.tokens == 0 or im.at < end or next > mark or im.gh == 0 or im.gw == 0 or im.gh % 2 != 0 or im.gw % 2 != 0 or @as(u64, im.gh) * im.gw != @as(u64, im.tokens) * @import("vision_config.zig").patches_per_token) return error.CheckpointMedia;
++            end = next;
++        }
++        for (m.images[m.count..]) |im| if (!std.meta.eql(im, Image{})) return error.CheckpointMedia;
++    }
++};
++
++/// Structural layout, independent of device addresses, physical page order and committed length.
++/// FP8 codes *and* FP32 scales use the existing Plan; this format never synthesizes or converts state.
++pub const Shape = struct {
++    version: u32 = 1,
++    flags: u32, // bit 0 FP8, bit 1 target MTP head
++    page_bytes: u64,
++    arena_bytes: u64, // through prompt_hidden, excluding the destination's own page table
++    heads: u64,
++    total_heads: u32,
++    kda_layers: u64,
++    caches: u64,
++    ring_rows: u64,
++    ring_row: u64,
++    conv_c: u64,
++    rec_layer: u64,
++    proj_layer: u64,
++    proj_row: u64,
++    kv_lora: u32,
++    i_dim: u32,
++    hidden: u32,
++
++    /// Global layout identity: uneven TP ranks have different recurrent widths and arena offsets.
++    /// Their exact local shapes remain in each rank's hashed metadata and are checked against its real destination.
++    pub fn layoutIdentity(shape: Shape) [32]u8 {
++        var common = shape;
++        common.arena_bytes = 0;
++        common.heads = 0;
++        common.conv_c = 0;
++        common.rec_layer = 0;
++        common.proj_layer = 0;
++        common.proj_row = 0;
++        return wire.hash(common);
++    }
++
++    pub fn of(st: *const state.State, c: *const Config) !Shape {
++        if (st.table == 0 or st.table < st.arena.buf.ptr or st.table - st.arena.buf.ptr >= st.arena.buf.len or st.caches.len == 0 or st.kda_layers > max_layers or st.cur.len != st.kda_layers) return error.CheckpointShape;
++        const page = st.caches[0].ps;
++        if (page == 0) return error.CheckpointShape;
++        for (st.caches) |x| if (x.pt != st.table or x.ps != page or (x.ls != 0) != st.kv8) return error.CheckpointShape;
++        if (st.head and (st.mtp_caches.pt != st.table or st.mtp_caches.ps != page or (st.mtp_caches.ls != 0) != st.kv8)) return error.CheckpointShape;
++        return .{ .flags = @intFromBool(st.kv8) | (@as(u32, @intFromBool(st.head)) << 1), .page_bytes = page, .arena_bytes = st.table - st.arena.buf.ptr, .heads = st.heads, .total_heads = c.kda_heads, .kda_layers = st.kda_layers, .caches = st.caches.len, .ring_rows = st.ring_rows, .ring_row = st.ring_row, .conv_c = st.conv_c, .rec_layer = st.rec_layer, .proj_layer = st.proj_layer, .proj_row = st.proj_row, .kv_lora = c.kv_lora, .i_dim = c.i_dim, .hidden = c.hidden };
++    }
++};
++
++pub const Metadata = struct {
++    magic: u64 = 0x31534b4346474c4d,
++    version: u32 = 1,
++    shape: Shape,
++    mark: u64,
++    mtp_len: u64,
++    bases: [2]u64,
++    cur_count: u32,
++    cur: [max_layers]u8 = @splat(0),
++    ring_from: i64 = -1,
++    draft_bytes: u64 = 0,
++    payload: u64,
++    geometry: [32]u8,
++    pages_required: u64,
++    media: Media,
++
++    /// Call while capture and state still refer to the same paused committed mark.
++    pub fn fromCapture(saved: *const cp.Capture, st: *const state.State, c: *const Config, media: Media) !Metadata {
++        if (st.pos != saved.pos or st.mtp_len != saved.mtp_len or st.pending != 0 or st.base != saved.bases[0] or st.mtp_base != saved.bases[1] or !std.mem.eql(u1, st.cur, saved.cur[0..saved.cur_len])) return error.NotAtMark;
++        var m: Metadata = .{ .shape = try Shape.of(st, c), .mark = saved.pos, .mtp_len = saved.mtp_len, .bases = .{ saved.bases[0], saved.bases[1] }, .cur_count = @intCast(saved.cur_len), .ring_from = saved.ring_from orelse -1, .draft_bytes = if (saved.ring_from != null) df.ring_bytes else 0, .payload = saved.plan.len, .geometry = geometry(&saved.plan, st, saved.ring_from != null), .pages_required = requiredPages(&saved.plan), .media = media };
++        for (saved.cur[0..saved.cur_len], 0..) |v, i| m.cur[i] = v;
++        try m.validate();
++        return m;
++    }
++    pub fn validate(m: *const Metadata) !void {
++        if (m.magic != 0x31534b4346474c4d or m.version != 1 or m.shape.version != 1 or m.shape.flags & ~@as(u32, 3) != 0 or m.cur_count > max_layers or m.cur_count != m.shape.kda_layers or m.mark > std.math.maxInt(i32) or m.mtp_len > std.math.maxInt(i32) or m.mtp_len > m.mark + state.window_rows) return error.CheckpointMetadata;
++        const head = m.shape.flags & 2 != 0;
++        if (!head and (m.mtp_len != 0 or m.bases[1] != 0)) return error.CheckpointMetadata;
++        if (head and m.mark / state.page_rows > m.mtp_len / state.page_rows + 1) return error.UnsupportedHeadLag;
++        if (m.bases[0] > m.mark or m.mark - m.bases[0] > m.shape.ring_rows or m.bases[1] > m.mtp_len or m.mtp_len - m.bases[1] > m.shape.ring_rows or m.bases[0] % sparse.pool != 0 or m.bases[1] % sparse.pool != 0) return error.CheckpointMetadata;
++        for (m.cur[0..m.cur_count]) |v| if (v > 1) return error.CheckpointMetadata;
++        for (m.cur[m.cur_count..]) |v| if (v != 0) return error.CheckpointMetadata;
++        if (m.ring_from == -1) {
++            if (m.draft_bytes != 0) return error.CheckpointDraft;
++        } else {
++            if (m.ring_from < 0 or @as(u64, @intCast(m.ring_from)) >= m.mark or m.mark - @as(u64, @intCast(m.ring_from)) > df.WIN or m.draft_bytes != df.ring_bytes) return error.CheckpointDraft;
++        }
++        const rows = @max(m.mark, m.mtp_len);
++        if (m.pages_required < (rows + state.page_rows - 1) / state.page_rows or m.pages_required > (rows + 2 * sparse.pool + state.page_rows - 1) / state.page_rows) return error.CheckpointMetadata;
++        try m.media.validate(m.mark);
++    }
++    pub fn bind(m: *const Metadata, identity: epoch.Binding) epoch.Binding {
++        var b = identity;
++        b.layout = m.shape.layoutIdentity();
++        b.media = wire.hash(m.media);
++        return b;
++    }
++    pub fn envelope(m: *const Metadata, agreement: epoch.Agreement, rank: u32) !epoch.Envelope {
++        try agreement.validate();
++        try m.validate();
++        if (rank >= agreement.world or agreement.mark != m.mark or !std.mem.eql(u8, &agreement.binding.layout, &m.shape.layoutIdentity()) or !std.mem.eql(u8, &agreement.binding.media, &wire.hash(m.media)) or (m.ring_from == -1) != std.mem.allEqual(u8, &agreement.binding.drafter, 0)) return error.CheckpointRankIdentity;
++        const local_heads = m.shape.total_heads / agreement.world + @intFromBool(rank < m.shape.total_heads % agreement.world);
++        if (local_heads == 0 or m.shape.heads != local_heads) return error.CheckpointRankIdentity;
++        return .{ .rank = rank, .agreement = agreement, .payload = m.payload, .detail_bytes = @intCast(wire.size(Metadata)) };
++    }
++};
++
++/// Required family validator for epoch.Store(rows). It runs on every rank before commit and during recovery.
++pub fn validateEnvelope(envelope: epoch.Envelope, detail: []const u8) !void {
++    const m = try wire.decode(Metadata, detail);
++    const expected = try m.envelope(envelope.agreement, envelope.rank);
++    if (!std.meta.eql(envelope, expected)) return error.CheckpointRankIdentity;
++}
++
++fn requiredPages(plan: *const layout.Plan) usize {
++    var pages: usize = 0;
++    for (plan.parts[0..plan.count]) |p| if (p.span != 0) {
++        pages = @max(pages, (p.len - 1) / p.span + 1);
++    };
++    return pages;
++}
++
++fn geometry(plan: *const layout.Plan, st: *const state.State, draft: bool) [32]u8 {
++    var h = Sha.init(.{});
++    h.update("GLM checkpoint Plan geometry 1");
++    for (plan.parts[0..plan.count], 0..) |p, i| {
++        const outside = draft and i + 1 == plan.count;
++        const origin = if (outside) p.live else if (p.span == 0) st.arena.buf.ptr else st.caches[0].lc;
++        const desc = [_]u64{ @intFromBool(outside), p.live - origin, p.len, p.span, p.page };
++        var bytes: [wire.size(@TypeOf(desc))]u8 = undefined;
++        h.update(wire.encode(desc, &bytes) catch unreachable);
++    }
++    return h.finalResult();
++}
++
++pub const DraftDestination = struct { live: u64, bytes: u64 };
++pub const Ready = struct { mark: usize, ring_from: ?i64 }; // local completion only; not TP activation
++
++/// Owns the admitted lease while inactive. Success retains it for the scheduler; failure permits only release.
++/// State, drafter ring, transfer slab and stream are exclusive to this restore until it returns.
++pub const Inactive = struct {
++    pool: *core.kv_pool.Pool,
++    live: *core.kv_pool.Lease,
++    st: *state.State,
++    stream: cuda.Stream,
++    draft: ?DraftDestination = null,
++    phase: enum { admitted, loading, ready, poisoned, released } = .admitted,
++
++    pub fn init(pool: *core.kv_pool.Pool, live: *core.kv_pool.Lease, st: *state.State, stream: cuda.Stream, draft: ?DraftDestination) !Inactive {
++        if (live.ids.items.len != 0 or live.promised == 0 or st.pages.len != 0 or st.capacity != 0 or st.pos != 0 or st.mtp_len != 0 or st.pending != 0 or st.table == 0) return error.CheckpointNotInactive;
++        if (stream.d != st.arena.buf.d) return error.CheckpointNotInactive;
++        return .{ .pool = pool, .live = live, .st = st, .stream = stream, .draft = draft };
++    }
++
++    /// Reads each payload byte once into a bounded slab, then directly into the destination Plan's physical pieces.
++    /// Hashes are verified before restoreHost or Ready escapes. Slab reuse is fenced even on a failed copy.
++    pub fn load(dst: *Inactive, reader: anytype, c: *const Config, slab: []u8) !Ready {
++        if (dst.phase != .admitted) return error.CheckpointRestoreState;
++        dst.phase = .loading;
++        errdefer {
++            cuda.completion.drain(dst.stream.d, dst.stream, "a failed GLM checkpoint restore did not drain");
++            dst.phase = .poisoned;
++        }
++        if (!reader.durable()) return error.CheckpointNotDurable;
++        if (slab.len < 4 or slab.len > epoch.max_chunk) return error.CheckpointReadState;
++        const m = try wire.decode(Metadata, reader.detail());
++        _ = try m.envelope(reader.envelope.agreement, reader.envelope.rank);
++        if (reader.envelope.payload != m.payload or !std.meta.eql(m.shape, try Shape.of(dst.st, c)) or dst.pool.page_bytes != m.shape.page_bytes) return error.CheckpointShape;
++        if (m.pages_required > dst.live.promised or m.pages_required > (dst.st.arena.buf.len - @as(usize, @intCast(dst.st.table - dst.st.arena.buf.ptr))) / 4) return error.PastReservation;
++        if ((m.ring_from != -1) != (dst.draft != null)) return error.CheckpointDraft;
++        if (dst.draft) |d| if (d.live == 0 or d.bytes != m.draft_bytes or d.live > std.math.maxInt(u64) - d.bytes) return error.CheckpointDraft;
++        // Uses the existing pool's reservation, never a prompt-cache snapshot or a second full-prefix allocation.
++        try dst.pool.cover(dst.live, @intCast(m.pages_required), null);
++        dst.st.pages = dst.live.ids.items;
++        dst.st.capacity = dst.live.ids.items.len * state.page_rows;
++        var plan = try layout.Plan.init(dst.st, c, @intCast(m.mark), if (dst.st.head) @as(usize, @intCast(m.mtp_len)) else null);
++        if (dst.draft) |d| try plan.outside(d.live, @intCast(d.bytes));
++        if (plan.len != m.payload or requiredPages(&plan) != m.pages_required or !std.mem.eql(u8, &m.geometry, &geometry(&plan, dst.st, dst.draft != null))) return error.CheckpointShape;
++        // Map the newly allocated physical ids; never restore the source's page table.
++        const table = std.mem.sliceAsBytes(dst.live.ids.items);
++        var offset: usize = 0;
++        while (offset < table.len) {
++            const n = @min(slab.len, table.len - offset);
++            @memcpy(slab[0..n], table[offset..][0..n]);
++            try dst.upload(dst.st.table + offset, slab[0..n]);
++            offset += n;
++        }
++        var part: usize = 0;
++        var done: usize = 0;
++        var total: u64 = 0;
++        while (true) {
++            const n = try reader.read(slab);
++            if (n == 0) break;
++            if (n > slab.len or total > plan.len or n > plan.len - total) return error.CheckpointPayloadSize;
++            var used: usize = 0;
++            while (used < n) {
++                while (part < plan.count and done == plan.parts[part].len) {
++                    part += 1;
++                    done = 0;
++                }
++                if (part == plan.count) return error.CheckpointPayloadSize;
++                const piece = plan.piece(plan.parts[part], done);
++                const len = @min(n - used, piece.len);
++                try dst.upload(piece.live, slab[used..][0..len]);
++                used += len;
++                done += len;
++            }
++            total += n;
++        }
++        if (total != plan.len) return error.CheckpointPayloadSize;
++        _ = try reader.finish();
++        var cur: [max_layers]u1 = undefined;
++        for (m.cur[0..m.cur_count], 0..) |v, i| cur[i] = @intCast(v);
++        try dst.st.restoreHost(dst.stream, @intCast(m.mark), @intCast(m.mtp_len), cur[0..m.cur_count], .{ @intCast(m.bases[0]), @intCast(m.bases[1]) });
++        try dst.stream.synchronize();
++        try reader.check();
++        dst.phase = .ready;
++        return .{ .mark = @intCast(m.mark), .ring_from = if (m.ring_from < 0) null else m.ring_from };
++    }
++
++    fn upload(dst: *Inactive, address: u64, bytes: []const u8) !void {
++        const d = dst.stream.d;
++        try d.check(d.api.cuMemcpyHtoDAsync_v2(address, bytes.ptr, bytes.len, dst.stream.handle), "cuMemcpyHtoDAsync checkpoint restore");
++        try dst.stream.synchronize();
++    }
++
++    /// After ready, the scheduler may retain this owner with the live sequence. Release also handles failure/cancel.
++    pub fn release(dst: *Inactive) void {
++        if (dst.phase == .released) return;
++        cuda.completion.drain(dst.stream.d, dst.stream, "checkpoint restore release did not drain");
++        dst.st.pages = &.{};
++        dst.st.capacity = 0;
++        dst.pool.finish(dst.live);
++        dst.phase = .released;
++    }
++};
++
++comptime {
++    std.debug.assert(wire.size(Metadata) + wire.size(epoch.Envelope) <= epoch.max_metadata);
++}

@@ -1,0 +1,45 @@
+test-glm-snapshots-host
++- run test 22 pass, 4 fail (26 total)
+error: 'glm_snapshot_host.test.GLM snapshots: a short prefix fits 4 GiB even with a 524288-token configured window' failed:
+       GLM snapshot sizing rank=0 world=2 at=2048 bytes=222298112 arena=7077433856
+       GLM snapshot sizing rank=0 world=2 at=34816 bytes=687865856 arena=7077433856
+       GLM snapshot sizing rank=0 world=2 at=266240 bytes=3707764736 arena=7077433856
+       expected 222298112, found 260046848
+       /Users/kelchm/.cache/zig-0.17.0-macos/lib/std/testing.zig:93:17: 0x10249cf2f in expectEqualInner__func_1123 (test)
+                       return error.TestExpectedEqual;
+                       ^
+       /Users/kelchm/.cache/zig-0.17.0-macos/lib/std/testing.zig:57:5: 0x102557813 in expectEqual (test)
+           return expectEqualInner(T, expected, actual);
+           ^
+       /private/var/folders/fk/1vypmf5s0t3d4900vppfhfx00000gn/T/glm080-tyw1sh93/source/zig/glm_snapshot_host.zig:52:5: 0x1025578bf in test.GLM snapshots: a short prefix fits 4 GiB even with a 524288-token configured window (test)
+           try t.expectEqual(short, glm.native.snap_min_bytes(&e));
+           ^
+error: 'glm_snapshot_host.test.GLM snapshots: actual store charges held plus spare pages, evicts and protects a borrowed state' failed:
+       /private/var/folders/fk/1vypmf5s0t3d4900vppfhfx00000gn/T/glm080-tyw1sh93/source/zig/glm_snapshot_host.zig:136:41: 0x102554d7f in test.GLM snapshots: actual store charges held plus spare pages, evicts and protects a borrowed state (test)
+           const borrowed = found.entry orelse return error.ExpectedHit;
+                                               ^
+error: 'glm_snapshot_host.test.GLM snapshots: 0.3 GiB fits the first default TP2 prefix at 256K but not a longer prefix' failed:
+       expected 222298112, found 260046848
+       /Users/kelchm/.cache/zig-0.17.0-macos/lib/std/testing.zig:93:17: 0x10249cf2f in expectEqualInner__func_1123 (test)
+                       return error.TestExpectedEqual;
+                       ^
+       /Users/kelchm/.cache/zig-0.17.0-macos/lib/std/testing.zig:57:5: 0x102529727 in expectEqual (test)
+           return expectEqualInner(T, expected, actual);
+           ^
+       /private/var/folders/fk/1vypmf5s0t3d4900vppfhfx00000gn/T/glm080-tyw1sh93/source/zig/glm_snapshot_host.zig:452:5: 0x1025297b3 in test.GLM snapshots: 0.3 GiB fits the first default TP2 prefix at 256K but not a longer prefix (test)
+           try t.expectEqual(@as(u64, if (glm.forward.window_rows == 16) 222298112 else 203423744), minimum);
+           ^
+error: 'glm_snapshot_host.test.GLM snapshots: the actual store's budget spans the host tier, keeps past the card's pages and evicts within both' failed:
+       GLM no-head sequence kv8=false cap=446528: 6061363712 -> 5571346432 bytes (-490017280)
+       GLM no-head sequence kv8=true cap=446528: 3339329024 -> 3076147968 bytes (-263181056)
+       /private/var/folders/fk/1vypmf5s0t3d4900vppfhfx00000gn/T/glm080-tyw1sh93/source/zig/glm_snapshot_host.zig:742:38: 0x1024b057b in test.GLM snapshots: the actual store's budget spans the host tier, keeps past the card's pages and evicts within both (test)
+               const e = found.entry orelse return error.ExpectedHit;
+                                            ^
+failed command: ./.zig-cache/o/f2bb1137a42ea7ba9cbac03f8fc20902/test --cache-dir=./.zig-cache --seed=0xeae5483a --listen=-
+
+Build Summary: 2/4 steps succeeded (1 failed); 22/26 tests passed (4 failed)
+test-glm-snapshots-host transitive failure
++- run test 22 pass, 4 fail (26 total)
+   +- compile test debug native success 4s MaxRSS:407M
+      +- options cached
+

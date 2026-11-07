@@ -2,7 +2,9 @@
 
 This separate `1104-r2` bundle adapts Mia's kit at `02dac3879852b8c5713318d3d64a5a791002e954`. It retains the pinned TensorFold base and upstream notices. Local additions provide SparkRun launch/supervision and capacity gates, independent upstream/site patch verification, off-host source preparation and the reviewed engine patches under `patches/`. Patch headers identify their basis; `0400` backports TensorFold #2103 with an adaptation for this kit's host fixtures. The chat template remains byte-identical to the selected kit. This development bundle does not establish production equivalence or authorize a rollout.
 
-The upstream notice follows.
+The preparation-memory implementation in `0900` adapts the temporary-arena separation and memory-telemetry ideas in Robert Wojciechowski's Apache-2.0 DeepSeek `0007-server-prepare-memory.patch`. Its donor credit is retained in the patch header. The local checkpoint metadata/restore and complete-media record additions do not enable server durability.
+
+This complete local notice is also copied into the image as `/opt/tensorfold/HOME-LAB-NOTICE.md`. The upstream notice follows.
 
 The local Dockerfile also builds FFmpeg 9.0.2 with GPL components disabled for the portable native video decoder. Its exact source archive hash and build configuration are retained in the image's `FFMPEG-BUILD-INFO`; its upstream licence files are copied under `LICENSES/FFmpeg`. DLPack, bundled with xgrammar, retains its Apache-2.0 terms and its licence is copied into the image. These additions do not change the licences of the upstream components below.
 

@@ -1,0 +1,75 @@
+{
+  "date": "2026-11-06",
+  "milestone": "native metadata, inactive direct restore, all-rank filesystem epoch commit/recovery; server unenabled",
+  "zig_version": "0.17.0",
+  "platform": "macOS arm64, explicit apple_m1 code generation for new host target; recording CUDA ABI, no model hosts or devices",
+  "patch": "0800-native-checkpoint-restore-epochs.patch",
+  "patch_sha256": "3ce9005ac7e5d28c774fad9ad71422f4a608bbacf6253acce7e089f75bea99f6",
+  "affected_native_files": 10,
+  "source": "/tmp/glm1104-r2-integrated",
+  "fresh_application": "/tmp/glm080-final-qualification",
+  "application": "verified patch/input/primitive hashes; fresh non-Git scratch copy; git apply --check and apply; verified all output hashes",
+  "format": "zig fmt --check passed for every affected source file",
+  "command": "zig build test-checkpoint-restore-host test-checkpoint-bounded-host -Dcpu=apple_m1 --summary all",
+  "exit_code": 0,
+  "build_steps_passed": 16,
+  "test_executions_passed": 102,
+  "test_binaries": {
+    "native_restore_and_imported_rows": 12,
+    "epoch_filesystem_and_wire": 13,
+    "prefix050_core": 37,
+    "existing_kv_pool": 23,
+    "prefix050_rank_writer": 14,
+    "prefix050_glm_capture": 3
+  },
+  "logical_restore": {
+    "tokens": 1000001,
+    "payload_bytes": 6649248044,
+    "chunk_bytes_max": 2097152,
+    "device_allocated_during_load": 0,
+    "destination_page_ids": 1954,
+    "page_id_bytes": 7816,
+    "dflash_ring_bytes": 41943040,
+    "evidence": "actual default TP2 FP8 State/Plan walker, sizing CUDA driver and synthetic reader; physical file integrity covered by smaller fixtures"
+  },
+  "wire_limits": {
+    "ranks": 64,
+    "metadata_bytes_max": 8192,
+    "images": 64,
+    "endian": "little",
+    "pointers_serialized": false
+  },
+  "crash_test": "writer child exits after 37 bytes of a real manifest temporary file; a new reader child recovers old complete epoch",
+  "existing_snapshot_regression": {
+    "base_pass": 22,
+    "base_fail": 4,
+    "patched_pass": 22,
+    "patched_fail": 4,
+    "same_failures": [
+      "glm_snapshot_host.test.GLM snapshots: a short prefix fits 4 GiB even with a 524288-token configured window",
+      "glm_snapshot_host.test.GLM snapshots: actual store charges held plus spare pages, evicts and protects a borrowed state",
+      "glm_snapshot_host.test.GLM snapshots: 0.3 GiB fits the first default TP2 prefix at 256K but not a longer prefix",
+      "glm_snapshot_host.test.GLM snapshots: the actual store's budget spans the host tier, keeps past the card's pages and evicts within both"
+    ]
+  },
+  "server_storage_enabled": false,
+  "scheduler_write_guards_integrated": false,
+  "tp_capture_restore_worker_integrated": false,
+  "all_rank_filesystem_commit_implemented": true,
+  "distributed_rank_transport_integrated": false,
+  "hardware_qualified": false,
+  "evidence_files": [
+    {
+      "path": "evidence/baseline-snapshot.log",
+      "sha256": "799c7eec28f109e1c3228157b5409ea1dac02a65c65dcceabe6881a7ad9ee838"
+    },
+    {
+      "path": "evidence/checkpoint-host.log",
+      "sha256": "74717df3430dfc99507edb08398e1d64287ace95af49b67f814a1af5fa05a48e"
+    },
+    {
+      "path": "evidence/patched-snapshot.log",
+      "sha256": "2c5c93e4ca73b2f5ef1332146adb68287f0656f9e19ea574273d6f9b5f925c75"
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+test-fairness-witness
++- run test w
+WITNESS cancellation: parity=1,0 pending=4096 pos=4096 snapshot=NotAtMark
+WITNESS retry: original state=0x200000 cancelled output=0x220000 retry input=0x220000
+WITNESS allocation: chunkpart announced, incomplete partial published, no KDA dispatch and no recovery header
+failed command: ./.zig-cache/o/270c817925177cc662718da4472003ff/test --cache-dir=./.zig-cache --seed=0x4cc394cd --listen=-
+
+Build Summary: 4/4 steps succeeded; 6/6 tests passed
+test-fairness-witness success
++- run test 6 pass (6 total) 290ms MaxRSS:3M
+   +- compile test debug native success 3s MaxRSS:382M
+      +- options cached
+

@@ -1,0 +1,30 @@
+test-glm-snapshots-host
++- run test w
+GLM snapshot sizing rank=0 world=2 at=4096 bytes=260046848 arena=7077433856
+GLM snapshot sizing rank=0 world=2 at=34816 bytes=687865856 arena=7077433856
+GLM snapshot sizing rank=0 world=2 at=266240 bytes=3707764736 arena=7077433856
+GLM no-head sequence kv8=false cap=446528: 6061363712 -> 5571346432 bytes (-490017280)
+GLM no-head sequence kv8=true cap=446528: 3339329024 -> 3076147968 bytes (-263181056)
+failed command: ./.zig-cache/o/c81ddcd6cbea1bce34413c7322f7f881/test --cache-dir=./.zig-cache --seed=0x93675b56 --listen=-
+
+Build Summary: 16/16 steps succeeded; 50/50 tests passed
+test-glm-snapshots-host success
++- run test 26 pass (26 total) 10s MaxRSS:323M
+   +- compile test debug native success 4s MaxRSS:410M
+      +- options cached
+test-glm-logprobs-host success
++- run test 7 pass (7 total) 462ms MaxRSS:3M
+   +- compile test debug native success 4s MaxRSS:317M
+      +- options (reused)
+test-glm-protocol-host success
++- run test 10 pass (10 total) 400ms MaxRSS:2M
+   +- compile test debug native success 2s MaxRSS:295M
+      +- options (reused)
+test-glm-prompts-host success
++- run test 7 pass (7 total) 290ms MaxRSS:4M
+   +- compile test debug native success 2s MaxRSS:312M
+      +- options (reused)
+compile-glm-native-open success
++- compile obj glm-open-check debug aarch64-linux-gnu success 11s MaxRSS:660M
+   +- options success
+

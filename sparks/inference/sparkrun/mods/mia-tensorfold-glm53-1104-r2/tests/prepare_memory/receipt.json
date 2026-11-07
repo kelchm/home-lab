@@ -1,0 +1,161 @@
+{
+  "status": "pass",
+  "patch": "0900-native-prepare-memory-contract.patch",
+  "patch_sha256": "0426f2057219a4dbdbfc9558381688ead18e77f05d3b299ee9e456fcc969d736",
+  "zig_version": "0.17.0",
+  "zig_sha256": "1c5f706db0ed6d55451940f31dc05a6177d05696bc1fa5d853696d04c718b523",
+  "cpu": "apple_m1",
+  "marker_sha256": "2efd0961dade7c57af35281d3ee54247e97943aa557c65a7257466673e54b207",
+  "input_tree_sha256": "8721982327f051abc8b509de3d761bf38bbb5c1370c38a859a16bb80fddc216a",
+  "input_after_tree_sha256": "8721982327f051abc8b509de3d761bf38bbb5c1370c38a859a16bb80fddc216a",
+  "patched_tree_sha256_before_instrumentation": "17b006385c7aa3841605532960ff6e659231183f37a9f6f8f9a0e9b194064ad0",
+  "commands": [
+    {
+      "command": [
+        "git",
+        "apply",
+        "--check",
+        "/Users/kelchm/.t3/worktrees/home-lab/t3-172d80bf/sparks/inference/sparkrun/mods/mia-tensorfold-glm53-1104-r2/patches/0900-native-prepare-memory-contract.patch"
+      ],
+      "exit": 0,
+      "log": "apply-check.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "git",
+        "apply",
+        "/Users/kelchm/.t3/worktrees/home-lab/t3-172d80bf/sparks/inference/sparkrun/mods/mia-tensorfold-glm53-1104-r2/patches/0900-native-prepare-memory-contract.patch"
+      ],
+      "exit": 0,
+      "log": "apply.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "/Users/kelchm/.cache/zig-0.17.0-macos/zig",
+        "fmt",
+        "--check",
+        "zig/src/server/prepare_gate.zig",
+        "zig/src/server/prepare_memory.zig",
+        "zig/src/server/server.zig",
+        "zig/src/server/serve.zig",
+        "zig/src/server/routes.zig",
+        "zig/src/server/status_routes.zig",
+        "zig/src/server/warm.zig",
+        "zig/src/server/hf_text.zig",
+        "zig/src/server/prompt.zig",
+        "zig/src/server/http_conn.zig",
+        "zig/src/server/images.zig",
+        "zig/src/core/tokenizer/tokenizer.zig",
+        "zig/src/core/template/template.zig",
+        "zig/src/core/engine_vision.zig",
+        "zig/src/families/glm/image_core.zig",
+        "zig/src/families/glm/image.zig",
+        "zig/src/families/glm/cuda_images.zig",
+        "zig/src/native/cuda_vision_offer.zig",
+        "zig/src/native/glm_host.zig"
+      ],
+      "exit": 0,
+      "log": "fmt.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "/Users/kelchm/.cache/zig-0.17.0-macos/zig",
+        "build",
+        "test-prepare-memory",
+        "-Dcpu=apple_m1",
+        "-j2",
+        "--summary",
+        "all"
+      ],
+      "exit": 0,
+      "log": "baseline.log",
+      "log_sha256": "4c0f5e959311007ebc6d3831bc438c3cb55fd8ea52fc6729895598ebb498dbe5"
+    },
+    {
+      "command": [
+        "/Users/kelchm/.cache/zig-0.17.0-macos/zig",
+        "build",
+        "test-prepare-memory",
+        "test-prepare-media-lifecycle",
+        "test-admission-host",
+        "test-http-limits-host",
+        "test-server-recovery-host",
+        "test-glm-protocol-host",
+        "test-glm-kv-pages-host",
+        "compile-glm-native-open",
+        "compile-omni-video-host",
+        "server-cpu",
+        "-Dcpu=apple_m1",
+        "-j2",
+        "--summary",
+        "all"
+      ],
+      "exit": 0,
+      "log": "test.log",
+      "log_sha256": "2e0062ffb8f88ebada79de246f5a95b5f57ef3db3c75559e8ce2b06b41ea2aed"
+    }
+  ],
+  "negative_control": {
+    "command": [
+      "/Users/kelchm/.cache/zig-0.17.0-macos/zig",
+      "build",
+      "test-prepare-negative",
+      "-Dcpu=apple_m1",
+      "-j2",
+      "--summary",
+      "all"
+    ],
+    "exit": 1,
+    "log": "negative.log",
+    "log_sha256": "2683d40264c7333c4f582c027422f9c9846945d159e37f2ad56ac989fdb73b9c"
+  },
+  "lean": {
+    "baseline": 921,
+    "candidate": 921,
+    "new": 0
+  },
+  "arena_before": [
+    {
+      "case": "0",
+      "retained": "799426",
+      "peak": "799426",
+      "ids": "32792",
+      "sha": "95117108e38f25057555bcc45768560e035c21eeabc1c8307e8def4344ff7a72",
+      "key": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "images": "0"
+    },
+    {
+      "case": "1",
+      "retained": "105680",
+      "peak": "105680",
+      "ids": "220",
+      "sha": "6ee4b22df58d55b8647134efe9c2c711fc81572b69b461223602cf3f6b3dfac7",
+      "key": "eb660b7d9e7decbf84eda288c6f32d8ba42a25f7b4f4fb72b6c70e115d57ee28",
+      "images": "2"
+    }
+  ],
+  "arena_after": [
+    {
+      "case": "0",
+      "retained": "196818",
+      "peak": "196818",
+      "ids": "32792",
+      "sha": "95117108e38f25057555bcc45768560e035c21eeabc1c8307e8def4344ff7a72",
+      "key": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "images": "0"
+    },
+    {
+      "case": "1",
+      "retained": "30322",
+      "peak": "30322",
+      "ids": "220",
+      "sha": "6ee4b22df58d55b8647134efe9c2c711fc81572b69b461223602cf3f6b3dfac7",
+      "key": "eb660b7d9e7decbf84eda288c6f32d8ba42a25f7b4f4fb72b6c70e115d57ee28",
+      "images": "2"
+    }
+  ],
+  "boundary": "CPU native HTTP/allocators/GLM media and recording TP; Linux CUDA compile only; no model or GPU execution; no 080 integration"
+}

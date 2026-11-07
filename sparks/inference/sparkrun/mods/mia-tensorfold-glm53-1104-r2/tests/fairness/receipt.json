@@ -1,0 +1,162 @@
+{
+  "status": "blocked-no-production-patch",
+  "zig_version": "0.17.0",
+  "source_manifest_sha256": "68ae9aab84d224301486fe3b21a74ae232206d4dd9a67e84397809948354194c",
+  "immutable_before_sha256": "dd3fb2bdac49cbdfb9a155d380d86023d10173d5cee76e2049d5642f755ae2c4",
+  "immutable_after_sha256": "dd3fb2bdac49cbdfb9a155d380d86023d10173d5cee76e2049d5642f755ae2c4",
+  "commands": [
+    {
+      "command": [
+        "<zig>",
+        "build",
+        "compile-glm-native-open",
+        "test-glm-prompts-host",
+        "test-glm-protocol-host",
+        "test-glm-logprobs-host",
+        "test-glm-snapshots-host",
+        "-Dcpu=apple_m1",
+        "-j2",
+        "--summary",
+        "all"
+      ],
+      "cwd": "baseline",
+      "exit": 0,
+      "log": "evidence/baseline-host.log",
+      "log_sha256": "9e5788efde1dc23a85e0dde78088dc7ff1cc4a4bff79b7fd9f8b63a8beebc440",
+      "summaries": [
+        "Build Summary: 16/16 steps succeeded; 50/50 tests passed"
+      ]
+    },
+    {
+      "command": [
+        "git",
+        "apply",
+        "--reject",
+        "<donor>"
+      ],
+      "cwd": "donor",
+      "exit": 1,
+      "log": "evidence/donor-apply.log",
+      "log_sha256": "48bced0142c07bacfcda34f2ed0244093ca288b9385ed40bbe459eb0756a3454",
+      "summaries": []
+    },
+    {
+      "command": [
+        "<zig>",
+        "build",
+        "compile-glm-native-open",
+        "test-glm-prompts-host",
+        "test-glm-protocol-host",
+        "test-glm-logprobs-host",
+        "test-glm-snapshots-host",
+        "-Dcpu=apple_m1",
+        "-j2",
+        "--summary",
+        "all"
+      ],
+      "cwd": "donor",
+      "exit": 1,
+      "log": "evidence/donor-host.log",
+      "log_sha256": "07ff6cb1f8d2c73d5a3c99be8f35efcd36d89a2d22af964cbf8c0f1e8d4593cf",
+      "summaries": [
+        "Build Summary: 14/16 steps succeeded (1 failed); 49/50 tests passed (1 failed)"
+      ]
+    },
+    {
+      "command": [
+        "<zig>",
+        "build",
+        "test-fairness-witness",
+        "-Dcpu=apple_m1",
+        "-j2",
+        "--summary",
+        "all"
+      ],
+      "cwd": "donor",
+      "exit": 1,
+      "log": "evidence/raw-donor-witness.log",
+      "log_sha256": "2a293b2b32574999e7cd845432b39b82f12f8426193e10b98a0ba725db03f057",
+      "summaries": [
+        "Build Summary: 2/4 steps succeeded (1 failed); 3/6 tests passed (3 failed)"
+      ]
+    },
+    {
+      "command": [
+        "<zig>",
+        "build",
+        "test-fairness-witness",
+        "-Dcpu=apple_m1",
+        "-j2",
+        "--summary",
+        "all"
+      ],
+      "cwd": "donor",
+      "exit": 0,
+      "log": "evidence/normalized-witness.log",
+      "log_sha256": "40f583c0584c12580546c9bf143de31146def8d4f47a412cfa0c7b610fcef1fa",
+      "summaries": [
+        "Build Summary: 4/4 steps succeeded; 6/6 tests passed"
+      ]
+    },
+    {
+      "command": [
+        "<zig>",
+        "build",
+        "test-fairness-safety",
+        "-Dcpu=apple_m1",
+        "-j2",
+        "--summary",
+        "all"
+      ],
+      "cwd": "donor",
+      "exit": 1,
+      "log": "evidence/normalized-safety.log",
+      "log_sha256": "f9cf94d8a1e2a15279edc53d6a6af25fb45c74021db15a0f9f372d941976a443",
+      "summaries": [
+        "Build Summary: 2/4 steps succeeded (1 failed); 0/7 tests passed (7 failed)"
+      ]
+    },
+    {
+      "command": [
+        "<zig>",
+        "build",
+        "test-fairness-cancel-control",
+        "-Dcpu=apple_m1",
+        "-j2",
+        "--summary",
+        "all"
+      ],
+      "cwd": "donor",
+      "exit": 1,
+      "log": "evidence/reset-control.log",
+      "log_sha256": "e20b1c4de9ea826011cfc5d9e8d8ccc6c8c40aebb66b8b5f8aa90ffb2ed081b2",
+      "summaries": [
+        "Build Summary: 2/4 steps succeeded (1 failed); 0/1 tests passed (1 failed)"
+      ]
+    },
+    {
+      "command": [
+        "<zig>",
+        "build",
+        "test-fairness-ewma-control",
+        "-Dcpu=apple_m1",
+        "-j2",
+        "--summary",
+        "all"
+      ],
+      "cwd": "donor",
+      "exit": 0,
+      "log": "evidence/ewma-control.log",
+      "log_sha256": "3b86087ba215be41da5a99f51bf854f6beafcbe40ba0c10a7c6da17b0ada4e79",
+      "summaries": [
+        "Build Summary: 4/4 steps succeeded; 1/1 tests passed"
+      ]
+    }
+  ],
+  "limitations": [
+    "Recording CUDA/NCCL drivers; no GPU arithmetic or real peer execution.",
+    "No TP exactness, cache/restore, media slicing, or performance qualification.",
+    "The one-line lo initialization only exposes deeper donor faults; it is not a candidate fix.",
+    "Existing broader baseline of 4421 passes/18 skips/319 steps was supplied, not rerun here."
+  ]
+}

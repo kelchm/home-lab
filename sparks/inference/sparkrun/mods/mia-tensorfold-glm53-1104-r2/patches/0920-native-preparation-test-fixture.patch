@@ -1,0 +1,17 @@
+From: Home Lab
+Subject: [PATCH] tests: initialize preparation ledger in idle-unload fixture
+
+The explicit Server fixture constructor needs the ledger introduced by 090.
+Keep the broad idle-unload tests compiling with the actual server layout.
+
+diff --git a/zig/src/server/idle_unload_test.zig b/zig/src/server/idle_unload_test.zig
+--- a/zig/src/server/idle_unload_test.zig
++++ b/zig/src/server/idle_unload_test.zig
+@@ -101,6 +101,7 @@
+             .arena = .init(gpa),
+             .slide = .init(gpa, self.io, null),
+             .teacher = .init(gpa),
++            .prepare_memory = .init(gpa),
+         };
+         self.srv = srv;
+         var args: cli.Args = .{};
