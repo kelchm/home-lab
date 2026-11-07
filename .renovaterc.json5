@@ -11,7 +11,7 @@
   ],
   dependencyDashboard: true,
   dependencyDashboardTitle: "Renovate Dashboard :robot:",
-  schedule: ["every weekend"],
+  schedule: ["at any time"],
   // A held or disabled minor update would otherwise also hide the patch
   // releases of the version in use.
   separateMinorPatch: true,
