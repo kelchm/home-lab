@@ -633,7 +633,7 @@
           }
         ]
       },
-      "interval": "5s",
+      "interval": "2s",
       "maxDataPoints": 2000,
       "targets": [
         {
@@ -647,7 +647,7 @@
           "refId": "A",
           "range": true,
           "instant": false,
-          "interval": "5s"
+          "interval": "2s"
         },
         {
           "datasource": {
@@ -660,7 +660,7 @@
           "refId": "B",
           "range": true,
           "instant": false,
-          "interval": "5s"
+          "interval": "2s"
         }
       ],
       "options": {
@@ -824,7 +824,7 @@
           }
         ]
       },
-      "interval": "5s",
+      "interval": "2s",
       "maxDataPoints": 2000,
       "targets": [
         {
@@ -838,7 +838,7 @@
           "refId": "A",
           "range": true,
           "instant": false,
-          "interval": "5s"
+          "interval": "2s"
         },
         {
           "datasource": {
@@ -851,7 +851,7 @@
           "refId": "B",
           "range": true,
           "instant": false,
-          "interval": "5s"
+          "interval": "2s"
         }
       ],
       "options": {
@@ -1032,7 +1032,7 @@
           }
         ]
       },
-      "interval": "5s",
+      "interval": "2s",
       "maxDataPoints": 2000,
       "targets": [
         {
@@ -1046,7 +1046,7 @@
           "refId": "A",
           "range": true,
           "instant": false,
-          "interval": "5s"
+          "interval": "2s"
         },
         {
           "datasource": {
@@ -1059,7 +1059,7 @@
           "refId": "B",
           "range": true,
           "instant": false,
-          "interval": "5s"
+          "interval": "2s"
         },
         {
           "datasource": {
@@ -1072,7 +1072,7 @@
           "refId": "C",
           "range": true,
           "instant": false,
-          "interval": "5s"
+          "interval": "2s"
         }
       ],
       "options": {
