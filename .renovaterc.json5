@@ -181,6 +181,16 @@
       versioning: "regex:^main-[0-9a-f]+-(?<major>\\d{4})(?<minor>\\d{2})(?<patch>\\d{2})$",
     },
     {
+      // Broadsheet publishes latest on every push to its main branch. Repository
+      // validation runs only on pull requests, so merge the PR after it passes.
+      description: "Broadsheet: deploy each main build",
+      matchDatasources: ["docker"],
+      matchPackageNames: ["ghcr.io/kelchm/broadsheet"],
+      matchUpdateTypes: ["digest"],
+      automerge: true,
+      automergeType: "pr",
+    },
+    {
       // Renovate's mise manager strips only a leading "v" from aqua tool
       // tags; these projects prefix their release tags with the tool name.
       description: "mise aqua tools: strip tool-name tag prefixes",
