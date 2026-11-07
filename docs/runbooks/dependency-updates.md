@@ -2,6 +2,8 @@
 
 Renovate proposes updates according to [`.renovaterc.json5`](../../.renovaterc.json5), and the [dependency-triage skill](../../.agents/skills/dependency-triage/SKILL.md) covers landing them. This page covers holding a dependency back on purpose: which mechanism to use, how to write an exact-content lock, what a lock records, and how to read a failed lookup. It also covers the [Renovate problems](#renovate-problems) alert.
 
+Updates are allowed at any time on every day; their arrival depends on when the hosted Renovate bot processes the repository. The [`schedule` setting](https://docs.renovatebot.com/configuration-options/#schedule) permits updates rather than triggering a daily run.
+
 ## Choose the narrowest mechanism
 
 Hold back only what has a stated reason, and only as far as the reason reaches. Each mechanism is a rule in [`.renovaterc.json5`](../../.renovaterc.json5) scoped to named packages or, for a Dockerfile content lock, the form of the reference itself.
@@ -83,7 +85,7 @@ Chart versions and chart content change through Renovate PRs, and the exact byte
 | Same version re-pushed | One PR replacing only `digest`, so review sees a content change with no version change |
 | New source committed with only a tag | A pin PR adding `digest` |
 
-None of these merge automatically, and Renovate runs on weekends, so a re-push can wait up to a week for its PR. Existing holds still apply: external-dns stays behind dashboard approval, including its digest updates. `scripts/ci/test-renovate-oci-charts.mjs` checks presence, extraction and replacement of both fields, not their correspondence in the registry. Changing only `tag` while retaining an old `digest` passes CI and continues deploying the old chart. Resolve the matching digest for manual version edits, and let Renovate rebuild held tag-only PRs before reviewing and landing them.
+None of these merge automatically. Renovate can propose a re-push digest update on any day when the bot next processes the repository. Existing holds still apply: external-dns stays behind dashboard approval, including its digest updates. `scripts/ci/test-renovate-oci-charts.mjs` checks presence, extraction and replacement of both fields, not their correspondence in the registry. Changing only `tag` while retaining an old `digest` passes CI and continues deploying the old chart. Resolve the matching digest for manual version edits, and let Renovate rebuild held tag-only PRs before reviewing and landing them.
 
 helm-controller appends the first 12 digest characters to the chart version, so a release reports `5.3.0+0e13b1456564` in `status.lastAttemptedRevision` and `helm history`, and `helm.sh/chart` labels show it with `_`. The 13 releases from a `HelmRepository` keep plain versions and follow versions only. `bootstrap/helmfile.d` also stays tag-only: it runs at cluster bootstrap and Flux takes over from the pinned sources.
 
