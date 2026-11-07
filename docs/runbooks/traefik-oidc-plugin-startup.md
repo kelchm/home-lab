@@ -58,6 +58,20 @@ Version 0.22 deployed on 2026-11-06 through [#1040](https://github.com/kelchm/ho
 
 The owner confirmed fresh Sonarr and Longhorn login/re-login. The observed browser callback used one replica; forced cross-replica login/callback and authenticated-session handoffs remain unverified and are tracked in [#1293](https://github.com/kelchm/home-lab/issues/1293).
 
+## Version 0.23 browser binding
+
+Version 0.23 fixes [GHSA-6qvg-9xhq-947r](https://github.com/sevensolutions/traefik-oidc-auth/security/advisories/GHSA-6qvg-9xhq-947r), a login-CSRF vulnerability affecting 0.22 even with PKCE enabled. It binds encrypted login state to a random value in a host-only `<CookieNamePrefix>.BrowserBinding` cookie. The cookie is Secure and HttpOnly with our settings, uses `Path=/` and `SameSite=Lax`, and expires after one hour; starting another login refreshes it. The [upstream design](https://github.com/sevensolutions/traefik-oidc-auth/blob/v0.23.0/docs/adr/0002-browser-bound-login-state.md) describes the callback check and remaining limitations.
+
+A callback without the matching binding discards the code and restarts login once. A second mismatch returns HTTP 400. Logins in progress during the version change can restart, and browsers blocking the cookie cannot complete login. Existing authenticated-session handling is unchanged in the reviewed source; confirm actual session and callback handoffs during browser acceptance. The shared session-encryption key must stay unchanged across replicas. This change does not resolve the logout or revocation limitations below.
+
+For the separately approved 0.23 rollout:
+
+1. Record Flux, pod and alert health, refresh PR CI against current `main`, and confirm rendering changes only the plugin version argument. Merge the version change alone.
+2. Confirm Flux applies the merge revision and both `traefik-admin` replicas run the 0.23 argument, are Ready, and log `Plugins loaded.`. Inspect each replica's entire startup window for plugin or router failures.
+3. Send browser-style unauthenticated requests through each replica to all 15 protected hosts, using `/select` for VictoriaLogs. Require redirects to the correct Kanidm client, with a Secure, HttpOnly, SameSite=Lax host-only `BrowserBinding` cookie. Send the returned cookie to the other replica and confirm the same binding is retained. This tests login initiation and cookie reuse, not an authenticated callback.
+4. Confirm fresh Sonarr and Longhorn logins in a new private browser session, then qualify login/callback and authenticated-session handoffs across replicas. Keep any unperformed authenticated checks in [#1293](https://github.com/kelchm/home-lab/issues/1293); do not infer them from redirects or readiness.
+5. Recheck Flux, pods, warning/critical alerts and post-merge `main` CI. If recovery requires reverting the plugin pin, verify restored routes and logins, and record that reverting to 0.22 restores the known CSRF vulnerability.
+
 ## Logout and revocation
 
 Signing out of Kanidm does not immediately end each host's gateway session. Our middleware defaults to validating its saved ID token locally, without a per-request Kanidm lookup. `CheckOnEveryRequest` reasserts authorization against that token's claims; it does not fetch current group membership or revocation state. The cookie's configured `MaxAge: 43200` is 12 hours from creation or renewal, not an absolute session lifetime. Token validation or failed refresh can end access earlier. Each host has its own cookie because `SessionCookie.Domain` is unset; sharing an OIDC client and cookie-name prefix does not share host-only cookies.
