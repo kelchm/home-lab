@@ -26,9 +26,10 @@ spec:
           app:
             image:
               repository: ghcr.io/kelchm/broadsheet
-              # Immutable sha tag; bump to deploy. Spegel caches mutable tags
-              # (latest) stale, so a versioned ref is the reliable pull.
-              tag: sha-ebbd27e@sha256:39847368f56888d0d6c78cdbf9b0ecd1e04e7d1b69d279f7e4fc37bc6a4456a6
+              # Broadsheet publishes latest on every push to its main branch.
+              # Renovate updates the digest, which is what the node pulls, so
+              # Spegel cannot serve a stale latest.
+              tag: latest@sha256:39847368f56888d0d6c78cdbf9b0ecd1e04e7d1b69d279f7e4fc37bc6a4456a6
             env:
               TZ: America/New_York
               BROADSHEET_PORT: &port 8080
