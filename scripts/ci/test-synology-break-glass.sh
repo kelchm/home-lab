@@ -52,6 +52,9 @@ rm -rf "${SENT}" && cp -Rp "${@: -2:1}" "${SENT}"
 STUB
 chmod +x "${TEST_DIR}/bin/ssh" "${TEST_DIR}/bin/rsync"
 
+# World-readable sources, so only the script's own umask keeps the staged copy private.
+chmod 0644 "${PROJECT}/compose.yaml" "${TEST_DIR}/good.env" "${TEST_DIR}/foreign.env"
+
 function fail() {
     echo "FAIL: $*" >&2
     cat "${TEST_DIR}/output.log" >&2
