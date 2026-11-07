@@ -966,6 +966,76 @@
     }
    ],
    "expect": []
+  },
+  {
+   "rule": "NodeGPUMemoryExhausted",
+   "name": "a kernel allocation failure names its Spark",
+   "records": [
+    {
+     "fields": {
+      "service.name": "kernel",
+      "service.namespace": "spark",
+      "severity_number": 17,
+      "host.name": "spark-1",
+      "_msg": "NVRM: nvAssertFailedNoLog: Assertion failed: NV_ERR_NO_MEMORY"
+     },
+     "offset": -120,
+     "repeat": 2,
+     "every": 10
+    }
+   ],
+   "expect": [
+    {
+     "labels": {
+      "instance": "spark-1"
+     },
+     "value": 2
+    }
+   ]
+  },
+  {
+   "rule": "NodeGPUMemoryExhausted",
+   "name": "a failure older than 15 minutes stays quiet",
+   "records": [
+    {
+     "fields": {
+      "service.name": "kernel",
+      "service.namespace": "spark",
+      "severity_number": 17,
+      "host.name": "spark-1",
+      "_msg": "NVRM: nvAssertFailedNoLog: Assertion failed: NV_ERR_NO_MEMORY"
+     },
+     "offset": -1200
+    }
+   ],
+   "expect": []
+  },
+  {
+   "rule": "NodeGPUMemoryExhausted",
+   "name": "another host's failure and other kernel lines stay quiet",
+   "records": [
+    {
+     "fields": {
+      "service.name": "kernel",
+      "service.namespace": "pve",
+      "severity_number": 17,
+      "host.name": "pve-sbx-1",
+      "_msg": "NVRM: NV_ERR_NO_MEMORY"
+     },
+     "offset": -120
+    },
+    {
+     "fields": {
+      "service.name": "kernel",
+      "service.namespace": "spark",
+      "severity_number": 17,
+      "host.name": "spark-1",
+      "_msg": "NVRM: Xid (PCI:000f:01:00): 31, pid=1234"
+     },
+     "offset": -120
+    }
+   ],
+   "expect": []
   }
  ]
 }

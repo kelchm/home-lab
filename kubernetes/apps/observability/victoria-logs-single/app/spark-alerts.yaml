@@ -1,0 +1,35 @@
+---
+# An allocation failure is in the kernel log and nowhere else: the engine can
+# report nothing, or wedge (docs/runbooks/logging.md#log-alerts). LogsQL rules:
+# the datasource label routes them to vmalert-victoria-logs. Series carry no
+# cluster label.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: spark-logs
+  labels:
+    alerting.home.kelch.io/datasource: victorialogs
+spec:
+  groups:
+    - name: spark-logs
+      type: vlogs
+      interval: 1m
+      labels:
+        platform: spark
+      rules:
+        # A warning because one or two isolated lines have been harmless on
+        # other pairs. Repeats mean the engine is going down.
+        - alert: NodeGPUMemoryExhausted
+          expr: >-
+            _time:15m {service.name="kernel"} service.namespace:=spark "NV_ERR_NO_MEMORY"
+            | stats by (host.name) count() as failures
+            | rename host.name as instance
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.instance }} logged {{ $value }} GPU memory failures in 15 minutes"
+            description: >-
+              The kernel on {{ $labels.instance }} logged NV_ERR_NO_MEMORY. A
+              failed allocation latches the engine broken, so check /health
+              on spark-1. Restart the model if it reports a fault or the
+              failures repeat.
