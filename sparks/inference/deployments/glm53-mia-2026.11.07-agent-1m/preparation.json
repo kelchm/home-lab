@@ -42,7 +42,7 @@
     }
   },
   "qualification_status": "pending",
-  "hosts_contacted": false,
+  "hosts_contacted": true,
   "gpu_or_model_executed": false,
   "python_service_changed": false,
   "source_audit": {
@@ -57,18 +57,12 @@
     ],
     "thinking_default": true
   },
-  "source_commit": "d1f9aa0ad3ce3ca6d50d96566212b0569aa78af1",
-  "preparation_pr": "https://github.com/kelchm/spark-inference/pull/3",
   "offhost_checks": {
     "spark_inference": {
       "tests": 47,
       "status": "passed",
       "sdk": "0.4.2",
       "log_sha256": "38855f40519b6e9665e0e1473c204532cd0dfa9b8800734f608ff390b5b8a8be"
-    },
-    "home_lab_consumer": {
-      "tests": 10,
-      "status": "passed"
     },
     "home_lab_contract_suite": {
       "passed": 253,
@@ -77,23 +71,17 @@
       "log_sha256": "5ab290587f503eadf245523fdaa0136cdb284a88ec283f0b0bb6af535654d1a6"
     },
     "generation_recipe_release_status_actionlint": "passed",
-    "materialized_sdk_contract": {
-      "tests": 1,
-      "status": "passed",
-      "external_attempts": 0
-    },
     "offline_campaign": "unknown; no endpoint evidence",
-    "independent_launch_review": "in progress",
-    "github_materialization": {
-      "source_commit": "d1f9aa0ad3ce3ca6d50d96566212b0569aa78af1",
-      "files": 23,
-      "status": "passed; all hashes, modes and release/image agreement verified"
-    }
+    "independent_launch_review": "store identity and explicit native TERM fixes accepted; external consumer retired for this trial"
   },
   "retained_python_local_recipe": {
     "path": "sparks/inference/sparkrun/mia-tensorfold-glm53-exl3-tp2/glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable-readiness-v2.yaml",
     "sha256": "e6d4207bd7c3c83a07c64e6919a18ca8965682c5c8969ff1b6dfd79d0c5bd006",
     "live_identity": "unverified; approved-window preflight required"
   },
-  "raw_evidence_local_directory": "/Users/kelchm/.cache/glm53-evidence/deploy-prep-20261107"
+  "raw_evidence_local_directory": "/Users/kelchm/.cache/glm53-evidence/deploy-prep-20261107",
+  "launch_flow": "existing home-lab recipe/mod/plugin/rsync; no PR3 fetch",
+  "spark_inference_pr3": "draft; launch-plumbing migration deferred",
+  "window_authorization": "owner approved NOW, November7; baseline first; stop/report unexpected results; ask final keep-native/restore-Python decision",
+  "trial_receipts_local_directory": "/Users/kelchm/.cache/glm53-evidence/trial-20261107T175225Z"
 }

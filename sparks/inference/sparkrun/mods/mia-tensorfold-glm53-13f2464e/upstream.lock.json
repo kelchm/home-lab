@@ -1,0 +1,21 @@
+{
+  "release_manifest": "release.json",
+  "release_sha256": "c537d7f0c5037f3e8002eb13f92a4d37cd01549d575c7269c8144cd04a7fb371",
+  "engine_repository": "kelchm/TensorFold",
+  "engine_revision": "e52eb42b52b1e50f3f23a5eae8115bbe80c5e7d9",
+  "kit_repository": "MiaAI-Lab/GLM-5.3-Flash-DGX-Sparks-1104",
+  "kit_revision": "13f2464ee84ab2b5dabf0bb264d1144b02cf5fb7",
+  "upstream_patch_count": 110,
+  "kit_patches_sha256": "287db8619735278d26139df314ddc01e938f70a09286224e528739772b2829fb",
+  "image": "ghcr.io/kelchm/spark-inference/glm53-mia@sha256:0956a18406597abc252564b6f23e7f205dc35c5eac5b475ea6c0c229d10d4d9c",
+  "image_id": "sha256:ab992b177ec576277720a8acf71d36ed094f56b724d9acb8aebc0d83afad2a34",
+  "mod_files": {
+    "capacity.py": "ed4c208b9d36ddf5ed5757823e070edb1dccb6b9525c59ce3d06456b04b44b99",
+    "chat_template.jinja": "f2e36c6b7fdd89f5f61564635227a1708e1601357cd41f9b5c0190911573d1e2",
+    "prepare.py": "9619f646aaafb06717d761a5f9f8a3274914f00b025b40d332638dbeff417e59",
+    "release.json": "c537d7f0c5037f3e8002eb13f92a4d37cd01549d575c7269c8144cd04a7fb371",
+    "run.sh": "05dc478f236be1c887fdf7692bf50dcf6ec36dbe6d12d6e034815d402f273714",
+    "serve.py": "7690565d8f280a30b545645b115a2df94e17374c79e7a4edc151a9472cab8670",
+    "upstream_chat_template.jinja": "15ff929998c3dd126addaa1448f7f811bb3724fe835f448ac889d8f558d034c8"
+  }
+}

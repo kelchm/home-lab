@@ -15,7 +15,7 @@ Every profile follows the contract in [#943](https://github.com/kelchm/home-lab/
 
 ## GLM-5.3-Flash on Mia's TensorFold kit
 
-The native [`glm53-mia-2026.11.07` trial](../deployments/glm53-mia-2026.11.07-agent-1m/README.md) is off-host preparation only. Its external spark-inference release inputs and image are pinned; a specific operating window still needs owner approval. The Python profile below remains the selected service and rollback.
+The native [`glm53-mia-2026.11.07` trial](../deployments/glm53-mia-2026.11.07-agent-1m/README.md) uses this repository’s existing recipe/mod/plugin and rsync flow. The owner authorized a November 7 comparison window with a Python baseline first; the final native/Python selection remains the owner’s decision. Migration of launch tooling into spark-inference is deferred until after qualification.
 
 `mia-tensorfold-glm53-exl3-tp2/` holds the profile for [Mia's two-Spark GLM kit](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold): TensorFold 0.6.0's Python CUDA engine with Mia's patches, serving Mia's 4 bpw EXL3 checkpoint across both Sparks. The kit's `main` at `3fd60dfc` replaced its v1.10 release after [#941's comparison on October 22](https://github.com/kelchm/home-lab/issues/941#issuecomment-6334247435), in which the same 48 requests gave identical replies on both, and decode and prefill were within about 3% of v1.10's. `bf5f9452` replaced `3fd60dfc` on October 25 and passed [a trial on October 27](https://github.com/kelchm/home-lab/issues/938#issuecomment-6448276787). `bf5f9452` has served day to day since [October 28](https://github.com/kelchm/home-lab/issues/938#issuecomment-6458998037); GLM had last served day to day on October 8, on v1.10.
 
