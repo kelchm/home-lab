@@ -1,0 +1,64 @@
+---
+# Radarr sets AUTH__METHOD: External and trusts the admin gateway's OIDC
+# middleware, so a direct connection gets full control without a login, and
+# /initialize.json returns the API key. This policy is that boundary: ingress
+# is default-denied for the selected endpoint and admits only the admin
+# Traefik instance and the integrations configured against Radarr.
+#
+# Every integration already holds Radarr's API key, so an L4 rule grants it
+# nothing more. Egress is unrestricted. Each workload label is paired with its
+# dedicated ServiceAccount identity so a compromised pod cannot gain access
+# merely by forging an app label.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: radarr
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: radarr
+  ingress:
+    # Only the admin Traefik instance serves the OIDC-protected Web UI.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: network
+            app.kubernetes.io/instance: traefik-admin-network
+            io.cilium.k8s.policy.serviceaccount: traefik-admin
+      toPorts: &port
+        - ports:
+            - port: "7878"
+              protocol: TCP
+
+    # API integrations.
+    - fromEndpoints:
+        # Homepage widget.
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: homepage
+            app.kubernetes.io/name: homepage
+            io.cilium.k8s.policy.serviceaccount: homepage
+        # Movie requests.
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: media
+            app.kubernetes.io/name: seerr
+            io.cilium.k8s.policy.serviceaccount: seerr
+        # Daily quality-profile sync (CronJob).
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: media
+            app.kubernetes.io/name: recyclarr
+            io.cilium.k8s.policy.serviceaccount: recyclarr
+        # Import after extraction.
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: media
+            app.kubernetes.io/name: unpackerr
+            io.cilium.k8s.policy.serviceaccount: unpackerr
+        # Movie sync for subtitles.
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: media
+            app.kubernetes.io/name: bazarr
+            io.cilium.k8s.policy.serviceaccount: bazarr
+        # Indexer sync.
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: media
+            app.kubernetes.io/name: prowlarr
+            io.cilium.k8s.policy.serviceaccount: prowlarr
+      toPorts: *port
