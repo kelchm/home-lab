@@ -88,7 +88,16 @@ Use this for database corruption, an unwanted change through the API or web UI, 
    kubectl -n identity logs kanidm-default-1 -c kanidm | grep -i refresh
    ```
 
-   Continue only when replica 1 has logged a completed refresh and shows the restored state: a change made after the backup is absent when you query that pod directly, for example through `kubectl -n identity port-forward pod/kanidm-default-1 8443` with the `kanidm` CLI pointed at `https://localhost:8443` and hostname verification skipped. Then set `"value":3`, check replica 2 the same way, and resume Flux, which leaves the group at the declared three:
+   Continue only when replica 1 has logged a completed refresh and shows the restored state: a change made after the backup is absent when you query that pod directly, for example through `kubectl -n identity port-forward pod/kanidm-default-1 8443` with the `kanidm` CLI pointed at `https://localhost:8443` and hostname verification skipped. Then add replica 2 and check it the same way:
+
+   ```sh
+   kubectl -n identity patch kanidm kanidm --type json \
+     -p '[{"op":"replace","path":"/spec/replicaGroups/0/replicas","value":3}]'
+   kubectl -n identity get pods -l app.kubernetes.io/name=kanidm -w   # until kanidm-default-2 is Ready
+   kubectl -n identity logs kanidm-default-2 -c kanidm | grep -i refresh
+   ```
+
+   Once replica 2 holds the restored state too, resume Flux, which leaves the group at the declared three:
 
    ```sh
    flux resume kustomization kanidm -n identity

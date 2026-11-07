@@ -102,7 +102,7 @@ Before recycling pods, confirm the node is *currently* healthy. Recycling onto a
 
 ## Recovery
 
-Delete the broken pod gracefully and let its controller replace it:
+For a Longhorn instance-manager, stop here and follow [Longhorn instance-managers](#longhorn-instance-managers) instead: deleting one that still carries engines and replicas fails them. For any other pod, delete it gracefully and let its controller replace it:
 
 ```sh
 kubectl -n <namespace> delete pod <name>
@@ -120,7 +120,7 @@ An instance-manager runs the engines and replicas of the volumes on its node. De
 1. List the volumes it serves and let them move off: stop or move their workloads, or drain the node with a PodDisruptionBudget-respecting `kubectl drain` as in the [cutover procedure](longhorn-storage-network-cutover.md#roll-managers-then-one-node-at-a-time). Do not add `--force` or `--disable-eviction`.
 2. Record the old pod's UID, container and sandbox IDs.
 3. Delete it gracefully, as above. Longhorn may not recreate it while the node is cordoned; once CNI is healthy, uncordon so the replacement can start.
-4. Require the replacement to have a new UID and sandbox, and [prove its storage interface](longhorn-storage-network-cutover.md#prove-each-replacement-has-the-filter): `lhnet1` with a `10.32.25.128/28` address and the storage routes.
+4. Require the replacement to have a new UID and sandbox, and [prove its storage interface](longhorn-storage-network-cutover.md#prove-each-replacement-has-the-filter): `lhnet1` with an address from `10.32.25.129`–`.142` in the `10.32.25.128/28` subnet, and the storage routes.
 5. Run `.agents/skills/talos-rollout/scripts/verify-node.sh <node>`. Every in-use volume must be attached and healthy, with none degraded or faulted, and every instance-manager Running and Ready with `lhnet1`. Watch rebuilds with `kubectl -n longhorn-system get replica -o wide -w`.
 
 ### When to force-delete
@@ -132,7 +132,7 @@ talosctl -n <node-ip> containers -k | grep <pod-name>   # must print nothing
 kubectl -n <namespace> delete pod <name> --force --grace-period=0
 ```
 
-Then continue from step 4.
+Then wait for the replacement as for a graceful delete: Running and Ready, a clean staleness query and the attachment present in `ip -br addr`. For an instance-manager, uncordon the node if step 1 drained it, so Longhorn can start the replacement, and continue from step 4.
 
 ## After recovery
 
