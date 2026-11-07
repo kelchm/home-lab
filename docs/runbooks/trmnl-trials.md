@@ -44,7 +44,7 @@ A device must resolve the private hostnames and reach `10.32.130.1:443`. An IoT 
 ## Enrollment differences
 
 - **Terminus:** `/api/setup` can provision a new MAC and its welcome playlist. Send a recognized `Model` (for example `og`) and a semantic `FW-Version`. The trial defaults firmware updates off.
-- **LaraPaper:** register the first user, then enable Permit Auto-Join or create the device manually. Configure its model and dimensions before using the display endpoint.
+- **LaraPaper:** register the first user (further signups are closed unless `MULTIUSER_REGISTRATION_ENABLED=true`), then enable Permit Auto-Join or create the device manually. Since 0.46.0, Auto-Join turns itself off after 15 minutes, and re-pairing a device that has connected before needs it on again. Configure its model and dimensions before using the display endpoint.
 - **Inker:** `/api/setup` auto-provisions the MAC and recognizes model/width/height headers. Use the returned API key as `Access-Token`.
 - **Next.js:** the deployed trial has its database initialized and built-in recipes seeded. Create the first administrator at `/setup`, then add/claim the device through the authenticated UI. For a fresh empty database, initialize it at `/setup` and restart the pod once before adding devices. An unauthenticated device cannot become an owned device by itself.
 

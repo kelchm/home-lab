@@ -30,7 +30,6 @@ spec:
               PHP_OPCACHE_ENABLE: '1'
               DB_CONNECTION: sqlite
               DB_DATABASE: /var/www/html/database/storage/database.sqlite
-              REGISTRATION_ENABLED: '1'
               LOG_CHANNEL: stderr
               LOG_LEVEL: warning
             envFrom:
