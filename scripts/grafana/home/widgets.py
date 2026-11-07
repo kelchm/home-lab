@@ -264,9 +264,14 @@ W.tiles("gpu", "GPU · $gpu", [
 # Thin, unfilled lines, because a busy GPU fills a thicker line's whole width.
 CRISP = dict(lineInterpolation="linear", lineWidth=1, fillOpacity=0, gradientMode="none")
 RATE = "$__rate_interval"
-GENERATED, PROMPT, CACHED = "tensorfold:generation_tokens_total", "tensorfold:prompt_tokens_total", "tensorfold_health:cached_tokens_total"
-# GLM reports reply tokens as they are written; earlier TensorFold recipes report finished and running tokens apart.
-WRITTEN = f"(tensorfold_health:completion_tokens_total or ({GENERATED} + tensorfold:generation_tokens_running))"
+# TensorFold's servers and the GLM kit's Python server name these counters differently; no recipe exports both, so one selector reads either.
+CACHED = '{__name__=~"tensorfold:prompt_tokens_cached_total|tensorfold_health:cached_tokens_total"}'
+DECODE_SECONDS = '{__name__=~"tensorfold:request_decode_seconds_sum|tensorfold_health:decode_seconds_total"}'
+GENERATED, PROMPT = "tensorfold:generation_tokens_total", "tensorfold:prompt_tokens_total"
+# Reply tokens written per second. The GLM kit's Python server counts them in one counter; TensorFold counts finished and in-flight tokens apart.
+# Built from rate() and delta() rather than a subquery, which VictoriaMetrics refuses at one-second steps beyond about a day.
+WRITTEN = (f"(rate(tensorfold_health:completion_tokens_total[{RATE}]) or "
+           f"(rate({GENERATED}[{RATE}]) + delta(tensorfold:generation_tokens_running[{RATE}]) / ($__rate_interval_ms / 1000)))")
 # The label on tensorfold:kv_cache_usage_ratio is a stream's place in the list of live streams, which shifts as streams finish, so a stream cannot be followed by it.
 # Ranking by size at each moment orders the bars, which are read one moment at a time. The engine runs at most eight.
 KV = "tensorfold:kv_cache_usage_ratio"
@@ -279,12 +284,14 @@ def ranked(top):
     return "sort_by_label(" + " or ".join(f'label_set(({nth(k)}) > 0, "rank", "#{k}")' for k in range(1, 9)) + ', "rank")'
 
 
+# Only the GLM kit's Python server reports its pool. Under another server Pool used reads -1, shown as a dash, so the tile does not keep the last recipe's figure.
 W.tiles("inference", "Inference · $model", [
     ("Requests running", zero("sum(tensorfold:requests_running)"), dict(hue=LOAD_HUE)),
     ("Requests waiting", zero("sum(tensorfold:requests_waiting)"), dict(thresholds=th([{"value": None, "color": LOAD_HUE}, {"value": 4, "color": "orange"}]))),
-    ("Decode speed per reply", f"sum(rate({GENERATED}[5m])) / (sum(rate(tensorfold_health:decode_seconds_total[5m])) > 0)", dict(unit="suffix: tok/s", decimals=1, noValue="–", hue=SPEED_HUE)),
+    ("Decode speed per reply", f"sum(increase({GENERATED}[5m])) / (sum(increase({DECODE_SECONDS}[5m])) > 0.05)", dict(unit="suffix: tok/s", decimals=1, noValue="–", hue=SPEED_HUE)),
     ("Prompt cache hits", f"100 * sum(rate({CACHED}[15m])) / (sum(rate({PROMPT}[15m])) > 0)", dict(unit="percent", noValue="–", hue=CLOCK_HUE)),
-    ("Pool used", "100 * (1 - sum(tensorfold_health:pool_free_tokens) / (sum(tensorfold_health:pool_tokens) > 0))", dict(unit="percent", noValue="–", hue=LOAD_HUE))], trend=True,
+    ("Pool used", "100 * (1 - sum(tensorfold_health:pool_free_tokens) / (sum(tensorfold_health:pool_tokens) > 0)) or (count(tensorfold:requests_running) * 0 - 1)",
+     dict(unit="percent", noValue="–", hue=LOAD_HUE, mappings=[{"type": "value", "options": {"-1": {"text": "–", "index": 0}}}]))], trend=True,
     desc="What the model is doing: work in hand, work queued, how fast each reply is writing, how much of its prompts it found cached and how full its shared pool is, each with its recent history behind it. A dash means idle, or a recipe that does not report it.")
 W.add("inference-idle", "Inference", "stat", [q("count(tensorfold:kv_cache_usage_ratio)")],
       {"colorMode": "none", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": RED, "textMode": "value", "text": {"valueSize": 16}},
@@ -297,7 +304,7 @@ W.trend("stream-tokens", "Tokens held by each running request · $model", [("req
         desc="Tokens in each running request's cache. Each track is usually one conversation growing turn by turn, and a gap is a request between turns. All one colour because the metrics carry no request id, so a colour could not follow a request. Hover for exact values. A recipe that reports no window size shows nothing here.")
 W.trend("gpu-use", "GPU in use", [("{{instance}}", f"100 * max by (instance) (avg_over_time(nvidia_smi_utilization_gpu_ratio[{RATE}]))")], "percent", hi=100, interval="5s", style=CRISP,
         desc="How hard each GPU has been working, averaged over each step of the chart.")
-W.trend("output", "Output · $model", [("tokens written", f"sum(clamp_min(deriv({WRITTEN}[{RATE}:1s]), 0))")], "suffix: tok/s", interval="1s", style=CRISP,
+W.trend("output", "Output · $model", [("tokens written", f"sum(clamp_min({WRITTEN}, 0))")], "suffix: tok/s", interval="1s", style=CRISP,
         desc="Tokens written per second across all streams, counted as they are written.")
 W.trend("prompt-new", "New prompt tokens · $model", [("tokens read", f"(sum(rate({PROMPT}[{RATE}])) - sum(rate({CACHED}[{RATE}]))) or sum(rate({PROMPT}[{RATE}]))")], "suffix: tok/s", interval="30s", style=CRISP,
         desc="Prompt tokens not found in cache, per second, booked when each request finishes. Cached tokens are left out because they cost no prefill. A recipe that reports no cache shows every prompt token.")
