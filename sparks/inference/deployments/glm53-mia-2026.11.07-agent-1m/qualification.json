@@ -536,5 +536,11 @@
     "network_ids_alerts": "Owner reported alert spam from repeated short-lived SSH polling connections.",
     "mitigation": "Stopped polling; one persistent SSH ControlMaster TCP connection per Spark; command channels refuse automatic direct fallback.",
     "service_impact": "Native remained healthy; no relaunch for the transport change."
+  },
+  "follow_up": {
+    "controlled_rerun": "rerun.json",
+    "analysis": "comparison.md",
+    "final_service": "Python, isolated rerun spill; retained production spill untouched",
+    "qualification": "rejected"
   }
 }
