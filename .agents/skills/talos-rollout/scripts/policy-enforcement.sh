@@ -8,17 +8,19 @@
 #   policy-enforcement.sh                 every unenforced endpoint fails; run
 #                                         this after any cilium-agent restart
 #   policy-enforcement.sh --record NODE   before rolling NODE, save the count of
-#                                         unenforced endpoints per identity
+#                                         unenforced endpoints per identity on
+#                                         the other nodes
 #   policy-enforcement.sh NODE            after rolling NODE, fail on anything
 #                                         unenforced on NODE, and on any identity
-#                                         with more unenforced endpoints than the
-#                                         saved count
+#                                         with more unenforced endpoints on the
+#                                         other nodes than the saved count
 #
 # Every endpoint on a rebooted node is created after its agent started, so the
 # restored-endpoint failure cannot explain anything found there. Agents that
 # have not restarted keep the pre-existing stale set, and a pod drained onto
-# one can reuse a stale identity; the saved count separates that from the
-# known set. Without a saved count, every unenforced endpoint fails.
+# one can reuse a stale identity, including one that was already unenforced on
+# NODE; the saved count separates that from the known set. Without a saved
+# count, every unenforced endpoint fails.
 set -Eeuo pipefail
 
 usage() {
@@ -82,6 +84,12 @@ for each_node in $nodes; do
         problems+=("could not read policy state from $agent on $each_node")
         continue
     fi
+    # Every agent has at least its health endpoint, so an empty list is a failed read.
+    if ! jq -e '.policy != null and .revision != null' "$work_dir/policy.json" >/dev/null 2>&1 \
+        || ! jq -e 'type == "array" and length > 0' "$work_dir/endpoints.json" >/dev/null 2>&1; then
+        problems+=("unexpected or empty policy state from $agent on $each_node")
+        continue
+    fi
     kubectl get pods -A --field-selector "spec.nodeName=$each_node" -o json \
         | jq -c '[.items[] | select(.status.podIP) | {key: .status.podIP, value: "\(.metadata.namespace)/\(.metadata.name)"}] | from_entries' \
         >"$work_dir/pods.json"
@@ -109,12 +117,19 @@ if (( ${#problems[@]} > 0 )); then
 fi
 
 if (( record )); then
+    # A pending endpoint may still settle into a failure, which the count
+    # would then excuse.
+    if jq -e 'select(.status == "pending")' "$work_dir/rows.jsonl" >/dev/null; then
+        printf 'Endpoints are still regenerating; re-run once none is pending.\n' >&2
+        exit 1
+    fi
     mkdir -p "$(dirname "$baseline")"
     jq -s --arg node "$node" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '{
       node: $node, recorded_at: $at,
-      unenforced: (map(select(.status != "ok")) | group_by(.identity) | map({key: (.[0].identity | tostring), value: length}) | from_entries)
+      unenforced: (map(select(.status != "ok" and .node != $node)) | group_by(.identity)
+        | map({key: (.[0].identity | tostring), value: length}) | from_entries)
     }' "$work_dir/rows.jsonl" >"$baseline"
-    printf 'Recorded %s unenforced endpoint(s) before rolling %s in %s.\n' \
+    printf 'Recorded %s unenforced endpoint(s) on the other nodes before rolling %s in %s.\n' \
         "$(jq '[.unenforced[]] | add // 0' "$baseline")" "$node" "$baseline"
     exit 0
 fi
@@ -127,7 +142,7 @@ elif [[ -f "$baseline" ]]; then
     # On the rolled node nothing may be unenforced; elsewhere, no identity may
     # have more unenforced endpoints than before the drain.
     gating="$(jq -cs --arg node "$node" --slurpfile base "$baseline" '
-      (map(select(.status != "ok")) | group_by(.identity)
+      (map(select(.status != "ok" and .node != $node)) | group_by(.identity)
         | map({key: (.[0].identity | tostring), value: length}) | from_entries) as $now
       | .[] | select(.status != "ok")
       | select(.node == $node

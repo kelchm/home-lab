@@ -191,4 +191,24 @@ expect_out 'no Running cilium agent on k8s-prod-1'
 agents k8s-prod-1=cilium-a k8s-prod-2=cilium-b
 ! gate 10.32.30.13 || fail 'a node that is not in the cluster passed'
 expect_out 'node k8s-prod-3 not found'
-echo 'ok: rolled node and new failures gate; the recorded known set does not; every node needs an agent'
+# A stale endpoint on the rolled node is recreated on a node whose agent holds
+# the same stale identity; the cluster-wide count would not change.
+endpoints cilium-a '"10.0.0.1", "10.0.0.2"'
+endpoints cilium-b '"10.0.0.2"'
+gate --record k8s-prod-1 || { cat "$TEST_DIR/out" >&2; fail 'recording failed'; }
+expect_out 'Recorded 0 unenforced endpoint(s) on the other nodes'
+endpoints cilium-a '"10.0.0.2"'
+jq -c '[.[] | select(.status.networking.addressing[0].ipv4 == "10.0.0.2")]
+  + [.[] | select(.status.networking.addressing[0].ipv4 == "10.0.0.1") | .status.networking.addressing[0].ipv4 = "10.0.0.9"]' \
+    "$TEST_DIR/endpoints.json" > "$TEST_DIR/state/ep-cilium-b.json"
+! gate k8s-prod-1 || fail 'a stale endpoint moved off the rolled node passed'
+expect_out '  - k8s-prod-2: media/app-moved fail'
+# A pending endpoint could settle into a failure the count would then excuse.
+endpoints cilium-b '"10.0.0.2", "10.0.0.4"'
+! gate --record k8s-prod-1 || fail 'a count was recorded while an endpoint was pending'
+expect_out 'still regenerating'
+# An agent that answers with nothing has not been checked.
+printf '[]' > "$TEST_DIR/state/ep-cilium-b.json"
+! gate || fail 'an empty endpoint list passed'
+expect_out 'unexpected or empty policy state from cilium-b on k8s-prod-2'
+echo 'ok: rolled node and new failures gate; the recorded known set does not; every node needs a readable agent'
