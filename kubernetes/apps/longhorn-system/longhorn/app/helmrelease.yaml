@@ -121,8 +121,9 @@ spec:
       # then drops the surplus, so numberOfReplicas is never undercut mid-move.
       replicaAutoBalance: best-effort
 
-    # Backup target is managed as a BackupTarget CR (backuptarget.yaml in
-    # this dir), not via defaultSettings — Longhorn 1.7+ moved backup-target
-    # out of the settings space and the chart's defaultSettings.backupTarget
-    # value is silently ignored on existing installs (it only populates the
-    # CR at the chart's first bootstrap, which has long passed for us).
+    # Backup target is managed as a BackupTarget CR
+    # (longhorn-config/app/backuptarget.yaml), not via defaultSettings —
+    # Longhorn 1.7+ moved backup-target out of the settings space and the
+    # chart's defaultSettings.backupTarget value is silently ignored on
+    # existing installs (it only populates the CR at the chart's first
+    # bootstrap, which has long passed for us).

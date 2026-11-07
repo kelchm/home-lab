@@ -10,6 +10,7 @@ resources:
   - ./namespace.yaml
   - ./middleware-kanidm-oidc.yaml
   - ./longhorn/ks.yaml
+  - ./longhorn-config/ks.yaml
 
 # Longhorn normally runs about 29 pods. A 75-pod cap preserves a full
 # replacement set plus upgrade headroom while still bounding runaway churn.
