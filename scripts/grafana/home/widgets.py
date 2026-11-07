@@ -264,7 +264,10 @@ W.tiles("gpu", "GPU · $gpu", [
 # Thin, unfilled lines, because a busy GPU fills a thicker line's whole width.
 CRISP = dict(lineInterpolation="linear", lineWidth=1, fillOpacity=0, gradientMode="none")
 RATE = "$__rate_interval"
-GENERATED, PROMPT, CACHED = "tensorfold:generation_tokens_total", "tensorfold:prompt_tokens_total", "tensorfold_health:cached_tokens_total"
+# TensorFold's servers and the GLM kit's Python server name these counters differently; no recipe exports both, so one selector reads either.
+CACHED = '{__name__=~"tensorfold:prompt_tokens_cached_total|tensorfold_health:cached_tokens_total"}'
+DECODE_SECONDS = '{__name__=~"tensorfold:request_decode_seconds_sum|tensorfold_health:decode_seconds_total"}'
+GENERATED, PROMPT = "tensorfold:generation_tokens_total", "tensorfold:prompt_tokens_total"
 # GLM reports reply tokens as they are written; earlier TensorFold recipes report finished and running tokens apart.
 WRITTEN = f"(tensorfold_health:completion_tokens_total or ({GENERATED} + tensorfold:generation_tokens_running))"
 # The label on tensorfold:kv_cache_usage_ratio is a stream's place in the list of live streams, which shifts as streams finish, so a stream cannot be followed by it.
@@ -282,7 +285,7 @@ def ranked(top):
 W.tiles("inference", "Inference · $model", [
     ("Requests running", zero("sum(tensorfold:requests_running)"), dict(hue=LOAD_HUE)),
     ("Requests waiting", zero("sum(tensorfold:requests_waiting)"), dict(thresholds=th([{"value": None, "color": LOAD_HUE}, {"value": 4, "color": "orange"}]))),
-    ("Decode speed per reply", f"sum(rate({GENERATED}[5m])) / (sum(rate(tensorfold_health:decode_seconds_total[5m])) > 0)", dict(unit="suffix: tok/s", decimals=1, noValue="–", hue=SPEED_HUE)),
+    ("Decode speed per reply", f"sum(increase({GENERATED}[5m])) / (sum(increase({DECODE_SECONDS}[5m])) >= 1)", dict(unit="suffix: tok/s", decimals=1, noValue="–", hue=SPEED_HUE)),
     ("Prompt cache hits", f"100 * sum(rate({CACHED}[15m])) / (sum(rate({PROMPT}[15m])) > 0)", dict(unit="percent", noValue="–", hue=CLOCK_HUE)),
     ("Pool used", "100 * (1 - sum(tensorfold_health:pool_free_tokens) / (sum(tensorfold_health:pool_tokens) > 0))", dict(unit="percent", noValue="–", hue=LOAD_HUE))], trend=True,
     desc="What the model is doing: work in hand, work queued, how fast each reply is writing, how much of its prompts it found cached and how full its shared pool is, each with its recent history behind it. A dash means idle, or a recipe that does not report it.")
