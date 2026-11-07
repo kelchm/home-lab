@@ -70,21 +70,15 @@ To roll back, `git revert` the change and merge; doco-cd redeploys the previous 
 
 ## Break-glass: apply over SSH
 
-Use this when doco-cd is unavailable or a fix cannot wait for a merge. Stage the files first, then stop doco-cd; otherwise its next poll redeploys the project from `main`.
+Use this when doco-cd is unavailable or a fix cannot wait for a merge. Compose cannot read the encrypted `*.sops.env` files: run as they are in Git, containers would start with ciphertext for credentials. [`break-glass-apply.sh`](../scripts/synology/break-glass-apply.sh) decrypts them with the [NAS age key](platform/doco-cd/README.md#nas-age-key) into a private local staging directory and refuses to continue while any staged file still carries SOPS ciphertext or metadata. Only then does it copy the project to `/volume1/docker/break-glass/<project>`, readable only by its owner, stop doco-cd and run Compose. Otherwise its next poll would redeploy the project from `main`.
 
 ```sh
-ssh kelchm@10.32.20.5 'mkdir -p /volume1/docker/break-glass/<project>'
-rsync -a --delete synology/<project>/ \
-  kelchm@10.32.20.5:/volume1/docker/break-glass/<project>/
-ssh kelchm@10.32.20.5 '
-  set -e
-  sudo /usr/local/bin/docker stop doco-cd
-  cd /volume1/docker/break-glass/<project>
-  sudo /usr/local/bin/docker-compose up -d
-  sudo /usr/local/bin/docker-compose ps -a
-'
+SOPS_AGE_KEY="$(op read 'op://Private/athena-doco-cd-sops-age-key/password')" \
+  scripts/synology/break-glass-apply.sh <project>
 ```
 
-The project name comes from `compose.yaml`, so this applies the local definition to the doco-cd-managed project. Because the two Compose versions compute different configuration hashes, expect every container to be recreated, both here and when doco-cd next deploys. `up -d` still waits for health dependencies before starting a publisher. Check that long-running services are running and healthy and that one-shot services exited `0`. Do not use `--wait`: Compose 2.20.1 treats a completed publisher without dependents as a failure.
+On exit, whether or not the apply succeeded, the script deletes the local copy and the decrypted files on Athena; it warns if it cannot reach Athena to do so, and then they must be removed by hand. Compose has read them by then, so a later Compose command in that directory needs another run of the script. `scripts/ci/test-synology-break-glass.sh` exercises the staging, the leftover-ciphertext refusal and the cleanup offline with a throwaway key and stubbed `ssh` and `rsync`; it has not been run against Athena. doco-cd itself has its own [manual apply](platform/doco-cd/README.md).
+
+The project name comes from `compose.yaml`, so this applies the local definition to the doco-cd-managed project. Because the two Compose versions compute different configuration hashes, expect every container to be recreated, both here and when doco-cd next deploys. `up -d` still waits for health dependencies before starting a publisher. The script prints `docker-compose ps -a`; check that long-running services are running and healthy and that one-shot services exited `0`. Do not use `--wait`: Compose 2.20.1 treats a completed publisher without dependents as a failure.
 
 Land the same change on `main`, then run `sudo /usr/local/bin/docker start doco-cd`. Its first poll redeploys `main`, because the break-glass containers carry no doco-cd labels and it treats the project as undeployed. After that deployment, remove `/volume1/docker/break-glass/<project>`.
