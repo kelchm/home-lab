@@ -30,6 +30,8 @@ if command -v mise >/dev/null 2>&1 \
       || [[ -z "${TALOSCONFIG:-}" || ! -f "${TALOSCONFIG}" ]]; }; then
     eval "$(mise env -s bash)"
 fi
+# The shared helpers resolve the kubeconfig the same way.
+export KUBECONFIG="${KUBECONFIG:-$ROOT_DIR/kubeconfig}"
 
 for bin in jq kubectl talosctl yq; do
     command -v "$bin" >/dev/null 2>&1 || { echo "missing required tool: $bin" >&2; exit 1; }

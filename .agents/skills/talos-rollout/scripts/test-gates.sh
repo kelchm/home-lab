@@ -117,7 +117,9 @@ args="$*"
 case "$args" in
     'get nodes -o json') cat "$d/nodes.json" ;;
     *'get pods -l k8s-app=cilium -o json') cat "$d/agents.json" ;;
-    *' exec '*' -- cilium-dbg policy get -o json') cat "$GATE_TEST_DIR/policy.json" ;;
+    *' exec '*' -- cilium-dbg policy get -o json')
+        agent="${args#*exec }"; [[ ! -e "$d/unreadable-${agent%% *}" ]] || { echo 'error: agent unreachable' >&2; exit 1; }
+        cat "$GATE_TEST_DIR/policy.json" ;;
     *' exec '*' -- cilium-dbg endpoint list -o json')
         agent="${args#*exec }"; cat "$d/ep-${agent%% *}.json" ;;
     *'get pods -A --field-selector spec.nodeName='*)
@@ -140,13 +142,16 @@ expect_out() { grep -qF -- "$1" "$TEST_DIR/out" || { cat "$TEST_DIR/out" >&2; fa
 
 # instance-manager: the annotation passes, so the pod's own lhnet1 decides.
 jq '{items: [.]}' "$TEST_DIR/im.json" > "$TEST_DIR/ims.json"
-im_rows() { with_stub "$SCRIPT_DIR/failing-instance-managers.sh" < "$TEST_DIR/ims.json"; cat "$TEST_DIR/out"; }
+im_rows() { with_stub "$SCRIPT_DIR/failing-instance-managers.sh" < "$TEST_DIR/ims.json" || fail 'failing-instance-managers.sh exited non-zero'; }
 printf '5: lhnet1    inet 10.32.25.129/28 brd 10.32.25.143 scope global lhnet1\n' > "$TEST_DIR/state/lhnet1-instance-manager-test"
-[[ -z "$(im_rows)" ]] || fail "instance-manager with its lhnet1 address reported: $(im_rows)"
+im_rows
+[[ ! -s "$TEST_DIR/out" ]] || fail "instance-manager with its lhnet1 address reported: $(cat "$TEST_DIR/out")"
 printf '5: lhnet1    inet 10.32.25.133/28 brd 10.32.25.143 scope global lhnet1\n' > "$TEST_DIR/state/lhnet1-instance-manager-test"
-[[ "$(im_rows)" == *'does not carry the annotated 10.32.25.129'* ]] || fail 'a different lhnet1 address passed'
+im_rows
+expect_out 'does not carry the annotated 10.32.25.129'
 rm "$TEST_DIR/state/lhnet1-instance-manager-test"
-[[ "$(im_rows)" == *'lhnet1 not present'* ]] || fail 'a pod without lhnet1 passed on its annotation alone'
+im_rows
+expect_out 'lhnet1 not present'
 echo 'ok: instance-manager gate confirms lhnet1 inside the pod, even when the pod IP is reused'
 
 # policy enforcement: k8s-prod-1 enforces; k8s-prod-2 holds one known stale
@@ -207,6 +212,21 @@ expect_out '  - k8s-prod-2: media/app-moved fail'
 endpoints cilium-b '"10.0.0.2", "10.0.0.4"'
 ! gate --record k8s-prod-1 || fail 'a count was recorded while an endpoint was pending'
 expect_out 'still regenerating'
+# Counts are per identity: a new failure in one identity is not excused by
+# another identity's recorded failures, even when the total is unchanged.
+stale() { jq -c "[.[] | select(.status.networking.addressing[0].ipv4 == \"10.0.0.1\")][0] | .status.networking.addressing[0].ipv4 = \"$1\" | .status.identity.id = $2" "$TEST_DIR/endpoints.json"; }
+{ stale 10.0.0.1 1; stale 10.0.0.9 1; } | jq -sc . > "$TEST_DIR/state/ep-cilium-b.json"
+gate --record k8s-prod-1 || { cat "$TEST_DIR/out" >&2; fail 'recording failed'; }
+expect_out 'Recorded 2 unenforced endpoint(s) on the other nodes'
+{ stale 10.0.0.1 1; stale 10.0.0.9 2; } | jq -sc . > "$TEST_DIR/state/ep-cilium-b.json"
+! gate k8s-prod-1 || fail 'a new identity failure passed because the total was unchanged'
+expect_out '  - k8s-prod-2: media/app-moved fail (identity 2'
+! grep -q '^  - k8s-prod-2: media/app-stale' "$TEST_DIR/out" || fail 'a recorded failure gated'
+# An agent whose state cannot be read has not been checked.
+touch "$TEST_DIR/state/unreadable-cilium-a"
+! gate || fail 'an unreadable agent passed'
+expect_out 'could not read policy state from cilium-a on k8s-prod-1'
+rm "$TEST_DIR/state/unreadable-cilium-a"
 # An agent that answers with nothing has not been checked.
 printf '[]' > "$TEST_DIR/state/ep-cilium-b.json"
 ! gate || fail 'an empty endpoint list passed'
