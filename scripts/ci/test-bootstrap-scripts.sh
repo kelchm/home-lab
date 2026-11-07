@@ -144,17 +144,22 @@ verify && fail "ACL verification accepted an allow entry before a deny entry"
 cat >"${fixtures}/talhelper" <<'STUB'
 #!/bin/sh
 # talhelper gencommand ...: print the fixture, or fail like talhelper would.
-[ -z "${TALHELPER_FAIL:-}" ] || exit 3
 cat "${GENERATED}"
+[ -z "${TALHELPER_FAIL:-}" ] || exit 3
 STUB
 chmod +x "${fixtures}/talhelper"
 
 gencommand() {
-    # gencommand LINE...: run the runner over a generated script of LINEs.
+    # gencommand [--retry] LINE...: run the runner over a generated script of LINEs.
+    local retry=()
+    if [[ "$1" == "--retry" ]]; then
+        retry=(--retry)
+        shift
+    fi
     printf '%s\n' "$@" >"${fixtures}/generated"
     : >"${fixtures}/ran"
-    PATH="${fixtures}:${PATH}" GENERATED="${fixtures}/generated" \
-        scripts/talos/run-gencommand.sh apply --extra-flags=--insecure >/dev/null 2>&1
+    PATH="${fixtures}:${PATH}" GENERATED="${fixtures}/generated" RETRY_INTERVAL=0 \
+        scripts/talos/run-gencommand.sh "${retry[@]}" apply --extra-flags=--insecure >/dev/null 2>&1
 }
 node() { echo "echo $1 >>'${fixtures}/ran'"; }
 
@@ -166,6 +171,13 @@ gencommand "$(node 1)" false "$(node 3)" && fail "run-gencommand hid an earlier 
 
 TALHELPER_FAIL=1 gencommand "$(node 1)" && fail "run-gencommand ignored a talhelper failure"
 gencommand "" && fail "run-gencommand accepted an empty command list"
+
+# --retry reruns until the commands succeed: here, on the third attempt.
+gencommand --retry "$(node x)" "[ \$(grep -c x '${fixtures}/ran') -ge 3 ]" ||
+    fail "run-gencommand --retry gave up on commands that later succeed"
+# A generation failure must not be retried forever.
+TALHELPER_FAIL=1 gencommand --retry true && fail "run-gencommand --retry ignored a talhelper failure"
+gencommand --retry "" && fail "run-gencommand --retry accepted an empty command list"
 
 # Every Taskfile must go through the runner rather than pipe into bash.
 if grep -nE '\|[[:space:]]*bash([^[:alnum:]_-]|$)' Taskfile.yaml .taskfiles/*/Taskfile.yaml; then

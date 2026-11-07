@@ -48,7 +48,7 @@ STUB
 cat >"${TEST_DIR}/bin/rsync" <<'STUB'
 #!/usr/bin/env bash
 printf 'rsync\n' >>"${LOG}"
-rm -rf "${SENT}" && cp -R "${@: -2:1}" "${SENT}"
+rm -rf "${SENT}" && cp -Rp "${@: -2:1}" "${SENT}"
 STUB
 chmod +x "${TEST_DIR}/bin/ssh" "${TEST_DIR}/bin/rsync"
 
@@ -58,13 +58,14 @@ function fail() {
     exit 1
 }
 
-# Each run stages under its own TMPDIR, which must be empty afterwards.
+# Each run stages under its own TMPDIR, which must be empty afterwards. It runs
+# under a permissive umask so the script must make its staging private itself.
 run() {
     : >"${LOG}"
     rm -rf "${SENT}" "${TEST_DIR}/tmp"
     mkdir "${TEST_DIR}/tmp"
     local status=0
-    (cd "${REPO}" && PATH="${TEST_DIR}/bin:${PATH}" TMPDIR="${TEST_DIR}/tmp" \
+    (umask 022 && cd "${REPO}" && PATH="${TEST_DIR}/bin:${PATH}" TMPDIR="${TEST_DIR}/tmp" \
         scripts/synology/break-glass-apply.sh app) >"${TEST_DIR}/output.log" 2>&1 || status=$?
     [[ -z "$(ls -A "${TEST_DIR}/tmp")" ]] || fail "a local staging copy was left behind"
     return "${status}"
@@ -76,7 +77,7 @@ cp "${TEST_DIR}/good.env" "${PROJECT}/app.sops.env"
 run || fail "a decryptable project was refused"
 grep -qx 'TOKEN=throwaway' "${SENT}/app.sops.env" || fail "the staged secret was not decrypted"
 if grep -rq 'ENC\[' "${SENT}"; then fail "ciphertext was sent"; fi
-if find "${SENT}" -perm -g=r | grep -q .; then fail "staged files are readable by group or others"; fi
+if find "${SENT}" \( -perm -g=r -o -perm -o=r \) | grep -q .; then fail "staged files are readable by group or others"; fi
 grep -q 'docker stop doco-cd' "${LOG}" || fail "doco-cd was not stopped"
 tail -n 1 "${LOG}" | grep -q "find '/volume1/docker/break-glass/app' -type f -name '\*.sops.env'" ||
     fail "the decrypted files were not removed from Athena last"
@@ -101,3 +102,11 @@ grep -q 'still encrypted' "${TEST_DIR}/output.log" || fail "leftover ciphertext 
 [[ ! -s "${LOG}" ]] || fail "Athena was contacted with leftover ciphertext"
 rm "${PROJECT}/extra.env"
 echo "ok: leftover ciphertext refused before stopping doco-cd"
+
+# SOPS metadata without ciphertext is refused too.
+grep '^sops_' "${TEST_DIR}/good.env" >"${PROJECT}/extra.env"
+if run; then fail "leftover SOPS metadata was accepted"; fi
+grep -q 'still encrypted' "${TEST_DIR}/output.log" || fail "leftover SOPS metadata failed for an unexpected reason"
+[[ ! -s "${LOG}" ]] || fail "Athena was contacted with leftover SOPS metadata"
+rm "${PROJECT}/extra.env"
+echo "ok: leftover SOPS metadata refused before stopping doco-cd"

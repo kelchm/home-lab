@@ -19,13 +19,20 @@ readonly REMOTE_ROOT="/volume1/docker/break-glass"
 
 # check_plaintext DIR: fail if any file under DIR still looks SOPS-encrypted.
 check_plaintext() {
-    local leftovers
-    leftovers="$(grep -rlE 'ENC\[[A-Z0-9_]+,data:|^sops_[a-z_]+=|^sops:|"sops": *\{' "$1")" || true
-    if [[ -n "${leftovers}" ]]; then
+    local leftovers status=0
+    leftovers="$(grep -rlE 'ENC\[[A-Z0-9_]+,data:|^sops_[a-z_]+=|^sops:|"sops": *\{' "$1")" || status=$?
+    case "${status}" in
+    0)
         echo "refusing to deploy, still encrypted:" >&2
         echo "${leftovers}" >&2
         return 1
-    fi
+        ;;
+    1) ;; # no matches
+    *)
+        echo "refusing to deploy: could not check the staged files for ciphertext" >&2
+        return 1
+        ;;
+    esac
 }
 
 # stage_project SOURCE DEST: copy SOURCE into the empty DEST, decrypting each
@@ -64,7 +71,9 @@ main() {
     ssh "${NAS}" "
         set -e
         cd '${remote}'
-        sudo /usr/local/bin/docker stop doco-cd
+        if sudo /usr/local/bin/docker inspect doco-cd >/dev/null 2>&1; then
+            sudo /usr/local/bin/docker stop doco-cd
+        fi
         status=0
         sudo /usr/local/bin/docker-compose up -d || status=\$?
         sudo /usr/local/bin/docker-compose ps -a || true
