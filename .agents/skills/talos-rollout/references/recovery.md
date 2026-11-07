@@ -68,8 +68,8 @@ If any are absent:
 1. Stop the rollout and cordon the affected node.
 2. Follow `docs/runbooks/multus-conf-absent-recovery.md` through every pre-recovery check: Multus running, the CNI conf present, the node untainted, and no active CNI EAGAIN cascade.
 3. Identify volumes and stateful workloads using the bad instance-manager. Allow active volumes to detach or move before recycling it. During the observed incident this required evicting the affected Kanidm replica.
-4. Delete only the bad instance-manager after the active-volume risk is understood. Longhorn may not recreate it while the node is unschedulable; once CNI is healthy, uncordon so the replacement can start.
-5. Require the replacement to show `lhnet1`, then wait until every Longhorn volume is healthy. Re-run `verify-node.sh` before proceeding.
+4. Delete only the bad instance-manager, gracefully, after the active-volume risk is understood: no `--force` or `--grace-period=0`. Force deletion is reserved for a pod diagnosed as stuck `Terminating` whose containers are confirmed gone from the node; the pod-recovery procedure covers that case. Longhorn may not recreate the instance-manager while the node is unschedulable; once CNI is healthy, uncordon so the replacement can start.
+5. Require the replacement to have a new UID and sandbox and to show `lhnet1` with its storage address and routes, then wait until every Longhorn volume is healthy. Re-run `verify-node.sh` before proceeding.
 
 Use `docs/runbooks/longhorn-storage-network-cutover.md` for the expected network-status shape and `docs/runbooks/multus-conf-absent-recovery.md` for the authoritative pod-recovery procedure.
 

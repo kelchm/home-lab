@@ -37,7 +37,7 @@ or fixing.
 | [cnpg-backup-restore](runbooks/cnpg-backup-restore.md) | CloudNativePG WAL archiving and base backups to the NAS S3 endpoint: alerts, the emergency archiver switch, and the three restore paths. |
 | [longhorn-storage-network-cutover](runbooks/longhorn-storage-network-cutover.md) | Moving Longhorn replica traffic onto the dedicated storage VLAN. |
 | [longhorn-storage-boundary](runbooks/longhorn-storage-boundary.md) | Preparing and, after a separate decision, running the eight bounded tenant-to-Longhorn storage-network attempts for #226. |
-| [kanidm-restore](runbooks/kanidm-restore.md) | Recovering Kanidm from DB corruption or PVC loss. |
+| [kanidm-restore](runbooks/kanidm-restore.md) | Restoring the three-replica Kanidm cluster from a backup or after losing claims. |
 | [kanidm-kaniop-cutover](runbooks/kanidm-kaniop-cutover.md) | Migrating Kanidm from the hand-rolled StatefulSet to the kaniop operator. |
 | [kanidm-oauth2-client-drift](runbooks/kanidm-oauth2-client-drift.md) | Recovering a KanidmOAuth2Client when its K8s secret drifts. |
 | [arr-suite-bootstrap](runbooks/arr-suite-bootstrap.md) | The *arr suite's NAS identity, ACL layout, and NFS export — current state. |

@@ -1,132 +1,146 @@
 # Kanidm restore
 
-Recovery procedures for the operator-managed Kanidm cluster. Two backup layers
-to choose from:
+Recovery procedures for the operator-managed Kanidm cluster: three replicas, `kanidm-default-0` to `-2`, each with its own Longhorn claim `kanidm-data-kanidm-default-<n>` mounted at `/data`. They replicate to each other in both directions. `primaryNode: true` makes replica 0 the primary; Kaniop configures each secondary's link to it with `automatic_refresh`, so an empty secondary reloads itself from replica 0.
 
-- **Application-consistent dumps** at `/data/<timestamp>.bak` (alongside the
-  live `/data/kanidm.db`). Produced by Kanidm's `[online_backup]` (configured
-  via `KANIDM_ONLINE_BACKUP_*` env vars). Daily at 01:00 ET, retained 7
-  in the PVC.
-- **Volume-level backups** of the Longhorn PVC. Produced by the cluster-wide
-  `default` `RecurringJob` (daily 03:00 ET retain 7 + weekly Sunday 04:00 ET
-  retain 4). Backup target: `nfs://10.32.25.5:/volume1/backups-k8s-prod/longhorn`.
+Two backup layers:
 
-The volume-level backups capture both the live DB and the bundled `.bak`
-files in a single snapshot.
+- **Online backups** at `/data/backup-<RFC 3339 UTC timestamp>.json.gz` on every replica, beside the live `/data/kanidm.db`. Kanidm's `[online_backup]` writes them, configured by the `KANIDM_ONLINE_BACKUP_*` variables in `kanidm.yaml`: daily at 05:00 UTC, seven kept. Each replica writes its own, carrying that replica's server identity and replication key.
+- **Volume backups** of each claim by the cluster-wide Longhorn `default` recurring jobs (daily at 07:00 UTC, retain 7; weekly on Sunday at 08:00 UTC, retain 4). The volume backup holds the live database and that replica's online backups. The Longhorn store is copied to Backblaze B2 daily; see [Longhorn backup and restore](longhorn-backup-restore.md).
 
-## Failure modes
+## What restore requires
 
-### DB-only corruption (most common)
+From the Kanidm 1.11.2 and Kaniop 0.21.0 sources and documentation:
 
-Triggered by a bad migration, accidental delete via the Kanidm API or web UI,
-or human error. Use the latest in-PVC `.bak` — fastest path, no NAS round-trip.
+- **The same Kanidm version that wrote the backup.** The book requires the same version; `kanidmd` enforces the same major.minor and fails with `DB0001` otherwise ([book](https://github.com/kanidm/kanidm/blob/v1.11.2/book/src/backup_and_restore.md), [check](https://github.com/kanidm/kanidm/blob/v1.11.2/server/lib/src/be/mod.rs#L1957-L1966)). Use the image in `kanidm.yaml` unless the backup predates an upgrade; then use the version that wrote it.
+- **A stopped server.** `kanidmd database restore` takes the exclusive lock the running server holds, so it cannot run through `kubectl exec`.
+- **`KANIDM_DOMAIN`, `KANIDM_ORIGIN`, `KANIDM_DB_PATH`, `KANIDM_TLS_CHAIN` and `KANIDM_TLS_KEY`** when no `server.toml` is supplied. The restore pod below mirrors the Job Kaniop's own restore runs ([source](https://github.com/pando85/kaniop/blob/v0.21.0/libs/operator/src/kanidm/restore/legacy.rs)). `restore` reads the `.json.gz` directly.
 
-```sh
-# 1. Suspend Flux and scale the Kanidm replicaGroup to 0. The PVC must be
-#    free (no pod attached) before a debug pod can mount it RWO.
-flux suspend kustomization kanidm -n identity
-kubectl -n identity patch kanidm kanidm --type merge \
-  -p '{"spec":{"replicaGroups":[{"name":"default","replicas":0,"role":"write_replica","primaryNode":true}]}}'
-kubectl -n identity wait --for=delete pod -l app.kubernetes.io/name=kanidm --timeout=120s
+Restore keeps the backup's server UUID, domain UUID and replication position. A restored replica therefore looks like an ordinary replica that has fallen behind, and its partners send it every change made since the backup ([replication update vector](https://github.com/kanidm/kanidm/blob/v1.11.2/server/lib/src/repl/ruv.rs)). **Restoring one replica while the others keep their data undoes the restore.** Restore one authoritative replica, and discard the others' data so they reload from it.
 
-# 2. List candidate .bak files. Use busybox (kanidm/server is distroless,
-#    no shell utilities). Pod terminates on shell exit.
-kubectl -n identity run kanidm-list --rm -it \
-  --image=busybox:1.37 \
-  --overrides='{"spec":{"containers":[{"name":"x","image":"busybox:1.37","stdin":true,"tty":true,
-    "command":["sh"],"volumeMounts":[{"name":"d","mountPath":"/data"}]}],
-    "volumes":[{"name":"d","persistentVolumeClaim":{"claimName":"kanidm-data-kanidm-default-0"}}]}}' \
-  -- sh
-# Inside: ls -lt /data/*.bak — pick the most recent that pre-dates the
-# corruption event. Note its full path. Exit.
+A refresh cannot pick its source: `kanidmd refresh-replication-consumer` reloads from whichever partner answers first. Never refresh a replica while another still holds data you are discarding.
 
-# 3. Restore from the chosen .bak. Use the kanidm/server image so kanidmd
-#    is on PATH; override the entrypoint to invoke the restore subcommand
-#    directly (image has no shell to wrap it in).
-kubectl -n identity run kanidm-restore --rm -it \
-  --image=kanidm/server:1.9.2 \
-  --overrides='{"spec":{"securityContext":{"runAsUser":389,"runAsGroup":389,"fsGroup":389},
-    "containers":[{"name":"x","image":"kanidm/server:1.9.2",
-      "command":["kanidmd","database","restore","/data/<timestamp>.bak"],
-      "env":[{"name":"KANIDM_DOMAIN","value":"auth.home.kelch.io"},
-             {"name":"KANIDM_ORIGIN","value":"https://auth.home.kelch.io"},
-             {"name":"KANIDM_DB_PATH","value":"/data/kanidm.db"}],
-      "volumeMounts":[{"name":"d","mountPath":"/data"}]}],
-    "volumes":[{"name":"d","persistentVolumeClaim":{"claimName":"kanidm-data-kanidm-default-0"}}]}}'
-# kanidmd reads its config from env vars when no /etc/kanidm/server.toml is
-# present. Container exits when restore completes.
+## Restore the cluster to a backup
 
-# 4. Resume Flux → Kanidm CR reconciles the StatefulSet back to the declared replica count.
-flux resume kustomization kanidm -n identity
+Use this for database corruption, an unwanted change through the API or web UI, or any restore to an earlier point. Replica 0 is the authoritative node. Replicas 1 and 2 lose their claims and reload from it.
 
-# 5. Sanity-check by logging in as idm_admin (password unchanged across restore).
-```
+*Intended, unrehearsed.* It follows the sequence Kaniop's own `KanidmRestore` controller runs ([documentation](https://github.com/pando85/kaniop/blob/v0.21.0/Documentation/src/usage/backup-restore.md)). That controller is marked experimental and its CI covers two replicas; it is an alternative to evaluate in the rehearsal, not the documented path.
 
-### PVC loss
+1. **Stop Kanidm.** Suspend Flux, then scale the replica group to zero. The JSON patch changes only the count; a merge patch on `replicaGroups` would replace the whole list and drop its other fields. At zero replicas Kaniop turns replication off and deletes the replicas' certificate Secrets.
 
-Triggered by Longhorn replica corruption, accidental PVC delete, or
-migration error. Restore the most recent Longhorn backup to a new PVC.
+   ```sh
+   flux suspend kustomization kanidm -n identity
+   kubectl -n identity patch kanidm kanidm --type json \
+     -p '[{"op":"replace","path":"/spec/replicaGroups/0/replicas","value":0}]'
+   kubectl -n identity wait --for=delete pod -l app.kubernetes.io/name=kanidm --timeout=180s
+   ```
 
-Two recovery paths:
+2. **Choose the backup.** List replica 0's online backups with a busybox pod; the server image has no shell. Pick the newest file from before the damage. Use a file written by replica 0, so the restored database keeps replica 0's identity.
 
-**(a) Run with the live DB from the snapshot — faster, accepts crash-consistency.**
-SQLite's WAL is journaled; Kanidm replays the journal at startup and recovers
-from a crash-consistent state. This is fine for Longhorn snapshots taken
-during normal operation.
+   ```sh
+   kubectl -n identity run kanidm-list --rm -it --restart=Never --image=busybox:1.37 \
+     --overrides='{"spec":{"securityContext":{"runAsUser":389,"runAsGroup":389},"containers":[{"name":"x","image":"busybox:1.37","stdin":true,"tty":true,"command":["ls","-l","/data"],"volumeMounts":[{"name":"d","mountPath":"/data"}]}],"volumes":[{"name":"d","persistentVolumeClaim":{"claimName":"kanidm-data-kanidm-default-0"}}]}}'
+   ```
 
-**(b) Restore from the bundled `.bak` — slower, guaranteed-consistent state.**
-Use when (a) shows DB integrity errors at startup, or when you specifically
-want a known-good point in time vs. the latest snapshot.
+   If the backup you need is older than the seven on the claim, first restore replica 0's claim from a Longhorn backup ([Restore one claim](longhorn-backup-restore.md#restore-one-claim)), then continue here.
 
-```sh
-# 1. Suspend Flux and scale the Kanidm replicaGroup to 0 (as in DB-only).
-flux suspend kustomization kanidm -n identity
-kubectl -n identity patch kanidm kanidm --type merge \
-  -p '{"spec":{"replicaGroups":[{"name":"default","replicas":0,"role":"write_replica","primaryNode":true}]}}'
+3. **Restore replica 0.** The pod exits when the restore completes; its log must end without an error.
 
-# 2. Restore Longhorn backup to a new PVC via the Longhorn UI (or CLI).
-#    See docs/runbooks/longhorn-backup-restore.md for the Longhorn-side flow.
-#    Result: a new PVC named e.g. kanidm-data-kanidm-default-0-restored.
+   ```sh
+   image=kanidm/server:1.11.2   # the version that wrote the backup
+   file=/data/backup-<timestamp>.json.gz
+   kubectl -n identity run kanidm-restore --rm -i --restart=Never --image="$image" \
+     --overrides='{"spec":{"securityContext":{"runAsUser":389,"runAsGroup":389,"fsGroup":389},
+       "containers":[{"name":"x","image":"'"$image"'",
+         "command":["kanidmd","database","restore","'"$file"'"],
+         "env":[{"name":"KANIDM_DOMAIN","value":"auth.home.kelch.io"},
+                {"name":"KANIDM_ORIGIN","value":"https://auth.home.kelch.io"},
+                {"name":"KANIDM_DB_PATH","value":"/data/kanidm.db"},
+                {"name":"KANIDM_TLS_CHAIN","value":"/etc/kanidm/tls/tls.crt"},
+                {"name":"KANIDM_TLS_KEY","value":"/etc/kanidm/tls/tls.key"}],
+         "volumeMounts":[{"name":"d","mountPath":"/data"},{"name":"tls","mountPath":"/etc/kanidm/tls","readOnly":true}]}],
+       "volumes":[{"name":"d","persistentVolumeClaim":{"claimName":"kanidm-data-kanidm-default-0"}},
+                  {"name":"tls","secret":{"secretName":"auth-home-kelch-io-tls"}}]}}'
+   ```
 
-# 3. Rebind: delete the old (broken) PVC, rename the restored PVC to match
-#    the StatefulSet's volumeClaimTemplate naming (kanidm-data-kanidm-default-0).
-#    PVC rename is done by re-creating with the same name pointing at the
-#    restored PV. See longhorn-backup-restore.md.
+4. **Discard replicas 1 and 2.** Deleting their claims deletes their volumes, including their own online backups; their Longhorn backups remain.
 
-# 4. Optionally restore from .bak inside the new PVC (path (b) above) using
-#    the debug-pod sequence from "DB-only corruption" step 3.
+   ```sh
+   kubectl -n identity delete pvc kanidm-data-kanidm-default-1 kanidm-data-kanidm-default-2
+   kubectl -n identity get pvc   # until both are gone
+   ```
 
-# 5. Resume Flux. Kanidm CR reconciles the StatefulSet back to the declared replica count
-#    against the restored PVC.
-flux resume kustomization kanidm -n identity
-```
+5. **Start replica 0 alone and check it.** With one replica, replication stays off.
 
-### NAS loss (catastrophic)
+   ```sh
+   kubectl -n identity patch kanidm kanidm --type json \
+     -p '[{"op":"replace","path":"/spec/replicaGroups/0/replicas","value":1}]'
+   kubectl -n identity get pods -l app.kubernetes.io/name=kanidm -w   # until kanidm-default-0 is Ready
+   ```
 
-In-PVC `.bak` files are retained for 7 days. After that, no recovery —
-this is a cluster-wide off-site replication gap, not a Kanidm-specific
-one. Out of scope for this runbook.
+   Log in as `idm_admin` with the password in the `kanidm-admin-passwords` Secret, and confirm that a change made after the backup is gone. If the login fails because the admin password changed after the backup, delete that Secret so Kaniop issues a new one, as its restore controller does.
 
-## Verification (post-restore)
+6. **Reseed replica 1, then replica 2, keeping Flux suspended.** An empty replica asks every partner for a refresh and takes the first answer, and readiness does not wait for the refresh to finish ([source](https://github.com/kanidm/kanidm/blob/v1.11.2/server/core/src/repl/mod.rs#L451-L475)). Going straight to three replicas could let replica 2 reload from replica 1 before replica 1 holds the restored data. Add one replica at a time, so the only partners a new replica can reach already hold it. Kaniop registers each new replica's certificate and restarts the StatefulSet.
 
-- [ ] Kanidm pod Running, 1/1 Ready
+   ```sh
+   kubectl -n identity patch kanidm kanidm --type json \
+     -p '[{"op":"replace","path":"/spec/replicaGroups/0/replicas","value":2}]'
+   kubectl -n identity get pods -l app.kubernetes.io/name=kanidm -w   # until kanidm-default-1 is Ready
+   kubectl -n identity logs kanidm-default-1 -c kanidm | grep -i refresh
+   ```
+
+   Continue only when replica 1 has logged a completed refresh and shows the restored state: a change made after the backup is absent when you query that pod directly, for example through `kubectl -n identity port-forward pod/kanidm-default-1 8443` with the `kanidm` CLI pointed at `https://localhost:8443` and hostname verification skipped. Then add replica 2 and check it the same way:
+
+   ```sh
+   kubectl -n identity patch kanidm kanidm --type json \
+     -p '[{"op":"replace","path":"/spec/replicaGroups/0/replicas","value":3}]'
+   kubectl -n identity get pods -l app.kubernetes.io/name=kanidm -w   # until kanidm-default-2 is Ready
+   kubectl -n identity logs kanidm-default-2 -c kanidm | grep -i refresh
+   ```
+
+   Once replica 2 holds the restored state too, resume Flux, which leaves the group at the declared three:
+
+   ```sh
+   flux resume kustomization kanidm -n identity
+   ```
+
+7. Complete [Verification](#verification).
+
+## Replica claim lost
+
+- **Replica 1 or 2.** Delete the claim and the pod; the StatefulSet recreates both, and the empty replica reloads from replica 0. *Intended.*
+- **Replica 0.** Restore its claim from a Longhorn backup with [Restore one claim](longhorn-backup-restore.md#restore-one-claim), scaling the group through the patch above. A backup within Kanidm's seven-day changelog window catches up from replicas 1 and 2 by normal replication. An older one is refused with a refresh-required error, because replica 0's links have no `automatic_refresh`. Then, while both partners are healthy, refresh replica 0 from them; the `-c` path is the configuration Kaniop renders, as its own certificate commands use:
+
+  ```sh
+  kubectl -n identity exec kanidm-default-0 -c kanidm -- \
+    kanidmd refresh-replication-consumer -c /run/kanidm/server.toml --i-want-to-refresh-this-servers-database
+  ```
+
+  *Intended.*
+
+## All claims lost
+
+In a cluster rebuild, Flux starts Kanidm on three new, empty claims. Restore replica 0 only and reseed the others. *Intended, unrehearsed.*
+
+1. Stop Kanidm as in step 1 above.
+2. Delete all three claims. Restore `kanidm-data-kanidm-default-0` from its Longhorn backup with [Restore one claim](longhorn-backup-restore.md#restore-one-claim) steps 1 and 3, using the backup volume that recorded `kanidm-data-kanidm-default-0` and the newest backup from before the outage.
+3. Start replica 0 alone and check it, as in step 5 above. The volume backup is crash-consistent; SQLite recovers its journal at startup. If the server reports database integrity errors, scale back to zero and restore one of the online backups on that volume as in steps 2 and 3.
+4. Reseed replicas 1 and 2 and verify, as in steps 6 and 7.
+
+If the NAS is gone too, the Longhorn store comes back from B2 first; see the [disaster-recovery runbook](longhorn-backup-restore.md#disaster-recovery-rebuild-the-cluster-and-restore-data). Restoring a Kanidm volume's backups from B2 was drilled outside Longhorn on 2026-10-05.
+
+## Verification
+
+- [ ] `kanidm-default-0`, `-1` and `-2` Running, each `1/1` Ready
 - [ ] `kubectl -n identity get kanidm kanidm` shows `Available=True`
+- [ ] Replicas 1 and 2 log a completed refresh from replica 0 and then normal replication, with no refresh-required or domain-mismatch errors
 - [ ] Web UI loads at `https://auth.home.kelch.io`
-- [ ] Login as `idm_admin` succeeds (password from
-      `kanidm-admin-passwords` Secret unchanged)
-- [ ] `KanidmGroup arr-admins` and `KanidmPersonAccount kelchm` reconciled
-      (visible in web UI)
-- [ ] OAuth2 clients (PR D+) re-issue secrets if any were rolled by the
-      restore — kaniop will emit them into `<client>-kanidm-oauth2-credentials`
-      Secrets in consumer namespaces
+- [ ] Login as `idm_admin` succeeds with the password in the `kanidm-admin-passwords` Secret
+- [ ] A change made after the chosen backup is absent through each replica
+- [ ] `KanidmGroup arr-admins` and `KanidmPersonAccount kelchm` reconciled (visible in web UI). Flux reapplies the Kaniop-managed people, groups and OAuth2 clients, so those reflect Git rather than the backup.
+- [ ] OAuth2 client secrets: if the restore rolled any back, Kaniop writes them to the `<client>-kanidm-oauth2-credentials` Secrets in the consumer namespaces; restart consumers that read them only at startup
 
 ## Restore drill
 
-The DB-only path should be exercised against a copy of production data
-once before the cluster is trusted with real OIDC clients. Walking through
-the procedure proves the `.bak` files are usable end-to-end and that the
-debug-pod overrides JSON works against current cluster state.
+Nothing on this page has been rehearsed against three replicas. Verified so far is only what the sources say: the backup path and format, the version rule, the offline lock, the required variables, how replicas catch up and refresh, and the steps Kaniop's restore controller takes. Whether the sequence above restores the cluster, and whether replication would have undone the old single-replica procedure, are inferences until a rehearsal on a disposable copy. The rehearsal is part of the recovery drill in [#224](https://github.com/kelchm/home-lab/issues/224).
 
-Recommended cadence for the drill: after every Kanidm major-version
-upgrade (1.9 → 1.10 → ...). Backup file format may shift between majors,
-and a stale runbook reads as broken when you actually need it.
+Rehearse again after every Kanidm minor upgrade (1.11 → 1.12 and so on). Restore refuses a backup from another minor version, and the backup format can change between them.
