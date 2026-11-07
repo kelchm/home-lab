@@ -160,7 +160,8 @@ def shape(lock, mod):
         kind = "qwen-tp1"
     else:
         raise InvalidManifest("unsupported lock shape; only the shared tensorfold-readiness mod is dependency-free")
-    fields(lock, SHAPES[kind], kind)
+    extra = " site_patch_count site_patches_sha256" if kind == "glm-native" and set(lock) & {"site_patch_count", "site_patches_sha256"} else ""
+    fields(lock, SHAPES[kind] + extra, kind)
     return kind
 
 
@@ -203,7 +204,22 @@ def validate_lock(lock, mod):
         hash_value(build["zig_sha256"], 64, "build.zig_sha256")
         pattern(build["zig_version"], r"[0-9]+\.[0-9]+\.[0-9]+", "build.zig_version", "expected a release version")
         text(build["zig_cpu"], "build.zig_cpu")
-        pattern(lock["image"].rsplit(":", 1)[1], rf"{lock['kit_date'][4:]}-{lock['kit_revision'][:7]}-{lock['kit_patches_sha256'][:12]}",
+        suffix = ""
+        if "site_patch_count" in lock:
+            positive(lock["site_patch_count"], "site_patch_count")
+            hash_value(lock["site_patches_sha256"], 64, "site_patches_sha256")
+            directory = mod / "patches"
+            require(not directory.is_symlink() and directory.is_dir(), "site patches", "expected an ordinary patch directory")
+            patches = sorted(directory.glob("*.patch"))
+            require(len(patches) == lock["site_patch_count"], "site_patch_count", "disagrees with frozen site patches")
+            for patch in patches:
+                name = str(patch.relative_to(mod))
+                require(not patch.is_symlink() and patch.is_file(), name, "expected an ordinary patch file")
+                equal(files.get(name), hashlib.sha256(patch.read_bytes()).hexdigest(), name)
+            equal(hashlib.sha256(b"".join(p.read_bytes() for p in patches)).hexdigest(),
+                  lock["site_patches_sha256"], "site_patches_sha256")
+            suffix = "-s" + lock["site_patches_sha256"][:12]
+        pattern(lock["image"].rsplit(":", 1)[1], rf"{lock['kit_date'][4:]}-{lock['kit_revision'][:7]}-{lock['kit_patches_sha256'][:12]}{suffix}",
                 "image", "tag must agree with recipe date, kit revision and patch identifier")
     elif kind == "glm":
         pattern(lock["engine_version"], r"[0-9]+\.[0-9]+\.[0-9]+", "engine_version", "expected a release version")
@@ -330,6 +346,9 @@ def validate_recipe(recipe, path, locks):
         equal(metadata.get("kit_date"), lock["kit_date"], "metadata.kit_date")
         equal({"repository": recipe.get("model"), "revision": recipe.get("model_revision")}, lock["weights"], "model/weights")
         equal({"repository": defaults.get("drafter"), "revision": defaults.get("drafter_revision")}, lock["drafter"], "drafter")
+        if "site_patch_count" in lock:
+            equal(metadata.get("site_patch_count"), lock["site_patch_count"], "metadata.site_patch_count")
+            equal(metadata.get("site_patches_sha256"), lock["site_patches_sha256"], "metadata.site_patches_sha256")
     if kind.startswith("qwen"):
         equal(metadata.get("server_patch_count"), len(lock["server_patches"]) + len(lock.get("site_patches", [])), "metadata.server_patch_count")
         equal({"repository": recipe.get("model"), "revision": recipe.get("model_revision")}, lock["weights"], "model/weights")
