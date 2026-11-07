@@ -1,0 +1,31 @@
+{
+  "patch": "0710-native-media-preparation-policy.patch",
+  "patch_sha256": "089729d5535992533a282ad066ad8bfdffdbedc966448a9e72bf7fc2793e38c9",
+  "files": [
+    {
+      "path": "zig/src/core/lanes/stream.zig",
+      "before_sha256": "eeca6c59c62e1f2a09bd73d66d094aaca4953b8ba0b9ec9152c49ad307fc0966",
+      "after_sha256": "d74f6f282278af878a78f75ae7d6b19d574c9e021211db11fb0d754af6404c6f"
+    },
+    {
+      "path": "zig/src/core/engine_vision.zig",
+      "before_sha256": "e8d55350947175316265c22be41b7d60707696f362ee2558a2dcb11d9b02cece",
+      "after_sha256": "ba0f30a4c1e5c2d1d2a05e4784286d61e3467803637511fcc18951331ae44e20"
+    },
+    {
+      "path": "zig/src/server/images.zig",
+      "before_sha256": "7bc732de01aa81a916e94dd6f7327f3f2e52ff744bd0ffde950725374b2121f0",
+      "after_sha256": "76a98dd0fab6f303410a3f00182e16b3f774e98b6b7432489e641f9c4b6f4810"
+    },
+    {
+      "path": "zig/src/native/cuda_vision_offer.zig",
+      "before_sha256": "07fa9102ab49458cdb66b3322bdeedda86db013bc2829d0823e74de328237e33",
+      "after_sha256": "d187298d20015f5d1d432a1a21ad3d40a07ed8f0975576a365417c13507bd0a6"
+    },
+    {
+      "path": "zig/src/native/glm_host.zig",
+      "before_sha256": "c02bfdf3ae7fb1ff3add9ca02942e73b45e5dbd9afc4082a14a9ddd5116505d8",
+      "after_sha256": "7680e2963ea676ba77f82b55652264500b97b07ec949f57c276f4a11329f54a7"
+    }
+  ]
+}

@@ -157,6 +157,8 @@ To roll back, stop it with its own recipe and launch the profile that served bef
 
 ## GLM-5.3-Flash native candidate from Mia's 1104 kit
 
+The [1104-r2 profile](mia-tensorfold-glm53-exl3-tp2/glm53-exl3-tp2-mia-1104-r2-agent-1m.yaml) is the successor under development. Its [separate bundle](mods/mia-tensorfold-glm53-1104-r2/README.md) pins Mia's newer 108-patch kit plus local API/media fixes, restores production media limits and requires the production 2,582,528-token live-pool floor. CUDA media output uses one 192 MiB buffer per rank. The ARM64 image and composed host/codec gates are recorded in its lock and receipt; no model has run on the Sparks. Durable serving, the full resident-memory contract, fairness and GPU qualification still block adoption in [#1280](https://github.com/kelchm/home-lab/issues/1280). The original 106-patch candidate below remains a retained reference.
+
 ### Candidate profile
 
 [`glm53-exl3-tp2-mia-1104-agent-1m`](mia-tensorfold-glm53-exl3-tp2/glm53-exl3-tp2-mia-1104-agent-1m.yaml) is a candidate for the same endpoint and served name. It has not run on the Sparks. It uses [Mia's 1104 kit](https://github.com/MiaAI-Lab/GLM-5.3-Flash-DGX-Sparks-1104/tree/138123c6f7f7ad6563382fec7b7af8d7e8825ebe) at `138123c6`, the native Zig/CUDA engine at `f350cd3e` (1.1.9), and all 106 engine patches, including warm turns (`0104`) and the tool-parser fixes (`0103`, `0105`). This does not switch the running Python durable profile or qualify its replacement.

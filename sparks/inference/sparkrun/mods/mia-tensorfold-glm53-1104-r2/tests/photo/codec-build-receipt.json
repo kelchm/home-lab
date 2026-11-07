@@ -1,0 +1,79 @@
+{
+  "sources": {
+    "jpeg": {
+      "version": "3.1.4.1",
+      "url": "https://github.com/libjpeg-turbo/libjpeg-turbo/releases/download/3.1.4.1/libjpeg-turbo-3.1.4.1.tar.gz",
+      "sha256": "ecae8008e2cc9ade2f2c1bb9d5e6d4fb73e7c433866a056bd82980741571a022",
+      "directory": "libjpeg-turbo-3.1.4.1"
+    },
+    "webp": {
+      "version": "1.6.0",
+      "url": "https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-1.6.0.tar.gz",
+      "sha256": "e4ab7009bf0629fd11982d4c2aa83964cf244cffba7347ecd39019a9e38c4564",
+      "directory": "libwebp-1.6.0"
+    },
+    "pillow_fixture": {
+      "version": "13.0.0",
+      "url": "https://files.pythonhosted.org/packages/ce/a4/9cc30690a394a8305e8be4c9036aa16d0dfddadd09079860b582f562496d/pillow-13.0.0.tar.gz",
+      "sha256": "cdcd1ba258178f7356d74170c9a81ba4eab6a5d55748bc402a5a2a6fe6be3510",
+      "directory": "pillow-13.0.0"
+    }
+  },
+  "commands": [
+    [
+      "cmake",
+      "-S",
+      "/private/tmp/glm065-codecs-reproduce/source/jpeg/libjpeg-turbo-3.1.4.1",
+      "-B",
+      "/private/tmp/glm065-codecs-reproduce/jpeg-build",
+      "-DCMAKE_BUILD_TYPE=Release",
+      "-DENABLE_SHARED=ON",
+      "-DENABLE_STATIC=OFF",
+      "-DWITH_TURBOJPEG=ON",
+      "-DWITH_JAVA=OFF",
+      "-DWITH_TOOLS=OFF",
+      "-DWITH_TESTS=OFF"
+    ],
+    [
+      "cmake",
+      "--build",
+      "/private/tmp/glm065-codecs-reproduce/jpeg-build",
+      "-j",
+      "8",
+      "--target",
+      "turbojpeg"
+    ],
+    [
+      "cmake",
+      "-S",
+      "/private/tmp/glm065-codecs-reproduce/source/webp/libwebp-1.6.0",
+      "-B",
+      "/private/tmp/glm065-codecs-reproduce/webp-build",
+      "-DCMAKE_BUILD_TYPE=Release",
+      "-DBUILD_SHARED_LIBS=ON",
+      "-DWEBP_BUILD_ANIM_UTILS=OFF",
+      "-DWEBP_BUILD_CWEBP=OFF",
+      "-DWEBP_BUILD_DWEBP=OFF",
+      "-DWEBP_BUILD_GIF2WEBP=OFF",
+      "-DWEBP_BUILD_IMG2WEBP=OFF",
+      "-DWEBP_BUILD_VWEBP=OFF",
+      "-DWEBP_BUILD_WEBPINFO=OFF",
+      "-DWEBP_BUILD_WEBPMUX=OFF",
+      "-DWEBP_BUILD_EXTRAS=OFF",
+      "-DWEBP_BUILD_LIBWEBPMUX=OFF"
+    ],
+    [
+      "cmake",
+      "--build",
+      "/private/tmp/glm065-codecs-reproduce/webp-build",
+      "-j",
+      "8",
+      "--target",
+      "webpdecoder"
+    ]
+  ],
+  "artifacts": {
+    "/private/tmp/glm065-codecs-reproduce/jpeg-build/libturbojpeg.0.4.0.dylib": "fb10516ab8537865190b82687dca3866bc167c8a5ca33a6dc1f86f9dad02900a",
+    "/private/tmp/glm065-codecs-reproduce/webp-build/libwebpdecoder.3.2.0.dylib": "7560517e5e7de43b1df51acaec78caef6d66cdbfa5a1b4f5c0918a59d44d7c62"
+  }
+}

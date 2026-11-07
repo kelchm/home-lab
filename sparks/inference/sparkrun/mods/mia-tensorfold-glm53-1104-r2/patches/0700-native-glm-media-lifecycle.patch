@@ -1,0 +1,1532 @@
+diff --git a/zig/src/core/engine_vision.zig b/zig/src/core/engine_vision.zig
+--- a/zig/src/core/engine_vision.zig
++++ b/zig/src/core/engine_vision.zig
+@@ -11,6 +11,7 @@
+     hash: u64,
+     source_pixels: u64 = 0,
+     deferred: ?@import("lanes").stream.Image.Deferred = null,
++    deadline: @FieldType(@import("lanes").stream.Image, "deadline") = null,
+     /// The image as tower inputs in order, each image tokens between `before` and `after`; empty: `pixels` alone.
+     pieces: []const Piece = &.{},
+ };
+@@ -50,6 +51,7 @@
+ 
+ /// A video's facts as the server's decoder reads them, and its frames on request.
+ pub const VideoSource = struct {
++    identity: ?u64 = null, // encoded bytes of a replayable request-owned source
+     frames: u64, // the stream's frame count
+     rate_num: u64, // its average frame rate, num / den
+     rate_den: u64,
+@@ -71,6 +73,7 @@
+ 
+ /// Video input an engine serves (``Vision.video``): how a decoded video becomes images and how the prompt holds them.
+ pub const VideoOffer = struct {
++    lazy: bool = false, // prepare retains a replayable source instead of the caller's open decoder
+     /// ``src`` at most ``max_tokens`` tokens and ``max_frames`` sampled frames; allocated in ``a``.
+     prepare: *const fn (ctx: *anyopaque, a: Allocator, src: VideoSource, max_tokens: u32, max_frames: u32) anyerror!PreparedVideo,
+     /// The token the chat template writes once per video, expanded to its groups.
+diff --git a/zig/src/core/lanes/stream.zig b/zig/src/core/lanes/stream.zig
+--- a/zig/src/core/lanes/stream.zig
++++ b/zig/src/core/lanes/stream.zig
+@@ -106,10 +106,12 @@
+     pub const Deferred = struct {
+         ctx: *const anyopaque,
+         prepare: *const fn (ctx: *const anyopaque, a: Allocator) anyerror![]const f32,
++        checked: ?*const fn (ctx: *const anyopaque, a: Allocator, check_ctx: ?*anyopaque, check: *const fn (?*anyopaque) anyerror!void) anyerror![]const f32 = null,
+     };
+ 
+     pixels: []const f32,
+     deferred: ?Deferred = null,
++    deadline: ?struct { io: std.Io, at: std.Io.Timestamp } = null,
+ 
+     gh: u32,
+     gw: u32,
+@@ -119,7 +121,33 @@
+ 
+     /// Patches live only in the caller's scoped allocator; encoded input lives with the request.
+     pub fn materialize(img: Image, a: Allocator) ![]const f32 {
+-        return if (img.deferred) |d| try d.prepare(d.ctx, a) else img.pixels;
++        return img.materializeChecked(a, null);
++    }
++
++    pub const Cancel = struct { ptr: ?*anyopaque, check: *const fn (?*anyopaque) bool };
++
++    pub fn checkWork(img: Image, cancel: ?Cancel) !void {
++        if (cancel) |c| if (c.check(c.ptr)) return error.Cancelled;
++        if (img.deadline) |d| if (std.Io.Clock.awake.now(d.io).nanoseconds >= d.at.nanoseconds) return error.MediaDeadline;
++    }
++
++    pub fn materializeChecked(img: Image, a: Allocator, cancel: ?Cancel) ![]const f32 {
++        const Check = struct {
++            image: Image,
++            cancel: ?Cancel,
++            fn run(ptr: ?*anyopaque) anyerror!void {
++                const c: *@This() = @ptrCast(@alignCast(ptr.?));
++                try c.image.checkWork(c.cancel);
++            }
++        };
++        var c: Check = .{ .image = img, .cancel = cancel };
++        try Check.run(&c);
++        const pixels = if (img.deferred) |d|
++            if (d.checked) |f| try f(d.ctx, a, &c, Check.run) else try d.prepare(d.ctx, a)
++        else
++            img.pixels;
++        try Check.run(&c);
++        return pixels;
+     }
+ };
+ 
+diff --git a/zig/src/families/glm/cuda_images.zig b/zig/src/families/glm/cuda_images.zig
+--- a/zig/src/families/glm/cuda_images.zig
++++ b/zig/src/families/glm/cuda_images.zig
+@@ -1,4 +1,4 @@
+-//! A prompt pass's image rows on every rank: rank 0's tower encodes them, the others receive them, all splice them.
++//! Chunk-scoped media rows on every rank: rank 0 encodes one image/group at a time; all ranks splice the window.
+ const std = @import("std");
+ const cuda = @import("cuda");
+ const lanes = @import("lanes");
+@@ -8,20 +8,16 @@
+ const image = image_core.For(@import("core").picture);
+ const video_mod = @import("video_core.zig").For(@import("core").picture);
+ 
+-/// What a request may hold: image tokens in all (the rows buffer), and images.
++/// Request admission budgets, independent of the shared active-window scratch allocation.
+ pub const Limits = struct { image_tokens: u32, max_images: u32, video_tokens: u32 = 0, max_videos: u32 = 0, max_frames: u32 = 0 };
+ 
+ /// Prompt rows [at, at + n) take image rows [row, row + n).
+ pub const Span = struct { at: u32, n: u32, row: u32 };
+ 
+-const Saved = struct {
+-    rows: cuda.DeviceBuffer,
+-    spans: std.ArrayList(Span) = .empty,
+-    fn deinit(s: *Saved, a: std.mem.Allocator) void {
+-        s.rows.free();
+-        s.spans.deinit(a);
+-    }
+-};
++// Only request-owned descriptors survive a prompt step. Device rows are shared scratch.
++const Saved = struct { images: []const lanes.stream.Image = &.{}, from: usize = 0 };
++pub const step_rows: u32 = 2 * @import("cuda_forward.zig").prefill_rows;
++pub const row_bytes: usize = vcfg.out_hidden * 2;
+ 
+ pub const Images = struct {
+     gpa: std.mem.Allocator,
+@@ -31,12 +27,13 @@
+     run: vision.Run,
+     tower: ?vision.Tower = null, // rank 0's; the other ranks receive the rows
+     cfg: ?vcfg.Config = null,
+-    rows: cuda.DeviceBuffer, // bf16 [limits.image_tokens][out_hidden]
++    rows: cuda.DeviceBuffer, // shared bf16 [step_rows + one image/group][out_hidden]
+     map: cuda.DeviceBuffer, // i32 [max_rows]: a splice's feature row per prompt row
+     host_map: []i32,
+     limits: Limits,
+     spans: std.ArrayList(Span) = .empty,
+     saved: std.AutoHashMapUnmanaged(u32, Saved) = .empty,
++    source: Saved = .{},
+     slot: u32 = 0, // the sequence the spans belong to: another stream's rows at the same positions take none
+     marks: struct { image: u32, open: u32, close: u32 } = .{ .image = 0, .open = 0, .close = 0 },
+     mark_ids: [3]u32 = @splat(0), // begin, image, end: text that spells one stays text
+@@ -45,6 +42,7 @@
+     /// The chat template writes each image's begin and end itself (the server only expands the image token).
+     pub const template_wraps = true;
+     pub const fixed_image_tokens: u32 = 2048;
++    pub const lazy_video = true;
+     /// A video's frames to patch pairs (Glm5NextVideoProcessor), over core's decoder: each pair goes in as an image.
+     pub const video = video_mod;
+ 
+@@ -66,7 +64,7 @@
+         errdefer module.unload();
+         v.* = .{ .gpa = gpa, .io = io, .d = d, .module = module, .run = .{ .stream = stream, .f = try vision.Funcs.load(module) }, .cfg = cfg, .rows = undefined, .map = undefined, .host_map = undefined, .limits = limits };
+         v.video_ids = cfg.video;
+-        v.rows = try cuda.DeviceBuffer.alloc(d, @as(usize, try v.rowLimit()) * vcfg.out_hidden * 2);
++        v.rows = try cuda.DeviceBuffer.alloc(d, v.scratchBytes());
+         errdefer v.rows.free();
+         v.map = try cuda.DeviceBuffer.alloc(d, max_rows * 4);
+         errdefer v.map.free();
+@@ -85,8 +83,6 @@
+ 
+     pub fn deinit(v: *Images) void {
+         @import("cuda_load_owner.zig").drain(v.run.stream, v.d);
+-        var it = v.saved.valueIterator();
+-        while (it.next()) |state| state.deinit(v.gpa);
+         v.saved.deinit(v.gpa);
+         v.spans.deinit(v.gpa);
+         if (v.tower) |*t| t.deinit();
+@@ -99,87 +95,140 @@
+ 
+     /// Device bytes the tower and the buffers hold.
+     pub fn bytes(v: *const Images) u64 {
+-        var total: u64 = (if (v.tower) |t| t.bytes else 0) + v.rows.len + v.map.len;
+-        var it = v.saved.valueIterator();
+-        while (it.next()) |owner| total += owner.rows.len;
+-        return total;
+-    }
+-
+-    // The tower and upload map are shared scratch. Feature rows and spans belong to each live sequence.
++        return (if (v.tower) |t| t.bytes else 0) + v.rows.len + v.map.len;
++    }
++
++    /// One global reservation before pool admission, independent of history length and live stream count.
++    /// The second region lets a whole image/group cross a chunk boundary without changing its tower inputs.
++    pub fn groupLimit(v: *const Images) u32 {
++        return @max(@min(v.limits.image_tokens, fixed_image_tokens), if (v.video_ids != null) @min(v.limits.video_tokens, 16384) else 0);
++    }
++
++    pub fn scratchBytes(v: *const Images) usize {
++        return (@as(usize, step_rows) + v.groupLimit()) * row_bytes;
++    }
++
++    pub fn streamBytes(_: *const Images) usize {
++        return 0; // the shared scratch was allocated before the pool/admission budget was measured
++    }
++
+     pub fn activate(v: *Images, slot: u32) !void {
+         if (v.slot == slot) return;
+-        if (!v.saved.contains(slot)) try v.saved.ensureUnusedCapacity(v.gpa, 1);
+-        const next = if (v.saved.fetchRemove(slot)) |entry| entry.value else Saved{
+-            .rows = try cuda.DeviceBuffer.alloc(v.d, @as(usize, try v.rowLimit()) * vcfg.out_hidden * 2),
+-        };
+-        v.saved.putAssumeCapacity(v.slot, .{ .rows = v.rows, .spans = v.spans });
+-        v.rows = next.rows;
+-        v.spans = next.spans;
++        // Reserve before changing either owner, including when an idle slot has no source descriptors.
++        try v.saved.ensureUnusedCapacity(v.gpa, 1);
++        const next = if (v.saved.fetchRemove(slot)) |entry| entry.value else Saved{};
++        v.saved.putAssumeCapacity(v.slot, v.source);
++        v.finishWindow();
++        v.source = next;
+         v.slot = slot;
+     }
+ 
++    /// Drop borrowed request descriptors even when a peer-link failure prevents a normal release step.
++    pub fn forget(v: *Images, slot: u32) void {
++        if (slot == v.slot) v.source = .{} else _ = v.saved.remove(slot);
++    }
++
+     pub fn release(v: *Images, slot: u32) void {
+-        @import("cuda_load_owner.zig").drain(v.run.stream, v.d);
+         if (slot != v.slot) {
+-            if (v.saved.fetchRemove(slot)) |entry| {
+-                var state = entry.value;
+-                state.deinit(v.gpa);
+-            }
++            _ = v.saved.remove(slot);
+             return;
+         }
+-        if (slot == 0) {
+-            v.clear();
+-            return;
+-        }
+-        if (v.saved.fetchRemove(0)) |zero| { // slot 0's rows and spans as its stream left them
+-            v.rows.free();
+-            v.spans.deinit(v.gpa);
+-            v.rows = zero.value.rows;
+-            v.spans = zero.value.spans;
+-        } else v.clear(); // slot 0's stream ended while this slot was bound: this buffer is slot 0's now
+-        v.slot = 0;
+-    }
+-
+-    pub fn streamBytes(v: *const Images) usize {
+-        return @as(usize, v.rowLimit() catch unreachable) * vcfg.out_hidden * 2;
+-    }
+-
+-    /// No rows splice into any pass until another begins (each request's prompt pass starts here).
++        v.finishWindow();
++        v.source = .{};
++        if (slot != 0) {
++            if (v.saved.fetchRemove(0)) |zero| v.source = zero.value;
++            v.slot = 0;
++        }
++    }
++
++    /// Reset the bound request; borrowed descriptors cannot outlive the request arena.
+     pub fn clear(v: *Images) void {
++        v.finishWindow();
++        v.source = .{};
++    }
++
++    /// No feature rows survive a prompt step, a failure or a suspension. The shared allocation is retained.
++    pub fn finishWindow(v: *Images) void {
++        if (v.spans.items.len != 0) @import("cuda_load_owner.zig").drain(v.run.stream, v.d);
+         v.spans.clearRetainingCapacity();
+     }
+ 
+-    /// Rank 0: a prompt pass on `slot` from row `from`: the images whose rows end past it, through the tower.
++    /// Register the request's descriptors only. A cached prefix never materializes here or at a later chunk.
+     pub fn begin(v: *Images, slot: u32, images: []const lanes.stream.Image, from: usize) !void {
+         try v.activate(slot);
+         v.clear();
+-        errdefer v.clear();
+-        const t = &(v.tower orelse return error.NoVision);
++        var end: u64 = 0;
++        var total: u64 = 0;
++        for (images) |img| {
++            if (img.tokens == 0 or img.tokens > v.groupLimit() or @as(u64, img.gh) * img.gw != @as(u64, img.tokens) * vcfg.patches_per_token) return error.ImageOutOfStep;
++            if (img.at < end) return error.ImageOutOfStep;
++            end = @as(u64, img.at) + img.tokens;
++            if (end > std.math.maxInt(u32)) return error.ImageOutOfStep;
++            total += img.tokens;
++            if (total > try v.rowLimit()) return error.ImageRows;
++        }
++        v.source = .{ .images = images, .from = from };
++    }
++
++    pub const Cancel = struct { ptr: ?*anyopaque, check: *const fn (?*anyopaque) bool };
++
++    fn encode(v: *Images, pixels: []const f32, img: lanes.stream.Image, out: u64) !void {
++        const t = if (v.tower) |*tower| tower else return error.NoVision;
++        try t.encode(&v.run, pixels, .{ 1, img.gh, img.gw }, out);
++    }
++
++    pub fn window(v: *Images, lo: usize, hi: usize, cancel: ?Cancel) !void {
++        return v.windowWith(lo, hi, cancel, v, encode);
++    }
++
++    /// The production owner/selection/copy path, with the tower operation parameterized for recording drivers.
++    pub fn windowWith(v: *Images, lo: usize, hi: usize, cancel: ?Cancel, ctx: anytype, comptime encodeFn: anytype) !void {
++        v.finishWindow();
++        if (hi < lo or hi - lo > step_rows) return error.BadWindow;
++        // Drain even if the first encode/copy fails before a span is published.
++        errdefer {
++            @import("cuda_load_owner.zig").drain(v.run.stream, v.d);
++            v.spans.clearRetainingCapacity();
++        }
++        const from = @max(lo, v.source.from);
+         var row: u32 = 0;
+-        for (images) |img| {
+-            if (img.gh * img.gw != img.tokens * vcfg.patches_per_token) return error.ImageOutOfStep;
+-            if (img.at + img.tokens <= from) continue; // in the kept state already
+-            if (img.tokens > (try v.rowLimit()) -| row) return error.ImageRows; // the server holds a request to its limits
++        for (v.source.images) |img| {
++            const end = @as(usize, img.at) + img.tokens;
++            const first = @max(from, img.at);
++            const last = @min(hi, end);
++            if (first >= last) continue;
+             var scratch: std.heap.ArenaAllocator = .init(v.gpa);
+             defer scratch.deinit();
+-            const pixels = try img.materialize(scratch.allocator());
+-            try t.encode(&v.run, pixels, .{ 1, img.gh, img.gw }, v.rows.ptr + @as(u64, row) * vcfg.out_hidden * 2);
+-            try v.spans.append(v.gpa, .{ .at = img.at, .n = img.tokens, .row = row });
+-            row += img.tokens;
+-        }
+-        v.slot = slot;
+-    }
+-
+-    /// The other ranks: rank 0's spans (as `words`: at, n, row a span) on `slot`; the rows arrive into `rows` next.
++            const pixels = try img.materializeChecked(scratch.allocator(), if (cancel) |c| .{ .ptr = c.ptr, .check = c.check } else null);
++            const count: u32 = @intCast(last - first);
++            const dst = v.rows.ptr + @as(u64, row) * row_bytes;
++            const whole = first == img.at and count == img.tokens;
++            const out = if (whole) dst else v.rows.ptr + @as(u64, step_rows) * row_bytes;
++            // Inputs retain the original full grid, even when this chunk consumes only its middle.
++            try encodeFn(ctx, pixels, img, out);
++            try img.checkWork(if (cancel) |c| .{ .ptr = c.ptr, .check = c.check } else null);
++            if (!whole) try v.d.check(v.d.api.cuMemcpyDtoDAsync_v2(dst, out + (first - img.at) * row_bytes, @as(usize, count) * row_bytes, v.run.stream.handle), "cuMemcpyDtoDAsync media slice");
++            // One input's scoped CPU arena and pinned upload ownership end before the next input starts.
++            try v.run.stream.synchronize();
++            try v.spans.append(v.gpa, .{ .at = @intCast(first), .n = count, .row = row });
++            row += count;
++        }
++    }
++
++    /// Other ranks take the active window's spans (at, n, row), then receive exactly rowCount() rows.
+     pub fn take(v: *Images, slot: u32, words: []const u32) !void {
+         try v.activate(slot);
+-        v.clear();
+-        errdefer v.clear();
++        v.spans.clearRetainingCapacity();
++        errdefer v.spans.clearRetainingCapacity();
+         if (words.len % 3 != 0) return error.BadStep;
+         var i: usize = 0;
+         while (i < words.len) : (i += 3) {
+             const sp: Span = .{ .at = words[i], .n = words[i + 1], .row = words[i + 2] };
+-            if (sp.row > try v.rowLimit() or sp.n > (try v.rowLimit()) - sp.row) return error.ImageRows;
++            if (sp.n == 0 or sp.row != v.rowCount() or sp.row > step_rows or sp.n > step_rows - sp.row or @as(u64, sp.at) + sp.n > std.math.maxInt(u32)) return error.ImageRows;
++            if (v.spans.items.len > 0) {
++                const prev = v.spans.items[v.spans.items.len - 1];
++                if (sp.at < @as(u64, prev.at) + prev.n) return error.ImageRows;
++            }
+             try v.spans.append(v.gpa, sp);
+         }
+         v.slot = slot;
+@@ -223,7 +272,7 @@
+ 
+     /// A video's sampled frames as patch pairs within `max_tokens` and `max_frames` (the server's prepare).
+     pub fn prepareVideo(v: *const Images, a: std.mem.Allocator, s: video.Source, max_tokens: u32, max_frames: u32) !video.Prepared {
+-        return video.prepare(a, s, v.cfg.?, @min(max_tokens, 16384), @min(max_frames, 128));
++        return video.prepareLazy(a, s, v.cfg.?, @min(max_tokens, 16384), @min(max_frames, 128));
+     }
+ 
+     /// An image's bytes as the tower reads them, at most `max_tokens` tokens (the server's prepare).
+diff --git a/zig/src/families/glm/cuda_images_interleave_test.zig b/zig/src/families/glm/cuda_images_interleave_test.zig
+--- a/zig/src/families/glm/cuda_images_interleave_test.zig
++++ b/zig/src/families/glm/cuda_images_interleave_test.zig
+@@ -1,34 +1,104 @@
+-//! A/B/A crosses actual follower admission and splice dispatch without running a tower or CUDA arithmetic.
++//! Real bounded CUDA media ownership, with recording driver calls and a counted CPU allocator.
+ const std = @import("std");
+ const cuda = @import("cuda");
+-const Images = @import("cuda_images.zig").Images;
++const lanes = @import("lanes");
++const media = @import("cuda_images.zig");
++const follow = @import("cuda_follow.zig");
++const Images = media.Images;
++const Image = lanes.stream.Image;
++const t = std.testing;
++
++const Counted = struct {
++    live: usize = 0,
++    peak: usize = 0,
++    allocations: usize = 0,
++    fail_at: usize = std.math.maxInt(usize),
++    fn allocator(c: *Counted) std.mem.Allocator {
++        return .{ .ptr = c, .vtable = &.{ .alloc = alloc, .resize = std.mem.Allocator.noResize, .remap = std.mem.Allocator.noRemap, .free = free } };
++    }
++    fn alloc(ctx: *anyopaque, n: usize, alignment: std.mem.Alignment, ret: usize) ?[*]u8 {
++        const c: *Counted = @ptrCast(@alignCast(ctx));
++        if (c.allocations == c.fail_at) return null;
++        const p = t.allocator.rawAlloc(n, alignment, ret) orelse return null;
++        c.allocations += 1;
++        c.live += n;
++        c.peak = @max(c.peak, c.live);
++        return p;
++    }
++    fn free(ctx: *anyopaque, bytes: []u8, alignment: std.mem.Alignment, ret: usize) void {
++        const c: *Counted = @ptrCast(@alignCast(ctx));
++        c.live -= bytes.len;
++        t.allocator.rawFree(bytes, alignment, ret);
++    }
++};
++
+ const Fake = struct {
+-    var launches: usize = 0;
+-    var feature: u64 = 0;
+-    var next: u64 = 0x10000;
+-    var ordered_uploads: usize = 0;
+-    var upload_stream: cuda.abi.Stream = null;
++    const feature_base = 0x100000000;
++    const map_base = 0x2000;
++    const link_base = 0x3000;
++    var driver_allocs: usize = 0;
++    var driver_live: usize = 0;
++    var driver_peak: usize = 0;
++    var feature_bytes: usize = 0;
++    var queued = false;
++    var syncs: usize = 0;
++    var encoded: usize = 0;
++    var encoded_ids: [256]u32 = undefined;
++    var values: [media.step_rows + 16384]u32 = undefined;
++    var map: [media.step_rows / 2 + 1]i32 = undefined;
++    var injected: [media.step_rows / 2 + 1]u32 = undefined;
++    var header: follow.Header = undefined;
++    var broadcasts: [128]struct { kind: u32, bytes: usize, rows: bool } = undefined;
++    var broadcasts_len: usize = 0;
++    var encode_failure = false;
++
++    fn reset() void {
++        driver_allocs = 0;
++        driver_live = 0;
++        driver_peak = 0;
++        feature_bytes = 0;
++        queued = false;
++        syncs = 0;
++        encoded = 0;
++        broadcasts_len = 0;
++        encode_failure = false;
++        @memset(&values, 0);
++    }
+     fn alloc(out: *u64, n: usize) callconv(.c) c_int {
+-        out.* = next;
+-        next += n + 256;
++        out.* = feature_base;
++        driver_allocs += 1;
++        driver_live += n;
++        feature_bytes = n;
++        driver_peak = @max(driver_peak, driver_live);
+         return 0;
+     }
+     fn free(_: u64) callconv(.c) c_int {
+-        return 0;
+-    }
+-    fn upload(_: u64, _: ?*const anyopaque, _: usize) callconv(.c) c_int {
+-        return 0;
+-    }
+-    fn uploadAsync(_: u64, _: ?*const anyopaque, _: usize, stream: cuda.abi.Stream) callconv(.c) c_int {
+-        ordered_uploads += 1;
+-        upload_stream = stream;
++        std.debug.assert(!queued);
++        driver_live -= feature_bytes;
+         return 0;
+     }
+     fn sync(_: cuda.abi.Stream) callconv(.c) c_int {
++        queued = false;
++        syncs += 1;
++        return 0;
++    }
++    fn uploadAsync(dst: u64, ptr: ?*const anyopaque, n: usize, _: cuda.abi.Stream) callconv(.c) c_int {
++        queued = true;
++        const src: [*]const u8 = @ptrCast(ptr.?);
++        if (dst == map_base) @memcpy(std.mem.sliceAsBytes(&map)[0..n], src[0..n]);
++        if (dst == link_base and n == @sizeOf(follow.Header)) @memcpy(std.mem.asBytes(&header), src[0..n]);
++        return 0;
++    }
++    fn copy(dst: u64, src: u64, bytes: usize, _: cuda.abi.Stream) callconv(.c) c_int {
++        queued = true;
++        const d = (dst - feature_base) / media.row_bytes;
++        const s = (src - feature_base) / media.row_bytes;
++        const n = bytes / media.row_bytes;
++        @memcpy(values[d..][0..n], values[s..][0..n]);
+         return 0;
+     }
+     fn hostAlloc(out: *?*anyopaque, n: usize, _: c_uint) callconv(.c) c_int {
+-        const bytes = std.testing.allocator.alignedAlloc(u8, .@"16", n + 16) catch return cuda.abi.error_not_ready;
++        const bytes = t.allocator.alignedAlloc(u8, .@"16", n + 16) catch return cuda.abi.error_not_ready;
+         std.mem.writeInt(usize, bytes[0..@sizeOf(usize)], n + 16, .little);
+         out.* = bytes.ptr + 16;
+         return 0;
+@@ -36,7 +106,7 @@
+     fn hostFree(ptr: ?*anyopaque) callconv(.c) c_int {
+         const base: [*]align(16) u8 = @alignCast(@as([*]u8, @ptrCast(ptr.?)) - 16);
+         const n = std.mem.readInt(usize, base[0..@sizeOf(usize)], .little);
+-        std.testing.allocator.free(base[0..n]);
++        t.allocator.free(base[0..n]);
+         return 0;
+     }
+     fn eventCreate(out: *cuda.abi.Event, _: c_uint) callconv(.c) c_int {
+@@ -52,136 +122,481 @@
+     fn eventDestroy(_: cuda.abi.Event) callconv(.c) c_int {
+         return 0;
+     }
+-    // the copy-source owner's pinned sources and events, on a driver whose launches and copies only count
+-    fn owned(d: *cuda.Driver) void {
++    fn launch(function: cuda.abi.Function, _: c_uint, _: c_uint, _: c_uint, _: c_uint, _: c_uint, _: c_uint, _: c_uint, _: cuda.abi.Stream, args: ?[*]?*anyopaque, _: ?[*]?*anyopaque) callconv(.c) c_int {
++        queued = true;
++        if (function == @as(cuda.abi.Function, @ptrFromInt(2))) {
++            const w: *const follow.Words = @ptrCast(@alignCast(args.?[2].?));
++            @memcpy(std.mem.asBytes(&header), std.mem.sliceAsBytes(w.w[0..16]));
++        } else {
++            const rows: *const c_int = @ptrCast(@alignCast(args.?[3].?));
++            for (map[0..@intCast(rows.*)], 0..) |m, i| injected[i] = if (m < 0) 0 else values[@intCast(m)];
++        }
++        return 0;
++    }
++    fn broadcast(ptr: u64, _: u64, n: usize, _: cuda.nccl.DataType, _: c_int, _: cuda.nccl.Comm, _: cuda.abi.Stream) callconv(.c) c_int {
++        broadcasts[broadcasts_len] = .{ .kind = header.kind, .bytes = n, .rows = ptr == feature_base };
++        broadcasts_len += 1;
++        queued = true;
++        return 0;
++    }
++    fn driver(d: *cuda.Driver) void {
++        d.* = undefined;
++        d.api.cuMemAlloc_v2 = alloc;
++        d.api.cuMemFree_v2 = free;
++        d.api.cuStreamSynchronize = sync;
++        d.api.cuMemcpyHtoDAsync_v2 = uploadAsync;
++        d.api.cuMemcpyDtoDAsync_v2 = copy;
+         d.api.cuMemHostAlloc = hostAlloc;
+         d.api.cuMemFreeHost = hostFree;
+         d.api.cuEventCreate = eventCreate;
+         d.api.cuEventRecord = eventRecord;
+         d.api.cuEventQuery = eventDone;
+         d.api.cuEventDestroy_v2 = eventDestroy;
+-    }
+-    fn launch(_: cuda.abi.Function, _: c_uint, _: c_uint, _: c_uint, _: c_uint, _: c_uint, _: c_uint, _: c_uint, _: cuda.abi.Stream, args: ?[*]?*anyopaque, _: ?[*]?*anyopaque) callconv(.c) c_int {
+-        launches += 1;
+-        feature = @as(*const u64, @ptrCast(@alignCast(args.?[0].?))).*;
+-        return 0;
++        d.api.cuLaunchKernel = launch;
++    }
++    fn encode(_: void, pixels: []const f32, img: Image, out: u64) !void {
++        encoded_ids[encoded] = @intFromFloat(pixels[0]);
++        encoded += 1;
++        queued = true;
++        if (encode_failure) return error.RecordedEncodeFailure;
++        const base = (out - feature_base) / media.row_bytes;
++        for (values[base..][0..img.tokens], 0..) |*v, i| v.* = @as(u32, @intFromFloat(pixels[0])) * 100000 + @as(u32, @intCast(i));
+     }
+ };
+-fn run(other_media: bool) !void {
+-    const a = std.testing.allocator;
++
++const Source = struct {
++    id: f32,
++    bytes: usize = 4096,
++    calls: usize = 0,
++    fail: bool = false,
++    cancel: bool = false,
++    cancel_during: bool = false,
++    fn prepare(ctx: *const anyopaque, a: std.mem.Allocator) anyerror![]const f32 {
++        const self: *Source = @ptrCast(@alignCast(@constCast(ctx)));
++        self.calls += 1;
++        const pixels = try a.alloc(f32, self.bytes / 4);
++        pixels[0] = self.id;
++        if (self.cancel_during) self.cancel = true;
++        if (self.fail) return error.RecordedMaterializationFailure;
++        return pixels;
++    }
++    fn cancelled(ctx: ?*anyopaque) bool {
++        const self: *const Source = @ptrCast(@alignCast(ctx.?));
++        return self.cancel;
++    }
++    fn image(self: *Source, at: u32, tokens: u32) Image {
++        return .{ .pixels = &.{}, .deferred = .{ .ctx = self, .prepare = prepare }, .at = at, .tokens = tokens, .gh = 2, .gw = tokens * 2, .hash = @intFromFloat(self.id) };
++    }
++};
++
++fn setup(v: *Images, d: *cuda.Driver, a: std.mem.Allocator, host: []i32) !void {
++    Fake.reset();
++    Fake.driver(d);
++    v.* = .{ .gpa = a, .io = undefined, .d = d, .module = undefined, .run = .{ .stream = .{ .d = d, .handle = @ptrFromInt(0x55) }, .f = undefined }, .rows = undefined, .map = .{ .d = d, .ptr = Fake.map_base, .len = host.len * 4, .borrowed = true }, .host_map = host, .limits = .{ .image_tokens = 102400, .max_images = 50, .video_tokens = 32768, .max_videos = 4, .max_frames = 128 }, .video_ids = .{ 1, 2, 3 } };
++    v.run.f.inject = .{ .d = d, .handle = null };
++    v.rows = try cuda.DeviceBuffer.alloc(d, v.scratchBytes());
++}
++fn cleanup(v: *Images) void {
++    v.run.stream.synchronize() catch unreachable;
++    v.rows.free();
++    v.spans.deinit(v.gpa);
++    v.saved.deinit(v.gpa);
++}
++
++test "media lifecycle: 50 full-quality images keep one global feature reservation and one CPU materialization" {
++    var cpu: Counted = .{};
+     var d: cuda.Driver = undefined;
+-    d.api.cuMemAlloc_v2 = Fake.alloc;
+-    d.api.cuMemFree_v2 = Fake.free;
+-    d.api.cuMemcpyHtoD_v2 = Fake.upload;
+-    d.api.cuMemcpyHtoDAsync_v2 = Fake.uploadAsync;
+-    d.api.cuStreamSynchronize = Fake.sync;
+-    d.api.cuLaunchKernel = Fake.launch;
+-    Fake.owned(&d);
+-    const stream: cuda.Stream = .{ .d = &d, .handle = @ptrFromInt(0x55) };
+-    var map: [2049]i32 = undefined;
+     var v: Images = undefined;
+-    v.gpa = a;
+-    v.d = &d;
+-    v.limits = .{ .image_tokens = 4, .max_images = 2 };
+-    v.video_ids = null;
+-    v.spans = .empty;
+-    v.slot = 0;
+-    v.saved = .empty;
+-    v.rows = .{ .d = &d, .ptr = 0x1000, .len = 4096, .borrowed = true };
+-    v.map = .{ .d = &d, .ptr = 0x2000, .len = 8196, .borrowed = true };
+-    v.host_map = &map;
+-    v.run.stream = stream;
+-    v.run.f.inject = .{ .d = &d, .handle = null };
+-    defer {
+-        stream.synchronize() catch unreachable; // the owner's pinned sources are released by a completed wait
+-        var it = v.saved.valueIterator();
+-        while (it.next()) |state| {
+-            state.rows.free();
+-            state.spans.deinit(a);
++    var map: [media.step_rows / 2 + 1]i32 = undefined;
++    try setup(&v, &d, cpu.allocator(), &map);
++    defer cleanup(&v);
++    var source: Source = .{ .id = 7, .bytes = 2048 * 4 * 1176 * 4 };
++    var imgs: [50]Image = undefined;
++    for (&imgs, 0..) |*img, i| img.* = source.image(@intCast(i * 2048), 2048);
++    try v.begin(1, &imgs, 0);
++    try t.expectEqual(@as(usize, 0), source.calls);
++    for (0..25) |i| {
++        try v.windowWith(i * 4096, (i + 1) * 4096, null, {}, Fake.encode);
++        try t.expectEqual(@as(usize, 4096), v.rowCount());
++        try v.splice(v.run.stream, 1, i * 4096, (i + 1) * 4096, 0x4000, 4);
++        try t.expectEqual(@as(u32, 702047), Fake.injected[2047]);
++        v.finishWindow();
++    }
++    try t.expectEqual(@as(usize, 50), source.calls);
++    try t.expectEqual(@as(usize, 1), Fake.driver_allocs);
++    try t.expectEqual(@as(usize, 192 << 20), Fake.driver_peak);
++    try t.expectEqual(@as(usize, 0), v.streamBytes());
++    try t.expect(cpu.peak < source.bytes * 2);
++    std.debug.print("media receipt: shared feature peak={d} CPU arena peak={d} one image payload={d} calls={d}\n", .{ Fake.driver_peak, cpu.peak, source.bytes, source.calls });
++    try v.begin(1, &imgs, 49 * 2048);
++    try v.windowWith(0, 2048, null, {}, Fake.encode);
++    try t.expectEqual(@as(usize, 50), source.calls);
++    try v.windowWith(49 * 2048, 50 * 2048, null, {}, Fake.encode);
++    try t.expectEqual(@as(usize, 51), source.calls);
++    v.clear();
++    try t.expectEqual(@as(usize, 0), v.source.images.len);
++}
++
++test "media lifecycle: chunk boundaries repeated images A B A and cached-prefix replay preserve every row" {
++    var d: cuda.Driver = undefined;
++    var v: Images = undefined;
++    var map: [media.step_rows / 2 + 1]i32 = undefined;
++    try setup(&v, &d, t.allocator, &map);
++    defer cleanup(&v);
++    var a: Source = .{ .id = 1 };
++    var b: Source = .{ .id = 2 };
++    const aa = [_]Image{ a.image(2047, 4), a.image(4096, 4) };
++    const bb = [_]Image{b.image(1, 2)};
++    try v.begin(7, &aa, 0);
++    try v.windowWith(0, 2048, null, {}, Fake.encode);
++    try v.splice(v.run.stream, 7, 0, 2048, 0x4000, 1);
++    try t.expectEqual(@as(u32, 100000), Fake.injected[2047]);
++    v.finishWindow();
++    try v.begin(8, &bb, 0);
++    try v.windowWith(0, 2048, null, {}, Fake.encode);
++    try v.splice(v.run.stream, 8, 0, 3, 0x4000, 1);
++    try t.expectEqualSlices(u32, &.{ 0, 200000, 200001 }, Fake.injected[0..3]);
++    v.finishWindow();
++    try v.activate(7);
++    try v.windowWith(2048, 4096, null, {}, Fake.encode);
++    try v.splice(v.run.stream, 7, 2048, 2052, 0x4000, 1);
++    try t.expectEqualSlices(u32, &.{ 100001, 100002, 100003, 0 }, Fake.injected[0..4]);
++    v.finishWindow();
++    // Suspension releases device contents, not the request-owned descriptors. Replay is deterministic.
++    try v.windowWith(2048, 4096, null, {}, Fake.encode);
++    try t.expectEqual(@as(u32, 100001), Fake.values[0]);
++    v.finishWindow();
++    // Rewind begins anew; resume skips exactly the cached image's tokens, including a partial image.
++    try v.begin(7, &aa, 2049);
++    try v.windowWith(2048, 4096, null, {}, Fake.encode);
++    try t.expectEqual(@as(u32, 2049), v.spans.items[0].at);
++    try t.expectEqual(@as(u32, 100002), Fake.values[0]);
++    v.release(7);
++    try t.expectEqual(@as(usize, 0), v.source.images.len);
++    try v.activate(8);
++    try t.expectEqual(@as(usize, 1), v.source.images.len);
++    v.release(0); // releasing an unbound zero slot cannot erase B's source
++    v.release(8);
++    try t.expectEqual(@as(usize, 0), v.source.images.len);
++    try v.begin(7, &aa, 0);
++    try v.windowWith(4096, 4100, null, {}, Fake.encode);
++    try t.expectEqual(@as(u32, 100003), Fake.values[3]);
++    try t.expectEqual(@as(usize, 1), Fake.driver_allocs);
++}
++
++test "media lifecycle: cancellation materialization failure tower failure and OOM discard partial rows" {
++    var cpu: Counted = .{};
++    var d: cuda.Driver = undefined;
++    var v: Images = undefined;
++    var map: [media.step_rows / 2 + 1]i32 = undefined;
++    try setup(&v, &d, cpu.allocator(), &map);
++    defer cleanup(&v);
++    var a: Source = .{ .id = 1 };
++    var b: Source = .{ .id = 2, .fail = true };
++    const imgs = [_]Image{ a.image(0, 2), b.image(2, 2) };
++    try v.begin(1, &imgs, 0);
++    try t.expectError(error.RecordedMaterializationFailure, v.windowWith(0, 4, null, {}, Fake.encode));
++    try t.expectEqual(@as(usize, 0), v.rowCount());
++    try t.expect(!Fake.queued);
++    const held = cpu.live;
++    b.fail = false;
++    a.cancel = true;
++    const cancel: Images.Cancel = .{ .ptr = &a, .check = Source.cancelled };
++    try t.expectError(error.Cancelled, v.windowWith(0, 4, cancel, {}, Fake.encode));
++    try t.expectEqual(held, cpu.live);
++    a.cancel = false;
++    a.cancel_during = true;
++    try t.expectError(error.Cancelled, v.windowWith(0, 4, cancel, {}, Fake.encode));
++    try t.expectEqual(held, cpu.live);
++    a.cancel = false;
++    a.cancel_during = false;
++    cpu.fail_at = cpu.allocations;
++    try t.expectError(error.OutOfMemory, v.windowWith(0, 4, null, {}, Fake.encode));
++    cpu.fail_at = std.math.maxInt(usize);
++    Fake.encode_failure = true;
++    try t.expectError(error.RecordedEncodeFailure, v.windowWith(0, 4, null, {}, Fake.encode));
++    try t.expect(!Fake.queued);
++    try t.expectEqual(held, cpu.live);
++    Fake.encode_failure = false;
++    try v.windowWith(0, 4, null, {}, Fake.encode);
++    try t.expectEqualSlices(u32, &.{ 100000, 100001, 200000, 200001 }, Fake.values[0..4]);
++    v.clear();
++    try t.expectEqual(@as(usize, 0), v.rowCount());
++    try t.expectEqual(@as(usize, 0), v.source.images.len);
++}
++
++// This tests the actual wire sender and receiver, not a substitute collective protocol.
++test "media lifecycle: actual TP image spans then rows then chunk and cancellation before forward" {
++    var d: cuda.Driver = undefined;
++    var v: Images = undefined;
++    var map: [media.step_rows / 2 + 1]i32 = undefined;
++    try setup(&v, &d, t.allocator, &map);
++    defer cleanup(&v);
++    var lib: cuda.nccl.Library = undefined;
++    lib.api.ncclBroadcast = Fake.broadcast;
++    var words: [8192]u32 = undefined;
++    var link: follow.Link = .{ .d = &d, .lib = &lib, .comm = null, .stream = v.run.stream, .buf = .{ .d = &d, .ptr = Fake.link_base, .len = 64 + words.len * 4, .borrowed = true }, .ids = &words, .gpa = t.allocator, .wait = false };
++    var e: @import("cuda_engine.zig").Engine = undefined;
++    e.slot = 1;
++    e.images = &v;
++    e.dropped = .empty;
++    e.prompt_logprobs = null;
++    e.m.glue.put_words = .{ .d = &d, .handle = @ptrFromInt(2) };
++    const x: follow.Leader = .{ .e = &e, .link = &link };
++    var a: Source = .{ .id = 1 };
++    const imgs = [_]Image{a.image(0, 2)};
++    try v.begin(1, &imgs, 0);
++    try t.expect(!try x.announceChunkWith(&.{ 1, 2 }, 0, 2, 1, null, null, false, recordedWindow));
++    try t.expectEqual(@as(usize, 3), Fake.broadcasts_len);
++    try t.expectEqual(@as(u32, @backingInt(follow.Kind.image)), Fake.broadcasts[0].kind);
++    try t.expect(Fake.broadcasts[1].rows);
++    try t.expectEqual(@as(usize, 2 * media.row_bytes), Fake.broadcasts[1].bytes);
++    try t.expectEqual(@as(u32, @backingInt(follow.Kind.chunk)), Fake.broadcasts[2].kind);
++    const packet = try follow.spanWords(t.allocator, v.spans.items, words.len);
++    defer t.allocator.free(packet);
++    v.finishWindow();
++    try v.take(1, packet);
++    try t.expectEqual(@as(usize, 2), v.rowCount());
++    v.finishWindow();
++    a.cancel = true;
++    Fake.broadcasts_len = 0;
++    try t.expect(try x.announceChunk(&.{ 1, 2 }, 0, 2, 1, null, .{ .ptr = &a, .check = Source.cancelled }, false));
++    try t.expectEqual(@as(usize, 2), Fake.broadcasts_len); // empty image header, chunk header, no row collective
++    try t.expectEqual(@as(usize, 0), v.rowCount());
++    a.cancel = false;
++    var repeated: [50]Image = undefined;
++    for (&repeated, 0..) |*img, i| img.* = a.image(@intCast(2 * i), 1);
++    try v.begin(1, &repeated, 0);
++    const long_part: [101]u32 = @splat(1);
++    Fake.broadcasts_len = 0;
++    link.keep_pending = .{ .slot = 1, .rows = 1 };
++    try t.expect(!try x.announceChunkWith(&long_part, 0, long_part.len, 1, null, null, true, recordedWindow));
++    try t.expectEqual(@as(usize, 6), Fake.broadcasts_len);
++    try t.expectEqual(@as(u32, @backingInt(follow.Kind.keep)), Fake.broadcasts[0].kind);
++    try t.expectEqual(@as(u32, @backingInt(follow.Kind.image)), Fake.broadcasts[1].kind);
++    try t.expectEqual(follow.head_bytes, Fake.broadcasts[1].bytes);
++    try t.expectEqual(@as(usize, 64 + 150 * 4), Fake.broadcasts[2].bytes);
++    try t.expect(Fake.broadcasts[3].rows);
++    try t.expectEqual(@as(usize, 50 * media.row_bytes), Fake.broadcasts[3].bytes);
++    try t.expectEqual(@as(u32, @backingInt(follow.Kind.chunk)), Fake.broadcasts[4].kind);
++    try t.expectEqual(@as(usize, 64 + 101 * 4), Fake.broadcasts[5].bytes);
++    v.finishWindow();
++    try v.begin(1, &imgs, 0);
++    a.fail = true;
++    Fake.broadcasts_len = 0;
++    try t.expectError(error.RecordedMaterializationFailure, x.announceChunk(&.{ 1, 2 }, 0, 2, 1, null, null, false));
++    try t.expectEqual(@as(usize, 0), Fake.broadcasts_len); // no peer was told to enter a forward pass
++}
++
++fn recordedWindow(v: *Images, lo: usize, hi: usize, cancel: ?Images.Cancel) !void {
++    try v.windowWith(lo, hi, cancel, {}, Fake.encode);
++}
++
++test "media lifecycle: a full 16384-token group crosses native single and paired chunk boundaries" {
++    var d: cuda.Driver = undefined;
++    var v: Images = undefined;
++    var map: [media.step_rows / 2 + 1]i32 = undefined;
++    try setup(&v, &d, t.allocator, &map);
++    defer cleanup(&v);
++    var a: Source = .{ .id = 4 };
++    const c = @import("cuda_forward.zig").prefill_rows;
++    const imgs = [_]Image{a.image(c - 1, 16384)};
++    try v.begin(3, &imgs, 0);
++    try v.windowWith(0, 2 * c, null, {}, Fake.encode);
++    try t.expectEqual(@as(usize, c + 1), v.rowCount());
++    try v.splice(v.run.stream, 3, c, 2 * c, 0x4000, 1);
++    try t.expectEqual(@as(u32, 400001), Fake.injected[0]);
++    try t.expectEqual(@as(u32, 400000 + c), Fake.injected[c - 1]);
++    v.finishWindow();
++    try v.windowWith(2 * c, 4 * c, null, {}, Fake.encode);
++    try t.expectEqual(@as(u32, 400001 + c), Fake.values[0]);
++    try t.expectEqual(@as(u32, 400000 + 3 * c), Fake.values[2 * c - 1]);
++    v.finishWindow();
++    try v.windowWith(4 * c, 5 * c, null, {}, Fake.encode);
++    try t.expectEqual(@as(usize, c - 1), v.rowCount());
++    try t.expectEqual(@as(u32, 400000 + 16383), Fake.values[c - 2]);
++    try t.expectEqual(@as(usize, 3), a.calls);
++    v.finishWindow();
++    try t.expectError(error.ImageRows, v.take(3, &.{ 0, media.step_rows + 1, 0 }));
++    try t.expectError(error.ImageRows, v.take(3, &.{ 0, 1, 1 }));
++    try t.expectError(error.ImageRows, v.take(3, &.{ 1, 2, 0, 2, 1, 2 }));
++    try t.expectError(error.ImageRows, v.take(3, &.{ std.math.maxInt(u32), 1, 0 }));
++    try t.expectError(error.BadStep, v.take(3, &.{ 0, 1 }));
++}
++
++const video = @import("video_core.zig").For(@import("core").picture);
++const config: @import("vision_config.zig").Config = .{ .image_token = 1, .image_start = 2, .image_end = 3, .mean = @splat(0.5), .std = @splat(0.5), .min_tokens = 16, .max_tokens = 2048 };
++const Frames = struct {
++    calls: usize = 0,
++    active: usize = 0,
++    max_active: usize = 0,
++    max_indices: usize = 0,
++    fail_after: ?usize = null,
++    cancelled: bool = false,
++    cancel_after: ?usize = null,
++    fn decode(ctx: *anyopaque, indices: []const u32, sink: *video.Sink) anyerror!void {
++        const f: *Frames = @ptrCast(@alignCast(ctx));
++        f.calls += 1;
++        f.active += 1;
++        defer f.active -= 1;
++        f.max_active = @max(f.max_active, f.active);
++        f.max_indices = @max(f.max_indices, indices.len);
++        var pixels: [53 * 21 * 3]u8 = undefined;
++        for (indices, 0..) |index, k| {
++            if (f.fail_after == k) return error.RecordedDecodeFailure;
++            for (&pixels, 0..) |*v, i| v.* = @intCast((index * 17 + i) % 256);
++            if (f.cancel_after == k) f.cancelled = true;
++            try sink.take(k, &pixels, 53, 21, 53 * 3);
+         }
+-        v.saved.deinit(a);
+-        v.rows.free();
+-        v.spans.deinit(a);
+-    }
+-    Fake.launches = 0;
+-    Fake.ordered_uploads = 0;
+-    try v.take(7, &.{ 2048, 2, 0 });
+-    try v.splice(stream, 7, 0, 2048, 0x3000, 4);
+-    try std.testing.expectEqual(@as(usize, 0), Fake.launches);
+-    // A's image is past its first 2048-row chunk. B is a shorter text or different-media prompt.
+-    try v.take(8, if (other_media) &.{ 1, 1, 0 } else &.{});
+-    try v.splice(stream, 7, 2048, 2050, 0x3000, 4);
+-    try std.testing.expectEqual(@as(usize, 1), Fake.launches);
+-    try std.testing.expectEqual(@as(usize, 1), Fake.ordered_uploads);
+-    try std.testing.expectEqual(stream.handle, Fake.upload_stream);
+-    const a_rows = Fake.feature;
+-    if (other_media) {
+-        try v.splice(stream, 8, 1, 2, 0x3000, 4);
+-        try std.testing.expect(Fake.feature != a_rows);
+-        try v.splice(stream, 7, 2048, 2050, 0x3000, 4);
+-        try std.testing.expectEqual(a_rows, Fake.feature);
+-    }
+-    v.release(7);
+-    try v.take(7, &.{ 2050, 1, 0 });
+-    try v.splice(stream, 7, 2050, 2051, 0x3000, 4);
+-    try std.testing.expect(Fake.feature != a_rows);
+-    try std.testing.expectEqual(@as(i32, 0), map[0]);
+-    // A restored prefix needs only the suffix's spans; a failed B admission does not clear A.
+-    try std.testing.expectError(error.ImageRows, v.take(8, &.{ 1, 2, 4 }));
+-    try v.splice(stream, 7, 2048, 2051, 0x3000, 4);
+-    try std.testing.expectEqualSlices(i32, &.{ -1, -1, 0 }, map[0..3]);
+-}
+-test "an image stream's rows survive a shorter text stream between its prompt chunks" {
+-    try run(false);
+-}
+-test "a stream's media rows survive another stream's different media between its prompt chunks" {
+-    try run(true);
+-}
+-
+-test "slot 0's stream released while another slot is bound leaves that slot's own release whole" {
+-    const a = std.testing.allocator;
++    }
++    fn source(f: *Frames, frames: u64) video.Source {
++        return .{ .identity = 99, .frames = frames, .rate_num = 2, .rate_den = 1, .width = 53, .height = 21, .ctx = f, .decode = decode };
++    }
++    fn cancel(ctx: ?*anyopaque) bool {
++        const f: *Frames = @ptrCast(@alignCast(ctx.?));
++        return f.cancelled;
++    }
++};
++fn pairImage(pair: video.Pair) Image {
++    const d = pair.deferred.?;
++    return .{ .pixels = pair.pixels, .deferred = .{ .ctx = d.ctx, .prepare = d.prepare, .checked = d.checked }, .gh = pair.gh, .gw = pair.gw, .at = 0, .tokens = pair.tokens, .hash = pair.hash };
++}
++
++test "media lifecycle: native lazy video groups exactly match eager pixels including an odd final frame" {
++    var plan_arena: std.heap.ArenaAllocator = .init(t.allocator);
++    defer plan_arena.deinit();
++    const a = plan_arena.allocator();
++    var frames: Frames = .{};
++    var src = frames.source(5);
++    src.rate_num = 1;
++    const lazy = try video.prepareLazy(a, src, config, 16384, 128);
++    try t.expectEqual(@as(usize, 0), frames.calls);
++    try t.expectEqual(@as(usize, 3), lazy.groups.len);
++    const eager = try video.prepare(a, src, config, 16384, 128);
++    frames = .{};
++    for (lazy.groups, eager.groups) |l, e| {
++        try t.expectEqual(@as(usize, 0), l.pixels.len);
++        try t.expectEqual(e.tokens, l.tokens);
++        try t.expectEqual(e.gh, l.gh);
++        try t.expectEqual(e.gw, l.gw);
++        var scratch: std.heap.ArenaAllocator = .init(t.allocator);
++        defer scratch.deinit();
++        const pixels = try pairImage(l).materialize(scratch.allocator());
++        try t.expectEqualSlices(f32, e.pixels, pixels);
++    }
++    try t.expectEqualSlices(f64, eager.times, lazy.times);
++    try t.expectEqual(@as(usize, 2), frames.max_indices);
++    try t.expectEqual(@as(usize, 1), frames.max_active);
++    try t.expectEqual(@as(usize, 0), frames.active);
++    try t.expect(lazy.groups[0].hash != lazy.groups[1].hash);
++    const replay = try video.prepareLazy(a, src, config, 16384, 128);
++    for (lazy.groups, replay.groups) |l, rr| try t.expectEqual(l.hash, rr.hash);
++    var different = src;
++    different.identity = 100;
++    try t.expect(lazy.groups[0].hash != (try video.prepareLazy(a, different, config, 16384, 128)).groups[0].hash);
++}
++
++test "media lifecycle: 128-frame video owns one decoded pair with cancellation failure retry and deadline" {
++    var plan_arena: std.heap.ArenaAllocator = .init(t.allocator);
++    defer plan_arena.deinit();
++    var frames: Frames = .{};
++    const lazy = try video.prepareLazy(plan_arena.allocator(), frames.source(128), config, 16384, 128);
++    try t.expectEqual(@as(usize, 64), lazy.groups.len);
++    var cpu: Counted = .{};
++    var max_payload: usize = 0;
++    for (lazy.groups) |pair| {
++        var scratch: std.heap.ArenaAllocator = .init(cpu.allocator());
++        {
++            const pixels = try pairImage(pair).materialize(scratch.allocator());
++            max_payload = @max(max_payload, pixels.len * 4);
++        }
++        scratch.deinit();
++        try t.expectEqual(@as(usize, 0), cpu.live);
++    }
++    try t.expectEqual(@as(usize, 64), frames.calls);
++    try t.expectEqual(@as(usize, 2), frames.max_indices);
++    try t.expect(cpu.peak < 4 * max_payload);
++    std.debug.print("media receipt: video groups={d} decoder inputs peak={d} CPU arena peak={d} group payload={d}\n", .{ lazy.groups.len, frames.max_indices, cpu.peak, max_payload });
++    for (0..3) |mode| {
++        var scratch: std.heap.ArenaAllocator = .init(cpu.allocator());
++        frames = .{};
++        if (mode == 0) frames.fail_after = 1;
++        if (mode == 1) frames.cancel_after = 1;
++        var img = pairImage(lazy.groups[0]);
++        if (mode == 2) img.deadline = .{ .io = t.io, .at = .{ .nanoseconds = 0 } };
++        try t.expectError(if (mode == 0) error.RecordedDecodeFailure else if (mode == 1) error.Cancelled else error.MediaDeadline, img.materializeChecked(scratch.allocator(), .{ .ptr = &frames, .check = Frames.cancel }));
++        try t.expectEqual(@as(usize, 0), frames.active);
++        scratch.deinit();
++        try t.expectEqual(@as(usize, 0), cpu.live);
++    }
++    frames = .{};
++    var scratch: std.heap.ArenaAllocator = .init(cpu.allocator());
++    _ = try pairImage(lazy.groups[0]).materialize(scratch.allocator());
++    scratch.deinit();
++    try t.expectEqual(@as(usize, 0), cpu.live);
++}
++
++test "media lifecycle: four streams retain all 50 images and four clips without per-stream CUDA allocations" {
+     var d: cuda.Driver = undefined;
+-    d.api.cuMemAlloc_v2 = Fake.alloc;
+-    d.api.cuMemFree_v2 = Fake.free;
+-    d.api.cuMemcpyHtoD_v2 = Fake.upload;
+-    d.api.cuMemcpyHtoDAsync_v2 = Fake.uploadAsync;
+-    d.api.cuStreamSynchronize = Fake.sync;
+-    d.api.cuLaunchKernel = Fake.launch;
+-    Fake.owned(&d);
+-    const stream: cuda.Stream = .{ .d = &d, .handle = @ptrFromInt(0x55) };
+-    var map: [2049]i32 = undefined;
+     var v: Images = undefined;
+-    v.gpa = a;
+-    v.d = &d;
+-    v.limits = .{ .image_tokens = 4, .max_images = 2 };
+-    v.video_ids = null;
+-    v.spans = .empty;
+-    v.slot = 0;
+-    v.saved = .empty;
+-    v.rows = .{ .d = &d, .ptr = 0x1000, .len = 4096, .borrowed = true };
+-    v.map = .{ .d = &d, .ptr = 0x2000, .len = 8196, .borrowed = true };
+-    v.host_map = &map;
+-    v.run.stream = stream;
+-    v.run.f.inject = .{ .d = &d, .handle = null };
+-    defer {
+-        stream.synchronize() catch unreachable; // the owner's pinned sources are released by a completed wait
+-        var it = v.saved.valueIterator();
+-        while (it.next()) |state| {
+-            state.rows.free();
+-            state.spans.deinit(a);
+-        }
+-        v.saved.deinit(a);
+-        v.rows.free();
+-        v.spans.deinit(a);
+-    }
+-    try v.take(0, &.{ 1, 2, 0 });
+-    try v.take(5, &.{ 3, 1, 0 }); // slot 0's rows and spans are put aside
+-    v.release(0); // slot 0's stream ends first: its rows go
+-    v.release(5); // then slot 5's: its buffer is slot 0's from here
+-    try std.testing.expectEqual(@as(u32, 0), v.slot);
+-    try std.testing.expectEqual(@as(usize, 0), v.spans.items.len);
+-    try std.testing.expectEqual(@as(usize, 0), v.saved.count());
+-    try v.take(0, &.{ 1, 2, 0 });
+-    try v.splice(stream, 0, 0, 4, 0x3000, 1);
+-    try std.testing.expectEqualSlices(i32, &.{ -1, 0, 1, -1 }, map[0..4]);
+-}
++    var map: [media.step_rows / 2 + 1]i32 = undefined;
++    try setup(&v, &d, t.allocator, &map);
++    defer cleanup(&v);
++    var sources: [4]Source = .{ .{ .id = 1 }, .{ .id = 2 }, .{ .id = 3 }, .{ .id = 4 } };
++    var all: [4][54]Image = undefined;
++    for (&sources, &all, 0..) |*source, *imgs, slot| {
++        for (imgs[0..50], 0..) |*img, i| img.* = source.image(@intCast(i * 2048), 2048);
++        for (imgs[50..], 0..) |*img, i| img.* = source.image(@intCast(102400 + i * 8192), 8192);
++        try v.begin(@intCast(slot + 1), imgs, 0);
++    }
++    try t.expectEqual(@as(usize, 0), Fake.encoded);
++    for (0..4) |slot| {
++        try v.activate(@intCast(slot + 1));
++        try t.expectEqual(@as(usize, 54), v.source.images.len);
++        try v.windowWith(131072, 135168, null, {}, Fake.encode);
++        try t.expectEqual(@as(usize, 4096), v.rowCount());
++        try t.expectEqual(@as(u32, @intCast((slot + 1) * 100000 + 8191)), Fake.values[4095]);
++        v.finishWindow();
++    }
++    try t.expectEqual(@as(usize, 1), Fake.driver_allocs);
++    try t.expectEqual(@as(usize, 192 << 20), Fake.driver_peak);
++    for (0..4) |slot| v.release(@intCast(slot + 1));
++    try t.expectEqual(@as(usize, 0), v.source.images.len);
++    try t.expectEqual(@as(u32, 0), v.saved.count());
++}
++
++fn failingVideoPlan(allocator: std.mem.Allocator) !void {
++    var arena: std.heap.ArenaAllocator = .init(allocator);
++    defer arena.deinit();
++    var frames: Frames = .{};
++    _ = try video.prepareLazy(arena.allocator(), frames.source(128), config, 16384, 128);
++    try t.expectEqual(@as(usize, 0), frames.calls);
++}
++test "media lifecycle: every lazy plan allocation failure releases the request arena before retry" {
++    try std.testing.checkAllAllocationFailures(t.allocator, failingVideoPlan, .{});
++}
++
++test "media lifecycle: failed activation keeps source ownership and failed release can forget its borrow" {
++    var cpu: Counted = .{};
++    var d: cuda.Driver = undefined;
++    var v: Images = undefined;
++    var map: [media.step_rows / 2 + 1]i32 = undefined;
++    try setup(&v, &d, cpu.allocator(), &map);
++    defer cleanup(&v);
++    var source: Source = .{ .id = 1 };
++    const imgs = [_]Image{source.image(0, 1)};
++    // Begin on slot zero needs no saved map allocation; switching slots must reserve before moving ownership.
++    try v.begin(0, &imgs, 0);
++    cpu.fail_at = cpu.allocations;
++    try t.expectError(error.OutOfMemory, v.activate(1));
++    try t.expectEqual(@as(u32, 0), v.slot);
++    try t.expectEqual(@as(usize, 1), v.source.images.len);
++    cpu.fail_at = std.math.maxInt(usize);
++    try v.activate(1);
++    v.forget(0);
++    try v.activate(0);
++    try t.expectEqual(@as(usize, 0), v.source.images.len);
++    try v.begin(0, &imgs, 0);
++    v.forget(0);
++    try t.expectEqual(@as(usize, 0), v.source.images.len);
++}
+diff --git a/zig/src/families/glm/cuda_follow.zig b/zig/src/families/glm/cuda_follow.zig
+--- a/zig/src/families/glm/cuda_follow.zig
++++ b/zig/src/families/glm/cuda_follow.zig
+@@ -241,6 +241,17 @@
+ 
+     /// `cancel` (rank 0's), asked before each chunk, decides for every rank; `from` every rank holds; `marks` rank 0's.
+     pub fn prefill(x: Leader, ids: []const u32, from: ?engine.Resume, cancel: ?engine.Cancel, marks: ?engine.Marks) !u32 {
++        // Whole-prompt mode must use the same bounded media protocol as stepped prefill. Text keeps its path.
++        if (x.e.images) |v| if (v.source.images.len != 0) {
++            var at: usize = if (from) |r| r.at else 0;
++            var resumed = from;
++            while (true) {
++                const step = try x.chunk(ids, at, false, resumed, cancel, marks);
++                if (step.first) |first| return first;
++                at += step.rows;
++                resumed = null;
++            }
++        };
+         try x.flush();
+         try x.send(.{ .kind = @backingInt(Kind.prefill), .flags = x.rows(), .a = if (from) |r| r.id else 0, .seed = if (from) |r| r.at else 0 }, ids);
+         return x.e.prefill(ids, from, cancel, marks);
+@@ -253,10 +264,36 @@
+         const n: usize = if (pair and x.e.pairedAt(start, ids.len, from, marks)) 2 else 1;
+         const part = ids[start..@min(ids.len, start + n * engine.prompt_rows + 1)];
+         const split = sparse.splitAt(start, x.e.settings.index_split, x.e.share.world); // a paired step's chunks share it
+-        try x.send(.{ .kind = @backingInt(Kind.chunk), .flags = x.rows() | @as(u32, @intFromBool(split)) << 1, .a = if (from) |r| r.id else 0, .seed = if (from) |r| r.at else 0, .depth = @intCast(start), .top_k = @intCast(ids.len) }, part);
++        const cancelled_media = try x.announceChunk(part, start, ids.len, n, from, cancel, split);
++        defer if (x.e.images) |v| v.finishWindow();
+         x.e.index_split = split;
+-        const first = try x.e.prefillChunk(part, start, ids.len, from, cancel, marks);
++        const first = try x.e.prefillChunk(part, start, ids.len, from, if (cancelled_media) .{ .ptr = null, .check = cancelMedia } else cancel, marks);
+         return .{ .first = first, .rows = @min(ids.len - start, n * engine.prompt_rows) };
++    }
++
++    fn cancelMedia(_: ?*anyopaque) bool {
++        return true;
++    }
++
++    /// Prepare before telling peers to enter forward collectives. A lazy cancellation still sends the chunk:
++    /// its ordinary gate broadcasts cancellation and keeps the interrupted prefix on every rank.
++    /// Exposed separately so recording drivers exercise the real header/rows/header order without a model.
++    pub fn announceChunk(x: Leader, part: []const u32, start: usize, len: usize, chunks: usize, from: ?engine.Resume, cancel: ?engine.Cancel, split: bool) !bool {
++        return x.announceChunkWith(part, start, len, chunks, from, cancel, split, images_mod.Images.window);
++    }
++
++    pub fn announceChunkWith(x: Leader, part: []const u32, start: usize, len: usize, chunks: usize, from: ?engine.Resume, cancel: ?engine.Cancel, split: bool, comptime prepare: anytype) !bool {
++        errdefer if (x.e.images) |v| v.finishWindow();
++        var cancelled_media = false;
++        if (x.e.images) |v| if (v.source.images.len != 0) {
++            prepare(v, start, @min(len, start + chunks * engine.prompt_rows), if (cancel) |c| .{ .ptr = c.ptr, .check = c.check } else null) catch |err| switch (err) {
++                error.Cancelled => cancelled_media = true,
++                else => return err,
++            };
++            try x.images(v);
++        };
++        try x.send(.{ .kind = @backingInt(Kind.chunk), .flags = x.rows() | @as(u32, @intFromBool(split)) << 1, .a = if (from) |r| r.id else 0, .seed = if (from) |r| r.at else 0, .depth = @intCast(start), .top_k = @intCast(len) }, part);
++        return cancelled_media;
+     }
+ 
+     /// `bits`: the rows' grammar words (structured output, with Engine.structured), else 0.
+@@ -407,6 +444,7 @@
+             };
+         },
+         .chunk => {
++            defer if (e.images) |v| v.finishWindow();
+             const ids = try e.gpa.dupe(u32, ids_in);
+             defer e.gpa.free(ids);
+             const from: ?engine.Resume = if (h.a != 0) .{ .id = h.a, .at = h.seed } else null;
+diff --git a/zig/src/families/glm/cuda_lanes.zig b/zig/src/families/glm/cuda_lanes.zig
+--- a/zig/src/families/glm/cuda_lanes.zig
++++ b/zig/src/families/glm/cuda_lanes.zig
+@@ -355,12 +355,12 @@
+         return p.fits(prompt, max_tokens);
+     }
+ 
+-    /// A prompt pass with images: rank 0's tower encodes those past `from`, then every rank holds their rows.
++    /// Borrow descriptors for this prompt; Leader.chunk prepares and broadcasts only the active window.
+     fn images(self: *Lanes, s: *lanes.Stream, from: ?engine.Resume) !void {
+         if (s.images.len == 0) return;
+         const v = self.x.e.images orelse return error.NoVision;
+         try v.begin(self.x.e.slot, s.images, if (from) |r| r.at else 0); // a refusal here leaves every rank as it was
+-        try self.x.images(v);
++
+     }
+     const Sink = @import("cuda_prompt_sink.zig").Sink;
+ 
+@@ -706,6 +706,7 @@
+     fn releaseFn(ptr: *anyopaque, s: *lanes.Stream) void {
+         const self = of(ptr);
+         const kv = self.lanes.fetchRemove(s) orelse return;
++        defer if (self.x.e.images) |v| v.forget(kv.value.slot);
+         self.x.release(kv.value.slot) catch |err| std.log.err("releasing slot {d}: {s}", .{ kv.value.slot, @errorName(err) });
+         if (self.lanes.count() == 0) self.x.idle() catch |err| std.log.err("the other ranks' idle step: {s}", .{@errorName(err)});
+     }
+diff --git a/zig/src/families/glm/cuda_vision.zig b/zig/src/families/glm/cuda_vision.zig
+--- a/zig/src/families/glm/cuda_vision.zig
++++ b/zig/src/families/glm/cuda_vision.zig
+@@ -418,6 +418,7 @@
+         }
+         var scratch = try cuda.DeviceBuffer.alloc(d, scratchBytes(N, seg));
+         defer scratch.free();
++        errdefer @import("cuda_load_owner.zig").drain(ru.stream, d);
+         var at: u64 = scratch.ptr;
+         const take = struct {
+             fn f(p: *u64, n: i64) u64 {
+diff --git a/zig/src/families/glm/image_core.zig b/zig/src/families/glm/image_core.zig
+--- a/zig/src/families/glm/image_core.zig
++++ b/zig/src/families/glm/image_core.zig
+@@ -6,6 +6,7 @@
+ pub const Deferred = struct {
+     ctx: *const anyopaque,
+     prepare: *const fn (ctx: *const anyopaque, a: std.mem.Allocator) anyerror![]const f32,
++    checked: ?*const fn (ctx: *const anyopaque, a: std.mem.Allocator, check_ctx: ?*anyopaque, check: *const fn (?*anyopaque) anyerror!void) anyerror![]const f32 = null,
+ };
+ 
+ pub const Prepared = struct {
+@@ -112,6 +113,22 @@
+                 const self: *const Lazy = @ptrCast(@alignCast(ctx));
+                 return (try prepare(self.io, a, self.bytes, self.config, self.max_tokens)).pixels;
+             }
++
++            fn checked(ctx: *const anyopaque, a: std.mem.Allocator, check_ctx: ?*anyopaque, check: *const fn (?*anyopaque) anyerror!void) anyerror![]const f32 {
++                const self: *const Lazy = @ptrCast(@alignCast(ctx));
++                try check(check_ctx);
++                var img = try picture.decode(self.io, a, self.bytes);
++                defer img.deinit(a);
++                try check(check_ctx);
++                const c = self.config;
++                const g = try geometry(@intCast(img.height), @intCast(img.width), @min(c.min_tokens, self.max_tokens), self.max_tokens);
++                const resized = try picture.resample.resize(a, .torch, .of(img.pixels, img.width, img.height), g.content_w, g.content_h);
++                defer a.free(resized);
++                try check(check_ctx);
++                const pixels = try patchify(a, .{ .width = g.content_w, .height = g.content_h, .pixels = resized }, g, c.mean, c.std);
++                try check(check_ctx);
++                return pixels;
++            }
+         };
+ 
+         /// Validate in temporary memory, retaining encoded bytes and geometry rather than all float patches.
+@@ -124,7 +141,7 @@
+             const grid = [2]u32{ g.target_h / vision.patch, g.target_w / vision.patch };
+             const lazy = try a.create(Lazy);
+             lazy.* = .{ .io = io, .bytes = bytes, .config = c, .max_tokens = max_tokens };
+-            return .{ .pixels = &.{}, .source_pixels = @as(u64, img.width) * img.height, .gh = grid[0], .gw = grid[1], .tokens = grid[0] * grid[1] / vision.patches_per_token, .hash = preparedHash(picture.identity.ofBytes(0x1a6e, bytes), c, g), .deferred = .{ .ctx = lazy, .prepare = Lazy.materialize } };
++            return .{ .pixels = &.{}, .source_pixels = @as(u64, img.width) * img.height, .gh = grid[0], .gw = grid[1], .tokens = grid[0] * grid[1] / vision.patches_per_token, .hash = preparedHash(picture.identity.ofBytes(0x1a6e, bytes), c, g), .deferred = .{ .ctx = lazy, .prepare = Lazy.materialize, .checked = Lazy.checked } };
+         }
+ 
+         /// Bytes to patches: decoded, fitted with Torch's uint8 bicubic resize, padded and cut.
+diff --git a/zig/src/families/glm/video_core.zig b/zig/src/families/glm/video_core.zig
+--- a/zig/src/families/glm/video_core.zig
++++ b/zig/src/families/glm/video_core.zig
+@@ -12,6 +12,7 @@
+ 
+         /// A decoded video's facts (the PyAV loader's VideoMetadata) and its frames on request.
+         pub const Source = struct {
++            identity: ?u64 = null, // non-null only for a replayable, request-owned encoded source
+             frames: u64, // the stream's frame count
+             rate_num: u64, // its average frame rate, num / den
+             rate_den: u64,
+@@ -37,15 +38,19 @@
+             frames: []u8, // [n, content_h, content_w, 3]
+             scratch: std.mem.Allocator,
+             got: usize = 0,
++            check_ctx: ?*anyopaque = null,
++            check: ?*const fn (?*anyopaque) anyerror!void = null,
+ 
+             /// Frame `k` of the plan, `w` x `h` RGB rows `stride` bytes apart.
+-            pub fn take(s: *Sink, k: usize, rgb: []const u8, w: u32, h: u32, stride: usize) Error!void {
++            pub fn take(s: *Sink, k: usize, rgb: []const u8, w: u32, h: u32, stride: usize) anyerror!void {
++                if (s.check) |check| try check(s.check_ctx);
+                 const p = s.plan;
+                 if (k != s.got or k >= p.indices.len or w != p.width or h != p.height) return error.BadVideo;
+                 const dst = s.frames[k * p.frameBytes() ..][0..p.frameBytes()];
+                 const frame: picture.resample.View = .{ .pixels = rgb, .width = w, .height = h, .stride = stride };
+                 // torchvision's uint8 resize
+                 try picture.resample.into(s.scratch, .torch, frame, p.content_w, p.content_h, dst);
++                if (s.check) |check| try check(s.check_ctx);
+                 s.got += 1;
+             }
+         };
+@@ -217,8 +222,62 @@
+         }
+ 
+         /// One pair of frames ready for the tower, and the video's.
+-        pub const Pair = struct { pixels: []f32, gh: u32, gw: u32, tokens: u32, hash: u64 };
++        pub const Pair = struct { pixels: []f32, deferred: ?@import("image_core.zig").Deferred = null, gh: u32, gw: u32, tokens: u32, hash: u64 };
+         pub const Prepared = struct { groups: []Pair, times: []f64 };
++
++        const LazyGroup = struct {
++            source: Source,
++            plan: Plan, // one pair's indices, borrowed from the request's sampling plan
++            config: vision.Config,
++
++            fn noop(_: ?*anyopaque) anyerror!void {}
++
++            fn materialize(ctx: *const anyopaque, a: std.mem.Allocator) anyerror![]const f32 {
++                return checked(ctx, a, null, noop);
++            }
++
++            fn checked(ctx: *const anyopaque, a: std.mem.Allocator, check_ctx: ?*anyopaque, check: *const fn (?*anyopaque) anyerror!void) anyerror![]const f32 {
++                const self: *const LazyGroup = @ptrCast(@alignCast(ctx));
++                try check(check_ctx);
++                const p = self.plan;
++                const frames = try a.alloc(u8, p.indices.len * p.frameBytes());
++                defer a.free(frames);
++                // Resampler scratch is group-owned as well; no frame or float patches live with the request.
++                var arena: std.heap.ArenaAllocator = .init(a);
++                defer arena.deinit();
++                var sink: Sink = .{ .plan = &p, .frames = frames, .scratch = arena.allocator(), .check_ctx = check_ctx, .check = check };
++                try self.source.decode(self.source.ctx, p.indices, &sink);
++                try check(check_ctx);
++                if (sink.got != p.indices.len) return error.BadVideo;
++                const groups = try patchify(a, p, frames, self.config.mean, self.config.std);
++                defer a.free(groups);
++                try check(check_ctx);
++                return groups[0].pixels;
++            }
++        };
++
++        /// Preserve the sampling, grid and all groups; defer decoding/float patches to a single active pair.
++        /// Encoded-byte + processor + plan identity intentionally cannot match the old eager-pixel namespace.
++        pub fn prepareLazy(a: std.mem.Allocator, s: Source, c: vision.Config, max_tokens: u32, max_frames: u32) anyerror!Prepared {
++            const id = s.identity orelse return prepare(a, s, c, max_tokens, max_frames);
++            const p = try plan(a, s, c, max_tokens, max_frames);
++            const groups = try a.alloc(Pair, p.pairs());
++            for (groups, 0..) |*g, index| {
++                var pair = p;
++                pair.indices = p.indices[2 * index .. @min(p.indices.len, 2 * index + 2)];
++                pair.times = p.times[index..][0..1];
++                const lazy = try a.create(LazyGroup);
++                lazy.* = .{ .source = s, .plan = pair, .config = c };
++                var hash = std.hash.Wyhash.init(0x676c6d76696403);
++                hash.update(std.mem.asBytes(&id));
++                hash.update(std.mem.asBytes(&c.mean));
++                hash.update(std.mem.asBytes(&c.std));
++                hash.update(std.mem.sliceAsBytes(&[_]u32{ p.width, p.height, p.target_h, p.target_w, p.content_h, p.content_w }));
++                hash.update(std.mem.sliceAsBytes(pair.indices));
++                g.* = .{ .pixels = &.{}, .deferred = .{ .ctx = lazy, .prepare = LazyGroup.materialize, .checked = LazyGroup.checked }, .gh = p.target_h / vision.patch, .gw = p.target_w / vision.patch, .tokens = p.tokensPerPair(), .hash = hash.final() };
++            }
++            return .{ .groups = groups, .times = p.times };
++        }
+ 
+         /// `s` decoded, resized as it decodes, then normalized and cut into pairs (allocated in `a`).
+         pub fn prepare(a: std.mem.Allocator, s: Source, c: vision.Config, max_tokens: u32, max_frames: u32) anyerror!Prepared {
+diff --git a/zig/src/native/cuda_vision_offer.zig b/zig/src/native/cuda_vision_offer.zig
+--- a/zig/src/native/cuda_vision_offer.zig
++++ b/zig/src/native/cuda_vision_offer.zig
+@@ -16,7 +16,7 @@
+             var out: api.PreparedImage = .{ .pixels = p.pixels, .gh = p.gh, .gw = p.gw, .tokens = p.tokens, .hash = p.hash };
+             if (comptime @hasField(@TypeOf(p), "source_pixels")) out.source_pixels = p.source_pixels;
+             if (comptime @hasField(@TypeOf(p), "deferred")) if (p.deferred) |lazy| {
+-                out.deferred = .{ .ctx = lazy.ctx, .prepare = lazy.prepare };
++                out.deferred = .{ .ctx = lazy.ctx, .prepare = lazy.prepare, .checked = lazy.checked };
+             };
+             return out;
+         }
+@@ -52,6 +52,7 @@
+         out.video = .{ .prepare = Video(T).prepare, .video_token = vm[1], .group_open = x.marks.open, .group_close = x.marks.close, .markers = vm, .video_tokens = x.limits.video_tokens, .max_videos = x.limits.max_videos, .max_frames = x.limits.max_frames };
+     };
+     if (comptime @hasDecl(T, "fixed_image_tokens")) if (out.video) |*video| {
++        if (comptime @hasDecl(T, "lazy_video")) video.lazy = T.lazy_video;
+         video.per_video_tokens = 16384;
+         video.max_frames = @min(video.max_frames, 128);
+     };
+@@ -76,11 +77,19 @@
+ 
+         fn prepare(ctx: *anyopaque, a: Allocator, src: api.VideoSource, max_tokens: u32, max_frames: u32) anyerror!api.PreparedVideo {
+             const t: *T = @ptrCast(@alignCast(ctx));
+-            var ad: @This() = .{ .src = src };
+-            const s: T.video.Source = .{ .frames = src.frames, .rate_num = src.rate_num, .rate_den = src.rate_den, .width = src.width, .height = src.height, .ctx = &ad, .decode = decode };
++            var local: @This() = .{ .src = src };
++            const ad = if (comptime @hasDecl(T, "lazy_video")) try a.create(@This()) else &local;
++            ad.* = .{ .src = src };
++            var s: T.video.Source = .{ .frames = src.frames, .rate_num = src.rate_num, .rate_den = src.rate_den, .width = src.width, .height = src.height, .ctx = ad, .decode = decode };
++            if (comptime @hasField(T.video.Source, "identity")) s.identity = src.identity;
+             const p = try t.prepareVideo(a, s, max_tokens, max_frames);
+             const groups = try a.alloc(api.PreparedImage, p.groups.len);
+-            for (groups, p.groups) |*g, q| g.* = .{ .pixels = q.pixels, .gh = q.gh, .gw = q.gw, .tokens = q.tokens, .hash = q.hash };
++            for (groups, p.groups) |*g, q| {
++                g.* = .{ .pixels = q.pixels, .gh = q.gh, .gw = q.gw, .tokens = q.tokens, .hash = q.hash };
++                if (comptime @hasField(@TypeOf(q), "deferred")) if (q.deferred) |d| {
++                    g.deferred = .{ .ctx = d.ctx, .prepare = d.prepare, .checked = d.checked };
++                };
++            }
+             return .{ .groups = groups, .times = p.times };
+         }
+     };
+diff --git a/zig/src/native/glm_host.zig b/zig/src/native/glm_host.zig
+--- a/zig/src/native/glm_host.zig
++++ b/zig/src/native/glm_host.zig
+@@ -190,7 +190,7 @@
+ fn prepareImage(ctx: *anyopaque, a: Allocator, bytes: []const u8, max_tokens: u32) anyerror!api.PreparedImage {
+     const h: *Host = @ptrCast(@alignCast(ctx));
+     const p = try glm.image.plan(h.wall.io, a, bytes, h.eng.vision.?.c, max_tokens);
+-    return .{ .pixels = p.pixels, .gh = p.gh, .gw = p.gw, .tokens = p.tokens, .hash = p.hash, .source_pixels = p.source_pixels, .deferred = if (p.deferred) |d| .{ .ctx = d.ctx, .prepare = d.prepare } else null };
++    return .{ .pixels = p.pixels, .gh = p.gh, .gw = p.gw, .tokens = p.tokens, .hash = p.hash, .source_pixels = p.source_pixels, .deferred = if (p.deferred) |d| .{ .ctx = d.ctx, .prepare = d.prepare, .checked = d.checked } else null };
+ }
+ 
+ /// Info.vision's video offer: a decoded video's frames to the tower's frame groups (glm/video.zig), on the HTTP thread.
+diff --git a/zig/src/server/images.zig b/zig/src/server/images.zig
+--- a/zig/src/server/images.zig
++++ b/zig/src/server/images.zig
+@@ -179,7 +179,7 @@
+     var bytes_total: usize = 0;
+     // every URL's download inside one request's seconds (images.py total_timeout_seconds, videos.py's)
+     const deadline: std.Io.Timestamp = if (io) |i| std.Io.Clock.awake.now(i).addDuration(.fromSeconds(if (v.image_limits) |l| l.prepare_seconds else media_fetch.total_s)) else .{ .nanoseconds = 0 };
+-    var video_budget: videos.Budget = .{ .deadline = if (fetch) |f| std.Io.Clock.awake.now(f.io).addDuration(.fromSeconds(videos.total_s)) else .{ .nanoseconds = 0 } };
++    var video_budget: videos.Budget = .{ .deadline = if (io != null) started.addDuration(.fromSeconds(videos.total_s)) else .{ .nanoseconds = 0 } };
+     var ii: usize = 0;
+     var vi: usize = 0;
+     var video_tokens_total: u64 = 0;
+@@ -189,6 +189,9 @@
+             const cap = videoTokenBudget(o, n_videos);
+             clips[vi] = try videos.prepare(cx, o, v.ctx, fetch, p.url, vi, cap, &video_budget);
+             try accountVideo(cx, o, clips[vi], cap, &video_tokens_total);
++            if (o.lazy) if (io) |video_io| for (clips[vi].groups) |*g| {
++                g.deadline = .{ .io = video_io, .at = video_budget.deadline };
++            };
+             vi += 1;
+             continue;
+         }
+@@ -207,6 +210,7 @@
+         tokens_total += prepared[i].tokens;
+         if (tokens_total > v.image_tokens) return cx.refuse("the request's images exceed the configured total visual-token budget");
+         if (v.image_limits) |l| {
++            prepared[i].deadline = .{ .io = l.io, .at = deadline };
+             pixels_total += prepared[i].source_pixels;
+             if (pixels_total > l.max_request_pixels) return cx.refuse("the request's images exceed the configured decoded pixel limit");
+             if (started.durationTo(std.Io.Clock.awake.now(l.io)).nanoseconds > @as(i96, l.prepare_seconds) * std.time.ns_per_s) return cx.refuse("image preparation exceeded the configured time limit");
+@@ -297,7 +301,7 @@
+ /// Appends one image's rows, its engine entry and its cache words; `named`: the word before them is its marker's.
+ fn placeImage(a: std.mem.Allocator, ids: *std.ArrayList(u32), key: *std.ArrayList(u32), imgs: *std.ArrayList(api.Image), token: u32, img: api.PreparedImage, named: bool) !void {
+     if (named) key.items[key.items.len - 1] = image_key.open(img.hash);
+-    try imgs.append(a, .{ .pixels = img.pixels, .deferred = img.deferred, .gh = img.gh, .gw = img.gw, .at = @intCast(ids.items.len), .tokens = img.tokens, .hash = img.hash });
++    try imgs.append(a, .{ .pixels = img.pixels, .deferred = img.deferred, .deadline = img.deadline, .gh = img.gh, .gw = img.gw, .at = @intCast(ids.items.len), .tokens = img.tokens, .hash = img.hash });
+     for (0..img.tokens) |j| {
+         try ids.append(a, token);
+         try key.append(a, image_key.row(img.hash, j));
+diff --git a/zig/src/server/videos.zig b/zig/src/server/videos.zig
+--- a/zig/src/server/videos.zig
++++ b/zig/src/server/videos.zig
+@@ -67,6 +67,21 @@
+     fn decode(ctx: *anyopaque, indices: []const u32, sink: api.FrameSink) anyerror!void {
+         const d: *Decoder = @ptrCast(@alignCast(ctx));
+         try d.v.frames(indices, Into{ .sink = sink });
++    }
++};
++
++const LazyDecoder = struct {
++    bytes: []const u8,
++
++    fn decode(ctx: *anyopaque, indices: []const u32, sink: api.FrameSink) anyerror!void {
++        const self: *const LazyDecoder = @ptrCast(@alignCast(ctx));
++        return self.decodeWith(indices, sink, api.tfvideo.Video);
++    }
++
++    fn decodeWith(self: *const LazyDecoder, indices: []const u32, sink: api.FrameSink, comptime Video: type) !void {
++        const video = try Video.open(self.bytes);
++        defer video.close();
++        try video.frames(indices, Decoder.Into{ .sink = sink });
+     }
+ };
+ 
+@@ -114,7 +129,7 @@
+         "video {d}: videos are limited to {d} minutes",
+         .{ i + 1, max_seconds / 60 },
+     ));
+-    const src: api.VideoSource = .{
++    var src: api.VideoSource = .{
+         .frames = @intCast(info.frames),
+         .rate_num = @intCast(info.rate_num),
+         .rate_den = @intCast(info.rate_den),
+@@ -123,6 +138,13 @@
+         .ctx = &d,
+         .decode = Decoder.decode,
+     };
++    if (offer.lazy) {
++        const lazy = try cx.a.create(LazyDecoder);
++        lazy.* = .{ .bytes = bytes };
++        src.ctx = lazy;
++        src.decode = LazyDecoder.decode;
++        src.identity = std.hash.Wyhash.hash(0x7466766964656f03, bytes);
++    }
+     return offer.prepare(ctx, cx.a, src, max_tokens, offer.max_frames) catch |e| switch (e) {
+         error.OutOfMemory => error.OutOfMemory,
+         error.VideoTooShort => cx.refuse(try std.fmt.allocPrint(
+@@ -258,3 +280,48 @@
+     try std.testing.expectError(error.Refused, images.expand(v, null, images.MarkText.text(), &cx, two, &[_]u32{ 1, 9 }, 0));
+     try std.testing.expectEqualStrings("the chat template wrote 1 image placeholders for 2 image parts", cx.message);
+ }
++
++test "media lifecycle: server lazy decoder closes each group on success decode failure and cancellation" {
++    const Recorder = struct {
++        var active: usize = 0;
++        var opens: usize = 0;
++        var failed = false;
++        fn open(bytes: []const u8) !@This() {
++            try std.testing.expectEqualStrings("request-owned bytes", bytes);
++            active += 1;
++            opens += 1;
++            return .{};
++        }
++        fn close(_: @This()) void {
++            active -= 1;
++        }
++        fn frames(_: @This(), indices: []const u32, sink: anytype) !void {
++            try std.testing.expectEqualSlices(u32, &.{ 7, 9 }, indices);
++            if (failed) return error.RecordedDecodeFailure;
++            try sink.take(0, &.{ 1, 2, 3 }, 1, 1, 3);
++        }
++        fn take(ctx: *anyopaque, _: usize, _: []const u8, _: u32, _: u32, _: usize) anyerror!void {
++            const cancelled: *bool = @ptrCast(@alignCast(ctx));
++            if (cancelled.*) return error.Cancelled;
++        }
++    };
++    Recorder.active = 0;
++    Recorder.opens = 0;
++    Recorder.failed = false;
++    const decoder: LazyDecoder = .{ .bytes = "request-owned bytes" };
++    var cancelled = false;
++    const sink: api.FrameSink = .{ .ctx = &cancelled, .take = Recorder.take };
++    try decoder.decodeWith(&.{ 7, 9 }, sink, Recorder);
++    try std.testing.expectEqual(@as(usize, 0), Recorder.active);
++    Recorder.failed = true;
++    try std.testing.expectError(error.RecordedDecodeFailure, decoder.decodeWith(&.{ 7, 9 }, sink, Recorder));
++    try std.testing.expectEqual(@as(usize, 0), Recorder.active);
++    Recorder.failed = false;
++    cancelled = true;
++    try std.testing.expectError(error.Cancelled, decoder.decodeWith(&.{ 7, 9 }, sink, Recorder));
++    try std.testing.expectEqual(@as(usize, 0), Recorder.active);
++    cancelled = false;
++    try decoder.decodeWith(&.{ 7, 9 }, sink, Recorder);
++    try std.testing.expectEqual(@as(usize, 4), Recorder.opens);
++    try std.testing.expectEqual(@as(usize, 0), Recorder.active);
++}

@@ -1,0 +1,81 @@
+{
+  "schema": "glm-native-parity-host/v1",
+  "date": "2026-11-06",
+  "kit_revision": "02dac3879852b8c5713318d3d64a5a791002e954",
+  "engine_revision": "f350cd3ea253a042e205746928271f9d8f71a82d",
+  "kit_patch_count": 108,
+  "site_patch_count": 9,
+  "site_patches_sha256": "98ad4090a7bc8ca5bdcf3d37186abc632b49631f770c28caaa7b941277ad0fbd",
+  "image": "glm53-tf:1104-02dac38-f7680c9bcdf7-s98ad4090a7bc",
+  "image_config_id": "sha256:c1ba6934accba54d17a2af5958ca78a618b835a2c4b1e55bfc8986c1815639b9",
+  "image_daemon_id": "sha256:d05f4bc2ce90a419403f0b166d421c4b8454b9f31426a02f98b5da39a6b1b077",
+  "embedded_patch_files_verified": 117,
+  "native_host": {
+    "build_steps_passed": 319,
+    "build_steps_total": 319,
+    "tests_passed": 4421,
+    "tests_skipped": 18,
+    "exit_code": 0
+  },
+  "photo": {
+    "macos_tests_passed": 29,
+    "linux_tests_passed": 29,
+    "runtime_image": "sha256:d05f4bc2ce90a419403f0b166d421c4b8454b9f31426a02f98b5da39a6b1b077",
+    "complete_pixel_arrays": 49,
+    "matched_refusals": 10,
+    "skipped": 0
+  },
+  "video": {
+    "ffmpeg": "9.0.2",
+    "codecs": [
+      "h264",
+      "hevc",
+      "vp8",
+      "vp9",
+      "mpeg4"
+    ],
+    "portable_zig_linked_library_sha256": "d65657f8683696b23cabe7c97c2812f900ffba332f51dbc94dff0f8a204338b1",
+    "functional_gate_exit_code": 0,
+    "pixel_parity_claimed": false
+  },
+  "evidence": {
+    "native_host": {
+      "local_path": "/tmp/glm1104-media-locked-host-gate.log",
+      "sha256": "afa9f297a23103f8d6b98908495d7efc4e54c7de9ff3aa2a8e06c48d3766e92e"
+    },
+    "image_build": {
+      "local_path": "/tmp/glm1104-media-build-milestone.log",
+      "sha256": "9a54f492c44c820b7d04bf25307111eadff40a7158c3b5e4eabd3deeae03eb09"
+    },
+    "photo": {
+      "local_path": "/tmp/glm1104-candidate9-photo.log",
+      "sha256": "63ed6e8148d2fdb56cd33e34b67d70cf3be921e062af42348657d64ebfb64daf"
+    },
+    "video": {
+      "local_path": "/tmp/glm1104-candidate9-video-smoke.log",
+      "sha256": "ba0c52dff27f1376fef5180edea079ddfb546e155cf51e381de13835e07ebaff"
+    },
+    "image_build_info": {
+      "local_path": "/Users/kelchm/.cache/glm1104-video-probe/candidate-9/BUILD-INFO",
+      "sha256": "262824b5e8cafaf6214754002e44eebb0fea6ac8e84d9377f30be0ec34f1f82a"
+    },
+    "ffmpeg_build_info": {
+      "local_path": "/Users/kelchm/.cache/glm1104-video-probe/candidate-9/FFMPEG-BUILD-INFO",
+      "sha256": "0b3025e36e0d69d0f5ea251bdf6f67e82b04755b69a6526e991269bdf79a4b9e"
+    },
+    "repository_tests": {
+      "local_path": "/tmp/glm1104-candidate9-repository-tests.log",
+      "sha256": "3b15409b9abcfe58d36b9ffe553fe5e7a6825299774d19ef2717d32ccb58eb23"
+    }
+  },
+  "sparks_accessed": false,
+  "gpu_model_executed": false,
+  "server_durable_storage_enabled": false,
+  "production_qualified": false,
+  "repository_tests": {
+    "passed": 312,
+    "skipped": 5,
+    "subtests_passed": 57,
+    "exit_code": 0
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "patch": "0650-native-photo-cmyk-parity.patch",
+  "patch_sha256": "517e6522701dafa91c2c14ba20406ddc00c20d7afa4248c10497922a18b34f33",
+  "files": [
+    {
+      "path": "zig/src/core/picture/jpeg.zig",
+      "before_sha256": "72c9323a94241043e0a05666c6a03f0a18023d2160d798077adcd3b31b8ba145",
+      "after_sha256": "25ab8dcf36eb1c5fcb9014571a756ed37e2b1b6bdc22cb4b9e8f7cb2e4f6ac25"
+    },
+    {
+      "path": "zig/src/core/picture/picture_test.zig",
+      "before_sha256": "d7060462bd6a1c2ff13d827ca03f2c689576cb5976f7cac26aed81cc27918fa7",
+      "after_sha256": "5376a8c558e9c0a113a62120a7c0a42b4c28e82da47e7cdb3558cf40525459eb"
+    }
+  ],
+  "apply_order": [
+    "integrated native source with site patches 0200 through 0600 already applied",
+    "0650-native-photo-cmyk-parity.patch",
+    "070 media memory and 080 checkpoint may follow; no overlapping files"
+  ],
+  "reference_source": {
+    "version": "Pillow 12.3.0",
+    "url": "https://files.pythonhosted.org/packages/1c/3d/bb7fca845737cf9d7dbde16ed1843984665ff2e0a518f5db43e77ec540b9/pillow-12.3.0.tar.gz",
+    "sha256": "3b8182a766685eaa002637e28b4ec8d6b18819a0c71f579bf0dbaa5830297cce"
+  },
+  "fixtures_sha256": "7fa9d00187321014030a8b837c9813cc20c3baf1b41257ea4d66d15dee59d4b3",
+  "unchanged_decoder_files": [
+    {
+      "path": "zig/src/core/picture/picture.zig",
+      "sha256": "928cd056508bb5b269fbbeb817503b7bff0e957aa11fd9342014b0e6cff02749"
+    },
+    {
+      "path": "zig/src/core/picture/png.zig",
+      "sha256": "8a399ee7e491a70a69429c5199baff5121ef9a2b7b28c23ef1dee4369b5b3ab2"
+    },
+    {
+      "path": "zig/src/core/picture/webp.zig",
+      "sha256": "f7cc999920b8574cc9448390de73cb79df9848f32ae13c082eface9facbfe2b9"
+    },
+    {
+      "path": "zig/src/core/picture/tags.zig",
+      "sha256": "819fc4a03f985fa539d6351103f7fc6553ccfebfbb01c5e69572782e5d73dd0a"
+    }
+  ]
+}

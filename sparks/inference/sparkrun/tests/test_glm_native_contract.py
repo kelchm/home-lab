@@ -22,6 +22,12 @@ MOD = ROOT / 'mods/mia-tensorfold-glm53-1104'
 RECIPE = ROOT / 'mia-tensorfold-glm53-exl3-tp2/glm53-exl3-tp2-mia-1104-agent-1m.yaml'
 
 
+@pytest.fixture(autouse=True, params=['1104', '1104-r2'])
+def native_revision(request, monkeypatch):
+    monkeypatch.setitem(globals(), 'MOD', ROOT / ('mods/mia-tensorfold-glm53-' + request.param))
+    monkeypatch.setitem(globals(), 'RECIPE', ROOT / ('mia-tensorfold-glm53-exl3-tp2/glm53-exl3-tp2-mia-' + request.param + '-agent-1m.yaml'))
+
+
 def load(name):
     spec = importlib.util.spec_from_file_location('glm_native_' + name, MOD / (name + '.py'))
     module = importlib.util.module_from_spec(spec)
@@ -52,8 +58,11 @@ def test_adapter_launches_the_native_rank_and_preserves_detected_fabric(rank):
     assert args[:2] == [serve.BINARY, 'serve']
     for key, value in {'--context': '1048576', '--parallel': '4', '--max-tokens': '32768', '--kv-cache': 'fp8',
                        '--drafter-bits': '4', '--reasoning-effort': 'xhigh', '--vision-max-images': '50',
-                       '--vision-image-tokens': '4096'}.items():
+                       '--vision-image-tokens': '102400' if MOD.name.endswith('-r2') else '4096'}.items():
         assert args[args.index(key) + 1] == value
+    if MOD.name.endswith('-r2'):
+        for key, value in {'--vision-max-videos': '4', '--vision-video-tokens': '32768', '--max-frames': '128', '--request-body-mib': '96'}.items():
+            assert args[args.index(key) + 1] == value
     assert '--thinking' in args and '--no-thinking' not in args
     assert env['TF_GLM_CLEAR_THINKING'] == '0'
     assert env['TF_GLM_DENSE_BITS'] == env['TF_GLM_HEAD_BITS'] == '8'
@@ -195,10 +204,19 @@ RECEIPT = ('info: prompt cache: 3.6 GiB of device pages and 0.0 GiB of pinned ho
 
 def test_capacity_gate_requires_the_actual_pool_and_nonzero_cache():
     check = load('capacity').check
-    assert check(RECEIPT) == (2098176, 3.6)
-    for bad in ('', RECEIPT + RECEIPT, RECEIPT.replace('4098 pages', '2048 pages'), RECEIPT.replace('512 rows', '256 rows'),
-                RECEIPT.replace('3.6 GiB', '0.0 GiB'),
-                RECEIPT.replace('0.0 GiB of pinned', '4.0 GiB of pinned')):
+    receipt = RECEIPT
+    if MOD.name.endswith('-r2'):
+        with pytest.raises(ValueError, match='Insufficient GLM pool'):
+            check(receipt)  # the original Mia smoke floor cannot replace production's measured floor
+        receipt = receipt.replace('4098 pages', '5044 pages')
+        assert check(receipt) == (2582528, 3.6)
+        with pytest.raises(ValueError, match='Insufficient GLM pool'):
+            check(receipt.replace('5044 pages', '5043 pages'))
+    else:
+        assert check(receipt) == (2098176, 3.6)
+    for bad in ('', receipt + receipt, receipt.replace('4098 pages', '2048 pages').replace('5044 pages', '2048 pages'),
+                receipt.replace('512 rows', '256 rows'), receipt.replace('3.6 GiB', '0.0 GiB'),
+                receipt.replace('0.0 GiB of pinned', '4.0 GiB of pinned')):
         with pytest.raises(ValueError):
             check(bad)
 
@@ -230,5 +248,9 @@ def test_recipe_retains_existing_weight_snapshots_and_has_both_readiness_gates()
     assert recipe['container'] == lock['image_id']
     assert recipe['metadata']['profile'] == RECIPE.stem
     assert recipe['metadata']['status'] == 'candidate'
-    assert recipe['post_exec'][0] == 'python3 /opt/glm53-1104/capacity.py'
-    assert recipe['post_exec'][1].endswith('--lanes 4 --efforts max,high,low,none')
+    suffix = '-r2' if MOD.name.endswith('-r2') else ''
+    assert recipe['post_exec'][0] == f'python3 /opt/glm53-1104{suffix}/capacity.py'
+    hook = shlex.split(recipe['post_exec'][1])
+    assert hook[:2] == ['python3', '/opt/tensorfold-readiness/readiness.py']
+    for key, value in {'--model': 'GLM-5.3-Flash', '--context': '1048576', '--lanes': '4', '--efforts': 'max,high,low,none'}.items():
+        assert hook.count(key) == 1 and hook[hook.index(key) + 1] == value

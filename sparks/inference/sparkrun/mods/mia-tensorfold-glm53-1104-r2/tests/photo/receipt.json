@@ -1,0 +1,76 @@
+{
+  "status": "PASS",
+  "timestamp": "2026-11-06T21:23:51.928831+00:00",
+  "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+  "machine": "arm64",
+  "python": "3.13.14",
+  "zig": "0.17.0",
+  "zig_sha256": "1c5f706db0ed6d55451940f31dc05a6177d05696bc1fa5d853696d04c718b523",
+  "reference": {
+    "pillow": "12.3.0",
+    "jpeg": "3.1.4.1",
+    "webp": "1.6.0"
+  },
+  "fixtures_sha256": "7fa9d00187321014030a8b837c9813cc20c3baf1b41257ea4d66d15dee59d4b3",
+  "patch_sha256": "517e6522701dafa91c2c14ba20406ddc00c20d7afa4248c10497922a18b34f33",
+  "source_files": [
+    {
+      "path": "zig/src/core/picture/jpeg.zig",
+      "before_sha256": "72c9323a94241043e0a05666c6a03f0a18023d2160d798077adcd3b31b8ba145",
+      "after_sha256": "25ab8dcf36eb1c5fcb9014571a756ed37e2b1b6bdc22cb4b9e8f7cb2e4f6ac25"
+    },
+    {
+      "path": "zig/src/core/picture/picture_test.zig",
+      "before_sha256": "d7060462bd6a1c2ff13d827ca03f2c689576cb5976f7cac26aed81cc27918fa7",
+      "after_sha256": "5376a8c558e9c0a113a62120a7c0a42b4c28e82da47e7cdb3558cf40525459eb"
+    }
+  ],
+  "unchanged_decoder_files": [
+    {
+      "path": "zig/src/core/picture/picture.zig",
+      "sha256": "928cd056508bb5b269fbbeb817503b7bff0e957aa11fd9342014b0e6cff02749"
+    },
+    {
+      "path": "zig/src/core/picture/png.zig",
+      "sha256": "8a399ee7e491a70a69429c5199baff5121ef9a2b7b28c23ef1dee4369b5b3ab2"
+    },
+    {
+      "path": "zig/src/core/picture/webp.zig",
+      "sha256": "f7cc999920b8574cc9448390de73cb79df9848f32ae13c082eface9facbfe2b9"
+    },
+    {
+      "path": "zig/src/core/picture/tags.zig",
+      "sha256": "819fc4a03f985fa539d6351103f7fc6553ccfebfbb01c5e69572782e5d73dd0a"
+    }
+  ],
+  "test_sources": {
+    "run.py": "bb260076db9b84b334bc22707577eaec235ca1421069b9887150b29ed432a0a9",
+    "native_photo_test.zig": "523365afcc4b88d50fa595513b5f9876e9c319651b9a65d6150bd87ff8ff76fd",
+    "make_fixtures.py": "4b4acbcfb04cfccf5a88f7ac30e85e26fdda4735bda51e07399a48f248ef01a4"
+  },
+  "native": {
+    "tests_passed": 29,
+    "jpeg": {
+      "path": "/private/tmp/glm065-codecs-reproduce/jpeg-build/libturbojpeg.0.4.0.dylib",
+      "sha256": "fb10516ab8537865190b82687dca3866bc167c8a5ca33a6dc1f86f9dad02900a"
+    },
+    "webp": {
+      "path": "/private/tmp/glm065-codecs-reproduce/webp-build/libwebpdecoder.3.2.0.dylib",
+      "sha256": "7560517e5e7de43b1df51acaec78caef6d66cdbfa5a1b4f5c0918a59d44d7c62"
+    },
+    "executable_sha256": "8dfe5b8759723a08f3e1982a77247fd64a9fef9b7f093a8ee3c6220b35b648d3"
+  },
+  "linux": {
+    "target": "aarch64-linux-gnu",
+    "cpu": "generic",
+    "image": "sha256:aa56b3a864a27ee4533f5a191909c176ed319b29878599b0846179093f04d89a",
+    "tests_passed": 29,
+    "executable_sha256": "594bc7a544704cb5a6a04a3dfc455d6b22ac5e96e49b37f0852b5a2e144ca3c3",
+    "output": "41d00635e8d006d6c7cff565591f3dd52f2e89a9890c8f32e7fbe11baf74e5b0  /opt/tensorfold/native/lib/libturbojpeg.so.0\na1c14fe86d5c48f87f2c14b1b37e8f39158e69569041fa2945b42e20ac36da66  /opt/tensorfold/native/lib/libwebpdecoder.so.3\n1/29 photo_parity_test.test.photo parity: production decoded pixels and refusals match pinned Pillow...photo parity: 49 complete pixel arrays, 10 refusals, zero skips\nOK\n2/29 photo_parity_test.test.photo parity: real CMYK decoder allocation failures and metadata errors release owned buffers...OK\n3/29 photo_parity_test.test_0...OK\n4/29 core.picture.picture.test_0...OK\n5/29 core.picture.jpeg.test.the version string libjpeg-turbo builds in is read up to its build stamp...OK\n6/29 core.picture.jpeg.test.the end marker is found past stuffed bytes, restarts and segments, and missing when the data stops...OK\n7/29 core.picture.webp.test.a WebP's chunks: the animation flag, its EXIF, and a chunk past the bytes refused...OK\n8/29 core.picture.tags.test.orientation from EXIF, either byte order, and XMP only without the EXIF tag...OK\n9/29 core.picture.resample.test.a flat picture stays flat at every size, both kinds...OK\n10/29 core.picture.resample.test.a kept size copies, and strided rows read only their pixels...OK\n11/29 core.picture.resample.test.torch's weights keep the largest under 2^15 at the most fraction bits...OK\n12/29 core.picture.resample.test.bilinear matches Pillow 12.3's Image.resize(BILINEAR), shrinking and enlarging...OK\n13/29 core.picture.identity.test.an identity names the bytes and the grid, in 62 bits...OK\n14/29 core.picture.patches.test.smart_resize as the processor rounds, grows and shrinks...OK\n15/29 core.picture.patches.test_0...OK\n16/29 core.picture.normalize_test.test.unfused: patches.zig's PIL path and Gemma 4's [0, 1] (mean 0, std 1)...OK\n17/29 core.picture.normalize_test.test.fused: patches.zig's and Qwen-VL video's torchvision path, LFM2's (x - 127.5) / 127.5...OK\n18/29 core.picture.normalize_test.test.fused_f32 and rescale_f32: GLM5-Next's video and image paths...OK\n19/29 core.picture.normalize_test.test.unfused is also Step-5's ToTensor and Normalize: x / 255 in f32 is x * rescale in f64 to f32, every u8...OK\n20/29 core.picture.normalize_test.test.unfused, fused and rescale_f32 each miss the others' bits...OK\n21/29 core.picture.picture_test.test.every picture 0.6.6 decoded decodes to the same RGB bytes, and its refusals read the same...OK\n22/29 core.picture.picture_test.test.edge pictures (zig/tests/fixtures/picture/edges.json) get 0.6.6's outcome, but for the named departures...OK\n23/29 core.picture.picture_test.test.WebP pictures (zig/tests/fixtures/picture/webp.json) decode to Pillow's RGB bytes, and its refusals read the same...OK\n24/29 core.picture.picture_test.test.damaged and cut pictures are refused or decoded, never trapped...OK\n25/29 core.picture.picture_test.test.sizes are judged as 0.6.6 judged them...OK\n26/29 core.picture.picture_test.test.alpha over white keeps opaque values and whitens clear ones...OK\n27/29 core.picture.picture_test.test.orientations transpose as Pillow's do...OK\n28/29 core.picture.patches_test.test.torchvision's resize and fused normalization give the processor's pixel_values, bit for bit...OK\n29/29 core.picture.patches_test.test.Pillow's resize or the unfused normalization each miss the processor's bits...OK\nAll 29 tests passed.\n"
+  },
+  "pixel_arrays_matched": 49,
+  "refusals_matched": 10,
+  "skipped": 0,
+  "missing_codec_negative_control": "failed with NoJpegLibrary as required",
+  "scratch": "/var/folders/fk/1vypmf5s0t3d4900vppfhfx00000gn/T/glm065-photo-test-xf_6hc3h"
+}

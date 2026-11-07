@@ -1,0 +1,222 @@
+Explicit profile request-body ceiling (32 MiB default, at most 96 MiB),
+shared by generation and counting routes. Framing/deadline policy is unchanged.
+
+diff --git a/zig/src/server/cli.zig b/zig/src/server/cli.zig
+index 87914e00..bfb313a0 100644
+--- a/zig/src/server/cli.zig
++++ b/zig/src/server/cli.zig
+@@ -43,6 +43,7 @@ pub const flags = [_]Flag{
+     .{ .name = "--allowed-origin", .kind = .append, .native = true },
+     .{ .name = "--allowed-controls", .native = true },
+     .{ .name = "--port", .native = true },
++    .{ .name = "--request-body-mib", .native = true },
+     .{ .name = "--name", .native = true },
+     .{ .name = "--chat-template", .native = true },
+     .{ .name = "--voices", .native = true },
+@@ -162,6 +163,7 @@ pub const Args = struct {
+     model: []const u8 = "",
+     host: []const u8 = "127.0.0.1",
+     port: u16 = 8080,
++    request_body_mib: u32 = 32,
+     name: []const u8 = "",
+     chat_template: ?[]const u8 = null,
+     voices: ?[]const u8 = null,
+@@ -403,6 +405,12 @@ fn apply(a: Allocator, out: *Args, name: []const u8, value: ?[]const u8, u: *Usa
+         out.max_frames = @intCast(n);
+         return;
+     }
++    if (is(name, "--request-body-mib")) {
++        const n = try int(u, a, name, v);
++        if (n < 1 or n > 96) return fail(u, a, "argument --request-body-mib: expected 1 through 96: '{s}'", .{v});
++        out.request_body_mib = @intCast(n);
++        return;
++    }
+     if (try @import("admission_cli.zig").apply(a, &out.admission, name, v, u)) return;
+     if (is(name, "--silence-onset-s")) out.silence.onset_seconds = try float(u, a, name, v) else if (is(name, "--silence-onset-voiced-s")) out.silence.onset_voiced_seconds = try float(u, a, name, v) else if (is(name, "--host")) out.host = v else if (is(name, "--port")) {
+         const p = try int(u, a, name, v);
+diff --git a/zig/src/server/server.zig b/zig/src/server/server.zig
+index 70d9ca09..3e1ea9a4 100644
+--- a/zig/src/server/server.zig
++++ b/zig/src/server/server.zig
+@@ -51,6 +51,8 @@ pub const Config = struct {
+     /// Ids a request may name for background priority by default (--name-priority); each is in model_ids.
+     background_ids: []const []const u8 = &.{},
+     default_max_tokens: i64 = 4096,
++    /// Explicit profile limit; the ordinary native default stays 32 MiB.
++    request_body_bytes: usize = @import("http_body.zig").limit,
+     enable_thinking: bool = true,
+     reasoning_effort: ?[]const u8 = null,
+     thinking_budget: i64 = 0,
+diff --git a/zig/src/server/serve.zig b/zig/src/server/serve.zig
+index 38cf1109..96a9bb70 100644
+--- a/zig/src/server/serve.zig
++++ b/zig/src/server/serve.zig
+@@ -170,6 +170,7 @@ pub fn run(gpa: Allocator, io: std.Io, args: cli.Args, s: Setup) u8 {
+         .model_ids = ids.items,
+         .background_ids = backgrounds,
+         .default_max_tokens = args.max_tokens,
++        .request_body_bytes = @as(usize, args.request_body_mib) * 1024 * 1024,
+         .enable_thinking = args.thinking,
+         .reasoning_effort = args.reasoning_effort,
+         .thinking_budget = args.thinking_budget,
+diff --git a/zig/src/server/http_body.zig b/zig/src/server/http_body.zig
+index ac35079f..62480cfe 100644
+--- a/zig/src/server/http_body.zig
++++ b/zig/src/server/http_body.zig
+@@ -146,7 +146,11 @@ fn trailerName(line: []const u8) bool {
+ 
+ /// The body as JSON (an empty body reads as ``{}``): a framing refusal, or the decoder's message as another exception.
+ pub fn readJson(conn: *Conn, cx: *errors.Cx) errors.Refused!json.Value {
+-    const raw = switch (try read(conn, cx.a, limit)) {
++    return readJsonLimit(conn, cx, limit);
++}
++
++pub fn readJsonLimit(conn: *Conn, cx: *errors.Cx, max: usize) errors.Refused!json.Value {
++    const raw = switch (try read(conn, cx.a, max)) {
+         .ok => |b| b,
+         .refused => |message| return cx.refuse(message),
+     };
+diff --git a/zig/src/server/openai.zig b/zig/src/server/openai.zig
+index 91c0f87a..0b7be4c3 100644
+--- a/zig/src/server/openai.zig
++++ b/zig/src/server/openai.zig
+@@ -48,7 +48,7 @@ pub const Out = struct {
+ /// POST /v1/chat/completions or /v1/completions, read from the client and answered to it.
+ pub fn post(srv: *Server, conn: *Conn, a: Allocator, is_chat: bool) void {
+     var cx: Cx = .{ .a = a };
+-    const body = http_body.readJson(conn, &cx) catch {
++    const body = http_body.readJsonLimit(conn, &cx, srv.config.request_body_bytes) catch {
+         const err = errorBody(a, &cx, if (is_chat) "messages" else "prompt") catch return;
+         return routes.sendValue(conn, a, cx.status(), wrapError(a, err) catch return);
+     };
+diff --git a/zig/src/server/anthropic.zig b/zig/src/server/anthropic.zig
+index 0c241ee4..9ed9b1e0 100644
+--- a/zig/src/server/anthropic.zig
++++ b/zig/src/server/anthropic.zig
+@@ -65,7 +65,7 @@ pub fn post(srv: *Server, conn: *Conn, a: Allocator) void {
+     const count = std.mem.endsWith(u8, auth.routePath(conn.path), "/count_tokens");
+     var cx: Cx = .{ .a = a };
+     const prepared = blk: {
+-        const raw = switch (http_body.read(conn, a, http_body.limit) catch return) {
++        const raw = switch (http_body.read(conn, a, srv.config.request_body_bytes) catch return) {
+             .ok => |b| b,
+             .refused => |m| return sendError(conn, a, m, 400),
+         };
+diff --git a/zig/src/server/responses.zig b/zig/src/server/responses.zig
+index 29687243..c01bd842 100644
+--- a/zig/src/server/responses.zig
++++ b/zig/src/server/responses.zig
+@@ -162,7 +162,7 @@ pub fn delete(srv: *Server, conn: *Conn, a: Allocator, rid: ?[]const u8) void {
+ pub fn post(srv: *Server, conn: *Conn, a: Allocator) void {
+     var cx: Cx = .{ .a = a };
+     const request = blk: {
+-        const raw = switch (http_body.read(conn, a, http_body.limit) catch return) {
++        const raw = switch (http_body.read(conn, a, srv.config.request_body_bytes) catch return) {
+             .ok => |b| b,
+             .refused => |m| return refuse(conn, a, m, 400, null),
+         };
+diff --git a/zig/src/server/tokens.zig b/zig/src/server/tokens.zig
+index f2d9f9e0..9ff849ed 100644
+--- a/zig/src/server/tokens.zig
++++ b/zig/src/server/tokens.zig
+@@ -90,7 +90,7 @@ fn detokenize(srv: *Server, cx: *Cx, body: Value) errors.Refused!Value {
+ pub fn post(srv: *Server, conn: *Conn, a: Allocator, detok: bool) void {
+     var cx: Cx = .{ .a = a };
+     const reply = blk: {
+-        const body = http_body.readJson(conn, &cx) catch break :blk null;
++        const body = http_body.readJsonLimit(conn, &cx, srv.config.request_body_bytes) catch break :blk null;
+         break :blk (if (detok) detokenize(srv, &cx, body) else tokenize(srv, &cx, body)) catch null;
+     };
+     if (reply) |r| return routes.sendValue(conn, a, 200, r);
+diff --git a/zig/src/server/http_limits_test.zig b/zig/src/server/http_limits_test.zig
+index 1ed9d7d4..85843b35 100644
+--- a/zig/src/server/http_limits_test.zig
++++ b/zig/src/server/http_limits_test.zig
+@@ -7,6 +7,87 @@ const server = @import("server.zig");
+ const admission = @import("http_admission.zig");
+ const testing = std.testing;
+ 
++test "HTTP body profile: explicit bounded CLI policy preserves the ordinary default" {
++    const cli = @import("cli.zig");
++    var arena = std.heap.ArenaAllocator.init(testing.allocator);
++    defer arena.deinit();
++    var usage: cli.Usage = .{};
++    try testing.expectEqual(@as(u32, 32), (try cli.parse(arena.allocator(), &.{"model"}, &usage)).request_body_mib);
++    for ([_][]const u8{ "1", "32", "96" }) |value| {
++        const args = try cli.parse(arena.allocator(), &.{ "model", "--request-body-mib", value }, &usage);
++        try testing.expectEqual(try std.fmt.parseInt(u32, value, 10), args.request_body_mib);
++    }
++    for ([_][]const u8{ "0", "-1", "97", "4294967296", "1.5", "nan" }) |value|
++        try testing.expectError(error.Usage, cli.parse(arena.allocator(), &.{ "model", "--request-body-mib", value }, &usage));
++}
++
++test "HTTP body profile: all generation and counting routes use the configured ceiling" {
++    const fixture = @import("late_system_test.zig");
++    const routes = @import("routes.zig");
++    var engine: fixture.Capture = .{};
++    defer testing.allocator.free(engine.prompt);
++    defer testing.allocator.free(engine.background_prompt);
++    var text: fixture.DropLate = .{};
++    const srv = try server.Server.init(testing.allocator, testing.io, engine.engine(), text.text(), .{
++        .served_name = "test",
++        .model_ids = &.{"test"},
++        .request_body_bytes = 1,
++    }, null);
++    defer srv.deinit();
++    const Wire = struct {
++        bytes: std.ArrayList(u8) = .empty,
++        fn write(ctx: *anyopaque, data: []const u8) error{Closed}!void {
++            const w: *@This() = @ptrCast(@alignCast(ctx));
++            w.bytes.appendSlice(testing.allocator, data) catch return error.Closed;
++        }
++    };
++    for ([_][]const u8{ "/v1/chat/completions", "/v1/completions", "/v1/responses", "/v1/messages", "/v1/messages/count_tokens", "/tokenize", "/detokenize" }) |path| {
++        var arena = std.heap.ArenaAllocator.init(testing.allocator);
++        defer arena.deinit();
++        var wire: Wire = .{};
++        defer wire.bytes.deinit(testing.allocator);
++        var conn = try http.Conn.init(testing.allocator, -1, "body profile");
++        defer conn.deinit();
++        conn.quiet_log = true;
++        conn.method = "POST";
++        conn.path = path;
++        conn.version = "HTTP/1.1";
++        conn.write_hooks = .{ .ctx = &wire, .write = Wire.write };
++        var headers = [_]http.Header{.{ .name = "Content-Length", .value = "2" }};
++        conn.headers = &headers;
++        @memcpy(conn.buf[0..2], "{}");
++        conn.end = 2;
++        routes.dispatch(srv, &conn, arena.allocator());
++        try testing.expect(std.mem.startsWith(u8, wire.bytes.items, "HTTP/1.1 400 "));
++        try testing.expect(std.mem.indexOf(u8, wire.bytes.items, "request body exceeds") != null);
++        try testing.expect(conn.close);
++        try testing.expectEqual(@as(usize, 0), engine.prompt.len);
++    }
++}
++
++test "HTTP body profile: fixed and chunked bodies accept the exact limit and refuse excess" {
++    for ([_]bool{ false, true }) |chunked| {
++        for ([_]usize{ 1, 2, 3 }) |ceiling| {
++            var slow: Slow = .{ .fragments = if (chunked) &.{"2\r\n{}\r\n0\r\n\r\n"} else &.{"{}"}, .delays = &.{0} };
++            var conn = try slow.conn();
++            defer conn.deinit();
++            conn.version = "HTTP/1.1";
++            var headers = [_]http.Header{if (chunked) .{ .name = "Transfer-Encoding", .value = "chunked" } else .{ .name = "Content-Length", .value = "2" }};
++            conn.headers = &headers;
++            var arena = std.heap.ArenaAllocator.init(testing.allocator);
++            defer arena.deinit();
++            var cx: @import("errors.zig").Cx = .{ .a = arena.allocator() };
++            if (ceiling < 2) {
++                try testing.expectError(error.Refused, body.readJsonLimit(&conn, &cx, ceiling));
++                try testing.expect(conn.close);
++            } else {
++                const value = try body.readJsonLimit(&conn, &cx, ceiling);
++                try testing.expect(value == .object);
++            }
++        }
++    }
++}
++
+ const Slow = struct {
+     fragments: []const []const u8,
+     delays: []const i32,

@@ -1,0 +1,71 @@
+{
+  "patch": "0500-native-checkpoint-foundations.patch",
+  "patch_sha256": "421c2ad63e66029d463c1139122e0c7f678028cd45a7514d10deb933ab2370cf",
+  "files": [
+    {
+      "path": "zig/build/glm_contracts.zig",
+      "before_sha256": "338b639dbb34f46d17c42223b09e3e15c6990c913fa78c6e4c4337ef9d2a31aa",
+      "after_sha256": "08185f8642a16b54ef414d9f82d3d29931acab26723ec4a69192db91fde13e3b"
+    },
+    {
+      "path": "zig/glm_checkpoint_host.zig",
+      "before_sha256": null,
+      "after_sha256": "21331772673fb95284d9437b868947895363f01460303a496f2e3365a8ae437f"
+    },
+    {
+      "path": "zig/src/core/checkpoint_capture.zig",
+      "before_sha256": null,
+      "after_sha256": "7e258cfa4b22e82975ce2199470814f6e61b3429aa7f8e95e3143359b63f5dc1"
+    },
+    {
+      "path": "zig/src/core/checkpoint_capture_test.zig",
+      "before_sha256": null,
+      "after_sha256": "b51491b0301db5c9cfaf90f44fd9388970d17f72a1607a1b0d5552c1560582e2"
+    },
+    {
+      "path": "zig/src/core/checkpoint_file.zig",
+      "before_sha256": null,
+      "after_sha256": "6f7c4bf607c9a7b5784edf333697e03abc1d4debf933a3266f7f4296b6d8024b"
+    },
+    {
+      "path": "zig/src/core/checkpoint_file_test.zig",
+      "before_sha256": null,
+      "after_sha256": "817f88fb069213ff03feb93f0f4f4ca4b9dda3d213f0f7120cd98936719cef73"
+    },
+    {
+      "path": "zig/src/core/checkpoint_stream.zig",
+      "before_sha256": null,
+      "after_sha256": "9929eaf09bb5c4ba11866e767621138a1e7082eaa760392eb4e3eff6246b205f"
+    },
+    {
+      "path": "zig/src/core/checkpoint_stream_test.zig",
+      "before_sha256": null,
+      "after_sha256": "9f800837d1831854615285eed867166f9b0dbd2f6cba4e5d1ea947191db7d442"
+    },
+    {
+      "path": "zig/src/core/kv_pool.zig",
+      "before_sha256": "2f612675c12c8da3c2a79ca83960e6a6056b65c6ac9504cb47dcd37f627abfe1",
+      "after_sha256": "b328927b20817225cbd8e2feb8a7262fbcaf7d068d7b967dec86cda34ea25daa"
+    },
+    {
+      "path": "zig/src/core/root.zig",
+      "before_sha256": "c2654c6e71abeabe4532207feee9f117b87c1bc8d62401d290c0d1203f23f438",
+      "after_sha256": "75f9f4898d6a294cd7fa50baaaefec7a6abbad91596177f80e27c3ab84c93149"
+    },
+    {
+      "path": "zig/src/families/glm/cuda.zig",
+      "before_sha256": "ab8034c68e204fdbe7e18fe3e66c58dfb6bd2ae25beb2e111b84f2f00e271afe",
+      "after_sha256": "ee08436048b9505f3cf21122d8def1a2a1c3249b954bd73403c7e4c946d46fea"
+    },
+    {
+      "path": "zig/src/families/glm/cuda_checkpoint.zig",
+      "before_sha256": null,
+      "after_sha256": "7287d4a8bc46a58283cfc350c31545cc39780a65ffabc44e4afc2e118fd95b93"
+    },
+    {
+      "path": "zig/src/families/glm/cuda_checkpoint_freeze.zig",
+      "before_sha256": null,
+      "after_sha256": "b31bae02a453bbe8dfdf34206b01b541bf27954ceaed6f7cd9ec723e794185c4"
+    }
+  ]
+}

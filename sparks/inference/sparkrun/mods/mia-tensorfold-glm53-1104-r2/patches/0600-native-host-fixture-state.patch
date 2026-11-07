@@ -1,0 +1,269 @@
+Adapt host fixtures to the Mia drafts switch, 4,096-row snapshot grid and
+DFlash prompt capacity. Drain HTTP fixture replies concurrently so long SSE
+streams cannot fill an unread socket. Production MM diagnostics are unchanged.
+
+diff --git a/zig/src/families/glm/cuda_mm.zig b/zig/src/families/glm/cuda_mm.zig
+index 747d788d..dc82263f 100644
+--- a/zig/src/families/glm/cuda_mm.zig
++++ b/zig/src/families/glm/cuda_mm.zig
+@@ -257,7 +257,7 @@ pub const default_stage_index = 2; // 6 stages
+ pub fn stageIndex(v: ?[]const u8) usize {
+     const t = v orelse return default_stage_index;
+     for (stage_variants, 0..) |st, i| if (t.len == 1 and t[0] == '0' + @as(u8, @intCast(st))) return i;
+-    if (t.len != 0) std.log.err("TF_GLM_MM_STAGES: 3, 5, 6 or 8 (not '{s}'): {d}", .{ t, stage_variants[default_stage_index] });
++    if (t.len != 0 and !@import("builtin").is_test) std.log.err("TF_GLM_MM_STAGES: 3, 5, 6 or 8 (not '{s}'): {d}", .{ t, stage_variants[default_stage_index] });
+     return default_stage_index;
+ }
+ 
+diff --git a/zig/src/native/draft_sources_cuda_test.zig b/zig/src/native/draft_sources_cuda_test.zig
+index e1595d47..ca431814 100644
+--- a/zig/src/native/draft_sources_cuda_test.zig
++++ b/zig/src/native/draft_sources_cuda_test.zig
+@@ -35,9 +35,11 @@ test "draft sources: CUDA GLM distinguishes its checkpoint head from loaded DFla
+     b.alone = false;
+     b.mtp_confidence = null;
+     e.mtp = false;
++    e.drafts = false;
+     e.drafter = null;
+     try check(b.facts(), null, false, false);
+     e.mtp = true;
++    e.drafts = true;
+     try check(b.facts(), null, true, true);
+     b.mtp_confidence = 0.3; // --mtp-confidence: the head's chances size its windows, still a checkpoint head
+     try check(b.facts(), null, true, true);
+diff --git a/zig/glm_fp8_pages_host.zig b/zig/glm_fp8_pages_host.zig
+index 91740ce8..caaaae25 100644
+--- a/zig/glm_fp8_pages_host.zig
++++ b/zig/glm_fp8_pages_host.zig
+@@ -724,9 +724,9 @@ test "GLM FP8 pages: the prompt cache's store keeps paged E4M3 states past the c
+             try e.prepareTiers(budget, host);
+         }
+     };
+-    const ids_a = [_]u32{ 2, 0, 3, 1, 8 }; // 2,048 rows and a page past them
+-    const ids_b = [_]u32{ 6, 4, 7, 5, 9 };
+-    var kv_buf = try cuda.DeviceBuffer.alloc(&d, 10 * page);
++    const ids_a = [_]u32{ 2, 0, 3, 1, 8, 10, 12, 14, 16 }; // 4,096 rows and a lookahead page
++    const ids_b = [_]u32{ 6, 4, 7, 5, 9, 11, 13, 15, 17 };
++    var kv_buf = try cuda.DeviceBuffer.alloc(&d, 18 * page);
+     defer kv_buf.free();
+     var a = f.seq;
+     a.st = try paged8(&d, &f, kv_buf.ptr, &ids_a, false);
+@@ -736,7 +736,7 @@ test "GLM FP8 pages: the prompt cache's store keeps paged E4M3 states past the c
+     defer b.st.deinit();
+     f.e.cur = &a;
+     defer f.e.cur = &f.seq;
+-    const one = f.e.stateBytes(2048);
++    const one = f.e.stateBytes(4096);
+     Ready.host = 3 * one;
+     f.e.snap_setup = .{ .ptr = &f.e, .run = Ready.run };
+     const budget = try adapter.cacheBudget(glm.native, &f.e, one + 31);
+@@ -744,18 +744,18 @@ test "GLM FP8 pages: the prompt cache's store keeps paged E4M3 states past the c
+     const family: pc.Snapshots = .{ .ptr = &f.e, .vtable = &adapter.Snaps(glm.native, null).vtable };
+     var store = pc.Store.init(t.allocator, family, adapter.cacheRules(glm.native), budget);
+     defer store.deinit();
+-    var prompt: [2049]u32 = @splat(1);
++    var prompt: [4097]u32 = @splat(1);
+     for (0..7) |i| {
+         prompt[0] = @intCast(i);
+-        try markPaged(&f, &a.st, kv_buf.ptr, page, 2048, 0, @intCast(i));
+-        try t.expect(store.keep(&prompt, 2048, null, &.{}, &.{}));
++        try markPaged(&f, &a.st, kv_buf.ptr, page, 4096, 0, @intCast(i));
++        try t.expect(store.keep(&prompt, 4096, null, &.{}, &.{}));
+         try t.expect(store.entries.items.len <= 4);
+     }
+     try t.expectEqual(@as(usize, 4), store.entries.items.len); // one on the card, three in host memory
+     try t.expectEqual(@as(u64, 3), store.counts.evicted);
+     // the last kept (salt 6) resumes onto b's pages as a's pages held it
+     prompt[0] = 6;
+-    const found = try store.lookup(t.allocator, &prompt, 2048, &.{}, &.{}, &.{});
++    const found = try store.lookup(t.allocator, &prompt, 4096, &.{}, &.{}, &.{});
+     defer t.allocator.free(found.marks);
+     const e = found.entry orelse return error.ExpectedHit;
+     defer store.release(e);
+@@ -763,9 +763,9 @@ test "GLM FP8 pages: the prompt cache's store keeps paged E4M3 states past the c
+     clobber(&b.st, kv_buf.ptr, page, 0xFF);
+     f.e.cur = &b;
+     try f.e.restoreState(kept.id);
+-    try samePrefix8(c, &a.st, &b.st, 2048, null);
++    try samePrefix8(c, &a.st, &b.st, 4096, null);
+     prompt[0] = 0; // the oldest went first
+-    const gone = try store.lookup(t.allocator, &prompt, 2048, &.{}, &.{}, &.{});
++    const gone = try store.lookup(t.allocator, &prompt, 4096, &.{}, &.{}, &.{});
+     defer t.allocator.free(gone.marks);
+     try t.expect(gone.entry == null);
+ }
+diff --git a/zig/glm_snapshot_host.zig b/zig/glm_snapshot_host.zig
+index bb5292b2..a1bfada2 100644
+--- a/zig/glm_snapshot_host.zig
++++ b/zig/glm_snapshot_host.zig
+@@ -45,10 +45,10 @@ test "GLM snapshots: a short prefix fits 4 GiB even with a 524288-token configur
+     e.mtp = true;
+     e.drafter = null; // the target MTP head absorbs prompts: its rows are budgeted
+     e.capacity = seq.st.capacity;
+-    for ([_]u32{ 2048, 34816, 266240 }) |at| {
++    for ([_]u32{ 4096, 34816, 266240 }) |at| {
+         std.debug.print("GLM snapshot sizing rank=0 world=2 at={d} bytes={d} arena={d}\n", .{ at, glm.native.snap_bytes(&e, at), seq.st.arena.buf.len });
+     }
+-    const short = glm.native.snap_bytes(&e, 2048);
++    const short = glm.native.snap_bytes(&e, 4096);
+     try t.expectEqual(short, glm.native.snap_min_bytes(&e));
+     const longer = glm.native.snap_bytes(&e, 34816);
+     try t.expect(short < 4 * @as(u64, 1 << 30));
+@@ -115,23 +115,23 @@ test "GLM snapshots: actual store charges held plus spare pages, evicts and prot
+     var f: Fixture = undefined;
+     try f.init(&d, 0, 1, false);
+     defer f.deinit();
+-    const budget = 2 * f.e.stateBytes(2048) + 31;
++    const budget = 2 * f.e.stateBytes(4096) + 31;
+     _ = try glm.native.snap_ready(&f.e, budget);
+     const family: pc.Snapshots = .{ .ptr = &f.e, .vtable = &adapter.Snaps(glm.native, null).vtable };
+     var store = pc.Store.init(t.allocator, family, adapter.cacheRules(glm.native), budget);
+     defer store.deinit();
+     const allocs = rec.allocs;
+-    var prompt: [2049]u32 = @splat(1);
++    var prompt: [4097]u32 = @splat(1);
+     for (0..9) |i| {
+         prompt[0] = @intCast(i);
+-        try f.mark(2048, 2048, @intCast(i));
+-        try t.expect(store.keep(&prompt, 2048, null, &.{}, &.{}));
++        try f.mark(4096, 4096, @intCast(i));
++        try t.expect(store.keep(&prompt, 4096, null, &.{}, &.{}));
+         try t.expect(store.held + glm.native.snap_spare(&f.e) <= budget);
+         try t.expectEqual(allocs, rec.allocs);
+         try t.expect(store.entries.items.len <= 2);
+     }
+     try t.expect(store.counts.evicted > 0);
+-    const found = try store.lookup(t.allocator, &prompt, 2048, &.{}, &.{}, &.{});
++    const found = try store.lookup(t.allocator, &prompt, 4096, &.{}, &.{}, &.{});
+     defer t.allocator.free(found.marks);
+     const borrowed = found.entry orelse return error.ExpectedHit;
+     defer store.release(borrowed);
+@@ -139,8 +139,8 @@ test "GLM snapshots: actual store charges held plus spare pages, evicts and prot
+     const id = kept.id;
+     for (10..15) |i| {
+         prompt[0] = @intCast(i);
+-        try f.mark(2048, 2048, @intCast(i));
+-        try t.expect(store.keep(&prompt, 2048, null, &.{}, &.{}));
++        try f.mark(4096, 4096, @intCast(i));
++        try t.expect(store.keep(&prompt, 4096, null, &.{}, &.{}));
+         try t.expect(f.e.holds(id));
+         try t.expect(store.held + glm.native.snap_spare(&f.e) <= budget);
+     }
+@@ -448,8 +448,9 @@ test "GLM snapshots: 0.3 GiB fits the first default TP2 prefix at 256K but not a
+     e.capacity = seq.st.capacity;
+     const minimum = glm.native.snap_min_bytes(&e);
+     const budget: u64 = 322122547;
+-    // 203,423,744 at 8-row windows; W16's 16-row windows double the KDA layers' window saves a state carries (+18 MiB)
+-    try t.expectEqual(@as(u64, if (glm.forward.window_rows == 16) 222298112 else 203423744), minimum);
++    // Mia keeps states on a 4,096-row grid. Its first mark adds 36 MiB of
++    // attention rows to upstream's 2,048-row minimum; W16 adds another 18 MiB.
++    try t.expectEqual(@as(u64, if (glm.forward.window_rows == 16) 260046848 else 241172480), minimum);
+     try t.expect(minimum <= budget);
+     try t.expect(glm.native.snap_bytes(&e, 34816) > budget);
+ }
+@@ -708,7 +709,7 @@ test "GLM snapshots: the actual store's budget spans the host tier, keeps past t
+     var f: Fixture = undefined;
+     try f.init(&d, 0, 1, false);
+     defer f.deinit();
+-    const one = f.e.stateBytes(2048);
++    const one = f.e.stateBytes(4096);
+     const Ready = struct {
+         var host: u64 = 0;
+         fn run(p: *anyopaque, budget: u64) anyerror!void {
+@@ -723,11 +724,11 @@ test "GLM snapshots: the actual store's budget spans the host tier, keeps past t
+     const family: pc.Snapshots = .{ .ptr = &f.e, .vtable = &adapter.Snaps(glm.native, null).vtable };
+     var store = pc.Store.init(t.allocator, family, adapter.cacheRules(glm.native), budget);
+     defer store.deinit();
+-    var prompt: [2049]u32 = @splat(1);
++    var prompt: [4097]u32 = @splat(1);
+     for (0..9) |i| {
+         prompt[0] = @intCast(i);
+-        try f.mark(2048, 0, @intCast(i));
+-        try t.expect(store.keep(&prompt, 2048, null, &.{}, &.{}));
++        try f.mark(4096, 0, @intCast(i));
++        try t.expect(store.keep(&prompt, 4096, null, &.{}, &.{}));
+         try t.expectEqual(budget - 31, store.held + glm.native.snap_spare(&f.e)); // whole pages: every one held or spare
+         try t.expect(store.entries.items.len <= 4);
+     }
+@@ -737,13 +738,13 @@ test "GLM snapshots: the actual store's budget spans the host tier, keeps past t
+     // the oldest kept is the first to go: the newest four still resume their own rows
+     for (5..9) |i| {
+         prompt[0] = @intCast(i);
+-        const found = try store.lookup(t.allocator, &prompt, 2048, &.{}, &.{}, &.{});
++        const found = try store.lookup(t.allocator, &prompt, 4096, &.{}, &.{}, &.{});
+         defer t.allocator.free(found.marks);
+         const e = found.entry orelse return error.ExpectedHit;
+         defer store.release(e);
+         const kept: *glm.engine.Kept = @ptrCast(@alignCast(e.saved));
+         try f.e.restoreState(kept.id);
+-        try t.expectEqual(@as(usize, 2048), f.seq.st.pos);
++        try t.expectEqual(@as(usize, 4096), f.seq.st.pos);
+     }
+ }
+ 
+diff --git a/zig/glm_prompt_host.zig b/zig/glm_prompt_host.zig
+index 722c9a24..0847ff0c 100644
+--- a/zig/glm_prompt_host.zig
++++ b/zig/glm_prompt_host.zig
+@@ -225,7 +225,8 @@ test "GLM prompt workflow: context window cut preserves sequence positions indep
+     try t.expectEqual(@as(u64, 2000 + 11 * dr.TAP_ROW), shifted.taps);
+     try t.expectEqual(@as(?dr.Run, null), try dr.promptRun(1000, 2000, 0, 2048, 5000, 0));
+     try t.expectError(error.BadPromptContext, dr.promptRun(0, 0, 9, 2, 10, 0));
+-    try t.expectError(error.DrafterContextTooWide, dr.promptRun(0, 0, 0, 5, 5, 2044));
++    try t.expect((try dr.promptRun(0, 0, 0, 5, 5, dr.MAX_CTX - 5)) != null);
++    try t.expectError(error.DrafterContextTooWide, dr.promptRun(0, 0, 0, 5, 5, dr.MAX_CTX - 4));
+ }
+ 
+ test "GLM prompt workflow: both ranks share exact packets and reject malformed batches" {
+diff --git a/zig/src/server/late_system_test.zig b/zig/src/server/late_system_test.zig
+index 3798da4c..b97b58ef 100644
+--- a/zig/src/server/late_system_test.zig
++++ b/zig/src/server/late_system_test.zig
+@@ -162,8 +162,45 @@ fn exchangeAs(srv: *server.Server, method: []const u8, path: []const u8, body: [
+     defer arena.deinit();
+     const a = arena.allocator();
+     if (try conn.readRequest(a, false) != .ready) return error.BadRequest;
+-    routes.dispatch(srv, &conn, a);
+-    const raw = try readReady(std.testing.allocator, pair[0]);
++    // Drain concurrently: an unread Unix socket can fill after only a few
++    // dozen SSE writes, turning a fixture's long reply into a write timeout.
++    const Reader = struct {
++        fd: platform.posix.socket_t,
++        data: []u8 = &.{},
++        failure: ?anyerror = null,
++        fn run(r: *@This()) void {
++            var out: std.ArrayList(u8) = .empty;
++            defer out.deinit(std.heap.page_allocator);
++            var buffer: [4096]u8 = undefined;
++            while (true) {
++                const n = platform.posix.read(r.fd, &buffer) catch |err| {
++                    r.failure = err;
++                    return;
++                };
++                if (n == 0) break;
++                out.appendSlice(std.heap.page_allocator, buffer[0..n]) catch |err| {
++                    r.failure = err;
++                    return;
++                };
++            }
++            r.data = out.toOwnedSlice(std.heap.page_allocator) catch |err| {
++                r.failure = err;
++                return;
++            };
++        }
++    };
++    var reader: Reader = .{ .fd = pair[0] };
++    {
++        const thread = try std.Thread.spawn(.{}, Reader.run, .{&reader});
++        defer {
++            _ = platform.posix.system.shutdown(pair[1], platform.posix.SHUT.WR);
++            thread.join();
++        }
++        routes.dispatch(srv, &conn, a);
++    }
++    defer std.heap.page_allocator.free(reader.data);
++    if (reader.failure) |err| return err;
++    const raw = try std.testing.allocator.dupe(u8, reader.data);
+     errdefer std.testing.allocator.free(raw);
+     const split = std.mem.indexOf(u8, raw, "\r\n\r\n") orelse return error.BadReply;
+     const status = std.fmt.parseInt(u16, raw["HTTP/1.1 ".len..][0..3], 10) catch return error.BadReply;

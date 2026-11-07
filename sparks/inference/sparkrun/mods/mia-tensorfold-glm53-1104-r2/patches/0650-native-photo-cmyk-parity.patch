@@ -1,0 +1,92 @@
+diff --git a/zig/src/core/picture/jpeg.zig b/zig/src/core/picture/jpeg.zig
+--- a/zig/src/core/picture/jpeg.zig
++++ b/zig/src/core/picture/jpeg.zig
+@@ -23,12 +23,15 @@
+ const init_decompress = 1;
+ const pf_rgb = 0;
+ const pf_gray = 6;
++const pf_cmyk = 11;
+ const param_stop_on_warning = 0;
+ const param_width = 5;
+ const param_height = 6;
+ const param_precision = 7;
+ const param_fast_upsample = 9;
+ const param_fast_dct = 10;
++const param_max_memory = 23;
++const param_max_pixels = 24;
+ const err_warning = 0;
+ 
+ const Fns = struct {
+@@ -150,13 +153,13 @@
+     defer m.exif.deinit(a);
+     try walk(a, data, &m);
+     try picture.fits(m.width, m.height);
+-    if (m.components == 4) return error.CmykJpeg;
+     if (!m.ended) return error.Invalid; // libjpeg would read past the end: Pillow's load refused the truncated bytes
+     const f = try load(io, a);
+     const h = f.tj3Init(init_decompress) orelse return error.OutOfMemory;
+     defer f.tj3Destroy(h);
+-    // Pillow's libjpeg settings: the accurate integer IDCT and smooth chroma upsampling; warnings are not errors
+-    for ([_][2]c_int{ .{ param_fast_dct, 0 }, .{ param_fast_upsample, 0 }, .{ param_stop_on_warning, 0 } }) |p| {
++    // Pillow's accurate integer IDCT and smooth upsampling, with bounded progressive coefficient storage.
++    // MAXMEMORY bounds libjpeg's intermediate buffers, not the caller's pixel allocation or total process RSS.
++    for ([_][2]c_int{ .{ param_fast_dct, 0 }, .{ param_fast_upsample, 0 }, .{ param_stop_on_warning, 0 }, .{ param_max_memory, 256 }, .{ param_max_pixels, picture.max_pixels } }) |p| {
+         if (f.tj3Set(h, p[0], p[1]) != 0) return error.Invalid;
+     }
+     if (f.tj3DecompressHeader(h, data.ptr, data.len) != 0 and f.tj3GetErrorCode(h) != err_warning) return error.Invalid;
+@@ -164,11 +167,15 @@
+     if (!same or f.tj3Get(h, param_precision) != 8) return error.Invalid;
+     const w: usize = m.width;
+     const ht: usize = m.height;
+-    const rgb = try a.alloc(u8, w * ht * 3);
++    const cmyk = m.components == 4;
++    // Only four-component JPEGs need the extra byte. fits() and the library's checked dimensions bound this
++    // allocation to 64 MiB; ordinary RGB/gray keep their original allocation and direct decode settings.
++    const rgb = try a.alloc(u8, w * ht * @as(usize, if (cmyk) 4 else 3));
+     errdefer a.free(rgb);
+     const gray = m.components == 1;
+-    const rc = f.tj3Decompress8(h, data.ptr, data.len, rgb.ptr, 0, if (gray) pf_gray else pf_rgb);
++    const rc = f.tj3Decompress8(h, data.ptr, data.len, rgb.ptr, 0, if (cmyk) pf_cmyk else if (gray) pf_gray else pf_rgb);
+     if (rc != 0 and f.tj3GetErrorCode(h) != err_warning) return error.Invalid;
++    if (cmyk) cmykToRgb(rgb, w * ht);
+     if (gray) { // Pillow's L to RGB: each value three times, widened in place from the end
+         var i = w * ht;
+         while (i > 0) {
+@@ -179,6 +186,23 @@
+     const exif: ?[]const u8 = if (m.exif.items.len > 0) m.exif.items else null;
+     const o = try tags.orientation(exif, m.xmp, if (m.dpi) .refuse else .ignore);
+     return .{ .width = w, .height = ht, .channels = 3, .data = rgb, .orientation = o };
++}
++
++/// Compact libjpeg's four-component output to RGB in place. TurboJPEG delegates YCCK -> CMYK to libjpeg;
++/// Pillow's JpegImagePlugin then uses CMYK;I even WITHOUT an Adobe APP14 marker (invert all four channels).
++/// Convert.c:cmyk2rgb is nk - MULDIV255(c, nk), with nk = 255-k after that inversion. This is not an ICC
++/// conversion. Keep Pillow's exact integer rounding rather than the codec's approximate CMYK -> RGB path.
++/// The allocation retains its original length so the caller can free it; only its first pixels*3 bytes are RGB.
++fn cmykToRgb(bytes: []u8, pixels: usize) void {
++    for (0..pixels) |i| {
++        // Read the whole source pixel before compacting: destination and source overlap at the first pixels.
++        const ink = bytes[i * 4 ..][0..4].*;
++        const nk: u32 = ink[3];
++        for (0..3) |c| {
++            const t = @as(u32, 255 - ink[c]) * nk + 128;
++            bytes[i * 3 + c] = @intCast(nk - ((t + (t >> 8)) >> 8));
++        }
++    }
+ }
+ 
+ /// Pillow's open: markers up to the first scan (EXIF, XMP, JFIF density, the frame), then on to the end marker.
+diff --git a/zig/src/core/picture/picture_test.zig b/zig/src/core/picture/picture_test.zig
+--- a/zig/src/core/picture/picture_test.zig
++++ b/zig/src/core/picture/picture_test.zig
+@@ -77,9 +77,8 @@
+ 
+ const Edge = struct { name: []const u8, b64: []const u8, width: usize = 0, height: usize = 0, rgb: ?[]const u8 = null, problem: ?[]const u8 = null };
+ 
+-/// Where this decoder parts from 0.6.6 on purpose: a CMYK JPEG is refused by name; a two-picture MPO gives its first.
++/// A two-picture MPO gives its first image, as the production GLM Pillow path does.
+ const departures = [_]struct { name: []const u8, outcome: []const u8 }{
+-    .{ .name = "jpeg_cmyk", .outcome = "CMYK JPEG images are unsupported here; send an RGB or grayscale JPEG, or a PNG" },
+     .{ .name = "jpeg_mpo_two", .outcome = "40x30 89ec4fbf73b19a585760f7293a178a3f02c38fe177491362e1d84fd3fdd5be70" },
+ };
+ 
