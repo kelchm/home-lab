@@ -1,0 +1,263 @@
+{
+  "historicalWindow": {
+    "from": 1793487600000,
+    "to": 1793491500000
+  },
+  "notes": [
+    "No production queries made. Capture paths are resolved by the shared runtime.",
+    "Historical derived output estimates were excluded because the recording has no raw counters needed to validate resets.",
+    "Daily tokens24h, streams, thermal slowdown and RoCE-error global totals are intentionally not assigned to hosts or deployments.",
+    "Inference result-level executedQueryString applies to all frames in that result, including anonymous pool slots without repeated metadata."
+  ],
+  "queries": {
+    "D_spark_gpuUtil": {
+      "meaning": "Per-host window-end GPU utilization percent from nvidia-smi; maximum across observed GPUs.",
+      "recorded": true,
+      "capturedExpression": "100 * max by (instance) (nvidia_smi_utilization_gpu_ratio)"
+    },
+    "D_spark_gpuTemp": {
+      "meaning": "Per-host window-end GPU temperature in degrees Celsius; maximum across observed GPUs.",
+      "recorded": true,
+      "capturedExpression": "max by (instance) (nvidia_smi_temperature_gpu)"
+    },
+    "D_spark_gpuMargin": {
+      "meaning": "Per-host window-end reported GPU thermal margin in degrees Celsius from nvidia_smi_temperature_gpu_tlimit. Live queries take the minimum across observed GPUs; the original recording used the maximum and is preserved as captured.",
+      "recorded": true,
+      "capturedExpression": "max by (instance) (nvidia_smi_temperature_gpu_tlimit)"
+    },
+    "D_spark_gpuPower": {
+      "meaning": "Per-host window-end GPU power draw in watts; maximum across observed GPUs.",
+      "recorded": true,
+      "capturedExpression": "max by (instance) (nvidia_smi_power_draw_watts)"
+    },
+    "D_spark_memoryAvailable": {
+      "meaning": "Per-host window-end available host memory in bytes from node_memory_MemAvailable_bytes.",
+      "recorded": true
+    },
+    "D_spark_diskUsed": {
+      "meaning": "Per-host window-end observation; disk is fullest filesystem fraction without mountpoint identity.",
+      "recorded": true
+    },
+    "D_spark_gpuUtilHistory": {
+      "meaning": "Per-host history of GPU utilization percent from nvidia-smi; maximum across observed GPUs at each sample, with no trailing window in the captured expression.",
+      "recorded": true,
+      "capturedExpression": "100 * max by (instance) (nvidia_smi_utilization_gpu_ratio)"
+    },
+    "D_spark_gpuTempHistory": {
+      "meaning": "Per-host history of GPU temperature in degrees Celsius; maximum across observed GPUs at each sample, with no trailing window in the captured expression.",
+      "recorded": true,
+      "capturedExpression": "max by (instance) (nvidia_smi_temperature_gpu)"
+    },
+    "D_spark_gpuPowerHistory": {
+      "meaning": "Per-host history of GPU power draw in watts; maximum across observed GPUs at each sample, with no trailing window in the captured expression.",
+      "recorded": true,
+      "capturedExpression": "max by (instance) (nvidia_smi_power_draw_watts)"
+    },
+    "D_spark_memoryHistory": {
+      "meaning": "Per-host history of available host memory in bytes from node_memory_MemAvailable_bytes, with no trailing window in the captured expression.",
+      "recorded": true
+    },
+    "D_spark_boardHistory": {
+      "meaning": "Per-host history of the highest board thermal-zone temperature in degrees Celsius over each trailing 6-minute window.",
+      "recorded": true
+    },
+    "D_spark_roceTraffic": {
+      "meaning": "Per-host history of transmitted RoCE bytes per second over each trailing 6-minute window, summed across matching .*s0f0 devices.",
+      "recorded": true
+    },
+    "D_spark_clockHistory": {
+      "meaning": "Per-host history of the maximum reported GPU SM clock in hertz after a trailing 6-minute mean per observed GPU. Preserve captured units.",
+      "recorded": true
+    },
+    "D_spark_hostUp": {
+      "meaning": "Model filters recorded cross-platform host catalog to platform=spark; live query narrows to Sparks.",
+      "recorded": true,
+      "capturedExpression": "min by (instance, platform) (up{job=~\"node-exporter|(pve|spark|synology|pi)-node\",platform!=\"\"})"
+    },
+    "D_spark_hostCpu": {
+      "meaning": "Model filters recorded cross-platform host catalog to platform=spark; live query narrows to Sparks.",
+      "recorded": true,
+      "capturedExpression": "100 * (1 - avg by (instance, platform) (rate(node_cpu_seconds_total{job=~\"node-exporter|(pve|spark|synology|pi)-node\",platform!=\"\",mode=\"idle\"}[5m])))"
+    },
+    "D_spark_gpuUp": {
+      "meaning": "Independent GPU collector state; capture omitted it. A missing target is not proof of a stopped host.",
+      "recorded": false
+    },
+    "D_spark_memoryStalls": {
+      "meaning": "Fraction of wall time fully stalled on host memory over 5 minutes. No captured samples.",
+      "recorded": false
+    },
+    "D_spark_thermalSeconds": {
+      "meaning": "Seconds of hardware thermal slowdown within each trailing 6-minute window. Overlapping windows must not be summed. Old hostless 24h zero is intentionally unused.",
+      "recorded": false
+    },
+    "D_spark_roceErrors": {
+      "meaning": "Link-error counter increments in trailing 6-minute windows, by host. Old hostless 24h zero is intentionally unused.",
+      "recorded": false
+    },
+    "D_spark_completedHistory": {
+      "meaning": "Aggregate across observed inference targets, without deployment identity. Token rates use a 6-minute completion-accounting window; request gauges are not filled with zero.",
+      "recorded": true
+    },
+    "D_spark_promptHistory": {
+      "meaning": "Aggregate across observed inference targets, without deployment identity. Token rates use a 6-minute completion-accounting window; request gauges are not filled with zero.",
+      "recorded": true
+    },
+    "D_spark_runningTotalHistory": {
+      "meaning": "Aggregate across observed inference targets, without deployment identity. Token rates use a 6-minute completion-accounting window; request gauges are not filled with zero.",
+      "recorded": true
+    },
+    "D_spark_waitingTotalHistory": {
+      "meaning": "Aggregate across observed inference targets, without deployment identity. Token rates use a 6-minute completion-accounting window; request gauges are not filled with zero.",
+      "recorded": true
+    },
+    "D_spark_runningTotal": {
+      "meaning": "Captured aggregate running request count, without deployment identity. Its unconditional zero fallback requires corroboration from the unfilled running-count history before accepting a recorded zero.",
+      "recorded": true,
+      "capturedExpression": "(sum(tensorfold:requests_running)) or vector(0)"
+    },
+    "D_spark_waitingTotal": {
+      "meaning": "Captured aggregate waiting request count, without deployment identity. Its unconditional zero fallback requires corroboration from the unfilled waiting-count history before accepting a recorded zero; this is not queue-wait duration.",
+      "recorded": true,
+      "capturedExpression": "(sum(tensorfold:requests_waiting)) or vector(0)"
+    },
+    "D_spark_requestShareTotal": {
+      "meaning": "Captured zero-filled aggregates: accept zero only with direct-family corroboration. Maximum request-window percent is NOT context-pool occupancy or unified memory.",
+      "recorded": true,
+      "capturedExpression": "(100 * max(tensorfold:kv_cache_usage_ratio)) or vector(0)"
+    },
+    "D_spark_serving": {
+      "meaning": "Daily serving target identity; runtime was aggregated away. Do not transfer metrics or runtime from historical recording.",
+      "recorded": true,
+      "capturedExpression": "max by (instance, model, recipe) (up{job=\"spark-inference\"})"
+    },
+    "D_spark_identity": {
+      "meaning": "Historical window only in recorded mode; live expression removes captured model/recipe/host selectors. Full deployment identity is preserved.",
+      "recorded": true,
+      "capturedExpression": "(up{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"} == 1) and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"}) < 10)"
+    },
+    "D_spark_healthReported": {
+      "meaning": "Optional TensorFold health endpoint reports ok; not end-to-end inference readiness.",
+      "recorded": true,
+      "capturedExpression": "(tensorfold_health:ok{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"}) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"}) < 10))"
+    },
+    "D_spark_running": {
+      "meaning": "Historical window only in recorded mode; live expression removes captured model/recipe/host selectors. Full deployment identity is preserved.",
+      "recorded": true,
+      "capturedExpression": "(tensorfold:requests_running{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"}) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"}) < 10))"
+    },
+    "D_spark_waiting": {
+      "meaning": "Historical window only in recorded mode; live expression removes captured model/recipe/host selectors. Full deployment identity is preserved.",
+      "recorded": true,
+      "capturedExpression": "(tensorfold:requests_waiting{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"}) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"}) < 10))"
+    },
+    "D_spark_runningHistory": {
+      "meaning": "Historical window only in recorded mode; live expression removes captured model/recipe/host selectors. Full deployment identity is preserved.",
+      "recorded": true,
+      "capturedExpression": "(max_over_time(tensorfold:requests_running{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"}[30s])) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"}) < 10))"
+    },
+    "D_spark_waitingHistory": {
+      "meaning": "Historical window only in recorded mode; live expression removes captured model/recipe/host selectors. Full deployment identity is preserved.",
+      "recorded": true,
+      "capturedExpression": "(max_over_time(tensorfold:requests_waiting{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"}[30s])) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"}) < 10))"
+    },
+    "D_spark_streamsHistory": {
+      "meaning": "Historical window only in recorded mode; live expression removes captured model/recipe/host selectors. Full deployment identity is preserved.",
+      "recorded": true,
+      "capturedExpression": "(tensorfold_health:streams_max{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"}) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"}) < 10))"
+    },
+    "D_spark_poolRatio": {
+      "meaning": "Historical window only in recorded mode; live expression removes captured model/recipe/host selectors. Full deployment identity is preserved.",
+      "recorded": true,
+      "capturedExpression": "(1 - tensorfold_health:pool_free_tokens{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"} / (tensorfold_health:pool_tokens{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"} > 0)) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"}) < 10))"
+    },
+    "D_spark_poolHistory": {
+      "meaning": "Historical window only in recorded mode; live expression removes captured model/recipe/host selectors. Full deployment identity is preserved.",
+      "recorded": true,
+      "capturedExpression": "(1 - tensorfold_health:pool_free_tokens{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"} / (tensorfold_health:pool_tokens{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"} > 0)) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"}) < 10))"
+    },
+    "D_spark_contextLength": {
+      "meaning": "Historical window only in recorded mode; live expression removes captured model/recipe/host selectors. Full deployment identity is preserved.",
+      "recorded": true,
+      "capturedExpression": "tensorfold_health:context_length{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"}"
+    },
+    "D_spark_poolTokens": {
+      "meaning": "Historical window only in recorded mode; live expression removes captured model/recipe/host selectors. Full deployment identity is preserved.",
+      "recorded": true,
+      "capturedExpression": "tensorfold_health:pool_tokens{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"}"
+    },
+    "D_spark_poolFree": {
+      "meaning": "Historical window only in recorded mode; live expression removes captured model/recipe/host selectors. Full deployment identity is preserved.",
+      "recorded": true,
+      "capturedExpression": "tensorfold_health:pool_free_tokens{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"}"
+    },
+    "D_spark_contextTokens": {
+      "meaning": "Anonymous instantaneous context occupancy. All four frames of this captured result share the first frame expression; later frames omit meta.executedQueryString. Never turn pool slots or instant ranks into stable sessions. Live join includes full deployment identity.",
+      "recorded": true,
+      "capturedExpression": "(tensorfold:kv_cache_usage_ratio{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"} * on (instance, recipe) group_left tensorfold_health:context_length{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"}) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"}) < 10))"
+    },
+    "D_spark_decodeSpeed": {
+      "meaning": "Completed-work generation tokens / accumulated decode seconds over 5 minutes. Not aggregate wall-clock output and not live per-request speed.",
+      "recorded": true,
+      "capturedExpression": "(rate(tensorfold:generation_tokens_total{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"}[5m]) / (rate(tensorfold_health:decode_seconds_total{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"}[5m]) > 0)) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"}) < 10))"
+    },
+    "D_spark_decodeHistory": {
+      "meaning": "Historical window only in recorded mode; live expression removes captured model/recipe/host selectors. Full deployment identity is preserved.",
+      "recorded": true,
+      "capturedExpression": "(rate(tensorfold:generation_tokens_total{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"}[5m]) / (rate(tensorfold_health:decode_seconds_total{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"}[5m]) > 0)) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"}) < 10))"
+    },
+    "D_spark_ttftHistory": {
+      "meaning": "Historical window only in recorded mode; live expression removes captured model/recipe/host selectors. Full deployment identity is preserved.",
+      "recorded": true,
+      "capturedExpression": "(rate(tensorfold:time_to_first_token_seconds_sum{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"}[2m0s]) / (rate(tensorfold:time_to_first_token_seconds_count{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"}[2m0s]) > 0)) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"}) < 10))"
+    },
+    "D_spark_latencyHistory": {
+      "meaning": "Historical window only in recorded mode; live expression removes captured model/recipe/host selectors. Full deployment identity is preserved.",
+      "recorded": true,
+      "capturedExpression": "(rate(tensorfold:request_latency_seconds_sum{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"}[2m0s]) / (rate(tensorfold:request_latency_seconds_count{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"}[2m0s]) > 0)) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"}) < 10))"
+    },
+    "D_spark_cacheFraction": {
+      "meaning": "Completed prompt accounting cached fraction over 15 minutes; full prompt accounting includes cached tokens.",
+      "recorded": true,
+      "capturedExpression": "(rate(tensorfold_health:cached_tokens_total{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"}[15m]) / (rate(tensorfold:prompt_tokens_total{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"}[15m]) > 0)) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"}) < 10))"
+    },
+    "D_spark_newPromptHistory": {
+      "meaning": "Historical window only in recorded mode; live expression removes captured model/recipe/host selectors. Full deployment identity is preserved.",
+      "recorded": true,
+      "capturedExpression": "(rate(tensorfold:prompt_tokens_total{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"}[2m0s]) - rate(tensorfold_health:cached_tokens_total{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"}[2m0s])) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"}) < 10))"
+    },
+    "D_spark_cachedPromptHistory": {
+      "meaning": "Historical window only in recorded mode; live expression removes captured model/recipe/host selectors. Full deployment identity is preserved.",
+      "recorded": true,
+      "capturedExpression": "(rate(tensorfold_health:cached_tokens_total{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"}[2m0s])) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\",model=~\"GLM-5\\\\.3-Flash\",recipe=~\"(glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m|glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable)\",instance=~\"spark-1\"}) < 10))"
+    },
+    "D_spark_capPool": {
+      "meaning": "Capability only: labeled zero means a fresh endpoint lacks this metric family. It is never a measured zero value or readiness assertion. Not captured.",
+      "recorded": false
+    },
+    "D_spark_capContext": {
+      "meaning": "Capability only: labeled zero means a fresh endpoint lacks this metric family. It is never a measured zero value or readiness assertion. Not captured.",
+      "recorded": false
+    },
+    "D_spark_capDecode": {
+      "meaning": "Capability only: labeled zero means a fresh endpoint lacks this metric family. It is never a measured zero value or readiness assertion. Not captured.",
+      "recorded": false
+    },
+    "D_spark_capLatency": {
+      "meaning": "Capability only: labeled zero means a fresh endpoint lacks this metric family. It is never a measured zero value or readiness assertion. Not captured.",
+      "recorded": false
+    },
+    "D_spark_capOutput": {
+      "meaning": "Capability only: labeled zero means a fresh endpoint lacks this metric family. It is never a measured zero value or readiness assertion. Not captured.",
+      "recorded": false
+    },
+    "D_spark_aggregateOutput": {
+      "meaning": "Aggregate output from the monotonic live completion counter; rate handles ordinary resets. No fallback to deriv(finished + in-flight), whose resets and handoff are ambiguous. Unavailable in recording: saved derivative estimates are deliberately excluded.",
+      "recorded": false
+    },
+    "D_spark_completedOutput": {
+      "meaning": "Per-deployment completion-accounted output, six-minute average; no labeled capture exists. Do not relabel the daily unlabeled aggregate as one deployment.",
+      "recorded": false
+    }
+  }
+}

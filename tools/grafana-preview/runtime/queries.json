@@ -1,0 +1,766 @@
+{
+  "common": [
+    {
+      "refId": "H_A",
+      "key": "A",
+      "source": "H",
+      "expr": "WITH (sys(x) = label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(x, \"system\", \"k8s-prod\", \"cluster\", \"k8s-prod\"), \"system\", \"pve-sbx\", \"cluster\", \"pve-sbx\"), \"system\", \"k8s-prod\", \"platform\", \"k8s\"), \"system\", \"pve-sbx\", \"platform\", \"pve\"), \"system\", \"spark\", \"platform\", \"spark\"), \"system\", \"athena\", \"platform\", \"synology\"), \"system\", \"network\", \"platform\", \"unifi|starlink|tmobile\"), \"system\", \"devices\", \"platform\", \"pi|glkvm\"), \"system\", \"network\", \"alertname\", \"(UniFi|Starlink|TMobile).*\"), \"system\", \"athena\", \"alertname\", \"NAS.*\"), \"system\", \"devices\", \"alertname\", \"GLKVM.*\"), \"system\", \"power\", \"alertname\", \"UPS.*\"), \"system\", \"k8s-prod\", \"alertname\", \"Probe.*\"), \"system\", \"power\", \"job\", \"pi-nut\"), \"system\", \"k8s-prod\", \"job\", \"pi-blackbox\"), \"system\", \"network\", \"probe\", \"unifi-gateway\"), \"system\", \"unassigned\", \"system\", \"\"), say(x, f) = label_replace(count_values without () (\"n\", round(x)), \"detail\", f, \"n\", \"(.*)\"), r(x) = max by (system, thing, what, detail) (x), avail = max by (cluster, platform, job, instance, mountpoint) (node_filesystem_avail_bytes{job=~\"node-exporter|(pve|spark|synology|pi)-node\",platform!=\"\",fstype=~\"ext4|xfs|btrfs\"}), size = max by (cluster, platform, job, instance, mountpoint) (node_filesystem_size_bytes{job=~\"node-exporter|(pve|spark|synology|pi)-node\",platform!=\"\",fstype=~\"ext4|xfs|btrfs\"}), dur = sys(((time() - ALERTS_FOR_STATE{alertname!~\"Watchdog|InfoInhibitor\"}) and ignoring (alertstate) ALERTS{alertstate=\"firing\"})), alert = (label_replace(label_join(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace((say((dur >= 3600) / 3600, \"alert \u00b7 firing for $1 h\")) or (say((dur < 3600) / 60, \"alert \u00b7 firing for $1 min\")), \"what\", \"$1\", \"alertname\", \"(.*)\"), \"thing\", \"$1\", \"instance\", \"([a-z][a-z0-9-]*)\"), \"thing\", \"$1\", \"name\", \"(.+)\"), \"thing\", \"$1\", \"ups\", \"(.+)\"), \"thing\", \"$1\", \"probe\", \"(.+)\"), \"thing\", \"$1\", \"wan_interface\", \"(.+)\"), \"td\", \" \", \"instance\", \"device\"), \"thing\", \"$1\", \"td\", \"([a-z][a-z0-9-]* .+)\")), room = ((95 - max by (instance, platform) (node_hwmon_temp_celsius * on (instance, chip, sensor) group_left node_hwmon_sensor_label{label=\"Tctl\"})) or (max by (instance, platform) (node_hwmon_temp_crit_celsius * on (instance, chip, sensor) group_left node_hwmon_sensor_label{label=\"Package id 0\"}) - max by (instance, platform) (node_hwmon_temp_celsius * on (instance, chip, sensor) group_left node_hwmon_sensor_label{label=\"Package id 0\"})) or max by (instance, platform) (nvidia_smi_temperature_gpu_tlimit) or (95 - max by (instance, platform) (node_hwmon_temp_celsius * on (instance, chip) group_left node_hwmon_chip_names{chip_name=\"k10temp\"})) or (85 - max by (instance, platform) (node_hwmon_temp_celsius * on (instance, chip) group_left node_hwmon_chip_names{chip_name=\"cpu_thermal\"})) or (95 - max by (instance, platform) (pikvm_hw_temp_cpu)) or (70 - max by (instance, platform) (label_replace(unpoller_device_temperature_celsius, \"instance\", \"$1\", \"name\", \"(.*)\")))), seen = (((r(label_match(alert, \"severity\", \"^critical$\")) * 0 + 3)) or ((r(label_match(alert, \"severity\", \"^warning$\")) * 0 + 2)) or ((r(label_mismatch(alert, \"severity\", \"critical|warning\")) * 0 + 1)) or ((r(label_set(say(count by (system) (sys(up) == 0), \"$1 affected\"), \"what\", \"Collectors silent\")) * 0 + 2)) or ((r(label_set(label_join(sys(say((((((avail / (-deriv(avail[7d:1h]) > 0))) and ((100 * (1 - avail / (size > 0))) > 70)) unless on (instance, mountpoint) node_filesystem_avail_bytes{platform=\"k8s\",mountpoint=\"/var\"}) < 604800) / 86400, \"full in $1 days at the pace of the last week\")), \"thing\", \" \", \"instance\", \"mountpoint\"), \"what\", \"Disk filling up\")) * 0 + 2)) or ((r(label_set(label_join(sys(say(((((((avail / (-deriv(avail[7d:1h]) > 0))) and ((100 * (1 - avail / (size > 0))) > 70)) unless on (instance, mountpoint) node_filesystem_avail_bytes{platform=\"k8s\",mountpoint=\"/var\"}) >= 604800) < 2592000) / 86400, \"full in $1 days at the pace of the last week\")), \"thing\", \" \", \"instance\", \"mountpoint\"), \"what\", \"Disk filling up\")) * 0 + 1)) or ((r(label_set(label_join(sys(say((100 * (1 - avail / (size > 0))) >= 85, \"$1% used\")), \"thing\", \" \", \"instance\", \"mountpoint\"), \"what\", \"Disk nearly full\")) * 0 + 2)) or ((r(label_set(label_join(sys(say(room < 5, \"$1 \u00b0C from its limit\")), \"thing\", \" \", \"instance\"), \"what\", \"Running hot\")) * 0 + 2)) or ((r(label_set(label_join(sys(say((room >= 5) < 15, \"$1 \u00b0C from its limit\")), \"thing\", \" \", \"instance\"), \"what\", \"Running hot\")) * 0 + 1)) or ((r(label_set(label_join(sys(max by (instance, platform) (nvidia_smi_clocks_event_reasons_hw_thermal_slowdown) == 1), \"thing\", \" \", \"instance\"), \"what\", \"GPU slowed by heat\")) * 0 + 2)) or ((r(label_set(label_join(sys(drive:health_status == 0), \"thing\", \" \", \"instance\", \"device\"), \"what\", \"Drive reports failure\")) * 0 + 3)) or ((r(label_set(label_join(sys(drive:health_status == 2), \"thing\", \" \", \"instance\", \"device\"), \"what\", \"Drive reports a warning\")) * 0 + 2)) or ((r(label_set(label_join(sys(say(max by (instance, platform, device) (smartctl_device_percentage_used) >= 80, \"$1% worn\")), \"thing\", \" \", \"instance\", \"device\"), \"what\", \"Drive wearing out\")) * 0 + 1)) or ((r(label_set(label_join(sys(say(sum by (platform, instance, device) ({__name__=~\"drive:ata_(reallocated|pending|uncorrectable)_sectors\"}) > 0, \"$1 bad sectors\")), \"thing\", \" \", \"instance\", \"device\"), \"what\", \"Disk has bad sectors\")) * 0 + 1)) or ((r(label_set(label_join(sys(label_replace(diskStatus == 3, \"device\", \"$1\", \"diskID\", \"(.*)\")), \"thing\", \" \", \"instance\", \"device\"), \"what\", \"Disk not in use\")) * 0 + 1)) or ((r(label_set(label_set(say(min_over_time((sum(kube_node_status_condition{condition=\"Ready\",status!=\"true\",cluster=\"k8s-prod\"}))[10m:1m]) > 0, \"$1 affected\"), \"system\", \"k8s-prod\"), \"what\", \"Nodes not ready\")) * 0 + 3)) or ((r(label_set(label_set(say(min_over_time((sum(kube_pod_status_ready{condition=\"false\",cluster=\"k8s-prod\"} * on (namespace, pod) group_left kube_pod_status_phase{phase=\"Running\",cluster=\"k8s-prod\"}) + (count(kube_pod_status_phase{phase=~\"Pending|Failed|Unknown\",cluster=\"k8s-prod\"} == 1) or vector(0)))[10m:1m]) > 0, \"$1 affected\"), \"system\", \"k8s-prod\"), \"what\", \"Pods not ready\")) * 0 + 2)) or ((r(label_set(label_set(say(min_over_time((count(flux_resource_info{ready!=\"True\",suspended!=\"True\",cluster=\"k8s-prod\"}) or vector(0))[10m:1m]) > 0, \"$1 affected\"), \"system\", \"k8s-prod\"), \"what\", \"Deploys failing\")) * 0 + 2)) or ((r(label_set(label_set(say(min_over_time((sum(longhorn_volume_robustness{state=\"faulted\",cluster=\"k8s-prod\"}))[10m:1m]) > 0, \"$1 affected\"), \"system\", \"k8s-prod\"), \"what\", \"Volumes faulted\")) * 0 + 3)) or ((r(label_set(label_set(say(min_over_time((sum(longhorn_volume_robustness{state=\"degraded\",cluster=\"k8s-prod\"}))[10m:1m]) > 0, \"$1 affected\"), \"system\", \"k8s-prod\"), \"what\", \"Volumes degraded\")) * 0 + 2)) or ((r(label_set(label_join(label_set(say(((certmanager_certificate_expiration_timestamp_seconds{cluster=\"k8s-prod\"} - time()) / 3600) and on (name, exported_namespace) ((certmanager_certificate_renewal_timestamp_seconds{cluster=\"k8s-prod\"} - time()) < -3600), \"renewal overdue \u00b7 expires in $1 h\"), \"system\", \"k8s-prod\"), \"thing\", \" \", \"name\"), \"what\", \"Certificate not renewing\")) * 0 + 2)) or ((r(label_set(label_set(max(label_value(pve_cluster_info, \"quorate\")) == 0, \"system\", \"pve-sbx\"), \"what\", \"Cluster lost quorum\")) * 0 + 3)) or ((r(label_set(label_join(label_set(label_replace(max by (id) (pve_up{id=~\"node/.*\"}) == 0, \"node\", \"$1\", \"id\", \"node/(.*)\"), \"system\", \"pve-sbx\"), \"thing\", \" \", \"node\"), \"what\", \"Node offline\")) * 0 + 3)) or ((r(label_set(label_join(label_set(max by (name) (max by (id) (pve_not_backed_up_info) * on (id) group_left(name) max by (id, name) (pve_guest_info{template=\"0\"})), \"system\", \"pve-sbx\"), \"thing\", \" \", \"name\"), \"what\", \"Guest is in no backup job\")) * 0 + 1)) or ((r(label_set(label_join(label_set(say(((max by (ups) (network_ups_tools_battery_runtime) or max by (ups) (label_set(upsBatteryRuntimeValue, \"ups\", \"network-rack\"))) < 600) / 60, \"$1 min of battery at this load\"), \"system\", \"power\"), \"thing\", \" \", \"ups\"), \"what\", \"UPS runtime short\")) * 0 + 1)) or ((r(label_set(label_join(label_set(say((max by (ups) (network_ups_tools_ups_load) or max by (ups) (label_set(upsInfoLoadValue, \"ups\", \"network-rack\"))) >= 80, \"$1% of its capacity\"), \"system\", \"power\"), \"thing\", \" \", \"ups\"), \"what\", \"UPS heavily loaded\")) * 0 + 1)) or ((r(label_set(label_join(label_set(say(100 * max by (name) (unpoller_device_cpu_utilization_ratio{job=\"unifi-api\"}) >= 80, \"$1% CPU\"), \"system\", \"network\"), \"thing\", \" \", \"name\"), \"what\", \"Network device busy\")) * 0 + 1)) or ((r(label_set(label_join(label_set(say(100 * max by (ap_radio) (label_replace(label_join(unpoller_device_radio_channel_utilization_total_ratio{job=\"unifi-api\"}, \"ap_radio\", \" \u00b7 \", \"name\", \"band\"), \"ap_radio\", \"$1 GHz\", \"ap_radio\", \"(.*)\")) >= 60, \"channel $1% busy\"), \"system\", \"network\"), \"thing\", \" \", \"ap_radio\"), \"what\", \"Wi-Fi channel busy\")) * 0 + 1)) or ((r(label_set(label_join(label_set(say(1000 * avg by (wan) (unpoller_device_wan_monitor_latency_average_seconds{job=\"unifi-api\"} * on (wan_networkgroup) group_left (wan) (max by (wan_networkgroup, wan) (label_replace(unpoller_wan_interface_state{job=\"unifi-api\"}, \"wan\", \"$1\", \"wan_interface\", \"(.*)\")) * 0 + 1)) > 100, \"$1 ms to its monitors\"), \"system\", \"network\"), \"thing\", \" \", \"wan\"), \"what\", \"Internet link slow\")) * 0 + 1)) or ((r(label_set(label_join(label_set(say(100 * max by (instance) (avg_over_time(starlink_dish_currently_obstructed{job=\"starlink-api\"}[1h])) >= 1, \"obstructed $1% of the last hour\"), \"system\", \"network\"), \"thing\", \" \", \"instance\"), \"what\", \"Dish obstructed\")) * 0 + 1)) or ((r(label_set(label_join(label_set(say(100 * max by (instance) (avg_over_time(starlink_dish_pop_ping_drop_ratio{job=\"starlink-api\"}[15m])) >= 2, \"$1% of pings dropped\"), \"system\", \"network\"), \"thing\", \" \", \"instance\"), \"what\", \"Dish dropping pings\")) * 0 + 1)) or ((r(label_set(label_join(label_set(say(max by (instance) (avg_over_time(tmobile_5g_rsrp_dbm{job=\"tmobile-api\"}[15m])) < -100, \"$1 dBm\"), \"system\", \"network\"), \"thing\", \" \", \"instance\"), \"what\", \"Weak 5G signal\")) * 0 + 1)) or ((r(label_set(label_join(sys(say(1000 * max by (probe, job) (probe_duration_seconds{job=\"pi-blackbox\"}) > 1000, \"$1 ms to answer\")), \"thing\", \" \", \"probe\"), \"what\", \"Slow from outside the cluster\")) * 0 + 1)))) label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(seen, \"order\", \"0\", \"system\", \"k8s-prod\"), \"order\", \"1\", \"system\", \"pve-sbx\"), \"order\", \"2\", \"system\", \"spark\"), \"order\", \"3\", \"system\", \"athena\"), \"order\", \"4\", \"system\", \"network\"), \"order\", \"5\", \"system\", \"power\"), \"order\", \"6\", \"system\", \"devices\"), \"order\", \"7\", \"system\", \"unassigned\"), \"tab\", \"\u2388-k8s-prod\", \"system\", \"k8s-prod\"), \"tab\", \"\u25a4-pve-sbx\", \"system\", \"pve-sbx\"), \"tab\", \"\u2726-spark\", \"system\", \"spark\"), \"tab\", \"\u26c1-athena\", \"system\", \"athena\"), \"tab\", \"\u21c4-network\", \"system\", \"network\"), \"tab\", \"\u26a1\ufe0e-power\", \"system\", \"power\"), \"tab\", \"\u2328\ufe0e-devices\", \"system\", \"devices\")",
+      "instant": true,
+      "range": false,
+      "scope": "common"
+    },
+    {
+      "refId": "H_P",
+      "key": "P",
+      "source": "H",
+      "expr": "max by(probe)(probe_success{job=\"pi-blackbox\"}) and on(probe) ((time()-max by(probe)(timestamp(probe_success{job=\"pi-blackbox\"}))) <= 180)",
+      "instant": true,
+      "range": false,
+      "scope": "common"
+    },
+    {
+      "refId": "H_PH",
+      "key": "PH",
+      "source": "H",
+      "expr": "min by(probe)(min_over_time(probe_success{job=\"pi-blackbox\"}[$__interval])) and on(probe) ((time()-max by(probe)(timestamp(probe_success{job=\"pi-blackbox\"}))) <= 180)",
+      "instant": false,
+      "range": true,
+      "scope": "common"
+    },
+    {
+      "refId": "H_PD",
+      "key": "PD",
+      "source": "H",
+      "expr": "1000 * max by(probe)(probe_duration_seconds{job=\"pi-blackbox\"})",
+      "instant": true,
+      "range": false,
+      "scope": "common"
+    },
+    {
+      "refId": "H_PC",
+      "key": "PC",
+      "source": "H",
+      "expr": "max by(probe)(probe_http_status_code{job=\"pi-blackbox\"})",
+      "instant": true,
+      "range": false,
+      "scope": "common"
+    },
+    {
+      "refId": "H_WKA",
+      "key": "WKA",
+      "source": "H",
+      "expr": "label_set((count(max by(namespace,deployment)(kube_deployment_spec_replicas{cluster=\"k8s-prod\"}))),\"kind\",\"Deployments\") or label_set((count(max by(namespace,statefulset)(kube_statefulset_replicas{cluster=\"k8s-prod\"}))),\"kind\",\"StatefulSets\") or label_set((count(max by(namespace,daemonset)(kube_daemonset_status_desired_number_scheduled{cluster=\"k8s-prod\"}))),\"kind\",\"DaemonSets\")",
+      "instant": true,
+      "range": false,
+      "scope": "common"
+    },
+    {
+      "refId": "H_WKB",
+      "key": "WKB",
+      "source": "H",
+      "expr": "label_set((count(max by(namespace,deployment)(kube_deployment_status_replicas_available{cluster=\"k8s-prod\"}) >= on(namespace,deployment) max by(namespace,deployment)(kube_deployment_spec_replicas{cluster=\"k8s-prod\"})) or (0 * count(max by(namespace,deployment)(kube_deployment_spec_replicas{cluster=\"k8s-prod\"})))),\"kind\",\"Deployments\") or label_set((count(max by(namespace,statefulset)(kube_statefulset_status_replicas_ready{cluster=\"k8s-prod\"}) >= on(namespace,statefulset) max by(namespace,statefulset)(kube_statefulset_replicas{cluster=\"k8s-prod\"})) or (0 * count(max by(namespace,statefulset)(kube_statefulset_replicas{cluster=\"k8s-prod\"})))),\"kind\",\"StatefulSets\") or label_set((count(max by(namespace,daemonset)(kube_daemonset_status_number_available{cluster=\"k8s-prod\"}) >= on(namespace,daemonset) max by(namespace,daemonset)(kube_daemonset_status_desired_number_scheduled{cluster=\"k8s-prod\"})) or (0 * count(max by(namespace,daemonset)(kube_daemonset_status_desired_number_scheduled{cluster=\"k8s-prod\"})))),\"kind\",\"DaemonSets\")",
+      "instant": true,
+      "range": false,
+      "scope": "common"
+    },
+    {
+      "refId": "H_WKC",
+      "key": "WKC",
+      "source": "H",
+      "expr": "label_set((count(max by(namespace,deployment)(kube_deployment_spec_replicas{cluster=\"k8s-prod\"}) unless on(namespace,deployment) max by(namespace,deployment)(kube_deployment_status_replicas_available{cluster=\"k8s-prod\"})) or (0 * count(max by(namespace,deployment)(kube_deployment_spec_replicas{cluster=\"k8s-prod\"})))),\"kind\",\"Deployments\") or label_set((count(max by(namespace,statefulset)(kube_statefulset_replicas{cluster=\"k8s-prod\"}) unless on(namespace,statefulset) max by(namespace,statefulset)(kube_statefulset_status_replicas_ready{cluster=\"k8s-prod\"})) or (0 * count(max by(namespace,statefulset)(kube_statefulset_replicas{cluster=\"k8s-prod\"})))),\"kind\",\"StatefulSets\") or label_set((count(max by(namespace,daemonset)(kube_daemonset_status_desired_number_scheduled{cluster=\"k8s-prod\"}) unless on(namespace,daemonset) max by(namespace,daemonset)(kube_daemonset_status_number_available{cluster=\"k8s-prod\"})) or (0 * count(max by(namespace,daemonset)(kube_daemonset_status_desired_number_scheduled{cluster=\"k8s-prod\"})))),\"kind\",\"DaemonSets\")",
+      "instant": true,
+      "range": false,
+      "scope": "common"
+    },
+    {
+      "refId": "H_WKF",
+      "key": "WKF",
+      "source": "H",
+      "expr": "min(up{job=\"kube-state-metrics\",cluster=\"k8s-prod\"})",
+      "instant": true,
+      "range": false,
+      "scope": "common"
+    },
+    {
+      "refId": "H_WKG",
+      "key": "WKG",
+      "source": "H",
+      "expr": "time()-min(timestamp(up{job=\"kube-state-metrics\",cluster=\"k8s-prod\"}))",
+      "instant": true,
+      "range": false,
+      "scope": "common"
+    },
+    {
+      "refId": "H_WKN",
+      "key": "WKN",
+      "source": "H",
+      "expr": "label_set(label_replace(((max by(namespace,deployment)(kube_deployment_spec_replicas{cluster=\"k8s-prod\"}) - on(namespace,deployment) max by(namespace,deployment)(kube_deployment_status_replicas_available{cluster=\"k8s-prod\"})) > 0),\"controller\",\"$1\",\"deployment\",\"(.*)\"),\"kind\",\"Deployments\") or label_set(label_replace(((max by(namespace,statefulset)(kube_statefulset_replicas{cluster=\"k8s-prod\"}) - on(namespace,statefulset) max by(namespace,statefulset)(kube_statefulset_status_replicas_ready{cluster=\"k8s-prod\"})) > 0),\"controller\",\"$1\",\"statefulset\",\"(.*)\"),\"kind\",\"StatefulSets\") or label_set(label_replace(((max by(namespace,daemonset)(kube_daemonset_status_desired_number_scheduled{cluster=\"k8s-prod\"}) - on(namespace,daemonset) max by(namespace,daemonset)(kube_daemonset_status_number_available{cluster=\"k8s-prod\"})) > 0),\"controller\",\"$1\",\"daemonset\",\"(.*)\"),\"kind\",\"DaemonSets\")",
+      "instant": true,
+      "range": false,
+      "scope": "common"
+    },
+    {
+      "refId": "H_WKI",
+      "key": "WKI",
+      "source": "H",
+      "expr": "label_set(label_replace((max by(namespace,deployment)(kube_deployment_spec_replicas{cluster=\"k8s-prod\"})),\"controller\",\"$1\",\"deployment\",\"(.*)\"),\"kind\",\"Deployments\") or label_set(label_replace((max by(namespace,statefulset)(kube_statefulset_replicas{cluster=\"k8s-prod\"})),\"controller\",\"$1\",\"statefulset\",\"(.*)\"),\"kind\",\"StatefulSets\") or label_set(label_replace((max by(namespace,daemonset)(kube_daemonset_status_desired_number_scheduled{cluster=\"k8s-prod\"})),\"controller\",\"$1\",\"daemonset\",\"(.*)\"),\"kind\",\"DaemonSets\")",
+      "instant": true,
+      "range": false,
+      "scope": "common"
+    },
+    {
+      "refId": "H_WKX",
+      "key": "WKX",
+      "source": "H",
+      "expr": "label_set(label_replace((max by(namespace,deployment)(kube_deployment_spec_replicas{cluster=\"k8s-prod\"}) unless on(namespace,deployment) max by(namespace,deployment)(kube_deployment_status_replicas_available{cluster=\"k8s-prod\"})),\"controller\",\"$1\",\"deployment\",\"(.*)\"),\"kind\",\"Deployments\") or label_set(label_replace((max by(namespace,statefulset)(kube_statefulset_replicas{cluster=\"k8s-prod\"}) unless on(namespace,statefulset) max by(namespace,statefulset)(kube_statefulset_status_replicas_ready{cluster=\"k8s-prod\"})),\"controller\",\"$1\",\"statefulset\",\"(.*)\"),\"kind\",\"StatefulSets\") or label_set(label_replace((max by(namespace,daemonset)(kube_daemonset_status_desired_number_scheduled{cluster=\"k8s-prod\"}) unless on(namespace,daemonset) max by(namespace,daemonset)(kube_daemonset_status_number_available{cluster=\"k8s-prod\"})),\"controller\",\"$1\",\"daemonset\",\"(.*)\"),\"kind\",\"DaemonSets\")",
+      "instant": true,
+      "range": false,
+      "scope": "common"
+    },
+    {
+      "refId": "H_BKA",
+      "key": "BKA",
+      "source": "H",
+      "expr": "count((longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\".*\",pvc=~\".*\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"})) or (0 * count(longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\".*\",pvc=~\".*\"}))",
+      "instant": true,
+      "range": false,
+      "scope": "common"
+    },
+    {
+      "refId": "H_BKB",
+      "key": "BKB",
+      "source": "H",
+      "expr": "sum(((time() - ((longhorn_volume_last_backup_at{cluster=\"k8s-prod\",pvc_namespace=~\".*\",pvc=~\".*\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}) > 0)) >= 0) <= bool 108000) or (0 * count((longhorn_volume_last_backup_at{cluster=\"k8s-prod\",pvc_namespace=~\".*\",pvc=~\".*\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}))) or ((count((longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\".*\",pvc=~\".*\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"})) or (0 * count(longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\".*\",pvc=~\".*\"}))) == 0)",
+      "instant": true,
+      "range": false,
+      "scope": "common"
+    },
+    {
+      "refId": "H_BKC",
+      "key": "BKC",
+      "source": "H",
+      "expr": "sum((time() - ((longhorn_volume_last_backup_at{cluster=\"k8s-prod\",pvc_namespace=~\".*\",pvc=~\".*\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}) > 0)) > bool 108000) or (0 * count((longhorn_volume_last_backup_at{cluster=\"k8s-prod\",pvc_namespace=~\".*\",pvc=~\".*\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}))) or ((count((longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\".*\",pvc=~\".*\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"})) or (0 * count(longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\".*\",pvc=~\".*\"}))) == 0)",
+      "instant": true,
+      "range": false,
+      "scope": "common"
+    },
+    {
+      "refId": "H_BKD",
+      "key": "BKD",
+      "source": "H",
+      "expr": "sum((longhorn_volume_last_backup_at{cluster=\"k8s-prod\",pvc_namespace=~\".*\",pvc=~\".*\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}) == bool 0) or ((count((longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\".*\",pvc=~\".*\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"})) or (0 * count(longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\".*\",pvc=~\".*\"}))) == 0)",
+      "instant": true,
+      "range": false,
+      "scope": "common"
+    },
+    {
+      "refId": "H_BKE",
+      "key": "BKE",
+      "source": "H",
+      "expr": "count((longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\".*\",pvc=~\".*\"} unless on (cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}) unless on (cluster,volume) longhorn_volume_last_backup_at{cluster=\"k8s-prod\"}) or (0 * count(longhorn_volume_capacity_bytes{cluster=\"k8s-prod\",pvc_namespace=~\".*\",pvc=~\".*\"}))",
+      "instant": true,
+      "range": false,
+      "scope": "common"
+    },
+    {
+      "refId": "H_BKF",
+      "key": "BKF",
+      "source": "H",
+      "expr": "100 * sum(up{cluster=\"k8s-prod\",job=\"longhorn-backend\"}) / max(kube_daemonset_status_desired_number_scheduled{cluster=\"k8s-prod\",namespace=\"longhorn-system\",daemonset=\"longhorn-manager\"})",
+      "instant": true,
+      "range": false,
+      "scope": "common"
+    },
+    {
+      "refId": "H_BKG",
+      "key": "BKG",
+      "source": "H",
+      "expr": "min(longhorn_backup_target_available{cluster=\"k8s-prod\",backup_target=\"default\"})",
+      "instant": true,
+      "range": false,
+      "scope": "common"
+    },
+    {
+      "refId": "H_BKJ",
+      "key": "BKJ",
+      "source": "H",
+      "expr": "sum(longhorn_volume_robustness{cluster=\"k8s-prod\",pvc_namespace=~\".*\",pvc=~\".*\",state=~\"degraded|faulted\"})",
+      "instant": true,
+      "range": false,
+      "scope": "common"
+    },
+    {
+      "refId": "H_BKI",
+      "key": "BKI",
+      "source": "H",
+      "expr": "time()-min(timestamp(up{cluster=\"k8s-prod\",job=\"longhorn-backend\"}))",
+      "instant": true,
+      "range": false,
+      "scope": "common"
+    },
+    {
+      "refId": "H_BKO",
+      "key": "BKO",
+      "source": "H",
+      "expr": "max((time() - (max by(cluster,volume,pvc_namespace,pvc)(longhorn_volume_last_backup_at{cluster=\"k8s-prod\"} unless on(cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}) > 0)))/3600",
+      "instant": true,
+      "range": false,
+      "scope": "common"
+    },
+    {
+      "refId": "H_BKH",
+      "key": "BKH",
+      "source": "H",
+      "expr": "max((time() - (max by(cluster,volume,pvc_namespace,pvc)(longhorn_volume_last_backup_at{cluster=\"k8s-prod\"} unless on(cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}) > 0)))/3600 and (100 * sum(up{cluster=\"k8s-prod\",job=\"longhorn-backend\"}) / max(kube_daemonset_status_desired_number_scheduled{cluster=\"k8s-prod\",namespace=\"longhorn-system\",daemonset=\"longhorn-manager\"}) == 100)",
+      "instant": false,
+      "range": true,
+      "scope": "common"
+    },
+    {
+      "refId": "H_BKV",
+      "key": "BKV",
+      "source": "H",
+      "expr": "label_set(((time() - (max by(cluster,volume,pvc_namespace,pvc)(longhorn_volume_last_backup_at{cluster=\"k8s-prod\"} unless on(cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}) > 0)) > 108000),\"problem\",\"stale\") or label_set((max by(cluster,volume,pvc_namespace,pvc)(longhorn_volume_last_backup_at{cluster=\"k8s-prod\"} unless on(cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}) == 0),\"problem\",\"never\") or label_set(((longhorn_volume_capacity_bytes{cluster=\"k8s-prod\"} unless on(cluster,pvc_namespace,pvc) longhorn:volume_backup_exempt{cluster=\"k8s-prod\"}) unless on(cluster,volume) longhorn_volume_last_backup_at{cluster=\"k8s-prod\"}),\"problem\",\"missing\")",
+      "instant": true,
+      "range": false,
+      "scope": "common"
+    },
+    {
+      "refId": "H_WNA",
+      "key": "WNA",
+      "source": "H",
+      "expr": "min by (wan) (unpoller_device_wan_status{job=\"unifi-api\"} * on (wan_networkgroup) group_left (wan) (max by (wan_networkgroup, wan) (label_replace(unpoller_wan_interface_state{job=\"unifi-api\"}, \"wan\", \"$1\", \"wan_interface\", \"(.*)\")) * 0 + 1))",
+      "instant": true,
+      "range": false,
+      "scope": "common"
+    },
+    {
+      "refId": "H_WNB",
+      "key": "WNB",
+      "source": "H",
+      "expr": "avg by (wan) (unpoller_device_wan_monitor_latency_average_seconds{job=\"unifi-api\"} * on (wan_networkgroup) group_left (wan) (max by (wan_networkgroup, wan) (label_replace(unpoller_wan_interface_state{job=\"unifi-api\"}, \"wan\", \"$1\", \"wan_interface\", \"(.*)\")) * 0 + 1))",
+      "instant": true,
+      "range": false,
+      "scope": "common"
+    },
+    {
+      "refId": "H_WNG",
+      "key": "WNG",
+      "source": "H",
+      "expr": "max by(wan)((time()-timestamp(unpoller_device_wan_status{job=\"unifi-api\"})) * on(wan_networkgroup) group_left(wan) (max by(wan_networkgroup,wan)(label_replace(unpoller_wan_interface_state{job=\"unifi-api\"},\"wan\",\"$1\",\"wan_interface\",\"(.*)\"))*0+1))",
+      "instant": true,
+      "range": false,
+      "scope": "common"
+    },
+    {
+      "refId": "H_WNH",
+      "key": "WNH",
+      "source": "H",
+      "expr": "min by (wan) (min_over_time(unpoller_device_wan_status{job=\"unifi-api\"}[$__interval]) * on (wan_networkgroup) group_left (wan) (max by (wan_networkgroup, wan) (label_replace(unpoller_wan_interface_state{job=\"unifi-api\"}, \"wan\", \"$1\", \"wan_interface\", \"(.*)\")) * 0 + 1)) and on(wan) (max by(wan)((time()-timestamp(unpoller_device_wan_status{job=\"unifi-api\"})) * on(wan_networkgroup) group_left(wan) (max by(wan_networkgroup,wan)(label_replace(unpoller_wan_interface_state{job=\"unifi-api\"},\"wan\",\"$1\",\"wan_interface\",\"(.*)\"))*0+1)) <= 180)",
+      "instant": false,
+      "range": true,
+      "scope": "common"
+    },
+    {
+      "refId": "H_MV",
+      "key": "MV",
+      "source": "H",
+      "expr": "min(up{job=~\"vmalert-victoria-logs|vmalert-victoria-metrics-k8s-stack\"}) and (count(up{job=~\"vmalert-victoria-logs|vmalert-victoria-metrics-k8s-stack\"}) == 2)",
+      "instant": true,
+      "range": false,
+      "scope": "common"
+    },
+    {
+      "refId": "H_MA",
+      "key": "MA",
+      "source": "H",
+      "expr": "time()-min(timestamp(up{job=~\"vmalert-victoria-logs|vmalert-victoria-metrics-k8s-stack\"}))",
+      "instant": true,
+      "range": false,
+      "scope": "common"
+    },
+    {
+      "refId": "H_MD",
+      "key": "MD",
+      "source": "H",
+      "expr": "count(up == 0) or (0 * count(up))",
+      "instant": true,
+      "range": false,
+      "scope": "common"
+    },
+    {
+      "refId": "H_ME",
+      "key": "ME",
+      "source": "H",
+      "expr": "sum(increase(vmalert_alerting_rules_errors_total[24h]))",
+      "instant": true,
+      "range": false,
+      "scope": "common"
+    },
+    {
+      "refId": "H_MN",
+      "key": "MN",
+      "source": "H",
+      "expr": "sum(increase(alertmanager_notifications_failed_total{job=\"vmalertmanager-victoria-metrics-k8s-stack\"}[24h]))",
+      "instant": true,
+      "range": false,
+      "scope": "common"
+    },
+    {
+      "refId": "H_MH",
+      "key": "MH",
+      "source": "H",
+      "expr": "sum(increase(alertmanager_notifications_total{job=\"vmalertmanager-victoria-metrics-k8s-stack\",integration=\"webhook\"}[10m]))-sum(increase(alertmanager_notifications_failed_total{job=\"vmalertmanager-victoria-metrics-k8s-stack\",integration=\"webhook\"}[10m]))",
+      "instant": true,
+      "range": false,
+      "scope": "common"
+    },
+    {
+      "refId": "H_MU",
+      "key": "MU",
+      "source": "H",
+      "expr": "min(up{job=\"vmalertmanager-victoria-metrics-k8s-stack\"})",
+      "instant": true,
+      "range": false,
+      "scope": "common"
+    },
+    {
+      "refId": "H_MT",
+      "key": "MT",
+      "source": "H",
+      "expr": "time()-min(timestamp(up{job=\"vmalertmanager-victoria-metrics-k8s-stack\"}))",
+      "instant": true,
+      "range": false,
+      "scope": "common"
+    },
+    {
+      "refId": "H_AL",
+      "key": "AL",
+      "source": "H",
+      "expr": "ALERTS{alertstate=\"firing\",alertname!~\"Watchdog|InfoInhibitor\"}",
+      "instant": true,
+      "range": false,
+      "scope": "common"
+    },
+    {
+      "refId": "H_AT",
+      "key": "AT",
+      "source": "H",
+      "expr": "(time()-ALERTS_FOR_STATE{alertname!~\"Watchdog|InfoInhibitor\"}) and ignoring(alertstate) ALERTS{alertstate=\"firing\",alertname!~\"Watchdog|InfoInhibitor\"}",
+      "instant": true,
+      "range": false,
+      "scope": "common"
+    },
+    {
+      "refId": "H_AH",
+      "key": "AH",
+      "source": "H",
+      "expr": "max_over_time(ALERTS{alertstate=\"firing\",severity=~\"critical|warning\",alertname!~\"Watchdog|InfoInhibitor\"}[$__interval])",
+      "instant": false,
+      "range": true,
+      "scope": "common"
+    },
+    {
+      "refId": "M_A",
+      "key": "A",
+      "source": "M",
+      "expr": "max by (instance, platform) (max_over_time(node_uname_info{platform!=\"\"}[24h]))",
+      "instant": true,
+      "range": false,
+      "scope": "common"
+    },
+    {
+      "refId": "M_B",
+      "key": "B",
+      "source": "M",
+      "expr": "100 * (1 - avg by (instance, platform) (rate(node_cpu_seconds_total{job=~\"node-exporter|(pve|spark|synology|pi)-node\",platform!=\"\",mode=\"idle\"}[5m])))",
+      "instant": true,
+      "range": false,
+      "scope": "common"
+    },
+    {
+      "refId": "M_C",
+      "key": "C",
+      "source": "M",
+      "expr": "100 * (1 - max by (instance, platform) (node_memory_MemAvailable_bytes{job=~\"node-exporter|(pve|spark|synology|pi)-node\",platform!=\"\"}) / max by (instance, platform) (node_memory_MemTotal_bytes{job=~\"node-exporter|(pve|spark|synology|pi)-node\",platform!=\"\"}))",
+      "instant": true,
+      "range": false,
+      "scope": "common"
+    },
+    {
+      "refId": "M_D",
+      "key": "D",
+      "source": "M",
+      "expr": "min by (instance, platform) (up{job=~\"node-exporter|(pve|spark|synology|pi)-node\",platform!=\"\"})",
+      "instant": true,
+      "range": false,
+      "scope": "common"
+    },
+    {
+      "refId": "M_E",
+      "key": "E",
+      "source": "M",
+      "expr": "100 * (1 - avg by (instance, platform) (rate(node_cpu_seconds_total{job=~\"node-exporter|(pve|spark|synology|pi)-node\",platform!=\"\",mode=\"idle\"}[5m])))",
+      "instant": false,
+      "range": true,
+      "scope": "common"
+    },
+    {
+      "refId": "M_F",
+      "key": "F",
+      "source": "M",
+      "expr": "time() - max by (instance, platform) (timestamp(up{job=~\"node-exporter|(pve|spark|synology|pi)-node\",platform!=\"\"}))",
+      "instant": true,
+      "range": false,
+      "scope": "common"
+    },
+    {
+      "refId": "R_k8s_requests",
+      "key": "k8s.requests",
+      "source": "R",
+      "expr": "sum(rate(traefik_service_requests_total{cluster=\"k8s-prod\"}[6m]))",
+      "instant": false,
+      "range": true,
+      "scope": "common"
+    },
+    {
+      "refId": "R_k8s_cores",
+      "key": "k8s.cores",
+      "source": "R",
+      "expr": "sum(rate(container_cpu_usage_seconds_total{container!=\"\",cluster=\"k8s-prod\"}[6m]))",
+      "instant": false,
+      "range": true,
+      "scope": "common"
+    },
+    {
+      "refId": "R_spark_tokens",
+      "key": "spark.tokens",
+      "source": "R",
+      "expr": "sum(rate(tensorfold:generation_tokens_total[6m]))",
+      "instant": false,
+      "range": true,
+      "scope": "common"
+    },
+    {
+      "refId": "R_nas_read",
+      "key": "nas.read",
+      "source": "R",
+      "expr": "sum(rate(node_disk_read_bytes_total{platform=\"synology\"}[6m]))",
+      "instant": false,
+      "range": true,
+      "scope": "common"
+    },
+    {
+      "refId": "R_ups_load",
+      "key": "ups.load",
+      "source": "R",
+      "expr": "(max by (ups) (network_ups_tools_ups_load) or max by (ups) (label_set(upsInfoLoadValue, \"ups\", \"network-rack\")))",
+      "instant": false,
+      "range": true,
+      "scope": "common"
+    },
+    {
+      "refId": "R_dev_kvmTemp",
+      "key": "dev.kvmTemp",
+      "source": "R",
+      "expr": "max(pikvm_hw_temp_cpu{job=\"glkvm-kvmd\"})",
+      "instant": false,
+      "range": true,
+      "scope": "common"
+    },
+    {
+      "refId": "R_net_wanRx",
+      "key": "net.wanRx",
+      "source": "R",
+      "expr": "sum by (port) (rate(unpoller_device_wan_receive_bytes_total{job=\"unifi-api\"}[6m]))",
+      "instant": false,
+      "range": true,
+      "scope": "common"
+    }
+  ],
+  "network": [
+    {
+      "refId": "R_net_latency",
+      "key": "net.latency",
+      "source": "R",
+      "expr": "avg by (wan) (unpoller_device_wan_monitor_latency_average_seconds{job=\"unifi-api\"} * on (wan_networkgroup) group_left (wan) (max by (wan_networkgroup, wan) (label_replace(unpoller_wan_interface_state{job=\"unifi-api\"}, \"wan\", \"$1\", \"wan_interface\", \"(.*)\")) * 0 + 1))",
+      "instant": false,
+      "range": true,
+      "scope": "network"
+    },
+    {
+      "refId": "R_net_dishDown",
+      "key": "net.dishDown",
+      "source": "R",
+      "expr": "max(starlink_dish_downlink_throughput_bps{job=\"starlink-api\"})",
+      "instant": false,
+      "range": true,
+      "scope": "network"
+    },
+    {
+      "refId": "R_net_dishUp",
+      "key": "net.dishUp",
+      "source": "R",
+      "expr": "max(starlink_dish_uplink_throughput_bps{job=\"starlink-api\"})",
+      "instant": false,
+      "range": true,
+      "scope": "network"
+    },
+    {
+      "refId": "R_net_dishPing",
+      "key": "net.dishPing",
+      "source": "R",
+      "expr": "1000 * max(starlink_dish_pop_ping_latency_seconds{job=\"starlink-api\"})",
+      "instant": false,
+      "range": true,
+      "scope": "network"
+    },
+    {
+      "refId": "R_net_tmobileRsrp",
+      "key": "net.tmobileRsrp",
+      "source": "R",
+      "expr": "max(tmobile_5g_rsrp_dbm{job=\"tmobile-api\"})",
+      "instant": false,
+      "range": true,
+      "scope": "network"
+    },
+    {
+      "refId": "R_net_tmobileSinr",
+      "key": "net.tmobileSinr",
+      "source": "R",
+      "expr": "max(tmobile_5g_sinr_db{job=\"tmobile-api\"})",
+      "instant": false,
+      "range": true,
+      "scope": "network"
+    },
+    {
+      "refId": "R_net_wanTx",
+      "key": "net.wanTx",
+      "source": "R",
+      "expr": "sum by (port) (rate(unpoller_device_wan_transmit_bytes_total{job=\"unifi-api\"}[6m]))",
+      "instant": false,
+      "range": true,
+      "scope": "network"
+    },
+    {
+      "refId": "I_net_availability",
+      "key": "net.availability",
+      "source": "I",
+      "expr": "min by (wan) (unpoller_device_wan_monitor_availability_percent{job=\"unifi-api\"} * on (wan_networkgroup) group_left (wan) (max by (wan_networkgroup, wan) (label_replace(unpoller_wan_interface_state{job=\"unifi-api\"}, \"wan\", \"$1\", \"wan_interface\", \"(.*)\")) * 0 + 1))",
+      "instant": true,
+      "range": false,
+      "scope": "network"
+    },
+    {
+      "refId": "I_net_linkDown",
+      "key": "net.linkDown",
+      "source": "I",
+      "expr": "1000 * max by (wan) (label_replace(unpoller_wan_provider_download_kbps{job=\"unifi-api\"}, \"wan\", \"$1\", \"wan_name\", \"(.*)\"))",
+      "instant": true,
+      "range": false,
+      "scope": "network"
+    },
+    {
+      "refId": "I_net_linkUp",
+      "key": "net.linkUp",
+      "source": "I",
+      "expr": "1000 * max by (wan) (label_replace(unpoller_wan_provider_upload_kbps{job=\"unifi-api\"}, \"wan\", \"$1\", \"wan_name\", \"(.*)\"))",
+      "instant": true,
+      "range": false,
+      "scope": "network"
+    },
+    {
+      "refId": "I_net_deviceInfo",
+      "key": "net.deviceInfo",
+      "source": "I",
+      "expr": "max by (name, type, version) (unpoller_device_info{job=\"unifi-api\"})",
+      "instant": true,
+      "range": false,
+      "scope": "network"
+    },
+    {
+      "refId": "I_net_deviceClients",
+      "key": "net.deviceClients",
+      "source": "I",
+      "expr": "sum by (name) (unpoller_device_stations{job=\"unifi-api\",station_type=\"user\"})",
+      "instant": true,
+      "range": false,
+      "scope": "network"
+    },
+    {
+      "refId": "I_net_deviceCpu",
+      "key": "net.deviceCpu",
+      "source": "I",
+      "expr": "100 * max by (name) (unpoller_device_cpu_utilization_ratio{job=\"unifi-api\"})",
+      "instant": true,
+      "range": false,
+      "scope": "network"
+    },
+    {
+      "refId": "I_net_deviceMem",
+      "key": "net.deviceMem",
+      "source": "I",
+      "expr": "100 * max by (name) (unpoller_device_memory_utilization_ratio{job=\"unifi-api\"})",
+      "instant": true,
+      "range": false,
+      "scope": "network"
+    },
+    {
+      "refId": "I_net_deviceTemp",
+      "key": "net.deviceTemp",
+      "source": "I",
+      "expr": "max by (name) (unpoller_device_temperature_celsius{job=\"unifi-api\"})",
+      "instant": true,
+      "range": false,
+      "scope": "network"
+    },
+    {
+      "refId": "I_net_deviceUptime",
+      "key": "net.deviceUptime",
+      "source": "I",
+      "expr": "max by (name) (unpoller_device_uptime_seconds{job=\"unifi-api\"})",
+      "instant": true,
+      "range": false,
+      "scope": "network"
+    },
+    {
+      "refId": "I_net_deviceUpgrade",
+      "key": "net.deviceUpgrade",
+      "source": "I",
+      "expr": "max by (name) (unpoller_device_upgradable{job=\"unifi-api\"})",
+      "instant": true,
+      "range": false,
+      "scope": "network"
+    },
+    {
+      "refId": "I_net_radioChannel",
+      "key": "net.radioChannel",
+      "source": "I",
+      "expr": "max by (ap_radio) (label_replace(label_join(unpoller_device_radio_channel{job=\"unifi-api\"}, \"ap_radio\", \" \u00b7 \", \"name\", \"band\"), \"ap_radio\", \"$1 GHz\", \"ap_radio\", \"(.*)\"))",
+      "instant": true,
+      "range": false,
+      "scope": "network"
+    },
+    {
+      "refId": "I_net_radioBusy",
+      "key": "net.radioBusy",
+      "source": "I",
+      "expr": "100 * max by (ap_radio) (label_replace(label_join(unpoller_device_radio_channel_utilization_total_ratio{job=\"unifi-api\"}, \"ap_radio\", \" \u00b7 \", \"name\", \"band\"), \"ap_radio\", \"$1 GHz\", \"ap_radio\", \"(.*)\"))",
+      "instant": true,
+      "range": false,
+      "scope": "network"
+    },
+    {
+      "refId": "I_net_radioClients",
+      "key": "net.radioClients",
+      "source": "I",
+      "expr": "max by (ap_radio) (label_replace(label_join(unpoller_device_radio_stations{job=\"unifi-api\",station_type=\"user\"}, \"ap_radio\", \" \u00b7 \", \"name\", \"band\"), \"ap_radio\", \"$1 GHz\", \"ap_radio\", \"(.*)\"))",
+      "instant": true,
+      "range": false,
+      "scope": "network"
+    },
+    {
+      "refId": "I_net_dishPing",
+      "key": "net.dishPing",
+      "source": "I",
+      "expr": "1000 * max(starlink_dish_pop_ping_latency_seconds{job=\"starlink-api\"})",
+      "instant": true,
+      "range": false,
+      "scope": "network"
+    },
+    {
+      "refId": "I_net_dishDrop",
+      "key": "net.dishDrop",
+      "source": "I",
+      "expr": "100 * max(avg_over_time(starlink_dish_pop_ping_drop_ratio{job=\"starlink-api\"}[15m]))",
+      "instant": true,
+      "range": false,
+      "scope": "network"
+    },
+    {
+      "refId": "I_net_dishObstructed",
+      "key": "net.dishObstructed",
+      "source": "I",
+      "expr": "100 * max(avg_over_time(starlink_dish_currently_obstructed{job=\"starlink-api\"}[1h]))",
+      "instant": true,
+      "range": false,
+      "scope": "network"
+    },
+    {
+      "refId": "I_net_dishUptime",
+      "key": "net.dishUptime",
+      "source": "I",
+      "expr": "max(starlink_dish_uptime_seconds{job=\"starlink-api\"})",
+      "instant": true,
+      "range": false,
+      "scope": "network"
+    },
+    {
+      "refId": "I_net_tmobileRegistered",
+      "key": "net.tmobileRegistered",
+      "source": "I",
+      "expr": "(max(tmobile_registration_info{job=\"tmobile-api\",registration=\"registered\"})) or vector(0)",
+      "instant": true,
+      "range": false,
+      "scope": "network"
+    },
+    {
+      "refId": "I_net_tmobileBars",
+      "key": "net.tmobileBars",
+      "source": "I",
+      "expr": "max(tmobile_5g_bars{job=\"tmobile-api\"})",
+      "instant": true,
+      "range": false,
+      "scope": "network"
+    },
+    {
+      "refId": "I_net_tmobileRsrp",
+      "key": "net.tmobileRsrp",
+      "source": "I",
+      "expr": "max(tmobile_5g_rsrp_dbm{job=\"tmobile-api\"})",
+      "instant": true,
+      "range": false,
+      "scope": "network"
+    },
+    {
+      "refId": "I_net_tmobileSinr",
+      "key": "net.tmobileSinr",
+      "source": "I",
+      "expr": "max(tmobile_5g_sinr_db{job=\"tmobile-api\"})",
+      "instant": true,
+      "range": false,
+      "scope": "network"
+    },
+    {
+      "refId": "I_net_tmobileUptime",
+      "key": "net.tmobileUptime",
+      "source": "I",
+      "expr": "max(tmobile_uptime_seconds{job=\"tmobile-api\"})",
+      "instant": true,
+      "range": false,
+      "scope": "network"
+    },
+    {
+      "refId": "I_net_wanPorts",
+      "key": "net.wanPorts",
+      "source": "I",
+      "expr": "max by (port, wan_interface, wan_networkgroup) (unpoller_device_wan_status{job=\"unifi-api\"})",
+      "instant": true,
+      "range": false,
+      "scope": "network"
+    },
+    {
+      "refId": "I_net_wanMap",
+      "key": "net.wanMap",
+      "source": "I",
+      "expr": "max by (wan_interface, wan_networkgroup) (unpoller_wan_interface_state{job=\"unifi-api\"})",
+      "instant": true,
+      "range": false,
+      "scope": "network"
+    }
+  ],
+  "window": {
+    "from": 1793496424636,
+    "to": 1793582824636
+  }
+}

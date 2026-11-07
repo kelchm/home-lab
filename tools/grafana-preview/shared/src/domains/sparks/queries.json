@@ -1,0 +1,712 @@
+[
+  {
+    "refId": "D_spark_gpuUtil",
+    "key": "gpuUtil",
+    "source": "spark",
+    "expr": "100 * max by (instance) (nvidia_smi_utilization_gpu_ratio{job=\"spark-gpu\",platform=\"spark\"})",
+    "instant": true,
+    "range": false,
+    "scope": "spark",
+    "capture": {
+      "kind": "bounded",
+      "key": "spark.gpuUtil",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_spark_gpuTemp",
+    "key": "gpuTemp",
+    "source": "spark",
+    "expr": "max by (instance) (nvidia_smi_temperature_gpu{job=\"spark-gpu\",platform=\"spark\"})",
+    "instant": true,
+    "range": false,
+    "scope": "spark",
+    "capture": {
+      "kind": "bounded",
+      "key": "spark.gpuTemp",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_spark_gpuMargin",
+    "key": "gpuMargin",
+    "source": "spark",
+    "expr": "min by (instance) (nvidia_smi_temperature_gpu_tlimit{job=\"spark-gpu\",platform=\"spark\"})",
+    "instant": true,
+    "range": false,
+    "scope": "spark",
+    "capture": {
+      "kind": "bounded",
+      "key": "spark.gpuMargin",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_spark_gpuPower",
+    "key": "gpuPower",
+    "source": "spark",
+    "expr": "max by (instance) (nvidia_smi_power_draw_watts{job=\"spark-gpu\",platform=\"spark\"})",
+    "instant": true,
+    "range": false,
+    "scope": "spark",
+    "capture": {
+      "kind": "bounded",
+      "key": "spark.gpuPower",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_spark_memoryAvailable",
+    "key": "memoryAvailable",
+    "source": "spark",
+    "expr": "node_memory_MemAvailable_bytes{job=\"spark-node\",platform=\"spark\"}",
+    "instant": true,
+    "range": false,
+    "scope": "spark",
+    "capture": {
+      "kind": "bounded",
+      "key": "spark.memAvail",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_spark_diskUsed",
+    "key": "diskUsed",
+    "source": "spark",
+    "expr": "max by (instance) (1 - node_filesystem_avail_bytes{job=\"spark-node\",platform=\"spark\",mountpoint!=\"/boot/efi\",fstype!~\"tmpfs|overlay|squashfs|ramfs|efivarfs|nfs.*|cifs|fuse.*\"} / node_filesystem_size_bytes{job=\"spark-node\",platform=\"spark\",mountpoint!=\"/boot/efi\",fstype!~\"tmpfs|overlay|squashfs|ramfs|efivarfs|nfs.*|cifs|fuse.*\"})",
+    "instant": true,
+    "range": false,
+    "scope": "spark",
+    "capture": {
+      "kind": "bounded",
+      "key": "spark.disk",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_spark_gpuUtilHistory",
+    "key": "gpuUtilHistory",
+    "source": "spark",
+    "expr": "100 * max by (instance) (nvidia_smi_utilization_gpu_ratio{job=\"spark-gpu\",platform=\"spark\"})",
+    "instant": false,
+    "range": true,
+    "scope": "spark",
+    "capture": {
+      "kind": "bounded",
+      "key": "spark.gpuUtil",
+      "range": true
+    }
+  },
+  {
+    "refId": "D_spark_gpuTempHistory",
+    "key": "gpuTempHistory",
+    "source": "spark",
+    "expr": "max by (instance) (nvidia_smi_temperature_gpu{job=\"spark-gpu\",platform=\"spark\"})",
+    "instant": false,
+    "range": true,
+    "scope": "spark",
+    "capture": {
+      "kind": "bounded",
+      "key": "spark.gpuTemp",
+      "range": true
+    }
+  },
+  {
+    "refId": "D_spark_gpuPowerHistory",
+    "key": "gpuPowerHistory",
+    "source": "spark",
+    "expr": "max by (instance) (nvidia_smi_power_draw_watts{job=\"spark-gpu\",platform=\"spark\"})",
+    "instant": false,
+    "range": true,
+    "scope": "spark",
+    "capture": {
+      "kind": "bounded",
+      "key": "spark.gpuPower",
+      "range": true
+    }
+  },
+  {
+    "refId": "D_spark_memoryHistory",
+    "key": "memoryHistory",
+    "source": "spark",
+    "expr": "node_memory_MemAvailable_bytes{job=\"spark-node\",platform=\"spark\"}",
+    "instant": false,
+    "range": true,
+    "scope": "spark",
+    "capture": {
+      "kind": "bounded",
+      "key": "spark.memAvail",
+      "range": true
+    }
+  },
+  {
+    "refId": "D_spark_boardHistory",
+    "key": "boardHistory",
+    "source": "spark",
+    "expr": "max by (instance) (max_over_time(node_thermal_zone_temp{job=\"spark-node\",platform=\"spark\"}[6m]))",
+    "instant": false,
+    "range": true,
+    "scope": "spark",
+    "capture": {
+      "kind": "bounded",
+      "key": "spark.board",
+      "range": true
+    }
+  },
+  {
+    "refId": "D_spark_roceTraffic",
+    "key": "roceTraffic",
+    "source": "spark",
+    "expr": "sum by (instance) (rate(node_infiniband_port_data_transmitted_bytes_total{job=\"spark-node\",platform=\"spark\",device=~\".*s0f0\"}[6m]))",
+    "instant": false,
+    "range": true,
+    "scope": "spark",
+    "capture": {
+      "kind": "bounded",
+      "key": "spark.roce",
+      "range": true
+    }
+  },
+  {
+    "refId": "D_spark_clockHistory",
+    "key": "clockHistory",
+    "source": "spark",
+    "expr": "max by (instance) (avg_over_time(nvidia_smi_clocks_current_sm_clock_hz{job=\"spark-gpu\",platform=\"spark\"}[6m]))",
+    "instant": false,
+    "range": true,
+    "scope": "spark",
+    "capture": {
+      "kind": "bounded",
+      "key": "spark.clock",
+      "range": true
+    }
+  },
+  {
+    "refId": "D_spark_hostUp",
+    "key": "hostUp",
+    "source": "spark",
+    "expr": "min by (instance, platform) (up{job=\"spark-node\",platform=\"spark\"})",
+    "instant": true,
+    "range": false,
+    "scope": "spark",
+    "capture": {
+      "kind": "catalog",
+      "key": "M_D"
+    }
+  },
+  {
+    "refId": "D_spark_hostCpu",
+    "key": "hostCpu",
+    "source": "spark",
+    "expr": "100 * (1 - avg by (instance, platform) (rate(node_cpu_seconds_total{job=\"spark-node\",platform=\"spark\",mode=\"idle\"}[5m])))",
+    "instant": true,
+    "range": false,
+    "scope": "spark",
+    "capture": {
+      "kind": "catalog",
+      "key": "M_B"
+    }
+  },
+  {
+    "refId": "D_spark_gpuUp",
+    "key": "gpuUp",
+    "source": "spark",
+    "expr": "min by (instance) (up{job=\"spark-gpu\",platform=\"spark\"})",
+    "instant": true,
+    "range": false,
+    "scope": "spark",
+    "optional": true
+  },
+  {
+    "refId": "D_spark_memoryStalls",
+    "key": "memoryStalls",
+    "source": "spark",
+    "expr": "rate(node_pressure_memory_stalled_seconds_total{job=\"spark-node\",platform=\"spark\"}[5m])",
+    "instant": false,
+    "range": true,
+    "scope": "spark",
+    "optional": true
+  },
+  {
+    "refId": "D_spark_thermalSeconds",
+    "key": "thermalSeconds",
+    "source": "spark",
+    "expr": "sum by (instance) (increase(nvidia_smi_clocks_event_reasons_counters_hw_thermal_slowdown_seconds{job=\"spark-gpu\",platform=\"spark\"}[6m]))",
+    "instant": false,
+    "range": true,
+    "scope": "spark",
+    "optional": true
+  },
+  {
+    "refId": "D_spark_roceErrors",
+    "key": "roceErrors",
+    "source": "spark",
+    "expr": "sum by (instance) (increase({__name__=~\"node_infiniband_(link_downed|local_ack_timeout_errors|out_of_sequence_packets_received|packet_sequence_errors|port_errors_received|roce_adp_retransmits)_total\",job=\"spark-node\",platform=\"spark\",device=~\".*s0f0\"}[6m]))",
+    "instant": false,
+    "range": true,
+    "scope": "spark",
+    "optional": true
+  },
+  {
+    "refId": "D_spark_completedHistory",
+    "key": "completedHistory",
+    "source": "spark",
+    "expr": "sum(rate(tensorfold:generation_tokens_total[6m]))",
+    "instant": false,
+    "range": true,
+    "scope": "spark",
+    "capture": {
+      "kind": "bounded",
+      "key": "spark.tokens",
+      "range": true
+    }
+  },
+  {
+    "refId": "D_spark_promptHistory",
+    "key": "promptHistory",
+    "source": "spark",
+    "expr": "sum(rate(tensorfold:prompt_tokens_total[6m]))",
+    "instant": false,
+    "range": true,
+    "scope": "spark",
+    "capture": {
+      "kind": "bounded",
+      "key": "spark.prompt",
+      "range": true
+    }
+  },
+  {
+    "refId": "D_spark_runningTotalHistory",
+    "key": "runningTotalHistory",
+    "source": "spark",
+    "expr": "sum(tensorfold:requests_running)",
+    "instant": false,
+    "range": true,
+    "scope": "spark",
+    "capture": {
+      "kind": "bounded",
+      "key": "spark.running",
+      "range": true
+    }
+  },
+  {
+    "refId": "D_spark_waitingTotalHistory",
+    "key": "waitingTotalHistory",
+    "source": "spark",
+    "expr": "sum(tensorfold:requests_waiting)",
+    "instant": false,
+    "range": true,
+    "scope": "spark",
+    "capture": {
+      "kind": "bounded",
+      "key": "spark.waiting",
+      "range": true
+    }
+  },
+  {
+    "refId": "D_spark_runningTotal",
+    "key": "runningTotal",
+    "source": "spark",
+    "expr": "sum(tensorfold:requests_running)",
+    "instant": true,
+    "range": false,
+    "scope": "spark",
+    "capture": {
+      "kind": "bounded",
+      "key": "spark.running",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_spark_waitingTotal",
+    "key": "waitingTotal",
+    "source": "spark",
+    "expr": "sum(tensorfold:requests_waiting)",
+    "instant": true,
+    "range": false,
+    "scope": "spark",
+    "capture": {
+      "kind": "bounded",
+      "key": "spark.waiting",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_spark_requestShareTotal",
+    "key": "requestShareTotal",
+    "source": "spark",
+    "expr": "100 * max(tensorfold:kv_cache_usage_ratio)",
+    "instant": true,
+    "range": false,
+    "scope": "spark",
+    "capture": {
+      "kind": "bounded",
+      "key": "spark.kv",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_spark_serving",
+    "key": "serving",
+    "source": "spark",
+    "expr": "max by (instance, model, recipe, runtime) (up{job=\"spark-inference\",platform=\"spark\"})",
+    "instant": true,
+    "range": false,
+    "scope": "spark",
+    "capture": {
+      "kind": "bounded",
+      "key": "spark.serving",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_spark_identity",
+    "key": "identity",
+    "source": "spark",
+    "expr": "(up{job=\"spark-inference\",platform=\"spark\"} == 1) and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\"}) < 10)",
+    "instant": true,
+    "range": false,
+    "scope": "spark",
+    "capture": {
+      "kind": "inference",
+      "key": "expr:fa62169b2424d4a5",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_spark_healthReported",
+    "key": "healthReported",
+    "source": "spark",
+    "expr": "(tensorfold_health:ok{job=\"spark-inference\",platform=\"spark\"}) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\"}) < 10))",
+    "instant": true,
+    "range": false,
+    "scope": "spark",
+    "capture": {
+      "kind": "inference",
+      "key": "expr:cfdf24e2c084c85e",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_spark_running",
+    "key": "running",
+    "source": "spark",
+    "expr": "(tensorfold:requests_running{job=\"spark-inference\",platform=\"spark\"}) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\"}) < 10))",
+    "instant": true,
+    "range": false,
+    "scope": "spark",
+    "capture": {
+      "kind": "inference",
+      "key": "expr:10887cc3467d7fc6",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_spark_waiting",
+    "key": "waiting",
+    "source": "spark",
+    "expr": "(tensorfold:requests_waiting{job=\"spark-inference\",platform=\"spark\"}) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\"}) < 10))",
+    "instant": true,
+    "range": false,
+    "scope": "spark",
+    "capture": {
+      "kind": "inference",
+      "key": "expr:eec58cd151d40f46",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_spark_runningHistory",
+    "key": "runningHistory",
+    "source": "spark",
+    "expr": "(max_over_time(tensorfold:requests_running{job=\"spark-inference\",platform=\"spark\"}[30s])) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\"}) < 10))",
+    "instant": false,
+    "range": true,
+    "scope": "spark",
+    "capture": {
+      "kind": "inference",
+      "key": "expr:cb5d7d84401e1823",
+      "range": true
+    }
+  },
+  {
+    "refId": "D_spark_waitingHistory",
+    "key": "waitingHistory",
+    "source": "spark",
+    "expr": "(max_over_time(tensorfold:requests_waiting{job=\"spark-inference\",platform=\"spark\"}[30s])) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\"}) < 10))",
+    "instant": false,
+    "range": true,
+    "scope": "spark",
+    "capture": {
+      "kind": "inference",
+      "key": "expr:aa78daa74f27eca1",
+      "range": true
+    }
+  },
+  {
+    "refId": "D_spark_streamsHistory",
+    "key": "streamsHistory",
+    "source": "spark",
+    "expr": "(tensorfold_health:streams_max{job=\"spark-inference\",platform=\"spark\"}) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\"}) < 10))",
+    "instant": false,
+    "range": true,
+    "scope": "spark",
+    "capture": {
+      "kind": "inference",
+      "key": "expr:82802640b138dc3e",
+      "range": true
+    }
+  },
+  {
+    "refId": "D_spark_poolRatio",
+    "key": "poolRatio",
+    "source": "spark",
+    "expr": "(1 - tensorfold_health:pool_free_tokens{job=\"spark-inference\",platform=\"spark\"} / (tensorfold_health:pool_tokens{job=\"spark-inference\",platform=\"spark\"} > 0)) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\"}) < 10))",
+    "instant": true,
+    "range": false,
+    "scope": "spark",
+    "capture": {
+      "kind": "inference",
+      "key": "expr:3015e4af3f4f9996",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_spark_poolHistory",
+    "key": "poolHistory",
+    "source": "spark",
+    "expr": "(1 - tensorfold_health:pool_free_tokens{job=\"spark-inference\",platform=\"spark\"} / (tensorfold_health:pool_tokens{job=\"spark-inference\",platform=\"spark\"} > 0)) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\"}) < 10))",
+    "instant": false,
+    "range": true,
+    "scope": "spark",
+    "capture": {
+      "kind": "inference",
+      "key": "expr:3015e4af3f4f9996",
+      "range": true
+    }
+  },
+  {
+    "refId": "D_spark_contextLength",
+    "key": "contextLength",
+    "source": "spark",
+    "expr": "tensorfold_health:context_length{job=\"spark-inference\",platform=\"spark\"}",
+    "instant": true,
+    "range": false,
+    "scope": "spark",
+    "capture": {
+      "kind": "inference",
+      "key": "expr:b035359118e080db",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_spark_poolTokens",
+    "key": "poolTokens",
+    "source": "spark",
+    "expr": "tensorfold_health:pool_tokens{job=\"spark-inference\",platform=\"spark\"}",
+    "instant": true,
+    "range": false,
+    "scope": "spark",
+    "capture": {
+      "kind": "inference",
+      "key": "expr:5445718f8bbe0ff7",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_spark_poolFree",
+    "key": "poolFree",
+    "source": "spark",
+    "expr": "tensorfold_health:pool_free_tokens{job=\"spark-inference\",platform=\"spark\"}",
+    "instant": true,
+    "range": false,
+    "scope": "spark",
+    "capture": {
+      "kind": "inference",
+      "key": "expr:17c85cf66fbe6aa9",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_spark_contextTokens",
+    "key": "contextTokens",
+    "source": "spark",
+    "expr": "(tensorfold:kv_cache_usage_ratio{job=\"spark-inference\",platform=\"spark\"} * on (job,instance,model,recipe,runtime) group_left tensorfold_health:context_length{job=\"spark-inference\",platform=\"spark\"}) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\"}) < 10))",
+    "instant": true,
+    "range": false,
+    "scope": "spark",
+    "capture": {
+      "kind": "inference",
+      "key": "expr:29857c8d4bf33080",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_spark_decodeSpeed",
+    "key": "decodeSpeed",
+    "source": "spark",
+    "expr": "(rate(tensorfold:generation_tokens_total{job=\"spark-inference\",platform=\"spark\"}[5m]) / (rate(tensorfold_health:decode_seconds_total{job=\"spark-inference\",platform=\"spark\"}[5m]) > 0)) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\"}) < 10))",
+    "instant": true,
+    "range": false,
+    "scope": "spark",
+    "capture": {
+      "kind": "inference",
+      "key": "expr:d9e63de1f6fe2415",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_spark_decodeHistory",
+    "key": "decodeHistory",
+    "source": "spark",
+    "expr": "(rate(tensorfold:generation_tokens_total{job=\"spark-inference\",platform=\"spark\"}[5m]) / (rate(tensorfold_health:decode_seconds_total{job=\"spark-inference\",platform=\"spark\"}[5m]) > 0)) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\"}) < 10))",
+    "instant": false,
+    "range": true,
+    "scope": "spark",
+    "capture": {
+      "kind": "inference",
+      "key": "expr:d9e63de1f6fe2415",
+      "range": true
+    }
+  },
+  {
+    "refId": "D_spark_ttftHistory",
+    "key": "ttftHistory",
+    "source": "spark",
+    "expr": "(rate(tensorfold:time_to_first_token_seconds_sum{job=\"spark-inference\",platform=\"spark\"}[2m0s]) / (rate(tensorfold:time_to_first_token_seconds_count{job=\"spark-inference\",platform=\"spark\"}[2m0s]) > 0)) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\"}) < 10))",
+    "instant": false,
+    "range": true,
+    "scope": "spark",
+    "capture": {
+      "kind": "inference",
+      "key": "expr:9a4482075387c2c6",
+      "range": true
+    }
+  },
+  {
+    "refId": "D_spark_latencyHistory",
+    "key": "latencyHistory",
+    "source": "spark",
+    "expr": "(rate(tensorfold:request_latency_seconds_sum{job=\"spark-inference\",platform=\"spark\"}[2m0s]) / (rate(tensorfold:request_latency_seconds_count{job=\"spark-inference\",platform=\"spark\"}[2m0s]) > 0)) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\"}) < 10))",
+    "instant": false,
+    "range": true,
+    "scope": "spark",
+    "capture": {
+      "kind": "inference",
+      "key": "expr:0c3123c2696a2665",
+      "range": true
+    }
+  },
+  {
+    "refId": "D_spark_cacheFraction",
+    "key": "cacheFraction",
+    "source": "spark",
+    "expr": "(rate(tensorfold_health:cached_tokens_total{job=\"spark-inference\",platform=\"spark\"}[15m]) / (rate(tensorfold:prompt_tokens_total{job=\"spark-inference\",platform=\"spark\"}[15m]) > 0)) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\"}) < 10))",
+    "instant": true,
+    "range": false,
+    "scope": "spark",
+    "capture": {
+      "kind": "inference",
+      "key": "expr:668bb1b5d2804360",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_spark_newPromptHistory",
+    "key": "newPromptHistory",
+    "source": "spark",
+    "expr": "(rate(tensorfold:prompt_tokens_total{job=\"spark-inference\",platform=\"spark\"}[2m0s]) - rate(tensorfold_health:cached_tokens_total{job=\"spark-inference\",platform=\"spark\"}[2m0s])) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\"}) < 10))",
+    "instant": false,
+    "range": true,
+    "scope": "spark",
+    "capture": {
+      "kind": "inference",
+      "key": "expr:49525f3fbdd0364a",
+      "range": true
+    }
+  },
+  {
+    "refId": "D_spark_cachedPromptHistory",
+    "key": "cachedPromptHistory",
+    "source": "spark",
+    "expr": "(rate(tensorfold_health:cached_tokens_total{job=\"spark-inference\",platform=\"spark\"}[2m0s])) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\"}) < 10))",
+    "instant": false,
+    "range": true,
+    "scope": "spark",
+    "capture": {
+      "kind": "inference",
+      "key": "expr:06b651079acabdb2",
+      "range": true
+    }
+  },
+  {
+    "refId": "D_spark_capPool",
+    "key": "capPool",
+    "source": "spark",
+    "expr": "(count by (job,instance,model,recipe,runtime) (tensorfold_health:pool_tokens{job=\"spark-inference\",platform=\"spark\"}) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\"}) < 10))) or on(job,instance,model,recipe,runtime) (0 * (up{job=\"spark-inference\",platform=\"spark\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\"}) < 10)))",
+    "instant": true,
+    "range": false,
+    "scope": "spark",
+    "optional": true
+  },
+  {
+    "refId": "D_spark_capContext",
+    "key": "capContext",
+    "source": "spark",
+    "expr": "(count by (job,instance,model,recipe,runtime) (tensorfold_health:context_length{job=\"spark-inference\",platform=\"spark\"}) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\"}) < 10))) or on(job,instance,model,recipe,runtime) (0 * (up{job=\"spark-inference\",platform=\"spark\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\"}) < 10)))",
+    "instant": true,
+    "range": false,
+    "scope": "spark",
+    "optional": true
+  },
+  {
+    "refId": "D_spark_capDecode",
+    "key": "capDecode",
+    "source": "spark",
+    "expr": "(count by (job,instance,model,recipe,runtime) (tensorfold_health:decode_seconds_total{job=\"spark-inference\",platform=\"spark\"}) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\"}) < 10))) or on(job,instance,model,recipe,runtime) (0 * (up{job=\"spark-inference\",platform=\"spark\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\"}) < 10)))",
+    "instant": true,
+    "range": false,
+    "scope": "spark",
+    "optional": true
+  },
+  {
+    "refId": "D_spark_capLatency",
+    "key": "capLatency",
+    "source": "spark",
+    "expr": "(count by (job,instance,model,recipe,runtime) (tensorfold:request_latency_seconds_count{job=\"spark-inference\",platform=\"spark\"}) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\"}) < 10))) or on(job,instance,model,recipe,runtime) (0 * (up{job=\"spark-inference\",platform=\"spark\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\"}) < 10)))",
+    "instant": true,
+    "range": false,
+    "scope": "spark",
+    "optional": true
+  },
+  {
+    "refId": "D_spark_capOutput",
+    "key": "capOutput",
+    "source": "spark",
+    "expr": "(count by (job,instance,model,recipe,runtime) (tensorfold_health:completion_tokens_total{job=\"spark-inference\",platform=\"spark\"}) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\"}) < 10))) or on(job,instance,model,recipe,runtime) (0 * (up{job=\"spark-inference\",platform=\"spark\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\"}) < 10)))",
+    "instant": true,
+    "range": false,
+    "scope": "spark",
+    "optional": true
+  },
+  {
+    "refId": "D_spark_aggregateOutput",
+    "key": "aggregateOutput",
+    "source": "spark",
+    "expr": "(rate(tensorfold_health:completion_tokens_total{job=\"spark-inference\",platform=\"spark\"}[1m])) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\"}) < 10))",
+    "instant": false,
+    "range": true,
+    "scope": "spark",
+    "optional": true
+  },
+  {
+    "refId": "D_spark_completedOutput",
+    "key": "completedOutput",
+    "source": "spark",
+    "expr": "(rate(tensorfold:generation_tokens_total{job=\"spark-inference\",platform=\"spark\"}[6m])) and on(job,instance,model,recipe,runtime) (up{job=\"spark-inference\",platform=\"spark\"} == 1 and (time() - timestamp(up{job=\"spark-inference\",platform=\"spark\"}) < 10))",
+    "instant": false,
+    "range": true,
+    "scope": "spark",
+    "optional": true
+  }
+]

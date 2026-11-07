@@ -1,0 +1,298 @@
+[
+  {
+    "refId": "D_pve_guestInfo",
+    "key": "guestInfo",
+    "source": "pve",
+    "expr": "max by (id, name, node, type, tags) (pve_guest_info{job=\"pve-api\",cluster=\"pve-sbx\",template=\"0\"})",
+    "instant": true,
+    "range": false,
+    "scope": "pve-sbx",
+    "capture": {
+      "kind": "bounded",
+      "key": "pve.guestInfo",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_pve_guestUp",
+    "key": "guestUp",
+    "source": "pve",
+    "expr": "max by (id) (pve_up{job=\"pve-api\",cluster=\"pve-sbx\"}) * on (id) group_left(name, node, type) max by (id, name, node, type, tags) (pve_guest_info{job=\"pve-api\",cluster=\"pve-sbx\",template=\"0\"})",
+    "instant": true,
+    "range": false,
+    "scope": "pve-sbx",
+    "capture": {
+      "kind": "bounded",
+      "key": "pve.guestUp",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_pve_guestCpu",
+    "key": "guestCpu",
+    "source": "pve",
+    "expr": "100 * (max by (id) (pve_cpu_usage_ratio{job=\"pve-api\",cluster=\"pve-sbx\"}) * on (id) group_left(name, node, type) max by (id, name, node, type, tags) (pve_guest_info{job=\"pve-api\",cluster=\"pve-sbx\",template=\"0\"}))",
+    "instant": true,
+    "range": false,
+    "scope": "pve-sbx",
+    "capture": {
+      "kind": "bounded",
+      "key": "pve.guestCpu",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_pve_guestMemory",
+    "key": "guestMemory",
+    "source": "pve",
+    "expr": "100 * (max by (id) (pve_memory_usage_bytes{job=\"pve-api\",cluster=\"pve-sbx\"}) / (max by (id) (pve_memory_size_bytes{job=\"pve-api\",cluster=\"pve-sbx\"}) > 0)) * on (id) group_left(name, node, type) max by (id, name, node, type, tags) (pve_guest_info{job=\"pve-api\",cluster=\"pve-sbx\",template=\"0\"})",
+    "instant": true,
+    "range": false,
+    "scope": "pve-sbx",
+    "capture": {
+      "kind": "bounded",
+      "key": "pve.guestMem",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_pve_guestUptime",
+    "key": "guestUptime",
+    "source": "pve",
+    "expr": "max by (id) (pve_uptime_seconds{job=\"pve-api\",cluster=\"pve-sbx\"}) * on (id) group_left(name, node, type) max by (id, name, node, type, tags) (pve_guest_info{job=\"pve-api\",cluster=\"pve-sbx\",template=\"0\"})",
+    "instant": true,
+    "range": false,
+    "scope": "pve-sbx",
+    "capture": {
+      "kind": "bounded",
+      "key": "pve.guestUptime",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_pve_guestOnboot",
+    "key": "guestOnboot",
+    "source": "pve",
+    "expr": "max by (id) (pve_onboot_status{job=\"pve-api\",cluster=\"pve-sbx\"}) * on (id) group_left(name, node, type) max by (id, name, node, type, tags) (pve_guest_info{job=\"pve-api\",cluster=\"pve-sbx\",template=\"0\"})",
+    "instant": true,
+    "range": false,
+    "scope": "pve-sbx",
+    "optional": true
+  },
+  {
+    "refId": "D_pve_guestMemoryBytes",
+    "key": "guestMemoryBytes",
+    "source": "pve",
+    "expr": "max by (id) (pve_memory_usage_bytes{job=\"pve-api\",cluster=\"pve-sbx\"}) * on (id) group_left(name, node, type) max by (id, name, node, type, tags) (pve_guest_info{job=\"pve-api\",cluster=\"pve-sbx\",template=\"0\"})",
+    "instant": true,
+    "range": false,
+    "scope": "pve-sbx",
+    "optional": true
+  },
+  {
+    "refId": "D_pve_guestMemorySize",
+    "key": "guestMemorySize",
+    "source": "pve",
+    "expr": "max by (id) (pve_memory_size_bytes{job=\"pve-api\",cluster=\"pve-sbx\"}) * on (id) group_left(name, node, type) max by (id, name, node, type, tags) (pve_guest_info{job=\"pve-api\",cluster=\"pve-sbx\",template=\"0\"})",
+    "instant": true,
+    "range": false,
+    "scope": "pve-sbx",
+    "optional": true
+  },
+  {
+    "refId": "D_pve_guestDiskSize",
+    "key": "guestDiskSize",
+    "source": "pve",
+    "expr": "max by (id) (pve_disk_size_bytes{job=\"pve-api\",cluster=\"pve-sbx\"}) * on (id) group_left(name, node, type) max by (id, name, node, type, tags) (pve_guest_info{job=\"pve-api\",cluster=\"pve-sbx\",template=\"0\"})",
+    "instant": true,
+    "range": false,
+    "scope": "pve-sbx",
+    "optional": true
+  },
+  {
+    "refId": "D_pve_guestNotBackedUp",
+    "key": "guestNotBackedUp",
+    "source": "pve",
+    "expr": "max by (id) (pve_not_backed_up_info{job=\"pve-api\",cluster=\"pve-sbx\"}) * on (id) group_left(name, node, type) max by (id, name, node, type, tags) (pve_guest_info{job=\"pve-api\",cluster=\"pve-sbx\",template=\"0\"})",
+    "instant": true,
+    "range": false,
+    "scope": "pve-sbx",
+    "optional": true
+  },
+  {
+    "refId": "D_pve_backupInventory",
+    "key": "backupInventory",
+    "source": "pve",
+    "expr": "max(pve_not_backed_up_total{job=\"pve-api\",cluster=\"pve-sbx\"})",
+    "instant": true,
+    "range": false,
+    "scope": "pve-sbx",
+    "optional": true
+  },
+  {
+    "refId": "D_pve_quorum",
+    "key": "quorum",
+    "source": "pve",
+    "expr": "min(label_value(pve_cluster_info{job=\"pve-api\",cluster=\"pve-sbx\"}, \"quorate\"))",
+    "instant": true,
+    "range": false,
+    "scope": "pve-sbx",
+    "capture": {
+      "kind": "bounded",
+      "key": "pve.quorate",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_pve_nodeUp",
+    "key": "nodeUp",
+    "source": "pve",
+    "expr": "max by (id) (pve_up{job=\"pve-api\",cluster=\"pve-sbx\",id=~\"node/.*\"})",
+    "instant": true,
+    "range": false,
+    "scope": "pve-sbx",
+    "optional": true
+  },
+  {
+    "refId": "D_pve_pools",
+    "key": "pools",
+    "source": "pve",
+    "expr": "sort_desc(100 * max by (node, storage) (label_mismatch(max by (id) (pve_disk_usage_bytes{job=\"pve-api\",cluster=\"pve-sbx\",id=~\"storage/.*\"} / (pve_disk_size_bytes{job=\"pve-api\",cluster=\"pve-sbx\",id=~\"storage/.*\"} > 0)) * on (id) group_left(storage, node, plugintype) max by (id, storage, node, plugintype) (pve_storage_info{job=\"pve-api\",cluster=\"pve-sbx\"}), \"plugintype\", \"nfs\")) or label_set(100 * max by (storage) (label_match(max by (id) (pve_disk_usage_bytes{job=\"pve-api\",cluster=\"pve-sbx\",id=~\"storage/.*\"} / (pve_disk_size_bytes{job=\"pve-api\",cluster=\"pve-sbx\",id=~\"storage/.*\"} > 0)) * on (id) group_left(storage, node, plugintype) max by (id, storage, node, plugintype) (pve_storage_info{job=\"pve-api\",cluster=\"pve-sbx\"}), \"plugintype\", \"nfs\")), \"node\", \"shared\"))",
+    "instant": true,
+    "range": false,
+    "scope": "pve-sbx",
+    "capture": {
+      "kind": "bounded",
+      "key": "pve.pools",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_pve_hostInfo",
+    "key": "hostInfo",
+    "source": "pve",
+    "expr": "max by (instance, platform) (max_over_time(node_uname_info{job=\"pve-node\",platform=\"pve\"}[24h]))",
+    "instant": true,
+    "range": false,
+    "scope": "pve-sbx",
+    "capture": {
+      "kind": "catalog",
+      "key": "M_A"
+    }
+  },
+  {
+    "refId": "D_pve_hostCpu",
+    "key": "hostCpu",
+    "source": "pve",
+    "expr": "100 * (1 - avg by (instance, platform) (rate(node_cpu_seconds_total{job=\"pve-node\",platform=\"pve\",mode=\"idle\"}[5m])))",
+    "instant": true,
+    "range": false,
+    "scope": "pve-sbx",
+    "capture": {
+      "kind": "catalog",
+      "key": "M_B"
+    }
+  },
+  {
+    "refId": "D_pve_hostMemory",
+    "key": "hostMemory",
+    "source": "pve",
+    "expr": "100 * (1 - max by (instance, platform) (node_memory_MemAvailable_bytes{job=\"pve-node\",platform=\"pve\"}) / (max by (instance, platform) (node_memory_MemTotal_bytes{job=\"pve-node\",platform=\"pve\"}) > 0))",
+    "instant": true,
+    "range": false,
+    "scope": "pve-sbx",
+    "capture": {
+      "kind": "catalog",
+      "key": "M_C"
+    }
+  },
+  {
+    "refId": "D_pve_hostUp",
+    "key": "hostUp",
+    "source": "pve",
+    "expr": "min by (instance, platform) (up{job=\"pve-node\",platform=\"pve\"})",
+    "instant": true,
+    "range": false,
+    "scope": "pve-sbx",
+    "capture": {
+      "kind": "catalog",
+      "key": "M_D"
+    }
+  },
+  {
+    "refId": "D_pve_hostCpuHistory",
+    "key": "hostCpuHistory",
+    "source": "pve",
+    "expr": "100 * (1 - avg by (instance, platform) (rate(node_cpu_seconds_total{job=\"pve-node\",platform=\"pve\",mode=\"idle\"}[5m])))",
+    "instant": false,
+    "range": true,
+    "scope": "pve-sbx",
+    "capture": {
+      "kind": "catalog",
+      "key": "M_E"
+    }
+  },
+  {
+    "refId": "D_pve_hostAge",
+    "key": "hostAge",
+    "source": "pve",
+    "expr": "time() - max by (instance, platform) (timestamp(up{job=\"pve-node\",platform=\"pve\"}))",
+    "instant": true,
+    "range": false,
+    "scope": "pve-sbx",
+    "capture": {
+      "kind": "catalog",
+      "key": "M_F"
+    }
+  },
+  {
+    "refId": "D_pve_guestCpuHistory",
+    "key": "guestCpuHistory",
+    "source": "pve",
+    "expr": "max by (id) (pve_cpu_usage_ratio{job=\"pve-api\",cluster=\"pve-sbx\"}) * on (id) group_left(name, node, type) max by (id, name, node, type, tags) (pve_guest_info{job=\"pve-api\",cluster=\"pve-sbx\",template=\"0\"})",
+    "instant": false,
+    "range": true,
+    "scope": "pve-sbx",
+    "optional": true
+  },
+  {
+    "refId": "D_pve_guestMemoryHistory",
+    "key": "guestMemoryHistory",
+    "source": "pve",
+    "expr": "max by (id) (pve_memory_usage_bytes{job=\"pve-api\",cluster=\"pve-sbx\"}) * on (id) group_left(name, node, type) max by (id, name, node, type, tags) (pve_guest_info{job=\"pve-api\",cluster=\"pve-sbx\",template=\"0\"})",
+    "instant": false,
+    "range": true,
+    "scope": "pve-sbx",
+    "optional": true
+  },
+  {
+    "refId": "D_pve_hostMemoryHistory",
+    "key": "hostMemoryHistory",
+    "source": "pve",
+    "expr": "max by (instance, platform) (node_memory_MemAvailable_bytes{job=\"pve-node\",platform=\"pve\"})",
+    "instant": false,
+    "range": true,
+    "scope": "pve-sbx",
+    "optional": true
+  },
+  {
+    "refId": "D_pve_backupCompletion",
+    "key": "backupCompletion",
+    "source": "pve",
+    "expr": "max by (instance, backup_job, outcome) (max_over_time(pve_backup_completed_timestamp_seconds{job=\"pve-backup\",platform=\"pve\",cluster=\"pve-sbx\"}[48h]))",
+    "instant": true,
+    "range": false,
+    "scope": "pve-sbx",
+    "optional": true
+  },
+  {
+    "refId": "D_pve_backupCompletionHistory",
+    "key": "backupCompletionHistory",
+    "source": "pve",
+    "expr": "max by (instance, backup_job, outcome) (max_over_time(pve_backup_completed_timestamp_seconds{job=\"pve-backup\",platform=\"pve\",cluster=\"pve-sbx\"}[48h]))",
+    "instant": false,
+    "range": true,
+    "scope": "pve-sbx",
+    "optional": true
+  }
+]

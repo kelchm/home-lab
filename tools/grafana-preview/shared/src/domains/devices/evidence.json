@@ -1,0 +1,12 @@
+{
+  "identity": "Expected supporting Pi names are configured hosts, retained even when absent. Additional platform=pi identities may appear from M_A. Fixed roles identify the supporting host's purpose, not current service success. Existing NTP dashboard server options identify ups-compute-rack and ups-office as time servers.",
+  "hostCapture": "runtime/catalog.json M_A inventory, M_B CPU instant, M_C memory percent instant, M_D direct node collector status, M_E CPU history, M_F scrape age. Models join instance plus platform=pi; selected CPU histories are filtered by instance. Bounded dev.piTemp is the CPU thermal sensor instant; thermal and memory histories are live-only.",
+  "kvmQueryCorrection": {
+    "key": "kvmUp",
+    "capturedExpression": "(max(up{job=\"glkvm-kvmd\"})) or vector(0)",
+    "liveExpression": "max(up{job=\"glkvm-kvmd\"})",
+    "interpretation": "Positive captured up is observed collector success; recorded zero cannot distinguish failed scrape from an absent target and remains unknown. Other KVM measurements are job aggregates with no retained host label. The native dashboard configures instance=glkvm, but the captured aggregation cannot prove individual target membership. No video, input, HTTP usability or recovery test was captured."
+  },
+  "ntp": "Chrony query families and source labels come from kubernetes/apps/observability/grafana/app/ntp-dashboard.json. No chrony samples exist in this recording. Live expressions preserve instance and source_address without fallback zeros. Sync requires successful up and chrony_up, scrape age below 300 seconds, valid stratum and reference age; 3600 seconds is the existing dashboard's holdover boundary, not a new threshold.",
+  "sourceReach": "chrony_sources_reachability_ratio times eight is answered polls out of the last eight, not a percent or continuous uptime. Tracking address, source state and source age are separate observations; synchronization does not establish calibrated UTC accuracy."
+}

@@ -1,0 +1,140 @@
+[
+  {
+    "refId": "D_power_load",
+    "key": "load",
+    "source": "power",
+    "expr": "(max by (ups) (network_ups_tools_ups_load) or max by (ups) (label_set(upsInfoLoadValue, \"ups\", \"network-rack\")))",
+    "instant": true,
+    "range": false,
+    "scope": "power",
+    "capture": {
+      "kind": "bounded",
+      "key": "ups.load",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_power_runtimeMin",
+    "key": "runtimeMin",
+    "source": "power",
+    "expr": "(max by (ups) (network_ups_tools_battery_runtime) or max by (ups) (label_set(upsBatteryRuntimeValue, \"ups\", \"network-rack\"))) / 60",
+    "instant": true,
+    "range": false,
+    "scope": "power",
+    "capture": {
+      "kind": "bounded",
+      "key": "ups.runtimeMin",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_power_charge",
+    "key": "charge",
+    "source": "power",
+    "expr": "(max by (ups) (network_ups_tools_battery_charge) or max by (ups) (label_set(upsBatteryChargeValue, \"ups\", \"network-rack\")))",
+    "instant": true,
+    "range": false,
+    "scope": "power",
+    "capture": {
+      "kind": "bounded",
+      "key": "ups.charge",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_power_input",
+    "key": "input",
+    "source": "power",
+    "expr": "(max by (ups) (network_ups_tools_input_voltage) or max by (ups) (label_set(upsInputVoltageValue, \"ups\", \"network-rack\")))",
+    "instant": true,
+    "range": false,
+    "scope": "power",
+    "capture": {
+      "kind": "bounded",
+      "key": "ups.input",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_power_onBattery",
+    "key": "onBattery",
+    "source": "power",
+    "expr": "(max by (ups) (network_ups_tools_ups_status{flag=\"OB\"}) or max by (ups) (label_set(label_match(upsInfoStatus, \"upsInfoStatus\", \"(.* )?OB( .*)?\") or upsInfoStatus * 0, \"ups\", \"network-rack\")))",
+    "instant": true,
+    "range": false,
+    "scope": "power",
+    "capture": {
+      "kind": "bounded",
+      "key": "ups.onBattery",
+      "range": false
+    }
+  },
+  {
+    "refId": "D_power_loadHistory",
+    "key": "loadHistory",
+    "source": "power",
+    "expr": "(max by (ups) (network_ups_tools_ups_load) or max by (ups) (label_set(upsInfoLoadValue, \"ups\", \"network-rack\")))",
+    "instant": false,
+    "range": true,
+    "scope": "power",
+    "capture": {
+      "kind": "bounded",
+      "key": "ups.load",
+      "range": true
+    }
+  },
+  {
+    "refId": "D_power_runtimeMinHistory",
+    "key": "runtimeMinHistory",
+    "source": "power",
+    "expr": "(max by (ups) (network_ups_tools_battery_runtime) or max by (ups) (label_set(upsBatteryRuntimeValue, \"ups\", \"network-rack\"))) / 60",
+    "instant": false,
+    "range": true,
+    "scope": "power",
+    "capture": {
+      "kind": "bounded",
+      "key": "ups.runtimeMin",
+      "range": true
+    }
+  },
+  {
+    "refId": "D_power_online",
+    "key": "online",
+    "source": "power",
+    "expr": "max by (ups) (network_ups_tools_ups_status{flag=\"OL\"}) or max by (ups) (label_set(label_match(upsInfoStatus, \"upsInfoStatus\", \"(.* )?OL( .*)?\"), \"ups\", \"network-rack\"))",
+    "instant": true,
+    "range": false,
+    "scope": "power",
+    "optional": true
+  },
+  {
+    "refId": "D_power_collector",
+    "key": "collector",
+    "source": "power",
+    "expr": "label_set(min(up{job=\"pi-nut\",instance=\"ups-compute-rack\"}), \"ups\", \"compute-rack\") or label_set(min(up{job=\"pi-nut\",instance=\"ups-office\"}), \"ups\", \"office\") or label_set(min(up{job=\"synology-snmp\",instance=\"nas\"}), \"ups\", \"network-rack\")",
+    "instant": true,
+    "range": false,
+    "scope": "power",
+    "optional": true
+  },
+  {
+    "refId": "D_power_chargeHistory",
+    "key": "chargeHistory",
+    "source": "power",
+    "expr": "(max by (ups) (network_ups_tools_battery_charge) or max by (ups) (label_set(upsBatteryChargeValue, \"ups\", \"network-rack\")))",
+    "instant": false,
+    "range": true,
+    "scope": "power",
+    "optional": true
+  },
+  {
+    "refId": "D_power_inputHistory",
+    "key": "inputHistory",
+    "source": "power",
+    "expr": "(max by (ups) (network_ups_tools_input_voltage) or max by (ups) (label_set(upsInputVoltageValue, \"ups\", \"network-rack\")))",
+    "instant": false,
+    "range": true,
+    "scope": "power",
+    "optional": true
+  }
+]

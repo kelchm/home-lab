@@ -1,0 +1,120 @@
+{
+  "scope": "pve-sbx API and backup completion; platform=pve host metrics have no cluster label",
+  "captureLimits": "Daily bounded recording only; no historical inference samples used. Original unscoped captured expressions are preserved below. Name-only guest measurements require unambiguous recorded inventory. No current-state assertion derives from repository guest definitions.",
+  "backupSource": "proxmox/monitoring/backup-metrics/README.md; kubernetes/apps/observability/pve-exporter/app/backup-alerts.yaml",
+  "queries": {
+    "guestInfo": {
+      "meaning": "Non-template identity. Recorded identity has name/node/type only; never invent VMID or tags.",
+      "recorded": true,
+      "capturedExpression": "max by (name, node, type) (pve_guest_info{template=\"0\"})"
+    },
+    "guestUp": {
+      "meaning": "Observed guest state, not desired state.",
+      "recorded": true,
+      "capturedExpression": "max by (name) (max by (id) (pve_up) * on (id) group_left(name) max by (id, name) (pve_guest_info{template=\"0\"}))"
+    },
+    "guestCpu": {
+      "meaning": "Reported CPU ratio, percent. No idle inference when absent.",
+      "recorded": true,
+      "capturedExpression": "100 * max by (name) (max by (id) (pve_cpu_usage_ratio) * on (id) group_left(name) max by (id, name) (pve_guest_info{template=\"0\"}))"
+    },
+    "guestMemory": {
+      "meaning": "Guest memory used / configured. Capture clamps at 100%; live query preserves reported ratio.",
+      "recorded": true,
+      "capturedExpression": "clamp_max(100 * max by (name) (max by (id) (pve_memory_usage_bytes) * on (id) group_left(name) max by (id, name) (pve_guest_info{template=\"0\"})) / max by (name) (max by (id) (pve_memory_size_bytes) * on (id) group_left(name) max by (id, name) (pve_guest_info{template=\"0\"})), 100)"
+    },
+    "guestUptime": {
+      "meaning": "Reported uptime at window end, not a lifecycle event history.",
+      "recorded": true,
+      "capturedExpression": "max by (name) (max by (id) (pve_uptime_seconds) * on (id) group_left(name) max by (id, name) (pve_guest_info{template=\"0\"}))"
+    },
+    "guestOnboot": {
+      "meaning": "Boot policy only; not desired current runtime state.",
+      "recorded": false
+    },
+    "guestMemoryBytes": {
+      "meaning": "Reported memory usage bytes.",
+      "recorded": false
+    },
+    "guestMemorySize": {
+      "meaning": "Configured memory bytes.",
+      "recorded": false
+    },
+    "guestDiskSize": {
+      "meaning": "Allocated guest disk capacity, not VM filesystem occupancy.",
+      "recorded": false
+    },
+    "guestNotBackedUp": {
+      "meaning": "One means excluded from every backup job. Missing series alone establishes nothing.",
+      "recorded": false
+    },
+    "backupInventory": {
+      "meaning": "Unfilled omission inventory total. Only live zero corroborates inclusion of inventoried guests; the recorded vector(0) total is deliberately unused.",
+      "recorded": false
+    },
+    "quorum": {
+      "meaning": "Reported quorum flag. Capture omits cluster label; no hard-coded node or guest health inference.",
+      "recorded": true,
+      "capturedExpression": "max(label_value(pve_cluster_info, \"quorate\"))"
+    },
+    "nodeUp": {
+      "meaning": "PVE API node status; separate from host collector status.",
+      "recorded": false
+    },
+    "pools": {
+      "meaning": "Pool occupancy by node/storage. Shared NFS pools appear once per storage name; two shares may expose the same backing capacity and must not be added.",
+      "recorded": true,
+      "capturedExpression": "sort_desc(100 * max by (node, storage) (label_mismatch(max by (id) (pve_disk_usage_bytes{id=~\"storage/.*\"} / (pve_disk_size_bytes{id=~\"storage/.*\"} > 0)) * on (id) group_left(storage, node, plugintype) max by (id, storage, node, plugintype) (pve_storage_info), \"plugintype\", \"nfs\")) or label_set(100 * max by (storage) (label_match(max by (id) (pve_disk_usage_bytes{id=~\"storage/.*\"} / (pve_disk_size_bytes{id=~\"storage/.*\"} > 0)) * on (id) group_left(storage, node, plugintype) max by (id, storage, node, plugintype) (pve_storage_info), \"plugintype\", \"nfs\")), \"node\", \"shared\"))"
+    },
+    "hostInfo": {
+      "meaning": "Host inventory seen over 24h; does not establish current collection or API availability.",
+      "recorded": true,
+      "capturedExpression": "max by (instance, platform) (max_over_time(node_uname_info{platform!=\"\"}[24h]))"
+    },
+    "hostCpu": {
+      "meaning": "Host CPU busy percent over 5m. Host-pushed series have no cluster label.",
+      "recorded": true,
+      "capturedExpression": "100 * (1 - avg by (instance, platform) (rate(node_cpu_seconds_total{job=~\"node-exporter|(pve|spark|synology|pi)-node\",platform!=\"\",mode=\"idle\"}[5m])))"
+    },
+    "hostMemory": {
+      "meaning": "Host memory occupied, separately from guest allocations.",
+      "recorded": true,
+      "capturedExpression": "100 * (1 - max by (instance, platform) (node_memory_MemAvailable_bytes{job=~\"node-exporter|(pve|spark|synology|pi)-node\",platform!=\"\"}) / max by (instance, platform) (node_memory_MemTotal_bytes{job=~\"node-exporter|(pve|spark|synology|pi)-node\",platform!=\"\"}))"
+    },
+    "hostUp": {
+      "meaning": "Host node-exporter collection status, not PVE quorum or API status.",
+      "recorded": true,
+      "capturedExpression": "min by (instance, platform) (up{job=~\"node-exporter|(pve|spark|synology|pi)-node\",platform!=\"\"})"
+    },
+    "hostCpuHistory": {
+      "meaning": "Native host CPU history; recording contains other platforms and consumers must filter platform=pve.",
+      "recorded": true,
+      "capturedExpression": "100 * (1 - avg by (instance, platform) (rate(node_cpu_seconds_total{job=~\"node-exporter|(pve|spark|synology|pi)-node\",platform!=\"\",mode=\"idle\"}[5m])))"
+    },
+    "hostAge": {
+      "meaning": "Seconds since host scrape status observation.",
+      "recorded": true,
+      "capturedExpression": "time() - max by (instance, platform) (timestamp(up{job=~\"node-exporter|(pve|spark|synology|pi)-node\",platform!=\"\"}))"
+    },
+    "guestCpuHistory": {
+      "meaning": "Native per-guest ratio history; no captured range available.",
+      "recorded": false
+    },
+    "guestMemoryHistory": {
+      "meaning": "Native per-guest bytes history; no captured range available.",
+      "recorded": false
+    },
+    "hostMemoryHistory": {
+      "meaning": "Available host memory bytes. Not recorded.",
+      "recorded": false
+    },
+    "backupCompletion": {
+      "meaning": "Latest completion timestamps by node, job and outcome over 48h. Sparse push samples require lookback. No completion recording exists; empty never means success.",
+      "recorded": false
+    },
+    "backupCompletionHistory": {
+      "meaning": "Rolling latest completion timestamps over 48h, not job counts or a complete ledger. No recording.",
+      "recorded": false
+    }
+  }
+}
