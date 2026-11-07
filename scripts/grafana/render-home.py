@@ -12,7 +12,7 @@ from pathlib import Path
 
 from home import overview as e
 from home import widgets as w
-from home.schema import Panels, autogrid, dashboard, datasource_variable, exprs, grid, item, only_while, row, rows, tab, tile_row
+from home.schema import TILE_PX, TILE_TREND_PX, Panels, autogrid, dashboard, datasource_variable, exprs, grid, item, only_while, row, rows, tab, tile_row
 
 ROOT = Path(__file__).resolve().parents[2]
 OUTPUT = ROOT / "kubernetes/apps/observability/grafana/app/home-dashboard.json"
@@ -53,14 +53,16 @@ def cells(h, *cs):
 
 
 def auto(cols, px, key, repeat=None, when=None):
-    SOURCE[key] = (key, "")
-    return row(autogrid([item(key, repeat, when)], cols=cols, px=px))
+    src, _, arg = key.partition("@")
+    name = f"{src}-{arg}" if arg else src
+    SOURCE[name] = (src, arg)
+    return row(autogrid([item(name, repeat, when)], cols=cols, px=px))
 
 
-def tiles(key, repeat=None, panels=w.W):
+def tiles(key, repeat=None, panels=w.W, px=TILE_PX):
     for m in panels.groups[key][1]:
         SOURCE[m] = (m, "")
-    return tile_row(panels.groups[key], repeat)
+    return tile_row(panels.groups[key], repeat, px)
 
 
 GO = cells(2, ("deeper", 24))
@@ -71,8 +73,9 @@ PAGES = {
                  cells(11, ("probes", 24)), GO],
     "pve-sbx": [tiles("pve-state"), cells(6, ("machines@pve", 15), ("machine-cpu@pve", 9)), cells(8, ("pve-guests", 15), ("pve-pools", 9)), cells(9, ("feed@pve-sbx", 24)),
                 cells(6, ("ssd-drives@pve", 24)), GO],
-    "spark": [tiles("gpu", repeat="gpu"), auto(1, 70, "inference-idle", when=False), only_while(tiles("inference"), "model", ".+"), only_while(cells(7, ("tokens", 24)), "model", ".+"),
-              cells(5, ("machines@spark", 15), ("machine-cpu@spark", 9)), cells(7, ("gpu-use", 24)), cells(9, ("feed@spark", 24)), cells(5, ("ssd-drives@spark", 24)), GO],
+    "spark": [tiles("gpu", repeat="gpu", px=TILE_TREND_PX), auto(1, 70, "inference-idle", when=False), only_while(tiles("inference", px=TILE_TREND_PX), "model", ".+"), only_while(cells(7, ("stream-share", 8), ("stream-tokens", 16)), "model", ".+"),
+              only_while(cells(7, ("output", 12), ("prompt-new", 12)), "model", ".+"),
+              cells(5, ("machines@spark", 15), ("machine-cpu@spark", 9)), cells(7, ("gpu-use", 24)), auto(1, 334, "feed@spark", when=True), cells(5, ("ssd-drives@spark", 24)), GO],
     "athena": [tiles("nas-state"), cells(4, ("machines@synology", 15), ("nas-volumes", 9)), cells(9, ("feed@athena", 24)), cells(10, ("hdd-drives", 24)), GO],
     "network": [cells(12, ("netdev", 24)), cells(9, ("feed@network", 24)), cells(5, ("wan", 24)), tiles("starlink"), tiles("tmobile"), cells(11, ("wifi", 24)), GO],
     "power": [tiles("ups", repeat="ups"), cells(7, ("ups-load", 12), ("ups-runtime", 12)), GO],

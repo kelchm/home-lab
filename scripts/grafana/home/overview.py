@@ -6,7 +6,7 @@ things worth a look before they become alerts.
 """
 from . import widgets as w
 from .schema import FIRE, NEUTRAL, NOALERT, QUIET, LOOK, BROKEN, PROBLEM, TEXT, RED, TILE, Panels, T, by_name, fixed, ls, match, q, th, union, yes, zero
-from .widgets import FS, HOSTS, K, SYS, SYSTEMS
+from .widgets import BOARD_CRITICAL, FS, HOSTS, K, SYS, SYSTEMS
 
 KEYS = "system, thing, what, detail"
 
@@ -60,8 +60,10 @@ def chip(name):
     return f'max by (instance, platform) (node_hwmon_temp_celsius * on (instance, chip) group_left node_hwmon_chip_names{{chip_name="{name}"}})'
 
 
+SPARK_BOARD = f'{BOARD_CRITICAL} - max by (instance, platform) (node_thermal_zone_temp{{job="spark-node"}})'
+SPARK_ROOM = f'min by (instance, platform) ({ls(SPARK_BOARD, source="board")} or {ls("max by (instance, platform) (nvidia_smi_temperature_gpu_tlimit)", source="gpu")})'
 # Assumed limits where a machine publishes none: 95 °C for the AMD CPUs, 85 °C for a Pi 5, and the alert lines for the KVM and the UniFi devices.
-ROOM = (f'(95 - {sens("Tctl")}) or ({sens("Package id 0", "node_hwmon_temp_crit_celsius")} - {sens("Package id 0")}) or max by (instance, platform) (nvidia_smi_temperature_gpu_tlimit)'
+ROOM = (f'(95 - {sens("Tctl")}) or ({sens("Package id 0", "node_hwmon_temp_crit_celsius")} - {sens("Package id 0")}) or {SPARK_ROOM}'
         f' or (95 - {chip("k10temp")}) or (85 - {chip("cpu_thermal")}) or (95 - max by (instance, platform) (pikvm_hw_temp_cpu))'
         ' or (70 - max by (instance, platform) (label_replace(unpoller_device_temperature_celsius, "instance", "$1", "name", "(.*)")))')
 SECTORS = 'sum by (platform, instance, device) ({__name__=~"drive:ata_(reallocated|pending|uncorrectable)_sectors"})'
