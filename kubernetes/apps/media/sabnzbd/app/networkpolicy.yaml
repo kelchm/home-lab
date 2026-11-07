@@ -1,0 +1,53 @@
+---
+# SABnzbd's own login is unset (username and password are empty in its config
+# volume) because the admin gateway's OIDC middleware fronts it, so a direct
+# connection gets the full Web UI and its settings, including the API key.
+# This policy is that boundary: ingress is default-denied for the selected
+# endpoint and admits only the admin Traefik instance and the integrations
+# configured against SABnzbd.
+#
+# Every integration already holds SABnzbd's API key, so an L4 rule grants it
+# nothing more. Egress is unrestricted. Each workload label is paired with its
+# dedicated ServiceAccount identity so a compromised pod cannot gain access
+# merely by forging an app label.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: sabnzbd
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: sabnzbd
+  ingress:
+    # Only the admin Traefik instance serves the OIDC-protected Web UI.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: network
+            app.kubernetes.io/instance: traefik-admin-network
+            io.cilium.k8s.policy.serviceaccount: traefik-admin
+      toPorts: &port
+        - ports:
+            - port: "8080"
+              protocol: TCP
+
+    # API integrations.
+    - fromEndpoints:
+        # Homepage widget.
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: homepage
+            app.kubernetes.io/name: homepage
+            io.cilium.k8s.policy.serviceaccount: homepage
+        # The download client configured in each *arr app.
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: media
+            app.kubernetes.io/name: lidarr
+            io.cilium.k8s.policy.serviceaccount: lidarr
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: media
+            app.kubernetes.io/name: radarr
+            io.cilium.k8s.policy.serviceaccount: radarr
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: media
+            app.kubernetes.io/name: sonarr
+            io.cilium.k8s.policy.serviceaccount: sonarr
+      toPorts: *port
