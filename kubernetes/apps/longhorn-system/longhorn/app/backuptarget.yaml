@@ -13,6 +13,11 @@ kind: BackupTarget
 metadata:
   name: default
   namespace: longhorn-system
+  annotations:
+    # Temporary guard for moving this object to the longhorn-config
+    # Kustomization: the old owner's garbage collection must skip it.
+    # The move itself drops the annotation again.
+    kustomize.toolkit.fluxcd.io/prune: disabled
 spec:
   backupTargetURL: nfs://10.32.25.5:/volume1/backups-k8s-prod/longhorn
   credentialSecret: ""
