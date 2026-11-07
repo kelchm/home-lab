@@ -9,9 +9,10 @@ tasks:
     cmds:
       - '[ -f talsecret.sops.yaml ] || talhelper gensecret | sops --filename-override talos/talsecret.sops.yaml --encrypt /dev/stdin > talsecret.sops.yaml'
       - task: :talos:generate-config
-      - talhelper gencommand apply --extra-flags="--insecure" | bash
-      - until talhelper gencommand bootstrap | bash; do sleep 10; done
-      - until talhelper gencommand kubeconfig --extra-flags="{{.ROOT_DIR}} --force" | bash; do sleep 10; done
+      - >-
+        {{.ROOT_DIR}}/scripts/talos/run-gencommand.sh apply --extra-flags="--insecure"
+      - until {{.ROOT_DIR}}/scripts/talos/run-gencommand.sh bootstrap; do sleep 10; done
+      - until {{.ROOT_DIR}}/scripts/talos/run-gencommand.sh kubeconfig --extra-flags="{{.ROOT_DIR}} --force"; do sleep 10; done
     preconditions:
       - test -f {{.ROOT_DIR}}/.sops.yaml
       - test -f {{.SOPS_AGE_KEY_FILE}}
