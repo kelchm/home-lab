@@ -284,12 +284,14 @@ def ranked(top):
     return "sort_by_label(" + " or ".join(f'label_set(({nth(k)}) > 0, "rank", "#{k}")' for k in range(1, 9)) + ', "rank")'
 
 
+# Only the GLM kit's Python server reports its pool. Under another server Pool used reads -1, shown as a dash, so the tile does not keep the last recipe's figure.
 W.tiles("inference", "Inference · $model", [
     ("Requests running", zero("sum(tensorfold:requests_running)"), dict(hue=LOAD_HUE)),
     ("Requests waiting", zero("sum(tensorfold:requests_waiting)"), dict(thresholds=th([{"value": None, "color": LOAD_HUE}, {"value": 4, "color": "orange"}]))),
     ("Decode speed per reply", f"sum(increase({GENERATED}[5m])) / (sum(increase({DECODE_SECONDS}[5m])) > 0.05)", dict(unit="suffix: tok/s", decimals=1, noValue="–", hue=SPEED_HUE)),
     ("Prompt cache hits", f"100 * sum(rate({CACHED}[15m])) / (sum(rate({PROMPT}[15m])) > 0)", dict(unit="percent", noValue="–", hue=CLOCK_HUE)),
-    ("Pool used", "100 * (1 - sum(tensorfold_health:pool_free_tokens) / (sum(tensorfold_health:pool_tokens) > 0))", dict(unit="percent", noValue="–", hue=LOAD_HUE))], trend=True,
+    ("Pool used", "100 * (1 - sum(tensorfold_health:pool_free_tokens) / (sum(tensorfold_health:pool_tokens) > 0)) or (count(tensorfold:requests_running) * 0 - 1)",
+     dict(unit="percent", noValue="–", hue=LOAD_HUE, mappings=[{"type": "value", "options": {"-1": {"text": "–", "index": 0}}}]))], trend=True,
     desc="What the model is doing: work in hand, work queued, how fast each reply is writing, how much of its prompts it found cached and how full its shared pool is, each with its recent history behind it. A dash means idle, or a recipe that does not report it.")
 W.add("inference-idle", "Inference", "stat", [q("count(tensorfold:kv_cache_usage_ratio)")],
       {"colorMode": "none", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": RED, "textMode": "value", "text": {"valueSize": 16}},
