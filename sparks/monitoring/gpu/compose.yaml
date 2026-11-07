@@ -5,7 +5,7 @@ name: monitoring-gpu
 
 services:
   gpu-exporter:
-    image: docker.io/utkuozdemir/nvidia_gpu_exporter:1.17.0@sha256:b085013de2828d7045c80f6af3db030b69fd81c14a43384c77652f74ad87971c
+    image: docker.io/utkuozdemir/nvidia_gpu_exporter:1.18.0@sha256:26c2a24ddb97356ae9461113a32697a1d7d1697b9e24b5faf86e0d643594a104
     user: "65534:65534"
     network_mode: host
     read_only: true
