@@ -226,7 +226,7 @@ python3 validate_locks.py &&
 
 The capacity hook reads the engine's startup pool and agreed per-rank cache receipts before the shared readiness hook checks strict native health, discovery, four concurrent replies, a tool call and effort renders. Missing receipts, a pool below 1,179,648 tokens (four 262,144-token prompts plus four reply budgets), or a zero device prompt cache fail the launch command. That pool floor is not four simultaneous 1M windows. The native health route lacks those capacity fields, so passing HTTP health alone is insufficient. A failed capacity/readiness hook still needs an explicit stop: `sparkrun stop "$candidate" --cluster sparks`. After a successful launch, leave the candidate running for the approved qualification checks; stop it explicitly when those checks finish.
 
-Roll back by stopping this candidate and relaunching `glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable.yaml`. The native candidate never opens the Python spill directory. The current spill restart-restore path itself remains unverified here.
+Roll back with the retained inputs for `glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable-readiness-v2.yaml` and the selected SparkRun 0.4.2 controller, following [Launch, stop and roll back](#launch-stop-and-roll-back). The native candidate never opens the Python spill directory. The current Python profile's bounded disk restoration was verified on November 6 with 19,200 loaded/cached tokens; native recovery remains unqualified.
 
 ### Qualification still required
 
