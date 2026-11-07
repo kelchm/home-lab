@@ -643,7 +643,7 @@ jobs:
         if: needs.pre-job.outputs.skills_changed == 'true'
         uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
-          version: "0.13.6"
+          version: "0.13.7"
           enable-cache: false
 
       - name: Validate Agent Skills
@@ -746,7 +746,7 @@ jobs:
         if: needs.pre-job.outputs.sparkrun_changed == 'true'
         uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
-          version: "0.13.6"
+          version: "0.13.7"
           enable-cache: false
 
       # The API access test loads its policy into network namespaces with the real nft.
