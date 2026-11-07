@@ -126,6 +126,9 @@ jobs:
               - 'proxmox/guests/netbird-router/**'
               - 'healthchecks/**'
               - '.taskfiles/healthchecks/**'
+              - 'Taskfile.yaml'
+              - '.taskfiles/bootstrap/**'
+              - '.taskfiles/talos/**'
             skills:
               - '.github/workflows/repository-validation.yaml'
               - '.agents/skills/**'
@@ -165,6 +168,7 @@ jobs:
               - 'scripts/ci/test-athena-acme.py'
               - 'scripts/ci/test-validate-synology.sh'
               - 'scripts/ci/validate-synology.sh'
+              - 'scripts/ci/test-synology-break-glass.sh'
               - 'scripts/ci/test-google-photos-takeout.py'
             talos:
               - '.github/workflows/repository-validation.yaml'
@@ -507,11 +511,11 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install yq and ShellCheck
+      - name: Install yq, ShellCheck, SOPS and age
         if: needs.pre-job.outputs.synology_changed == 'true'
         uses: jdx/mise-action@f5be966e4a917d54244728e6a5fdcd1d93a35e6c # v5.2.6
         with:
-          install_args: "aqua:mikefarah/yq aqua:koalaman/shellcheck"
+          install_args: "aqua:mikefarah/yq aqua:koalaman/shellcheck aqua:getsops/sops aqua:FiloSottile/age"
 
       - name: Validate Compose projects and doco-cd targets
         if: needs.pre-job.outputs.synology_changed == 'true'
@@ -519,6 +523,10 @@ jobs:
           docker compose version
           scripts/ci/test-validate-synology.sh
           scripts/ci/validate-synology.sh
+
+      - name: Test break-glass secret staging offline with synthetic keys
+        if: needs.pre-job.outputs.synology_changed == 'true'
+        run: scripts/ci/test-synology-break-glass.sh
 
       - name: Test inactive Photos collector offline in its pinned image
         if: needs.pre-job.outputs.synology_changed == 'true'
