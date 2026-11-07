@@ -7,9 +7,6 @@ kind: RecurringJob
 metadata:
   name: backup-daily
   namespace: longhorn-system
-  annotations:
-    # Temporary guard while this moves to the longhorn-config Kustomization.
-    kustomize.toolkit.fluxcd.io/prune: disabled
 spec:
   cron: "0 7 * * *"        # 03:00 America/New_York EDT (02:00 EST)
   task: backup
@@ -26,9 +23,6 @@ kind: RecurringJob
 metadata:
   name: backup-weekly
   namespace: longhorn-system
-  annotations:
-    # Temporary guard while this moves to the longhorn-config Kustomization.
-    kustomize.toolkit.fluxcd.io/prune: disabled
 spec:
   cron: "0 8 * * 0"        # 04:00 Sunday America/New_York EDT (03:00 EST)
   task: backup

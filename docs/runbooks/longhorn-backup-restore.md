@@ -33,7 +33,7 @@ If any of those gaps grow load-bearing, layer Velero on top — the BackupTarget
 
 ## Schedule and retention
 
-Defined in `kubernetes/apps/longhorn-system/longhorn/app/recurringjobs.yaml`:
+Defined in `kubernetes/apps/longhorn-system/longhorn-config/app/recurringjobs.yaml`:
 
 Cron is evaluated in UTC, so the America/New_York wall time shifts an hour across daylight saving:
 
@@ -255,7 +255,7 @@ Check for content you know was there before the backup, not just that the filesy
 
 Use this when all three nodes are lost or wiped and the NAS backup share is intact. It rebuilds Talos and Flux from this repository, then restores volume data from the Longhorn backups.
 
-**If the NAS is also lost,** the Longhorn backup store has an off-site copy in Backblaze B2, taken daily at 10:00 UTC. Restore it first by following [Off-site backup from Athena](../../synology/offsite-backup/README.md#restore), and serve the directory that contains `backupstore/` over NFS. In the step 4 commit, also change `backupTargetURL` in `kubernetes/apps/longhorn-system/longhorn/app/backuptarget.yaml` to that NFS URL, so the Flux-managed `default` target points at the restored store. Do not add it as a second target. Serving the restored store over NFS and restoring through a repointed `default` target are both **undrilled**. What was **drilled**, on 2026-10-05 ([restore drill](../../synology/offsite-backup/README.md#restore-drill-2026-10-05)): restoring one Kanidm volume's backups from B2 with Kopia, serving them over S3 from a throwaway versitygw pod, and rebuilding the volume as a disk image with the engine's `restore-to-file` command, outside Longhorn's control plane. A full restore of the store is **undrilled**. The media and manuals shares are not in the off-site copy and are gone with the NAS.
+**If the NAS is also lost,** the Longhorn backup store has an off-site copy in Backblaze B2, taken daily at 10:00 UTC. Restore it first by following [Off-site backup from Athena](../../synology/offsite-backup/README.md#restore), and serve the directory that contains `backupstore/` over NFS. In the step 4 commit, also change `backupTargetURL` in `kubernetes/apps/longhorn-system/longhorn-config/app/backuptarget.yaml` to that NFS URL, so the Flux-managed `default` target points at the restored store. Do not add it as a second target. Serving the restored store over NFS and restoring through a repointed `default` target are both **undrilled**. What was **drilled**, on 2026-10-05 ([restore drill](../../synology/offsite-backup/README.md#restore-drill-2026-10-05)): restoring one Kanidm volume's backups from B2 with Kopia, serving them over S3 from a throwaway versitygw pod, and rebuilding the volume as a disk image with the engine's `restore-to-file` command, outside Longhorn's control plane. A full restore of the store is **undrilled**. The media and manuals shares are not in the off-site copy and are gone with the NAS.
 
 ### What has been exercised
 
@@ -312,7 +312,7 @@ Run every command from the repository root.
    kubectl -n longhorn-system get backuptargets.longhorn.io default
    ```
 
-   Continue when the `longhorn` Kustomization is Ready and the BackupTarget shows `AVAILABLE true`. Flux has by now started every application except the two held in step 4 on a new, empty volume. That is expected; step 8 replaces those volumes.
+   Continue when the `longhorn` and `longhorn-config` Kustomizations are Ready and the BackupTarget shows `AVAILABLE true`. `longhorn-config` applies the BackupTarget and RecurringJobs only after the HelmRelease has installed Longhorn's CRDs. Flux has by now started every application except the two held in step 4 on a new, empty volume. That is expected; step 8 replaces those volumes.
 7. **Stage the paired applications**, one at a time, before releasing them. *Undrilled*, including CloudNativePG recovery to a `targetTime` taken from a Longhorn backup.
    1. **Choose the restore points.** For each of `printing/bambuddy`, `iot/visionect` and `iot/visionect-logs`, find the backup to restore as in [Restore one claim](#restore-one-claim) step 1. Take Visionect's two claims from the same night. Record each backup's name, URL and `snapshotCreatedAt`, the moment its data was captured; `backupCreatedAt` is when the upload finished, which can be minutes later:
 
