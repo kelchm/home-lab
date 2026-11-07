@@ -19,7 +19,7 @@ spec:
           app:
             image:
               repository: ghcr.io/usetrmnl/larapaper
-              tag: 0.45.1@sha256:cde6a1f47f181260a0dc0d5d0c5fa3ad9cad2a225cb5cd242d5c369afba34785
+              tag: 0.46.0@sha256:98d14dcf52531e92a5c27bc1f4cfdc57bf5e04d41fc3759b0fb8d21d9834d739
             env:
               TZ: America/New_York
               APP_URL: https://larapaper.home.kelch.io
@@ -30,7 +30,6 @@ spec:
               PHP_OPCACHE_ENABLE: '1'
               DB_CONNECTION: sqlite
               DB_DATABASE: /var/www/html/database/storage/database.sqlite
-              REGISTRATION_ENABLED: '1'
               LOG_CHANNEL: stderr
               LOG_LEVEL: warning
             envFrom:
