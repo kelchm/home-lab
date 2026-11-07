@@ -61,7 +61,7 @@ jobs:
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
         with:
           # renovate: datasource=github-releases depName=docker/buildx
-          version: v0.38.1
+          version: v0.38.2
           driver-opts: image=moby/buildkit:v0.34.1@sha256:99368f3e46177c6405b9740e4461d91cee004128daeecca78d4ceac50ec1da5c
       - name: Build once on native amd64 without registry credentials
         id: build
@@ -112,7 +112,7 @@ jobs:
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
         with:
           # renovate: datasource=github-releases depName=docker/buildx
-          version: v0.38.1
+          version: v0.38.2
           driver-opts: image=moby/buildkit:v0.34.1@sha256:99368f3e46177c6405b9740e4461d91cee004128daeecca78d4ceac50ec1da5c
       - name: Set immutable build identity
         id: identity
