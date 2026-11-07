@@ -155,6 +155,87 @@ To roll back, stop it with its own recipe and launch the profile that served bef
 - **Admission:** requests past the four streams queue without limit, because `TF_GLM_MAX_QUEUED` is empty.
 - **Access and memory:** the endpoint has no API key, and no memory watchdog runs ([#944](https://github.com/kelchm/home-lab/issues/944)).
 
+## GLM-5.3-Flash native candidate from Mia's 1104 kit
+
+### Candidate profile
+
+[`glm53-exl3-tp2-mia-1104-agent-1m`](mia-tensorfold-glm53-exl3-tp2/glm53-exl3-tp2-mia-1104-agent-1m.yaml) is a candidate for the same endpoint and served name. It has not run on the Sparks. It uses [Mia's 1104 kit](https://github.com/MiaAI-Lab/GLM-5.3-Flash-DGX-Sparks-1104/tree/138123c6f7f7ad6563382fec7b7af8d7e8825ebe) at `138123c6`, the native Zig/CUDA engine at `f350cd3e` (1.1.9), and all 106 engine patches, including warm turns (`0104`) and the tool-parser fixes (`0103`, `0105`). This does not switch the running Python durable profile or qualify its replacement.
+
+New date-based kit profiles use Mia’s published `MMDD` reference (`1104` here), followed by the local behavior and window: `glm53-exl3-tp2-mia-1104-agent-1m`. The reference follows Mia’s recipe name; the lock’s `kit_date` retains the full publication date (`20261104`). The versioned mod is `mia-tensorfold-glm53-1104`; its lock retains the full kit/engine commits, patch digest, build inputs and image config digest. Another kit revision with the same reference gets a distinct revision suffix on its profile/mod rather than replacing a retained bundle. Existing profile names and SparkRun instance identities stay as they are for rollback.
+
+| Setting | Running Python durable profile | Mia 1104 | This native candidate |
+| --- | --- | --- | --- |
+| Engine | Python 0.6.0 plus 123 patches | Native Zig/CUDA 1.1.9 plus 106 patches | Full pinned 1104 stack |
+| Weights and drafter | EXL3 4 bpw and DFlash2 at `078455ff` / `bf582e4e` | Same model tensor bytes at `76c0b517`, same drafter | Reuse the current immutable snapshots; no new compression of the downloaded checkpoint |
+| Dense / output head | Selected dense projections q4; output head FP8 | q8 dense; checked-in head BF16, measured head q8 | q8 dense and q8 head (`*_BITS=8`); this is integer weight storage, separate from the FP8 KV format |
+| KV | Shared FP8 pool, 2,582,528 tokens observed | Shared FP8 pages, 512 tokens per page; 2,098,176 tokens measured at 8 streams / 9.5 GiB reserve | Shared FP8 pages; require at least 1,179,648 tokens and a nonzero device prompt cache at startup |
+| Streams / window / replies | 4 / 1,048,576 / 32,768 | 4 by default, 8 measured; window auto-fit up to 1,048,576 | 4 / fixed 1,048,576 / 32,768; no silent window reduction |
+| Thinking / clearing | On / keep reasoning | Off / clear reasoning by default | On / `TF_GLM_CLEAR_THINKING=0`; preserve reasoning clients return |
+| Reserve / scheduling | 14.5 GiB reserve, Python prefill policy | 12 GiB default reserve, 9.5 measured; 4,096-row prompt chunks, prefill share 0.68 | Start at 12 GiB and share 0.68; pool/cache receipt and host headroom must pass before promotion |
+| Prompt storage | Device cache plus 64 GiB NVMe spill per rank | Device cache; pinned-host tier off by default | Device cache only, `TF_GLM_HOST_CACHE_GIB=0`; no NVMe spill or reuse of the Python spill directory |
+| Vision | 50 images, 102,400 image tokens per request | 50 images, native default of 4,096 image tokens per request | Explicit 4,096-token budget initially; image-history behavior is an adoption blocker until evaluated |
+| Memory guard | None | Launcher samples both hosts, then runs its own stop script | Each rank's SparkRun entrypoint counts MemAvailable plus free per-CPU pages above their resting level, capped at MemTotal; stops only its child process group below 2.5 GiB for 4 s, and escalates after 10 s; TP peer loss ends the other rank |
+
+The unchanged EXL3 shards are repacked by a different runtime. q8 dense/head can use more resident memory than the running Python choices; they do not change the expert checkpoint's 4 bpw. The newer Hugging Face revision changes documentation/license files; all 83 shard payloads and model/tokenizer/template files match the snapshot we already have.
+
+`TF_GLM_CLEAR_THINKING=0` follows [Z.ai’s preserved-thinking guidance for agent use](https://docs.z.ai/guides/capabilities/thinking-mode). Warm turns precompute a reusable prefix after a reply when the engine is quiet; under load they yield or are dropped. They do not establish that clearing reasoning improves agent quality. The native server does not restore reasoning that a client omits as the Python mod does: pi/Hermes must replay it. OpenAI/Responses request overrides exist; the Anthropic route validates but ignores `context_management`'s keep-all edit. The global keep policy avoids clearing in image-tool loops that inject a user message. Long-session reasoning loops, `--loop-guard`, and any thinking budget still need workload evaluation; neither guard nor a global thinking budget is enabled here.
+
+### Inputs outside SparkRun
+
+The [dated mod](mods/mia-tensorfold-glm53-1104/) builds a local ARM64 image, never a mutable upstream tag. SparkRun distributes that image and the two pinned Hugging Face snapshots. Both snapshots are already present for the running profile. The mod carries Mia's unchanged vision template and its upstream notices. Python spill snapshots are not portable to this native engine; keeping `TF_GLM_HOST_CACHE_GIB=0` does not provide persistence or disk spill. Restoring durable caching is required before this profile can replace the Python durable profile under the no-regression objective in [#1280](https://github.com/kelchm/home-lab/issues/1280).
+
+### Build
+
+Build only on the workstation's Colima `tf-build` profile. The helper fixes that Docker context, checks the frozen mod, verifies the kit's exact patch count/digest and template, and builds the pinned engine for the Spark CPU and sm_121. The Dockerfile adapts Mia's native image with digest-pinned CUDA 13.3.1 ARM64 bases and Python for SparkRun mods; xgrammar and JPEG/WebP sources retain Mia's checked pins. The target binaries are not executed on the Mac's CPU.
+
+```sh
+bash sparks/inference/sparkrun/mods/mia-tensorfold-glm53-1104/build/build.sh
+```
+
+A normal rebuild exports the candidate's immutable daemon ID, compares its config digest with the lock, and changes the locked local tag only on a match. A mismatch retains a uniquely named candidate and leaves the locked tag alone. `--candidate` deliberately builds and retains an artifact without tagging or editing any lock, for a new version's review. Review and record that artifact's config digest in the new lock and owning recipe, and tag its inspected immutable daemon ID using the lock's `image` name. Do not rewrite a retained qualified bundle to accept drift. APT dependencies can change on rebuild even with immutable base images.
+
+The November 4 workstation build produced ARM64 image config `9f8a5221…` (about 2.0 GiB), with all 106 patches recorded in `BUILD-INFO`. The build, frozen-file checks, lock validation and 230 local tests passed (five platform-specific skips). Python and the pinned JPEG/WebP libraries load off-host. The Spark CPU binary has compiled but has not been run on a Spark; these checks do not establish GPU behavior.
+
+### Launch, stop and roll back
+
+The native TP watch line uses SparkRun's `MASTER_PORT` (25000 by default), and NCCL bootstrap uses `MASTER_PORT - 1` (24999). The watch line must listen first so SparkRun can start rank 1; NCCL opens only after rank 1 joins. SparkRun checks only the gate port for collisions, so check **both** ports on the head before launching (`ss -tln 'sport = :24999 or sport = :25000'` for the defaults); neither may have a listener.
+
+No candidate launch is authorized or performed by this change. An owner-approved idle window, the [before-launch checks](#before-a-launch), and full-size pings on both CX7 rails are required. The scoped memory guard is part of the new rank entrypoint; the existing full-size rail check remains a manual gate. Neither Mia's `start.sh` nor `stop.sh` runs under SparkRun, and this does not install a host-wide guard or complete [#944](https://github.com/kelchm/home-lab/issues/944).
+
+After syncing the recipes/mods, validate the staged tree on the head while the current service is still running:
+
+```sh
+cd ~/sparkrun/recipes/glm53 &&
+  python3 validate_locks.py
+```
+
+Resolve every validation failure before stopping the current service. A sync can leave retired recipes behind, so validating only the workstation checkout is insufficient. After this validation and the before-launch checks pass, stop the current **durable** instance using its own [flush and stop procedure](#launch-stop-and-roll-back). Load the local image on the head only after both GPUs are idle; SparkRun copies it to the worker. From the workstation:
+
+```sh
+DOCKER_CONTEXT=colima-tf-build docker save glm53-tf:1104-138123c-9233337d9b14 | ssh kelchm@10.32.21.31 docker load
+```
+
+From `~/sparkrun/recipes/glm53` on the head:
+
+```sh
+candidate="$PWD/mia-tensorfold-glm53-exl3-tp2/glm53-exl3-tp2-mia-1104-agent-1m.yaml"
+python3 validate_locks.py &&
+  sparkrun run "$candidate" --cluster sparks --dry-run &&
+  sparkrun run "$candidate" --cluster sparks --no-follow
+```
+
+The capacity hook reads the engine's startup pool and agreed per-rank cache receipts before the shared readiness hook checks strict native health, discovery, four concurrent replies, a tool call and effort renders. Missing receipts, a pool below 1,179,648 tokens (four 262,144-token prompts plus four reply budgets), or a zero device prompt cache fail the launch command. That pool floor is not four simultaneous 1M windows. The native health route lacks those capacity fields, so passing HTTP health alone is insufficient. A failed capacity/readiness hook still needs an explicit stop: `sparkrun stop "$candidate" --cluster sparks`. After a successful launch, leave the candidate running for the approved qualification checks; stop it explicitly when those checks finish.
+
+Roll back with the retained inputs for `glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable-readiness-v2.yaml` and the selected SparkRun 0.4.2 controller, following [Launch, stop and roll back](#launch-stop-and-roll-back). The native candidate never opens the Python spill directory. The current Python profile's bounded disk restoration was verified on November 6 with 19,200 loaded/cached tokens; native recovery remains unqualified.
+
+### Qualification still required
+
+Track the evaluation and adoption decisions in [#1280](https://github.com/kelchm/home-lab/issues/1280), a child of #938. The next step is off-host implementation of the no-regression qualification contract, memory accounting, API/media parity and durable native checkpoints. Hardware qualification follows only after those prerequisites are met and an owner-approved idle window and recovery procedure are agreed.
+
+Before promoting this profile, record the build/image identity and driver compatibility on the Sparks; confirm the full 1M window, four streams, both RoCE rails, pool/cache sizes and memory floor on **both** ranks. Verify the scoped guard and TP peer-stop behavior without inducing host memory exhaustion. Its local supervisor tests do not establish recovery on real Sparks or solve the wider freeze-recovery question in #944.
+
+Run the [shared validation](#validate), agent and interrupted-tool probes, OpenAI and Anthropic tool turns, reasoning replay, warm-prefix cache accounting, and a long pi/Hermes session with images. Compare against today's durable profile on fixed prompts. Preserve the production policy of 50 image occurrences at a fixed 2,048-token cap per image and a 102,400-token request ceiling, plus the existing video capability. The candidate's 4,096-token total budget is a blocker, not an adoption concession; increasing the total alone does not make earlier image grids stable. Measure TTFT/decode fairness under simultaneous prefill, context growth with kept reasoning and long-session looping. Require bounded native NVMe checkpoint save/restore, including images and DFlash2 state, before adoption. Preserve at least the production profile's observed 2,582,528-token aggregate live capacity; this candidate's smaller startup smoke floor does not satisfy that requirement. Eight streams, a smaller reserve, loop guards and thinking budgets are later tuning choices, not established benefits of this candidate.
+
 ## Qwen3.8-Flash-Next on Mia's Zig-engine kits
 
 Qwen has two profiles, one across both Sparks and one on the head alone. Each part below describes the two-Spark profile first.
@@ -889,7 +970,7 @@ Review the base and upstream releases with the other coupled inputs at the next 
 
 The same next-profile-refresh trigger applies to the kit, engine, weights, toolchain and patches recorded across the applicable lock, recipe and build files: review upstream changes as a coupled set. CI runs each frozen `prepare.py --check`, the shared [`validate_locks.py`](validate_locks.py) through the pytest collection, and the existing recipe/runtime contracts. Run the shared validator alone with `uv run --no-project --python 3.12 --with-requirements requirements-test.txt python validate_locks.py` from this directory; `--root` accepts a temporary source tree. It does not rewrite manifests, checksums or snapshot files.
 
-The validator supports the current GLM, one-Spark Qwen, two-Spark Qwen, DeepSeek and dependency-free shared readiness lock shapes. Recipes are discovered recursively as `.yaml` and `.yml`, excluding the top-level `benchmarks`, `mods`, `tests` and `plugins` trees. Unknown fields/shapes, missing required dependency fields, new mods without locks and locks without owning recipes fail explicitly. Structured pins require full nonzero source revisions and hashes, digest-pinned image/base references, and exact `name==version` Python package specifications where declared. The published kits' `upstream_patch_hash` is a 12-digit identifier; DeepSeek's Engram `config.json` uses a 40-digit Git blob name and its LFS shards use 64 digits. Historical patch-source descriptions and branch fetch hints remain text, not invented full commit pins. DeepSeek's literal Dockerfile base is checked alongside the lock-supplied Qwen bases; this is a check of the supported `FROM` forms, not a general Dockerfile dependency audit.
+The validator supports the current Python GLM, dated native GLM, one-Spark Qwen, two-Spark Qwen, DeepSeek and dependency-free shared readiness lock shapes. Recipes are discovered recursively as `.yaml` and `.yml`, excluding the top-level `benchmarks`, `mods`, `tests` and `plugins` trees. Unknown fields/shapes, missing required dependency fields, new mods without locks and locks without owning recipes fail explicitly. Structured pins require full nonzero source revisions and hashes, digest-pinned image/base references, and exact `name==version` Python package specifications where declared. The published kits' `upstream_patch_hash` is a 12-digit identifier; DeepSeek's Engram `config.json` uses a 40-digit Git blob name and its LFS shards use 64 digits. Historical patch-source descriptions and branch fetch hints remain text, not invented full commit pins. DeepSeek's literal Dockerfile base is checked alongside the lock-supplied Qwen bases; this is a check of the supported `FROM` forms, not a general Dockerfile dependency audit.
 
 Owning recipes must agree with their lock's image, source/patch metadata, weights and launcher variables where recorded. The validator also checks recipe source revisions and distribution entries, drafter metadata, and agreement between the readiness hook's model/window and the recipe. Existing profile tests already caught several of those contradictions; the shared layer adds pin/schema rejection and applies these relationships across discovered manifests. [`tests/test_lock_validation.py`](tests/test_lock_validation.py) demonstrates manifest edits that still pass the snapshot's checksum checker but fail semantics, including the mutable Qwen base, unpinned packages, zero revisions, GLM metadata, and DeepSeek source/bias metadata.
 

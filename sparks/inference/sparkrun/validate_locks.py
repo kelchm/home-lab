@@ -21,6 +21,7 @@ KIT = "kit_repository kit_revision"
 QWEN = "engine_branch weights server_patches build"
 SHAPES = {
     "glm": f"{COMMON} {KIT} engine_version upstream_patch_count upstream_patch_hash launcher_env installed_files",
+    "glm-native": f"{COMMON} {KIT} kit_date kit_patch_count kit_patches_sha256 weights drafter build",
     "qwen-tp1": f"{COMMON} {KIT} {QWEN} kit_patch_count kit_patches_sha256",
     "qwen-tp2": f"{COMMON} {KIT} {QWEN} upstream_patch_count upstream_patch_hash site_patches binary_sha256",
     "deepseek": f"{COMMON} engine_branch inputs_branch inputs_revision patches kit engram",
@@ -114,27 +115,30 @@ def validate_dockerfile(mod, lock):
     dockerfile = mod / "build/Dockerfile"
     if not dockerfile.exists():
         return
-    bases = []
+    bases, stages = [], set()
     for line in dockerfile.read_text().splitlines():
         tokens = line.split()
         if tokens and tokens[0].upper() == "FROM":
             require(len(tokens) == 2 or (len(tokens) == 4 and tokens[2].upper() == "AS"), "build/Dockerfile", "unsupported FROM shape")
             base = tokens[1]
-            if base == "scratch":
-                continue
-            if base == "${BASE_IMAGE}":
-                require("build" in lock, "build/Dockerfile", "BASE_IMAGE requires a declared build.base_image")
-                base = lock["build"]["base_image"]
-            image(base, "build/Dockerfile FROM")
-            bases.append(base)
+            if base not in stages and base != "scratch":
+                if base in ("${BASE_IMAGE}", "${RUNTIME_IMAGE}"):
+                    key = "runtime_image" if base == "${RUNTIME_IMAGE}" else "base_image"
+                    require("build" in lock and key in lock["build"], "build/Dockerfile", f"{base} requires build.{key}")
+                    base = lock["build"][key]
+                image(base, "build/Dockerfile FROM")
+                bases.append(base)
+            if len(tokens) == 4:
+                stages.add(tokens[3])
         elif tokens and tokens[0].upper() == "ARG" and len(tokens) > 1:
-            if tokens[1].split("=", 1)[0] == "BASE_IMAGE":
-                equal(tokens[1:], ["BASE_IMAGE"], "build/Dockerfile BASE_IMAGE (lock supplied, no override)")
+            if tokens[1].split("=", 1)[0] in ("BASE_IMAGE", "RUNTIME_IMAGE"):
+                equal(tokens[1:], [tokens[1].split("=", 1)[0]], "build/Dockerfile base (lock supplied, no override)")
             elif tokens[1].startswith("ZIG_SHA256="):
                 hash_value(tokens[1].split("=", 1)[1], 64, "build/Dockerfile ZIG_SHA256")
     require(bool(bases), "build/Dockerfile", "missing immutable FROM base")
     if "build" in lock:
-        require(all(base == lock["build"]["base_image"] for base in bases), "build/Dockerfile", "FROM base disagrees with build.base_image")
+        allowed = {lock["build"][key] for key in ("base_image", "runtime_image") if key in lock["build"]}
+        require(set(bases) == allowed, "build/Dockerfile", "FROM bases disagree with build image pins")
 
 
 READINESS_MODS = frozenset({"tensorfold-readiness", "tensorfold-readiness-v2"})
@@ -144,6 +148,8 @@ def shape(lock, mod):
     require(isinstance(lock, dict), "lock", "expected an object")
     if mod.name in READINESS_MODS:
         kind = "readiness"
+    elif "kit_date" in lock:
+        kind = "glm-native"
     elif set(lock) & {"launcher_env", "installed_files", "engine_version"}:
         kind = "glm"
     elif set(lock) & {"kit", "engram", "inputs_revision", "inputs_branch"}:
@@ -184,7 +190,22 @@ def validate_lock(lock, mod):
         hash_value(lock["upstream_patch_hash"], 12, "upstream_patch_hash")
     else:
         pattern(lock["image"], rf"{IMAGE_NAME}:{TAG}", "image", "expected a named local image tag paired with image_id")
-    if kind == "glm":
+    if kind == "glm-native":
+        pattern(lock["kit_date"], r"[0-9]{8}", "kit_date", "expected YYYYMMDD recipe date")
+        positive(lock["kit_patch_count"], "kit_patch_count")
+        hash_value(lock["kit_patches_sha256"], 64, "kit_patches_sha256")
+        source(lock["weights"], "weights")
+        source(lock["drafter"], "drafter")
+        build = lock["build"]
+        fields(build, "base_image runtime_image zig_version zig_sha256 zig_cpu", "build")
+        for key in ("base_image", "runtime_image"):
+            image(build[key], f"build.{key}")
+        hash_value(build["zig_sha256"], 64, "build.zig_sha256")
+        pattern(build["zig_version"], r"[0-9]+\.[0-9]+\.[0-9]+", "build.zig_version", "expected a release version")
+        text(build["zig_cpu"], "build.zig_cpu")
+        pattern(lock["image"].rsplit(":", 1)[1], rf"{lock['kit_date'][4:]}-{lock['kit_revision'][:7]}-{lock['kit_patches_sha256'][:12]}",
+                "image", "tag must agree with recipe date, kit revision and patch identifier")
+    elif kind == "glm":
         pattern(lock["engine_version"], r"[0-9]+\.[0-9]+\.[0-9]+", "engine_version", "expected a release version")
         env = lock["launcher_env"]
         fields(env, GLM_LAUNCHER, "launcher_env")
@@ -298,13 +319,17 @@ def validate_recipe(recipe, path, locks):
     metadata, defaults = recipe.get("metadata"), recipe.get("defaults")
     require(isinstance(metadata, dict) and isinstance(defaults, dict), "recipe", "metadata and defaults are required")
     equal(metadata.get("profile"), path.stem, "metadata.profile")
-    expected_image = lock["image_id"] if kind in ("qwen-tp1", "deepseek") else lock["image"]
+    expected_image = lock["image_id"] if kind in ("glm-native", "qwen-tp1", "deepseek") else lock["image"]
     equal(recipe.get("container"), expected_image, "container")
     for key in ("engine_revision", "kit_revision", "upstream_patch_count", "upstream_patch_hash"):
         if key in lock:
             equal(metadata.get(key), lock[key], f"metadata.{key}")
-    if kind == "qwen-tp1":
+    if kind in ("qwen-tp1", "glm-native"):
         equal(metadata.get("upstream_patch_count"), lock["kit_patch_count"], "metadata.upstream_patch_count")
+    if kind == "glm-native":
+        equal(metadata.get("kit_date"), lock["kit_date"], "metadata.kit_date")
+        equal({"repository": recipe.get("model"), "revision": recipe.get("model_revision")}, lock["weights"], "model/weights")
+        equal({"repository": defaults.get("drafter"), "revision": defaults.get("drafter_revision")}, lock["drafter"], "drafter")
     if kind.startswith("qwen"):
         equal(metadata.get("server_patch_count"), len(lock["server_patches"]) + len(lock.get("site_patches", [])), "metadata.server_patch_count")
         equal({"repository": recipe.get("model"), "revision": recipe.get("model_revision")}, lock["weights"], "model/weights")
