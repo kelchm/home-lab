@@ -257,11 +257,7 @@ Validate (each step gates the next):
 4. **Denied-VLAN blocking** — from VLAN 90 (IoT) / VLAN 99 (Guest):
    `curl --max-time 2 http://10.32.130.99/` should fail (timeout / refused).
    Requires the rules in "Firewall rules" above to be applied first.
-5. **Failover** — `talosctl -n 10.32.30.11 reboot`. From VLAN 10, run a
-   continuous `curl` loop; at most one or two requests should fail before
-   ECMP reconverges on the remaining 2 next-hops.
-   `vtysh -c 'show ip route 10.32.130.99'` should show 2 next-hops during
-   the reboot and 3 again after it returns.
+5. **Failover** — reboot one node only through the [Talos rollout procedure](../../.agents/skills/talos-rollout/SKILL.md), which gates on etcd, storage and network health; never with a bare `talosctl reboot`. From VLAN 10, run a continuous `curl` loop. `vtysh -c 'show ip route 10.32.130.99'` should show 2 next-hops while the node is down and 3 again after it returns. With BGP graceful restart off (see `kubernetes/apps/kube-system/cilium-bgp/app/bgp.yaml`), the gateway should drop the node as soon as its session closes, or within the 9-second hold time if it dies first. Record failures on the way down and again when the node rejoins: Cilium can advertise a load-balancer IP before that node's datapath serves it, so the rejoin is not assumed clean. Neither is measured yet; with graceful restart on, a client hashed to the rebooting node lost 82–85 seconds ([#222](https://github.com/kelchm/home-lab/issues/222#issuecomment-6007919796)).
 
 Tear down only when all five pass:
 

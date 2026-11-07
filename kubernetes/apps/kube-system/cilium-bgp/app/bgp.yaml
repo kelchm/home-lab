@@ -20,8 +20,16 @@ spec:
             name: unifi-gateway
 ---
 # Per-peer config: timers match UniFi (3s keepalive / 9s hold), MD5 auth from
-# the bgp-md5 Secret, graceful restart so a node reboot doesn't immediately
-# withdraw routes from the other peers' learned RIB.
+# the bgp-md5 Secret.
+#
+# Graceful restart stays off. With it on, the gateway kept a rebooting node as
+# an ECMP next hop until the node came back (82-85s outages in #222), because
+# the LB Services use externalTrafficPolicy Cluster and every node advertises
+# them. Without it, a node that closes its session is withdrawn at once and a
+# node that dies within the 9s hold time. The cost: a cilium-agent restart
+# also withdraws that node until its session returns, which resets flows
+# hashed to it and briefly drops externalTrafficPolicy Local IPs whose only
+# endpoint is there.
 apiVersion: cilium.io/v2alpha1
 kind: CiliumBGPPeerConfig
 metadata:
@@ -33,8 +41,7 @@ spec:
     keepAliveTimeSeconds: 3
     connectRetryTimeSeconds: 5
   gracefulRestart:
-    enabled: true
-    restartTimeSeconds: 120
+    enabled: false
   families:
     - afi: ipv4
       safi: unicast
