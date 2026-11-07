@@ -16,7 +16,8 @@ This is an operator-led procedure. The scripts collect facts and enforce mechani
 - Use `task talos:upgrade-node IP=<node-ip>` for upgrades. It runs preflight for that node and stops if any gate fails, and pins `--reboot-mode=powercycle`; never use Talos's default kexec reboot path on these nodes.
 - Never force a drain. `--force` and `--disable-eviction` bypass Longhorn's drain policy for every workload on the node, not only the one blocking you.
 - Check etcd and Talos health after every node.
-- Require every in-use Longhorn volume attached and healthy, no volume degraded or faulted, and every instance-manager Running and Ready with `longhorn-system/storage-network`, interface `lhnet1`, and a `10.32.25.x` address before moving to the next node.
+- Require every in-use Longhorn volume attached and healthy, no volume degraded or faulted, and every instance-manager Running and Ready with `longhorn-system/storage-network`, interface `lhnet1`, and a `10.32.25.x` address before moving to the next node. A sandbox recreated without Multus keeps the previous sandbox's network-status annotation, so the gates also require the annotation's default network to name the current `status.podIP` and ask the pod itself whether `lhnet1` carries the annotated address.
+- Require every endpoint on the rolled node to enforce the Cilium policies that select it (#1348).
 - Stop after any failed check. Never continue merely because Kubernetes marks the rebooted node Ready.
 - Keep an out-of-band power path available, especially for `k8s-prod-1`.
 
@@ -43,7 +44,7 @@ Run preflight against the node you intend to roll first. The candidate argument 
 
 Preflight prints a one-line summary per check and expands raw output only for checks that fail. Set `VERBOSE=1` to see every table. It exits non-zero listing every failed check, so read the whole list rather than fixing the first line and re-running. A query it cannot run at all stops it on the spot with that command's error.
 
-It gates on: routes to every rollout destination, Talos reachable at each node, `talosctl health` passing across the three control-plane nodes, every node answering an etcd member query, all Kubernetes nodes Ready **and uncordoned**, Multus safeguards Ready, every in-use Longhorn volume attached and healthy, and all instance-managers Ready with `lhnet1`. It reports without judging: which interface carries your API and Talos paths, any idle Longhorn volume, every CloudNativePG cluster with its instance count and primary placement, every suspended Flux Kustomization, and every PodDisruptionBudget at zero allowed disruptions.
+It gates on: routes to every rollout destination, Talos reachable at each node, `talosctl health` passing across the three control-plane nodes, every node answering an etcd member query, all Kubernetes nodes Ready **and uncordoned**, Multus safeguards Ready, every in-use Longhorn volume attached and healthy, and all instance-managers Ready with `lhnet1` present in the pod at the address its network-status names. Given a candidate, it also records how many endpoints already fail to enforce their Cilium policy, for comparison after the roll. It reports without judging: which interface carries your API and Talos paths, any idle Longhorn volume, every CloudNativePG cluster with its instance count and primary placement, every suspended Flux Kustomization, and every PodDisruptionBudget at zero allowed disruptions.
 
 It also reads the `talosctl` client pin from `.mise.toml`, prints it alongside the desired target (`talos/talenv.yaml`) and each node's live version, and warns when any pair is more than one minor apart. The pin drives manual and `apply-node` commands; preflight's own queries select a matching client per node as described above. Talos upgrades only between adjacent minors, so a wider skew is an unsupported combination: settle it before go/no-go, but a warning does not by itself block the rollout. Unparsed versions make the comparison incomplete rather than confirming agreement.
 
@@ -98,6 +99,8 @@ For the selected node:
 
    The volume watcher reports unhealthy counts, the trend since it started, and which volumes changed state, with a full snapshot every two minutes rather than reprinting everything each poll. It also prints Longhorn's configured rebuild concurrency and replenishment interval so you can tell normal pacing from a stall.
 
+   Last, it runs `scripts/policy-enforcement.sh <node>`, which matches every endpoint against the policy entries its agent holds and flags any endpoint a default-deny policy selects that does not enforce that direction. Until Cilium 1.20.5, agents that restored endpoints at their last start keep identities whose cached policy enforces nothing ([#1348](https://github.com/kelchm/home-lab/issues/1348)). Every endpoint on the rebooted node was created after its agent started, so any failure there fails the gate. Elsewhere it fails only for an identity with more unenforced endpoints than preflight recorded before the drain, such as a pod drained onto a node whose agent holds that identity's stale policy. Either is new: stop and record it in #1348. Without a recorded count it fails on every unenforced endpoint. A `PENDING` endpoint is still regenerating; re-run the script before concluding.
+
 7. Re-run the candidate review for the next node — access path, database primaries, disruption budgets — then repeat the full preflight. Placement changed when the last node drained.
 
 ## Apply a configuration change
@@ -115,6 +118,14 @@ After all nodes have been rolled:
 ```
 
 Confirm every Talos server reports the target version, all three nodes are Ready and uncordoned, etcd is healthy, every in-use Longhorn volume is attached and healthy, and all instance-managers are Running and Ready with `lhnet1`.
+
+Then check policy enforcement on every node:
+
+```bash
+.agents/skills/talos-rollout/scripts/policy-enforcement.sh
+```
+
+Every pod has now been created after its node's agent started, so this is expected to pass, clearing the stale set #1348 lists. That is inferred, not yet observed: record the result in #1348 either way. Run the same command, with no node, after any cilium-agent restart.
 
 The rollout is not complete until every temporary change is reversed: database topologies restored with no leftover PVCs, Longhorn volumes, or inactive replication slots; and no Flux Kustomization left suspended. Preflight lists suspended Kustomizations for exactly this reason.
 

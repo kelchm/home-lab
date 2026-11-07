@@ -113,6 +113,7 @@ jobs:
               - '.renovaterc.json5'
               - '.shellcheckrc'
               - '**/*.sh'
+              - '.agents/skills/talos-rollout/scripts/*.jq'
               - 'scripts/healthchecks.py'
               - 'scripts/ci/test-healthchecks.py'
               - 'scripts/ci/check-renovate-problems.py'
@@ -601,6 +602,10 @@ jobs:
       - name: Validate mixed-version Talos client selection
         if: needs.pre-job.outputs.scripts_changed == 'true'
         run: .agents/skills/talos-rollout/scripts/test-node-client.sh
+
+      - name: Validate Talos rollout gates
+        if: needs.pre-job.outputs.scripts_changed == 'true'
+        run: .agents/skills/talos-rollout/scripts/test-gates.sh
 
       - name: Validate Kanidm ceiling sync
         if: needs.pre-job.outputs.scripts_changed == 'true'
