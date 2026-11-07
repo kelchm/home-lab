@@ -1,0 +1,107 @@
+{
+  "schema": "glm-video-warm-reuse/v1",
+  "patch_sha256": "891c6e0ae51aadd0601c2bca768f66b60a416379bbc544cab335ec87195ca83a",
+  "tests_real_library_passed": 34,
+  "skipped": 0,
+  "checks": [
+    {
+      "command": [
+        "/Users/kelchm/.cache/zig-0.17.0-macos/zig",
+        "build",
+        "test-native-video-prepare",
+        "test-native-bundle-contract",
+        "test-native-prepare-memory",
+        "test-native-media-errors",
+        "compile-glm-native-open",
+        "-Dcpu=apple_m1",
+        "-j3",
+        "--summary",
+        "all"
+      ],
+      "exit": 0,
+      "log": "host.log",
+      "sha256": "ac4c9de5b4a1e93cc5d2302d856f8b2b7051de46261ef10a08d1e672b2a6e881"
+    },
+    {
+      "command": [
+        "/Users/kelchm/.cache/zig-0.17.0-macos/zig",
+        "build",
+        "compile-followup-video",
+        "-j3",
+        "--summary",
+        "all"
+      ],
+      "exit": 0,
+      "log": "compile.log",
+      "sha256": "fbd765f9243daa1a99a33a17027fd90c514ae778da189cb3ee39e8e18f3fd88a"
+    },
+    {
+      "command": [
+        "docker",
+        "--context",
+        "colima-tf-build",
+        "run",
+        "--rm",
+        "--name",
+        "glm-video-prepare-6a6adcfdb8aa4eaea1f11daa041a0cbf",
+        "-i",
+        "--network",
+        "none",
+        "--entrypoint",
+        "bash",
+        "sha256:c9a61e94a37686ed30ca294b447d3ba8a942746012a2afc9892c4821db862148",
+        "-c",
+        "mkdir /probe && tar -xf - -C /probe && cd /probe && LD_LIBRARY_PATH=/probe ./video-prepare-real"
+      ],
+      "image": "sha256:c9a61e94a37686ed30ca294b447d3ba8a942746012a2afc9892c4821db862148",
+      "library_sha256": "d65657f8683696b23cabe7c97c2812f900ffba332f51dbc94dff0f8a204338b1",
+      "binary_sha256": "73c272a59c138402f6da1741c7176b15cb18077a8486788c6bdf41f8f93af396",
+      "exit": 0,
+      "log": "portable.log",
+      "sha256": "3eb76dbbb0395ecd305c3cf521b9054fb6c6c1826042f984fe23fed95674cd41"
+    }
+  ],
+  "input_source_unchanged": true,
+  "gpu_model_executed": false,
+  "negative_controls_completed": true,
+  "negative_controls": [
+    {
+      "name": "no-warm-reuse",
+      "compile": {
+        "command": [
+          "/Users/kelchm/.cache/zig-0.17.0-macos/zig",
+          "build",
+          "compile-followup-video",
+          "-j3",
+          "--summary",
+          "all"
+        ],
+        "exit": 0,
+        "log": "no-warm-reuse-compile.log",
+        "sha256": "f7c2dc5f658e245d5759fa0f7dc2942d087466d569434f79b6e6698a29008198"
+      },
+      "intended_test_failure": true,
+      "log": "/tmp/glm1104-video0940-reproduce/no-warm-reuse.log",
+      "log_sha256": "213a355a98fae9061264ad0556bd74f5ba584ec1669c494ee17cfcda89e1a715"
+    },
+    {
+      "name": "declared-tail-required",
+      "compile": {
+        "command": [
+          "/Users/kelchm/.cache/zig-0.17.0-macos/zig",
+          "build",
+          "compile-followup-video",
+          "-j3",
+          "--summary",
+          "all"
+        ],
+        "exit": 0,
+        "log": "declared-tail-required-compile.log",
+        "sha256": "eca49c0c928c93abd2c509c3072a83dd7479e970159d5b1ad10cfb5079133930"
+      },
+      "intended_test_failure": true,
+      "log": "/tmp/glm1104-video0940-reproduce/declared-tail-required.log",
+      "log_sha256": "d9b20b2dd2463660928e7fdac3a818a21bcc32f4f4f737998df9801ea2f24f10"
+    }
+  ]
+}

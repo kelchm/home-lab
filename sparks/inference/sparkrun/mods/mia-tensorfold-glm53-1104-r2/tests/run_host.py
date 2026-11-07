@@ -7,6 +7,7 @@ Docker daemon, model endpoint, package installation or network is used.
 """
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -99,6 +100,9 @@ def install_video_tests(scratch, mod=MOD):
         path = reference / relative
         path.parent.mkdir(parents=True)
         shutil.copy2(scratch / relative, path)
+        correction = mod / 'patches/0940-native-video-warm-reuse.patch'
+        if correction.is_file():
+            subprocess.run(['git', 'apply', '--reverse', '--include=' + relative, str(correction)], cwd=reference, check=True)
         patch = str(mod / 'patches/0750-native-video-single-pass.patch')
         subprocess.run(['git', 'apply', '--reverse', '--include=' + relative, patch], cwd=reference, check=True)
         expected = json.loads((here / 'source-manifest.json').read_text())['input_files'][relative]
@@ -119,6 +123,12 @@ def install_video_tests(scratch, mod=MOD):
                              r'\1    if (api.tfvideo.version() == null) return error.SkipZigTest;\n', content, flags=re.M)
         (server / target).write_text(content)
     shutil.copytree(here / 'fixtures', server / 'video-fixtures')
+    followup = mod / 'tests/video_followup/fixtures.py'
+    if followup.is_file():
+        spec = importlib.util.spec_from_file_location('video_followup_fixtures', followup)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        module.install(scratch)
     with (server / 'root.zig').open('a') as root:
         root.write('\ntest { _ = @import("video_prepare_core_test.zig"); _ = @import("video_prepare_http_test.zig"); }\n')
     with (scratch / 'zig/src/glm_media_cpu.zig').open('a') as media:
@@ -129,7 +139,7 @@ def install_video_tests(scratch, mod=MOD):
     content = build.read_text()
     needle = '    const server_json = @import("server.zig").addTo(b, server_tests, host, .debug);'
     addition = '''
-    b.step("test-native-video-prepare", "Single-pass video canvases, allocator bounds and independent eager parity").dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = server_tests, .filters = &.{"video prepare:"} })).step);
+    b.step("test-native-video-prepare", "Single-pass video canvases, allocator bounds and independent eager parity").dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = server_tests, .filters = &.{"video prepare:", "video followup:"} })).step);
 '''
     if content.count(needle) != 1:
         raise ValueError('The video host build graph changed')

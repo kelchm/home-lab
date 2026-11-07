@@ -4,22 +4,22 @@
   "kit_revision": "02dac3879852b8c5713318d3d64a5a791002e954",
   "engine_revision": "f350cd3ea253a042e205746928271f9d8f71a82d",
   "kit_patch_count": 108,
-  "site_patch_count": 15,
-  "site_patches_sha256": "0c49ea55217be66da4c7adbbf70d36caf66f69b43b9e4ffde7f14faa11be0ebf",
-  "image": "glm53-tf:1104-02dac38-f7680c9bcdf7-s0c49ea55217b",
-  "image_config_id": "sha256:4f667f7aec1ef64da66c51c060231039661943af2b9a4da59732a1ab3653f4d0",
-  "image_daemon_id": "sha256:c9a61e94a37686ed30ca294b447d3ba8a942746012a2afc9892c4821db862148",
+  "site_patch_count": 16,
+  "site_patches_sha256": "876391916c5ae9e149b0a0ede5f443ff320f2fd88f24c7030797250da9ad4390",
+  "image": "glm53-tf:1104-02dac38-f7680c9bcdf7-s876391916c5a",
+  "image_config_id": "sha256:b68b66b046dd16b98ceb206cafa46e17bb9fc9c83c997f68d47bbf1c2c782f76",
+  "image_daemon_id": "sha256:71466021be36647209839c005b37209498aa7e29056be496701116edd60490b7",
   "native_host": {
     "build_steps_passed": 338,
     "build_steps_total": 338,
-    "tests_passed": 4586,
-    "tests_skipped": 28,
+    "tests_passed": 4588,
+    "tests_skipped": 30,
     "exit_code": 0
   },
   "photo": {
     "macos_tests_passed": 29,
     "linux_tests_passed": 29,
-    "runtime_image": "sha256:c9a61e94a37686ed30ca294b447d3ba8a942746012a2afc9892c4821db862148",
+    "runtime_image": "sha256:71466021be36647209839c005b37209498aa7e29056be496701116edd60490b7",
     "complete_pixel_arrays": 49,
     "matched_refusals": 10,
     "skipped": 0
@@ -36,60 +36,74 @@
     "portable_zig_linked_library_sha256": "d65657f8683696b23cabe7c97c2812f900ffba332f51dbc94dff0f8a204338b1",
     "functional_gate_exit_code": 0,
     "pixel_parity_claimed": false,
-    "real_library_tests_passed": 32,
+    "real_library_tests_passed": 34,
     "skipped": 0,
-    "runtime_image": "sha256:c9a61e94a37686ed30ca294b447d3ba8a942746012a2afc9892c4821db862148",
+    "runtime_image": "sha256:71466021be36647209839c005b37209498aa7e29056be496701116edd60490b7",
     "native_eager_float_comparisons": 153058752,
     "native_eager_float_differences": 0,
     "long_fixture_groups": 33,
     "long_fixture_decode_calls": 1,
     "long_fixture_repeat_decoded_bytes": 0,
-    "gpu_pixel_model_quality_qualified": false
+    "gpu_pixel_model_quality_qualified": false,
+    "warm_decode_calls": 0,
+    "trimmed_edit_list_sampled_frames": 12
   },
   "evidence": {
     "native_host": {
-      "local_path": "/tmp/glm1104-video15-host-gate.log",
-      "sha256": "f58dece493640f914d588fc8af5cad62629131c8be2278400185e0f644fbdfd4"
+      "local_path": "/tmp/glm1104-video16b-host-gate.log",
+      "sha256": "16acd99cb5672f4147f7264fd2216a96227f21702b70418ef086c39c71fa5694"
     },
     "image_build": {
-      "local_path": "/tmp/glm1104-video15-image-build.log",
-      "sha256": "e67aafdb82edb74facdef823739bbb4e52174a5db859d45ee343797a04334788"
+      "local_path": "/tmp/glm1104-video16b-image-build.log",
+      "sha256": "1aa30735a3a27e5478c7c8d275179976aa216d930162f6cbc09653efdc4792df"
     },
     "photo": {
-      "local_path": "/tmp/glm1104-video15-photo.log",
-      "sha256": "abeccdc806416e2aa2482888f3db638ca4a17a387f61c43ff902622332e7ef85"
+      "local_path": "/tmp/glm1104-video16-photo.log",
+      "sha256": "a8a077911b33076a3e9cafbc3bcc2039de10fcefca8d6ccca9a258cd13091152"
+    },
+    "photo_receipt": {
+      "local_path": "/tmp/glm1104-video16-photo-receipt.json",
+      "sha256": "d99d610b249b43592f8f0993b63d762db7edba042be30ae3d71eebca7daad6cd"
     },
     "video": {
-      "local_path": "/tmp/glm1104-video15-portable-gate/portable-final.log",
-      "sha256": "0f7bd3c950af9461a769d269526af3a6062a342e638b3a9b9b55eb4578b8563a"
+      "local_path": "/tmp/glm1104-video16-portable-gate/portable.log",
+      "sha256": "4caa6994f40d5eadfa7e1db42736fa675f5b5e690ce113cf823481b52343a601"
     },
     "video_receipt": {
-      "local_path": "/tmp/glm1104-video15-portable-gate/receipt-final.json",
-      "sha256": "cc7c6c86b8e4caa49793895f06cad064b6d82687bc9e4f86ee9a17dfa3de1e50"
+      "local_path": "/tmp/glm1104-video16-portable-gate/receipt.json",
+      "sha256": "8af813f62cb4a1c1b6d204166e198fe0bd721bdac268981c309e952976f3020c"
     },
     "video_compile": {
-      "local_path": "/tmp/glm1104-video15-portable-gate/compile.log",
+      "local_path": "/tmp/glm1104-video16-portable-gate/compile.log",
       "sha256": "9ad938d5b07aec988af160d87087e234f0d557dab4b2c1cfd19e24ef75faadcb"
     },
     "image_build_info": {
-      "local_path": "/Users/kelchm/.cache/glm1104-video-probe/candidate-15/BUILD-INFO",
-      "sha256": "76a029d1d1fd2182eabee53fc6018d2ca61bf2271399f3487589875baea85438"
+      "local_path": "/Users/kelchm/.cache/glm1104-video-probe/candidate-16/BUILD-INFO",
+      "sha256": "b0974eca4d37c4ce62c3f6dfafa91557974a86c4ee5ec74907003e3d104441cb"
     },
     "ffmpeg_build_info": {
-      "local_path": "/Users/kelchm/.cache/glm1104-video-probe/candidate-15/FFMPEG-BUILD-INFO",
+      "local_path": "/Users/kelchm/.cache/glm1104-video-probe/candidate-16/FFMPEG-BUILD-INFO",
       "sha256": "0b3025e36e0d69d0f5ea251bdf6f67e82b04755b69a6526e991269bdf79a4b9e"
     },
     "image_source_verification": {
-      "local_path": "/Users/kelchm/.cache/glm1104-video-probe/candidate-15/verification.json",
-      "sha256": "e693d2f9fa1d7cd4bb525c72e8ce3b19ce9613b36db38812bdd96f27ed5a831a"
+      "local_path": "/Users/kelchm/.cache/glm1104-video-probe/candidate-16/verification.json",
+      "sha256": "6fb7502afa0721d06a8f6c3ce040a49ba277c7992e6b20218cba87fe4e3f456a"
+    },
+    "video_followup": {
+      "local_path": "/tmp/glm1104-video0940-reproduce/receipt.json",
+      "sha256": "9e012bdf94221a075ad2eb4f4bdc3b5de71b6b5bd0b92ff38a3a3c26843ce759"
+    },
+    "sdk_compatibility": {
+      "local_path": "/tmp/glm1104-final16-sdk-compatibility.json",
+      "sha256": "7697e60f5e16039b6fdaed2ed785039295a459292ae08ea68cd2c0c93749d9fe"
     },
     "repository_tests": {
-      "local_path": "/tmp/glm1104-candidate15-repository-pinned-tests.log",
-      "sha256": "d2c14c211390d502a874452b1fcd55e0c3d226a03d1325b76f1ab79c2f3b7066"
+      "local_path": "/tmp/glm1104-final16-repository-tests.log",
+      "sha256": "d3e1224eb47f2974ca13c32880195dfd66aeeb6216fd5f02a5d9d3c5fb7aa4a0"
     },
     "markdown_links": {
-      "local_path": "/tmp/glm1104-candidate15-markdown-links.log",
-      "sha256": "b2cd3631d430c7eff366a51ddcffb9468b673f7d99baf55b4fb7ef383bbc3874"
+      "local_path": "/tmp/glm1104-final16-markdown-links.log",
+      "sha256": "358aa7211269820a48a67381d2a17a8a92aa58ecaee7a6dd2acb26d9408457d0"
     }
   },
   "sparks_accessed": false,
@@ -97,12 +111,12 @@
   "server_durable_storage_enabled": false,
   "production_qualified": false,
   "repository_tests": {
-    "passed": 312,
+    "passed": 363,
     "skipped": 5,
-    "subtests_passed": 57,
+    "subtests_passed": 59,
     "exit_code": 0,
-    "sdk_version": "0.3.10",
-    "source_boundary": "Before reconciliation with November 6 merged SparkRun changes"
+    "sdk_version": "0.4.2",
+    "source_boundary": "144eed00-plus-final16; includes merged SparkRun 0.4.2 promotion #1302 and updated Python v2 rollback"
   },
   "checkpoint": {
     "tests_passed": 103,
@@ -120,9 +134,26 @@
     "rss_bound_claimed": false
   },
   "known_blockers": [
-    "Live all-rank capture/restore and separate-NVMe persistence",
-    "Safe sliced-prefill rollback and numerical/performance qualification",
+    "Live write protection, all-rank capture/restore and separate-NVMe serving persistence",
+    "Shared ownership of live and idle prompt rows without reducing production capacity",
+    "Sliced-prefill rollback, fair scheduling and numerical/performance qualification",
+    "Metadata-only video counting, preparation disconnects, frame-planning bounds and codec/RSS accounting",
     "Measured GB10 memory, model quality and no-regression hardware campaign"
   ],
-  "build_info_patch_hashes_verified": 123
+  "build_info_patch_hashes_verified": 124,
+  "sdk_compatibility": {
+    "sdk_0310_tests_passed": 9,
+    "sdk_042_tests_passed": 9,
+    "host_execution": false
+  },
+  "upstream_check": {
+    "kit_head": "e9153a4fc40c6dc088692550c8f9f939fa8fbdf0",
+    "checked_at": "2026-11-07",
+    "engine_patch_changes_since_locked_kit": false,
+    "changes": "Four commits affect documentation, replay script and patch-number test only; serving source remains the locked 108-patch set",
+    "disk_pr_1411_head": "d903d8597a61b0460636128d26a3d0a627c8a892",
+    "disk_pr_1411_state": "open",
+    "slicing_pr_11_head": "63b235561e0df644b59567523b5982840f60cfc3",
+    "slicing_pr_11_state": "open"
+  }
 }

@@ -82,12 +82,12 @@ def main():
     check = runner.docker_run(scratch / 'zig-out/bin/video-prepare-real', args.library,
                               args.docker_context, args.image, work / 'portable.log')
     output = (work / 'portable.log').read_text()
-    if 'All 32 tests passed.' not in output or 'SKIP' in output:
-        raise RuntimeError('The complete 32-test real-library gate did not run')
+    if 'All 34 tests passed.' not in output or 'SKIP' in output:
+        raise RuntimeError('The complete 34-test real-library gate did not run')
     native_source.verify_source(args.source, lock)
     receipt = {'schema': 'glm-composed-video/v1', 'source_identity': identity,
                'image': args.image, 'library_sha256': runner.sha(args.library),
-               'long_clip_sha256': runner.sha(args.long_clip), 'tests_passed': 32,
+               'long_clip_sha256': runner.sha(args.long_clip), 'tests_passed': 34,
                'skipped': 0, 'checks': [compile_check, check], 'gpu_model_executed': False}
     (work / 'receipt.json').write_text(json.dumps(receipt, indent=2) + '\n')
     print('PASS: ' + str(work / 'receipt.json'))

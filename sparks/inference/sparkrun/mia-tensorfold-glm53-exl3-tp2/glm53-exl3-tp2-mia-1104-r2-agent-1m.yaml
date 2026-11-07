@@ -2,7 +2,7 @@ recipe_version: '2'
 model: Mia-AiLab/GLM-5.3-Flash-EXL3-4bpw-TensorFold
 model_revision: 078455ffe6472f9a52fbc1139f58b9db2881b25c
 runtime: tensorfold
-container: sha256:4f667f7aec1ef64da66c51c060231039661943af2b9a4da59732a1ab3653f4d0
+container: sha256:b68b66b046dd16b98ceb206cafa46e17bb9fc9c83c997f68d47bbf1c2c782f76
 min_nodes: 2
 max_nodes: 2
 metadata:
@@ -17,9 +17,9 @@ metadata:
   upstream_patch_count: 108
   target_model_revision: 078455ffe6472f9a52fbc1139f58b9db2881b25c
   draft_model_revision: bf582e4eacc1810f76656d1811693ff6c6737d2a
-  site_patch_count: 15
-  site_patches_sha256: 0c49ea55217be66da4c7adbbf70d36caf66f69b43b9e4ffde7f14faa11be0ebf
-  image: glm53-tf:1104-02dac38-f7680c9bcdf7-s0c49ea55217b
+  site_patch_count: 16
+  site_patches_sha256: 876391916c5ae9e149b0a0ede5f443ff320f2fd88f24c7030797250da9ad4390
+  image: glm53-tf:1104-02dac38-f7680c9bcdf7-s876391916c5a
 defaults:
   tensor_parallel: 2
   pipeline_parallel: 1
