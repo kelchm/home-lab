@@ -1,0 +1,236 @@
+From: gpt-6.1-sol <noreply@openai.com>
+Subject: [PATCH] Reuse validated warm video canvases and preserve sampled-frame compatibility
+
+The parent request retains video callbacks through warm completion. Avoid HTTP-thread
+redecoding and a second full canvas set. Match ordered media and processor policy.
+Like the Python loader, require sampled frames rather than an unselected declared tail.
+Late media classification now covers only the reachable preparation deadline error.
+
+diff --git a/zig/src/server/prepare_memory.zig b/zig/src/server/prepare_memory.zig
+--- a/zig/src/server/prepare_memory.zig
++++ b/zig/src/server/prepare_memory.zig
+@@ -95,6 +95,7 @@
+     reserve: u64,
+     refs: std.atomic.Value(u32) = .init(1),
+     arena: std.heap.ArenaAllocator,
++    video_reuse: ?*const anyopaque = null, // request-owned prepared clips; warm borrowers retain this Request
+ 
+     pub fn create(a: Allocator, io: std.Io, ledger: *Ledger, held: ?*gate.Gate, reserve: u64) !*Request {
+         const r = try a.create(Request);
+diff --git a/zig/src/server/prompt.zig b/zig/src/server/prompt.zig
+--- a/zig/src/server/prompt.zig
++++ b/zig/src/server/prompt.zig
+@@ -34,7 +34,7 @@
+     return renderIdsMedia(srv, cx, messages, tools, thinking, effort, generation, null);
+ }
+ 
+-fn renderIdsMedia(srv: *Server, cx: *Cx, messages: Value, tools: []const Value, thinking: bool, effort: ?[]const u8, generation: bool, ordered: ?*Value) errors.Refused![]const u32 {
++pub fn renderIdsMedia(srv: *Server, cx: *Cx, messages: Value, tools: []const Value, thinking: bool, effort: ?[]const u8, generation: bool, ordered: ?*Value) errors.Refused![]const u32 {
+     var arena: std.heap.ArenaAllocator = .init(@import("prepare_memory.zig").scratch(.prompt));
+     defer arena.deinit();
+     var scratch: Cx = .{ .a = arena.allocator(), .clear_thinking = cx.clear_thinking };
+diff --git a/zig/src/server/warm.zig b/zig/src/server/warm.zig
+--- a/zig/src/server/warm.zig
++++ b/zig/src/server/warm.zig
+@@ -26,6 +26,7 @@
+             .length => "done",
+             .cancelled => "stepped aside",
+             .failed => "failed",
++            .refused => "refused",
+             else => "ended",
+         }, if (f.message.len > 0) ": " else "", f.message, f.stats.queued_seconds });
+         const parent = p.parent;
+@@ -62,7 +63,7 @@
+     var cx: errors.Cx = .{ .a = a, .clear_thinking = if (clear != null and clear.? == .bool) clear.?.bool else null };
+     const warm_prompt = try shared(srv, &cx, input, message, thinking, effort);
+     var prompt = warm_prompt.ids;
+-    // an image conversation's pass holds its images as its turns did (data URLs only: no URL is fetched twice)
++    // The retained parent supplies matching validated video canvases; expansion never decodes them again.
+     const pictures = try images.expand(srv.info.vision, null, srv.text, &cx, .{ .array = warm_prompt.messages }, prompt, prompt.len);
+     if (pictures) |x| prompt = x.ids;
+     if (prompt.len == 0 or (srv.info.context_window > 0 and prompt.len >= srv.info.context_window)) return;
+@@ -95,8 +96,9 @@
+         if (called) if (calls.?.array[0].get("id")) |id| if (id == .string) try next.put(cx.a, "tool_call_id", id);
+         try next.put(cx.a, "content", .{ .string = text });
+         list[before.len + 1] = .{ .object = next };
+-        if (i == 0) first = list;
+-        out.* = try prompt_mod.renderIds(srv, cx, .{ .array = list }, input.tools, thinking, effort, true);
++        var ordered: Value = .null;
++        out.* = try prompt_mod.renderIdsMedia(srv, cx, .{ .array = list }, input.tools, thinking, effort, true, if (i == 0) &ordered else null);
++        if (i == 0) first = if (ordered == .array) ordered.array else list;
+     }
+     const n = std.mem.indexOfDiff(u32, ids[0], ids[1]) orelse return .{ .ids = &.{}, .messages = first };
+     return .{ .ids = ids[0][0..n], .messages = first };
+diff --git a/zig/src/server/images.zig b/zig/src/server/images.zig
+--- a/zig/src/server/images.zig
++++ b/zig/src/server/images.zig
+@@ -25,6 +25,54 @@
+ };
+ 
+ const Part = struct { video: bool = false, url: []const u8, low: bool = false };
++
++/// One request's already validated videos. The parent owns every callback/canvas until warm completion.
++const VideoReuse = struct {
++    ctx: *anyopaque,
++    offer: api.VideoOffer,
++    parts: []const Part,
++    clips: []const api.PreparedVideo,
++
++    fn matches(r: *const VideoReuse, v: api.Vision, ps: []const Part) bool {
++        const o = v.video orelse return false;
++        if (v.ctx != r.ctx or o.prepare != r.offer.prepare or o.prepare_scratch != r.offer.prepare_scratch or
++            o.lazy != r.offer.lazy or o.video_tokens != r.offer.video_tokens or
++            o.per_video_tokens != r.offer.per_video_tokens or o.max_frames != r.offer.max_frames or
++            o.max_videos != r.offer.max_videos or ps.len != r.parts.len) return false;
++        for (ps, r.parts) |p, saved| {
++            if (p.video != saved.video or p.low != saved.low or !std.mem.eql(u8, p.url, saved.url)) return false;
++        }
++        return true;
++    }
++};
++
++test "video followup: request reuse requires identical media, context and processor policy" {
++    const Fake = struct {
++        fn prepare(_: *anyopaque, _: std.mem.Allocator, _: api.VideoSource, _: u32, _: u32) anyerror!api.PreparedVideo {
++            return error.UnexpectedPrepare;
++        }
++    };
++    var ctx: u8 = 0;
++    var other: u8 = 0;
++    const offer: api.VideoOffer = .{ .prepare = Fake.prepare, .lazy = true, .video_token = 8, .group_open = 1, .group_close = 2, .video_tokens = 32768, .per_video_tokens = 16384, .max_videos = 4, .max_frames = 128 };
++    const ps: []const Part = &.{ .{ .video = true, .url = "data:,a" }, .{ .url = "data:,b" } };
++    const saved: VideoReuse = .{ .ctx = &ctx, .offer = offer, .parts = ps, .clips = &.{} };
++    var v: api.Vision = .{ .ctx = &ctx, .prepare = undefined, .image_token = 9, .image_tokens = 102400, .max_images = 50, .video = offer };
++    try std.testing.expect(saved.matches(v, ps));
++    try std.testing.expect(!saved.matches(v, &.{ ps[1], ps[0] }));
++    try std.testing.expect(!saved.matches(v, &.{.{ .video = true, .url = "data:,c" }}));
++    v.ctx = &other;
++    try std.testing.expect(!saved.matches(v, ps));
++    v.ctx = &ctx;
++    v.video.?.max_frames = 64;
++    try std.testing.expect(!saved.matches(v, ps));
++    v.video = offer;
++    v.video.?.video_tokens = 16384;
++    try std.testing.expect(!saved.matches(v, ps));
++    v.video = offer;
++    v.video.?.per_video_tokens = 8192;
++    try std.testing.expect(!saved.matches(v, ps));
++}
+ 
+ /// The image and video parts of normalized `messages`, in the order the template meets them.
+ fn parts(cx: *Cx, messages: Value, image_type: []const u8) errors.Refused![]const Part {
+@@ -158,6 +206,11 @@
+     var n_images: usize = 0;
+     for (ps) |p| n_images += @intFromBool(!p.video);
+     const n_videos = ps.len - n_images;
++    const owner = @import("prepare_memory.zig").current;
++    const reusable: ?*const VideoReuse = if (owner) |r| if (r.video_reuse) |raw| blk: {
++        const saved: *const VideoReuse = @ptrCast(@alignCast(raw));
++        break :blk if (saved.matches(v, ps)) saved else null;
++    } else null else null;
+     const video_token: ?u32 = if (v.video) |o| o.video_token else null;
+     // the template's placeholders alone, one per part (request text cannot match a marker)
+     var marks: usize = 0;
+@@ -202,6 +255,12 @@
+     for (ps) |p| {
+         if (p.video) {
+             const o = v.video.?;
++            if (reusable) |saved| {
++                clips[vi] = saved.clips[vi];
++                try accountVideo(cx, o, clips[vi], videoTokenBudget(o, n_videos), &video_tokens_total);
++                vi += 1;
++                continue;
++            }
+             const phase = if (video_work) |b| b.begin() catch return cx.refuse("video preparation exceeded the configured time limit") else null;
+             defer if (video_work) |b| b.finish(phase.?);
+             if (video_work) |b| video_budget.deadline = b.deadline();
+@@ -243,6 +302,15 @@
+             if (image_work) |b| b.check(phase.?) catch return cx.refuse("image preparation exceeded the configured time limit");
+         }
+     }
++    if (n_videos > 0 and v.video.?.lazy and v.video.?.prepare_scratch != null) if (owner) |r| {
++        const retained = r.arena.allocator();
++        // Only publish data allocated in the parent's retained arena, never a temporary expansion's data.
++        if (r.video_reuse == null and cx.a.ptr == retained.ptr and cx.a.vtable == retained.vtable) {
++            const saved = try cx.a.create(VideoReuse);
++            saved.* = .{ .ctx = v.ctx, .offer = v.video.?, .parts = ps, .clips = clips };
++            r.video_reuse = saved;
++        }
++    };
+     var out_ids: std.ArrayList(u32) = .empty;
+     var key: std.ArrayList(u32) = .empty;
+     var imgs: std.ArrayList(api.Image) = .empty;
+diff --git a/zig/src/families/glm/video_core.zig b/zig/src/families/glm/video_core.zig
+--- a/zig/src/families/glm/video_core.zig
++++ b/zig/src/families/glm/video_core.zig
+@@ -38,7 +38,6 @@
+             frames: []u8, // [n, content_h, content_w, 3]
+             scratch: std.mem.Allocator,
+             got: usize = 0,
+-            validate_tail: bool = false, // decode through the declared final frame without retaining an extra sample
+             check_ctx: ?*anyopaque = null,
+             check: ?*const fn (?*anyopaque) anyerror!void = null,
+ 
+@@ -46,16 +45,12 @@
+             pub fn take(s: *Sink, k: usize, rgb: []const u8, w: u32, h: u32, stride: usize) anyerror!void {
+                 if (s.check) |check| try check(s.check_ctx);
+                 const p = s.plan;
+-                if (k != s.got or k >= p.indices.len + @intFromBool(s.validate_tail) or w != p.width or h != p.height) return error.BadVideo;
++                if (k != s.got or k >= p.indices.len or w != p.width or h != p.height) return error.BadVideo;
+                 const row = std.math.mul(usize, w, 3) catch return error.BadVideo;
+                 if (stride < row or h == 0) return error.BadVideo;
+                 const last = std.math.mul(usize, h - 1, stride) catch return error.BadVideo;
+                 const required = std.math.add(usize, last, row) catch return error.BadVideo;
+                 if (rgb.len < required) return error.BadVideo;
+-                if (k == p.indices.len) {
+-                    s.got += 1;
+-                    return;
+-                }
+                 const dst = s.frames[k * p.frameBytes() ..][0..p.frameBytes()];
+                 const frame: picture.resample.View = .{ .pixels = rgb, .width = w, .height = h, .stride = stride };
+                 // torchvision's uint8 resize
+@@ -280,17 +275,11 @@
+             const bytes = try planned.retainedBytes(max_tokens);
+             const frames = try a.alloc(u8, bytes);
+             errdefer a.free(frames);
+-            const last = std.math.cast(u32, s.frames - 1) orelse return error.BadVideo;
+-            const tail = planned.indices[planned.indices.len - 1] != last;
+-            const decode_indices = if (tail) blk: {
+-                const all = try arena.allocator().alloc(u32, planned.indices.len + 1);
+-                @memcpy(all[0..planned.indices.len], planned.indices);
+-                all[planned.indices.len] = last;
+-                break :blk all;
+-            } else planned.indices;
+-            var sink: Sink = .{ .plan = &planned, .frames = frames, .scratch = scratch, .validate_tail = tail };
+-            try s.decode(s.ctx, decode_indices, &sink);
+-            if (sink.got != decode_indices.len) return error.BadVideo;
++            // Container frame counts can include edit-list-discarded frames. As Python's loader does,
++            // require every sampled frame, without demanding an unsampled declared tail frame.
++            var sink: Sink = .{ .plan = &planned, .frames = frames, .scratch = scratch };
++            try s.decode(s.ctx, planned.indices, &sink);
++            if (sink.got != planned.indices.len) return error.BadVideo;
+             var p = planned;
+             p.indices = try a.dupe(u32, planned.indices);
+             errdefer a.free(p.indices);
+diff --git a/zig/src/families/glm/cuda_native.zig b/zig/src/families/glm/cuda_native.zig
+--- a/zig/src/families/glm/cuda_native.zig
++++ b/zig/src/families/glm/cuda_native.zig
+@@ -445,7 +445,6 @@
+ pub fn requestProblem(_: ?*anyopaque, err: anyerror) ?[]const u8 {
+     return switch (err) {
+         error.MediaDeadline => "image or video preparation exceeded its time budget",
+-        error.BadVideo, error.Short, error.Decode => "the video's bytes are invalid or unsupported; use MP4 or WebM (H.264, HEVC, VP8, VP9 or MPEG-4)",
+         else => null,
+     };
+ }
+@@ -543,8 +542,8 @@
+ 
+ test "media request errors: GLM classifies only known media input failures" {
+     const t = std.testing;
+-    for ([_]anyerror{ error.MediaDeadline, error.BadVideo, error.Short, error.Decode }) |err|
++    for ([_]anyerror{error.MediaDeadline}) |err|
+         try t.expect(requestProblem(null, err) != null);
+-    for ([_]anyerror{ error.OutOfMemory, error.CudaError, error.RankMismatch, error.BadStep, error.BadChunk }) |err|
++    for ([_]anyerror{ error.OutOfMemory, error.CudaError, error.RankMismatch, error.BadStep, error.BadChunk, error.BadVideo, error.Short, error.Decode }) |err|
+         try t.expect(requestProblem(null, err) == null);
+ }

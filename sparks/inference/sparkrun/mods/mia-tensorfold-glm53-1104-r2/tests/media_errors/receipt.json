@@ -1,0 +1,22 @@
+{
+  "schema": "glm-media-request-errors-host/v1",
+  "patch_sha256": "8c1576077372c6c04ad43c9623ea97d4f27a056d420c5efd0221c200e6b801c4",
+  "focused_final": {
+    "build_steps": 11,
+    "server_tests_passed": 20,
+    "core_tests_unchanged_cached": 21,
+    "glm_tests_unchanged_cached": 7,
+    "linux_native_open_compiled": true,
+    "log_sha256": "d4960d8dac145675a6ed9dbee9f8f56b75a36983afdec5b06bfcfe9689ecaa2d"
+  },
+  "negative_control": {
+    "mutation": "map refused finish through cx.other instead of cx.refuse",
+    "expected_failure": "whole OpenAI request becomes HTTP 500 and loses invalid_request_error",
+    "exit_nonzero": true,
+    "no_compilation_error": true,
+    "log_sha256": "ea9ec5cc9649ae197a7352f2b7c5ffb4b4113ac328d3ed805f912c2e97cdfa66"
+  },
+  "api_cells": 12,
+  "native_model_executed": false,
+  "hardware_qualified": false
+}

@@ -1,0 +1,25 @@
+{
+  "schema": "glm-python-memory-baseline-source/v1",
+  "engine_revision": "c4646171139ee8a3c38103eaa1699dad226ec12b",
+  "kit_revision": "bf5f94523a8251029cedae86bf61f8ce37fac218",
+  "patch_count": 123,
+  "source_sha256": {
+    "families/glm5_next/cuda/engine.py": "46907b43974753f0321d790cbbefd06b22c82398052246742b4282043a854a8d",
+    "families/glm5_next/cuda/multi.py": "8f4f52d09606158a870a9b4180cd8b54cdfcaa1ea5acd50aabe49c7577e6f734",
+    "families/glm5_next/cuda/pool.py": "a888c73945414e68b3e3b7b0f112fd62963b08291cf4dd32e438e03e95289665"
+  },
+  "guarded_upstream_matches": {
+    "families/glm5_next/cuda/kept_reasoning.py": true,
+    "cuda/health.py": true,
+    "cuda/http.py": true
+  },
+  "production_parallel": 4,
+  "configured_cache_gib": "12.5",
+  "observed_total_pool_tokens": 2582528,
+  "idle_prefix_rows_share_live_pool": true,
+  "separate_additional_12_5gib_row_cache": false,
+  "kept_fixed_state_byte_cap_gib": "0",
+  "inspection_only": true,
+  "model_code_executed": false,
+  "sparks_accessed": false
+}

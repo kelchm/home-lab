@@ -1,0 +1,60 @@
+{
+  "patch": "0760-native-media-request-errors.patch",
+  "patch_sha256": "8c1576077372c6c04ad43c9623ea97d4f27a056d420c5efd0221c200e6b801c4",
+  "marker_sha256": "37f6a0b8e965644c991fee4475affec81c6e77eabeefae230386a35d132b869e",
+  "base": "Mia108 +020025030040050060065070071080082090092; 076 also applies before 080",
+  "files": [
+    {
+      "path": "zig/src/core/engine_api.zig",
+      "before_sha256": "ec91f8d9b5457ba9af97ed7418b6870e79fb5a961e96ddfd9e1c8da1876b840b",
+      "after_sha256": "cb671e65631c6e84f8050d7d256ca550500cd26bdfafbd585a077b8a534790cc"
+    },
+    {
+      "path": "zig/src/core/lane_host.zig",
+      "before_sha256": "54cd56384a43efa7ccfe8d459f30f79e72c82056bbed23bfc17bf1793e3d62f6",
+      "after_sha256": "797bb65c3471c5ab3e6ff8c5521e75eb980a43b6ce5a2888956e66a5dd8d00b5"
+    },
+    {
+      "path": "zig/src/core/lane_host_recall.zig",
+      "before_sha256": "9fd16fc7c3b671263b6c14065ef568f620314afdbdb922138867ad8125139fb0",
+      "after_sha256": "789571dcd3d7d09c81d92b351d7e2310d8dd5488e3930abba2a12e2b7d957400"
+    },
+    {
+      "path": "zig/src/core/lane_host_media_test.zig",
+      "before_sha256": null,
+      "after_sha256": "174f83085a0c8be4ce5c79aa7417c6ad06423e7ac3258d73bdb5d7ff18b928e9"
+    },
+    {
+      "path": "zig/src/server/chat.zig",
+      "before_sha256": "7b5f5d8a4016e0889dea1563282b9bc02796652ea3599e9202a906793e1cd45b",
+      "after_sha256": "64f82c1af029c083efd4f613bf9c0502e9a7986e9490edaaf34a5c793d1294cf"
+    },
+    {
+      "path": "zig/src/server/speech_stream.zig",
+      "before_sha256": "8641d0976bb9f7fdc0e201713a991c44047d7390ae3b10456f571ba1374a7b89",
+      "after_sha256": "645588567cb23e8ef9041ea0af2ebbccc219e1dcd880c868afd200c4673eb4a2"
+    },
+    {
+      "path": "zig/src/native/cuda.zig",
+      "before_sha256": "da1ef352272c5a72c6369c9d4ff01c8a6b79d62398ae9bc5404e10e00d7875a1",
+      "after_sha256": "91a0a649950cf9668c4b021a826b8910a0714f618d5262f1630314efbcef4e1e"
+    },
+    {
+      "path": "zig/src/families/glm/cuda_native.zig",
+      "before_sha256": "4df2d8de9f6ac3ca3c94031fbc8e7d2a2f5873135b8b6e98ad9866d4da9eb61b",
+      "after_sha256": "6541db8f1664ff874e8f38be3558417434e096b985b29c2c9f9fe1aec7f27f7b"
+    }
+  ],
+  "test_inputs": {
+    "tests/media_errors/server_cases.zig": "2548aa733fbd5797b4a415f3dbc1572400c64f7ae80972e202f2096971757274",
+    "tests/api/native_api_test.zig": "763312b1fbbf1ef23d83cb3e75ee493b8162ed0f40664cffa3ff4d39c32be518",
+    "tests/api/reasoning_cache_test.zig": "93a726f652c8bf5df6a4d2275bd86c124841fcb08b673811e6c3620c8dfc813e",
+    "tests/media/native_media_test.zig": "388d0c573d86bc738707b31ab7c028188cd12abd700a6bde6798a1c50987286a",
+    "tests/compat/server_cases.zig": "c5d2a1746ad0adc5457c78082a4df103d51c9a641fea646090987be2b43369d7",
+    "tests/prepare_memory/harness.zig": "b012ba34f000187eeea1a3fc938eb6562afce269be9ca1120dbb43f33a6bb749",
+    "tests/prepare_memory/server_cases.zig": "a4665a51596ea65fc7c1322366361d1a8f53e8474f2cbf57e3c583c70b994711",
+    "tests/prepare_memory/arena_probe.zig": "9671bf4d01f554e5fabc457e1c3870066781200044e4f4182de728e536f6ef2b",
+    "tests/media_errors/host_fixtures.py": "17842d635f724d6a1cbc4fff71545ec248a572d3ee3202e8289911cfba7e6360",
+    "tests/media_errors/run.py": "9abe994f72741ec0184dea07ccd0f9c94a387d3c1949ecf4fc4156482fa6402b"
+  }
+}

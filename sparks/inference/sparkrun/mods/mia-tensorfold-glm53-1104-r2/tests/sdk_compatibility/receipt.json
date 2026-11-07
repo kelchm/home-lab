@@ -1,0 +1,4387 @@
+{
+  "harness_sha256": {
+    "cases.py": "14154f44a8149128a167b681a7ed5862c106e3347c1da4e653c906fb0228f0d8",
+    "run.py": "c446c004af2963592c9db1537e0190a618d06600354388bfb8140245143c2877"
+  },
+  "limitations": [
+    "RuntimePlugin.run and the installed native orchestrator execute; launch_inference preflight, scheduling, image/model distribution and mod installation do not.",
+    "The actual wait_for_port algorithm and socket-table command generator execute; their remote commands receive recorded synthetic results, without running ss, awk, nc or a shell.",
+    "The executor generates real container scripts; they are recorded, never executed. No CLI run/stop command (including stop --dry-run) is invoked.",
+    "The real Python capacity/readiness hook mains execute in process with a synthetic container log and HTTP responses. This cannot establish real GPU, NCCL, RoCE, capacity or inference readiness.",
+    "Native flags and environment are checked against hashed source declarations/consumers. No Zig parser, native binary, model or native media path executes.",
+    "Endpoint readiness is exercised through the real fallback path, with the Docker startup observer disabled at its observation boundary.",
+    "The merged 0.4.2-specific placement/complete_post_launch suite is separate; these focused tests do not assert full-suite compatibility with 0.3.10."
+  ],
+  "native_source": "/private/tmp/glm1104-video16b-locked-source",
+  "passed": true,
+  "production_baseline": "SparkRun 0.4.2 with the Python durable readiness-v2 profile, per merged PR #1302",
+  "repository": "/private/tmp/glm1104-final16-repository",
+  "repository_revision_label": "144eed00-plus-final16",
+  "revision_verification": "Content SHA-256 only; Git HEAD is neither read nor modified",
+  "schema": 1,
+  "scope": "Off-host SDK launch and hook compatibility; synthetic host observations and HTTP responses",
+  "sdk_042_status": "Promoted independently in PR #1302; these tests perform no host operation or deployment",
+  "sdks": [
+    {
+      "blocked_external_attempts": [
+        {
+          "event": "subprocess.Popen",
+          "expected_self_test": true
+        },
+        {
+          "event": "socket.__new__",
+          "expected_self_test": true
+        }
+      ],
+      "exercised_sources": {
+        "/private/tmp/glm1104-final16-repository/sparks/inference/sparkrun/mods/mia-tensorfold-glm53-1104-r2/capacity.py": {
+          "called": [
+            "<module>",
+            "check",
+            "main"
+          ],
+          "sha256": "c755b89956e7adf7bd19789908e32429c162f177dfdf036578dd03cbb034afca"
+        },
+        "/private/tmp/glm1104-final16-repository/sparks/inference/sparkrun/mods/mia-tensorfold-glm53-1104-r2/serve.py": {
+          "called": [
+            "<module>",
+            "launch"
+          ],
+          "sha256": "06990a27cb157bec413a7be2cb9cf3135e6176a0cc4d53dde10ef3cf5180ad15"
+        },
+        "/private/tmp/glm1104-final16-repository/sparks/inference/sparkrun/mods/tensorfold-readiness/readiness.py": {
+          "called": [
+            "<module>",
+            "chat",
+            "check_health",
+            "check_models",
+            "check_renders",
+            "fetch",
+            "main",
+            "main.<locals>.<lambda>",
+            "nearest",
+            "nearest.<locals>.<lambda>",
+            "render",
+            "smoke",
+            "tool_call"
+          ],
+          "sha256": "da1a49ee498f8eb2804aa4f126ac9080faf8283321da17d9d89fee3c95f8ad52"
+        },
+        "/private/tmp/glm1104-final16-repository/sparks/inference/sparkrun/plugins/tensorfold/__init__.py": {
+          "called": [
+            "<module>",
+            "TensorFoldRuntime",
+            "TensorFoldRuntime._drafter_path",
+            "TensorFoldRuntime._engine_env",
+            "TensorFoldRuntime._env_command",
+            "TensorFoldRuntime._launch_issues",
+            "TensorFoldRuntime._model_path",
+            "TensorFoldRuntime._parallelism_issues",
+            "TensorFoldRuntime._require_launch_topology",
+            "TensorFoldRuntime._run_cluster",
+            "TensorFoldRuntime._topology_issues",
+            "TensorFoldRuntime.cluster_strategy",
+            "TensorFoldRuntime.default_executor_config",
+            "TensorFoldRuntime.generate_node_command",
+            "TensorFoldRuntime.get_common_env",
+            "TensorFoldRuntime.native_rendezvous_port",
+            "TensorFoldRuntime.validate_recipe",
+            "_config_get",
+            "_env_assignment",
+            "hf_snapshot_path",
+            "parse_hf_snapshot"
+          ],
+          "sha256": "028dbc5838ecc706f21fc2c110edc1490d7f504c9892b76477353483269ba5ab"
+        },
+        "/tmp/glm1104-qualification-venv/lib/python3.13/site-packages/sparkrun/core/bootstrap.py": {
+          "called": [
+            "<module>",
+            "AmbiguousCategoryError",
+            "CategoryNotFoundError",
+            "_record_builder_gate",
+            "get_runtime",
+            "init_sparkrun"
+          ],
+          "sha256": "dcd11604126987da6f10883f87b21079742337c8e2d3a78d04c4f98a978e8808"
+        },
+        "/tmp/glm1104-qualification-venv/lib/python3.13/site-packages/sparkrun/core/external_plugins.py": {
+          "called": [
+            "<module>",
+            "_external_plugins_disabled",
+            "_is_registerable",
+            "_plugin_base_types",
+            "_scan_module_for_plugins",
+            "_scan_module_for_plugins.<locals>._consider",
+            "iter_plugin_module_names",
+            "load_external_plugins",
+            "load_plugin_module"
+          ],
+          "sha256": "9d284460bf83f48a4dfb59c0123a832241269f92d8f661e286a188ad94109e56"
+        },
+        "/tmp/glm1104-qualification-venv/lib/python3.13/site-packages/sparkrun/core/launcher.py": {
+          "called": [
+            "<module>",
+            "LaunchResult",
+            "ReadinessWatcher",
+            "ServeReadiness",
+            "ServeReadiness.health_url",
+            "post_launch_lifecycle",
+            "resolve_recipe_trust",
+            "wait_for_endpoint_ready",
+            "wait_for_endpoint_ready.<locals>.cancelled",
+            "wait_for_serve_ready"
+          ],
+          "sha256": "e25a86bb4c650892a2b09cc32c75c52b2e1c31d088d012271cd520d2813293d3"
+        },
+        "/tmp/glm1104-qualification-venv/lib/python3.13/site-packages/sparkrun/orchestration/executor.py": {
+          "called": [
+            "<module>",
+            "ExecutorUnavailableError",
+            "_builder_exec_dict",
+            "_cluster_exec_dict",
+            "_coerce_dict",
+            "_coerce_str",
+            "_config_exec_dict",
+            "_default_executor_name",
+            "_known_executor_names",
+            "_platform_exec_dict",
+            "_recipe_exec_dict",
+            "_resolve_executor_name",
+            "_runtime_exec_config_dict",
+            "_runtime_exec_dict",
+            "get_executor",
+            "resolve_executor"
+          ],
+          "sha256": "c02ec7637f6e505f8aa02ae17b46ff2eed6bc051e87e117782eb6558cc37fbab"
+        },
+        "/tmp/glm1104-qualification-venv/lib/python3.13/site-packages/sparkrun/orchestration/executors/_base.py": {
+          "called": [
+            "<module>",
+            "Executor",
+            "Executor.__init__",
+            "Executor.extension_point_name",
+            "Executor.finalize_config",
+            "Executor.generate_exec_serve_script",
+            "Executor.generate_launch_script",
+            "Executor.initialize",
+            "Executor.is_enabled",
+            "Executor.is_multi_extension",
+            "Executor.name",
+            "Executor.node_container_name",
+            "Executor.workload_labels",
+            "Executor.workload_labels_for_cluster",
+            "ExecutorConfig",
+            "ExecutorConfig.__post_init__",
+            "ExecutorConfig.from_chain",
+            "_intent_id_from_cluster_id"
+          ],
+          "sha256": "b17f21b12ec8b7c1115e4f81459da40b289eb1ab775819e7d6526f0d1c287776"
+        },
+        "/tmp/glm1104-qualification-venv/lib/python3.13/site-packages/sparkrun/orchestration/executors/docker.py": {
+          "called": [
+            "<module>",
+            "DockerExecutor",
+            "DockerExecutor._accelerator_opts",
+            "DockerExecutor._build_default_opts",
+            "DockerExecutor.apply_runtime_adjustments",
+            "DockerExecutor.default_config",
+            "DockerExecutor.run_cmd",
+            "DockerExecutor.stop_cmd",
+            "_is_root_container_user",
+            "_mask_sensitive_env_in_command",
+            "_nvidia_gpu_args",
+            "_optional_device_arg"
+          ],
+          "sha256": "a5857be189a37f027060331d481b1b30296da187cee3befe1f21757ce95cd47c"
+        },
+        "/tmp/glm1104-qualification-venv/lib/python3.13/site-packages/sparkrun/orchestration/health.py": {
+          "called": [
+            "<module>",
+            "_budget_spent",
+            "is_container_running",
+            "listen_probe_cmd",
+            "proc_listen_probe_cmd",
+            "wait_for_healthy",
+            "wait_for_port"
+          ],
+          "sha256": "2eb91218124eb22689fce21ad555740164821269fd0bd6aebc4af27d08fc0181"
+        },
+        "/tmp/glm1104-qualification-venv/lib/python3.13/site-packages/sparkrun/orchestration/hooks.py": {
+          "called": [
+            "<module>",
+            "_confirm_hook_execution",
+            "_run_exec_command",
+            "build_hook_context",
+            "render_hook_command",
+            "render_hook_commands",
+            "run_post_exec"
+          ],
+          "sha256": "9de57eb2d1584d0ddabd93b447dbcb6f71da55dd3781fba8f4eca0cea00f002f"
+        },
+        "/tmp/glm1104-qualification-venv/lib/python3.13/site-packages/sparkrun/runtimes/_cluster_ops.py": {
+          "called": [
+            "<module>",
+            "ClusterContext",
+            "ClusterContext.build",
+            "ClusterContext.image_for_host",
+            "_config_ssh_cap",
+            "_refuse_unsupported_collectives",
+            "_stop_ranked_containers_parallel",
+            "cleanup_after_failure",
+            "cleanup_ranked_containers",
+            "detect_head_ip",
+            "detect_ib_with_ips",
+            "dump_serve_log",
+            "find_port",
+            "launch_containers_parallel",
+            "resolve_hosts_for_init",
+            "run_native_cluster",
+            "run_pre_serve_hooks"
+          ],
+          "sha256": "c78a9b88951e6a683877b5fdbdba3184c5d037c3166f1e704caf8c8ff8c06c04"
+        },
+        "/tmp/glm1104-qualification-venv/lib/python3.13/site-packages/sparkrun/runtimes/base.py": {
+          "called": [
+            "<module>",
+            "RuntimePlugin",
+            "RuntimePlugin._head_container_name",
+            "RuntimePlugin._make_node_command_args",
+            "RuntimePlugin._pre_serve",
+            "RuntimePlugin._print_cluster_banner",
+            "RuntimePlugin._print_connection_info",
+            "RuntimePlugin._resolve_executor",
+            "RuntimePlugin._resolve_master_addr",
+            "RuntimePlugin._run_native_cluster",
+            "RuntimePlugin.default_executor",
+            "RuntimePlugin.extension_point_name",
+            "RuntimePlugin.finalize_host_comm_env",
+            "RuntimePlugin.get_cluster_env",
+            "RuntimePlugin.get_extra_docker_opts",
+            "RuntimePlugin.get_extra_env",
+            "RuntimePlugin.get_extra_volumes",
+            "RuntimePlugin.get_head_container_name",
+            "RuntimePlugin.initialize",
+            "RuntimePlugin.is_enabled",
+            "RuntimePlugin.is_multi_extension",
+            "RuntimePlugin.name",
+            "RuntimePlugin.native_apis",
+            "RuntimePlugin.run",
+            "RuntimePlugin.validate_recipe"
+          ],
+          "sha256": "0139605eb85b0a198f3dcf870978829f6637b0737ca3c88a7097b0e88bfbabad"
+        }
+      },
+      "lifecycle_entry": "post_launch_lifecycle (SystemExit(1) on failure)",
+      "missing_required_calls": [],
+      "native_launch": {
+        "0": {
+          "argv": [
+            "/opt/tensorfold/native/bin/tensorfold-native",
+            "serve",
+            "/cache/huggingface/hub/models--Mia-AiLab--GLM-5.3-Flash-EXL3-4bpw-TensorFold/snapshots/078455ffe6472f9a52fbc1139f58b9db2881b25c",
+            "--name",
+            "GLM-5.3-Flash",
+            "--host",
+            "0.0.0.0",
+            "--port",
+            "8888",
+            "--context",
+            "1048576",
+            "--parallel",
+            "4",
+            "--max-tokens",
+            "32768",
+            "--kv-cache",
+            "fp8",
+            "--request-body-mib",
+            "96",
+            "--thinking",
+            "--reasoning-effort",
+            "xhigh",
+            "--no-update-check",
+            "--vision",
+            "--vision-max-images",
+            "50",
+            "--vision-max-videos",
+            "4",
+            "--vision-image-tokens",
+            "102400",
+            "--vision-video-tokens",
+            "32768",
+            "--max-frames",
+            "128",
+            "--chat-template",
+            "/opt/glm53-1104-r2/chat_template.jinja",
+            "--drafter",
+            "/cache/huggingface/hub/models--incoai--GLM-5.3-Flash-DFlash2/snapshots/bf582e4eacc1810f76656d1811693ff6c6737d2a",
+            "--drafter-bits",
+            "4"
+          ],
+          "env": {
+            "CONTEXT": "1048576",
+            "DRAFTER": "/cache/huggingface/hub/models--incoai--GLM-5.3-Flash-DFlash2/snapshots/bf582e4eacc1810f76656d1811693ff6c6737d2a",
+            "FABRIC_MASTER": "198.18.0.31",
+            "HOST": "0.0.0.0",
+            "MASTER": "192.0.2.31",
+            "MASTER_PORT": "29511",
+            "MAX_TOKENS": "32768",
+            "MODEL_PATH": "/cache/huggingface/hub/models--Mia-AiLab--GLM-5.3-Flash-EXL3-4bpw-TensorFold/snapshots/078455ffe6472f9a52fbc1139f58b9db2881b25c",
+            "NCCL_COMM_ID": "198.18.0.31:29510",
+            "NCCL_IB_GID_INDEX": "3",
+            "NCCL_IB_HCA": "rail0,rail1",
+            "NCCL_MAX_NCHANNELS": "4",
+            "NCCL_MIN_NCHANNELS": "4",
+            "PORT": "8888",
+            "RANK": "0",
+            "SERVED_NAME": "GLM-5.3-Flash",
+            "TENSORFOLD_MEMORY_RESERVE_GIB": "12",
+            "TENSORFOLD_NO_LIVE": "1",
+            "TENSORFOLD_NO_UPDATE_CHECK": "1",
+            "TENSORFOLD_PREFILL_SHARE": "0.68",
+            "TF_CUDA_DEVICE": "0",
+            "TF_GLM_ABSORB_MMA": "1",
+            "TF_GLM_CE_EXCHANGE": "0",
+            "TF_GLM_CLEAR_THINKING": "0",
+            "TF_GLM_DENSE_BITS": "8",
+            "TF_GLM_HEAD_BITS": "8",
+            "TF_GLM_HOST_CACHE_GIB": "0",
+            "TF_GLM_RANK": "0",
+            "TF_GLM_W8A8": "0",
+            "TF_GLM_WORLD": "2",
+            "TF_KV_PAGES": "on",
+            "TF_PREPARE_RESIDENTS": "4",
+            "TF_PREPARE_WAITING": "32",
+            "TF_PREPARE_WAIT_MS": "300000",
+            "TF_ROCE": "1",
+            "TF_ROCE_MAX_KB": "4096"
+          }
+        },
+        "1": {
+          "argv": [
+            "/opt/tensorfold/native/bin/tensorfold-native",
+            "serve",
+            "/cache/huggingface/hub/models--Mia-AiLab--GLM-5.3-Flash-EXL3-4bpw-TensorFold/snapshots/078455ffe6472f9a52fbc1139f58b9db2881b25c",
+            "--name",
+            "GLM-5.3-Flash",
+            "--host",
+            "0.0.0.0",
+            "--port",
+            "8888",
+            "--context",
+            "1048576",
+            "--parallel",
+            "4",
+            "--max-tokens",
+            "32768",
+            "--kv-cache",
+            "fp8",
+            "--request-body-mib",
+            "96",
+            "--thinking",
+            "--reasoning-effort",
+            "xhigh",
+            "--no-update-check",
+            "--vision",
+            "--vision-max-images",
+            "50",
+            "--vision-max-videos",
+            "4",
+            "--vision-image-tokens",
+            "102400",
+            "--vision-video-tokens",
+            "32768",
+            "--max-frames",
+            "128",
+            "--chat-template",
+            "/opt/glm53-1104-r2/chat_template.jinja",
+            "--drafter",
+            "/cache/huggingface/hub/models--incoai--GLM-5.3-Flash-DFlash2/snapshots/bf582e4eacc1810f76656d1811693ff6c6737d2a",
+            "--drafter-bits",
+            "4"
+          ],
+          "env": {
+            "CONTEXT": "1048576",
+            "DRAFTER": "/cache/huggingface/hub/models--incoai--GLM-5.3-Flash-DFlash2/snapshots/bf582e4eacc1810f76656d1811693ff6c6737d2a",
+            "FABRIC_MASTER": "198.18.0.31",
+            "HOST": "0.0.0.0",
+            "MASTER": "192.0.2.31",
+            "MASTER_PORT": "29511",
+            "MAX_TOKENS": "32768",
+            "MODEL_PATH": "/cache/huggingface/hub/models--Mia-AiLab--GLM-5.3-Flash-EXL3-4bpw-TensorFold/snapshots/078455ffe6472f9a52fbc1139f58b9db2881b25c",
+            "NCCL_COMM_ID": "198.18.0.31:29510",
+            "NCCL_IB_GID_INDEX": "3",
+            "NCCL_IB_HCA": "rail0,rail1",
+            "NCCL_MAX_NCHANNELS": "4",
+            "NCCL_MIN_NCHANNELS": "4",
+            "PORT": "8888",
+            "RANK": "1",
+            "SERVED_NAME": "GLM-5.3-Flash",
+            "TENSORFOLD_MEMORY_RESERVE_GIB": "12",
+            "TENSORFOLD_NO_LIVE": "1",
+            "TENSORFOLD_NO_UPDATE_CHECK": "1",
+            "TENSORFOLD_PREFILL_SHARE": "0.68",
+            "TF_CUDA_DEVICE": "0",
+            "TF_GLM_ABSORB_MMA": "1",
+            "TF_GLM_CE_EXCHANGE": "0",
+            "TF_GLM_CLEAR_THINKING": "0",
+            "TF_GLM_DENSE_BITS": "8",
+            "TF_GLM_HEAD_BITS": "8",
+            "TF_GLM_HOST_CACHE_GIB": "0",
+            "TF_GLM_RANK": "1",
+            "TF_GLM_W8A8": "0",
+            "TF_GLM_WORLD": "2",
+            "TF_KV_PAGES": "on",
+            "TF_PREPARE_RESIDENTS": "4",
+            "TF_PREPARE_WAITING": "32",
+            "TF_PREPARE_WAIT_MS": "300000",
+            "TF_ROCE": "1",
+            "TF_ROCE_MAX_KB": "4096"
+          }
+        }
+      },
+      "native_revision": {
+        "engine_revision": "f350cd3ea253a042e205746928271f9d8f71a82d",
+        "kit_revision": "02dac3879852b8c5713318d3d64a5a791002e954",
+        "site_patch_count": 16,
+        "site_patches_sha256": "876391916c5ae9e149b0a0ede5f443ff320f2fd88f24c7030797250da9ad4390"
+      },
+      "native_source_manifest_sha256": "3cb4e8f29eb1a660549bcae1a31fc423431b873e3d938952e4186ebab535c552",
+      "native_source_sha256": {
+        "/private/tmp/glm1104-video16b-locked-source/zig/src/core/lane_host_fill.zig": "b77fb71fe3216204342305336cb2696655932259acaff9133209e93e5ef5494d",
+        "/private/tmp/glm1104-video16b-locked-source/zig/src/cuda/roce.zig": "d2db446bf9091ceb51b0793835c0007f429833affc1ebc5687c706080513d72b",
+        "/private/tmp/glm1104-video16b-locked-source/zig/src/cuda/tp_watch.zig": "edb9c4835dcda10f7d77f2034aa4a126b7fb550f24e3d8c50df70ed8d4867813",
+        "/private/tmp/glm1104-video16b-locked-source/zig/src/families/glm/cuda_ce.zig": "7eba0cf923606813ff848d09efeb4e8f1e647040ec2df29025fbe3d8be20dbcf",
+        "/private/tmp/glm1104-video16b-locked-source/zig/src/families/glm/cuda_native.zig": "1f4593e59ca9405460e196986049140fe79632d0e66bcc9fbb27a2f64e78fe82",
+        "/private/tmp/glm1104-video16b-locked-source/zig/src/families/glm/cuda_ranks.zig": "68fec345e909ea4ba5877a449a215086b539f9fc00ec1433e1f33047171f8464",
+        "/private/tmp/glm1104-video16b-locked-source/zig/src/native/cuda.zig": "91a0a649950cf9668c4b021a826b8910a0714f618d5262f1630314efbcef4e1e",
+        "/private/tmp/glm1104-video16b-locked-source/zig/src/server/cli.zig": "0fa3865d587719608b2aa0079734f764a0c27ed7a281e1b04917c6acaee4c8fa",
+        "/private/tmp/glm1104-video16b-locked-source/zig/src/server/hf_text.zig": "f6354e53609700e7999295e404a3b5a83b38f3c3e317adfcfd42da762c4b5e6a",
+        "/private/tmp/glm1104-video16b-locked-source/zig/src/server/prepare_gate.zig": "97488579311b0b6badd68e99cdb37a4512b04acb13400ba3d49a7200b457e2db"
+      },
+      "passed": true,
+      "plugin_api": "API 1 declaration accepted; 0.3.10 loader ignores the declaration",
+      "python": "3.13.14 (main, Jun 11 2026, 03:58:32) [Clang 22.1.3 ]",
+      "recipe_sha256": "8fd65864b666ca2324688b5bec7172292206b41ba3afd11f21011f1964b21bee",
+      "scenarios": {
+        "test_capacity_failure_propagates_and_skips_readiness": [
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_cleanup"
+          },
+          {
+            "host": "192.0.2.32",
+            "kind": "recorded_cleanup"
+          },
+          {
+            "host": "192.0.2.32",
+            "kind": "recorded_reachability"
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "collision_scan",
+            "port": 29511
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "container",
+            "rank": 0,
+            "script_sha256": "19514bb8eeb057ce53791a1ad7dfcd8fd01b807775948a17b3df93cbf61db9d9"
+          },
+          {
+            "host": "192.0.2.32",
+            "kind": "container",
+            "rank": 1,
+            "script_sha256": "b0034a4affff07d36c632bbd0870f0945ebb837f528aa63c85d96e2d22f15895"
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "serve",
+            "rank": 0,
+            "script_sha256": "dd1cdb5ab3072f1d95440e715c887ba014dae2dcb73a3d09420d569bf86bfa55"
+          },
+          {
+            "kind": "recorded_log_capture"
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": true
+          },
+          {
+            "host": "192.0.2.32",
+            "kind": "serve",
+            "rank": 1,
+            "script_sha256": "149a7358d0f7af5618b8396f67c50216b39453d51369ee4368426913e242d642"
+          },
+          {
+            "command": "ss -tln \"sport = :8888\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:22B8$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "api_socket_table",
+            "port": 8888,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :8888\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:22B8$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "api_socket_table",
+            "port": 8888,
+            "ready": true
+          },
+          {
+            "kind": "sdk_http_readiness",
+            "ready": true,
+            "url": "http://192.0.2.31:8888/v1/models"
+          },
+          {
+            "command": "python3 /opt/glm53-1104-r2/capacity.py",
+            "hook": "capacity",
+            "kind": "post_exec",
+            "metadata": false,
+            "timeout": 600,
+            "watchdog": false
+          },
+          {
+            "error": "Insufficient GLM pool: 2582016 tokens",
+            "hook": "capacity",
+            "kind": "hook_failed"
+          }
+        ],
+        "test_closed_gate_never_admits_rank1": [
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_cleanup"
+          },
+          {
+            "host": "192.0.2.32",
+            "kind": "recorded_cleanup"
+          },
+          {
+            "host": "192.0.2.32",
+            "kind": "recorded_reachability"
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "collision_scan",
+            "port": 29511
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "container",
+            "rank": 0,
+            "script_sha256": "19514bb8eeb057ce53791a1ad7dfcd8fd01b807775948a17b3df93cbf61db9d9"
+          },
+          {
+            "host": "192.0.2.32",
+            "kind": "container",
+            "rank": 1,
+            "script_sha256": "b0034a4affff07d36c632bbd0870f0945ebb837f528aa63c85d96e2d22f15895"
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "serve",
+            "rank": 0,
+            "script_sha256": "dd1cdb5ab3072f1d95440e715c887ba014dae2dcb73a3d09420d569bf86bfa55"
+          },
+          {
+            "kind": "recorded_log_capture"
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_failure_log"
+          }
+        ],
+        "test_head_exit_aborts_gate_without_rank1": [
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_cleanup"
+          },
+          {
+            "host": "192.0.2.32",
+            "kind": "recorded_cleanup"
+          },
+          {
+            "host": "192.0.2.32",
+            "kind": "recorded_reachability"
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "collision_scan",
+            "port": 29511
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "container",
+            "rank": 0,
+            "script_sha256": "19514bb8eeb057ce53791a1ad7dfcd8fd01b807775948a17b3df93cbf61db9d9"
+          },
+          {
+            "host": "192.0.2.32",
+            "kind": "container",
+            "rank": 1,
+            "script_sha256": "b0034a4affff07d36c632bbd0870f0945ebb837f528aa63c85d96e2d22f15895"
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "serve",
+            "rank": 0,
+            "script_sha256": "dd1cdb5ab3072f1d95440e715c887ba014dae2dcb73a3d09420d569bf86bfa55"
+          },
+          {
+            "kind": "recorded_log_capture"
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": false
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_failure_log"
+          }
+        ],
+        "test_native_tp2_waits_for_socket_table_before_rank1": [
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_cleanup"
+          },
+          {
+            "host": "192.0.2.32",
+            "kind": "recorded_cleanup"
+          },
+          {
+            "host": "192.0.2.32",
+            "kind": "recorded_reachability"
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "collision_scan",
+            "port": 29511
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "container",
+            "rank": 0,
+            "script_sha256": "19514bb8eeb057ce53791a1ad7dfcd8fd01b807775948a17b3df93cbf61db9d9"
+          },
+          {
+            "host": "192.0.2.32",
+            "kind": "container",
+            "rank": 1,
+            "script_sha256": "b0034a4affff07d36c632bbd0870f0945ebb837f528aa63c85d96e2d22f15895"
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "serve",
+            "rank": 0,
+            "script_sha256": "dd1cdb5ab3072f1d95440e715c887ba014dae2dcb73a3d09420d569bf86bfa55"
+          },
+          {
+            "kind": "recorded_log_capture"
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": true
+          },
+          {
+            "host": "192.0.2.32",
+            "kind": "serve",
+            "rank": 1,
+            "script_sha256": "149a7358d0f7af5618b8396f67c50216b39453d51369ee4368426913e242d642"
+          }
+        ],
+        "test_readiness_failure_propagates_after_capacity": [
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_cleanup"
+          },
+          {
+            "host": "192.0.2.32",
+            "kind": "recorded_cleanup"
+          },
+          {
+            "host": "192.0.2.32",
+            "kind": "recorded_reachability"
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "collision_scan",
+            "port": 29511
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "container",
+            "rank": 0,
+            "script_sha256": "19514bb8eeb057ce53791a1ad7dfcd8fd01b807775948a17b3df93cbf61db9d9"
+          },
+          {
+            "host": "192.0.2.32",
+            "kind": "container",
+            "rank": 1,
+            "script_sha256": "b0034a4affff07d36c632bbd0870f0945ebb837f528aa63c85d96e2d22f15895"
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "serve",
+            "rank": 0,
+            "script_sha256": "dd1cdb5ab3072f1d95440e715c887ba014dae2dcb73a3d09420d569bf86bfa55"
+          },
+          {
+            "kind": "recorded_log_capture"
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": true
+          },
+          {
+            "host": "192.0.2.32",
+            "kind": "serve",
+            "rank": 1,
+            "script_sha256": "149a7358d0f7af5618b8396f67c50216b39453d51369ee4368426913e242d642"
+          },
+          {
+            "command": "ss -tln \"sport = :8888\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:22B8$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "api_socket_table",
+            "port": 8888,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :8888\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:22B8$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "api_socket_table",
+            "port": 8888,
+            "ready": true
+          },
+          {
+            "kind": "sdk_http_readiness",
+            "ready": true,
+            "url": "http://192.0.2.31:8888/v1/models"
+          },
+          {
+            "command": "python3 /opt/glm53-1104-r2/capacity.py",
+            "hook": "capacity",
+            "kind": "post_exec",
+            "metadata": false,
+            "timeout": 600,
+            "watchdog": false
+          },
+          {
+            "kind": "hook_passed",
+            "output": "GLM capacity passed: 2582528 pool tokens, 3.6 GiB device prompt cache per rank\n"
+          },
+          {
+            "command": "python3 /opt/tensorfold-readiness/readiness.py --model GLM-5.3-Flash --context 1048576 --lanes 4 --efforts max,high,low,none",
+            "hook": "readiness",
+            "kind": "post_exec",
+            "metadata": false,
+            "timeout": 600,
+            "watchdog": false
+          },
+          {
+            "kind": "hook_http",
+            "path": "/health"
+          },
+          {
+            "kind": "hook_http",
+            "path": "/v1/models"
+          },
+          {
+            "error": "/v1/models context_length is 4096, not 1048576",
+            "hook": "readiness",
+            "kind": "hook_failed"
+          }
+        ],
+        "test_real_capacity_then_readiness_hooks_after_endpoint_ready": [
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_cleanup"
+          },
+          {
+            "host": "192.0.2.32",
+            "kind": "recorded_cleanup"
+          },
+          {
+            "host": "192.0.2.32",
+            "kind": "recorded_reachability"
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "collision_scan",
+            "port": 29511
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "container",
+            "rank": 0,
+            "script_sha256": "19514bb8eeb057ce53791a1ad7dfcd8fd01b807775948a17b3df93cbf61db9d9"
+          },
+          {
+            "host": "192.0.2.32",
+            "kind": "container",
+            "rank": 1,
+            "script_sha256": "b0034a4affff07d36c632bbd0870f0945ebb837f528aa63c85d96e2d22f15895"
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "serve",
+            "rank": 0,
+            "script_sha256": "dd1cdb5ab3072f1d95440e715c887ba014dae2dcb73a3d09420d569bf86bfa55"
+          },
+          {
+            "kind": "recorded_log_capture"
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": true
+          },
+          {
+            "host": "192.0.2.32",
+            "kind": "serve",
+            "rank": 1,
+            "script_sha256": "149a7358d0f7af5618b8396f67c50216b39453d51369ee4368426913e242d642"
+          },
+          {
+            "command": "ss -tln \"sport = :8888\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:22B8$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "api_socket_table",
+            "port": 8888,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :8888\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:22B8$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "api_socket_table",
+            "port": 8888,
+            "ready": true
+          },
+          {
+            "kind": "sdk_http_readiness",
+            "ready": true,
+            "url": "http://192.0.2.31:8888/v1/models"
+          },
+          {
+            "command": "python3 /opt/glm53-1104-r2/capacity.py",
+            "hook": "capacity",
+            "kind": "post_exec",
+            "metadata": false,
+            "timeout": 600,
+            "watchdog": false
+          },
+          {
+            "kind": "hook_passed",
+            "output": "GLM capacity passed: 2582528 pool tokens, 3.6 GiB device prompt cache per rank\n"
+          },
+          {
+            "command": "python3 /opt/tensorfold-readiness/readiness.py --model GLM-5.3-Flash --context 1048576 --lanes 4 --efforts max,high,low,none",
+            "hook": "readiness",
+            "kind": "post_exec",
+            "metadata": false,
+            "timeout": 600,
+            "watchdog": false
+          },
+          {
+            "kind": "hook_http",
+            "path": "/health"
+          },
+          {
+            "kind": "hook_http",
+            "path": "/v1/models"
+          },
+          {
+            "kind": "hook_http",
+            "path": "/v1/chat/completions"
+          },
+          {
+            "kind": "smoke_lane",
+            "lane": 0,
+            "thread": "ThreadPoolExecutor-22_0"
+          },
+          {
+            "kind": "hook_http",
+            "path": "/v1/chat/completions"
+          },
+          {
+            "kind": "smoke_lane",
+            "lane": 1,
+            "thread": "ThreadPoolExecutor-22_1"
+          },
+          {
+            "kind": "hook_http",
+            "path": "/v1/chat/completions"
+          },
+          {
+            "kind": "smoke_lane",
+            "lane": 2,
+            "thread": "ThreadPoolExecutor-22_2"
+          },
+          {
+            "kind": "hook_http",
+            "path": "/v1/chat/completions"
+          },
+          {
+            "kind": "smoke_lane",
+            "lane": 3,
+            "thread": "ThreadPoolExecutor-22_3"
+          },
+          {
+            "kind": "hook_http",
+            "path": "/v1/chat/completions"
+          },
+          {
+            "kind": "hook_http",
+            "path": "/tokenize"
+          },
+          {
+            "kind": "hook_http",
+            "path": "/tokenize"
+          },
+          {
+            "kind": "hook_http",
+            "path": "/tokenize"
+          },
+          {
+            "kind": "hook_http",
+            "path": "/tokenize"
+          },
+          {
+            "kind": "hook_http",
+            "path": "/tokenize"
+          },
+          {
+            "kind": "hook_http",
+            "path": "/tokenize"
+          },
+          {
+            "kind": "hook_http",
+            "path": "/tokenize"
+          },
+          {
+            "kind": "hook_http",
+            "path": "/health"
+          },
+          {
+            "kind": "hook_passed",
+            "output": "TensorFold discovery: {\"model\": \"GLM-5.3-Flash\", \"context\": 1048576, \"efforts\": [\"max\", \"high\", \"low\", \"none\"]}\nTensorFold smoke: [{\"stream\": 0, \"seconds\": 0.001, \"usage\": {\"prompt_tokens\": 12, \"completion_tokens\": 1}}, {\"stream\": 1, \"seconds\": 0.0, \"usage\": {\"prompt_tokens\": 12, \"completion_tokens\": 1}}, {\"stream\": 2, \"seconds\": 0.0, \"usage\": {\"prompt_tokens\": 12, \"completion_tokens\": 1}}, {\"stream\": 3, \"seconds\": 0.0, \"usage\": {\"prompt_tokens\": 12, \"completion_tokens\": 1}}]\nTensorFold tool call: [{\"function\": {\"name\": \"get_weather\", \"arguments\": \"{\\\"city\\\":\\\"Oslo\\\"}\"}}]\nTensorFold levels: {\"minimal\": \"low\", \"medium\": \"high\", \"xhigh\": \"max\"}\nTensorFold readiness passed\n"
+          }
+        ],
+        "test_sdk_readiness_failure_prevents_both_hooks": [
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_cleanup"
+          },
+          {
+            "host": "192.0.2.32",
+            "kind": "recorded_cleanup"
+          },
+          {
+            "host": "192.0.2.32",
+            "kind": "recorded_reachability"
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "collision_scan",
+            "port": 29511
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "container",
+            "rank": 0,
+            "script_sha256": "19514bb8eeb057ce53791a1ad7dfcd8fd01b807775948a17b3df93cbf61db9d9"
+          },
+          {
+            "host": "192.0.2.32",
+            "kind": "container",
+            "rank": 1,
+            "script_sha256": "b0034a4affff07d36c632bbd0870f0945ebb837f528aa63c85d96e2d22f15895"
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "serve",
+            "rank": 0,
+            "script_sha256": "dd1cdb5ab3072f1d95440e715c887ba014dae2dcb73a3d09420d569bf86bfa55"
+          },
+          {
+            "kind": "recorded_log_capture"
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": true
+          },
+          {
+            "host": "192.0.2.32",
+            "kind": "serve",
+            "rank": 1,
+            "script_sha256": "149a7358d0f7af5618b8396f67c50216b39453d51369ee4368426913e242d642"
+          },
+          {
+            "command": "ss -tln \"sport = :8888\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:22B8$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "api_socket_table",
+            "port": 8888,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :8888\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:22B8$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "api_socket_table",
+            "port": 8888,
+            "ready": true
+          },
+          {
+            "kind": "sdk_http_readiness",
+            "ready": false,
+            "url": "http://192.0.2.31:8888/v1/models"
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 5
+          },
+          {
+            "kind": "sdk_http_readiness",
+            "ready": false,
+            "url": "http://192.0.2.31:8888/v1/models"
+          }
+        ]
+      },
+      "script_templates_sha256": {
+        "scripts/container_launch.sh": "9aff15696a589ca8fcd6f7687e319ecb6d2d471bd2ac7245c51529181fd0e0b6",
+        "scripts/exec_serve_detached.sh": "63fd01d85df5c17e105f419474042be23fddd73d0f2a53834b0a8715ad73bcbe"
+      },
+      "sdk_py_sh_tree_sha256": "f08433150e0984af095e0cd7c82e2e64371400cf6994ba51a2a2b99ab051935a",
+      "sdk_root": "/tmp/glm1104-qualification-venv/lib/python3.13/site-packages/sparkrun",
+      "sdk_sources_unchanged": true,
+      "sdk_version": "0.3.10",
+      "test_output": "test_capacity_failure_propagates_and_skips_readiness (__main__.CompatibilityTests.test_capacity_failure_propagates_and_skips_readiness) ... ok\ntest_closed_gate_never_admits_rank1 (__main__.CompatibilityTests.test_closed_gate_never_admits_rank1) ... ok\ntest_head_exit_aborts_gate_without_rank1 (__main__.CompatibilityTests.test_head_exit_aborts_gate_without_rank1) ... ok\ntest_native_tp2_waits_for_socket_table_before_rank1 (__main__.CompatibilityTests.test_native_tp2_waits_for_socket_table_before_rank1) ... ok\ntest_plugin_discovery_and_api1 (__main__.CompatibilityTests.test_plugin_discovery_and_api1) ... ok\ntest_readiness_failure_propagates_after_capacity (__main__.CompatibilityTests.test_readiness_failure_propagates_after_capacity) ... ok\ntest_real_capacity_then_readiness_hooks_after_endpoint_ready (__main__.CompatibilityTests.test_real_capacity_then_readiness_hooks_after_endpoint_ready) ... ok\ntest_sdk_readiness_failure_prevents_both_hooks (__main__.CompatibilityTests.test_sdk_readiness_failure_prevents_both_hooks) ... ok\ntest_unmocked_process_and_network_are_blocked (__main__.CompatibilityTests.test_unmocked_process_and_network_are_blocked) ... ok\n\n----------------------------------------------------------------------\nRan 9 tests in 0.051s\n\nOK\n",
+      "tests_run": 9,
+      "worker_command": [
+        "/tmp/glm1104-qualification-venv/bin/python",
+        "-I",
+        "-B",
+        "/private/tmp/glm1104-video16b-build-milestone/tests/sdk_compatibility/cases.py",
+        "--repo",
+        "/private/tmp/glm1104-final16-repository",
+        "--native-source",
+        "/private/tmp/glm1104-video16b-locked-source",
+        "--expected-sdk",
+        "0.3.10",
+        "--report",
+        "<temporary-report>"
+      ],
+      "worker_returncode": 0
+    },
+    {
+      "blocked_external_attempts": [
+        {
+          "event": "subprocess.Popen",
+          "expected_self_test": true
+        },
+        {
+          "event": "socket.__new__",
+          "expected_self_test": true
+        }
+      ],
+      "exercised_sources": {
+        "/private/tmp/glm1104-final16-repository/sparks/inference/sparkrun/mods/mia-tensorfold-glm53-1104-r2/capacity.py": {
+          "called": [
+            "<module>",
+            "check",
+            "main"
+          ],
+          "sha256": "c755b89956e7adf7bd19789908e32429c162f177dfdf036578dd03cbb034afca"
+        },
+        "/private/tmp/glm1104-final16-repository/sparks/inference/sparkrun/mods/mia-tensorfold-glm53-1104-r2/serve.py": {
+          "called": [
+            "<module>",
+            "launch"
+          ],
+          "sha256": "06990a27cb157bec413a7be2cb9cf3135e6176a0cc4d53dde10ef3cf5180ad15"
+        },
+        "/private/tmp/glm1104-final16-repository/sparks/inference/sparkrun/mods/tensorfold-readiness/readiness.py": {
+          "called": [
+            "<module>",
+            "chat",
+            "check_health",
+            "check_models",
+            "check_renders",
+            "fetch",
+            "main",
+            "main.<locals>.<lambda>",
+            "nearest",
+            "nearest.<locals>.<lambda>",
+            "render",
+            "smoke",
+            "tool_call"
+          ],
+          "sha256": "da1a49ee498f8eb2804aa4f126ac9080faf8283321da17d9d89fee3c95f8ad52"
+        },
+        "/private/tmp/glm1104-final16-repository/sparks/inference/sparkrun/plugins/tensorfold/__init__.py": {
+          "called": [
+            "<module>",
+            "TensorFoldRuntime",
+            "TensorFoldRuntime._drafter_path",
+            "TensorFoldRuntime._engine_env",
+            "TensorFoldRuntime._env_command",
+            "TensorFoldRuntime._launch_issues",
+            "TensorFoldRuntime._model_path",
+            "TensorFoldRuntime._parallelism_issues",
+            "TensorFoldRuntime._require_launch_topology",
+            "TensorFoldRuntime._run_cluster",
+            "TensorFoldRuntime._topology_issues",
+            "TensorFoldRuntime.cluster_strategy",
+            "TensorFoldRuntime.default_executor_config",
+            "TensorFoldRuntime.generate_node_command",
+            "TensorFoldRuntime.get_common_env",
+            "TensorFoldRuntime.native_rendezvous_port",
+            "TensorFoldRuntime.validate_recipe",
+            "_config_get",
+            "_env_assignment",
+            "hf_snapshot_path",
+            "parse_hf_snapshot"
+          ],
+          "sha256": "028dbc5838ecc706f21fc2c110edc1490d7f504c9892b76477353483269ba5ab"
+        },
+        "/tmp/glm1104-sdk042-tests/lib/python3.12/site-packages/sparkrun/core/bootstrap.py": {
+          "called": [
+            "<module>",
+            "AmbiguousCategoryError",
+            "CategoryNotFoundError",
+            "_record_builder_gate",
+            "_register_plugins",
+            "get_runtime",
+            "init_sparkrun"
+          ],
+          "sha256": "826e33af899851a42a281af9b73b47051d6e440ef825b779687025f113b00371"
+        },
+        "/tmp/glm1104-sdk042-tests/lib/python3.12/site-packages/sparkrun/core/external_plugins.py": {
+          "called": [
+            "<module>",
+            "_external_plugins_disabled",
+            "_import_directory_plugin",
+            "_is_registerable",
+            "_module_matches_directory",
+            "_plugin_base_types",
+            "_register_plugin_module",
+            "_scan_module_for_plugins",
+            "_scan_module_for_plugins.<locals>._consider",
+            "configured_plugin_paths",
+            "directory_plugin_identities",
+            "directory_plugin_identities.<locals>.<genexpr>",
+            "iter_plugin_module_names",
+            "load_external_plugins",
+            "load_external_plugins.<locals>.<genexpr>"
+          ],
+          "sha256": "47b844df33bb63ddad0546c034c77ca6cd28c3d99e9b3ff7d33bffdc7a081dc2"
+        },
+        "/tmp/glm1104-sdk042-tests/lib/python3.12/site-packages/sparkrun/core/launcher.py": {
+          "called": [
+            "<module>",
+            "LaunchResult",
+            "ReadinessWatcher",
+            "ServeReadiness",
+            "ServeReadiness.health_url",
+            "complete_post_launch",
+            "complete_post_launch.<locals>.<lambda>",
+            "wait_for_endpoint_ready",
+            "wait_for_endpoint_ready.<locals>.cancelled",
+            "wait_for_serve_ready"
+          ],
+          "sha256": "adcfef112a0a7176a029d132e9d034f23b394eda0ae313ee4d5d50e373373cf5"
+        },
+        "/tmp/glm1104-sdk042-tests/lib/python3.12/site-packages/sparkrun/core/registration.py": {
+          "called": [
+            "<module>",
+            "ApplicationProfileCompatibilityError",
+            "PluginCompatibilityError",
+            "PluginConflictError",
+            "_Snapshot",
+            "_Snapshot.__init__",
+            "_Snapshot.capture",
+            "claim_registration",
+            "enlist_registry_state",
+            "enlist_registry_state.<locals>.<genexpr>",
+            "load_and_register_plugin",
+            "register_unique",
+            "registry_transaction"
+          ],
+          "sha256": "fe499b9839f5ef5bdf895072a1731e497e41f0d78704a923fc8d19e96a9bd513"
+        },
+        "/tmp/glm1104-sdk042-tests/lib/python3.12/site-packages/sparkrun/orchestration/executor.py": {
+          "called": [
+            "<module>",
+            "ExecutorUnavailableError",
+            "_builder_exec_dict",
+            "_cluster_exec_dict",
+            "_coerce_dict",
+            "_coerce_str",
+            "_config_exec_dict",
+            "_default_executor_name",
+            "_known_executor_names",
+            "_platform_exec_dict",
+            "_recipe_exec_dict",
+            "_resolve_executor_name",
+            "_runtime_exec_config_dict",
+            "_runtime_exec_dict",
+            "get_executor",
+            "resolve_executor"
+          ],
+          "sha256": "b4f5fc5080ace51ec7cc22379e990774e7294e56b66ed1454c2f6e6e18a59452"
+        },
+        "/tmp/glm1104-sdk042-tests/lib/python3.12/site-packages/sparkrun/orchestration/executors/_base.py": {
+          "called": [
+            "<module>",
+            "Executor",
+            "Executor.__init__",
+            "Executor.extension_point_name",
+            "Executor.finalize_config",
+            "Executor.for_host",
+            "Executor.generate_exec_serve_script",
+            "Executor.generate_launch_script",
+            "Executor.initialize",
+            "Executor.is_enabled",
+            "Executor.is_multi_extension",
+            "Executor.name",
+            "Executor.node_container_name",
+            "Executor.on_registration",
+            "Executor.workload_labels",
+            "Executor.workload_labels_for_cluster",
+            "ExecutorConfig",
+            "ExecutorConfig.__post_init__",
+            "ExecutorConfig.from_chain",
+            "ExecutorTarget",
+            "_intent_id_from_cluster_id",
+            "accelerator_vendor_for"
+          ],
+          "sha256": "201b3eb1d8c3e990fc6a0be2aad95d8606cfc6d395f0545043b9bc219124b8ff"
+        },
+        "/tmp/glm1104-sdk042-tests/lib/python3.12/site-packages/sparkrun/orchestration/executors/docker.py": {
+          "called": [
+            "<module>",
+            "DockerExecutor",
+            "DockerExecutor.__init__",
+            "DockerExecutor._accelerator_opts",
+            "DockerExecutor._build_default_opts",
+            "DockerExecutor.apply_runtime_adjustments",
+            "DockerExecutor.default_config",
+            "DockerExecutor.run_cmd",
+            "DockerExecutor.run_cmd.<locals>.<genexpr>",
+            "DockerExecutor.status_cmd",
+            "DockerExecutor.stop_cmd",
+            "_is_root_container_user",
+            "_mask_sensitive_env_in_command",
+            "_nvidia_gpu_args",
+            "_optional_device_arg"
+          ],
+          "sha256": "68e93946d1aca365c008cfa97522fa463b657f223a501b477a114f7031814a3c"
+        },
+        "/tmp/glm1104-sdk042-tests/lib/python3.12/site-packages/sparkrun/orchestration/health.py": {
+          "called": [
+            "<module>",
+            "_budget_spent",
+            "is_container_running",
+            "listen_probe_cmd",
+            "proc_listen_probe_cmd",
+            "wait_for_healthy",
+            "wait_for_port"
+          ],
+          "sha256": "d6ffc400510837bd67d47b2a3b0f887edb165c12d98f000373b3f477c411369a"
+        },
+        "/tmp/glm1104-sdk042-tests/lib/python3.12/site-packages/sparkrun/orchestration/hooks.py": {
+          "called": [
+            "<module>",
+            "HookLaunchContext",
+            "_confirm_hook_execution",
+            "_describe_limit",
+            "_failure_log_dir",
+            "_format_timeout",
+            "_hook_failure_message",
+            "_hook_steps",
+            "_log_hook_target",
+            "_prune_failure_logs",
+            "_redactor",
+            "_run_exec_command",
+            "_run_exec_command.<locals>.<genexpr>",
+            "_save_failure_output",
+            "_whole_seconds",
+            "build_hook_context",
+            "build_hook_env",
+            "build_hook_launch_context",
+            "build_hook_launch_context.<locals>.value",
+            "hook_entry_problems",
+            "hook_launch_scope",
+            "parse_hook_timeout",
+            "render_hook_command",
+            "render_hook_command.<locals>.protect",
+            "render_hook_commands",
+            "resolve_hook_timeout",
+            "run_post_exec",
+            "timed_hook_script"
+          ],
+          "sha256": "4759fa2ca118235eab6f20dcaa3066568a47e7d0987c169f73937269ae686146"
+        },
+        "/tmp/glm1104-sdk042-tests/lib/python3.12/site-packages/sparkrun/runtimes/_cluster_ops.py": {
+          "called": [
+            "<module>",
+            "ClusterContext",
+            "ClusterContext.build",
+            "ClusterContext.env_for_host",
+            "ClusterContext.hardware_for",
+            "ClusterContext.image_for_host",
+            "_config_ssh_cap",
+            "_refuse_unsupported_collectives",
+            "_stop_ranked_containers_parallel",
+            "cleanup_after_failure",
+            "cleanup_ranked_containers",
+            "detect_head_ip",
+            "detect_ib_with_ips",
+            "dump_serve_log",
+            "find_port",
+            "launch_containers_parallel",
+            "resolve_hosts_for_init",
+            "run_native_cluster",
+            "run_pre_serve_hooks"
+          ],
+          "sha256": "327884e8bc684b524050d3018a5ab752cd3a342be9334d1f6932c06fc869b82c"
+        },
+        "/tmp/glm1104-sdk042-tests/lib/python3.12/site-packages/sparkrun/runtimes/base.py": {
+          "called": [
+            "<module>",
+            "RuntimePlugin",
+            "RuntimePlugin._head_container_name",
+            "RuntimePlugin._make_node_command_args",
+            "RuntimePlugin._pre_serve",
+            "RuntimePlugin._print_cluster_banner",
+            "RuntimePlugin._print_connection_info",
+            "RuntimePlugin._resolve_executor",
+            "RuntimePlugin._resolve_master_addr",
+            "RuntimePlugin._run_native_cluster",
+            "RuntimePlugin.default_executor",
+            "RuntimePlugin.extension_point_name",
+            "RuntimePlugin.finalize_host_comm_env",
+            "RuntimePlugin.get_cluster_env",
+            "RuntimePlugin.get_extra_docker_opts",
+            "RuntimePlugin.get_extra_env",
+            "RuntimePlugin.get_extra_volumes",
+            "RuntimePlugin.get_head_container_name",
+            "RuntimePlugin.initialize",
+            "RuntimePlugin.is_enabled",
+            "RuntimePlugin.is_multi_extension",
+            "RuntimePlugin.name",
+            "RuntimePlugin.native_apis",
+            "RuntimePlugin.run",
+            "RuntimePlugin.validate_recipe"
+          ],
+          "sha256": "b697b87a13b8d5a64944244e84934bba0a06baf61e5b54dc0968bb3fb623119b"
+        }
+      },
+      "lifecycle_entry": "complete_post_launch (RuntimeError on failure)",
+      "missing_required_calls": [],
+      "native_launch": {
+        "0": {
+          "argv": [
+            "/opt/tensorfold/native/bin/tensorfold-native",
+            "serve",
+            "/cache/huggingface/hub/models--Mia-AiLab--GLM-5.3-Flash-EXL3-4bpw-TensorFold/snapshots/078455ffe6472f9a52fbc1139f58b9db2881b25c",
+            "--name",
+            "GLM-5.3-Flash",
+            "--host",
+            "0.0.0.0",
+            "--port",
+            "8888",
+            "--context",
+            "1048576",
+            "--parallel",
+            "4",
+            "--max-tokens",
+            "32768",
+            "--kv-cache",
+            "fp8",
+            "--request-body-mib",
+            "96",
+            "--thinking",
+            "--reasoning-effort",
+            "xhigh",
+            "--no-update-check",
+            "--vision",
+            "--vision-max-images",
+            "50",
+            "--vision-max-videos",
+            "4",
+            "--vision-image-tokens",
+            "102400",
+            "--vision-video-tokens",
+            "32768",
+            "--max-frames",
+            "128",
+            "--chat-template",
+            "/opt/glm53-1104-r2/chat_template.jinja",
+            "--drafter",
+            "/cache/huggingface/hub/models--incoai--GLM-5.3-Flash-DFlash2/snapshots/bf582e4eacc1810f76656d1811693ff6c6737d2a",
+            "--drafter-bits",
+            "4"
+          ],
+          "env": {
+            "CONTEXT": "1048576",
+            "DRAFTER": "/cache/huggingface/hub/models--incoai--GLM-5.3-Flash-DFlash2/snapshots/bf582e4eacc1810f76656d1811693ff6c6737d2a",
+            "FABRIC_MASTER": "198.18.0.31",
+            "HOST": "0.0.0.0",
+            "MASTER": "192.0.2.31",
+            "MASTER_PORT": "29511",
+            "MAX_TOKENS": "32768",
+            "MODEL_PATH": "/cache/huggingface/hub/models--Mia-AiLab--GLM-5.3-Flash-EXL3-4bpw-TensorFold/snapshots/078455ffe6472f9a52fbc1139f58b9db2881b25c",
+            "NCCL_COMM_ID": "198.18.0.31:29510",
+            "NCCL_IB_GID_INDEX": "3",
+            "NCCL_IB_HCA": "rail0,rail1",
+            "NCCL_MAX_NCHANNELS": "4",
+            "NCCL_MIN_NCHANNELS": "4",
+            "PORT": "8888",
+            "RANK": "0",
+            "SERVED_NAME": "GLM-5.3-Flash",
+            "TENSORFOLD_MEMORY_RESERVE_GIB": "12",
+            "TENSORFOLD_NO_LIVE": "1",
+            "TENSORFOLD_NO_UPDATE_CHECK": "1",
+            "TENSORFOLD_PREFILL_SHARE": "0.68",
+            "TF_CUDA_DEVICE": "0",
+            "TF_GLM_ABSORB_MMA": "1",
+            "TF_GLM_CE_EXCHANGE": "0",
+            "TF_GLM_CLEAR_THINKING": "0",
+            "TF_GLM_DENSE_BITS": "8",
+            "TF_GLM_HEAD_BITS": "8",
+            "TF_GLM_HOST_CACHE_GIB": "0",
+            "TF_GLM_RANK": "0",
+            "TF_GLM_W8A8": "0",
+            "TF_GLM_WORLD": "2",
+            "TF_KV_PAGES": "on",
+            "TF_PREPARE_RESIDENTS": "4",
+            "TF_PREPARE_WAITING": "32",
+            "TF_PREPARE_WAIT_MS": "300000",
+            "TF_ROCE": "1",
+            "TF_ROCE_MAX_KB": "4096"
+          }
+        },
+        "1": {
+          "argv": [
+            "/opt/tensorfold/native/bin/tensorfold-native",
+            "serve",
+            "/cache/huggingface/hub/models--Mia-AiLab--GLM-5.3-Flash-EXL3-4bpw-TensorFold/snapshots/078455ffe6472f9a52fbc1139f58b9db2881b25c",
+            "--name",
+            "GLM-5.3-Flash",
+            "--host",
+            "0.0.0.0",
+            "--port",
+            "8888",
+            "--context",
+            "1048576",
+            "--parallel",
+            "4",
+            "--max-tokens",
+            "32768",
+            "--kv-cache",
+            "fp8",
+            "--request-body-mib",
+            "96",
+            "--thinking",
+            "--reasoning-effort",
+            "xhigh",
+            "--no-update-check",
+            "--vision",
+            "--vision-max-images",
+            "50",
+            "--vision-max-videos",
+            "4",
+            "--vision-image-tokens",
+            "102400",
+            "--vision-video-tokens",
+            "32768",
+            "--max-frames",
+            "128",
+            "--chat-template",
+            "/opt/glm53-1104-r2/chat_template.jinja",
+            "--drafter",
+            "/cache/huggingface/hub/models--incoai--GLM-5.3-Flash-DFlash2/snapshots/bf582e4eacc1810f76656d1811693ff6c6737d2a",
+            "--drafter-bits",
+            "4"
+          ],
+          "env": {
+            "CONTEXT": "1048576",
+            "DRAFTER": "/cache/huggingface/hub/models--incoai--GLM-5.3-Flash-DFlash2/snapshots/bf582e4eacc1810f76656d1811693ff6c6737d2a",
+            "FABRIC_MASTER": "198.18.0.31",
+            "HOST": "0.0.0.0",
+            "MASTER": "192.0.2.31",
+            "MASTER_PORT": "29511",
+            "MAX_TOKENS": "32768",
+            "MODEL_PATH": "/cache/huggingface/hub/models--Mia-AiLab--GLM-5.3-Flash-EXL3-4bpw-TensorFold/snapshots/078455ffe6472f9a52fbc1139f58b9db2881b25c",
+            "NCCL_COMM_ID": "198.18.0.31:29510",
+            "NCCL_IB_GID_INDEX": "3",
+            "NCCL_IB_HCA": "rail0,rail1",
+            "NCCL_MAX_NCHANNELS": "4",
+            "NCCL_MIN_NCHANNELS": "4",
+            "PORT": "8888",
+            "RANK": "1",
+            "SERVED_NAME": "GLM-5.3-Flash",
+            "TENSORFOLD_MEMORY_RESERVE_GIB": "12",
+            "TENSORFOLD_NO_LIVE": "1",
+            "TENSORFOLD_NO_UPDATE_CHECK": "1",
+            "TENSORFOLD_PREFILL_SHARE": "0.68",
+            "TF_CUDA_DEVICE": "0",
+            "TF_GLM_ABSORB_MMA": "1",
+            "TF_GLM_CE_EXCHANGE": "0",
+            "TF_GLM_CLEAR_THINKING": "0",
+            "TF_GLM_DENSE_BITS": "8",
+            "TF_GLM_HEAD_BITS": "8",
+            "TF_GLM_HOST_CACHE_GIB": "0",
+            "TF_GLM_RANK": "1",
+            "TF_GLM_W8A8": "0",
+            "TF_GLM_WORLD": "2",
+            "TF_KV_PAGES": "on",
+            "TF_PREPARE_RESIDENTS": "4",
+            "TF_PREPARE_WAITING": "32",
+            "TF_PREPARE_WAIT_MS": "300000",
+            "TF_ROCE": "1",
+            "TF_ROCE_MAX_KB": "4096"
+          }
+        }
+      },
+      "native_revision": {
+        "engine_revision": "f350cd3ea253a042e205746928271f9d8f71a82d",
+        "kit_revision": "02dac3879852b8c5713318d3d64a5a791002e954",
+        "site_patch_count": 16,
+        "site_patches_sha256": "876391916c5ae9e149b0a0ede5f443ff320f2fd88f24c7030797250da9ad4390"
+      },
+      "native_source_manifest_sha256": "3cb4e8f29eb1a660549bcae1a31fc423431b873e3d938952e4186ebab535c552",
+      "native_source_sha256": {
+        "/private/tmp/glm1104-video16b-locked-source/zig/src/core/lane_host_fill.zig": "b77fb71fe3216204342305336cb2696655932259acaff9133209e93e5ef5494d",
+        "/private/tmp/glm1104-video16b-locked-source/zig/src/cuda/roce.zig": "d2db446bf9091ceb51b0793835c0007f429833affc1ebc5687c706080513d72b",
+        "/private/tmp/glm1104-video16b-locked-source/zig/src/cuda/tp_watch.zig": "edb9c4835dcda10f7d77f2034aa4a126b7fb550f24e3d8c50df70ed8d4867813",
+        "/private/tmp/glm1104-video16b-locked-source/zig/src/families/glm/cuda_ce.zig": "7eba0cf923606813ff848d09efeb4e8f1e647040ec2df29025fbe3d8be20dbcf",
+        "/private/tmp/glm1104-video16b-locked-source/zig/src/families/glm/cuda_native.zig": "1f4593e59ca9405460e196986049140fe79632d0e66bcc9fbb27a2f64e78fe82",
+        "/private/tmp/glm1104-video16b-locked-source/zig/src/families/glm/cuda_ranks.zig": "68fec345e909ea4ba5877a449a215086b539f9fc00ec1433e1f33047171f8464",
+        "/private/tmp/glm1104-video16b-locked-source/zig/src/native/cuda.zig": "91a0a649950cf9668c4b021a826b8910a0714f618d5262f1630314efbcef4e1e",
+        "/private/tmp/glm1104-video16b-locked-source/zig/src/server/cli.zig": "0fa3865d587719608b2aa0079734f764a0c27ed7a281e1b04917c6acaee4c8fa",
+        "/private/tmp/glm1104-video16b-locked-source/zig/src/server/hf_text.zig": "f6354e53609700e7999295e404a3b5a83b38f3c3e317adfcfd42da762c4b5e6a",
+        "/private/tmp/glm1104-video16b-locked-source/zig/src/server/prepare_gate.zig": "97488579311b0b6badd68e99cdb37a4512b04acb13400ba3d49a7200b457e2db"
+      },
+      "passed": true,
+      "plugin_api": "API 1 declaration enforced by external loader",
+      "python": "3.12.13 (main, Jul 18 2026, 16:55:18) [Clang 22.1.3 ]",
+      "recipe_sha256": "8fd65864b666ca2324688b5bec7172292206b41ba3afd11f21011f1964b21bee",
+      "scenarios": {
+        "test_capacity_failure_propagates_and_skips_readiness": [
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_cleanup"
+          },
+          {
+            "host": "192.0.2.32",
+            "kind": "recorded_cleanup"
+          },
+          {
+            "host": "192.0.2.32",
+            "kind": "recorded_reachability"
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "collision_scan",
+            "port": 29511
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "container",
+            "rank": 0,
+            "script_sha256": "3ef1ac1e1d711256a0d2c0ac20bb5b315638c1dc259e3e5c78a440ce9496ebf4"
+          },
+          {
+            "host": "192.0.2.32",
+            "kind": "container",
+            "rank": 1,
+            "script_sha256": "7b96ea048bfc76460e8e525888d10c47ecb5b1d22aba413a55f7374a2fcdd468"
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "serve",
+            "rank": 0,
+            "script_sha256": "dd1cdb5ab3072f1d95440e715c887ba014dae2dcb73a3d09420d569bf86bfa55"
+          },
+          {
+            "kind": "recorded_log_capture"
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": true
+          },
+          {
+            "host": "192.0.2.32",
+            "kind": "serve",
+            "rank": 1,
+            "script_sha256": "149a7358d0f7af5618b8396f67c50216b39453d51369ee4368426913e242d642"
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_executor_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :8888\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:22B8$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "api_socket_table",
+            "port": 8888,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_executor_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :8888\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:22B8$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "api_socket_table",
+            "port": 8888,
+            "ready": true
+          },
+          {
+            "kind": "sdk_http_readiness",
+            "ready": true,
+            "url": "http://192.0.2.31:8888/v1/models"
+          },
+          {
+            "command": "python3 /opt/glm53-1104-r2/capacity.py",
+            "hook": "capacity",
+            "kind": "post_exec",
+            "metadata": true,
+            "timeout": 3640,
+            "watchdog": true
+          },
+          {
+            "error": "Insufficient GLM pool: 2582016 tokens",
+            "hook": "capacity",
+            "kind": "hook_failed"
+          }
+        ],
+        "test_closed_gate_never_admits_rank1": [
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_cleanup"
+          },
+          {
+            "host": "192.0.2.32",
+            "kind": "recorded_cleanup"
+          },
+          {
+            "host": "192.0.2.32",
+            "kind": "recorded_reachability"
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "collision_scan",
+            "port": 29511
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "container",
+            "rank": 0,
+            "script_sha256": "3ef1ac1e1d711256a0d2c0ac20bb5b315638c1dc259e3e5c78a440ce9496ebf4"
+          },
+          {
+            "host": "192.0.2.32",
+            "kind": "container",
+            "rank": 1,
+            "script_sha256": "7b96ea048bfc76460e8e525888d10c47ecb5b1d22aba413a55f7374a2fcdd468"
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "serve",
+            "rank": 0,
+            "script_sha256": "dd1cdb5ab3072f1d95440e715c887ba014dae2dcb73a3d09420d569bf86bfa55"
+          },
+          {
+            "kind": "recorded_log_capture"
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_failure_log"
+          }
+        ],
+        "test_head_exit_aborts_gate_without_rank1": [
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_cleanup"
+          },
+          {
+            "host": "192.0.2.32",
+            "kind": "recorded_cleanup"
+          },
+          {
+            "host": "192.0.2.32",
+            "kind": "recorded_reachability"
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "collision_scan",
+            "port": 29511
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "container",
+            "rank": 0,
+            "script_sha256": "3ef1ac1e1d711256a0d2c0ac20bb5b315638c1dc259e3e5c78a440ce9496ebf4"
+          },
+          {
+            "host": "192.0.2.32",
+            "kind": "container",
+            "rank": 1,
+            "script_sha256": "7b96ea048bfc76460e8e525888d10c47ecb5b1d22aba413a55f7374a2fcdd468"
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "serve",
+            "rank": 0,
+            "script_sha256": "dd1cdb5ab3072f1d95440e715c887ba014dae2dcb73a3d09420d569bf86bfa55"
+          },
+          {
+            "kind": "recorded_log_capture"
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": false
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_failure_log"
+          }
+        ],
+        "test_native_tp2_waits_for_socket_table_before_rank1": [
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_cleanup"
+          },
+          {
+            "host": "192.0.2.32",
+            "kind": "recorded_cleanup"
+          },
+          {
+            "host": "192.0.2.32",
+            "kind": "recorded_reachability"
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "collision_scan",
+            "port": 29511
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "container",
+            "rank": 0,
+            "script_sha256": "3ef1ac1e1d711256a0d2c0ac20bb5b315638c1dc259e3e5c78a440ce9496ebf4"
+          },
+          {
+            "host": "192.0.2.32",
+            "kind": "container",
+            "rank": 1,
+            "script_sha256": "7b96ea048bfc76460e8e525888d10c47ecb5b1d22aba413a55f7374a2fcdd468"
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "serve",
+            "rank": 0,
+            "script_sha256": "dd1cdb5ab3072f1d95440e715c887ba014dae2dcb73a3d09420d569bf86bfa55"
+          },
+          {
+            "kind": "recorded_log_capture"
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": true
+          },
+          {
+            "host": "192.0.2.32",
+            "kind": "serve",
+            "rank": 1,
+            "script_sha256": "149a7358d0f7af5618b8396f67c50216b39453d51369ee4368426913e242d642"
+          }
+        ],
+        "test_readiness_failure_propagates_after_capacity": [
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_cleanup"
+          },
+          {
+            "host": "192.0.2.32",
+            "kind": "recorded_cleanup"
+          },
+          {
+            "host": "192.0.2.32",
+            "kind": "recorded_reachability"
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "collision_scan",
+            "port": 29511
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "container",
+            "rank": 0,
+            "script_sha256": "3ef1ac1e1d711256a0d2c0ac20bb5b315638c1dc259e3e5c78a440ce9496ebf4"
+          },
+          {
+            "host": "192.0.2.32",
+            "kind": "container",
+            "rank": 1,
+            "script_sha256": "7b96ea048bfc76460e8e525888d10c47ecb5b1d22aba413a55f7374a2fcdd468"
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "serve",
+            "rank": 0,
+            "script_sha256": "dd1cdb5ab3072f1d95440e715c887ba014dae2dcb73a3d09420d569bf86bfa55"
+          },
+          {
+            "kind": "recorded_log_capture"
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": true
+          },
+          {
+            "host": "192.0.2.32",
+            "kind": "serve",
+            "rank": 1,
+            "script_sha256": "149a7358d0f7af5618b8396f67c50216b39453d51369ee4368426913e242d642"
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_executor_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :8888\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:22B8$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "api_socket_table",
+            "port": 8888,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_executor_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :8888\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:22B8$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "api_socket_table",
+            "port": 8888,
+            "ready": true
+          },
+          {
+            "kind": "sdk_http_readiness",
+            "ready": true,
+            "url": "http://192.0.2.31:8888/v1/models"
+          },
+          {
+            "command": "python3 /opt/glm53-1104-r2/capacity.py",
+            "hook": "capacity",
+            "kind": "post_exec",
+            "metadata": true,
+            "timeout": 3640,
+            "watchdog": true
+          },
+          {
+            "kind": "hook_passed",
+            "output": "GLM capacity passed: 2582528 pool tokens, 3.6 GiB device prompt cache per rank\n"
+          },
+          {
+            "command": "python3 /opt/tensorfold-readiness/readiness.py --model GLM-5.3-Flash --context 1048576 --lanes 4 --efforts max,high,low,none",
+            "hook": "readiness",
+            "kind": "post_exec",
+            "metadata": true,
+            "timeout": 3640,
+            "watchdog": true
+          },
+          {
+            "kind": "hook_http",
+            "path": "/health"
+          },
+          {
+            "kind": "hook_http",
+            "path": "/v1/models"
+          },
+          {
+            "error": "/v1/models context_length is 4096, not 1048576",
+            "hook": "readiness",
+            "kind": "hook_failed"
+          }
+        ],
+        "test_real_capacity_then_readiness_hooks_after_endpoint_ready": [
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_cleanup"
+          },
+          {
+            "host": "192.0.2.32",
+            "kind": "recorded_cleanup"
+          },
+          {
+            "host": "192.0.2.32",
+            "kind": "recorded_reachability"
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "collision_scan",
+            "port": 29511
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "container",
+            "rank": 0,
+            "script_sha256": "3ef1ac1e1d711256a0d2c0ac20bb5b315638c1dc259e3e5c78a440ce9496ebf4"
+          },
+          {
+            "host": "192.0.2.32",
+            "kind": "container",
+            "rank": 1,
+            "script_sha256": "7b96ea048bfc76460e8e525888d10c47ecb5b1d22aba413a55f7374a2fcdd468"
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "serve",
+            "rank": 0,
+            "script_sha256": "dd1cdb5ab3072f1d95440e715c887ba014dae2dcb73a3d09420d569bf86bfa55"
+          },
+          {
+            "kind": "recorded_log_capture"
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": true
+          },
+          {
+            "host": "192.0.2.32",
+            "kind": "serve",
+            "rank": 1,
+            "script_sha256": "149a7358d0f7af5618b8396f67c50216b39453d51369ee4368426913e242d642"
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_executor_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :8888\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:22B8$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "api_socket_table",
+            "port": 8888,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_executor_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :8888\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:22B8$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "api_socket_table",
+            "port": 8888,
+            "ready": true
+          },
+          {
+            "kind": "sdk_http_readiness",
+            "ready": true,
+            "url": "http://192.0.2.31:8888/v1/models"
+          },
+          {
+            "command": "python3 /opt/glm53-1104-r2/capacity.py",
+            "hook": "capacity",
+            "kind": "post_exec",
+            "metadata": true,
+            "timeout": 3640,
+            "watchdog": true
+          },
+          {
+            "kind": "hook_passed",
+            "output": "GLM capacity passed: 2582528 pool tokens, 3.6 GiB device prompt cache per rank\n"
+          },
+          {
+            "command": "python3 /opt/tensorfold-readiness/readiness.py --model GLM-5.3-Flash --context 1048576 --lanes 4 --efforts max,high,low,none",
+            "hook": "readiness",
+            "kind": "post_exec",
+            "metadata": true,
+            "timeout": 3640,
+            "watchdog": true
+          },
+          {
+            "kind": "hook_http",
+            "path": "/health"
+          },
+          {
+            "kind": "hook_http",
+            "path": "/v1/models"
+          },
+          {
+            "kind": "hook_http",
+            "path": "/v1/chat/completions"
+          },
+          {
+            "kind": "smoke_lane",
+            "lane": 0,
+            "thread": "ThreadPoolExecutor-22_0"
+          },
+          {
+            "kind": "hook_http",
+            "path": "/v1/chat/completions"
+          },
+          {
+            "kind": "smoke_lane",
+            "lane": 1,
+            "thread": "ThreadPoolExecutor-22_1"
+          },
+          {
+            "kind": "hook_http",
+            "path": "/v1/chat/completions"
+          },
+          {
+            "kind": "smoke_lane",
+            "lane": 2,
+            "thread": "ThreadPoolExecutor-22_2"
+          },
+          {
+            "kind": "hook_http",
+            "path": "/v1/chat/completions"
+          },
+          {
+            "kind": "smoke_lane",
+            "lane": 3,
+            "thread": "ThreadPoolExecutor-22_3"
+          },
+          {
+            "kind": "hook_http",
+            "path": "/v1/chat/completions"
+          },
+          {
+            "kind": "hook_http",
+            "path": "/tokenize"
+          },
+          {
+            "kind": "hook_http",
+            "path": "/tokenize"
+          },
+          {
+            "kind": "hook_http",
+            "path": "/tokenize"
+          },
+          {
+            "kind": "hook_http",
+            "path": "/tokenize"
+          },
+          {
+            "kind": "hook_http",
+            "path": "/tokenize"
+          },
+          {
+            "kind": "hook_http",
+            "path": "/tokenize"
+          },
+          {
+            "kind": "hook_http",
+            "path": "/tokenize"
+          },
+          {
+            "kind": "hook_http",
+            "path": "/health"
+          },
+          {
+            "kind": "hook_passed",
+            "output": "TensorFold discovery: {\"model\": \"GLM-5.3-Flash\", \"context\": 1048576, \"efforts\": [\"max\", \"high\", \"low\", \"none\"]}\nTensorFold smoke: [{\"stream\": 0, \"seconds\": 0.002, \"usage\": {\"prompt_tokens\": 12, \"completion_tokens\": 1}}, {\"stream\": 1, \"seconds\": 0.001, \"usage\": {\"prompt_tokens\": 12, \"completion_tokens\": 1}}, {\"stream\": 2, \"seconds\": 0.0, \"usage\": {\"prompt_tokens\": 12, \"completion_tokens\": 1}}, {\"stream\": 3, \"seconds\": 0.0, \"usage\": {\"prompt_tokens\": 12, \"completion_tokens\": 1}}]\nTensorFold tool call: [{\"function\": {\"name\": \"get_weather\", \"arguments\": \"{\\\"city\\\":\\\"Oslo\\\"}\"}}]\nTensorFold levels: {\"minimal\": \"low\", \"medium\": \"high\", \"xhigh\": \"max\"}\nTensorFold readiness passed\n"
+          }
+        ],
+        "test_sdk_readiness_failure_prevents_both_hooks": [
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_cleanup"
+          },
+          {
+            "host": "192.0.2.32",
+            "kind": "recorded_cleanup"
+          },
+          {
+            "host": "192.0.2.32",
+            "kind": "recorded_reachability"
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "collision_scan",
+            "port": 29511
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "container",
+            "rank": 0,
+            "script_sha256": "3ef1ac1e1d711256a0d2c0ac20bb5b315638c1dc259e3e5c78a440ce9496ebf4"
+          },
+          {
+            "host": "192.0.2.32",
+            "kind": "container",
+            "rank": 1,
+            "script_sha256": "7b96ea048bfc76460e8e525888d10c47ecb5b1d22aba413a55f7374a2fcdd468"
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "serve",
+            "rank": 0,
+            "script_sha256": "dd1cdb5ab3072f1d95440e715c887ba014dae2dcb73a3d09420d569bf86bfa55"
+          },
+          {
+            "kind": "recorded_log_capture"
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_container_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :29511\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:7347$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "gate_socket_table",
+            "port": 29511,
+            "ready": true
+          },
+          {
+            "host": "192.0.2.32",
+            "kind": "serve",
+            "rank": 1,
+            "script_sha256": "149a7358d0f7af5618b8396f67c50216b39453d51369ee4368426913e242d642"
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_executor_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :8888\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:22B8$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "api_socket_table",
+            "port": 8888,
+            "ready": false
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 2
+          },
+          {
+            "host": "192.0.2.31",
+            "kind": "recorded_executor_liveness",
+            "running": true
+          },
+          {
+            "command": "ss -tln \"sport = :8888\" 2>/dev/null | grep -q LISTEN || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '$4==\"0A\" && $2 ~ /:22B8$/{f=1} END{exit !f}'",
+            "host": "192.0.2.31",
+            "kind": "api_socket_table",
+            "port": 8888,
+            "ready": true
+          },
+          {
+            "kind": "sdk_http_readiness",
+            "ready": false,
+            "url": "http://192.0.2.31:8888/v1/models"
+          },
+          {
+            "kind": "recorded_retry",
+            "seconds": 5
+          },
+          {
+            "kind": "sdk_http_readiness",
+            "ready": false,
+            "url": "http://192.0.2.31:8888/v1/models"
+          }
+        ]
+      },
+      "script_templates_sha256": {
+        "scripts/container_launch.sh": "057fce2c8dd82e6b00f8ee3323787f52899459ec1da68dc884af8b48298cc507",
+        "scripts/exec_serve_detached.sh": "63fd01d85df5c17e105f419474042be23fddd73d0f2a53834b0a8715ad73bcbe"
+      },
+      "sdk_py_sh_tree_sha256": "d2c2dd9adeab98e7ed9b2a156ae6875e4831ad40161ed8e2feac966155c3f76d",
+      "sdk_root": "/tmp/glm1104-sdk042-tests/lib/python3.12/site-packages/sparkrun",
+      "sdk_sources_unchanged": true,
+      "sdk_version": "0.4.2",
+      "test_output": "test_capacity_failure_propagates_and_skips_readiness (__main__.CompatibilityTests.test_capacity_failure_propagates_and_skips_readiness) ... ok\ntest_closed_gate_never_admits_rank1 (__main__.CompatibilityTests.test_closed_gate_never_admits_rank1) ... ok\ntest_head_exit_aborts_gate_without_rank1 (__main__.CompatibilityTests.test_head_exit_aborts_gate_without_rank1) ... ok\ntest_native_tp2_waits_for_socket_table_before_rank1 (__main__.CompatibilityTests.test_native_tp2_waits_for_socket_table_before_rank1) ... ok\ntest_plugin_discovery_and_api1 (__main__.CompatibilityTests.test_plugin_discovery_and_api1) ... ok\ntest_readiness_failure_propagates_after_capacity (__main__.CompatibilityTests.test_readiness_failure_propagates_after_capacity) ... ok\ntest_real_capacity_then_readiness_hooks_after_endpoint_ready (__main__.CompatibilityTests.test_real_capacity_then_readiness_hooks_after_endpoint_ready) ... ok\ntest_sdk_readiness_failure_prevents_both_hooks (__main__.CompatibilityTests.test_sdk_readiness_failure_prevents_both_hooks) ... ok\ntest_unmocked_process_and_network_are_blocked (__main__.CompatibilityTests.test_unmocked_process_and_network_are_blocked) ... ok\n\n----------------------------------------------------------------------\nRan 9 tests in 0.122s\n\nOK\n",
+      "tests_run": 9,
+      "worker_command": [
+        "/tmp/glm1104-sdk042-tests/bin/python",
+        "-I",
+        "-B",
+        "/private/tmp/glm1104-video16b-build-milestone/tests/sdk_compatibility/cases.py",
+        "--repo",
+        "/private/tmp/glm1104-final16-repository",
+        "--native-source",
+        "/private/tmp/glm1104-video16b-locked-source",
+        "--expected-sdk",
+        "0.4.2",
+        "--report",
+        "<temporary-report>"
+      ],
+      "worker_returncode": 0
+    }
+  ]
+}

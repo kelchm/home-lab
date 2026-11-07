@@ -2,7 +2,7 @@ recipe_version: '2'
 model: Mia-AiLab/GLM-5.3-Flash-EXL3-4bpw-TensorFold
 model_revision: 078455ffe6472f9a52fbc1139f58b9db2881b25c
 runtime: tensorfold
-container: sha256:1d1c44ae8c87b866581c4978d78991570406d2da02a13954203cc3d69d68cc70
+container: sha256:b68b66b046dd16b98ceb206cafa46e17bb9fc9c83c997f68d47bbf1c2c782f76
 min_nodes: 2
 max_nodes: 2
 metadata:
@@ -10,16 +10,16 @@ metadata:
   weights: mia
   serving_profile: agent
   status: candidate
-  description: Native request ownership and checkpoint restore candidate; durable serving disabled
+  description: Single-pass native video and media refusal candidate; durable serving disabled
   kit_date: '20261104'
   kit_revision: 02dac3879852b8c5713318d3d64a5a791002e954
   engine_revision: f350cd3ea253a042e205746928271f9d8f71a82d
   upstream_patch_count: 108
   target_model_revision: 078455ffe6472f9a52fbc1139f58b9db2881b25c
   draft_model_revision: bf582e4eacc1810f76656d1811693ff6c6737d2a
-  site_patch_count: 13
-  site_patches_sha256: fc4f6f91fe4f89dff230723021f42679a08985c978513add26d7e652f08b3bf3
-  image: glm53-tf:1104-02dac38-f7680c9bcdf7-sfc4f6f91fe4f
+  site_patch_count: 16
+  site_patches_sha256: 876391916c5ae9e149b0a0ede5f443ff320f2fd88f24c7030797250da9ad4390
+  image: glm53-tf:1104-02dac38-f7680c9bcdf7-s876391916c5a
 defaults:
   tensor_parallel: 2
   pipeline_parallel: 1
