@@ -1,0 +1,40 @@
+{
+  "engine_commit": "e52eb42b52b1e50f3f23a5eae8115bbe80c5e7d9",
+  "executables": [
+    "recipes/glm53-mia/sparkrun/mods/glm53-native/readiness.py",
+    "recipes/glm53-mia/sparkrun/mods/glm53-native/run.sh"
+  ],
+  "files": {
+    "AGENTS.md": "23f6b128447edbf18a1357bb2324f6526eeef2a36a4df096106b23644201b33d",
+    "LICENSE": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+    "NOTICE": "3280e14939eb6ae71733edffc2b4a7f079c4e7bb821ad77b6981887702a03877",
+    "plugins/tensorfold/__init__.py": "028dbc5838ecc706f21fc2c110edc1490d7f504c9892b76477353483269ba5ab",
+    "qualification/README.md": "75537e3565a53606bd1c3812c8f92c789dabd6e50886f0b5807cad949b347d93",
+    "qualification/__init__.py": "8ec91ada5a446a7c0de2a6383ef0483b90623bb35df7d13f7b5a20111f62e48c",
+    "qualification/__main__.py": "171ddb68c1c46a0b1437be837cbe4cca276ef34c5f8140a7c223580c59ad1c9f",
+    "qualification/evidence.py": "bfbba141029c74058632da64d94a05ccc868f55d85d1ce75e859a000be6ca3d8",
+    "qualification/transport.py": "3aab337a41ce893f806abdc94df8359b506dc35b8265c19052fdb042ea330d21",
+    "qualification/workload.py": "be8c0b0f4737860cfc6993e90abc56f6b0813501fcadb9a28cc77022abccf99b",
+    "recipes/glm53-mia/releases/glm53-mia-2026.11.07.json": "c537d7f0c5037f3e8002eb13f92a4d37cd01549d575c7269c8144cd04a7fb371",
+    "recipes/glm53-mia/sparkrun/README.md": "4351b15327a111d04fda49ac57616a9b90d707e6c8c28440fcc09b4c9988fa97",
+    "recipes/glm53-mia/sparkrun/mods/glm53-native/capacity.py": "dbb53fa620a5b8d12daa49e8e1ad3bb4153d8fd29ba41eb05343f4a20e7639e8",
+    "recipes/glm53-mia/sparkrun/mods/glm53-native/chat_template.jinja": "f2e36c6b7fdd89f5f61564635227a1708e1601357cd41f9b5c0190911573d1e2",
+    "recipes/glm53-mia/sparkrun/mods/glm53-native/manifest.json": "a5c69171b7030b5ec8a428a349b223a174bbfedf4a690a23a6461c755c278888",
+    "recipes/glm53-mia/sparkrun/mods/glm53-native/readiness.py": "4f75d957e8f7779b251521ebf3ce7ae62bd40c24ac30c675a5ed53e9d3cda41b",
+    "recipes/glm53-mia/sparkrun/mods/glm53-native/run.sh": "43427da568b4338c14cc5303b339989731d8d700b53dfb5de0c478eaa9a970fe",
+    "recipes/glm53-mia/sparkrun/mods/glm53-native/serve.py": "9564069a872e94ce1a28d3a309985bfbad2e4ee2bb579dbd98a197c58584bb96",
+    "recipes/glm53-mia/sparkrun/mods/glm53-native/upstream_chat_template.jinja": "15ff929998c3dd126addaa1448f7f811bb3724fe835f448ac889d8f558d034c8",
+    "recipes/glm53-mia/sparkrun/mods/glm53-native/verify.py": "93de9a3a84dc610a1f51b0c82d6a15da7fb929eade194634f3961591b246bff7",
+    "recipes/glm53-mia/sparkrun/profile.yaml.in": "32d3bf796684887c630398bd5b6987d027899cdaa80824d923efbdc4621c1047",
+    "recipes/glm53-mia/sparkrun/profiles/glm53-mia-2026.11.07-agent-1m.yaml": "86230797efef815c8265a496b473feb40dd92c610601df5026b76cdbbf4d5117",
+    "recipes/glm53-mia/sparkrun/profiles/glm53-mia-2026.11.07-quota-probe.yaml": "c1a54b69871340b1385c77b7d1ef68cbf6d52338eca297a95c92d62abc1f4070"
+  },
+  "image": "ghcr.io/kelchm/spark-inference/glm53-mia@sha256:0956a18406597abc252564b6f23e7f205dc35c5eac5b475ea6c0c229d10d4d9c",
+  "operating_status": "qualification-only; requires an approved window",
+  "profile_path": "recipes/glm53-mia/sparkrun/profiles/glm53-mia-2026.11.07-agent-1m.yaml",
+  "release": "glm53-mia-2026.11.07",
+  "release_path": "recipes/glm53-mia/releases/glm53-mia-2026.11.07.json",
+  "repository": "kelchm/spark-inference",
+  "schema": "spark-inference-deployment/v1",
+  "source_commit": "d1f9aa0ad3ce3ca6d50d96566212b0569aa78af1"
+}
