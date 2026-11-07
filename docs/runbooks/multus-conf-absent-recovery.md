@@ -102,19 +102,37 @@ Before recycling pods, confirm the node is *currently* healthy. Recycling onto a
 
 ## Recovery
 
+Delete the broken pod gracefully and let its controller replace it:
+
 ```sh
+kubectl -n <namespace> delete pod <name>
+kubectl -n <namespace> get pod -o wide -w   # until the replacement is Running and Ready
+```
+
+Then rerun the staleness query above and confirm the replacement's interface with `ip -br addr`.
+
+Any delete gets a replacement with a fresh UID, so a graceful delete does not inherit the old sandbox's name reservation. The `failed to reserve sandbox name "<podname>_<namespace>_<UID>_0"` error belongs to kubelet retrying a sandbox for the *same* pod after a cancelled CNI ADD, which is why the pre-recovery checks require a clean CNI before you delete anything. A graceful delete also lets kubelet stop the containers and run CNI DEL, which releases the sandbox, its name and its IPAM allocations.
+
+### Longhorn instance-managers
+
+An instance-manager runs the engines and replicas of the volumes on its node. Deleting one that still carries them fails every replica it hosts, and the engines with them. Before deleting it:
+
+1. List the volumes it serves and let them move off: stop or move their workloads, or drain the node with a PodDisruptionBudget-respecting `kubectl drain` as in the [cutover procedure](longhorn-storage-network-cutover.md#roll-managers-then-one-node-at-a-time). Do not add `--force` or `--disable-eviction`.
+2. Record the old pod's UID, container and sandbox IDs.
+3. Delete it gracefully, as above. Longhorn may not recreate it while the node is cordoned; once CNI is healthy, uncordon so the replacement can start.
+4. Require the replacement to have a new UID and sandbox, and [prove its storage interface](longhorn-storage-network-cutover.md#prove-each-replacement-has-the-filter): `lhnet1` with a `10.32.25.128/28` address and the storage routes.
+5. Run `.agents/skills/talos-rollout/scripts/verify-node.sh <node>`. Every in-use volume must be attached and healthy, with none degraded or faulted, and every instance-manager Running and Ready with `lhnet1`. Watch rebuilds with `kubectl -n longhorn-system get replica -o wide -w`.
+
+### When to force-delete
+
+Only for a pod already diagnosed as stuck: it has stayed `Terminating` well past its grace period, and kubelet cannot finish the teardown, for example because CNI DEL keeps failing. Force deletion removes the API object without waiting for kubelet, so the old containers can keep running beside their replacement; for an instance-manager that means two processes claiming the same engines and replicas. Before forcing, confirm on the node that the pod's containers are gone, and for an instance-manager complete steps 1 and 2 above:
+
+```sh
+talosctl -n <node-ip> containers -k | grep <pod-name>   # must print nothing
 kubectl -n <namespace> delete pod <name> --force --grace-period=0
 ```
 
-`--force --grace-period=0` is mandatory, not stylistic. A graceful delete can hit a containerd sandbox-name-reservation conflict — kubelet's CNI ADD got cancelled mid-flight (RST_STREAM / DeadlineExceeded), the sandbox name stays reserved against the dead pod's UID, and replacements with the same UID fail with `failed to reserve sandbox name "<podname>_<namespace>_<UID>_0": name "..." is reserved for "<old-sandbox-id>"`. Force-delete works because the controller (DaemonSet / StatefulSet / Deployment) creates the replacement pod with a fresh UID.
-
-For Longhorn instance-managers, replicas inside the recycled IM may be marked failed and rebuilt against the new IM. Watch progress:
-
-```sh
-kubectl -n longhorn-system get replica -o wide -w
-```
-
-Wait until rebuilds complete and the engine reports the volume Healthy in the Longhorn UI before considering the recovery done.
+Then continue from step 4.
 
 ## After recovery
 
