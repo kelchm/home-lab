@@ -20,7 +20,7 @@ spec:
           app:
             image:
               repository: ghcr.io/usetrmnl/terminus
-              tag: latest@sha256:af35903b5b718dab2c18b651840aca0db1a3ffbcd7f5f02e3d6098bf5d806fac
+              tag: latest@sha256:c26b521620aac2fdb096a567a943c4dd5149a0888050230d3bd3cd217e855476
             env:
               TZ: America/New_York
               HANAMI_PORT: '2300'
@@ -114,7 +114,7 @@ spec:
           worker:
             image:
               repository: ghcr.io/usetrmnl/terminus
-              tag: latest@sha256:af35903b5b718dab2c18b651840aca0db1a3ffbcd7f5f02e3d6098bf5d806fac
+              tag: latest@sha256:c26b521620aac2fdb096a567a943c4dd5149a0888050230d3bd3cd217e855476
             env:
               HANAMI_PORT: '2300'
               API_URI: https://terminus.home.kelch.io
