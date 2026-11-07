@@ -79,11 +79,19 @@ Use this for database corruption, an unwanted change through the API or web UI, 
 
    Log in as `idm_admin` with the password in the `kanidm-admin-passwords` Secret, and confirm that a change made after the backup is gone. If the login fails because the admin password changed after the backup, delete that Secret so Kaniop issues a new one, as its restore controller does.
 
-6. **Reseed replicas 1 and 2.** Resume Flux, which returns the group to three replicas. The StatefulSet starts them in order with empty claims; Kaniop registers their new replication certificates and restarts the StatefulSet, and each reloads from replica 0 through its `automatic_refresh` link. Replica 1 starts before replica 2 exists, so its only source is replica 0.
+6. **Reseed replica 1, then replica 2, keeping Flux suspended.** An empty replica asks every partner for a refresh and takes the first answer, and readiness does not wait for the refresh to finish ([source](https://github.com/kanidm/kanidm/blob/v1.11.2/server/core/src/repl/mod.rs#L451-L475)). Going straight to three replicas could let replica 2 reload from replica 1 before replica 1 holds the restored data. Add one replica at a time, so the only partners a new replica can reach already hold it. Kaniop registers each new replica's certificate and restarts the StatefulSet.
+
+   ```sh
+   kubectl -n identity patch kanidm kanidm --type json \
+     -p '[{"op":"replace","path":"/spec/replicaGroups/0/replicas","value":2}]'
+   kubectl -n identity get pods -l app.kubernetes.io/name=kanidm -w   # until kanidm-default-1 is Ready
+   kubectl -n identity logs kanidm-default-1 -c kanidm | grep -i refresh
+   ```
+
+   Continue only when replica 1 has logged a completed refresh and shows the restored state: a change made after the backup is absent when you query that pod directly, for example through `kubectl -n identity port-forward pod/kanidm-default-1 8443` with the `kanidm` CLI pointed at `https://localhost:8443` and hostname verification skipped. Then set `"value":3`, check replica 2 the same way, and resume Flux, which leaves the group at the declared three:
 
    ```sh
    flux resume kustomization kanidm -n identity
-   kubectl -n identity get pods -l app.kubernetes.io/name=kanidm -w
    ```
 
 7. Complete [Verification](#verification).
