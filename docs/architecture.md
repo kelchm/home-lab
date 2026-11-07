@@ -344,20 +344,19 @@ Add carve-out firewall rules per allocated IP+port — never pool-wide allows.
 
 ### Firewall posture per pool
 
-Configured in UniFi (no committable artifact lives in this repo; intent in [`network/unifi/README.md`](../network/unifi/README.md)):
+UniFi's inter-VLAN default is allow, and most of this posture is not enforced yet. The IoT and Guest denies are unapplied intent, and Main clients reach `admin-prod` without an admin-device restriction. Both Traefik gateways admit every source in their Cilium policies, so they don't enforce the boundary either. Applying these rules is tracked in [#348](https://github.com/kelchm/home-lab/issues/348). No committable artifact lives in this repo; [`network/unifi/README.md`](../network/unifi/README.md) records the intended rules and the applied state.
 
-```
-VLAN 10 Main  → admin-prod          : allow (admin device group only)
-VLAN 10 Main  → services-prod       : allow
-VLAN 21 Workloads → services-prod    : allow
-VLAN 90 IoT   → admin-prod          : deny
-VLAN 90 IoT   → services-prod       : deny
-VLAN 99 Guest → admin-prod          : deny
-VLAN 99 Guest → services-prod       : deny
-VLAN 90       → 10.32.150.30 TCP/11113 : allow (Visionect devices)
-VLAN 10       → 10.32.150.30 TCP/443   : allow (Visionect management UI)
-other clients → 10.32.150.30 any       : deny
-```
+| Source | Destination | Target | Current state |
+|---|---|---|---|
+| VLAN 10 Main | `admin-prod` | allow, admin device group only | allowed from every Main client by the default |
+| VLAN 10 Main | `services-prod` | allow | allowed by the default |
+| VLAN 21 Workloads | `services-prod` | allow | allowed by the default |
+| VLAN 21 Workloads | `admin-prod` | deny, except Hermes → `10.32.130.1` TCP/443 | applied (`Block Workloads to Admin Prod Routed`) |
+| VLAN 90 IoT | `admin-prod`, `services-prod` | deny | not applied; allowed by the default |
+| VLAN 99 Guest | `admin-prod`, `services-prod` | deny | not applied; allowed by the default |
+| VLAN 90 IoT | `10.32.150.30` TCP/11113 | allow (Visionect devices) | applied |
+| VLAN 10 Main | `10.32.150.30` TCP/443 | allow (Visionect management UI) | applied |
+| other clients | `10.32.150.30` any | deny | applied |
 
 ## Service categorization & exposure
 
