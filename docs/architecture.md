@@ -109,7 +109,7 @@ Removing or moving many dashboards at once can leave stale files in the Grafana 
 | VLAN | Name | Subnet | Purpose |
 |---|---|---|---|
 | 1 | Default | 10.32.1.0/24 | UniFi management |
-| 5 | Cameras | 10.32.5.0/24 | Existing |
+| 5 | Cameras | 10.32.5.0/24 | Cameras; no Internet access |
 | 10 | Main | 10.32.10.0/24 | Trusted household devices |
 | 19 | Remote Admin | 10.32.19.0/24 | Isolated remote-access routing-peer transit |
 | 20 | Infra Mgmt | 10.32.20.0/24 | Classic mgmt planes for non-Talos tenants |
@@ -117,8 +117,8 @@ Removing or moving many dashboards at once can leave stale files in the Grafana 
 | 25 | Storage | 10.32.25.0/24 | NFS/iSCSI to Synology |
 | 30 | K8s Prod | 10.32.30.0/24 | Prod cluster compute (nodes + API VIP only) |
 | 31 | K8s 2 | 10.32.31.0/24 | Second Kubernetes cluster compute (reserved) |
-| 90 | IoT | 10.32.90.0/24 | Existing |
-| 99 | Guest | 10.32.99.0/24 | Existing |
+| 90 | IoT | 10.32.90.0/24 | Household appliances and media devices |
+| 99 | Guest | 10.32.99.0/24 | Visitors (household devices are moving to IoT) |
 
 VLAN 40 (Lab Services) is being retired — it existed only to host node subinterfaces required by Cilium L2 announcements. Under BGP, LB IPs are routed (not bridged) so no node interface on the pool subnet is needed. The legacy L2 pools and node subinterfaces remain in place pending a final maintenance window.
 
@@ -133,6 +133,29 @@ VLAN 40 (Lab Services) is being retired — it existed only to host node subinte
 - PVE and K8s storage identities → Storage: scope to named peers and services
 - K8s Prod, K8s 2, and Workloads → Internet: allow subject to normal DNS and egress controls
 - Per-pool LB rules: see [LB Pool Allocation](#lb-pool-allocation)
+
+### Firewall zones
+
+Zones are trust levels, not one per VLAN. A network joins the zone whose baseline policy it shares, and named rules carry the exceptions. Custom zones block routed traffic between their own member networks by default, so sharing a zone grants no access between members. The migration is tracked in [#348](https://github.com/kelchm/home-lab/issues/348); [`network/unifi/README.md`](../network/unifi/README.md#firewall-zones-applied-state) records the applied state.
+
+| Zone | Target networks | Baseline |
+|---|---|---|
+| Internal (built-in) | Main | Household clients. A short list of admin devices with reserved addresses gets management access; other Main clients get household services only. |
+| Infrastructure | Default, Infra Mgmt, Workloads, K8s Prod | Servers and management planes. Members are blocked from each other except for named dependencies; management is reachable only from admin devices and approved remote access. |
+| Untrusted | IoT, Cameras, Guest | Devices and visitors that are not managed here. Internet access (Cameras excepted) and named local services only; members are blocked from each other. |
+| Remote Admin | Remote Admin | NetBird routing peer with per-resource allows. |
+
+Storage, Services (VLAN 40), K8s Sandbox and the temporary SDR management VLAN are transitional and are not assigned a target zone: Storage loses its gateway once its routed dependencies are resolved, VLAN 40 retires through the Talos procedure, and the other two retire after dependency checks. Guest joins Untrusted once the household devices on it have moved to IoT and its shared key is replaced.
+
+Home Assistant is the deliberate exception to the generic rules. Household clients reach it, and it initiates connections to devices across Untrusted, Main and the UPS servers, through its own named rule set ([#1365](https://github.com/kelchm/home-lab/issues/1365)).
+
+**Conventions:**
+
+- Name rules `Allow <source> to <service>` or `Block <source> to <scope>`; the description records why the rule exists.
+- Blocks match new connections only and have logging enabled, so replies are never caught and each blocked flow names its rule in VictoriaLogs.
+- Match sources and destinations by IP or address group where a network might change zone. When a network moves zone, UniFi removes it from network selectors in other rules and pauses any rule left empty.
+- Restricted zones reach the gateway only for DNS, DHCP, NTP, mDNS (including mDNS responses from UDP source port 5353) and ICMP, followed by a block.
+- BGP pool destinations are classified as External from Internal and Untrusted sources, so pool denies go in that cell, ahead of the Internet allow.
 
 ## IP Addressing Convention
 
@@ -344,7 +367,7 @@ Add carve-out firewall rules per allocated IP+port — never pool-wide allows.
 
 ### Firewall posture per pool
 
-UniFi's inter-VLAN default is allow, and most of this posture is not enforced yet. The IoT and Guest denies are unapplied intent, and Main clients reach `admin-prod` without an admin-device restriction. Both Traefik gateways admit every source in their Cilium policies, so they don't enforce the boundary either. Applying these rules is tracked in [#348](https://github.com/kelchm/home-lab/issues/348). No committable artifact lives in this repo; [`network/unifi/README.md`](../network/unifi/README.md) records the intended rules and the applied state.
+Internal-to-Internal traffic is allowed by default, so this posture is enforced only where a rule or a custom zone applies. IoT and Guest are restricted; Main clients still reach `admin-prod` without an admin-device restriction. Both Traefik gateways admit every source in their Cilium policies, so they don't enforce the boundary either. Applying these rules is tracked in [#348](https://github.com/kelchm/home-lab/issues/348). No committable artifact lives in this repo; [`network/unifi/README.md`](../network/unifi/README.md) records the intended rules and the applied state.
 
 | Source | Destination | Target | Current state |
 |---|---|---|---|
@@ -352,8 +375,9 @@ UniFi's inter-VLAN default is allow, and most of this posture is not enforced ye
 | VLAN 10 Main | `services-prod` | allow | allowed by the default |
 | VLAN 21 Workloads | `services-prod` | allow | allowed by the default |
 | VLAN 21 Workloads | `admin-prod` | deny, except Hermes → `10.32.130.1` TCP/443 | applied (`Block Workloads to Admin Prod Routed`) |
-| VLAN 90 IoT | `admin-prod`, `services-prod` | deny | not applied; allowed by the default |
-| VLAN 99 Guest | `admin-prod`, `services-prod` | deny | not applied; allowed by the default |
+| VLANs 5 and 90 (Untrusted) | `admin-prod`, `services-prod`, `shared-prod` | deny, except Visionect below | applied (`Block IoT to Other Service Pools`) |
+| VLAN 99 Guest | `admin-prod` | deny | applied (`Block Guest to Admin Services`) |
+| VLAN 99 Guest | `services-prod` | deny | not applied; household devices on Guest still use it until they move to IoT |
 | VLAN 90 IoT | `10.32.150.30` TCP/11113 | allow (Visionect devices) | applied |
 | VLAN 10 Main | `10.32.150.30` TCP/443 | allow (Visionect management UI) | applied |
 | other clients | `10.32.150.30` any | deny | applied |
