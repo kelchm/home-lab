@@ -367,7 +367,7 @@ The collector side expects three things of whatever launches an inference engine
 
 - The engine's output is the container's output.
 - The container uses Docker's `fluentd` log driver with the options in `LOG_DOCKER_OPTS` in the [TensorFold adapter](../../sparks/inference/sparkrun/plugins/tensorfold/__init__.py), which send every line to `127.0.0.1:24224`.
-- The container carries the `sparkrun.recipe`, `sparkrun.served_model_name`, `sparkrun.runtime` and `sparkrun.rank` labels, and the driver's `labels` option names them. The [metrics scrape](../../sparks/monitoring/scrape.yaml) reads the same labels, so renaming them means changing both.
+- The container carries the `sparkrun.recipe`, `sparkrun.served_model_name` and `sparkrun.runtime` labels, plus `sparkrun.rank` when a launch has more than one rank, and the driver's `labels` option names them. The [metrics scrape](../../sparks/monitoring/scrape.yaml) reads the same labels, so renaming them means changing both.
 
 SparkRun meets the first only with help: it runs the inference server in a container whose main process is `sleep infinity`, with the server's output in `/tmp/sparkrun_serve.log`, so it reaches neither `docker logs` nor the journal and is gone when the container is removed. The adapter's serve command therefore copies its output to the container's own (`SERVE_OUTPUT`), and the log file and `sparkrun logs` are unchanged. The adapter applies both changes at every launch, for every TensorFold recipe.
 
