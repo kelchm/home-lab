@@ -6,6 +6,7 @@ Host, GPU and inference metrics for the two DGX Sparks. Enrollment, verification
 |---|---|
 | [compose.yaml](compose.yaml) | node-exporter, smartctl-exporter, apt-metrics, vmagent and fluent-bit. |
 | [logs/](logs/) | fluent-bit's configuration and journal mapping; see [Host logs](../../docs/runbooks/logging.md#host-logs). Identical to the PVE nodes'. |
+| [inference-logs/](inference-logs/) | Adds the inference server's output to fluent-bit, with each engine's request lines read into common fields; see [Spark inference logs](../../docs/runbooks/logging.md#spark-inference-logs). |
 | [gpu/compose.yaml](gpu/compose.yaml) | The NVIDIA GPU exporter, as its own project. |
 | [scrape.yaml](scrape.yaml) | Host, SMART, GPU, vmagent, deployer, log collector and inference scrape jobs. |
 | [.doco-cd.yml](.doco-cd.yml) | The two deployments every Spark's doco-cd applies. |

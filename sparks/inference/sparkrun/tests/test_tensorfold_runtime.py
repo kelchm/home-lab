@@ -9,6 +9,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import time
 from functools import partial
 from pathlib import Path
 from unittest import mock
@@ -20,7 +21,7 @@ PLUGINS = Path(__file__).resolve().parents[1] / "plugins"
 if str(PLUGINS) not in sys.path:
     sys.path.insert(0, str(PLUGINS))
 
-from tensorfold import _FABRIC_MASTER, REQUIRED_DEFAULTS, TensorFoldRuntime, hf_snapshot_path  # noqa: E402
+from tensorfold import _FABRIC_MASTER, LOG_DOCKER_OPTS, REQUIRED_DEFAULTS, SERVE_OUTPUT, TensorFoldRuntime, hf_snapshot_path  # noqa: E402
 
 from sparkrun.core.bootstrap import get_runtime, init_sparkrun  # noqa: E402
 from sparkrun.core.external_plugins import load_external_plugins  # noqa: E402
@@ -83,6 +84,8 @@ def _recipe(defaults=None, **extra):
 
 
 def _parse_env_command(command: str) -> tuple[dict[str, str], list[str]]:
+    output, _, command = command.partition("\n")
+    assert output == SERVE_OUTPUT, output
     tokens = shlex.split(command)
     assert tokens, command
     assert tokens[0] == "env", command
@@ -475,7 +478,9 @@ def test_native_lifecycle_gates_tcpstore_then_starts_rank1(runtime, monkeypatch,
     monkeypatch.setattr(_cluster_ops, "detect_head_ip", lambda ctx: FABRIC_HEAD)
     monkeypatch.setattr(_cluster_ops, "resolve_hosts_for_init", lambda ctx, head_ip: [FABRIC_HEAD, FABRIC_WORKER])
     monkeypatch.setattr("sparkrun.runtimes._init_network.workers_can_reach", lambda ctx, target: True)
-    monkeypatch.setattr(_cluster_ops, "launch_containers_parallel", lambda *a, **k: order.append("containers") or 0)
+    docker_opts: list = []
+    monkeypatch.setattr(_cluster_ops, "launch_containers_parallel",
+                        lambda *a, **k: order.append("containers") or docker_opts.append(k["extra_docker_opts"]) or 0)
     monkeypatch.setattr(_cluster_ops, "run_pre_serve_hooks", lambda *a, **k: order.append("pre_serve"))
     monkeypatch.setattr(_cluster_ops, "cleanup_ranked_containers", lambda *a, **k: None)
     monkeypatch.setattr(_cluster_ops, "cleanup_after_failure", lambda *a, **k: order.append("cleanup"))
@@ -541,6 +546,7 @@ def test_native_lifecycle_gates_tcpstore_then_starts_rank1(runtime, monkeypatch,
     assert rc == 0
     assert order.index("containers") < order.index("pre_serve") < order.index("exec:h1")
     assert order.index("exec:h1") < order.index("wait:h1:29511") < order.index("exec:h2")
+    assert docker_opts == [list(LOG_DOCKER_OPTS)]
     rank0, _ = _parse_env_command(captured[0])
     rank1, _ = _parse_env_command(captured[1])
     assert rank0["RANK"] == "0"
@@ -552,6 +558,30 @@ def test_native_lifecycle_gates_tcpstore_then_starts_rank1(runtime, monkeypatch,
     assert [source.rank for source in sources] == [0, 1]
     assert {source.mode for source in sources} == {MODE_FILE}
     assert [source.container for source in sources] == ["cid_node_0", "cid_node_1"]
+
+
+def test_rank_containers_send_their_output_to_the_sparks_collector(runtime):
+    from sparkrun.orchestration.executors.docker import DockerExecutor
+
+    tokens = shlex.split(DockerExecutor().run_cmd("img", "sleep infinity", extra_opts=runtime.get_extra_docker_opts()))
+    image = tokens.index("img")
+    assert tokens[image - len(LOG_DOCKER_OPTS):image] == list(LOG_DOCKER_OPTS)
+    assert "--log-opt=fluentd-address=tcp://127.0.0.1:24224" in LOG_DOCKER_OPTS
+
+
+@pytest.mark.skipif(b"GNU" not in subprocess.run(["tee", "--version"], capture_output=True).stdout,
+                    reason="the engine images' tee is GNU coreutils")
+def test_serve_output_reaches_both_the_log_file_and_pid_1(tmp_path):
+    # A stand-in for PID 1's output, which Docker's log driver reads.
+    pid1 = tmp_path / "pid1"
+    script = "%s\necho out\necho err >&2\n" % SERVE_OUTPUT.replace("/proc/1/fd/1", str(pid1))
+    result = subprocess.run(["bash", "-c", script], capture_output=True, text=True, check=True)
+    assert result.stdout.splitlines() == ["out", "err"]
+    for _ in range(50):
+        if pid1.read_text().splitlines() == ["out", "err"]:
+            break
+        time.sleep(0.1)
+    assert pid1.read_text().splitlines() == ["out", "err"]
 
 
 DSV41_RECIPES = sorted((Path(__file__).resolve().parents[1] / "bertholomus-tensorfold-dsv41-tp2").glob("*.yaml"))
