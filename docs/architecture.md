@@ -149,13 +149,23 @@ Storage, Services (VLAN 40), K8s Sandbox and the temporary SDR management VLAN a
 
 Home Assistant is the deliberate exception to the generic rules. Household clients reach it, and it initiates connections to devices across Untrusted, Main and the UPS servers, through its own named rule set ([#1365](https://github.com/kelchm/home-lab/issues/1365)).
 
-**Conventions:**
+**Rule conventions:**
 
-- Name rules `Allow <source> to <service>` or `Block <source> to <scope>`; the description records why the rule exists.
-- Blocks match new connections only and have logging enabled, so replies are never caught and each blocked flow names its rule in VictoriaLogs.
-- Match sources and destinations by IP or address group where a network might change zone. When a network moves zone, UniFi removes it from network selectors in other rules and pauses any rule left empty.
-- Restricted zones reach the gateway only for DNS, DHCP, NTP, mDNS (including mDNS responses from UDP source port 5353) and ICMP, followed by a block.
+- Name rules `<Source> to <Purpose>`, for example `Guest to Lab Networks` or `Home Assistant to Thermostats`. Leave out Allow/Block: the console's Action column and the flow logs' action field carry the verdict, and the name stays true if the action changes. The source is the zone, network or list the rule matches; the purpose is the role or service reached, never a list of what the rule contains. Put the distinctive words first and keep names to about 30 characters, because the console's Name column cannot be widened. Use plain ASCII and keep names unique.
+- Give every rule a one-sentence description of why it exists.
+- Match the whole zone where the rule covers it. Use a network selector only for a network that will not change zone: when a network moves zone, UniFi removes it from network selectors in other rules and pauses any rule left empty. Put anything more specific in a Network List, even if only one rule uses it, so the policy table reads as names. Only a single standard port that UniFi labels as a service (DNS, NTP, HTTP, HTTPS, SSH) stays inline.
+- Blocks match new connections only and log, so replies are never caught and each blocked flow names its rule.
+- Restricted zones reach the gateway through `Gateway Services` (DNS, DHCP, NTP, mDNS), ping and mDNS proxy replies, followed by a block.
 - BGP pool destinations are classified as External from Internal and Untrusted sources, so pool denies go in that cell, ahead of the Internet allow.
+- Access is defined only in firewall rules. Client groups and the Object Manager generate their own rules and are not used.
+
+**Network List conventions:**
+
+- Name lists for the role in plain words, without a type prefix: IP lists for what the members are (`Time Servers`), port lists for the listening service (`Home Assistant Web`), domain lists for what the domains serve (`Thingino Update Hosts`).
+- Use the list description for what the members are and how each address stays fixed, or for what each port is for.
+- Every address in a list is statically configured, a DHCP reservation, or pinned by Cilium. A plain DHCP lease eventually changes and silently breaks the rule.
+
+**Changes:** take a Control Plane backup and a JSON snapshot before each batch, then compare every rule's effective match against the snapshot afterwards. Renaming a rule does not change past flow records, so settle names once; [`network/unifi/README.md`](../network/unifi/README.md#names-before-2026-11-08) maps earlier names.
 
 ## IP Addressing Convention
 
@@ -374,9 +384,9 @@ Internal-to-Internal traffic is allowed by default, so this posture is enforced 
 | VLAN 10 Main | `admin-prod` | allow, admin device group only | allowed from every Main client by the default |
 | VLAN 10 Main | `services-prod` | allow | allowed by the default |
 | VLAN 21 Workloads | `services-prod` | allow | allowed by the default |
-| VLAN 21 Workloads | `admin-prod` | deny, except Hermes → `10.32.130.1` TCP/443 | applied (`Block Workloads to Admin Prod`) |
-| VLANs 5 and 90 (Untrusted) | `admin-prod`, `services-prod`, `shared-prod` | deny, except Visionect below | applied (`Block Untrusted to Service Pools`) |
-| VLAN 99 Guest | `admin-prod` | deny | applied (`Block Guest to Admin Prod`) |
+| VLAN 21 Workloads | `admin-prod` | deny, except Hermes → `10.32.130.1` TCP/443 | applied (`Workloads to Admin Prod`) |
+| VLANs 5 and 90 (Untrusted) | `admin-prod`, `services-prod`, `shared-prod` | deny, except Visionect below | applied (`Untrusted to Service Pools`) |
+| VLAN 99 Guest | `admin-prod` | deny | applied (`Guest to Admin Prod`) |
 | VLAN 99 Guest | `services-prod` | deny | not applied; household devices on Guest still use it until they move to IoT |
 | VLAN 90 IoT | `10.32.150.30` TCP/11113 | allow (Visionect devices) | applied |
 | VLAN 10 Main | `10.32.150.30` TCP/443 | allow (Visionect management UI) | applied |

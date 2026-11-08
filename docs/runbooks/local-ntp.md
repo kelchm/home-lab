@@ -11,12 +11,12 @@ Both servers and their central alerts were accepted on 2026-10-30. See [rpi-nixo
 
 ## Allow access in UniFi
 
-Two enabled policies allow NTP to `10.32.20.111/32` and `10.32.20.112/32` (IPv4 UDP 123, source port Any, All states, Always, Auto Allow Return Traffic off):
+Two enabled policies allow NTP (UDP 123) to the `Time Servers` list, `10.32.20.111` and `10.32.20.112`:
 
 | Policy | Zones and sources | Why it is needed |
 |---|---|---|
-| **Allow Workloads to Local NTP** | Internal → Internal; Workloads (21) | Sits above **Block Workloads to Protected Networks** |
-| **Allow Untrusted to Local NTP** | Untrusted → Internal; Cameras (5) and IoT (90) | Untrusted blocks Internal by default |
+| **Workloads to Time Servers** | Internal → Internal; Workloads (21) | Sits above **Workloads to Protected Networks** |
+| **Untrusted to Time Servers** | Untrusted → Internal; Cameras (5) and IoT (90) | Untrusted blocks Internal by default |
 
 Other Internal networks reach the Pis through Allow All. On 2026-11-08 the original **Allow Cameras Storage Workloads to Pi NTP** rule was renamed and Storage was removed from its sources: no Storage host had used it in the previous week. Cameras had already moved to the Untrusted rule when the network changed zone. The applied zone state is in [`network/unifi/README.md`](../../network/unifi/README.md#local-ntp). Confirm the current policy order before further changes.
 

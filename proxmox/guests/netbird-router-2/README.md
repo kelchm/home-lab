@@ -123,20 +123,13 @@ arping -D -c 3 10.32.19.104
 
 Require the intended VLAN-19 interface, a functioning L2 path and normal gateway/DNS positive controls; retain command/exit status and response counts. iputils duplicate-detection success means no duplicate replies to those probes, not proof against an offline, sleeping, filtered or hidden static device. Another responder, broken L2/positive controls or ambiguous result fails the gate. On failure, set only 104's NIC down and `onboot=0` and request a graceful shutdown; confirm stopped. If shutdown does not complete, keep it link-down/protected and stop for diagnosis, with no automatic hard stop or destruction. Do not add firewall permissions while this gate is unresolved. No probe was sent during preparation.
 
-### 6. UniFi administrator source-only edit, then path checks
+### 6. UniFi list edit, then path checks
 
-The [descriptive delta](unifi-source-delta.json) is not a request payload. With an authorized administrator session, freshly read both forwards and their generated returns. Use the supported administrator UI; an API alternative requires verifying the installed endpoint's full-object PUT semantics and a complete fresh semantic diff first. Saved read-only authentication is not write authority and must not be escalated or probed for writes now.
+Since 2026-11-08 both NetBird forwards, `NetBird to Services Ingress` (`6ab93666519d986cdf987240`) and `NetBird to Admin Ingress` (`6ad6c08f519d986cdf2ee284`), match their source through the `NetBird Routers` Network List. With an authorized administrator session, add `10.32.19.104` to that list in Settings → Networks → Network Lists, and update its description. Change nothing else: no policy edit, no subnet, no reuse of retired Tailscale allowances.
 
-Change only `source.ips` from `["10.32.19.103"]` to `["10.32.19.103","10.32.19.104"]` for forward IDs `6ab93666519d986cdf987240` (services, destination `10.32.140.1`) and `6ad6c08f519d986cdf2ee284` (admin, destination `10.32.130.1`). Preserve IPv4/TCP443, zones, schedule, enablement, order, `.103`, current friendly names/descriptions and all other semantics. Never add a subnet or reuse retired Tailscale allowances. Find each generated response by `origin_id`; require matching source VIP/443, destination `.103/.104`, `RESPOND_ONLY` and `RELATED,ESTABLISHED`. Do not write generated returns independently.
+UniFi regenerates each forward's generated return from the list's members; this was verified on 2026-11-08 by adding and removing a test member on another list. Afterwards, find each return by `origin_id` and require a matching source VIP/443, destination `10.32.19.103` and `10.32.19.104`, `RESPOND_ONLY` and `RELATED,ESTABLISHED`. Do not write generated returns directly.
 
-The offline checker requires complete firewall-policy inventories before and after the edit (a list or a `netbird_policies` object containing every policy, not just the four NetBird objects):
-
-```sh
-python3 proxmox/guests/netbird-router-2/check-unifi-delta.py prepare before.json > forward-candidates.json
-python3 proxmox/guests/netbird-router-2/check-unifi-delta.py verify before.json after.json
-```
-
-It makes no requests. `prepare` preserves fresh friendly renames and emits forward objects only for review, not transmission. `verify` requires the same policy IDs, the exact two forward/generated-return changes and unchanged semantics for every other policy, including unknown fields; only top-level `hits` and `last_hit` counters may change. A filtered snapshot cannot establish that no other policy changed. Concurrent changes require a refreshed review rather than overwriting them. Re-read just before any actual write and read back afterward. A generated-return ID change needs fresh inspection, not an independent write.
+The [descriptive delta](unifi-source-delta.json) and the offline checker (`check-unifi-delta.py`) describe the earlier per-rule `source.ips` edit. They predate the list and no longer apply. The checker would reject a list-based change, so do not use it as a gate. Instead, compare a complete policy and list snapshot from before and after: the only changes should be the list's members and description, and the two regenerated returns.
 
 **Now**, after approved UniFi edits, require validated TLS Jellyfin `/health` HTTP 200, Grafana `/api/health` HTTP 200 with healthy database and DNS UDP/TCP53 from 104. Retain blocked HTTP80 to both VIPs, PVE `.20.21:8006` and adjacent `.130.2:53` checks with positive endpoint controls and exact scope readback. Record gateway `.30.1:443` behavior from the router; do not make success a gate because the complete zone matrix is unverified. Away-client DNS-resource TCP443 must remain denied by NetBird policy. A timeout to an absent listener alone does not prove a /32 rule.
 

@@ -36,8 +36,8 @@ Two custom forward policies cross the boundary:
 
 | Policy | Source zone and match | Destination zone and match | Action |
 |---|---|---|---|
-| `Allow NetBird Router to Services HTTPS` | `Remote Admin`; IP `10.32.19.103` | `Internal`; IP `10.32.140.1`, port 443 | Allow; IPv4; TCP |
-| `Allow NetBird Router to Admin HTTPS` | `Remote Admin`; IP `10.32.19.103` | `Internal`; IP `10.32.130.1`, port 443 | Allow; IPv4; TCP |
+| `NetBird to Services Ingress` | `Remote Admin`; list `NetBird Routers` | `Internal`; list `Services Ingress`, port 443 | Allow; IPv4; TCP |
+| `NetBird to Admin Ingress` | `Remote Admin`; list `NetBird Routers` | `Internal`; list `Admin Ingress`, port 443 | Allow; IPv4; TCP |
 
 On 2026-10-29, `Allow Main to Tailscale Routers` and `Allow Tailscale Routers to Routed LAN` were deleted with their owned generated returns under [#1069](https://github.com/kelchm/home-lab/issues/1069). Fresh reloads in Network 10.6.109 showed policy counts 114 → 112 → 110. Both NetBird forwards and their established/related returns, VLAN 19 and the Remote Admin zone were preserved. Generated return IDs can renumber or be reused; verification matched fresh parent relationships, names and policy semantics rather than historical ID absence. This was console readback, with no traffic test or complete configuration export. Main → Remote Admin is now blocked, and the two NetBird policies above are the only Remote Admin → Internal initiation exceptions.
 
@@ -73,12 +73,12 @@ The following policies remain live in UniFi Network 10.6.101 and ordered above t
 
 | Policy | Source zone and match | Destination zone and match | Action |
 |---|---|---|---|
-| `Allow Hermes to MCPHub` | `Internal`; IP `10.32.21.100` | `External`; IP `10.32.130.1` | Allow; TCP 443 |
-| `Block Workloads to Protected Networks` | `Internal`; network `Workloads` | `Internal`; networks `Infra Mgmt`, `K8s Prod`, `Storage` | Block; all protocols |
-| `Block Workloads to Admin Prod` | `Internal`; network `Workloads` | `External`; IP `10.32.130.0/24` | Block; all protocols |
-| `Block K8s Prod to Workloads` | `Internal`; network `K8s Prod` | `Internal`; network `Workloads` | Block; all protocols |
+| `Hermes to MCPHub` | `Internal`; list `Hermes` | `External`; list `Admin Ingress` | Allow; TCP 443 |
+| `Workloads to Protected Networks` | `Internal`; network `Workloads` | `Internal`; networks `Infra Mgmt`, `K8s Prod`, `Storage` | Block; all protocols |
+| `Workloads to Admin Prod` | `Internal`; network `Workloads` | `External`; list `Admin Prod Pool` | Block; all protocols |
+| `K8s Prod to Workloads` | `Internal`; network `K8s Prod` | `Internal`; network `Workloads` | Block; all protocols |
 
-`Allow Hermes to MCPHub` (formerly `Allow Hermes to MetaMCP`) carries MCPHub traffic through the admin-gateway IP. It is ordered immediately above `Block Workloads to Admin Prod`; all other Workloads clients remain denied from `admin-prod`. An unauthenticated HTTPS probe from Hermes reached MetaMCP and returned HTTP 401, while the earlier disposable-guest test remained blocked.
+`Hermes to MCPHub` (formerly `Allow Hermes to MetaMCP`) carries MCPHub traffic through the admin ingress. It is ordered immediately above `Workloads to Admin Prod`; all other Workloads clients remain denied from `admin-prod`. An unauthenticated HTTPS probe from Hermes reached MetaMCP and returned HTTP 401, while the earlier disposable-guest test remained blocked.
 
 `admin-prod` is a Cilium BGP-routed prefix, not a UniFi network. A live negative test proved that UniFi classifies this routed destination through the `External` zone: an `Internal` destination rule did not block Traefik at `10.32.130.1`, while the otherwise identical `External` rule did. This classification is controller behavior, not a statement that the service is Internet-hosted. Retest it after controller upgrades or routing changes.
 
@@ -135,9 +135,9 @@ allocates from it.
 
 ## Firewall zones applied state
 
-Rules are configured manually in the UniFi UI; this section records the applied state because there is no committable controller artifact. The target model and conventions are in [`docs/architecture.md`](../../docs/architecture.md#firewall-zones). Progress is tracked in [#348](https://github.com/kelchm/home-lab/issues/348).
+Rules are configured manually in the UniFi UI; this section records the applied state because there is no readable firewall export. A Control Plane backup is the recovery baseline. The target model and naming conventions are in [`docs/architecture.md`](../../docs/architecture.md#firewall-zones). Progress is tracked in [#348](https://github.com/kelchm/home-lab/issues/348).
 
-Applied on 2026-11-07 in UniFi Network 10.6.109, with temporary test interfaces used for positive and negative checks before and after each change:
+Zone membership, applied on 2026-11-07 in UniFi Network 10.6.109:
 
 | Zone | Networks |
 |---|---|
@@ -146,82 +146,138 @@ Applied on 2026-11-07 in UniFi Network 10.6.109, with temporary test interfaces 
 | DMZ | Services (40) |
 | Remote Admin (custom) | Remote Admin |
 
-Internal-to-Internal still ends in Allow All. Untrusted blocks routed traffic to Internal, between its own members, and to every other local zone by default; Internet access stays allowed except for Cameras. The zone was created as `IoT` and renamed `Untrusted` the same day; rules reference zones by ID, so the rename changed no policy.
+Internal-to-Internal still ends in Allow All. Untrusted blocks routed traffic to Internal, between its own members, and to every other local zone by default; Internet access stays allowed except for Cameras. The zone was created as `IoT` and renamed `Untrusted`.
 
-Blocks added in this migration match new connections only and log, so each blocked flow appears in the UniFi flow logs in VictoriaLogs with the rule name in `flow.policies`. Allowed flows show only `CONNTRACK`.
+On 2026-11-08 every rule was renamed to the `<Source> to <Purpose>` convention, and every specific address or app port moved into a Network List. A field-by-field comparison with the pre-change snapshot showed no change in what any rule matches, except the two deliberate changes noted under [Gateway access](#gateway-access) and the Visionect test display. Probes from temporary Cameras, IoT and Guest interfaces passed all 64 checks afterwards.
+
+Blocks match new connections only and log. In UniFi Network 10.6, blocked flows carry the rule name; allowed flows show only `CONNTRACK`. The console shows the current name of a rule that still exists, while VictoriaLogs keeps the name captured at collection time, so searches across 2026-11-08 need the old names below.
+
+### Network Lists
+
+Settings → Networks → Network Lists. Each list's description records what the members are and how each address stays fixed, or what each port is for. Every address in a list is statically configured, a DHCP reservation, or pinned by Cilium.
+
+| List | Type | Members |
+|---|---|---|
+| Home Assistant | IPv4 | `10.32.1.244` |
+| Hyperion | IPv4 | `10.32.10.244` |
+| Visionect Test Display | IPv4 | `10.32.90.179` |
+| Hermes | IPv4 | `10.32.21.100` |
+| Time Servers | IPv4 | `10.32.20.111`, `10.32.20.112` |
+| Talos Nodes | IPv4 | `10.32.30.11-10.32.30.13` |
+| NetBird Routers | IPv4 | `10.32.19.103` |
+| Thermostats | IPv4 | `10.32.90.30-10.32.90.33` |
+| Bambu Printers | IPv4 | `10.32.90.50`, `10.32.90.51` |
+| Thingino Cameras | IPv4 | `10.32.5.30`, `10.32.5.31` |
+| Visionect | IPv4 | `10.32.150.30` |
+| Admin Ingress | IPv4 | `10.32.130.1` |
+| Services Ingress | IPv4 | `10.32.140.1` |
+| Admin Prod Pool | IPv4 | `10.32.130.0/24` |
+| Service Pools | IPv4 | `10.32.130.0/24`, `10.32.140.0/24`, `10.32.150.0/24` |
+| Gateway Services | Port | 53, 67, 123, 5353 |
+| mDNS | Port | 5353 |
+| Protect Camera Services | Port | 6666, 7442, 7444, 7550 |
+| Home Assistant Web | Port | 8123 |
+| Visionect Device Protocol | Port | 11113 |
+| Bambu LAN Mode | Port | 8883, 990, 322, 6000, 2024-2026, 50000-50100 |
+| Thingino Update Hosts | Domain | `github.com`, `raw.githubusercontent.com`, `release-assets.githubusercontent.com` |
+
+The Home Assistant, Hyperion and Visionect Test Display reservations were added on 2026-11-08 at their existing addresses. Hyperion's reservation is tied to a private Wi-Fi address, so that network's private-address setting must stay fixed. No client groups are used; the five unused ones were deleted.
 
 ### Untrusted zone
 
-| Policy | Source | Destination | Action |
-|---|---|---|---|
-| `Allow Main to Untrusted` | Internal; IP `10.32.10.0/24` | Untrusted; any | Allow; generated return |
-| `Allow Home Assistant to Thermostats` | Internal; IP `10.32.1.244` | Untrusted; IPs `10.32.90.30-.33`, TCP 80 | Allow; generated return |
-| `Allow Bambuddy to Printers` | Internal; IPs `10.32.30.11-.13` | Untrusted; IPs `10.32.90.50`, `.51`, TCP 8883, 990, 50000-50100, 322, 6000, 2024-2026 | Allow; generated return |
-| `Allow Untrusted to Local NTP` | Untrusted; any | Internal; IPs `10.32.20.111`, `.112`, UDP 123 | Allow; generated return |
-| `Allow IoT to Home Assistant` | Untrusted; IP `10.32.90.0/24` | Internal; IP `10.32.1.244`, TCP 8123 | Allow; generated return |
-| `Allow IoT to Visionect` | Untrusted; IP `10.32.90.0/24` | Internal; IP `10.32.150.30`, TCP 11113 | Allow; generated return |
-| `Allow Legacy Display to Hyperion` | Untrusted; IP `10.32.90.179` | Internal; IP `10.32.10.244`, TCP 11113, 11199 | Allow; generated return. Temporary: one display still points at a legacy endpoint on a workstation, using an unreserved address. |
-| `Allow IoT to Visionect Routed` | Untrusted; IP `10.32.90.0/24` | External; IP `10.32.150.30`, TCP 11113 | Allow |
-| `Block Untrusted to Service Pools` | Untrusted; any | External; IPs `10.32.130.0/24`, `10.32.140.0/24`, `10.32.150.0/24` | Block; new only; logged |
+| Rule | Source | Destination | Port | Action |
+|---|---|---|---|---|
+| `Main to Untrusted` | Internal; network Main | Untrusted; any | any | Allow; generated return |
+| `Home Assistant to Thermostats` | Internal; list Home Assistant | Untrusted; list Thermostats | HTTP | Allow; generated return |
+| `Bambuddy to Printers` | Internal; list Talos Nodes | Untrusted; list Bambu Printers | Bambu LAN Mode | Allow; generated return |
+| `Untrusted to Time Servers` | Untrusted; any | Internal; list Time Servers | NTP | Allow; generated return |
+| `IoT to Home Assistant` | Untrusted; network IoT | Internal; list Home Assistant | Home Assistant Web | Allow; generated return |
+| `IoT to Visionect` | Untrusted; network IoT | Internal; list Visionect | Visionect Device Protocol | Allow; generated return |
+| `Visionect Test Display to Lab Server` | Untrusted; list Visionect Test Display | Internal; list Hyperion | Visionect Device Protocol | Allow; generated return |
+| `IoT to Visionect Routed` | Untrusted; network IoT | External; list Visionect | Visionect Device Protocol | Allow |
+| `Untrusted to Service Pools` | Untrusted; any | External; list Service Pools | any | Block; new only; logged |
+| `Thingino Cameras to Updates` | Untrusted; list Thingino Cameras | External; list Thingino Update Hosts | HTTPS | Allow; logged |
 
 Visionect is permitted in both the Internal and External destination cells because the routed address has matched both, depending on the path. Cilium still restricts Bambuddy's pod-level access; the gateway sees the node addresses.
 
-Gateway access from Untrusted, in order: `Allow Untrusted to Gateway DNS` (TCP/UDP 53), `Allow Untrusted to Gateway DHCP NTP mDNS` (UDP 67, 123, 5353), `Allow Untrusted to Gateway ICMP`, `Allow Cameras to Protect` (`10.32.5.0/24`, TCP 6666, 7442, 7444, 7550), `Allow Untrusted to Gateway mDNS Proxy` (UDP source port 5353, any destination port), then `Block Untrusted to Gateway` (new only; logged). The mDNS response permit is needed because the gateway's mDNS proxy queries by multicast, so device answers sent by unicast to the proxy's port do not match connection tracking as replies.
+`Visionect Test Display to Lab Server` is temporary. It lets a reverse-engineering test display reach the capture proxy and lab Visionect server on Hyperion; it lost the unused TCP 11199 on 2026-11-08. How devices reach development workstations is an open question in #348.
+
+### Gateway access
+
+Untrusted and Guest reach the gateway through the same four rules, in order:
+
+| Rule | Port | Action |
+|---|---|---|
+| `Untrusted to Gateway Services` / `Guest to Gateway Services` | Gateway Services, TCP/UDP | Allow |
+| `Untrusted to Gateway Ping` / `Guest to Gateway Ping` | ICMP | Allow |
+| `Untrusted to mDNS Proxy Replies` / `Guest to mDNS Proxy Replies` | source port mDNS, any destination port, UDP | Allow |
+| `Untrusted to Gateway` / `Guest to Gateway` | any | Block; new only; logged |
+
+`Cameras to Protect` (network Cameras, Protect Camera Services, TCP) sits above the Untrusted block. The mDNS reply permit is needed because the gateway's mDNS proxy queries by multicast, so device answers sent by unicast to the proxy's port do not match connection tracking as replies.
+
+On 2026-11-08 the separate DNS and DHCP/NTP/mDNS permits were merged into one TCP/UDP rule per source. The merge also allows TCP on 67, 123 and 5353 to the gateway, which does not listen on them.
 
 ### Cameras
 
-Cameras (VLAN 5, `10.32.5.0/24`) is in Untrusted with `Allow Internet Access` off, `Isolate Network` on, and IPv6 disabled. UniFi regenerated the Internet block in the Untrusted-to-External cell when the network moved. Internet egress is blocked except for Thingino firmware downloads from the Wyze Cam 3 at `10.32.5.30` and Cam 2 at `10.32.5.31`:
+Cameras (VLAN 5, `10.32.5.0/24`) is in Untrusted with `Allow Internet Access` off, `Isolate Network` on, and IPv6 disabled. UniFi regenerated the Internet block in the Untrusted-to-External cell when the network moved. `Thingino Cameras to Updates` is the only Internet exception. It permits any HTTPS content on those GitHub hosts, matched through the gateway's DNS. Pause it to withdraw the exception. The legacy `Camera Out Test` rule, which would have restored blanket Internet access if resumed, was deleted on 2026-11-08.
 
-| Policy | Source | Destination | State |
-|---|---|---|---|
-| `Allow Thingino Cameras to GitHub` | Untrusted; `10.32.5.30`, `10.32.5.31` | External; `github.com`, `raw.githubusercontent.com`, `release-assets.githubusercontent.com`; TCP 443 | Active; logged; above the Internet block |
-
-The update exception permits any HTTPS content on those GitHub hosts. Keep the two camera IPs stable or update the source matches when renumbering them. The paused legacy `Camera Out Test` rule, which would have restored blanket Internet access if resumed, was deleted on 2026-11-08. Pause the update allow to withdraw just the exception. Main reaches the cameras through `Allow Main to Untrusted`; ordinary IoT devices cannot reach them, because the zone blocks traffic between its members.
-
-After the 2026-11-07 move, both UniFi cameras stayed connected to Protect through `10.32.5.1` and kept recording, and Protect returned snapshots. Both Thingino cameras were offline, so their update exception was verified by readback rather than a live download. The earlier acceptance results and firmware snapshots are recorded in [#349](https://github.com/kelchm/home-lab/issues/349).
+Main reaches the cameras through `Main to Untrusted`; ordinary IoT devices cannot reach them, because the zone blocks traffic between its members. After the 2026-11-07 move both UniFi cameras stayed connected to Protect through `10.32.5.1` and kept recording. Earlier acceptance results are in [#349](https://github.com/kelchm/home-lab/issues/349).
 
 ### Guest containment
 
-Guest is still in Internal, because household devices on it depend on local services until they move to IoT. These rules restrict it in the meantime:
+Guest is still in Internal, because household devices on it depend on local services until they move to IoT.
 
-| Policy | Source | Destination | Action |
+| Rule | Source | Destination | Action |
 |---|---|---|---|
-| `Block Guest to Lab Networks` | Internal; network Guest | Internal; networks Infra Mgmt, Workloads, Storage, K8s Prod, K8s Sandbox | Block; new only; logged |
-| `Block Guest to Legacy Services` | Internal; network Guest | DMZ; network Services | Block; new only; logged |
-| `Block Guest to Admin Prod` | Internal; network Guest | External; IP `10.32.130.0/24` | Block; new only; logged |
-
-Gateway access from Guest follows the same pattern as Untrusted: `Allow Guest to Gateway DNS`, `Allow Guest to Gateway DHCP NTP mDNS`, `Allow Guest to Gateway ICMP` and `Allow Guest to Gateway mDNS Proxy`, then `Block Guest to Gateway` (new only; logged).
+| `Guest to Lab Networks` | Internal; network Guest | Internal; networks Infra Mgmt, Workloads, Storage, K8s Prod, K8s Sandbox | Block; new only; logged |
+| `Guest to Legacy Services` | Internal; network Guest | DMZ; network Services | Block; new only; logged |
+| `Guest to Admin Prod` | Internal; network Guest | External; list Admin Prod Pool | Block; new only; logged |
 
 Guest still reaches Main, Default (including Home Assistant) and `services-prod`. Closing those paths waits for the household devices to move off Guest.
 
 ### Local NTP
 
-`Allow Workloads to Local NTP` is enabled for Internal → Internal traffic from the Workloads network to `10.32.20.111/32` and `10.32.20.112/32`, IPv4 UDP destination 123, source port Any, All states/Always. It sits above `Block Workloads to Protected Networks`. Cameras and IoT use `Allow Untrusted to Local NTP` instead. Storage was removed from the source on 2026-11-08: no Storage host had used it in the previous week, and Storage-attached hosts take time over their ordinary interface. Other Internal networks reach the Pis through Allow All. Auto Allow Return Traffic is off. See [#1031](https://github.com/kelchm/home-lab/issues/1031) for the original applied-state evidence.
+`Workloads to Time Servers` (network Workloads → list Time Servers, NTP) sits above `Workloads to Protected Networks`; `Untrusted to Time Servers` covers Cameras and IoT. Other Internal networks reach the Pis through Allow All. Storage was removed from the Workloads rule's sources on 2026-11-08: no Storage host had used it in the previous week. See the [local NTP runbook](../../docs/runbooks/local-ntp.md).
 
 ### Other Internal rules
 
-| Policy | Source | Destination | State |
-|---|---|---|---|
-| `Allow Main to Visionect Admin` | Internal; IP `10.32.10.0/24` | Internal; IP `10.32.150.30`, TCP 443 | Active; generated return |
-| `Block Internal to Visionect` | Internal; any | Internal; IP `10.32.150.30` | Active |
+| Rule | Source | Destination | Port | Action |
+|---|---|---|---|---|
+| `Main to Visionect Admin` | Internal; network Main | Internal; list Visionect | HTTPS | Allow; generated return |
+| `Internal to Visionect` | Internal; any | Internal; list Visionect | any | Block |
 
 The Workloads containment rules are listed [above](#workloads-containment-applied-state).
 
 ### BGP load-balancer pools
 
-The pools are routed prefixes, not UniFi networks. From Internal and Untrusted sources UniFi classifies them as External, so pool denies go in the External destination cell ahead of the Internet allow. Applied pool rules:
+The pools are routed prefixes, not UniFi networks. From Internal and Untrusted sources UniFi classifies them as External, so pool denies go in the External destination cell ahead of the Internet allow.
 
-| Source | Destination | Policy |
+| Source | Destination | Rule |
 |---|---|---|
-| Workloads | `admin-prod` (`10.32.130.0/24`), except Hermes → `10.32.130.1` TCP 443 | `Block Workloads to Admin Prod` |
-| Untrusted | `admin-prod`, `services-prod`, `shared-prod`, except Visionect | `Block Untrusted to Service Pools` |
-| Guest | `admin-prod` | `Block Guest to Admin Prod` |
+| Workloads | Admin Prod Pool, except `Hermes to MCPHub` | `Workloads to Admin Prod` |
+| Untrusted | Service Pools, except Visionect | `Untrusted to Service Pools` |
+| Guest | Admin Prod Pool | `Guest to Admin Prod` |
 
 Main reaches every pool, and Guest reaches `services-prod`, until the admin-device restriction and the Guest move are applied. Per-pool intent is in [`docs/architecture.md`](../../docs/architecture.md#firewall-posture-per-pool).
 
 #### shared-prod tenant rules
 
-Shared-pool policy is explicit per tenant. Visionect at `10.32.150.30` accepts its device protocol (TCP 11113) from IoT and its management UI (TCP 443) from Main. `Block Internal to Visionect` denies every other Internal source. The Cilium policy on the destination pod repeats the same source and port boundary; the UniFi rules stop disallowed traffic before it reaches the cluster.
+Visionect at `10.32.150.30` accepts its device protocol from IoT and its management UI (HTTPS) from Main. `Internal to Visionect` blocks every other Internal source. The Cilium policy on the destination pod repeats the same boundary; the UniFi rules stop disallowed traffic before it reaches the cluster.
+
+### Names before 2026-11-08
+
+Only blocks carry names in the flow logs, and only rules with logging enabled produce them. These earlier names appear in VictoriaLogs:
+
+| Current | Earlier names recorded |
+|---|---|
+| `Guest to Gateway` | `Block Guest Gateway Access`, `Block IoT and Guest Gateway Access` (shared with IoT) |
+| `Untrusted to Gateway` | `Block Other IoT Gateway Access`, `Block IoT Gateway Access`, `Block IoT and Guest Gateway Access` |
+| `Guest to Lab Networks` | `Block Guest to Lab Networks`, `Block IoT and Guest to Lab Networks`, `Block Guest to Infra Mgmt` |
+| `Guest to Legacy Services` | `Block Guest to Legacy Services`, `Block IoT and Guest to Legacy Services` |
+| `Guest to Admin Prod` | `Block Guest to Admin Services`, `Block IoT and Guest to Admin Services` |
+| `Untrusted to Service Pools` | `Block IoT to Other Service Pools` |
+
+The Workloads, K8s Prod and Visionect blocks do not log.
 
 ## VPN
 
