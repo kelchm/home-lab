@@ -23,13 +23,14 @@ import subprocess
 import sys
 import time
 
-ATHENA = "kelchm@10.32.20.5"
+ATHENA = os.environ.get("SPARKNEST_ATHENA_HOST", "kelchm@10.32.10.5")
 ROOT = Path("/volume1/models/sparknest")
 AGENT = "/volume1/docker/sparknest/ingest.py"
 CONTAINER = "sparknest-sparknest-1"
 DOCKER = "/usr/local/bin/docker"
 SKIP = {"@eaDir", ".DS_Store", ".locks", "token", "stored_tokens"}
 CHUNK = 4 << 20
+DIRECT_CONFIG = Path("/volume1/docker/sparknest-transfer/sources.json")
 
 
 def encoded(value):
@@ -234,6 +235,9 @@ def remote_command(host, argv, sudo=False):
     command = ("sudo -n " if sudo else "") + shlex.join([str(a) for a in argv])
     control = os.environ.get("SPARKNEST_SSH_CONTROL_DIR")
     connection = ["-S", str(Path(control) / host.split("@")[-1])] if control else []
+    if host == "kelchm@10.32.10.5":
+        # The management address already pins this same NAS's host key.
+        connection += ["-o", "HostKeyAlias=10.32.20.5"]
     return ["ssh"] + connection + ["-o", "BatchMode=yes", "-o", "ConnectTimeout=10",
             "-o", "ServerAliveInterval=30", "-o", "ServerAliveCountMax=3", host, command]
 
@@ -262,7 +266,19 @@ def digest_file(path, with_git=False):
     return sha.hexdigest(), git.hexdigest() if git is not None else None
 
 
-def receive(request):
+def reusable_copy(rec, copies):
+    for value in copies:
+        if value["bytes"] != rec["identity"][0]:
+            continue
+        if rec.get("sha256") and value["sha256"] != rec["sha256"]:
+            continue
+        if rec.get("etag") and len(rec["etag"]) == 40 and value.get("git_sha1") != rec["etag"]:
+            continue
+        return value
+    return None
+
+
+def receive(request, stream=None):
     """Receive one file, or reflink an existing Athena copy; verify before publish."""
     rec = request["file"]
     folder = ROOT / "incoming/bulk" / request["key"] / "payloads"
@@ -272,6 +288,14 @@ def receive(request):
     if final.is_file() and receipt.is_file():
         result = json.loads(receipt.read_text())
         if identity(final) == result["stored_identity"]:
+            if rec.get("etag") and len(rec["etag"]) == 40 and not result.get("git_sha1"):
+                sha, git = digest_file(final, with_git=True)
+                if identity(final) != result["stored_identity"] or sha != result["sha256"]:
+                    raise ValueError("cached receipt payload changed")
+                result["git_sha1"] = git
+                atomic_json(receipt, result)
+            if reusable_copy(rec, [result]) is None:
+                raise ValueError("cached receipt differs from the published file identity")
             return result
     if request.get("probe"):
         return None
@@ -298,12 +322,13 @@ def receive(request):
         if identity(source) != before:
             raise ValueError("Athena source changed while copying")
     else:
+        stream = stream if stream is not None else sys.stdin.buffer
         remaining = rec["identity"][0]
         sha_obj = hashlib.sha256()
         git_obj = hashlib.sha1(("blob " + str(remaining) + "\0").encode()) if remaining <= 1 << 20 or (rec.get("etag") and len(rec["etag"]) == 40) else None
         with partial.open("wb") as target:
             while remaining:
-                chunk = sys.stdin.buffer.read(min(CHUNK, remaining))
+                chunk = stream.read(min(CHUNK, remaining))
                 if not chunk:
                     raise ValueError("transfer ended early")
                 target.write(chunk)
@@ -313,7 +338,7 @@ def receive(request):
                 remaining -= len(chunk)
             target.flush()
             os.fsync(target.fileno())
-        trailer = sys.stdin.buffer.read(64).decode("ascii")
+        trailer = stream.read(64).decode("ascii")
         sha, git = sha_obj.hexdigest(), git_obj.hexdigest() if git_obj is not None else None
         if sha != trailer:
             raise ValueError("source and destination SHA-256 differ")
@@ -346,6 +371,46 @@ def send(request):
         raise ValueError("source changed while reading: " + str(path))
     sys.stdout.buffer.write(sha.hexdigest().encode())
     sys.stdout.buffer.flush()
+
+
+def send_authorized(allowlist_path):
+    """Forced SSH command: stream only an inventoried, unchanged source file."""
+    request = decoded(os.environ.get("SSH_ORIGINAL_COMMAND", ""))
+    rec = request["file"]
+    allowed = json.loads(Path(allowlist_path).read_text())
+    if rec["identity"] not in allowed.get(rec["src"], []):
+        raise ValueError("source is outside this transfer's inventory")
+    send(request)
+
+
+def receive_direct(request):
+    """Pull Spark payloads to Athena over the storage VLAN, bypassing the Mac."""
+    profile = json.loads(DIRECT_CONFIG.read_text())[request["source_host"]]
+    command = ["ssh", "-n", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10",
+               "-o", "ServerAliveInterval=30", "-o", "ServerAliveCountMax=3",
+               "-o", "StrictHostKeyChecking=yes", "-o", "IdentitiesOnly=yes",
+               "-o", "HostKeyAlgorithms=ssh-ed25519",
+               "-o", "UserKnownHostsFile=" + profile["known_hosts"],
+               "-i", profile["identity"], profile["host"], encoded({"file": request["file"]})]
+    source = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE)
+    try:
+        try:
+            result = receive(request, stream=source.stdout)
+        except Exception as exc:
+            if source.poll() is None:
+                source.terminate()
+            _, error = source.communicate()
+            raise RuntimeError("direct receive failed: " + str(exc) + "\n" +
+                               error.decode(errors="replace")[-2000:]) from exc
+        _, error = source.communicate()
+        if source.returncode:
+            raise RuntimeError("direct source failed: " + error.decode(errors="replace")[-2000:])
+        return dict(result, transport="direct-storage-vlan", source_host=profile["host"])
+    finally:
+        if source.poll() is None:
+            source.terminate()
+            source.communicate()
 
 
 def safe_relative(text):
@@ -502,6 +567,44 @@ def native_job(*args):
     return response
 
 
+def finish_lmstudio(item, state):
+    """Remove a legacy generic import only after its native replacement verifies."""
+    notes = state["share_job"].get("job", {}).get("notes", [])
+    if any(": kept " in note for note in notes):
+        raise RuntimeError("LM Studio model still has native sharing skips")
+    script = """import http.client, socket
+c = http.client.HTTPConnection('localhost', timeout=60)
+c.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+c.sock.connect('/data/state/api.sock')
+c.request('GET', '/v1/hf')
+r = c.getresponse()
+if r.status != 200: raise RuntimeError('model catalog HTTP ' + str(r.status))
+print(r.read().decode())
+"""
+    catalog = json.loads(docker("python3", "-c", script))
+    repo = item["name"][8:].replace("--", "/", 1)
+    if not any(model["repo"] == repo for model in catalog["repos"]):
+        raise RuntimeError("converted LM Studio model is missing from the native catalog")
+    old = safe_relative(item["legacy_import_name"])
+    if len(old.parts) != 2 or item["source"] != "mac" or item["store"] != "lmstudio":
+        raise ValueError("refusing cleanup outside the legacy Mac LM Studio namespace")
+    path = "/imports/mac/lmstudio/" + str(old)
+    probe = """import json, os, sys
+try:
+    os.lstat('/mnt/sparknest' + sys.argv[1])
+except FileNotFoundError:
+    print('false')
+else:
+    print('true')
+"""
+    if not json.loads(docker("python3", "-c", probe, path)):
+        return {"path": path, "absent": True, "catalog_repo": repo}
+    response = json.loads(docker("nest", "--json", "rm", "--recursive", path))
+    if not isinstance(response, list) or any(result.get("errors") for result in response):
+        raise RuntimeError("legacy import cleanup failed: " + json.dumps(response))
+    return {"path": path, "result": response, "catalog_repo": repo}
+
+
 def annotate_inventory(data):
     """Preserve known HF blob identities and make conflicting default refs explicit."""
     names, refs = collections.defaultdict(set), collections.defaultdict(set)
@@ -525,7 +628,8 @@ def annotate_inventory(data):
                         raise ValueError("conflicting source digests: " + rec["src"])
                     rec["sha256"] = rec["etag"]
         item["shared_refs"] = {ref: target for ref, target in item.get("refs", {}).items()
-                               if len(refs[(item["name"], ref)]) == 1}
+                               if len(refs[(item["name"], ref)]) == 1
+                               and not (item.get("legacy_import_name") and ref == "imported")}
     data["ref_conflicts"] = [{"repo": repo, "ref": ref, "targets": sorted(targets)}
                              for (repo, ref), targets in sorted(refs.items()) if len(targets) > 1]
     data["schema"] = 2
@@ -561,7 +665,9 @@ def run_queue(inventory_path, journal_path):
     journal.pop("blocked", None)
     valid = set(agent("probe-copies", {"copies": list(journal["files"].values())})["valid"])
     journal["files"] = {fid: value for fid, value in journal["files"].items() if value["path"] in valid}
-    verified_copies = {v["sha256"]: v for v in journal["files"].values()}
+    verified_copies = collections.defaultdict(list)
+    for value in journal["files"].values():
+        verified_copies[value["sha256"]].append(value)
     candidates_by_sha, candidates_by_model = {}, {}
     for item in inv["items"]:
         if item["source"] == "athena":
@@ -584,6 +690,8 @@ def run_queue(inventory_path, journal_path):
         atomic_json(journal_path, journal)
         print("STAGING", item["source"], item["store"], item["name"], flush=True)
         try:
+            if item["store"] == "lmstudio" and item["kind"] != "hf":
+                raise ValueError("LM Studio folders require verified native model identities; generic fallback is disabled")
             copies = []
             records = item["files"] + item.get("trees", [])
             for n, rec in enumerate(records):
@@ -591,15 +699,21 @@ def run_queue(inventory_path, journal_path):
                 state["current_bytes"] = rec["identity"][0]
                 atomic_json(journal_path, journal)
                 fid = hashlib.sha256((item["source"] + rec["src"] + str(rec["identity"])).encode()).hexdigest()
-                result = journal["files"].get(fid)
-                if result is None and rec.get("sha256") in verified_copies:
-                    result = dict(verified_copies[rec["sha256"]], method="reuse-verified")
+                own = journal["files"].get(fid)
+                result = reusable_copy(rec, [own]) if own else None
+                known = verified_copies.get(rec.get("sha256"), [])
+                if result is None:
+                    reusable = reusable_copy(rec, known)
+                    if reusable:
+                        result = dict(reusable, method="reuse-verified")
                 if result is None:
                     request = {"key": key, "file": rec}
                     result = agent("receive", dict(request, probe=True))
                     candidate = rec["src"] if item["source"] == "athena" else candidates_by_sha.get(rec.get("sha256"))
                     if candidate is None and item["kind"] == "hf" and rec.get("revision"):
                         candidate = candidates_by_model.get((item["name"], rec["revision"], rec["rel"]))
+                    if candidate is None and known:
+                        candidate = known[0]["path"]
                     if result is None and candidate and rec.get("sha256"):
                         request["candidate"] = candidate
                         try:
@@ -614,6 +728,9 @@ def run_queue(inventory_path, journal_path):
                     elif result is None and item["source"] == "athena":
                         request["candidate"] = rec["src"]
                         result = agent("receive", request)
+                    if result is None:
+                        if item["host"] != "local" and item["source"] != "athena" and os.environ.get("SPARKNEST_DIRECT_SOURCES") == "1":
+                            result = agent("receive-direct", dict(request, source_host=item["host"]))
                     if result is None:
                         source_request = {"file": rec}
                         if item["host"] == "local":
@@ -634,7 +751,7 @@ def run_queue(inventory_path, journal_path):
                         result = json.loads(output)
                 journal["files"][fid] = result
                 candidates_by_sha.setdefault(result["sha256"], result["path"])
-                verified_copies.setdefault(result["sha256"], result)
+                verified_copies[result["sha256"]].append(result)
                 if rec.get("sha256") and rec["sha256"] != result["sha256"]:
                     raise RuntimeError("recorded SHA-256 differs for " + rec["src"])
                 if rec.get("etag") and len(rec["etag"]) == 40 and rec["etag"] != result["git_sha1"]:
@@ -664,6 +781,8 @@ def run_queue(inventory_path, journal_path):
             state["verification"] = verification
             if verification["bad"]:
                 raise RuntimeError("archive content verification failed: " + str(verification["bad"]))
+            if item.get("legacy_import_name"):
+                state["legacy_cleanup"] = finish_lmstudio(item, state)
             state["state"] = "verified"
             state["finished"] = time.time()
             atomic_json(journal_path, journal)
@@ -686,6 +805,9 @@ def run_queue(inventory_path, journal_path):
 
 def main():
     mode = sys.argv[1]
+    if mode == "send-authorized":
+        send_authorized(sys.argv[2])
+        return
     if mode == "inventory":
         run_inventory(json.loads(Path(sys.argv[2]).read_text()), sys.argv[3])
         return
@@ -697,6 +819,7 @@ def main():
         send(request)
         return
     result = {"inventory-agent": inventory, "receive": receive,
+              "receive-direct": receive_direct,
               "prepare": prepare, "verify": verify, "preflight": preflight,
               "filter-stage": filter_stage, "probe-copies": probe_copies}[mode](request)
     print(json.dumps(result))
