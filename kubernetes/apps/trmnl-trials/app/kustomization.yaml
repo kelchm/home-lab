@@ -4,7 +4,6 @@ kind: Kustomization
 resources:
 - ./ocirepository.yaml
 - ./secret.sops.yaml
-- ./networkpolicy.yaml
 - ./terminus.yaml
 - ./larapaper.yaml
 - ./inker.yaml
