@@ -7,7 +7,7 @@ Use the UPS Pis for local time service over IPv4 UDP 123:
 | ups-compute-rack | `10.32.20.111` |
 | ups-office | `10.32.20.112` |
 
-Both servers and their central alerts were accepted on 2026-10-30. See [rpi-nixos](https://github.com/kelchm/rpi-nixos#local-time-servers) for server operation and [host monitoring](host-monitoring.md#pi) for alerts. The UniFi access rule and seven DHCP advertisements are applied, and all three Talos nodes have demonstrated fresh background synchronization to a Pi. [#1031](https://github.com/kelchm/home-lab/issues/1031) records the evidence and remaining acceptance. The [NTP dashboard](https://grafana.home.kelch.io/d/ntp) shows both servers, their sources and their request load; its packet counts cannot show which clients use a server. Merging the [Talos patch](../../talos/patches/global/machine-time.yaml) does not apply it to running nodes.
+Both servers and their central alerts were accepted on 2026-10-30. See [rpi-nixos](https://github.com/kelchm/rpi-nixos#local-time-servers) for server operation and [host monitoring](host-monitoring.md#pi) for alerts. The UniFi access rules and seven DHCP advertisements are applied, and all three Talos nodes have demonstrated fresh background synchronization to a Pi. [#1031](https://github.com/kelchm/home-lab/issues/1031) records the evidence and remaining acceptance. The [NTP dashboard](https://grafana.home.kelch.io/d/ntp) shows both servers, their sources and their request load; its packet counts cannot show which clients use a server. Merging the [Talos patch](../../talos/patches/global/machine-time.yaml) does not apply it to running nodes.
 
 ## Allow access in UniFi
 
@@ -54,7 +54,7 @@ After a normal lease renewal, confirm the client received both addresses and syn
 
 - **Talos:** restore the previous public-only list (`162.159.200.1`, `162.159.200.123`) and apply through the same task, one node at a time. Verify fresh synchronization. A Git revert alone does not change running nodes.
 - **DHCP:** disable the NTP option and restore its previous empty list on each changed network. Verify the client's next lease.
-- **Firewall:** after restoring clients, remove only the new Pi NTP policy. Preserve existing rules and WAN2 routes.
+- **Firewall:** after restoring clients, remove only the two Pi NTP policies, **Workloads to Time Servers** and **Untrusted to Time Servers**. Preserve existing rules and WAN2 routes.
 
 ## Remaining acceptance
 

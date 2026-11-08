@@ -377,7 +377,7 @@ Add carve-out firewall rules per allocated IP+port — never pool-wide allows.
 
 ### Firewall posture per pool
 
-Internal-to-Internal traffic is allowed by default, so this posture is enforced only where a rule or a custom zone applies. IoT and Guest are restricted; Main clients still reach `admin-prod` without an admin-device restriction. Both Traefik gateways admit every source in their Cilium policies, so they don't enforce the boundary either. Applying these rules is tracked in [#348](https://github.com/kelchm/home-lab/issues/348). No committable artifact lives in this repo; [`network/unifi/README.md`](../network/unifi/README.md) records the intended rules and the applied state.
+Internal-to-Internal traffic is allowed by default, so this posture is enforced only where a rule or a custom zone applies. Untrusted (IoT and Cameras) is restricted from every pool except Visionect, and Guest only from `admin-prod`; Main clients still reach `admin-prod` without an admin-device restriction. Both Traefik gateways admit every source in their Cilium policies, so they don't enforce the boundary either. Applying these rules is tracked in [#348](https://github.com/kelchm/home-lab/issues/348). No committable artifact lives in this repo; [`network/unifi/README.md`](../network/unifi/README.md) records the intended rules and the applied state.
 
 | Source | Destination | Target | Current state |
 |---|---|---|---|
