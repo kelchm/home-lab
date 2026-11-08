@@ -11,6 +11,7 @@ Alertmanager routes as follows:
 | Match | Receiver | Repeat | Resolution |
 |---|---|---:|---|
 | `severity="critical"` and `evaluator="vmalert"` | `k8s-prod Alerts` in Pushover, high priority | 12 hours | Quiet priority |
+| `alertname="NodeSecurityUpdatesOverdue"` and `evaluator="vmalert"` | `k8s-prod Alerts` in Pushover, normal priority | 5 days | Quiet priority |
 | `severity="warning"` and `evaluator="vmalert"` | `k8s-prod Alerts` in Pushover, normal priority | 12 hours | Quiet priority |
 | `alertname="Watchdog"` and `evaluator="vmalert"` | `healthchecks-watchdog` webhook to healthchecks.io | 1 minute | None |
 | Everything else | `null` | N/A | N/A |
