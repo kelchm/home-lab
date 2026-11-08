@@ -6,20 +6,18 @@ These are four temporary, independent deployments for choosing a self-hosted TRM
 
 Use the home LAN or a VPN route to the admin network. Each URL uses the private admin Gateway and the existing `*.home.kelch.io` certificate; these servers have no public route or external DNS record. They use their own application login rather than the homelab OIDC layer, so device APIs can work without browser SSO.
 
-| Server | URL | First visit |
+| Server | URL | 1Password Login item |
 |---|---|---|
-| Terminus | <https://terminus.home.kelch.io> | Register an account. The first account is verified automatically. |
-| LaraPaper | <https://larapaper.home.kelch.io> | Register an account; production mode does not seed the development admin account. |
-| Inker | <https://inker.home.kelch.io> | Sign in with the generated trial PIN, retrieved below. |
-| BYOS Next.js | <https://byos-next.home.kelch.io/setup> | Create the first administrator; the trial database is initialized. |
+| Terminus | <https://terminus.home.kelch.io> | `TRMNL - Terminus` |
+| LaraPaper | <https://larapaper.home.kelch.io> | `TRMNL - LaraPaper` |
+| Inker | <https://inker.home.kelch.io> | `TRMNL - Inker` |
+| BYOS Next.js | <https://byos-next.home.kelch.io/sign-in> | `TRMNL - Next.js` |
 
-Retrieve the Inker PIN from the cluster; it is also stored encrypted in the trial Secret manifest:
+All four Login items are in the **Project - home-lab** vault in 1Password. Inker uses its password field as the administrator PIN; the other items contain the email/password accounts created through each application's registration flow. The saved credentials were read back from 1Password and used to verify fresh sign-ins on 2026-11-08. No browser passwords are stored in Git.
 
-```sh
-kubectl -n trmnl-trials get secret inker-trial -o jsonpath='{.data.ADMIN_PIN}' | base64 --decode
-```
+The Inker PIN also remains in Kubernetes Secret `trmnl-trials/inker-trial`, key `ADMIN_PIN`, and in the encrypted trial Secret manifest. Application encryption keys and database credentials remain SOPS encrypted in Git.
 
-The applications use separate Longhorn volumes. Terminus and Next.js each have a dedicated PostgreSQL container within their own pod; Terminus also has its own worker and persistent Valkey queue. There are no shared application accounts, databases, API keys or playlists. Credentials and application encryption keys are SOPS encrypted in Git. RWO volumes use one replica and `Recreate` updates. PVCs are retained when a release is removed, so removing a trial does not silently erase its data.
+The applications use separate Longhorn volumes. Terminus and Next.js each have a dedicated PostgreSQL container within their own pod; Terminus also has its own worker and persistent Valkey queue. There are no shared application accounts, databases, API keys or playlists. RWO volumes use one replica and `Recreate` updates. PVCs are retained when a release is removed, so removing a trial does not silently erase its data.
 
 ## Compare with the same task
 
@@ -44,9 +42,9 @@ A device must resolve the private hostnames and reach `10.32.130.1:443`. An IoT 
 ## Enrollment differences
 
 - **Terminus:** `/api/setup` can provision a new MAC and its welcome playlist. Send a recognized `Model` (for example `og`) and a semantic `FW-Version`. The trial defaults firmware updates off.
-- **LaraPaper:** register the first user (further signups are closed unless `MULTIUSER_REGISTRATION_ENABLED=true`), then enable Permit Auto-Join or create the device manually. Since 0.46.0, Auto-Join turns itself off after 15 minutes, and re-pairing a device that has connected before needs it on again. Configure its model and dimensions before using the display endpoint.
+- **LaraPaper:** sign in with the saved account (further signups are closed unless `MULTIUSER_REGISTRATION_ENABLED=true`), then enable Permit Auto-Join or create the device manually. Since 0.46.0, Auto-Join turns itself off after 15 minutes, and re-pairing a device that has connected before needs it on again. Configure its model and dimensions before using the display endpoint.
 - **Inker:** `/api/setup` auto-provisions the MAC and recognizes model/width/height headers. Use the returned API key as `Access-Token`.
-- **Next.js:** the deployed trial has its database initialized and built-in recipes seeded. Create the first administrator at `/setup`, then add/claim the device through the authenticated UI. For a fresh empty database, initialize it at `/setup` and restart the pod once before adding devices. An unauthenticated device cannot become an owned device by itself.
+- **Next.js:** the deployed trial has its database initialized, built-in recipes seeded and an administrator account in 1Password. Sign in, then add/claim the device through the authenticated UI. For a fresh empty database, initialize it and create the first administrator at `/setup`, then restart the pod once before adding devices. An unauthenticated device cannot become an owned device by itself.
 
 ## Candidate selection
 
@@ -86,6 +84,8 @@ After the owner chooses a winner, export useful settings/images, then remove unw
 
 The initial eight-server deployment was adopted by Flux on 2026-11-01 at `f8687927e4f648ae818ce9b9f035a2dcda676d0b`. All eight releases and private routes were healthy. Synthetic device setup/display/image requests succeeded through HTTPS for Terminus and Inker (800×480 PNG) and the four subsequently retired experimental servers (800×480 BMP). Those results established basic protocol and rendering behavior, rather than project maturity or physical-board compatibility.
 
-For the remaining candidates, Terminus and Inker have synthetic devices at `02:00:00:00:00:01` and `02:00:00:00:00:03`. Next.js initialized all 21 migrations and seeded 11 built-in recipes. Its first administrator and LaraPaper's first user are left for the owner to register; their owned-device flows still need acceptance after account setup. The stock-firmware guard was checked in the Next.js container, and Terminus setup/display returned firmware update/reset flags false. Initial isolation tests blocked private-LAN and shared admin Gateway HTTPS connections; the owner subsequently requested removal of the trial network restrictions on 2026-11-08.
+For the remaining candidates, Terminus and Inker have synthetic devices at `02:00:00:00:00:01` and `02:00:00:00:00:03`. Next.js initialized all 21 migrations and seeded 11 built-in recipes. The stock-firmware guard was checked in the Next.js container, and Terminus setup/display returned firmware update/reset flags false. Initial isolation tests blocked private-LAN and shared admin Gateway HTTPS connections.
+
+On 2026-11-08, the owner requested removal of the trial network restrictions. Flux applied `e4e1ea0148843a8d0e308cdf86790169afd9e356`; the trial namespace has no NetworkPolicy or CiliumNetworkPolicy resources, and all four application containers reached the private Grafana HTTPS endpoint and received its expected HTTP 307 authentication redirect. All four releases and pods remained Ready. Existing human accounts were absent: Terminus and LaraPaper had no users, and Next.js had only its built-in mono-user placeholder. Fresh trial accounts were registered for those three applications, Next.js's first real user was verified as an administrator, and all four 1Password logins were tested successfully. Owned-device and physical-board flows still need acceptance.
 
 Physical-board acceptance, custom panel/firmware compatibility, and any necessary IoT VLAN access remain open in #1219. The completed server rollout does not imply that a physical board has been enrolled.
