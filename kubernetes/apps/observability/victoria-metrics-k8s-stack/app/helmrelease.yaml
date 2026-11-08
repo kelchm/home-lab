@@ -379,14 +379,12 @@ spec:
         KubeClientCertificateExpiration:
           spec:
             for: 1h
-        # Repeated cancelled client queries, such as overlapping Grafana
-        # refreshes, trip both. TooManyErrorLogs, ServiceDown and TooManyRestarts
-        # still notify for a failing component.
+        # VictoriaMetrics counts every query a client cancels as an API error
+        # and logs it as a warning, so overlapping Grafana refreshes kept both
+        # firing most of the day. TooManyErrorLogs, ServiceDown,
+        # TooManyRestarts, AlertingRulesError and RecordingRulesError still
+        # notify for a failing component.
         RequestErrorsToAPI:
-          spec:
-            labels:
-              severity: info
+          enabled: false
         TooManyLogs:
-          spec:
-            labels:
-              severity: info
+          enabled: false
