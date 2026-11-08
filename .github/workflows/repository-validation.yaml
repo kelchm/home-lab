@@ -858,8 +858,8 @@ jobs:
       - network
       - docs
     runs-on: ubuntu-latest
-    # A superseded run is cancelled by concurrency; skip rather than fail. A
-    # failed or skipped dependency still reaches the check below and fails it.
+    # In a run cancelled by concurrency this reports cancelled, not failed. In
+    # any other run a failed or skipped dependency still fails the check below.
     if: ${{ !cancelled() }}
     steps:
       - name: Require every validation job to succeed
