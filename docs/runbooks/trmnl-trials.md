@@ -39,6 +39,8 @@ On 2026-11-08, the connection successfully listed 95 dashboards and the panels i
 
 The token has no expiration. To rotate it, create a replacement token under Grafana's `trmnl-inker` service account, update the 1Password item and Inker connection, verify rendering, then revoke the old token. No Grafana administrator credential is stored in Inker.
 
+Inker's memory request is 512 MiB and its limit is 4 GiB to accommodate concurrent Chromium renders for Grafana section previews. The original 1 GiB limit caused out-of-memory kills while previewing the Home dashboard's **Everything** section. Inker keeps login sessions in memory, so a backend restart also logs users out. If screen creation fails and the browser returns to login, check the pod's restart count and last termination reason before changing the Grafana credentials.
+
 ## Physical device
 
 Follow the [TRMNL device connection guide](https://help.trmnl.com/en/articles/12263392-connect-your-device-to-terminus-byos). Before changing a device, record its current custom server, API key, account association and Wi-Fi configuration so it can be restored. Unknown-device responses in some implementations include `reset_firmware: true`; switching servers or a failed enrollment may clear the saved credentials. Use the matching server URL above as the custom host, without `/setup` or another path. Terminus's `API_URI`, LaraPaper's `APP_URL` and Next.js's `BETTER_AUTH_URL` already match their trial URLs.
