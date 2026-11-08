@@ -267,20 +267,7 @@ fi
 section "Longhorn instance-managers"
 instance_json="$(kubectl -n longhorn-system get pods -l longhorn.io/component=instance-manager -o json)"
 instance_count="$(jq '.items | length' <<<"$instance_json")"
-bad_instances="$(jq -r '
-  .items[]
-  | (.status.containerStatuses // []) as $containers
-  | (.metadata.annotations["k8s.v1.cni.cncf.io/network-status"] // "[]") as $raw
-  | ($raw | fromjson? // []) as $networks
-  | select(.status.phase != "Running"
-      or ($containers | length) == 0
-      or (all($containers[]; .ready == true) | not)
-      or ([$networks[]
-        | select(.name == "longhorn-system/storage-network"
-            and .interface == "lhnet1"
-            and any(.ips[]?; startswith("10.32.25.")))] | length) == 0)
-  | [.metadata.name, .spec.nodeName, (.status.phase // "unknown")] | @tsv
-' <<<"$instance_json")"
+bad_instances="$("$ROOT_DIR/.agents/skills/talos-rollout/scripts/failing-instance-managers.sh" <<<"$instance_json")"
 bad_instance_count="$(grep -c . <<<"${bad_instances:-}" || true)"
 line "Running, Ready, and attached to lhnet1: $(( instance_count - bad_instance_count ))/${instance_count}"
 detail "$(jq -r '.items[] | [.metadata.name, .spec.nodeName, (.status.phase // "unknown"), ((.status.containerStatuses // []) | all(.ready == true))] | @tsv' <<<"$instance_json")"
@@ -288,7 +275,20 @@ if (( instance_count == 0 )); then
     fail 'no Longhorn instance-manager pods found'
 fi
 if [[ -n "$bad_instances" ]]; then
-    fail "${bad_instance_count} instance-manager(s) not Ready or missing storage-network/lhnet1" "$bad_instances"
+    fail "${bad_instance_count} instance-manager(s) not Ready, missing storage-network/lhnet1, or with a stale network-status" "$bad_instances"
+fi
+
+# --- Cilium policy enforcement -------------------------------------------------
+# verify-node.sh compares the cluster after the roll with this count, so a pod
+# drained onto a stale identity is told apart from the known #1348 set.
+if [[ -n "$candidate" ]]; then
+    section "Cilium policy enforcement"
+    if policy_out="$("$ROOT_DIR/.agents/skills/talos-rollout/scripts/policy-enforcement.sh" --record "$candidate" 2>&1)"; then
+        line "$(tail -n 1 <<<"$policy_out")"
+        detail "$policy_out"
+    else
+        fail "could not record Cilium policy enforcement before rolling $candidate" "$policy_out"
+    fi
 fi
 
 # --- CloudNativePG ------------------------------------------------------------

@@ -16,6 +16,8 @@ talosconfig
 # Misc.
 .private/
 .task/
+# Talos rollout gate state (policy-enforcement baselines)
+.talos-rollout/
 .venv/
 .DS_Store
 Thumbs.db
