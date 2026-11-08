@@ -117,11 +117,15 @@ def inventory(spec):
             repos = [p for p in children(root, warnings) if p.name.startswith("models--") and p.is_dir()]
             for repo in repos:
                 if repo.is_symlink():
-                    warnings.append("linked repository directory: " + str(repo))
+                    warnings.append("linked repository directory not followed: " + str(repo))
+                    continue
                 if not (repo / "snapshots").is_dir():
                     continue
                 files, refs, trees = [], {}, []
                 for rev in children(repo / "snapshots", warnings):
+                    if rev.is_symlink():
+                        warnings.append("linked revision directory not followed: " + str(rev))
+                        continue
                     if not rev.is_dir():
                         continue
                     for path in walk(rev, warnings):
@@ -188,11 +192,16 @@ def inventory(spec):
                 for owner in children(root, warnings):
                     if owner.name in SKIP:
                         continue
+                    if owner.is_symlink() and owner.is_dir():
+                        warnings.append("linked model owner directory not followed: " + str(owner))
+                        continue
                     if owner.is_file():
                         loose.append(file_record(owner, owner.relative_to(root)))
                     elif owner.is_dir():
                         for model in children(owner, warnings):
-                            if model.is_dir():
+                            if model.is_symlink() and model.is_dir():
+                                warnings.append("linked model directory not followed: " + str(model))
+                            elif model.is_dir():
                                 roots.append(model)
                             elif model.is_file():
                                 loose.append(file_record(model, model.relative_to(root)))
@@ -213,9 +222,11 @@ def inventory(spec):
         item["host"] = spec["host"]
         item["sudo"] = spec.get("sudo", spec["name"] == "athena")
         item["source"] = spec["name"]
-        item["key"] = hashlib.sha256(json.dumps({"source": spec["name"], "store": item["store"],
-                                                "name": item["name"], "files": item["files"],
-                                                "refs": item.get("refs", {})}, sort_keys=True).encode()).hexdigest()[:20]
+        key_input = {"source": spec["name"], "store": item["store"], "name": item["name"],
+                     "files": item["files"], "refs": item.get("refs", {})}
+        if item.get("trees"):
+            key_input["trees"] = item["trees"]
+        item["key"] = hashlib.sha256(json.dumps(key_input, sort_keys=True).encode()).hexdigest()[:20]
     return {"items": items, "warnings": warnings}
 
 
@@ -395,8 +406,8 @@ def prepare(request):
                 path = repo / "refs" / safe_relative(name)
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text(target)
-            expected.append({"path": "/hf-home/hub/" + item["name"] + "/refs/" + source_ref,
-                             "sha256": hashlib.sha256(target.encode()).hexdigest(), "bytes": len(target.encode())})
+                expected.append({"path": "/hf-home/hub/" + item["name"] + "/refs/" + name,
+                                 "sha256": hashlib.sha256(target.encode()).hexdigest(), "bytes": len(target.encode())})
     # Expected hashes are outside the daemon's writable /data mount.
     manifest = Path(AGENT).parent / "ingest-manifests" / (item["key"] + ".json")
     atomic_json(manifest, expected)

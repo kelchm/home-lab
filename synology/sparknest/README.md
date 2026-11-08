@@ -57,6 +57,7 @@ For later applies, update the applied Compose/config copies and use only `compos
 | `ingest.py` | Frozen copy of the version used for this run |
 | `journal.json` | Completed files, per-collection progress, native job details and verification |
 | `worker.log`, `worker.json` | Worker output and process identity |
+| `progress.py` | Read-only live progress display for the coordinator |
 | `ssh/` | Private persistent SSH control sockets, no private keys |
 
 The inventory covers Athena's ModelKeep archive and import-staging caches; the Mac's HF, LM Studio, Ollama, ComfyUI and flatrate adapter/checkpoint stores; and both Sparks' shared/home HF caches, runtime inputs and existing OCR models. On November 8 it contained 98 collections, 4,888 files and 5,845,171,861,725 logical bytes, including duplicated stores and revisions. Five optional source roots were absent on the Sparks and are reported in inventory warnings. GPU `ComputeCache` directories, `.locks`, zero-byte lock files, Synology metadata, and HF authentication files are excluded. These are configured model stores, not a scan of every disk. Missing/unreadable roots, traversal failures and linked directories are reported; linked directories inside walked trees are not followed.
@@ -84,11 +85,23 @@ caffeinate -i python3 -u "$RUNTIME/ingest.py" run "$RUNTIME/inventory.json" "$RU
 
 Run the last command in a retained terminal, or detach it with output to `worker.log` and record its process group. `journal.json.lock` prevents concurrent coordinators for that journal. An SSH transport failure stops the queue rather than failing every remaining collection. Restore connections and rerun the same command to resume. Completed receipts survive interruption; partial files restart from the beginning. Previously completed staging paths are checked on resume and missing ones are discarded from the reuse index. **Do not clean `incoming/bulk` while a run or its journal still depends on it.** No automated cleanup or source deletion is included.
 
+Monitor the whole queue from the Mac with the following command. Copy `progress.py` into the runtime directory first when setting up another run. Add `--once` for a single report. Ctrl-C stops only the monitor.
+
+```sh
+python3 /Users/kelchm/Documents/sparknest-ingest-20261108/progress.py
+```
+
+The display shows completed collections, logical bytes verified, the current source and phase, per-file staging boundaries, failures, and repos with native sharing skips. The [Jobs page](http://10.32.10.5:8091/#/jobs) covers only native imports and sharing, so all jobs can say done while the coordinator clones or hashes another collection. Hashing a large file can take several minutes between journal updates; the monitor does not invent byte progress within a hash operation.
+
+The active November 8 coordinator and NAS agent are frozen at commit `8e834dea`. Subsequent inventory fixes in this directory include HF tree metadata in item identity, skip linked repository/model directories, and verify every ref written. Apply these together on a later coordinator launch; the running queue continues using its captured inventory and frozen scripts.
+
 The loader verifies SSH streams with source/destination SHA-256, and validates recorded ModelKeep/HF/Ollama checksums when available. It can reuse a verified Athena copy by checksum instead of reading a duplicate on another machine. After native import it reads every expected archived file through FUSE and compares its full SHA-256. `verified` means the archive holds the expected content; it does not prove that a reused source's own bytes were read, that a partial HF cache is a complete upstream model, or that an independent backup exists.
 
 HF models retain their repo names, actual commit IDs, original filenames, tree metadata when present, and source-specific ref aliases under `refs/sources/...`. Shared branch refs are added only when the full inventory agrees on the target. Conflicting `main` refs exist for DFlash2 and GLM-5.3-Flash-EXL3-TR3; pre-existing archive refs are retained, and the source aliases identify each source's target. Local folders without an authoritative HF revision remain folders under `/imports`; they are not assigned invented HF commits or presented as fully cataloged HF models.
 
 Original HF blob names are borrowed from other copies of the same repo/revision/file when available. Otherwise the loader computes a SHA-256 name. For LFS weights this recovers the normal HF blob identity; Git-managed metadata can use another naming convention. Native `hf share` requires HF tree/Xet metadata to publish eligible weights into the global shared store; Git-managed files stay in their repositories. It can skip unknown files even when the job succeeds. The journal retains its notes and skips: full content verification does not imply that every file deduplicated. This is whole-file sharing, not chunk deduplication.
+
+**Observed metadata dependency:** `wrldsuksgo2mars/DeepSeek-V4-Flash-Vision-Exp-EXL3-K2.2-D2-v1` at `8347bfb8776287ef2dcab2b46e9f15c655825c3a` was retained and passed full content verification, but `hf share` skipped all 31 files, including all 11 weight shards (91,839,042,912 bytes). Both inventoried Athena copies lack HF tree/Xet records; ModelKeep retained only path, size and SHA-256. The unauthenticated Hub lookup returned an authentication error, which does not distinguish a private repo from one no longer available. The correct SHA-256 weight names alone are insufficient for the native shared-store conversion. Repeated imports into that same repo/revision can still reuse its existing blobs; this is not evidence of cross-repository deduplication. The observed repo has 31 ordinary blob files totaling 91,886,448,032 bytes and no shared-store links. This remains a native archive limitation in #1371, independently of successful byte verification.
 
 ### v0.8.3 import workaround
 
