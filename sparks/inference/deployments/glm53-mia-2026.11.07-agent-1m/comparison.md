@@ -2,6 +2,8 @@
 
 The owner authorized N8 → N4 → P4 → repeated N8, with a final return to Python. Both service profiles follow Mia’s recipes, with their respective precision defaults. Native remains unqualified. Python was restored and passed readiness on both Sparks at the end. The running profile is `glm53-python-rerun-p4`, from `~/sparkrun/recipes/glm53/mia-tensorfold-glm53-rerun/P4.yaml`, using the isolated `/cache/huggingface/tensorfold-spill-rerun-20261107` store. The original retained production spill was not opened by the rerun.
 
+Later sharding, Python precision and upstream message-start results are recorded separately in [the November 7–8 follow-ups](followups.md), including the verification-command correction. This comparison retains its original release/configuration scope.
+
 ## Decode
 
 End-to-end aggregate tokens/s, median [minimum–maximum] of five cohorts per cell. Each request generates 768 tokens; four-stream rows include four simultaneous requests per cohort. Unique early prefixes prevent reuse between repetitions, so the spread includes prefix-sensitive generation as well as timing variation; each exact request body is paired across arms. This is bounded generation, not a completed quality task.

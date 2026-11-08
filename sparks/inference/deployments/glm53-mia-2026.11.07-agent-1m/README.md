@@ -8,6 +8,8 @@ The owner authorized the trial NOW on November 7 after confirming GLM is idle: c
 
 The initial single-batch comparison is retained below; use the controlled comparison above for the repeated results.
 
+The [November 7–8 follow-ups](followups.md) add the observed workload aggregates, sharding screen, Python FP8-dense comparison, and separately scoped upstream arbitrary-cut and served message-start experiments. The latest operating-thread window ended with both-rank Python P4 restoration, the full pool and the same isolated rerun spill, rechecked locally from retained snapshots. They also correct a no-op standalone verification command without rewriting sealed evidence. The [follow-up receipt](followups.json) binds the selected raw inputs and distinguishes these experiments from this rejected Mia release.
+
 | Matched exploratory measurement | Python | Native |
 | --- | ---: | ---: |
 | One-stream end-to-end decode | 49.08 tok/s | 42.82 tok/s |
