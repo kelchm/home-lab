@@ -48,13 +48,20 @@ def rules(node):
 
 
 errors, count = [], 0
+# Both vmalerts write ALERTS and ALERTS_FOR_STATE to VMSingle, keyed by alert and group name, so a log rule's name is its own.
+evaluators = {}
 for path in sorted((ROOT / "kubernetes").rglob("*.y*ml")):
     if path.suffix not in (".yaml", ".yml") or path.stem.endswith(".sops"):
         continue
     for document in documents(path):
+        labels = ((document.get("metadata") or {}).get("labels") or {}) if isinstance(document, dict) else {}
+        logs = labels.get("alerting.home.kelch.io/datasource") == "victorialogs"
         for rule in rules(document):
             count += 1
             name, where = rule["alert"], path.relative_to(ROOT)
+            evaluators.setdefault(name, set()).add(logs)
+            if len(evaluators[name]) > 1:
+                errors.append(f"{where}: {name}: a log rule and a metrics rule share this name")
             annotations = rule.get("annotations") or {}
             if not NAME.match(name):
                 errors.append(f"{where}: {name}: a name is CamelCase and starts with a capital")

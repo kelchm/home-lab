@@ -242,10 +242,16 @@ spec:
 
         # Three minutes of unbroken decoding with no new token. The window sits in the
         # expression, not in `for`, so a stream that has only just started does not count.
+        # The window skips steps before a series exists, so the offset term also requires
+        # the series three minutes ago: a restarted engine is not judged on its first seconds.
+        # Its own 15s window keeps a sample from before a reboot, which leaves no stale marker,
+        # from standing in for that.
         # A long prefill holds no stream in the decoding state.
         - alert: InferenceEngineStalled
           expr: |
             min_over_time((sum by (instance, platform, model) (tensorfold_health:streams{job="spark-inference", state="decoding"}))[3m:15s]) > 0
+            and
+            sum by (instance, platform, model) (max_over_time(tensorfold_health:streams{job="spark-inference", state="decoding"}[15s] offset 3m)) > 0
             and
             sum by (instance, platform, model) (increase(tensorfold_health:completion_tokens_total{job="spark-inference"}[3m])) == 0
           labels:

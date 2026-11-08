@@ -3,8 +3,13 @@
 # datasource, so this instance selects only VMRules labelled
 # alerting.home.kelch.io/datasource=victorialogs, which the metrics vmalert
 # excludes. It reuses that vmalert's notifier config, so its alerts reach
-# VMAlertmanager with evaluator=vmalert and follow the same routes. The image
-# follows the operator default, which the victoria-metrics-k8s-stack chart sets.
+# VMAlertmanager with evaluator=vmalert and follow the same routes. It writes
+# ALERTS and ALERTS_FOR_STATE to the same VMSingle as the metrics vmalert. Those
+# series are keyed by alert and group name, which validate-alert-conventions.py
+# keeps apart from the metrics rules. There is no remote read: vmalert restores
+# state only for rules with `for`, and log rules keep persistence in the
+# expression instead. The image follows the operator default, which the
+# victoria-metrics-k8s-stack chart sets.
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMAlert
 metadata:
@@ -13,6 +18,8 @@ spec:
   datasource:
     url: http://victoria-logs-single-server.observability.svc.cluster.local.:9428
   evaluationInterval: 1m
+  remoteWrite:
+    url: http://vmsingle-victoria-metrics-k8s-stack.observability.svc.cluster.local.:8428
   notifierConfigRef:
     name: vmalert-victoria-metrics-k8s-stack-additional-notifier
     key: notifier-configs.yaml
