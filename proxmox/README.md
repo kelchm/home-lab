@@ -86,9 +86,9 @@ Three UniFi policies contain the general-purpose Workloads VLAN without changing
 
 | Policy | Source | Destination | Action |
 |---|---|---|---|
-| `Block Workloads to Protected Networks` | `Workloads` | `Infra Mgmt`, `Storage`, `K8s Prod` | Block all |
-| `Block Workloads to Admin Prod Routed` | `Workloads` | `10.32.130.0/24` in UniFi's `External` destination zone | Block all |
-| `Block K8s Prod to Workloads` | `K8s Prod` | `Workloads` | Block all |
+| `Workloads to Protected Networks` | `Workloads` | `Infra Mgmt`, `Storage`, `K8s Prod` | Block all |
+| `Workloads to Admin Prod` | `Workloads` | `10.32.130.0/24` in UniFi's `External` destination zone | Block all |
+| `K8s Prod to Workloads` | `K8s Prod` | `Workloads` | Block all |
 
 The `admin-prod` pool is a BGP-routed prefix rather than a UniFi network. Network 10.5.67 classified that path in the `External` destination zone during live testing; an otherwise identical `Internal`-zone rule did not match `10.32.130.1`. Keep the explicit routed rule above the default allow rules and retest after UniFi upgrades.
 
