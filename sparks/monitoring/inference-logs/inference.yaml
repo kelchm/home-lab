@@ -1,0 +1,46 @@
+# Adds the inference server's output to the journal configuration in ../logs,
+# which stays identical to the PVE nodes'; see "Spark inference logs" in
+# docs/runbooks/logging.md. SparkRun's TensorFold adapter gives each rank's
+# container Docker's fluentd log driver, which sends every line here with the
+# container's SparkRun labels. Its output repeats the shared one, which takes
+# only the journal, with a buffer of its own; test-host-logs.py checks the two
+# match.
+includes:
+  - fluent-bit.yaml
+
+pipeline:
+  inputs:
+    # Docker connects from the host, so the port is on loopback only. Lines that
+    # arrive while the collector is down wait in Docker's buffer, up to the limit
+    # the adapter sets. The input takes no key, because Docker's driver can't send
+    # one: any process on the host's network, the ranks included, can write here.
+    - name: forward
+      alias: inference
+      listen: 127.0.0.1
+      port: 24224
+      storage.type: filesystem
+
+  filters:
+    - name: lua
+      match: inference
+      script: /fluent-bit/etc/inference.lua
+      call: normalize_inference
+      type_int_key: severity_number
+
+  outputs:
+    - name: opentelemetry
+      alias: ingest-inference
+      match: inference
+      host: metrics-ingest.home.kelch.io
+      port: 443
+      tls: on
+      tls.verify: on
+      tls.verify_hostname: on
+      logs_uri: /insert/opentelemetry/v1/logs
+      header:
+        - Authorization Bearer ${INGEST_TOKEN}
+        - VL-Ignore-Fields scope.name,scope.version
+      logs_body_key: $body
+      logs_body_key_attributes: off
+      retry_limit: no_limits
+      storage.total_limit_size: 256M

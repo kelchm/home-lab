@@ -299,7 +299,7 @@ Each event's line names the reason and object, so a word such as `BackOff` or a 
 
 ## Host logs
 
-Each PVE node, Spark, Pi and the NAS sends its systemd journal, kernel messages included, to VictoriaLogs, and each PVE node also sends its [task logs](#pve-task-logs). On a PVE node, Spark or the NAS, a `fluent-bit` container in the host's monitoring stack reads the journal read-only and sends OTLP to `https://metrics-ingest.home.kelch.io/insert/opentelemetry/v1/logs` with the host's metrics token. Its configuration is [`proxmox/monitoring/logs/`](../../proxmox/monitoring/logs/), kept identical in [`sparks/monitoring/logs/`](../../sparks/monitoring/logs/) and [`synology/monitoring/logs/`](../../synology/monitoring/logs/). The host's VMUser routes that path to VictoriaLogs and adds `host.name`, `service.namespace` and the stream fields as query arguments, so, as with metrics, the configuration carries no identity and a host cannot give itself another: VMAuth drops a client's own `extra_fields` and `_stream_fields`, VictoriaLogs reads those arguments before its `VL-Extra-Fields` and `VL-Stream-Fields` headers, and `extra_fields` override the same fields in a record. The route also sets the `AccountID` and `ProjectID` headers to 0, so every record lands in the default tenant the datasource reads. A host does choose its own `service.name`, a stream field, so a host's token could create streams at will; `VictoriaLogsStreamChurnHigh` would show it. [Athena's journal](#athena-journal) has its own limits, and the GLKVM doesn't send logs ([#914](https://github.com/kelchm/home-lab/issues/914)).
+Each PVE node, Spark, Pi and the NAS sends its systemd journal, kernel messages included, to VictoriaLogs, each PVE node also sends its [task logs](#pve-task-logs), and each Spark its [inference server's output](#spark-inference-logs). On a PVE node, Spark or the NAS, a `fluent-bit` container in the host's monitoring stack reads the journal read-only and sends OTLP to `https://metrics-ingest.home.kelch.io/insert/opentelemetry/v1/logs` with the host's metrics token. Its configuration is [`proxmox/monitoring/logs/`](../../proxmox/monitoring/logs/), kept identical in [`sparks/monitoring/logs/`](../../sparks/monitoring/logs/) and [`synology/monitoring/logs/`](../../synology/monitoring/logs/). The host's VMUser routes that path to VictoriaLogs and adds `host.name`, `service.namespace` and the stream fields as query arguments, so, as with metrics, the configuration carries no identity and a host cannot give itself another: VMAuth drops a client's own `extra_fields` and `_stream_fields`, VictoriaLogs reads those arguments before its `VL-Extra-Fields` and `VL-Stream-Fields` headers, and `extra_fields` override the same fields in a record. The route also sets the `AccountID` and `ProjectID` headers to 0, so every record lands in the default tenant the datasource reads. A host does choose its own `service.name`, a stream field, so a host's token could create streams at will; `VictoriaLogsStreamChurnHigh` would show it. [Athena's journal](#athena-journal) has its own limits, and the GLKVM doesn't send logs ([#914](https://github.com/kelchm/home-lab/issues/914)).
 
 Each Pi runs the same configuration as a NixOS `fluent-bit` service from rpi-nixos's [`modules/profiles/logs`](https://github.com/kelchm/rpi-nixos/tree/main/modules/profiles/logs), with the same `host.lua` byte for byte, so a change to the mapping needs the same change there. A Pi keeps its journal in RAM (`/run/log/journal`, at most 16 MB), so its collector keeps its cursor and a 16 MiB buffer in RAM as well.
 
@@ -361,6 +361,61 @@ To roll out, merge: every PVE node's log route is already live, and each node ap
 
 After a deploy, on each node, `fluentbit_input_records_total{job="pve-fluent-bit",name="pve-tasks"}` exists, `docker logs monitoring-fluent-bit-1` has no `cannot open`, and [Verify a host](#verify-a-host) passes. A task's arrival is the final check: `service.name:=pve-task | stats by (host.name, pve.task.type) count()` lists it after the node's next task. To roll back, revert the change: the collector returns to the journal alone, with its cursor intact, and stored task records stay until retention removes them. A later redeploy resumes from `pve-tasks.db`.
 
+### Spark inference logs
+
+The collector side expects three things of whatever launches an inference engine, so a launcher other than SparkRun needs only these:
+
+- The engine's output is the container's output.
+- The container uses Docker's `fluentd` log driver with the options in `LOG_DOCKER_OPTS` in the [TensorFold adapter](../../sparks/inference/sparkrun/plugins/tensorfold/__init__.py), which send every line to `127.0.0.1:24224`.
+- The container carries the `sparkrun.recipe`, `sparkrun.served_model_name` and `sparkrun.runtime` labels, plus `sparkrun.rank` when a launch has more than one rank, and the driver's `labels` option names them. The [metrics scrape](../../sparks/monitoring/scrape.yaml) reads the same labels, so renaming them means changing both.
+
+SparkRun meets the first only with help: it runs the inference server in a container whose main process is `sleep infinity`, with the server's output in `/tmp/sparkrun_serve.log`, so it reaches neither `docker logs` nor the journal and is gone when the container is removed. The adapter's serve command therefore copies its output to the container's own (`SERVE_OUTPUT`), and the log file and `sparkrun logs` are unchanged. The adapter applies both changes at every launch, for every TensorFold recipe.
+
+[`sparks/monitoring/inference-logs/`](../../sparks/monitoring/inference-logs/) adds a `forward` input on that port to the Spark's collector. It includes the shared configuration unchanged, as the [task logs](#pve-task-logs) do, and sends through the same token and log route with an output and 256 MiB buffer of its own. These lines never pass through the journal, so they are stored once.
+
+Every engine prints one line when a request finishes, but each prints different values in different forms. [`inference.lua`](../../sparks/monitoring/inference-logs/inference.lua) reads them into the fields below. Seconds are always plain numbers. A value the engine didn't print or didn't measure is absent, never zero.
+
+| Field | Content |
+| --- | --- |
+| `service.name` | `inference`, one stream per Spark. |
+| `inference.recipe`, `inference.model`, `inference.runtime`, `inference.rank` | The recipe file name without `.yaml`, the served name, the runtime and the rank. These match the inference metrics' `recipe`, `model` and `runtime` labels. A one-Spark run has no rank, as in the metrics. |
+| `event.name` | `inference.request.done` when a request finishes, `inference.request.ended` when the client leaves or the engine fails it, and `inference.request.refused` when it is turned away. Absent on other lines. |
+| `inference.request.id` | The request's ID, such as `chatcmpl-…`. |
+| `inference.finish` | How it ended: the engine's finish reason (`stop`, `length`, `tool_calls`), or `client-left`, `error` or `refused`. `error.type` names the engine's error. |
+| `inference.tokens.prompt`, `inference.tokens.cached`, `inference.tokens.output` | Prompt tokens, how many of them came from the prompt cache, and reply tokens. |
+| `inference.thinking`, `inference.effort` | Whether thinking was on (`true` or `false`), and the reasoning level. |
+| `inference.ttft_s`, `inference.queue_s`, `inference.prefill_s`, `inference.decode_s`, `inference.total_s` | Seconds to the first token, waiting in the queue, reading the prompt, writing the reply, and in all. |
+| `inference.output_tps` | Reply tokens per second, as the engine computes it. |
+| `inference.spec.rounds`, `inference.spec.accepted`, `inference.spec.drafted`, `inference.preemptions` | Decode rounds, draft tokens accepted and proposed, and times the request was preempted. |
+| `http.request.method`, `url.path`, `http.response.status_code` | From the Zig server's line for each HTTP request. A successful request for `/metrics`, `/health` or `/stats` is dropped, since the metrics already show polling. |
+| `_msg` | The line as the engine printed it. |
+| `_time` | When Docker read the line, to the millisecond. The engines print no time of their own. |
+
+Which timings a recipe has depends on its engine:
+
+| Engine | Recipes | Timings |
+| --- | --- | --- |
+| TensorFold 0.6.0's Python server | Mia's GLM kit | `ttft_s`, `prefill_s`, `output_tps`, `preemptions` |
+| TensorFold's Zig server | Qwen TP2 v1.1, native GLM | `ttft_s`, `queue_s`, `decode_s`, `total_s`, `output_tps` |
+| Older forks of the Zig server | DeepSeek, Qwen one-Spark | None: only tokens, cache, finish and drafts |
+
+All other lines, such as model loading, `prompt cache:` summaries and tracebacks, are kept with only the common fields. A request line must start with the engine's `[tensorfold]` prefix, and the parser reads only the keys above, so a key an engine adds later is ignored rather than misread, and stays searchable in `_msg`. Other delivery behaviour:
+
+- **Before a launch:** the change applies when a container is created. An instance launched before the adapter change keeps `json-file` and sends nothing until its next launch.
+- **Collector down:** Docker's driver is asynchronous, so the container starts and the engine writes whether or not the collector is up. Docker holds up to 16,384 lines in memory while it can't connect. It drops lines beyond that, everything it holds if the Docker daemon restarts, and whatever is still queued when the container is removed. A write to the collector gives up after 5 seconds, so a collector that hangs can't stop SparkRun removing the container. Docker sends without waiting for Fluent Bit to confirm, so delivery up to the collector is best effort; from there on the collector's file buffer holds records as it does the journal's. The log file in the container still has every line, and the engine's errors are in the same stream as its output.
+- **Endpoint outage:** as for the journal, records wait in the buffer and arrive with their original timestamps.
+- **Other runtimes:** only the TensorFold adapter sets the driver. A recipe on another SparkRun runtime keeps `json-file`.
+- **Trust:** the input on port 24224 takes no key, because Docker's driver can't send one. Any process on the Spark's host network can write records there under the Spark's token, including the ranks, which use host networking and already write their own lines. Those are the same processes the host already trusts with its metrics.
+
+`NodeLogsSilent` doesn't watch this input, because a Spark can serve nothing for days. The delivery and drop alerts cover its output as they do the journal's, from the collector on; lines Docker drops before they reach it show up in no counter.
+
+To roll out:
+
+1. Merge. Each Spark's doco-cd recreates only `fluent-bit`, which then listens on port 24224. A running inference instance is not touched.
+2. Sync the adapter into the SparkRun control environment on spark-1, as [Deploy](../../sparks/inference/sparkrun/README.md#deploy) describes, with whoever owns the next launch. That launch is the first to send its lines.
+
+After the launch, `docker inspect --format '{{.HostConfig.LogConfig.Type}}' <rank container>` is `fluentd` on each Spark, and `service.name:=inference | stats by (host.name, inference.recipe) count()` lists the recipe from both. To roll back, revert the change and relaunch: the running containers keep sending to a port no one listens on, and Docker drops those lines without stopping the engine. Stored records stay until retention removes them.
+
 ### Athena journal
 
 Athena's `fluent-bit` runs in the [`monitoring`](../../synology/monitoring/) project, with the pipeline, mapping and image a PVE node or Spark runs, and reads only the journal. DSM's text logs repeat it, because syslog-ng reads `systemd-journal()`, so nothing tails `/var/log`. Direct package logs and Docker's `json-file` output stay out. It is one container of at most 128 MiB, a buffer of at most 256 MiB on `/volume1` and no new token or account. The journal held about 8 MiB and 63 minutes on October 30, 2026, so it sends at most about 180 MiB a day before VictoriaLogs compresses it.
@@ -418,8 +473,13 @@ Host records carry no Kubernetes namespace, so filter on `host.name` or `service
 - Errors on every host: `service.namespace:in(pve, spark, synology, pi) severity_number:>=17`
 - Failed PVE tasks: `service.name:=pve-task "TASK ERROR"`
 - A whole task, from a UPID in the journal or a line above: `pve.task.upid:="UPID:..."`
+- Requests per recipe: `service.name:=inference event.name:=inference.request.done | stats by (inference.recipe) count()`
+- Wait for the first token, by recipe: `service.name:=inference inference.ttft_s:* | stats by (inference.recipe) quantile(0.5, inference.ttft_s) p50, quantile(0.9, inference.ttft_s) p90`
+- Share of prompt tokens read from the cache: `service.name:=inference event.name:=inference.request.done | stats sum(inference.tokens.cached) cached, sum(inference.tokens.prompt) prompt | math cached / prompt as share`
+- How requests ended: `service.name:=inference inference.finish:* | stats by (inference.finish) count()`
+- Failed and refused requests: `service.name:=inference inference.finish:in(error, refused)`
 
-`python3 scripts/logging/test-host-logs.py` runs the host configuration on the machine's own journal and checks what a pinned VictoriaLogs stores: a syslog line at two levels, a container's stdout and stderr through the `journald` driver, a kernel message, and a client header that tries to rename the host. It also checks that every host's log route stamps the identity its metrics route does, and runs the [task log](#pve-task-logs) overlay on synthetic task files through a first start with old history and index files, a running task with a half-written line, a restart, a reused inode, a silent task that resumes and an overlong line, checking that each record is stored once. It needs a Docker daemon that logs to journald, such as a GitHub runner or Colima's VM. CI runs it with the host monitoring checks. It ends with the [NAS journal test](#athena-journal), which `python3 scripts/logging/test-host-logs.py nas` runs alone on any Docker daemon.
+`python3 scripts/logging/test-host-logs.py` runs the host configuration on the machine's own journal and checks what a pinned VictoriaLogs stores: a syslog line at two levels, a container's stdout and stderr through the `journald` driver, a kernel message, and a client header that tries to rename the host. It also checks that every host's log route stamps the identity its metrics route does, and runs the [task log](#pve-task-logs) overlay on synthetic task files through a first start with old history and index files, a running task with a half-written line, a restart, a reused inode, a silent task that resumes and an overlong line, checking that each record is stored once. It sends each engine's request lines through the [inference overlay](#spark-inference-logs) with Docker's `fluentd` driver and the adapter's own options, and checks the fields each is read into; `python3 scripts/logging/test-host-logs.py inference` runs that part alone on any Docker daemon. It needs a Docker daemon that logs to journald, such as a GitHub runner or Colima's VM. CI runs it with the host monitoring checks. It ends with the [NAS journal test](#athena-journal), which `python3 scripts/logging/test-host-logs.py nas` runs alone on any Docker daemon.
 
 ### Verify a host
 

@@ -7,7 +7,9 @@ SparkRun's solo and native RuntimePlugin paths. The adapter names no model or
 engine: each recipe sets its entrypoint, served name and window, and its mod
 owns the launch. A one-node launch gets no rendezvous variables. Each recipe's
 post_exec gate checks engine-specific health and discovery beyond SparkRun's
-built-in readiness.
+built-in readiness. Every rank's output also goes to the Spark's log collector,
+labelled with its recipe, model and rank, so every engine's request lines arrive
+in VictoriaLogs the same way.
 """
 
 from __future__ import annotations
@@ -35,6 +37,28 @@ REQUIRED_DEFAULTS = ("entrypoint", "served_model_name", "context")
 
 # The head's CX7 address for the launch in progress, per context so nested or concurrent launches keep their own.
 _FABRIC_MASTER: ContextVar[str | None] = ContextVar("tensorfold_fabric_master", default=None)
+
+# SparkRun runs the serve command in a container whose PID 1 is `sleep infinity`, with its
+# output in /tmp/sparkrun_serve.log, where `sparkrun logs` reads it. The command also copies
+# that output to PID 1's, which Docker's log driver reads. This copy exists only for
+# SparkRun: a launcher that runs the engine as the container's main process needs none.
+# -p keeps tee writing the log file if PID 1's output fails; if tee itself dies, the
+# engine's next write fails too.
+SERVE_OUTPUT = "exec > >(tee -p /proc/1/fd/1) 2>&1"
+# Docker sends each rank's output to the Spark's log collector, the Fluent Bit forward input
+# in sparks/monitoring/inference-logs. Asynchronous, so a container starts and writes even
+# while the collector is down; a buffer of 16,384 lines covers its restart. Without a write
+# timeout, a collector that stops reading would block removing the container.
+LOG_DOCKER_OPTS = (
+    "--log-driver=fluentd",
+    "--log-opt=fluentd-address=tcp://127.0.0.1:24224",
+    "--log-opt=fluentd-async=true",
+    "--log-opt=fluentd-buffer-limit=16384",
+    "--log-opt=fluentd-write-timeout=5s",
+    "--log-opt=fluentd-sub-second-precision=true",
+    "--log-opt=tag=inference",
+    "--log-opt=labels=sparkrun.recipe,sparkrun.served_model_name,sparkrun.runtime,sparkrun.rank",
+)
 
 _HF_MODELS_PREFIX = "models--"
 _SNAPSHOTS_SEGMENT = "/snapshots/"
@@ -129,6 +153,9 @@ class TensorFoldRuntime(RuntimePlugin):
             "cap_add": ["IPC_LOCK"],
             "ulimit": ["memlock=-1:-1"],
         }
+
+    def get_extra_docker_opts(self) -> list[str]:
+        return list(LOG_DOCKER_OPTS)
 
     def get_common_env(self):
         return default_env_hf_offline()
@@ -245,7 +272,7 @@ class TensorFoldRuntime(RuntimePlugin):
         for key, value in engine_env.items():
             if key not in ordered:
                 assignments.append(_env_assignment(key, value))
-        return "env %s %s" % (" ".join(assignments), command)
+        return "%s\nenv %s %s" % (SERVE_OUTPUT, " ".join(assignments), command)
 
     def _run_cluster(self, hosts, image, serve_command="", recipe=None, overrides=None, **kwargs):
         # The head's CX7 address, for engines whose ranks link over the fabric rather than the rendezvous network.
