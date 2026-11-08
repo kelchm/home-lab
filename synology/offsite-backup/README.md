@@ -114,7 +114,7 @@ A first attempt through a second Longhorn backup target on `k8s-prod` restored f
 
 | | |
 |---|---|
-| Data age (RPO) | At worst, 27 hours plus the duration of the run in progress, when runs succeed. Longhorn backs up at 07:00 UTC and this job starts at 10:00 UTC, so when a run starts the newest off-site backup is already 27 hours old, and it stays the newest until that run completes. The first run took 7h25m; an ordinary daily run uploads only what changed and has not been timed yet. Each failed or unfinished run adds a day; the dead-man check reports those |
+| Data age (RPO) | At worst, 27 hours plus the duration of the run in progress, when runs succeed. Longhorn backs up at 07:00 UTC and this job starts at 10:00 UTC, so when a run starts the newest off-site backup is already 27 hours old, and it stays the newest until that run completes. The first run took 7h25m. Daily runs from 2026-10-31 to 11-07 snapshotted `/sources/longhorn` in 6m24s–14m35s and `/sources/object-storage` in 1m24s–33m01s, measured from the container log. The worst observed age of off-site Longhorn data was therefore about 27h15m, and of database WAL about 24h40m; see [measured data age](../../docs/runbooks/longhorn-backup-restore.md#measured-data-age-2026-11-08). Each failed or unfinished run adds a day; the dead-man check reports those |
 | Time to restore (RTO) | Not measured for the full store. One 70 MB volume directory took 17 seconds; 90 GB depends on the downlink |
 | History | 14 daily and 4 weekly snapshots of the store, each holding Longhorn's own 7 daily and 4 weekly backups |
 | Drill cadence | None fixed. Repeat the drill above after changing the Kopia version, the repository layout or the provider |

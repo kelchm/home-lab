@@ -203,6 +203,8 @@ kubectl -n longhorn-system get backups -l backup-volume=<volume-name> \
   --sort-by=.metadata.creationTimestamp
 ```
 
+The `backupvolumes` NAME column is not the volume name: Longhorn 1.12 appends a suffix, as in `pvc-d0a45a01-…-f1a920a9`. The `backup-volume` label, the backup URL and every `<backup-volume-name>` below take the volume name without it, which is the BackupVolume's `.spec.volumeName`. The suffixed name matches no backups.
+
 ### 1. Restore through an explicit Volume
 
 Longhorn restores only into a `Volume` whose `spec.fromBackup` names the backup. Use the Volume/PV/claim recipe in [Restore one claim](#restore-one-claim) for every restore. That recipe is written for a rebuilt cluster; on a running cluster, ignore its step 1 warning about backup volumes named after a current PV: the live volume's own backup volume is the one you want, and the backup to pick is the last one before the damage. Shortcuts that do not work on Longhorn 1.12, and that this runbook used to suggest:
@@ -213,7 +215,7 @@ Longhorn restores only into a `Volume` whose `spec.fromBackup` names the backup.
 
 Choose one shape:
 
-- **Inspect a copy first.** Recommended for a first restore, and whenever you are not sure which backup is good. It leaves the live claim and its volume untouched. Follow [Restore one claim](#restore-one-claim) steps 1 and 3, skipping step 2, in the application's namespace or a disposable one. In step 3's manifest, replace every `<backup-volume-name>` with a new name such as `<claim>-restore`: the Volume's name, the PV's name, the PV's `volumeHandle` and the claim's `volumeName`. A `volumeHandle` left at the backup volume's name is the live volume, and the copy's claim would mount it. Give the claim a new name too, and set the PV's `claimRef.name` to it. Keep `fromBackup` as the backup URL. Add the label `recurring-job-group.longhorn.io/no-backup: enabled` to the Volume's metadata, so the copy starts no backup history of its own; it does not need the existing one. Wait for the restore as in step 4, then inspect it (step 2 below).
+- **Inspect a copy first.** Recommended for a first restore, and whenever you are not sure which backup is good. It leaves the live claim and its volume untouched. Follow [Restore one claim](#restore-one-claim) steps 1 and 3, skipping step 2, in the application's namespace or a disposable one. In step 3's manifest, replace every `<backup-volume-name>` with a new name such as `<claim>-restore`: the Volume's name, the PV's name, the PV's `volumeHandle` and the claim's `volumeName`. A `volumeHandle` left at the backup volume's name is the live volume, and the copy's claim would mount it. Give the claim a new name too, and set the PV's `claimRef.name` to it. Keep `fromBackup` as the backup URL. Add the label `recurring-job-group.longhorn.io/no-backup: enabled` to the Volume's metadata, so the copy starts no backup history of its own; it does not need the existing one. Wait for the restore as in step 4, then inspect it (step 2 below). **Drilled** on 2026-11-08 for `identity/kanidm-data-kanidm-default-0` and `printing/bambuddy-db-1` ([#224](https://github.com/kelchm/home-lab/issues/224)): both copies restored into two-replica volumes named `<claim>-restore` in a disposable namespace, the only reference to the live volume was the backup URL, and the live volumes stayed attached and healthy. A 2 GiB volume holding 172 MB restored in 16 seconds; a 20 GiB volume holding 1.28 GB restored in 53 seconds. A copy reports `degraded` for a few seconds while it restores.
 - **Replace the live claim.** Follow [Restore one claim](#restore-one-claim) steps 1–4. Deleting the claim destroys the current volume and its local snapshots, because the `longhorn` class reclaims with `Delete`. If anything on it may still matter, back it up first (Longhorn UI → **Volume** → select → **Create Backup**) or inspect a copy first. On a running cluster the backup volume's name is the live volume's name, so before step 3 wait until the old volume and PV are gone:
 
   ```sh
@@ -223,15 +225,18 @@ Choose one shape:
 
 ### 2. Inspect
 
-Mount the restored claim from a debug pod while nothing else uses it:
+Mount the restored claim read-only from a debug pod while nothing else uses it. The scratch directory is for copies of files that need writing to open:
 
 ```sh
 kubectl -n <ns> run restore-inspect --rm -it --restart=Never \
   --image=alpine \
-  --overrides='{"spec":{"containers":[{"name":"x","image":"alpine","command":["sh"],"stdin":true,"tty":true,"volumeMounts":[{"name":"d","mountPath":"/data"}]}],"volumes":[{"name":"d","persistentVolumeClaim":{"claimName":"<restored-claim>"}}]}}'
+  --overrides='{"spec":{"containers":[{"name":"x","image":"alpine","command":["sh"],"stdin":true,"tty":true,"volumeMounts":[{"name":"d","mountPath":"/data","readOnly":true},{"name":"s","mountPath":"/scratch"}]}],"volumes":[{"name":"d","persistentVolumeClaim":{"claimName":"<restored-claim>","readOnly":true}},{"name":"s","emptyDir":{}}]}}'
 ```
 
-Check for content you know was there before the backup, not just that the filesystem mounts: an empty volume also mounts and binds.
+Check for content you know was there before the backup, not just that the filesystem mounts: an empty volume also mounts and binds. Only the pod's view is read-only: the CSI driver mounts the filesystem read-write on the node, so ext4 replays its journal there.
+
+- **SQLite in WAL mode, such as Kanidm.** A crash-consistent copy holds `-wal` and `-shm` files, and SQLite cannot open it on a read-only mount. Copy the database and both files to `/scratch` and run `PRAGMA integrity_check` on the copy. On 2026-11-08 Kanidm's copy returned `ok` with 122 tables and 323 `id2entry` rows.
+- **PostgreSQL.** Run `pg_controldata -D <pgdata>` from the cluster's own CNPG image as uid 26, and compare the database system identifier and timeline with `kubectl -n <ns> get clusters.postgresql.cnpg.io <cluster> -o jsonpath='{.status.systemID} {.status.timelineID}'`. A primary's copy has no `standby.signal` and reports `in production`, because the snapshot is crash-consistent. Starting PostgreSQL on a copy is covered by the [2026-09-30 Visionect drill](visionect-migration.md#restore-drill-2026-09-30).
 
 ### 3. Verify
 
@@ -241,12 +246,20 @@ Check for content you know was there before the backup, not just that the filesy
 
 ### 4. Cleanup
 
-- An inspection copy uses a `Retain` PV, so deleting its claim leaves the volume behind. Delete the claim, then the PV, then the Longhorn volume:
+- An inspection copy uses a `Retain` PV, so deleting its claim leaves the volume behind. Stop any pod still using the claim, then delete the claim, the PV and the Longhorn volume:
 
   ```sh
   kubectl -n <ns> delete pvc <claim>-restore
   kubectl delete pv <claim>-restore
   kubectl -n longhorn-system delete volumes.longhorn.io <claim>-restore
+  ```
+
+  Then confirm nothing is left. **Drilled** on 2026-11-08: Longhorn removed the volumes, engines, replicas and VolumeAttachments within 35 seconds, and no backup volume or backup was created for either copy. The drill ran equivalent queries rather than these exact commands.
+
+  ```sh
+  kubectl -n longhorn-system get volumes.longhorn.io,engines.longhorn.io,replicas.longhorn.io | grep <claim>-restore
+  kubectl get volumeattachments,pv | grep <claim>-restore
+  kubectl -n longhorn-system get backupvolumes.longhorn.io -o jsonpath='{.items[*].spec.volumeName}' | tr ' ' '\n' | grep <claim>-restore
   ```
 
 - If you scaled down a workload, ensure it scales back to declared replicas
@@ -268,8 +281,9 @@ Do not read this section as a tested procedure. Each step below is tagged with o
 
 - The cluster was created on 2026-04-24. No rebuild from `task bootstrap:talos` and `task bootstrap:apps` is recorded since, and `scripts/bootstrap-apps.sh` has changed since then. Steps 1–7 are **undrilled**.
 - One thing was **drilled**, on 2026-09-30 ([Visionect restore drill](visionect-migration.md#restore-drill-2026-09-30)): restoring the `visionect-db-1` and `visionect` backups into new single-replica volumes in a disposable namespace, and starting PostgreSQL on the restored database volume. Everything else, including the same restore for any other application, is **undrilled**.
+- On 2026-11-08 ([#224](https://github.com/kelchm/home-lab/issues/224)), on the running cluster: [Inspect a copy first](#1-restore-through-an-explicit-volume) for Kanidm replica 0 and `bambuddy-db-1`, with file-level checks only, and the [Kanidm restore and reseed](kanidm-restore.md#restore-drill-2026-11-08) in a disposable Kaniop cluster. Both are **drilled**. Neither rebuilt anything, restored over a live claim or exercised the rebuild steps below.
 - `task bootstrap:apps` could not finish on a clean cluster ([#758](https://github.com/kelchm/home-lab/issues/758)). The bootstrap now installs Multus itself. That was tested on 2026-10-05 on a disposable three-node Talos v1.13.11 cluster of PVE guests, which overrode the NIC selection, dropped the node patches and volume configs, skipped `sops-age` and never synced this repository. On this cluster's hardware it is **undrilled**; those checks and cold image-pull timing are acceptance criteria in [#224](https://github.com/kelchm/home-lab/issues/224). Step 5 says what to check if it stalls.
-- Recovery time is unmeasured. Backups run daily at 07:00 UTC, so data loss is one day when the schedule was healthy and longer if backups were failing before the outage; record the timestamp of each backup you restore. The drill and its measurements are tracked in [#224](https://github.com/kelchm/home-lab/issues/224).
+- Whole-cluster recovery time is unmeasured. Single-volume restores took 16 seconds for 172 MB and 53 seconds for 1.28 GB on 2026-11-08. Backups run daily at 07:00 UTC, so data loss is one day when the schedule was healthy and longer if backups were failing before the outage; record the timestamp of each backup you restore. [Measured data age](#measured-data-age-2026-11-08) has the observed values. The drill and its measurements are tracked in [#224](https://github.com/kelchm/home-lab/issues/224).
 
 ### Prerequisites
 
@@ -284,6 +298,40 @@ Confirm all of these before touching a node.
 | Matching hardware | `talos/talconfig.yaml` selects each node's install disk by serial number and its NIC by MAC address. If a disk or node was replaced, edit it first, together with that node's `talos/patches/<node>/network-extras.yaml` (primary and storage NIC MAC addresses and the storage bridge's interface name) and the `devices` pattern in the Cilium HelmRelease if the NIC is no longer named `eno*`. |
 | NAS | Athena up at `10.32.25.5`, exporting `backups-k8s-prod` with the rules under [Backup target](#backup-target), plus the media and manuals shares. |
 | Talos installer USB | `https://factory.talos.dev/image/<schematic-id>/<talos-version>/metal-amd64.iso`. The schematic ID is the last path segment of `talosImageURL` in `talos/talconfig.yaml`; the version is `talosVersion` in `talos/talenv.yaml`. |
+
+### External dependencies
+
+Everything a full recovery needs from outside the cluster, as recorded in this repository on 2026-11-08. **Gap** marks a dependency whose own loss has no documented recovery path.
+
+| Dependency | Where it lives | Recovery path |
+|---|---|---|
+| Cluster age key | 1Password `k8s-prod-sops-age-key`, plus a copy on a separate device. Decrypts `talos/talsecret.sops.yaml` and every `kubernetes/` Secret, including the Cloudflare, BGP and Flux webhook credentials below. | [Prerequisites](#prerequisites). **Gap:** the separate device is not named, and losing both copies means reissuing every secret; no procedure covers that. |
+| NAS age key | `/volume1/docker/doco-cd/sops_age_key` on Athena and 1Password `athena-doco-cd-sops-age-key`. Decrypts `synology/**/*.sops.env`: the Kopia repository password, B2 key, healthchecks.io ping URL and object-store credentials. | [doco-cd](../../synology/platform/doco-cd/README.md#nas-age-key). |
+| `talsecret` | `talos/talsecret.sops.yaml` in Git, encrypted to the cluster age key. | Procedure steps 1 and 3. |
+| 1Password | Vaults `Private` and `Project - home-lab`: both age keys, the Kopia repository password, the B2 master key, the healthchecks.io API key, object-store and UniFi credentials. | **Gap:** account recovery (Emergency Kit, second device) is not documented here, and this one account holds both age keys. |
+| NAS (Athena) and its NFS export | `10.32.25.5`; export rules under [Backup target](#backup-target); also hosts the CloudNativePG object store and the off-site job. | NAS lost: restore the stores from B2 to another machine ([off-site restore](../../synology/offsite-backup/README.md#restore)); serving them over NFS is undrilled. **Gap:** rebuilding Athena itself (DSM, shares, export rules, doco-cd, `s3-storage`) on new hardware is undocumented, and the media and manuals shares have no off-site copy. |
+| Backblaze B2 and Kopia | Bucket `athena-home-kelch-io`; repository password `athena-kopia-repository` and master key `blackblaze-master-key` in 1Password. | [Off-site restore](../../synology/offsite-backup/README.md#restore), drilled for one volume on 2026-10-05. **Gap:** the Backblaze account login and its second factor are the last line of defence, with no recovery procedure. |
+| Cloudflare | `kelch.io` DNS, the tunnel, and API tokens for cert-manager DNS-01 (`cert-manager-secret`) and external-dns (`cloudflare-dns-secret`); tunnel credentials in `cloudflare-tunnel-secret`. All three are SOPS Secrets in Git. | Flux reapplies the Secrets after a rebuild, and cert-manager reissues certificates. **Gap:** account recovery, and reissuing a revoked token or tunnel, are undocumented. |
+| LAN DNS | The UniFi gateway answers static infrastructure records and forwards app names to `k8s-gateway` ([DNS plan](../architecture.md#dns-plan)). | The cluster-derived records come back with the cluster. **Gap:** the gateway's static records are not exported to Git. |
+| UniFi and BGP | Gateway ASN 65000 peering with the nodes; FRR config in [`network/unifi/frr.conf`](../../network/unifi/frr.conf); MD5 password in `kubernetes/apps/kube-system/cilium-bgp/app/bgp-secret.sops.yaml`. | [UniFi README](../../network/unifi/README.md) reapplies FRR. **Gap:** the rest of the console's configuration (VLANs, zones, firewall policies, DHCP reservations) has no documented backup or restore. |
+| GitHub and Flux | Public repository, synced by Flux over anonymous HTTPS with no deploy key. The webhook Receiver token in `kubernetes/apps/flux-system/flux-instance/app/secret.sops.yaml` must match the repository webhook's secret. | Nothing to restore while GitHub is up. **Gap:** no mirror; without GitHub, a local clone is the only copy and the FluxInstance sync URL must change. |
+| Container registries | Public images from `ghcr.io` (most), `docker.io`, `quay.io`, `registry.k8s.io` and `mirror.gcr.io`; no pull secrets. Spegel shares images only between the running nodes. | **Gap:** no local mirror, so a cold rebuild pulls everything from the Internet, subject to Docker Hub's anonymous rate limit; cold-pull time is unmeasured ([#224](https://github.com/kelchm/home-lab/issues/224)). |
+| healthchecks.io | Checks `k8s-prod Watchdog` and `Athena off-site backup`, declared in [`healthchecks/checks.json`](../../healthchecks/checks.json); API key `healthchecksio-home-lab-rw` in 1Password; ping URLs in SOPS. | [Alerting](alerting.md#healthchecksio-checks). Pause the Watchdog check during a planned rebuild. |
+| Talos Image Factory | `factory.talos.dev` builds the installer from the schematic ID in Git. | **Gap:** no local copy of the installer image is kept. |
+
+### Measured data age (2026-11-08)
+
+Data age at recovery (RPO), measured from timestamps over 2026-11-01 to 2026-11-08 UTC, a week in which every scheduled job succeeded. Each missed run adds a day to the worst case. Targets are not set here.
+
+| Tier | Evidence | Typical age | Worst observed |
+|---|---|---|---|
+| Longhorn backups on the NAS | 33 backed-up volumes, 7 daily and 1 weekly backup each, every one `Completed`. `snapshotCreatedAt` between 07:00:06 and 07:03:35; uploads finished within 29 seconds. | 0–24 hours, by time of day | 24.04 hours between consecutive snapshots |
+| CloudNativePG WAL on Athena | `cnpg_pg_stat_archiver_seconds_since_last_archival` over 7 days, both databases; no failed archivals. | About 2.5 minutes (median) | 301 seconds, the 5-minute archive timeout |
+| CloudNativePG base backups | Daily from the standby: Visionect at 08:30, about 3.5 minutes; Bambuddy at 08:40, about 18 seconds. 9 of 9 completed each since 2026-10-30. | Sets the WAL replay length, not the data age | 24 hours of WAL to replay |
+| Kanidm online backups | Seven files written at 05:00:00 UTC on 2026-11-01 to -07, read from replica 0's restored volume. Each reaches the NAS inside the 07:00 Longhorn backup. | 0–24 hours on the volume; 2–26 hours on the NAS | About 26 hours on the NAS |
+| Off-site copy in B2 | Kopia runs from 2026-10-31 to -11-07 all completed. Longhorn source: 6m24s–14m35s, done by 10:06–10:15. Object store: 1m24s–33m01s, done by 10:11–10:45. | Longhorn data about 3–27 hours; database WAL about 0–24 hours | Longhorn data about 27h15m; database WAL about 24h40m |
+
+Off-site timings come from the `offsite-backup-kopia-1` container log on Athena; the healthchecks.io history was not read, because it needs the API key.
 
 ### Procedure
 
@@ -329,7 +377,7 @@ Run every command from the repository root.
 
 ### Restore one claim
 
-**Undrilled** as written. The 2026-09-30 drill used the same three kinds of object, but with one replica, a new volume name, a disposable namespace and a recurring-job label that kept the volume out of backups. Two replicas, reusing the backup volume's name, replacing a claim Flux already created, and the Helm ownership metadata have not been exercised.
+**Undrilled** as written. The 2026-09-30 drill used the same three kinds of object, but with one replica, a new volume name, a disposable namespace and a recurring-job label that kept the volume out of backups. The 2026-11-08 drill ran steps 1 and 3 with two replicas, in the [inspect-a-copy](#1-restore-through-an-explicit-volume) shape: renamed objects in a disposable namespace. Reusing the backup volume's name, replacing a claim Flux already created, and the Helm ownership metadata have not been exercised.
 
 1. List what the backup target holds. A backup volume is named after the old cluster's PV, so match on the claim it recorded:
 
@@ -425,7 +473,7 @@ Claims and sizes are the 2026-10-04 inventory, with the CNPG row updated from th
 
 | Order | Application | Claims | Notes |
 |---|---|---|---|
-| 1 | `identity/kanidm` | `kanidm-data-kanidm-default-0`, `-1`, `-2` (2Gi each) | Sign-in for every other application. Follow [All claims lost](kanidm-restore.md#all-claims-lost): restore replica 0's claim only, then let replicas 1 and 2 start empty and reload from it. Restoring all three from their own backups would let the replicas replicate inconsistent states into each other. **Undrilled.** |
+| 1 | `identity/kanidm` | `kanidm-data-kanidm-default-0`, `-1`, `-2` (2Gi each) | Sign-in for every other application. Follow [All claims lost](kanidm-restore.md#all-claims-lost): restore replica 0's claim only, then let replicas 1 and 2 start empty and reload from it. Restoring all three from their own backups would let the replicas replicate inconsistent states into each other. **Undrilled** in a rebuild. The restore-and-reseed sequence it relies on was **drilled** on 2026-11-08 in a disposable cluster, from an online backup ([record](kanidm-restore.md#restore-drill-2026-11-08)). |
 | 2 | CNPG databases | `iot/visionect-db-*` (30Gi each), `printing/bambuddy-db-*` (20Gi each); inventory actual PVC UIDs | Procedure steps 4 and 7 hold the consumers (`visionect`, `bambuddy`) back until their claims are restored; otherwise they run against the recovered database with empty application volumes. Where the store has a completed base backup, do not restore these claims: each Cluster manifest bootstraps from the store on Athena, restoring the newest base backup and replaying archived WAL; see [cnpg-backup-restore](cnpg-backup-restore.md#2-after-the-cluster-or-the-whole-kubernetes-cluster-is-rebuilt) (**drilled** on scratch clusters only). It needs `s3-storage` on Athena, or a served copy of its share when Athena is lost too. **Before the first completed base backup, including during activation, that recovery path is unavailable:** WAL alone cannot bootstrap a database. Use the Longhorn fallback that follows, with `bootstrap.initdb` replacing `bootstrap.recovery` for the new empty destination before loading its recovered data. After validating that data, take a completed manual base backup and restore the permanent `bootstrap.recovery` stanza pointing to its verified archive; do not leave a future rebuild using `initdb`. The Longhorn backups remain an independent copy. With HA, backups exist for both instance volumes and do not reliably record which was primary: inspect the recovered PGDATA and use a primary copy without `standby.signal`; do not guess from its instance number or start an isolated standby expecting it to promote itself. If zero or multiple copies appear primary, or their backup-time roles and intended recovery point cannot be established, stop with consumers still off: absence of `standby.signal` alone does not select the authoritative copy. Prefer native recovery; otherwise reconcile the copies' timelines/checkpoints and capture history before choosing one. Standby-volume recovery is undrilled; prefer the verified CNPG-native path. Restore the selected primary backup to a scratch claim, start PostgreSQL on it as in the [2026-09-30 drill](visionect-migration.md#restore-drill-2026-09-30) (**drilled** to that point for `visionect-db` only), `pg_dump --format=custom` each application database, and load it with the `pg_restore` invocation in [visionect-migration](visionect-migration.md#phase-3-cold-cutover) (**undrilled**). |
 | 3 | `iot/visionect`, `printing/bambuddy` | `visionect` (5Gi), `visionect-logs` (4Gi), `bambuddy` (100Gi) | Restored in procedure step 7, which pairs Bambuddy's archive with its database recovery target before either starts; see also [bambuddy-bootstrap](bambuddy-bootstrap.md#backup-and-restore-drill). |
 | 4 | `iot/broadsheet` | `broadsheet` (20Gi) | Declared in Git, not by Helm. |
