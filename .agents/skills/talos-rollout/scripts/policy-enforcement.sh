@@ -84,8 +84,10 @@ for each_node in $nodes; do
         problems+=("could not read policy state from $agent on $each_node")
         continue
     fi
-    # Every agent has at least its health endpoint, so an empty list is a failed read.
-    if ! jq -e '.policy != null and .revision != null' "$work_dir/policy.json" >/dev/null 2>&1 \
+    # Every agent holds this cluster's policies and at least its health
+    # endpoint, so an empty list of either is a failed read.
+    if ! jq -e '.revision != null and (.policy | if type == "string" then fromjson else . end | type == "array" and length > 0)' \
+            "$work_dir/policy.json" >/dev/null 2>&1 \
         || ! jq -e 'type == "array" and length > 0' "$work_dir/endpoints.json" >/dev/null 2>&1; then
         problems+=("unexpected or empty policy state from $agent on $each_node")
         continue

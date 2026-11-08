@@ -227,6 +227,13 @@ touch "$TEST_DIR/state/unreadable-cilium-a"
 ! gate || fail 'an unreadable agent passed'
 expect_out 'could not read policy state from cilium-a on k8s-prod-1'
 rm "$TEST_DIR/state/unreadable-cilium-a"
+# An agent with no policy entries has not been checked either.
+jq -c '.policy = "[]"' "$TEST_DIR/policy.json" > "$TEST_DIR/policy-empty.json"
+cp "$TEST_DIR/policy.json" "$TEST_DIR/policy-full.json"
+cp "$TEST_DIR/policy-empty.json" "$TEST_DIR/policy.json"
+! gate || fail 'an empty policy list passed'
+expect_out 'unexpected or empty policy state from cilium-a on k8s-prod-1'
+cp "$TEST_DIR/policy-full.json" "$TEST_DIR/policy.json"
 # An agent that answers with nothing has not been checked.
 printf '[]' > "$TEST_DIR/state/ep-cilium-b.json"
 ! gate || fail 'an empty endpoint list passed'
