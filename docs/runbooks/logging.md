@@ -375,7 +375,7 @@ Every engine prints one line when a request finishes, but each prints different 
 | Field | Content |
 | --- | --- |
 | `service.name` | `inference`, one stream per Spark. |
-| `inference.recipe`, `inference.model`, `inference.runtime`, `inference.rank` | The recipe file name without `.yaml`, the served name, the runtime and the rank. These match the inference metrics' `recipe`, `model` and `runtime` labels. |
+| `inference.recipe`, `inference.model`, `inference.runtime`, `inference.rank` | The recipe file name without `.yaml`, the served name, the runtime and the rank. These match the inference metrics' `recipe`, `model` and `runtime` labels. A one-Spark run has no rank, as in the metrics. |
 | `event.name` | `inference.request.done` when a request finishes, `inference.request.ended` when the client leaves or the engine fails it, and `inference.request.refused` when it is turned away. Absent on other lines. |
 | `inference.request.id` | The request's ID, such as `chatcmpl-…`. |
 | `inference.finish` | How it ended: the engine's finish reason (`stop`, `length`, `tool_calls`), or `client-left`, `error` or `refused`. `error.type` names the engine's error. |
@@ -402,6 +402,7 @@ All other lines, such as model loading, `prompt cache:` summaries and tracebacks
 - **Collector down:** Docker's driver is asynchronous, so the container starts and the engine writes whether or not the collector is up. Docker holds up to 16,384 lines in memory until the collector answers. It drops lines beyond that, and everything it holds if the Docker daemon restarts. A write to the collector gives up after 5 seconds, so a collector that hangs can't stop SparkRun removing the container. The log file in the container still has every line, and the engine's errors are in the same stream as its output.
 - **Endpoint outage:** as for the journal, records wait in the buffer and arrive with their original timestamps.
 - **Other runtimes:** only the TensorFold adapter sets the driver. A recipe on another SparkRun runtime keeps `json-file`.
+- **Trust:** the input on port 24224 takes no key, because Docker's driver can't send one. Any process on the Spark's host network can write records there under the Spark's token, including the ranks, which use host networking and already write their own lines. Those are the same processes the host already trusts with its metrics.
 
 `NodeLogsSilent` doesn't watch this input, because a Spark can serve nothing for days. The delivery and drop alerts cover its output as they do the journal's.
 

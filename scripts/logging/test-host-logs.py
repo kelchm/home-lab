@@ -17,7 +17,7 @@ overlong line. Every stored record is compared with what should have arrived, on
 
 Then runs the Sparks' inference overlay and sends request lines from each TensorFold engine through
 Docker's fluentd driver, with the options and labels the SparkRun adapter sets, and checks the fields
-each line is read into. `test-host-logs.py inference` runs this part alone; it needs only Docker.
+each line is read into. `test-host-logs.py inference` runs this part alone; it needs Docker and yq.
 
 Finally runs Athena's collector from synology/monitoring/compose.yaml, with its hardening and mounts,
 on a journal systemd 219 writes, whose files only DSM's log group can read here: publication, a
@@ -452,6 +452,8 @@ INFERENCE_LINES = {
     'info: prompt cache: 59 tokens, resumed at 0, kept 2; 2 states, 223 MiB and 0 MiB spare of 16384 MiB '
     '(hits 0, misses 1, evicted 0, refused 0, failed 0)': {'event.name': None, 'inference.request.id': None},
 }
+# From a one-Spark container, which carries no rank label.
+SOLO_LINE = '[tensorfold] done chatcmpl-solo prompt=33 cached=0 thinking=False effort=none tokens=4 sha=bca3318b4669 finish=stop'
 # Polling that succeeded, which the overlay drops.
 INFERENCE_DROPPED = ['[tensorfold] 127.0.0.1 "GET /metrics HTTP/1.1" 200 -', '[tensorfold] 127.0.0.1 "GET /health HTTP/1.1" 200 -']
 
@@ -476,19 +478,28 @@ server.listen()
 held = []
 while True:
     held.append(server.accept())
+    print('accepted', flush=True)
 """
 
 
 def test_stalled_collector(python_image, run):
     """A collector that stops reading must not stop Docker removing a rank's container."""
     name = f'inference-stalled-{run}'
+    if not any(o.startswith('--log-opt=fluentd-write-timeout=') for o in adapter_docker_opts(24224)):
+        sys.exit('The adapter should bound the log driver\'s writes with fluentd-write-timeout')
     try:
         docker('run', '-d', '--name', f'{name}-collector', '-p', '127.0.0.1::24224', python_image, 'python', '-c', STALLED)
         port = docker('port', f'{name}-collector', '24224/tcp').stdout.split(':')[-1].strip()
         # Far more than the socket buffers hold, so the driver's writes block.
         docker('run', '-d', '--name', f'{name}-rank0', *adapter_docker_opts(port), ALPINE_IMAGE,
                'sh', '-c', 'yes "$(printf "%0200d" 0)" | head -n 400000; sleep 600')
-        time.sleep(10)
+        # Once connected, the driver fills the socket buffers within a second and its writes block.
+        deadline = time.time() + 30
+        while 'accepted' not in docker('logs', f'{name}-collector').stdout:
+            if time.time() > deadline:
+                sys.exit('The log driver never connected to the stalled collector')
+            time.sleep(1)
+        time.sleep(5)
         started = time.time()
         try:
             subprocess.run(['docker', 'rm', '-f', f'{name}-rank0'], check=True, capture_output=True, timeout=60)
@@ -530,16 +541,23 @@ def test_inference_logs(routes, fb_image, vl_image, memory, base):
             docker('run', '--rm', '-i', '--name', f'{net}-rank0', *adapter_docker_opts(forward),
                    *[a for k, v in labels.items() for a in ('--label', f'{k}={v}')], ALPINE_IMAGE,
                    'sh', '-c', 'cat; echo "stderr line" >&2', input='\n'.join(lines) + '\n')
+            # SparkRun's one-Spark path labels no rank.
+            docker('run', '--rm', '-i', '--name', f'{net}-solo', *adapter_docker_opts(forward),
+                   *[a for k, v in labels.items() if k != 'sparkrun.rank' for a in ('--label', f'{k}={v}')],
+                   ALPINE_IMAGE, 'cat', input=SOLO_LINE + '\n')
             rows = []
             deadline = time.time() + 60
             while time.time() < deadline:
-                rows = query(port, f'inference.recipe:={recipe}')
-                if 'stderr line' in {r['_msg'] for r in rows}:
+                try:
+                    rows = query(port, f'inference.recipe:={recipe}')
+                except OSError:
+                    rows = []
+                if {'stderr line', SOLO_LINE} <= {r['_msg'] for r in rows}:
                     break
                 time.sleep(2)
             failures = []
             counts = Counter(r['_msg'] for r in rows)
-            want = {*INFERENCE_LINES, 'stderr line'}
+            want = {*INFERENCE_LINES, 'stderr line', SOLO_LINE}
             if set(counts) != want or set(counts.values()) != {1}:
                 failures.append(f'stored {dict(counts)}, missing {want - set(counts)}')
             for row in rows:
@@ -548,6 +566,9 @@ def test_inference_logs(routes, fb_image, vl_image, memory, base):
                           'inference.runtime': 'tensorfold', 'inference.rank': '0', 'container.name': f'{net}-rank0',
                           'log.iostream': 'stderr' if row['_msg'] == 'stderr line' else 'stdout', 'severity_number': '0',
                           'pipeline.normalize_error': None, **INFERENCE_LINES.get(row['_msg'], {})}
+                if row['_msg'] == SOLO_LINE:
+                    fields |= {'inference.rank': None, 'container.name': f'{net}-solo', 'event.name': 'inference.request.done',
+                               'inference.tokens.output': '4'}
                 for key, value in fields.items():
                     if row.get(key) != value:
                         failures.append(f"{row['_msg'][:50]}: {key} should be {value!r}, got {row.get(key)!r}")

@@ -85,9 +85,11 @@ local function request(attributes, line)
   return true
 end
 
+-- nil, not no value, for an absent label: tonumber() with no argument is an error.
 local function label(record, key)
   local v = record[key]
   if v ~= nil and tostring(v) ~= '' then return tostring(v) end
+  return nil
 end
 
 -- A record from Docker's fluentd driver: the line as `log`, `source` stdout or

@@ -12,7 +12,8 @@ pipeline:
   inputs:
     # Docker connects from the host, so the port is on loopback only. Lines that
     # arrive while the collector is down wait in Docker's buffer, up to the limit
-    # the adapter sets.
+    # the adapter sets. The input takes no key, because Docker's driver can't send
+    # one: any process on the host's network, the ranks included, can write here.
     - name: forward
       alias: inference
       listen: 127.0.0.1
