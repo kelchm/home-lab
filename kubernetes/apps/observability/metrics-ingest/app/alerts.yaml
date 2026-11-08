@@ -205,7 +205,7 @@ spec:
             severity: warning
           annotations:
             summary: "{{ $labels.instance }} has had security updates waiting for two weeks"
-            description: 'Packages from a security archive have had upgrades available on {{ $labels.instance }} for two weeks without a break, the end of the soak; {{ $value }} are waiting now. Install them, then reboot the host if they need it.'
+            description: 'Packages from a security archive have had upgrades available on {{ $labels.instance }} for two weeks without a break, the end of the soak; {{ $value }} are waiting now. Install them, then reboot the host if they need it. If one cannot be installed yet, hold it and record why, as the host-monitoring runbook describes.'
 
         - alert: NodePackageListsStale
           expr: time() - apt_package_lists_refreshed_timestamp_seconds{job=~"(pve|spark)-node"} > 2 * 86400
