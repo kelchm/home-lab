@@ -1,6 +1,6 @@
 # SparkNest on Athena
 
-SparkNest v0.8.3 runs as one container and one voting node on Athena, using TCP and an internal FUSE mount. This is an evaluation deployment, manually applied from this directory; it is not in `synology/.doco-cd.yml`. Bulk qualification is tracked in [#1371](https://github.com/kelchm/home-lab/issues/1371). Original model stores remain independent and must be retained until complete ingest and recovery acceptance.
+SparkNest v0.8.3 runs as one container and one voting node on Athena, using TCP and an internal FUSE mount. This is an evaluation deployment, manually applied from this directory; it is not in `synology/.doco-cd.yml`. Bulk qualification is tracked in [#1371](https://github.com/kelchm/home-lab/issues/1371). Original NAS stores remain independent. Apart from the specifically approved Mac cache cleanup recorded below, retain originals until ingest and recovery acceptance.
 
 The UI/API is at `http://10.32.10.5:8091/` on Main and `http://10.32.25.5:8091/` on Storage. There is no management-VLAN listener. The UI shell is public; API requests require the cluster-derived bearer token. Retrieve the login link on Athena with `sudo /usr/local/bin/docker exec sparknest-sparknest-1 nest ui`, replacing its container hostname and port with `10.32.10.5:8091`. Do not commit that link or the token. Traffic is HTTP on these LAN addresses.
 
@@ -147,6 +147,16 @@ Completed receipt copies are reused after a restart. An interrupted partial file
 
 After sharing, repo blob entries become symlinks. Repeating `nest hf import` can try to adopt a regular input blob onto an existing symlink and fail with `not a regular file`, while still returning exit zero. The loader instead prepares a portable cache, hashes existing destination blobs, removes only duplicate staging links, then uses `nest --json import <cache> /hf-home/hub --seal blobs --wait`, followed by `nest --json hf share <repo> --verify --wait`. Snapshot symlinks are retained even when duplicate blob links are omitted from staging; after import they resolve against the already archived blobs. Top-level failures, host failures and import errors are checked; a full FUSE hash check is required before recording success.
 
+## Approved Mac cache cleanup
+
+On November 8 the owner approved removal of eight previously reviewed Mac HF cache entries plus the uv package cache. HF reported eight repos/eight revisions removed, totaling 49.0 GB logically; uv removed 635,368 files, reported as 25.2 GiB. Every model candidate passed a fresh Mac file-identity check, retained ordinary Athena files matched their captured identities, and SparkNest had already passed full FUSE verification. A real BGE weight was also restored from Athena's ordinary cache without SparkNest and matched SHA-256 before cleanup. These ordinary Athena copies and SparkNest share the NAS failure domain.
+
+The approved HF repos were `DaoCloud/Muse-Glimmer-30B-DSpark`, `Qwen/Qwen3.5-9B`, `hubertsiuzdak/snac_24khz`, `meta-models/Muse-Glimmer-30B-ExecuTorch-PTE`, `mlx-community/Muse-Glimmer-30B-4bit`, `unsloth/bge-small-en-v1.5-GGUF`, `unsloth/orpheus-3b-0.1-ft-GGUF`, and `unslothai/Qwen3-ASR-1.7B-GGUF`. Cleanup used `hf cache rm` and `uv cache clean`; no raw shared-blob deletion was used. The remaining eight local HF revisions and 83 checked untargeted HF payloads were unchanged. LM Studio, ComfyUI, Ollama, training outputs and the active ingest runtime were retained. This approval does not authorize another batch of source deletions.
+
+The audit, exact command and before/after cache listings live in the Mac runtime directory as `mac-cleanup-candidates.json`, `cleanup-executed.json`, and `cleanup-cache-before.json`/`cleanup-cache-after.json`. The old inventory remains evidence of captured sources even when these approved Mac cache files no longer exist. Completed Athena staging receipts are still available to the running worker.
+
+Physical free space stayed near 235.5 GiB immediately afterwards; the tools' logical deletion totals are not a measured physical-space gain. The Data volume has 13 purgeable local Time Machine snapshots and both cache paths are included in backups, consistent with APFS retaining deleted cache blocks. No backup snapshots were removed. macOS can reclaim local snapshot space as needed; manual snapshot thinning would be a separate change to backup history.
+
 ## Inspection and recovery
 
 ```sh
@@ -169,4 +179,4 @@ Observed on Athena: FUSE ABI 7.23, UI HTTP 200, API 401 without a token, real BG
 
 A network-disabled one-shot export reconstructed a frozen metadata snapshot as 70 directories, 66 files (5,178,805,597 bytes) and 35 symlinks, using the read-only live object store plus the small retained recovery archive. Twenty exported source-checksummed paths totaling 4,839,937,827 bytes matched their recorded SHA-256. This proves reconstruction without the daemon, not completeness of the small retained archive: an earlier archive-only attempt missed a source ref added after that selection was backed up.
 
-Bulk ingest, final sharing/space accounting, complete recovery acceptance, and any source cleanup are not complete. Consult the runtime journal and #1371 for current progress.
+Bulk ingest, final sharing/space accounting, complete recovery acceptance, and any further source cleanup are not complete. Consult the runtime journal and #1371 for current progress.
