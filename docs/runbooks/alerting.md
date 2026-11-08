@@ -27,6 +27,7 @@ Rules follow the [monitoring-mixins guidelines](https://monitoring.mixins.dev/#g
 
 - **Name:** a terse description of the condition, in CamelCase, starting with a capital. Related alerts share their first component, such as `UniFi…` or `Longhorn…`.
 - **Severity:** `critical` when something that should be up is down, or something is at risk of failing or of damage, and nothing else is covering for it. `warning` when it needs action but not urgently: lost visibility, a failed or stale backup, a change that did not apply, or a failure that something else is covering for, such as one WAN of two, which escalates to `critical` if it lasts. `info` marks something out of the ordinary that needs no action by itself. Routing above turns these into a high-priority push, a normal push and no notification; Home shows `info` alerts as worth a look.
+- **Quiet by default:** apart from `Watchdog` and `InfoInhibitor`, which Home hides, no alert fires in normal operation, `info` included. Home's Needs attention list is then usually empty, and anything on it is new. An alert that keeps firing for an accepted condition is a rule bug: change the rule to match the policy actually followed, or delete it. Lowering it to `info` only moves the noise from Pushover to Home. Home's Alerts over the last 7 days strip shows how much of the week each system was all clear.
 - **Annotations:** every rule has a `summary`, one readable sentence, and a `description` with the detail templated in. `runbook_url` is optional.
 
 The guidelines leave some choices open. The lab settles them this way:
@@ -65,7 +66,7 @@ Alertmanager groups alerts by name, cluster and namespace, not by machine: two m
 
 A problem that only affects what can be seen of a device is `info` when every notifying rule it blinds is covered by another notifying alert, and notifies otherwise. `TMobileMetricsMissing` is info: no notifying rule reads the T-Mobile gateway, because `UniFiWANDown` reports a WAN1 outage. `StarlinkMetricsMissing` notifies, because `StarlinkObstructed` and `StarlinkPingDropSustained` have no other cover; so do `UniFiMetricsMissing`, `PVEMetricsMissing`, `NodeCollectorDown` and the Longhorn, Flux and cert-manager `MetricsMissing` alerts.
 
-The bundled `RequestErrorsToAPI` and `TooManyLogs` are `info`: they fire on any API error or `warn` log that recurs for 15 minutes, and repeated cancelled client queries, such as overlapping Grafana refreshes, are enough to trip them. A real fault can trip them too, so read `RequestErrorsToAPI`'s `path` label or the component's warnings before dismissing one. `TooManyErrorLogs`, `ServiceDown` and `TooManyRestarts` still notify for a failing component.
+The bundled `RequestErrorsToAPI` and `TooManyLogs` are disabled. VictoriaMetrics counts every query a client cancels as an API error and logs it as a warning, so Grafana cancelling overlapping dashboard refreshes kept both firing most of the day: in an hour sampled on 2026-11-08, 628 of VMSingle's 634 warnings were cancelled Grafana queries. `TooManyErrorLogs`, `ServiceDown`, `TooManyRestarts`, `AlertingRulesError` and `RecordingRulesError` still notify for a failing component.
 
 ## First response
 

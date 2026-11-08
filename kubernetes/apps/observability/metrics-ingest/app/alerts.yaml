@@ -184,17 +184,17 @@ spec:
             description: 'The Pi firmware on {{ $labels.instance }} has reported undervoltage for 15 minutes. An undervolted Pi throttles its CPU. Check the power supply and its cable: a long or thin USB cable drops voltage.'
 
         # Read over the window rather than held with for:, so an evaluator restart doesn't reset the wait.
+        # New updates soak for a couple of weeks before they are installed, so this fires only once a host is past that.
         - alert: NodeSecurityUpdatesPending
           expr: |
             apt_security_upgrades_pending{job=~"(pve|spark)-node"} > 0
-            and min_over_time(apt_security_upgrades_pending{job=~"(pve|spark)-node"}[3d]) > 0
-            and apt_security_upgrades_pending{job=~"(pve|spark)-node"} offset 3d > 0
+            and min_over_time(apt_security_upgrades_pending{job=~"(pve|spark)-node"}[21d]) > 0
+            and apt_security_upgrades_pending{job=~"(pve|spark)-node"} offset 21d > 0
           labels:
-            # New updates soak for a couple of weeks before they are installed.
             severity: info
           annotations:
-            summary: "{{ $labels.instance }} has had security updates waiting for three days"
-            description: 'Packages from a security archive have had upgrades available on {{ $labels.instance }} for three days; {{ $value }} are waiting now. Install them, then reboot the host if they need it.'
+            summary: "{{ $labels.instance }} has had security updates waiting for three weeks"
+            description: 'Packages from a security archive have had upgrades available on {{ $labels.instance }} for three weeks without a break, past the couple of weeks new updates soak; {{ $value }} are waiting now. Install them, then reboot the host if they need it.'
 
         - alert: NodePackageListsStale
           expr: time() - apt_package_lists_refreshed_timestamp_seconds{job=~"(pve|spark)-node"} > 2 * 86400
