@@ -1322,6 +1322,31 @@
       },
       "alert_and_incident_files": 0,
       "monitor_exit_status": "both 0, reported by operating thread; not inferred from empty monitor logs"
+    },
+    "resume-20261108-01": {
+      "verified_profile": {
+        "profile": "P4",
+        "both_ranks_verified": true,
+        "dense": "q4",
+        "head": "FP8 per pinned loader",
+        "isolated_spill": true,
+        "pool_tokens": 2582528,
+        "production_pool_floor_met": true
+      },
+      "snapshot_path": "/Users/kelchm/.cache/glm53-python-fp8-screen-20261107/runs/resume-20261108-01/P4-after-resume-final-identity.json",
+      "observed_snapshot_utc_epoch": 1794155418.732836,
+      "telemetry": {
+        "telemetry.jsonl": {
+          "samples": 352,
+          "new_kernel_warning_samples": 0
+        },
+        "recovery-resume-telemetry.jsonl": {
+          "samples": 148,
+          "new_kernel_warning_samples": 0
+        }
+      },
+      "alert_and_incident_files": 0,
+      "monitor_exit_status": "both 0, reported by operating thread; not inferred from empty monitor logs"
     }
   },
   "input_sha256": {
@@ -1444,11 +1469,122 @@
     "/Users/kelchm/.cache/glm53-workload-screen-20261107/runs/attempt-20261107-shard-screen-01/screen-verdict.json": "2953529d84e86693f2a1f42b0a7bebc8ae7a5a8397bf15ec5b811f0b685e5fdf",
     "/Users/kelchm/.cache/glm-cut-check/perf/RESULTS.md": "ebd63b02762dc8684b735b9a9d5a0428ddc7d0d139db6c66fbd2445a245a0933",
     "/Users/kelchm/.cache/glm-cut-check/perf/analyze.py": "0e6feeb3292e6ccd18a5d851217e93f1cba013a86279ffc2a1ae2bd9000a1422",
-    "/Users/kelchm/.cache/glm-cut-check/RESULTS.md": "7c10d2cb5e21cc91e1514bc522cd39fac9c24d611b4a58268f9112a0d4dd8f13",
+    "/Users/kelchm/.cache/glm-cut-check/RESULTS.md": "a646099c35e3012156e8e4eee9e52fb499f7475cb705c5cfd2479e5f05950217",
     "/Users/kelchm/.cache/glm53-workload-screen-20261107/workload-report.md": "53bfabd514c5e2e85168af6722eb31dd33f34b902a976f65a89818b12af2a774",
     "/Users/kelchm/.cache/glm53-workload-screen-20261107/runs/attempt-20261107-shard-screen-01/report.md": "03f16711f5272c21cd37db163d6a5e2512fcfffe2a025539065129847b350d79",
     "/Users/kelchm/.cache/glm53-python-fp8-screen-20261107/runs/attempt-01/report.md": "ded2b7d2e00cbb89cf925ace60a4fb2f0d937a052375ffe196ce998f9f250c5c",
-    "/Users/kelchm/.cache/glm53-verify-state-audit-20261108.json": "80f44845890d3d7af569ca88ed3b1c15ec6514323228f3ace5b8bc213722ac38"
+    "/Users/kelchm/.cache/glm53-verify-state-audit-20261108.json": "80f44845890d3d7af569ca88ed3b1c15ec6514323228f3ace5b8bc213722ac38",
+    "/Users/kelchm/.cache/glm-cut-check/runs/resume-pi-q8/rank0.log": "9e6d608906ca8169bc2a0bdf63104c187dca2fdf1caeb5503670cb31fa325379",
+    "/Users/kelchm/.cache/glm-cut-check/runs/resume-pi-q8/rank1.log": "e3305b31d4f876de9d14f7475be28c7dc33e5f437d36950d1d714b70a16bf34a",
+    "/Users/kelchm/.cache/glm-cut-check/runs/resume-pi-q8/containers.txt": "bf588a81b4fcbfed6312e34efb54a73e5d427481a68ffaa189a126609ca3cb4a",
+    "/Users/kelchm/.cache/glm53-python-fp8-screen-20261107/runs/resume-20261108-01/P4-after-resume-final-identity.json": "a2b174c77f47f2789dfcb90f62d2cf3847adcca90b1d114b926142619b052dc0",
+    "/Users/kelchm/.cache/glm53-python-fp8-screen-20261107/runs/resume-20261108-01/P4-after-resume-verification.json": "ff2c125d494374153f6f48b7b6e275f6dc7036af7ec6b918ddbc1bb889199910",
+    "/Users/kelchm/.cache/glm53-python-fp8-screen-20261107/runs/resume-20261108-01/P4-after-resume-LAUNCH_VERIFIED.json": "8b3c9522ef4054b2f9395356cb9e62769f070a0ea525d730843401ed96f8b0f9",
+    "/Users/kelchm/.cache/glm53-python-fp8-screen-20261107/runs/resume-20261108-01/P4-after-resume-RESTORED_P4.json": "a004fae1bdb331e7799cc5bab7123767bc2e57c6a27a4e81b0f197287030c49b",
+    "/Users/kelchm/.cache/glm53-python-fp8-screen-20261107/runs/resume-20261108-01/telemetry.jsonl": "921baabb41bfde2a0290f2a950f89da87db3c048d6cce7abcdb14862a85e3aea",
+    "/Users/kelchm/.cache/glm53-python-fp8-screen-20261107/runs/resume-20261108-01/recovery-resume-telemetry.jsonl": "d9e9348b7f943f6517c0ce2cfef897308bde9faea69a9a8f9b7632135ec86d22"
   },
-  "independent_review_scope": "Coordinator recalculation and retained-snapshot checks only. Fork-thread independent reviews are separate; no new completed cross-vendor review is claimed here."
+  "independent_review_scope": "Coordinator recalculation and retained-snapshot checks only. Fork-thread independent reviews are separate; no new completed cross-vendor review is claimed here.",
+  "cut_resume_v2": {
+    "engine_commit": "f5eaf02d0ea0203c85abb44aab9386f226fe72aa",
+    "image_tag": "tensorfold-dev:f5eaf02d0ea0",
+    "image_config_id": "sha256:4c9e40ee5e34d367e35295c2743afbab3e2e1736e9e5353a6da554dd157ae07b",
+    "source_file": "zig/tests/cuda/glm_cut_resume_tests.zig",
+    "source_file_sha256": "9294b96865a097b50b152a12aada9ce26c6fe27c3572f03c55437fc807017f03",
+    "rank_log_summary": {
+      "0": {
+        "comparisons": 30,
+        "exact": 30,
+        "relations": {
+          "G2=G1": 3,
+          "F=G1": 9,
+          "R=F": 9,
+          "R=G1": 9
+        }
+      },
+      "1": {
+        "comparisons": 30,
+        "exact": 30,
+        "relations": {
+          "G2=G1": 3,
+          "F=G1": 9,
+          "R=F": 9,
+          "R=G1": 9
+        }
+      }
+    },
+    "compared_values": [
+      "global tokens",
+      "MTP drafts",
+      "rank-local vocabulary logits",
+      "second-draft-step MTP logits",
+      "canonical committed-state hashes with index-ring overlap aligned by position"
+    ],
+    "history_extension_pairs": [
+      [
+        5001,
+        203
+      ],
+      [
+        12003,
+        602
+      ],
+      [
+        30002,
+        1101
+      ]
+    ],
+    "cut_patterns": [
+      "end-only",
+      "messages-any",
+      "messages-64"
+    ],
+    "tape_ids": 48,
+    "verify_widths": [
+      1,
+      3,
+      8,
+      2,
+      5,
+      4,
+      7,
+      6
+    ],
+    "fresh_arena_fill_bytes": [
+      65,
+      90,
+      119
+    ],
+    "scope": {
+      "tp": 2,
+      "kv": "contiguous FP8",
+      "dense_bits": 8,
+      "head_bits": 8,
+      "index_split": 2048,
+      "checkpoint": "078455ffe6472f9a52fbc1139f58b9db2881b25c",
+      "target_mtp": true,
+      "dflash2": false,
+      "mia_patches": false,
+      "maximum_extended_prompt_tokens": 31103
+    },
+    "limits": [
+      "one Pi-style token source and one precision",
+      "canonical state uses hashes; index-ring comparison covers positional overlap",
+      "only the second draft step MTP logits are retained",
+      "paged/sharded KV and DFlash2 not exercised",
+      "paired/solo prompt paths not exercised",
+      "no disk learning or persistence qualification"
+    ],
+    "coordinator_validation": "Recounted each rank log and checked exact verdict fields, both container exits/image IDs, pinned source and saved Python restoration locally; no device rerun or new independent review."
+  },
+  "source_revisions": [
+    {
+      "path": "/Users/kelchm/.cache/glm-cut-check/RESULTS.md",
+      "prior_sha256": "7c10d2cb5e21cc91e1514bc522cd39fac9c24d611b4a58268f9112a0d4dd8f13",
+      "prior_receipt_commit": "a5557ee27a70a64a524613cd2c68be1119a0c927",
+      "current_sha256": "a646099c35e3012156e8e4eee9e52fb499f7475cb705c5cfd2479e5f05950217",
+      "reason": "Fork-thread report adds v1 adversarial-review limitations and the v2 kept/resumed-state result; earlier report bytes remain bound by the prior commit."
+    }
+  ],
+  "updated_utc": "2026-11-08T16:32:35.041683+00:00"
 }

@@ -2,7 +2,7 @@
 
 Keep the Python q4-dense/FP8-head P4 profile. The native release's large-first-save and near-window cache-capture failures remain unresolved. The subsequent screens support message-start cache reuse as the next engine question, with an explicit cold-prefill and retained-state cost. The full fixed-work replay campaign remains on HOLD.
 
-The [original controlled comparison](comparison.md) records the November 7 release experiment. The [follow-up receipt](followups.json) records the later screens, separately scoped upstream experiments, recalculated latency metrics, selected input hashes and local checks of both November 8 Python-restoration snapshots. These are different engine/configuration comparisons; their rates must not be pooled into one benchmark.
+The [original controlled comparison](comparison.md) records the November 7 release experiment. The [follow-up receipt](followups.json) records the later screens, separately scoped upstream experiments, recalculated latency metrics, selected input hashes and local checks of the three November 8 Python-restoration snapshots. These are different engine/configuration comparisons; their rates must not be pooled into one benchmark.
 
 ## Workload relevance
 
@@ -42,7 +42,21 @@ FP8's automatic pool was 2,308,096 tokens, below the unchanged 2,582,528-token q
 
 The fork thread tested commit `3ed491eed30f60dace08fe8269c30381fc7d0242`: upstream main `3ace0f66e` plus [upstream #2404](https://github.com/ashhart/TensorFold/pull/2404) and its `glm-cut-check` command. The local development image was `tensorfold-dev:3ed491eed30f`, config `sha256:d9dfbb788404e5980bfb6e5de58c2b2260893d46c91f53a0721f7904f1b9a901` on both Sparks. No Mia engine patches were included.
 
-The reported 160/160 patterns, across synthetic, Pi-shaped and prose inputs, kept the global first token and rank-0 vocabulary-shard logits byte-identical to the 2,048-row grid through 32 teacher-forced continuation tokens. Prompts ranged from 5K to 30K tokens, with native q8 and native q4 dense, q8 head, contiguous FP8 KV, target MTP and no DFlash2 drafter. Logical state equality was not established: scratch/layout bytes differ across some cuts. This is bounded evidence for the upstream path; it does not qualify Mia's 4,096-row, paged, sharded, absorb-MMA or DFlash2 paths. The fork thread owns its independent review; that review is not included in this coordinator receipt.
+The reported 160/160 patterns, across synthetic, Pi-shaped and prose inputs, kept the global first token and rank-0 vocabulary-shard logits byte-identical to the 2,048-row grid through 32 teacher-forced continuation tokens. Prompts ranged from 5K to 30K tokens, with native q8 and native q4 dense, q8 head, contiguous FP8 KV, target MTP and no DFlash2 drafter. The subsequent adversarial review identified reused-slot contamination and the absence of a kept-state resume: a skipped cache write could read correct leftovers from the previous run. Logical state equality was also not established. The v1 result therefore remains a reused-slot output check; v2 below addresses those coverage gaps. Neither result qualifies Mia's 4,096-row, paged, sharded, absorb-MMA or DFlash2 paths.
+
+## Upstream kept-state resume correctness (v2)
+
+Commit `f5eaf02d0ea0203c85abb44aab9386f226fe72aa`, image `tensorfold-dev:f5eaf02d0ea0`, config `sha256:4c9e40ee5e34d367e35295c2743afbab3e2e1736e9e5353a6da554dd157ae07b` on both ranks, ran `glm-cut-resume`. Both recorded containers exited zero. The coordinator recounted 30 exact comparisons on each rank, 60 total, including every rank's own vocabulary shard and canonical committed-state hashes.
+
+Three Pi-shaped history/extension pairs (5,001+203, 12,003+602 and 30,002+1,101 tokens) cover extended-prompt pool residues 0, 1 and 3. Three cut patterns use the history end alone, arbitrary message-like starts, and 64-row-aligned starts. The index split is 2,048, matching the served default. Each sequence is freshly allocated/refilled with distinct finite byte patterns, so the grid repeat checks whether any unwritten arena bytes influence the observations.
+
+- G2 = G1: two fresh grid passes agree under different initial fill bytes.
+- F = G1: a fresh cut pass agrees with the fresh grid pass.
+- R = F and R = G1: a state kept by a mark at the history boundary, then resumed into another fresh sequence after an intervening conversation, agrees with both fresh references.
+
+The comparisons cover first/verified tokens, MTP drafts, prompt and continuation logits, the second draft step's MTP logits, and canonical state immediately after prefill and after the continuation. The 48-ID continuation tape uses verification widths 1–8 with partial and whole keeps. State checks include KDA convolution/current recurrent copies, latent rows and FP8 scales, completed pooled rows, device cursors, the held prompt row and both index rings aligned by absolute position over their overlap. No observed logit was non-finite. Canonical state is compared through hashes rather than raw scratch/layout bytes; differently based rings agreed over their shared retained positions.
+
+This closes the tested upstream reused-slot, both-rank, partial-pool and kept/resumed-state gaps. It remains one token source and one precision (dense/head 8/8), TP2, contiguous FP8 KV, target MTP, extended prompts up to 31,103 tokens and no DFlash2. Paired/solo prompt steps, paged/sharded KV, disk persistence, larger contexts and Mia's kernels remain outside this test. The fork thread reports two source reviews before the run with initial blockers fixed; the coordinator checked retained source/logs and restoration without rerunning hardware or claiming a new independent review.
 
 ## Upstream served message-start experiment
 
@@ -67,7 +81,7 @@ Content, reasoning, tool names and exact argument strings matched for 32/32 assi
 
 ## Restore verification and command correction
 
-After both November 8 windows, retained `LAUNCH_VERIFIED`, `RESTORED_P4` and explicit `verify_state.check(snapshot, 'P4')` results agree: both ranks are back on Python q4, strict idle, four slots/1M context, the full 2,582,528-token pool and the isolated `/cache/huggingface/tensorfold-spill-rerun-20261107` block-spill store. The original retained production spill was not used by the tests. The operating thread reported exact-ID development-container cleanup, free GPUs/ports before restore, and both monitors exiting zero. Retained telemetry has no new kernel warnings and neither window contains ALERT/INCIDENT files. The coordinator independently reran the saved-snapshot checks locally, without host access.
+After all three November 8 windows (cut, served performance and kept-state resume), retained `LAUNCH_VERIFIED`, `RESTORED_P4` and explicit `verify_state.check(snapshot, 'P4')` results agree: both ranks are back on Python q4, strict idle, four slots/1M context, the full 2,582,528-token pool and the isolated `/cache/huggingface/tensorfold-spill-rerun-20261107` block-spill store. The original retained production spill was not used by the tests. The operating thread reported exact-ID development-container cleanup, free GPUs/ports before restore, and each monitor exiting zero. Retained telemetry has no new kernel warnings and no window contains ALERT/INCIDENT files. The coordinator independently reran the saved-snapshot checks locally, without host access.
 
 The previous handover command `python3 verify_state.py --profile P4 --snapshot …` was invalid verification evidence: that module defines `check()` but has no entry point and silently ignores CLI arguments. The controller's actual launch/restore path imports and calls `check()` before publishing `LAUNCH_VERIFIED`; it was not relying on the no-op CLI. Five earlier/current snapshots passed retrospective checks, and wrong pool/image/rank/precision controls were rejected. Historical sealed inputs and receipts remain unchanged. The retained audit records the faulty invocation and the scope of the recheck; a zero exit status or empty redirected file alone is never an acceptance receipt.
 
@@ -86,7 +100,7 @@ Raw files remain outside Git, with selected source hashes in [followups.json](fo
 - Python precision: `/Users/kelchm/.cache/glm53-python-fp8-screen-20261107/runs/attempt-01/`.
 - Upstream cut check: `/Users/kelchm/.cache/glm-cut-check/RESULTS.md` and `runs/`.
 - Upstream served experiment: `/Users/kelchm/.cache/glm-cut-check/perf/RESULTS.md` and `perf/runs/`.
-- Python lifecycle: `/Users/kelchm/.cache/glm53-python-fp8-screen-20261107/runs/{cutcheck-20261108-01,perf-20261108-01}/`.
+- Python lifecycle: `/Users/kelchm/.cache/glm53-python-fp8-screen-20261107/runs/{cutcheck-20261108-01,perf-20261108-01,resume-20261108-01}/`.
 - Verification audit: `/Users/kelchm/.cache/glm53-verify-state-audit-20261108.json`.
 
 Keep Python and the native release's rejected status. The upstream request-start result supports further fork work on cache-resume granularity, but its cold cost, cache pressure, concurrency exclusions and disk-learning refusal must be resolved before production qualification. The fork thread owns engine changes, local development images and announced test windows; home-lab retains the production recipe, spill preservation, rollback and consolidated reporting. No recipe, engine, image pin or production setting changes in this closeout. The fixed-work replay source remains available as a diagnostic, with its hardware campaign still on HOLD.
