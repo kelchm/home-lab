@@ -242,10 +242,14 @@ spec:
 
         # Three minutes of unbroken decoding with no new token. The window sits in the
         # expression, not in `for`, so a stream that has only just started does not count.
-        # A long prefill holds no stream in the decoding state.
+        # The window skips steps where the series is missing, so all 12 steps must be there:
+        # a new or restarted engine is not judged on its first seconds, nor on samples from
+        # before a restart. A long prefill holds no stream in the decoding state.
         - alert: InferenceEngineStalled
           expr: |
             min_over_time((sum by (instance, platform, model) (tensorfold_health:streams{job="spark-inference", state="decoding"}))[3m:15s]) > 0
+            and
+            count_over_time((sum by (instance, platform, model) (tensorfold_health:streams{job="spark-inference", state="decoding"}))[3m:15s]) >= 12
             and
             sum by (instance, platform, model) (increase(tensorfold_health:completion_tokens_total{job="spark-inference"}[3m])) == 0
           labels:

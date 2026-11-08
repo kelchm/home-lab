@@ -352,11 +352,13 @@ W.table("certs", "Certificates", "name", "Certificate", [
     ("Renews in", f"min by (name) (certmanager_certificate_renewal_timestamp_seconds{{{K}}} - time())", dict(unit="dtdurations"))],
     sort="Lifetime left", desc_sort=False, keywidth=210,
     desc="Time left as a share of each certificate's own lifetime. Three days left is normal for a certificate that lives a week and an emergency for one that lives a year.")
+# The barman-cloud plugin records backups; its cnpg_collector_* counterparts stay 0 while it is in use.
+BACKUP = "max by (pod) (barman_cloud_cloudnative_pg_io_last_available_backup_timestamp)"
 W.table("databases", "Databases", "pod", "Database", [
     ("Up", "max by (pod) (cnpg_collector_up)", dict(mappings=yes("Yes", "No"), custom__cellOptions=TEXT)),
     ("Size", "sum by (pod) (cnpg_pg_database_size_bytes)", dict(unit="bytes", decimals=1)),
     ("Connections", "sum by (pod) (cnpg_backends_total)", {}),
-    ("Own backup", "(time() - (max by (pod) (cnpg_collector_last_available_backup_timestamp) > 0)) or (max by (pod) (cnpg_collector_last_available_backup_timestamp) - 1)",
+    ("Own backup", f"(time() - ({BACKUP} > 0)) or ({BACKUP} - 1)",
      dict(unit="dtdurations", mappings=[{"type": "value", "options": {"-1": {"text": "none", "index": 0}}}]))],
     desc="Each PostgreSQL server CloudNativePG runs.")
 BB = 'job="pi-blackbox"'
