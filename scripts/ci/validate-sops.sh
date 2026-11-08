@@ -28,8 +28,21 @@ path, relative, rules_json = sys.argv[1:]
 def fail(message):
     sys.exit(f"{relative}: {message}")
 
-rule = next((r for r in json.loads(rules_json)
-             if re.search(r.get("path_regex", ""), relative)), None)
+def yq(expression, *args, stdin=None, env=None):
+    result = subprocess.run(["yq", "-o=json", "-I0", expression, *args], input=stdin,
+                            capture_output=True, text=True, env={**os.environ, **(env or {})})
+    if result.returncode:
+        # yq's diagnostics can quote file content, so they are not echoed.
+        fail("yq could not evaluate the file or a SOPS regex")
+    return [json.loads(line) for line in result.stdout.splitlines()]
+
+# SOPS takes the first rule whose path_regex matches, using Go's regexp
+# rather than Python's re; an empty path_regex matches any file.
+rules = json.loads(rules_json)
+hits = yq("[.[] as $r | strenv(SOPS_FILE) | test($r)]", "-p=json", "-",
+          stdin=json.dumps([r.get("path_regex", "") for r in rules]),
+          env={"SOPS_FILE": relative})[0]
+rule = next((r for r, hit in zip(rules, hits) if hit), None)
 if rule is None or not rule.get("age"):
     fail("no matching age creation rule")
 # SOPS accepts a comma-separated string or a list.
@@ -144,14 +157,6 @@ COMMENT_SELECTORS = ("unencrypted_comment_regex", "encrypted_comment_regex")
 # SOPS writes an encrypted comment inside a sequence back as a list item.
 VALUE_TYPES = ("str", "int", "float", "bool", "time", "comment")
 
-def yq(expression, *args, stdin=None, env=None):
-    result = subprocess.run(["yq", "-o=json", "-I0", expression, *args], input=stdin,
-                            capture_output=True, text=True, env={**os.environ, **(env or {})})
-    if result.returncode:
-        # yq's diagnostics can quote file content, so they are not echoed.
-        fail("yq could not evaluate the YAML file or its encryption selector")
-    return [json.loads(line) for line in result.stdout.splitlines()]
-
 # SOPS records one selector, defaulting to unencrypted_suffix: _unencrypted.
 # Comment selectors depend on comment order, so they fail closed here.
 def selector(settings, source):
@@ -199,10 +204,16 @@ def validate_yaml():
                 fail("non-string YAML mapping key; SOPS supports string keys only")
             keys = tuple(p for p in nodepath if isinstance(p, str))
             container = keys[:-1] if node["parent"] == "map" else keys
+            if nodepath[0] == "sops":
+                # The metadata subtree goes, but the comments SOPS attached to
+                # the enclosing document stay: those on the key or a scalar value.
+                if len(nodepath) == 1:
+                    add_comments((), node["key"]["comments"])
+                    if node["kind"] == "scalar":
+                        add_comments((), node["comments"])
+                continue
             if node["key"]:
                 add_comments(container, node["key"]["comments"])
-            if nodepath[0] == "sops":
-                continue
             if node["kind"] == "scalar":
                 add_comments(container, node["comments"])
                 entries.append((keys, False, node))
@@ -287,15 +298,18 @@ function main() {
     while IFS= read -r -d '' file; do
         [[ "${file}" != '.sops.yaml' ]] || continue
 
-        status="$(sops filestatus "${ROOT_DIR}/${file}")"
+        # SOPS diagnostics can quote file content, so they are not echoed.
+        status="$(sops filestatus "${ROOT_DIR}/${file}" 2>/dev/null || true)"
         if [[ "${status}" != *'"encrypted":true'* ]]; then
-            echo "SOPS file is not encrypted: ${file}" >&2
+            echo "SOPS file is not encrypted or could not be parsed: ${file}" >&2
             return 1
         fi
 
         validate_file "${file}"
-        if [[ "${file}" != *.sops.env && "${decrypt_available}" == true ]]; then
-            sops decrypt "${ROOT_DIR}/${file}" >/dev/null
+        if [[ "${file}" != *.sops.env && "${decrypt_available}" == true ]] &&
+            ! sops decrypt "${ROOT_DIR}/${file}" >/dev/null 2>&1; then
+            echo "SOPS could not decrypt: ${file}" >&2
+            return 1
         fi
     done < <(git -C "${ROOT_DIR}" ls-files -z -- '*.sops.yaml' '*.sops.yml' '*.sops.env')
 

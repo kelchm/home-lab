@@ -20,15 +20,18 @@ cp "${SCRIPT_DIR}/validate-sops.sh" "${TEST_DIR}/scripts/ci/"
 git -C "${TEST_DIR}" init --quiet
 recipient="$(age-keygen -o "${TEST_DIR}/fixture.key" 2>/dev/null && age-keygen -y "${TEST_DIR}/fixture.key")"
 wrong_recipient="$(age-keygen -o "${TEST_DIR}/wrong.key" 2>/dev/null && age-keygen -y "${TEST_DIR}/wrong.key")"
+talos_recipient="$(age-keygen -o "${TEST_DIR}/talos.key" 2>/dev/null && age-keygen -y "${TEST_DIR}/talos.key")"
 # The private fixture keys are never supplied to SOPS.
-rm "${TEST_DIR}/fixture.key" "${TEST_DIR}/wrong.key"
+rm "${TEST_DIR}/fixture.key" "${TEST_DIR}/wrong.key" "${TEST_DIR}/talos.key"
 # The repository's two YAML selector forms, plus the other path selectors the
-# validator supports, so each is checked against the pinned SOPS binary.
+# validator supports, so each is checked against the pinned SOPS binary. Talos
+# has its own recipient, as #296 plans. The last two rules differ only under
+# Go's ASCII \\w, which SOPS uses, and Python's Unicode one.
 cat > "${TEST_DIR}/.sops.yaml" <<EOF_CONFIG
 creation_rules:
   - path_regex: talos/.*\\.sops\\.ya?ml
     mac_only_encrypted: true
-    age: "${recipient}"
+    age: "${talos_recipient}"
   - path_regex: kubernetes/.*\\.sops\\.ya?ml
     encrypted_regex: "^(data|stringData)$"
     mac_only_encrypted: true
@@ -41,6 +44,10 @@ creation_rules:
     age: ["${recipient}"]
   - path_regex: synology/.*\\.sops\\.env
     age: ${recipient}
+  - path_regex: ^\\w/
+    age: "${wrong_recipient}"
+  - path_regex: \\.sops\\.yaml$
+    age: "${recipient}"
 stores:
   yaml:
     indent: 2
@@ -198,7 +205,8 @@ stringData:
   second: fixture-second
 EOF_YAML
 readonly YAML_FIXTURE="${TEST_DIR}/kubernetes/app/secret.sops.yaml"
-for target in "${YAML_FIXTURE}" "${TEST_DIR}/talos/talsecret.sops.yaml" \
+mkdir "${TEST_DIR}/é"
+for target in "${YAML_FIXTURE}" "${TEST_DIR}/talos/talsecret.sops.yaml" "${TEST_DIR}/é/secret.sops.yaml" \
     "${TEST_DIR}/selectors/suffix/secret.sops.yaml" "${TEST_DIR}/selectors/regex/secret.sops.yaml"; do
     sops encrypt --filename-override "${target}" --output "${target}" "${TEST_DIR}/plain.yaml"
 done
@@ -225,6 +233,11 @@ Path(target).write_text("\n".join(lines))
 PYTHON
 }
 
+# SOPS drops comments inside the metadata subtree along with it.
+inject_yaml 'sops:' '  # fixture: metadata note'
+"${TEST_DIR}/scripts/ci/validate-sops.sh" > /dev/null
+echo 'ok: comment inside SOPS metadata accepted'
+
 inject_yaml 'stringData:' '  leaked: throwaway-plaintext'
 expect_failure 'plaintext YAML value' 'plaintext value at stringData.leaked'
 
@@ -249,8 +262,17 @@ expect_failure 'YAML selector differs from the creation rule' 'encryption select
 sops encrypt --filename-override "${YAML_FIXTURE}" --age "${wrong_recipient}" --output "${YAML_FIXTURE}" "${TEST_DIR}/plain.yaml"
 expect_failure 'wrong YAML recipient' 'age recipients do not match the creation rule'
 
+sops encrypt --filename-override "${YAML_FIXTURE}" --age "${talos_recipient}" --output "${YAML_FIXTURE}" "${TEST_DIR}/plain.yaml"
+expect_failure 'runtime secret encrypted to the Talos recipient' 'age recipients do not match the creation rule'
+
 cp "${TEST_DIR}/valid.yaml" "${YAML_FIXTURE}"
+cp "${TEST_DIR}/talos/talsecret.sops.yaml" "${TEST_DIR}/talsecret.yaml"
 printf 'leaked: throwaway-plaintext\n' >> "${TEST_DIR}/talos/talsecret.sops.yaml"
 expect_failure 'plaintext value under the default selector' 'plaintext value at leaked'
+
+# A later document's sops key is dropped, but not the comments SOPS keeps with the document.
+cp "${TEST_DIR}/talsecret.yaml" "${TEST_DIR}/talos/talsecret.sops.yaml"
+printf -- '---\nsops: ignored # throwaway-plaintext-comment\n' >> "${TEST_DIR}/talos/talsecret.sops.yaml"
+expect_failure 'comment on a later sops key' 'plaintext comment in the document root'
 
 echo 'SOPS validator regression tests passed.'
