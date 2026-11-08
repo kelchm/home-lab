@@ -220,33 +220,61 @@ tests:
               summary: ups-office is running undervolted
               description: 'The Pi firmware on ups-office has reported undervoltage for 15 minutes. An undervolted Pi throttles its CPU. Check the power supply and its cable: a long or thin USB cable drops voltage.'
 
-  - name: Security updates waiting three weeks alert; ones installed sooner do not
+  - name: Security updates arriving on an up-to-date host notify once; later arrivals do not
     interval: 1h
     input_series:
-      # More arrive partway through; the alert reports the count waiting now.
+      # Three arrive at 11h; three more at 22h, while the first are still waiting.
       - series: apt_security_upgrades_pending{instance="pve-sbx-1",platform="pve",job="pve-node"}
-        values: 24x300 30x300
-      # Installed after its soak, inside the three weeks.
+        values: 0x10 3x10 6x10
+      # Already waiting when it starts reporting.
       - series: apt_security_upgrades_pending{instance="spark-1",platform="spark",job="spark-node"}
-        values: 3x400 0x200
-      # A host that starts reporting already behind waits three weeks like any other.
-      - series: apt_security_upgrades_pending{instance="pve-sbx-2",platform="pve",job="pve-node"}
-        values: _x30 5x570
+        values: 5x32
     alert_rule_test:
-      - eval_time: 503h
-        alertname: NodeSecurityUpdatesPending
-        exp_alerts: []
-      - eval_time: 505h
-        alertname: NodeSecurityUpdatesPending
+      - eval_time: 12h
+        alertname: NodeSecurityUpdatesAvailable
         exp_alerts:
           - exp_labels:
               instance: pve-sbx-1
               platform: pve
               job: pve-node
-              severity: info
+              severity: warning
             exp_annotations:
-              summary: pve-sbx-1 has had security updates waiting for three weeks
-              description: 'Packages from a security archive have had upgrades available on pve-sbx-1 for three weeks without a break, past the couple of weeks new updates soak; 30 are waiting now. Install them, then reboot the host if they need it.'
+              summary: pve-sbx-1 has security updates to install
+              description: '3 packages from a security archive have upgrades available on pve-sbx-1, which had none waiting. They soak for two weeks; NodeSecurityUpdatesOverdue notifies if they are still waiting then. Install them sooner if one fixes a vulnerability being exploited.'
+      - eval_time: 18h
+        alertname: NodeSecurityUpdatesAvailable
+        exp_alerts: []
+      - eval_time: 24h
+        alertname: NodeSecurityUpdatesAvailable
+        exp_alerts: []
+
+  - name: Security updates waiting two weeks alert; ones installed sooner do not
+    interval: 1h
+    input_series:
+      # More arrive partway through; the alert reports the count waiting now.
+      - series: apt_security_upgrades_pending{instance="pve-sbx-1",platform="pve",job="pve-node"}
+        values: 24x200 30x200
+      # Installed inside the two weeks.
+      - series: apt_security_upgrades_pending{instance="spark-1",platform="spark",job="spark-node"}
+        values: 3x300 0x100
+      # A host that starts reporting already behind waits two weeks like any other.
+      - series: apt_security_upgrades_pending{instance="pve-sbx-2",platform="pve",job="pve-node"}
+        values: _x30 5x370
+    alert_rule_test:
+      - eval_time: 335h
+        alertname: NodeSecurityUpdatesOverdue
+        exp_alerts: []
+      - eval_time: 337h
+        alertname: NodeSecurityUpdatesOverdue
+        exp_alerts:
+          - exp_labels:
+              instance: pve-sbx-1
+              platform: pve
+              job: pve-node
+              severity: warning
+            exp_annotations:
+              summary: pve-sbx-1 has had security updates waiting for two weeks
+              description: 'Packages from a security archive have had upgrades available on pve-sbx-1 for two weeks without a break, the end of the soak; 30 are waiting now. Install them, then reboot the host if they need it.'
 
   - name: Package lists not refreshed for two days alert
     interval: 1m
