@@ -333,6 +333,18 @@ Data age at recovery (RPO), measured from timestamps over 2026-11-01 to 2026-11-
 
 Off-site timings come from the `offsite-backup-kopia-1` container log on Athena; the healthchecks.io history was not read, because it needs the API key.
 
+### Recovery targets
+
+Adopted on 2026-11-08 ([#224](https://github.com/kelchm/home-lab/issues/224)): the targets are what the current schedule delivers, as measured above. This is a home lab, so tighter targets are not worth more frequent backups. If one application needs less data loss, give that application its own schedule rather than changing these.
+
+| Scenario | Data loss (RPO) | Downtime (RTO) |
+|---|---|---|
+| One application or volume lost, cluster healthy | 24 hours for application data; 5 minutes for the CloudNativePG databases through point-in-time recovery | About 1 hour of hands-on work. Single-volume restores took under a minute on 2026-11-08 |
+| Cluster lost, NAS healthy | As above | About a day. Not measured: the whole-cluster rebuild has not been drilled |
+| Cluster and NAS lost | About 27 hours for Longhorn data and about 25 hours for the databases, from the B2 copy | A few days, mostly replacing the storage. Downloading every volume except VictoriaMetrics, VictoriaLogs and Jellyfin takes about 42 minutes, and the full store about 3.7 hours ([off-site restore](../../synology/offsite-backup/README.md#restore)) |
+
+If a restored backup turns out bad, restore the previous daily backup, then the weekly one; for a CloudNativePG database, choose an earlier recovery target instead. Whenever you are not sure which backup is good, [inspect a copy first](#1-restore-through-an-explicit-volume) and leave the live claim in place.
+
 ### Procedure
 
 Run every command from the repository root.
