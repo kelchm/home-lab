@@ -863,7 +863,9 @@ jobs:
       - network
       - docs
     runs-on: ubuntu-latest
-    if: ${{ always() }}
+    # In a run cancelled by concurrency this reports cancelled, not failed. In
+    # any other run a failed or skipped dependency still fails the check below.
+    if: ${{ !cancelled() }}
     steps:
       - name: Require every validation job to succeed
         env:
