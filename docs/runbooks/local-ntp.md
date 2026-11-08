@@ -11,18 +11,14 @@ Both servers and their central alerts were accepted on 2026-10-30. See [rpi-nixo
 
 ## Allow access in UniFi
 
-The enabled policy **Allow Cameras Storage Workloads to Pi NTP** has these settings:
+Two enabled policies allow NTP to `10.32.20.111/32` and `10.32.20.112/32` (IPv4 UDP 123, source port Any, All states, Always, Auto Allow Return Traffic off):
 
-| Setting | Value |
-|---|---|
-| Action / zones | Allow; Internal → Internal |
-| Sources | Cameras (VLAN 5), Workloads (21), Storage (25); source port Any |
-| Destinations | `10.32.20.111/32`, `10.32.20.112/32` |
-| Protocol / destination port | IPv4 UDP / 123 |
-| Connection states / schedule | All / Always |
-| Auto Allow Return Traffic | Off; existing policies already permit replies |
+| Policy | Zones and sources | Why it is needed |
+|---|---|---|
+| **Allow Workloads to Local NTP** | Internal → Internal; Workloads (21) | Sits above **Block Workloads to Protected Networks** |
+| **Allow Untrusted to Local NTP** | Untrusted → Internal; Cameras (5) and IoT (90) | Untrusted blocks Internal by default |
 
-It sits immediately above **Block Workloads to Protected Networks**, ahead of the Cameras/Storage isolation block. Existing isolation policies, return rules and the **Starlink Management** routes through WAN2 were preserved; other intended networks already have access. Confirm the current policy order before further changes.
+Other Internal networks reach the Pis through Allow All. On 2026-11-08 the original **Allow Cameras Storage Workloads to Pi NTP** rule was renamed and Storage was removed from its sources: no Storage host had used it in the previous week. Cameras had already moved to the Untrusted rule when the network changed zone. The applied zone state is in [`network/unifi/README.md`](../../network/unifi/README.md#local-ntp). Confirm the current policy order before further changes.
 
 ## Configure Talos
 

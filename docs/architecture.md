@@ -374,9 +374,9 @@ Internal-to-Internal traffic is allowed by default, so this posture is enforced 
 | VLAN 10 Main | `admin-prod` | allow, admin device group only | allowed from every Main client by the default |
 | VLAN 10 Main | `services-prod` | allow | allowed by the default |
 | VLAN 21 Workloads | `services-prod` | allow | allowed by the default |
-| VLAN 21 Workloads | `admin-prod` | deny, except Hermes → `10.32.130.1` TCP/443 | applied (`Block Workloads to Admin Prod Routed`) |
-| VLANs 5 and 90 (Untrusted) | `admin-prod`, `services-prod`, `shared-prod` | deny, except Visionect below | applied (`Block IoT to Other Service Pools`) |
-| VLAN 99 Guest | `admin-prod` | deny | applied (`Block Guest to Admin Services`) |
+| VLAN 21 Workloads | `admin-prod` | deny, except Hermes → `10.32.130.1` TCP/443 | applied (`Block Workloads to Admin Prod`) |
+| VLANs 5 and 90 (Untrusted) | `admin-prod`, `services-prod`, `shared-prod` | deny, except Visionect below | applied (`Block Untrusted to Service Pools`) |
+| VLAN 99 Guest | `admin-prod` | deny | applied (`Block Guest to Admin Prod`) |
 | VLAN 99 Guest | `services-prod` | deny | not applied; household devices on Guest still use it until they move to IoT |
 | VLAN 90 IoT | `10.32.150.30` TCP/11113 | allow (Visionect devices) | applied |
 | VLAN 10 Main | `10.32.150.30` TCP/443 | allow (Visionect management UI) | applied |
