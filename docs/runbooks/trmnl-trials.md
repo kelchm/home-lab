@@ -31,6 +31,14 @@ Start in Terminus, then repeat the workflow in each candidate where it has the c
 
 The trial namespace has no Kubernetes NetworkPolicy or CiliumNetworkPolicy restrictions. The servers can fetch public recipes and private homelab services, including the shared admin Gateway, subject to destination policies and application authentication. Their database/cache ports have no Service. The admin Gateway retains its backend allowance so the trial URLs continue to work.
 
+## Grafana in Inker
+
+The installed Grafana plugin has a connection named **Homelab Grafana**, pointing at <https://grafana.home.kelch.io>. It uses the dedicated `trmnl-inker` Grafana service account with the **Viewer** role. Its token is stored in the **Grafana - Inker** API Credential item in the **Project - home-lab** 1Password vault, in the `credential` field. Inker stores its copy in the connection's encrypted settings on its persistent volume. Its **Allow Local Network** setting is enabled for rendering the private Grafana URL.
+
+On 2026-11-08, the connection successfully listed 95 dashboards and the panels in the Home dashboard, then rendered the Home dashboard's **Needs attention** panel as an 800×480 PNG. The temporary verification screen was removed. Open the Grafana connection in Inker to choose a dashboard and panel or section for a screen.
+
+The token has no expiration. To rotate it, create a replacement token under Grafana's `trmnl-inker` service account, update the 1Password item and Inker connection, verify rendering, then revoke the old token. No Grafana administrator credential is stored in Inker.
+
 ## Physical device
 
 Follow the [TRMNL device connection guide](https://help.trmnl.com/en/articles/12263392-connect-your-device-to-terminus-byos). Before changing a device, record its current custom server, API key, account association and Wi-Fi configuration so it can be restored. Unknown-device responses in some implementations include `reset_firmware: true`; switching servers or a failed enrollment may clear the saved credentials. Use the matching server URL above as the custom host, without `/setup` or another path. Terminus's `API_URI`, LaraPaper's `APP_URL` and Next.js's `BETTER_AUTH_URL` already match their trial URLs.
