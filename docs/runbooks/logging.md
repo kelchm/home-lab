@@ -363,10 +363,13 @@ After a deploy, on each node, `fluentbit_input_records_total{job="pve-fluent-bit
 
 ### Spark inference logs
 
-SparkRun runs the inference server in a container whose main process is `sleep infinity`, with the server's output in `/tmp/sparkrun_serve.log`, so it reaches neither `docker logs` nor the journal and is gone when the container is removed. The [TensorFold adapter](../../sparks/inference/sparkrun/plugins/tensorfold/__init__.py) changes two things at every launch, for every TensorFold recipe:
+The collector side expects three things of whatever launches an inference engine, so a launcher other than SparkRun needs only these:
 
-- The serve command copies its output to the container's own. The log file and `sparkrun logs` are unchanged.
-- Each rank's container uses Docker's `fluentd` log driver, which sends every line to `127.0.0.1:24224` with the container's `sparkrun.recipe`, `sparkrun.served_model_name`, `sparkrun.runtime` and `sparkrun.rank` labels.
+- The engine's output is the container's output.
+- The container uses Docker's `fluentd` log driver with the options in `LOG_DOCKER_OPTS` in the [TensorFold adapter](../../sparks/inference/sparkrun/plugins/tensorfold/__init__.py), which send every line to `127.0.0.1:24224`.
+- The container carries the `sparkrun.recipe`, `sparkrun.served_model_name`, `sparkrun.runtime` and `sparkrun.rank` labels, and the driver's `labels` option names them. The [metrics scrape](../../sparks/monitoring/scrape.yaml) reads the same labels, so renaming them means changing both.
+
+SparkRun meets the first only with help: it runs the inference server in a container whose main process is `sleep infinity`, with the server's output in `/tmp/sparkrun_serve.log`, so it reaches neither `docker logs` nor the journal and is gone when the container is removed. The adapter's serve command therefore copies its output to the container's own (`SERVE_OUTPUT`), and the log file and `sparkrun logs` are unchanged. The adapter applies both changes at every launch, for every TensorFold recipe.
 
 [`sparks/monitoring/inference-logs/`](../../sparks/monitoring/inference-logs/) adds a `forward` input on that port to the Spark's collector. It includes the shared configuration unchanged, as the [task logs](#pve-task-logs) do, and sends through the same token and log route with an output and 256 MiB buffer of its own. These lines never pass through the journal, so they are stored once.
 
@@ -394,17 +397,17 @@ Which timings a recipe has depends on its engine:
 | --- | --- | --- |
 | TensorFold 0.6.0's Python server | Mia's GLM kit | `ttft_s`, `prefill_s`, `output_tps`, `preemptions` |
 | TensorFold's Zig server | Qwen TP2 v1.1, native GLM | `ttft_s`, `queue_s`, `decode_s`, `total_s`, `output_tps` |
-| Older forks of the Zig server | DeepSeek `2970bcd`, Qwen one-Spark `656879fd` | None: only tokens, cache, finish and drafts |
+| Older forks of the Zig server | DeepSeek, Qwen one-Spark | None: only tokens, cache, finish and drafts |
 
-All other lines, such as model loading, `prompt cache:` summaries and tracebacks, are kept with only the common fields. Other delivery behaviour:
+All other lines, such as model loading, `prompt cache:` summaries and tracebacks, are kept with only the common fields. A request line must start with the engine's `[tensorfold]` prefix, and the parser reads only the keys above, so a key an engine adds later is ignored rather than misread, and stays searchable in `_msg`. Other delivery behaviour:
 
 - **Before a launch:** the change applies when a container is created. An instance launched before the adapter change keeps `json-file` and sends nothing until its next launch.
-- **Collector down:** Docker's driver is asynchronous, so the container starts and the engine writes whether or not the collector is up. Docker holds up to 16,384 lines in memory until the collector answers. It drops lines beyond that, and everything it holds if the Docker daemon restarts. A write to the collector gives up after 5 seconds, so a collector that hangs can't stop SparkRun removing the container. The log file in the container still has every line, and the engine's errors are in the same stream as its output.
+- **Collector down:** Docker's driver is asynchronous, so the container starts and the engine writes whether or not the collector is up. Docker holds up to 16,384 lines in memory while it can't connect. It drops lines beyond that, everything it holds if the Docker daemon restarts, and whatever is still queued when the container is removed. A write to the collector gives up after 5 seconds, so a collector that hangs can't stop SparkRun removing the container. Docker sends without waiting for Fluent Bit to confirm, so delivery up to the collector is best effort; from there on the collector's file buffer holds records as it does the journal's. The log file in the container still has every line, and the engine's errors are in the same stream as its output.
 - **Endpoint outage:** as for the journal, records wait in the buffer and arrive with their original timestamps.
 - **Other runtimes:** only the TensorFold adapter sets the driver. A recipe on another SparkRun runtime keeps `json-file`.
 - **Trust:** the input on port 24224 takes no key, because Docker's driver can't send one. Any process on the Spark's host network can write records there under the Spark's token, including the ranks, which use host networking and already write their own lines. Those are the same processes the host already trusts with its metrics.
 
-`NodeLogsSilent` doesn't watch this input, because a Spark can serve nothing for days. The delivery and drop alerts cover its output as they do the journal's.
+`NodeLogsSilent` doesn't watch this input, because a Spark can serve nothing for days. The delivery and drop alerts cover its output as they do the journal's, from the collector on; lines Docker drops before they reach it show up in no counter.
 
 To roll out:
 

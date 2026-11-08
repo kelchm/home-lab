@@ -25,7 +25,7 @@ pipeline:
       match: inference
       script: /fluent-bit/etc/inference.lua
       call: normalize_inference
-      type_int_key: severity_number inference.tokens.prompt inference.tokens.cached inference.tokens.output inference.spec.rounds inference.spec.accepted inference.spec.drafted inference.preemptions http.response.status_code
+      type_int_key: severity_number
 
   outputs:
     - name: opentelemetry

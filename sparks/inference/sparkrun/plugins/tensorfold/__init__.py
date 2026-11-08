@@ -40,8 +40,10 @@ _FABRIC_MASTER: ContextVar[str | None] = ContextVar("tensorfold_fabric_master", 
 
 # SparkRun runs the serve command in a container whose PID 1 is `sleep infinity`, with its
 # output in /tmp/sparkrun_serve.log, where `sparkrun logs` reads it. The command also copies
-# that output to PID 1's, which Docker's log driver reads. -p keeps the engine writing if
-# that copy fails.
+# that output to PID 1's, which Docker's log driver reads. This copy exists only for
+# SparkRun: a launcher that runs the engine as the container's main process needs none.
+# -p keeps tee writing the log file if PID 1's output fails; if tee itself dies, the
+# engine's next write fails too.
 SERVE_OUTPUT = "exec > >(tee -p /proc/1/fd/1) 2>&1"
 # Docker sends each rank's output to the Spark's log collector, the Fluent Bit forward input
 # in sparks/monitoring/inference-logs. Asynchronous, so a container starts and writes even

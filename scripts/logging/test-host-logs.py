@@ -449,6 +449,11 @@ INFERENCE_LINES = {
         'http.request.method': 'POST', 'url.path': '/v1/chat/completions', 'http.response.status_code': '429',
         'event.name': None},
     '[tensorfold] 127.0.0.1 "GET /metrics HTTP/1.1" 503 -': {'http.response.status_code': '503'},
+    # Only whole keys count, and only a line with the engine's prefix and a request's shape is a request.
+    '[tensorfold] done chatcmpl-draft prompt=12 cached=0 tokens=4 draft_tokens=900 finish=stop': {
+        'event.name': 'inference.request.done', 'inference.tokens.output': '4'},
+    '[tensorfold] done loading weights in 3.2s': {'event.name': None, 'inference.request.id': None},
+    'done chatcmpl-bare prompt=12 tokens=4 finish=stop': {'event.name': None, 'inference.tokens.output': None},
     'info: prompt cache: 59 tokens, resumed at 0, kept 2; 2 states, 223 MiB and 0 MiB spare of 16384 MiB '
     '(hits 0, misses 1, evicted 0, refused 0, failed 0)': {'event.name': None, 'inference.request.id': None},
 }

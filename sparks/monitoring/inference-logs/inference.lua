@@ -5,28 +5,6 @@
 -- it from the host's token.
 dofile('/fluent-bit/etc/host.lua')
 
--- Fields of a `done` line by the key the engines print, and how to read them.
-local DONE = {
-  prompt = { 'inference.tokens.prompt', 'count' },
-  cached = { 'inference.tokens.cached', 'count' },
-  tokens = { 'inference.tokens.output', 'count' },
-  thinking = { 'inference.thinking', 'flag' },
-  effort = { 'inference.effort', 'text' },
-  finish = { 'inference.finish', 'text' },
-  rounds = { 'inference.spec.rounds', 'count' },
-  preemptions = { 'inference.preemptions', 'count' },
-  queued = { 'inference.queue_s', 'seconds' },
-  ttft = { 'inference.ttft_s', 'seconds' },
-  prefill = { 'inference.prefill_s', 'seconds' },
-  decode = { 'inference.decode_s', 'seconds' },
-  elapsed = { 'inference.total_s', 'seconds' },
-  ['tok/s'] = { 'inference.output_tps', 'number' },
-}
-
--- Requests that poll the server: a successful one is dropped, because metrics
--- already show the polling.
-local POLLED = { ['/metrics'] = true, ['/health'] = true, ['/stats'] = true }
-
 -- The Zig engine prints seconds as `0.920`, the Python one as `0.92s`, and -1
 -- for a time it didn't measure.
 local function seconds(v)
@@ -34,42 +12,65 @@ local function seconds(v)
   if n and n >= 0 then return n end
 end
 
-local READ = {
-  count = tonumber,
-  number = tonumber,
-  seconds = seconds,
-  text = function(v) return v end,
-  flag = function(v) return v:lower() end,
+-- Fields of a `done` line by the key the engines print, and how to read the
+-- ones that need it. VictoriaLogs stores every value as text, so the rest are
+-- kept as printed.
+local DONE = {
+  prompt = { 'inference.tokens.prompt' },
+  cached = { 'inference.tokens.cached' },
+  tokens = { 'inference.tokens.output' },
+  thinking = { 'inference.thinking', string.lower },
+  effort = { 'inference.effort' },
+  finish = { 'inference.finish' },
+  rounds = { 'inference.spec.rounds' },
+  preemptions = { 'inference.preemptions' },
+  queued = { 'inference.queue_s', seconds },
+  ttft = { 'inference.ttft_s', seconds },
+  prefill = { 'inference.prefill_s', seconds },
+  decode = { 'inference.decode_s', seconds },
+  elapsed = { 'inference.total_s', seconds },
+  ['tok/s'] = { 'inference.output_tps' },
 }
 
+-- Requests that poll the server: a successful one is dropped, because metrics
+-- already show the polling.
+local POLLED = { ['/metrics'] = true, ['/health'] = true, ['/stats'] = true }
+
 local function done(attributes, rest)
-  for key, value in rest:gmatch('([%w/]+)=(%S+)') do
+  -- Whole keys only: `draft_tokens=` is not `tokens=`.
+  for key, value in rest:gmatch(' ([^%s=]+)=(%S+)') do
     local field = DONE[key]
-    if field then attributes[field[1]] = READ[field[2]](value) end
+    if field and field[2] then
+      attributes[field[1]] = field[2](value)
+    elseif field then
+      attributes[field[1]] = value
+    end
   end
-  local accepted, drafted = rest:match(' accepted=(%d+)/(%d+)')
-  attributes['inference.spec.accepted'] = tonumber(accepted)
-  attributes['inference.spec.drafted'] = tonumber(drafted)
+  attributes['inference.spec.accepted'], attributes['inference.spec.drafted'] = rest:match(' accepted=(%d+)/(%d+)')
 end
 
--- `done <id> ...`, `ended <id> reason=client-left ...` or `reason=error (Kind) ...`,
--- `refused <id>: <message>`, and the Zig server's access line. Returns false
--- for a line to drop.
+-- `[tensorfold] done <id> ... prompt=...`, `ended <id> reason=client-left ...`
+-- or `reason=error (Kind) ...`, `refused <id>: <message>`, and the Zig
+-- server's access line. Lines without the engine's prefix, or that only start
+-- with one of those words, keep just the common fields. Returns false for a
+-- line to drop.
 local function request(attributes, line)
-  line = line:gsub('^%[tensorfold%] ', '')
-  local verb, id, rest = line:match('^(%a+) ([%w_.-]+):? ?(.*)$')
-  if verb == 'done' then
+  local tagged
+  line, tagged = line:gsub('^%[tensorfold%] ', '')
+  if tagged == 0 then return true end
+  local verb, id, rest = line:match('^(%a+) ([%w_.-]+)(.*)$')
+  if verb == 'done' and rest:find(' prompt=%d') then
     attributes['event.name'] = 'inference.request.done'
-    done(attributes, ' ' .. rest)
-  elseif verb == 'ended' then
+    done(attributes, rest)
+  elseif verb == 'ended' and rest:find('^ reason=') then
     attributes['event.name'] = 'inference.request.ended'
-    attributes['inference.finish'] = rest:match('^reason=(%S+)')
-    attributes['error.type'] = rest:match('^reason=%S+ %((.-)%)')
-    attributes['inference.tokens.prompt'] = tonumber(rest:match(' prompt=(%d+)'))
-    attributes['inference.tokens.output'] = tonumber(rest:match(' tokens=(%d+)'))
+    attributes['inference.finish'] = rest:match('^ reason=(%S+)')
+    attributes['error.type'] = rest:match('^ reason=%S+ %((.-)%)')
+    attributes['inference.tokens.prompt'] = rest:match(' prompt=(%d+)')
+    attributes['inference.tokens.output'] = rest:match(' tokens=(%d+)')
     local after = rest:match(' after=(%S+)')
     attributes['inference.total_s'] = after and seconds(after)
-  elseif verb == 'refused' then
+  elseif verb == 'refused' and rest:find('^: ') then
     attributes['event.name'] = 'inference.request.refused'
     attributes['inference.finish'] = 'refused'
   else
@@ -78,14 +79,14 @@ local function request(attributes, line)
     if POLLED[path] and status:sub(1, 1) == '2' then return false end
     attributes['http.request.method'] = method
     attributes['url.path'] = path
-    attributes['http.response.status_code'] = tonumber(status)
+    attributes['http.response.status_code'] = status
     return true
   end
   attributes['inference.request.id'] = id
   return true
 end
 
--- nil, not no value, for an absent label: tonumber() with no argument is an error.
+-- nil for an absent or empty label.
 local function label(record, key)
   local v = record[key]
   if v ~= nil and tostring(v) ~= '' then return tostring(v) end
@@ -108,7 +109,7 @@ local function build(tag, ts, group, metadata, record)
   attributes['inference.runtime'] = label(record, 'sparkrun.runtime')
   local recipe = label(record, 'sparkrun.recipe')
   attributes['inference.recipe'] = recipe and recipe:gsub('^.*/', ''):gsub('%.ya?ml$', '')
-  attributes['inference.rank'] = tonumber(label(record, 'sparkrun.rank'))
+  attributes['inference.rank'] = label(record, 'sparkrun.rank')
   if not request(attributes, line) then return -1, ts, metadata, record end
   return code, time, attributes, body
 end
