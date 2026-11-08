@@ -467,6 +467,38 @@ def adapter_docker_opts(port):
     return [f'--log-opt=fluentd-address=tcp://127.0.0.1:{port}' if o == address else o for o in opts]
 
 
+# Accepts connections and never reads them, as a collector that has hung.
+STALLED = """
+import socket, time
+server = socket.socket()
+server.bind(('0.0.0.0', 24224))
+server.listen()
+held = []
+while True:
+    held.append(server.accept())
+"""
+
+
+def test_stalled_collector(python_image, run):
+    """A collector that stops reading must not stop Docker removing a rank's container."""
+    name = f'inference-stalled-{run}'
+    try:
+        docker('run', '-d', '--name', f'{name}-collector', '-p', '127.0.0.1::24224', python_image, 'python', '-c', STALLED)
+        port = docker('port', f'{name}-collector', '24224/tcp').stdout.split(':')[-1].strip()
+        # Far more than the socket buffers hold, so the driver's writes block.
+        docker('run', '-d', '--name', f'{name}-rank0', *adapter_docker_opts(port), ALPINE_IMAGE,
+               'sh', '-c', 'yes "$(printf "%0200d" 0)" | head -n 400000; sleep 600')
+        time.sleep(10)
+        started = time.time()
+        try:
+            subprocess.run(['docker', 'rm', '-f', f'{name}-rank0'], check=True, capture_output=True, timeout=60)
+        except subprocess.TimeoutExpired:
+            sys.exit('Removing a container hung while its log collector stopped reading')
+        print(f'Stalled collector: container removed in {time.time() - started:.1f}s.')
+    finally:
+        subprocess.run(['docker', 'rm', '-f', f'{name}-rank0', f'{name}-collector'], capture_output=True)
+
+
 def test_inference_logs(routes, fb_image, vl_image, memory, base):
     output_parity(INFERENCE / 'inference.yaml')
     run = uuid.uuid4().hex[:8]
@@ -527,6 +559,7 @@ def test_inference_logs(routes, fb_image, vl_image, memory, base):
             subprocess.run(['docker', 'volume', 'rm', f'{net}-state'], capture_output=True)
             subprocess.run(['docker', 'network', 'rm', net], capture_output=True)
     print(f'Spark inference logs: {len(want)} lines stored once each, with their fields; polling dropped.')
+    test_stalled_collector(pinned(ROOT / 'scripts/logging/test-fluent-bit.py', r"PYTHON_IMAGE = '([^']+)'"), run)
 
 
 def binds(service, root):

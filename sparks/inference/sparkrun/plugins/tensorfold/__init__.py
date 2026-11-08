@@ -45,12 +45,14 @@ _FABRIC_MASTER: ContextVar[str | None] = ContextVar("tensorfold_fabric_master", 
 SERVE_OUTPUT = "exec > >(tee -p /proc/1/fd/1) 2>&1"
 # Docker sends each rank's output to the Spark's log collector, the Fluent Bit forward input
 # in sparks/monitoring/inference-logs. Asynchronous, so a container starts and writes even
-# while the collector is down; a buffer of 16,384 lines covers its restart.
+# while the collector is down; a buffer of 16,384 lines covers its restart. Without a write
+# timeout, a collector that stops reading would block removing the container.
 LOG_DOCKER_OPTS = (
     "--log-driver=fluentd",
     "--log-opt=fluentd-address=tcp://127.0.0.1:24224",
     "--log-opt=fluentd-async=true",
     "--log-opt=fluentd-buffer-limit=16384",
+    "--log-opt=fluentd-write-timeout=5s",
     "--log-opt=fluentd-sub-second-precision=true",
     "--log-opt=tag=inference",
     "--log-opt=labels=sparkrun.recipe,sparkrun.served_model_name,sparkrun.runtime,sparkrun.rank",

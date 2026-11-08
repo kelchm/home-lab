@@ -399,7 +399,7 @@ Which timings a recipe has depends on its engine:
 All other lines, such as model loading, `prompt cache:` summaries and tracebacks, are kept with only the common fields. Other delivery behaviour:
 
 - **Before a launch:** the change applies when a container is created. An instance launched before the adapter change keeps `json-file` and sends nothing until its next launch.
-- **Collector down:** Docker's driver is asynchronous, so the container starts and the engine writes whether or not the collector is up. Docker holds up to 16,384 lines in memory until the collector answers. It drops lines beyond that, and everything it holds if the Docker daemon restarts. The log file in the container still has every line.
+- **Collector down:** Docker's driver is asynchronous, so the container starts and the engine writes whether or not the collector is up. Docker holds up to 16,384 lines in memory until the collector answers. It drops lines beyond that, and everything it holds if the Docker daemon restarts. A write to the collector gives up after 5 seconds, so a collector that hangs can't stop SparkRun removing the container. The log file in the container still has every line, and the engine's errors are in the same stream as its output.
 - **Endpoint outage:** as for the journal, records wait in the buffer and arrive with their original timestamps.
 - **Other runtimes:** only the TensorFold adapter sets the driver. A recipe on another SparkRun runtime keeps `json-file`.
 
