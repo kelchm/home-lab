@@ -84,7 +84,7 @@ services:
   # task-logs/pve-tasks.yaml.
   fluent-bit:
     <<: *service
-    image: docker.io/fluent/fluent-bit:5.1.5@sha256:2740f387f6e68fab66d28e4fa6a853387b9cab6ffb4cb78958f69bba4eb0e7b4
+    image: docker.io/fluent/fluent-bit:5.2.0@sha256:a48190bf67679495a332fd61025421a46e7e4d168380185a8e16da2e9acc3126
     # Root without capabilities, to read the root-owned journal and token, and task logs, which
     # are www-data:root 0640, through their group.
     user: "0:0"
