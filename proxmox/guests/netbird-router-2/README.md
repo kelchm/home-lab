@@ -38,7 +38,7 @@ A future hostname/user/key/network change creates a new cloud-init instance and 
 
 ## Installation sequence
 
-The 2026-11-08 installation followed this sequence. Reuse it, with its own approval, for a rebuild with a new key and peer (see [Withdrawal and identity recovery](#withdrawal-and-identity-recovery)). Disruptive H1/R1 tests, hard stops, host reboot/power tests, restores, backup starts, deletion, upgrades and renames are outside it.
+The 2026-11-08 installation followed this sequence. Reuse it, with its own approval, for a rebuild with a new key and peer (see [Withdrawal and identity recovery](#withdrawal-and-identity-recovery)). For a rebuild at `.104`, first remove `.104` from the `NetBird Routers` list, keeping `.103`, so the new guest has no ingress access until the step 5 conflict gate passes; step 6 adds it back. Disruptive H1/R1 tests, hard stops, host reboot/power tests, restores, backup starts, deletion, upgrades and renames are outside it.
 
 ### 1. Refresh prerequisites and isolate the clone
 

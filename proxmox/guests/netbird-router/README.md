@@ -36,7 +36,7 @@ ssh kelchm@10.32.20.21 sudo sha256sum /mnt/pve/library-pve/snippets/netbird-pilo
 
 ## Restore
 
-Prefer a successful post-enrollment `daily-backups` archive to rebuilding. The restore procedure is intended to recover the archived NetBird peer identity and installed version; if that identity remains enrolled, no setup key is needed. The first scheduled post-enrollment backup was verified on 2026-10-29: `backups-pve-sbx:backup/vzdump-qemu-103-2026_10_29-05_00_02.vma.zst`, 623,690,275 bytes, VM 103 backup 09:00:02–09:00:17 UTC, enclosing task `OK` at 09:01:44 UTC. It follows enrollment on September 27 at about 15:28; the older September 27 05:00 archive predates enrollment. Today's archive predates the 11:56 UTC local-snippet installation. It was not unpacked, restored or booted, so neither its saved vendor reference nor identity recovery was verified by this check. Restore remains undrilled. While VM 103 is down, NetBird has no routed remote path. Run the following on `pve-sbx-1` through a reachable admin session on Main, with someone at home.
+Prefer a successful post-enrollment `daily-backups` archive to rebuilding. The restore procedure is intended to recover the archived NetBird peer identity and installed version; if that identity remains enrolled, no setup key is needed. The first scheduled post-enrollment backup was verified on 2026-10-29: `backups-pve-sbx:backup/vzdump-qemu-103-2026_10_29-05_00_02.vma.zst`, 623,690,275 bytes, VM 103 backup 09:00:02–09:00:17 UTC, enclosing task `OK` at 09:01:44 UTC. It follows enrollment on September 27 at about 15:28; the older September 27 05:00 archive predates enrollment. Today's archive predates the 11:56 UTC local-snippet installation. It was not unpacked, restored or booted, so neither its saved vendor reference nor identity recovery was verified by this check. Restore remains undrilled. While VM 103 is down, away clients depend on VM 104, whose failover is unmeasured (#625). Run the following on `pve-sbx-1` through a reachable admin session on Main, with someone at home.
 
 ```sh
 sudo pvesm list backups-pve-sbx --vmid 103
@@ -52,7 +52,7 @@ After the snippet-reference checks pass, start it with `sudo qm start 103`. PVE 
 
 ## Rebuild
 
-The original creation commands were not recorded. The steps below reproduce the configuration that was read back. While VM 103 is down, NetBird has no routed remote path, so rebuild it from Main with someone at home.
+The original creation commands were not recorded. The steps below reproduce the configuration that was read back. While VM 103 is down, away clients depend on VM 104, whose failover is unmeasured (#625), so rebuild it from Main with someone at home.
 
 1. Choose the snippet reference explicitly. The commands below retain the original NAS-backed reference. To reproduce the installed node-local configuration, enable `snippets` on `local`, provision the byte-identical root-owned file on the chosen node using the [destination provisioning checks](local-startup.md#provision-on-another-node), and substitute `vendor=local:snippets/netbird-pilot-router.yaml` below. Do not run the existing-VM installation commands against a newly rebuilt VM. If deliberately using the NAS-backed reference, verify the NAS copy against `vendor-data.yaml`; if missing, restore that exact file to `/mnt/pve/library-pve/snippets/netbird-pilot-router.yaml`. Retain it for older archives in either case.
 2. If a broken VM 103 still exists, confirm its name and node, turn off protection with `sudo qm set 103 --protection 0`, then remove it: `sudo qm destroy 103 --purge 1 --destroy-unreferenced-disks 1`.
@@ -79,7 +79,7 @@ The original creation commands were not recorded. The steps below reproduce the 
 
 Follow the [stdin-only enrollment procedure](enrollment.md), including separately staging its credential-free helper for a rebuild, fresh logging checks, bounded guest-exec completion and end-of-window key revocation on every outcome. Git and cloud-init never hold a setup key. The frozen vendor snippet is unchanged. The former argv-based example could persist in guest journal/sudo logs and process lists; actual historical log contents are unknown, and the recorded old one-off key is expired.
 
-The `pilot-home` network routes through the `pilot-routers` group, not a specific peer, so the new peer takes over the routes once it is in that group. The UniFi rules match the `NetBird Routers` Network List, which holds `10.32.19.103` and `10.32.19.104`, so a rebuild at the same address needs no firewall change.
+The `pilot-home` network routes through the `pilot-routers` group, not a specific peer, so the new peer becomes eligible for the routes once it is in that group. With VM 104 also in the group, clients may keep using 104, so router-local probes on the new 103 do not show that any client traffic passes through it. The UniFi rules match the `NetBird Routers` Network List, which holds `10.32.19.103` and `10.32.19.104`, so a rebuild at the same address needs no firewall change.
 
 Verify with `netbird status`. It must show Management connected and `Networks: 10.32.130.1/32, 10.32.140.1/32, 10.32.30.1/32`. Then run the router probes in the runbook's verification section, and read NetBird back with [`scripts/netbird-export.sh`](../../../scripts/netbird-export.sh).
 
