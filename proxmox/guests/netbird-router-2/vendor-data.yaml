@@ -1,6 +1,7 @@
 #cloud-config
-# PLANNED, NOT INSTALLED. New VM 104 only; the 103 vendor bytes remain frozen.
-# Retain PVE default ciupgrade=1 for first-boot Debian security updates.
+# VM 104 vendor data, installed as local:snippets/netbird-router-2.yaml on pve-sbx-2.
+# Retain PVE default ciupgrade=1 for first-boot Debian security updates. NetBird's
+# version is set afterwards by ../netbird-router/upgrade-routers.sh.
 
 package_update: true
 package_upgrade: true
@@ -44,16 +45,7 @@ write_files:
         > /etc/apt/sources.list.d/netbird.list
 
       apt-get -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::Retries=2 update
-      # Hold the second router at the existing peer's baseline until the
-      # separately approved rolling upgrade. This pin contains no credential.
-      printf '%s\n' \
-        'Package: netbird' \
-        'Pin: version 0.79.0' \
-        'Pin-Priority: 1001' \
-        > /etc/apt/preferences.d/netbird-router-baseline
-      DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::Retries=2 install --yes netbird=0.79.0
-      apt-mark hold netbird
-      test "$(dpkg-query -W -f='${Version}' netbird)" = '0.79.0'
+      DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::Retries=2 install --yes netbird
 
   - path: /usr/local/sbin/netbird-router-enroll
     owner: root:root

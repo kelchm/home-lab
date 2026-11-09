@@ -1,25 +1,26 @@
 # NetBird routing peer
 
-VM 103 is one of NetBird's two routing peers; [VM 104](../netbird-router-2/README.md) on `pve-sbx-2` is the other. It carries traffic from away clients to the household HTTPS, admin HTTPS and DNS resources. NetBird Cloud objects, client ownership, access verification and recovery limits are in the [NetBird runbook](../../../docs/runbooks/netbird-remote-access.md); setup and qualification are tracked in [#625](https://github.com/kelchm/home-lab/issues/625).
+VM 103 is one of NetBird's two routing peers; [VM 104](../netbird-router-2/README.md) on `pve-sbx-2` is the other. It carries traffic from away clients to the household HTTPS, admin HTTPS and DNS resources. NetBird Cloud objects, client ownership, access verification and recovery limits are in the [NetBird runbook](../../../docs/runbooks/netbird-remote-access.md); it was qualified in [#625](https://github.com/kelchm/home-lab/issues/625).
 
-Read back on 2026-10-27, with backup/protection changes verified on 2026-10-28 and node-local snippet installation and the first scheduled post-enrollment backup verified on 2026-10-29:
+Read back on 2026-11-08, after the stage-2 rename, upgrade and reboots that day:
 
 | Setting | Value |
 |---|---|
-| VMID and name | `103`, `netbird-pilot-router`. Dropping `pilot` is approved in stages: friendly labels first; the VM name and snippet only with the router upgrade after the R1 baseline (#625). |
+| VMID and name | `103`, `netbird-router-1`; renamed from `netbird-pilot-router` on 2026-11-08. The guest hostname and NetBird peer name match; the peer keeps its identity and `100.64.224.15`. |
 | Node | `pve-sbx-1`. Template 9000 is on that node's `local-lvm`, so a rebuild clones there. |
 | Network | `10.32.19.103/24` on VLAN 19 (`vmbr0` tag 19); gateway and resolver `10.32.19.1`; search domain `home.kelch.io` |
 | Guest | Full clone of template 9000 (Debian 13 genericcloud): 1 vCPU, 1 GiB RAM, 8 GiB `local-lvm`, OVMF, QEMU guest agent |
 | Boot | `onboot: 1`, `startup: order=10,up=30`; unattended host-boot acceptance is still pending (#1096). |
 | Protection, backup, HA | `protection: 1` and covered by `daily-backups`, both since 2026-10-28. Not a PVE HA resource. |
-| NetBird | 0.79.0 from the `pkgs.netbird.io` `stable` repository; kernel WireGuard on `wt0`, UDP 51820; client routes and DNS disabled, all other client settings default |
-| Tags | `netbird;pilot;remote-access` |
+| OS | Debian 13, kernel 6.12.116 after the renamed instance's first boot on 2026-11-08 |
+| NetBird | 0.82.0 from the `pkgs.netbird.io` `stable` repository, set by [`upgrade-routers.sh`](upgrade-routers.sh); kernel WireGuard on `wt0`, UDP 51820; client routes and DNS disabled, all other client settings default |
+| Tags and description | `netbird;remote-access`; "NetBird routing peer 1; VLAN 19; Debian 13 genericcloud" |
 
 Main cannot reach the VM's SSH. Manage it with `qm guest exec 103` from `pve-sbx-1`, as the runbook describes.
 
 ## Vendor data
 
-[`vendor-data.yaml`](vendor-data.yaml) is byte-identical to the installed snippet referenced by VM 103's saved `local:snippets/netbird-pilot-router.yaml` and the retained NAS source `library-pve:snippets/netbird-pilot-router.yaml`. All have SHA-256 `1c45c56620287cce1825e8af4ed7a03c7f316dd7a10744a5ad102a06a14dc52a`. The [node-local replacement](local-startup.md#accepted-installation-2026-10-29) was installed and verified on 2026-10-29 without a restart or running-medium regeneration, preserving hostname, instance ID, enrolled peer identity and NetBird 0.79.0. The cloud-init image still shows the expected old NAS value with the local value pending until a normal start; autostart acceptance remains untested in #1096. The vendor data does the following:
+[`vendor-data.yaml`](vendor-data.yaml) is byte-identical to the installed snippet referenced by VM 103's saved `local:snippets/netbird-router-1.yaml`. Two copies under the old name stay for older backups: `local:snippets/netbird-pilot-router.yaml`, referenced by archives from 2026-10-29 to 2026-11-08, and the NAS source `library-pve:snippets/netbird-pilot-router.yaml`, referenced by earlier ones. All have SHA-256 `1c45c56620287cce1825e8af4ed7a03c7f316dd7a10744a5ad102a06a14dc52a`. The [node-local replacement](local-startup.md#accepted-installation-2026-10-29) was installed on 2026-10-29; the 2026-11-08 restarts were operator restarts, so unattended host-boot acceptance remains untested in #1096. The vendor data does the following:
 
 - installs `ca-certificates`, `curl`, `qemu-guest-agent` and `tcpdump`;
 - enables IPv4 forwarding;
@@ -52,46 +53,47 @@ After the snippet-reference checks pass, start it with `sudo qm start 103`. PVE 
 
 ## Rebuild
 
-The original creation commands were not recorded. The steps below reproduce the configuration that was read back. While VM 103 is down, away clients depend on VM 104, whose failover is unmeasured (#625), so rebuild it from Main with someone at home.
+The original creation commands were not recorded. The steps below reproduce the configuration that was read back. While VM 103 is down, away clients depend on VM 104. Clients moved between the routers without help during the 2026-11-08 upgrades, but failover was not formally measured, so rebuild it from Main with someone at home.
 
-1. Choose the snippet reference explicitly. The commands below retain the original NAS-backed reference. To reproduce the installed node-local configuration, enable `snippets` on `local`, provision the byte-identical root-owned file on the chosen node using the [destination provisioning checks](local-startup.md#provision-on-another-node), and substitute `vendor=local:snippets/netbird-pilot-router.yaml` below. Do not run the existing-VM installation commands against a newly rebuilt VM. If deliberately using the NAS-backed reference, verify the NAS copy against `vendor-data.yaml`; if missing, restore that exact file to `/mnt/pve/library-pve/snippets/netbird-pilot-router.yaml`. Retain it for older archives in either case.
+1. Choose the snippet reference explicitly. The commands below use the installed node-local file, `local:snippets/netbird-router-1.yaml`; on another node, enable `snippets` on `local` and provision the byte-identical root-owned file there using the [destination provisioning checks](local-startup.md#provision-on-another-node). Do not run the existing-VM installation commands against a newly rebuilt VM. A NAS-backed reference (`library-pve:snippets/netbird-pilot-router.yaml`) works too but makes host-boot startup depend on the NAS; verify that copy against `vendor-data.yaml` and retain it for older archives either way.
 2. If a broken VM 103 still exists, confirm its name and node, turn off protection with `sudo qm set 103 --protection 0`, then remove it: `sudo qm destroy 103 --purge 1 --destroy-unreferenced-disks 1`.
 3. On `pve-sbx-1`, write the operator key from `sudo qm config 200` (its `sshkeys` value, URL-decoded) to a file, then run:
 
    ```sh
-   sudo qm clone 9000 103 --name netbird-pilot-router --full 1 --storage local-lvm
+   sudo qm clone 9000 103 --name netbird-router-1 --full 1 --storage local-lvm
    sudo qm set 103 \
      --cores 1 --memory 1024 \
      --net0 virtio,bridge=vmbr0,tag=19 \
      --ipconfig0 ip=10.32.19.103/24,gw=10.32.19.1 \
      --nameserver 10.32.19.1 --searchdomain home.kelch.io \
      --ciuser kelchm --sshkeys <key-file> \
-     --cicustom vendor=library-pve:snippets/netbird-pilot-router.yaml \
+     --cicustom vendor=local:snippets/netbird-router-1.yaml \
      --onboot 1 --startup order=10,up=30 --protection 1 \
-     --tags 'netbird;pilot;remote-access'
+     --tags 'netbird;remote-access' \
+     --description 'NetBird routing peer 1; VLAN 19; Debian 13 genericcloud'
    sudo qm disk resize 103 scsi0 8G
    sudo qm start 103
    ```
 
-4. Once the guest agent answers, run these through `sudo qm guest exec 103 --` and check each `exitcode` and `out-data`: `cloud-init status --wait`, `systemctl --failed`, `systemctl is-active qemu-guest-agent netbird`, `sysctl net.ipv4.ip_forward` and `netbird version`. A rebuild installs NetBird's current stable release, not 0.79.0.
+4. Once the guest agent answers, run these through `sudo qm guest exec 103 --` and check each `exitcode` and `out-data`: `cloud-init status --wait`, `systemctl --failed`, `systemctl is-active qemu-guest-agent netbird`, `sysctl net.ipv4.ip_forward` and `netbird version`. A rebuild installs NetBird's current stable release; after enrollment, run [`upgrade-routers.sh`](upgrade-routers.sh) to set the declared version.
 
 ## Enrollment
 
 Follow the [stdin-only enrollment procedure](enrollment.md), including separately staging its credential-free helper for a rebuild, fresh logging checks, bounded guest-exec completion and end-of-window key revocation on every outcome. Git and cloud-init never hold a setup key. The frozen vendor snippet is unchanged. The former argv-based example could persist in guest journal/sudo logs and process lists; actual historical log contents are unknown, and the recorded old one-off key is expired.
 
-The `pilot-home` network routes through the `pilot-routers` group, not a specific peer, so the new peer becomes eligible for the routes once it is in that group. With VM 104 also in the group, clients may keep using 104, so router-local probes on the new 103 do not show that any client traffic passes through it. The UniFi rules match the `NetBird Routers` Network List, which holds `10.32.19.103` and `10.32.19.104`, so a rebuild at the same address needs no firewall change.
+The `home` network routes through the `routers` group, not a specific peer, so the new peer becomes eligible for the routes once it is in that group. With VM 104 also in the group, clients may keep using 104, so router-local probes on the new 103 do not show that any client traffic passes through it. The UniFi rules match the `NetBird Routers` Network List, which holds `10.32.19.103` and `10.32.19.104`, so a rebuild at the same address needs no firewall change.
 
 Verify with `netbird status`. It must show Management connected and `Networks: 10.32.130.1/32, 10.32.140.1/32, 10.32.30.1/32`. Then run the router probes in the runbook's verification section, and read NetBird back with [`scripts/netbird-export.sh`](../../../scripts/netbird-export.sh).
 
 ## Upgrades
 
-Debian's unattended-upgrades ignore the NetBird repository, so NetBird stays at its installed version until someone upgrades it:
+Debian's unattended-upgrades ignore the NetBird repository, so NetBird stays at its installed version until someone upgrades it. [`upgrade-routers.sh`](upgrade-routers.sh) declares the routers' version, and Renovate opens a PR when NetBird releases a new one. Merging that PR changes no router. From an admin device on Main, run:
 
 ```sh
-sudo qm guest exec 103 --timeout 300 -- sh -c 'apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install --yes netbird'
+proxmox/guests/netbird-router/upgrade-routers.sh
 ```
 
-Treat an upgrade as a router restart: away clients lose the home resources until the daemon reconnects. Run it as its own change with someone at home, then repeat the enrollment checks.
+It installs the declared version on VM 103, then VM 104. It upgrades or downgrades as needed, waits for each router to reconnect and route the resources, and stops before touching a router if the other one isn't serving. Upgrading restarts that router's NetBird daemon; away clients move to the other router. On 2026-11-08 both routers went from 0.79.0 to 0.82.0 this way, and the away iPhone and Persephone reconnected each time without help.
 
 ### Cloud-init settings upgrade NetBird
 
@@ -99,4 +101,4 @@ The vendor data's `package_upgrade: false` has no effect. PVE's generated user d
 
 A byte-identical vendor-only path change is different: vendor content and its storage reference are excluded from the generated instance ID. The [node-local startup procedure](local-startup.md) verifies user/network/metadata hashes without a restart and leaves acceptance for the next planned authorized host reboot.
 
-PVE derives the instance ID from the user and network data, and regenerates them each time it starts the VM. They hold the VM name as the hostname, the cloud-init user, its SSH keys and the network settings. Changing any of these makes the next start, including one after a host reboot, a new instance: it upgrades every package including NetBird, and applies any new hostname. Make such a change only as part of a planned upgrade, and restart VM 103 immediately afterwards rather than leaving it for the next host reboot. This was read from PVE 9.2.21 and the guest's cloud-init and apt logs on 2026-10-28.
+PVE derives the instance ID from the user and network data, and regenerates them each time it starts the VM. They hold the VM name as the hostname, the cloud-init user, its SSH keys and the network settings. Changing any of these makes the next start, including one after a host reboot, a new instance: it upgrades every package including NetBird, and applies any new hostname. Make such a change only as part of a planned upgrade, and restart VM 103 immediately afterwards rather than leaving it for the next host reboot. This was read from PVE 9.2.21 and the guest's cloud-init and apt logs on 2026-10-28. The 2026-11-08 rename followed it: `qm reboot 103` started a new instance that upgraded Debian and NetBird and set the new hostname, followed by a second reboot onto the new kernel. Run `upgrade-routers.sh` after any new instance to return NetBird to the declared version.

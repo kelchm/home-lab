@@ -277,8 +277,11 @@ class Definition(unittest.TestCase):
         helper = '\n'.join(line[6:] for line in helper.rstrip().splitlines()) + '\n'
         self.assertEqual(helper, (GUEST.parent / 'netbird-router/netbird-router-enroll.sh').read_text())
         self.assertIn('package_upgrade: true', vendor)
-        for text in ['Pin: version 0.79.0', 'netbird=0.79.0', 'apt-mark hold netbird', '--connect-timeout 10 --max-time 60']:
-            self.assertIn(text, vendor)
+        self.assertIn('--connect-timeout 10 --max-time 60', vendor)
+        # upgrade-routers.sh sets the version; a first-boot pin would undo it on a new instance.
+        self.assertIn('install --yes netbird\n', vendor)
+        for text in ['Pin: version', 'netbird=', 'apt-mark hold']:
+            self.assertNotIn(text, vendor)
         commands = vendor.split('runcmd:', 1)[1]
         self.assertLess(commands.index('qemu-guest-agent.service'), commands.index('/usr/local/sbin/netbird-router-bootstrap'))
 
