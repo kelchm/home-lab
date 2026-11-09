@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
-"""Render the Home dashboard: every system at a glance, then a tab for each system.
+"""Render the Home dashboard: every system at a glance, then a tab for each system. Also render Home · E-paper, the whole
+lab on one page for an e-paper display, which judges health with Home's own rules.
 
 Tabs, the auto grid and panels shown only while they have data need Grafana's v2 dashboard format, which a provisioned
 file gets only as a full dashboard.grafana.app/v2 resource. The parts are in home/: schema helpers, the widgets each
-class of thing gets, and the overview's rules and panels.
+class of thing gets, the overview's rules and panels, and the e-paper page.
 """
 import argparse
 import copy
 import json
 from pathlib import Path
 
+from home import eink
 from home import overview as e
 from home import widgets as w
 from home.schema import TILE_PX, TILE_TREND_PX, Panels, autogrid, dashboard, datasource_variable, exprs, grid, item, only_while, row, rows, tab, tile_row
@@ -178,16 +180,18 @@ longest = max(len(x) for _, x in exprs(dashboard_json))
 assert longest < MAX_QUERY, f"a query of {longest} characters is longer than VictoriaMetrics accepts"
 rendered = json.dumps(dashboard_json, ensure_ascii=False, separators=(",", ":")) + "\n"
 assert len(rendered.encode()) < MAX_BYTES, f"the dashboard is {len(rendered.encode())} bytes, too large for its ConfigMap"
+eink_json = eink.build()
+eink_query = eink_json["spec"]["elements"]["systems"]["spec"]["data"]["spec"]["queries"][0]["spec"]["query"]["spec"]["expr"]
+# E-paper adds presentation definitions inside the shared WITH block. Compare
+# its health definitions with their source so a Home edit cannot leave it stale.
+health_prefix = e.Q("seen").removesuffix(") seen")
+assert eink_query.startswith(health_prefix + ", worst ="), "E-paper health definitions differ from Home; build its systems query from overview.Q in home/eink.py"
+assert max(len(x) for _, x in exprs(eink_json)) < MAX_QUERY, "An e-paper query is longer than VictoriaMetrics accepts"
+eink_rendered = json.dumps(eink_json, ensure_ascii=False, indent=2) + "\n"
+assert len(eink_rendered.encode()) < MAX_BYTES, f"the e-paper dashboard is {len(eink_rendered.encode())} bytes, too large for its ConfigMap"
 if args.check:
     assert OUTPUT.read_text() == rendered, "Regenerate the Home dashboard: python3 scripts/grafana/render-home.py"
-    eink = json.loads(EINK_OUTPUT.read_text())
-    eink_query = eink["spec"]["elements"]["systems"]["spec"]["data"]["spec"]["queries"][0]["spec"]["query"]["spec"]["expr"]
-    # E-paper adds presentation definitions inside the shared WITH block. Compare
-    # its health definitions with their source so a Home edit cannot leave it stale.
-    health_prefix = e.Q("seen").removesuffix(") seen")
-    assert eink_query.startswith(health_prefix + ", worst ="), (
-        "E-paper health definitions differ from Home; update the shared WITH prefix in " + str(EINK_OUTPUT.relative_to(ROOT))
-    )
-    assert max(len(x) for _, x in exprs(eink)) < MAX_QUERY, "An e-paper query is longer than VictoriaMetrics accepts"
+    assert EINK_OUTPUT.read_text() == eink_rendered, "Regenerate the e-paper dashboard: python3 scripts/grafana/render-home.py"
 else:
     OUTPUT.write_text(rendered)
+    EINK_OUTPUT.write_text(eink_rendered)
