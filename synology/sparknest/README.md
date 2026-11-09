@@ -2,6 +2,8 @@
 
 SparkNest v0.8.3 runs as one container and one voting node on Athena, using TCP and an internal FUSE mount. This is an evaluation deployment, manually applied from this directory; it is not in `synology/.doco-cd.yml`. Bulk qualification is tracked in [#1371](https://github.com/kelchm/home-lab/issues/1371). Original NAS stores remain independent. The owner authorizes removing captured Mac model copies after their selected backup and recovery checks pass, following the confirmed local model cleanup procedure below. Retain active inputs, changed/new files, unique training outputs and any source whose checks fail.
 
+The dated [evaluation findings](FINDINGS.md) distinguish demonstrated recovery, remaining acceptance work, integration defects and candidate upstream changes. Native HF `--archive` import/download support already permits archive-first payload storage; this trial's host-backed import layout is not mandatory. That alternate path still needs live acceptance here.
+
 The UI/API is at `http://10.32.10.5:8091/` on Main and `http://10.32.25.5:8091/` on Storage. There is no management-VLAN listener. The UI shell is public; API requests require the cluster-derived bearer token. Retrieve the login link on Athena with `sudo /usr/local/bin/docker exec sparknest-sparknest-1 nest ui`, replacing its container hostname and port with `10.32.10.5:8091`. Do not commit that link or the token. Traffic is HTTP on these LAN addresses.
 
 ## Storage
@@ -69,17 +71,23 @@ RUNTIME=/Users/kelchm/Documents/sparknest-ingest-20261108
 python3 "$RUNTIME/ingest.py" inventory "$RUNTIME/sources.json" "$RUNTIME/inventory.json" </dev/null
 ```
 
-For a detached run, first open persistent SSH connections in the foreground while the SSH agent is reachable. The worker then reuses the connections without requiring the tool session's SSH agent. Keep the socket directory private and the Mac awake: remote payloads travel through the Mac to Athena.
+For a detached run, first complete the direct-transfer configuration below, then open persistent SSH connections in the foreground while the SSH agent is reachable. The worker reuses them without requiring the tool session's SSH agent. Keep the socket directory private and the Mac awake for coordination. In qualified direct mode, Spark payloads travel to Athena over the storage VLAN; Mac payloads make one hop to Athena.
 
 ```sh
 mkdir -p "$RUNTIME/ssh"
 chmod 700 "$RUNTIME/ssh"
-for ip in 10.32.20.5 10.32.21.31 10.32.21.32; do
+for ip in 10.32.10.5 10.32.21.31 10.32.21.32; do
+  host_key_alias="$ip"
+  if [ "$ip" = 10.32.10.5 ]; then
+    host_key_alias=10.32.20.5
+  fi
   ssh -n -M -S "$RUNTIME/ssh/$ip" -o ControlPersist=86400 -o BatchMode=yes \
+    -o "HostKeyAlias=$host_key_alias" \
     -o ConnectTimeout=10 -o ServerAliveInterval=30 -o ServerAliveCountMax=3 \
     -f "kelchm@$ip" true
 done
 export SPARKNEST_SSH_CONTROL_DIR="$RUNTIME/ssh"
+export SPARKNEST_DIRECT_SOURCES=1
 caffeinate -i python3 -u "$RUNTIME/ingest.py" run "$RUNTIME/inventory.json" "$RUNTIME/journal.json" </dev/null
 ```
 
