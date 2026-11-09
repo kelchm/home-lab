@@ -1,6 +1,6 @@
 # NetBird routing peer
 
-VM 103 is NetBird's only routing peer. It carries traffic from away clients to the household HTTPS, admin HTTPS and DNS resources. NetBird Cloud objects, client ownership, access verification and recovery limits are in the [NetBird runbook](../../../docs/runbooks/netbird-remote-access.md); setup and qualification are tracked in [#625](https://github.com/kelchm/home-lab/issues/625).
+VM 103 is one of NetBird's two routing peers; [VM 104](../netbird-router-2/README.md) on `pve-sbx-2` is the other. It carries traffic from away clients to the household HTTPS, admin HTTPS and DNS resources. NetBird Cloud objects, client ownership, access verification and recovery limits are in the [NetBird runbook](../../../docs/runbooks/netbird-remote-access.md); setup and qualification are tracked in [#625](https://github.com/kelchm/home-lab/issues/625).
 
 Read back on 2026-10-27, with backup/protection changes verified on 2026-10-28 and node-local snippet installation and the first scheduled post-enrollment backup verified on 2026-10-29:
 
@@ -79,7 +79,7 @@ The original creation commands were not recorded. The steps below reproduce the 
 
 Follow the [stdin-only enrollment procedure](enrollment.md), including separately staging its credential-free helper for a rebuild, fresh logging checks, bounded guest-exec completion and end-of-window key revocation on every outcome. Git and cloud-init never hold a setup key. The frozen vendor snippet is unchanged. The former argv-based example could persist in guest journal/sudo logs and process lists; actual historical log contents are unknown, and the recorded old one-off key is expired.
 
-The `pilot-home` network routes through the `pilot-routers` group, not a specific peer, so the new peer takes over the routes once it is in that group. The UniFi rules match source `10.32.19.103`, so a rebuild at the same address needs no firewall change.
+The `pilot-home` network routes through the `pilot-routers` group, not a specific peer, so the new peer takes over the routes once it is in that group. The UniFi rules match the `NetBird Routers` Network List, which holds `10.32.19.103` and `10.32.19.104`, so a rebuild at the same address needs no firewall change.
 
 Verify with `netbird status`. It must show Management connected and `Networks: 10.32.130.1/32, 10.32.140.1/32, 10.32.30.1/32`. Then run the router probes in the runbook's verification section, and read NetBird back with [`scripts/netbird-export.sh`](../../../scripts/netbird-export.sh).
 
