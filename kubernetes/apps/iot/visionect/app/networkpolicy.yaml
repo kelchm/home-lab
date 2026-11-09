@@ -65,6 +65,15 @@ spec:
         - ports:
             - port: "8443"
               protocol: TCP
+    # E-paper trial images render through Inker's private in-cluster service.
+    - toServices:
+        - k8sService:
+            serviceName: inker
+            namespace: trmnl-trials
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP
     # Display sessions render operator-configured HTTP(S) URLs. Preserve that
     # product behavior while excluding private destinations; add an explicit
     # private service path here before configuring one in VSS.

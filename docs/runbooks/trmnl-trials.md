@@ -41,6 +41,14 @@ The token has no expiration. To rotate it, create a replacement token under Graf
 
 Inker's memory request is 512 MiB and its limit is 4 GiB to accommodate concurrent Chromium renders for Grafana section previews. The original 1 GiB limit caused out-of-memory kills while previewing the Home dashboard's **Everything** section. Inker keeps login sessions in memory, so a backend restart also logs users out. If screen creation fails and the browser returns to login, check the pod's restart count and last termination reason before changing the Grafana credentials.
 
+### E-paper overview
+
+[Home · E-paper](https://grafana.home.kelch.io/d/home-eink?theme=light&kiosk) is a separate 1600×1200 overview of the entire lab. Its seven system rows use Home's existing health definitions, show the worst current issue and a count of additional issues, and otherwise show the most recent firing alert within seven days. Warning and critical states use white text on black. A timestamp records when the image was generated. The source is [home-eink-dashboard.json](../../kubernetes/apps/observability/grafana/app/home-eink-dashboard.json).
+
+Inker's **Home lab · E-paper** screen (instance `9`) captures the **whole dashboard** (`panel_id: full`) at 1600×1200. Use whole-dashboard capture instead of the section compositor, which rearranges panels into equal-sized cells. The [e-ink image](https://inker.home.kelch.io/api/plugins/instances/9/render?mode=einkPreview) requires no application login and is reachable through the private admin Gateway. The final image and an isolated test with critical, warning, long-message and unmapped-system rows were visually verified at the full resolution on 2026-11-08; full-dashboard renders took about three seconds.
+
+For VSS, use `http://inker.trmnl-trials.svc.cluster.local/api/plugins/instances/9/render?mode=einkPreview`. This stays inside the cluster and uses the Visionect policy's explicit Inker service allowance on TCP/80. The admin-Gateway hostname is blocked by VSS's existing egress policy. Verify a PNG fetch from the VSS app container after deploying the allowance before changing a device's rendering URL; that fetch is still pending. If Inker is retired, remove the VSS allowance and update any VSS sessions using this image URL.
+
 ## Physical device
 
 Follow the [TRMNL device connection guide](https://help.trmnl.com/en/articles/12263392-connect-your-device-to-terminus-byos). Before changing a device, record its current custom server, API key, account association and Wi-Fi configuration so it can be restored. Unknown-device responses in some implementations include `reset_firmware: true`; switching servers or a failed enrollment may clear the saved credentials. Use the matching server URL above as the custom host, without `/setup` or another path. Terminus's `API_URI`, LaraPaper's `APP_URL` and Next.js's `BETTER_AUTH_URL` already match their trial URLs.
