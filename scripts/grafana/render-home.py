@@ -16,6 +16,7 @@ from home.schema import TILE_PX, TILE_TREND_PX, Panels, autogrid, dashboard, dat
 
 ROOT = Path(__file__).resolve().parents[2]
 OUTPUT = ROOT / "kubernetes/apps/observability/grafana/app/home-dashboard.json"
+EINK_OUTPUT = OUTPUT.with_name("home-eink-dashboard.json")
 # A ConfigMap holds at most 1 MiB, and VictoriaMetrics rejects a query over 16,384 characters.
 MAX_BYTES = 1_000_000
 MAX_QUERY = 16_000
@@ -179,5 +180,14 @@ rendered = json.dumps(dashboard_json, ensure_ascii=False, separators=(",", ":"))
 assert len(rendered.encode()) < MAX_BYTES, f"the dashboard is {len(rendered.encode())} bytes, too large for its ConfigMap"
 if args.check:
     assert OUTPUT.read_text() == rendered, "Regenerate the Home dashboard: python3 scripts/grafana/render-home.py"
+    eink = json.loads(EINK_OUTPUT.read_text())
+    eink_query = eink["spec"]["elements"]["systems"]["spec"]["data"]["spec"]["queries"][0]["spec"]["query"]["spec"]["expr"]
+    # E-paper adds presentation definitions inside the shared WITH block. Compare
+    # its health definitions with their source so a Home edit cannot leave it stale.
+    health_prefix = e.Q("seen").removesuffix(") seen")
+    assert eink_query.startswith(health_prefix + ", worst ="), (
+        "E-paper health definitions differ from Home; update the shared WITH prefix in " + str(EINK_OUTPUT.relative_to(ROOT))
+    )
+    assert max(len(x) for _, x in exprs(eink)) < MAX_QUERY, "An e-paper query is longer than VictoriaMetrics accepts"
 else:
     OUTPUT.write_text(rendered)

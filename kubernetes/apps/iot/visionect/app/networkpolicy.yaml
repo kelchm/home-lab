@@ -65,7 +65,7 @@ spec:
         - ports:
             - port: "8443"
               protocol: TCP
-    # E-paper trial images render through Inker's private in-cluster service.
+    # VSS only fetches images; Inker's admin and setup APIs share this port.
     - toServices:
         - k8sService:
             serviceName: inker
@@ -74,6 +74,10 @@ spec:
         - ports:
             - port: "80"
               protocol: TCP
+          rules:
+            http:
+              - method: GET
+                path: /api/plugins/instances/[0-9]+/render(\?.*)?
     # Display sessions render operator-configured HTTP(S) URLs. Preserve that
     # product behavior while excluding private destinations; add an explicit
     # private service path here before configuring one in VSS.
