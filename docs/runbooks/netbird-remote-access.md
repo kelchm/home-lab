@@ -1,6 +1,6 @@
 # NetBird remote access
 
-NetBird is Matt's selected replacement for Tailscale. Its only routing peer is VM 103, `netbird-pilot-router`, at `10.32.19.103` on the isolated Remote Admin VLAN. Setup and comprehensive testing remain unfinished in [#625](https://github.com/kelchm/home-lab/issues/625). NetBird Cloud and UniFi policy are applied manually; merging this document changes neither. The routing peer's definition, rebuild and enrollment are in [`proxmox/guests/netbird-router`](../../proxmox/guests/netbird-router/README.md).
+NetBird is Matt's selected replacement for Tailscale. It has two routing peers on the isolated Remote Admin VLAN: VM 103, `netbird-pilot-router`, at `10.32.19.103` on `pve-sbx-1`, and VM 104, `netbird-router-2`, at `10.32.19.104` on `pve-sbx-2`, enrolled on 2026-11-08. Setup and comprehensive testing remain unfinished in [#625](https://github.com/kelchm/home-lab/issues/625). NetBird Cloud and UniFi policy are applied manually; merging this document changes neither. The routing peers' definitions, rebuild and enrollment are in [`proxmox/guests/netbird-router`](../../proxmox/guests/netbird-router/README.md) and [`proxmox/guests/netbird-router-2`](../../proxmox/guests/netbird-router-2/README.md).
 
 Tailscale infrastructure retirement completed on October 29, 2026: the router VMs and disks, UniFi policies, route approvals, seven machine registrations and tailnet are gone. The [retirement record](../plans/20260902-tailscale-remote-admin.md#retirement-record-2026-10-29) preserves the archive limits and distinguishes Hyperion's verified local logout from the four personal clients whose local logout remains unverified in [#1069](https://github.com/kelchm/home-lab/issues/1069). NetBird remains the single routed remote path, with the same household HTTPS, admin HTTPS and split-DNS scope; retirement adds no NetBird qualification or host-boot acceptance.
 
@@ -63,6 +63,7 @@ Read back on 2026-10-27; Hyperion and the iPhone again on 2026-10-28:
 | Peer | Installed from | Version | Upgrade owner and effect |
 |---|---|---|---|
 | `netbird-pilot-router` | Debian package from `pkgs.netbird.io` `stable`, installed by vendor data | 0.79.0; 0.81.5 available | Operator, by hand through guest exec ([procedure](../../proxmox/guests/netbird-router/README.md#upgrades)). Away clients lose the resources until the daemon reconnects. |
+| `netbird-router-2` | Same package, installed by its vendor data with an apt pin and hold at 0.79.0 (2026-11-08) | 0.79.0 | Operator, by replacing the pin and hold in an approved rolling upgrade, one router at a time ([definition](../../proxmox/guests/netbird-router-2/README.md#first-boot-packages-and-future-instances)). |
 | Hyperion | Homebrew `netbirdio/tap/netbird` (daemon and CLI) and cask `netbirdio/tap/netbird-ui`; LaunchDaemon `netbird` runs `/opt/homebrew/bin/netbird service run` | Running daemon 0.80.0; installed formula 0.81.5, installed 2026-10-28; UI 0.80.0 | Operator, with `brew upgrade`. The running daemon keeps its old version until `sudo netbird service restart` or a reboot. |
 | iPhone | App Store | Management reports build `ci-cb7ca8ef` on iOS 27.0.1; iOS core 0.75.0 as of 2026-09-27 | App Store updates |
 
@@ -91,9 +92,9 @@ The extension adds access to every matching HTTPS route on `gateway-admin`, incl
 
 NetBird's [Networks API](https://docs.netbird.io/api/resources/networks) and [Policies API](https://docs.netbird.io/api/resources/policies) describe the corresponding objects. Prefer cloning the shape of the live household HTTPS policy with only the name and destination resource changed, after checking its scope. UniFi's routed-prefix classification for this source zone is documented in the applied-state reference; do not widen the destination zone or prefix to work around a failed probe.
 
-## Manage VM 103
+## Manage the routing peers
 
-VM 103 runs on `pve-sbx-1` (`10.32.20.21`). Manage it through PVE's QEMU guest agent. From an admin device on Main, connect with `ssh kelchm@pve-sbx-1`, then run:
+VM 103 runs on `pve-sbx-1` (`10.32.20.21`) and VM 104 on `pve-sbx-2` (`10.32.20.22`). Manage each through PVE's QEMU guest agent on its host; for 104, use `pve-sbx-2` and VMID `104` in the commands below. From an admin device on Main, connect with `ssh kelchm@pve-sbx-1`, then run:
 
 ```sh
 sudo qm guest exec 103 -- hostname
@@ -118,11 +119,9 @@ The [node-local startup installation](../../proxmox/guests/netbird-router/local-
 
 Installation acceptance does not establish automatic return after a reboot. Autostart acceptance waits for the next separately authorized planned host boot and its unattended-start evidence. Do not reboot solely for acceptance or fault shared NFS/NAS to test this repair. #1096 stays open and #625/P6 stays uncredited until that acceptance is recorded.
 
-## Planned second router and qualification
+## Second router and qualification
 
-The [104 definition and installation procedure](../../proxmox/guests/netbird-router-2/README.md) prepares a second peer on `pve-sbx-2`, with `.104` proposed but unallocated. Nothing is installed or enrolled; 103 remains the only router. The design order is #1096 installation and identity verification, then #1097 activation, then the two-peer baseline and separate rolling upgrades/stage-2 rename. #1096 host-boot acceptance waits for the next planned authorized host boot and is not an extra immediate reboot prerequisite; #625/P6 remains uncredited.
-
-The candidate keeps 103's frozen vendor bytes, uses default Debian first-boot upgrades with NetBird 0.79.0 explicitly pinned/held, and provides guarded node-local snippet provisioning and [stdin-only enrollment](../../proxmox/guests/netbird-router/enrollment.md). Before enrollment, fresh IP/MAC history plus an approved duplicate-address probe must precede `.104` source additions to the two existing UniFi forwards; destinations, TCP443, zones, `.103` and friendly renames stay intact. Administrator writes and installation require a separate concrete approval after review. No key is created/read in preparation.
+VM 104 was installed and enrolled on 2026-11-08 by its [definition and installation procedure](../../proxmox/guests/netbird-router-2/README.md) (#1097). Both peers are in the routers group with metric 9999 and masquerade, `10.32.19.104` was added to UniFi's `NetBird Routers` list, and 104's router-side allowed and blocked paths match 103's. Adding the second router may move a client's routes to it, which resets that client's open TCP connections; a Main client such as Hyperion has no resource routes because of the posture check. #1096 host-boot acceptance still waits for the next planned authorized host boot; #625/P6 remains uncredited.
 
 [Two-peer qualification](../../proxmox/guests/netbird-router-2/qualification.md) proposes a 60-second graceful-loss recovery bound and 120-second rejoin bound, with both directions, natural return behavior, P2P/relay/idle evidence and exact running client versions/update settings. Those bounds are unaccepted and unmeasured, and do not cover abrupt host loss (the inspected 0.79.0 watcher fallback can take about 3.5 minutes), backend path failure or power recovery. NetBird 0.80.0/0.81.5 source retains the inspected scoring/hysteresis and watcher constants but differs in implementation; neither source proves behavior for every running Mac/phone core. A later disruptive-test approval is required. Preserve the existing #625 matrix and owner decisions, and record actual results there after review. Two peers do not establish full HA or an identity-restore drill.
 
@@ -142,4 +141,4 @@ NetBird setup and comprehensive testing, including home/away transitions, sleep/
 
 Disable the new NetBird admin HTTPS policy first, then disable the new UniFi forward rule and its paired return rule using the IDs recorded during application. Do not select return rules by name alone. Remove the new resource and policy, and the dedicated resource group if unused, after confirming that the original household HTTPS and DNS resources remain present and functional. Leave the original services policy, split DNS, peer policy and posture check intact. Verify that remote admin HTTPS is withdrawn while Jellyfin and native peer access continue to work, and update the same applied-state references with the withdrawal.
 
-VM 103 is the only routed remote path. Retain it and the household HTTPS, DNS and peer access when rolling back this admin-only extension.
+VMs 103 and 104 are the only routed remote path. Retain them and the household HTTPS, DNS and peer access when rolling back this admin-only extension.

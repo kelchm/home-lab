@@ -1,40 +1,44 @@
 # Second NetBird routing peer
 
-**Planned, not allocated or installed.** This definition prepares [#1097](https://github.com/kelchm/home-lab/issues/1097). VM 103 remains the only routing peer and still uses its NAS vendor reference. [#1099](https://github.com/kelchm/home-lab/pull/1099) prepares the local-startup repair; it has not been installed. Merging these files deploys nothing: Flux reconciles `kubernetes/apps`, and PVE, NetBird Cloud and UniFi changes require an administrator's separate approved window. No key, guest, firewall edit or failover test was created by preparation.
+VM 104 is NetBird's second routing peer. It was installed and enrolled on 2026-11-08 under [#1097](https://github.com/kelchm/home-lab/issues/1097) by the sequence below; the [installation evidence](https://github.com/kelchm/home-lab/issues/1097#issuecomment-6729072987) is on that issue. With VM 103 on `pve-sbx-1`, both peers are in the routers group and serve the same three resources. Client failover between them is unmeasured: the independent-path/H1/R1 baseline in [#625](https://github.com/kelchm/home-lab/issues/625) needs its own approved window, followed by rolling upgrades and the stage-2 rename one router at a time. #1096's host-boot acceptance stays open for the next separately authorized planned host boot.
 
-The approved design order is **103 local-startup repair (#1096) → second peer (#1097) → independent-path/H1/R1 baseline → rolling upgrades and stage-2 rename**. Install #1096 and verify 103's unchanged identity, version and generated cloud-init data before activating 104. Its actual host-boot acceptance remains open for the next separately authorized planned host boot; do not delay redundancy solely to manufacture a power cycle, credit #625/P6 early or fault shared NAS storage.
+Manage 104 like 103, through the guest agent on its host: `ssh kelchm@pve-sbx-2`, then `sudo qm guest exec 104 -- netbird status`. Main cannot reach the VM's SSH.
 
-## Proposed definition and evidence
+## Installed definition
 
-| Setting | Proposed value |
+Read back on 2026-11-08:
+
+| Setting | Value |
 |---|---|
 | VM / name / host | `104` / `netbird-router-2` / `pve-sbx-2` (`10.32.20.22`) |
 | Address | `10.32.19.104/24`, gateway/resolver `10.32.19.1`, search `home.kelch.io`, VLAN 19 on `vmbr0` |
-| Source / disks | Full clone of Debian 13 template 9000 on node 1, stopped offline migration to node 2; root 8 GiB, EFI and cloud-init on node 2 `local-lvm` |
+| Source / disks | Full clone of Debian 13 template 9000 on node 1, stopped offline migration to node 2; root 8 GiB, EFI and cloud-init on node 2 `local-lvm`, with no `base-9000` dependency |
 | Resources / firmware | 1 vCPU, 1024 MiB; inherited `x86-64-v2-AES`, q35/OVMF, existing EFI secure-boot settings and `virtio-scsi-single` |
-| Identity | New generated MAC, SMBIOS UUID, vmgenid, machine ID and NetBird identity; never clone an enrolled router |
-| Cloud-init | Existing approved operator public SSH key and user `kelchm`; retain default `ciupgrade=1` |
-| Vendor / helper | [`vendor-data.yaml`](vendor-data.yaml) at `local:snippets/netbird-router-2.yaml`; embeds the [shared credential-free enrollment helper](../netbird-router/netbird-router-enroll.sh) |
-| NetBird | Exact `0.79.0`, apt preference plus hold; client routes/DNS disabled at enrollment; IPv4 forwarding, kernel WireGuard |
-| Routing | Existing routers group `dasjbl3l0ubs738ubh10`, Network `dasjblifadhs73btnb40`, router object `dasjboifadhs73btp080`; group metric 9999 and masquerade preserved |
-| Startup / protection | Staging `onboot=0`, NIC down, stopped; after bootstrap/definition validation `onboot=1`, `startup=order=10,up=30`, `protection=1`; no PVE HA relocation |
-| Backup | Existing all-guest `daily-backups`, 05:00 America/New_York, existing retention and destination; verify the first successful post-enrollment archive later |
+| Identity | Fresh MAC, SMBIOS UUID, vmgenid, machine ID and NetBird WireGuard key, each distinct from 103 and template 9000; never clone an enrolled router |
+| Cloud-init | User `kelchm` with the operator key `SHA256:2GmeRvteq/52xGPMBHWtTC9tJ69pok60DB41bn74M3g` (the same as 103); default `ciupgrade=1`; instance ID `d0de10ad67ebd78d279aea87ac02cd1c1b4602d4` |
+| Vendor / helper | [`vendor-data.yaml`](vendor-data.yaml) at `local:snippets/netbird-router-2.yaml`, on `pve-sbx-2` only, root `0644`, SHA-256 `c9aed81b8f46da6aacb9d5ee12fb43df97043394363cfb5eb09c81876cdd4898`. Its header comment predates installation; leave the bytes unchanged so they keep matching the installed copy. It embeds the [shared credential-free enrollment helper](../netbird-router/netbird-router-enroll.sh). |
+| OS | Debian 13, kernel 6.12.116 after the first-boot upgrade (103 runs 6.12.113); unattended-upgrades enabled |
+| NetBird | `0.79.0` with an apt preference and hold; peer `netbird-router-2` in `All` and `routers` only, login and inactivity expiration off; client routes and DNS disabled; IPv4 forwarding, kernel WireGuard |
+| Routing | Routers group `dasjbl3l0ubs738ubh10` (both peers), Network `dasjblifadhs73btnb40`, router object `dasjboifadhs73btp080`; group metric 9999 and masquerade unchanged |
+| UniFi | `10.32.19.104` is in the `NetBird Routers` Network List with `.103`, so both NetBird HTTPS forwards and their generated returns cover it |
+| Startup / protection | `onboot=1`, `startup=order=10,up=30`, `protection=1`, tags `netbird;remote-access`; not a PVE HA resource |
+| Backup | All-guest `daily-backups`, 05:00 America/New_York. The first post-enrollment archive is due on 2026-11-09 and has not been verified yet. |
 
-Saved read-only inventory from 2026-10-29 supports this placement: VMID 104 and local-lvm volumes were absent across three nodes; node 2 was online/quorate with about 28.75 GiB available RAM and 793.80 GiB local-lvm capacity. VLAN 19 was allowed on its bridge. UniFi active/history tables showed no `.104` assignment; DHCP is disabled on VLAN 19. These are dated observations, **not a reservation**, a conflict proof or a hardware/power-reliability result. Preserve retired 101/102 and their addresses/archives. Fresh allocation/capacity/task/ownership checks are required in the approved window.
+The enrolling key was one-off with a one-day expiry and was revoked right after use. From 104, Jellyfin `/health` and Grafana `/api/health` return HTTP 200 with validated TLS, and DNS to `10.32.30.1` answers over UDP and TCP; `10.32.130.1:80`, `10.32.140.1:80`, `10.32.20.21:8006` and `10.32.130.2:53` time out while answering from Main. Its routed-traffic filter matches 103's: clients may reach only TCP 443 on `10.32.140.1` and `10.32.130.1` and port 53 on `10.32.30.1`.
 
-PVE's installed clone/migration source supports full clone locally on node 1 followed by stopped migration of 104 to node 2. Direct cross-host clone of local-only template/storage is rejected. Template, 103 and its availability stay untouched. Clone/migration/bootstrap and the new guest's node-2 datapath are unexecuted. Shared gateway, switch/trunks, VLAN, DNS, WAN/relays, Cloud, PVE control plane, software lineage and NAS backups remain dependencies; physical power-domain independence is unverified.
+Retired VMIDs and addresses 101/102 stay reserved. Shared gateway, switch/trunks, VLAN, DNS, WAN/relays, Cloud, PVE control plane, software lineage and NAS backups remain common dependencies; physical power-domain independence is unverified.
 
 ## First-boot packages and future instances
 
 104 deliberately retains PVE's default Debian first-boot package/security upgrades. Cloud-init performs that package phase before `runcmd`; the NetBird repository is not yet present, so suppressing `ciupgrade` is unnecessary to pin NetBird. The new vendor file explicitly installs `netbird=0.79.0`, writes an apt preference and holds that package. It starts/enables the guest agent before its own NetBird bootstrap, bounds curl fetches and apt acquisition timeouts, and stops on key/version failure. The preceding cloud-init package phase still has to complete before those commands run; early guest-agent availability is not guaranteed during that phase.
 
-103 was dist-upgraded on 2026-09-27; 104 uses the template and Debian packages available at its later first boot. Record both kernels, package skew, WireGuard module and unattended-upgrades configuration in the baseline. Matching NetBird versions does not mean identical OS packages. The old 103 vendor bytes remain SHA-256 `1c45c56620287cce1825e8af4ed7a03c7f316dd7a10744a5ad102a06a14dc52a`; do not rewrite that baseline or its historical snippets.
+103 was dist-upgraded on 2026-09-27. 104's first boot on 2026-11-08 applied 51 Debian upgrades, including kernel 6.12.116, and 104 was rebooted onto that kernel before enrollment. Matching NetBird versions does not mean identical OS packages. The old 103 vendor bytes remain SHA-256 `1c45c56620287cce1825e8af4ed7a03c7f316dd7a10744a5ad102a06a14dc52a`; do not rewrite that baseline or its historical snippets.
 
 A future hostname/user/key/network change creates a new cloud-init instance and can upgrade Debian packages/kernel again. Handle that and a stage-2 rename in an explicit future window after the baseline. 104's NetBird hold/preference must be deliberately replaced with the reviewed next version during its separately approved rolling upgrade. Never silently fall back to latest if 0.79.0 is unavailable. The preparation verified the public 0.79.0 package hash (`1fd041f1452fe4e0c9dfff3a51ba11087e465c7d11004d6852bea4887f02566f`); actual apt installation must freshly verify signed repository metadata. Linux 0.79.0's inspected auto-updater is unsupported, but do not infer other clients' update behavior from that.
 
-## Approved installation sequence
+## Installation sequence
 
-This is a staged procedure, not an execution record or a request to run it now. After review, root's concrete activation request covers allocation of 104/`.104` on node 2; installing/verifying #1096 on 103; the reviewed stopped clone/migration/snippet/bootstrap, conflict probes and network checks; and administrator UniFi/Cloud enrollment changes. It explicitly names the remaining #1096 host-boot/P6 acceptance gate. Disruptive H1/R1 tests require a later approval. Hard stops, host reboot/power tests, restores, backup starts, deletion, upgrades and renames are outside that installation request.
+The 2026-11-08 installation followed this sequence. Reuse it, with its own approval, for a rebuild with a new key and peer (see [Withdrawal and identity recovery](#withdrawal-and-identity-recovery)). For a rebuild at `.104`, first remove `.104` from the `NetBird Routers` list, keeping `.103`, so the new guest has no ingress access until the step 5 conflict gate passes; step 6 adds it back. Disruptive H1/R1 tests, hard stops, host reboot/power tests, restores, backup starts, deletion, upgrades and renames are outside it.
 
 ### 1. Refresh prerequisites and isolate the clone
 
@@ -153,6 +157,6 @@ The helper bounds stdin/enrollment, uses a unique `0600` `/run` file and exit/si
 
 ## Withdrawal and identity recovery
 
-For an approved withdrawal, first prove 103 healthy and serving the away path. Gracefully stop 104 on its actual host, set `onboot=0`/NIC down, withdraw only peer 104 from the routers group (or its peer), revoke the key and remove only `.104` from both forward source arrays; verify generated returns and `.103` service. Preserve friendly renames, all other semantics, the good #1096 repair and old snippets. On an unresponsive/ambiguous guest, keep isolation/protection and diagnose rather than auto-hard-stop/destroy. Leave the protected stopped guest for an explicit disposition.
+For an approved withdrawal, first prove 103 healthy and serving the away path. Gracefully stop 104 on its actual host, set `onboot=0`/NIC down, withdraw only peer 104 from the routers group (or its peer), revoke any unused key and remove only `.104` from the `NetBird Routers` list; verify the regenerated returns and `.103` service. Preserve friendly renames, all other semantics, the good #1096 repair and old snippets. On an unresponsive/ambiguous guest, keep isolation/protection and diagnose rather than auto-hard-stop/destroy. Leave the protected stopped guest for an explicit disposition.
 
 After failed-node ownership, **rebuild with a new key/peer is the default**. Moving a config owned by a failed host is not routine automatic recovery. Identity-preserving restore is separate and undrilled: fence every old instance, choose an exact successful post-enrollment archive and its archived snippet bytes, establish node/VMID ownership and local storage capability, restore without `--unique` or incidental name/network/cloud-init edits, re-protect and verify before start. Never restore 103's identity into 104 or run two copies of one identity. `vzdump` does not independently archive the external host snippet; retain every filename/hash referenced by old archives, including 103's historical NAS file. Backups share NAS; neither host/power/backend failure nor restore acceptance is established here.
