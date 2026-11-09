@@ -1,9 +1,10 @@
-"""Home · E-paper: the whole lab on one 1600×1200 black-and-white page.
+"""Home · E-paper: the whole lab on one 1600×1200 page in four greys.
 
-Inker captures the dashboard in kiosk mode with the light theme, stretches its contrast, and dithers to one bit.
-So the page is drawn in solid black on the page's own white: no
-colour carries meaning, nothing is filled grey, and every panel is transparent. Grey would also dither into noise that
-compresses badly, and Inker shrinks any image whose PNG passes 90 kB. Thirty grid rows fill the page without scrolling.
+Inker captures the dashboard in kiosk mode with the light theme and passes the screenshot through in grey (its preview
+mode; einkPreview would dither it to one bit). So the page uses four flat shades and no colour: black for words, numbers
+and data; dark grey for secondary words, rules and warnings; light grey for chart fills, what is left of a capacity and
+lesser alerts; and the page's white. Every panel is transparent. Antialiasing adds in-between shades at edges. Preview
+mode bypasses Inker's one-bit processing and its 90 kB downscaling limit. Thirty grid rows fill the page without scrolling.
 
 One query, `systems`, runs Home's own health rules (overview.Q) and returns every row the page needs about health: a
 level for each system, the headline, and the list of what needs attention. The other panels read it through the
@@ -15,12 +16,22 @@ from .schema import Panels, T, by_name, by_ref, dashboard, datasource_variable, 
 from .widgets import BB, HOSTS, K, SYN, UNI
 
 INK = "#000000"
+DARK = "#555555"
+LIGHT = "#BBBBBB"   # brightness 187 exceeds Grafana's 180 cutoff for dark text on a solid background
 PAGE = "#FAFAFA"   # the light theme's page: a state drawn in it disappears into the white
+
+
+def tint(shade):
+    """The fill opacity that turns a black series into this shade on the page, so a chart keeps its black line."""
+    return round(100 * (1 - int(shade[1:3], 16) / 255))
+
+
 LAST = {"calcs": ["lastNotNull"], "fields": "", "values": False}
 DAY = {"timeFrom": "24h", "hideTimeOverride": True, "maxDataPoints": 300, "interval": "5m"}
 WEEK = {"timeFrom": "7d", "hideTimeOverride": True, "maxDataPoints": 400, "interval": "30m"}
-# A warning or critical turns its text white on black; anything quieter stays black on white.
-LOUD = th([{"value": None, "color": "transparent"}, {"value": 2, "color": INK}])
+# Home's levels, darker as they get worse: worth a look on light grey, a warning white on dark grey, a critical white on black.
+SEVERITY = [{"value": 1, "color": LIGHT}, {"value": 2, "color": DARK}, {"value": 3, "color": INK}]
+LOUD = th([{"value": None, "color": "transparent"}, *SEVERITY])
 INSET = 12   # where a stat's or a chart's own text starts inside its panel
 
 P = Panels()
@@ -41,24 +52,24 @@ def shape(kind, name, config, left=None, width=None, right=None, top=0, height=1
             "placement": placement, "constraint": {"horizontal": "leftright" if len(edges) == 2 else next(iter(edges)), "vertical": "top"}}
 
 
-def words_at(text, size):
-    return {"text": {"mode": "fixed", "fixed": text}, "color": {"fixed": INK}, "size": size, "align": "left", "valign": "middle"}
+def words_at(text, size, shade=INK):
+    return {"text": {"mode": "fixed", "fixed": text}, "color": {"fixed": shade}, "size": size, "align": "left", "valign": "middle"}
 
 
 def heading(key, title, title_px, aside="", aside_px=0, queries=(), right=None, **defaults):
-    """A section's name in capitals, a lighter word after it, then a heavy rule to the end of the column.
+    """A section's name in black capitals, a dark grey word after it, then a heavy dark grey rule to the end of the column.
     A canvas, because a text panel one row high has only 12 px inside it. Canvas cannot measure text, so each word carries
     its width in Inter at that size, measured in the browser. right is a field shown at the far end, such as the time."""
     els = [shape("text", "title", words_at(title.upper(), 15), INSET, width=title_px + 4)]
     start, stop = INSET + title_px + 12, 0
     if aside:
-        els.append(shape("text", "aside", words_at(aside, 13), start, width=aside_px + 4))
+        els.append(shape("text", "aside", words_at(aside, 13, DARK), start, width=aside_px + 4))
         start += aside_px + 12
     if right:
-        value = {"text": {"mode": "field", "field": right, "fixed": ""}, "color": {"fixed": INK}, "size": 13, "align": "right", "valign": "middle"}
+        value = {"text": {"mode": "field", "field": right, "fixed": ""}, "color": {"fixed": DARK}, "size": 13, "align": "right", "valign": "middle"}
         els.append(shape("metric-value", "right", value, right=INSET, width=300))
         stop = INSET + 312
-    els.append(shape("rectangle", "rule", words_at("", 1), start, right=stop, top=7, height=3, background=INK))
+    els.append(shape("rectangle", "rule", words_at("", 1), start, right=stop, top=7, height=3, background=DARK))
     opts = {"inlineEditing": False, "showAdvancedTypes": False, "panZoom": False, "infinitePan": False,
             "root": {"type": "frame", "name": "root", "elements": els, "background": {"color": {"fixed": "transparent"}}, "border": {"color": {"fixed": "transparent"}},
                      "constraint": {"horizontal": "left", "vertical": "top"}, "placement": {}}}
@@ -76,7 +87,7 @@ def stat(key, queries, size, label=14, unit=None, decimals=0, names=(), **defaul
 
 
 def words(key, queries, size, text, transformations, mappings, label=None, justify="auto", **defaults):
-    """Text that turns white on black at a warning or critical. The mappings match exact values only: a range would also catch a
+    """Text on a background as dark as its level (see SEVERITY). The mappings match exact values only: a range would also catch a
     line such as "2 things need attention", which Grafana reads as the number 2."""
     P.add(key, "", "stat", queries,
           {"colorMode": "background_solid", "graphMode": "none", "justifyMode": justify, "orientation": "horizontal", "wideLayout": True, "textMode": text, "showPercentChange": False,
@@ -86,12 +97,13 @@ def words(key, queries, size, text, transformations, mappings, label=None, justi
     return bare(key)
 
 
-def chart(key, title, queries, unit, overrides=(), hi=None, fill=0, width=2, **custom):
-    """The shape of the last day in black: no axes, since the number above it gives the scale, and a black line at zero to stand on."""
+def chart(key, title, queries, unit, overrides=(), hi=None, fill=tint(LIGHT), width=2, **custom):
+    """The last day as a black line over a grey fill: no axes, since the number above it gives the scale, and a dark grey line at
+    zero to stand on, so the data is the only black in the chart."""
     c = {"drawStyle": "line", "lineInterpolation": "linear", "lineWidth": width, "fillOpacity": fill, "gradientMode": "none", "showPoints": "never", "spanNulls": 600000,
          "axisBorderShow": False, "axisGridShow": False, "axisPlacement": "hidden", "axisSoftMin": 0, "stacking": {"mode": "none", "group": "A"}, "thresholdsStyle": {"mode": "line"},
          **custom}
-    d = {"unit": unit, "decimals": 0, "color": fixed(INK), "custom": c, "thresholds": th([{"value": None, "color": "transparent"}, {"value": 0, "color": INK}]),
+    d = {"unit": unit, "decimals": 0, "color": fixed(INK), "custom": c, "thresholds": th([{"value": None, "color": "transparent"}, {"value": 0, "color": DARK}]),
          **({"max": hi} if hi is not None else {})}
     time_axis = {"matcher": {"id": "byType", "options": "time"}, "properties": [{"id": "custom.axisPlacement", "value": "hidden"}]}
     P.add(key, title, "timeseries", queries, {"legend": {"showLegend": False, "displayMode": "list", "placement": "bottom", "calcs": []}, "tooltip": {"mode": "none"}}, d,
@@ -128,9 +140,9 @@ def ranked(key, expr, by, fmt, width):
 
 
 def fullness(key, pct, by, width):
-    """How full each thing is: solid black for what is used and an outline for what is left, on one scale to 100%."""
+    """How full each thing is: black for what is used and light grey for what is left, on one scale to 100%."""
     used = labelled(pct, by, "$1%")
-    return bars(key, [table(used, "A"), table(f"100 - {used}", "B")], stacking="normal", width=width, max=100, overrides=[by_name("Value #B", custom__fillOpacity=0)],
+    return bars(key, [table(used, "A"), table(f"100 - {used}", "B")], stacking="normal", width=width, max=100, overrides=[by_name("Value #B", color=fixed(LIGHT))],
                 transformations=[T("joinByField", byField="bar", mode="outer"),
                                  T("organize", excludeByName={f"{f} {i}": True for f in ("Time", by) for i in (1, 2)}, indexByName={"bar": 0}, renameByName={})])
 
@@ -227,9 +239,9 @@ state("net-state", "network")
 stat("net-hero", [q(WAN_IN, "in", "A"), q(WAN_OUT, "out", "B")], 32, unit="bps", decimals=1)
 stat("net-day", [q(f"sum(increase(unpoller_device_wan_receive_bytes_total{{{UNI}}}[24h]))", "in, 24 h", "A"),
                  q(f"sum(increase(unpoller_device_wan_transmit_bytes_total{{{UNI}}}[24h]))", "out, 24 h", "B")], 26, unit="decbytes")
-# On a symmetric log scale, so the quiet hours keep a shape beside the busy ones.
-chart("net-chart", "Internet · 24 h · in above the line, out below", [series(WAN_IN, "in", "A"), series(WAN_OUT, "out", "B")], "bps", fill=100, width=1,
-      overrides=[by_name("out", custom__transform="negative-Y")], scaleDistribution={"type": "symlog", "log": 10, "linearThreshold": 1000000})
+# On a symmetric log scale, so the quiet hours keep a shape beside the busy ones. Download, the bigger of the two, is the darker.
+chart("net-chart", "Internet · 24 h · in above the line, out below", [series(WAN_IN, "in", "A"), series(WAN_OUT, "out", "B")], "bps", fill=tint(DARK), width=1,
+      overrides=[by_name("out", custom__transform="negative-Y", custom__fillOpacity=tint(LIGHT))], scaleDistribution={"type": "symlog", "log": 10, "linearThreshold": 1000000})
 stat("net-facts", [q(WAN_MS, "{{wan}}", "A"), q(f'sum(unpoller_device_stations{{{UNI},station_type="user"}})', "clients", "B"),
                    q(f"count(unpoller_device_info{{{UNI}}})", "UniFi devices", "C")], 22, label=13, names=[by_ref("A", unit="ms")])
 
@@ -238,8 +250,9 @@ heading("spark-head", "Sparks", 58, "inference", 58)
 state("spark-state", "spark")
 stat("spark-hero", [q("100 * max(nvidia_smi_utilization_gpu_ratio)", "GPU busy", "A"), q("sum(nvidia_smi_power_draw_watts)", "drawing", "B")], 36,
      names=[by_name("GPU busy", unit="percent"), by_name("drawing", unit="watt")])
-chart("spark-chart", "GPU power, both Sparks · 24 h", [series("max by (instance) (nvidia_smi_power_draw_watts)", "{{instance}}")], "watt", fill=100, width=1,
-      stacking={"mode": "normal", "group": "A"})
+# Stacked, spark-1 dark under spark-2 light, each edged in black, so either one's share reads at a glance.
+chart("spark-chart", "GPU power, both Sparks · 24 h", [series("max by (instance) (nvidia_smi_power_draw_watts)", "{{instance}}")], "watt", fill=tint(LIGHT), width=1,
+      overrides=[by_name("spark-1", custom__fillOpacity=tint(DARK))], stacking={"mode": "normal", "group": "A"})
 # TensorFold reports only while it serves a model, so its numbers drop out rather than read zero while none is loaded.
 stat("spark-facts", [q("sum(tensorfold:requests_running)", "requests", "A"), q("sum(increase(tensorfold:generation_tokens_total[24h]))", "tokens, 24 h", "B"),
                      q("max(nvidia_smi_temperature_gpu)", "hottest GPU", "C")], 22, label=13,
@@ -281,11 +294,12 @@ P.add("dev-heat", "", "stat", [q(f"sort_desc({DEVICE_HEAT})", "{{instance}}")],
        "reduceOptions": LAST, "text": {"titleSize": 14, "valueSize": 16}}, {"color": fixed(INK), "unit": "celsius", "decimals": 0, "noValue": "–"})
 bare("dev-heat")
 
-# ------------------------------------------------------------------ the week: Home's alert strip, in black where a warning or critical fired
-heading("week-head", "Alerts", 57, "warnings and criticals on each system", 236)
+# ------------------------------------------------------------------ the week: Home's alert strip, in Home's levels, darker as they get worse
+# The aside's width is estimated from the width measured for the earlier, shorter wording, with room to spare.
+heading("week-head", "Alerts", 57, "worst alert on each system · darker is worse", 280)
 P.add("week", "", "state-timeline", [q(w.QS(e.ordered(f"max_over_time(({e.ALEVEL})[30m:5m])")), "{{system}}", instant=False, interval="30m")],
       {"alignValue": "left", "legend": {"showLegend": False}, "mergeValues": True, "rowHeight": 0.8, "showValue": "never", "tooltip": {"mode": "none"}},
-      {"color": {"mode": "thresholds"}, "thresholds": th([{"value": None, "color": PAGE}, {"value": 2, "color": INK}]), "custom": {"fillOpacity": 100, "lineWidth": 0, "spanNulls": False}},
+      {"color": {"mode": "thresholds"}, "thresholds": th([{"value": None, "color": PAGE}, *SEVERITY]), "custom": {"fillOpacity": 100, "lineWidth": 0, "spanNulls": False}},
       qopts=WEEK)
 bare("week")
 
@@ -326,7 +340,7 @@ def build():
             if pq["spec"]["query"]["group"] == "datasource":
                 pq["spec"]["query"]["spec"]["panelId"] = elements["systems"]["spec"]["id"]
     items = [{"kind": "GridLayoutItem", "spec": {"x": x, "y": y, "width": wd, "height": h, "element": ref(name)}} for name, x, y, wd, h in LAYOUT]
-    d = dashboard("home-eink", "Home · E-paper", "The whole lab on one page for a 1600×1200 black-and-white e-paper display: Home's health judgement, then each system's numbers "
+    d = dashboard("home-eink", "Home · E-paper", "The whole lab on one page for a 1600×1200 four-grey e-paper display: Home's health judgement, then each system's numbers "
                   "and its last day. Capture the whole dashboard in kiosk mode with the light theme.", ["overview", "e-paper"], [datasource_variable()], elements,
                   {"kind": "GridLayout", "spec": {"items": items}})
     s = d["spec"]

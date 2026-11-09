@@ -6,7 +6,7 @@
   },
   "spec": {
     "title": "Home · E-paper",
-    "description": "The whole lab on one page for a 1600×1200 black-and-white e-paper display: Home's health judgement, then each system's numbers and its last day. Capture the whole dashboard in kiosk mode with the light theme.",
+    "description": "The whole lab on one page for a 1600×1200 four-grey e-paper display: Home's health judgement, then each system's numbers and its last day. Capture the whole dashboard in kiosk mode with the light theme.",
     "annotations": [],
     "cursorSync": "Off",
     "editable": false,
@@ -152,7 +152,7 @@
                           "fixed": ""
                         },
                         "color": {
-                          "fixed": "#000000"
+                          "fixed": "#555555"
                         },
                         "size": 13,
                         "align": "right",
@@ -198,7 +198,7 @@
                       },
                       "background": {
                         "color": {
-                          "fixed": "#000000"
+                          "fixed": "#555555"
                         }
                       },
                       "border": {
@@ -348,7 +348,15 @@
                         "color": "transparent"
                       },
                       {
+                        "value": 1,
+                        "color": "#BBBBBB"
+                      },
+                      {
                         "value": 2,
+                        "color": "#555555"
+                      },
+                      {
+                        "value": 3,
                         "color": "#000000"
                       }
                     ]
@@ -509,7 +517,15 @@
                         "color": "transparent"
                       },
                       {
+                        "value": 1,
+                        "color": "#BBBBBB"
+                      },
+                      {
                         "value": 2,
+                        "color": "#555555"
+                      },
+                      {
+                        "value": 3,
                         "color": "#000000"
                       }
                     ]
@@ -627,7 +643,7 @@
                           "fixed": "k8s-prod"
                         },
                         "color": {
-                          "fixed": "#000000"
+                          "fixed": "#555555"
                         },
                         "size": 13,
                         "align": "left",
@@ -673,7 +689,7 @@
                       },
                       "background": {
                         "color": {
-                          "fixed": "#000000"
+                          "fixed": "#555555"
                         }
                       },
                       "border": {
@@ -842,7 +858,15 @@
                         "color": "transparent"
                       },
                       {
+                        "value": 1,
+                        "color": "#BBBBBB"
+                      },
+                      {
                         "value": 2,
+                        "color": "#555555"
+                      },
+                      {
+                        "value": 3,
                         "color": "#000000"
                       }
                     ]
@@ -1178,7 +1202,7 @@
                     "drawStyle": "line",
                     "lineInterpolation": "linear",
                     "lineWidth": 2,
-                    "fillOpacity": 0,
+                    "fillOpacity": 27,
                     "gradientMode": "none",
                     "showPoints": "never",
                     "spanNulls": 600000,
@@ -1203,7 +1227,7 @@
                       },
                       {
                         "value": 0,
-                        "color": "#000000"
+                        "color": "#555555"
                       }
                     ]
                   }
@@ -1462,7 +1486,7 @@
                           "fixed": "internet and Wi-Fi"
                         },
                         "color": {
-                          "fixed": "#000000"
+                          "fixed": "#555555"
                         },
                         "size": 13,
                         "align": "left",
@@ -1508,7 +1532,7 @@
                       },
                       "background": {
                         "color": {
-                          "fixed": "#000000"
+                          "fixed": "#555555"
                         }
                       },
                       "border": {
@@ -1677,7 +1701,15 @@
                         "color": "transparent"
                       },
                       {
+                        "value": 1,
+                        "color": "#BBBBBB"
+                      },
+                      {
                         "value": 2,
+                        "color": "#555555"
+                      },
+                      {
+                        "value": 3,
                         "color": "#000000"
                       }
                     ]
@@ -2013,7 +2045,7 @@
                     "drawStyle": "line",
                     "lineInterpolation": "linear",
                     "lineWidth": 1,
-                    "fillOpacity": 100,
+                    "fillOpacity": 67,
                     "gradientMode": "none",
                     "showPoints": "never",
                     "spanNulls": 600000,
@@ -2043,7 +2075,7 @@
                       },
                       {
                         "value": 0,
-                        "color": "#000000"
+                        "color": "#555555"
                       }
                     ]
                   }
@@ -2070,6 +2102,10 @@
                       {
                         "id": "custom.transform",
                         "value": "negative-Y"
+                      },
+                      {
+                        "id": "custom.fillOpacity",
+                        "value": 27
                       }
                     ]
                   }
@@ -2292,7 +2328,7 @@
                           "fixed": "inference"
                         },
                         "color": {
-                          "fixed": "#000000"
+                          "fixed": "#555555"
                         },
                         "size": 13,
                         "align": "left",
@@ -2338,7 +2374,7 @@
                       },
                       "background": {
                         "color": {
-                          "fixed": "#000000"
+                          "fixed": "#555555"
                         }
                       },
                       "border": {
@@ -2507,7 +2543,15 @@
                         "color": "transparent"
                       },
                       {
+                        "value": 1,
+                        "color": "#BBBBBB"
+                      },
+                      {
                         "value": 2,
+                        "color": "#555555"
+                      },
+                      {
+                        "value": 3,
                         "color": "#000000"
                       }
                     ]
@@ -2742,7 +2786,7 @@
                     "drawStyle": "line",
                     "lineInterpolation": "linear",
                     "lineWidth": 1,
-                    "fillOpacity": 100,
+                    "fillOpacity": 27,
                     "gradientMode": "none",
                     "showPoints": "never",
                     "spanNulls": 600000,
@@ -2767,7 +2811,7 @@
                       },
                       {
                         "value": 0,
-                        "color": "#000000"
+                        "color": "#555555"
                       }
                     ]
                   }
@@ -2782,6 +2826,18 @@
                       {
                         "id": "custom.axisPlacement",
                         "value": "hidden"
+                      }
+                    ]
+                  },
+                  {
+                    "matcher": {
+                      "id": "byName",
+                      "options": "spark-1"
+                    },
+                    "properties": [
+                      {
+                        "id": "custom.fillOpacity",
+                        "value": 67
                       }
                     ]
                   }
@@ -3016,7 +3072,7 @@
                           "fixed": "pve-sbx"
                         },
                         "color": {
-                          "fixed": "#000000"
+                          "fixed": "#555555"
                         },
                         "size": 13,
                         "align": "left",
@@ -3062,7 +3118,7 @@
                       },
                       "background": {
                         "color": {
-                          "fixed": "#000000"
+                          "fixed": "#555555"
                         }
                       },
                       "border": {
@@ -3231,7 +3287,15 @@
                         "color": "transparent"
                       },
                       {
+                        "value": 1,
+                        "color": "#BBBBBB"
+                      },
+                      {
                         "value": 2,
+                        "color": "#555555"
+                      },
+                      {
+                        "value": 3,
                         "color": "#000000"
                       }
                     ]
@@ -3592,8 +3656,11 @@
                     },
                     "properties": [
                       {
-                        "id": "custom.fillOpacity",
-                        "value": 0
+                        "id": "color",
+                        "value": {
+                          "mode": "fixed",
+                          "fixedColor": "#BBBBBB"
+                        }
                       }
                     ]
                   }
@@ -3680,7 +3747,7 @@
                           "fixed": "storage"
                         },
                         "color": {
-                          "fixed": "#000000"
+                          "fixed": "#555555"
                         },
                         "size": 13,
                         "align": "left",
@@ -3726,7 +3793,7 @@
                       },
                       "background": {
                         "color": {
-                          "fixed": "#000000"
+                          "fixed": "#555555"
                         }
                       },
                       "border": {
@@ -3895,7 +3962,15 @@
                         "color": "transparent"
                       },
                       {
+                        "value": 1,
+                        "color": "#BBBBBB"
+                      },
+                      {
                         "value": 2,
+                        "color": "#555555"
+                      },
+                      {
+                        "value": 3,
                         "color": "#000000"
                       }
                     ]
@@ -4188,8 +4263,11 @@
                     },
                     "properties": [
                       {
-                        "id": "custom.fillOpacity",
-                        "value": 0
+                        "id": "color",
+                        "value": {
+                          "mode": "fixed",
+                          "fixedColor": "#BBBBBB"
+                        }
                       }
                     ]
                   }
@@ -4424,7 +4502,7 @@
                           "fixed": "UPS battery"
                         },
                         "color": {
-                          "fixed": "#000000"
+                          "fixed": "#555555"
                         },
                         "size": 13,
                         "align": "left",
@@ -4470,7 +4548,7 @@
                       },
                       "background": {
                         "color": {
-                          "fixed": "#000000"
+                          "fixed": "#555555"
                         }
                       },
                       "border": {
@@ -4639,7 +4717,15 @@
                         "color": "transparent"
                       },
                       {
+                        "value": 1,
+                        "color": "#BBBBBB"
+                      },
+                      {
                         "value": 2,
+                        "color": "#555555"
+                      },
+                      {
+                        "value": 3,
                         "color": "#000000"
                       }
                     ]
@@ -4881,7 +4967,7 @@
                     "drawStyle": "line",
                     "lineInterpolation": "linear",
                     "lineWidth": 2,
-                    "fillOpacity": 0,
+                    "fillOpacity": 27,
                     "gradientMode": "none",
                     "showPoints": "never",
                     "spanNulls": 600000,
@@ -4906,7 +4992,7 @@
                       },
                       {
                         "value": 0,
-                        "color": "#000000"
+                        "color": "#555555"
                       }
                     ]
                   },
@@ -5008,7 +5094,7 @@
                           "fixed": "Pis and console"
                         },
                         "color": {
-                          "fixed": "#000000"
+                          "fixed": "#555555"
                         },
                         "size": 13,
                         "align": "left",
@@ -5054,7 +5140,7 @@
                       },
                       "background": {
                         "color": {
-                          "fixed": "#000000"
+                          "fixed": "#555555"
                         }
                       },
                       "border": {
@@ -5223,7 +5309,15 @@
                         "color": "transparent"
                       },
                       {
+                        "value": 1,
+                        "color": "#BBBBBB"
+                      },
+                      {
                         "value": 2,
+                        "color": "#555555"
+                      },
+                      {
+                        "value": 3,
                         "color": "#000000"
                       }
                     ]
@@ -5575,10 +5669,10 @@
                       "config": {
                         "text": {
                           "mode": "fixed",
-                          "fixed": "warnings and criticals on each system"
+                          "fixed": "worst alert on each system · darker is worse"
                         },
                         "color": {
-                          "fixed": "#000000"
+                          "fixed": "#555555"
                         },
                         "size": 13,
                         "align": "left",
@@ -5600,7 +5694,7 @@
                         "left": 81,
                         "top": 0,
                         "height": 16,
-                        "width": 240
+                        "width": 284
                       },
                       "constraint": {
                         "horizontal": "left",
@@ -5624,7 +5718,7 @@
                       },
                       "background": {
                         "color": {
-                          "fixed": "#000000"
+                          "fixed": "#555555"
                         }
                       },
                       "border": {
@@ -5635,7 +5729,7 @@
                         "radius": 0
                       },
                       "placement": {
-                        "left": 329,
+                        "left": 373,
                         "right": 0,
                         "top": 7,
                         "height": 3
@@ -5751,7 +5845,15 @@
                         "color": "#FAFAFA"
                       },
                       {
+                        "value": 1,
+                        "color": "#BBBBBB"
+                      },
+                      {
                         "value": 2,
+                        "color": "#555555"
+                      },
+                      {
+                        "value": 3,
                         "color": "#000000"
                       }
                     ]
