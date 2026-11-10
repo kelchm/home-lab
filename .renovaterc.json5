@@ -87,6 +87,16 @@
       minimumGroupSize: 2,
     },
     {
+      // The routing peers install NetBird from apt, which Debian's automatic
+      // updates skip. The PR records the version; the script applies it.
+      description: "NetBird routing peers: merging stages the version for the upgrade script",
+      matchFileNames: ["proxmox/guests/netbird-router/upgrade-routers.sh"],
+      matchPackageNames: ["netbirdio/netbird"],
+      prBodyNotes: [
+        "Merging changes no router. From an admin device on Main, run `proxmox/guests/netbird-router/upgrade-routers.sh`; it upgrades the two routing peers one at a time and stops if the other one isn't serving.",
+      ],
+    },
+    {
       // A digest-only FROM declares exact content without a tag to follow.
       // Do not guess latest. Tagged references in the same file stay managed.
       // Lock rationale and review process: docs/runbooks/dependency-updates.md.

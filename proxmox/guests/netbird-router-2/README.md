@@ -16,9 +16,9 @@ Read back on 2026-11-08:
 | Resources / firmware | 1 vCPU, 1024 MiB; inherited `x86-64-v2-AES`, q35/OVMF, existing EFI secure-boot settings and `virtio-scsi-single` |
 | Identity | Fresh MAC, SMBIOS UUID, vmgenid, machine ID and NetBird WireGuard key, each distinct from 103 and template 9000; never clone an enrolled router |
 | Cloud-init | User `kelchm` with the operator key `SHA256:2GmeRvteq/52xGPMBHWtTC9tJ69pok60DB41bn74M3g` (the same as 103); default `ciupgrade=1`; instance ID `d0de10ad67ebd78d279aea87ac02cd1c1b4602d4` |
-| Vendor / helper | [`vendor-data.yaml`](vendor-data.yaml) at `local:snippets/netbird-router-2.yaml`, on `pve-sbx-2` only, root `0644`, SHA-256 `c9aed81b8f46da6aacb9d5ee12fb43df97043394363cfb5eb09c81876cdd4898`. Its header comment predates installation; leave the bytes unchanged so they keep matching the installed copy. It embeds the [shared credential-free enrollment helper](../netbird-router/netbird-router-enroll.sh). |
-| OS | Debian 13, kernel 6.12.116 after the first-boot upgrade (103 runs 6.12.113); unattended-upgrades enabled |
-| NetBird | `0.79.0` with an apt preference and hold; peer `netbird-router-2` in `All` and `routers` only, login and inactivity expiration off; client routes and DNS disabled; IPv4 forwarding, kernel WireGuard |
+| Vendor / helper | [`vendor-data.yaml`](vendor-data.yaml) at `local:snippets/netbird-router-2.yaml`, on `pve-sbx-2` only, root `0644`, SHA-256 `59588885e027ab105251574869960c69998b0253a0ea89bb8aa8a009750b06c5`. The 2026-11-08 installation used an earlier revision that pinned NetBird 0.79.0 (`c9aed81b8f46da6aacb9d5ee12fb43df97043394363cfb5eb09c81876cdd4898`); after the upgrade that day the pin was removed here and the installed copy replaced to match. It embeds the [shared credential-free enrollment helper](../netbird-router/netbird-router-enroll.sh). |
+| OS | Debian 13, kernel 6.12.116 after the first-boot upgrade (103 also runs 6.12.116 since 2026-11-08); unattended-upgrades enabled |
+| NetBird | `0.82.0` since 2026-11-08, set by [`upgrade-routers.sh`](../netbird-router/upgrade-routers.sh), with no apt preference or hold; peer `netbird-router-2` in `All` and `routers` only, login and inactivity expiration off; client routes and DNS disabled; IPv4 forwarding, kernel WireGuard |
 | Routing | Routers group `dasjbl3l0ubs738ubh10` (both peers), Network `dasjblifadhs73btnb40`, router object `dasjboifadhs73btp080`; group metric 9999 and masquerade unchanged |
 | UniFi | `10.32.19.104` is in the `NetBird Routers` Network List with `.103`, so both NetBird HTTPS forwards and their generated returns cover it |
 | Startup / protection | `onboot=1`, `startup=order=10,up=30`, `protection=1`, tags `netbird;remote-access`; not a PVE HA resource |
@@ -30,11 +30,11 @@ Retired VMIDs and addresses 101/102 stay reserved. Shared gateway, switch/trunks
 
 ## First-boot packages and future instances
 
-104 deliberately retains PVE's default Debian first-boot package/security upgrades. Cloud-init performs that package phase before `runcmd`; the NetBird repository is not yet present, so suppressing `ciupgrade` is unnecessary to pin NetBird. The new vendor file explicitly installs `netbird=0.79.0`, writes an apt preference and holds that package. It starts/enables the guest agent before its own NetBird bootstrap, bounds curl fetches and apt acquisition timeouts, and stops on key/version failure. The preceding cloud-init package phase still has to complete before those commands run; early guest-agent availability is not guaranteed during that phase.
+104 deliberately retains PVE's default Debian first-boot package/security upgrades. Cloud-init performs that package phase before `runcmd`; the NetBird repository is not yet present, so suppressing `ciupgrade` is unnecessary to pin NetBird. The vendor file installs NetBird's current stable package; [`upgrade-routers.sh`](../netbird-router/upgrade-routers.sh) then sets the declared version. The installed revision pinned and held 0.79.0 until the 2026-11-08 upgrade. It starts/enables the guest agent before its own NetBird bootstrap, bounds curl fetches and apt acquisition timeouts, and stops on key/version failure. The preceding cloud-init package phase still has to complete before those commands run; early guest-agent availability is not guaranteed during that phase.
 
-103 was dist-upgraded on 2026-09-27. 104's first boot on 2026-11-08 applied 51 Debian upgrades, including kernel 6.12.116, and 104 was rebooted onto that kernel before enrollment. Matching NetBird versions does not mean identical OS packages. The old 103 vendor bytes remain SHA-256 `1c45c56620287cce1825e8af4ed7a03c7f316dd7a10744a5ad102a06a14dc52a`; do not rewrite that baseline or its historical snippets.
+103 was dist-upgraded on 2026-09-27 and again at its renamed first boot on 2026-11-08. 104's first boot on 2026-11-08 applied 51 Debian upgrades, including kernel 6.12.116, and 104 was rebooted onto that kernel before enrollment. Matching NetBird versions does not mean identical OS packages. The old 103 vendor bytes remain SHA-256 `1c45c56620287cce1825e8af4ed7a03c7f316dd7a10744a5ad102a06a14dc52a`; do not rewrite that baseline or its historical snippets.
 
-A future hostname/user/key/network change creates a new cloud-init instance and can upgrade Debian packages/kernel again. Handle that and a stage-2 rename in an explicit future window after the baseline. 104's NetBird hold/preference must be deliberately replaced with the reviewed next version during its separately approved rolling upgrade. Never silently fall back to latest if 0.79.0 is unavailable. The preparation verified the public 0.79.0 package hash (`1fd041f1452fe4e0c9dfff3a51ba11087e465c7d11004d6852bea4887f02566f`); actual apt installation must freshly verify signed repository metadata. Linux 0.79.0's inspected auto-updater is unsupported, but do not infer other clients' update behavior from that.
+A future hostname/user/key/network change creates a new cloud-init instance and can upgrade Debian packages/kernel again. Restart immediately after such a change, then run `upgrade-routers.sh` to return NetBird to the declared version. The 0.79.0 preference and hold were removed from the running VM during the 2026-11-08 upgrade. Apt installation verifies signed repository metadata. Linux 0.79.0's inspected auto-updater is unsupported, but do not infer other clients' update behavior from that.
 
 ## Installation sequence
 
@@ -94,7 +94,7 @@ In an approved node-2 Bash session, use that exact path, verify all transfer has
 transfer='/tmp/netbird-router-2.<this-run>'
 (cd "$transfer" && sha256sum --check SHA256SUMS)
 sudo bash "$transfer/provision-snippet.sh" "$transfer/vendor-data.yaml" netbird-router-2.yaml \
-  c9aed81b8f46da6aacb9d5ee12fb43df97043394363cfb5eb09c81876cdd4898
+  59588885e027ab105251574869960c69998b0253a0ea89bb8aa8a009750b06c5
 sudo qm set 104 --cicustom vendor=local:snippets/netbird-router-2.yaml --onboot 0
 ```
 
