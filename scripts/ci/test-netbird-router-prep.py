@@ -279,7 +279,7 @@ class Definition(unittest.TestCase):
         self.assertIn('package_upgrade: true', vendor)
         self.assertIn('--connect-timeout 10 --max-time 60', vendor)
         # upgrade-routers.sh sets the version; a first-boot pin would undo it on a new instance.
-        self.assertIn('install --yes netbird\n', vendor)
+        self.assertRegex(vendor, r'(?m)^[ \t]*DEBIAN_FRONTEND=noninteractive apt-get .* install --yes netbird$')
         for text in ['Pin: version', 'netbird=', 'apt-mark hold']:
             self.assertNotIn(text, vendor)
         commands = vendor.split('runcmd:', 1)[1]

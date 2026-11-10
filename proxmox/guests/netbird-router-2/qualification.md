@@ -1,6 +1,6 @@
 # Two-peer qualification procedure
 
-**NOT EXECUTED. Requires explicit disruptive-test approval after installation and independent path verification.** Matt is physically at home with a working Main-to-PVE management session throughout. At least one client uses cellular/hotspot or another genuine away network, while another stays on Main. No client NetBird toggle, daemon restart, route selection override, location script, policy change, or metric change may be used to pass a row.
+**NOT EXECUTED.** #625 and #1097 closed by owner decision without it: clients moved between routers without help during the 2026-11-08 upgrades ([runbook](../../../docs/runbooks/netbird-remote-access.md#second-router-and-qualification)), and timed failover is left to normal use. The version and hostname details below are as of 2026-11-07. Running it still requires explicit disruptive-test approval. Matt is physically at home with a working Main-to-PVE management session throughout. At least one client uses cellular/hotspot or another genuine away network, while another stays on Main. No client NetBird toggle, daemon restart, route selection override, location script, policy change, or metric change may be used to pass a row.
 
 ## Entry gates and instrumentation
 

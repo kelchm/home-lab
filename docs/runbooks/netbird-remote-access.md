@@ -55,7 +55,7 @@ Every enabled resource policy names its resource directly, and no policy names a
 
 The export also contains peer addresses and IDs. Compare it against the table above, record the differences and the verified state in the issue for the change, and keep the raw files out of Git and issue comments. Run it before and after every NetBird Cloud change.
 
-The script exits non-zero if any request fails. Its first full run, on 2026-10-28, succeeded for every endpoint and produced the table above. The Auditor token gets HTTP 403 from `users/current` and from other users' token lists, neither of which the script reads.
+The script exits non-zero if any request fails. Its first full run, on 2026-10-28, succeeded for every endpoint; the table above is from the 2026-11-08 runs. The Auditor token gets HTTP 403 from `users/current` and from other users' token lists, neither of which the script reads.
 
 ## Clients and upgrades
 
@@ -64,7 +64,7 @@ Read back on 2026-11-08:
 | Peer | Installed from | Version | Upgrade owner and effect |
 |---|---|---|---|
 | `netbird-router-1`, `netbird-router-2` | Debian package from `pkgs.netbird.io` `stable`; vendor data installs it at first boot | 0.82.0 | Renovate opens a PR for each NetBird release against [`upgrade-routers.sh`](../../proxmox/guests/netbird-router/upgrade-routers.sh). Merging changes no router; running the script upgrades them one at a time, and away clients move to the other router ([procedure](../../proxmox/guests/netbird-router/README.md#upgrades)). |
-| Hyperion | Homebrew `netbirdio/tap/netbird` (daemon and CLI) and cask `netbirdio/tap/netbird-ui`; LaunchDaemon `netbird` runs `/opt/homebrew/bin/netbird service run` | 0.81.5 | Operator, with `brew upgrade`. A `netbird-ui` cask upgrade removes and reinstalls the service; an interrupted one on 2026-10-28 left no daemon until the upgrade was rerun. Check `netbird status` after upgrading. |
+| Hyperion | Homebrew `netbirdio/tap/netbird` (daemon and CLI) and cask `netbirdio/tap/netbird-ui`; LaunchDaemon `netbird` runs `/opt/homebrew/bin/netbird service run` | 0.81.5, daemon and CLI read back on 2026-11-10 | Operator, with `brew upgrade`. A `netbird-ui` cask upgrade removes and reinstalls the service; an interrupted one on 2026-10-28 left no daemon until the upgrade was rerun. Check `netbird status` after upgrading. |
 | Persephone | — | 0.82.0, reported by management | Operator |
 | iPhone | App Store | Management reports build `ci-cb7ca8ef` | App Store updates |
 
@@ -120,7 +120,7 @@ VM 103 saves `vendor=local:snippets/netbird-router-1.yaml` since its 2026-11-08 
 
 The [node-local startup installation](../../proxmox/guests/netbird-router/local-startup.md#accepted-installation-2026-10-29) for [#1096](https://github.com/kelchm/home-lab/issues/1096) was separately authorized, completed and verified on 2026-10-29 at 11:56 UTC. Only the saved vendor reference/digest changed; the byte-identical file, generated user/network/meta hashes, hostname, instance ID, enrolled peer, NetBird version and running QEMU process were preserved. The running cloud-init medium was not regenerated; its old NAS vendor value with the local value pending is expected until a normal start. Enabling snippets on `local` retained all previous cluster-wide content flags; the file itself must be provisioned on every chosen migration/restore node. Keep the old NAS snippet for older archives, including the verified post-enrollment backup that predates this installation. Backup completion does not establish identity recovery; restore remains undrilled.
 
-Installation acceptance does not establish automatic return after a host reboot, and the 2026-11-08 operator restarts were not host boots. At the next planned host boot, check that VM 103 started by itself. Do not reboot solely for this or fault shared NFS/NAS to test it. With two routers, VM 104 covers away clients if VM 103 does not start.
+Installation acceptance does not establish automatic return after a host reboot, and the 2026-11-08 operator restarts were not host boots. At the next planned host boot, check that VM 103 started by itself. Do not reboot solely for this or fault shared NFS/NAS to test it. With two routers, away clients should move to VM 104 if VM 103 does not start. They did after the graceful restarts on 2026-11-08, but failover after losing a host has not been timed.
 
 ## Second router and qualification
 
