@@ -46,8 +46,8 @@ spec:
         # may be on the node that died, and fires before the alerts it holds
         # back. A cordoned node is under maintenance and skipped, by its last
         # cordon state within 15 minutes in case kube-state-metrics went down
-        # with it. instance repeats the node name, as host alerts name their
-        # machine.
+        # with it; KubeNodeCordoned covers it instead. instance repeats the
+        # node name, as host alerts name their machine.
         - alert: KubeNodeDown
           expr: |
             label_replace(
@@ -62,6 +62,36 @@ spec:
             summary: Kubernetes node {{ $labels.node }} is down
             description: '{{ $labels.node }}''s kubelet has not answered for four minutes and the node is not cordoned. Check it with talosctl and its console. Alerts that only restate that the node is down are held back while this fires.'
             runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/alerting.md#one-alert-per-machine
+
+        # A cordon marks planned maintenance. For its first two hours the info
+        # alert holds back every k8s-prod warning and the node's own alerts;
+        # see "Planned maintenance" in the alerting runbook. A cordon that
+        # lasts two hours becomes a warning, which ends the cluster-wide hold.
+        # The cordon state is read as KubeNodeDown reads it.
+        - alert: KubeNodeCordoned
+          expr: |
+            label_replace(
+              last_over_time((max by (cluster, node) (kube_node_spec_unschedulable{cluster="k8s-prod",job="kube-state-metrics"}))[15m:1m]) == 1
+              unless on (cluster, node)
+              min_over_time((max by (cluster, node) (kube_node_spec_unschedulable{cluster="k8s-prod",job="kube-state-metrics"}))[2h:1m]) == 1,
+              "instance", "$1", "node", "(.+)")
+          labels:
+            severity: info
+          annotations:
+            summary: Kubernetes node {{ $labels.node }} is cordoned for maintenance
+            description: '{{ $labels.node }} is cordoned. For up to two hours, k8s-prod warnings and alerts about the node itself are held back; critical alerts still notify. Uncordon it when the work is done.'
+            runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/alerting.md#planned-maintenance
+        - alert: KubeNodeCordoned
+          expr: |
+            label_replace(
+              min_over_time((max by (cluster, node) (kube_node_spec_unschedulable{cluster="k8s-prod",job="kube-state-metrics"}))[2h:1m]) == 1,
+              "instance", "$1", "node", "(.+)")
+          labels:
+            severity: warning
+          annotations:
+            summary: Kubernetes node {{ $labels.node }} has been cordoned for two hours
+            description: '{{ $labels.node }} has been cordoned for two hours, so k8s-prod warnings notify again. Finish the maintenance and uncordon it, or check it with talosctl and its console if a reboot has hung. Alerts that only restate that the node is down stay held back.'
+            runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/alerting.md#planned-maintenance
 
     - name: flux-reconciliation
       labels:
@@ -168,7 +198,7 @@ spec:
             count by (node) (up{job="fluent-bit"} == 1) == 2
           for: 5m
           labels:
-            severity: critical
+            severity: warning
           annotations:
             summary: '{{ $labels.node }} lacks a healthy Fluent Bit scrape target'
             description: Each node needs both the v2 and v1 metrics targets up. Check DaemonSet scheduling, PodMonitor conversion and the metrics network path.

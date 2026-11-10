@@ -419,6 +419,39 @@ tests:
           - labels: 'ALERTS{alertname="KubeNodeDown",alertstate="firing",cluster="k8s-prod",instance="k8s-prod-2",node="k8s-prod-2",severity="critical"}'
             value: 1
 
+  - name: A cordon is info for two hours, then a warning, and clears when lifted
+    interval: 1m
+    input_series:
+      # Cordoned at 2m and never uncordoned.
+      - series: kube_node_spec_unschedulable{cluster="k8s-prod",job="kube-state-metrics",node="k8s-prod-3"}
+        values: 0x1 1x200
+      # Cordoned at 2m, uncordoned at 30m.
+      - series: kube_node_spec_unschedulable{cluster="k8s-prod",job="kube-state-metrics",node="k8s-prod-2"}
+        values: 0x1 1x27 0x172
+      - series: kube_node_spec_unschedulable{cluster="k8s-prod",job="kube-state-metrics",node="k8s-prod-1"}
+        values: 0x200
+    promql_expr_test:
+      - expr: ALERTS{alertname="KubeNodeCordoned",alertstate="firing"}
+        eval_time: 1m
+        exp_samples: []
+      - expr: ALERTS{alertname="KubeNodeCordoned",alertstate="firing"}
+        eval_time: 20m
+        exp_samples:
+          - labels: 'ALERTS{alertname="KubeNodeCordoned",alertstate="firing",cluster="k8s-prod",instance="k8s-prod-2",node="k8s-prod-2",severity="info"}'
+            value: 1
+          - labels: 'ALERTS{alertname="KubeNodeCordoned",alertstate="firing",cluster="k8s-prod",instance="k8s-prod-3",node="k8s-prod-3",severity="info"}'
+            value: 1
+      - expr: ALERTS{alertname="KubeNodeCordoned",alertstate="firing"}
+        eval_time: 60m
+        exp_samples:
+          - labels: 'ALERTS{alertname="KubeNodeCordoned",alertstate="firing",cluster="k8s-prod",instance="k8s-prod-3",node="k8s-prod-3",severity="info"}'
+            value: 1
+      - expr: ALERTS{alertname="KubeNodeCordoned",alertstate="firing"}
+        eval_time: 150m
+        exp_samples:
+          - labels: 'ALERTS{alertname="KubeNodeCordoned",alertstate="firing",cluster="k8s-prod",instance="k8s-prod-3",node="k8s-prod-3",severity="warning"}'
+            value: 1
+
   - name: A node without both healthy Fluent Bit targets has its own alert
     interval: 1m
     input_series:
@@ -438,5 +471,5 @@ tests:
       - expr: ALERTS{alertname="FluentBitCollectorTargetMissing",alertstate="firing"}
         eval_time: 6m
         exp_samples:
-          - labels: 'ALERTS{alertname="FluentBitCollectorTargetMissing",alertstate="firing",cluster="k8s-prod",node="k8s-prod-2",severity="critical"}'
+          - labels: 'ALERTS{alertname="FluentBitCollectorTargetMissing",alertstate="firing",cluster="k8s-prod",node="k8s-prod-2",severity="warning"}'
             value: 1

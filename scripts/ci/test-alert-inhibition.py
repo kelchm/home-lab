@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the one-alert-per-machine inhibit rules in a real Alertmanager and check which simulated alerts each outage holds back."""
+"""Run the one-alert-per-machine inhibit rules in a real Alertmanager and check which simulated alerts each outage or maintenance holds back."""
 import datetime as dt
 import json
 import shutil
@@ -24,7 +24,7 @@ SCENARIOS = {
         ("KubeNodeNotReady", {**K, "node": "k8s-prod-2", "namespace": "observability", "severity": "warning"}, True),
         ("KubeNodeUnreachable", {**K, "node": "k8s-prod-2", "namespace": "observability", "severity": "warning"}, True),
         ("KubeletInstanceUnreachable", {**K, "node": "k8s-prod-2", "instance": "k8s-prod-2", "severity": "warning"}, True),
-        ("FluentBitCollectorTargetMissing", {**K, "node": "k8s-prod-2", "severity": "critical"}, True),
+        ("FluentBitCollectorTargetMissing", {**K, "node": "k8s-prod-2", "severity": "warning"}, True),
         ("DriveMetricsMissing", {"instance": "k8s-prod-2", "device": "nvme0", "platform": "k8s", "severity": "warning"}, True),
         ("NodeCPUTemperatureSensorMissing", {**K, "instance": "k8s-prod-2", "severity": "warning"}, True),
         ("KubeAPIInstanceUnreachable", {**K, "instance": "10.32.30.12:6443", "job": "apiserver", "severity": "warning"}, True),
@@ -39,6 +39,36 @@ SCENARIOS = {
         ("DriveMetricsMissing", {"instance": "k8s-prod-1", "device": "nvme0", "platform": "k8s", "severity": "warning"}, False),
         ("TargetDown", {**K, "job": "node-exporter", "namespace": "observability", "severity": "warning"}, False),
         ("etcdMembersDown", {**K, "job": "kube-etcd", "severity": "warning"}, False),
+    ],
+    "k8s-prod-3 is cordoned and shut down for maintenance": [
+        ("KubeNodeCordoned", {**K, "node": "k8s-prod-3", "instance": "k8s-prod-3", "severity": "info"}, False),
+        # Its own alerts, at any severity.
+        ("LonghornNodeNotReady", {**K, "node": "k8s-prod-3", "namespace": "longhorn-system", "severity": "critical"}, True),
+        ("KubeletInstanceUnreachable", {**K, "node": "k8s-prod-3", "instance": "k8s-prod-3", "severity": "warning"}, True),
+        ("KubeNodeUnreachable", {**K, "node": "k8s-prod-3", "namespace": "observability", "severity": "warning"}, True),
+        ("FluentBitCollectorTargetMissing", {**K, "node": "k8s-prod-3", "severity": "warning"}, True),
+        ("DriveMetricsMissing", {"instance": "k8s-prod-3", "device": "nvme0", "platform": "k8s", "severity": "warning"}, True),
+        ("KubeControllerManagerInstanceUnreachable", {**K, "instance": "10.32.30.13:10257", "job": "kube-controller-manager", "severity": "warning"}, True),
+        # Every k8s-prod warning, which draining and stopping a node raise.
+        ("TargetDown", {**K, "job": "spegel", "namespace": "kube-system", "severity": "warning"}, True),
+        ("etcdMembersDown", {**K, "job": "kube-etcd", "severity": "warning"}, True),
+        ("KubeDaemonSetRolloutStuck", {**K, "daemonset": "cilium", "namespace": "kube-system", "severity": "warning"}, True),
+        ("KubePodNotReady", {**K, "namespace": "identity", "pod": "kanidm-default-0", "severity": "warning"}, True),
+        ("TooManyScrapeErrors", {**K, "namespace": "observability", "severity": "warning"}, True),
+        # Criticals, faults the node still reports, other nodes' critical
+        # alerts, and alerts from outside the cluster still notify.
+        ("NodeCPUTemperatureCritical", {**K, "instance": "k8s-prod-3", "severity": "critical"}, False),
+        ("LonghornVolumeFaulted", {**K, "node": "k8s-prod-1", "namespace": "longhorn-system", "volume": "pvc-1", "severity": "critical"}, False),
+        ("KubeNodeDown", {**K, "node": "k8s-prod-1", "instance": "k8s-prod-1", "severity": "critical"}, False),
+        ("NodeLogDeliveryFailing", {"instance": "nas", "job": "synology-fluent-bit", "platform": "synology", "severity": "warning"}, False),
+        ("KubeNodeCordoned", {**K, "node": "k8s-prod-2", "instance": "k8s-prod-2", "severity": "warning"}, False),
+    ],
+    "k8s-prod-3 has been cordoned for two hours": [
+        ("KubeNodeCordoned", {**K, "node": "k8s-prod-3", "instance": "k8s-prod-3", "severity": "warning"}, False),
+        ("KubeletInstanceUnreachable", {**K, "node": "k8s-prod-3", "instance": "k8s-prod-3", "severity": "warning"}, True),
+        ("KubeSchedulerInstanceUnreachable", {**K, "instance": "10.32.30.13:10259", "job": "kube-scheduler", "severity": "warning"}, True),
+        ("TargetDown", {**K, "job": "spegel", "namespace": "kube-system", "severity": "warning"}, False),
+        ("KubePodNotReady", {**K, "namespace": "identity", "pod": "kanidm-default-0", "severity": "warning"}, False),
     ],
     "pve-sbx-1 is down": [
         ("PVENodeDown", {**P, "id": "node/pve-sbx-1", "node": "pve-sbx-1", "instance": "pve-sbx-1", "severity": "critical"}, False),

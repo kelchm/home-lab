@@ -57,11 +57,11 @@ The rules match an alert to the machine by its `instance` (the hostname, which `
 
 A hold-back works only if the down alert is already firing when the other alert would first notify, so each down alert waits less than the alerts it holds back. `KubeNodeDown` reads vmagent's scrape of the kubelet rather than kube-state-metrics, which runs as one replica and may be on the node that died; at four minutes it comes before `LonghornNodeNotReady` and `FluentBitCollectorTargetMissing` at five and the node and kubelet alerts at fifteen. `PVENodeDown` at five minutes comes before the ten of `NodeMetricsMissing` and `PVEGuestDown`. Alertmanager also waits 30 seconds before a group's first notification. When the down alert resolves, anything still firing about that machine notifies at the group's next interval; a symptom that clears within it does not.
 
-A planned reboot cordons the node, so `KubeNodeDown` skips it, and the alerts it would hold back notify as they would without it: a reboot that hangs past five minutes notifies through `LonghornNodeNotReady`.
+A cordoned node is in planned maintenance, so `KubeNodeDown` skips it and `KubeNodeCordoned` holds back its alerts instead, as described in [Planned maintenance](#planned-maintenance).
 
 `scripts/ci/test-alert-inhibition.py` runs these rules in Alertmanager in CI and checks, for a k8s-prod node, a PVE node and the NAS going down, which simulated alerts are held back and which still notify.
 
-Two aggregate alerts about a k8s-prod node are not held back, because neither names the machine: `TargetDown` counts each scrape job's failed targets, and `etcdMembersDown` counts etcd members. A node that stays down past ten minutes therefore also raises `TargetDown` for each namespace with a per-node job, and past twenty, `etcdMembersDown`.
+Outside planned maintenance, two aggregate alerts about a k8s-prod node are not held back, because neither names the machine: `TargetDown` counts each scrape job's failed targets, and `etcdMembersDown` counts etcd members. A node that stays down past ten minutes therefore also raises `TargetDown` for each namespace with a per-node job, and past twenty, `etcdMembersDown`.
 
 Alertmanager groups alerts by name, cluster and namespace, not by machine: two machines that go down together arrive in one notification, a second machine joining a firing group sends an update after `group_interval`, and a firing group repeats every 12 hours and announces its resolution.
 
@@ -69,12 +69,22 @@ A problem that only affects what can be seen of a device is `info` when every no
 
 The bundled `RequestErrorsToAPI` and `TooManyLogs` are disabled. VictoriaMetrics counts every query a client cancels as an API error and logs it as a warning, so Grafana cancelling overlapping dashboard refreshes kept both firing most of the day: in an hour sampled on 2026-11-08, 628 of VMSingle's 634 warnings were cancelled Grafana queries. `TooManyErrorLogs`, `ServiceDown`, `TooManyRestarts`, `AlertingRulesError` and `RecordingRulesError` still notify for a failing component.
 
+## Planned maintenance
+
+A cordon marks a k8s-prod node as under planned maintenance: Talos cordons a node before it upgrades or reboots, and so does a manual drain. `KubeNodeCordoned` fires at `info` as soon as a node is cordoned. While it fires, it holds back the node's own alerts, the same ones `KubeNodeDown` holds back, and every other `warning` with `cluster=k8s-prod`. Those are the side effects of draining and stopping a node: DaemonSet pods and rollouts, `TargetDown`, `etcdMembersDown`, scrape errors, and replicas that a topology spread cannot place on two nodes. `critical` alerts still notify, as do alerts from outside the cluster, such as NAS log delivery. Nothing needs to be silenced.
+
+A cordon is meant to be short. After two hours `KubeNodeCordoned` becomes a `warning`, which notifies and ends the cluster-wide hold, so anything still firing then notifies at its group's next interval. The node's own alerts stay held back while it remains cordoned. Uncordoning ends both. A reboot that hangs while cordoned therefore notifies after two hours, not five minutes: `LonghornNodeNotReady` does not cover it, because each node's longhorn-manager reports only its own node and a node that is down reports nothing.
+
+The hold-back is cluster-wide because the side effects carry no node label to match. While a node is cordoned, a warning that has nothing to do with the maintenance waits until the cordon lifts or reaches two hours.
+
+`scripts/ci/test-alert-inhibition.py` checks a cordoned node shut down for maintenance and one cordoned for two hours, alongside the outages.
+
 ## First response
 
 1. Open `https://alertmanager.home.kelch.io` and inspect the complete label and annotation set. Pushover is a prompt to investigate, not the full source of truth.
 2. Confirm the alert has `evaluator=vmalert`. Any alert without that label did not come from the production evaluator.
 3. Follow the alert description and linked subsystem runbook. For Flux failures, inspect the named Kustomization or HelmRelease before forcing a reconcile. For Longhorn backup alerts, use [longhorn-backup-restore](longhorn-backup-restore.md#routine-monitoring). For alerts about the monitoring stack itself, the [Observability Pipeline](https://grafana.home.kelch.io/d/observability-pipeline/observability-pipeline) dashboard shows which stage is failing: scrape and store, evaluate and notify, or log collection.
-4. Silence only when the cause and maintenance window are understood. Fix the signal or its rule instead of leaving a recurring silence.
+4. Silence only when the cause and maintenance window are understood. Fix the signal or its rule instead of leaving a recurring silence. Node maintenance needs no silence: cordon the node, as described in [Planned maintenance](#planned-maintenance).
 
 Useful inventory commands:
 

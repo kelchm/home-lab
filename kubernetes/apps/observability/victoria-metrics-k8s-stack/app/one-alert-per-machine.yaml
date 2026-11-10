@@ -7,6 +7,10 @@
 # such as a temperature or a SMART error, and anything the outage breaks, such
 # as pods, volumes, backups and services, still notify. See "One alert per
 # machine" in docs/runbooks/alerting.md.
+#
+# A cordoned node is in planned maintenance: KubeNodeCordoned takes
+# KubeNodeDown's place for its own alerts, and for the first two hours also
+# holds back every k8s-prod warning. See "Planned maintenance" in the runbook.
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMAlertmanagerConfig
 metadata:
@@ -15,23 +19,30 @@ spec:
   inhibit_rules:
     # Its missing data, by its instance (the hostname, which KubeNodeDown and
     # PVENodeDown also carry).
-    - source_matchers: ['alertname=~"KubeNodeDown|PVENodeDown|NodeMetricsMissing"']
+    - source_matchers: ['alertname=~"KubeNodeDown|KubeNodeCordoned|PVENodeDown|NodeMetricsMissing"']
       target_matchers: ['alertname=~".+MetricsMissing|.+SensorMissing|NodeCollectorDown|KubeletInstanceUnreachable"', 'alertname!~"KubeNodeDown|PVENodeDown|NodeMetricsMissing"']
       equal: [instance]
     # A Kubernetes node's readiness and reachability, by its node label.
-    - source_matchers: ['alertname="KubeNodeDown"']
+    - source_matchers: ['alertname=~"KubeNodeDown|KubeNodeCordoned"']
       target_matchers: ['alertname=~"KubeNodeNotReady|KubeNodeUnreachable|KubeNodeReadinessFlapping|KubeletInstanceUnreachable|LonghornNodeNotReady|FluentBitCollectorTargetMissing"']
       equal: [cluster, node]
     # Control-plane instances are named by the node's address and port; the
     # addresses are the static ones in docs/architecture.md.
-    - source_matchers: ['alertname="KubeNodeDown"', 'node="k8s-prod-1"']
+    - source_matchers: ['alertname=~"KubeNodeDown|KubeNodeCordoned"', 'node="k8s-prod-1"']
       target_matchers: ['alertname=~"KubeAPIInstanceUnreachable|KubeControllerManagerInstanceUnreachable|KubeSchedulerInstanceUnreachable"', 'instance=~"10[.]32[.]30[.]11:[0-9]+"']
       equal: [cluster]
-    - source_matchers: ['alertname="KubeNodeDown"', 'node="k8s-prod-2"']
+    - source_matchers: ['alertname=~"KubeNodeDown|KubeNodeCordoned"', 'node="k8s-prod-2"']
       target_matchers: ['alertname=~"KubeAPIInstanceUnreachable|KubeControllerManagerInstanceUnreachable|KubeSchedulerInstanceUnreachable"', 'instance=~"10[.]32[.]30[.]12:[0-9]+"']
       equal: [cluster]
-    - source_matchers: ['alertname="KubeNodeDown"', 'node="k8s-prod-3"']
+    - source_matchers: ['alertname=~"KubeNodeDown|KubeNodeCordoned"', 'node="k8s-prod-3"']
       target_matchers: ['alertname=~"KubeAPIInstanceUnreachable|KubeControllerManagerInstanceUnreachable|KubeSchedulerInstanceUnreachable"', 'instance=~"10[.]32[.]30[.]13:[0-9]+"']
+      equal: [cluster]
+    # A cordon under two hours old holds back every k8s-prod warning: the
+    # side effects of draining and stopping a node. Criticals still notify,
+    # and anything still firing when the cordon lifts or turns into a warning
+    # notifies then.
+    - source_matchers: ['alertname="KubeNodeCordoned"', 'severity="info"']
+      target_matchers: ['severity="warning"', 'alertname!="KubeNodeCordoned"']
       equal: [cluster]
     # A PVE node also stops sending host metrics, and its guests stop.
     - source_matchers: ['alertname="PVENodeDown"']
