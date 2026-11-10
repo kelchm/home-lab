@@ -153,7 +153,7 @@ The helper bounds stdin/enrollment, uses a unique `0600` `/run` file and exit/si
 
 ### 8. Baseline and backups remain open
 
-[Qualification](qualification.md) defines proposed independent-path/H1/R1 evidence and limits. Do not run it under installation approval alone. The existing `all=1` backup job will include 104 when created, but only a successful **post-enrollment** archive can recover that enrolled identity; verify the next scheduled task and archive. Do not start an immediate backup. Keep #1097/#625 open until their actual acceptance evidence exists; merging documentation completes no live gate.
+[Qualification](qualification.md) defines proposed independent-path/H1/R1 evidence and limits. Do not run it under installation approval alone. The existing `all=1` backup job will include 104 when created, but only a successful **post-enrollment** archive can recover that enrolled identity; verify the next scheduled task and archive. Do not start an immediate backup. #1097 and #625 closed by owner decision without running it; merging documentation completes no live gate.
 
 ## Withdrawal and identity recovery
 
