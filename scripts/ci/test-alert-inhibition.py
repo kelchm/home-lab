@@ -67,8 +67,9 @@ SCENARIOS = {
         ("KubeNodeCordoned", {**K, "node": "k8s-prod-3", "instance": "k8s-prod-3", "severity": "warning"}, False),
         ("KubeletInstanceUnreachable", {**K, "node": "k8s-prod-3", "instance": "k8s-prod-3", "severity": "warning"}, True),
         ("KubeSchedulerInstanceUnreachable", {**K, "instance": "10.32.30.13:10259", "job": "kube-scheduler", "severity": "warning"}, True),
-        ("TargetDown", {**K, "job": "spegel", "namespace": "kube-system", "severity": "warning"}, False),
-        ("KubePodNotReady", {**K, "namespace": "identity", "pod": "kanidm-default-0", "severity": "warning"}, False),
+        ("TargetDown", {**K, "job": "spegel", "namespace": "kube-system", "severity": "warning"}, True),
+        ("KubePodNotReady", {**K, "namespace": "identity", "pod": "kanidm-default-0", "severity": "warning"}, True),
+        ("LonghornVolumeFaulted", {**K, "node": "k8s-prod-1", "namespace": "longhorn-system", "volume": "pvc-1", "severity": "critical"}, False),
     ],
     "pve-sbx-1 is down": [
         ("PVENodeDown", {**P, "id": "node/pve-sbx-1", "node": "pve-sbx-1", "instance": "pve-sbx-1", "severity": "critical"}, False),

@@ -422,6 +422,9 @@ tests:
   - name: A cordon is info for two hours, then a warning, and clears when lifted
     interval: 1m
     input_series:
+      # Cordoned at 2m, then kube-state-metrics stopped reporting it.
+      - series: kube_node_spec_unschedulable{cluster="k8s-prod",job="kube-state-metrics",node="k8s-prod-4"}
+        values: 0x1 1 stale
       # Cordoned at 2m and never uncordoned.
       - series: kube_node_spec_unschedulable{cluster="k8s-prod",job="kube-state-metrics",node="k8s-prod-3"}
         values: 0x1 1x200
