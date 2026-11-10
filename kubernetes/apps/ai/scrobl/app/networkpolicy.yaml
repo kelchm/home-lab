@@ -1,5 +1,5 @@
 ---
-# No listener or Kubernetes API access. Only resolve DNS and read Last.fm.
+# No listener or Kubernetes API access. Only resolve and read Last.fm.
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
@@ -25,7 +25,7 @@ spec:
               protocol: TCP
           rules:
             dns:
-              - matchPattern: "*"
+              - matchName: ws.audioscrobbler.com
     - toFQDNs:
         - matchName: ws.audioscrobbler.com
       toPorts:

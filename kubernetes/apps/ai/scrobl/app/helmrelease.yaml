@@ -53,6 +53,12 @@ spec:
     defaultPodOptions:
       automountServiceAccountToken: false
       restartPolicy: Never
+      # Query the allowed absolute hostname before trying search suffixes,
+      # which the exact-name DNS policy intentionally rejects.
+      dnsConfig:
+        options:
+          - name: ndots
+            value: "1"
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000

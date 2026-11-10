@@ -8,6 +8,8 @@ This is prepared configuration, not a record of deployment acceptance. The `0.1.
 
 The image is built and published by scrobl's release workflow; home-lab pins its version and digest. Renovate proposes later `X.Y.Z` releases, and merging an update changes future Jobs. The distroless image has no shell or listener. It runs as UID/GID 1000 with a read-only root filesystem and its original `/data` working directory, so SQLite's database, journal and temporary files stay on the writable claim.
 
+The Cilium policy permits only DNS queries for `ws.audioscrobbler.com` through CoreDNS and HTTPS to that hostname. The pod uses `ndots: 1` to query the absolute name before trying search suffixes, which the exact-name DNS rule rejects. Other DNS names and outbound destinations are not allowed.
+
 ## Production credential
 
 The owner creates a dedicated Last.fm API key for this cluster, distinct from the development key. Store it as `SCROBL_API_KEY` in the `ai/scrobl-secrets` Secret through `app/secret.sops.yaml`, encrypted with the repository's Kubernetes SOPS rule, and include `./secret.sops.yaml` in `app/kustomization.yaml`. The container receives only that key through a Secret reference. Never use or retrieve the development key to bootstrap production.
