@@ -1,0 +1,10 @@
+machine:
+  kubelet:
+    # Keep the node IP off the fabric addresses.
+    nodeIP:
+      validSubnets: ["10.32.21.0/24"]
+  sysctls:
+    # Both fabric paths sit on one ConnectX-7; answer ARP only on the
+    # interface that owns the address, or RoCE peers resolve the wrong port.
+    net.ipv4.conf.all.arp_ignore: "1"
+    net.ipv4.conf.all.arp_announce: "2"

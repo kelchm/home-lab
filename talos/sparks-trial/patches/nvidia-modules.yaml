@@ -1,0 +1,12 @@
+# Sidero's NVIDIA guide loads these four; rdma_ucm has no modalias, so it is
+# listed explicitly for rdma_cm users. mlx5_ib and ib_uverbs autoload.
+# talhelper 3.1.17 cannot decode KernelModuleConfig documents yet, so this
+# uses the equivalent v1alpha1 field.
+machine:
+  kernel:
+    modules:
+      - name: nvidia
+      - name: nvidia_uvm
+      - name: nvidia_drm
+      - name: nvidia_modeset
+      - name: rdma_ucm

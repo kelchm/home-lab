@@ -1,0 +1,3 @@
+# Throwaway cluster secrets and rendered configs never leave the workstation.
+talsecret.yaml
+clusterconfig/
