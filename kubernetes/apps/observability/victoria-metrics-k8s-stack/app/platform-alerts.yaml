@@ -80,7 +80,7 @@ spec:
             severity: info
           annotations:
             summary: Kubernetes node {{ $labels.node }} is cordoned for maintenance
-            description: '{{ $labels.node }} is cordoned. Until it is uncordoned, k8s-prod warnings and alerts about the node itself are held back; critical alerts still notify. After two hours this becomes a warning.'
+            description: '{{ $labels.node }} is cordoned. Until it is uncordoned, k8s-prod warnings and alerts about the node itself are held back; other critical alerts still notify. After two hours this becomes a warning.'
             runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/alerting.md#planned-maintenance
         - alert: KubeNodeCordoned
           expr: |
