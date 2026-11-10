@@ -1,0 +1,83 @@
+---
+# One scheduled writer; do not start manual Jobs against this PVC while a
+# sync is active. scrobl has no application-level writer lock yet (#41).
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: scrobl
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: scrobl
+  interval: 1h
+  values:
+    controllers:
+      scrobl:
+        type: cronjob
+        cronjob:
+          schedule: "30 0 * * *"
+          timeZone: America/New_York
+          concurrencyPolicy: Forbid
+          startingDeadlineSeconds: 3600
+          activeDeadlineSeconds: 3600
+          backoffLimit: 0
+          successfulJobsHistory: 1
+          failedJobsHistory: 1
+          # KubeJobFailed needs 15 minutes before notifying; keep diagnostics
+          # for a day while bounding retained pod objects in the ai quota.
+          ttlSecondsAfterFinished: 86400
+        containers:
+          app:
+            image:
+              repository: ghcr.io/kelchm/scrobl
+              tag: 0.1.0@sha256:37014d2967dca95572ec59df359ae0a9855b29a71bdae0de56ea0584d7c601ed
+            # Keep the image's /data working directory: SQLite temporary
+            # files also need to land on this writable mount.
+            args: ["sync", "--db", "/data/history.db", "--user", "kelchm"]
+            env:
+              SCROBL_API_KEY:
+                valueFrom:
+                  secretKeyRef:
+                    name: scrobl-secrets
+                    key: SCROBL_API_KEY
+            securityContext:
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              capabilities: { drop: ["ALL"] }
+            resources:
+              requests:
+                cpu: 25m
+                memory: 64Mi
+              limits:
+                memory: 256Mi
+    defaultPodOptions:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      # Query the allowed absolute hostname before trying search suffixes,
+      # which the exact-name DNS policy intentionally rejects.
+      dnsConfig:
+        options:
+          - name: ndots
+            value: "1"
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile: { type: RuntimeDefault }
+    persistence:
+      data:
+        type: persistentVolumeClaim
+        storageClass: longhorn
+        accessMode: ReadWriteOnce
+        size: 1Gi
+        retain: true
+        # CronJob volumes are normally detached when backups run, and the
+        # cluster intentionally leaves detached-volume backups disabled.
+        # Revisit when serve keeps this volume attached; remove only no-backup.
+        labels:
+          recurring-job.longhorn.io/source: enabled
+          recurring-job-group.longhorn.io/no-backup: enabled
+        globalMounts:
+          - path: /data
