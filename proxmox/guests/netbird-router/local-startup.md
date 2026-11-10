@@ -167,7 +167,7 @@ Inspect `after.netbird.json` for Management/Signal connected, the same overlay a
 
 ## Provision on another node
 
-Use this for an authorized restore, migration or rebuild after the repair. These are storage/file checks, not the existing-VM reference-change procedure. The `local` content flags are cluster-wide and may already include `snippets`; the destination directory may already exist. Preserve all flags and existing matching files. This also works without the NAS by using the repository’s byte-identical vendor file.
+Use this for an authorized restore, migration or rebuild after the repair. These are storage/file checks, not the existing-VM reference-change procedure. The `local` content flags are cluster-wide and may already include `snippets`; the destination directory may already exist. Preserve all flags and existing matching files. This also works without the NAS by using the repository’s byte-identical vendor file. Set `snippet` to the file the VM's `cicustom` names: `netbird-router-1.yaml` for a rebuild or an archive from 2026-11-09 on, `netbird-pilot-router.yaml` for an archive from 2026-10-30 to 2026-11-08.
 
 In a Bash session in a reviewed workstation checkout, select the destination explicitly (node 2 is shown), verify the source, and copy it to a private transfer directory:
 
@@ -186,6 +186,7 @@ set -euo pipefail
 umask 077
 source_file='/tmp/netbird-snippet.<this-run>/vendor-data.yaml'
 snippet_sha=1c45c56620287cce1825e8af4ed7a03c7f316dd7a10744a5ad102a06a14dc52a
+snippet=netbird-router-1.yaml
 provision=$(mktemp -d /root/netbird-snippet-provision.XXXXXX)
 printf 'Provision evidence: %s\n' "$provision"
 printf '%s  %s\n' "$snippet_sha" "$source_file" | sha256sum --check --status
@@ -210,15 +211,15 @@ if test ! -e /var/lib/vz/snippets; then
 fi
 test -d /var/lib/vz/snippets
 test ! -L /var/lib/vz/snippets
-if test -e /var/lib/vz/snippets/netbird-pilot-router.yaml; then
-    test -f /var/lib/vz/snippets/netbird-pilot-router.yaml
-    test ! -L /var/lib/vz/snippets/netbird-pilot-router.yaml
+if test -e "/var/lib/vz/snippets/$snippet"; then
+    test -f "/var/lib/vz/snippets/$snippet"
+    test ! -L "/var/lib/vz/snippets/$snippet"
 else
-    install -o root -g root -m 0644 "$source_file" /var/lib/vz/snippets/netbird-pilot-router.yaml
+    install -o root -g root -m 0644 "$source_file" "/var/lib/vz/snippets/$snippet"
 fi
-cmp "$source_file" /var/lib/vz/snippets/netbird-pilot-router.yaml
-resolved=$(pvesm path local:snippets/netbird-pilot-router.yaml)
-test "$resolved" = /var/lib/vz/snippets/netbird-pilot-router.yaml
+cmp "$source_file" "/var/lib/vz/snippets/$snippet"
+resolved=$(pvesm path "local:snippets/$snippet")
+test "$resolved" = "/var/lib/vz/snippets/$snippet"
 printf '%s  %s\n' "$snippet_sha" "$resolved" | sha256sum --check --status
 test "$(stat -c '%U:%G %a' "$resolved")" = 'root:root 644'
 pvesh get /storage/local --output-format json > "$provision/storage.after.json"
