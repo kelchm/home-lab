@@ -3,8 +3,9 @@
 #
 # Private only: the household gateway serves it at home, and NetBird's
 # existing permit to that gateway serves it away. Nothing is published to
-# the internet. Since 1.17 background jobs run embedded in the web process,
-# so one container plus a Valkey sidecar is the whole application.
+# the internet. Background jobs run in a separate worker container: embedded
+# in the web process, a big import's follow-up jobs held Ruby's global lock
+# long enough that health checks timed out and the site returned 503.
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
@@ -45,7 +46,9 @@ spec:
             image: *image
             command: ["web-entrypoint.sh"]
             args: ["bin/rails", "server", "-p", "3000", "-b", "0.0.0.0"]
-            env:
+            # Shared with the worker. SIDEKIQ_EMBEDDED stays unset, so the web
+            # process runs no jobs.
+            env: &env
               RAILS_ENV: production
               SELF_HOSTED: "true"
               TIME_ZONE: America/New_York
@@ -53,8 +56,8 @@ spec:
               # Traefik terminates TLS; this turns on secure cookies and the
               # HTTPS redirect, which the probes satisfy with X-Forwarded-Proto.
               APPLICATION_PROTOCOL: https
-              SIDEKIQ_EMBEDDED: "true"
               WEB_CONCURRENCY: "0"
+              # Worker threads. Read by the worker only.
               BACKGROUND_PROCESSING_CONCURRENCY: "2"
               REDIS_URL: redis://127.0.0.1:6379
               # Discrete variables: the entrypoint's DATABASE_URL parsing does
@@ -74,7 +77,7 @@ spec:
               DATABASE_NAME:
                 valueFrom:
                   secretKeyRef: { name: dawarich-db-app, key: dbname }
-            envFrom:
+            envFrom: &envFrom
               - secretRef:
                   name: dawarich-secret
             probes:
@@ -93,14 +96,16 @@ spec:
                   periodSeconds: 10
                   timeoutSeconds: 5
                   failureThreshold: 180
+              # Generous: a restart only interrupts work. Readiness takes the
+              # pod out of service sooner.
               liveness:
                 enabled: true
                 custom: true
                 spec:
                   httpGet: *health
                   periodSeconds: 30
-                  timeoutSeconds: 5
-                  failureThreshold: 3
+                  timeoutSeconds: 10
+                  failureThreshold: 5
               # Checks PostgreSQL and Valkey. Unlike /health, it is subject to
               # the allowed-host check.
               readiness:
@@ -122,6 +127,21 @@ spec:
               allowPrivilegeEscalation: false
               readOnlyRootFilesystem: true
               capabilities: { drop: ["ALL"] }
+            resources:
+              requests:
+                cpu: 100m
+                memory: 384Mi
+              limits:
+                # Web only; uploads stream to storage. Migrations run here.
+                memory: 1536Mi
+          # Background jobs: imports, track and visit building, stats.
+          # Waits for the database; the web container runs migrations.
+          worker:
+            image: *image
+            command: ["sidekiq-entrypoint.sh"]
+            env: *env
+            envFrom: *envFrom
+            securityContext: *container-security
             resources:
               requests:
                 cpu: 200m
@@ -195,6 +215,8 @@ spec:
           dawarich:
             app:
               - path: /var/app/storage
+            worker:
+              - path: /var/app/storage
       # Rewritten from the image on every start.
       public:
         type: emptyDir
@@ -212,6 +234,8 @@ spec:
           dawarich:
             app:
               - path: /var/app/tmp
+            worker:
+              - path: /var/app/tmp
       # Rack spools uploads here, so a Timeline upload lands in /tmp first.
       tmp:
         type: emptyDir
@@ -221,6 +245,8 @@ spec:
             tmp-permissions:
               - path: /tmp
             app:
+              - path: /tmp
+            worker:
               - path: /tmp
       valkey-data:
         type: emptyDir
