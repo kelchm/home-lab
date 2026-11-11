@@ -72,7 +72,9 @@ end
 -- so a whole log line can be redacted as well as a request path.
 local function redact_query(s)
   return (s:gsub('([?&])([^=&?#%s"]+)=([^&#%s"]+)', function(sep, name, value)
-    if SECRET_PARAMS[name:lower()] then return sep .. name .. '=REDACTED' end
+    -- Applications decode the name, so `%74oken` is `token`.
+    local decoded = name:gsub('%%(%x%x)', function(h) return string.char(tonumber(h, 16)) end)
+    if SECRET_PARAMS[decoded:lower()] then return sep .. name .. '=REDACTED' end
   end))
 end
 

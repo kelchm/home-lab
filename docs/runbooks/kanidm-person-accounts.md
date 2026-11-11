@@ -10,7 +10,7 @@ With the default `credentialBootstrapDelivery: event`, kaniop answers a person w
 
 ## Add a person
 
-1. Add the manifest with email delivery and commit it:
+1. Add the manifest with email delivery, list it under `resources` in [`kustomization.yaml`](../../kubernetes/apps/identity/kanidm/app/kustomization.yaml), and commit both:
 
    ```yaml
    apiVersion: kaniop.rs/v1beta1
