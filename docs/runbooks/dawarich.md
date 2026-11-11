@@ -9,7 +9,7 @@ The raw Google Timeline export on Athena (`/volume1/homes/kelchm/cloud-backups/g
 | Part | Detail |
 |---|---|
 | App | `freikin/dawarich`, one pod with a web container and a worker container. The web container runs migrations and seeds on every start, then serves; the worker runs background jobs (`sidekiq-entrypoint.sh`). Jobs used to run embedded in the web process, but after the first big import their CPU load starved the web process until health checks timed out and the site returned 503. |
-| Valkey | Sidecar on `127.0.0.1:6379` holding the job queue, cache and websocket state. Not persisted: replacing the pod drops queued jobs. After a pod replacement during a backlog, re-queue track generation for untracked points (below). Stats recalculate hourly on their own. |
+| Valkey | Sidecar on `127.0.0.1:6379` holding the job queue, cache and websocket state. Not persisted: a restart of the Valkey container or a pod replacement drops queued and running jobs. Re-run an import that was in flight (delete it under Imports and upload the file again), and re-queue track generation for untracked points (below). Stats recalculate hourly on their own. |
 | Database | `dawarich-db`, CloudNativePG PostgreSQL 17 with PostGIS, two instances, WAL archiving and daily base backups to Athena bucket `k8s-prod-dawarich-db`. See the [CloudNativePG runbook](cnpg-backup-restore.md). |
 | Files | 20 GiB Longhorn volume at `/var/app/storage` for uploaded imports and exports. `/var/app/public`, `/var/app/tmp` and `/tmp` are scratch. |
 
@@ -34,7 +34,7 @@ Use the phone's own export (Google Maps → Settings → Personal content → Ex
 
 ## Re-queue track generation
 
-Imports queue track building per day of history; a large import leaves thousands of jobs. If the pod is replaced before they finish, re-queue the remainder. It only touches points not yet in a track:
+Imports queue track building per day of history; a large import leaves thousands of jobs. If Valkey restarts or the pod is replaced before they finish, re-queue the remainder. It only touches points not yet in a track:
 
 ```sh
 kubectl -n personal exec deploy/dawarich -c app -- bin/rails runner '

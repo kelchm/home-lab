@@ -134,11 +134,21 @@ spec:
               limits:
                 # Web only; uploads stream to storage. Migrations run here.
                 memory: 1536Mi
-          # Background jobs: imports, track and visit building, stats.
-          # Waits for the database; the web container runs migrations.
+          # Background jobs: imports, track and visit building, stats. The web
+          # container runs migrations and seeds before it listens, so the
+          # worker waits for port 3000; after an upgrade it cannot run new code
+          # against the old schema. The image has Ruby but no curl or wget.
           worker:
             image: *image
-            command: ["sidekiq-entrypoint.sh"]
+            command:
+              - sh
+              - -c
+              - |
+                until ruby -rsocket -e 'TCPSocket.new("127.0.0.1", 3000).close' 2>/dev/null; do
+                  echo "Waiting for the web container to finish migrations..."
+                  sleep 5
+                done
+                exec /usr/local/bin/sidekiq-entrypoint.sh
             env: *env
             envFrom: *envFrom
             securityContext: *container-security
