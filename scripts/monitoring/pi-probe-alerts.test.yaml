@@ -327,12 +327,12 @@
       ],
       "promql_expr_test": [
         {
-          "expr": "count by (probe, severity) (ALERTS{alertname=\"DsmCertificateExpiring\"})",
+          "expr": "count by (probe, severity) (ALERTS{alertname=\"HostCertificateExpiring\"})",
           "eval_time": "60m",
           "exp_samples": []
         },
         {
-          "expr": "count by (probe, severity) (ALERTS{alertname=\"DsmCertificateExpiring\",alertstate=\"pending\"})",
+          "expr": "count by (probe, severity) (ALERTS{alertname=\"HostCertificateExpiring\",alertstate=\"pending\"})",
           "eval_time": "61m",
           "exp_samples": [
             {
@@ -342,16 +342,91 @@
           ]
         },
         {
-          "expr": "count by (probe, severity) (ALERTS{alertname=\"DsmCertificateExpiring\",alertstate=\"firing\"})",
+          "expr": "count by (probe, severity) (ALERTS{alertname=\"HostCertificateExpiring\",alertstate=\"firing\"})",
           "eval_time": "120m",
           "exp_samples": []
         },
         {
-          "expr": "count by (probe, severity) (ALERTS{alertname=\"DsmCertificateExpiring\",alertstate=\"firing\"})",
+          "expr": "count by (probe, severity) (ALERTS{alertname=\"HostCertificateExpiring\",alertstate=\"firing\"})",
           "eval_time": "121m",
           "exp_samples": [
             {
               "labels": "{probe=\"athena-dsm\",severity=\"warning\"}",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "expr": "count by (probe, severity) (ALERTS{alertname=\"ProbeCertificateExpiring\"})",
+          "eval_time": "121m",
+          "exp_samples": []
+        }
+      ]
+    },
+    {
+      "name": "GLKVM and UniFi console cross 14 days then wait one hour on the host-certificate rule only",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "up{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"kvm-compute-rack\",target=\"https://kvm-compute-rack.home.kelch.io/\",module=\"http_2xx\"}",
+          "values": "1+0x121"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"kvm-compute-rack\",target=\"https://kvm-compute-rack.home.kelch.io/\",module=\"http_2xx\"}",
+          "values": "1+0x121"
+        },
+        {
+          "series": "probe_ssl_earliest_cert_expiry{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"kvm-compute-rack\",target=\"https://kvm-compute-rack.home.kelch.io/\",module=\"http_2xx\"}",
+          "values": "1213200+0x121"
+        },
+        {
+          "series": "up{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"unifi-console\",target=\"https://unifi.home.kelch.io/\",module=\"http_2xx\"}",
+          "values": "1+0x121"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"unifi-console\",target=\"https://unifi.home.kelch.io/\",module=\"http_2xx\"}",
+          "values": "1+0x121"
+        },
+        {
+          "series": "probe_ssl_earliest_cert_expiry{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"unifi-console\",target=\"https://unifi.home.kelch.io/\",module=\"http_2xx\"}",
+          "values": "1213200+0x121"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "count by (probe, severity) (ALERTS{alertname=\"HostCertificateExpiring\"})",
+          "eval_time": "60m",
+          "exp_samples": []
+        },
+        {
+          "expr": "count by (probe, severity) (ALERTS{alertname=\"HostCertificateExpiring\",alertstate=\"pending\"})",
+          "eval_time": "61m",
+          "exp_samples": [
+            {
+              "labels": "{probe=\"kvm-compute-rack\",severity=\"warning\"}",
+              "value": 1
+            },
+            {
+              "labels": "{probe=\"unifi-console\",severity=\"warning\"}",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "expr": "count by (probe, severity) (ALERTS{alertname=\"HostCertificateExpiring\",alertstate=\"firing\"})",
+          "eval_time": "120m",
+          "exp_samples": []
+        },
+        {
+          "expr": "count by (probe, severity) (ALERTS{alertname=\"HostCertificateExpiring\",alertstate=\"firing\"})",
+          "eval_time": "121m",
+          "exp_samples": [
+            {
+              "labels": "{probe=\"kvm-compute-rack\",severity=\"warning\"}",
+              "value": 1
+            },
+            {
+              "labels": "{probe=\"unifi-console\",severity=\"warning\"}",
               "value": 1
             }
           ]
@@ -399,7 +474,7 @@
           "exp_samples": []
         },
         {
-          "expr": "count by (probe, severity) (ALERTS{alertname=\"DsmCertificateExpiring\",alertstate=\"firing\"})",
+          "expr": "count by (probe, severity) (ALERTS{alertname=\"HostCertificateExpiring\",alertstate=\"firing\"})",
           "eval_time": "60m",
           "exp_samples": [
             {
@@ -434,7 +509,7 @@
           ]
         },
         {
-          "expr": "count by (probe, severity) (ALERTS{alertname=\"DsmCertificateExpiring\",alertstate=\"firing\"})",
+          "expr": "count by (probe, severity) (ALERTS{alertname=\"HostCertificateExpiring\",alertstate=\"firing\"})",
           "eval_time": "121m",
           "exp_samples": [
             {
@@ -464,22 +539,22 @@
       ],
       "promql_expr_test": [
         {
-          "expr": "count by (probe, severity) (ALERTS{alertname=\"DsmCertificateExpiring\"})",
+          "expr": "count by (probe, severity) (ALERTS{alertname=\"HostCertificateExpiring\"})",
           "eval_time": "65m",
           "exp_samples": []
         },
         {
-          "expr": "count by (probe, severity) (ALERTS{alertname=\"DsmCertificateExpiring\"})",
+          "expr": "count by (probe, severity) (ALERTS{alertname=\"HostCertificateExpiring\"})",
           "eval_time": "135m",
           "exp_samples": []
         },
         {
-          "expr": "count by (probe, severity) (ALERTS{alertname=\"DsmCertificateExpiring\",alertstate=\"firing\"})",
+          "expr": "count by (probe, severity) (ALERTS{alertname=\"HostCertificateExpiring\",alertstate=\"firing\"})",
           "eval_time": "201m",
           "exp_samples": []
         },
         {
-          "expr": "count by (probe, severity) (ALERTS{alertname=\"DsmCertificateExpiring\",alertstate=\"firing\"})",
+          "expr": "count by (probe, severity) (ALERTS{alertname=\"HostCertificateExpiring\",alertstate=\"firing\"})",
           "eval_time": "202m",
           "exp_samples": [
             {
@@ -489,14 +564,14 @@
           ]
         },
         {
-          "expr": "count by (probe, severity) (ALERTS{alertname=\"DsmCertificateExpiring\"})",
+          "expr": "count by (probe, severity) (ALERTS{alertname=\"HostCertificateExpiring\"})",
           "eval_time": "220m",
           "exp_samples": []
         }
       ]
     },
     {
-      "name": "All ten expected probes report: no missing alerts",
+      "name": "All twelve expected probes report: no missing alerts",
       "interval": "1m",
       "input_series": [
         {
@@ -541,6 +616,14 @@
         },
         {
           "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"unifi-gateway\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"kvm-compute-rack\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"unifi-console\"}",
           "values": "1x25"
         }
       ],
@@ -599,6 +682,14 @@
         {
           "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"grafana\"}",
           "values": "1x4 stale _x12 1x7"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"kvm-compute-rack\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"unifi-console\"}",
+          "values": "1x25"
         }
       ],
       "promql_expr_test": [
@@ -697,6 +788,14 @@
         {
           "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"unifi-gateway\"}",
           "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"kvm-compute-rack\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"unifi-console\"}",
+          "values": "1x25"
         }
       ],
       "promql_expr_test": [
@@ -774,6 +873,14 @@
         {
           "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"grafana\"}",
           "values": "1x4 stale _x2 1x17"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"kvm-compute-rack\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"unifi-console\"}",
+          "values": "1x25"
         }
       ],
       "promql_expr_test": [
@@ -832,6 +939,14 @@
         {
           "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"unifi-gateway\"}",
           "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"kvm-compute-rack\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"unifi-console\"}",
+          "values": "1x25"
         }
       ],
       "promql_expr_test": [
@@ -880,6 +995,14 @@
         },
         {
           "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"unifi-gateway\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"kvm-compute-rack\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"unifi-console\"}",
           "values": "1x25"
         }
       ],
@@ -938,6 +1061,14 @@
         {
           "series": "up{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"grafana\"}",
           "values": "0x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"kvm-compute-rack\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"unifi-console\"}",
+          "values": "1x25"
         }
       ],
       "promql_expr_test": [
@@ -995,6 +1126,14 @@
         {
           "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"grafana\"}",
           "values": "0x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"kvm-compute-rack\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"unifi-console\"}",
+          "values": "1x25"
         }
       ],
       "promql_expr_test": [
@@ -1047,6 +1186,14 @@
         },
         {
           "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"unifi-gateway\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"kvm-compute-rack\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"unifi-console\"}",
           "values": "1x25"
         }
       ],

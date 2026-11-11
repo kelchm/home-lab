@@ -54,7 +54,7 @@ nginx serves a Let's Encrypt certificate for `kvm-compute-rack.home.kelch.io` fr
 
 The firmware starts two `crond` processes that read the same crontab, so every entry fires twice; `renew.sh` holds a lock and the second copy exits. Lego renews only when the certificate is due and keeps the same key. nginx's startup script regenerates a self-signed pair only if the files are missing or the key doesn't match, never because the certificate expired.
 
-The firmware sends `Strict-Transport-Security` with a one-year `max-age` (`/etc/kvmd/nginx/ssl.conf`). Once a browser has seen the trusted certificate on the hostname, it will refuse to click through a broken one. If renewal ever fails and the certificate expires, use `https://10.32.20.10/`: HSTS does not apply to an IP address, so the browser allows the usual warning. Nothing yet alerts on an expiring certificate; adding the rack Pi's TLS probe for this host is tracked in [#419](https://github.com/kelchm/home-lab/issues/419).
+The firmware sends `Strict-Transport-Security` with a one-year `max-age` (`/etc/kvmd/nginx/ssl.conf`). Once a browser has seen the trusted certificate on the hostname, it will refuse to click through a broken one. If renewal ever fails and the certificate expires, use `https://10.32.20.10/`: HSTS does not apply to an IP address, so the browser allows the usual warning. The rack Pi probes `https://kvm-compute-rack.home.kelch.io/` with normal certificate checks, and `HostCertificateExpiring` warns when fewer than 14 days remain; see the [host-monitoring runbook](../../docs/runbooks/host-monitoring.md#service-probes).
 
 The `kvm-acme` token has `Zone:Zone:Read` and `Zone:DNS:Edit` on `kelch.io` and is used only here, so it can be revoked without touching Athena or S3. Its 1Password item is `op://Project - home-lab/kvm-acme/credential`. Cloudflare cannot scope a token to one record, so a stolen token could edit any `kelch.io` record. Anyone who can read it already has root on the console that types into every host's BIOS.
 
@@ -316,7 +316,7 @@ What the export provides on this firmware:
 
 The scrape drops `pikvm_atx_*` and `pikvm_gpio_*`. ATX is not wired, so its power state means nothing. The GPIO rows are the retained host-switch command channels, which only pulse a switch sequence; they do not read back the selected port, and the vendor code reports each channel's state under both its `online` and `state` names. The export has no HDMI signal, USB enumeration, selected port, uptime or filesystem metrics, and nothing in it observes the host on the selected port. A blank screen or missing video is not an appliance failure. Load average stays between 8 and 10 because of the SoC's media threads and is not a useful signal.
 
-The scrape addresses the appliance by IP so it does not depend on DNS, and therefore skips certificate verification. Nothing currently alerts on certificate expiry; see [TLS](#tls).
+The scrape addresses the appliance by IP so it does not depend on DNS, and therefore skips certificate verification. Certificate expiry is watched by the rack Pi's probe instead; see [TLS](#tls).
 
 | Alert | Fires when |
 |---|---|

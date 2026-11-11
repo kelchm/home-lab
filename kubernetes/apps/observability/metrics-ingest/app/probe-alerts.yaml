@@ -40,6 +40,8 @@ spec:
               or absent_over_time(probe_success{job="pi-blackbox",instance="ups-compute-rack",platform="pi",probe="homepage"}[5m])
               or absent_over_time(probe_success{job="pi-blackbox",instance="ups-compute-rack",platform="pi",probe="cloudflare-tunnel"}[5m])
               or absent_over_time(probe_success{job="pi-blackbox",instance="ups-compute-rack",platform="pi",probe="athena-dsm"}[5m])
+              or absent_over_time(probe_success{job="pi-blackbox",instance="ups-compute-rack",platform="pi",probe="kvm-compute-rack"}[5m])
+              or absent_over_time(probe_success{job="pi-blackbox",instance="ups-compute-rack",platform="pi",probe="unifi-console"}[5m])
               or absent_over_time(probe_success{job="pi-blackbox",instance="ups-compute-rack",platform="pi",probe="k8s-gateway"}[5m])
               or absent_over_time(probe_success{job="pi-blackbox",instance="ups-compute-rack",platform="pi",probe="unifi-gateway"}[5m])
             )
@@ -73,7 +75,7 @@ spec:
         # Internal certificates live 160 h and renew with 53 h left; 36 h left means renewal has failed for about 17 h.
         - alert: ProbeCertificateExpiring
           expr: |
-            (probe_ssl_earliest_cert_expiry{job="pi-blackbox",probe!="athena-dsm"} - time() < 36 * 3600)
+            (probe_ssl_earliest_cert_expiry{job="pi-blackbox",probe!~"athena-dsm|kvm-compute-rack|unifi-console"} - time() < 36 * 3600)
             and on (instance, platform, probe)
             (probe_success{job="pi-blackbox"} == 1)
             and on (instance, platform, probe)
@@ -86,9 +88,13 @@ spec:
             description: "Check certificate renewal for {{ $labels.target }}. Public tunnel probes see Cloudflare's edge certificate; internal HTTPS probes see Traefik's certificate."
             runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/host-monitoring.md#service-probes
 
-        - alert: DsmCertificateExpiring
+        # Hosts that renew their own 90-day certificates (Athena DSM, the GLKVM,
+        # the UniFi console)
+        # renew about 30 days before expiry; 14 days left means renewal has
+        # been failing for over two weeks.
+        - alert: HostCertificateExpiring
           expr: |
-            (probe_ssl_earliest_cert_expiry{job="pi-blackbox",probe="athena-dsm"} - time() < 14 * 24 * 3600)
+            (probe_ssl_earliest_cert_expiry{job="pi-blackbox",probe=~"athena-dsm|kvm-compute-rack|unifi-console"} - time() < 14 * 24 * 3600)
             and on (instance, platform, probe)
             (probe_success{job="pi-blackbox"} == 1)
             and on (instance, platform, probe)
@@ -98,5 +104,5 @@ spec:
             severity: warning
           annotations:
             summary: "Certificate for {{ $labels.probe }} expires in {{ $value | humanizeDuration }}"
-            description: "{{ $labels.target }} has less than 14 days of served certificate validity. Check Athena DSM certificate renewal and deployment."
+            description: "{{ $labels.target }} has less than 14 days of served certificate validity. Check the host's own ACME renewal: the Athena ACME runbook for athena-dsm, devices/glkvm/README.md#tls for kvm-compute-rack, the UniFi console's certificate settings for unifi-console."
             runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/host-monitoring.md#service-probes
