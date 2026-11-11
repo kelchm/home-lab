@@ -108,7 +108,9 @@ The firmware ships the client and its GL UI integration:
 
 `--disable-dns` means the appliance never uses NetBird's DNS, which it doesn't need. The appliance's kernel has WireGuard, so the client runs in kernel mode.
 
-Enrolled 2026-11-11 as `kvm-compute-rack.netbird.cloud` with a one-off setup key whose auto-group is the console's router group; the key was revoked after its single use. The peer reported Management, Signal and Relay connected and `Networks: 10.32.20.10/32`. Access from an away client has not yet been verified.
+Enrolled 2026-11-11 as `kvm-compute-rack.netbird.cloud` with a one-off setup key whose auto-group is the console's router group; the key was revoked after its single use. The peer reported Management, Signal and Relay connected and `Networks: 10.32.20.10/32`. On the same day the iPhone, on cellular, loaded the console at its normal hostname with the trusted certificate.
+
+A routing peer applies NetBird's resource rules to traffic it forwards. Traffic addressed to the appliance itself is local, so NetBird's input chain decides it, and that chain is filled only by a policy whose destination is the appliance's peer group. The site therefore needs both: a resource policy for the route and a peer policy for the ports. Everything else arriving on `wt0` hits NetBird's final drop.
 
 To re-enroll after a wipe, create a new one-off setup key with the same auto-group, then either paste it into the GL UI's NetBird page or run the same steps over SSH, sending the key on standard input so it stays out of the process list:
 

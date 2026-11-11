@@ -58,7 +58,10 @@ The recovery console at `10.32.20.10` is reachable away from home without the PV
 | Network | `kvm` | Routed by group `kvm`, metric 9999, masquerade |
 | Resource | `kvm-console` | `10.32.20.10/32` |
 | Policy | `kvm-console` | `clients` → resource `kvm-console`, TCP 443 and 22, with the posture check |
+| Policy | `kvm-console-peer` | `clients` → group `kvm`, TCP 443 and 22, with the posture check |
 | Setup key | `kvm-compute-rack` | One-off, auto-group `kvm`, used once on 2026-11-11; revoked |
+
+Both policies are needed. NetBird enforces a resource policy in the router's forward chain, but traffic to the router's own address is delivered locally through its input chain, which only peer policies populate; with the resource policy alone the appliance dropped the away iPhone's connections. NetBird keeps one rule per policy, so the peer rule is a separate policy. The resource policy still matters: it gives away clients the route to `10.32.20.10`. On 2026-11-11 the iPhone, on cellular, loaded `https://kvm-compute-rack.home.kelch.io/` with the trusted certificate.
 
 Peer `kvm-compute-rack` (`kvm-compute-rack.netbird.cloud`) runs the firmware's NetBird client with kernel WireGuard; it is in `All` and `kvm`, with login expiration and NetBird SSH off. Away clients resolve `kvm-compute-rack.home.kelch.io` through the `home-dns` resource, which the PVE routers carry; if both are down, browse to `https://10.32.20.10/` instead, which still routes through the appliance itself.
 
