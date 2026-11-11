@@ -58,6 +58,26 @@ local TRAEFIK_FIELDS = {
   TLSVersion = 'tls.protocol.version', TLSCipher = 'tls.cipher',
   ['request_User-Agent'] = 'user_agent.original',
 }
+-- Query parameters whose values are credentials: API keys (SABnzbd, the *arr
+-- SignalR socket, Jellyfin, Bambuddy), OAuth authorization codes and state,
+-- and reset tokens. Names match case-insensitively and whole; events.lua keeps
+-- the same list for Kubernetes Events.
+local SECRET_PARAMS = {}
+for _, name in ipairs({ 'access_token', 'api-key', 'api_key', 'apikey', 'client_secret', 'code',
+  'id_token', 'key', 'password', 'refresh_token', 'secret', 'secret_key', 'state', 'token' }) do
+  SECRET_PARAMS[name] = true
+end
+
+-- `name=value` pairs after `?` or `&`, ending at `&`, `#`, a quote or whitespace,
+-- so a whole log line can be redacted as well as a request path.
+local function redact_query(s)
+  return (s:gsub('([?&])([^=&?#%s"]+)=([^&#%s"]+)', function(sep, name, value)
+    -- Applications decode the name, so `%74oken` is `token`.
+    local decoded = name:gsub('%%(%x%x)', function(h) return string.char(tonumber(h, 16)) end)
+    if SECRET_PARAMS[decoded:lower()] then return sep .. name .. '=REDACTED' end
+  end))
+end
+
 local NUMERIC_ATTRIBUTES = {
   'client.port', 'network.peer.port', 'server.port', 'http.response.status_code',
   'http.response.body.size', 'http.request.body.size', 'code.line.number',
@@ -374,6 +394,7 @@ local function build(ingress, record)
   end
 
   if app == 'traefik' and payload.RequestMethod and payload.DownstreamStatus then
+    if type(payload.RequestPath) == 'string' then payload.RequestPath = redact_query(payload.RequestPath) end
     body = traefik_common(payload)
     for source, target in pairs(TRAEFIK_FIELDS) do
       if payload[source] ~= nil then
@@ -436,7 +457,8 @@ function normalize(tag, ts, group, metadata, record)
     local found, r = pcall(identity, ingress.kubernetes)
     attributes = { ['log.iostream'] = ingress.stream, ['pipeline.normalize_error'] = tostring(attributes),
       otlp = { severity_number = 0 } }
-    body, resource = ingress.raw, found and r or {}
+    -- JSON writers such as Traefik's escape `&` as \u0026.
+    body, resource = redact_query((ingress.raw:gsub('\\u0026', '&'))), found and r or {}
   end
   return 1, ts, attributes, { body = body, resource = { attributes = resource } }
 end

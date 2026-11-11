@@ -1,7 +1,8 @@
 ---
-# Sole human admin account. Initial password set out-of-band via the
-# credential-reset URL surfaced in `kubectl describe kanidmpersonaccount kelchm`.
-# kaniop emits the URL for `credentialsTokenTtl` seconds (default 3600).
+# Sole human admin account. Its first credentials were set through the reset
+# link kaniop publishes in a Kubernetes Event, before
+# docs/runbooks/kanidm-person-accounts.md existed; it has credentials now, so
+# kaniop issues no link. Add new people by that runbook instead.
 apiVersion: kaniop.rs/v1beta1
 kind: KanidmPersonAccount
 metadata:
