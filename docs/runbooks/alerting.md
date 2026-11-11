@@ -67,8 +67,6 @@ Alertmanager groups alerts by name, cluster and namespace, not by machine: two m
 
 A problem that only affects what can be seen of a device is `info` when every notifying rule it blinds is covered by another notifying alert, and notifies otherwise. `TMobileMetricsMissing` is info: no notifying rule reads the T-Mobile gateway, because `UniFiWANDown` reports a WAN1 outage. `StarlinkMetricsMissing` notifies, because `StarlinkObstructed` and `StarlinkPingDropSustained` have no other cover; so do `UniFiMetricsMissing`, `PVEMetricsMissing`, `NodeCollectorDown` and the Longhorn, Flux and cert-manager `MetricsMissing` alerts.
 
-`ProbeMetricsMissing` and the MCP functional check alerts are `info` by operator policy: a missing secondary reachability check or a failed read-only gateway check calls for inspecting Home rather than a phone notification. This is an explicit exception to the lost-visibility routing rule above.
-
 The bundled `RequestErrorsToAPI` and `TooManyLogs` are disabled. VictoriaMetrics counts every query a client cancels as an API error and logs it as a warning, so Grafana cancelling overlapping dashboard refreshes kept both firing most of the day: in an hour sampled on 2026-11-08, 628 of VMSingle's 634 warnings were cancelled Grafana queries. `TooManyErrorLogs`, `ServiceDown`, `TooManyRestarts`, `AlertingRulesError` and `RecordingRulesError` still notify for a failing component.
 
 ## Planned maintenance

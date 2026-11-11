@@ -26,7 +26,7 @@ spec:
             )
           for: 2m
           labels:
-            severity: info
+            severity: critical
           annotations:
             summary: MCPHub homelab-read check is failing
             description: The five-minute gateway check failed or has no success in ten minutes. Check the grafana-mcp-functional-probe Job logs, its bearer key, the admin gateway route and MCPHub's Grafana backend.
@@ -38,7 +38,7 @@ spec:
           expr: absent(kube_cronjob_status_last_successful_time{namespace="ai", cronjob="grafana-mcp-functional-probe"})
           for: 12m
           labels:
-            severity: info
+            severity: warning
           annotations:
             summary: MCPHub homelab-read check has no success metric
             description: No gateway check success metric has appeared for twelve minutes. Check the grafana-mcp-functional-probe CronJob, its Secret and kube-state-metrics coverage.

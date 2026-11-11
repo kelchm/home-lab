@@ -49,7 +49,7 @@ spec:
             (up{job="pi-blackbox-exporter"} == 1)
           for: 5m
           labels:
-            severity: info
+            severity: warning
           annotations:
             summary: "Probe {{ $labels.probe }} stopped reporting from {{ $labels.instance }}"
             description: "No probe_success samples arrived for {{ $labels.probe }} for at least ten minutes and the Pi exporter is up. Check this Pi's vmagent target list and blackbox probe configuration in rpi-nixos."

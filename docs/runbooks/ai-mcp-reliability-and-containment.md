@@ -31,7 +31,29 @@ The `grafana-mcp-functional-probe` CronJob runs every five minutes through `http
 
 Changing MCPHub's settings Secret triggers Stakater Reloader and a single-pod `Recreate` rollout; clients briefly lose their in-memory sessions and must reconnect. The new key and tool policy leave existing principals and groups unchanged. After rollout, wait for the next scheduled probe to succeed and confirm existing clients can still list their normal tools. The new key and in-cluster gateway policy need this post-merge acceptance; a workstation check cannot prove pod egress.
 
-After rollout:
+### Merge window and alert timing
+
+Flux applies the probe CronJob/Secret and the MCPHub settings through separate Kustomizations; MCPHub depends on grafana-mcp, but the CronJob scheduler does not wait for the new gateway key to load. After the settings Secret changes, Stakater Reloader asynchronously restarts MCPHub using its single-pod `Recreate` strategy. There is no guaranteed restart duration or ordering relative to a probe run. Merge just after a successful scheduled run if practical, leaving almost five minutes before the next run at wall-clock minutes :00, :05, :10, and so on. Do not assume a ten-minute grace period.
+
+- **Failed Job branch, critical:** an unsuccessful Job with failed pod count greater than zero, no success for that same Job, and a start time less than ten minutes ago starts a two-minute `for` timer. It can fire about two minutes after the failure is first scraped, even when the previous run succeeded recently. Each Job permits one retry and has a 120-second total deadline. A subsequent scheduled Job's success does not clear an older failed Job's branch; that branch remains eligible until ten minutes after the failed Job's own start time or until its metrics disappear.
+- **Stale success branch, critical:** a last-success timestamp older than ten minutes starts the same two-minute `for` timer, so this branch fires just over twelve minutes after the last success, rather than twelve minutes after merge. A fresh success resets it.
+- **Missing success metric, warning:** twelve continuous minutes without a last-success series fires the missing alert. A failed first-ever run can still trigger the critical failed-Job branch before this warning.
+
+These times precede scrape/evaluation and notification delays; the metrics evaluator runs every 30 seconds and Alertmanager normally waits 30 seconds before a group's first notification. Timers already pending before merge do not acquire a new grace period.
+
+For the quickest diagnosis, compare the probe Job's logs and start time with MCPHub's pod replacement/readiness and the CronJob's `lastSuccessfulTime`. A 502/connection failure during the replacement gap followed by a successful scheduled run indicates a recovered restart interruption; the older failed Job can still keep its critical branch firing for the remainder of its ten-minute window. A repeated failure after the replacement pod is Ready needs investigation: 401/403 suggests key loading or tool authorization, 404 suggests the route/tool name, and DNS/TLS/timeouts suggest name resolution or the network path. Read Job events for scheduling or missing-Secret failures. Confirm existing clients reconnect and still list their normal tools. Do not infer recovery merely from the gateway pod being Ready: the functional check must succeed.
+
+Read-only commands for that window (add the explicit main-checkout `--kubeconfig` path when running from a T3 worktree):
+
+```sh
+kubectl -n ai get pods -l app.kubernetes.io/name=mcphub -o wide
+kubectl -n ai get cronjob grafana-mcp-functional-probe -o yaml
+kubectl -n ai get jobs --sort-by=.metadata.creationTimestamp
+kubectl -n ai logs job/<probe-job-name> --all-containers=true --prefix=true
+kubectl -n ai describe job <probe-job-name>
+```
+
+After rollout, an optional manual check follows the existing procedure:
 
 ```sh
 kubectl -n ai wait --for=condition=available deployment/mcphub deployment/grafana-mcp --timeout=5m
@@ -75,4 +97,4 @@ kubectl -n ai delete job grafana-mcp-manual-probe
 
 ## Alerts and memory monitoring
 
-`ai-mcp-reliability` reports a failed/stale gateway check or twelve minutes with no probe success metric. `GrafanaMCPFunctionalProbeFailed` and `GrafanaMCPFunctionalProbeMissing` are `info`: visible on Home and in Alertmanager, with no Pushover notification. Inspect the scheduled Job logs, bearer Secret, gateway route and MCPHub backend connection when one appears.
+`ai-mcp-reliability` reports a failed/stale gateway check or twelve minutes with no probe success metric. `GrafanaMCPFunctionalProbeFailed` remains `critical` and `GrafanaMCPFunctionalProbeMissing` remains `warning`, using their existing Pushover routes. Inspect the scheduled Job logs, bearer Secret, gateway route and MCPHub backend connection when one appears.

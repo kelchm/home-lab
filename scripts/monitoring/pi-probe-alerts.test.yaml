@@ -617,7 +617,7 @@
           "eval_time": "14m",
           "exp_samples": [
             {
-              "labels": "{probe=\"grafana\",instance=\"ups-compute-rack\",severity=\"info\"}",
+              "labels": "{probe=\"grafana\",instance=\"ups-compute-rack\",severity=\"warning\"}",
               "value": 1
             }
           ]
@@ -627,7 +627,7 @@
           "eval_time": "17m",
           "exp_samples": [
             {
-              "labels": "{probe=\"grafana\",instance=\"ups-compute-rack\",severity=\"info\"}",
+              "labels": "{probe=\"grafana\",instance=\"ups-compute-rack\",severity=\"warning\"}",
               "value": 1
             }
           ]
@@ -695,7 +695,7 @@
           "eval_time": "5m",
           "exp_samples": [
             {
-              "labels": "{probe=\"grafana\",instance=\"ups-compute-rack\",severity=\"info\"}",
+              "labels": "{probe=\"grafana\",instance=\"ups-compute-rack\",severity=\"warning\"}",
               "value": 1
             }
           ]
@@ -705,7 +705,7 @@
           "eval_time": "15m",
           "exp_samples": [
             {
-              "labels": "{probe=\"grafana\",instance=\"ups-compute-rack\",severity=\"info\"}",
+              "labels": "{probe=\"grafana\",instance=\"ups-compute-rack\",severity=\"warning\"}",
               "value": 1
             }
           ]
@@ -1041,7 +1041,7 @@
           "eval_time": "10m",
           "exp_samples": [
             {
-              "labels": "{probe=\"grafana\",instance=\"ups-compute-rack\",severity=\"info\"}",
+              "labels": "{probe=\"grafana\",instance=\"ups-compute-rack\",severity=\"warning\"}",
               "value": 1
             }
           ]
@@ -1066,7 +1066,7 @@
           "eval_time": "21m",
           "exp_samples": [
             {
-              "labels": "{probe=\"grafana\",instance=\"ups-compute-rack\",severity=\"info\"}",
+              "labels": "{probe=\"grafana\",instance=\"ups-compute-rack\",severity=\"warning\"}",
               "value": 1
             }
           ]
