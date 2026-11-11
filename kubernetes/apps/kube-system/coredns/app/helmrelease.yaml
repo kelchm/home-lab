@@ -21,6 +21,12 @@ spec:
     replicaCount: 2
     podDisruptionBudget:
       maxUnavailable: 1
+    # With the required one-per-node anti-affinity below, maxUnavailable 1
+    # lets a rollout remove an old pod before its replacement schedules, so it
+    # completes while one of the three nodes is cordoned.
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
 
     servers:
       # Deliberately route the household/internal zone directly to UniFi.
@@ -98,6 +104,12 @@ spec:
             - matchExpressions:
                 - key: node-role.kubernetes.io/control-plane
                   operator: Exists
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                k8s-app: kube-dns
+            topologyKey: kubernetes.io/hostname
     tolerations:
       - key: CriticalAddonsOnly
         operator: Exists

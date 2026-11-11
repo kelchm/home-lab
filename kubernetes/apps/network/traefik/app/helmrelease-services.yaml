@@ -24,6 +24,23 @@ spec:
     podDisruptionBudget:
       enabled: true
       maxUnavailable: 1
+    # One replica per node, required. A rollout replaces one pod at a time,
+    # removing the old pod first (maxSurge 0), so it needs no spare node and
+    # still completes while one of the three nodes is cordoned. The PDB above
+    # already allows one replica down.
+    updateStrategy:
+      type: RollingUpdate
+      rollingUpdate:
+        maxUnavailable: 1
+        maxSurge: 0
+    affinity:
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app.kubernetes.io/name: traefik
+                app.kubernetes.io/instance: traefik-services-network
+            topologyKey: kubernetes.io/hostname
     deployment:
       replicas: 2
     providers:
