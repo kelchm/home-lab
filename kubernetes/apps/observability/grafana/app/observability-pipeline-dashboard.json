@@ -1799,7 +1799,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(increase(fluentbit_output_dropped_records_total{job=~\"(.+-)?fluent-bit\"}[$__interval]))",
+          "expr": "sum(increase(fluentbit_output_dropped_records_total{job=~\"(.+-)?fluent-bit(-events)?\"}[$__interval]))",
           "legendFormat": "Fluent Bit records dropped (lower bound)",
           "refId": "A",
           "range": true

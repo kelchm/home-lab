@@ -9,6 +9,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 NAME = re.compile(r"^[A-Z][A-Za-z0-9]*$")
 SEVERITIES = {"critical", "warning", "info"}
+# Probe absence loses notifying coverage; gateway checks retain their existing
+# notification contract when their route changes.
+PROBE_SEVERITIES = {
+    "ProbeMetricsMissing": "warning",
+    "GrafanaMCPFunctionalProbeFailed": "critical",
+    "GrafanaMCPFunctionalProbeMissing": "warning",
+}
 # Names replaced when the conventions were adopted; a rule must not bring one back.
 RETIRED = {
     "DriveAtaPendingSectors", "DriveAtaReallocatedSectors", "DriveAtaUncorrectableSectors", "DriveHealthMissing",
@@ -70,6 +77,9 @@ for path in sorted((ROOT / "kubernetes").rglob("*.y*ml")):
             severity = (rule.get("labels") or {}).get("severity")
             if severity not in SEVERITIES:
                 errors.append(f"{where}: {name}: severity is {severity!r}, not one of {sorted(SEVERITIES)}")
+            expected = PROBE_SEVERITIES.get(name)
+            if expected and severity != expected:
+                errors.append(f"{where}: {name}: probe severity must be {expected!r}; see the alerting runbook")
             for key in ("summary", "description"):
                 if not annotations.get(key):
                     errors.append(f"{where}: {name}: no {key} annotation")
