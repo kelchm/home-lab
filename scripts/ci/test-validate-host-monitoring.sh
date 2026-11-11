@@ -97,7 +97,6 @@ write_fixture
 echo '-- diverged' >>"${TEMP_DIR}/sparks/monitoring/logs/host.lua"
 expect_failure 'diverged host log configuration' 'logs must be identical'
 
-# The NAS copy may differ only by the line marked for the #1432 trial.
 write_fixture
 echo '# diverged' >>"${TEMP_DIR}/synology/monitoring/logs/fluent-bit.yaml"
 expect_failure 'diverged NAS log configuration' 'synology/monitoring/logs must be identical'
