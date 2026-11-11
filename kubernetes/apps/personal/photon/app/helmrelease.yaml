@@ -74,11 +74,12 @@ spec:
             resources:
               requests:
                 cpu: 100m
-                memory: 4Gi
+                memory: 3Gi
               limits:
-                # 3 GiB heap plus OpenSearch's off-heap use. Measure after
-                # the backfill and adjust.
-                memory: 6Gi
+                # 3 GiB heap plus OpenSearch's off-heap use. Measured on
+                # 2026-11-11: 2.1 GiB idle, 2.7 GiB peak during the
+                # 290k-point backfill at 25 lookups per second.
+                memory: 5Gi
     defaultPodOptions:
       # ndots:1 resolves the mirror as an absolute name first. With the
       # default ndots:5 each download starts with three search-suffixed
