@@ -24,6 +24,9 @@ for config in "$@"; do
         echo "${config##*/}: unexpected encryption providers; refusing to rewrite them" >&2
         exit 1
     fi
-    yq -i '(select(.kind == "KubeEtcdEncryptionConfig") | .config.resources[0].providers) |=
-        [((.[0] | .secretbox.keys[0].name = "key2")), {"identity": {}}]' "$config"
+    # Write through the path rather than with yq -i: since yq 4.54.3, -i replaces a
+    # symlink (such as a worktree's link to the primary checkout) instead of its target.
+    updated="$(yq '(select(.kind == "KubeEtcdEncryptionConfig") | .config.resources[0].providers) |=
+        [((.[0] | .secretbox.keys[0].name = "key2")), {"identity": {}}]' "$config")"
+    printf '%s\n' "$updated" > "$config"
 done
